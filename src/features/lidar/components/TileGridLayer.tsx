@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { TileCoord } from '../types/geometry';
-import { useTileGrid } from '../hooks/useTileGrid';
+import { useLidarPicking } from '../hooks/useLidarPicking';
+import { LidarPanel } from './LidarPanel';
+import { PickingBanner } from './PickingBanner';
+import { ConfirmPopup } from './ConfirmPopup';
 
 export function TileGridLayer({ map }: { map: MapboxMap | null }) {
   const openViewer = useCallback((coord: TileCoord) => {
@@ -17,7 +20,21 @@ export function TileGridLayer({ map }: { map: MapboxMap | null }) {
     );
   }, []);
 
-  useTileGrid(map, openViewer);
+  const picking = useLidarPicking(map);
 
-  return null;
+  return (
+    <>
+      <LidarPanel
+        picking={picking}
+        onView={openViewer}
+      />
+      <PickingBanner active={picking.isPicking} />
+      <ConfirmPopup
+        coord={picking.pendingCoord}
+        screenPos={picking.clickScreenPos}
+        onConfirm={picking.confirmDownload}
+        onCancel={picking.cancelPending}
+      />
+    </>
+  );
 }
