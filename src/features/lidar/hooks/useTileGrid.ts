@@ -67,6 +67,7 @@ export function useTileGrid(
         id: FILL_LAYER,
         type: 'fill',
         source: SOURCE_ID,
+        slot: 'top',
         paint: {
           'fill-color': [
             'match', ['get', 'status'],
@@ -88,6 +89,7 @@ export function useTileGrid(
         id: LINE_LAYER,
         type: 'line',
         source: SOURCE_ID,
+        slot: 'top',
         paint: {
           'line-color': [
             'match', ['get', 'status'],
@@ -121,10 +123,9 @@ export function useTileGrid(
       });
     };
 
+    map.on('style.load', onStyleLoad);
     if (map.isStyleLoaded()) {
       onStyleLoad();
-    } else {
-      map.on('style.load', onStyleLoad);
     }
 
     map.on('moveend', refreshGrid);

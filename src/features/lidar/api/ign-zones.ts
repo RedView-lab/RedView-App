@@ -20,22 +20,27 @@ function containsPoint(bbox: ZoneInfo['bbox'], lon: number, lat: number): boolea
 function parseZonesXml(xmlText: string): ZoneInfo[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'application/xml');
-  const entries = doc.querySelectorAll('entry');
+  const entries = doc.getElementsByTagNameNS('*', 'entry');
   const zones: ZoneInfo[] = [];
 
-  for (const entry of entries) {
-    const title = entry.querySelector('title')?.textContent?.trim() ?? '';
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const title = entry.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() ?? '';
     if (!title) continue;
 
-    const bboxAttr = entry.querySelector('[bbox]')?.getAttribute('bbox')
-      ?? entry.querySelector('georss\\:box, box')?.textContent?.trim()
-      ?? '';
+    // Extract bbox from gpf_dl:bbox attribute on <link> elements
+    let bboxAttr = '';
+    const links = entry.getElementsByTagNameNS('*', 'link');
+    for (let j = 0; j < links.length; j++) {
+      const attr = links[j].getAttribute('gpf_dl:bbox');
+      if (attr) { bboxAttr = attr; break; }
+    }
 
     let west = -180, south = -90, east = 180, north = 90;
     if (bboxAttr) {
       const parts = bboxAttr.split(/[\s,]+/).map(Number);
       if (parts.length >= 4 && parts.every(n => !isNaN(n))) {
-        [south, west, north, east] = parts;
+        [west, south, east, north] = parts;
       }
     }
 

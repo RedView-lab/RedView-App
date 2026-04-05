@@ -82,6 +82,7 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
         id: HOVER_FILL,
         type: 'fill',
         source: HOVER_SOURCE,
+        slot: 'top',
         paint: {
           'fill-color': '#ef4444',
           'fill-opacity': 0.25,
@@ -92,6 +93,7 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
         id: HOVER_LINE,
         type: 'line',
         source: HOVER_SOURCE,
+        slot: 'top',
         paint: {
           'line-color': '#ef4444',
           'line-width': 2,
@@ -100,10 +102,10 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
       });
     };
 
+    // Always listen for style reloads so layers are re-added after terrain toggles etc.
+    map.on('style.load', setupOverlay);
     if (map.isStyleLoaded()) {
       setupOverlay();
-    } else {
-      map.on('style.load', setupOverlay);
     }
 
     return () => {
