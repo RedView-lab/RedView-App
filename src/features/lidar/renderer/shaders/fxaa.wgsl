@@ -48,10 +48,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
   let lumMax = max(lumM, max(max(lumN, lumS), max(lumE, lumW)));
   let lumRange = lumMax - lumMin;
 
-  if (lumRange < max(0.0312, lumMax * 0.125)) {
-    return vec4<f32>(rgbM, 1.0);
-  }
-
+  // Compute edge direction and FXAA samples upfront (uniform control flow required)
   let dirX = -((lumN + lumS) - 2.0 * lumM);
   let dirY = (lumE + lumW) - 2.0 * lumM;
 
@@ -63,14 +60,19 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     vec2<f32>(4.0),
   ) * rcpFrame;
 
-  let rgbA = 0.5 * (
-    textureSample(sceneTex, sceneSampler, input.uv + dir * (1.0 / 3.0 - 0.5)).rgb +
-    textureSample(sceneTex, sceneSampler, input.uv + dir * (2.0 / 3.0 - 0.5)).rgb
-  );
-  let rgbB = rgbA * 0.5 + 0.25 * (
-    textureSample(sceneTex, sceneSampler, input.uv + dir * -0.5).rgb +
-    textureSample(sceneTex, sceneSampler, input.uv + dir * 0.5).rgb
-  );
+  // All textureSample calls must happen before any non-uniform branch
+  let sampleA1 = textureSample(sceneTex, sceneSampler, input.uv + dir * (1.0 / 3.0 - 0.5)).rgb;
+  let sampleA2 = textureSample(sceneTex, sceneSampler, input.uv + dir * (2.0 / 3.0 - 0.5)).rgb;
+  let sampleB1 = textureSample(sceneTex, sceneSampler, input.uv + dir * -0.5).rgb;
+  let sampleB2 = textureSample(sceneTex, sceneSampler, input.uv + dir * 0.5).rgb;
+
+  // Early out for low-contrast areas (no edge)
+  if (lumRange < max(0.0312, lumMax * 0.125)) {
+    return vec4<f32>(rgbM, 1.0);
+  }
+
+  let rgbA = 0.5 * (sampleA1 + sampleA2);
+  let rgbB = rgbA * 0.5 + 0.25 * (sampleB1 + sampleB2);
 
   let lumB = luminance(rgbB);
   if (lumB < lumMin || lumB > lumMax) {
