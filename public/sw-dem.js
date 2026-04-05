@@ -41,8 +41,23 @@ let francePolyLoading = null;
 // SW Lifecycle
 // ---------------------------------------------------------------------------
 
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+const STATIC_CACHE_NAME = 'dem-static-v1';
+
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(STATIC_CACHE_NAME)
+      .then(cache => cache.add('/france-border.json'))
+      .then(() => self.skipWaiting())
+  );
+});
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    // Clean up old negative caches on version bump
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k === 'dem-negative-v1').map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
+  );
+});
 
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'SET_MAPBOX_TOKEN') {
@@ -72,25 +87,56 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+const NEGATIVE_CACHE_NAME = 'dem-negative-v1';
+const NEGATIVE_TTL = 3600; // 1 hour in seconds
+
 async function handleDemRequest(request, z, x, y) {
-  // Check Cache API first
+  // Check Cache API first (positive cache)
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
+  // Check negative cache (tiles known to have no data)
+  const negCache = await caches.open(NEGATIVE_CACHE_NAME);
+  const negCached = await negCache.match(cacheKey);
+  if (negCached) {
+    const age = negCached.headers.get('x-cached-at');
+    if (age && (Date.now() - parseInt(age, 10)) < NEGATIVE_TTL * 1000) {
+      return new Response(null, { status: 204 });
+    }
+    // Expired — delete and retry
+    negCache.delete(cacheKey);
+  }
+
   try {
     let pngBlob;
 
     if (tileOverlapsFrance(z, x, y) && z >= IGN_DEM_MINZOOM) {
-      pngBlob = await buildIGNTile(z, x, y);
+      const ignResult = await buildIGNTile(z, x, y);
+
+      if (ignResult) {
+        if (ignResult.blob) {
+          // Fully covered by IGN — use directly
+          pngBlob = ignResult.blob;
+        } else {
+          // Partial IGN coverage — composite with Mapbox (includes blend zone)
+          pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+        }
+      }
     }
 
+    // No IGN result (or tile outside France bounds) — pure Mapbox fallback
     if (!pngBlob && mapboxToken) {
       pngBlob = await fetchMapboxTile(z, x, y);
     }
 
     if (!pngBlob) {
+      // Cache negative result to avoid repeated requests
+      negCache.put(cacheKey, new Response(null, {
+        status: 204,
+        headers: { 'x-cached-at': String(Date.now()) },
+      }));
       return new Response(null, { status: 204 });
     }
 
@@ -284,6 +330,8 @@ async function getIGNTile(z, col, row) {
 
 // ---------------------------------------------------------------------------
 // Build IGN Terrain-RGB tile (Mercator ← WGS84G resampling + OffscreenCanvas PNG)
+// Returns { blob, elevations, coverage } where coverage is a Uint8Array mask
+// (1 = IGN data, 0 = no data). Returns null if no IGN coverage at all.
 // ---------------------------------------------------------------------------
 
 async function buildIGNTile(mercZ, mercX, mercY) {
@@ -306,11 +354,13 @@ async function buildIGNTile(mercZ, mercX, mercY) {
   }
   await Promise.all(fetches);
 
-  // Resample elevations via bicubic interpolation into 512x512 grid
-  const elevations = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
+  const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
+  const elevations = new Float32Array(totalPixels);
+  const coverage = new Uint8Array(totalPixels); // 1 = has IGN data
   const n = 1 << mercZ;
   const matrixWidth = 1 << (demZ + 1);
   const matrixHeight = 1 << demZ;
+  let coveredCount = 0;
 
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     const yFrac = (mercY + (py + 0.5) / DEM_TILE_SIZE) / n;
@@ -328,12 +378,22 @@ async function buildIGNTile(mercZ, mercX, mercY) {
         const fx = (((lng + 180) / 360) * matrixWidth - col) * IGN_SRC_TILE_SIZE;
         const fy = (((90 - lat) / 180) * matrixHeight - row) * IGN_SRC_TILE_SIZE;
         elevations[py * DEM_TILE_SIZE + px] = bicubicSample(tileData, fx, fy);
+        coverage[py * DEM_TILE_SIZE + px] = 1;
+        coveredCount++;
       }
     }
   }
 
-  // Encode to Terrain-RGB PNG via OffscreenCanvas
-  return encodeTerrainRGBPng(elevations);
+  // No IGN coverage at all → return null so caller falls back to Mapbox
+  if (coveredCount === 0) return null;
+
+  // Fully covered → encode directly, no compositing needed
+  if (coveredCount === totalPixels) {
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage };
+  }
+
+  // Partial coverage → return data for compositing with Mapbox
+  return { blob: null, elevations, coverage };
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +419,127 @@ async function encodeTerrainRGBPng(elevations) {
 
   ctx.putImageData(imageData, 0, 0);
   return canvas.convertToBlob({ type: 'image/png' });
+}
+
+// ---------------------------------------------------------------------------
+// Terrain-RGB PNG decoding — reads a Mapbox Terrain-RGB blob back to elevations
+// ---------------------------------------------------------------------------
+
+async function decodeTerrainRGBBlob(blob) {
+  const img = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(img.width, img.height);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, img.width, img.height);
+  const pixels = imageData.data;
+  const elevations = new Float32Array(img.width * img.height);
+
+  for (let i = 0; i < elevations.length; i++) {
+    const idx = i * 4;
+    const r = pixels[idx];
+    const g = pixels[idx + 1];
+    const b = pixels[idx + 2];
+    elevations[i] = -10000 + (r * 65536 + g * 256 + b) * 0.1;
+  }
+  return elevations;
+}
+
+// ---------------------------------------------------------------------------
+// Composite IGN + Mapbox elevations with blend zone at boundary
+// ---------------------------------------------------------------------------
+
+async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
+  // Fetch Mapbox tile for the uncovered pixels
+  const mapboxBlob = await fetchMapboxTile(z, x, y);
+  if (!mapboxBlob) {
+    // No Mapbox data available — just encode IGN as-is (uncovered pixels = 0)
+    return encodeTerrainRGBPng(ignElevations);
+  }
+
+  // Decode Mapbox tile
+  const mbElevations = await decodeTerrainRGBBlob(mapboxBlob);
+
+  const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
+  const BLEND_RADIUS = 8; // pixels of gradual transition
+
+  // Fast approximate distance transform using two-pass scan (Chamfer 3-4)
+  // distToBorder[i] = approximate distance from pixel i to nearest pixel of opposite coverage
+  const distToBorder = new Float32Array(totalPixels);
+  const INF = DEM_TILE_SIZE * 2;
+  distToBorder.fill(INF);
+
+  // Mark border pixels (distance = 0)
+  for (let py = 0; py < DEM_TILE_SIZE; py++) {
+    for (let px = 0; px < DEM_TILE_SIZE; px++) {
+      const idx = py * DEM_TILE_SIZE + px;
+      const c = coverage[idx];
+      // Check 4-connected neighbors for coverage change
+      if (
+        (py > 0 && coverage[idx - DEM_TILE_SIZE] !== c) ||
+        (py < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE] !== c) ||
+        (px > 0 && coverage[idx - 1] !== c) ||
+        (px < DEM_TILE_SIZE - 1 && coverage[idx + 1] !== c)
+      ) {
+        distToBorder[idx] = 0;
+      }
+    }
+  }
+
+  // Forward pass (top-left to bottom-right)
+  for (let py = 0; py < DEM_TILE_SIZE; py++) {
+    for (let px = 0; px < DEM_TILE_SIZE; px++) {
+      const idx = py * DEM_TILE_SIZE + px;
+      if (py > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE] + 1);
+      if (px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - 1] + 1);
+      if (py > 0 && px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE - 1] + 1.414);
+      if (py > 0 && px < DEM_TILE_SIZE - 1) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE + 1] + 1.414);
+    }
+  }
+
+  // Backward pass (bottom-right to top-left)
+  for (let py = DEM_TILE_SIZE - 1; py >= 0; py--) {
+    for (let px = DEM_TILE_SIZE - 1; px >= 0; px--) {
+      const idx = py * DEM_TILE_SIZE + px;
+      if (py < DEM_TILE_SIZE - 1) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE] + 1);
+      if (px < DEM_TILE_SIZE - 1) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + 1] + 1);
+      if (py < DEM_TILE_SIZE - 1 && px < DEM_TILE_SIZE - 1) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE + 1] + 1.414);
+      if (py < DEM_TILE_SIZE - 1 && px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE - 1] + 1.414);
+    }
+  }
+
+  // Resample Mapbox elevations if size differs (256→512)
+  const mbSize = Math.round(Math.sqrt(mbElevations.length));
+  const scale = mbSize / DEM_TILE_SIZE;
+
+  // Composite: blend IGN + Mapbox based on distance-derived weight
+  const result = new Float32Array(totalPixels);
+  for (let i = 0; i < totalPixels; i++) {
+    const py = (i / DEM_TILE_SIZE) | 0;
+    const px = i % DEM_TILE_SIZE;
+
+    // Sample Mapbox at corresponding position
+    let mbVal;
+    if (scale === 1) {
+      mbVal = mbElevations[i];
+    } else {
+      const mx = Math.min((px * scale) | 0, mbSize - 1);
+      const my = Math.min((py * scale) | 0, mbSize - 1);
+      mbVal = mbElevations[my * mbSize + mx];
+    }
+
+    const dist = distToBorder[i];
+    if (dist >= BLEND_RADIUS) {
+      // Far from border — use whichever source covers this pixel
+      result[i] = coverage[i] ? ignElevations[i] : mbVal;
+    } else {
+      // In blend zone — smoothly interpolate
+      const t = dist / BLEND_RADIUS; // 0 at border, 1 at full radius
+      const w = coverage[i] ? t : (1 - t); // weight for IGN
+      result[i] = ignElevations[i] * w + mbVal * (1 - w);
+    }
+  }
+
+  return encodeTerrainRGBPng(result);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,8 +569,17 @@ async function fetchMapboxTile(z, x, y) {
 async function ensureFrancePoly() {
   if (francePoly) return true;
   if (francePolyLoading) return francePolyLoading;
-  francePolyLoading = fetch('/france-border.json')
-    .then(r => r.json())
+  francePolyLoading = (async () => {
+    // Try static cache first (precached on install), then network
+    let response;
+    const staticCache = await caches.open(STATIC_CACHE_NAME);
+    response = await staticCache.match('/france-border.json');
+    if (!response) {
+      response = await fetch('/france-border.json');
+      if (response.ok) staticCache.put('/france-border.json', response.clone());
+    }
+    return response.json();
+  })()
     .then(geo => {
       francePoly = geo.coordinates; // MultiPolygon coords
       francePolyBBoxes = francePoly.map(polygon => {
