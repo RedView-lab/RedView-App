@@ -1,6 +1,7 @@
 import type { WebGPUContext } from './webgpu-context';
 import billboardWgsl from './shaders/billboard.wgsl?raw';
 import fxaaWgsl from './shaders/fxaa.wgsl?raw';
+import terrainWgsl from './shaders/terrain.wgsl?raw';
 
 export interface BillboardPipeline {
   pipeline: GPURenderPipeline;
@@ -113,4 +114,73 @@ export function createFxaaPipeline(ctx: WebGPUContext): FxaaPipeline {
   });
 
   return { pipeline, bindGroupLayout, sampler };
+}
+
+export interface TerrainPipeline {
+  pipeline: GPURenderPipeline;
+  bindGroupLayout: GPUBindGroupLayout;
+}
+
+export function createTerrainPipeline(ctx: WebGPUContext): TerrainPipeline {
+  const { device } = ctx;
+  const shaderModule = device.createShaderModule({ code: terrainWgsl });
+
+  const bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+    ],
+  });
+
+  const pipelineLayout = device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
+
+  const pipeline = device.createRenderPipeline({
+    layout: pipelineLayout,
+    vertex: {
+      module: shaderModule,
+      entryPoint: 'vs_main',
+      buffers: [
+        {
+          // position (vec3) + normal (vec3) = 24 bytes
+          arrayStride: 24,
+          stepMode: 'vertex',
+          attributes: [
+            { shaderLocation: 0, offset: 0, format: 'float32x3' },  // position
+            { shaderLocation: 1, offset: 12, format: 'float32x3' }, // normal
+          ],
+        },
+        {
+          // color (vec3<f32>) = 12 bytes
+          arrayStride: 12,
+          stepMode: 'vertex',
+          attributes: [
+            { shaderLocation: 2, offset: 0, format: 'float32x3' }, // color
+          ],
+        },
+      ],
+    },
+    fragment: {
+      module: shaderModule,
+      entryPoint: 'fs_main',
+      targets: [
+        {
+          format: 'bgra8unorm',
+          blend: {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+          },
+        },
+      ],
+    },
+    depthStencil: {
+      format: 'depth24plus',
+      depthWriteEnabled: true,
+      depthCompare: 'less',
+    },
+    primitive: {
+      topology: 'triangle-list',
+      cullMode: 'back',
+    },
+  });
+
+  return { pipeline, bindGroupLayout };
 }

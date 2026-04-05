@@ -113,3 +113,51 @@ export function createInstanceBuffer(
   buffer.unmap();
   return buffer;
 }
+
+export interface TerrainBuffers {
+  vertexBuffer: GPUBuffer;   // position + normal (6 floats per vertex)
+  colorBuffer: GPUBuffer;    // color as float32x3
+  indexBuffer: GPUBuffer;
+  indexCount: number;
+}
+
+export function createTerrainBuffers(
+  device: GPUDevice,
+  vertices: Float32Array,
+  colors: Uint8Array,
+  indices: Uint32Array,
+  vertexCount: number,
+): TerrainBuffers {
+  // Vertex buffer: position + normal (already packed as 6 floats per vertex)
+  const vertexBuffer = device.createBuffer({
+    size: vertices.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(vertexBuffer.getMappedRange()).set(vertices);
+  vertexBuffer.unmap();
+
+  // Color buffer: convert Uint8 RGB to Float32 RGB for shader
+  const colorF32 = new Float32Array(vertexCount * 3);
+  for (let i = 0; i < vertexCount * 3; i++) {
+    colorF32[i] = colors[i] / 255;
+  }
+  const colorBuffer = device.createBuffer({
+    size: colorF32.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Float32Array(colorBuffer.getMappedRange()).set(colorF32);
+  colorBuffer.unmap();
+
+  // Index buffer
+  const indexBuffer = device.createBuffer({
+    size: indices.byteLength,
+    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+    mappedAtCreation: true,
+  });
+  new Uint32Array(indexBuffer.getMappedRange()).set(indices);
+  indexBuffer.unmap();
+
+  return { vertexBuffer, colorBuffer, indexBuffer, indexCount: indices.length };
+}
