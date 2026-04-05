@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/((?!assets/|dem-tiles/|ortho-tiles/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|dem-tiles/|ortho-tiles/|sw-dem/).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -11,6 +11,12 @@
     },
     {
       "source": "/sw-dem.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/sw-dem/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
       ]
