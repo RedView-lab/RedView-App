@@ -1,5 +1,6 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useState, useEffect } from 'react';
 import type { TileCoord } from '../types/geometry';
+import { buildTileFileName } from '../processing/coord-transform';
 import { useLidarViewer } from '../hooks/useLidarViewer';
 import { useStorageQuota } from '../hooks/useStorageQuota';
 
@@ -13,6 +14,7 @@ function formatBytes(bytes: number): string {
 export default function LidarViewerPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const params = new URLSearchParams(window.location.search);
+  const [overlayHidden, setOverlayHidden] = useState(false);
 
   const tileCoord = useMemo<TileCoord | null>(() => {
     const x = params.get('x');
@@ -32,91 +34,160 @@ export default function LidarViewerPage() {
   const quota = useStorageQuota();
 
   const isLoading = status !== 'ready' && status !== 'idle' && !status.startsWith('error');
+  const isError = status.startsWith('error');
+  const tileName = tileCoord ? buildTileFileName(tileCoord) : '';
+
+  // Fade out overlay when rendering is ready
+  useEffect(() => {
+    if (status === 'ready') {
+      const t = setTimeout(() => setOverlayHidden(true), 600);
+      return () => clearTimeout(t);
+    }
+    setOverlayHidden(false);
+  }, [status]);
 
   return (
     <div style={containerStyle}>
       <canvas ref={canvasRef} style={canvasStyle} />
 
-      {isLoading && (
-        <div style={overlayStyle}>
-          <div style={progressBarBg}>
-            <div style={{ ...progressBarFill, width: `${Math.max(2, progress)}%` }} />
+      {/* Loading overlay */}
+      {!overlayHidden && (isLoading || isError) && (
+        <div style={{
+          ...overlayStyle,
+          opacity: status === 'ready' ? 0 : 1,
+        }}>
+          <div style={loaderStyle}>
+            <h1 style={titleStyle}>LiDAR HD Viewer</h1>
+            {isError ? (
+              <p style={{ ...statusTextStyle, color: '#ef4444' }}>{status}</p>
+            ) : (
+              <>
+                <p style={statusTextStyle}>{status}</p>
+                <div style={barBgStyle}>
+                  <div style={{ ...barFillStyle, width: `${Math.max(2, progress)}%` }} />
+                </div>
+              </>
+            )}
           </div>
-          <span style={statusText}>{status} {progress > 0 ? `${progress.toFixed(0)}%` : ''}</span>
         </div>
       )}
 
-      {status.startsWith('error') && (
-        <div style={{ ...overlayStyle, color: '#ff6060' }}>
-          {status}
-        </div>
-      )}
+      {/* Controls hint */}
+      <div style={controlsHintStyle}>
+        🖱️ Clic gauche : orbiter · Clic droit : déplacer · Molette : zoom
+      </div>
 
+      {/* Bottom info bar */}
       <div style={infoBarStyle}>
-        {tileCoord && (
-          <span>Tile {tileCoord.xKm}_{tileCoord.yKm} ({tileCoord.territory})</span>
-        )}
+        {tileCoord && <span>{tileName}</span>}
         <span style={{ marginLeft: 'auto', opacity: 0.5 }}>
           {formatBytes(quota.used)} / {formatBytes(quota.quota)}
         </span>
+      </div>
+
+      {/* Watermark */}
+      <div style={watermarkStyle}>
+        <span style={{ color: '#ef4444', fontWeight: 700, fontSize: '1.8rem' }}>red</span>
+        <span style={{ color: '#f1f1f1', fontWeight: 700, fontSize: '1.8rem' }}>view</span>
       </div>
     </div>
   );
 }
 
+/* ---- Styles ---- */
+
 const containerStyle: React.CSSProperties = {
   position: 'fixed',
   inset: 0,
-  background: '#0d0d12',
-  display: 'flex',
-  flexDirection: 'column',
+  background: '#111',
+  overflow: 'hidden',
 };
 
 const canvasStyle: React.CSSProperties = {
-  flex: 1,
-  width: '100%',
   display: 'block',
+  width: '100%',
+  height: '100%',
 };
 
 const overlayStyle: React.CSSProperties = {
   position: 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: 8,
-  color: '#ccc',
-  fontFamily: 'system-ui, sans-serif',
-  fontSize: 13,
-};
-
-const progressBarBg: React.CSSProperties = {
-  width: 200,
-  height: 3,
-  background: 'rgba(255,255,255,0.1)',
-  borderRadius: 2,
-};
-
-const progressBarFill: React.CSSProperties = {
+  top: 0,
+  left: 0,
+  width: '100%',
   height: '100%',
-  background: '#6496ff',
-  borderRadius: 2,
-  transition: 'width 0.3s',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: '#111',
+  zIndex: 10,
+  transition: 'opacity 0.5s',
 };
 
-const statusText: React.CSSProperties = {
-  opacity: 0.6,
+const loaderStyle: React.CSSProperties = {
+  textAlign: 'center',
+};
+
+const titleStyle: React.CSSProperties = {
+  fontSize: '1.5rem',
+  marginBottom: 12,
+  fontWeight: 600,
+  color: '#eee',
+};
+
+const statusTextStyle: React.CSSProperties = {
+  fontSize: '0.85rem',
+  color: '#888',
+  marginBottom: 8,
   textTransform: 'capitalize',
 };
 
-const infoBarStyle: React.CSSProperties = {
-  display: 'flex',
-  padding: '6px 12px',
+const barBgStyle: React.CSSProperties = {
+  width: 300,
+  height: 6,
+  background: '#333',
+  borderRadius: 3,
+  overflow: 'hidden',
+  margin: '0 auto',
+};
+
+const barFillStyle: React.CSSProperties = {
+  height: '100%',
+  background: '#ef4444',
+  transition: 'width 0.2s',
+};
+
+const controlsHintStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 12,
+  left: 12,
+  zIndex: 5,
+  background: 'rgba(0,0,0,0.7)',
+  padding: '8px 14px',
+  borderRadius: 6,
   fontSize: 11,
   color: '#888',
-  fontFamily: 'system-ui, sans-serif',
-  background: '#111118',
-  borderTop: '1px solid #222',
+};
+
+const infoBarStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 12,
+  left: 12,
+  zIndex: 5,
+  display: 'flex',
+  gap: 16,
+  background: 'rgba(0,0,0,0.7)',
+  padding: '8px 14px',
+  borderRadius: 6,
+  fontSize: 12,
+  color: '#ccc',
+  fontFamily: 'ui-monospace, "SF Mono", monospace',
+};
+
+const watermarkStyle: React.CSSProperties = {
+  position: 'absolute',
+  bottom: 12,
+  right: 16,
+  zIndex: 5,
+  pointerEvents: 'none',
+  userSelect: 'none',
 };

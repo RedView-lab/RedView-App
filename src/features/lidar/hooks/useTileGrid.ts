@@ -17,33 +17,42 @@ export function useTileGrid(
 
   const refreshGrid = useCallback(() => {
     if (!map) return;
-    const bounds = map.getBounds()!;
-    const zoom = map.getZoom();
-    if (zoom < 12) {
+
+    // Re-scan OPFS for cached tiles before rendering
+    listCachedTiles().then((cached) => {
+      cachedKeys.current.clear();
+      for (const t of cached) {
+        cachedKeys.current.add(tileCoordKey(t.coord));
+      }
+
+      const bounds = map.getBounds()!;
+      const zoom = map.getZoom();
+      if (zoom < 12) {
+        const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
+        if (source) {
+          source.setData({ type: 'FeatureCollection', features: [] });
+        }
+        return;
+      }
+
+      const tiles = viewportToTileCoords(
+        bounds.getWest(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getNorth(),
+      );
+
+      const features = tiles.map((coord) => {
+        const key = tileCoordKey(coord);
+        const status = cachedKeys.current.has(key) ? 'cached' : 'available';
+        return tileToGeoJsonFeature(coord, status);
+      });
+
       const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
       if (source) {
-        source.setData({ type: 'FeatureCollection', features: [] });
+        source.setData({ type: 'FeatureCollection', features });
       }
-      return;
-    }
-
-    const tiles = viewportToTileCoords(
-      bounds.getWest(),
-      bounds.getSouth(),
-      bounds.getEast(),
-      bounds.getNorth(),
-    );
-
-    const features = tiles.map((coord) => {
-      const key = tileCoordKey(coord);
-      const status = cachedKeys.current.has(key) ? 'cached' : 'available';
-      return tileToGeoJsonFeature(coord, status);
-    });
-
-    const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-    if (source) {
-      source.setData({ type: 'FeatureCollection', features });
-    }
+    }).catch(() => {});
   }, [map]);
 
   useEffect(() => {

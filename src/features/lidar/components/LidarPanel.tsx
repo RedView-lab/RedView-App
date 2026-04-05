@@ -30,6 +30,27 @@ function phaseLabel(phase: string, downloaded: number, total: number): string {
   }
 }
 
+/** Map each phase to a global 0–100 % range */
+function phasePercent(phase: string, downloaded: number, total: number, subPercent?: number): number {
+  switch (phase) {
+    case 'cached': return 100;
+    case 'downloading': {
+      // 0–50 %
+      if (total > 0) return Math.min(50, (downloaded / total) * 50);
+      return 5;
+    }
+    case 'parsing': return 55;
+    case 'colorizing': {
+      // 60–85 %
+      const sub = subPercent ?? 0;
+      return 60 + sub * 0.25;
+    }
+    case 'computing-normals': return 90;
+    case 'rendering': return 98;
+    default: return 0;
+  }
+}
+
 export function LidarPanel({ picking, onView }: LidarPanelProps) {
   const [open, setOpen] = useState(true);
 
@@ -68,31 +89,33 @@ export function LidarPanel({ picking, onView }: LidarPanelProps) {
             }}
           >
             {isDownloading
-              ? 'Téléchargement...'
+              ? 'Traitement en cours...'
               : picking.isPicking
                 ? 'Annuler la sélection'
                 : 'Télécharger une tuile LIDAR'}
           </button>
 
           {/* Download progress */}
-          {isDownloading && picking.progress && (
-            <div style={progressSection}>
-              <div style={progressBarBg}>
-                <div
-                  style={{
-                    ...progressBarFill,
-                    width: picking.progress.totalBytes > 0
-                      ? `${Math.max(2, (picking.progress.bytesDownloaded / picking.progress.totalBytes) * 100)}%`
-                      : '100%',
-                    animation: picking.progress.totalBytes === 0 ? 'lidar-indeterminate 1.5s ease-in-out infinite' : undefined,
-                  }}
-                />
+          {isDownloading && picking.progress && (() => {
+            const p = picking.progress;
+            const pct = phasePercent(p.phase, p.bytesDownloaded, p.totalBytes, p.percent);
+            return (
+              <div style={progressSection}>
+                <div style={progressBarBg}>
+                  <div
+                    style={{
+                      ...progressBarFill,
+                      width: `${Math.max(2, pct)}%`,
+                    }}
+                  />
+                </div>
+                <div style={progressLabelStyle}>
+                  {phaseLabel(p.phase, p.bytesDownloaded, p.totalBytes)}
+                  {pct > 0 ? ` — ${Math.round(pct)}%` : ''}
+                </div>
               </div>
-              <div style={progressLabelStyle}>
-                {phaseLabel(picking.progress.phase, picking.progress.bytesDownloaded, picking.progress.totalBytes)}
-              </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Cached tiles list */}
           {picking.cachedTiles.length > 0 && (

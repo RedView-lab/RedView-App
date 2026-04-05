@@ -1,7 +1,8 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { TileCoord } from '../types/geometry';
 import { useLidarPicking } from '../hooks/useLidarPicking';
+import { useTileGrid } from '../hooks/useTileGrid';
 import { LidarPanel } from './LidarPanel';
 import { PickingBanner } from './PickingBanner';
 import { ConfirmPopup } from './ConfirmPopup';
@@ -13,14 +14,16 @@ export function TileGridLayer({ map }: { map: MapboxMap | null }) {
       y: String(coord.yKm),
       t: coord.territory,
     });
-    window.open(
-      `/lidar-viewer.html?${params.toString()}`,
-      `lidar_${coord.xKm}_${coord.yKm}`,
-      'width=1200,height=800',
-    );
+    window.open(`/lidar-viewer.html?${params.toString()}`, '_blank');
   }, []);
 
   const picking = useLidarPicking(map);
+  const { refreshGrid } = useTileGrid(map, openViewer);
+
+  // Refresh the grid overlay whenever cached tiles change (after download/delete)
+  useEffect(() => {
+    refreshGrid();
+  }, [picking.cachedTiles, refreshGrid]);
 
   return (
     <>

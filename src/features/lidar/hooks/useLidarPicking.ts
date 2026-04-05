@@ -5,7 +5,8 @@ import type { DownloadProgress } from '../types/events';
 import type { CachedTileInfo } from '../types/tile';
 import { fromWgs84, detectAltRef } from '../processing/coord-transform';
 import { tileToGeoJsonFeature } from '../tile-manager/tile-grid';
-import { downloadTile } from '../api/ign-download';
+import { processTile } from '../tile-manager/tile-lifecycle';
+import { TileStateManager } from '../tile-manager/tile-state';
 import { listCachedTiles, deleteTile as deleteTileFromStore } from '../storage/tile-store';
 
 const HOVER_SOURCE = 'lidar-hover-tile';
@@ -206,14 +207,31 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
     setDownloading(coord);
     setProgress(null);
 
+    const stateManager = new TileStateManager();
+    const unsub = stateManager.subscribe((event) => {
+      if (event.progress) {
+        setProgress(event.progress);
+      } else if (event.tileCoord) {
+        // State changed without explicit progress — build one from tile state
+        const ts = stateManager.get(event.tileCoord);
+        if (ts) {
+          setProgress(ts.progress ?? {
+            tileCoord: event.tileCoord,
+            bytesDownloaded: 0,
+            totalBytes: 0,
+            phase: ts.status,
+          });
+        }
+      }
+    });
+
     try {
-      await downloadTile(coord, (p) => {
-        setProgress(p);
-      });
+      await processTile(coord, stateManager);
       refreshCache();
     } catch (err) {
-      console.error('[lidar] Download failed:', err);
+      console.error('[lidar] Processing failed:', err);
     } finally {
+      unsub();
       setDownloading(null);
       setProgress(null);
     }
