@@ -1,13 +1,22 @@
 import type { TileCoord } from '../types/geometry';
 import type { DownloadProgress } from '../types/events';
 import { resolveDownloadUrls, cacheDownloadUrl } from './ign-zones';
-import { saveTile, hasTile, loadTile } from '../storage/tile-store';
+import { saveTile, hasTile, loadTile, deleteTile } from '../storage/tile-store';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
 const RETRY_BASE_429_MS = 2_000;
 const RETRY_BASE_5XX_MS = 1_000;
 const INTER_REQUEST_DELAY_MS = 200;
+
+/** LAZ/LAS files must start with 'LASF' magic bytes */
+const LAZ_MAGIC = [0x4C, 0x41, 0x53, 0x46]; // 'LASF'
+
+function isValidLaz(buf: ArrayBuffer): boolean {
+  if (buf.byteLength < 4) return false;
+  const header = new Uint8Array(buf, 0, 4);
+  return header.every((b, i) => b === LAZ_MAGIC[i]);
+}
 
 let rateLimitUntil = 0;
 
@@ -124,7 +133,11 @@ export async function downloadTile(
       message: 'Loading from local cache',
     });
     const cached = await loadTile(coord);
-    if (cached) return cached;
+    if (cached) {
+      if (isValidLaz(cached)) return cached;
+      console.warn(`[lidar] Corrupt cached tile ${coord.xKm}_${coord.yKm}, re-downloading`);
+      await deleteTile(coord);
+    }
   }
 
   const urls = await resolveDownloadUrls(coord);
@@ -136,6 +149,11 @@ export async function downloadTile(
     const url = urls[i];
     const buf = await fetchWithRetry(url, coord, onProgress);
     if (buf && buf.byteLength > 0) {
+      if (!isValidLaz(buf)) {
+        console.warn(`[lidar] Non-LAZ response from ${url} (${buf.byteLength} bytes), skipping`);
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        continue;
+      }
       cacheDownloadUrl(coord, url);
       await saveTile(coord, buf);
       return buf;

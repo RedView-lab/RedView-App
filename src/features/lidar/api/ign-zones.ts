@@ -162,7 +162,7 @@ function buildFallbackUrls(coord: TileCoord): string[] {
 
   const urls: string[] = [];
   for (const zone of codes) {
-    const zoneName = `NUALHD_1-0__LAZ_LAMB93_${zone}`;
+    const zoneName = `NUALHD_1-0__LAZ_${coord.projection}_${zone}`;
     urls.push(`/api/lidar-download?zone=${encodeURIComponent(zoneName)}&file=${baseName}.copc.laz`);
     urls.push(`/api/lidar-download?zone=${encodeURIComponent(zoneName)}&file=${baseName}.laz`);
   }
