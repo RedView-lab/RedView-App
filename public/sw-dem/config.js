@@ -18,11 +18,17 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-const CACHE_NAME = 'dem-tiles-v7';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v2';
+const CACHE_NAME = 'dem-tiles-v8';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v3';
 const NEGATIVE_TTL = 3600;
 const ORTHO_CACHE_NAME = 'ortho-tiles-v1';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 3000;
 const IGN_CONCURRENCY = 4;
+
+// Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
+const IGN_NULL_TTL_TRANSIENT = 30_000;   // 30s — timeout, 5xx, network error
+const IGN_NULL_TTL_PERMANENT = 3600_000; // 1h  — 404, invalid size
+// Maximum zoom levels to fall back when IGN tile is missing
+const IGN_FALLBACK_MAX_DEPTH = 3;

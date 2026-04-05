@@ -37,7 +37,8 @@ let mapboxToken = '';
 const OLD_CACHES = [
   'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3',
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
-  'dem-negative-v1',
+  'dem-tiles-v7',
+  'dem-negative-v1', 'dem-negative-v2',
 ];
 
 self.addEventListener('install', (e) => {
@@ -110,6 +111,7 @@ async function handleDemRequest(request, z, x, y) {
 
   try {
     let pngBlob;
+    let demSource = 'none';
 
     if (tileOverlapsFrance(z, x, y) && z >= IGN_DEM_MINZOOM) {
       const ignResult = await buildIGNTile(z, x, y);
@@ -117,14 +119,17 @@ async function handleDemRequest(request, z, x, y) {
       if (ignResult) {
         if (ignResult.blob) {
           pngBlob = ignResult.blob;
+          demSource = ignResult.source || 'ign-full';
         } else {
           pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+          demSource = `composite(${ignResult.source || 'ign-partial'})`;
         }
       }
     }
 
     if (!pngBlob && mapboxToken) {
       pngBlob = await fetchMapboxTile(z, x, y);
+      if (pngBlob) demSource = 'mapbox';
     }
 
     if (!pngBlob) {
@@ -135,11 +140,16 @@ async function handleDemRequest(request, z, x, y) {
       return new Response(null, { status: 204 });
     }
 
+    if (demSource.includes('fallback')) {
+      console.warn(`[sw-dem] ${z}/${x}/${y} used ${demSource}`);
+    }
+
     const response = new Response(pngBlob, {
       status: 200,
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=604800',
+        'X-DEM-Source': demSource,
       },
     });
 

@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
 // Build IGN Terrain-RGB tile (Mercator ← WGS84G resampling + border dilation)
-// Returns { blob, elevations, coverage } or null
+// Returns { blob, elevations, coverage, source } or null
+// Uses zoom-level fallback: if tile missing at demZ, tries lower zoom levels
 // ---------------------------------------------------------------------------
 
 async function buildIGNTile(mercZ, mercX, mercY) {
@@ -9,26 +10,29 @@ async function buildIGNTile(mercZ, mercX, mercY) {
   const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
   const br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
 
-  // Fetch all needed IGN tiles
+  // Fetch all needed IGN tiles — with zoom-level fallback
+  // tileMap stores: { data, actualZ, actualCol, actualRow } or null
   const tileMap = new Map();
   const fetches = [];
   for (let row = tl.row; row <= br.row; row++) {
     for (let col = tl.col; col <= br.col; col++) {
       fetches.push(
-        getIGNTile(demZ, col, row).then((d) => {
-          tileMap.set(`${col}/${row}`, d);
+        getIGNTileWithFallback(demZ, col, row).then((result) => {
+          tileMap.set(`${col}/${row}`, result);
         }),
       );
     }
   }
   await Promise.all(fetches);
 
+  // Track whether any fallback zoom was used (for diagnostics)
+  let usedFallback = false;
+  let minFallbackZ = demZ;
+
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
   const elevations = new Float32Array(totalPixels);
   const coverage = new Uint8Array(totalPixels);
   const n = 1 << mercZ;
-  const matrixWidth = 1 << (demZ + 1);
-  const matrixHeight = 1 << demZ;
   let coveredCount = 0;
 
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
@@ -39,17 +43,33 @@ async function buildIGNTile(mercZ, mercX, mercY) {
       const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
 
+      // Compute which tile at demZ this pixel maps to
+      const matrixWidth = 1 << (demZ + 1);
+      const matrixHeight = 1 << demZ;
       const col = Math.max(0, Math.min(Math.floor(((lng + 180) / 360) * matrixWidth), matrixWidth - 1));
       const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
 
-      const tileData = tileMap.get(`${col}/${row}`);
-      if (tileData) {
-        const fx = (((lng + 180) / 360) * matrixWidth - col) * IGN_SRC_TILE_SIZE;
-        const fy = (((90 - lat) / 180) * matrixHeight - row) * IGN_SRC_TILE_SIZE;
-        if (hasValidRawElevation(tileData, fx, fy)) {
-          elevations[py * DEM_TILE_SIZE + px] = bicubicSample(tileData, fx, fy);
+      const result = tileMap.get(`${col}/${row}`);
+      if (result && result.data) {
+        // Compute fractional pixel coords in the ACTUAL tile's coordinate space
+        const aZ = result.actualZ;
+        const aCol = result.actualCol;
+        const aRow = result.actualRow;
+        const aMatW = 1 << (aZ + 1);
+        const aMatH = 1 << aZ;
+
+        const fx = (((lng + 180) / 360) * aMatW - aCol) * IGN_SRC_TILE_SIZE;
+        const fy = (((90 - lat) / 180) * aMatH - aRow) * IGN_SRC_TILE_SIZE;
+
+        if (hasValidRawElevation(result.data, fx, fy)) {
+          elevations[py * DEM_TILE_SIZE + px] = bicubicSample(result.data, fx, fy);
           coverage[py * DEM_TILE_SIZE + px] = 1;
           coveredCount++;
+
+          if (aZ < demZ) {
+            usedFallback = true;
+            minFallbackZ = Math.min(minFallbackZ, aZ);
+          }
         }
       }
     }
@@ -57,12 +77,19 @@ async function buildIGNTile(mercZ, mercX, mercY) {
 
   if (coveredCount === 0) return null;
 
+  // Determine source label for diagnostics
+  const source = usedFallback ? `ign-fallback-z${minFallbackZ}` : 'ign';
+
   if (coveredCount === totalPixels) {
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage };
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
   }
 
-  // --- Border pixel dilation (2 passes) ---
-  for (let pass = 0; pass < 2; pass++) {
+  // --- Adaptive border pixel dilation ---
+  // More passes when coverage is sparse (larger gaps need more dilation)
+  const coverageRatio = coveredCount / totalPixels;
+  const dilationPasses = coverageRatio > 0.8 ? 2 : coverageRatio > 0.5 ? 4 : 6;
+
+  for (let pass = 0; pass < dilationPasses; pass++) {
     const newElevations = new Float32Array(elevations);
     const newCoverage = new Uint8Array(coverage);
     for (let py = 0; py < DEM_TILE_SIZE; py++) {
@@ -86,8 +113,8 @@ async function buildIGNTile(mercZ, mercX, mercY) {
   }
 
   if (coveredCount >= totalPixels) {
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage };
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
   }
 
-  return { blob: null, elevations, coverage };
+  return { blob: null, elevations, coverage, source };
 }
