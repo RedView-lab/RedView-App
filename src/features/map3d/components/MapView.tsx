@@ -1,10 +1,21 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 
-export default function MapView() {
+interface MapViewProps {
+  onMapReady?: (map: MapboxMap) => void;
+}
+
+export default function MapView({ onMapReady }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { isLoaded } = useMap(containerRef);
+  const { map, isLoaded } = useMap(containerRef);
+
+  useEffect(() => {
+    if (isLoaded && map.current && onMapReady) {
+      onMapReady(map.current);
+    }
+  }, [isLoaded, map, onMapReady]);
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>

@@ -1,4 +1,7 @@
+import { useState, useCallback } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import { MapView } from '@/features/map3d';
+import { TileGridLayer } from '@/features/lidar';
 
 interface DashboardProps {
   email: string;
@@ -6,9 +9,13 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
+  const [map, setMap] = useState<MapboxMap | null>(null);
+  const onMapReady = useCallback((m: MapboxMap) => setMap(m), []);
+
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
-      <MapView />
+      <MapView onMapReady={onMapReady} />
+      {map && <TileGridLayer map={map} />}
       <button
         onClick={onLogout}
         style={{

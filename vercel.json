@@ -1,6 +1,9 @@
 {
   "rewrites": [
-    { "source": "/((?!assets/|dem-tiles/|ortho-tiles/|sw-dem/).*)", "destination": "/index.html" }
+    { "source": "/api/lidar-zones", "destination": "/api/lidar-zones" },
+    { "source": "/api/lidar-download", "destination": "/api/lidar-download" },
+    { "source": "/lidar-viewer.html", "destination": "/lidar-viewer.html" },
+    { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|lidar-viewer).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

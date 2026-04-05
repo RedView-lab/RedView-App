@@ -12,5 +12,12 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 2500,
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        'lidar-viewer': path.resolve(__dirname, 'lidar-viewer.html'),
+      },
+    },
   },
+  assetsInclude: ['**/*.wgsl'],
 })
