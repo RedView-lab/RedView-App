@@ -2,13 +2,38 @@ import type { ZoneInfo, TileCoord } from '../types/geometry';
 import { toWgs84, buildTileFileName, isCorsica } from '../processing/coord-transform';
 
 const FALLBACK_ZONES_FXX = [
-  'AE_2025-07-22', 'AF_2025-09-11', 'KH_2024-12-20', 'PM_2025-03-25',
-  'QK_2025-06-13', 'QM_2025-03-14', 'QM_2025-02-20', 'LN_2025-02-10',
-  'QM_2024-12-15', 'PM_2024-12-15', 'PK_2024-12-15', 'QN_2024-12-15',
-  'QL_2024-11-15', 'QO_2024-12-15', 'QP_2024-12-15',
+  // Row A-B (Bretagne nord)
+  'AE_2025-07-22', 'AF_2025-09-11', 'BE_2025-09-22',
+  // Row C-D (Bretagne sud / Normandie)
+  'CE_2026-01-22', 'DE_2026-01-20', 'DF_2025-01-06', 'DH_2025-03-03', 'DI_2025-01-16',
+  // Row E (Atlantique / Centre-Ouest)
+  'EF_2025-01-23', 'EG_2025-01-06', 'EH_2025-07-21', 'EI_2025-05-16', 'EJ_2025-07-24',
+  'EM_2025-07-01', 'EN_2025-10-14', 'EO_2025-10-08', 'EP_2025-09-24', 'EQ_2025-09-26',
+  'ER_2025-07-08',
+  // Row F (Centre / Normandie)
+  'FD_2025-09-19', 'FE_2025-10-15', 'FF_2025-07-22', 'FG_2024-12-20', 'FH_2025-06-13',
+  'FI_2025-01-24', 'FJ_2025-01-23', 'FK_2025-02-04', 'FN_2025-07-29', 'FO_2025-09-15',
+  'FP_2025-08-07', 'FQ_2025-09-15', 'FR_2025-03-21',
+  // Row G (Ile-de-France / Centre)
+  'GD_2025-01-08', 'GE_2026-03-06', 'GF_2025-07-23', 'GG_2024-12-20', 'GH_2024-12-23',
+  'GI_2025-02-18', 'GJ_2025-01-27', 'GL_2026-01-14', 'GM_2025-05-13', 'GN_2024-12-13',
+  'GO_2025-09-22', 'GP_2025-03-28', 'GQ_2025-04-11', 'GR_2025-04-03',
+  // Row H (Nord / Picardie / Champagne)
+  'HC_2025-10-29', 'HD_2025-09-26', 'HE_2025-07-31', 'HF_2024-12-16',
+  // Row I-K (Est / Alsace / Lorraine / Bourgogne)
+  'KH_2024-12-20',
+  // Row L-N (Alpes / Jura / Rhône)
+  'LN_2025-02-10',
+  // Row P (Sud-Est / Provence / Languedoc)
+  'PK_2024-12-15', 'PM_2025-03-25', 'PM_2024-12-15',
+  // Row Q (Pyrénées / Méditerranée)
+  'QK_2025-06-13', 'QL_2024-11-15', 'QM_2025-03-14', 'QM_2025-02-20', 'QM_2024-12-15',
+  'QN_2024-12-15', 'QO_2024-12-15', 'QP_2024-12-15',
 ];
 const FALLBACK_ZONES_CORSE = ['VS_2025-04-02'];
 const FALLBACK_ZONES_REU = ['REU_2025-06-18'];
+
+const ZONES_STORAGE_KEY = 'redview_lidar_zones_v1';
 
 let zonesCache: ZoneInfo[] | null = null;
 const tileUrlCache = new Map<string, string>();
@@ -54,6 +79,26 @@ function parseZonesXml(xmlText: string): ZoneInfo[] {
   return zones;
 }
 
+function saveZonesToStorage(zones: ZoneInfo[]): void {
+  try {
+    const data = JSON.stringify({ ts: Date.now(), zones });
+    localStorage.setItem(ZONES_STORAGE_KEY, data);
+  } catch { /* quota exceeded — ignore */ }
+}
+
+function loadZonesFromStorage(): ZoneInfo[] | null {
+  try {
+    const raw = localStorage.getItem(ZONES_STORAGE_KEY);
+    if (!raw) return null;
+    const { ts, zones } = JSON.parse(raw) as { ts: number; zones: ZoneInfo[] };
+    // Expire after 7 days
+    if (Date.now() - ts > 7 * 24 * 3600_000) return null;
+    return zones;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchAllZones(): Promise<ZoneInfo[]> {
   if (zonesCache) return zonesCache;
 
@@ -64,7 +109,10 @@ async function fetchAllZones(): Promise<ZoneInfo[]> {
 
     for (; page <= totalPages; page++) {
       const resp = await fetch(`/api/lidar-zones?page=${page}`);
-      if (!resp.ok) break;
+      if (!resp.ok) {
+        console.warn(`[lidar] Zone fetch page ${page} failed: HTTP ${resp.status}`);
+        break;
+      }
       const text = await resp.text();
 
       if (page === 1) {
@@ -78,12 +126,24 @@ async function fetchAllZones(): Promise<ZoneInfo[]> {
       }
     }
 
-    zonesCache = allZones;
-    return allZones;
+    if (allZones.length > 0) {
+      zonesCache = allZones;
+      saveZonesToStorage(allZones);
+      return allZones;
+    }
   } catch (err) {
     console.warn('[lidar] Failed to fetch WFS zones:', err);
-    return [];
   }
+
+  // Try localStorage cache before giving up
+  const cached = loadZonesFromStorage();
+  if (cached && cached.length > 0) {
+    console.info(`[lidar] Using ${cached.length} cached zones from localStorage`);
+    zonesCache = cached;
+    return cached;
+  }
+
+  return [];
 }
 
 function buildFallbackUrls(coord: TileCoord): string[] {

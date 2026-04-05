@@ -8,7 +8,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const upstream = await fetch(url, {
-      headers: { Accept: 'application/xml' },
+      headers: {
+        Accept: 'application/atom+xml, application/xml;q=0.9, */*;q=0.8',
+        'User-Agent': 'RedView-App/1.0',
+      },
       signal: AbortSignal.timeout(15_000),
     });
 
