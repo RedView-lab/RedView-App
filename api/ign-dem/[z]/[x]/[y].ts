@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { processDemTile } from '../lib/dem-processor.js';
+import { processDemTile } from '../../../lib/dem-processor.js';
 
 const HEADERS = {
   'Content-Type': 'image/png',
