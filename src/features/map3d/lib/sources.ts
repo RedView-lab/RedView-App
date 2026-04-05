@@ -1,12 +1,17 @@
-import { FRANCE_BOUNDS } from './ign.config';
+import { FRANCE_BOUNDS, DEM_SOURCE_MAXZOOM } from './ign.config';
 import { getOrthoTileTemplate } from './ign.utils';
 
-export const mapboxDEMSource = {
-  id: 'mapbox-dem',
+/**
+ * Unified DEM source: IGN MNS 0.42m/px for France, Mapbox 30m elsewhere.
+ * Served via Vercel serverless function at /api/ign-dem/{z}/{x}/{y}.
+ */
+export const unifiedDEMSource = {
+  id: 'unified-dem',
   type: 'raster-dem' as const,
-  url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
-  tileSize: 512,
-  maxzoom: 14,
+  tiles: ['/api/ign-dem/{z}/{x}/{y}'],
+  tileSize: 256,
+  encoding: 'mapbox' as const,
+  maxzoom: DEM_SOURCE_MAXZOOM,
 };
 
 export const ignOrthoSource = {

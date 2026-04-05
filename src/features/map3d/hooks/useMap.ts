@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { MAPBOX_TOKEN, DEFAULT_VIEW, FOG_CONFIG } from '../lib/mapbox.config';
-import { mapboxDEMSource, ignOrthoSource } from '../lib/sources';
+import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
 import { loadViewport, saveViewport } from '../lib/viewport-persist';
@@ -36,12 +36,13 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       // Globe atmosphere
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
 
-      // Mapbox terrain DEM source (30m worldwide)
-      map.addSource(mapboxDEMSource.id, {
+      // Unified DEM source: IGN MNS 0.42m/px France + Mapbox 30m elsewhere
+      map.addSource(unifiedDEMSource.id, {
         type: 'raster-dem',
-        url: mapboxDEMSource.url,
-        tileSize: mapboxDEMSource.tileSize,
-        maxzoom: mapboxDEMSource.maxzoom,
+        tiles: unifiedDEMSource.tiles,
+        tileSize: unifiedDEMSource.tileSize,
+        encoding: unifiedDEMSource.encoding,
+        maxzoom: unifiedDEMSource.maxzoom,
       });
 
       // IGN orthophoto source
@@ -58,8 +59,8 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       // IGN ortho layer
       map.addLayer(ignOrthoLayer);
 
-      // Terrain with exaggeration 0.8
-      const terrain = new TerrainManager(map, mapboxDEMSource.id);
+      // Terrain with exaggeration 1.5 (better for high-res IGN data)
+      const terrain = new TerrainManager(map, unifiedDEMSource.id);
       terrain.init();
       terrainRef.current = terrain;
 
