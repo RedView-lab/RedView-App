@@ -1,6 +1,6 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
-const DEFAULT_EXAGGERATION = 1.5;
+const DEFAULT_EXAGGERATION = 1.2;
 
 export class TerrainManager {
   private map: MapboxMap;

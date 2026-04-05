@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/ign-dem/:z/:x/:y", "destination": "/api/ign-dem/[z]/[x]/[y]" },
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
   ]
 }

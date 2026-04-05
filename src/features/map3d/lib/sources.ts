@@ -3,13 +3,13 @@ import { getOrthoTileTemplate } from './ign.utils';
 
 /**
  * Unified DEM source: IGN MNS 0.42m/px for France, Mapbox 30m elsewhere.
- * Served via Vercel serverless function at /api/ign-dem/{z}/{x}/{y}.
+ * Processed client-side by Service Worker (sw-dem.js) intercepting /dem-tiles/ requests.
  */
 export const unifiedDEMSource = {
   id: 'unified-dem',
   type: 'raster-dem' as const,
-  tiles: ['/api/ign-dem/{z}/{x}/{y}'],
-  tileSize: 256,
+  tiles: ['/dem-tiles/{z}/{x}/{y}'],
+  tileSize: 512,
   encoding: 'mapbox' as const,
   maxzoom: DEM_SOURCE_MAXZOOM,
 };

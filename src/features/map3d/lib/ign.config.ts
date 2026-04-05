@@ -24,5 +24,5 @@ export const IGN_DEM_MAXZOOM = 17;
 // z16 in Mercator maps to ~z17 in WGS84G at French latitudes.
 export const DEM_SOURCE_MAXZOOM = 16;
 
-export const DEM_TILE_SIZE = 256;
+export const DEM_TILE_SIZE = 512;
 export const DEM_NODATA_THRESHOLD = -10000;

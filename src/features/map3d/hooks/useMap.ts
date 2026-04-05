@@ -1,12 +1,24 @@
 import { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { MAPBOX_TOKEN, DEFAULT_VIEW, FOG_CONFIG } from '../lib/mapbox.config';
+import { MAPBOX_TOKEN, MAPBOX_STYLE, DEFAULT_VIEW, FOG_CONFIG } from '../lib/mapbox.config';
 import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
 import { loadViewport, saveViewport } from '../lib/viewport-persist';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
+
+// Register DEM Service Worker and send Mapbox token
+const swReady = (async () => {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/sw-dem.js');
+    const reg = await navigator.serviceWorker.ready;
+    reg.active?.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+  } catch (e) {
+    console.error('[sw-dem] Registration failed:', e);
+  }
+})();
 
 export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -21,18 +33,24 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: 'mapbox://styles/mapbox/standard',
+      style: MAPBOX_STYLE,
       center: savedVp?.center ?? DEFAULT_VIEW.center,
       zoom: savedVp?.zoom ?? DEFAULT_VIEW.zoom,
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
+      maxTileCacheSize: 200,
+      minTileCacheSize: 50,
     });
 
     mapRef.current = map;
 
-    map.on('load', () => {
+    // style.load fires earlier than load — terrain appears sooner
+    map.on('style.load', async () => {
+      // Wait for Service Worker to be ready before adding DEM source
+      await swReady;
+
       // Globe atmosphere
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
 
@@ -45,7 +63,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         maxzoom: unifiedDEMSource.maxzoom,
       });
 
-      // IGN orthophoto source
+      // IGN orthophoto source (20cm/px France overlay on top of satellite base)
       map.addSource(ignOrthoSource.id, {
         type: 'raster',
         tiles: ignOrthoSource.tiles,
@@ -59,7 +77,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       // IGN ortho layer
       map.addLayer(ignOrthoLayer);
 
-      // Terrain with exaggeration 1.5 (better for high-res IGN data)
+      // Terrain with natural exaggeration
       const terrain = new TerrainManager(map, unifiedDEMSource.id);
       terrain.init();
       terrainRef.current = terrain;
