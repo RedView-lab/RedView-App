@@ -4,7 +4,7 @@
 // Intercepts /ortho-tiles/{z}/{x}/{y} → IGN orthophotos clipped to France border
 // ---------------------------------------------------------------------------
 
-const CACHE_NAME = 'dem-tiles-v5';
+const CACHE_NAME = 'dem-tiles-v6';
 
 // Config — DEM
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
@@ -56,7 +56,7 @@ self.addEventListener('activate', (e) => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k === 'dem-tiles-v1' || k === 'dem-tiles-v2' || k === 'dem-tiles-v3' || k === 'dem-tiles-v4' || k === 'dem-negative-v1')
+          .filter(k => k === 'dem-tiles-v1' || k === 'dem-tiles-v2' || k === 'dem-tiles-v3' || k === 'dem-tiles-v4' || k === 'dem-tiles-v5' || k === 'dem-negative-v1')
           .map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
@@ -213,6 +213,14 @@ function sanitizeElevation(value) {
   return value;
 }
 
+// Check if a single BIL pixel is valid (not NaN, not NODATA)
+function isRawValid(data, x, y) {
+  const cx = Math.max(0, Math.min(x, IGN_SRC_TILE_SIZE - 1));
+  const cy = Math.max(0, Math.min(y, IGN_SRC_TILE_SIZE - 1));
+  const val = data[cy * IGN_SRC_TILE_SIZE + cx];
+  return !Number.isNaN(val) && val >= DEM_NODATA_THRESHOLD;
+}
+
 // Check if the raw elevation at nearest pixel is actually valid data
 // (not NODATA). Used to build accurate coverage masks — a WGS84G tile
 // can contain valid French data in one part and NODATA in another.
@@ -224,7 +232,7 @@ function hasValidRawElevation(data, fx, fy) {
 }
 
 // ---------------------------------------------------------------------------
-// Bicubic interpolation (Catmull-Rom)
+// NODATA-aware interpolation (Catmull-Rom with bilinear/nearest fallback)
 // ---------------------------------------------------------------------------
 
 function cubicHermite(A, B, C, D, t) {
@@ -246,16 +254,61 @@ function bicubicSample(data, fx, fy) {
   const dx = fx - ix;
   const dy = fy - iy;
 
-  const rows = [];
-  for (let j = -1; j <= 2; j++) {
-    const c0 = sampleAt(data, ix - 1, iy + j);
-    const c1 = sampleAt(data, ix, iy + j);
-    const c2 = sampleAt(data, ix + 1, iy + j);
-    const c3 = sampleAt(data, ix + 2, iy + j);
-    rows.push(cubicHermite(c0, c1, c2, c3, dx));
+  // Check all 16 kernel pixels for NODATA. If any is invalid,
+  // Catmull-Rom would mix real elevation with NODATA→0, causing
+  // extreme overshoot spikes. Fall back to safer interpolation.
+  let allValid = true;
+  for (let j = -1; j <= 2 && allValid; j++) {
+    for (let k = -1; k <= 2 && allValid; k++) {
+      if (!isRawValid(data, ix + k, iy + j)) allValid = false;
+    }
   }
 
-  return cubicHermite(rows[0], rows[1], rows[2], rows[3], dy);
+  if (allValid) {
+    // Full Catmull-Rom bicubic — safe, all 16 pixels are valid
+    const rows = [];
+    for (let j = -1; j <= 2; j++) {
+      const c0 = sampleAt(data, ix - 1, iy + j);
+      const c1 = sampleAt(data, ix, iy + j);
+      const c2 = sampleAt(data, ix + 1, iy + j);
+      const c3 = sampleAt(data, ix + 2, iy + j);
+      rows.push(cubicHermite(c0, c1, c2, c3, dx));
+    }
+    return cubicHermite(rows[0], rows[1], rows[2], rows[3], dy);
+  }
+
+  // Fallback: bilinear using only the 4 inner (nearest) pixels
+  // Only use pixels that are valid; if fewer than 2, use nearest-neighbor
+  const p00v = isRawValid(data, ix, iy);
+  const p10v = isRawValid(data, ix + 1, iy);
+  const p01v = isRawValid(data, ix, iy + 1);
+  const p11v = isRawValid(data, ix + 1, iy + 1);
+  const validCount = (p00v ? 1 : 0) + (p10v ? 1 : 0) + (p01v ? 1 : 0) + (p11v ? 1 : 0);
+
+  if (validCount < 2) {
+    // Nearest-neighbor: return closest valid pixel
+    if (p00v) return sampleAt(data, ix, iy);
+    if (p10v) return sampleAt(data, ix + 1, iy);
+    if (p01v) return sampleAt(data, ix, iy + 1);
+    if (p11v) return sampleAt(data, ix + 1, iy + 1);
+    return 0; // all invalid
+  }
+
+  // Weighted bilinear: substitute invalid pixels with average of valid ones
+  const p00 = p00v ? sampleAt(data, ix, iy) : 0;
+  const p10 = p10v ? sampleAt(data, ix + 1, iy) : 0;
+  const p01 = p01v ? sampleAt(data, ix, iy + 1) : 0;
+  const p11 = p11v ? sampleAt(data, ix + 1, iy + 1) : 0;
+  const validAvg = (p00 * (p00v ? 1 : 0) + p10 * (p10v ? 1 : 0) + p01 * (p01v ? 1 : 0) + p11 * (p11v ? 1 : 0)) / validCount;
+
+  const s00 = p00v ? p00 : validAvg;
+  const s10 = p10v ? p10 : validAvg;
+  const s01 = p01v ? p01 : validAvg;
+  const s11 = p11v ? p11 : validAvg;
+
+  const top = s00 + (s10 - s00) * dx;
+  const bot = s01 + (s11 - s01) * dx;
+  return top + (bot - top) * dy;
 }
 
 // ---------------------------------------------------------------------------
@@ -462,7 +515,7 @@ async function encodeTerrainRGBPng(elevations) {
 
   for (let i = 0; i < elevations.length; i++) {
     const height = sanitizeElevation(elevations[i]);
-    const val = Math.round((height + 10000) / 0.1);
+    const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) / 0.1)));
     const idx = i * 4;
     pixels[idx] = (val >> 16) & 0xff;
     pixels[idx + 1] = (val >> 8) & 0xff;
@@ -511,6 +564,10 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
 
   // Decode Mapbox tile
   const mbElevations = await decodeTerrainRGBBlob(mapboxBlob);
+  const mbPixelCount = mbElevations.length;
+  if (mbPixelCount === 0) {
+    return encodeTerrainRGBPng(ignElevations);
+  }
 
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
@@ -578,6 +635,50 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     }
   }
 
+  // --- Tile-edge border injection ---
+  // If the coverage boundary aligns with the tile edge, the neighbor-based
+  // border detection above misses it (no neighbor outside the tile).
+  // Mark all covered pixels on tile edges as border (dist=0) so the Chamfer
+  // distance propagates correctly and blending happens at tile seams.
+  const lastPx = DEM_TILE_SIZE - 1;
+  for (let px = 0; px < DEM_TILE_SIZE; px++) {
+    // Top edge
+    if (coverage[px]) distToBorder[px] = 0;
+    // Bottom edge
+    const bIdx = lastPx * DEM_TILE_SIZE + px;
+    if (coverage[bIdx]) distToBorder[bIdx] = 0;
+  }
+  for (let py = 0; py < DEM_TILE_SIZE; py++) {
+    // Left edge
+    const lIdx = py * DEM_TILE_SIZE;
+    if (coverage[lIdx]) distToBorder[lIdx] = 0;
+    // Right edge
+    const rIdx = py * DEM_TILE_SIZE + lastPx;
+    if (coverage[rIdx]) distToBorder[rIdx] = 0;
+  }
+
+  // Re-run distance propagation after injecting tile-edge borders
+  // Forward pass
+  for (let py = 0; py < DEM_TILE_SIZE; py++) {
+    for (let px = 0; px < DEM_TILE_SIZE; px++) {
+      const idx = py * DEM_TILE_SIZE + px;
+      if (py > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE] + 1);
+      if (px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - 1] + 1);
+      if (py > 0 && px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE - 1] + 1.414);
+      if (py > 0 && px < lastPx) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx - DEM_TILE_SIZE + 1] + 1.414);
+    }
+  }
+  // Backward pass
+  for (let py = lastPx; py >= 0; py--) {
+    for (let px = lastPx; px >= 0; px--) {
+      const idx = py * DEM_TILE_SIZE + px;
+      if (py < lastPx) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE] + 1);
+      if (px < lastPx) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + 1] + 1);
+      if (py < lastPx && px < lastPx) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE + 1] + 1.414);
+      if (py < lastPx && px > 0) distToBorder[idx] = Math.min(distToBorder[idx], distToBorder[idx + DEM_TILE_SIZE - 1] + 1.414);
+    }
+  }
+
   // --- Collect per-pixel border offset samples (IGN − Mapbox) ---
   // Instead of a single average, store spatially-located samples so we can
   // interpolate a locally-varying offset across the blend zone.
@@ -588,7 +689,11 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
       if (distToBorder[idx] < 3 && coverage[idx]) {
         const mb = sampleMB(px, py);
         if (mb > -9000) {
-          borderSamples.push({ px, py, offset: ignElevations[idx] - mb });
+          const off = ignElevations[idx] - mb;
+          // Clamp offset to ±200m — reject extreme outliers from bad data
+          if (off > -200 && off < 200) {
+            borderSamples.push({ px, py, offset: off });
+          }
         }
       }
     }
@@ -611,7 +716,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
 
   // Inverse-distance-weighted offset at a given pixel
   function idwOffset(px, py) {
-    if (samplesForIDW.length === 0) return 0;
+    if (samplesForIDW.length === 0) return medianOffset;
     if (samplesForIDW.length < 4) return medianOffset;
 
     let wSum = 0, vSum = 0;
@@ -628,7 +733,8 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
       wSum += w;
       vSum += w * s.offset;
     }
-    return wSum > 0 ? vSum / wSum : medianOffset;
+    const result = wSum > 0 ? vSum / wSum : medianOffset;
+    return Number.isFinite(result) ? result : medianOffset;
   }
 
   // --- Composite with spatially-varying offset-corrected blending ---
