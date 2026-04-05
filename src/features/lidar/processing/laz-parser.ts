@@ -2,6 +2,21 @@ import type { PointCloudData } from '../types/tile';
 import type { DetectedCrs, PointCloudBounds } from '../types/geometry';
 import { detectCrs } from '../processing/coord-transform';
 
+// Singleton lazPerf WASM instance — initialized once per thread (main or worker)
+let lazPerfPromise: Promise<any> | null = null;
+
+async function getLazPerf() {
+  if (!lazPerfPromise) {
+    lazPerfPromise = (async () => {
+      const { Las } = await import('copc');
+      return Las.PointData.createLazPerf({
+        locateFile: () => '/laz-perf.wasm',
+      });
+    })();
+  }
+  return lazPerfPromise;
+}
+
 /**
  * Create a copc-compatible Getter from an ArrayBuffer.
  * Getter signature: (begin: number, end: number) => Promise<Uint8Array>
@@ -42,6 +57,7 @@ function extractPoints(
 
 export async function parseLazFile(buffer: ArrayBuffer): Promise<PointCloudData> {
   const { Copc, Las } = await import('copc');
+  const lazPerf = await getLazPerf();
   const getter = bufferGetter(buffer);
 
   let positions: Float32Array;
@@ -65,7 +81,7 @@ export async function parseLazFile(buffer: ArrayBuffer): Promise<PointCloudData>
 
     for (const [, node] of nodeEntries) {
       if (!node || node.pointCount === 0) continue;
-      const view = await Copc.loadPointDataView(getter, copc, node);
+      const view = await Copc.loadPointDataView(getter, copc, node, { lazPerf });
       const chunk = extractPoints(view);
       chunks.push(chunk);
       totalCount += chunk.count;
@@ -95,7 +111,7 @@ export async function parseLazFile(buffer: ArrayBuffer): Promise<PointCloudData>
   } catch {
     // Fallback: standard LAS/LAZ (non-COPC)
     const lazBuf = new Uint8Array(buffer);
-    const decompressed = await Las.PointData.decompressFile(lazBuf);
+    const decompressed = await Las.PointData.decompressFile(lazBuf, lazPerf);
     const header = Las.Header.parse(decompressed);
 
     // Build a view from the decompressed data

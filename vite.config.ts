@@ -10,6 +10,12 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  optimizeDeps: {
+    include: ['copc'],
+  },
+  worker: {
+    format: 'es',
+  },
   build: {
     chunkSizeWarningLimit: 2500,
     rollupOptions: {
