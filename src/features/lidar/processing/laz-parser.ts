@@ -33,22 +33,34 @@ function extractPoints(
   const getX = view.getter('X');
   const getY = view.getter('Y');
   const getZ = view.getter('Z');
-  const getR = view.getter('Red');
-  const getG = view.getter('Green');
-  const getB = view.getter('Blue');
   const getCls = view.getter('Classification');
+
+  // RGB dimensions are optional — many IGN LiDAR HD files don't include colors
+  let getR: ((i: number) => number) | null = null;
+  let getG: ((i: number) => number) | null = null;
+  let getB: ((i: number) => number) | null = null;
+  try { getR = view.getter('Red'); } catch { /* dimension not available */ }
+  try { getG = view.getter('Green'); } catch { /* dimension not available */ }
+  try { getB = view.getter('Blue'); } catch { /* dimension not available */ }
 
   const positions = new Float32Array(n * 3);
   const colors = new Uint8Array(n * 3);
   const classifications = new Uint8Array(n);
+  const hasColors = getR !== null && getG !== null && getB !== null;
 
   for (let i = 0; i < n; i++) {
     positions[i * 3] = getX(i);
     positions[i * 3 + 1] = getY(i);
     positions[i * 3 + 2] = getZ(i);
-    colors[i * 3] = Math.min(255, getR(i) >> 8);
-    colors[i * 3 + 1] = Math.min(255, getG(i) >> 8);
-    colors[i * 3 + 2] = Math.min(255, getB(i) >> 8);
+    if (hasColors) {
+      colors[i * 3] = Math.min(255, getR!(i) >> 8);
+      colors[i * 3 + 1] = Math.min(255, getG!(i) >> 8);
+      colors[i * 3 + 2] = Math.min(255, getB!(i) >> 8);
+    } else {
+      colors[i * 3] = 128;
+      colors[i * 3 + 1] = 128;
+      colors[i * 3 + 2] = 128;
+    }
     classifications[i] = getCls(i);
   }
 
