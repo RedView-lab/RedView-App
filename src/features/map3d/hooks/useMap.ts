@@ -40,8 +40,8 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
-      maxTileCacheSize: 200,
-      minTileCacheSize: 50,
+      maxTileCacheSize: 400,
+      minTileCacheSize: 100,
     });
 
     mapRef.current = map;
@@ -53,6 +53,13 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
       // Globe atmosphere
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
+
+      // Standard Satellite style: set daytime lighting for clearer, brighter look
+      try {
+        map.setConfigProperty('basemap', 'lightPreset', 'day');
+      } catch {
+        // Ignore if style doesn't support config properties
+      }
 
       // Unified DEM source: IGN MNS 0.42m/px France + Mapbox 30m elsewhere
       map.addSource(unifiedDEMSource.id, {

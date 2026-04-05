@@ -4,7 +4,7 @@
 // Intercepts /ortho-tiles/{z}/{x}/{y} → IGN orthophotos clipped to France border
 // ---------------------------------------------------------------------------
 
-const CACHE_NAME = 'dem-tiles-v2';
+const CACHE_NAME = 'dem-tiles-v3';
 
 // Config — DEM
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
@@ -56,7 +56,7 @@ self.addEventListener('activate', (e) => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k === 'dem-tiles-v1' || k === 'dem-negative-v1')
+          .filter(k => k === 'dem-tiles-v1' || k === 'dem-tiles-v2' || k === 'dem-negative-v1')
           .map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
@@ -567,11 +567,22 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
 
 async function fetchMapboxTile(z, x, y) {
   if (!mapboxToken) return null;
-  const url = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1/${z}/${x}/${y}.pngraw?access_token=${mapboxToken}`;
+  // Request 512x512 tiles (@2x) to match our tileSize: 512 DEM source
+  const url = `https://api.mapbox.com/v4/mapbox.mapbox-terrain-dem-v1/${z}/${x}/${y}@2x.pngraw?access_token=${mapboxToken}`;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null;
-    return await res.blob();
+    const blob = await res.blob();
+    // Verify the tile is actually 512x512; if not, resample it
+    const img = await createImageBitmap(blob);
+    if (img.width === DEM_TILE_SIZE && img.height === DEM_TILE_SIZE) {
+      return blob;
+    }
+    // Resample to DEM_TILE_SIZE x DEM_TILE_SIZE
+    const canvas = new OffscreenCanvas(DEM_TILE_SIZE, DEM_TILE_SIZE);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
+    return canvas.convertToBlob({ type: 'image/png' });
   } catch {
     return null;
   }
