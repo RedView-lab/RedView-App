@@ -1,5 +1,4 @@
-import { addProtocol, removeProtocol } from 'mapbox-gl';
-import type { ProtocolRequestParams } from 'mapbox-gl';
+import mapboxgl from 'mapbox-gl';
 import {
   DEM_TILE_SIZE,
   DEM_NODATA_THRESHOLD,
@@ -229,6 +228,13 @@ async function fetchMapboxTile(
 // Protocol registration
 // ---------------------------------------------------------------------------
 
+// mapbox-gl v3 exposes addProtocol/removeProtocol at runtime but
+// @types/mapbox-gl doesn't declare them — access via the namespace object.
+const _mapboxgl = mapboxgl as unknown as {
+  addProtocol: (name: string, handler: (params: { url: string }, ac: AbortController) => Promise<{ data: ImageBitmap | null }>) => void;
+  removeProtocol: (name: string) => void;
+};
+
 let registered = false;
 
 export function registerDEMProtocol(token: string): void {
@@ -238,7 +244,7 @@ export function registerDEMProtocol(token: string): void {
   // Clean up tiles from expired sessions (fire-and-forget)
   clearExpiredSessions();
 
-  addProtocol('igndem', async (params: ProtocolRequestParams, abortController: AbortController) => {
+  _mapboxgl.addProtocol('igndem', async (params, abortController) => {
     const parts = params.url.replace('igndem://', '').split('/');
     const mercZ = parseInt(parts[0], 10);
     const mercX = parseInt(parts[1], 10);
@@ -274,6 +280,6 @@ export function registerDEMProtocol(token: string): void {
 
 export function unregisterDEMProtocol(): void {
   if (!registered) return;
-  removeProtocol('igndem');
+  _mapboxgl.removeProtocol('igndem');
   registered = false;
 }
