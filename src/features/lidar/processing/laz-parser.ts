@@ -108,8 +108,10 @@ export async function parseLazFile(buffer: ArrayBuffer): Promise<PointCloudData>
 
     const yMean = (bounds.minY + bounds.maxY) / 2;
     crs = detectCrs(yMean);
-  } catch {
+  } catch (copcErr) {
     // Fallback: standard LAS/LAZ (non-COPC)
+    console.warn('[lidar] COPC parsing failed, trying standard LAS/LAZ fallback:', copcErr);
+    try {
     const lazBuf = new Uint8Array(buffer);
     const decompressed = await Las.PointData.decompressFile(lazBuf, lazPerf);
     const header = Las.Header.parse(decompressed);
@@ -131,6 +133,12 @@ export async function parseLazFile(buffer: ArrayBuffer): Promise<PointCloudData>
 
     const yMean = (bounds.minY + bounds.maxY) / 2;
     crs = detectCrs(yMean);
+    } catch (lasErr) {
+      throw new Error(
+        `Failed to parse LAZ file. COPC error: ${copcErr instanceof Error ? copcErr.message : copcErr}; ` +
+        `LAS fallback error: ${lasErr instanceof Error ? lasErr.message : lasErr}`
+      );
+    }
   }
 
   return { positions, colors, classifications, count, bounds, crs };

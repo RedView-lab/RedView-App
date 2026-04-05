@@ -14,6 +14,17 @@ self.onmessage = async (e: MessageEvent<ProcessWorkerInput>) => {
   const { buffer } = e.data;
 
   const post = (self as unknown as Worker).postMessage.bind(self);
+
+  // Validate LASF magic bytes before attempting parse
+  if (buffer.byteLength < 375) {
+    throw new Error(`Invalid LAZ file: too small (${buffer.byteLength} bytes)`);
+  }
+  const magic = new Uint8Array(buffer, 0, 4);
+  if (magic[0] !== 0x4C || magic[1] !== 0x41 || magic[2] !== 0x53 || magic[3] !== 0x46) {
+    const sig = String.fromCharCode(...magic);
+    throw new Error(`Invalid LAZ file: expected LASF signature, got "${sig}" — the downloaded file is not a valid LAS/LAZ`);
+  }
+
   post({ type: 'progress', percent: 5, phase: 'parsing' });
 
   const raw = await parseLazFile(buffer);

@@ -13,7 +13,7 @@ const INTER_REQUEST_DELAY_MS = 200;
 const LAZ_MAGIC = [0x4C, 0x41, 0x53, 0x46]; // 'LASF'
 
 function isValidLaz(buf: ArrayBuffer): boolean {
-  if (buf.byteLength < 4) return false;
+  if (buf.byteLength < 375) return false; // minimum LAS 1.0 header size
   const header = new Uint8Array(buf, 0, 4);
   return header.every((b, i) => b === LAZ_MAGIC[i]);
 }
@@ -70,6 +70,13 @@ async function fetchWithRetry(
       }
 
       if (!resp.ok) return null;
+
+      // Reject HTML/XML error pages served with 200 status
+      const contentType = resp.headers.get('content-type') ?? '';
+      if (contentType.includes('text/html') || contentType.includes('application/xml')) {
+        console.warn(`[lidar] Non-binary response (${contentType}) from ${url}, skipping`);
+        return null;
+      }
 
       const totalBytes = parseInt(resp.headers.get('content-length') ?? '0', 10);
 

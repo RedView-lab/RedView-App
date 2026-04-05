@@ -44,18 +44,18 @@ function containsPoint(bbox: ZoneInfo['bbox'], lon: number, lat: number): boolea
 
 function parseZonesXml(xmlText: string): ZoneInfo[] {
   const parser = new DOMParser();
-  const doc = parser.parseFromString(xmlText, 'application/xml');
-  const entries = doc.getElementsByTagNameNS('*', 'entry');
+  const doc = parser.parseFromString(xmlText, 'text/xml');
+  const entries = doc.getElementsByTagName('entry');
   const zones: ZoneInfo[] = [];
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    const title = entry.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() ?? '';
+    const title = entry.getElementsByTagName('title')[0]?.textContent?.trim() ?? '';
     if (!title) continue;
 
     // Extract bbox from gpf_dl:bbox attribute on <link> elements
     let bboxAttr = '';
-    const links = entry.getElementsByTagNameNS('*', 'link');
+    const links = entry.getElementsByTagName('link');
     for (let j = 0; j < links.length; j++) {
       const attr = links[j].getAttribute('gpf_dl:bbox');
       if (attr) { bboxAttr = attr; break; }
@@ -116,11 +116,24 @@ async function fetchAllZones(): Promise<ZoneInfo[]> {
       const text = await resp.text();
 
       if (page === 1) {
-        const match = text.match(/pagecount="(\d+)"/i);
-        if (match) totalPages = parseInt(match[1], 10);
+        // Try to extract pagecount from <feed gpf_dl:pagecount="N"> attribute (matching earth-explorer)
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, 'text/xml');
+        const feedEl = doc.getElementsByTagName('feed')[0];
+        if (feedEl) {
+          const pcAttr = feedEl.getAttribute('gpf_dl:pagecount');
+          if (pcAttr) totalPages = parseInt(pcAttr, 10) || 1;
+        }
+        // Fallback: regex match
+        if (totalPages === 1) {
+          const match = text.match(/pagecount[="\s]+(\d+)/i);
+          if (match) totalPages = parseInt(match[1], 10);
+        }
       }
 
-      allZones.push(...parseZonesXml(text));
+      const parsed = parseZonesXml(text);
+      if (parsed.length === 0 && page > 1) break; // no more entries
+      allZones.push(...parsed);
       if (page < totalPages) {
         await new Promise(r => setTimeout(r, 200));
       }

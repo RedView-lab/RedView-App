@@ -72,7 +72,10 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
     if (!map) return;
 
     const setupOverlay = () => {
-      if (map.getSource(HOVER_SOURCE)) return;
+      // Clean up orphaned layers/source from previous style loads
+      if (map.getLayer(HOVER_LINE)) map.removeLayer(HOVER_LINE);
+      if (map.getLayer(HOVER_FILL)) map.removeLayer(HOVER_FILL);
+      if (map.getSource(HOVER_SOURCE)) map.removeSource(HOVER_SOURCE);
 
       map.addSource(HOVER_SOURCE, {
         type: 'geojson',
@@ -107,6 +110,9 @@ export function useLidarPicking(map: MapboxMap | null): PickingState {
     map.on('style.load', setupOverlay);
     if (map.isStyleLoaded()) {
       setupOverlay();
+    } else {
+      // Fallback: style.load may have already fired before this effect ran
+      map.once('load', setupOverlay);
     }
 
     return () => {

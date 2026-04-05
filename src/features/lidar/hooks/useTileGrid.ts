@@ -65,7 +65,10 @@ export function useTileGrid(
     });
 
     const onStyleLoad = () => {
-      if (map.getSource(SOURCE_ID)) return;
+      // Clean up orphaned layers/source from previous style loads
+      if (map.getLayer(LINE_LAYER)) map.removeLayer(LINE_LAYER);
+      if (map.getLayer(FILL_LAYER)) map.removeLayer(FILL_LAYER);
+      if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
 
       map.addSource(SOURCE_ID, {
         type: 'geojson',
@@ -135,6 +138,9 @@ export function useTileGrid(
     map.on('style.load', onStyleLoad);
     if (map.isStyleLoaded()) {
       onStyleLoad();
+      refreshGrid();
+    } else {
+      map.once('load', () => { onStyleLoad(); refreshGrid(); });
     }
 
     map.on('moveend', refreshGrid);
