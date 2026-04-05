@@ -29,7 +29,7 @@ function App() {
   if (loading) {
     return (
       <div className="loading">
-        <p className="accent">{"> "}loading...</p>
+        <p>Loading...</p>
       </div>
     )
   }
@@ -39,7 +39,7 @@ function App() {
     window.location.href = `${landingUrl}/auth/login`
     return (
       <div className="loading">
-        <p>{"> "}redirecting to authentication...</p>
+        <p>Redirecting...</p>
       </div>
     )
   }
