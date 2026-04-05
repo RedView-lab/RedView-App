@@ -4,7 +4,7 @@
 // Intercepts /ortho-tiles/{z}/{x}/{y} → IGN orthophotos clipped to France border
 // ---------------------------------------------------------------------------
 
-const CACHE_NAME = 'dem-tiles-v1';
+const CACHE_NAME = 'dem-tiles-v2';
 
 // Config — DEM
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
@@ -52,9 +52,13 @@ self.addEventListener('install', (e) => {
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    // Clean up old negative caches on version bump
+    // Purge old caches from previous SW versions
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k === 'dem-negative-v1').map(k => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter(k => k === 'dem-tiles-v1' || k === 'dem-negative-v1')
+          .map(k => caches.delete(k))
+      )
     ).then(() => self.clients.claim())
   );
 });
@@ -207,6 +211,16 @@ function decodeBIL32(buffer) {
 function sanitizeElevation(value) {
   if (Number.isNaN(value) || value < DEM_NODATA_THRESHOLD) return 0;
   return value;
+}
+
+// Check if the raw elevation at nearest pixel is actually valid data
+// (not NODATA). Used to build accurate coverage masks — a WGS84G tile
+// can contain valid French data in one part and NODATA in another.
+function hasValidRawElevation(data, fx, fy) {
+  const ix = Math.max(0, Math.min(Math.round(fx), IGN_SRC_TILE_SIZE - 1));
+  const iy = Math.max(0, Math.min(Math.round(fy), IGN_SRC_TILE_SIZE - 1));
+  const val = data[iy * IGN_SRC_TILE_SIZE + ix];
+  return !Number.isNaN(val) && val >= DEM_NODATA_THRESHOLD;
 }
 
 // ---------------------------------------------------------------------------
@@ -377,9 +391,14 @@ async function buildIGNTile(mercZ, mercX, mercY) {
       if (tileData) {
         const fx = (((lng + 180) / 360) * matrixWidth - col) * IGN_SRC_TILE_SIZE;
         const fy = (((90 - lat) / 180) * matrixHeight - row) * IGN_SRC_TILE_SIZE;
-        elevations[py * DEM_TILE_SIZE + px] = bicubicSample(tileData, fx, fy);
-        coverage[py * DEM_TILE_SIZE + px] = 1;
-        coveredCount++;
+        // Only mark as covered if the raw BIL value at this pixel is valid,
+        // not NODATA — a single WGS84G tile can have data for France and
+        // NODATA for Italy/Spain/etc.
+        if (hasValidRawElevation(tileData, fx, fy)) {
+          elevations[py * DEM_TILE_SIZE + px] = bicubicSample(tileData, fx, fy);
+          coverage[py * DEM_TILE_SIZE + px] = 1;
+          coveredCount++;
+        }
       }
     }
   }
