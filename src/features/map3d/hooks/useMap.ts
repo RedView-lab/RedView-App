@@ -1,10 +1,9 @@
 import { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { MAPBOX_TOKEN, DEFAULT_VIEW, FOG_CONFIG } from '../lib/mapbox.config';
-import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
+import { mapboxDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
-import { registerDEMProtocol, unregisterDEMProtocol } from '../lib/dem-protocol';
 import { loadViewport, saveViewport } from '../lib/viewport-persist';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
@@ -16,9 +15,6 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-
-    // Register custom protocol before map init
-    registerDEMProtocol(MAPBOX_TOKEN);
 
     // Restore viewport from previous session if available
     const savedVp = loadViewport();
@@ -40,13 +36,12 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       // Globe atmosphere
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
 
-      // Unified DEM source (IGN 0.42m France + Mapbox 30m elsewhere)
-      map.addSource(unifiedDEMSource.id, {
+      // Mapbox terrain DEM source (30m worldwide)
+      map.addSource(mapboxDEMSource.id, {
         type: 'raster-dem',
-        tiles: unifiedDEMSource.tiles,
-        tileSize: unifiedDEMSource.tileSize,
-        encoding: unifiedDEMSource.encoding,
-        maxzoom: unifiedDEMSource.maxzoom,
+        url: mapboxDEMSource.url,
+        tileSize: mapboxDEMSource.tileSize,
+        maxzoom: mapboxDEMSource.maxzoom,
       });
 
       // IGN orthophoto source
@@ -64,7 +59,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       map.addLayer(ignOrthoLayer);
 
       // Terrain with exaggeration 0.8
-      const terrain = new TerrainManager(map, unifiedDEMSource.id);
+      const terrain = new TerrainManager(map, mapboxDEMSource.id);
       terrain.init();
       terrainRef.current = terrain;
 
@@ -107,7 +102,6 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       terrainRef.current = null;
       map.remove();
       mapRef.current = null;
-      unregisterDEMProtocol();
     };
   }, [containerRef]);
 

@@ -1,13 +1,12 @@
-import { FRANCE_BOUNDS, DEM_SOURCE_MAXZOOM } from './ign.config';
+import { FRANCE_BOUNDS } from './ign.config';
 import { getOrthoTileTemplate } from './ign.utils';
 
-export const unifiedDEMSource = {
-  id: 'unified-dem',
+export const mapboxDEMSource = {
+  id: 'mapbox-dem',
   type: 'raster-dem' as const,
-  tiles: ['igndem://{z}/{x}/{y}'],
-  tileSize: 256,
-  encoding: 'mapbox' as const,
-  maxzoom: DEM_SOURCE_MAXZOOM,
+  url: 'mapbox://mapbox.mapbox-terrain-dem-v1',
+  tileSize: 512,
+  maxzoom: 14,
 };
 
 export const ignOrthoSource = {
