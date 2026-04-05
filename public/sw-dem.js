@@ -4,7 +4,7 @@
 // Intercepts /ortho-tiles/{z}/{x}/{y} → IGN orthophotos clipped to France border
 // ---------------------------------------------------------------------------
 
-const CACHE_NAME = 'dem-tiles-v4';
+const CACHE_NAME = 'dem-tiles-v5';
 
 // Config — DEM
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
@@ -56,7 +56,7 @@ self.addEventListener('activate', (e) => {
     caches.keys().then(keys =>
       Promise.all(
         keys
-          .filter(k => k === 'dem-tiles-v1' || k === 'dem-tiles-v2' || k === 'dem-tiles-v3' || k === 'dem-negative-v1')
+          .filter(k => k === 'dem-tiles-v1' || k === 'dem-tiles-v2' || k === 'dem-tiles-v3' || k === 'dem-tiles-v4' || k === 'dem-negative-v1')
           .map(k => caches.delete(k))
       )
     ).then(() => self.clients.claim())
@@ -411,6 +411,40 @@ async function buildIGNTile(mercZ, mercX, mercY) {
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage };
   }
 
+  // --- Border pixel dilation (2 passes) ---
+  // Fill uncovered pixels adjacent to valid IGN data by propagating
+  // nearest valid elevation. This prevents bicubic sampling artifacts
+  // at NODATA boundaries inside WGS84G tiles and provides smoother
+  // transition data for the blend zone.
+  for (let pass = 0; pass < 2; pass++) {
+    const newElevations = new Float32Array(elevations);
+    const newCoverage = new Uint8Array(coverage);
+    for (let py = 0; py < DEM_TILE_SIZE; py++) {
+      for (let px = 0; px < DEM_TILE_SIZE; px++) {
+        const idx = py * DEM_TILE_SIZE + px;
+        if (coverage[idx]) continue; // already covered
+        // Check 4-connected neighbors for valid data
+        let sum = 0, count = 0;
+        if (py > 0 && coverage[idx - DEM_TILE_SIZE]) { sum += elevations[idx - DEM_TILE_SIZE]; count++; }
+        if (py < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE]) { sum += elevations[idx + DEM_TILE_SIZE]; count++; }
+        if (px > 0 && coverage[idx - 1]) { sum += elevations[idx - 1]; count++; }
+        if (px < DEM_TILE_SIZE - 1 && coverage[idx + 1]) { sum += elevations[idx + 1]; count++; }
+        if (count > 0) {
+          newElevations[idx] = sum / count;
+          newCoverage[idx] = 1;
+          coveredCount++;
+        }
+      }
+    }
+    elevations.set(newElevations);
+    coverage.set(newCoverage);
+  }
+
+  // Re-check: dilation might have filled everything
+  if (coveredCount >= totalPixels) {
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage };
+  }
+
   // Partial coverage → return data for compositing with Mapbox
   return { blob: null, elevations, coverage };
 }
@@ -481,8 +515,8 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
   // Adaptive blend radius: wider at low zoom (each pixel covers more ground)
-  // z5 → ~128px, z10 → ~64px, z14 → ~48px, z16 → ~40px
-  const BLEND_RADIUS = Math.max(40, Math.round(128 / Math.pow(1.15, Math.max(0, z - 5))));
+  // z5 → ~160px, z10 → ~96px, z14 → ~72px, z16 → ~64px
+  const BLEND_RADIUS = Math.max(64, Math.round(160 / Math.pow(1.1, Math.max(0, z - 5))));
 
   // Smoothstep for artifact-free blending (no linear seam)
   function smoothstep(t) {
@@ -544,27 +578,60 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     }
   }
 
-  // --- Compute average elevation offset between IGN & Mapbox at the border ---
-  // This eliminates the vertical wall by shifting Mapbox elevations to match
-  // IGN at the boundary before blending.
-  let offsetSum = 0;
-  let offsetCount = 0;
+  // --- Collect per-pixel border offset samples (IGN − Mapbox) ---
+  // Instead of a single average, store spatially-located samples so we can
+  // interpolate a locally-varying offset across the blend zone.
+  const borderSamples = []; // { px, py, offset }
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
       const idx = py * DEM_TILE_SIZE + px;
       if (distToBorder[idx] < 3 && coverage[idx]) {
-        // IGN pixel right at the border
         const mb = sampleMB(px, py);
         if (mb > -9000) {
-          offsetSum += ignElevations[idx] - mb;
-          offsetCount++;
+          borderSamples.push({ px, py, offset: ignElevations[idx] - mb });
         }
       }
     }
   }
-  const borderOffset = offsetCount > 0 ? offsetSum / offsetCount : 0;
 
-  // --- Composite with offset-corrected blending ---
+  // Compute median offset as fallback (robust against outliers)
+  let medianOffset = 0;
+  if (borderSamples.length > 0) {
+    const sorted = borderSamples.map(s => s.offset).sort((a, b) => a - b);
+    const mid = sorted.length >> 1;
+    medianOffset = sorted.length & 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  // Subsample border samples for performance (keep ~every 4th sample, cap at 2000)
+  let samplesForIDW = borderSamples;
+  if (samplesForIDW.length > 2000) {
+    const step = Math.ceil(samplesForIDW.length / 2000);
+    samplesForIDW = samplesForIDW.filter((_, i) => i % step === 0);
+  }
+
+  // Inverse-distance-weighted offset at a given pixel
+  function idwOffset(px, py) {
+    if (samplesForIDW.length === 0) return 0;
+    if (samplesForIDW.length < 4) return medianOffset;
+
+    let wSum = 0, vSum = 0;
+    const searchR = BLEND_RADIUS * 2;
+    const searchR2 = searchR * searchR;
+    for (let i = 0; i < samplesForIDW.length; i++) {
+      const s = samplesForIDW[i];
+      const dx = px - s.px;
+      const dy = py - s.py;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < 1) return s.offset;
+      if (d2 > searchR2) continue;
+      const w = 1 / d2; // inverse-distance-squared weighting
+      wSum += w;
+      vSum += w * s.offset;
+    }
+    return wSum > 0 ? vSum / wSum : medianOffset;
+  }
+
+  // --- Composite with spatially-varying offset-corrected blending ---
   const result = new Float32Array(totalPixels);
   for (let i = 0; i < totalPixels; i++) {
     const py = (i / DEM_TILE_SIZE) | 0;
@@ -578,14 +645,18 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     } else {
       // In blend zone — smoothstep interpolation with offset correction
       const t = smoothstep(dist / BLEND_RADIUS); // 0 at border, 1 at full radius
-      const w = coverage[i] ? t : (1 - t);       // weight for IGN
+      const localOffset = idwOffset(px, py);
 
-      // Offset-corrected Mapbox value: shift towards IGN baseline near border,
-      // fade offset to 0 far from border (on the Mapbox side)
-      const offsetFade = coverage[i] ? 1 : (1 - t);
-      const mbCorrected = mb + borderOffset * offsetFade;
-
-      result[i] = ignElevations[i] * w + mbCorrected * (1 - w);
+      if (coverage[i]) {
+        // IGN pixel in blend zone: fade from offset-corrected Mapbox at border → pure IGN inside
+        const mbCorrected = mb + localOffset;
+        result[i] = ignElevations[i] * t + mbCorrected * (1 - t);
+      } else {
+        // Mapbox pixel in blend zone: fade from offset-corrected Mapbox at border → raw Mapbox outside
+        // CRITICAL FIX: never reference ignElevations[i] here (it's 0 = uninitialized)
+        const mbCorrected = mb + localOffset * (1 - t);
+        result[i] = mbCorrected;
+      }
     }
   }
 
