@@ -3,12 +3,12 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindState } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindData, clearWindCache } from '../lib/open-meteo';
-import { generateDenseField } from '../lib/wind-field';
 import {
-  createWindIcons,
-  addWindLayer,
-  updateWindData,
-  removeWindLayer,
+  initWindParticles,
+  updateWindParticles,
+  pauseWindParticles,
+  resumeWindParticles,
+  removeWindParticles,
 } from '../lib/wind-layer';
 
 // ── Configuration ─────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ export function useWind(
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
 
-  // ── Fetch sparse API data → interpolate → render static layer ───
+  // ── Fetch sparse API data → build wind texture → feed particles ──
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
@@ -94,14 +94,13 @@ export function useWind(
         const sparsePoints = await fetchWindData(grid, controller.signal);
         if (controller.signal.aborted) return;
 
-        const dense = generateDenseField(sparsePoints, bounds, bounds.zoom);
-        updateWindData(m, dense);
+        updateWindParticles(m, sparsePoints, bounds);
         lastBoundsRef.current = bounds;
 
         setState({
           loading: false,
           error: null,
-          pointCount: dense.length,
+          pointCount: sparsePoints.length,
           lastUpdate: Date.now(),
         });
       } catch (err: unknown) {
@@ -121,28 +120,31 @@ export function useWind(
 
     if (enabled) {
       try {
-        createWindIcons(map);
-        addWindLayer(map);
+        initWindParticles(map);
         layerInitRef.current = true;
       } catch (err) {
         console.error('[wind] init failed:', err);
-        setState((s) => ({ ...s, error: 'Wind layer init failed' }));
+        setState((s) => ({ ...s, error: 'Wind particle init failed' }));
         return;
       }
 
       fetchForViewport(map);
 
+      const onMoveStart = () => pauseWindParticles();
       const onMoveEnd = () => {
+        resumeWindParticles();
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => fetchForViewport(map), DEBOUNCE_MS);
       };
+      map.on('movestart', onMoveStart);
       map.on('moveend', onMoveEnd);
 
       return () => {
+        map.off('movestart', onMoveStart);
         map.off('moveend', onMoveEnd);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         abortRef.current?.abort();
-        removeWindLayer(map);
+        removeWindParticles();
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
@@ -151,7 +153,7 @@ export function useWind(
       if (layerInitRef.current) {
         abortRef.current?.abort();
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        removeWindLayer(map);
+        removeWindParticles();
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         clearWindCache();
