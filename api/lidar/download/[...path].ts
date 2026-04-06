@@ -1,15 +1,21 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request) {
   if (req.method !== 'GET') {
-    return res.status(405).send('Method not allowed');
+    return new Response('Method not allowed', { status: 405 });
   }
 
   try {
-    // Vercel catch-all: req.query.path is an array of path segments
-    const pathSegments = req.query.path;
-    if (!Array.isArray(pathSegments) || pathSegments.length < 2) {
-      return res.status(400).send('Missing zone/file parameters');
+    const url = new URL(req.url);
+    const pathSegments = url.pathname
+      .replace(/^\/api\/lidar\/download\//, '')
+      .split('/')
+      .filter(Boolean);
+
+    if (pathSegments.length < 2) {
+      return new Response('Missing zone/file parameters', { status: 400 });
     }
 
     const zone = pathSegments[0];
@@ -17,17 +23,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Validate parameters to prevent path traversal
     if (!/^[\w._-]+$/.test(zone) || !/^[\w._-]+$/.test(file)) {
-      return res.status(400).send('Invalid parameters');
+      return new Response('Invalid parameters', { status: 400 });
     }
 
-    const url = `https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/${zone}/${file}`;
+    const ignUrl = `https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/${zone}/${file}`;
 
     const maxRetries = 3;
     const baseDelay429 = 2000;
     const baseDelay5xx = 1000;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      const response = await fetch(url, {
+      const response = await fetch(ignUrl, {
         headers: { 'User-Agent': 'RedView/0.1' },
       });
 
@@ -42,37 +48,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         if (attempt < maxRetries) {
-          console.log(`[LiDAR] 429 from IGN for ${file}, retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        if (retryAfter) res.setHeader('Retry-After', retryAfter);
-        return res.status(429).send('IGN rate limit exceeded after retries');
+
+        const headers: HeadersInit = {};
+        if (retryAfter) headers['Retry-After'] = retryAfter;
+        return new Response('IGN rate limit exceeded after retries', { status: 429, headers });
       }
 
       if (response.status >= 500 && attempt < maxRetries) {
         const delay = baseDelay5xx * Math.pow(2, attempt);
-        console.log(`[LiDAR] ${response.status} from IGN for ${file}, retry ${attempt + 1}/${maxRetries} in ${delay}ms`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }
 
       if (!response.ok) {
-        return res.status(response.status).send(`IGN download error: ${response.status}`);
+        return new Response(`IGN download error: ${response.status}`, { status: response.status });
       }
 
+      // Stream the response body directly — no buffering
+      const headers = new Headers();
       const contentLength = response.headers.get('content-length');
       const contentType = response.headers.get('content-type');
-      if (contentLength) res.setHeader('Content-Length', contentLength);
-      res.setHeader('Content-Type', contentType || 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${file}"`);
+      if (contentLength) headers.set('Content-Length', contentLength);
+      headers.set('Content-Type', contentType || 'application/octet-stream');
+      headers.set('Content-Disposition', `attachment; filename="${file}"`);
 
-      const buffer = Buffer.from(await response.arrayBuffer());
-      res.send(buffer);
-      return;
+      return new Response(response.body, { status: 200, headers });
     }
-  } catch (err: any) {
-    console.error('[LiDAR] Download proxy error:', err.message);
-    if (!res.headersSent) res.status(502).send('Download proxy error');
+
+    return new Response('Download failed after retries', { status: 502 });
+  } catch {
+    return new Response('Download proxy error', { status: 502 });
   }
 }

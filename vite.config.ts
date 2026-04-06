@@ -10,6 +10,22 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/lidar': {
+        target: 'https://data.geopf.fr',
+        changeOrigin: true,
+        rewrite: (p) => {
+          // /api/lidar/zones?page=N → /telechargement/resource/LiDARHD-NUALID?page=N
+          if (p.startsWith('/api/lidar/zones')) {
+            return p.replace('/api/lidar/zones', '/telechargement/resource/LiDARHD-NUALID');
+          }
+          // /api/lidar/download/ZONE/FILE → /telechargement/download/LiDARHD-NUALID/ZONE/FILE
+          return p.replace('/api/lidar/download/', '/telechargement/download/LiDARHD-NUALID/');
+        },
+      },
+    },
+  },
   build: {
     chunkSizeWarningLimit: 2500,
     rollupOptions: {

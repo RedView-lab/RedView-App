@@ -1,5 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
+/**
+ * Strip <georss:polygon> elements from the XML response.
+ * The client only needs <title>, <link gpf_dl:bbox>, and <feed gpf_dl:pagecount>.
+ * Polygons are huge (many KB each) and cause Vercel's 4.5MB body limit to be exceeded.
+ */
+function stripPolygons(xml: string): string {
+  return xml.replace(/<georss:polygon>[^<]*<\/georss:polygon>/g, '');
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).send('Method not allowed');
@@ -18,9 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const text = await response.text();
+    const stripped = stripPolygons(text);
     res.setHeader('Content-Type', 'application/xml');
     res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.send(text);
+    res.send(stripped);
   } catch (err: any) {
     console.error('[LiDAR] WFS proxy error:', err.message);
     res.status(502).send('WFS proxy error');
