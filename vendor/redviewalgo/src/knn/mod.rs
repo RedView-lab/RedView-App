@@ -1,0 +1,346 @@
+pub mod features;
+
+use crate::types::ActivityData;
+use features::{FeatureNorm, NormalizedSample, TrainingSample};
+use serde::{Deserialize, Serialize};
+
+/// Minimum number of training samples needed for KNN to be used.
+const MIN_SAMPLES: usize = 50;
+
+/// Maximum training samples — with efficient distance search, we can use more data.
+const MAX_SAMPLES: usize = 50_000;
+
+/// KNN prediction result with confidence metric.
+pub struct KnnPrediction {
+    pub speed_ms: f64,
+    /// Confidence in [0, 1]. Higher = closer neighbors, more reliable prediction.
+    pub confidence: f64,
+}
+
+/// The complete KNN model with pre-normalized samples for fast distance computation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnnModel {
+    /// Raw training samples (kept for serialisation / debugging)
+    pub samples: Vec<TrainingSample>,
+    /// Normalization params: [gradient, elapsed_h, cum_climb, recent_grad, elevation]
+    pub norms: Vec<FeatureNorm>,
+    /// Pre-normalized & weighted feature vectors — NOT serialised, rebuilt on demand.
+    #[serde(skip)]
+    precomputed: Vec<NormalizedSample>,
+}
+
+impl KnnModel {
+    pub fn is_usable(&mut self) -> bool {
+        self.ensure_precomputed();
+        self.precomputed.len() >= MIN_SAMPLES
+    }
+
+    /// Maximum elapsed_h seen in training data.
+    pub fn max_elapsed_h(&self) -> f64 {
+        self.samples
+            .iter()
+            .map(|s| s.elapsed_h)
+            .fold(0.0_f64, f64::max)
+    }
+
+    /// Create an empty model (used as fallback when no training data exists).
+    pub fn empty() -> Self {
+        KnnModel {
+            samples: vec![],
+            norms: vec![],
+            precomputed: vec![],
+        }
+    }
+
+    /// FIX: Rebuild precomputed samples after deserialization.
+    /// Called lazily on first use if precomputed is empty but samples exist.
+    pub fn ensure_precomputed(&mut self) {
+        if self.precomputed.is_empty() && !self.samples.is_empty() && !self.norms.is_empty() {
+            self.precomputed = self
+                .samples
+                .iter()
+                .map(|s| NormalizedSample {
+                    features: features::normalize_features(
+                        s.gradient_pct,
+                        s.elapsed_h,
+                        s.cum_climb_m,
+                        s.recent_avg_gradient,
+                        s.elevation_m,
+                        s.cum_distance_m,
+                        &self.norms,
+                    ),
+                    speed_ms: s.speed_ms,
+                })
+                .collect();
+        }
+    }
+}
+
+/// Extract training samples from multiple activities and build the KNN model.
+pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
+    let mut samples = features::extract_training_samples(activities);
+
+    // Subsample if needed — keep every Nth sample uniformly
+    if samples.len() > MAX_SAMPLES {
+        let step = samples.len() as f64 / MAX_SAMPLES as f64;
+        let mut kept = Vec::with_capacity(MAX_SAMPLES);
+        let mut idx = 0.0_f64;
+        while (idx as usize) < samples.len() && kept.len() < MAX_SAMPLES {
+            kept.push(samples[idx as usize].clone());
+            idx += step;
+        }
+        samples = kept;
+    }
+
+    let norms = features::compute_norms(&samples);
+
+    let precomputed = samples
+        .iter()
+        .map(|s| NormalizedSample {
+            features: features::normalize_features(
+                s.gradient_pct,
+                s.elapsed_h,
+                s.cum_climb_m,
+                s.recent_avg_gradient,
+                s.elevation_m,
+                s.cum_distance_m,
+                &norms,
+            ),
+            speed_ms: s.speed_ms,
+        })
+        .collect();
+
+    KnnModel {
+        samples,
+        norms,
+        precomputed,
+    }
+}
+
+/// Predict speed (m/s) using KNN for a single route point.
+/// Returns KnnPrediction with speed and confidence metric.
+///
+/// Uses pre-normalized features for O(samples) distance computation.
+/// Confidence = 1 / (1 + mean_neighbor_distance), range [0, 1].
+pub fn knn_predict_speed(
+    model: &mut KnnModel,
+    gradient_pct: f64,
+    elapsed_h: f64,
+    cum_climb_m: f64,
+    recent_avg_gradient: f64,
+    elevation_m: f64,
+    cum_distance_m: f64,
+) -> KnnPrediction {
+    model.ensure_precomputed();
+    let precomputed = &model.precomputed;
+
+    if precomputed.is_empty() {
+        return KnnPrediction {
+            speed_ms: 5.56,
+            confidence: 0.0,
+        };
+    }
+
+    let q = features::normalize_features(
+        gradient_pct,
+        elapsed_h,
+        cum_climb_m,
+        recent_avg_gradient,
+        elevation_m,
+        cum_distance_m,
+        &model.norms,
+    );
+
+    // Adaptive K: scale with data size for better bias-variance tradeoff
+    let adaptive_k = ((precomputed.len() as f64).sqrt() as usize).clamp(5, 20);
+    let k = adaptive_k.min(precomputed.len());
+
+    // Max-heap of size K for efficient nearest-neighbor tracking
+    let mut top_k: Vec<(f64, f64)> = Vec::with_capacity(k + 1);
+
+    for ns in precomputed {
+        let d = dist_sq(&q, &ns.features);
+
+        if top_k.len() < k {
+            top_k.push((d, ns.speed_ms));
+            if top_k.len() == k {
+                top_k.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+            }
+        } else if d < top_k[k - 1].0 {
+            top_k[k - 1] = (d, ns.speed_ms);
+            // Insertion sort to maintain order
+            let mut i = k - 1;
+            while i > 0 && top_k[i].0 < top_k[i - 1].0 {
+                top_k.swap(i, i - 1);
+                i -= 1;
+            }
+        }
+    }
+
+    // Gaussian-based inverse-distance weighting — smoother falloff than 1/d
+    let mut weight_sum = 0.0;
+    let mut value_sum = 0.0;
+    let mut dist_sum = 0.0;
+
+    // Compute bandwidth from median neighbor distance for adaptive Gaussian width
+    let median_d2 = if top_k.len() >= 3 {
+        let mid = top_k.len() / 2;
+        top_k[mid].0.max(1e-12)
+    } else {
+        1.0
+    };
+
+    for &(d, speed) in &top_k {
+        let r = d.sqrt();
+        // Gaussian kernel: w = exp(-d / (2·σ²))
+        let w = (-d / (2.0 * median_d2)).exp();
+        weight_sum += w;
+        value_sum += w * speed;
+        dist_sum += r;
+    }
+
+    let speed = if weight_sum > 0.0 {
+        value_sum / weight_sum
+    } else {
+        5.56
+    };
+
+    // Confidence: combines mean distance (absolute proximity) with Gaussian decay
+    // Uses 1/(1+mean_dist) as base, scaled by mean Gaussian weight
+    let mean_dist = if !top_k.is_empty() {
+        dist_sum / top_k.len() as f64
+    } else {
+        f64::MAX
+    };
+    let mean_weight = if !top_k.is_empty() && weight_sum > 0.0 {
+        weight_sum / top_k.len() as f64
+    } else {
+        0.0
+    };
+    let confidence = ((1.0 / (1.0 + mean_dist)) * mean_weight.sqrt()).clamp(0.0, 1.0);
+
+    KnnPrediction { speed_ms: speed, confidence }
+}
+
+/// Squared Euclidean distance between two feature vectors.
+#[inline]
+fn dist_sq(a: &[f64; features::N_FEATURES], b: &[f64; features::N_FEATURES]) -> f64 {
+    let mut sum = 0.0;
+    for i in 0..features::N_FEATURES {
+        let d = a[i] - b[i];
+        sum += d * d;
+    }
+    sum
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{ActivityData, ActivitySummary, DataPoint};
+
+    fn make_activity(n_points: usize, base_speed: f64, has_power: bool) -> ActivityData {
+        let mut points = Vec::with_capacity(n_points);
+        for i in 0..n_points {
+            let t = i as f64;
+            let dist = t * base_speed;
+            let grad_cycle = (t * 0.01).sin() * 5.0;
+            let ele = 500.0 + grad_cycle * 10.0;
+            let speed = (base_speed - grad_cycle * 0.3).max(1.0);
+
+            points.push(DataPoint {
+                timestamp_s: t,
+                lat: 45.0 + t * 0.00001,
+                lon: 6.0,
+                altitude_m: ele,
+                speed_ms: speed,
+                power_w: if has_power { 200.0 } else { 0.0 },
+                cadence_rpm: 80.0,
+                heart_rate_bpm: 140.0,
+                temperature_c: 20.0,
+                distance_m: dist,
+            });
+        }
+
+        let summary = ActivitySummary {
+            duration_s: n_points as f64,
+            distance_m: points.last().map(|p| p.distance_m).unwrap_or(0.0),
+            elevation_gain_m: 500.0,
+            avg_speed_ms: base_speed,
+            avg_power_w: if has_power { 200.0 } else { 0.0 },
+            avg_hr_bpm: 140.0,
+            has_power,
+            has_hr: true,
+        };
+
+        ActivityData { points, summary }
+    }
+
+    #[test]
+    fn test_knn_model_building() {
+        let activities = vec![
+            make_activity(1000, 7.0, false),
+            make_activity(500, 6.0, false),
+        ];
+
+        let mut model = build_knn_model(&activities);
+
+        assert!(
+            model.samples.len() > 100,
+            "Expected >100 samples, got {}",
+            model.samples.len()
+        );
+        assert_eq!(model.norms.len(), 6);
+        assert!(model.is_usable());
+    }
+
+    #[test]
+    fn test_knn_prediction() {
+        let activities = vec![
+            make_activity(2000, 7.0, false),
+            make_activity(1000, 6.5, false),
+        ];
+
+        let mut model = build_knn_model(&activities);
+
+        let pred = knn_predict_speed(&mut model, 0.0, 0.5, 100.0, 0.0, 500.0, 5000.0);
+        assert!(
+            pred.speed_ms > 4.0 && pred.speed_ms < 12.0,
+            "Flat prediction: got {} m/s",
+            pred.speed_ms
+        );
+        assert!(pred.confidence > 0.0, "Confidence should be > 0");
+
+        let pred_up = knn_predict_speed(&mut model, 8.0, 0.5, 100.0, 5.0, 800.0, 5000.0);
+        assert!(
+            pred_up.speed_ms < pred.speed_ms,
+            "Uphill ({}) should be slower than flat ({})",
+            pred_up.speed_ms,
+            pred.speed_ms
+        );
+    }
+
+    #[test]
+    fn test_knn_model_too_small() {
+        let activities = vec![make_activity(10, 7.0, false)];
+        let mut model = build_knn_model(&activities);
+        assert!(!model.is_usable());
+    }
+
+    #[test]
+    fn test_knn_confidence_decreases_with_extrapolation() {
+        let activities = vec![make_activity(2000, 7.0, false)];
+        let mut model = build_knn_model(&activities);
+
+        // Within training range
+        let pred_normal = knn_predict_speed(&mut model, 0.0, 0.3, 100.0, 0.0, 500.0, 3000.0);
+        // Far outside training range (50h elapsed = way beyond training data)
+        let pred_extrap = knn_predict_speed(&mut model, 0.0, 50.0, 50000.0, 0.0, 500.0, 500000.0);
+
+        assert!(
+            pred_normal.confidence > pred_extrap.confidence,
+            "Normal confidence ({}) should be > extrapolated ({})",
+            pred_normal.confidence,
+            pred_extrap.confidence
+        );
+    }
+}

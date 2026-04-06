@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { MapView } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
+import { FitPredictionPanel } from '@/features/fitPredictor';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -13,6 +14,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const mapRef = useRef<MapboxMap | null>(null);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
+  const [fitPanelOpen, setFitPanelOpen] = useState(false);
 
   const handleMapReady = (map: MapboxMap) => {
     mapRef.current = map;
@@ -31,13 +33,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
 
-      <div style={lidarDockStyle}>
+      <div style={leftDockStackStyle}>
         <LidarPanel
           modeActive={lidarModeEnabled}
           detailsOpen={lidarDetailsOpen}
           onToggleMode={() => setLidarModeEnabled((current) => !current)}
           onToggleDetails={() => setLidarDetailsOpen((current) => !current)}
           onFlyTo={handleFlyTo}
+        />
+        <FitPredictionPanel
+          open={fitPanelOpen}
+          onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
       </div>
 
@@ -65,9 +71,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 }
 
-const lidarDockStyle: React.CSSProperties = {
+const leftDockStackStyle: React.CSSProperties = {
   position: 'absolute',
   top: 12,
   left: 12,
   zIndex: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 10,
 };

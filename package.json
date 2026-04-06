@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "build:fit-engine": "powershell -ExecutionPolicy Bypass -File ./vendor/redviewalgo/build.ps1",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
