@@ -85,6 +85,14 @@ fn build_one_segment(
 
     let seg_type = classify_gradient(avg_gradient).to_string();
 
+    // VAM (Velocità Ascensionale Media): vertical ascent rate in m/h
+    // Only meaningful for climb segments
+    let vam_mh = if seg_type == "climb" && time_s > 0.0 && gain > 0.0 {
+        gain / (time_s / 3600.0)
+    } else {
+        0.0
+    };
+
     SegmentSummary {
         start_distance_m: start_dist,
         end_distance_m: end_dist,
@@ -95,5 +103,6 @@ fn build_one_segment(
         avg_speed_kmh,
         time_s,
         segment_type: seg_type,
+        vam_mh,
     }
 }

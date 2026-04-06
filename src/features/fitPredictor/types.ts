@@ -19,6 +19,8 @@ export interface PredictionConfig {
   rider_type?: RiderType;
   target_duration_h?: number;
   surface_types?: number[];
+  ambient_temperature_c?: number;
+  headwind_ms?: number;
 }
 
 export interface RiderProfile {
@@ -44,6 +46,8 @@ export interface PredictionPoint {
   circadian_factor?: number;
   distance_eff_factor?: number;
   knn_confidence?: number;
+  predicted_speed_low_kmh?: number;
+  predicted_speed_high_kmh?: number;
 }
 
 export interface SegmentSummary {
@@ -56,6 +60,7 @@ export interface SegmentSummary {
   avg_speed_kmh: number;
   time_s: number;
   segment_type: string;
+  vam_mh?: number;
 }
 
 export interface PredictionResult {
@@ -69,6 +74,8 @@ export interface PredictionResult {
   segments: SegmentSummary[];
   points: PredictionPoint[];
   rider_profile: RiderProfile;
+  total_time_low_s?: number;
+  total_time_high_s?: number;
 }
 
 export interface ActualSpeedPoint {

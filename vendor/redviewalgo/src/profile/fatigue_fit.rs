@@ -113,11 +113,22 @@ pub fn build_fatigue_model(activities: &[ActivityData], has_power: bool) -> Fati
         let clamped_a = a.clamp(0.0, 0.6);
         let clamped_b = b.clamp(0.0, 0.6);
 
-        // Ultra floor: for events >24h, sustainable power is typically higher
-        // than the training-derived floor (athletes self-pace at 40-55% FTP).
-        // Empirical: ultra_floor = floor + 0.15, clamped to [0.62, 0.82]
-        // Based on RAAM data: riders sustain 65-80% of paced effort over multi-day
-        let ultra_floor = (clamped_floor + 0.15).clamp(0.62, 0.82);
+        // Data-driven ultra floor: use actual fatigued chunks (>8h) to estimate
+        // sustainable performance at ultra durations instead of fixed +0.15 offset.
+        let late_perfs: Vec<f64> = time_perf.iter()
+            .filter(|(t, _)| *t > 8.0)
+            .map(|(_, p)| *p)
+            .collect();
+        let ultra_floor = if late_perfs.len() >= 5 {
+            // Use 25th percentile of late performance as sustainable floor
+            let mut sorted = late_perfs.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p25 = sorted[sorted.len() / 4];
+            p25.clamp(0.55, 0.85)
+        } else {
+            // Not enough ultra data: fall back to model-based estimate
+            (clamped_floor + 0.12).clamp(0.62, 0.82)
+        };
 
         // Also compute single-exp fallback from the slow component for compatibility
         let effective_baseline = clamped_floor + clamped_a + clamped_b;
@@ -152,9 +163,19 @@ pub fn build_fatigue_model(activities: &[ActivityData], has_power: bool) -> Fati
             floor
         };
 
-        // Ultra floor for single-exp: default higher steady-state
-        // Raised to match bi-exp: floor + 0.15, clamped [0.62, 0.82]
-        let ultra_floor = (corrected_floor.clamp(0.35, 0.80) + 0.15).clamp(0.62, 0.82);
+        // Data-driven ultra floor for single-exp
+        let late_perfs: Vec<f64> = time_perf.iter()
+            .filter(|(t, _)| *t > 6.0)
+            .map(|(_, p)| *p)
+            .collect();
+        let ultra_floor = if late_perfs.len() >= 3 {
+            let mut sorted = late_perfs.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let p25 = sorted[sorted.len() / 4];
+            p25.clamp(0.55, 0.85)
+        } else {
+            (corrected_floor.clamp(0.35, 0.80) + 0.12).clamp(0.62, 0.82)
+        };
 
         FatigueModel {
             decay_lambda: corrected_lambda.clamp(0.005, 0.2),

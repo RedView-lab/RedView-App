@@ -7,7 +7,8 @@ use crate::math::{
 use crate::prediction::descent::cap_descent_speed;
 use crate::prediction::fatigue::{
     circadian_factor, compute_fatigue_factor, distance_efficiency_factor,
-    fatigue_recovery_after_stop, morning_rebound_factor,
+    fatigue_recovery_after_stop, glycogen_factor, morning_rebound_factor,
+    sleep_inertia_factor, thermal_factor, update_glycogen,
 };
 use crate::prediction::surface::{surface_effective_crr, surface_speed_penalty};
 use crate::profile::lookup_speed_for_gradient;
@@ -31,7 +32,7 @@ const CDA_TUCK_FACTOR: f64 = 0.80;
 /// Reference climbing rate for climbing load (600m D+/30min = very hard sustained climbing).
 const CLIMBING_LOAD_REFERENCE: f64 = 600.0;
 /// Climbing load penalty coefficient (short-term).
-const CLIMBING_LOAD_COEFF: f64 = 0.12;
+const CLIMBING_LOAD_COEFF: f64 = 0.08;
 /// Climbing load sliding window (seconds) — short-term (30min).
 const CLIMBING_LOAD_WINDOW_S: f64 = 1800.0;
 /// Long-term climbing load window (4h) — accumulated fatigue from repeated climbs.
@@ -58,10 +59,11 @@ fn combined_micro_factor_floor(total_route_km: f64) -> f64 {
     if total_route_km < 200.0 {
         1.0 // no floor for short rides
     } else {
-        // Smooth sigmoid transition: 0.75 at 200km, converging to 0.50 at 3000km+
+        // Smooth sigmoid transition: 0.80 at 200km, converging to 0.58 at 3000km+
+        // Raised from old 0.75/0.50 to prevent excessive stacking of many penalties
         let x = (total_route_km - 200.0) / 1000.0;
-        let floor = 0.50 + 0.25 / (1.0 + x);
-        floor.clamp(0.50, 0.75)
+        let floor = 0.58 + 0.22 / (1.0 + x);
+        floor.clamp(0.58, 0.80)
     }
 }
 
@@ -96,6 +98,7 @@ pub fn predict_single_pass(
     sleep_strategy: &SleepStrategy,
     race_mode: bool,
     stop_schedule: &[StopEvent],
+    ambient_temperature_c: f64,
 ) -> (Vec<PredictionPoint>, f64) {
     let n = route.points.len();
     let use_knn = knn.is_usable();
@@ -126,6 +129,15 @@ pub fn predict_single_pass(
     let mut is_climbing = false;
     // Track time spent climbing since last descent for recovery boost decay
     let mut climb_duration_since_recovery_s: f64 = 0.0;
+
+    // Glycogen tracking: starts at 1.0 (full stores)
+    let mut glycogen_level: f64 = 1.0;
+    // Previous speed for gradient transition momentum smoothing
+    let mut prev_speed_ms: f64 = FALLBACK_SPEED_MS;
+    // Sleep inertia tracking: time since last sleep stop wake-up (hours)
+    let mut time_since_wake_h: f64 = f64::MAX; // MAX = no recent sleep, no inertia
+    // Ambient temperature from config
+    let ambient_temp_c = ambient_temperature_c;
 
     for i in 0..n {
         let rp = &route.points[i];
@@ -177,6 +189,14 @@ pub fn predict_single_pass(
             // Distance efficiency partial recovery for long stops (>30min)
             if stop.duration_s > 1800.0 {
                 dist_eff_recovery = (dist_eff_recovery + DIST_EFF_RECOVERY_PER_STOP).min(0.08);
+            }
+
+            // Glycogen refuel during stops (eating at rest)
+            glycogen_level = update_glycogen(glycogen_level, stop.duration_s / 3600.0, 0.0, true);
+
+            // Track sleep inertia: if this was a sleep stop, reset wake timer
+            if matches!(stop.stop_type, crate::types::StopType::Sleep) {
+                time_since_wake_h = 0.0;
             }
 
             next_stop_idx += 1;
@@ -418,7 +438,7 @@ pub fn predict_single_pass(
             // to tiredness. Scale down the fatigue penalty proportionally to how
             // much we blend toward fatigued bins.
             let blend_ratio = if !profile.fatigued_bins.is_empty() {
-                (elapsed_h / 12.0).clamp(0.0, 1.0)
+                1.0 - (-elapsed_h / 8.0).exp() // exponential onset matching gradient_bins
             } else {
                 0.0
             };
@@ -433,6 +453,15 @@ pub fn predict_single_pass(
         // distance efficiency decay, circadian, recovery boosts, and morning rebound
         let effective_dist_eff = (dist_eff + dist_eff_recovery).min(1.0);
 
+        // Thermal stress factor
+        let thermal = thermal_factor(ambient_temp_c);
+
+        // Glycogen depletion factor
+        let glycogen = glycogen_factor(glycogen_level);
+
+        // Sleep inertia factor (post-wake penalty)
+        let sleep_inertia = sleep_inertia_factor(time_since_wake_h);
+
         // Compute combined micro-factor with anti-stacking floor
         let total_route_km = route.total_distance_m / 1000.0;
         let logistics_eff = logistics_efficiency_factor(cum_distance_km);
@@ -443,7 +472,10 @@ pub fn predict_single_pass(
             * circadian
             * morning_factor
             * logistics_eff
-            * surface_penalty;
+            * surface_penalty
+            * thermal
+            * glycogen
+            * sleep_inertia;
         let micro_floor = combined_micro_factor_floor(total_route_km);
         let micro_clamped = micro_combined.max(micro_floor);
 
@@ -452,10 +484,20 @@ pub fn predict_single_pass(
             * recovery_factor
             * (1.0 + effective_recovery_boost);
 
+        // Gradient transition momentum: smooth speed changes to model
+        // real-world inertia (rider doesn't instantly change speed at gradient transitions).
+        // Apply asymmetric smoothing: 80/20 for decelerations, no smoothing for accelerations.
+        let momentum_speed = if raw_speed_ms < prev_speed_ms {
+            // Decelerating (e.g. flat→climb): rider carries momentum
+            0.8 * raw_speed_ms + 0.2 * prev_speed_ms
+        } else {
+            raw_speed_ms // Accelerating: no artificial boost
+        };
+
         // Physics-based descent cap (terminal velocity + curvature + reaction)
         let cda_tuck = cda * CDA_TUCK_FACTOR;
         let capped_speed = cap_descent_speed(
-            raw_speed_ms,
+            momentum_speed,
             rp.gradient_pct,
             elapsed_h,
             mass_kg,
@@ -472,6 +514,12 @@ pub fn predict_single_pass(
         } else {
             0.0
         };
+
+        // Update state for next iteration
+        let segment_dt_h = segment_time / 3600.0;
+        glycogen_level = update_glycogen(glycogen_level, segment_dt_h, rp.gradient_pct, false);
+        time_since_wake_h += segment_dt_h;
+        prev_speed_ms = speed_ms;
 
         // Power estimate for display
         let predicted_power = estimate_power_from_speed(
@@ -490,6 +538,8 @@ pub fn predict_single_pass(
             circadian_factor: circadian,
             distance_eff_factor: effective_dist_eff,
             knn_confidence: point_knn_confidence,
+            predicted_speed_low_kmh: 0.0,  // filled in by mod.rs after loop
+            predicted_speed_high_kmh: 0.0, // filled in by mod.rs after loop
         });
 
         elapsed_s += segment_time;

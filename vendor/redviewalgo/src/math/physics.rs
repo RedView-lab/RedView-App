@@ -244,6 +244,35 @@ pub fn gradient_adjusted_cda(base_cda: f64, gradient_pct: f64) -> f64 {
     }
 }
 
+/// Aerodynamic drag force with headwind (N) at ground speed v (m/s).
+/// `headwind_ms` is positive for headwind, negative for tailwind.
+/// Drag depends on airspeed (ground speed + headwind), not ground speed alone.
+/// Power required: F_aero * v_ground (force acts at ground speed).
+pub fn force_aero_wind(cda: f64, rho: f64, speed_ms: f64, headwind_ms: f64) -> f64 {
+    let airspeed = (speed_ms + headwind_ms).max(0.0);
+    0.5 * rho * cda * airspeed * airspeed
+}
+
+/// Altitude acclimatization factor.
+/// Reduces the VO2max penalty from altitude_power_factor over time spent at altitude.
+/// Based on Chapman et al. 2014: acclimatization recovers ~50% of altitude deficit
+/// over 7-14 days, with most gains in first 3-5 days.
+///
+/// `hours_above_1500m`: cumulative hours spent above 1500m during the event.
+/// Returns a correction multiplier to apply *on top of* altitude_power_factor.
+/// Range: [1.0, ~1.03] — up to 3% recovery of altitude penalty.
+pub fn altitude_acclimatization(hours_above_1500m: f64) -> f64 {
+    if hours_above_1500m <= 0.0 {
+        return 1.0;
+    }
+    // Exponential onset: ~50% of maximum benefit at 72h (3 days)
+    // Maximum recovery: 3% (modest, since event-duration acclimatization is limited)
+    let max_recovery = 0.03;
+    let tau = 72.0; // hours for 63% of benefit
+    let recovery = max_recovery * (1.0 - (-hours_above_1500m / tau).exp());
+    1.0 + recovery
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

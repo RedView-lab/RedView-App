@@ -257,6 +257,12 @@ pub struct PredictionPoint {
     /// KNN confidence at this point [0-1]
     #[serde(default)]
     pub knn_confidence: f64,
+    /// Predicted speed lower bound (km/h) — 90% confidence interval
+    #[serde(default)]
+    pub predicted_speed_low_kmh: f64,
+    /// Predicted speed upper bound (km/h) — 90% confidence interval
+    #[serde(default)]
+    pub predicted_speed_high_kmh: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -270,6 +276,9 @@ pub struct SegmentSummary {
     pub avg_speed_kmh: f64,
     pub time_s: f64,
     pub segment_type: String, // "climb", "descent", "flat"
+    /// VAM (Velocità Ascensionale Media) in m/h — only meaningful for climb segments
+    #[serde(default)]
+    pub vam_mh: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -286,6 +295,12 @@ pub struct PredictionResult {
     pub segments: Vec<SegmentSummary>,
     pub points: Vec<PredictionPoint>,
     pub rider_profile: RiderProfile,
+    /// Total time lower bound (s) — 90% confidence interval
+    #[serde(default)]
+    pub total_time_low_s: f64,
+    /// Total time upper bound (s) — 90% confidence interval
+    #[serde(default)]
+    pub total_time_high_s: f64,
 }
 
 // ─── Config from JS ─────────────────────────────────────────────────────────
@@ -383,6 +398,14 @@ pub struct PredictionConfig {
     /// If None or empty, all points default to Unknown.
     #[serde(default)]
     pub surface_types: Option<Vec<u8>>,
+    /// Ambient temperature (°C) — affects thermal stress model.
+    /// Default: 18.0 (thermoneutral). Set to actual forecast for better accuracy.
+    #[serde(default)]
+    pub ambient_temperature_c: Option<f64>,
+    /// Headwind speed (m/s) — positive = headwind, negative = tailwind.
+    /// Default: 0.0 (no wind). Average expected wind for the route.
+    #[serde(default)]
+    pub headwind_ms: Option<f64>,
 }
 
 fn default_pacing() -> f64 {
@@ -411,6 +434,8 @@ impl Default for PredictionConfig {
             stop_strategy: StopStrategy::None,
             sleep_strategy: SleepStrategy::None,
             surface_types: None,
+            ambient_temperature_c: None,
+            headwind_ms: None,
         }
     }
 }

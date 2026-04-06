@@ -1,7 +1,7 @@
 pub mod features;
 
 use crate::types::ActivityData;
-use features::{FeatureNorm, NormalizedSample, TrainingSample};
+use features::{FeatureNorm, NormalizedSample, TrainingSample, DEFAULT_WEIGHTS};
 use serde::{Deserialize, Serialize};
 
 /// Minimum number of training samples needed for KNN to be used.
@@ -22,11 +22,18 @@ pub struct KnnPrediction {
 pub struct KnnModel {
     /// Raw training samples (kept for serialisation / debugging)
     pub samples: Vec<TrainingSample>,
-    /// Normalization params: [gradient, elapsed_h, cum_climb, recent_grad, elevation]
+    /// Normalization params: [gradient, elapsed_h, cum_climb, recent_grad, elevation, cum_dist, hr_zone, temp]
     pub norms: Vec<FeatureNorm>,
+    /// Optimized feature weights from LOO-CV (defaults if optimization skipped).
+    #[serde(default = "default_weights")]
+    pub weights: [f64; features::N_FEATURES],
     /// Pre-normalized & weighted feature vectors — NOT serialised, rebuilt on demand.
     #[serde(skip)]
     precomputed: Vec<NormalizedSample>,
+}
+
+fn default_weights() -> [f64; features::N_FEATURES] {
+    DEFAULT_WEIGHTS
 }
 
 impl KnnModel {
@@ -48,6 +55,7 @@ impl KnnModel {
         KnnModel {
             samples: vec![],
             norms: vec![],
+            weights: DEFAULT_WEIGHTS,
             precomputed: vec![],
         }
     }
@@ -56,18 +64,22 @@ impl KnnModel {
     /// Called lazily on first use if precomputed is empty but samples exist.
     pub fn ensure_precomputed(&mut self) {
         if self.precomputed.is_empty() && !self.samples.is_empty() && !self.norms.is_empty() {
+            let weights = &self.weights;
             self.precomputed = self
                 .samples
                 .iter()
                 .map(|s| NormalizedSample {
-                    features: features::normalize_features(
+                    features: features::normalize_features_weighted(
                         s.gradient_pct,
                         s.elapsed_h,
                         s.cum_climb_m,
                         s.recent_avg_gradient,
                         s.elevation_m,
                         s.cum_distance_m,
+                        s.heart_rate_zone,
+                        s.temperature_c,
                         &self.norms,
+                        weights,
                     ),
                     speed_ms: s.speed_ms,
                 })
@@ -77,6 +89,7 @@ impl KnnModel {
 }
 
 /// Extract training samples from multiple activities and build the KNN model.
+/// Includes LOO-CV weight optimization for maximum prediction accuracy.
 pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
     let mut samples = features::extract_training_samples(activities);
 
@@ -94,17 +107,27 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
 
     let norms = features::compute_norms(&samples);
 
+    // Optimize feature weights via LOO-CV if enough samples
+    let weights = if samples.len() >= 200 {
+        features::optimize_feature_weights(&samples, &norms)
+    } else {
+        DEFAULT_WEIGHTS
+    };
+
     let precomputed = samples
         .iter()
         .map(|s| NormalizedSample {
-            features: features::normalize_features(
+            features: features::normalize_features_weighted(
                 s.gradient_pct,
                 s.elapsed_h,
                 s.cum_climb_m,
                 s.recent_avg_gradient,
                 s.elevation_m,
                 s.cum_distance_m,
+                s.heart_rate_zone,
+                s.temperature_c,
                 &norms,
+                &weights,
             ),
             speed_ms: s.speed_ms,
         })
@@ -113,6 +136,7 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
     KnnModel {
         samples,
         norms,
+        weights,
         precomputed,
     }
 }
@@ -121,7 +145,7 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
 /// Returns KnnPrediction with speed and confidence metric.
 ///
 /// Uses pre-normalized features for O(samples) distance computation.
-/// Confidence = 1 / (1 + mean_neighbor_distance), range [0, 1].
+/// Confidence combines proximity, Gaussian weight, and neighbor speed variance.
 pub fn knn_predict_speed(
     model: &mut KnnModel,
     gradient_pct: f64,
@@ -141,18 +165,21 @@ pub fn knn_predict_speed(
         };
     }
 
-    let q = features::normalize_features(
+    let q = features::normalize_features_weighted(
         gradient_pct,
         elapsed_h,
         cum_climb_m,
         recent_avg_gradient,
         elevation_m,
         cum_distance_m,
+        0.7,  // neutral HR zone for prediction (unknown future HR)
+        18.0, // neutral temperature for prediction
         &model.norms,
+        &model.weights,
     );
 
-    // Adaptive K: scale with data size for better bias-variance tradeoff
-    let adaptive_k = ((precomputed.len() as f64).sqrt() as usize).clamp(5, 20);
+    // Adaptive K: scale with data size, raised cap for large datasets
+    let adaptive_k = ((precomputed.len() as f64).sqrt() as usize).clamp(7, 50);
     let k = adaptive_k.min(precomputed.len());
 
     // Max-heap of size K for efficient nearest-neighbor tracking
@@ -205,8 +232,8 @@ pub fn knn_predict_speed(
         5.56
     };
 
-    // Confidence: combines mean distance (absolute proximity) with Gaussian decay
-    // Uses 1/(1+mean_dist) as base, scaled by mean Gaussian weight
+    // Confidence: combines mean distance, Gaussian weight, and speed variance
+    // Speed variance among neighbors penalizes regions where KNN is uncertain
     let mean_dist = if !top_k.is_empty() {
         dist_sum / top_k.len() as f64
     } else {
@@ -217,7 +244,23 @@ pub fn knn_predict_speed(
     } else {
         0.0
     };
-    let confidence = ((1.0 / (1.0 + mean_dist)) * mean_weight.sqrt()).clamp(0.0, 1.0);
+
+    // Variance-weighted confidence: penalize when neighbors disagree on speed
+    let speed_variance = if weight_sum > 0.0 && !top_k.is_empty() {
+        let mean_spd = value_sum / weight_sum;
+        let var: f64 = top_k.iter()
+            .map(|&(d, spd)| {
+                let w = (-d / (2.0 * median_d2)).exp();
+                w * (spd - mean_spd).powi(2)
+            })
+            .sum::<f64>() / weight_sum;
+        var.sqrt()
+    } else {
+        1.0
+    };
+    let variance_penalty = 1.0 / (1.0 + speed_variance);
+
+    let confidence = ((1.0 / (1.0 + mean_dist)) * mean_weight.sqrt() * variance_penalty).clamp(0.0, 1.0);
 
     KnnPrediction { speed_ms: speed, confidence }
 }

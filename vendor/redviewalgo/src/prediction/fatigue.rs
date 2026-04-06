@@ -198,6 +198,98 @@ pub fn morning_rebound_factor(start_time_h: f64, elapsed_h: f64, night_count: u3
     }
 }
 
+/// Glycogen depletion factor.
+/// Models progressive glycogen depletion and partial refueling at stops.
+/// At race intensity, glycogen stores last ~2-3h (Coyle 1995, Rauch et al. 2005).
+/// With proper fueling (60-90g carbs/h), depletion is much slower.
+///
+/// `glycogen_level`: 0.0 (depleted) to 1.0 (full). Caller tracks state.
+/// Returns performance factor [0.85, 1.0].
+pub fn glycogen_factor(glycogen_level: f64) -> f64 {
+    let level = glycogen_level.clamp(0.0, 1.0);
+    // Above 40%: negligible performance impact (well-fueled)
+    if level > 0.4 {
+        1.0 - 0.04 * (1.0 - level) // very mild: 0-2.4% penalty
+    } else {
+        // Below 40%: moderate decline
+        let penalty = 0.024 + 0.10 * ((0.4 - level) / 0.4); // 2.4-12.4% penalty
+        (1.0 - penalty).max(0.85)
+    }
+}
+
+/// Update glycogen level over a time step.
+/// Depletion rate depends on intensity (gradient proxy: steeper = more glycolytic).
+/// Assumes well-fueled rider with consistent on-bike nutrition.
+///
+/// Returns new glycogen level after dt_h hours.
+pub fn update_glycogen(
+    current_level: f64,
+    dt_h: f64,
+    gradient_pct: f64,
+    is_stopped: bool,
+) -> f64 {
+    if is_stopped {
+        // Eating at stops: restore ~20% per hour stopped, but never above current level
+        // (stops refuel, they don't magically deplete)
+        return (current_level + 0.20 * dt_h).min(1.0);
+    }
+
+    // Depletion rate: base 0.06/h for well-fueled rider with nutrition strategy
+    // (~16h to bonk from full — realistic for riders eating 60-90g carbs/h)
+    let base_rate = 0.06;
+    let climb_factor = if gradient_pct > 5.0 {
+        1.0 + 0.06 * (gradient_pct - 5.0).min(10.0) // up to 1.6x on 15%+ grades
+    } else {
+        1.0
+    };
+    // On-bike feeding: continuous intake (~0.045/h recovery from eating while riding)
+    let net_depletion = (base_rate * climb_factor - 0.045).max(0.0);
+    (current_level - net_depletion * dt_h).max(0.0)
+}
+
+/// Thermal stress factor.
+/// Heat and cold both degrade performance (Périard et al. 2015, Castellani & Young 2016).
+/// Neutral zone: 10-20°C. Above 30°C: cardiac drift, below 5°C: vasoconstriction.
+///
+/// Returns factor [0.85, 1.0].
+pub fn thermal_factor(ambient_temp_c: f64) -> f64 {
+    if ambient_temp_c >= 10.0 && ambient_temp_c <= 20.0 {
+        return 1.0; // thermoneutral zone
+    }
+    if ambient_temp_c > 20.0 {
+        // Heat: ~2% per °C above 25°C, onset at 20°C (mild)
+        let heat_penalty = if ambient_temp_c > 25.0 {
+            0.02 * (ambient_temp_c - 25.0)
+        } else {
+            0.005 * (ambient_temp_c - 20.0)
+        };
+        (1.0 - heat_penalty).max(0.85)
+    } else {
+        // Cold: ~1% per °C below 5°C, mild effect 5-10°C
+        let cold_penalty = if ambient_temp_c < 5.0 {
+            0.01 * (5.0 - ambient_temp_c) + 0.02
+        } else {
+            0.004 * (10.0 - ambient_temp_c)
+        };
+        (1.0 - cold_penalty).max(0.85)
+    }
+}
+
+/// Post-sleep inertia factor.
+/// After waking from a sleep stop, performance is reduced for 15-30 min
+/// (Tassi & Muzet 2000: sleep inertia lasts 15-60 min, worst in first 10 min).
+///
+/// `time_since_wake_h`: hours since waking from last sleep stop.
+/// Returns factor [0.88, 1.0]. Only applies within first 0.5h of waking.
+pub fn sleep_inertia_factor(time_since_wake_h: f64) -> f64 {
+    if time_since_wake_h < 0.0 || time_since_wake_h > 0.5 {
+        return 1.0;
+    }
+    // Exponential dissipation: 12% penalty at wake, halving every 10 min
+    let penalty = 0.12 * (-time_since_wake_h * 6.0).exp(); // τ = 10min
+    (1.0 - penalty).max(0.88)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

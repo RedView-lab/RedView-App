@@ -63,10 +63,22 @@ pub fn predict(
     // Estimate riding time for stop schedule generation (rough: distance / 25 km/h)
     let estimated_riding_time_s = route.total_distance_m / (25.0 / 3.6);
     let has_sleep_stops = matches!(config.sleep_strategy, SleepStrategy::SleepStops);
-    let stop_schedule = stops::generate_stop_schedule(
+    let mut stop_schedule = stops::generate_stop_schedule(
         estimated_riding_time_s,
         &effective_stop_strategy,
         has_sleep_stops,
+    );
+
+    // Terrain-aware stop placement: shift stops to valley bottoms
+    let estimated_avg_speed = 25.0 / 3.6; // rough estimate for terrain search
+    stops::terrain_aware_shift(&mut stop_schedule, &route, estimated_avg_speed);
+
+    // Add extra stops at high altitude (>2500m)
+    stops::altitude_adjusted_stops(
+        &mut stop_schedule,
+        &route,
+        estimated_avg_speed,
+        estimated_riding_time_s,
     );
 
     // Apply surface types from OSM data if provided
@@ -83,12 +95,13 @@ pub fn predict(
 
     // Single-pass prediction — fatigue is applied per-point internally,
     // stops are integrated into the loop for recovery effects
-    let (pred_points, riding_time_s) = speed::predict_single_pass(
+    let (mut pred_points, riding_time_s) = speed::predict_single_pass(
         &profile, &route, knn, mass_kg, cda, crr, pacing, drivetrain_eff,
         config.start_time_h,
         &config.sleep_strategy,
         config.race_mode,
         &stop_schedule,
+        config.ambient_temperature_c.unwrap_or(18.0),
     );
 
     // Build segment summaries
@@ -105,6 +118,25 @@ pub fn predict(
         0.0
     };
 
+    // Confidence intervals: compute time bounds from per-point speed bounds
+    // Use average KNN confidence to estimate prediction uncertainty
+    let mean_confidence = if !pred_points.is_empty() {
+        pred_points.iter().map(|p| p.knn_confidence).sum::<f64>() / pred_points.len() as f64
+    } else {
+        0.0
+    };
+    // Uncertainty band: ±5% with good data, ±15% with poor data
+    let uncertainty = 0.05 + 0.10 * (1.0 - mean_confidence);
+    let total_time_low_s = total_time_s * (1.0 - uncertainty);
+    let total_time_high_s = total_time_s * (1.0 + uncertainty);
+
+    // Add per-point speed bounds
+    for p in &mut pred_points {
+        let point_uncertainty = 0.05 + 0.10 * (1.0 - p.knn_confidence);
+        p.predicted_speed_low_kmh = p.predicted_speed_kmh * (1.0 - point_uncertainty);
+        p.predicted_speed_high_kmh = p.predicted_speed_kmh * (1.0 + point_uncertainty);
+    }
+
     PredictionResult {
         total_time_s,
         riding_time_s,
@@ -116,6 +148,8 @@ pub fn predict(
         segments: segment_list,
         points: pred_points,
         rider_profile: profile.clone(),
+        total_time_low_s,
+        total_time_high_s,
     }
 }
 

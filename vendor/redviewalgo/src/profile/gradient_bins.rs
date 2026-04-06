@@ -1,12 +1,16 @@
-use crate::math::{gradient_pct, percentile, std_dev};
+use crate::math::{gradient_pct, monotone_cubic_interp, percentile, std_dev};
 use crate::types::{ActivityData, GradientBin};
 
-/// Gradient bin width in percent.
-const BIN_WIDTH: f64 = 0.5;
+/// Gradient bin width in percent — 0.25% for fine-grained speed curves.
+/// Critical: 3% vs 3.5% grade is ~1-2 km/h in pro cycling.
+const BIN_WIDTH: f64 = 0.25;
 /// Min gradient for binning.
 const GRADIENT_MIN: f64 = -20.0;
 /// Max gradient for binning.
 const GRADIENT_MAX: f64 = 25.0;
+/// Minimum samples per bin for a reliable estimate.
+/// Kept at 3 despite narrower bins — cubic interpolation smooths across neighbors.
+const MIN_BIN_SAMPLES: usize = 3;
 /// Fresh data window (seconds) — first 2h of each activity.
 const FRESH_WINDOW_S: f64 = 7200.0;
 /// Fatigued data starts after this (seconds) — after 3h of each activity.
@@ -147,7 +151,7 @@ fn bin_samples(samples: &[(f64, f64)], speed_percentile: f64) -> Vec<GradientBin
             .map(|(_, s)| *s)
             .collect();
 
-        if speeds.len() >= 3 {
+        if speeds.len() >= MIN_BIN_SAMPLES {
             let adaptive_pct = if center > 3.0 || center < -3.0 {
                 speed_percentile.min(0.50)
             } else {
@@ -170,7 +174,9 @@ fn bin_samples(samples: &[(f64, f64)], speed_percentile: f64) -> Vec<GradientBin
 }
 
 /// Lookup speed from fatigued bins with elapsed-time blending.
-/// Blends fresh and fatigued bins: `lerp(fresh, fatigued, min(1, elapsed_h / 12))`.
+/// Uses exponential fatigue blending (Abbiss & Laursen 2005 kinetics):
+///   blend = 1 - exp(-elapsed_h / 8)
+/// τ=8h → 63% fatigued at 8h, 86% at 16h, 95% at 24h.
 pub fn lookup_blended_speed(
     fresh_bins: &[GradientBin],
     fatigued_bins: &[GradientBin],
@@ -185,7 +191,9 @@ pub fn lookup_blended_speed(
 
     match (fresh_speed, fatigued_speed) {
         (Some(fs), Some(fatg)) => {
-            let blend = (elapsed_h / 12.0).min(1.0).max(0.0);
+            // Exponential onset: matches physiological fatigue kinetics
+            let blend = 1.0 - (-elapsed_h / 8.0).exp();
+            let blend = blend.clamp(0.0, 1.0);
             Some(fs * (1.0 - blend) + fatg * blend)
         }
         (Some(fs), None) => Some(fs),
@@ -194,17 +202,37 @@ pub fn lookup_blended_speed(
     }
 }
 
+/// Lookup speed using monotone cubic interpolation across gradient bins.
+/// Produces smooth, continuous speed curves instead of step-function nearest-bin.
 fn lookup_bin_speed(bins: &[GradientBin], gradient_pct_val: f64) -> Option<f64> {
     if bins.is_empty() {
         return None;
     }
-    // Find closest bin
-    bins.iter()
-        .min_by(|a, b| {
-            let da = (a.gradient_pct - gradient_pct_val).abs();
-            let db = (b.gradient_pct - gradient_pct_val).abs();
-            da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-        })
-        .filter(|b| (b.gradient_pct - gradient_pct_val).abs() < 2.0)
-        .map(|b| b.median_speed_ms)
+    if bins.len() == 1 {
+        // Only one bin: check if close enough
+        if (bins[0].gradient_pct - gradient_pct_val).abs() < 3.0 {
+            return Some(bins[0].median_speed_ms);
+        }
+        return None;
+    }
+
+    // Sort bins by gradient and use monotone cubic interpolation
+    let mut sorted: Vec<(f64, f64)> = bins
+        .iter()
+        .map(|b| (b.gradient_pct, b.median_speed_ms))
+        .collect();
+    sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let xs: Vec<f64> = sorted.iter().map(|(g, _)| *g).collect();
+    let ys: Vec<f64> = sorted.iter().map(|(_, s)| *s).collect();
+
+    // Check if gradient is within range (with 2% margin)
+    let min_g = xs.first().unwrap() - 2.0;
+    let max_g = xs.last().unwrap() + 2.0;
+    if gradient_pct_val < min_g || gradient_pct_val > max_g {
+        return None;
+    }
+
+    let speed = monotone_cubic_interp(&xs, &ys, gradient_pct_val);
+    Some(speed.max(0.5))
 }
