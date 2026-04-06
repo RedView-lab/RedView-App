@@ -6,7 +6,6 @@
 
 import type { SerializedNode, VisibleNode, CameraState, FlatOctree } from './types';
 import {
-  MIN_NODE_SIZE_PX,
   LOD_FADE_LOW,
   LOD_FADE_HIGH,
   HYSTERESIS_FACTOR,
@@ -397,16 +396,6 @@ export class LodManager {
     const tmp = this.prevDensity;
     this.prevDensity = swap;
     this.prevDensitySwap = tmp;
-  }
-
-  private sortBuf: number[] = [];
-  private getSortedIndices(nodes: VisibleNode[]): number[] {
-    const n = nodes.length;
-    const buf = this.sortBuf;
-    buf.length = n;
-    for (let i = 0; i < n; i++) buf[i] = i;
-    buf.sort((a, b) => nodes[a].screenSize - nodes[b].screenSize);
-    return buf;
   }
 
   private checkTemporalCoherence(
