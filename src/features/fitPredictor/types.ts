@@ -3,6 +3,9 @@ export type FitPanelMode = 'route' | 'compare';
 export type RiderType = 'elite' | 'trained' | 'recreational';
 
 export interface PredictionConfig {
+  ftp_w?: number;
+  rider_weight_kg?: number;
+  bike_weight_kg?: number;
   mass_kg?: number;
   cda?: number;
   crr?: number;
@@ -21,6 +24,9 @@ export interface PredictionConfig {
 export interface RiderProfile {
   ftp_w: number;
   mass_kg: number;
+  rider_weight_kg: number;
+  bike_weight_kg: number;
+  wkg: number;
   cda: number;
   crr: number;
   has_power: boolean;

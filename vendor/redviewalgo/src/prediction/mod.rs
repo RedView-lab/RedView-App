@@ -20,7 +20,12 @@ pub fn predict(
     config: &PredictionConfig,
     knn: &mut KnnModel,
 ) -> PredictionResult {
+    // Total system mass: prefer split weight from profile (already resolved
+    // from config overrides in build_rider_profile), fallback to config.mass_kg
     let mass_kg = config.mass_kg.unwrap_or(profile.mass_kg);
+    // If user provided split weights via config, profile already has the correct
+    // total mass from rider_weight_kg + bike_weight_kg. The config.mass_kg
+    // override is only for legacy callers who pass a single total.
     let cda = config.cda.unwrap_or(profile.cda);
     let crr = config.crr.unwrap_or(profile.crr);
     let pacing = config.pacing_factor;

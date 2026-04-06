@@ -204,10 +204,19 @@ pub struct RiderProfile {
     /// Used for blending during ultra-distance prediction.
     #[serde(default)]
     pub fatigued_bins: Vec<GradientBin>,
-    /// Estimated FTP in watts (0 if no power data)
+    /// FTP in watts (user-provided or auto-estimated). 0 if no power data.
     pub ftp_w: f64,
-    /// Estimated rider+bike mass (kg)
+    /// Total system mass: rider + bike + equipment (kg)
     pub mass_kg: f64,
+    /// Rider body weight only (kg)
+    #[serde(default)]
+    pub rider_weight_kg: f64,
+    /// Bike + bags + equipment weight (kg)
+    #[serde(default)]
+    pub bike_weight_kg: f64,
+    /// W/kg ratio = FTP / rider_weight_kg. The #1 climbing predictor in cycling.
+    #[serde(default)]
+    pub wkg: f64,
     /// Drag area CdA (m²)
     pub cda: f64,
     /// Rolling resistance coefficient
@@ -303,8 +312,20 @@ pub enum StopType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PredictionConfig {
+    /// Override FTP in watts. When provided, takes priority over auto-estimated FTP.
+    /// Must be the rider's known FTP (from lab test, Zwift, TrainingPeaks, etc.).
+    #[serde(default)]
+    pub ftp_w: Option<f64>,
+    /// Rider body weight only (kg). Used with bike_weight_kg to compute total mass
+    /// and W/kg ratio. Takes priority over mass_kg.
+    #[serde(default)]
+    pub rider_weight_kg: Option<f64>,
+    /// Bike + bags + equipment weight (kg). Combined with rider_weight_kg.
+    /// Default: 10kg if rider_weight_kg is provided but this is missing.
+    #[serde(default)]
+    pub bike_weight_kg: Option<f64>,
     /// Override rider+bike+equipment mass (kg). If None, auto-estimated.
-    /// This should be the TOTAL race-day weight: rider + bike + bags + water + food.
+    /// LEGACY: prefer rider_weight_kg + bike_weight_kg for accurate W/kg.
     #[serde(default)]
     pub mass_kg: Option<f64>,
     /// Override CdA (m²). If None, auto-estimated or default.
@@ -371,6 +392,9 @@ fn default_pacing() -> f64 {
 impl Default for PredictionConfig {
     fn default() -> Self {
         Self {
+            ftp_w: None,
+            rider_weight_kg: None,
+            bike_weight_kg: None,
             mass_kg: None,
             cda: None,
             crr: None,

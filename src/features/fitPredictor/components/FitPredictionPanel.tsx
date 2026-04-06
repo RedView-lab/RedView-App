@@ -22,7 +22,9 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
   const [fitFiles, setFitFiles] = useState<File[]>([]);
   const [gpxFile, setGpxFile] = useState<File | null>(null);
   const [validationFile, setValidationFile] = useState<File | null>(null);
-  const [massKg, setMassKg] = useState('');
+  const [ftpWatts, setFtpWatts] = useState('');
+  const [riderWeightKg, setRiderWeightKg] = useState('');
+  const [bikeWeightKg, setBikeWeightKg] = useState('10');
   const [pacingFactor, setPacingFactor] = useState('1.0');
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
@@ -49,9 +51,15 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
 
   const hasResult = Boolean(predictionResult || comparisonResult);
   const panelVisible = open || busy || Boolean(error) || hasResult;
-  const canRunRoute = fitFiles.length > 0 && Boolean(gpxFile) && !busy;
-  const canRunCompare = fitFiles.length > 0 && Boolean(validationFile) && !busy;
+  const hasMandatoryFields = ftpWatts !== '' && riderWeightKg !== '' && bikeWeightKg !== '';
+  const canRunRoute = fitFiles.length > 0 && Boolean(gpxFile) && hasMandatoryFields && !busy;
+  const canRunCompare = fitFiles.length > 0 && Boolean(validationFile) && hasMandatoryFields && !busy;
   const canRun = mode === 'route' ? canRunRoute : canRunCompare;
+
+  const parsedFtp = Number.parseFloat(ftpWatts);
+  const parsedRiderWeight = Number.parseFloat(riderWeightKg);
+  const computedWkg = parsedFtp > 0 && parsedRiderWeight > 0 ? parsedFtp / parsedRiderWeight : 0;
+  const wkgColor = computedWkg <= 0 ? '#8d97a7' : computedWkg < 2.5 ? '#f87171' : computedWkg < 3.5 ? '#fb923c' : computedWkg < 4.5 ? '#4ade80' : '#60a5fa';
 
   const handleFitChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
@@ -73,7 +81,9 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
     setFitFiles([]);
     setGpxFile(null);
     setValidationFile(null);
-    setMassKg('');
+    setFtpWatts('');
+    setRiderWeightKg('');
+    setBikeWeightKg('10');
     setPacingFactor('1.0');
     resetOutputs();
 
@@ -93,7 +103,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
       return;
     }
 
-    const config = buildConfig(massKg, pacingFactor);
+    const config = buildConfig(ftpWatts, riderWeightKg, bikeWeightKg, pacingFactor);
     setBusy(true);
     setError(null);
     setPredictionResult(null);
@@ -216,34 +226,75 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
             </div>
           )}
 
-          <div style={configGridStyle}>
-            <div style={configFieldStyle}>
-              <label style={fieldLabelStyle}>Poids total (kg)</label>
-              <input
-                type="number"
-                min="40"
-                max="200"
-                step="0.5"
-                value={massKg}
-                onChange={(event) => setMassKg(event.target.value)}
-                placeholder="auto"
-                style={textInputStyle}
-              />
+          <div style={cardStyle}>
+            <div style={cardHeaderStyle}>
+              <span style={sectionTitleStyle}>Profil coureur (obligatoire)</span>
+              {computedWkg > 0 && (
+                <span style={{ fontSize: 12, fontWeight: 700, color: wkgColor }}>{computedWkg.toFixed(2)} W/kg</span>
+              )}
             </div>
-            <div style={configFieldStyle}>
-              <label style={fieldLabelStyle}>Pacing</label>
-              <select value={pacingFactor} onChange={(event) => setPacingFactor(event.target.value)} style={textInputStyle}>
-                <option value="0.85">Conservateur</option>
-                <option value="1.0">Normal</option>
-                <option value="1.1">Agressif</option>
-              </select>
+            <div style={{ ...configGridStyle, gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>FTP (W) *</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="500"
+                  step="1"
+                  value={ftpWatts}
+                  onChange={(event) => setFtpWatts(event.target.value)}
+                  placeholder="ex: 250"
+                  style={{ ...textInputStyle, ...(ftpWatts === '' ? requiredInputStyle : null) }}
+                />
+              </div>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>Coureur (kg) *</label>
+                <input
+                  type="number"
+                  min="40"
+                  max="150"
+                  step="0.5"
+                  value={riderWeightKg}
+                  onChange={(event) => setRiderWeightKg(event.target.value)}
+                  placeholder="ex: 72"
+                  style={{ ...textInputStyle, ...(riderWeightKg === '' ? requiredInputStyle : null) }}
+                />
+              </div>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>Velo + equip (kg) *</label>
+                <input
+                  type="number"
+                  min="5"
+                  max="30"
+                  step="0.5"
+                  value={bikeWeightKg}
+                  onChange={(event) => setBikeWeightKg(event.target.value)}
+                  placeholder="ex: 10"
+                  style={{ ...textInputStyle, ...(bikeWeightKg === '' ? requiredInputStyle : null) }}
+                />
+              </div>
+            </div>
+            <div style={{ ...configGridStyle, marginTop: 8 }}>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>Pacing</label>
+                <select value={pacingFactor} onChange={(event) => setPacingFactor(event.target.value)} style={textInputStyle}>
+                  <option value="0.85">Conservateur</option>
+                  <option value="1.0">Normal</option>
+                  <option value="1.1">Agressif</option>
+                </select>
+              </div>
+              <div style={{ ...configFieldStyle, justifyContent: 'flex-end' }}>
+                <p style={fieldMetaStyle}>
+                  Total: {(parsedRiderWeight > 0 && Number.parseFloat(bikeWeightKg) > 0) ? `${(parsedRiderWeight + Number.parseFloat(bikeWeightKg)).toFixed(1)} kg` : '—'}
+                </p>
+              </div>
             </div>
           </div>
 
           <div style={hintStyle}>
             {mode === 'route'
-              ? 'Charge plusieurs FIT pour profiler le rider puis un GPX pour estimer le temps.'
-              : 'Charge plusieurs FIT d historique puis un FIT reel separe pour comparer temps predit vs temps observe.'}
+              ? 'FTP + poids obligatoires. Le W/kg pilote les predictions en montee. Charge FIT historiques + GPX cible.'
+              : 'FTP + poids obligatoires. Charge FIT historiques + un FIT reel pour comparer temps predit vs observe.'}
           </div>
 
           {error && <div style={errorStyle}>{error}</div>}
@@ -281,8 +332,10 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                 <Metric label="Distance" value={`${(predictionResult.total_distance_m / 1000).toFixed(1)} km`} />
                 <Metric label="Vitesse moy" value={`${predictionResult.avg_speed_kmh.toFixed(1)} km/h`} />
                 <Metric label="D+ / D-" value={`${Math.round(predictionResult.elevation_gain_m)} / ${Math.round(predictionResult.elevation_loss_m)} m`} />
+                <Metric label="W/kg" value={predictionResult.rider_profile.wkg > 0 ? `${predictionResult.rider_profile.wkg.toFixed(2)}` : 'N/A'} accent />
                 <Metric label="FTP" value={predictionResult.rider_profile.ftp_w > 0 ? `${Math.round(predictionResult.rider_profile.ftp_w)} W` : 'N/A'} />
-                <Metric label="Masse rider" value={`${predictionResult.rider_profile.mass_kg.toFixed(1)} kg`} />
+                <Metric label="Coureur" value={`${predictionResult.rider_profile.rider_weight_kg.toFixed(1)} kg`} />
+                <Metric label="Velo + equip" value={`${predictionResult.rider_profile.bike_weight_kg.toFixed(1)} kg`} />
               </div>
             </div>
           )}
@@ -327,13 +380,21 @@ function Metric({ label, value, accent = false }: { label: string; value: string
   );
 }
 
-function buildConfig(massKg: string, pacingFactor: string): PredictionConfig {
+function buildConfig(ftpWatts: string, riderWeightKg: string, bikeWeightKg: string, pacingFactor: string): PredictionConfig {
   const config: PredictionConfig = {
     pacing_factor: Number.parseFloat(pacingFactor),
   };
-  const parsedMass = Number.parseFloat(massKg);
-  if (!Number.isNaN(parsedMass) && parsedMass > 0) {
-    config.mass_kg = parsedMass;
+  const parsedFtp = Number.parseFloat(ftpWatts);
+  if (!Number.isNaN(parsedFtp) && parsedFtp > 0) {
+    config.ftp_w = parsedFtp;
+  }
+  const parsedRiderWeight = Number.parseFloat(riderWeightKg);
+  if (!Number.isNaN(parsedRiderWeight) && parsedRiderWeight > 0) {
+    config.rider_weight_kg = parsedRiderWeight;
+  }
+  const parsedBikeWeight = Number.parseFloat(bikeWeightKg);
+  if (!Number.isNaN(parsedBikeWeight) && parsedBikeWeight > 0) {
+    config.bike_weight_kg = parsedBikeWeight;
   }
   return config;
 }
@@ -559,6 +620,10 @@ const textInputStyle: CSSProperties = {
   fontSize: 12,
   padding: '9px 10px',
   outline: 'none',
+};
+
+const requiredInputStyle: CSSProperties = {
+  borderColor: 'rgba(251, 146, 60, 0.4)',
 };
 
 const hintStyle: CSSProperties = {

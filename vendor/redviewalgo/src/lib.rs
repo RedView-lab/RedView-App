@@ -95,9 +95,10 @@ pub fn predict(
 
     // 4. Build rider profile
     progress("Construction du profil rider...");
-    let profile = profile::build_rider_profile(&activities);
-    progress(&format!("Profil: FTP={:.0}W, masse={:.1}kg, {} bins",
-        profile.ftp_w, profile.mass_kg, profile.gradient_bins.len()));
+    let profile = profile::build_rider_profile(&activities, &cfg);
+    progress(&format!("Profil: FTP={:.0}W, masse={:.1}kg (coureur {:.1}kg + vélo {:.1}kg), W/kg={:.2}, {} bins",
+        profile.ftp_w, profile.mass_kg, profile.rider_weight_kg, profile.bike_weight_kg,
+        profile.wkg, profile.gradient_bins.len()));
 
     // 4b. Build KNN model from activity data
     progress("Construction du modèle KNN...");
@@ -209,7 +210,7 @@ pub fn predict_vs_actual(
 
     // Build profile + KNN from TRAINING ONLY
     progress("Building rider profile from training data...");
-    let rider_profile = profile::build_rider_profile(&training_activities);
+    let rider_profile = profile::build_rider_profile(&training_activities, &cfg);
 
     progress("Building KNN model from training data...");
     let mut knn_model = knn::build_knn_model(&training_activities);
