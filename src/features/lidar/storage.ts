@@ -251,7 +251,7 @@ export async function saveNormalsData(lazFileName: string, normals: Float32Array
   const dir = await getLidarDir();
   const fh = await dir.getFileHandle(normalsKey(lazFileName), { create: true });
   const w = await fh.createWritable();
-  await w.write(normals.buffer);
+  await w.write(normals.buffer as ArrayBuffer);
   await w.close();
 }
 

@@ -50,7 +50,7 @@ export async function parseLazBuffer(
     const views: { v: any; count: number }[] = [];
     let loaded = 0;
     for (const node of allNodes) {
-      const v = await Copc.loadPointDataView(getter, copc, node, { lazPerf });
+      const v = await Copc.loadPointDataView(getter, copc, node!, { lazPerf });
       views.push({ v, count: v.pointCount });
       loaded++;
       onProgress?.(`Lecture COPC ${loaded}/${allNodes.length}...`, 10 + (loaded / allNodes.length) * 50);

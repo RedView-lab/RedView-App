@@ -42,6 +42,7 @@ export function useLidarContextMenu(
       const coord: TileCoord = {
         xKm,
         yKm,
+        territory: 'FXX',
         projection: 'LAMB93',
         altRef: 'IGN69',
       };

@@ -1,5 +1,5 @@
 import type {
-  TileCoord, DownloadProgress, LidarEvent, LidarEventCallback, CachedTileInfo,
+  TileCoord, LidarEvent, LidarEventCallback, CachedTileInfo,
 } from './types';
 import { wgs84ToTileCoord, toWgs84, buildTileFileName } from './coordConvert';
 import { downloadTile } from './downloader';

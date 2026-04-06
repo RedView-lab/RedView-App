@@ -67,10 +67,10 @@ export interface CachedTileInfo {
   cachedAt: number;
 }
 
-/** GPU buffer set for one loaded tile */
+/** GPU buffer set for one loaded tile (typed loosely to avoid WebGPU dep in shared types) */
 export interface GpuTileBuffers {
   coord: TileCoord;
-  vertexBuffer: GPUBuffer;
+  vertexBuffer: unknown;
   pointCount: number;
   bounds: PointCloudBounds;
   crs: DetectedCrs;
@@ -84,6 +84,7 @@ export interface LidarEvent {
   tileCoord?: TileCoord;
   progress?: DownloadProgress;
   error?: string;
+  message?: string;
 }
 
 export type LidarEventCallback = (event: LidarEvent) => void;

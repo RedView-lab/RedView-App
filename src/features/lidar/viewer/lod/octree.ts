@@ -2,7 +2,7 @@
 // Octree LOD — Build, Voxel Sampling & Flatten
 // ============================================
 
-import type { AABB, OctreeNode, SerializedNode, FlatOctree } from './types';
+import type { AABB, SerializedNode, FlatOctree } from './types';
 import { MAX_POINTS_PER_NODE, MAX_DEPTH, OCCUPANCY_GRID_SIZE } from './types';
 
 const GRID = OCCUPANCY_GRID_SIZE;
@@ -84,28 +84,6 @@ function tryVoxelSample(
 
   if (testAndSet(node.occGrid, ix, iy, iz)) {
     node.voxelSamples.push(x, y, z, r, g, b, a);
-  }
-}
-
-function splitNode(
-  node: BuildNode,
-  positions: Float32Array,
-  colors: Uint8Array,
-): void {
-  node.isLeaf = false;
-  const indices = node.pointIndices;
-  node.pointIndices = [];
-
-  for (let k = 0; k < indices.length; k++) {
-    const idx = indices[k];
-    const j = idx * 3;
-    const x = positions[j], y = positions[j + 1], z = positions[j + 2];
-    const octant = getOctant(node.aabb, x, y, z);
-
-    if (!node.children[octant]) {
-      node.children[octant] = createNode(node.depth + 1, childAABB(node.aabb, octant));
-    }
-    node.children[octant]!.pointIndices.push(idx);
   }
 }
 

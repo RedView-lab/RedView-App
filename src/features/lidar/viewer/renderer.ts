@@ -305,7 +305,6 @@ export class LidarRenderer {
   // Octree LOD buffers
   private leafChunks: PointChunkBuffers[] = [];
   private voxelChunks: PointChunkBuffers[] = [];
-  private octreeMaxDepth = 0;
   lastViewProj: Float32Array = new Float32Array(16);
   lastCamPos: [number, number, number] = [0, 0, 0];
   lastCamFwd: [number, number, number] = [0, 0, -1];
@@ -465,7 +464,7 @@ export class LidarRenderer {
 
     this.device.queue.writeTexture(
       { texture: this.heightTexture },
-      params.data,
+      params.data as Float32Array<ArrayBuffer>,
       { bytesPerRow: params.width * 4 },
       { width: params.width, height: params.height },
     );
@@ -491,7 +490,6 @@ export class LidarRenderer {
     this.leafChunks = [];
     this.voxelChunks = [];
 
-    this.octreeMaxDepth = octree.maxDepthReached;
     this.totalPoints = octree.totalLeafPoints;
 
     if (octree.leafPositions.byteLength > 0) {
@@ -622,13 +620,13 @@ export class LidarRenderer {
         size: count * 12,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       });
-      this.device.queue.writeBuffer(pos, 0, positions, pointOffset * 3, count * 3);
+      this.device.queue.writeBuffer(pos, 0, positions as Float32Array<ArrayBuffer>, pointOffset * 3, count * 3);
 
       const col = this.device.createBuffer({
         size: count * 4,
         usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
       });
-      this.device.queue.writeBuffer(col, 0, colors, pointOffset * 4, count * 4);
+      this.device.queue.writeBuffer(col, 0, colors as Uint8Array<ArrayBuffer>, pointOffset * 4, count * 4);
 
       chunks.push({ pos, col, pointOffset, count });
     }
@@ -724,10 +722,10 @@ export class LidarRenderer {
       const count = Math.min(this.pointChunkCapacity, this.totalPoints - offset);
 
       const pos = this.device.createBuffer({ size: count * 12, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-      this.device.queue.writeBuffer(pos, 0, positions, offset * 3, count * 3);
+      this.device.queue.writeBuffer(pos, 0, positions as Float32Array<ArrayBuffer>, offset * 3, count * 3);
 
       const col = this.device.createBuffer({ size: count * 4, usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST });
-      this.device.queue.writeBuffer(col, 0, colors, offset * 4, count * 4);
+      this.device.queue.writeBuffer(col, 0, colors as Uint8Array<ArrayBuffer>, offset * 4, count * 4);
 
       this.buffers.push({ pos, col, count });
       offset += count;
@@ -745,19 +743,19 @@ export class LidarRenderer {
       size: vertices.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(vertBuf, 0, vertices);
+    this.device.queue.writeBuffer(vertBuf, 0, vertices as Float32Array<ArrayBuffer>);
 
     const colBuf = this.device.createBuffer({
       size: colors.byteLength,
       usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(colBuf, 0, colors);
+    this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
 
     const idxBuf = this.device.createBuffer({
       size: indices.byteLength,
       usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
     });
-    this.device.queue.writeBuffer(idxBuf, 0, indices);
+    this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
 
     this.terrainMesh = { vertBuf, colBuf, idxBuf, count: indices.length };
   }
