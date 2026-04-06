@@ -1,21 +1,23 @@
-// ── Mapbox GL Custom Layer for Wind Particles ─────────────────────────
-// Renders WebGL wind particles directly into Mapbox's GL context.
-// With renderingMode '2d', Mapbox automatically drapes the output
-// onto the 3D terrain surface — particles follow the terrain contours.
+// ── Mapbox GL Custom Layer for Wind Streaks ───────────────────────────
+// Renders 3D wind streaks directly into Mapbox's GL context.
+// Each particle is a terrain-tangent quad oriented along the wind
+// direction, with head-to-tail opacity fade.
 
 import mapboxgl, { type CustomLayerInterface, type Map as MapboxMap } from 'mapbox-gl';
 import type { WindData } from './wind-gl';
 
 const LAYER_ID = 'wind-particles';
-const PARTICLE_STRIDE = 8;
+const VERTEX_STRIDE = 7; // x, y, z, r, g, b, a
+const VERTS_PER_STREAK = 6; // 2 triangles per quad
 const ELEVATION_GRID_SIZE = 56;
-const MIN_PARTICLES = 1600;
-const MAX_PARTICLES = 4200;
-const PARTICLE_ALTITUDE_OFFSET = 2.5;
+const MIN_PARTICLES = 4000;
+const MAX_PARTICLES = 10000;
+const PARTICLE_ALTITUDE_OFFSET = 4;
 const MAX_DELTA_SECONDS = 0.05;
 const MIN_PARTICLE_LIFE = 4;
 const MAX_PARTICLE_LIFE = 11;
 const ELEVATION_REFRESH_MS = 1500;
+const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
 interface WindBounds {
   north: number;
@@ -28,7 +30,6 @@ interface ParticleProgram {
   program: WebGLProgram;
   a_position: number;
   a_color: number;
-  a_size: number;
   u_matrix: WebGLUniformLocation | null;
 }
 
@@ -64,7 +65,6 @@ precision highp float;
 
 attribute vec3 a_position;
 attribute vec4 a_color;
-attribute float a_size;
 
 uniform mat4 u_matrix;
 
@@ -72,7 +72,6 @@ varying vec4 v_color;
 
 void main() {
     gl_Position = u_matrix * vec4(a_position, 1.0);
-    gl_PointSize = a_size;
     v_color = a_color;
 }
 `;
@@ -83,13 +82,7 @@ precision mediump float;
 varying vec4 v_color;
 
 void main() {
-    vec2 centered = gl_PointCoord - vec2(0.5);
-    float dist = length(centered);
-    float alpha = smoothstep(0.5, 0.12, dist);
-    if (alpha <= 0.0) {
-        discard;
-    }
-    gl_FragColor = vec4(v_color.rgb, v_color.a * alpha);
+    gl_FragColor = v_color;
 }
 `;
 
@@ -147,7 +140,6 @@ function createProgram(gl: WebGL2RenderingContext): ParticleProgram {
     program,
     a_position: gl.getAttribLocation(program, 'a_position'),
     a_color: gl.getAttribLocation(program, 'a_color'),
-    a_size: gl.getAttribLocation(program, 'a_size'),
     u_matrix: gl.getUniformLocation(program, 'u_matrix'),
   };
 }
@@ -207,7 +199,7 @@ function restoreGLState(gl: WebGL2RenderingContext, state: SavedGLState, attribs
 function interpolateColor(speed: number): [number, number, number, number] {
   if (speed <= COLOR_STOPS[0].speed) {
     const [r, g, b] = COLOR_STOPS[0].color;
-    return [r, g, b, 0.45];
+    return [r, g, b, 0.6];
   }
 
   for (let index = 1; index < COLOR_STOPS.length; index++) {
@@ -219,13 +211,13 @@ function interpolateColor(speed: number): [number, number, number, number] {
         lerp(left.color[0], right.color[0], t),
         lerp(left.color[1], right.color[1], t),
         lerp(left.color[2], right.color[2], t),
-        clamp(0.42 + speed * 0.018, 0.42, 0.9),
+        clamp(0.6 + speed * 0.012, 0.6, 0.95),
       ];
     }
   }
 
   const [r, g, b] = COLOR_STOPS[COLOR_STOPS.length - 1].color;
-  return [r, g, b, 0.9];
+  return [r, g, b, 0.95];
 }
 
 export class WindCustomLayer implements CustomLayerInterface {
@@ -249,6 +241,8 @@ export class WindCustomLayer implements CustomLayerInterface {
   private particleAges = new Float32Array(0);
   private particleLives = new Float32Array(0);
   private particleSpeeds = new Float32Array(0);
+  private particleWindU = new Float32Array(0);
+  private particleWindV = new Float32Array(0);
   private vertexData = new Float32Array(0);
 
   private elevationGrid = new Float32Array(0);
@@ -292,20 +286,18 @@ export class WindCustomLayer implements CustomLayerInterface {
 
     this.matrix.set(matrix);
 
-    const attribs = [this.program.a_position, this.program.a_color, this.program.a_size];
+    const attribs = [this.program.a_position, this.program.a_color];
     const savedState = saveGLState(gl, attribs);
 
     gl.useProgram(this.program.program);
     gl.uniformMatrix4fv(this.program.u_matrix, false, this.matrix);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-    const stride = PARTICLE_STRIDE * Float32Array.BYTES_PER_ELEMENT;
+    const stride = VERTEX_STRIDE * Float32Array.BYTES_PER_ELEMENT;
     gl.enableVertexAttribArray(this.program.a_position);
     gl.vertexAttribPointer(this.program.a_position, 3, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(this.program.a_color);
     gl.vertexAttribPointer(this.program.a_color, 4, gl.FLOAT, false, stride, 3 * Float32Array.BYTES_PER_ELEMENT);
-    gl.enableVertexAttribArray(this.program.a_size);
-    gl.vertexAttribPointer(this.program.a_size, 1, gl.FLOAT, false, stride, 7 * Float32Array.BYTES_PER_ELEMENT);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -314,7 +306,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.disable(gl.STENCIL_TEST);
     gl.disable(gl.CULL_FACE);
 
-    gl.drawArrays(gl.POINTS, 0, this.particleCount);
+    gl.drawArrays(gl.TRIANGLES, 0, this.particleCount * VERTS_PER_STREAK);
 
     restoreGLState(gl, savedState, attribs);
     this.map?.triggerRepaint();
@@ -349,7 +341,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private configureParticles(): void {
     if (!this.map || !this.bounds) return;
 
-    const nextCount = clamp(Math.round(1400 + this.map.getZoom() * 180), MIN_PARTICLES, MAX_PARTICLES);
+    const nextCount = clamp(Math.round(3000 + this.map.getZoom() * 400), MIN_PARTICLES, MAX_PARTICLES);
     this.particleCount = nextCount;
     this.lastConfiguredZoom = this.map.getZoom();
 
@@ -357,7 +349,9 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.particleAges = new Float32Array(this.particleCount);
     this.particleLives = new Float32Array(this.particleCount);
     this.particleSpeeds = new Float32Array(this.particleCount);
-    this.vertexData = new Float32Array(this.particleCount * PARTICLE_STRIDE);
+    this.particleWindU = new Float32Array(this.particleCount);
+    this.particleWindV = new Float32Array(this.particleCount);
+    this.vertexData = new Float32Array(this.particleCount * VERTS_PER_STREAK * VERTEX_STRIDE);
 
     for (let index = 0; index < this.particleCount; index++) {
       this.respawnParticle(index, true);
@@ -416,6 +410,8 @@ export class WindCustomLayer implements CustomLayerInterface {
 
       const wind = this.sampleWind(lng, lat);
       this.particleSpeeds[index] = wind.speed;
+      this.particleWindU[index] = wind.u;
+      this.particleWindV[index] = wind.v;
 
       const metersPerDegreeLng = Math.max(1, Math.cos((lat * Math.PI) / 180) * metersPerDegreeLat);
       lng += (wind.u * deltaSeconds * simulationScale) / metersPerDegreeLng;
@@ -432,29 +428,127 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   private rebuildVertexData(): void {
-    if (!this.map || !this.gl || !this.vertexBuffer || this.particleCount === 0) return;
+    if (!this.map || !this.gl || !this.vertexBuffer || this.particleCount === 0 || !this.bounds) return;
 
     const zoom = this.map.getZoom();
+    const centerLat = (this.bounds.north + this.bounds.south) / 2;
+    const cosLat = Math.cos(centerLat * Math.PI / 180);
+    const metersPerDegreeLat = 111_320;
+    const metersPerDegreeLng = Math.max(1, cosLat * metersPerDegreeLat);
+    const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, zoom));
+    const pixelScale = 1 / (512 * Math.pow(2, zoom));
 
     for (let index = 0; index < this.particleCount; index++) {
       const positionIndex = index * 2;
       const lng = this.particlePositions[positionIndex];
       const lat = this.particlePositions[positionIndex + 1];
-      const elevation = this.sampleElevation(lng, lat) + PARTICLE_ALTITUDE_OFFSET;
-      const mercator = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, elevation);
       const speed = this.particleSpeeds[index];
-      const [red, green, blue, alpha] = interpolateColor(speed);
-      const size = clamp(1.2 + zoom * 0.05 + speed * 0.06, 1.4, 4.4);
+      const wu = this.particleWindU[index];
+      const wv = this.particleWindV[index];
 
-      const vertexIndex = index * PARTICLE_STRIDE;
-      this.vertexData[vertexIndex] = mercator.x;
-      this.vertexData[vertexIndex + 1] = mercator.y;
-      this.vertexData[vertexIndex + 2] = mercator.z;
-      this.vertexData[vertexIndex + 3] = red;
-      this.vertexData[vertexIndex + 4] = green;
-      this.vertexData[vertexIndex + 5] = blue;
-      this.vertexData[vertexIndex + 6] = alpha;
-      this.vertexData[vertexIndex + 7] = size;
+      // Streak length & width in screen-pixel equivalents
+      const streakPixels = 10 + speed * 0.5;
+      const streakMeters = streakPixels * metersPerPx;
+      const hwMc = 1.8 * pixelScale;
+
+      // Wind direction (default east if calm)
+      const windMag = Math.hypot(wu, wv);
+      let dirU = 1, dirV = 0;
+      if (windMag > 0.01) {
+        dirU = wu / windMag;
+        dirV = wv / windMag;
+      }
+
+      // Tail position (upwind from head) in geographic space
+      const tailLng = lng - (dirU * streakMeters) / metersPerDegreeLng;
+      const tailLat = lat - (dirV * streakMeters) / metersPerDegreeLat;
+
+      // Terrain elevation at head & tail
+      const headElev = this.sampleElevation(lng, lat) + PARTICLE_ALTITUDE_OFFSET;
+      const tailElev = this.sampleElevation(tailLng, tailLat) + PARTICLE_ALTITUDE_OFFSET;
+
+      // Mercator world-space positions
+      const headMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, headElev);
+      const tailMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: tailLng, lat: tailLat }, tailElev);
+
+      // Perpendicular direction in Mercator XY for quad width
+      const dx = headMc.x - tailMc.x;
+      const dy = headMc.y - tailMc.y;
+      const len2d = Math.hypot(dx, dy);
+
+      let perpX: number, perpY: number;
+      if (len2d > 1e-12) {
+        perpX = (-dy / len2d) * hwMc;
+        perpY = (dx / len2d) * hwMc;
+      } else {
+        perpX = hwMc;
+        perpY = 0;
+      }
+
+      // Color (head = full, tail = faded)
+      const [r, g, b, a] = interpolateColor(speed);
+      const tailAlpha = a * 0.2;
+
+      const hx = headMc.x, hy = headMc.y, hz = headMc.z;
+      const tx = tailMc.x, ty = tailMc.y, tz = tailMc.z;
+
+      // 6 vertices (2 triangles): v0-v1-v2, v0-v2-v3
+      // v0 = head+perp, v1 = head-perp, v2 = tail-perp, v3 = tail+perp
+      const base = index * VERTS_PER_STREAK * VERTEX_STRIDE;
+
+      // v0: head + perp
+      this.vertexData[base]      = hx + perpX;
+      this.vertexData[base + 1]  = hy + perpY;
+      this.vertexData[base + 2]  = hz;
+      this.vertexData[base + 3]  = r;
+      this.vertexData[base + 4]  = g;
+      this.vertexData[base + 5]  = b;
+      this.vertexData[base + 6]  = a;
+
+      // v1: head - perp
+      this.vertexData[base + 7]  = hx - perpX;
+      this.vertexData[base + 8]  = hy - perpY;
+      this.vertexData[base + 9]  = hz;
+      this.vertexData[base + 10] = r;
+      this.vertexData[base + 11] = g;
+      this.vertexData[base + 12] = b;
+      this.vertexData[base + 13] = a;
+
+      // v2: tail - perp
+      this.vertexData[base + 14] = tx - perpX;
+      this.vertexData[base + 15] = ty - perpY;
+      this.vertexData[base + 16] = tz;
+      this.vertexData[base + 17] = r;
+      this.vertexData[base + 18] = g;
+      this.vertexData[base + 19] = b;
+      this.vertexData[base + 20] = tailAlpha;
+
+      // v0 again: head + perp
+      this.vertexData[base + 21] = hx + perpX;
+      this.vertexData[base + 22] = hy + perpY;
+      this.vertexData[base + 23] = hz;
+      this.vertexData[base + 24] = r;
+      this.vertexData[base + 25] = g;
+      this.vertexData[base + 26] = b;
+      this.vertexData[base + 27] = a;
+
+      // v2 again: tail - perp
+      this.vertexData[base + 28] = tx - perpX;
+      this.vertexData[base + 29] = ty - perpY;
+      this.vertexData[base + 30] = tz;
+      this.vertexData[base + 31] = r;
+      this.vertexData[base + 32] = g;
+      this.vertexData[base + 33] = b;
+      this.vertexData[base + 34] = tailAlpha;
+
+      // v3: tail + perp
+      this.vertexData[base + 35] = tx + perpX;
+      this.vertexData[base + 36] = ty + perpY;
+      this.vertexData[base + 37] = tz;
+      this.vertexData[base + 38] = r;
+      this.vertexData[base + 39] = g;
+      this.vertexData[base + 40] = b;
+      this.vertexData[base + 41] = tailAlpha;
     }
 
     const previousArrayBuffer = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING) as WebGLBuffer | null;
