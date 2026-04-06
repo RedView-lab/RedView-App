@@ -1,10 +1,14 @@
 // ============================================
 // Octree LOD — Manager
+// Smooth cross-fading, proportional budget,
+// temporal density smoothing, GPU stochastic discard.
 // ============================================
 
 import type { SerializedNode, VisibleNode, CameraState, FlatOctree } from './types';
 import {
   MIN_NODE_SIZE_PX,
+  LOD_FADE_LOW,
+  LOD_FADE_HIGH,
   HYSTERESIS_FACTOR,
   TEMPORAL_POS_THRESHOLD,
   TEMPORAL_ROT_THRESHOLD,
@@ -14,6 +18,8 @@ import {
   FRAME_WINDOW,
   TARGET_FRAME_MS,
   OCCUPANCY_GRID_SIZE,
+  MIN_DENSITY,
+  DENSITY_BLEND_RATE,
 } from './types';
 import {
   extractFrustumPlanes,
@@ -23,6 +29,11 @@ import {
   INSIDE,
   type FrustumPlanes,
 } from './frustum';
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
 
 export class LodManager {
   private octree: FlatOctree | null = null;
@@ -43,6 +54,10 @@ export class LodManager {
   private frameIdx = 0;
   private slowFrameCount = 0;
   private fastFrameCount = 0;
+
+  /** Temporal density smoothing: stores previous frame density per node offset key */
+  private prevDensity = new Map<number, number>();
+  private prevDensitySwap = new Map<number, number>();
 
   voxelMinDepth = 0;
   private rootExtent = 1;
@@ -65,6 +80,8 @@ export class LodManager {
     this.refinedLastFrame.clear();
     this.lastCamera = null;
     this.cacheValid = false;
+    this.prevDensity.clear();
+    this.prevDensitySwap.clear();
     this.stats.totalPoints = octree.totalLeafPoints;
     this.stats.totalNodes = octree.nodeCount;
     this.stats.maxDepth = octree.maxDepthReached;
@@ -79,7 +96,7 @@ export class LodManager {
     const gridSize = OCCUPANCY_GRID_SIZE;
     const nodeSize = this.rootExtent / Math.pow(2, this.voxelMinDepth);
     const cellSize = nodeSize / gridSize;
-    const maxVoxelSize = basePointSize * 3;
+    const maxVoxelSize = basePointSize * (1.5 + this.voxelMinDepth * 0.3);
     return Math.min(maxVoxelSize, Math.max(basePointSize, cellSize * 1.3));
   }
 
@@ -108,6 +125,7 @@ export class LodManager {
 
     if (this.checkTemporalCoherence(camPosX, camPosY, camPosZ, camFwdX, camFwdY, camFwdZ)) {
       this.enforceBudget();
+      this.applyTemporalSmoothing();
       return;
     }
 
@@ -128,6 +146,7 @@ export class LodManager {
     this.collectVisible(this.octree.root, planes, viewProj, viewportW, viewportH, true);
 
     this.enforceBudget();
+    this.applyTemporalSmoothing();
 
     this.stats.visiblePoints = this.visiblePointCount;
     this.stats.visibleNodes = this.visibleNodes.length;
@@ -141,6 +160,8 @@ export class LodManager {
     }
     this.cacheValid = true;
   }
+
+  // ── LOD collection with smooth cross-fade zone ──
 
   private collectVisible(
     node: SerializedNode,
@@ -165,11 +186,15 @@ export class LodManager {
 
     const ss = screenSpaceSize(node.aabb, viewProj, vpW, vpH);
 
-    let threshold = MIN_NODE_SIZE_PX;
+    // Hysteresis: refined nodes use lower threshold to avoid oscillation
+    let fadeLow = LOD_FADE_LOW;
+    let fadeHigh = LOD_FADE_HIGH;
     if (this.refinedLastFrame.has(node.id)) {
-      threshold *= HYSTERESIS_FACTOR;
+      fadeLow *= HYSTERESIS_FACTOR;
+      fadeHigh *= HYSTERESIS_FACTOR;
     }
 
+    // Leaves always render at full opacity
     if (node.isLeaf) {
       if (node.pointCount > 0) {
         this.visibleNodes.push({
@@ -179,13 +204,15 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: 1.0,
+          fadeAlpha: 1.0,
         });
         this.visiblePointCount += node.pointCount;
       }
       return;
     }
 
-    if (ss < threshold) {
+    // Below fade zone: render only voxels (coarse LOD)
+    if (ss < fadeLow) {
       if (node.voxelCount > 0) {
         this.visibleNodes.push({
           offset: node.voxelOffset,
@@ -194,6 +221,7 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: 1.0,
+          fadeAlpha: 1.0,
         });
         this.visiblePointCount += node.voxelCount;
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
@@ -202,6 +230,72 @@ export class LodManager {
       return;
     }
 
+    // In transition zone [fadeLow, fadeHigh]: render BOTH voxels (fading out)
+    // and children (fading in) for smooth cross-fade
+    if (ss < fadeHigh && !node.isLeaf) {
+      const childAlpha = smoothstep(fadeLow, fadeHigh, ss);   // 0→1 as ss grows
+      const voxelAlpha = 1.0 - childAlpha;                     // 1→0 as ss grows
+
+      // Emit fading-out voxels for this node
+      if (node.voxelCount > 0 && voxelAlpha > 0.05) {
+        this.visibleNodes.push({
+          offset: node.voxelOffset,
+          count: node.voxelCount,
+          isVoxel: true,
+          depth: node.depth,
+          screenSize: ss,
+          density: voxelAlpha,  // GPU stochastic discard handles partial rendering
+          fadeAlpha: voxelAlpha,
+        });
+        this.visiblePointCount += Math.ceil(node.voxelCount * voxelAlpha);
+        if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
+      }
+
+      // Emit fading-in children
+      this.refinedThisFrame.add(node.id);
+      const pointsBefore = this.visiblePointCount;
+
+      for (let i = 0; i < 8; i++) {
+        const child = node.children[i];
+        if (child) this.collectVisible(child, planes, viewProj, vpW, vpH, testFrustum);
+      }
+
+      // Apply fade alpha to all children just added
+      const nodesLen = this.visibleNodes.length;
+      if (childAlpha < 0.95) {
+        for (let j = nodesLen - 1; j >= 0; j--) {
+          const vn = this.visibleNodes[j];
+          // Only affect nodes we just added (check if their offset is new)
+          if (vn.fadeAlpha === 1.0 && !vn.isVoxel) {
+            vn.fadeAlpha = childAlpha;
+            vn.density = Math.max(MIN_DENSITY, vn.density * childAlpha);
+          } else {
+            break; // stop at previously existing entries
+          }
+        }
+      }
+
+      const childrenContributed = this.visiblePointCount > pointsBefore;
+      if (!childrenContributed && node.voxelCount > 0 && voxelAlpha <= 0.05) {
+        // Fallback: no children contributed, show voxels full
+        this.visibleNodes.push({
+          offset: node.voxelOffset,
+          count: node.voxelCount,
+          isVoxel: true,
+          depth: node.depth,
+          screenSize: ss,
+          density: 1.0,
+          fadeAlpha: 1.0,
+        });
+        this.visiblePointCount += node.voxelCount;
+        if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
+      }
+
+      this.stats.lodSkipped++;
+      return;
+    }
+
+    // Above fade zone: recurse fully into children
     this.refinedThisFrame.add(node.id);
 
     const pointsBefore = this.visiblePointCount;
@@ -223,43 +317,86 @@ export class LodManager {
         depth: node.depth,
         screenSize: ss,
         density: 1.0,
+        fadeAlpha: 1.0,
       });
       this.visiblePointCount += node.voxelCount;
       if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
     }
   }
 
+  // ── Proportional budget enforcement ──
+
   private enforceBudget(): void {
     const nodes = this.visibleNodes;
     const n = nodes.length;
 
     if (this.visiblePointCount <= this.pointBudget) {
-      for (let i = 0; i < n; i++) nodes[i].density = 1.0;
       this.density = 1.0;
       return;
     }
 
-    const order = this.getSortedIndices(nodes);
-
-    let excess = this.visiblePointCount - this.pointBudget;
+    // Compute average screen size for proportional weighting
+    let totalSS = 0;
+    let leafPointCount = 0;
     for (let i = 0; i < n; i++) {
-      const node = nodes[order[i]];
-      if (excess <= 0) {
-        node.density = 1.0;
-        continue;
-      }
-      const maxRemovable = Math.floor(node.count * 0.60);
-      if (maxRemovable <= excess) {
-        node.density = 0.40;
-        excess -= maxRemovable;
-      } else {
-        const rawDensity = 1 - excess / node.count;
-        node.density = Math.max(0.40, Math.round(rawDensity * 20) / 20);
-        excess -= Math.floor(node.count * (1 - node.density));
+      if (!nodes[i].isVoxel) {
+        totalSS += nodes[i].screenSize * nodes[i].count;
+        leafPointCount += nodes[i].count;
       }
     }
 
-    this.density = Math.max(0.40, this.pointBudget / this.visiblePointCount);
+    if (leafPointCount === 0) {
+      this.density = 1.0;
+      return;
+    }
+
+    const avgSS = totalSS / leafPointCount;
+    const budgetRatio = this.pointBudget / this.visiblePointCount;
+
+    for (let i = 0; i < n; i++) {
+      const node = nodes[i];
+
+      // Don't thin voxels — they're already coarse LOD representations
+      if (node.isVoxel) continue;
+
+      // Tiny nodes always render at full density (< 1000 points = negligible cost)
+      if (node.count < 1000) continue;
+
+      // Proportional density: nodes with larger screen size keep more points
+      const ssWeight = avgSS > 0 ? node.screenSize / avgSS : 1;
+      const rawDensity = budgetRatio * Math.sqrt(ssWeight);
+      node.density = Math.max(MIN_DENSITY, Math.min(1.0, rawDensity)) * node.fadeAlpha;
+    }
+
+    this.density = Math.max(MIN_DENSITY, budgetRatio);
+  }
+
+  // ── Temporal density smoothing ──
+
+  private applyTemporalSmoothing(): void {
+    const nodes = this.visibleNodes;
+    const n = nodes.length;
+    const swap = this.prevDensitySwap;
+    swap.clear();
+
+    for (let i = 0; i < n; i++) {
+      const node = nodes[i];
+      const key = node.offset; // unique per node in flattened buffer
+      const prev = this.prevDensity.get(key);
+
+      if (prev !== undefined) {
+        // Lerp towards target density for smooth transitions
+        const target = node.density;
+        node.density = prev + (target - prev) * DENSITY_BLEND_RATE;
+      }
+
+      swap.set(key, node.density);
+    }
+
+    // Swap maps (avoid allocations)
+    const tmp = this.prevDensity;
+    this.prevDensity = swap;
+    this.prevDensitySwap = tmp;
   }
 
   private sortBuf: number[] = [];
@@ -308,15 +445,15 @@ export class LodManager {
     if (avgMs > TARGET_FRAME_MS * 1.15) {
       this.slowFrameCount++;
       this.fastFrameCount = 0;
-      if (this.slowFrameCount >= 8) {
-        this.pointBudget = Math.max(MIN_POINT_BUDGET, Math.floor(this.pointBudget * 0.95));
+      if (this.slowFrameCount >= 4) {
+        this.pointBudget = Math.max(MIN_POINT_BUDGET, Math.floor(this.pointBudget * 0.90));
         this.slowFrameCount = 0;
       }
     } else if (avgMs < TARGET_FRAME_MS * 0.80) {
       this.fastFrameCount++;
       this.slowFrameCount = 0;
       if (this.fastFrameCount >= 4) {
-        this.pointBudget = Math.min(MAX_POINT_BUDGET, Math.floor(this.pointBudget * 1.15));
+        this.pointBudget = Math.min(MAX_POINT_BUDGET, Math.floor(this.pointBudget * 1.20));
         this.fastFrameCount = 0;
       }
     } else {

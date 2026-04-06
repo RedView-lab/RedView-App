@@ -3,6 +3,7 @@
 // ============================================
 // Hybrid LOD: smooth disc billboards (far) + raytraced box imposters (near).
 // Normals computed on GPU via Sobel gradient on heightmap texture.
+// GPU stochastic density discard for artifact-free LOD thinning.
 
 const SHADER = /* wgsl */`
 struct Camera {
@@ -19,6 +20,11 @@ struct Camera {
   hmOriginZ: f32,
   hmScaleX: f32,
   hmScaleZ: f32,
+  /** Density [0..1] for stochastic point discard. 1.0 = keep all. */
+  density: f32,
+  _pad1: f32,
+  _pad2: f32,
+  _pad3: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -34,7 +40,15 @@ struct VsOut {
   @location(4) sobelNormal: vec3<f32>,
   @location(5) @interpolate(flat) camDist: f32,
   @location(6) @interpolate(flat) radius: f32,
+  @location(7) @interpolate(flat) stochasticKeep: f32,
 };
+
+// Quality hash for stochastic discard — avoids periodic patterns of sin-based hashes
+fn pcgHash(input: u32) -> u32 {
+  var state = input * 747796405u + 2891336453u;
+  let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
 
 fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
   let u = (worldPos.x - camera.hmOriginX) / camera.hmScaleX;
@@ -63,10 +77,22 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
 @vertex
 fn vs_main(
   @builtin(vertex_index) vi: u32,
+  @builtin(instance_index) ii: u32,
   @location(0) pos: vec3<f32>,
   @location(1) col: vec4<f32>,
 ) -> VsOut {
   var out: VsOut;
+
+  // Stochastic density: hash instance_index to decide keep/discard
+  // Computed in VS as flat-interpolated, discarded in FS.
+  // When density >= 1.0, always keep (skip hash).
+  var keep = 1.0;
+  if (camera.density < 0.999) {
+    let h = pcgHash(ii);
+    let r = f32(h) / 4294967295.0;  // 0..1 uniform
+    keep = select(0.0, 1.0, r < camera.density);
+  }
+  out.stochasticKeep = keep;
 
   let uv = vec2<f32>(
     select(-1.0, 1.0, (vi & 1u) != 0u),
@@ -81,9 +107,11 @@ fn vs_main(
   let scaledRadius = baseRadius * distScale;
   let billboardScale = scaledRadius * 1.8;
 
+  // If this point will be discarded, collapse quad to degenerate (saves rasterizer work)
+  let scale = select(0.0, 1.0, keep > 0.5);
   let wp = pos
-    + camera.right.xyz * uv.x * billboardScale
-    + camera.up.xyz * uv.y * billboardScale;
+    + camera.right.xyz * uv.x * billboardScale * scale
+    + camera.up.xyz * uv.y * billboardScale * scale;
 
   out.pos = camera.viewProj * vec4<f32>(wp, 1.0);
   out.color = col;
@@ -127,6 +155,9 @@ fn shade(N: vec3<f32>, baseColorSrgb: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs_main(in: VsOut) -> FsOut {
+  // Stochastic discard: if VS flagged this instance for removal, discard all fragments
+  if (in.stochasticKeep < 0.5) { discard; }
+
   var out: FsOut;
 
   let lodNear = camera.lodThreshold * 0.6;
@@ -210,6 +241,10 @@ struct Camera {
   hmOriginZ: f32,
   hmScaleX: f32,
   hmScaleZ: f32,
+  density: f32,
+  _pad1: f32,
+  _pad2: f32,
+  _pad3: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
@@ -279,8 +314,9 @@ export class LidarRenderer {
   private heightSampler!: GPUSampler;
   private cameraBufferVoxel!: GPUBuffer;
   private pointBindGroupVoxel!: GPUBindGroup;
-  private uniformCache = new Float32Array(40);
+  private uniformCache = new Float32Array(44);
   private _tempFloat = new Float32Array(1);
+  private _densityFloat = new Float32Array(1);
 
   private buffers: { pos: GPUBuffer; col: GPUBuffer; count: number }[] = [];
   private terrainMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
@@ -391,13 +427,13 @@ export class LidarRenderer {
       depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
     });
 
-    // Camera uniform: 160 bytes
+    // Camera uniform: 176 bytes (44 × f32, 16-byte aligned)
     this.cameraBuffer = this.device.createBuffer({
-      size: 160,
+      size: 176,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.cameraBufferVoxel = this.device.createBuffer({
-      size: 160,
+      size: 176,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -507,6 +543,11 @@ export class LidarRenderer {
       this.device.queue.writeBuffer(this.cameraBufferVoxel, 28 * 4, this._tempFloat);
     }
 
+    // Reset density to 1.0 for both camera buffers at start of frame
+    this._densityFloat[0] = 1.0;
+    this.device.queue.writeBuffer(this.cameraBuffer, 40 * 4, this._densityFloat);
+    this.device.queue.writeBuffer(this.cameraBufferVoxel, 40 * 4, this._densityFloat);
+
     const enc = this.device.createCommandEncoder();
     const pass = enc.beginRenderPass({
       colorAttachments: [{
@@ -536,52 +577,72 @@ export class LidarRenderer {
 
     if (this.voxelChunks.length > 0) {
       pass.setBindGroup(0, this.pointBindGroupVoxel);
-      this.drawNodesBatched(pass, visibleNodes, this.voxelChunks, true);
+      this.drawNodesBatched(pass, visibleNodes, this.voxelChunks, true, this.cameraBufferVoxel);
     }
 
     if (this.leafChunks.length > 0) {
       pass.setBindGroup(0, this.pointBindGroup);
-      this.drawNodesBatched(pass, visibleNodes, this.leafChunks, false);
+      this.drawNodesBatched(pass, visibleNodes, this.leafChunks, false, this.cameraBuffer);
     }
 
     pass.end();
     this.device.queue.submit([enc.finish()]);
   }
 
+  /** Current density written to the uniform buffer (avoid redundant writes). */
+  private currentDensityLeaf = 1.0;
+  private currentDensityVoxel = 1.0;
+
   private drawNodesBatched(
     pass: GPURenderPassEncoder,
     nodes: VisibleNode[],
     chunks: PointChunkBuffers[],
     isVoxel: boolean,
+    camBuffer: GPUBuffer,
   ): void {
     const chunkState = { index: -1 };
     let batchStart = -1;
     let batchCount = 0;
+    let batchDensity = 1.0;
 
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i];
       if (n.isVoxel !== isVoxel || n.count === 0) continue;
 
-      if (n.density < 1.0) {
-        if (batchStart >= 0) {
-          this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
-          batchStart = -1;
-          batchCount = 0;
-        }
-        if (n.density > 0) {
-          this.drawSegmentedThinnedNode(pass, chunks, n.offset, n.count, n.density, chunkState);
-        }
+      // Quantize density coarsely to reduce uniform buffer writes
+      const d = n.density > 0.995 ? 1.0 : Math.round(n.density * 100) / 100;
+
+      // Can this node extend the current batch?
+      const canBatch = batchStart >= 0
+        && n.offset === batchStart + batchCount
+        && Math.abs(d - batchDensity) < 0.005;
+
+      if (canBatch) {
+        batchCount += n.count;
       } else {
-        if (batchStart >= 0 && n.offset === batchStart + batchCount) {
-          batchCount += n.count;
-        } else {
-          if (batchStart >= 0) this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
-          batchStart = n.offset;
-          batchCount = n.count;
+        // Flush previous batch
+        if (batchStart >= 0) {
+          this.setDensityUniform(camBuffer, batchDensity, isVoxel);
+          this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
         }
+        batchStart = n.offset;
+        batchCount = n.count;
+        batchDensity = d;
       }
     }
-    if (batchStart >= 0) this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
+    if (batchStart >= 0) {
+      this.setDensityUniform(camBuffer, batchDensity, isVoxel);
+      this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
+    }
+  }
+
+  private setDensityUniform(camBuffer: GPUBuffer, density: number, isVoxel: boolean): void {
+    const current = isVoxel ? this.currentDensityVoxel : this.currentDensityLeaf;
+    if (Math.abs(density - current) < 0.001) return;
+    this._densityFloat[0] = density;
+    this.device.queue.writeBuffer(camBuffer, 40 * 4, this._densityFloat);
+    if (isVoxel) { this.currentDensityVoxel = density; }
+    else { this.currentDensityLeaf = density; }
   }
 
   private computePointChunkCapacity(): number {
@@ -626,44 +687,6 @@ export class LidarRenderer {
     }
 
     return chunks;
-  }
-
-  private drawSegmentedThinnedNode(
-    pass: GPURenderPassEncoder,
-    chunks: PointChunkBuffers[],
-    offset: number,
-    count: number,
-    density: number,
-    chunkState: { index: number },
-  ): void {
-    const targetCount = Math.max(1, Math.floor(count * density));
-    const segmentCount = this.getThinningSegmentCount(count);
-    let keptSoFar = 0;
-
-    for (let segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++) {
-      const segmentStart = offset + Math.floor((segmentIndex * count) / segmentCount);
-      const segmentEnd = offset + Math.floor(((segmentIndex + 1) * count) / segmentCount);
-      const segmentCountPoints = segmentEnd - segmentStart;
-      if (segmentCountPoints <= 0) continue;
-
-      const nextKept = Math.round(((segmentIndex + 1) * targetCount) / segmentCount);
-      const keepCount = nextKept - keptSoFar;
-      keptSoFar = nextKept;
-      if (keepCount <= 0) continue;
-
-      const slack = segmentCountPoints - keepCount;
-      const windowOffset = slack > 0 ? (slack >>> 1) : 0;
-      this.drawRange(pass, chunks, segmentStart + windowOffset, keepCount, chunkState);
-    }
-  }
-
-  private getThinningSegmentCount(count: number): number {
-    if (count <= 1) return 1;
-    if (count >= 100_000) return 8;
-    if (count >= 50_000) return 6;
-    if (count >= 20_000) return 4;
-    if (count >= 5_000) return 2;
-    return 1;
   }
 
   private drawRange(
@@ -784,9 +807,15 @@ export class LidarRenderer {
     f[37] = this.hmOriginZ;
     f[38] = this.hmScaleX;
     f[39] = this.hmScaleZ;
+    f[40] = 1.0; // density (default: keep all, updated per-node in drawNodesBatched)
+    f[41] = 0;   // _pad1
+    f[42] = 0;   // _pad2
+    f[43] = 0;   // _pad3
 
     this.device.queue.writeBuffer(this.cameraBuffer, 0, f);
     this.device.queue.writeBuffer(this.cameraBufferVoxel, 0, f);
+    this.currentDensityLeaf = 1.0;
+    this.currentDensityVoxel = 1.0;
   }
 
   render() {

@@ -14,14 +14,20 @@ export const OCCUPANCY_GRID_SIZE = 64;
 /** Screen-space size (px) below which a node renders at its LOD level instead of recursing */
 export const MIN_NODE_SIZE_PX = 45;
 
+/** LOD cross-fade: nodes below this screen-size render only voxels */
+export const LOD_FADE_LOW = 35;
+
+/** LOD cross-fade: nodes above this screen-size render only leaves */
+export const LOD_FADE_HIGH = 55;
+
 /** Hysteresis factor — refined nodes use this fraction of threshold to merge back. */
 export const HYSTERESIS_FACTOR = 0.55;
 
 /** Temporal coherence: reuse visibility if camera moved less than this (meters) */
-export const TEMPORAL_POS_THRESHOLD = 0.5;
+export const TEMPORAL_POS_THRESHOLD = 1.5;
 
 /** Temporal coherence: reuse visibility if camera rotated less than this (degrees) */
-export const TEMPORAL_ROT_THRESHOLD = 0.35;
+export const TEMPORAL_ROT_THRESHOLD = 1.0;
 
 /** Adaptive budget: initial point budget */
 export const INITIAL_POINT_BUDGET = 8_000_000;
@@ -33,10 +39,16 @@ export const MIN_POINT_BUDGET = 3_000_000;
 export const MAX_POINT_BUDGET = 25_000_000;
 
 /** Rolling frame window for adaptive FPS tracking */
-export const FRAME_WINDOW = 12;
+export const FRAME_WINDOW = 8;
 
 /** Target frame time in ms (60fps) */
 export const TARGET_FRAME_MS = 16.6;
+
+/** Minimum density floor (never remove more than 85% of points) */
+export const MIN_DENSITY = 0.15;
+
+/** Temporal density blend rate (lerp towards target density each frame) */
+export const DENSITY_BLEND_RATE = 0.3;
 
 /** Axis-aligned bounding box */
 export interface AABB {
@@ -93,6 +105,8 @@ export interface VisibleNode {
   depth: number;
   screenSize: number;
   density: number;
+  /** Cross-fade alpha for smooth LOD transitions (0 = fully transparent, 1 = fully opaque) */
+  fadeAlpha: number;
 }
 
 /** Camera state for temporal coherence checks */
