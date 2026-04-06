@@ -203,8 +203,26 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
   console.log(`[WFS] Tile (${coord.xKm}, ${coord.yKm}) center WGS84: [${lon.toFixed(6)}, ${lat.toFixed(6)}] — ${matchingZones.length} matching zone(s)${matchingZones.length > 0 ? ': ' + matchingZones.map(z => z.name).join(', ') : ''}`);
 
   if (matchingZones.length === 0) {
-    console.warn(`[WFS] No zones contain tile center, falling back to ${coord.projection === 'RGR92UTM40S' ? 'REU' : isCorsica(centerX, centerY) ? 'Corsica' : 'FXX'} fallback list`);
-    return buildFallbackUrls(coord);
+    // Try nearby zones (within ~5km buffer) before giving up
+    const BUFFER_DEG = 0.05;
+    const nearbyZones = zones.filter(z =>
+      lon >= z.bbox.west - BUFFER_DEG && lon <= z.bbox.east + BUFFER_DEG &&
+      lat >= z.bbox.south - BUFFER_DEG && lat <= z.bbox.north + BUFFER_DEG
+    );
+
+    if (nearbyZones.length > 0) {
+      console.log(`[WFS] No exact match, but ${nearbyZones.length} nearby zone(s): ${nearbyZones.map(z => z.name).join(', ')}`);
+      const urls: string[] = [];
+      const baseName = buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef);
+      for (const zone of nearbyZones) {
+        urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.copc.laz`);
+        urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.laz`);
+      }
+      return urls;
+    }
+
+    console.warn(`[WFS] No zones contain or are near tile center — no LiDAR HD coverage at this location`);
+    return [];
   }
 
   const urls: string[] = [];

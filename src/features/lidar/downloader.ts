@@ -42,7 +42,7 @@ export async function downloadTile(
 
   const urls = await resolveDownloadUrls(coord);
   if (urls.length === 0) {
-    throw new Error(`Aucune zone LiDAR HD trouvée pour les coordonnées (${coord.xKm}, ${coord.yKm})`);
+    throw new Error(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
   }
 
   let lastError: Error | null = null;
