@@ -55,6 +55,29 @@ export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, al
   return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
 }
 
+export function getTileBounds(coord: TileCoord): {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+} {
+  return {
+    minX: coord.xKm * 1000,
+    minY: coord.yKm * 1000,
+    maxX: (coord.xKm + 1) * 1000,
+    maxY: (coord.yKm + 1) * 1000,
+  };
+}
+
+export function tileCoordToWgs84Polygon(coord: TileCoord): [number, number][] {
+  const { minX, minY, maxX, maxY } = getTileBounds(coord);
+  const southWest = toWgs84(minX, minY, coord.projection);
+  const southEast = toWgs84(maxX, minY, coord.projection);
+  const northEast = toWgs84(maxX, maxY, coord.projection);
+  const northWest = toWgs84(minX, maxY, coord.projection);
+  return [southWest, southEast, northEast, northWest, southWest];
+}
+
 export function wgs84ToTileCoord(lon: number, lat: number): TileCoord {
   const isReunion = lon > 55 && lon < 56 && lat > -21.5 && lat < -20.5;
   const crs: DetectedCrs = isReunion ? 'RGR92UTM40S' : 'LAMB93';
