@@ -9,12 +9,16 @@ export default async function handler(req: Request) {
 
   try {
     const url = new URL(req.url);
-    const pathSegments = url.pathname
+    const rawPath = url.pathname;
+    const pathSegments = rawPath
       .replace(/^\/api\/lidar\/download\//, '')
       .split('/')
       .filter(Boolean);
 
+    console.log(`[LiDAR proxy] raw pathname=${rawPath} segments=[${pathSegments.join(', ')}]`);
+
     if (pathSegments.length < 2) {
+      console.warn(`[LiDAR proxy] Not enough segments (${pathSegments.length}) from pathname: ${rawPath}`);
       return new Response('Missing zone/file parameters', { status: 400 });
     }
 
@@ -27,6 +31,7 @@ export default async function handler(req: Request) {
     }
 
     const ignUrl = `https://data.geopf.fr/telechargement/download/LiDARHD-NUALID/${zone}/${file}`;
+    console.log(`[LiDAR proxy] ${req.method} zone=${zone} file=${file} -> ${ignUrl}`);
 
     const maxRetries = 3;
     const baseDelay429 = 2000;
@@ -64,6 +69,7 @@ export default async function handler(req: Request) {
       }
 
       if (!response.ok) {
+        console.warn(`[LiDAR proxy] Upstream ${response.status} for ${ignUrl}`);
         return new Response(`IGN download error: ${response.status}`, { status: response.status });
       }
 

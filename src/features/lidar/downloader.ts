@@ -90,7 +90,10 @@ async function fetchWithRetry(
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
+    console.log(`[Download] ${url} -> HTTP ${response.status}`);
+
     if (response.status === 404) {
+      console.warn(`[Download] 404 for ${url}`);
       const err = new Error('Not found') as any;
       err.status = 404;
       throw err;
