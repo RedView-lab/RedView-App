@@ -2,6 +2,9 @@
 // TypeScript port of https://github.com/mapbox/webgl-wind (ISC License)
 // GPU-accelerated particle animation: positions stored in textures,
 // updated via shaders, trails via ping-pong FBOs with fade.
+//
+// Adapted for Mapbox GL CustomLayerInterface: renders into Mapbox's
+// shared WebGL context with proper GL state save/restore.
 
 // ── GLSL Shaders (inline) ──────────────────────────────────────────────
 
@@ -264,6 +267,69 @@ function getColorRamp(colors: Record<number, string>): Uint8Array {
   return new Uint8Array(ctx.getImageData(0, 0, 256, 1).data);
 }
 
+// ── GL State save / restore (for shared Mapbox context) ────────────────
+
+interface SavedGLState {
+  blend: boolean;
+  depthTest: boolean;
+  stencilTest: boolean;
+  scissorTest: boolean;
+  cullFace: boolean;
+  blendFuncSrc: number;
+  blendFuncDst: number;
+  activeTexture: number;
+  program: WebGLProgram | null;
+  framebuffer: WebGLFramebuffer | null;
+  arrayBuffer: WebGLBuffer | null;
+  viewport: Int32Array;
+  textures: (WebGLTexture | null)[];
+}
+
+function saveGLState(gl: WebGLRenderingContext): SavedGLState {
+  const textures: (WebGLTexture | null)[] = [];
+  for (let i = 0; i < 4; i++) {
+    gl.activeTexture(gl.TEXTURE0 + i);
+    textures.push(gl.getParameter(gl.TEXTURE_BINDING_2D));
+  }
+  return {
+    blend: gl.isEnabled(gl.BLEND),
+    depthTest: gl.isEnabled(gl.DEPTH_TEST),
+    stencilTest: gl.isEnabled(gl.STENCIL_TEST),
+    scissorTest: gl.isEnabled(gl.SCISSOR_TEST),
+    cullFace: gl.isEnabled(gl.CULL_FACE),
+    blendFuncSrc: gl.getParameter(gl.BLEND_SRC_RGB),
+    blendFuncDst: gl.getParameter(gl.BLEND_DST_RGB),
+    activeTexture: gl.getParameter(gl.ACTIVE_TEXTURE),
+    program: gl.getParameter(gl.CURRENT_PROGRAM),
+    framebuffer: gl.getParameter(gl.FRAMEBUFFER_BINDING),
+    arrayBuffer: gl.getParameter(gl.ARRAY_BUFFER_BINDING),
+    viewport: gl.getParameter(gl.VIEWPORT),
+    textures,
+  };
+}
+
+function restoreGLState(gl: WebGLRenderingContext, s: SavedGLState): void {
+  // Restore capabilities
+  if (s.blend) gl.enable(gl.BLEND); else gl.disable(gl.BLEND);
+  if (s.depthTest) gl.enable(gl.DEPTH_TEST); else gl.disable(gl.DEPTH_TEST);
+  if (s.stencilTest) gl.enable(gl.STENCIL_TEST); else gl.disable(gl.STENCIL_TEST);
+  if (s.scissorTest) gl.enable(gl.SCISSOR_TEST); else gl.disable(gl.SCISSOR_TEST);
+  if (s.cullFace) gl.enable(gl.CULL_FACE); else gl.disable(gl.CULL_FACE);
+
+  gl.blendFunc(s.blendFuncSrc, s.blendFuncDst);
+  gl.useProgram(s.program);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, s.framebuffer);
+  gl.bindBuffer(gl.ARRAY_BUFFER, s.arrayBuffer);
+  gl.viewport(s.viewport[0], s.viewport[1], s.viewport[2], s.viewport[3]);
+
+  // Restore texture bindings
+  for (let i = 0; i < s.textures.length; i++) {
+    gl.activeTexture(gl.TEXTURE0 + i);
+    gl.bindTexture(gl.TEXTURE_2D, s.textures[i]);
+  }
+  gl.activeTexture(s.activeTexture);
+}
+
 // ── WindGL class ───────────────────────────────────────────────────────
 
 export interface WindData {
@@ -275,6 +341,9 @@ export interface WindData {
   vMin: number;
   vMax: number;
 }
+
+/** Max trail texture resolution (capped for performance) */
+const MAX_TRAIL_RES = 2048;
 
 export class WindGL {
   private gl: WebGLRenderingContext;
@@ -304,6 +373,10 @@ export class WindGL {
   windData!: WindData;
   private windTexture!: WebGLTexture;
 
+  /** Trail FBO dimensions (may differ from canvas size) */
+  private trailWidth = 0;
+  private trailHeight = 0;
+
   constructor(gl: WebGLRenderingContext) {
     this.gl = gl;
 
@@ -315,14 +388,19 @@ export class WindGL {
     this.framebuffer = gl.createFramebuffer()!;
 
     this.setColorRamp(DEFAULT_RAMP_COLORS);
-    this.resize();
   }
 
-  resize(): void {
+  /** Allocate / reallocate trail textures at a given resolution */
+  resize(width: number, height: number): void {
     const gl = this.gl;
-    const emptyPixels = new Uint8Array(gl.canvas.width * gl.canvas.height * 4);
-    this.backgroundTexture = createTexture(gl, gl.NEAREST, emptyPixels, gl.canvas.width, gl.canvas.height);
-    this.screenTexture = createTexture(gl, gl.NEAREST, emptyPixels, gl.canvas.width, gl.canvas.height);
+    const w = Math.min(width, MAX_TRAIL_RES);
+    const h = Math.min(height, MAX_TRAIL_RES);
+    if (w === this.trailWidth && h === this.trailHeight) return;
+    this.trailWidth = w;
+    this.trailHeight = h;
+    const emptyPixels = new Uint8Array(w * h * 4);
+    this.backgroundTexture = createTexture(gl, gl.NEAREST, emptyPixels, w, h);
+    this.screenTexture = createTexture(gl, gl.NEAREST, emptyPixels, w, h);
   }
 
   setColorRamp(colors: Record<number, string>): void {
@@ -356,39 +434,78 @@ export class WindGL {
     this.windTexture = createTexture(this.gl, this.gl.LINEAR, windData.image, windData.width, windData.height);
   }
 
-  draw(): void {
+  /** Prerender pass: update particle positions (offscreen FBO work) */
+  prerender(): void {
+    if (!this.windData) return;
     const gl = this.gl;
+    const saved = saveGLState(gl);
+
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.SCISSOR_TEST);
 
     bindTexture(gl, this.windTexture, 0);
     bindTexture(gl, this.particleStateTexture0, 1);
 
-    this.drawScreen();
-    this.updateParticles();
+    this.updateParticlesPass();
+
+    restoreGLState(gl, saved);
   }
 
-  private drawScreen(): void {
+  /** Render pass: compose trail texture into the current framebuffer (Mapbox's) */
+  render(): void {
+    if (!this.windData) return;
     const gl = this.gl;
-    // draw the screen into a temporary framebuffer to retain it as the background on the next frame
+    const saved = saveGLState(gl);
+
+    gl.disable(gl.DEPTH_TEST);
+    gl.disable(gl.STENCIL_TEST);
+    gl.disable(gl.SCISSOR_TEST);
+
+    bindTexture(gl, this.windTexture, 0);
+    bindTexture(gl, this.particleStateTexture0, 1);
+
+    // 1) Draw particles + fade into the trail FBO
     bindFramebuffer(gl, this.framebuffer, this.screenTexture);
-    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+    gl.viewport(0, 0, this.trailWidth, this.trailHeight);
 
     this.drawTexture(this.backgroundTexture, this.fadeOpacity);
     this.drawParticles();
 
-    bindFramebuffer(gl, null);
-    // enable blending to support drawing on top of an existing background (e.g. a map)
+    // 2) Blit the trail texture into Mapbox's current FBO
+    bindFramebuffer(gl, saved.framebuffer);
+    gl.viewport(saved.viewport[0], saved.viewport[1], saved.viewport[2], saved.viewport[3]);
+
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     this.drawTexture(this.screenTexture, 1.0);
-    gl.disable(gl.BLEND);
 
-    // save the current screen as the background for the next frame
+    // 3) Swap trail textures for next frame
     const temp = this.backgroundTexture;
     this.backgroundTexture = this.screenTexture;
     this.screenTexture = temp;
+
+    restoreGLState(gl, saved);
   }
+
+  /** Release all GL resources */
+  dispose(): void {
+    const gl = this.gl;
+    gl.deleteProgram(this.drawProgram.program);
+    gl.deleteProgram(this.screenProgram.program);
+    gl.deleteProgram(this.updateProgram.program);
+    gl.deleteBuffer(this.quadBuffer);
+    gl.deleteBuffer(this.particleIndexBuffer);
+    gl.deleteFramebuffer(this.framebuffer);
+    gl.deleteTexture(this.colorRampTexture);
+    gl.deleteTexture(this.backgroundTexture);
+    gl.deleteTexture(this.screenTexture);
+    gl.deleteTexture(this.particleStateTexture0);
+    gl.deleteTexture(this.particleStateTexture1);
+    if (this.windTexture) gl.deleteTexture(this.windTexture);
+  }
+
+  // ── Private ──────────────────────────────────────────────────────
 
   private drawTexture(texture: WebGLTexture, opacity: number): void {
     const gl = this.gl;
@@ -421,7 +538,7 @@ export class WindGL {
     gl.drawArrays(gl.POINTS, 0, this._numParticles);
   }
 
-  private updateParticles(): void {
+  private updateParticlesPass(): void {
     const gl = this.gl;
     bindFramebuffer(gl, this.framebuffer, this.particleStateTexture1);
     gl.viewport(0, 0, this.particleStateResolution, this.particleStateResolution);

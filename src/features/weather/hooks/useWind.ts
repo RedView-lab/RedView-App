@@ -6,8 +6,6 @@ import { fetchWindData, clearWindCache } from '../lib/open-meteo';
 import {
   initWindParticles,
   updateWindParticles,
-  pauseWindParticles,
-  resumeWindParticles,
   removeWindParticles,
 } from '../lib/wind-layer';
 
@@ -130,21 +128,17 @@ export function useWind(
 
       fetchForViewport(map);
 
-      const onMoveStart = () => pauseWindParticles();
       const onMoveEnd = () => {
-        resumeWindParticles();
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => fetchForViewport(map), DEBOUNCE_MS);
       };
-      map.on('movestart', onMoveStart);
       map.on('moveend', onMoveEnd);
 
       return () => {
-        map.off('movestart', onMoveStart);
         map.off('moveend', onMoveEnd);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         abortRef.current?.abort();
-        removeWindParticles();
+        removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
@@ -153,7 +147,7 @@ export function useWind(
       if (layerInitRef.current) {
         abortRef.current?.abort();
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        removeWindParticles();
+        removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         clearWindCache();
