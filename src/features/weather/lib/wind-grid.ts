@@ -81,7 +81,6 @@ export function computeWindGrid(
   // If too many points, increase spacing and recompute
   if (points.length > MAX_POINTS) {
     const ratio = Math.sqrt(points.length / MAX_POINTS);
-    const coarserSpacing = spacing * ratio;
     return computeWindGrid(bounds, zoom - Math.log2(ratio));
   }
 

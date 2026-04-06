@@ -29,7 +29,7 @@ interface ViewportBounds {
 }
 
 function getViewportBounds(map: MapboxMap): ViewportBounds {
-  const b = map.getBounds();
+  const b = map.getBounds()!;
   return {
     north: b.getNorth(),
     south: b.getSouth(),
