@@ -57,7 +57,7 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
   let cellWorldZ = camera.hmScaleZ / dims.y;
   let scale = (cellWorldX + cellWorldZ) * 0.5;
 
-  return normalize(vec3<f32>(-dzdx, scale * 8.0, -dzdy));
+  return normalize(vec3<f32>(-dzdx, scale * 3.0, -dzdy));
 }
 
 @vertex
@@ -90,7 +90,7 @@ fn vs_main(
   out.worldPos = wp;
   out.center = pos;
   out.localUV = uv;
-  let lodNear = camera.lodThreshold * 0.8;
+  let lodNear = camera.lodThreshold * 0.6;
   if (dist > lodNear || camera.lodThreshold == 0.0) {
     out.sobelNormal = computeSobelNormal(pos);
   } else {
@@ -110,33 +110,27 @@ fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
   return select(c / 12.92, pow((c + 0.055) / 1.055, vec3<f32>(2.4)), c > vec3<f32>(0.04045));
 }
 
-fn tonemap(hdr: vec3<f32>) -> vec3<f32> {
-  let mapped = hdr / (vec3<f32>(1.0) + hdr);
-  return pow(clamp(mapped, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 2.2));
+fn linearToSrgb(c: vec3<f32>) -> vec3<f32> {
+  return pow(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 2.2));
 }
 
-fn blinnPhong(N: vec3<f32>, worldPos: vec3<f32>, baseColorSrgb: vec3<f32>) -> vec3<f32> {
+fn shade(N: vec3<f32>, baseColorSrgb: vec3<f32>) -> vec3<f32> {
   let baseColor = srgbToLinear(baseColorSrgb);
   let L = normalize(camera.sunDir.xyz);
-  let V = normalize(camera.cameraPos.xyz - worldPos);
-  let H = normalize(L + V);
 
   let NdotL = dot(N, L);
   let diffuse = NdotL * 0.5 + 0.5;
-  let lighting = 0.30 + 0.70 * diffuse;
+  let lighting = 0.15 + 0.85 * diffuse;
 
-  let NdotH = max(dot(N, H), 0.0);
-  let specular = 0.12 * pow(NdotH, 24.0);
-
-  return tonemap(baseColor * lighting + vec3<f32>(specular));
+  return linearToSrgb(baseColor * lighting);
 }
 
 @fragment
 fn fs_main(in: VsOut) -> FsOut {
   var out: FsOut;
 
-  let lodNear = camera.lodThreshold * 0.8;
-  let lodFar  = camera.lodThreshold * 1.2;
+  let lodNear = camera.lodThreshold * 0.6;
+  let lodFar  = camera.lodThreshold * 1.4;
 
   // NEAR PATH: Raytraced box imposter
   if (in.camDist < lodFar) {
@@ -165,7 +159,7 @@ fn fs_main(in: VsOut) -> FsOut {
       else if (tNear == tmin.y) { faceNormal = vec3<f32>(0.0, -sign(rayDir.y), 0.0); }
       else { faceNormal = vec3<f32>(0.0, 0.0, -sign(rayDir.z)); }
 
-      let boxColor = blinnPhong(faceNormal, hitPos, in.color.rgb);
+      let boxColor = shade(faceNormal, in.color.rgb);
       let boxDepth = clipPos.z / clipPos.w;
 
       if (in.camDist > lodNear) {
@@ -175,7 +169,7 @@ fn fs_main(in: VsOut) -> FsOut {
         if (dist2 > 1.0) { discard; }
         let edge = 1.0 - smoothstep(0.6, 1.0, sqrt(dist2));
         let N = normalize(in.sobelNormal);
-        let discColor = blinnPhong(N, in.center, in.color.rgb);
+        let discColor = shade(N, in.color.rgb);
 
         out.color = vec4<f32>(mix(boxColor, discColor, t), mix(in.color.a, in.color.a * edge, t));
         out.depth = mix(boxDepth, in.pos.z, t);
@@ -193,7 +187,7 @@ fn fs_main(in: VsOut) -> FsOut {
 
   let edge = 1.0 - smoothstep(0.5, 1.0, sqrt(dist2));
   let N = normalize(in.sobelNormal);
-  let color = blinnPhong(N, in.center, in.color.rgb);
+  let color = shade(N, in.color.rgb);
 
   out.color = vec4<f32>(color, in.color.a * edge);
   out.depth = in.pos.z;

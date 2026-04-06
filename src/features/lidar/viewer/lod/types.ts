@@ -12,10 +12,10 @@ export const MAX_DEPTH = 16;
 export const OCCUPANCY_GRID_SIZE = 64;
 
 /** Screen-space size (px) below which a node renders at its LOD level instead of recursing */
-export const MIN_NODE_SIZE_PX = 20;
+export const MIN_NODE_SIZE_PX = 45;
 
 /** Hysteresis factor — refined nodes use this fraction of threshold to merge back. */
-export const HYSTERESIS_FACTOR = 0.35;
+export const HYSTERESIS_FACTOR = 0.55;
 
 /** Temporal coherence: reuse visibility if camera moved less than this (meters) */
 export const TEMPORAL_POS_THRESHOLD = 0.5;
