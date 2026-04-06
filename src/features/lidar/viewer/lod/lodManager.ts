@@ -4,7 +4,7 @@
 // temporal density smoothing, GPU stochastic discard.
 // ============================================
 
-import type { SerializedNode, VisibleNode, CameraState, FlatOctree } from './types';
+import type { SerializedNode, VisibleNode, CameraState, FlatOctree, PlatformProfile } from './types';
 import {
   LOD_FADE_LOW,
   LOD_FADE_HIGH,
@@ -49,6 +49,8 @@ export class LodManager {
   private cacheValid = false;
 
   private pointBudget = INITIAL_POINT_BUDGET;
+  private minBudget = MIN_POINT_BUDGET;
+  private maxBudget = MAX_POINT_BUDGET;
   private frameTimes: number[] = [];
   private frameIdx = 0;
   private slowFrameCount = 0;
@@ -88,6 +90,15 @@ export class LodManager {
 
     const r = octree.root.aabb;
     this.rootExtent = Math.max(r.maxX - r.minX, r.maxY - r.minY, r.maxZ - r.minZ);
+  }
+
+  /** Apply platform-specific budget limits (e.g. lower for Apple M1 unified memory). */
+  applyPlatformProfile(profile: PlatformProfile) {
+    this.pointBudget = profile.initialBudget;
+    this.minBudget = Math.min(profile.initialBudget, MIN_POINT_BUDGET);
+    this.maxBudget = profile.maxBudget;
+    this.stats.pointBudget = this.pointBudget;
+    console.log(`[LOD] Platform budget: ${(this.pointBudget / 1e6).toFixed(1)}M (max ${(this.maxBudget / 1e6).toFixed(1)}M)`);
   }
 
   getVoxelPointSize(basePointSize: number): number {
@@ -435,14 +446,14 @@ export class LodManager {
       this.slowFrameCount++;
       this.fastFrameCount = 0;
       if (this.slowFrameCount >= 4) {
-        this.pointBudget = Math.max(MIN_POINT_BUDGET, Math.floor(this.pointBudget * 0.90));
+        this.pointBudget = Math.max(this.minBudget, Math.floor(this.pointBudget * 0.90));
         this.slowFrameCount = 0;
       }
     } else if (avgMs < TARGET_FRAME_MS * 0.80) {
       this.fastFrameCount++;
       this.slowFrameCount = 0;
       if (this.fastFrameCount >= 4) {
-        this.pointBudget = Math.min(MAX_POINT_BUDGET, Math.floor(this.pointBudget * 1.20));
+        this.pointBudget = Math.min(this.maxBudget, Math.floor(this.pointBudget * 1.20));
         this.fastFrameCount = 0;
       }
     } else {

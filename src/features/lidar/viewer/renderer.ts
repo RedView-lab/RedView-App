@@ -4,8 +4,13 @@
 // Hybrid LOD: smooth disc billboards (far) + raytraced box imposters (near).
 // Normals computed on GPU via Sobel gradient on heightmap texture.
 // GPU stochastic density discard for artifact-free LOD thinning.
+//
+// Two shader variants:
+//  - SHADER_GATHER: uses textureGather (requires float32-filterable)
+//  - SHADER_LOAD:   uses textureLoad (Apple Metal / universal fallback)
 
-const SHADER = /* wgsl */`
+// --- Shared WGSL preamble: structs, hash, lighting, fragment shader ---
+const SHADER_PREAMBLE = /* wgsl */`
 struct Camera {
   viewProj: mat4x4<f32>,
   right: vec4<f32>,
@@ -49,7 +54,10 @@ fn pcgHash(input: u32) -> u32 {
   let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
   return (word >> 22u) ^ word;
 }
+`;
 
+// --- Sobel normal via textureGather (high quality, requires float32-filterable) ---
+const SOBEL_GATHER = /* wgsl */`
 fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
   let u = (worldPos.x - camera.hmOriginX) / camera.hmScaleX;
   let v = (worldPos.z - camera.hmOriginZ) / camera.hmScaleZ;
@@ -73,6 +81,49 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
 
   return normalize(vec3<f32>(-dzdx, scale * 3.0, -dzdy));
 }
+`;
+
+// --- Sobel normal via textureLoad (Apple Metal compatible, no gather/sampler needed) ---
+const SOBEL_LOAD = /* wgsl */`
+fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
+  let u = (worldPos.x - camera.hmOriginX) / camera.hmScaleX;
+  let v = (worldPos.z - camera.hmOriginZ) / camera.hmScaleZ;
+
+  let dims = textureDimensions(heightTex, 0);
+  let dimsF = vec2<f32>(dims);
+
+  // Integer texel coordinates (clamped)
+  let px = clamp(i32(u * dimsF.x), 0, i32(dims.x) - 1);
+  let py = clamp(i32(v * dimsF.y), 0, i32(dims.y) - 1);
+
+  let pxL = max(px - 1, 0);
+  let pxR = min(px + 1, i32(dims.x) - 1);
+  let pyD = max(py - 1, 0);
+  let pyU = min(py + 1, i32(dims.y) - 1);
+
+  // 3×3 Sobel kernel via individual textureLoad calls
+  let hL  = textureLoad(heightTex, vec2<i32>(pxL, py),  0).r;
+  let hR  = textureLoad(heightTex, vec2<i32>(pxR, py),  0).r;
+  let hD  = textureLoad(heightTex, vec2<i32>(px,  pyD), 0).r;
+  let hU  = textureLoad(heightTex, vec2<i32>(px,  pyU), 0).r;
+  let hLD = textureLoad(heightTex, vec2<i32>(pxL, pyD), 0).r;
+  let hRD = textureLoad(heightTex, vec2<i32>(pxR, pyD), 0).r;
+  let hLU = textureLoad(heightTex, vec2<i32>(pxL, pyU), 0).r;
+  let hRU = textureLoad(heightTex, vec2<i32>(pxR, pyU), 0).r;
+
+  let dzdx = (hR + 2.0 * hR + hRU) - (hL + 2.0 * hL + hLU);
+  let dzdy = (hU + 2.0 * hLU + hRU) - (hD + 2.0 * hLD + hRD);
+
+  let cellWorldX = camera.hmScaleX / dimsF.x;
+  let cellWorldZ = camera.hmScaleZ / dimsF.y;
+  let scale = (cellWorldX + cellWorldZ) * 0.5;
+
+  return normalize(vec3<f32>(-dzdx, scale * 3.0, -dzdy));
+}
+`;
+
+// --- Vertex + Fragment shader body (shared by both variants) ---
+const SHADER_BODY = /* wgsl */`
 
 @vertex
 fn vs_main(
@@ -226,6 +277,10 @@ fn fs_main(in: VsOut) -> FsOut {
 }
 `;
 
+// Compose final shader variants
+const SHADER_GATHER = SHADER_PREAMBLE + SOBEL_GATHER + SHADER_BODY;
+const SHADER_LOAD   = SHADER_PREAMBLE + SOBEL_LOAD   + SHADER_BODY;
+
 const TERRAIN_SHADER = /* wgsl */`
 struct Camera {
   viewProj: mat4x4<f32>,
@@ -277,6 +332,7 @@ fn terrain_fs(in: TerrainVsOut) -> @location(0) vec4<f32> {
 `;
 
 import type { VisibleNode, FlatOctree } from './lod/types';
+import type { PlatformProfile } from './lod/types';
 
 const MAX_BUFFER_POINTS = 50_000_000;
 
@@ -339,21 +395,67 @@ export class LidarRenderer {
   lastCamPos: [number, number, number] = [0, 0, 0];
   lastCamFwd: [number, number, number] = [0, 0, -1];
 
+  /** True when device is lost and not yet recovered. Guards render calls. */
+  deviceLost = false;
+  /** Platform profile detected at init (Apple vs Desktop). */
+  platform: PlatformProfile | null = null;
+
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (!navigator.gpu) throw new Error('WebGPU non supporté');
     const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
     if (!adapter) throw new Error('Pas de GPUAdapter');
 
+    // --- Platform detection ---
+    const adapterInfo = (adapter as any).info ?? null;
+    const vendor = (adapterInfo?.vendor ?? '').toLowerCase();
+    const arch = (adapterInfo?.architecture ?? '').toLowerCase();
+    const desc = (adapterInfo?.description ?? adapterInfo?.device ?? '').toLowerCase();
+    const isApple = vendor.includes('apple') || arch.includes('apple') || desc.includes('apple');
+    this.platform = isApple
+      ? { initialBudget: 5_000_000, maxBudget: 12_000_000, maxCanvasDim: 4096, dprCap: 1.5, isApple: true }
+      : { initialBudget: 8_000_000, maxBudget: 25_000_000, maxCanvasDim: 8192, dprCap: 3.0, isApple: false };
+
+    console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
+    console.log(`[LiDAR GPU] Platform profile: ${isApple ? 'Apple (Metal)' : 'Desktop'}`);
+
+    // --- Feature detection ---
     const features: GPUFeatureName[] = [];
-    if (adapter.features.has('float32-filterable')) features.push('float32-filterable');
+    const hasF32FilterSupport = adapter.features.has('float32-filterable');
+    if (hasF32FilterSupport) features.push('float32-filterable');
+    console.log(`[LiDAR GPU] float32-filterable: ${hasF32FilterSupport}`);
+
+    // --- Device creation with error scope ---
     this.device = await adapter.requestDevice({ requiredFeatures: features });
     this.pointChunkCapacity = this.computePointChunkCapacity();
+
+    console.log(`[LiDAR GPU] maxBufferSize: ${(this.device.limits.maxBufferSize / 1024 / 1024).toFixed(0)} MB`);
+    console.log(`[LiDAR GPU] pointChunkCapacity: ${this.pointChunkCapacity.toLocaleString()}`);
+
+    // --- Device lost handler ---
+    this.device.lost.then((info) => {
+      console.error(`[LiDAR GPU] Device lost: reason=${info.reason}, message=${info.message}`);
+      this.deviceLost = true;
+      if (info.reason !== 'destroyed') {
+        // Surface recoverable loss to the user
+        const statusEl = document.getElementById('status');
+        const overlay = document.getElementById('overlay');
+        if (statusEl) statusEl.textContent = `⚠️ GPU device lost: ${info.message || info.reason}. Rechargez la page.`;
+        if (overlay) overlay.classList.remove('hidden');
+      }
+    });
 
     this.context = canvas.getContext('webgpu') as GPUCanvasContext;
     this.format = navigator.gpu.getPreferredCanvasFormat();
     this.context.configure({ device: this.device, format: this.format, alphaMode: 'premultiplied' });
+    console.log(`[LiDAR GPU] Canvas format: ${this.format}`);
 
     const hasF32Filter = this.device.features.has('float32-filterable');
+
+    // --- Bind group layouts ---
+    // When float32-filterable is NOT available (Apple Metal), we use textureLoad
+    // instead of textureGather. textureLoad doesn't use the sampler, but WebGPU
+    // requires all bind group entries declared in the layout to be present.
+    // We keep the sampler binding for layout compatibility but mark it non-filtering.
     this.pointBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
@@ -368,7 +470,14 @@ export class LidarRenderer {
       ],
     });
 
-    const shader = this.device.createShaderModule({ code: SHADER });
+    // --- Select shader variant based on float32-filterable support ---
+    const shaderCode = hasF32Filter ? SHADER_GATHER : SHADER_LOAD;
+    console.log(`[LiDAR GPU] Shader variant: ${hasF32Filter ? 'textureGather' : 'textureLoad (Metal fallback)'}`);
+
+    // --- Pipeline creation with error scope to catch validation failures ---
+    this.device.pushErrorScope('validation');
+
+    const shader = this.device.createShaderModule({ code: shaderCode });
     this.pipeline = this.device.createRenderPipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.pointBindGroupLayout] }),
       vertex: {
@@ -426,6 +535,13 @@ export class LidarRenderer {
       primitive: { topology: 'triangle-list', cullMode: 'back' },
       depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
     });
+
+    // Check for pipeline creation validation errors
+    const pipelineError = await this.device.popErrorScope();
+    if (pipelineError) {
+      console.error(`[LiDAR GPU] Pipeline validation error: ${pipelineError.message}`);
+      throw new Error(`GPU pipeline creation failed: ${pipelineError.message}`);
+    }
 
     // Camera uniform: 176 bytes (44 × f32, 16-byte aligned)
     this.cameraBuffer = this.device.createBuffer({
@@ -532,7 +648,7 @@ export class LidarRenderer {
   }
 
   renderLOD(visibleNodes: VisibleNode[], voxelPointSize?: number): void {
-    if (!this.device) return;
+    if (!this.device || this.deviceLost) return;
     if (this.leafChunks.length === 0 && this.voxelChunks.length === 0 && !this.terrainMesh) return;
 
     const colorView = this.context.getCurrentTexture().createView();
@@ -673,15 +789,23 @@ export class LidarRenderer {
 
       const pos = this.device.createBuffer({
         size: count * 12,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true,
       });
-      this.device.queue.writeBuffer(pos, 0, positions as Float32Array<ArrayBuffer>, pointOffset * 3, count * 3);
+      new Float32Array(pos.getMappedRange()).set(
+        positions.subarray(pointOffset * 3, (pointOffset + count) * 3),
+      );
+      pos.unmap();
 
       const col = this.device.createBuffer({
         size: count * 4,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+        usage: GPUBufferUsage.VERTEX,
+        mappedAtCreation: true,
       });
-      this.device.queue.writeBuffer(col, 0, colors as Uint8Array<ArrayBuffer>, pointOffset * 4, count * 4);
+      new Uint8Array(col.getMappedRange()).set(
+        colors.subarray(pointOffset * 4, (pointOffset + count) * 4),
+      );
+      col.unmap();
 
       chunks.push({ pos, col, pointOffset, count });
     }
@@ -758,21 +882,27 @@ export class LidarRenderer {
 
     const vertBuf = this.device.createBuffer({
       size: vertices.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true,
     });
-    this.device.queue.writeBuffer(vertBuf, 0, vertices as Float32Array<ArrayBuffer>);
+    new Float32Array(vertBuf.getMappedRange()).set(vertices);
+    vertBuf.unmap();
 
     const colBuf = this.device.createBuffer({
       size: colors.byteLength,
-      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true,
     });
-    this.device.queue.writeBuffer(colBuf, 0, colors as Uint8Array<ArrayBuffer>);
+    new Uint8Array(colBuf.getMappedRange()).set(colors);
+    colBuf.unmap();
 
     const idxBuf = this.device.createBuffer({
       size: indices.byteLength,
-      usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
+      usage: GPUBufferUsage.INDEX,
+      mappedAtCreation: true,
     });
-    this.device.queue.writeBuffer(idxBuf, 0, indices as Uint32Array<ArrayBuffer>);
+    new Uint32Array(idxBuf.getMappedRange()).set(indices);
+    idxBuf.unmap();
 
     this.terrainMesh = { vertBuf, colBuf, idxBuf, count: indices.length };
   }
@@ -819,7 +949,7 @@ export class LidarRenderer {
   }
 
   render() {
-    if (!this.device || (this.buffers.length === 0 && !this.terrainMesh)) return;
+    if (!this.device || this.deviceLost || (this.buffers.length === 0 && !this.terrainMesh)) return;
 
     const encoder = this.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({

@@ -86,6 +86,8 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
 }
 
 // --- Main ---
+let renderer: LidarRenderer | null = null;
+
 (async () => {
   try {
     // 1. Try loading colorized cache first
@@ -129,8 +131,11 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
     // 5. Init WebGPU
     setStatus('Initialisation WebGPU...', 85);
     resizeCanvas();
-    const renderer = new LidarRenderer();
+    renderer = new LidarRenderer();
     await renderer.init(canvas);
+    // Re-resize with platform-aware DPR cap now that we know the GPU
+    resizeCanvas();
+    renderer.resize(canvas.width, canvas.height);
 
     // 5b. Upload heightmap texture for GPU Sobel normals
     const cx = (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2;
@@ -181,6 +186,7 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
 
     const lodManager = new LodManager();
     lodManager.setOctree(octree);
+    if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
 
     // Done — hide overlay
     setStatus('Prêt', 100);
@@ -191,6 +197,7 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
     let lastFrameTime = performance.now();
 
     const renderLoop = () => {
+      if (!renderer) return;
       const now = performance.now();
       const deltaMs = now - lastFrameTime;
       lastFrameTime = now;
@@ -211,12 +218,14 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
       renderer.renderLOD(lodManager.getVisibleNodes(), voxelSize);
 
       const s = lodManager.stats;
+      const gpu = renderer.platform?.isApple ? ' [Apple]' : '';
       if (showLodStats) {
         statsEl.textContent =
           `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
           ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
           ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
-          ` · voxel ${renderer.pointSize.toFixed(2)}m`;
+          ` · voxel ${renderer.pointSize.toFixed(2)}m` +
+          ` · ${canvas.width}×${canvas.height}${gpu}`;
       } else {
         statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${tileFileName}`;
       }
@@ -226,12 +235,14 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
 
     // Handle resize
     window.addEventListener('resize', () => {
+      if (!renderer) return;
       resizeCanvas();
       renderer.resize(canvas.width, canvas.height);
     });
 
     // Keyboard controls
     window.addEventListener('keydown', (e) => {
+      if (!renderer) return;
       if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
       if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
       renderer.pointSize = Math.max(0.01, Math.min(10, renderer.pointSize));
@@ -252,8 +263,12 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.floor(window.innerWidth * dpr);
-  canvas.height = Math.floor(window.innerHeight * dpr);
+  // Cap resolution to avoid oversized canvases on high-DPR screens (Retina Mac M1 etc.)
+  const MAX_DIM = renderer?.platform?.maxCanvasDim ?? 4096;
+  const maxDim = Math.max(window.innerWidth, window.innerHeight);
+  const effectiveDpr = Math.min(dpr, MAX_DIM / maxDim);
+  canvas.width = Math.floor(window.innerWidth * effectiveDpr);
+  canvas.height = Math.floor(window.innerHeight * effectiveDpr);
 }
 
 function buildRGBA(pc: PointCloudData): Uint8Array {

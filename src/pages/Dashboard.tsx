@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { MapView } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
+import { MapToolsPanel } from '@/features/weather';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -12,12 +13,14 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const mapRef = useRef<MapboxMap | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
   const [fitPanelOpen, setFitPanelOpen] = useState(false);
 
   const handleMapReady = (map: MapboxMap) => {
     mapRef.current = map;
+    setMapLoaded(true);
   };
 
   const handleFlyTo = (lon: number, lat: number) => {
@@ -66,6 +69,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       >
         Logout
       </button>
+
+      <div style={rightDockStyle}>
+        <MapToolsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
+      </div>
     </div>
     </LidarProvider>
   );
@@ -79,4 +86,11 @@ const leftDockStackStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
+};
+
+const rightDockStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 50,
+  right: 12,
+  zIndex: 20,
 };

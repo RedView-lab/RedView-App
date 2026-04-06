@@ -22,8 +22,15 @@ export function generateHeightmap(pc: PointCloudData, resolution = 1.0): Promise
       { type: 'module' },
     );
 
+    const TIMEOUT_MS = 30_000;
+    const timer = setTimeout(() => {
+      worker.terminate();
+      reject(new Error(`Heightmap generation timed out after ${TIMEOUT_MS / 1000}s`));
+    }, TIMEOUT_MS);
+
     worker.onmessage = (e: MessageEvent) => {
       if (e.data.type === 'done') {
+        clearTimeout(timer);
         resolve({
           vertices: e.data.vertices as Float32Array,
           colors: e.data.colors as Uint8Array,
@@ -39,7 +46,9 @@ export function generateHeightmap(pc: PointCloudData, resolution = 1.0): Promise
     };
 
     worker.onerror = (err) => {
-      reject(err);
+      clearTimeout(timer);
+      const msg = err instanceof ErrorEvent ? err.message : String(err);
+      reject(new Error(`Heightmap worker error: ${msg}`));
       worker.terminate();
     };
 

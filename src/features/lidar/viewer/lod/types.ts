@@ -50,6 +50,15 @@ export const MIN_DENSITY = 0.15;
 /** Temporal density blend rate (lerp towards target density each frame) */
 export const DENSITY_BLEND_RATE = 0.3;
 
+/** Platform-dependent GPU/memory profile */
+export interface PlatformProfile {
+  initialBudget: number;
+  maxBudget: number;
+  maxCanvasDim: number;
+  dprCap: number;
+  isApple: boolean;
+}
+
 /** Axis-aligned bounding box */
 export interface AABB {
   minX: number; minY: number; minZ: number;

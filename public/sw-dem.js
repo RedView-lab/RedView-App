@@ -37,8 +37,8 @@ let mapboxToken = '';
 const OLD_CACHES = [
   'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3',
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
-  'dem-tiles-v7',
-  'dem-negative-v1', 'dem-negative-v2',
+  'dem-tiles-v7', 'dem-tiles-v8',
+  'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
 ];
 
 self.addEventListener('install', (e) => {

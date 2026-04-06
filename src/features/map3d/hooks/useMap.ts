@@ -40,8 +40,8 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
-      maxTileCacheSize: 400,
-      minTileCacheSize: 100,
+      maxTileCacheSize: 800,
+      minTileCacheSize: 200,
     });
 
     mapRef.current = map;

@@ -1,8 +1,7 @@
 {
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },
-    { "source": "/api/lidar/wmts/:zoom/:row/:col", "destination": "/api/lidar/wmts?zoom=:zoom&row=:row&col=:col" },
-    { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
+    { "source": "/((?!assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -26,7 +25,7 @@
     {
       "source": "/france-border.json",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800" }
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
       ]
     }
   ]
