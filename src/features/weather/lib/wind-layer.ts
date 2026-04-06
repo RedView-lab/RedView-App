@@ -1,66 +1,91 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { WindPoint } from '../types';
+import type { AnimatedWindPoint } from '../types';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
 export const WIND_SOURCE_ID = 'wind-data';
 export const WIND_LAYER_ID = 'wind-arrows';
-export const WIND_ICON_ID = 'wind-arrow';
 
-// ── Arrow icon generation (Canvas → ImageData) ───────────────────────
+// We create multiple speed-keyed icons for color banding (no SDF needed)
+const ICON_SIZE = 64;
+const SPEED_BANDS = [
+  { key: 'wind-arrow-0', maxSpeed: 5, color: '#6eb8e6', stroke: '#2a5a7a' },
+  { key: 'wind-arrow-1', maxSpeed: 10, color: '#44cc88', stroke: '#1a6b3d' },
+  { key: 'wind-arrow-2', maxSpeed: 20, color: '#eecc44', stroke: '#8a7520' },
+  { key: 'wind-arrow-3', maxSpeed: 30, color: '#ee7733', stroke: '#8a3d10' },
+  { key: 'wind-arrow-4', maxSpeed: Infinity, color: '#dd3344', stroke: '#7a1020' },
+] as const;
 
-/**
- * Generate a clean arrow icon pointing UP (north = 0°).
- * The icon is drawn as an SDF-compatible grayscale image
- * so Mapbox can recolor it via `icon-color`.
- */
-function generateArrowImageData(): ImageData {
-  const size = 48;
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext('2d')!;
+// ── Arrow icon generation (Canvas → RGBA ImageData) ──────────────────
 
-  const cx = size / 2;
-  const cy = size / 2;
+function createCanvas(w: number, h: number): { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+  // OffscreenCanvas preferred, fallback to DOM canvas
+  try {
+    const c = new OffscreenCanvas(w, h);
+    const ctx = c.getContext('2d');
+    if (ctx) return { canvas: c, ctx: ctx as unknown as CanvasRenderingContext2D };
+  } catch { /* fallback */ }
 
-  // Clear
-  ctx.clearRect(0, 0, size, size);
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext('2d')!;
+  return { canvas: c, ctx };
+}
 
-  // Arrow shape: slim chevron pointing up
+function generateArrowImageData(fill: string, stroke: string): ImageData {
+  const s = ICON_SIZE;
+  const { ctx } = createCanvas(s, s);
+  const cx = s / 2;
+
+  ctx.clearRect(0, 0, s, s);
+
+  // Draw arrow pointing UP (north = 0°)
+  // Broad chevron with tail — easy to see at all zoom levels
   ctx.beginPath();
-  // Tip (top center)
-  ctx.moveTo(cx, 4);
-  // Right wing
-  ctx.lineTo(cx + 14, cy + 10);
-  // Inner right notch
-  ctx.lineTo(cx, cy - 2);
-  // Inner left notch
-  ctx.lineTo(cx - 14, cy + 10);
+  ctx.moveTo(cx, 4);              // Tip
+  ctx.lineTo(cx + 18, cx + 12);   // Right wing
+  ctx.lineTo(cx + 6, cx + 2);     // Right notch
+  ctx.lineTo(cx + 6, s - 10);     // Right tail
+  ctx.lineTo(cx - 6, s - 10);     // Left tail
+  ctx.lineTo(cx - 6, cx + 2);     // Left notch
+  ctx.lineTo(cx - 18, cx + 12);   // Left wing
   ctx.closePath();
 
-  // SDF-white fill
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-
-  // Small tail bar for wind direction clarity
-  ctx.beginPath();
-  ctx.moveTo(cx, cy + 2);
-  ctx.lineTo(cx, cy + 16);
+  // Dark outline for visibility over any terrain
+  ctx.strokeStyle = stroke;
   ctx.lineWidth = 3;
-  ctx.strokeStyle = '#ffffff';
-  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.stroke();
 
-  return ctx.getImageData(0, 0, size, size);
+  // Colored fill
+  ctx.fillStyle = fill;
+  ctx.fill();
+
+  return ctx.getImageData(0, 0, s, s);
+}
+
+function speedBandKey(speed: number): string {
+  for (const b of SPEED_BANDS) {
+    if (speed < b.maxSpeed) return b.key;
+  }
+  return SPEED_BANDS[SPEED_BANDS.length - 1].key;
 }
 
 /**
- * Load the wind arrow icon into the map.
+ * Load all wind arrow icon variants into the map.
  */
-export function createWindArrowIcon(map: MapboxMap): void {
-  if (map.hasImage(WIND_ICON_ID)) return;
-
-  const imageData = generateArrowImageData();
-  map.addImage(WIND_ICON_ID, imageData, { sdf: true });
+export function createWindArrowIcons(map: MapboxMap): void {
+  for (const band of SPEED_BANDS) {
+    if (map.hasImage(band.key)) continue;
+    try {
+      const data = generateArrowImageData(band.color, band.stroke);
+      map.addImage(band.key, data, { sdf: false });
+      console.log(`[wind] icon "${band.key}" registered (${ICON_SIZE}px)`);
+    } catch (e) {
+      console.error(`[wind] Failed to create icon "${band.key}":`, e);
+    }
+  }
 }
 
 // ── Source + Layer management ─────────────────────────────────────────
@@ -82,57 +107,45 @@ export function addWindLayer(map: MapboxMap): void {
     });
   }
 
-  // Layer
+  // Layer — uses per-feature icon-image from properties
   if (!map.getLayer(WIND_LAYER_ID)) {
     map.addLayer({
       id: WIND_LAYER_ID,
       type: 'symbol',
       source: WIND_SOURCE_ID,
       layout: {
-        'icon-image': WIND_ICON_ID,
-        // Rotate arrow to show FLOW direction (where wind blows TO)
-        // Meteorological direction = where wind comes FROM, so + 180°
+        'icon-image': ['get', 'icon'],
+        // Rotate arrow to show FLOW direction (meteorological + 180°)
         'icon-rotate': ['+', ['get', 'direction'], 180],
         'icon-rotation-alignment': 'map',
         'icon-pitch-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
-        // Scale by wind speed: calm → small, strong → large
+        // Scale by wind speed: calm → visible, strong → large
         'icon-size': [
           'interpolate',
           ['linear'],
           ['get', 'speed'],
-          0, 0.35,   // calm
-          5, 0.5,    // light breeze
-          10, 0.65,  // moderate
-          20, 0.85,  // strong
-          30, 1.0,   // storm
+          0, 0.45,
+          5, 0.55,
+          10, 0.7,
+          20, 0.85,
+          30, 1.0,
         ],
       },
       paint: {
-        // Speed-based color ramp (SDF recoloring)
-        'icon-color': [
-          'interpolate',
-          ['linear'],
-          ['get', 'speed'],
-          0,  '#88bbee',  // calm: light blue
-          5,  '#44cc88',  // light: green
-          10, '#eecc44',  // moderate: yellow
-          20, '#ee7733',  // strong: orange
-          30, '#dd3344',  // storm: red
-        ],
-        'icon-opacity': 0.85,
-        'icon-halo-color': 'rgba(0,0,0,0.4)',
-        'icon-halo-width': 0.5,
+        // Per-feature opacity for fade-in/fade-out animation
+        'icon-opacity': ['get', 'opacity'],
       },
     });
+    console.log('[wind] layer added');
   }
 }
 
 /**
- * Build a GeoJSON FeatureCollection from wind data points.
+ * Build a GeoJSON FeatureCollection from animated wind points.
  */
-function buildGeoJSON(points: WindPoint[]): GeoJSON.FeatureCollection {
+export function buildWindGeoJSON(points: AnimatedWindPoint[]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: points.map((p) => ({
@@ -145,6 +158,8 @@ function buildGeoJSON(points: WindPoint[]): GeoJSON.FeatureCollection {
         speed: p.speed,
         direction: p.direction,
         gusts: p.gusts,
+        icon: speedBandKey(p.speed),
+        opacity: p.opacity,
       },
     })),
   };
@@ -153,11 +168,11 @@ function buildGeoJSON(points: WindPoint[]): GeoJSON.FeatureCollection {
 /**
  * Update the wind source data on the map.
  */
-export function updateWindData(map: MapboxMap, points: WindPoint[]): void {
+export function updateWindData(map: MapboxMap, points: AnimatedWindPoint[]): void {
   const source = map.getSource(WIND_SOURCE_ID);
   if (!source) return;
 
-  (source as mapboxgl.GeoJSONSource).setData(buildGeoJSON(points));
+  (source as mapboxgl.GeoJSONSource).setData(buildWindGeoJSON(points));
 }
 
 /**
@@ -166,5 +181,8 @@ export function updateWindData(map: MapboxMap, points: WindPoint[]): void {
 export function removeWindLayer(map: MapboxMap): void {
   if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID);
   if (map.getSource(WIND_SOURCE_ID)) map.removeSource(WIND_SOURCE_ID);
-  if (map.hasImage(WIND_ICON_ID)) map.removeImage(WIND_ICON_ID);
+  for (const band of SPEED_BANDS) {
+    if (map.hasImage(band.key)) map.removeImage(band.key);
+  }
+  console.log('[wind] layer removed');
 }

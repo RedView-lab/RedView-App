@@ -45,6 +45,29 @@ export interface WindState {
   lastUpdate: number | null;
 }
 
+// ── Animated wind point for rendering ─────────────────────────────────
+
+export interface AnimatedWindPoint {
+  /** Current display latitude (offset from origin by phase) */
+  lat: number;
+  /** Current display longitude (offset from origin by phase) */
+  lng: number;
+  /** Wind speed in m/s */
+  speed: number;
+  /** Meteorological wind direction in degrees */
+  direction: number;
+  /** Wind gusts in m/s */
+  gusts: number;
+  /** Display opacity (0–1, for fade-in/out) */
+  opacity: number;
+  /** Grid origin latitude */
+  originLat: number;
+  /** Grid origin longitude */
+  originLng: number;
+  /** Animation phase (0–1, wraps around) */
+  phase: number;
+}
+
 // ── MapToolsPanel props ───────────────────────────────────────────────
 
 export interface MapToolsPanelProps {

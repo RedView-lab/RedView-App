@@ -3,10 +3,11 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindState } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindData, clearWindCache } from '../lib/open-meteo';
+import { generateDenseField } from '../lib/wind-field';
+import { WindAnimator } from '../lib/wind-animator';
 import {
-  createWindArrowIcon,
+  createWindArrowIcons,
   addWindLayer,
-  updateWindData,
   removeWindLayer,
 } from '../lib/wind-layer';
 
@@ -14,9 +15,6 @@ import {
 
 const DEBOUNCE_MS = 800;
 const VIEWPORT_SHIFT_THRESHOLD = 0.15; // 15% shift → refetch
-const PULSE_INTERVAL_MS = 2500;
-const PULSE_MIN = 0.7;
-const PULSE_MAX = 0.9;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -66,10 +64,10 @@ export function useWind(
   const abortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pulseRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const animatorRef = useRef<WindAnimator | null>(null);
   const layerInitRef = useRef(false);
 
-  // ── Fetch wind data for current viewport ────────────────────────
+  // ── Fetch wind data, interpolate, start animation ───────────────
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
@@ -90,30 +88,41 @@ export function useWind(
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
+        // 1. Sparse grid for API fetching
         const grid = computeWindGrid(bounds, bounds.zoom);
         if (grid.length === 0) {
           setState((s) => ({ ...s, loading: false, pointCount: 0 }));
           return;
         }
 
-        const points = await fetchWindData(grid, controller.signal);
+        console.log(`[wind] fetching ${grid.length} API points...`);
 
-        // Check if still mounted & not aborted
+        // 2. Fetch sparse data from Open-Meteo
+        const sparsePoints = await fetchWindData(grid, controller.signal);
         if (controller.signal.aborted) return;
 
-        updateWindData(m, points);
+        console.log(`[wind] received ${sparsePoints.length} API points`);
+
+        // 3. Interpolate to dense field (~300 arrows)
+        const denseField = generateDenseField(sparsePoints, bounds, bounds.zoom);
+
+        // 4. Feed to animator
+        if (animatorRef.current) {
+          animatorRef.current.setField(denseField, bounds.zoom);
+        }
+
         lastBoundsRef.current = bounds;
 
         setState({
           loading: false,
           error: null,
-          pointCount: points.length,
+          pointCount: denseField.length,
           lastUpdate: Date.now(),
         });
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         const message = err instanceof Error ? err.message : 'Wind fetch failed';
-        console.error('[weather]', message);
+        console.error('[wind]', message);
         setState((s) => ({ ...s, loading: false, error: message }));
       }
     },
@@ -126,10 +135,22 @@ export function useWind(
     if (!map) return;
 
     if (enabled) {
-      // Initialize layer
-      createWindArrowIcon(map);
-      addWindLayer(map);
-      layerInitRef.current = true;
+      try {
+        // Initialize icons and layer
+        createWindArrowIcons(map);
+        addWindLayer(map);
+        layerInitRef.current = true;
+
+        // Create animator
+        const animator = new WindAnimator(map);
+        animatorRef.current = animator;
+        animator.start();
+        console.log('[wind] animator started');
+      } catch (err) {
+        console.error('[wind] init failed:', err);
+        setState((s) => ({ ...s, error: 'Wind layer init failed' }));
+        return;
+      }
 
       // Fetch immediately
       fetchForViewport(map);
@@ -141,24 +162,15 @@ export function useWind(
       };
       map.on('moveend', onMoveEnd);
 
-      // Subtle opacity pulse animation
-      let rising = false;
-      pulseRef.current = setInterval(() => {
-        if (!map.getLayer('wind-arrows')) return;
-        const target = rising ? PULSE_MAX : PULSE_MIN;
-        rising = !rising;
-        try {
-          map.setPaintProperty('wind-arrows', 'icon-opacity', target);
-        } catch {
-          // Layer may have been removed
-        }
-      }, PULSE_INTERVAL_MS);
-
       return () => {
         map.off('moveend', onMoveEnd);
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (pulseRef.current) clearInterval(pulseRef.current);
         abortRef.current?.abort();
+
+        // Destroy animator
+        animatorRef.current?.destroy();
+        animatorRef.current = null;
+
         removeWindLayer(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
@@ -169,7 +181,10 @@ export function useWind(
       if (layerInitRef.current) {
         abortRef.current?.abort();
         if (debounceRef.current) clearTimeout(debounceRef.current);
-        if (pulseRef.current) clearInterval(pulseRef.current);
+
+        animatorRef.current?.destroy();
+        animatorRef.current = null;
+
         removeWindLayer(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
