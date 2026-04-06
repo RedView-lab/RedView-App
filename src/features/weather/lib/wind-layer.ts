@@ -9,7 +9,7 @@ let windLayer: WindCustomLayer | null = null;
 
 // ── Public API ────────────────────────────────────────────────────────
 
-/** Add the wind particle custom layer to the map (terrain-draped) */
+/** Add the wind particle custom layer to the map as world-space 3D particles. */
 export function initWindParticles(map: MapboxMap): void {
   if (windLayer) return; // already initialized
   try {
@@ -33,7 +33,7 @@ export function updateWindParticles(
 ): void {
   if (!windLayer) return;
   const windData = buildWindTexture(sparsePoints, bounds);
-  windLayer.setWind(windData);
+  windLayer.setWind(windData, bounds);
 }
 
 /** Remove the custom layer and release all GPU resources */
