@@ -252,13 +252,13 @@ pub fn normalize_features_weighted(
 
 /// Optimize feature weights via leave-one-out cross-validation on a subsample.
 /// Tests random weight combinations and returns the set minimizing RMSE.
-/// Computationally heavy but runs once during model build.
+/// Uses k-d tree for fast neighbor lookups in inner loop.
 pub fn optimize_feature_weights(
     samples: &[TrainingSample],
     norms: &[FeatureNorm],
 ) -> [f64; N_FEATURES] {
-    // Subsample for speed: max 3000 samples for LOO-CV
-    let max_cv_samples = 3000;
+    // Subsample for speed: max 1000 samples for LOO-CV
+    let max_cv_samples = 1000;
     let step = if samples.len() > max_cv_samples {
         samples.len() as f64 / max_cv_samples as f64
     } else {
@@ -271,7 +271,7 @@ pub fn optimize_feature_weights(
         idx += step;
     }
 
-    let weight_options: &[f64] = &[0.3, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0];
+    let weight_options: &[f64] = &[0.5, 1.0, 1.5, 2.0, 3.0, 4.0];
 
     // Use a simple pseudo-random generator (deterministic, no external deps)
     let mut rng_state: u64 = 42;
@@ -289,8 +289,8 @@ pub fn optimize_feature_weights(
         best_rmse = default_rmse;
     }
 
-    // Random search: 800 random weight combinations
-    for _ in 0..800 {
+    // Random search: 200 random weight combinations (was 800, k-d tree makes each faster)
+    for _ in 0..200 {
         let mut candidate = [0.0_f64; N_FEATURES];
         for d in 0..N_FEATURES {
             candidate[d] = weight_options[next_rand()];
@@ -311,6 +311,7 @@ pub fn optimize_feature_weights(
 }
 
 /// Evaluate feature weights via approximate LOO-CV, returning RMSE.
+/// Uses k-d tree for fast nearest-neighbor queries in the inner loop.
 fn evaluate_weights_loo(
     indices: &[usize],
     samples: &[TrainingSample],
@@ -330,47 +331,44 @@ fn evaluate_weights_loo(
         })
         .collect();
 
+    // Build k-d tree over all normalized samples
+    let feats: Vec<[f64; N_FEATURES]> = normalized.iter().map(|(f, _)| *f).collect();
+    let speeds: Vec<f64> = normalized.iter().map(|(_, s)| *s).collect();
+    let tree = super::kdtree::KdTree::build(&feats, &speeds);
+
+    // K+1 because we need to exclude self
     let k = ((samples.len() as f64).sqrt() as usize).clamp(7, 50);
+    let k_query = (k + 1).min(samples.len());
     let mut sse = 0.0;
 
     for &test_idx in indices {
         let q = &normalized[test_idx].0;
         let actual_speed = normalized[test_idx].1;
 
-        // Find k nearest neighbors (excluding self)
-        let mut top_k: Vec<(f64, f64)> = Vec::with_capacity(k + 1);
-        for (j, (feat, speed)) in normalized.iter().enumerate() {
-            if j == test_idx {
-                continue;
-            }
-            let d = dist_sq_arr(q, feat);
-            if top_k.len() < k {
-                top_k.push((d, *speed));
-                if top_k.len() == k {
-                    top_k.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-                }
-            } else if d < top_k[k - 1].0 {
-                top_k[k - 1] = (d, *speed);
-                let mut i = k - 1;
-                while i > 0 && top_k[i].0 < top_k[i - 1].0 {
-                    top_k.swap(i, i - 1);
-                    i -= 1;
-                }
-            }
-        }
+        // Query k+1 neighbors (one will be self with dist=0, skip it)
+        let neighbors = tree.knn_query(q, k_query);
 
-        // Gaussian-weighted prediction
-        let median_d2 = if top_k.len() >= 3 {
-            top_k[top_k.len() / 2].0.max(1e-12)
+        // Gaussian-weighted prediction, skipping self
+        let mut found = 0;
+        let median_d2 = if neighbors.len() >= 4 {
+            neighbors[neighbors.len() / 2].0.max(1e-12)
         } else {
             1.0
         };
         let mut w_sum = 0.0;
         let mut v_sum = 0.0;
-        for &(d, spd) in &top_k {
+        for &(d, spd) in &neighbors {
+            // Skip self (distance ≈ 0)
+            if d < 1e-15 {
+                continue;
+            }
             let w = (-d / (2.0 * median_d2)).exp();
             w_sum += w;
             v_sum += w * spd;
+            found += 1;
+            if found >= k {
+                break;
+            }
         }
         let predicted = if w_sum > 0.0 { v_sum / w_sum } else { actual_speed };
         sse += (predicted - actual_speed).powi(2);

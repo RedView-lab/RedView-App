@@ -81,22 +81,27 @@ pub fn predict(
         estimated_riding_time_s,
     );
 
-    // Apply surface types from OSM data if provided
-    let mut route = route.clone();
-    if let Some(ref surface_data) = config.surface_types {
-        for (i, rp) in route.points.iter_mut().enumerate() {
+    // Apply surface types from OSM data if provided — only clone route when needed
+    let route_owned;
+    let route_ref = if let Some(ref surface_data) = config.surface_types {
+        let mut r = route.clone();
+        for (i, rp) in r.points.iter_mut().enumerate() {
             rp.surface_type = if i < surface_data.len() {
                 SurfaceType::from_u8(surface_data[i])
             } else {
                 SurfaceType::Unknown
             };
         }
-    }
+        route_owned = r;
+        &route_owned
+    } else {
+        route
+    };
 
     // Single-pass prediction — fatigue is applied per-point internally,
     // stops are integrated into the loop for recovery effects
     let (mut pred_points, riding_time_s) = speed::predict_single_pass(
-        &profile, &route, knn, mass_kg, cda, crr, pacing, drivetrain_eff,
+        &profile, route_ref, knn, mass_kg, cda, crr, pacing, drivetrain_eff,
         config.start_time_h,
         &config.sleep_strategy,
         config.race_mode,
@@ -105,12 +110,12 @@ pub fn predict(
     );
 
     // Build segment summaries
-    let segment_list = segments::build_segments(&pred_points, &route.points);
+    let segment_list = segments::build_segments(&pred_points, &route_ref.points);
 
     // Stop time = sum of all scheduled stop durations
     let stop_time_s: f64 = stop_schedule.iter().map(|s| s.duration_s).sum();
     let total_time_s = riding_time_s + stop_time_s;
-    let total_distance_m = route.total_distance_m;
+    let total_distance_m = route_ref.total_distance_m;
 
     let avg_speed_kmh = if total_time_s > 0.0 {
         (total_distance_m / total_time_s) * 3.6

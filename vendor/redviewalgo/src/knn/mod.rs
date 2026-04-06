@@ -1,7 +1,9 @@
 pub mod features;
+pub mod kdtree;
 
 use crate::types::ActivityData;
 use features::{FeatureNorm, NormalizedSample, TrainingSample, DEFAULT_WEIGHTS};
+use kdtree::KdTree;
 use serde::{Deserialize, Serialize};
 
 /// Minimum number of training samples needed for KNN to be used.
@@ -30,6 +32,9 @@ pub struct KnnModel {
     /// Pre-normalized & weighted feature vectors — NOT serialised, rebuilt on demand.
     #[serde(skip)]
     precomputed: Vec<NormalizedSample>,
+    /// K-d tree spatial index — NOT serialised, rebuilt on demand.
+    #[serde(skip)]
+    kdtree: Option<KdTree>,
 }
 
 fn default_weights() -> [f64; features::N_FEATURES] {
@@ -57,11 +62,13 @@ impl KnnModel {
             norms: vec![],
             weights: DEFAULT_WEIGHTS,
             precomputed: vec![],
+            kdtree: None,
         }
     }
 
     /// FIX: Rebuild precomputed samples after deserialization.
     /// Called lazily on first use if precomputed is empty but samples exist.
+    /// Also builds the k-d tree index for O(log N) queries.
     pub fn ensure_precomputed(&mut self) {
         if self.precomputed.is_empty() && !self.samples.is_empty() && !self.norms.is_empty() {
             let weights = &self.weights;
@@ -84,6 +91,13 @@ impl KnnModel {
                     speed_ms: s.speed_ms,
                 })
                 .collect();
+        }
+        // Build k-d tree if needed
+        if self.kdtree.is_none() && !self.precomputed.is_empty() {
+            let feats: Vec<[f64; features::N_FEATURES]> =
+                self.precomputed.iter().map(|s| s.features).collect();
+            let speeds: Vec<f64> = self.precomputed.iter().map(|s| s.speed_ms).collect();
+            self.kdtree = Some(KdTree::build(&feats, &speeds));
         }
     }
 }
@@ -114,7 +128,7 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
         DEFAULT_WEIGHTS
     };
 
-    let precomputed = samples
+    let precomputed: Vec<NormalizedSample> = samples
         .iter()
         .map(|s| NormalizedSample {
             features: features::normalize_features_weighted(
@@ -133,18 +147,25 @@ pub fn build_knn_model(activities: &[ActivityData]) -> KnnModel {
         })
         .collect();
 
+    // Build k-d tree index for O(log N) nearest-neighbor queries
+    let feats: Vec<[f64; features::N_FEATURES]> =
+        precomputed.iter().map(|s| s.features).collect();
+    let speeds: Vec<f64> = precomputed.iter().map(|s| s.speed_ms).collect();
+    let kdtree = Some(KdTree::build(&feats, &speeds));
+
     KnnModel {
         samples,
         norms,
         weights,
         precomputed,
+        kdtree,
     }
 }
 
 /// Predict speed (m/s) using KNN for a single route point.
 /// Returns KnnPrediction with speed and confidence metric.
 ///
-/// Uses pre-normalized features for O(samples) distance computation.
+/// Uses k-d tree index for O(log N) nearest-neighbor queries.
 /// Confidence combines proximity, Gaussian weight, and neighbor speed variance.
 pub fn knn_predict_speed(
     model: &mut KnnModel,
@@ -182,27 +203,8 @@ pub fn knn_predict_speed(
     let adaptive_k = ((precomputed.len() as f64).sqrt() as usize).clamp(7, 50);
     let k = adaptive_k.min(precomputed.len());
 
-    // Max-heap of size K for efficient nearest-neighbor tracking
-    let mut top_k: Vec<(f64, f64)> = Vec::with_capacity(k + 1);
-
-    for ns in precomputed {
-        let d = dist_sq(&q, &ns.features);
-
-        if top_k.len() < k {
-            top_k.push((d, ns.speed_ms));
-            if top_k.len() == k {
-                top_k.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-            }
-        } else if d < top_k[k - 1].0 {
-            top_k[k - 1] = (d, ns.speed_ms);
-            // Insertion sort to maintain order
-            let mut i = k - 1;
-            while i > 0 && top_k[i].0 < top_k[i - 1].0 {
-                top_k.swap(i, i - 1);
-                i -= 1;
-            }
-        }
-    }
+    // Use k-d tree for O(log N) nearest-neighbor search
+    let top_k = model.kdtree.as_ref().unwrap().knn_query(&q, k);
 
     // Gaussian-based inverse-distance weighting — smoother falloff than 1/d
     let mut weight_sum = 0.0;
@@ -233,7 +235,6 @@ pub fn knn_predict_speed(
     };
 
     // Confidence: combines mean distance, Gaussian weight, and speed variance
-    // Speed variance among neighbors penalizes regions where KNN is uncertain
     let mean_dist = if !top_k.is_empty() {
         dist_sum / top_k.len() as f64
     } else {

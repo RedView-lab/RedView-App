@@ -1,4 +1,4 @@
-use crate::math::{gradient_pct, monotone_cubic_interp, percentile, std_dev};
+use crate::math::{gradient_pct, monotone_cubic_interp, percentile, std_dev, MonotoneSpline};
 use crate::types::{ActivityData, GradientBin};
 
 /// Gradient bin width in percent — 0.25% for fine-grained speed curves.
@@ -15,6 +15,100 @@ const MIN_BIN_SAMPLES: usize = 3;
 const FRESH_WINDOW_S: f64 = 7200.0;
 /// Fatigued data starts after this (seconds) — after 3h of each activity.
 const FATIGUED_START_S: f64 = 10800.0;
+
+/// Pre-computed spline cache for fast gradient→speed lookups.
+/// Build once from gradient bins, then O(log N) per evaluation.
+#[derive(Debug, Clone)]
+pub struct SplineBins {
+    fresh_spline: Option<MonotoneSpline>,
+    fatigued_spline: Option<MonotoneSpline>,
+    fresh_min_g: f64,
+    fresh_max_g: f64,
+    fatigued_min_g: f64,
+    fatigued_max_g: f64,
+}
+
+impl SplineBins {
+    /// Build pre-computed splines from fresh and fatigued gradient bin vectors.
+    pub fn build(fresh_bins: &[GradientBin], fatigued_bins: &[GradientBin]) -> Self {
+        let fresh_spline = Self::build_spline(fresh_bins);
+        let fatigued_spline = Self::build_spline(fatigued_bins);
+
+        let (fresh_min_g, fresh_max_g) = Self::gradient_range(fresh_bins);
+        let (fatigued_min_g, fatigued_max_g) = Self::gradient_range(fatigued_bins);
+
+        SplineBins {
+            fresh_spline,
+            fatigued_spline,
+            fresh_min_g,
+            fresh_max_g,
+            fatigued_min_g,
+            fatigued_max_g,
+        }
+    }
+
+    fn build_spline(bins: &[GradientBin]) -> Option<MonotoneSpline> {
+        if bins.len() < 2 {
+            return None;
+        }
+        let mut sorted: Vec<(f64, f64)> = bins
+            .iter()
+            .map(|b| (b.gradient_pct, b.median_speed_ms))
+            .collect();
+        sorted.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let xs: Vec<f64> = sorted.iter().map(|(g, _)| *g).collect();
+        let ys: Vec<f64> = sorted.iter().map(|(_, s)| *s).collect();
+        Some(MonotoneSpline::build(xs, ys))
+    }
+
+    fn gradient_range(bins: &[GradientBin]) -> (f64, f64) {
+        if bins.is_empty() {
+            return (0.0, 0.0);
+        }
+        let min = bins.iter().map(|b| b.gradient_pct).fold(f64::MAX, f64::min);
+        let max = bins.iter().map(|b| b.gradient_pct).fold(f64::MIN, f64::max);
+        (min - 2.0, max + 2.0)
+    }
+
+    /// Fast blended speed lookup using pre-computed splines.
+    /// O(log N) per call instead of O(N) sort + spline rebuild.
+    #[inline]
+    pub fn lookup_blended(&self, gradient_pct_val: f64, elapsed_h: f64) -> Option<f64> {
+        let fresh_speed = self.lookup_fresh(gradient_pct_val);
+        let fatigued_speed = self.lookup_fatigued(gradient_pct_val);
+
+        match (fresh_speed, fatigued_speed) {
+            (Some(fs), Some(fatg)) => {
+                let blend = 1.0 - (-elapsed_h / 8.0).exp();
+                let blend = blend.clamp(0.0, 1.0);
+                Some(fs * (1.0 - blend) + fatg * blend)
+            }
+            (Some(fs), None) => Some(fs),
+            (None, Some(fatg)) => Some(fatg),
+            (None, None) => None,
+        }
+    }
+
+    #[inline]
+    fn lookup_fresh(&self, gradient_pct_val: f64) -> Option<f64> {
+        if let Some(ref spline) = self.fresh_spline {
+            if gradient_pct_val >= self.fresh_min_g && gradient_pct_val <= self.fresh_max_g {
+                return Some(spline.eval(gradient_pct_val).max(0.5));
+            }
+        }
+        None
+    }
+
+    #[inline]
+    fn lookup_fatigued(&self, gradient_pct_val: f64) -> Option<f64> {
+        if let Some(ref spline) = self.fatigued_spline {
+            if gradient_pct_val >= self.fatigued_min_g && gradient_pct_val <= self.fatigued_max_g {
+                return Some(spline.eval(gradient_pct_val).max(0.5));
+            }
+        }
+        None
+    }
+}
 
 /// Build speed-vs-gradient bins from activities (fresh bins only — backward compatible).
 pub fn build_gradient_bins(activities: &[ActivityData]) -> Vec<GradientBin> {

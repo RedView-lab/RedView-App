@@ -12,7 +12,7 @@ use crate::prediction::fatigue::{
 };
 use crate::prediction::surface::{surface_effective_crr, surface_speed_penalty};
 use crate::profile::lookup_speed_for_gradient;
-use crate::profile::gradient_bins::lookup_blended_speed;
+use crate::profile::gradient_bins::SplineBins;
 use crate::types::{PredictionPoint, RiderProfile, Route, SleepStrategy, StopEvent};
 use std::collections::VecDeque;
 
@@ -138,6 +138,13 @@ pub fn predict_single_pass(
     let mut time_since_wake_h: f64 = f64::MAX; // MAX = no recent sleep, no inertia
     // Ambient temperature from config
     let ambient_temp_c = ambient_temperature_c;
+
+    // Pre-compute spline cache for gradient bins — avoids O(N) sort+rebuild per lookup
+    let spline_bins = SplineBins::build(&profile.gradient_bins, &profile.fatigued_bins);
+
+    // Hoist constant micro-factor floor out of loop
+    let total_route_km = route.total_distance_m / 1000.0;
+    let micro_floor = combined_micro_factor_floor(total_route_km);
 
     for i in 0..n {
         let rp = &route.points[i];
@@ -424,9 +431,7 @@ pub fn predict_single_pass(
             // Empirical gradient bins fallback — use blended fresh/fatigued bins
             let fatigue_factor = compute_fatigue_factor(&profile.fatigue, elapsed_h);
             let base_speed = if !profile.fatigued_bins.is_empty() {
-                lookup_blended_speed(
-                    &profile.gradient_bins,
-                    &profile.fatigued_bins,
+                spline_bins.lookup_blended(
                     rp.gradient_pct,
                     elapsed_h,
                 ).unwrap_or(FALLBACK_SPEED_MS)
@@ -463,7 +468,6 @@ pub fn predict_single_pass(
         let sleep_inertia = sleep_inertia_factor(time_since_wake_h);
 
         // Compute combined micro-factor with anti-stacking floor
-        let total_route_km = route.total_distance_m / 1000.0;
         let logistics_eff = logistics_efficiency_factor(cum_distance_km);
         let surface_penalty = surface_speed_penalty(rp.surface_type, rp.gradient_pct);
         let micro_combined = climbing_load_factor
@@ -476,7 +480,6 @@ pub fn predict_single_pass(
             * thermal
             * glycogen
             * sleep_inertia;
-        let micro_floor = combined_micro_factor_floor(total_route_km);
         let micro_clamped = micro_combined.max(micro_floor);
 
         let raw_speed_ms = raw_speed_ms

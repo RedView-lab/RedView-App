@@ -5,7 +5,7 @@ pub mod statistics;
 
 // Re-export commonly used items
 pub use geo::haversine_distance;
-pub use interpolation::{monotone_cubic_interp, smooth_elevations};
+pub use interpolation::{monotone_cubic_interp, smooth_elevations, MonotoneSpline};
 pub use physics::{
     air_density, altitude_acclimatization, altitude_power_factor, force_aero, force_aero_wind,
     force_gravity, force_rolling, gradient_adjusted_cda, gradient_pct,

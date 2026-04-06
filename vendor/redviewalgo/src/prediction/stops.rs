@@ -83,22 +83,29 @@ pub fn terrain_aware_shift(
         return;
     }
 
+    let pts = &route.points;
+
     for event in events.iter_mut() {
         let trigger_dist = event.riding_time_trigger_s * estimated_avg_speed_ms;
         let search_radius = trigger_dist * 0.10; // ±10% of distance
+        let dist_lo = trigger_dist - search_radius;
+        let dist_hi = trigger_dist + search_radius;
+
+        // Binary search: find first point with distance >= dist_lo
+        let start_idx = pts.partition_point(|rp| rp.distance_m < dist_lo);
 
         // Find the flattest point within search window
         let mut best_trigger = event.riding_time_trigger_s;
         let mut best_abs_gradient = f64::MAX;
 
-        for rp in &route.points {
-            if (rp.distance_m - trigger_dist).abs() > search_radius {
-                continue;
+        for j in start_idx..pts.len() {
+            let rp = &pts[j];
+            if rp.distance_m > dist_hi {
+                break;
             }
             let abs_g = rp.gradient_pct.abs();
             if abs_g < best_abs_gradient {
                 best_abs_gradient = abs_g;
-                // Convert distance back to time
                 best_trigger = rp.distance_m / estimated_avg_speed_ms;
             }
         }
