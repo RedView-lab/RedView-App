@@ -1,0 +1,16 @@
+{
+  "name": "redviewalgo",
+  "type": "module",
+  "description": "Cycling performance prediction engine — WASM module",
+  "version": "0.1.0",
+  "files": [
+    "redviewalgo_bg.wasm",
+    "redviewalgo.js",
+    "redviewalgo.d.ts"
+  ],
+  "main": "redviewalgo.js",
+  "types": "redviewalgo.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}
