@@ -5,28 +5,36 @@ import { updateWindData } from './wind-layer';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-/** Animation tick rate (ms). 10 fps = 100ms. */
-const TICK_MS = 100;
+/** Animation tick rate. Slower than before to avoid visible symbol re-placement. */
+const TICK_MS = 200;
 
-/**
- * Travel distance per tick at 1 m/s, in degrees.
- * Tuned so arrows visibly move but don't teleport.
- * At 10 m/s → 0.002° per tick → ~0.02°/s ≈ 2 km/s visual speed.
- */
-const TRAVEL_PER_MS_PER_SPEED = 0.0002;
+/** Full back-and-forth cycle duration for moderate wind. */
+const BASE_CYCLE_MS = 12_000;
 
-/** Total travel distance (degrees) before a particle resets. Zoom-adaptive. */
-function travelDistance(zoom: number): number {
-  // At z5 → long travel (~3°), at z14 → short travel (~0.03°)
-  if (zoom <= 5) return 3.0;
-  if (zoom >= 14) return 0.03;
-  // Log interpolation
-  return 3.0 * Math.pow(0.03 / 3.0, (zoom - 5) / (14 - 5));
+/** Base opacity is constant to avoid clignotement from fade zones. */
+const BASE_OPACITY = 0.92;
+
+function phaseStep(speed: number): number {
+  const speedFactor = Math.min(1.1, Math.max(0.35, speed / 12));
+  return ((Math.PI * 2) / BASE_CYCLE_MS) * TICK_MS * speedFactor;
 }
 
-/** Fade-in / fade-out zones as fraction of phase [0,1] */
-const FADE_IN = 0.08;
-const FADE_OUT = 0.08;
+function motionAmplitude(zoom: number, speed: number): number {
+  // Keep motion very subtle when zoomed in, broader when zoomed out.
+  const minAmplitude = 0.00018;
+  const maxAmplitude = 0.18;
+
+  let zoomAmplitude = maxAmplitude;
+  if (zoom >= 16) {
+    zoomAmplitude = minAmplitude;
+  } else if (zoom > 5) {
+    const t = (zoom - 5) / (16 - 5);
+    zoomAmplitude = maxAmplitude * Math.pow(minAmplitude / maxAmplitude, t);
+  }
+
+  const speedFactor = Math.min(1.15, Math.max(0.55, speed / 10));
+  return zoomAmplitude * speedFactor;
+}
 
 // ── Animator class ────────────────────────────────────────────────────
 
@@ -52,7 +60,7 @@ export class WindAnimator {
       speed: p.speed,
       direction: p.direction,
       gusts: p.gusts,
-      phase: Math.random(), // random initial phase → staggered movement
+      phase: Math.random() * Math.PI * 2,
     }));
 
     // Immediately render the first frame
@@ -95,17 +103,10 @@ export class WindAnimator {
   private tick(): void {
     if (this.destroyed || this.particles.length === 0) return;
 
-    const dt = TICK_MS;
-    const travel = travelDistance(this.zoom);
-
     for (const p of this.particles) {
-      // Advance phase proportionally to wind speed
-      // Faster wind → faster phase advance → faster arrow movement
-      const speedFactor = Math.max(0.3, p.speed); // minimum movement for calm wind
-      const phaseAdvance = (speedFactor * TRAVEL_PER_MS_PER_SPEED * dt) / travel;
-      p.phase += phaseAdvance;
-      if (p.phase >= 1.0) {
-        p.phase -= 1.0;
+      p.phase += phaseStep(p.speed);
+      if (p.phase >= Math.PI * 2) {
+        p.phase -= Math.PI * 2;
       }
     }
 
@@ -115,7 +116,6 @@ export class WindAnimator {
   private renderFrame(): void {
     if (this.destroyed) return;
 
-    const travel = travelDistance(this.zoom);
     const points: AnimatedWindPoint[] = new Array(this.particles.length);
 
     for (let i = 0; i < this.particles.length; i++) {
@@ -126,18 +126,13 @@ export class WindAnimator {
       const flowDeg = p.direction + 180;
       const flowRad = (flowDeg * Math.PI) / 180;
 
-      const offset = p.phase * travel;
+      // Slow oscillation along the wind vector. This keeps the field alive
+      // without particle resets that cause visible blinking in symbol layers.
+      const offset = Math.sin(p.phase) * motionAmplitude(this.zoom, p.speed);
+
       // Move along flow direction (north=0° → +lat, east=90° → +lng)
       const dLat = offset * Math.cos(flowRad);
       const dLng = offset * Math.sin(flowRad);
-
-      // Compute opacity with fade-in/fade-out at edges
-      let opacity = 0.9;
-      if (p.phase < FADE_IN) {
-        opacity = 0.9 * (p.phase / FADE_IN);
-      } else if (p.phase > 1.0 - FADE_OUT) {
-        opacity = 0.9 * ((1.0 - p.phase) / FADE_OUT);
-      }
 
       points[i] = {
         lat: p.originLat + dLat,
@@ -145,7 +140,7 @@ export class WindAnimator {
         speed: p.speed,
         direction: p.direction,
         gusts: p.gusts,
-        opacity,
+        opacity: BASE_OPACITY,
         originLat: p.originLat,
         originLng: p.originLng,
         phase: p.phase,

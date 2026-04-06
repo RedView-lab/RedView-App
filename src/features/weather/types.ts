@@ -64,7 +64,7 @@ export interface AnimatedWindPoint {
   originLat: number;
   /** Grid origin longitude */
   originLng: number;
-  /** Animation phase (0–1, wraps around) */
+  /** Animation phase in radians (0–2π, wraps around) */
   phase: number;
 }
 
