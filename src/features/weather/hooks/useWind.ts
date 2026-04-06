@@ -11,8 +11,9 @@ import {
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-const DEBOUNCE_MS = 800;
-const VIEWPORT_SHIFT_THRESHOLD = 0.15;
+const DEBOUNCE_MS = 2000;
+const MIN_FETCH_INTERVAL_MS = 10_000;
+const VIEWPORT_SHIFT_THRESHOLD = 0.25;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -63,12 +64,17 @@ export function useWind(
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
+  const lastFetchTimeRef = useRef(0);
 
   // ── Fetch sparse API data → build wind texture → feed particles ──
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
       const bounds = getViewportBounds(m);
+
+      // Skip if we fetched recently (global rate-limit guard)
+      const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
+      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS) return;
 
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
@@ -94,6 +100,7 @@ export function useWind(
 
         updateWindParticles(m, sparsePoints, bounds);
         lastBoundsRef.current = bounds;
+        lastFetchTimeRef.current = Date.now();
 
         setState({
           loading: false,

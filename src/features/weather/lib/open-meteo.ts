@@ -6,6 +6,12 @@ import { coordCacheKey } from './wind-grid';
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const BATCH_SIZE = 50; // Max coordinates per request
+const MAX_RETRIES = 3;
+const INITIAL_BACKOFF_MS = 2_000;
+
+// ── Global rate-limit cooldown ────────────────────────────────────────
+
+let rateLimitedUntil = 0;
 
 // ── In-memory cache ───────────────────────────────────────────────────
 
@@ -54,25 +60,52 @@ async function fetchBatch(
     `&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
     `&wind_speed_unit=ms&timeformat=unixtime&cell_selection=nearest`;
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
+  let lastError: Error | null = null;
 
-  const json = await res.json();
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
-  // Single coordinate → response is an object; multiple → array
-  const items: OpenMeteoResponse[] = Array.isArray(json) ? json : [json];
+    // Respect global cooldown from previous 429
+    const waitUntil = rateLimitedUntil - Date.now();
+    if (waitUntil > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, waitUntil);
+        signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+      });
+    }
 
-  return items.map((item) => {
-    const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
-    const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
-    return {
-      lat,
-      lng,
-      speed: item.current.wind_speed_10m,
-      direction: item.current.wind_direction_10m,
-      gusts: item.current.wind_gusts_10m,
-    };
-  });
+    const res = await fetch(url, { signal });
+
+    if (res.status === 429) {
+      const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
+      rateLimitedUntil = Date.now() + backoff;
+      console.warn(`[wind] Open-Meteo 429, backing off ${backoff}ms (attempt ${attempt + 1}/${MAX_RETRIES + 1})`);
+      lastError = new Error(`Open-Meteo 429: Too Many Requests`);
+      if (attempt < MAX_RETRIES) continue;
+      throw lastError;
+    }
+
+    if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
+
+    const json = await res.json();
+
+    // Single coordinate → response is an object; multiple → array
+    const items: OpenMeteoResponse[] = Array.isArray(json) ? json : [json];
+
+    return items.map((item) => {
+      const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
+      const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
+      return {
+        lat,
+        lng,
+        speed: item.current.wind_speed_10m,
+        direction: item.current.wind_direction_10m,
+        gusts: item.current.wind_gusts_10m,
+      };
+    });
+  }
+
+  throw lastError ?? new Error('Open-Meteo fetch failed');
 }
 
 /**
