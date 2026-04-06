@@ -2,6 +2,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { useRef, useEffect } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
+import { useLidarContextMenu } from '@/features/lidar/components/useLidarContextMenu';
 
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
@@ -10,6 +11,9 @@ interface MapViewProps {
 export default function MapView({ onMapReady }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { map, isLoaded } = useMap(containerRef);
+
+  // LiDAR: right-click context menu on map
+  useLidarContextMenu(isLoaded ? map.current : null);
 
   useEffect(() => {
     if (isLoaded && map.current && onMapReady) {
