@@ -176,8 +176,8 @@ function buildFallbackUrls(coord: TileCoord): string[] {
 
   for (const code of fallbackCodes) {
     const zoneName = `NUALHD_1-0__LAZ_${coord.projection}_${code}`;
-    urls.push(`/api/lidar/download/${zoneName}/${baseName}.copc.laz`);
-    urls.push(`/api/lidar/download/${zoneName}/${baseName}.laz`);
+    urls.push(`/api/lidar/dl?zone=${zoneName}&file=${baseName}.copc.laz`);
+    urls.push(`/api/lidar/dl?zone=${zoneName}&file=${baseName}.laz`);
   }
 
   return urls;
@@ -211,8 +211,8 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
   const baseName = buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef);
 
   for (const zone of matchingZones) {
-    urls.push(`/api/lidar/download/${zone.name}/${baseName}.copc.laz`);
-    urls.push(`/api/lidar/download/${zone.name}/${baseName}.laz`);
+    urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.copc.laz`);
+    urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.laz`);
   }
 
   console.log(`[WFS] Resolved ${urls.length} candidate URLs for tile (${coord.xKm}, ${coord.yKm})`);
