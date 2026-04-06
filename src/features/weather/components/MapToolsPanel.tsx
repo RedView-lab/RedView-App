@@ -5,11 +5,11 @@ import { useWind } from '../hooks/useWind';
 // ── Wind speed legend steps ───────────────────────────────────────────
 
 const LEGEND: { label: string; color: string; min: number }[] = [
-  { label: '0–5', color: '#6eb8e6', min: 0 },
-  { label: '5–10', color: '#44cc88', min: 5 },
-  { label: '10–20', color: '#eecc44', min: 10 },
-  { label: '20–30', color: '#ee7733', min: 20 },
-  { label: '30+', color: '#dd3344', min: 30 },
+  { label: '0–5', color: '#a8d4f0', min: 0 },
+  { label: '5–10', color: '#7ecba1', min: 5 },
+  { label: '10–20', color: '#e8d44a', min: 10 },
+  { label: '20–30', color: '#e89050', min: 20 },
+  { label: '30+', color: '#e05060', min: 30 },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────

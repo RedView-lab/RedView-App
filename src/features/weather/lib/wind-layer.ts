@@ -1,113 +1,92 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { AnimatedWindPoint } from '../types';
+import type { WindPoint } from '../types';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
 export const WIND_SOURCE_ID = 'wind-data';
 export const WIND_LAYER_ID = 'wind-arrows';
 
-// We create multiple speed-keyed icons for color banding (no SDF needed)
-const ICON_SIZE = 64;
+// Thin elongated arrow — 16 × 64 px (4:1 aspect ratio)
+const ICON_W = 16;
+const ICON_H = 64;
+
 const SPEED_BANDS = [
-  { key: 'wind-arrow-0', maxSpeed: 5, color: '#6eb8e6', stroke: '#2a5a7a' },
-  { key: 'wind-arrow-1', maxSpeed: 10, color: '#44cc88', stroke: '#1a6b3d' },
-  { key: 'wind-arrow-2', maxSpeed: 20, color: '#eecc44', stroke: '#8a7520' },
-  { key: 'wind-arrow-3', maxSpeed: 30, color: '#ee7733', stroke: '#8a3d10' },
-  { key: 'wind-arrow-4', maxSpeed: Infinity, color: '#dd3344', stroke: '#7a1020' },
+  { key: 'w0', max: 5,        fill: '#a8d4f0', stroke: '#4a7a96' },
+  { key: 'w1', max: 10,       fill: '#7ecba1', stroke: '#357a52' },
+  { key: 'w2', max: 20,       fill: '#e8d44a', stroke: '#8a7a20' },
+  { key: 'w3', max: 30,       fill: '#e89050', stroke: '#8a4a18' },
+  { key: 'w4', max: Infinity,  fill: '#e05060', stroke: '#7a1828' },
 ] as const;
 
-// ── Arrow icon generation (Canvas → RGBA ImageData) ──────────────────
+// ── Thin arrow icon generation ────────────────────────────────────────
 
-function createCanvas(w: number, h: number): { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
-  // OffscreenCanvas preferred, fallback to DOM canvas
+function getCtx(w: number, h: number): CanvasRenderingContext2D {
   try {
     const c = new OffscreenCanvas(w, h);
     const ctx = c.getContext('2d');
-    if (ctx) return { canvas: c, ctx: ctx as unknown as CanvasRenderingContext2D };
+    if (ctx) return ctx as unknown as CanvasRenderingContext2D;
   } catch { /* fallback */ }
-
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  const ctx = c.getContext('2d')!;
-  return { canvas: c, ctx };
+  return c.getContext('2d')!;
 }
 
-function generateArrowImageData(fill: string, stroke: string): ImageData {
-  const s = ICON_SIZE;
-  const { ctx } = createCanvas(s, s);
-  const cx = s / 2;
+function generateArrow(fill: string, stroke: string): ImageData {
+  const ctx = getCtx(ICON_W, ICON_H);
+  const cx = ICON_W / 2;
 
-  ctx.clearRect(0, 0, s, s);
+  ctx.clearRect(0, 0, ICON_W, ICON_H);
 
-  // Draw arrow pointing UP (north = 0°)
-  // Broad chevron with tail — easy to see at all zoom levels
+  // Long thin arrow pointing UP (north = 0°)
   ctx.beginPath();
-  ctx.moveTo(cx, 4);              // Tip
-  ctx.lineTo(cx + 18, cx + 12);   // Right wing
-  ctx.lineTo(cx + 6, cx + 2);     // Right notch
-  ctx.lineTo(cx + 6, s - 10);     // Right tail
-  ctx.lineTo(cx - 6, s - 10);     // Left tail
-  ctx.lineTo(cx - 6, cx + 2);     // Left notch
-  ctx.lineTo(cx - 18, cx + 12);   // Left wing
+  ctx.moveTo(cx, 2);                    // Tip
+  ctx.lineTo(cx + 6, 15);               // Right wing
+  ctx.lineTo(cx + 1.5, 11);             // Right notch
+  ctx.lineTo(cx + 1.5, ICON_H - 3);     // Right shaft
+  ctx.lineTo(cx - 1.5, ICON_H - 3);     // Left shaft
+  ctx.lineTo(cx - 1.5, 11);             // Left notch
+  ctx.lineTo(cx - 6, 15);               // Left wing
   ctx.closePath();
 
-  // Dark outline for visibility over any terrain
   ctx.strokeStyle = stroke;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 1.5;
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // Colored fill
   ctx.fillStyle = fill;
   ctx.fill();
 
-  return ctx.getImageData(0, 0, s, s);
+  return ctx.getImageData(0, 0, ICON_W, ICON_H);
 }
 
-function speedBandKey(speed: number): string {
+function bandKey(speed: number): string {
   for (const b of SPEED_BANDS) {
-    if (speed < b.maxSpeed) return b.key;
+    if (speed < b.max) return b.key;
   }
   return SPEED_BANDS[SPEED_BANDS.length - 1].key;
 }
 
-/**
- * Load all wind arrow icon variants into the map.
- */
-export function createWindArrowIcons(map: MapboxMap): void {
-  for (const band of SPEED_BANDS) {
-    if (map.hasImage(band.key)) continue;
+export function createWindIcons(map: MapboxMap): void {
+  for (const b of SPEED_BANDS) {
+    if (map.hasImage(b.key)) continue;
     try {
-      const data = generateArrowImageData(band.color, band.stroke);
-      map.addImage(band.key, data, { sdf: false });
-      console.log(`[wind] icon "${band.key}" registered (${ICON_SIZE}px)`);
+      map.addImage(b.key, generateArrow(b.fill, b.stroke), { sdf: false });
     } catch (e) {
-      console.error(`[wind] Failed to create icon "${band.key}":`, e);
+      console.error(`[wind] icon "${b.key}" failed:`, e);
     }
   }
 }
 
-// ── Source + Layer management ─────────────────────────────────────────
+// ── Source + Layer ─────────────────────────────────────────────────────
 
-const EMPTY_FC: GeoJSON.FeatureCollection = {
-  type: 'FeatureCollection',
-  features: [],
-};
+const EMPTY_FC: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 
-/**
- * Add wind GeoJSON source and symbol layer to the map.
- */
 export function addWindLayer(map: MapboxMap): void {
-  // Source
   if (!map.getSource(WIND_SOURCE_ID)) {
-    map.addSource(WIND_SOURCE_ID, {
-      type: 'geojson',
-      data: EMPTY_FC,
-    });
+    map.addSource(WIND_SOURCE_ID, { type: 'geojson', data: EMPTY_FC });
   }
 
-  // Layer — uses per-feature icon-image from properties
   if (!map.getLayer(WIND_LAYER_ID)) {
     map.addLayer({
       id: WIND_LAYER_ID,
@@ -115,74 +94,52 @@ export function addWindLayer(map: MapboxMap): void {
       source: WIND_SOURCE_ID,
       layout: {
         'icon-image': ['get', 'icon'],
-        // Rotate arrow to show FLOW direction (meteorological + 180°)
         'icon-rotate': ['+', ['get', 'direction'], 180],
         'icon-rotation-alignment': 'map',
         'icon-pitch-alignment': 'map',
         'icon-allow-overlap': true,
         'icon-ignore-placement': true,
-        // Scale by wind speed: calm → visible, strong → large
         'icon-size': [
-          'interpolate',
-          ['linear'],
-          ['get', 'speed'],
-          0, 0.45,
-          5, 0.55,
-          10, 0.7,
-          20, 0.85,
-          30, 1.0,
+          'interpolate', ['linear'], ['get', 'speed'],
+          0, 0.35,
+          5, 0.45,
+          10, 0.55,
+          20, 0.70,
+          30, 0.85,
         ],
       },
       paint: {
-        // Per-feature opacity for fade-in/fade-out animation
-        'icon-opacity': ['get', 'opacity'],
+        'icon-opacity': 0.88,
       },
     });
-    console.log('[wind] layer added');
   }
 }
 
-/**
- * Build a GeoJSON FeatureCollection from animated wind points.
- */
-export function buildWindGeoJSON(points: AnimatedWindPoint[]): GeoJSON.FeatureCollection {
-  return {
+export function updateWindData(map: MapboxMap, points: WindPoint[]): void {
+  const src = map.getSource(WIND_SOURCE_ID);
+  if (!src) return;
+
+  const fc: GeoJSON.FeatureCollection = {
     type: 'FeatureCollection',
     features: points.map((p) => ({
       type: 'Feature' as const,
-      geometry: {
-        type: 'Point' as const,
-        coordinates: [p.lng, p.lat],
-      },
+      geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
       properties: {
         speed: p.speed,
         direction: p.direction,
         gusts: p.gusts,
-        icon: speedBandKey(p.speed),
-        opacity: p.opacity,
+        icon: bandKey(p.speed),
       },
     })),
   };
+
+  (src as mapboxgl.GeoJSONSource).setData(fc);
 }
 
-/**
- * Update the wind source data on the map.
- */
-export function updateWindData(map: MapboxMap, points: AnimatedWindPoint[]): void {
-  const source = map.getSource(WIND_SOURCE_ID);
-  if (!source) return;
-
-  (source as mapboxgl.GeoJSONSource).setData(buildWindGeoJSON(points));
-}
-
-/**
- * Remove all wind-related resources from the map.
- */
 export function removeWindLayer(map: MapboxMap): void {
   if (map.getLayer(WIND_LAYER_ID)) map.removeLayer(WIND_LAYER_ID);
   if (map.getSource(WIND_SOURCE_ID)) map.removeSource(WIND_SOURCE_ID);
-  for (const band of SPEED_BANDS) {
-    if (map.hasImage(band.key)) map.removeImage(band.key);
+  for (const b of SPEED_BANDS) {
+    if (map.hasImage(b.key)) map.removeImage(b.key);
   }
-  console.log('[wind] layer removed');
 }

@@ -4,17 +4,17 @@ import type { WindState } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindData, clearWindCache } from '../lib/open-meteo';
 import { generateDenseField } from '../lib/wind-field';
-import { WindAnimator } from '../lib/wind-animator';
 import {
-  createWindArrowIcons,
+  createWindIcons,
   addWindLayer,
+  updateWindData,
   removeWindLayer,
 } from '../lib/wind-layer';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 800;
-const VIEWPORT_SHIFT_THRESHOLD = 0.15; // 15% shift → refetch
+const VIEWPORT_SHIFT_THRESHOLD = 0.15;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -64,23 +64,20 @@ export function useWind(
   const abortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const animatorRef = useRef<WindAnimator | null>(null);
   const layerInitRef = useRef(false);
 
-  // ── Fetch wind data, interpolate, start animation ───────────────
+  // ── Fetch sparse API data → interpolate → render static layer ───
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
       const bounds = getViewportBounds(m);
 
-      // Skip if viewport hasn't shifted enough
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
         const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
         if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < 0.5) return;
       }
 
-      // Cancel previous request
       abortRef.current?.abort();
       const controller = new AbortController();
       abortRef.current = controller;
@@ -88,35 +85,23 @@ export function useWind(
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        // 1. Sparse grid for API fetching
         const grid = computeWindGrid(bounds, bounds.zoom);
         if (grid.length === 0) {
           setState((s) => ({ ...s, loading: false, pointCount: 0 }));
           return;
         }
 
-        console.log(`[wind] fetching ${grid.length} API points...`);
-
-        // 2. Fetch sparse data from Open-Meteo
         const sparsePoints = await fetchWindData(grid, controller.signal);
         if (controller.signal.aborted) return;
 
-        console.log(`[wind] received ${sparsePoints.length} API points`);
-
-        // 3. Interpolate to dense field (~300 arrows)
-        const denseField = generateDenseField(sparsePoints, bounds, bounds.zoom);
-
-        // 4. Feed to animator
-        if (animatorRef.current) {
-          animatorRef.current.setField(denseField, bounds.zoom);
-        }
-
+        const dense = generateDenseField(sparsePoints, bounds, bounds.zoom);
+        updateWindData(m, dense);
         lastBoundsRef.current = bounds;
 
         setState({
           loading: false,
           error: null,
-          pointCount: denseField.length,
+          pointCount: dense.length,
           lastUpdate: Date.now(),
         });
       } catch (err: unknown) {
@@ -129,33 +114,24 @@ export function useWind(
     [],
   );
 
-  // ── Init / destroy layer on enable toggle ───────────────────────
+  // ── Init / destroy on enable toggle ─────────────────────────────
 
   useEffect(() => {
     if (!map) return;
 
     if (enabled) {
       try {
-        // Initialize icons and layer
-        createWindArrowIcons(map);
+        createWindIcons(map);
         addWindLayer(map);
         layerInitRef.current = true;
-
-        // Create animator
-        const animator = new WindAnimator(map);
-        animatorRef.current = animator;
-        animator.start();
-        console.log('[wind] animator started');
       } catch (err) {
         console.error('[wind] init failed:', err);
         setState((s) => ({ ...s, error: 'Wind layer init failed' }));
         return;
       }
 
-      // Fetch immediately
       fetchForViewport(map);
 
-      // Listen to viewport changes
       const onMoveEnd = () => {
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => fetchForViewport(map), DEBOUNCE_MS);
@@ -166,25 +142,15 @@ export function useWind(
         map.off('moveend', onMoveEnd);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         abortRef.current?.abort();
-
-        // Destroy animator
-        animatorRef.current?.destroy();
-        animatorRef.current = null;
-
         removeWindLayer(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
       };
     } else {
-      // Cleanup if was enabled before
       if (layerInitRef.current) {
         abortRef.current?.abort();
         if (debounceRef.current) clearTimeout(debounceRef.current);
-
-        animatorRef.current?.destroy();
-        animatorRef.current = null;
-
         removeWindLayer(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;

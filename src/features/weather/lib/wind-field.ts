@@ -3,7 +3,7 @@ import type { WindPoint } from '../types';
 // ── Configuration ─────────────────────────────────────────────────────
 
 /** Target number of display arrows in the viewport */
-const TARGET_ARROW_COUNT = 300;
+const TARGET_ARROW_COUNT = 700;
 
 // ── IDW (Inverse Distance Weighting) interpolation ───────────────────
 

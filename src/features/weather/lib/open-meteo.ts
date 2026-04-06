@@ -52,7 +52,7 @@ async function fetchBatch(
   const url =
     `${API_BASE}?latitude=${lats}&longitude=${lngs}` +
     `&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
-    `&wind_speed_unit=ms&timeformat=unixtime`;
+    `&wind_speed_unit=ms&timeformat=unixtime&cell_selection=nearest`;
 
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
