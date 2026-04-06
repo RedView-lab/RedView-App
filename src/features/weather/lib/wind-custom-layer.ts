@@ -55,7 +55,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.windGL.prerender();
   }
 
-  render(gl: WebGLRenderingContext, _matrix: number[]): void {
+  render(_gl: WebGLRenderingContext, _matrix: number[]): void {
     if (!this.windGL || !this.hasWindData) return;
 
     // Draw the trail texture into Mapbox's current framebuffer
