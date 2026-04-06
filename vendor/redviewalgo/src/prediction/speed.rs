@@ -59,11 +59,11 @@ fn combined_micro_factor_floor(total_route_km: f64) -> f64 {
     if total_route_km < 200.0 {
         1.0 // no floor for short rides
     } else {
-        // Smooth sigmoid transition: 0.80 at 200km, converging to 0.58 at 3000km+
-        // Raised from old 0.75/0.50 to prevent excessive stacking of many penalties
+        // Smooth sigmoid transition: 0.82 at 200km, converging to 0.65 at 3000km+
+        // Prevents catastrophic stacking of many independent micro-penalties
         let x = (total_route_km - 200.0) / 1000.0;
-        let floor = 0.58 + 0.22 / (1.0 + x);
-        floor.clamp(0.58, 0.80)
+        let floor = 0.65 + 0.17 / (1.0 + x);
+        floor.clamp(0.65, 0.82)
     }
 }
 
@@ -79,9 +79,9 @@ fn logistics_efficiency_factor(distance_km: f64) -> f64 {
     if distance_km < 300.0 {
         return 1.0;
     }
-    // Logarithmic decay: ~3% at 500km, ~6% at 1500km, ~8% at 3000km
-    let penalty = 0.03 * (1.0 + (distance_km - 300.0) / 500.0).ln();
-    (1.0 - penalty).clamp(0.90, 1.0)
+    // Logarithmic decay: ~1.5% at 500km, ~3% at 1500km, ~4% at 3000km
+    let penalty = 0.02 * (1.0 + (distance_km - 300.0) / 500.0).ln();
+    (1.0 - penalty).clamp(0.93, 1.0)
 }
 
 /// Run a single prediction pass with per-point fatigue.

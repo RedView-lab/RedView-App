@@ -112,22 +112,24 @@ pub fn circadian_factor(
 }
 
 /// Distance-based mechanical efficiency decay.
-/// Models saddle fatigue, posture degradation, and repetitive strain at 500km+.
-/// Based on Knechtle et al. 2014 (RAAM riders: 15-20% speed decline over 4800km)
+/// Models saddle fatigue, posture degradation, and repetitive strain.
+/// Based on Knechtle et al. 2014 (RAAM riders: 15-20% total speed decline over 4800km)
 /// and Matomäki et al. 2019 (cycling efficiency drops 1-3% over ultra-duration).
 ///
-/// Returns factor in [0.82, 1.0]. Negligible for short rides (<150km).
-/// Uses sigmoidal curve: gradual onset at 200km, plateau at floor.
+/// Important: this captures ONLY distance-specific mechanical degradation.
+/// Time-dependent fatigue, glycogen, circadian etc are separate factors.
+/// RAAM 15-20% is the total from ALL causes — mechanical alone is ~8-10%.
+///
+/// Returns factor in [0.90, 1.0]. Negligible for rides <200km.
 pub fn distance_efficiency_factor(distance_km: f64) -> f64 {
-    if distance_km < 150.0 {
+    if distance_km < 200.0 {
         return 1.0;
     }
-    // Sigmoidal decay: onset ~200km, inflection ~500km, floor 0.82
-    // RAAM data shows ~15-20% avg speed decline over 4800km
-    // TCR data shows ~12-15% decline over 3500km
-    let sigmoid = 1.0 / (1.0 + (-0.004 * (distance_km - 500.0)).exp());
-    let decay = 0.18 * sigmoid;
-    (1.0 - decay).clamp(0.82, 1.0)
+    // Sigmoidal decay: onset ~300km, inflection ~1000km, floor 0.90
+    // At 750km: ~3%, at 1500km: ~8%, at 3000km+: ~10%
+    let sigmoid = 1.0 / (1.0 + (-0.004 * (distance_km - 1000.0)).exp());
+    let decay = 0.10 * sigmoid;
+    (1.0 - decay).clamp(0.90, 1.0)
 }
 
 /// Compute partial fatigue recovery after a rest stop.
