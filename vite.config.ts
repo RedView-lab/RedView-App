@@ -12,6 +12,19 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/api/lidar/wmts': {
+        target: 'https://data.geopf.fr',
+        changeOrigin: true,
+        rewrite: (p) => {
+          // /api/lidar/wmts/19/row/col → /wmts?SERVICE=WMTS&...&TILEMATRIX=19&TILEROW=row&TILECOL=col
+          const match = p.match(/\/api\/lidar\/wmts\/(\d+)\/(\d+)\/(\d+)/);
+          if (match) {
+            const [, zoom, row, col] = match;
+            return `/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${zoom}&TILEROW=${row}&TILECOL=${col}`;
+          }
+          return p;
+        },
+      },
       '/api/lidar': {
         target: 'https://data.geopf.fr',
         changeOrigin: true,

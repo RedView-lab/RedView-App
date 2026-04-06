@@ -1,7 +1,7 @@
 {
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },
-    { "source": "/api/lidar/wmts", "destination": "/api/lidar/wmts" },
+    { "source": "/api/lidar/wmts/:zoom/:row/:col", "destination": "/api/lidar/wmts?zoom=:zoom&row=:row&col=:col" },
     { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
   ],
   "headers": [
