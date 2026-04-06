@@ -70,8 +70,8 @@ export async function downloadTile(
   }
 
   const triedZones = urls.map(u => {
-    const parts = u.split('/');
-    return parts[parts.length - 2];
+    const match = u.match(/zone=([^&]+)/);
+    return match ? match[1] : u;
   }).filter((v, i, a) => a.indexOf(v) === i);
   console.error(`[Download] All ${urls.length} candidate URLs failed for tile (${coord.xKm}, ${coord.yKm}). Zones tried: ${triedZones.join(', ')}`);
   throw new Error(`Impossible de télécharger la tuile LiDAR HD pour (${coord.xKm}, ${coord.yKm}) — ${urls.length} URLs testées dans ${triedZones.length} zone(s) [${triedZones.slice(0, 5).join(', ')}${triedZones.length > 5 ? '...' : ''}]. Dernière erreur: ${lastError?.message || 'inconnue'}`);
