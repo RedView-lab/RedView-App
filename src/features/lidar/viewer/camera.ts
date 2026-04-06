@@ -124,7 +124,7 @@ export class CameraController {
     const aspect = this.canvas.width / this.canvas.height;
     const fov = Math.PI / 4;
     const near = Math.max(0.5, this.radius * 0.001);
-    const far = this.radius * 5;
+    const far = this.radius * 10;
     const f = 1 / Math.tan(fov / 2);
     return new Float32Array([
       f / aspect, 0, 0, 0,

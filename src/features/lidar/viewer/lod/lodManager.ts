@@ -248,18 +248,18 @@ export class LodManager {
         node.density = 1.0;
         continue;
       }
-      const maxRemovable = Math.floor(node.count * 0.75);
+      const maxRemovable = Math.floor(node.count * 0.60);
       if (maxRemovable <= excess) {
-        node.density = 0.25;
+        node.density = 0.40;
         excess -= maxRemovable;
       } else {
         const rawDensity = 1 - excess / node.count;
-        node.density = Math.max(0.25, Math.round(rawDensity * 20) / 20);
+        node.density = Math.max(0.40, Math.round(rawDensity * 20) / 20);
         excess -= Math.floor(node.count * (1 - node.density));
       }
     }
 
-    this.density = Math.max(0.25, this.pointBudget / this.visiblePointCount);
+    this.density = Math.max(0.40, this.pointBudget / this.visiblePointCount);
   }
 
   private sortBuf: number[] = [];
@@ -308,15 +308,15 @@ export class LodManager {
     if (avgMs > TARGET_FRAME_MS * 1.15) {
       this.slowFrameCount++;
       this.fastFrameCount = 0;
-      if (this.slowFrameCount >= 6) {
-        this.pointBudget = Math.max(MIN_POINT_BUDGET, Math.floor(this.pointBudget * 0.90));
+      if (this.slowFrameCount >= 8) {
+        this.pointBudget = Math.max(MIN_POINT_BUDGET, Math.floor(this.pointBudget * 0.95));
         this.slowFrameCount = 0;
       }
     } else if (avgMs < TARGET_FRAME_MS * 0.80) {
       this.fastFrameCount++;
       this.slowFrameCount = 0;
-      if (this.fastFrameCount >= 6) {
-        this.pointBudget = Math.min(MAX_POINT_BUDGET, Math.floor(this.pointBudget * 1.10));
+      if (this.fastFrameCount >= 4) {
+        this.pointBudget = Math.min(MAX_POINT_BUDGET, Math.floor(this.pointBudget * 1.15));
         this.fastFrameCount = 0;
       }
     } else {

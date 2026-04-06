@@ -79,7 +79,7 @@ fn vs_main(
 
   let baseRadius = camera.pointSize * 0.5;
   let scaledRadius = baseRadius * distScale;
-  let billboardScale = scaledRadius * 2.6;
+  let billboardScale = scaledRadius * 1.8;
 
   let wp = pos
     + camera.right.xyz * uv.x * billboardScale
