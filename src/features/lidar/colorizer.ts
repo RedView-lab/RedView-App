@@ -7,7 +7,7 @@ const DEFAULT_R = 128, DEFAULT_G = 128, DEFAULT_B = 128;
 
 async function fetchOrthoTile(zoom: number, tileX: number, tileY: number): Promise<Uint8Array | null> {
   try {
-    const response = await fetch(`/api/lidar/wmts/${zoom}/${tileY}/${tileX}`);
+    const response = await fetch(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${zoom}&TILEROW=${tileY}&TILECOL=${tileX}`);
     if (!response.ok) return null;
 
     const blob = await response.blob();

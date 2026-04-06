@@ -1,6 +1,8 @@
 import type { ZoneInfo, TileCoord } from './types';
 import { toWgs84, buildTileFileName, isCorsica } from './coordConvert';
 
+const IGN_DL_BASE = 'https://data.geopf.fr/telechargement';
+
 let zonesCache: ZoneInfo[] | null = null;
 const tileUrlCache = new Map<string, string>();
 
@@ -86,6 +88,16 @@ function containsPoint(bbox: ZoneInfo['bbox'], lon: number, lat: number): boolea
   return lon >= bbox.west && lon <= bbox.east && lat >= bbox.south && lat <= bbox.north;
 }
 
+/**
+ * Strip <georss:polygon> from XML to reduce parsing overhead.
+ * Previously done server-side in the Vercel proxy.
+ */
+function stripPolygons(xml: string): string {
+  return xml
+    .replace(/<georss:polygon>[\s\S]*?<\/georss:polygon>/g, '')
+    .replace(/<georss:polygon\/>/g, '');
+}
+
 function parseZonesXml(xmlText: string): ZoneInfo[] {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xmlText, 'text/xml');
@@ -129,10 +141,10 @@ async function fetchAllZones(): Promise<ZoneInfo[]> {
 
   try {
     while (page <= maxPages) {
-      const response = await fetch(`/api/lidar/zones?page=${page}`);
+      const response = await fetch(`${IGN_DL_BASE}/resource/LiDARHD-NUALID?limit=100&page=${page}`);
       if (!response.ok) throw new Error(`WFS error: ${response.status}`);
 
-      const xmlText = await response.text();
+      const xmlText = stripPolygons(await response.text());
       const zones = parseZonesXml(xmlText);
       allZones.push(...zones);
 
@@ -176,8 +188,8 @@ function buildFallbackUrls(coord: TileCoord): string[] {
 
   for (const code of fallbackCodes) {
     const zoneName = `NUALHD_1-0__LAZ_${coord.projection}_${code}`;
-    urls.push(`/api/lidar/dl?zone=${zoneName}&file=${baseName}.copc.laz`);
-    urls.push(`/api/lidar/dl?zone=${zoneName}&file=${baseName}.laz`);
+    urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zoneName}/${baseName}.copc.laz`);
+    urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zoneName}/${baseName}.laz`);
   }
 
   return urls;
@@ -215,8 +227,8 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
       const urls: string[] = [];
       const baseName = buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef);
       for (const zone of nearbyZones) {
-        urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.copc.laz`);
-        urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.laz`);
+        urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zone.name}/${baseName}.copc.laz`);
+        urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zone.name}/${baseName}.laz`);
       }
       return urls;
     }
@@ -229,8 +241,8 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
   const baseName = buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef);
 
   for (const zone of matchingZones) {
-    urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.copc.laz`);
-    urls.push(`/api/lidar/dl?zone=${zone.name}&file=${baseName}.laz`);
+    urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zone.name}/${baseName}.copc.laz`);
+    urls.push(`${IGN_DL_BASE}/download/LiDARHD-NUALID/${zone.name}/${baseName}.laz`);
   }
 
   console.log(`[WFS] Resolved ${urls.length} candidate URLs for tile (${coord.xKm}, ${coord.yKm})`);
