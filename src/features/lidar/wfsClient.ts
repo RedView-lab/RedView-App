@@ -154,7 +154,7 @@ async function fetchAllZones(): Promise<ZoneInfo[]> {
 
     allZones.sort((a, b) => b.date.localeCompare(a.date));
     zonesCache = allZones;
-    console.log(`[WFS] Fetched ${allZones.length} LiDAR HD zones`);
+    console.log(`[WFS] Fetched ${allZones.length} LiDAR HD zones (feed declares ${maxPages} pages)`);
     return allZones;
   } catch (err) {
     console.warn('[WFS] Failed to fetch zones, using fallback list:', err);
@@ -200,7 +200,10 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
 
   const matchingZones = zones.filter(z => containsPoint(z.bbox, lon, lat));
 
+  console.log(`[WFS] Tile (${coord.xKm}, ${coord.yKm}) center WGS84: [${lon.toFixed(6)}, ${lat.toFixed(6)}] — ${matchingZones.length} matching zone(s)${matchingZones.length > 0 ? ': ' + matchingZones.map(z => z.name).join(', ') : ''}`);
+
   if (matchingZones.length === 0) {
+    console.warn(`[WFS] No zones contain tile center, falling back to ${coord.projection === 'RGR92UTM40S' ? 'REU' : isCorsica(centerX, centerY) ? 'Corsica' : 'FXX'} fallback list`);
     return buildFallbackUrls(coord);
   }
 
@@ -212,6 +215,7 @@ export async function resolveDownloadUrls(coord: TileCoord): Promise<string[]> {
     urls.push(`/api/lidar/download/${zone.name}/${baseName}.laz`);
   }
 
+  console.log(`[WFS] Resolved ${urls.length} candidate URLs for tile (${coord.xKm}, ${coord.yKm})`);
   return urls;
 }
 

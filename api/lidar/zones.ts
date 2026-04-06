@@ -6,7 +6,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Polygons are huge (many KB each) and cause Vercel's 4.5MB body limit to be exceeded.
  */
 function stripPolygons(xml: string): string {
-  return xml.replace(/<georss:polygon>[^<]*<\/georss:polygon>/g, '');
+  return xml
+    .replace(/<georss:polygon>[\s\S]*?<\/georss:polygon>/g, '')
+    .replace(/<georss:polygon\/>/g, '');
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

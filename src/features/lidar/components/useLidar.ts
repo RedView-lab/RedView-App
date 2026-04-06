@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { LidarManager } from '../lidarManager';
+import { useState, useEffect, useCallback } from 'react';
 import type { TileCoord, CachedTileInfo, DownloadProgress } from '../types';
 import { toWgs84 } from '../coordConvert';
+import { useLidarManager } from './LidarContext';
 
 export function useLidar() {
-  const managerRef = useRef<LidarManager | null>(null);
+  const manager = useLidarManager();
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
   const [storageUsed, setStorageUsed] = useState(0);
   const [storageQuota, setStorageQuota] = useState(0);
@@ -12,10 +12,7 @@ export function useLidar() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const mgr = new LidarManager();
-    managerRef.current = mgr;
-
-    const unsub = mgr.on((event) => {
+    const unsub = manager.on((event) => {
       if (event.type === 'progress' && event.progress) {
         setProgress(event.progress);
         setError(null);
@@ -31,32 +28,30 @@ export function useLidar() {
     });
 
     refreshCache();
-    return () => { unsub(); mgr.destroy(); };
-  }, []);
+    return unsub;
+  }, [manager]);
 
   const refreshCache = useCallback(async () => {
-    const mgr = managerRef.current;
-    if (!mgr) return;
-    const tiles = await mgr.getCachedTiles();
+    const tiles = await manager.getCachedTiles();
     setCachedTiles(tiles);
-    const usage = await mgr.getStorageUsage();
+    const usage = await manager.getStorageUsage();
     setStorageUsed(usage.used);
     setStorageQuota(usage.quota);
-  }, []);
+  }, [manager]);
 
   const downloadTile = useCallback(async (coord: TileCoord) => {
     setError(null);
-    await managerRef.current?.downloadTile(coord);
-  }, []);
+    await manager.downloadTile(coord);
+  }, [manager]);
 
   const removeTile = useCallback(async (coord: TileCoord) => {
-    await managerRef.current?.removeTile(coord);
+    await manager.removeTile(coord);
     refreshCache();
-  }, [refreshCache]);
+  }, [manager, refreshCache]);
 
   const openViewer = useCallback((coord: TileCoord) => {
-    managerRef.current?.openViewer(coord);
-  }, []);
+    manager.openViewer(coord);
+  }, [manager]);
 
   const getTileCenter = useCallback((coord: TileCoord): [number, number] => {
     return toWgs84(

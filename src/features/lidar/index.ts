@@ -7,3 +7,4 @@ export type {
 export { wgs84ToTileCoord, toWgs84, buildTileFileName } from './coordConvert';
 export { LidarPanel } from './components/LidarPanel';
 export { useLidarContextMenu } from './components/useLidarContextMenu';
+export { LidarProvider, useLidarManager } from './components/LidarContext';

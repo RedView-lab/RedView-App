@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MapView } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
+import { LidarProvider } from '@/features/lidar/components/LidarContext';
 
 interface DashboardProps {
   email: string;
@@ -11,6 +12,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showLidar, setShowLidar] = useState(false);
 
   return (
+    <LidarProvider>
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <MapView />
 
@@ -76,5 +78,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         Logout
       </button>
     </div>
+    </LidarProvider>
   );
 }

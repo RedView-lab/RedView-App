@@ -1,18 +1,19 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { LidarManager } from '../lidarManager';
 import type { TileCoord } from '../types';
-import { fromWgs84 } from '../coordConvert';
+import { wgs84ToTileCoord } from '../coordConvert';
+import { useLidarManager } from './LidarContext';
 
 /**
  * Adds a right-click context menu item "Charger LiDAR HD" on the Mapbox map.
  * When clicked, starts downloading the 1km² LiDAR tile at the cursor location.
+ * Uses the shared LidarManager from LidarContext so progress/errors are visible in the panel.
  */
 export function useLidarContextMenu(
   map: MapboxMap | null,
   onDownloadStart?: (coord: TileCoord) => void,
 ) {
-  const managerRef = useRef<LidarManager | null>(null);
+  const manager = useLidarManager();
   const menuRef = useRef<HTMLDivElement | null>(null);
 
   const cleanup = useCallback(() => {
@@ -25,27 +26,12 @@ export function useLidarContextMenu(
   useEffect(() => {
     if (!map) return;
 
-    const mgr = new LidarManager();
-    managerRef.current = mgr;
-
     const handleContextMenu = (e: mapboxgl.MapMouseEvent) => {
       e.preventDefault();
       cleanup();
 
       const { lng, lat } = e.lngLat;
-
-      // Convert WGS84 to LAMB93 (default CRS for metropolitan France)
-      const [x, y] = fromWgs84(lng, lat, 'LAMB93');
-      const xKm = Math.floor(x / 1000);
-      const yKm = Math.floor(y / 1000);
-
-      const coord: TileCoord = {
-        xKm,
-        yKm,
-        territory: 'FXX',
-        projection: 'LAMB93',
-        altRef: 'IGN69',
-      };
+      const coord = wgs84ToTileCoord(lng, lat);
 
       // Create context menu
       const menu = document.createElement('div');
@@ -65,7 +51,7 @@ export function useLidarContextMenu(
       });
 
       const item = document.createElement('button');
-      item.textContent = `🛰️ Charger LiDAR HD (${xKm}_${yKm})`;
+      item.textContent = `🛰️ Charger LiDAR HD (${coord.xKm}_${coord.yKm})`;
       Object.assign(item.style, {
         display: 'block',
         width: '100%',
@@ -85,7 +71,7 @@ export function useLidarContextMenu(
       item.onclick = () => {
         cleanup();
         onDownloadStart?.(coord);
-        mgr.downloadTile(coord);
+        manager.downloadTile(coord);
       };
 
       menu.appendChild(item);
@@ -105,7 +91,6 @@ export function useLidarContextMenu(
     return () => {
       map.off('contextmenu', handleContextMenu);
       cleanup();
-      mgr.destroy();
     };
-  }, [map, onDownloadStart, cleanup]);
+  }, [map, manager, onDownloadStart, cleanup]);
 }
