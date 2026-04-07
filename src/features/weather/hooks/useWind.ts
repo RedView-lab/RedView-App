@@ -11,9 +11,9 @@ import {
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-const DEBOUNCE_MS = 2000;
-const MIN_FETCH_INTERVAL_MS = 10_000;
-const VIEWPORT_SHIFT_THRESHOLD = 0.25;
+const DEBOUNCE_MS = 4000;
+const MIN_FETCH_INTERVAL_MS = 30_000;
+const VIEWPORT_SHIFT_THRESHOLD = 0.4;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ export function useWind(
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
         const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
-        if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < 0.5) return;
+        if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < 1.0) return;
       }
 
       abortRef.current?.abort();
@@ -89,7 +89,17 @@ export function useWind(
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        const grid = computeWindGrid(bounds, bounds.zoom);
+        // Expand bounds by 30% margin so small pans don't need re-fetch
+        const latPad = (bounds.north - bounds.south) * 0.3;
+        const lngPad = (bounds.east - bounds.west) * 0.3;
+        const fetchBounds = {
+          north: Math.min(90, bounds.north + latPad),
+          south: Math.max(-90, bounds.south - latPad),
+          east: Math.min(180, bounds.east + lngPad),
+          west: Math.max(-180, bounds.west - lngPad),
+        };
+
+        const grid = computeWindGrid(fetchBounds, bounds.zoom);
         if (grid.length === 0) {
           setState((s) => ({ ...s, loading: false, pointCount: 0 }));
           return;
@@ -98,7 +108,7 @@ export function useWind(
         const sparsePoints = await fetchWindData(grid, controller.signal);
         if (controller.signal.aborted) return;
 
-        updateWindParticles(m, sparsePoints, bounds);
+        updateWindParticles(m, sparsePoints, fetchBounds);
         lastBoundsRef.current = bounds;
         lastFetchTimeRef.current = Date.now();
 

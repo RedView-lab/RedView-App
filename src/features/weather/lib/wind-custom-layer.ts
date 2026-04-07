@@ -1,23 +1,34 @@
-// ── Mapbox GL Custom Layer for Wind Streaks ───────────────────────────
-// Renders 3D wind streaks directly into Mapbox's GL context.
-// Each particle is a terrain-tangent quad oriented along the wind
-// direction, with head-to-tail opacity fade.
+// ── Mapbox GL Custom Layer for Wind Arrows ────────────────────────────
+// Renders 3D wind arrows directly into Mapbox's GL context.
+// Each particle is a terrain-following arrow oriented along the wind
+// direction, with head-to-tail opacity fade and proper arrowhead shape.
 
 import mapboxgl, { type CustomLayerInterface, type Map as MapboxMap } from 'mapbox-gl';
 import type { WindData } from './wind-gl';
 
 const LAYER_ID = 'wind-particles';
 const VERTEX_STRIDE = 7; // x, y, z, r, g, b, a
-const VERTS_PER_STREAK = 6; // 2 triangles per quad
+const VERTS_PER_ARROW = 9; // 3 triangles: arrowhead(3) + body quad(6)
 const ELEVATION_GRID_SIZE = 56;
-const MIN_PARTICLES = 4000;
-const MAX_PARTICLES = 10000;
-const PARTICLE_ALTITUDE_OFFSET = 4;
+const MIN_PARTICLES = 600;
+const MAX_PARTICLES = 1800;
+const PARTICLE_ALTITUDE_OFFSET = 6;
 const MAX_DELTA_SECONDS = 0.05;
-const MIN_PARTICLE_LIFE = 4;
-const MAX_PARTICLE_LIFE = 11;
+const MIN_PARTICLE_LIFE = 5;
+const MAX_PARTICLE_LIFE = 14;
 const ELEVATION_REFRESH_MS = 1500;
 const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
+
+// Arrow geometry proportions
+const HEAD_LENGTH_RATIO = 0.32; // arrowhead is 32% of total arrow length
+const SHOULDER_HW_PX = 5.5; // arrowhead half-width in pixels
+const BODY_HW_PX = 1.6; // body half-width in pixels
+const TAIL_TAPER = 0.5; // tail narrows to 50% of body width
+const ARROW_BASE_PX = 28; // base arrow length in pixels (at 0 wind speed)
+const ARROW_SPEED_SCALE = 1.8; // extra pixels per m/s of wind speed
+
+// Fade-in rate: particles reach full opacity in ~0.4s
+const FADE_IN_RATE = 2.5;
 
 interface WindBounds {
   north: number;
@@ -243,6 +254,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private particleSpeeds = new Float32Array(0);
   private particleWindU = new Float32Array(0);
   private particleWindV = new Float32Array(0);
+  private particleFade = new Float32Array(0); // 0→1 fade-in to prevent flickering
   private vertexData = new Float32Array(0);
 
   private elevationGrid = new Float32Array(0);
@@ -266,8 +278,8 @@ export class WindCustomLayer implements CustomLayerInterface {
       return;
     }
 
-    if (Math.abs(this.map.getZoom() - this.lastConfiguredZoom) > 0.75) {
-      this.configureParticles();
+    if (Math.abs(this.map.getZoom() - this.lastConfiguredZoom) > 1.5) {
+      this.resizeParticles();
     }
 
     const now = performance.now();
@@ -306,7 +318,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.disable(gl.STENCIL_TEST);
     gl.disable(gl.CULL_FACE);
 
-    gl.drawArrays(gl.TRIANGLES, 0, this.particleCount * VERTS_PER_STREAK);
+    gl.drawArrays(gl.TRIANGLES, 0, this.particleCount * VERTS_PER_ARROW);
 
     restoreGLState(gl, savedState, attribs);
     this.map?.triggerRepaint();
@@ -329,19 +341,27 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   setWind(windData: WindData, bounds: WindBounds): void {
+    const hadData = this.hasWindData;
     this.windData = windData;
     this.bounds = bounds;
     this.hasWindData = true;
-    this.lastFrameTime = 0;
     this.rebuildElevationGrid();
-    this.configureParticles();
+
+    if (!hadData || this.particleCount === 0) {
+      // First load: full init
+      this.configureParticles();
+    } else {
+      // Data update: respawn only out-of-bounds particles
+      this.clampParticlesToBounds();
+    }
+
     this.map?.triggerRepaint();
   }
 
   private configureParticles(): void {
     if (!this.map || !this.bounds) return;
 
-    const nextCount = clamp(Math.round(3000 + this.map.getZoom() * 400), MIN_PARTICLES, MAX_PARTICLES);
+    const nextCount = clamp(Math.round(400 + this.map.getZoom() * 80), MIN_PARTICLES, MAX_PARTICLES);
     this.particleCount = nextCount;
     this.lastConfiguredZoom = this.map.getZoom();
 
@@ -351,10 +371,72 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.particleSpeeds = new Float32Array(this.particleCount);
     this.particleWindU = new Float32Array(this.particleCount);
     this.particleWindV = new Float32Array(this.particleCount);
-    this.vertexData = new Float32Array(this.particleCount * VERTS_PER_STREAK * VERTEX_STRIDE);
+    this.particleFade = new Float32Array(this.particleCount);
+    this.vertexData = new Float32Array(this.particleCount * VERTS_PER_ARROW * VERTEX_STRIDE);
 
     for (let index = 0; index < this.particleCount; index++) {
       this.respawnParticle(index, true);
+    }
+  }
+
+  /** Resize particle arrays when zoom changes, preserving existing particles. */
+  private resizeParticles(): void {
+    if (!this.map || !this.bounds) return;
+
+    const nextCount = clamp(Math.round(400 + this.map.getZoom() * 80), MIN_PARTICLES, MAX_PARTICLES);
+    if (nextCount === this.particleCount) {
+      this.lastConfiguredZoom = this.map.getZoom();
+      return;
+    }
+
+    const prevCount = this.particleCount;
+    const keepCount = Math.min(prevCount, nextCount);
+
+    const newPositions = new Float32Array(nextCount * 2);
+    const newAges = new Float32Array(nextCount);
+    const newLives = new Float32Array(nextCount);
+    const newSpeeds = new Float32Array(nextCount);
+    const newWindU = new Float32Array(nextCount);
+    const newWindV = new Float32Array(nextCount);
+    const newFade = new Float32Array(nextCount);
+
+    // Copy existing particles
+    newPositions.set(this.particlePositions.subarray(0, keepCount * 2));
+    newAges.set(this.particleAges.subarray(0, keepCount));
+    newLives.set(this.particleLives.subarray(0, keepCount));
+    newSpeeds.set(this.particleSpeeds.subarray(0, keepCount));
+    newWindU.set(this.particleWindU.subarray(0, keepCount));
+    newWindV.set(this.particleWindV.subarray(0, keepCount));
+    newFade.set(this.particleFade.subarray(0, keepCount));
+
+    this.particlePositions = newPositions;
+    this.particleAges = newAges;
+    this.particleLives = newLives;
+    this.particleSpeeds = newSpeeds;
+    this.particleWindU = newWindU;
+    this.particleWindV = newWindV;
+    this.particleFade = newFade;
+    this.vertexData = new Float32Array(nextCount * VERTS_PER_ARROW * VERTEX_STRIDE);
+    this.particleCount = nextCount;
+    this.lastConfiguredZoom = this.map.getZoom();
+
+    // Spawn new particles if we grew
+    for (let index = keepCount; index < nextCount; index++) {
+      this.respawnParticle(index, true);
+    }
+  }
+
+  /** Respawn only particles that landed outside new bounds. */
+  private clampParticlesToBounds(): void {
+    if (!this.bounds) return;
+
+    for (let index = 0; index < this.particleCount; index++) {
+      const positionIndex = index * 2;
+      const lng = this.particlePositions[positionIndex];
+      const lat = this.particlePositions[positionIndex + 1];
+      if (!this.isWithinBounds(lng, lat, 0.05)) {
+        this.respawnParticle(index, true);
+      }
     }
   }
 
@@ -402,6 +484,11 @@ export class WindCustomLayer implements CustomLayerInterface {
       let lng = this.particlePositions[positionIndex];
       let lat = this.particlePositions[positionIndex + 1];
 
+      // Fade in newly spawned particles smoothly
+      if (this.particleFade[index] < 1) {
+        this.particleFade[index] = Math.min(1, this.particleFade[index] + deltaSeconds * FADE_IN_RATE);
+      }
+
       this.particleAges[index] += deltaSeconds;
       if (this.particleAges[index] >= this.particleLives[index]) {
         this.respawnParticle(index, false);
@@ -445,11 +532,11 @@ export class WindCustomLayer implements CustomLayerInterface {
       const speed = this.particleSpeeds[index];
       const wu = this.particleWindU[index];
       const wv = this.particleWindV[index];
+      const fade = this.particleFade[index];
 
-      // Streak length & width in screen-pixel equivalents
-      const streakPixels = 10 + speed * 0.5;
-      const streakMeters = streakPixels * metersPerPx;
-      const hwMc = 1.8 * pixelScale;
+      // Arrow length in screen-pixel equivalents (bigger & longer)
+      const arrowPixels = ARROW_BASE_PX + speed * ARROW_SPEED_SCALE;
+      const arrowMeters = arrowPixels * metersPerPx;
 
       // Wind direction (default east if calm)
       const windMag = Math.hypot(wu, wv);
@@ -459,96 +546,137 @@ export class WindCustomLayer implements CustomLayerInterface {
         dirV = wv / windMag;
       }
 
-      // Tail position (upwind from head) in geographic space
-      const tailLng = lng - (dirU * streakMeters) / metersPerDegreeLng;
-      const tailLat = lat - (dirV * streakMeters) / metersPerDegreeLat;
+      // Tail position (upwind from tip) in geographic space
+      const tailLng = lng - (dirU * arrowMeters) / metersPerDegreeLng;
+      const tailLat = lat - (dirV * arrowMeters) / metersPerDegreeLat;
 
-      // Terrain elevation at head & tail
-      const headElev = this.sampleElevation(lng, lat) + PARTICLE_ALTITUDE_OFFSET;
+      // Neck position (where arrowhead meets body)
+      const neckLng = lerp(lng, tailLng, HEAD_LENGTH_RATIO);
+      const neckLat = lerp(lat, tailLat, HEAD_LENGTH_RATIO);
+
+      // Terrain elevation at tip, neck & tail
+      const tipElev = this.sampleElevation(lng, lat) + PARTICLE_ALTITUDE_OFFSET;
+      const neckElev = this.sampleElevation(neckLng, neckLat) + PARTICLE_ALTITUDE_OFFSET;
       const tailElev = this.sampleElevation(tailLng, tailLat) + PARTICLE_ALTITUDE_OFFSET;
 
       // Mercator world-space positions
-      const headMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, headElev);
+      const tipMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, tipElev);
+      const neckMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: neckLng, lat: neckLat }, neckElev);
       const tailMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: tailLng, lat: tailLat }, tailElev);
 
-      // Perpendicular direction in Mercator XY for quad width
-      const dx = headMc.x - tailMc.x;
-      const dy = headMc.y - tailMc.y;
+      // Perpendicular direction in Mercator XY
+      const dx = tipMc.x - tailMc.x;
+      const dy = tipMc.y - tailMc.y;
       const len2d = Math.hypot(dx, dy);
 
       let perpX: number, perpY: number;
       if (len2d > 1e-12) {
-        perpX = (-dy / len2d) * hwMc;
-        perpY = (dx / len2d) * hwMc;
+        perpX = -dy / len2d;
+        perpY = dx / len2d;
       } else {
-        perpX = hwMc;
+        perpX = 1;
         perpY = 0;
       }
 
-      // Color (head = full, tail = faded)
-      const [r, g, b, a] = interpolateColor(speed);
-      const tailAlpha = a * 0.2;
+      // Widths in Mercator units
+      const shoulderHW = SHOULDER_HW_PX * pixelScale;
+      const bodyHW = BODY_HW_PX * pixelScale;
+      const tailHW = bodyHW * TAIL_TAPER;
 
-      const hx = headMc.x, hy = headMc.y, hz = headMc.z;
-      const tx = tailMc.x, ty = tailMc.y, tz = tailMc.z;
+      // Color with fade-in applied
+      const [r, g, b, baseAlpha] = interpolateColor(speed);
+      const headAlpha = baseAlpha * fade;
+      const neckAlpha = baseAlpha * 0.85 * fade;
+      const tailAlpha = baseAlpha * 0.15 * fade;
 
-      // 6 vertices (2 triangles): v0-v1-v2, v0-v2-v3
-      // v0 = head+perp, v1 = head-perp, v2 = tail-perp, v3 = tail+perp
-      const base = index * VERTS_PER_STREAK * VERTEX_STRIDE;
+      const base = index * VERTS_PER_ARROW * VERTEX_STRIDE;
 
-      // v0: head + perp
-      this.vertexData[base]      = hx + perpX;
-      this.vertexData[base + 1]  = hy + perpY;
-      this.vertexData[base + 2]  = hz;
+      // ── Triangle 1: Arrowhead (Tip → ShoulderLeft → ShoulderRight) ──
+
+      // v0: Tip (center point)
+      this.vertexData[base]      = tipMc.x;
+      this.vertexData[base + 1]  = tipMc.y;
+      this.vertexData[base + 2]  = tipMc.z;
       this.vertexData[base + 3]  = r;
       this.vertexData[base + 4]  = g;
       this.vertexData[base + 5]  = b;
-      this.vertexData[base + 6]  = a;
+      this.vertexData[base + 6]  = headAlpha;
 
-      // v1: head - perp
-      this.vertexData[base + 7]  = hx - perpX;
-      this.vertexData[base + 8]  = hy - perpY;
-      this.vertexData[base + 9]  = hz;
+      // v1: ShoulderLeft (neck position + shoulder half-width)
+      this.vertexData[base + 7]  = neckMc.x + perpX * shoulderHW;
+      this.vertexData[base + 8]  = neckMc.y + perpY * shoulderHW;
+      this.vertexData[base + 9]  = neckMc.z;
       this.vertexData[base + 10] = r;
       this.vertexData[base + 11] = g;
       this.vertexData[base + 12] = b;
-      this.vertexData[base + 13] = a;
+      this.vertexData[base + 13] = neckAlpha;
 
-      // v2: tail - perp
-      this.vertexData[base + 14] = tx - perpX;
-      this.vertexData[base + 15] = ty - perpY;
-      this.vertexData[base + 16] = tz;
+      // v2: ShoulderRight (neck position - shoulder half-width)
+      this.vertexData[base + 14] = neckMc.x - perpX * shoulderHW;
+      this.vertexData[base + 15] = neckMc.y - perpY * shoulderHW;
+      this.vertexData[base + 16] = neckMc.z;
       this.vertexData[base + 17] = r;
       this.vertexData[base + 18] = g;
       this.vertexData[base + 19] = b;
-      this.vertexData[base + 20] = tailAlpha;
+      this.vertexData[base + 20] = neckAlpha;
 
-      // v0 again: head + perp
-      this.vertexData[base + 21] = hx + perpX;
-      this.vertexData[base + 22] = hy + perpY;
-      this.vertexData[base + 23] = hz;
+      // ── Triangle 2: Body upper (NeckLeft → NeckRight → TailRight) ──
+
+      // v3: NeckLeft (neck position + body half-width)
+      this.vertexData[base + 21] = neckMc.x + perpX * bodyHW;
+      this.vertexData[base + 22] = neckMc.y + perpY * bodyHW;
+      this.vertexData[base + 23] = neckMc.z;
       this.vertexData[base + 24] = r;
       this.vertexData[base + 25] = g;
       this.vertexData[base + 26] = b;
-      this.vertexData[base + 27] = a;
+      this.vertexData[base + 27] = neckAlpha;
 
-      // v2 again: tail - perp
-      this.vertexData[base + 28] = tx - perpX;
-      this.vertexData[base + 29] = ty - perpY;
-      this.vertexData[base + 30] = tz;
+      // v4: NeckRight (neck position - body half-width)
+      this.vertexData[base + 28] = neckMc.x - perpX * bodyHW;
+      this.vertexData[base + 29] = neckMc.y - perpY * bodyHW;
+      this.vertexData[base + 30] = neckMc.z;
       this.vertexData[base + 31] = r;
       this.vertexData[base + 32] = g;
       this.vertexData[base + 33] = b;
-      this.vertexData[base + 34] = tailAlpha;
+      this.vertexData[base + 34] = neckAlpha;
 
-      // v3: tail + perp
-      this.vertexData[base + 35] = tx + perpX;
-      this.vertexData[base + 36] = ty + perpY;
-      this.vertexData[base + 37] = tz;
+      // v5: TailRight (tail position - tail half-width)
+      this.vertexData[base + 35] = tailMc.x - perpX * tailHW;
+      this.vertexData[base + 36] = tailMc.y - perpY * tailHW;
+      this.vertexData[base + 37] = tailMc.z;
       this.vertexData[base + 38] = r;
       this.vertexData[base + 39] = g;
       this.vertexData[base + 40] = b;
       this.vertexData[base + 41] = tailAlpha;
+
+      // ── Triangle 3: Body lower (NeckLeft → TailRight → TailLeft) ──
+
+      // v6: NeckLeft (same as v3)
+      this.vertexData[base + 42] = neckMc.x + perpX * bodyHW;
+      this.vertexData[base + 43] = neckMc.y + perpY * bodyHW;
+      this.vertexData[base + 44] = neckMc.z;
+      this.vertexData[base + 45] = r;
+      this.vertexData[base + 46] = g;
+      this.vertexData[base + 47] = b;
+      this.vertexData[base + 48] = neckAlpha;
+
+      // v7: TailRight (same as v5)
+      this.vertexData[base + 49] = tailMc.x - perpX * tailHW;
+      this.vertexData[base + 50] = tailMc.y - perpY * tailHW;
+      this.vertexData[base + 51] = tailMc.z;
+      this.vertexData[base + 52] = r;
+      this.vertexData[base + 53] = g;
+      this.vertexData[base + 54] = b;
+      this.vertexData[base + 55] = tailAlpha;
+
+      // v8: TailLeft (tail position + tail half-width)
+      this.vertexData[base + 56] = tailMc.x + perpX * tailHW;
+      this.vertexData[base + 57] = tailMc.y + perpY * tailHW;
+      this.vertexData[base + 58] = tailMc.z;
+      this.vertexData[base + 59] = r;
+      this.vertexData[base + 60] = g;
+      this.vertexData[base + 61] = b;
+      this.vertexData[base + 62] = tailAlpha;
     }
 
     const previousArrayBuffer = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING) as WebGLBuffer | null;
@@ -638,6 +766,8 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.particleLives[index] = lerp(MIN_PARTICLE_LIFE, MAX_PARTICLE_LIFE, Math.random());
     this.particleAges[index] = randomAge ? Math.random() * this.particleLives[index] : 0;
     this.particleSpeeds[index] = 0;
+    // Start fade at a random point if randomAge (initial spawn), else 0 for smooth fade-in
+    this.particleFade[index] = randomAge ? Math.min(1, Math.random() + 0.3) : 0;
   }
 
   private isWithinBounds(lng: number, lat: number, marginRatio: number): boolean {
@@ -653,8 +783,8 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   private getSimulationScale(): number {
-    if (!this.map) return 80;
-    return clamp(150 - this.map.getZoom() * 8, 40, 120);
+    if (!this.map) return 60;
+    return clamp(120 - this.map.getZoom() * 6, 30, 90);
   }
 }
 

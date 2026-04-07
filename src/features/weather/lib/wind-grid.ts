@@ -20,7 +20,7 @@ const SPACING_TABLE: [number, number][] = [
 ];
 
 const MIN_SPACING = 0.005;
-const MAX_POINTS = 50; // Open-Meteo supports up to ~50 coords per batch
+const MAX_POINTS = 30; // keep API calls small
 
 /**
  * Get grid spacing (degrees) for a given zoom level.
