@@ -9,22 +9,20 @@ import type { WindData } from './wind-gl';
 const LAYER_ID = 'wind-particles';
 const VERTEX_STRIDE = 7; // x, y, z, r, g, b, a
 const VERTS_PER_ARROW = 9; // 3 triangles: arrowhead(3) + body quad(6)
-const ELEVATION_GRID_SIZE = 80;
 const FIXED_PARTICLE_COUNT = 1000;
-const PARTICLE_ALTITUDE_OFFSET = 25;
+const PARTICLE_ALTITUDE_OFFSET = 2;
 const MAX_DELTA_SECONDS = 0.05;
 const MIN_PARTICLE_LIFE = 5;
 const MAX_PARTICLE_LIFE = 14;
-const ELEVATION_REFRESH_MS = 1500;
 const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
 // Arrow geometry proportions
 const HEAD_LENGTH_RATIO = 0.32; // arrowhead is 32% of total arrow length
-const SHOULDER_HW_PX = 5.5; // arrowhead half-width in pixels
-const BODY_HW_PX = 1.6; // body half-width in pixels
+const SHOULDER_HW_PX = 14; // arrowhead half-width in pixels
+const BODY_HW_PX = 4; // body half-width in pixels
 const TAIL_TAPER = 0.5; // tail narrows to 50% of body width
-const ARROW_BASE_PX = 28; // base arrow length in pixels (at 0 wind speed)
-const ARROW_SPEED_SCALE = 1.8; // extra pixels per m/s of wind speed
+const ARROW_BASE_PX = 80; // base arrow length in pixels (at 0 wind speed)
+const ARROW_SPEED_SCALE = 4; // extra pixels per m/s of wind speed
 
 // Fade-in rate: particles reach full opacity in ~0.4s
 const FADE_IN_RATE = 2.5;
@@ -100,12 +98,14 @@ void main() {
 `;
 
 const COLOR_STOPS: Array<{ speed: number; color: [number, number, number] }> = [
-  { speed: 0, color: [0.196, 0.533, 0.741] },
-  { speed: 5, color: [0.4, 0.761, 0.647] },
-  { speed: 10, color: [0.671, 0.867, 0.643] },
-  { speed: 20, color: [0.992, 0.878, 0.545] },
-  { speed: 30, color: [0.957, 0.427, 0.263] },
-  { speed: 40, color: [0.835, 0.243, 0.31] },
+  { speed: 0, color: [0.30, 0.60, 0.90] },
+  { speed: 2, color: [0.20, 0.78, 0.80] },
+  { speed: 5, color: [0.18, 0.85, 0.45] },
+  { speed: 8, color: [0.55, 0.90, 0.20] },
+  { speed: 12, color: [0.95, 0.85, 0.15] },
+  { speed: 18, color: [0.95, 0.55, 0.10] },
+  { speed: 25, color: [0.92, 0.28, 0.15] },
+  { speed: 35, color: [0.80, 0.10, 0.20] },
 ];
 
 function clamp(value: number, min: number, max: number): number {
@@ -218,7 +218,7 @@ function restoreGLState(gl: WebGL2RenderingContext, state: SavedGLState, attribs
 function interpolateColor(speed: number): [number, number, number, number] {
   if (speed <= COLOR_STOPS[0].speed) {
     const [r, g, b] = COLOR_STOPS[0].color;
-    return [r, g, b, 0.6];
+    return [r, g, b, 0.75];
   }
 
   for (let index = 1; index < COLOR_STOPS.length; index++) {
@@ -230,7 +230,7 @@ function interpolateColor(speed: number): [number, number, number, number] {
         lerp(left.color[0], right.color[0], t),
         lerp(left.color[1], right.color[1], t),
         lerp(left.color[2], right.color[2], t),
-        clamp(0.6 + speed * 0.012, 0.6, 0.95),
+        clamp(0.75 + speed * 0.015, 0.75, 0.95),
       ];
     }
   }
@@ -265,10 +265,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private particleFade = new Float32Array(0); // 0→1 fade-in to prevent flickering
   private vertexData = new Float32Array(0);
 
-  private elevationGrid = new Float32Array(0);
   private lastFrameTime = 0;
-  private lastElevationRefresh = 0;
-  private missingElevationSamples = 0;
 
   // Viewport tracking for particle redistribution
   private lastViewportCenterLng = 0;
@@ -305,9 +302,6 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.redistributeParticles();
 
     const now = performance.now();
-    if (this.missingElevationSamples > 0 && now - this.lastElevationRefresh > ELEVATION_REFRESH_MS) {
-      this.rebuildElevationGrid();
-    }
 
     // Advance wind blend factor
     if (this.windBlendT < 1) {
@@ -384,7 +378,6 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.windData = windData;
     this.bounds = bounds;
     this.hasWindData = true;
-    this.rebuildElevationGrid();
 
     if (!hadData || this.particleCount === 0) {
       this.configureParticles();
@@ -477,30 +470,6 @@ export class WindCustomLayer implements CustomLayerInterface {
     }
   }
 
-  private rebuildElevationGrid(): void {
-    if (!this.map || !this.bounds) return;
-
-    const resolution = ELEVATION_GRID_SIZE;
-    const grid = new Float32Array(resolution * resolution);
-    let missingCount = 0;
-
-    for (let y = 0; y < resolution; y++) {
-      const lat = lerp(this.bounds.north, this.bounds.south, y / (resolution - 1));
-      for (let x = 0; x < resolution; x++) {
-        const lng = lerp(this.bounds.west, this.bounds.east, x / (resolution - 1));
-        const terrainElevation = this.map.queryTerrainElevation([lng, lat]);
-        if (terrainElevation == null) {
-          missingCount++;
-        }
-        grid[y * resolution + x] = terrainElevation ?? 0;
-      }
-    }
-
-    this.elevationGrid = grid;
-    this.missingElevationSamples = missingCount;
-    this.lastElevationRefresh = performance.now();
-  }
-
   private advanceParticles(now: number): void {
     if (!this.bounds || !this.windData) return;
 
@@ -555,11 +524,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     if (!this.map || !this.gl || !this.vertexBuffer || this.particleCount === 0 || !this.bounds) return;
 
     const zoom = this.map.getZoom();
-    const centerLat = (this.bounds.north + this.bounds.south) / 2;
-    const cosLat = Math.cos(centerLat * Math.PI / 180);
     const metersPerDegreeLat = 111_320;
-    const metersPerDegreeLng = Math.max(1, cosLat * metersPerDegreeLat);
-    const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, zoom));
     const pixelScale = 1 / (512 * Math.pow(2, zoom));
 
     for (let index = 0; index < this.particleCount; index++) {
@@ -570,6 +535,11 @@ export class WindCustomLayer implements CustomLayerInterface {
       const wu = this.particleWindU[index];
       const wv = this.particleWindV[index];
       const fade = this.particleFade[index];
+
+      // Per-particle latitude correction to match advanceParticles() direction
+      const cosLat = Math.cos(lat * Math.PI / 180);
+      const metersPerDegreeLng = Math.max(1, cosLat * metersPerDegreeLat);
+      const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, zoom));
 
       // Arrow length in screen-pixel equivalents (bigger & longer)
       const arrowPixels = ARROW_BASE_PX + speed * ARROW_SPEED_SCALE;
@@ -786,23 +756,8 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   private sampleElevation(lng: number, lat: number): number {
-    if (!this.bounds || this.elevationGrid.length === 0) {
-      return 0;
-    }
-
-    const resolution = ELEVATION_GRID_SIZE;
-    const nx = clamp((lng - this.bounds.west) / (this.bounds.east - this.bounds.west), 0, 1) * (resolution - 1);
-    const ny = clamp((this.bounds.north - lat) / (this.bounds.north - this.bounds.south), 0, 1) * (resolution - 1);
-    const x0 = Math.floor(nx);
-    const y0 = Math.floor(ny);
-    const x1 = Math.min(resolution - 1, x0 + 1);
-    const y1 = Math.min(resolution - 1, y0 + 1);
-    const tx = nx - x0;
-    const ty = ny - y0;
-
-    const top = lerp(this.elevationGrid[y0 * resolution + x0], this.elevationGrid[y0 * resolution + x1], tx);
-    const bottom = lerp(this.elevationGrid[y1 * resolution + x0], this.elevationGrid[y1 * resolution + x1], tx);
-    return lerp(top, bottom, ty);
+    if (!this.map) return 0;
+    return this.map.queryTerrainElevation([lng, lat]) ?? 0;
   }
 
   private respawnParticle(index: number, randomAge: boolean): void {

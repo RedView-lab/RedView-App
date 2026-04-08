@@ -171,7 +171,8 @@ let _transparentBlob = null;
 async function getTransparentBlob() {
   if (!_transparentBlob) {
     const c = new OffscreenCanvas(1, 1);
-    c.getContext('2d');
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 1, 1);
     _transparentBlob = await c.convertToBlob({ type: 'image/png' });
   }
   return _transparentBlob;
@@ -221,6 +222,12 @@ async function handleOrthoRequest(z, x, y) {
     const url = buildOrthoTileURL(z, x, y);
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) return await transparentResponse();
+
+    // Validate that the IGN response is actually an image
+    const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+    if (!contentType.startsWith('image/')) {
+      return await transparentResponse();
+    }
 
     let response;
     if (classification === 'inside') {
