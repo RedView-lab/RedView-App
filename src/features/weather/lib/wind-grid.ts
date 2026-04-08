@@ -20,7 +20,7 @@ const SPACING_TABLE: [number, number][] = [
 ];
 
 const MIN_SPACING = 0.005;
-const MAX_POINTS = 30; // keep API calls small
+const MAX_POINTS = 60; // up to 2 API batches of 50 for higher density
 
 /**
  * Get grid spacing (degrees) for a given zoom level.

@@ -4,7 +4,7 @@ import type { WindData } from './wind-gl';
 // ── Configuration ─────────────────────────────────────────────────────
 
 /** Resolution of the wind texture (width × height pixels) */
-const TEX_SIZE = 128;
+const TEX_SIZE = 192;
 
 /** IDW (Inverse Distance Weighting) power parameter */
 const IDW_POWER = 2;

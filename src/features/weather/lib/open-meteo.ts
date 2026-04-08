@@ -55,10 +55,17 @@ async function fetchBatch(
   const lats = coords.map((c) => c.lat.toFixed(4)).join(',');
   const lngs = coords.map((c) => c.lng.toFixed(4)).join(',');
 
+  // Use Météo-France AROME HD (1.5km) when all points fall within France coverage
+  const inFrance = coords.every(
+    (c) => c.lat >= 41 && c.lat <= 52 && c.lng >= -6 && c.lng <= 10,
+  );
+  const modelParam = inFrance ? '&models=meteofrance_arome_france_hd' : '';
+
   const url =
     `${API_BASE}?latitude=${lats}&longitude=${lngs}` +
     `&current=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
-    `&wind_speed_unit=ms&timeformat=unixtime&cell_selection=nearest`;
+    `&wind_speed_unit=ms&timeformat=unixtime&cell_selection=nearest` +
+    modelParam;
 
   let lastError: Error | null = null;
 

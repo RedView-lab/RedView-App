@@ -11,9 +11,11 @@ import {
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-const DEBOUNCE_MS = 4000;
-const MIN_FETCH_INTERVAL_MS = 30_000;
-const VIEWPORT_SHIFT_THRESHOLD = 0.4;
+const DEBOUNCE_MS = 1500;
+const MIN_FETCH_INTERVAL_MS = 10_000;
+const VIEWPORT_SHIFT_THRESHOLD = 0.3;
+const ZOOM_DELTA_THRESHOLD = 0.8;
+const BOUNDS_PADDING = 0.5;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -62,6 +64,7 @@ export function useWind(
 
   const abortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
+  const lastFetchBoundsRef = useRef<{ north: number; south: number; east: number; west: number } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
@@ -76,10 +79,28 @@ export function useWind(
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
       if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS) return;
 
+      // Check if existing data already covers current viewport
+      if (lastFetchBoundsRef.current && lastBoundsRef.current) {
+        const fb = lastFetchBoundsRef.current;
+        const viewportCovered =
+          bounds.west >= fb.west && bounds.east <= fb.east &&
+          bounds.south >= fb.south && bounds.north <= fb.north;
+
+        if (viewportCovered) {
+          // Data covers viewport — only refetch on significant zoom change
+          const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
+          if (zoomDelta < ZOOM_DELTA_THRESHOLD * 2) {
+            lastBoundsRef.current = bounds;
+            return;
+          }
+        }
+      }
+
+      // OR gate: refetch if viewport shifted significantly OR zoom changed
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
         const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
-        if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < 1.0) return;
+        if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < ZOOM_DELTA_THRESHOLD) return;
       }
 
       abortRef.current?.abort();
@@ -89,9 +110,9 @@ export function useWind(
       setState((s) => ({ ...s, loading: true, error: null }));
 
       try {
-        // Expand bounds by 30% margin so small pans don't need re-fetch
-        const latPad = (bounds.north - bounds.south) * 0.3;
-        const lngPad = (bounds.east - bounds.west) * 0.3;
+        // Expand bounds by 50% margin to create a data reservoir
+        const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
+        const lngPad = (bounds.east - bounds.west) * BOUNDS_PADDING;
         const fetchBounds = {
           north: Math.min(90, bounds.north + latPad),
           south: Math.max(-90, bounds.south - latPad),
@@ -110,6 +131,7 @@ export function useWind(
 
         updateWindParticles(m, sparsePoints, fetchBounds);
         lastBoundsRef.current = bounds;
+        lastFetchBoundsRef.current = fetchBounds;
         lastFetchTimeRef.current = Date.now();
 
         setState({
@@ -158,6 +180,7 @@ export function useWind(
         removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
+        lastFetchBoundsRef.current = null;
         setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
       };
     } else {
@@ -167,6 +190,7 @@ export function useWind(
         removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
+        lastFetchBoundsRef.current = null;
         clearWindCache();
         setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
       }

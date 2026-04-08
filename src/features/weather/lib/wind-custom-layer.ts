@@ -9,10 +9,9 @@ import type { WindData } from './wind-gl';
 const LAYER_ID = 'wind-particles';
 const VERTEX_STRIDE = 7; // x, y, z, r, g, b, a
 const VERTS_PER_ARROW = 9; // 3 triangles: arrowhead(3) + body quad(6)
-const ELEVATION_GRID_SIZE = 56;
-const MIN_PARTICLES = 600;
-const MAX_PARTICLES = 1800;
-const PARTICLE_ALTITUDE_OFFSET = 6;
+const ELEVATION_GRID_SIZE = 80;
+const FIXED_PARTICLE_COUNT = 1000;
+const PARTICLE_ALTITUDE_OFFSET = 25;
 const MAX_DELTA_SECONDS = 0.05;
 const MIN_PARTICLE_LIFE = 5;
 const MAX_PARTICLE_LIFE = 14;
@@ -63,6 +62,9 @@ interface SavedGLState {
   arrayBuffer: WebGLBuffer | null;
   viewport: Int32Array;
   attribEnabled: boolean[];
+  polygonOffsetFill: boolean;
+  polygonOffsetFactor: number;
+  polygonOffsetUnits: number;
 }
 
 interface WindSample {
@@ -177,6 +179,9 @@ function saveGLState(gl: WebGL2RenderingContext, attribs: number[]): SavedGLStat
     attribEnabled: attribs.map((attrib) =>
       attrib >= 0 ? Boolean(gl.getVertexAttrib(attrib, gl.VERTEX_ATTRIB_ARRAY_ENABLED)) : false,
     ),
+    polygonOffsetFill: gl.isEnabled(gl.POLYGON_OFFSET_FILL),
+    polygonOffsetFactor: gl.getParameter(gl.POLYGON_OFFSET_FACTOR),
+    polygonOffsetUnits: gl.getParameter(gl.POLYGON_OFFSET_UNITS),
   };
 }
 
@@ -195,6 +200,9 @@ function restoreGLState(gl: WebGL2RenderingContext, state: SavedGLState, attribs
   gl.bindBuffer(gl.ARRAY_BUFFER, state.arrayBuffer);
   gl.viewport(state.viewport[0], state.viewport[1], state.viewport[2], state.viewport[3]);
   gl.activeTexture(state.activeTexture);
+
+  if (state.polygonOffsetFill) gl.enable(gl.POLYGON_OFFSET_FILL); else gl.disable(gl.POLYGON_OFFSET_FILL);
+  gl.polygonOffset(state.polygonOffsetFactor, state.polygonOffsetUnits);
 
   for (let index = 0; index < attribs.length; index++) {
     const attrib = attribs[index];
@@ -261,7 +269,17 @@ export class WindCustomLayer implements CustomLayerInterface {
   private lastFrameTime = 0;
   private lastElevationRefresh = 0;
   private missingElevationSamples = 0;
-  private lastConfiguredZoom = -1;
+
+  // Viewport tracking for particle redistribution
+  private lastViewportCenterLng = 0;
+  private lastViewportCenterLat = 0;
+  private lastViewportZoom = -1;
+
+  // Wind data blending for smooth transitions (Phase 5)
+  private prevWindData: WindData | null = null;
+  private prevBounds: WindBounds | null = null;
+  private windBlendT = 1; // 0→1 blend from prev→current
+  private windBlendStart = 0;
 
   onAdd(map: MapboxMap, gl: WebGL2RenderingContext): void {
     this.map = map;
@@ -278,13 +296,23 @@ export class WindCustomLayer implements CustomLayerInterface {
       return;
     }
 
-    if (Math.abs(this.map.getZoom() - this.lastConfiguredZoom) > 1.5) {
-      this.resizeParticles();
+    // Initialize particles on first frame if needed
+    if (this.particleCount === 0) {
+      this.configureParticles();
     }
+
+    // Redistribute particles when viewport changes significantly
+    this.redistributeParticles();
 
     const now = performance.now();
     if (this.missingElevationSamples > 0 && now - this.lastElevationRefresh > ELEVATION_REFRESH_MS) {
       this.rebuildElevationGrid();
+    }
+
+    // Advance wind blend factor
+    if (this.windBlendT < 1) {
+      const elapsed = (now - this.windBlendStart) / 1000;
+      this.windBlendT = clamp(elapsed / 0.5, 0, 1); // 0.5s blend duration
     }
 
     this.advanceParticles(now);
@@ -317,6 +345,8 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.depthMask(false);
     gl.disable(gl.STENCIL_TEST);
     gl.disable(gl.CULL_FACE);
+    gl.enable(gl.POLYGON_OFFSET_FILL);
+    gl.polygonOffset(-1, -1);
 
     gl.drawArrays(gl.TRIANGLES, 0, this.particleCount * VERTS_PER_ARROW);
 
@@ -342,18 +372,24 @@ export class WindCustomLayer implements CustomLayerInterface {
 
   setWind(windData: WindData, bounds: WindBounds): void {
     const hadData = this.hasWindData;
+
+    // Keep old data for smooth blending
+    if (hadData && this.windData && this.bounds) {
+      this.prevWindData = this.windData;
+      this.prevBounds = { ...this.bounds };
+      this.windBlendT = 0;
+      this.windBlendStart = performance.now();
+    }
+
     this.windData = windData;
     this.bounds = bounds;
     this.hasWindData = true;
     this.rebuildElevationGrid();
 
     if (!hadData || this.particleCount === 0) {
-      // First load: full init
       this.configureParticles();
-    } else {
-      // Data update: respawn only out-of-bounds particles
-      this.clampParticlesToBounds();
     }
+    // No clampParticlesToBounds needed — redistributeParticles handles viewport changes each frame
 
     this.map?.triggerRepaint();
   }
@@ -361,9 +397,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private configureParticles(): void {
     if (!this.map || !this.bounds) return;
 
-    const nextCount = clamp(Math.round(400 + this.map.getZoom() * 80), MIN_PARTICLES, MAX_PARTICLES);
-    this.particleCount = nextCount;
-    this.lastConfiguredZoom = this.map.getZoom();
+    this.particleCount = FIXED_PARTICLE_COUNT;
 
     this.particlePositions = new Float32Array(this.particleCount * 2);
     this.particleAges = new Float32Array(this.particleCount);
@@ -377,65 +411,68 @@ export class WindCustomLayer implements CustomLayerInterface {
     for (let index = 0; index < this.particleCount; index++) {
       this.respawnParticle(index, true);
     }
-  }
 
-  /** Resize particle arrays when zoom changes, preserving existing particles. */
-  private resizeParticles(): void {
-    if (!this.map || !this.bounds) return;
-
-    const nextCount = clamp(Math.round(400 + this.map.getZoom() * 80), MIN_PARTICLES, MAX_PARTICLES);
-    if (nextCount === this.particleCount) {
-      this.lastConfiguredZoom = this.map.getZoom();
-      return;
-    }
-
-    const prevCount = this.particleCount;
-    const keepCount = Math.min(prevCount, nextCount);
-
-    const newPositions = new Float32Array(nextCount * 2);
-    const newAges = new Float32Array(nextCount);
-    const newLives = new Float32Array(nextCount);
-    const newSpeeds = new Float32Array(nextCount);
-    const newWindU = new Float32Array(nextCount);
-    const newWindV = new Float32Array(nextCount);
-    const newFade = new Float32Array(nextCount);
-
-    // Copy existing particles
-    newPositions.set(this.particlePositions.subarray(0, keepCount * 2));
-    newAges.set(this.particleAges.subarray(0, keepCount));
-    newLives.set(this.particleLives.subarray(0, keepCount));
-    newSpeeds.set(this.particleSpeeds.subarray(0, keepCount));
-    newWindU.set(this.particleWindU.subarray(0, keepCount));
-    newWindV.set(this.particleWindV.subarray(0, keepCount));
-    newFade.set(this.particleFade.subarray(0, keepCount));
-
-    this.particlePositions = newPositions;
-    this.particleAges = newAges;
-    this.particleLives = newLives;
-    this.particleSpeeds = newSpeeds;
-    this.particleWindU = newWindU;
-    this.particleWindV = newWindV;
-    this.particleFade = newFade;
-    this.vertexData = new Float32Array(nextCount * VERTS_PER_ARROW * VERTEX_STRIDE);
-    this.particleCount = nextCount;
-    this.lastConfiguredZoom = this.map.getZoom();
-
-    // Spawn new particles if we grew
-    for (let index = keepCount; index < nextCount; index++) {
-      this.respawnParticle(index, true);
+    // Track initial viewport
+    const b = this.map.getBounds();
+    if (b) {
+      this.lastViewportCenterLng = (b.getWest() + b.getEast()) / 2;
+      this.lastViewportCenterLat = (b.getSouth() + b.getNorth()) / 2;
+      this.lastViewportZoom = this.map.getZoom();
     }
   }
 
-  /** Respawn only particles that landed outside new bounds. */
-  private clampParticlesToBounds(): void {
-    if (!this.bounds) return;
+  /**
+   * Redistribute particles when the viewport changes.
+   * Particles outside the current viewport are respawned inside it with fade-in.
+   * This keeps density constant regardless of zoom/pan state.
+   */
+  private redistributeParticles(): void {
+    if (!this.map || !this.bounds || this.particleCount === 0) return;
+
+    const b = this.map.getBounds();
+    if (!b) return;
+
+    const vpWest = b.getWest();
+    const vpEast = b.getEast();
+    const vpSouth = b.getSouth();
+    const vpNorth = b.getNorth();
+    const vpCenterLng = (vpWest + vpEast) / 2;
+    const vpCenterLat = (vpSouth + vpNorth) / 2;
+    const vpZoom = this.map.getZoom();
+
+    // Check if viewport has shifted meaningfully
+    const vpW = vpEast - vpWest;
+    const vpH = vpNorth - vpSouth;
+    if (vpW <= 0 || vpH <= 0) return;
+
+    const shiftLng = Math.abs(vpCenterLng - this.lastViewportCenterLng) / vpW;
+    const shiftLat = Math.abs(vpCenterLat - this.lastViewportCenterLat) / vpH;
+    const zoomDelta = Math.abs(vpZoom - this.lastViewportZoom);
+
+    // Only redistribute when meaningful viewport change occurred
+    if (shiftLng < 0.05 && shiftLat < 0.05 && zoomDelta < 0.3) return;
+
+    this.lastViewportCenterLng = vpCenterLng;
+    this.lastViewportCenterLat = vpCenterLat;
+    this.lastViewportZoom = vpZoom;
+
+    // Small margin so particles slightly outside viewport survive
+    const marginLng = vpW * 0.1;
+    const marginLat = vpH * 0.1;
 
     for (let index = 0; index < this.particleCount; index++) {
-      const positionIndex = index * 2;
-      const lng = this.particlePositions[positionIndex];
-      const lat = this.particlePositions[positionIndex + 1];
-      if (!this.isWithinBounds(lng, lat, 0.05)) {
-        this.respawnParticle(index, true);
+      const posIdx = index * 2;
+      const lng = this.particlePositions[posIdx];
+      const lat = this.particlePositions[posIdx + 1];
+
+      // Is particle visible in current viewport (with margin)?
+      const inViewport =
+        lng >= vpWest - marginLng && lng <= vpEast + marginLng &&
+        lat >= vpSouth - marginLat && lat <= vpNorth + marginLat;
+
+      if (!inViewport) {
+        // Respawn inside current viewport with fade-in
+        this.respawnParticleInViewport(index, vpWest, vpEast, vpSouth, vpNorth);
       }
     }
   }
@@ -504,7 +541,7 @@ export class WindCustomLayer implements CustomLayerInterface {
       lng += (wind.u * deltaSeconds * simulationScale) / metersPerDegreeLng;
       lat += (wind.v * deltaSeconds * simulationScale) / metersPerDegreeLat;
 
-      if (!this.isWithinBounds(lng, lat, 0.01)) {
+      if (!this.isInsideDataBounds(lng, lat) && !this.isInViewport(lng, lat)) {
         this.respawnParticle(index, false);
         continue;
       }
@@ -686,20 +723,35 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   private sampleWind(lng: number, lat: number): WindSample {
-    if (!this.windData || !this.bounds) {
+    const current = this.sampleWindFrom(lng, lat, this.windData, this.bounds);
+
+    // Blend with previous wind data during transition
+    if (this.windBlendT < 1 && this.prevWindData && this.prevBounds) {
+      const prev = this.sampleWindFrom(lng, lat, this.prevWindData, this.prevBounds);
+      const t = this.windBlendT;
+      const u = lerp(prev.u, current.u, t);
+      const v = lerp(prev.v, current.v, t);
+      return { u, v, speed: Math.hypot(u, v) };
+    }
+
+    return current;
+  }
+
+  private sampleWindFrom(lng: number, lat: number, windData: WindData | null, bounds: WindBounds | null): WindSample {
+    if (!windData || !bounds) {
       return { u: 0, v: 0, speed: 0 };
     }
 
-    const width = this.windData.width;
-    const height = this.windData.height;
-    const rangeLng = this.bounds.east - this.bounds.west;
-    const rangeLat = this.bounds.north - this.bounds.south;
+    const width = windData.width;
+    const height = windData.height;
+    const rangeLng = bounds.east - bounds.west;
+    const rangeLat = bounds.north - bounds.south;
     if (rangeLng <= 0 || rangeLat <= 0) {
       return { u: 0, v: 0, speed: 0 };
     }
 
-    const nx = clamp((lng - this.bounds.west) / rangeLng, 0, 1) * (width - 1);
-    const ny = clamp((this.bounds.north - lat) / rangeLat, 0, 1) * (height - 1);
+    const nx = clamp((lng - bounds.west) / rangeLng, 0, 1) * (width - 1);
+    const ny = clamp((bounds.north - lat) / rangeLat, 0, 1) * (height - 1);
     const x0 = Math.floor(nx);
     const y0 = Math.floor(ny);
     const x1 = Math.min(width - 1, x0 + 1);
@@ -707,10 +759,10 @@ export class WindCustomLayer implements CustomLayerInterface {
     const tx = nx - x0;
     const ty = ny - y0;
 
-    const topLeft = this.readWindTexel(x0, y0);
-    const topRight = this.readWindTexel(x1, y0);
-    const bottomLeft = this.readWindTexel(x0, y1);
-    const bottomRight = this.readWindTexel(x1, y1);
+    const topLeft = this.readWindTexelFrom(x0, y0, windData);
+    const topRight = this.readWindTexelFrom(x1, y0, windData);
+    const bottomLeft = this.readWindTexelFrom(x0, y1, windData);
+    const bottomRight = this.readWindTexelFrom(x1, y1, windData);
 
     const uTop = lerp(topLeft.u, topRight.u, tx);
     const uBottom = lerp(bottomLeft.u, bottomRight.u, tx);
@@ -722,18 +774,14 @@ export class WindCustomLayer implements CustomLayerInterface {
     return { u, v, speed: Math.hypot(u, v) };
   }
 
-  private readWindTexel(x: number, y: number): { u: number; v: number } {
-    if (!this.windData) {
-      return { u: 0, v: 0 };
-    }
-
-    const index = (y * this.windData.width + x) * 4;
-    const uNorm = this.windData.image[index] / 255;
-    const vNorm = this.windData.image[index + 1] / 255;
+  private readWindTexelFrom(x: number, y: number, windData: WindData): { u: number; v: number } {
+    const index = (y * windData.width + x) * 4;
+    const uNorm = windData.image[index] / 255;
+    const vNorm = windData.image[index + 1] / 255;
 
     return {
-      u: lerp(this.windData.uMin, this.windData.uMax, uNorm),
-      v: lerp(this.windData.vMin, this.windData.vMax, vNorm),
+      u: lerp(windData.uMin, windData.uMax, uNorm),
+      v: lerp(windData.vMin, windData.vMax, vNorm),
     };
   }
 
@@ -758,27 +806,66 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   private respawnParticle(index: number, randomAge: boolean): void {
-    if (!this.bounds) return;
+    // Prefer spawning within the current viewport for uniform density
+    if (this.map) {
+      const b = this.map.getBounds();
+      if (b) {
+        this.respawnParticleInViewport(index, b.getWest(), b.getEast(), b.getSouth(), b.getNorth());
+        if (randomAge) {
+          this.particleAges[index] = Math.random() * this.particleLives[index];
+          this.particleFade[index] = Math.min(1, Math.random() + 0.3);
+        }
+        return;
+      }
+    }
 
+    // Fallback: spawn in data bounds
+    if (!this.bounds) return;
     const positionIndex = index * 2;
     this.particlePositions[positionIndex] = lerp(this.bounds.west, this.bounds.east, Math.random());
     this.particlePositions[positionIndex + 1] = lerp(this.bounds.south, this.bounds.north, Math.random());
     this.particleLives[index] = lerp(MIN_PARTICLE_LIFE, MAX_PARTICLE_LIFE, Math.random());
     this.particleAges[index] = randomAge ? Math.random() * this.particleLives[index] : 0;
     this.particleSpeeds[index] = 0;
-    // Start fade at a random point if randomAge (initial spawn), else 0 for smooth fade-in
     this.particleFade[index] = randomAge ? Math.min(1, Math.random() + 0.3) : 0;
   }
 
-  private isWithinBounds(lng: number, lat: number, marginRatio: number): boolean {
+  private respawnParticleInViewport(
+    index: number,
+    vpWest: number, vpEast: number, vpSouth: number, vpNorth: number,
+  ): void {
+    const positionIndex = index * 2;
+    this.particlePositions[positionIndex] = lerp(vpWest, vpEast, Math.random());
+    this.particlePositions[positionIndex + 1] = lerp(vpSouth, vpNorth, Math.random());
+    this.particleLives[index] = lerp(MIN_PARTICLE_LIFE, MAX_PARTICLE_LIFE, Math.random());
+    this.particleAges[index] = 0;
+    this.particleSpeeds[index] = 0;
+    this.particleFade[index] = 0; // smooth fade-in
+  }
+
+  /** Check if position is within the wind data bounds (for texture sampling validity) */
+  private isInsideDataBounds(lng: number, lat: number): boolean {
     if (!this.bounds) return false;
-    const lngMargin = (this.bounds.east - this.bounds.west) * marginRatio;
-    const latMargin = (this.bounds.north - this.bounds.south) * marginRatio;
     return (
-      lng >= this.bounds.west - lngMargin &&
-      lng <= this.bounds.east + lngMargin &&
-      lat >= this.bounds.south - latMargin &&
-      lat <= this.bounds.north + latMargin
+      lng >= this.bounds.west &&
+      lng <= this.bounds.east &&
+      lat >= this.bounds.south &&
+      lat <= this.bounds.north
+    );
+  }
+
+  /** Check if position is within the current map viewport (with 10% margin) */
+  private isInViewport(lng: number, lat: number): boolean {
+    if (!this.map) return false;
+    const b = this.map.getBounds();
+    if (!b) return false;
+    const w = b.getEast() - b.getWest();
+    const h = b.getNorth() - b.getSouth();
+    const mLng = w * 0.1;
+    const mLat = h * 0.1;
+    return (
+      lng >= b.getWest() - mLng && lng <= b.getEast() + mLng &&
+      lat >= b.getSouth() - mLat && lat <= b.getNorth() + mLat
     );
   }
 
