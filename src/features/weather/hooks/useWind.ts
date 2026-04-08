@@ -11,11 +11,11 @@ import {
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-const DEBOUNCE_MS = 1500;
-const MIN_FETCH_INTERVAL_MS = 10_000;
-const VIEWPORT_SHIFT_THRESHOLD = 0.3;
-const ZOOM_DELTA_THRESHOLD = 0.8;
-const BOUNDS_PADDING = 0.5;
+const DEBOUNCE_MS = 800;
+const MIN_FETCH_INTERVAL_MS = 5_000;
+const VIEWPORT_SHIFT_THRESHOLD = 0.25;
+const ZOOM_DELTA_THRESHOLD = 0.6;
+const BOUNDS_PADDING = 0.8;
 
 // ── Viewport helpers ──────────────────────────────────────────────────
 
@@ -69,15 +69,27 @@ export function useWind(
   const layerInitRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
 
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // ── Fetch sparse API data → build wind texture → feed particles ──
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
       const bounds = getViewportBounds(m);
 
-      // Skip if we fetched recently (global rate-limit guard)
+      // Rate-limit guard: if too soon, schedule a deferred retry
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
-      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS) return;
+      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS) {
+        // Schedule retry after cooldown expires (only if not already scheduled)
+        if (!retryTimerRef.current) {
+          const delay = MIN_FETCH_INTERVAL_MS - timeSinceLastFetch + 100;
+          retryTimerRef.current = setTimeout(() => {
+            retryTimerRef.current = null;
+            fetchForViewport(m);
+          }, delay);
+        }
+        return;
+      }
 
       // Check if existing data already covers current viewport
       if (lastFetchBoundsRef.current && lastBoundsRef.current) {
@@ -176,6 +188,7 @@ export function useWind(
       return () => {
         map.off('moveend', onMoveEnd);
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
         abortRef.current?.abort();
         removeWindParticles(map);
         layerInitRef.current = false;
@@ -187,6 +200,7 @@ export function useWind(
       if (layerInitRef.current) {
         abortRef.current?.abort();
         if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
         removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;

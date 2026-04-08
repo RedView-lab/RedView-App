@@ -9,7 +9,6 @@ import type { WindData } from './wind-gl';
 const LAYER_ID = 'wind-particles';
 const VERTEX_STRIDE = 7; // x, y, z, r, g, b, a
 const VERTS_PER_ARROW = 9; // 3 triangles: arrowhead(3) + body quad(6)
-const FIXED_PARTICLE_COUNT = 1000;
 const PARTICLE_ALTITUDE_OFFSET = 2;
 const MAX_DELTA_SECONDS = 0.05;
 const MIN_PARTICLE_LIFE = 5;
@@ -18,11 +17,20 @@ const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
 // Arrow geometry proportions
 const HEAD_LENGTH_RATIO = 0.32; // arrowhead is 32% of total arrow length
-const SHOULDER_HW_PX = 14; // arrowhead half-width in pixels
-const BODY_HW_PX = 4; // body half-width in pixels
 const TAIL_TAPER = 0.5; // tail narrows to 50% of body width
-const ARROW_BASE_PX = 80; // base arrow length in pixels (at 0 wind speed)
-const ARROW_SPEED_SCALE = 4; // extra pixels per m/s of wind speed
+
+// Zoom-adaptive arrow sizing: lerp between these based on zoom
+const ARROW_PX_ZOOM_LOW = 22;   // arrow base length at zoom ≤5
+const ARROW_PX_ZOOM_HIGH = 90;  // arrow base length at zoom ≥14
+const ARROW_SPEED_SCALE_LOW = 1.0;
+const ARROW_SPEED_SCALE_HIGH = 5.0;
+const SHOULDER_HW_LOW = 4;      // half-width at zoom ≤5
+const SHOULDER_HW_HIGH = 16;    // half-width at zoom ≥14
+const BODY_HW_LOW = 1.2;
+const BODY_HW_HIGH = 5;
+
+// Screen-space minimum distance (px) between arrow tips to prevent overlap
+const MIN_ARROW_SPACING_PX = 55;
 
 // Direction temporal smoothing factor (0→1: lower = smoother)
 const DIRECTION_SMOOTH = 0.25;
@@ -258,6 +266,8 @@ export class WindCustomLayer implements CustomLayerInterface {
   private hasWindData = false;
 
   private particleCount = 0;
+  private maxParticleCount = 0; // allocated size
+  private activeParticleCount = 0; // how many pass the anti-overlap filter
   private particlePositions = new Float32Array(0);
   private particleAges = new Float32Array(0);
   private particleLives = new Float32Array(0);
@@ -265,6 +275,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   private particleWindU = new Float32Array(0);
   private particleWindV = new Float32Array(0);
   private particleFade = new Float32Array(0); // 0→1 fade-in to prevent flickering
+  private particleVisible = new Uint8Array(0); // 1 = visible (passes spacing filter)
   private vertexData = new Float32Array(0);
 
   private lastFrameTime = 0;
@@ -312,6 +323,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     }
 
     this.advanceParticles(now);
+    this.resolveOverlaps();
     this.rebuildVertexData();
   }
 
@@ -344,7 +356,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.enable(gl.POLYGON_OFFSET_FILL);
     gl.polygonOffset(-1, -1);
 
-    gl.drawArrays(gl.TRIANGLES, 0, this.particleCount * VERTS_PER_ARROW);
+    gl.drawArrays(gl.TRIANGLES, 0, this.activeParticleCount * VERTS_PER_ARROW);
 
     restoreGLState(gl, savedState, attribs);
     this.map?.triggerRepaint();
@@ -392,16 +404,21 @@ export class WindCustomLayer implements CustomLayerInterface {
   private configureParticles(): void {
     if (!this.map || !this.bounds) return;
 
-    this.particleCount = FIXED_PARTICLE_COUNT;
+    // Zoom-adaptive particle count: fewer at low zoom, more at high zoom
+    const zoom = this.map.getZoom();
+    this.particleCount = Math.round(clamp(300 + zoom * 80, 400, 1400));
+    this.maxParticleCount = 1400; // always allocate max to avoid re-allocation
+    this.activeParticleCount = this.particleCount;
 
-    this.particlePositions = new Float32Array(this.particleCount * 2);
-    this.particleAges = new Float32Array(this.particleCount);
-    this.particleLives = new Float32Array(this.particleCount);
-    this.particleSpeeds = new Float32Array(this.particleCount);
-    this.particleWindU = new Float32Array(this.particleCount);
-    this.particleWindV = new Float32Array(this.particleCount);
-    this.particleFade = new Float32Array(this.particleCount);
-    this.vertexData = new Float32Array(this.particleCount * VERTS_PER_ARROW * VERTEX_STRIDE);
+    this.particlePositions = new Float32Array(this.maxParticleCount * 2);
+    this.particleAges = new Float32Array(this.maxParticleCount);
+    this.particleLives = new Float32Array(this.maxParticleCount);
+    this.particleSpeeds = new Float32Array(this.maxParticleCount);
+    this.particleWindU = new Float32Array(this.maxParticleCount);
+    this.particleWindV = new Float32Array(this.maxParticleCount);
+    this.particleFade = new Float32Array(this.maxParticleCount);
+    this.particleVisible = new Uint8Array(this.maxParticleCount);
+    this.vertexData = new Float32Array(this.maxParticleCount * VERTS_PER_ARROW * VERTEX_STRIDE);
 
     for (let index = 0; index < this.particleCount; index++) {
       this.respawnParticle(index, true);
@@ -450,6 +467,16 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.lastViewportCenterLng = vpCenterLng;
     this.lastViewportCenterLat = vpCenterLat;
     this.lastViewportZoom = vpZoom;
+
+    // Adjust active particle count for zoom level
+    const newCount = Math.round(clamp(300 + vpZoom * 80, 400, 1400));
+    if (newCount > this.particleCount) {
+      // Spawn new particles
+      for (let i = this.particleCount; i < newCount; i++) {
+        this.respawnParticleInViewport(i, vpWest, vpEast, vpSouth, vpNorth);
+      }
+    }
+    this.particleCount = newCount;
 
     // Small margin so particles slightly outside viewport survive
     const marginLng = vpW * 0.1;
@@ -531,6 +558,71 @@ export class WindCustomLayer implements CustomLayerInterface {
     }
   }
 
+  /**
+   * Screen-space overlap resolution (Windy.com-style).
+   * Projects all particle tips to screen-space pixels, then uses a spatial
+   * hash grid to hide arrows that are too close to an already-visible arrow.
+   * The result is a uniform, non-overlapping distribution with stable density.
+   */
+  private resolveOverlaps(): void {
+    if (!this.map || this.particleCount === 0) return;
+
+    // Compute screen-space positions for all particles
+    const screenPositions = new Float32Array(this.particleCount * 2);
+    for (let i = 0; i < this.particleCount; i++) {
+      const lng = this.particlePositions[i * 2];
+      const lat = this.particlePositions[i * 2 + 1];
+      const pt = this.map.project([lng, lat]);
+      screenPositions[i * 2] = pt.x;
+      screenPositions[i * 2 + 1] = pt.y;
+    }
+
+    // Spatial hash grid for fast neighbor lookup
+    const cellSize = MIN_ARROW_SPACING_PX;
+    const occupied = new Map<number, true>();
+
+    // Sort by fade (prefer fully visible particles) for stable results
+    const indices = new Uint16Array(this.particleCount);
+    for (let i = 0; i < this.particleCount; i++) indices[i] = i;
+    indices.sort((a, b) => this.particleFade[b] - this.particleFade[a]);
+
+    let visibleCount = 0;
+    this.particleVisible.fill(0);
+
+    for (let k = 0; k < this.particleCount; k++) {
+      const i = indices[k];
+      const sx = screenPositions[i * 2];
+      const sy = screenPositions[i * 2 + 1];
+
+      // Cell coordinates in the spatial grid
+      const cx = Math.floor(sx / cellSize);
+      const cy = Math.floor(sy / cellSize);
+
+      // Check the 3x3 neighborhood for already-placed arrows
+      let tooClose = false;
+      outer:
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const key = (cx + dx) * 73856093 + (cy + dy) * 19349663; // hash
+          if (occupied.has(key)) {
+            tooClose = true;
+            break outer;
+          }
+        }
+      }
+
+      if (!tooClose) {
+        this.particleVisible[i] = 1;
+        visibleCount++;
+        // Mark this cell as occupied
+        const key = cx * 73856093 + cy * 19349663;
+        occupied.set(key, true);
+      }
+    }
+
+    this.activeParticleCount = visibleCount;
+  }
+
   private rebuildVertexData(): void {
     if (!this.map || !this.gl || !this.vertexBuffer || this.particleCount === 0 || !this.bounds) return;
 
@@ -538,7 +630,19 @@ export class WindCustomLayer implements CustomLayerInterface {
     const metersPerDegreeLat = 111_320;
     const pixelScale = 1 / (512 * Math.pow(2, zoom));
 
+    // Zoom-adaptive arrow dimensions
+    const zoomT = clamp((zoom - 5) / 9, 0, 1); // 0 at zoom≤5, 1 at zoom≥14
+    const arrowBasePx = lerp(ARROW_PX_ZOOM_LOW, ARROW_PX_ZOOM_HIGH, zoomT);
+    const arrowSpeedScale = lerp(ARROW_SPEED_SCALE_LOW, ARROW_SPEED_SCALE_HIGH, zoomT);
+    const shoulderHwPx = lerp(SHOULDER_HW_LOW, SHOULDER_HW_HIGH, zoomT);
+    const bodyHwPx = lerp(BODY_HW_LOW, BODY_HW_HIGH, zoomT);
+
+    let writeIndex = 0; // compact visible arrows to front of buffer
+
     for (let index = 0; index < this.particleCount; index++) {
+      // Skip hidden (overlapping) particles
+      if (!this.particleVisible[index]) continue;
+
       const positionIndex = index * 2;
       const lng = this.particlePositions[positionIndex];
       const lat = this.particlePositions[positionIndex + 1];
@@ -552,8 +656,8 @@ export class WindCustomLayer implements CustomLayerInterface {
       const metersPerDegreeLng = Math.max(1, cosLat * metersPerDegreeLat);
       const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, zoom));
 
-      // Arrow length in screen-pixel equivalents (bigger & longer)
-      const arrowPixels = ARROW_BASE_PX + speed * ARROW_SPEED_SCALE;
+      // Arrow length in screen-pixel equivalents (zoom-adaptive)
+      const arrowPixels = arrowBasePx + speed * arrowSpeedScale;
       const arrowMeters = arrowPixels * metersPerPx;
 
       // Wind direction (default east if calm)
@@ -596,9 +700,9 @@ export class WindCustomLayer implements CustomLayerInterface {
         perpY = 0;
       }
 
-      // Widths in Mercator units
-      const shoulderHW = SHOULDER_HW_PX * pixelScale;
-      const bodyHW = BODY_HW_PX * pixelScale;
+      // Widths in Mercator units (zoom-adaptive)
+      const shoulderHW = shoulderHwPx * pixelScale;
+      const bodyHW = bodyHwPx * pixelScale;
       const tailHW = bodyHW * TAIL_TAPER;
 
       // Color with fade-in applied
@@ -607,7 +711,7 @@ export class WindCustomLayer implements CustomLayerInterface {
       const neckAlpha = baseAlpha * 0.85 * fade;
       const tailAlpha = baseAlpha * 0.15 * fade;
 
-      const base = index * VERTS_PER_ARROW * VERTEX_STRIDE;
+      const base = writeIndex * VERTS_PER_ARROW * VERTEX_STRIDE;
 
       // ── Triangle 1: Arrowhead (Tip → ShoulderLeft → ShoulderRight) ──
 
@@ -695,11 +799,15 @@ export class WindCustomLayer implements CustomLayerInterface {
       this.vertexData[base + 60] = g;
       this.vertexData[base + 61] = b;
       this.vertexData[base + 62] = tailAlpha;
+
+      writeIndex++;
     }
 
+    // Upload only the compacted visible portion
+    const uploadSize = writeIndex * VERTS_PER_ARROW * VERTEX_STRIDE;
     const previousArrayBuffer = this.gl.getParameter(this.gl.ARRAY_BUFFER_BINDING) as WebGLBuffer | null;
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.vertexData, this.gl.DYNAMIC_DRAW);
+    this.gl.bufferData(this.gl.ARRAY_BUFFER, this.vertexData.subarray(0, uploadSize), this.gl.DYNAMIC_DRAW);
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, previousArrayBuffer);
   }
 
