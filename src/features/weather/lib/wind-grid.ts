@@ -67,21 +67,29 @@ export function computeWindGrid(
     spacing,
   };
 
-  const points: { lat: number; lng: number }[] = [];
+  let currentSpacing = config.spacing;
 
-  for (let lat = config.south; lat <= config.north; lat += config.spacing) {
-    for (let lng = config.west; lng <= config.east; lng += config.spacing) {
-      // Clamp to valid WGS84 range
+  // Iteratively widen spacing until point count fits within MAX_POINTS
+  // (avoids unbounded recursion when bounds are large at low zoom)
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const latSteps = Math.floor((config.north - config.south) / currentSpacing) + 1;
+    const lngSteps = Math.floor((config.east - config.west) / currentSpacing) + 1;
+    if (latSteps * lngSteps <= MAX_POINTS) break;
+    currentSpacing *= Math.sqrt((latSteps * lngSteps) / MAX_POINTS) * 1.05;
+  }
+
+  const points: { lat: number; lng: number }[] = [];
+  const snappedSouth = snapToGrid(bounds.south, currentSpacing);
+  const snappedWest = snapToGrid(bounds.west, currentSpacing);
+
+  for (let lat = snappedSouth; lat <= config.north; lat += currentSpacing) {
+    for (let lng = snappedWest; lng <= config.east; lng += currentSpacing) {
       const clampedLat = Math.max(-90, Math.min(90, Math.round(lat * 1e6) / 1e6));
       const clampedLng = Math.max(-180, Math.min(180, Math.round(lng * 1e6) / 1e6));
       points.push({ lat: clampedLat, lng: clampedLng });
+      if (points.length >= MAX_POINTS) break;
     }
-  }
-
-  // If too many points, increase spacing and recompute
-  if (points.length > MAX_POINTS) {
-    const ratio = Math.sqrt(points.length / MAX_POINTS);
-    return computeWindGrid(bounds, zoom - Math.log2(ratio));
+    if (points.length >= MAX_POINTS) break;
   }
 
   return points;
