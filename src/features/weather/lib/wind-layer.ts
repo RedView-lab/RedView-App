@@ -1,6 +1,6 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindPoint } from '../types';
-import { WindCustomLayer, WIND_LAYER_ID } from './wind-custom-layer';
+import { WindCustomLayer, WIND_LAYER_ID } from './wind';
 import { buildWindTexture } from './wind-texture';
 
 // ── Module-level singleton ────────────────────────────────────────────
