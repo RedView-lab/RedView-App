@@ -24,6 +24,8 @@ const TAIL_TAPER = 0.5; // tail narrows to 50% of body width
 const ARROW_BASE_PX = 80; // base arrow length in pixels (at 0 wind speed)
 const ARROW_SPEED_SCALE = 4; // extra pixels per m/s of wind speed
 
+// Direction temporal smoothing factor (0→1: lower = smoother)
+const DIRECTION_SMOOTH = 0.25;
 // Fade-in rate: particles reach full opacity in ~0.4s
 const FADE_IN_RATE = 2.5;
 
@@ -98,14 +100,14 @@ void main() {
 `;
 
 const COLOR_STOPS: Array<{ speed: number; color: [number, number, number] }> = [
-  { speed: 0, color: [0.30, 0.60, 0.90] },
-  { speed: 2, color: [0.20, 0.78, 0.80] },
-  { speed: 5, color: [0.18, 0.85, 0.45] },
-  { speed: 8, color: [0.55, 0.90, 0.20] },
-  { speed: 12, color: [0.95, 0.85, 0.15] },
-  { speed: 18, color: [0.95, 0.55, 0.10] },
-  { speed: 25, color: [0.92, 0.28, 0.15] },
-  { speed: 35, color: [0.80, 0.10, 0.20] },
+  { speed: 0, color: [0.25, 0.52, 0.96] },
+  { speed: 3, color: [0.10, 0.75, 0.85] },
+  { speed: 6, color: [0.05, 0.85, 0.35] },
+  { speed: 10, color: [0.70, 0.92, 0.10] },
+  { speed: 15, color: [0.98, 0.80, 0.05] },
+  { speed: 20, color: [0.98, 0.45, 0.05] },
+  { speed: 30, color: [0.90, 0.15, 0.12] },
+  { speed: 40, color: [0.70, 0.05, 0.40] },
 ];
 
 function clamp(value: number, min: number, max: number): number {
@@ -502,13 +504,22 @@ export class WindCustomLayer implements CustomLayerInterface {
       }
 
       const wind = this.sampleWind(lng, lat);
-      this.particleSpeeds[index] = wind.speed;
-      this.particleWindU[index] = wind.u;
-      this.particleWindV[index] = wind.v;
+
+      // Temporal smoothing: blend new wind with previous to avoid direction jitter
+      const prevSpeed = this.particleSpeeds[index];
+      if (prevSpeed > 0.01 && this.particleFade[index] > 0.1) {
+        this.particleSpeeds[index] = lerp(prevSpeed, wind.speed, DIRECTION_SMOOTH);
+        this.particleWindU[index] = lerp(this.particleWindU[index], wind.u, DIRECTION_SMOOTH);
+        this.particleWindV[index] = lerp(this.particleWindV[index], wind.v, DIRECTION_SMOOTH);
+      } else {
+        this.particleSpeeds[index] = wind.speed;
+        this.particleWindU[index] = wind.u;
+        this.particleWindV[index] = wind.v;
+      }
 
       const metersPerDegreeLng = Math.max(1, Math.cos((lat * Math.PI) / 180) * metersPerDegreeLat);
-      lng += (wind.u * deltaSeconds * simulationScale) / metersPerDegreeLng;
-      lat += (wind.v * deltaSeconds * simulationScale) / metersPerDegreeLat;
+      lng += (this.particleWindU[index] * deltaSeconds * simulationScale) / metersPerDegreeLng;
+      lat += (this.particleWindV[index] * deltaSeconds * simulationScale) / metersPerDegreeLat;
 
       if (!this.isInsideDataBounds(lng, lat) && !this.isInViewport(lng, lat)) {
         this.respawnParticle(index, false);
@@ -701,7 +712,7 @@ export class WindCustomLayer implements CustomLayerInterface {
       const t = this.windBlendT;
       const u = lerp(prev.u, current.u, t);
       const v = lerp(prev.v, current.v, t);
-      return { u, v, speed: Math.hypot(u, v) };
+      return { u, v, speed: lerp(prev.speed, current.speed, t) };
     }
 
     return current;
@@ -741,7 +752,17 @@ export class WindCustomLayer implements CustomLayerInterface {
 
     const u = lerp(uTop, uBottom, ty);
     const v = lerp(vTop, vBottom, ty);
-    return { u, v, speed: Math.hypot(u, v) };
+
+    // Read scalar speed from B channel (interpolated bilinearly)
+    const speedTopLeft = this.readSpeedTexelFrom(x0, y0, windData);
+    const speedTopRight = this.readSpeedTexelFrom(x1, y0, windData);
+    const speedBottomLeft = this.readSpeedTexelFrom(x0, y1, windData);
+    const speedBottomRight = this.readSpeedTexelFrom(x1, y1, windData);
+    const speedTop = lerp(speedTopLeft, speedTopRight, tx);
+    const speedBottom = lerp(speedBottomLeft, speedBottomRight, tx);
+    const speed = lerp(speedTop, speedBottom, ty);
+
+    return { u, v, speed };
   }
 
   private readWindTexelFrom(x: number, y: number, windData: WindData): { u: number; v: number } {
@@ -753,6 +774,12 @@ export class WindCustomLayer implements CustomLayerInterface {
       u: lerp(windData.uMin, windData.uMax, uNorm),
       v: lerp(windData.vMin, windData.vMax, vNorm),
     };
+  }
+
+  private readSpeedTexelFrom(x: number, y: number, windData: WindData): number {
+    const index = (y * windData.width + x) * 4;
+    const speedNorm = windData.image[index + 2] / 255;
+    return lerp(windData.speedMin, windData.speedMax, speedNorm);
   }
 
   private sampleElevation(lng: number, lat: number): number {

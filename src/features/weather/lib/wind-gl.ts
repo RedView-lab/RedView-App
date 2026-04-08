@@ -340,6 +340,8 @@ export interface WindData {
   uMax: number;
   vMin: number;
   vMax: number;
+  speedMin: number;
+  speedMax: number;
 }
 
 /** Max trail texture resolution (capped for performance) */
