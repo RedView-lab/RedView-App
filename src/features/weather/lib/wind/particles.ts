@@ -20,6 +20,8 @@ export class ParticleSystem {
   speeds = new Float32Array(MAX_PARTICLE_ALLOC);
   windU = new Float32Array(MAX_PARTICLE_ALLOC);
   windV = new Float32Array(MAX_PARTICLE_ALLOC);
+  dirU = new Float32Array(MAX_PARTICLE_ALLOC);        // actual movement direction (unit vector)
+  dirV = new Float32Array(MAX_PARTICLE_ALLOC);        // actual movement direction (unit vector)
   fade = new Float32Array(MAX_PARTICLE_ALLOC);       // 0→1 fade-in
   visible = new Uint8Array(MAX_PARTICLE_ALLOC);       // 1 = passes spacing filter
 
@@ -127,6 +129,8 @@ export class ParticleSystem {
       const pi = i * 2;
       let lng = this.positions[pi];
       let lat = this.positions[pi + 1];
+      const prevLng = lng;
+      const prevLat = lat;
 
       // Smooth fade-in
       if (this.fade[i] < 1) {
@@ -159,6 +163,16 @@ export class ParticleSystem {
       const mpdLng = Math.max(1, Math.cos(lat * Math.PI / 180) * metersPerDegreeLat);
       lng += (this.windU[i] * dt * simScale) / mpdLng;
       lat += (this.windV[i] * dt * simScale) / metersPerDegreeLat;
+
+      // Compute actual displacement direction (guarantees arrow points where it moves)
+      const dispE = (lng - prevLng) * mpdLng;
+      const dispN = (lat - prevLat) * metersPerDegreeLat;
+      const dispMag = Math.hypot(dispE, dispN);
+      if (dispMag > 0.001) {
+        this.dirU[i] = dispE / dispMag;
+        this.dirV[i] = dispN / dispMag;
+      }
+      // else: keep previous direction (avoid jitter near zero displacement)
 
       // Out of both data bounds and viewport → recycle
       if (!isInsideBounds(lng, lat, bounds) && !isInViewport(lng, lat, map)) {
@@ -252,6 +266,8 @@ export class ParticleSystem {
     this.speeds[i] = 0;
     this.windU[i] = 0;
     this.windV[i] = 0;
+    this.dirU[i] = 0;
+    this.dirV[i] = 0;
     this.fade[i] = randomAge ? Math.min(1, Math.random() + 0.3) : 0;
   }
 }

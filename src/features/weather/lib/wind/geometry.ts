@@ -56,12 +56,26 @@ export class ArrowGeometryBuilder {
 
       const { shoulderHW: shoulderHwPx, bodyHW: bodyHwPx } = adaptiveArrowWidths(zoom, speed, dpr);
 
-      // Wind direction (default east if calm)
-      const windMag = Math.hypot(wu, wv);
-      let dirU = 1, dirV = 0;
-      if (windMag > 0.01) {
-        dirU = wu / windMag;
-        dirV = wv / windMag;
+      // ── Arrow direction: use actual displacement when available ─────
+      // Guarantees the arrow points exactly in its movement direction.
+      // Falls back to wind direction for newly spawned particles.
+      const du = particles.dirU[i];
+      const dv = particles.dirV[i];
+      const dmag = Math.hypot(du, dv);
+      let dirU: number, dirV: number;
+      if (dmag > 0.5) {
+        dirU = du / dmag;
+        dirV = dv / dmag;
+      } else {
+        // Fallback: wind direction (for fresh spawns with no displacement yet)
+        const windMag = Math.hypot(wu, wv);
+        if (windMag > 0.01) {
+          dirU = wu / windMag;
+          dirV = wv / windMag;
+        } else {
+          dirU = 1;
+          dirV = 0;
+        }
       }
 
       // Tail & neck positions in geographic space
@@ -70,19 +84,20 @@ export class ArrowGeometryBuilder {
       const neckLng = lerp(lng, tailLng, HEAD_LENGTH_RATIO);
       const neckLat = lerp(lat, tailLat, HEAD_LENGTH_RATIO);
 
-      // ── Adaptive terrain elevation (anti-clip) ─────────────────────
-      const tipOffset = adaptiveAltitudeOffset(map, lng, lat, metersPerPx, arrowMeters);
-      const neckOffset = adaptiveAltitudeOffset(map, neckLng, neckLat, metersPerPx, arrowMeters);
-      const tailOffset = adaptiveAltitudeOffset(map, tailLng, tailLat, metersPerPx, arrowMeters);
+      // ── Flat arrow with max-terrain elevation (anti-clip + no tilt) ─
+      // Sample terrain at all key points, use the maximum, add offset.
+      // This keeps the arrow perfectly flat → no perspective direction distortion.
+      const rawTip  = map.queryTerrainElevation?.([lng, lat]) ?? 0;
+      const rawNeck = map.queryTerrainElevation?.([neckLng, neckLat]) ?? 0;
+      const rawTail = map.queryTerrainElevation?.([tailLng, tailLat]) ?? 0;
+      const maxTerrain = Math.max(rawTip, rawNeck, rawTail);
+      const altOffset = adaptiveAltitudeOffset(map, lng, lat, metersPerPx, arrowMeters);
+      const arrowElev = maxTerrain + altOffset;
 
-      const tipElev = (map.queryTerrainElevation?.([lng, lat]) ?? 0) + tipOffset;
-      const neckElev = (map.queryTerrainElevation?.([neckLng, neckLat]) ?? 0) + neckOffset;
-      const tailElev = (map.queryTerrainElevation?.([tailLng, tailLat]) ?? 0) + tailOffset;
-
-      // Mercator world-space positions
-      const tipMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, tipElev);
-      const neckMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: neckLng, lat: neckLat }, neckElev);
-      const tailMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: tailLng, lat: tailLat }, tailElev);
+      // Mercator world-space positions (all at same elevation → flat arrow)
+      const tipMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, arrowElev);
+      const neckMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: neckLng, lat: neckLat }, arrowElev);
+      const tailMc = mapboxgl.MercatorCoordinate.fromLngLat({ lng: tailLng, lat: tailLat }, arrowElev);
 
       // Perpendicular direction in Mercator XY
       const dx = tipMc.x - tailMc.x;

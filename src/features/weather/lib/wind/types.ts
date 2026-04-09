@@ -154,11 +154,11 @@ export function adaptiveAltitudeOffset(
   metersPerPx: number,
   arrowMeters: number,
 ): number {
-  // Base offset: 4 screen-pixels' worth of meters — always visible
-  const baseOffset = metersPerPx * 4;
+  // Base offset: 10 screen-pixels' worth of meters — generous clearance
+  const baseOffset = metersPerPx * 10;
 
   // Slope detection: sample elevation in a small cross pattern
-  const delta = metersPerPx * 8 / 111_320; // ~8px in degrees
+  const delta = metersPerPx * 10 / 111_320; // ~10px in degrees
   const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
   const elevN = map.queryTerrainElevation?.([lng, lat + delta]) ?? elev;
   const elevS = map.queryTerrainElevation?.([lng, lat - delta]) ?? elev;
@@ -167,14 +167,14 @@ export function adaptiveAltitudeOffset(
   const slopeX = Math.abs(elevE - elevW) / (2 * delta * 111_320);
   const slopeY = Math.abs(elevN - elevS) / (2 * delta * 111_320);
   const slopeMag = Math.hypot(slopeX, slopeY); // rise/run (unitless)
-  const slopeBoost = slopeMag * metersPerPx * 12; // steeper → more offset
+  const slopeBoost = slopeMag * metersPerPx * 20; // steeper → more offset
 
   // Pitch factor: oblique views lose Z-buffer precision
   const pitch = map.getPitch?.() ?? 0;
-  const pitchFactor = 1 + (pitch / 90) * 0.6;
+  const pitchFactor = 1 + (pitch / 90) * 0.8;
 
-  // Floor: never less than 2m or 2% of arrow length
-  const floor = Math.max(2, arrowMeters * 0.02);
+  // Floor: never less than 5m or 5% of arrow length
+  const floor = Math.max(5, arrowMeters * 0.05);
 
   return Math.max(floor, (baseOffset + slopeBoost) * pitchFactor);
 }

@@ -14,6 +14,8 @@ varying vec4 v_color;
 
 void main() {
     gl_Position = u_matrix * vec4(a_position, 1.0);
+    // Depth bias: push arrows slightly toward camera to prevent Z-fighting with terrain
+    gl_Position.z -= 0.0015 * gl_Position.w;
     v_color = a_color;
 }
 `;
