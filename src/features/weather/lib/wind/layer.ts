@@ -1,5 +1,5 @@
 import type { CustomLayerInterface, Map as MapboxMap } from 'mapbox-gl';
-import { LAYER_ID, VERTEX_STRIDE, clamp } from './types';
+import { LAYER_ID, VERTEX_STRIDE } from './types';
 import type { WindBounds, WindData } from './types';
 import { createWindProgram, saveGLState, restoreGLState } from './shaders';
 import { WindSampler } from './sampler';

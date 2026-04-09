@@ -1,6 +1,6 @@
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import {
-  clamp, lerp,
+  lerp,
   VERTEX_STRIDE, VERTS_PER_ARROW, MAX_PARTICLE_ALLOC,
   EQUATORIAL_CIRCUMFERENCE, HEAD_LENGTH_RATIO, TAIL_TAPER,
   adaptiveArrowLength, adaptiveArrowWidths, pitchSizeCorrection,

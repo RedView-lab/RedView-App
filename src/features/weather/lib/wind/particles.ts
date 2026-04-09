@@ -32,7 +32,7 @@ export class ParticleSystem {
   private lastVpZoom = -1;
 
   /** Initialize particle pool based on current viewport. */
-  configure(map: MapboxMap, bounds: WindBounds): void {
+  configure(map: MapboxMap, _bounds: WindBounds): void {
     const b = map.getBounds();
     if (!b) return;
 
