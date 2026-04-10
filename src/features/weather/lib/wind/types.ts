@@ -12,9 +12,9 @@ export const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
 // ── Trail geometry constants ───────────────────────────────────────────
 
-export const TRAIL_LENGTH = 32;                        // ring buffer size per particle
+export const TRAIL_LENGTH = 48;                        // ring buffer size per particle
 export const VERTS_PER_SEGMENT = 6;                    // 2 triangles per trail segment
-export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 31
+export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 47
 
 // ── Simulation constants ───────────────────────────────────────────────
 
@@ -89,17 +89,10 @@ export function lerp(a: number, b: number, t: number): number {
 // All visual parameters are continuous functions of zoom/pitch/dpi — no
 // fixed breakpoints. Inspired by Windy.com and earth.nullschool.net.
 
-/** Particle count adapts to viewport area and zoom. Higher zoom = more arrows for density. */
-export function adaptiveParticleCount(zoom: number, viewportWidthDeg: number, viewportHeightDeg: number): number {
-  // Approximate viewport area in km² (at latitude ~46° for France)
-  const kmPerDegLat = 111;
-  const kmPerDegLng = 111 * Math.cos(46 * Math.PI / 180);
-  const areaKm2 = viewportWidthDeg * kmPerDegLng * viewportHeightDeg * kmPerDegLat;
-  // Target density: ~0.8 arrows per km² at zoom 8, scaling with zoom
-  const zoomFactor = Math.pow(1.15, zoom - 8);
-  const baseDensity = 0.8;
-  const count = baseDensity * zoomFactor * Math.sqrt(areaKm2);
-  return Math.round(clamp(count, 400, MAX_PARTICLE_ALLOC));
+/** Particle count — screen-density based so coverage stays uniform at all zoom levels. */
+export function adaptiveParticleCount(zoom: number, _viewportWidthDeg: number, _viewportHeightDeg: number): number {
+  const zoomT = clamp((zoom - 4) / 12, 0, 1);
+  return Math.round(lerp(900, MAX_PARTICLE_ALLOC, zoomT * zoomT));
 }
 
 /** Trail half-width in screen pixels. Visible streamlines across all zooms. */
@@ -116,11 +109,10 @@ export function adaptiveLifetime(speed: number): number {
   return lerp(16, 5, t); // calm=16s, gale=5s (longer for flowing trails)
 }
 
-/** Simulation speed scale — exponential so trails stay ~100px across all zoom levels. */
+/** Simulation speed scale — exponential so trails stay ~150px across all zoom levels.
+ *  1_500_000 * 2^(-zoom) gives ~4.5 screen-px/frame at 60fps for 10 m/s wind. */
 export function adaptiveSimulationScale(zoom: number): number {
-  // At zoom 14 ≈ 61, at zoom 6 ≈ 15625, at zoom 10 ≈ 977.
-  // Produces ~3px/frame trail displacement at 10 m/s wind regardless of zoom.
-  return clamp(1_000_000 * Math.pow(2, -zoom), 4, 80_000);
+  return clamp(1_500_000 * Math.pow(2, -zoom), 10, 50_000);
 }
 
 /** Pitch-aware size correction: at high pitch, arrows viewed from side appear smaller. */

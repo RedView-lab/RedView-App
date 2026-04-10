@@ -21,10 +21,7 @@ export class ParticleSystem {
   speeds = new Float32Array(MAX_PARTICLE_ALLOC);
   windU = new Float32Array(MAX_PARTICLE_ALLOC);
   windV = new Float32Array(MAX_PARTICLE_ALLOC);
-  dirU = new Float32Array(MAX_PARTICLE_ALLOC);        // displacement direction (kept for fallback)
-  dirV = new Float32Array(MAX_PARTICLE_ALLOC);
   fade = new Float32Array(MAX_PARTICLE_ALLOC);       // 0→1 fade-in
-  visible = new Uint8Array(MAX_PARTICLE_ALLOC);       // 1 = passes spacing filter
 
   // Trail ring buffers — store Mercator coords directly (avoids fromLngLat in geometry builder)
   trailX = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
@@ -34,7 +31,6 @@ export class ParticleSystem {
   trailCount = new Uint8Array(MAX_PARTICLE_ALLOC);   // valid entries (0 → TRAIL_LENGTH)
 
   count = 0;
-  activeCount = 0; // visible arrows after overlap resolve
 
   private lastFrameTime = 0;
   private lastVpCenterLng = 0;
@@ -50,7 +46,6 @@ export class ParticleSystem {
     const vpH = b.getNorth() - b.getSouth();
     const zoom = map.getZoom();
     this.count = adaptiveParticleCount(zoom, vpW, vpH);
-    this.activeCount = this.count;
 
     for (let i = 0; i < this.count; i++) {
       this.respawnInViewport(i, b.getWest(), b.getEast(), b.getSouth(), b.getNorth(), true);
@@ -102,9 +97,10 @@ export class ParticleSystem {
     }
     this.count = newCount;
 
-    // Recycle out-of-viewport particles (with 10% margin)
+    // Single pass: recycle out-of-viewport + reshuffle on zoom change
     const mLng = vpW * 0.1;
     const mLat = vpH * 0.1;
+    const reshuffleRate = zoomDelta >= 0.3 ? clamp(zoomDelta * 0.6, 0.1, 0.85) : 0;
 
     for (let i = 0; i < this.count; i++) {
       const pi = i * 2;
@@ -114,7 +110,11 @@ export class ParticleSystem {
         lng >= vpWest - mLng && lng <= vpEast + mLng &&
         lat >= vpSouth - mLat && lat <= vpNorth + mLat;
       if (!inVp) {
+        // Out of viewport → always recycle
         this.respawnInViewport(i, vpWest, vpEast, vpSouth, vpNorth, false);
+      } else if (reshuffleRate > 0 && Math.random() < reshuffleRate) {
+        // Zoom changed → reshuffle for even coverage
+        this.respawnInViewport(i, vpWest, vpEast, vpSouth, vpNorth, true);
       }
     }
   }
@@ -232,8 +232,6 @@ export class ParticleSystem {
     this.speeds[i] = 0;
     this.windU[i] = 0;
     this.windV[i] = 0;
-    this.dirU[i] = 0;
-    this.dirV[i] = 0;
     this.fade[i] = randomAge ? Math.min(1, Math.random() + 0.3) : 0;
     this.trailCount[i] = 0;
     this.trailHead[i] = 0;
