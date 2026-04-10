@@ -52,7 +52,7 @@ export function interpolateColor(speed: number, tipHighlight = false): [number, 
   }
 
   // Speed-adaptive alpha: calm wind → more transparent, strong → more opaque
-  const alpha = clamp(0.55 + speed * 0.012, 0.55, 0.85);
+  const alpha = clamp(0.60 + speed * 0.015, 0.60, 0.92);
 
   // Nullschool-style bright tip: push color toward white
   if (tipHighlight) {
@@ -79,6 +79,6 @@ export function trailAlpha(
   const fadeOut = lifeRatio > 0.85 ? clamp((1 - lifeRatio) / 0.15, 0, 1) : 1;
   // Head glow: boost last 10%
   const headGlow = t > 0.9 ? 1.2 : 1.0;
-  // Quadratic gradient: t² gives smooth tail→head transition
-  return baseAlpha * t * t * fade * fadeOut * headGlow;
+  // Square-root gradient: fills more of the trail than t² while keeping smooth tail fade
+  return baseAlpha * Math.sqrt(t) * fade * fadeOut * headGlow;
 }

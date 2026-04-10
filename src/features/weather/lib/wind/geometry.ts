@@ -76,9 +76,9 @@ export class TrailGeometryBuilder {
         const t0 = s / segments;
         const t1 = (s + 1) / segments;
 
-        // Width taper: smoothstep from 0 at tail → full width at 30%
-        const w0 = halfWidth * smoothstep(0, 0.3, t0);
-        const w1 = halfWidth * smoothstep(0, 0.3, t1);
+        // Width taper: 30% minimum at tail → full width at 25% along trail
+        const w0 = halfWidth * (0.3 + 0.7 * smoothstep(0, 0.25, t0));
+        const w1 = halfWidth * (0.3 + 0.7 * smoothstep(0, 0.25, t1));
 
         // Alpha gradient: tail→head
         const a0 = trailAlpha(t0, baseAlpha, fade, lifeRatio);

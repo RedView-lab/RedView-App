@@ -20,10 +20,10 @@ export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 31
 
 export const MAX_DELTA_SECONDS = 0.05;
 export const DIRECTION_SMOOTH = 0.22;
-export const FADE_IN_RATE = 2.8;
+export const FADE_IN_RATE = 4.5;
 export const WIND_BLEND_DURATION = 0.5; // seconds for prev→current crossfade
-export const DROP_RATE = 0.003;          // base random respawn probability per frame
-export const DROP_RATE_BUMP = 0.002;     // additional respawn rate × speed_t
+export const DROP_RATE = 0.001;          // base random respawn probability per frame
+export const DROP_RATE_BUMP = 0.001;     // additional respawn rate × speed_t
 
 // ── Max allocation (avoids re-allocation on zoom) ──────────────────────
 
@@ -102,11 +102,11 @@ export function adaptiveParticleCount(zoom: number, viewportWidthDeg: number, vi
   return Math.round(clamp(count, 400, MAX_PARTICLE_ALLOC));
 }
 
-/** Trail half-width in screen pixels. Thin streamlines like wind-layer (1-3px). */
+/** Trail half-width in screen pixels. Visible streamlines across all zooms. */
 export function adaptiveTrailWidth(zoom: number, speed: number, dpr: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  const basePx = lerp(1.0, 2.5, zoomT);
-  const speedBoost = clamp(speed * 0.03, 0, 0.8);
+  const basePx = lerp(2.0, 3.5, zoomT);
+  const speedBoost = clamp(speed * 0.04, 0, 1.0);
   return (basePx + speedBoost) / Math.max(1, dpr * 0.75);
 }
 
@@ -116,9 +116,11 @@ export function adaptiveLifetime(speed: number): number {
   return lerp(16, 5, t); // calm=16s, gale=5s (longer for flowing trails)
 }
 
-/** Simulation speed scale adapts to zoom. */
+/** Simulation speed scale — exponential so trails stay ~100px across all zoom levels. */
 export function adaptiveSimulationScale(zoom: number): number {
-  return clamp(130 - zoom * 6.5, 25, 100);
+  // At zoom 14 ≈ 61, at zoom 6 ≈ 15625, at zoom 10 ≈ 977.
+  // Produces ~3px/frame trail displacement at 10 m/s wind regardless of zoom.
+  return clamp(1_000_000 * Math.pow(2, -zoom), 4, 80_000);
 }
 
 /** Pitch-aware size correction: at high pitch, arrows viewed from side appear smaller. */

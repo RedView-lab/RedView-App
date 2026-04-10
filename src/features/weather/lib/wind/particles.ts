@@ -183,7 +183,7 @@ export class ParticleSystem {
       const cosLat = Math.cos(lat * Math.PI / 180);
       const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, map.getZoom()));
       const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
-      const altitude = elev + metersPerPx * 8;
+      const altitude = elev + clamp(metersPerPx * 3, 10, 40);
       // Inline Mercator conversion (no object allocation)
       const mcX = (180 + lng) / 360;
       const mcY = (180 - (180 / Math.PI * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)))) / 360;
