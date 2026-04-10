@@ -55,7 +55,6 @@ export class WindCustomLayer implements CustomLayerInterface {
     const now = performance.now();
     this.sampler.advanceBlend(now);
     this.particles.advance(now, this.map, this.sampler, bounds);
-    this.particles.resolveOverlaps(this.map);
 
     // Build trail geometry
     const vertexCount = this.geometry.build(this.particles, this.map);

@@ -110,13 +110,6 @@ export function adaptiveTrailWidth(zoom: number, speed: number, dpr: number): nu
   return (basePx + speedBoost) / Math.max(1, dpr * 0.75);
 }
 
-/** Minimum screen-space spacing between trail heads. Wider since trails are longer. */
-export function adaptiveTrailSpacing(zoom: number, dpr: number): number {
-  const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  const basePx = lerp(60, 110, zoomT);
-  return basePx / Math.max(1, dpr * 0.75);
-}
-
 /** Particle lifetime adapts to wind speed (fast = short, slow = long). */
 export function adaptiveLifetime(speed: number): number {
   const t = clamp(speed / 25, 0, 1);

@@ -1,4 +1,4 @@
-import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   VERTEX_STRIDE, MAX_PARTICLE_ALLOC, TRAIL_LENGTH,
   VERTS_PER_SEGMENT, MAX_TRAIL_SEGMENTS,
@@ -32,8 +32,6 @@ export class TrailGeometryBuilder {
     let totalVerts = 0;
 
     for (let i = 0; i < particles.count; i++) {
-      if (!particles.visible[i]) continue;
-
       const count = particles.trailCount[i];
       if (count < 2) continue; // need at least 2 points for 1 segment
 
@@ -58,17 +56,16 @@ export class TrailGeometryBuilder {
         const idx0 = (head - count + s + TRAIL_LENGTH) % TRAIL_LENGTH;
         const idx1 = (head - count + s + 1 + TRAIL_LENGTH) % TRAIL_LENGTH;
 
-        const mc0 = mapboxgl.MercatorCoordinate.fromLngLat(
-          { lng: particles.trailLng[ringBase + idx0], lat: particles.trailLat[ringBase + idx0] },
-          particles.trailElev[ringBase + idx0],
-        );
-        const mc1 = mapboxgl.MercatorCoordinate.fromLngLat(
-          { lng: particles.trailLng[ringBase + idx1], lat: particles.trailLat[ringBase + idx1] },
-          particles.trailElev[ringBase + idx1],
-        );
+        // Read pre-computed Mercator coords directly (no fromLngLat overhead)
+        const x0 = particles.trailX[ringBase + idx0];
+        const y0 = particles.trailY[ringBase + idx0];
+        const z0 = particles.trailZ[ringBase + idx0];
+        const x1 = particles.trailX[ringBase + idx1];
+        const y1 = particles.trailY[ringBase + idx1];
+        const z1 = particles.trailZ[ringBase + idx1];
 
-        const dx = mc1.x - mc0.x;
-        const dy = mc1.y - mc0.y;
+        const dx = x1 - x0;
+        const dy = y1 - y0;
         const len = Math.hypot(dx, dy);
         if (len < 1e-14) continue; // skip zero-length segments
 
@@ -94,40 +91,40 @@ export class TrailGeometryBuilder {
         const off = totalVerts * VERTEX_STRIDE;
 
         // Triangle 1: v0L, v0R, v1L
-        this.vertexData[off]      = mc0.x + perpX * w0;
-        this.vertexData[off + 1]  = mc0.y + perpY * w0;
-        this.vertexData[off + 2]  = mc0.z;
+        this.vertexData[off]      = x0 + perpX * w0;
+        this.vertexData[off + 1]  = y0 + perpY * w0;
+        this.vertexData[off + 2]  = z0;
         this.vertexData[off + 3]  = r0; this.vertexData[off + 4] = g0; this.vertexData[off + 5] = b0;
         this.vertexData[off + 6]  = a0;
 
-        this.vertexData[off + 7]  = mc0.x - perpX * w0;
-        this.vertexData[off + 8]  = mc0.y - perpY * w0;
-        this.vertexData[off + 9]  = mc0.z;
+        this.vertexData[off + 7]  = x0 - perpX * w0;
+        this.vertexData[off + 8]  = y0 - perpY * w0;
+        this.vertexData[off + 9]  = z0;
         this.vertexData[off + 10] = r0; this.vertexData[off + 11] = g0; this.vertexData[off + 12] = b0;
         this.vertexData[off + 13] = a0;
 
-        this.vertexData[off + 14] = mc1.x + perpX * w1;
-        this.vertexData[off + 15] = mc1.y + perpY * w1;
-        this.vertexData[off + 16] = mc1.z;
+        this.vertexData[off + 14] = x1 + perpX * w1;
+        this.vertexData[off + 15] = y1 + perpY * w1;
+        this.vertexData[off + 16] = z1;
         this.vertexData[off + 17] = r1; this.vertexData[off + 18] = g1; this.vertexData[off + 19] = b1;
         this.vertexData[off + 20] = a1;
 
         // Triangle 2: v0R, v1R, v1L
-        this.vertexData[off + 21] = mc0.x - perpX * w0;
-        this.vertexData[off + 22] = mc0.y - perpY * w0;
-        this.vertexData[off + 23] = mc0.z;
+        this.vertexData[off + 21] = x0 - perpX * w0;
+        this.vertexData[off + 22] = y0 - perpY * w0;
+        this.vertexData[off + 23] = z0;
         this.vertexData[off + 24] = r0; this.vertexData[off + 25] = g0; this.vertexData[off + 26] = b0;
         this.vertexData[off + 27] = a0;
 
-        this.vertexData[off + 28] = mc1.x - perpX * w1;
-        this.vertexData[off + 29] = mc1.y - perpY * w1;
-        this.vertexData[off + 30] = mc1.z;
+        this.vertexData[off + 28] = x1 - perpX * w1;
+        this.vertexData[off + 29] = y1 - perpY * w1;
+        this.vertexData[off + 30] = z1;
         this.vertexData[off + 31] = r1; this.vertexData[off + 32] = g1; this.vertexData[off + 33] = b1;
         this.vertexData[off + 34] = a1;
 
-        this.vertexData[off + 35] = mc1.x + perpX * w1;
-        this.vertexData[off + 36] = mc1.y + perpY * w1;
-        this.vertexData[off + 37] = mc1.z;
+        this.vertexData[off + 35] = x1 + perpX * w1;
+        this.vertexData[off + 36] = y1 + perpY * w1;
+        this.vertexData[off + 37] = z1;
         this.vertexData[off + 38] = r1; this.vertexData[off + 39] = g1; this.vertexData[off + 40] = b1;
         this.vertexData[off + 41] = a1;
 

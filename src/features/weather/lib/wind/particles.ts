@@ -4,7 +4,7 @@ import {
   MAX_DELTA_SECONDS, DIRECTION_SMOOTH, FADE_IN_RATE,
   MAX_PARTICLE_ALLOC, TRAIL_LENGTH, DROP_RATE, DROP_RATE_BUMP,
   EQUATORIAL_CIRCUMFERENCE,
-  adaptiveParticleCount, adaptiveLifetime, adaptiveSimulationScale, adaptiveTrailSpacing,
+  adaptiveParticleCount, adaptiveLifetime, adaptiveSimulationScale,
 } from './types';
 import type { WindBounds } from './types';
 import type { WindSampler } from './sampler';
@@ -26,10 +26,10 @@ export class ParticleSystem {
   fade = new Float32Array(MAX_PARTICLE_ALLOC);       // 0→1 fade-in
   visible = new Uint8Array(MAX_PARTICLE_ALLOC);       // 1 = passes spacing filter
 
-  // Trail ring buffers — store past positions for streaming geometry
-  trailLng = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
-  trailLat = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
-  trailElev = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  // Trail ring buffers — store Mercator coords directly (avoids fromLngLat in geometry builder)
+  trailX = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  trailY = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  trailZ = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
   trailHead = new Uint8Array(MAX_PARTICLE_ALLOC);    // write index into ring buffer
   trailCount = new Uint8Array(MAX_PARTICLE_ALLOC);   // valid entries (0 → TRAIL_LENGTH)
 
@@ -179,16 +179,20 @@ export class ParticleSystem {
       this.positions[pi] = lng;
       this.positions[pi + 1] = lat;
 
-      // Record trail position with terrain elevation
+      // Record trail position as Mercator coords (pre-converted — avoids 30K fromLngLat in geometry)
       const cosLat = Math.cos(lat * Math.PI / 180);
       const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, map.getZoom()));
       const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
-      const altOffset = metersPerPx * 8;
+      const altitude = elev + metersPerPx * 8;
+      // Inline Mercator conversion (no object allocation)
+      const mcX = (180 + lng) / 360;
+      const mcY = (180 - (180 / Math.PI * Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360)))) / 360;
+      const mcZ = altitude / (EQUATORIAL_CIRCUMFERENCE * Math.max(1e-6, cosLat));
       const ringBase = i * TRAIL_LENGTH;
       const head = this.trailHead[i];
-      this.trailLng[ringBase + head] = lng;
-      this.trailLat[ringBase + head] = lat;
-      this.trailElev[ringBase + head] = elev + altOffset;
+      this.trailX[ringBase + head] = mcX;
+      this.trailY[ringBase + head] = mcY;
+      this.trailZ[ringBase + head] = mcZ;
       this.trailHead[i] = (head + 1) % TRAIL_LENGTH;
       if (this.trailCount[i] < TRAIL_LENGTH) this.trailCount[i]++;
 
@@ -198,59 +202,6 @@ export class ParticleSystem {
         this.respawnFromMap(i, map);
       }
     }
-  }
-
-  /**
-   * Screen-space overlap resolution (Windy.com-style spatial hash).
-   * Hides arrows within adaptive spacing of an already-visible arrow.
-   */
-  resolveOverlaps(map: MapboxMap): void {
-    if (this.count === 0) return;
-
-    const zoom = map.getZoom();
-    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const cellSize = adaptiveTrailSpacing(zoom, dpr);
-
-    // Project all tips to screen-space
-    const sx = new Float32Array(this.count);
-    const sy = new Float32Array(this.count);
-    for (let i = 0; i < this.count; i++) {
-      const pt = map.project([this.positions[i * 2], this.positions[i * 2 + 1]]);
-      sx[i] = pt.x;
-      sy[i] = pt.y;
-    }
-
-    // Sort by fade (prefer fully opaque) for stability
-    const indices = new Uint16Array(this.count);
-    for (let i = 0; i < this.count; i++) indices[i] = i;
-    indices.sort((a, b) => this.fade[b] - this.fade[a]);
-
-    const occupied = new Map<number, true>();
-    let visibleCount = 0;
-    this.visible.fill(0);
-
-    for (let k = 0; k < this.count; k++) {
-      const i = indices[k];
-      const cx = Math.floor(sx[i] / cellSize);
-      const cy = Math.floor(sy[i] / cellSize);
-
-      let tooClose = false;
-      outer:
-      for (let dx = -1; dx <= 1; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const key = (cx + dx) * 73856093 + (cy + dy) * 19349663;
-          if (occupied.has(key)) { tooClose = true; break outer; }
-        }
-      }
-
-      if (!tooClose) {
-        this.visible[i] = 1;
-        visibleCount++;
-        occupied.set(cx * 73856093 + cy * 19349663, true);
-      }
-    }
-
-    this.activeCount = visibleCount;
   }
 
   // ── Respawn helpers ────────────────────────────────────────────────
