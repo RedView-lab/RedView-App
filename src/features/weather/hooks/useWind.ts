@@ -12,7 +12,7 @@ import {
 // ── Configuration ─────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 800;
-const MIN_FETCH_INTERVAL_MS = 5_000;
+const MIN_FETCH_INTERVAL_MS = 8_000;
 const VIEWPORT_SHIFT_THRESHOLD = 0.25;
 const ZOOM_DELTA_THRESHOLD = 0.6;
 const BOUNDS_PADDING = 0.8;

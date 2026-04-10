@@ -6,12 +6,15 @@ import { coordCacheKey } from './wind-grid';
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
 const BATCH_SIZE = 50; // Max coordinates per request
-const MAX_RETRIES = 3;
-const INITIAL_BACKOFF_MS = 2_000;
+const MAX_RETRIES = 4;
+const INITIAL_BACKOFF_MS = 3_000;
+const MIN_REQUEST_GAP_MS = 1_500; // minimum gap between any two API calls
+const INTER_BATCH_DELAY_MS = 1_200; // delay between consecutive batches
 
 // ── Global rate-limit cooldown ────────────────────────────────────────
 
 let rateLimitedUntil = 0;
+let lastRequestTime = 0;
 
 // ── In-memory cache ───────────────────────────────────────────────────
 
@@ -73,14 +76,19 @@ async function fetchBatch(
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
     // Respect global cooldown from previous 429
-    const waitUntil = rateLimitedUntil - Date.now();
-    if (waitUntil > 0) {
+    const cooldownWait = rateLimitedUntil - Date.now();
+    // Respect minimum gap between any two requests
+    const gapWait = (lastRequestTime + MIN_REQUEST_GAP_MS) - Date.now();
+    const waitMs = Math.max(0, cooldownWait, gapWait);
+
+    if (waitMs > 0) {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(resolve, waitUntil);
+        const timer = setTimeout(resolve, waitMs);
         signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
       });
     }
 
+    lastRequestTime = Date.now();
     const res = await fetch(url, { signal });
 
     if (res.status === 429) {
@@ -139,9 +147,17 @@ export async function fetchWindData(
 
   if (uncached.length === 0) return results;
 
-  // 2. Batch fetch uncached coordinates
+  // 2. Batch fetch uncached coordinates (with inter-batch delay)
   for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+    // Inter-batch delay to avoid 429 on consecutive batches
+    if (i > 0) {
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(resolve, INTER_BATCH_DELAY_MS);
+        signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Aborted', 'AbortError')); }, { once: true });
+      });
+    }
 
     const batch = uncached.slice(i, i + BATCH_SIZE);
     const points = await fetchBatch(batch, signal);

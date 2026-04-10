@@ -52,7 +52,7 @@ export function interpolateColor(speed: number, tipHighlight = false): [number, 
   }
 
   // Speed-adaptive alpha: calm wind → more transparent, strong → more opaque
-  const alpha = clamp(0.65 + speed * 0.012, 0.65, 0.92);
+  const alpha = clamp(0.55 + speed * 0.012, 0.55, 0.85);
 
   // Nullschool-style bright tip: push color toward white
   if (tipHighlight) {
@@ -66,21 +66,19 @@ export function interpolateColor(speed: number, tipHighlight = false): [number, 
 }
 
 /**
- * Compute per-vertex alpha distribution along the arrow for head→tail fade.
- * Returns { headAlpha, neckAlpha, tailAlpha } with fade-in and fade-out applied.
+ * Compute trail alpha at parametric position t (0 = tail, 1 = head).
+ * Uses t² gradient for smooth tail→head transition with head glow.
  */
-export function arrowAlphaGradient(
+export function trailAlpha(
+  t: number,
   baseAlpha: number,
   fade: number,
   lifeRatio: number,
-): { headAlpha: number; neckAlpha: number; tailAlpha: number } {
+): number {
   // Fade-out in last 15% of life to prevent pop-out
   const fadeOut = lifeRatio > 0.85 ? clamp((1 - lifeRatio) / 0.15, 0, 1) : 1;
-  const effectiveFade = fade * fadeOut;
-
-  return {
-    headAlpha: baseAlpha * effectiveFade,
-    neckAlpha: baseAlpha * 0.82 * effectiveFade,
-    tailAlpha: baseAlpha * 0.12 * effectiveFade,
-  };
+  // Head glow: boost last 10%
+  const headGlow = t > 0.9 ? 1.2 : 1.0;
+  // Quadratic gradient: t² gives smooth tail→head transition
+  return baseAlpha * t * t * fade * fadeOut * headGlow;
 }

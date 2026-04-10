@@ -8,13 +8,13 @@ export type { WindData };
 
 export const LAYER_ID = 'wind-particles';
 export const VERTEX_STRIDE = 7;        // x, y, z, r, g, b, a
-export const VERTS_PER_ARROW = 9;      // 3 triangles: arrowhead(3) + body quad(6)
 export const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
-// ── Arrow shape proportions ────────────────────────────────────────────
+// ── Trail geometry constants ───────────────────────────────────────────
 
-export const HEAD_LENGTH_RATIO = 0.30;
-export const TAIL_TAPER = 0.45;
+export const TRAIL_LENGTH = 32;                        // ring buffer size per particle
+export const VERTS_PER_SEGMENT = 6;                    // 2 triangles per trail segment
+export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 31
 
 // ── Simulation constants ───────────────────────────────────────────────
 
@@ -22,10 +22,12 @@ export const MAX_DELTA_SECONDS = 0.05;
 export const DIRECTION_SMOOTH = 0.22;
 export const FADE_IN_RATE = 2.8;
 export const WIND_BLEND_DURATION = 0.5; // seconds for prev→current crossfade
+export const DROP_RATE = 0.003;          // base random respawn probability per frame
+export const DROP_RATE_BUMP = 0.002;     // additional respawn rate × speed_t
 
 // ── Max allocation (avoids re-allocation on zoom) ──────────────────────
 
-export const MAX_PARTICLE_ALLOC = 2000;
+export const MAX_PARTICLE_ALLOC = 1500;
 
 // ── Interfaces ─────────────────────────────────────────────────────────
 
@@ -97,41 +99,28 @@ export function adaptiveParticleCount(zoom: number, viewportWidthDeg: number, vi
   const zoomFactor = Math.pow(1.15, zoom - 8);
   const baseDensity = 0.8;
   const count = baseDensity * zoomFactor * Math.sqrt(areaKm2);
-  return Math.round(clamp(count, 300, MAX_PARTICLE_ALLOC));
+  return Math.round(clamp(count, 400, MAX_PARTICLE_ALLOC));
 }
 
-/** Arrow base length in screen pixels. Scales with zoom + DPI + speed contribution. */
-export function adaptiveArrowLength(zoom: number, speed: number, dpr: number): number {
-  const zoomT = clamp((zoom - 4) / 12, 0, 1); // 0 at z4, 1 at z16
-  const basePx = lerp(16, 70, zoomT * zoomT); // quadratic curve for smoother scaling
-  const speedBoost = speed * lerp(0.8, 4.0, zoomT);
-  return (basePx + speedBoost) / Math.max(1, dpr * 0.75); // DPI-normalize
-}
-
-/** Arrow widths (shoulder + body half-widths) in screen pixels. */
-export function adaptiveArrowWidths(zoom: number, speed: number, dpr: number): {
-  shoulderHW: number;
-  bodyHW: number;
-} {
+/** Trail half-width in screen pixels. Thin streamlines like wind-layer (1-3px). */
+export function adaptiveTrailWidth(zoom: number, speed: number, dpr: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  // Fast wind → narrower/longer (streamlined), slow → stubbier (like Windy)
-  const speedTaper = clamp(1.0 - speed * 0.012, 0.6, 1.0);
-  const shoulderHW = lerp(3.5, 14, zoomT) * speedTaper / Math.max(1, dpr * 0.75);
-  const bodyHW = lerp(1.0, 4.5, zoomT) * speedTaper / Math.max(1, dpr * 0.75);
-  return { shoulderHW, bodyHW };
+  const basePx = lerp(1.0, 2.5, zoomT);
+  const speedBoost = clamp(speed * 0.03, 0, 0.8);
+  return (basePx + speedBoost) / Math.max(1, dpr * 0.75);
 }
 
-/** Minimum screen-space spacing between arrows. Adapts to arrow size for uniform look. */
-export function adaptiveArrowSpacing(zoom: number, dpr: number): number {
+/** Minimum screen-space spacing between trail heads. Wider since trails are longer. */
+export function adaptiveTrailSpacing(zoom: number, dpr: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  const basePx = lerp(40, 75, zoomT);
+  const basePx = lerp(60, 110, zoomT);
   return basePx / Math.max(1, dpr * 0.75);
 }
 
 /** Particle lifetime adapts to wind speed (fast = short, slow = long). */
 export function adaptiveLifetime(speed: number): number {
   const t = clamp(speed / 25, 0, 1);
-  return lerp(12, 4, t); // calm=12s, gale=4s
+  return lerp(16, 5, t); // calm=16s, gale=5s (longer for flowing trails)
 }
 
 /** Simulation speed scale adapts to zoom. */

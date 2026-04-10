@@ -4,7 +4,7 @@ import type { WindBounds, WindData } from './types';
 import { createWindProgram, saveGLState, restoreGLState } from './shaders';
 import { WindSampler } from './sampler';
 import { ParticleSystem } from './particles';
-import { ArrowGeometryBuilder } from './geometry';
+import { TrailGeometryBuilder } from './geometry';
 
 // ── Mapbox GL Custom Layer for Wind Arrows ─────────────────────────────
 // Thin orchestrator: composes WindSampler + ParticleSystem + ArrowGeometryBuilder.
@@ -24,8 +24,9 @@ export class WindCustomLayer implements CustomLayerInterface {
 
   private sampler = new WindSampler();
   private particles = new ParticleSystem();
-  private geometry = new ArrowGeometryBuilder();
+  private geometry = new TrailGeometryBuilder();
   private initialized = false;
+  private vertexCount = 0;
 
   // ── Mapbox lifecycle ─────────────────────────────────────────────
 
@@ -56,8 +57,9 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.particles.advance(now, this.map, this.sampler, bounds);
     this.particles.resolveOverlaps(this.map);
 
-    // Build arrow geometry
+    // Build trail geometry
     const vertexCount = this.geometry.build(this.particles, this.map);
+    this.vertexCount = vertexCount;
     if (vertexCount === 0) return;
 
     // Upload to GPU
@@ -73,7 +75,7 @@ export class WindCustomLayer implements CustomLayerInterface {
   }
 
   render(gl: WebGL2RenderingContext, matrix: number[]): void {
-    if (!this.program || !this.vertexBuffer || this.particles.count === 0) return;
+    if (!this.program || !this.vertexBuffer || this.vertexCount === 0) return;
 
     this.matrix.set(matrix);
 
@@ -100,7 +102,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     // No polygonOffset — adaptive altitude offset handles terrain clearance properly
     gl.disable(gl.POLYGON_OFFSET_FILL);
 
-    gl.drawArrays(gl.TRIANGLES, 0, this.particles.activeCount * 9);
+    gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
 
     restoreGLState(gl, saved, attribs);
     this.map?.triggerRepaint();

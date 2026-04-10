@@ -2,8 +2,9 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   clamp, lerp,
   MAX_DELTA_SECONDS, DIRECTION_SMOOTH, FADE_IN_RATE,
-  MAX_PARTICLE_ALLOC,
-  adaptiveParticleCount, adaptiveLifetime, adaptiveSimulationScale, adaptiveArrowSpacing,
+  MAX_PARTICLE_ALLOC, TRAIL_LENGTH, DROP_RATE, DROP_RATE_BUMP,
+  EQUATORIAL_CIRCUMFERENCE,
+  adaptiveParticleCount, adaptiveLifetime, adaptiveSimulationScale, adaptiveTrailSpacing,
 } from './types';
 import type { WindBounds } from './types';
 import type { WindSampler } from './sampler';
@@ -20,10 +21,17 @@ export class ParticleSystem {
   speeds = new Float32Array(MAX_PARTICLE_ALLOC);
   windU = new Float32Array(MAX_PARTICLE_ALLOC);
   windV = new Float32Array(MAX_PARTICLE_ALLOC);
-  dirU = new Float32Array(MAX_PARTICLE_ALLOC);        // actual movement direction (unit vector)
-  dirV = new Float32Array(MAX_PARTICLE_ALLOC);        // actual movement direction (unit vector)
+  dirU = new Float32Array(MAX_PARTICLE_ALLOC);        // displacement direction (kept for fallback)
+  dirV = new Float32Array(MAX_PARTICLE_ALLOC);
   fade = new Float32Array(MAX_PARTICLE_ALLOC);       // 0→1 fade-in
   visible = new Uint8Array(MAX_PARTICLE_ALLOC);       // 1 = passes spacing filter
+
+  // Trail ring buffers — store past positions for streaming geometry
+  trailLng = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  trailLat = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  trailElev = new Float32Array(MAX_PARTICLE_ALLOC * TRAIL_LENGTH);
+  trailHead = new Uint8Array(MAX_PARTICLE_ALLOC);    // write index into ring buffer
+  trailCount = new Uint8Array(MAX_PARTICLE_ALLOC);   // valid entries (0 → TRAIL_LENGTH)
 
   count = 0;
   activeCount = 0; // visible arrows after overlap resolve
@@ -129,8 +137,6 @@ export class ParticleSystem {
       const pi = i * 2;
       let lng = this.positions[pi];
       let lat = this.positions[pi + 1];
-      const prevLng = lng;
-      const prevLat = lat;
 
       // Smooth fade-in
       if (this.fade[i] < 1) {
@@ -164,16 +170,6 @@ export class ParticleSystem {
       lng += (this.windU[i] * dt * simScale) / mpdLng;
       lat += (this.windV[i] * dt * simScale) / metersPerDegreeLat;
 
-      // Compute actual displacement direction (guarantees arrow points where it moves)
-      const dispE = (lng - prevLng) * mpdLng;
-      const dispN = (lat - prevLat) * metersPerDegreeLat;
-      const dispMag = Math.hypot(dispE, dispN);
-      if (dispMag > 0.001) {
-        this.dirU[i] = dispE / dispMag;
-        this.dirV[i] = dispN / dispMag;
-      }
-      // else: keep previous direction (avoid jitter near zero displacement)
-
       // Out of both data bounds and viewport → recycle
       if (!isInsideBounds(lng, lat, bounds) && !isInViewport(lng, lat, map)) {
         this.respawnFromMap(i, map);
@@ -182,6 +178,25 @@ export class ParticleSystem {
 
       this.positions[pi] = lng;
       this.positions[pi + 1] = lat;
+
+      // Record trail position with terrain elevation
+      const cosLat = Math.cos(lat * Math.PI / 180);
+      const metersPerPx = EQUATORIAL_CIRCUMFERENCE * cosLat / (512 * Math.pow(2, map.getZoom()));
+      const elev = map.queryTerrainElevation?.([lng, lat]) ?? 0;
+      const altOffset = metersPerPx * 8;
+      const ringBase = i * TRAIL_LENGTH;
+      const head = this.trailHead[i];
+      this.trailLng[ringBase + head] = lng;
+      this.trailLat[ringBase + head] = lat;
+      this.trailElev[ringBase + head] = elev + altOffset;
+      this.trailHead[i] = (head + 1) % TRAIL_LENGTH;
+      if (this.trailCount[i] < TRAIL_LENGTH) this.trailCount[i]++;
+
+      // Drop-rate random respawn (wind-layer style organic flow)
+      const speedT = clamp(this.speeds[i] / 25, 0, 1);
+      if (Math.random() < DROP_RATE + speedT * DROP_RATE_BUMP) {
+        this.respawnFromMap(i, map);
+      }
     }
   }
 
@@ -194,7 +209,7 @@ export class ParticleSystem {
 
     const zoom = map.getZoom();
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const cellSize = adaptiveArrowSpacing(zoom, dpr);
+    const cellSize = adaptiveTrailSpacing(zoom, dpr);
 
     // Project all tips to screen-space
     const sx = new Float32Array(this.count);
@@ -269,6 +284,8 @@ export class ParticleSystem {
     this.dirU[i] = 0;
     this.dirV[i] = 0;
     this.fade[i] = randomAge ? Math.min(1, Math.random() + 0.3) : 0;
+    this.trailCount[i] = 0;
+    this.trailHead[i] = 0;
   }
 }
 
