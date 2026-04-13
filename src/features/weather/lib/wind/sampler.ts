@@ -111,15 +111,15 @@ export class WindSampler {
   }
 
   private readUV(x: number, y: number, data: WindData): { u: number; v: number } {
-    const idx = (y * data.width + x) * 4;
+    const idx = (y * data.width + x) * 3;
     return {
-      u: lerp(data.uMin, data.uMax, data.image[idx] / 255),
-      v: lerp(data.vMin, data.vMax, data.image[idx + 1] / 255),
+      u: data.image[idx],
+      v: data.image[idx + 1],
     };
   }
 
   private readSpeed(x: number, y: number, data: WindData): number {
-    const idx = (y * data.width + x) * 4;
-    return lerp(data.speedMin, data.speedMax, data.image[idx + 2] / 255);
+    const idx = (y * data.width + x) * 3;
+    return data.image[idx + 2];
   }
 }

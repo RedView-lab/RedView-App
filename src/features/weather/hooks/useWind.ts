@@ -14,7 +14,7 @@ import {
 const DEBOUNCE_MS = 800;
 const MIN_FETCH_INTERVAL_MS = 8_000;
 const VIEWPORT_SHIFT_THRESHOLD = 0.25;
-const ZOOM_DELTA_THRESHOLD = 0.6;
+const ZOOM_DELTA_THRESHOLD = 1.2;
 const BOUNDS_PADDING = 0.8;
 
 // ── Viewport helpers ──────────────────────────────────────────────────

@@ -21,7 +21,7 @@ export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 63
 export const MAX_DELTA_SECONDS = 0.05;
 export const DIRECTION_SMOOTH = 0.22;
 export const FADE_IN_RATE = 4.5;
-export const WIND_BLEND_DURATION = 0.5; // seconds for prev→current crossfade
+export const WIND_BLEND_DURATION = 1.2; // seconds for prev→current crossfade
 export const DROP_RATE = 0.001;          // base random respawn probability per frame
 export const DROP_RATE_BUMP = 0.001;     // additional respawn rate × speed_t
 

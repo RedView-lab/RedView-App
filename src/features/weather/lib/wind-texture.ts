@@ -13,18 +13,13 @@ const IDW_MIN_DIST = 0.001; // degrees — avoids division by zero
 // ── Wind texture generation ───────────────────────────────────────────
 
 /**
- * Build a WebGL-ready wind texture from sparse API points.
+ * Build a wind field grid from sparse API points using IDW interpolation.
  *
- * The texture is a TEX_SIZE × TEX_SIZE RGBA image where:
- *   R channel = normalized u component (east–west wind)
- *   G channel = normalized v component (north–south wind)
- *   B channel = normalized scalar speed (IDW of point speeds directly)
- *   A = 255 (opaque)
+ * The result is a TEX_SIZE × TEX_SIZE Float32Array with 3 floats per texel:
+ *   [u, v, speed] stored directly as physical m/s values.
  *
- * u/v are normalized from [uMin..uMax] / [vMin..vMax] → [0..255].
- * speed is normalized from [speedMin..speedMax] → [0..255].
- * Scalar speed is interpolated independently from u/v to avoid vector
- * cancellation artifacts in rotating wind fields (cyclones, etc.).
+ * This avoids the previous Uint8 encode/decode cycle which caused
+ * direction instability when normalization ranges shifted between fetches.
  */
 export function buildWindTexture(
   sparsePoints: WindPoint[],
@@ -35,7 +30,7 @@ export function buildWindTexture(
 
   if (sparsePoints.length === 0 || latRange <= 0 || lngRange <= 0) {
     return {
-      image: new Uint8Array(TEX_SIZE * TEX_SIZE * 4),
+      image: new Float32Array(TEX_SIZE * TEX_SIZE * 3),
       width: TEX_SIZE,
       height: TEX_SIZE,
       uMin: 0,
@@ -47,8 +42,7 @@ export function buildWindTexture(
     };
   }
 
-  // First pass: compute u/v/speed at each texel via IDW, find min/max
-  const grid = new Float32Array(TEX_SIZE * TEX_SIZE * 3); // [u, v, speed] per texel
+  const image = new Float32Array(TEX_SIZE * TEX_SIZE * 3);
   let uMin = Infinity,
     uMax = -Infinity,
     vMin = Infinity,
@@ -90,9 +84,6 @@ export function buildWindTexture(
         wSum += w;
 
         // Convert meteorological direction → u/v components
-        // Meteorological direction = where wind comes FROM
-        // u = east component of where wind GOES TO → -speed * sin(dir)
-        // v = north component of where wind GOES TO → -speed * cos(dir)
         const rad = (p.direction * Math.PI) / 180;
         uSum += w * (-p.speed * Math.sin(rad));
         vSum += w * (-p.speed * Math.cos(rad));
@@ -105,9 +96,9 @@ export function buildWindTexture(
       const speed = wSum > 0 ? speedSum / wSum : 0;
 
       const idx = (y * TEX_SIZE + x) * 3;
-      grid[idx] = u;
-      grid[idx + 1] = v;
-      grid[idx + 2] = speed;
+      image[idx] = u;
+      image[idx + 1] = v;
+      image[idx + 2] = speed;
 
       if (u < uMin) uMin = u;
       if (u > uMax) uMax = u;
@@ -118,36 +109,10 @@ export function buildWindTexture(
     }
   }
 
-  // Ensure non-zero ranges (avoid division by zero)
-  if (uMin === uMax) {
-    uMin -= 0.1;
-    uMax += 0.1;
-  }
-  if (vMin === vMax) {
-    vMin -= 0.1;
-    vMax += 0.1;
-  }
-  if (speedMin === speedMax) {
-    speedMin = Math.max(0, speedMin - 0.1);
-    speedMax += 0.1;
-  }
-
-  // Second pass: encode u/v/speed as normalized [0..255] RGBA
-  const image = new Uint8Array(TEX_SIZE * TEX_SIZE * 4);
-  const uRange = uMax - uMin;
-  const vRange = vMax - vMin;
-  const speedRange = speedMax - speedMin;
-
-  for (let i = 0; i < TEX_SIZE * TEX_SIZE; i++) {
-    const u = grid[i * 3];
-    const v = grid[i * 3 + 1];
-    const speed = grid[i * 3 + 2];
-
-    image[i * 4] = Math.round(((u - uMin) / uRange) * 255);           // R = normalized u
-    image[i * 4 + 1] = Math.round(((v - vMin) / vRange) * 255);       // G = normalized v
-    image[i * 4 + 2] = Math.round(((speed - speedMin) / speedRange) * 255); // B = normalized speed
-    image[i * 4 + 3] = 255;                                            // A = opaque
-  }
+  // Ensure non-zero ranges (metadata only — not used for encoding)
+  if (uMin === uMax) { uMin -= 0.1; uMax += 0.1; }
+  if (vMin === vMax) { vMin -= 0.1; vMax += 0.1; }
+  if (speedMin === speedMax) { speedMin = Math.max(0, speedMin - 0.1); speedMax += 0.1; }
 
   return { image, width: TEX_SIZE, height: TEX_SIZE, uMin, uMax, vMin, vMax, speedMin, speedMax };
 }

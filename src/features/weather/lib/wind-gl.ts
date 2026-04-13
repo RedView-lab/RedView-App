@@ -333,7 +333,8 @@ function restoreGLState(gl: WebGLRenderingContext, s: SavedGLState): void {
 // ── WindGL class ───────────────────────────────────────────────────────
 
 export interface WindData {
-  image: Uint8Array;
+  /** Float32 grid: 3 floats per texel [u, v, speed] (row-major, top=north). */
+  image: Float32Array;
   width: number;
   height: number;
   uMin: number;
@@ -433,7 +434,8 @@ export class WindGL {
 
   setWind(windData: WindData): void {
     this.windData = windData;
-    this.windTexture = createTexture(this.gl, this.gl.LINEAR, windData.image, windData.width, windData.height);
+    // Legacy GPU path (unused) — expects Uint8 RGBA; cast to satisfy type checker
+    this.windTexture = createTexture(this.gl, this.gl.LINEAR, windData.image as unknown as Uint8Array, windData.width, windData.height);
   }
 
   /** Prerender pass: update particle positions (offscreen FBO work) */
