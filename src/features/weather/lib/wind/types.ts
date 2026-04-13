@@ -12,9 +12,9 @@ export const EQUATORIAL_CIRCUMFERENCE = 40_075_017;
 
 // ── Trail geometry constants ───────────────────────────────────────────
 
-export const TRAIL_LENGTH = 48;                        // ring buffer size per particle
+export const TRAIL_LENGTH = 64;                        // ring buffer size per particle
 export const VERTS_PER_SEGMENT = 6;                    // 2 triangles per trail segment
-export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 47
+export const MAX_TRAIL_SEGMENTS = TRAIL_LENGTH - 1;    // = 63
 
 // ── Simulation constants ───────────────────────────────────────────────
 
@@ -27,7 +27,7 @@ export const DROP_RATE_BUMP = 0.001;     // additional respawn rate × speed_t
 
 // ── Max allocation (avoids re-allocation on zoom) ──────────────────────
 
-export const MAX_PARTICLE_ALLOC = 1500;
+export const MAX_PARTICLE_ALLOC = 2000;
 
 // ── Interfaces ─────────────────────────────────────────────────────────
 
@@ -42,7 +42,6 @@ export interface ParticleProgram {
   program: WebGLProgram;
   a_position: number;
   a_color: number;
-  u_matrix: WebGLUniformLocation | null;
 }
 
 export interface SavedGLState {
@@ -92,7 +91,7 @@ export function lerp(a: number, b: number, t: number): number {
 /** Particle count — screen-density based so coverage stays uniform at all zoom levels. */
 export function adaptiveParticleCount(zoom: number, _viewportWidthDeg: number, _viewportHeightDeg: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  return Math.round(lerp(900, MAX_PARTICLE_ALLOC, zoomT * zoomT));
+  return Math.round(lerp(1000, MAX_PARTICLE_ALLOC, zoomT * zoomT));
 }
 
 /** Trail half-width in screen pixels. Visible streamlines across all zooms. */

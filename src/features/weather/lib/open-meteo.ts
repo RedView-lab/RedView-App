@@ -4,7 +4,7 @@ import { coordCacheKey } from './wind-grid';
 // ── Configuration ─────────────────────────────────────────────────────
 
 const API_BASE = 'https://api.open-meteo.com/v1/forecast';
-const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
 const BATCH_SIZE = 50; // Max coordinates per request
 const MAX_RETRIES = 4;
 const INITIAL_BACKOFF_MS = 3_000;
