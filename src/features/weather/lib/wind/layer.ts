@@ -60,6 +60,7 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.matrix.set(matrix);
     const canvas = this.map.getCanvas();
     const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
+    const center = this.map.getCenter();
     const vertexCount = this.geometry.build(
       this.particles,
       this.matrix,
@@ -67,6 +68,8 @@ export class WindCustomLayer implements CustomLayerInterface {
       canvas.height,
       this.map.getZoom(),
       dpr,
+      center.lng,
+      center.lat,
     );
     this.vertexCount = vertexCount;
     if (vertexCount === 0) return;

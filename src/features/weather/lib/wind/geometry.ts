@@ -9,16 +9,22 @@ import type { ParticleSystem } from './particles';
 // ── Trail geometry builder (NDC-based, globe-aware) ────────────────────
 // Projects Mercator trail points through the Mapbox globe matrix on the CPU,
 // computes perpendicular offsets in screen pixels, then outputs final NDC
-// vertices. This ensures trails follow the globe curvature at any zoom level.
+// vertices. Includes ECEF horizon culling so trails don't appear in the
+// black space outside the globe at low zoom levels.
 //
 // Each trail segment = 2 triangles (quad) = 6 vertices × 7 floats.
 
-// Scratch arrays for per-particle projected trail (avoid per-frame allocation)
-const _scratchNDC = new Float32Array(MAX_PARTICLE_ALLOC * 3); // ndcX, ndcY, ndcZ per point
-const _scratchScreen = new Float32Array(MAX_PARTICLE_ALLOC * 2); // screenX, screenY
-const _scratchVisible = new Uint8Array(MAX_PARTICLE_ALLOC);
+// Scratch arrays per particle trail (reused each iteration)
+const _scratchNDC = new Float32Array(TRAIL_LENGTH * 3);    // ndcX, ndcY, ndcZ
+const _scratchScreen = new Float32Array(TRAIL_LENGTH * 2);  // screenX, screenY
+const _scratchVisible = new Uint8Array(TRAIL_LENGTH);
 
 const DEPTH_BIAS = 0.0015;
+const DEG_TO_RAD = Math.PI / 180;
+
+/** Horizon threshold: cos(~87°) ≈ 0.05. Points further than 87° from the
+ *  camera center are culled. Prevents trails from appearing beyond the globe edge. */
+const HORIZON_COS = 0.05;
 
 export class TrailGeometryBuilder {
   /** Pre-allocated vertex buffer. */
@@ -38,6 +44,8 @@ export class TrailGeometryBuilder {
     canvasHeight: number,
     zoom: number,
     dpr: number,
+    centerLng: number,
+    centerLat: number,
   ): number {
     const m = matrix;
     const halfW = canvasWidth * 0.5;
@@ -45,6 +53,15 @@ export class TrailGeometryBuilder {
     // Inverse half-canvas for converting screen-pixel offsets back to NDC
     const invHalfW = 1 / halfW;
     const invHalfH = 1 / halfH;
+
+    // Camera direction on unit sphere (ECEF) — the point the camera looks at.
+    // Used for horizon culling: dot(pointECEF, camDir) < threshold → backface.
+    const cLatRad = centerLat * DEG_TO_RAD;
+    const cLngRad = centerLng * DEG_TO_RAD;
+    const cosCLat = Math.cos(cLatRad);
+    const camDirX = cosCLat * Math.sin(cLngRad);
+    const camDirY = Math.sin(cLatRad);
+    const camDirZ = cosCLat * Math.cos(cLngRad);
 
     let totalVerts = 0;
 
@@ -67,26 +84,44 @@ export class TrailGeometryBuilder {
       const ringBase = i * TRAIL_LENGTH;
       const head = particles.trailHead[i];
 
-      // ── Project all trail points through the globe matrix ──
+      // ── Project all trail points & horizon-cull ──
       let visibleCount = 0;
       for (let p = 0; p < count; p++) {
         const idx = (head - count + p + TRAIL_LENGTH) % TRAIL_LENGTH;
-        const mx = particles.trailX[ringBase + idx];
-        const my = particles.trailY[ringBase + idx];
-        const mz = particles.trailZ[ringBase + idx];
+        const mcX = particles.trailX[ringBase + idx];
+        const mcY = particles.trailY[ringBase + idx];
+        const mcZ = particles.trailZ[ringBase + idx];
 
-        // Matrix multiply: clip = m * vec4(mx, my, mz, 1)
-        const clipW = m[3] * mx + m[7] * my + m[11] * mz + m[15];
+        // ── Horizon test via ECEF dot product ──
+        // Mercator → lng/lat → ECEF on unit sphere (no trig for lat via exp identity)
+        const lngRad = (mcX * 360 - 180) * DEG_TO_RAD;
+        const expU = Math.exp(Math.PI * (1 - 2 * mcY));
+        const expU2 = expU * expU;
+        const invDenom = 1 / (expU2 + 1);
+        const sinLat = (expU2 - 1) * invDenom;
+        const cosLat = 2 * expU * invDenom;
 
-        if (clipW <= 0.0001) {
-          // Behind camera / on backface of globe → not visible
+        const ptX = cosLat * Math.sin(lngRad);
+        const ptY = sinLat;
+        const ptZ = cosLat * Math.cos(lngRad);
+
+        const dot = ptX * camDirX + ptY * camDirY + ptZ * camDirZ;
+        if (dot < HORIZON_COS) {
           _scratchVisible[p] = 0;
           continue;
         }
 
-        const clipX = m[0] * mx + m[4] * my + m[8] * mz + m[12];
-        const clipY = m[1] * mx + m[5] * my + m[9] * mz + m[13];
-        const clipZ = m[2] * mx + m[6] * my + m[10] * mz + m[14];
+        // ── Matrix projection (Mercator → clip → NDC) ──
+        const clipW = m[3] * mcX + m[7] * mcY + m[11] * mcZ + m[15];
+
+        if (clipW <= 0.0001) {
+          _scratchVisible[p] = 0;
+          continue;
+        }
+
+        const clipX = m[0] * mcX + m[4] * mcY + m[8] * mcZ + m[12];
+        const clipY = m[1] * mcX + m[5] * mcY + m[9] * mcZ + m[13];
+        const clipZ = m[2] * mcX + m[6] * mcY + m[10] * mcZ + m[14];
 
         const invW = 1 / clipW;
         const ndcX = clipX * invW;
