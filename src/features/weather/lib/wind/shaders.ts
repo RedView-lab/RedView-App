@@ -1,19 +1,21 @@
 import type { ParticleProgram, SavedGLState } from './types';
 
 // ── GLSL Vertex Shader ─────────────────────────────────────────────────
-// Positions are pre-projected to NDC on the CPU (globe-aware matrix applied there).
-// The shader simply passes through NDC coordinates and vertex color.
 
 export const VERTEX_SHADER = `
 precision highp float;
 
-attribute vec3 a_position;  // NDC: x [-1,1], y [-1,1], z depth
+attribute vec3 a_position;
 attribute vec4 a_color;
+
+uniform mat4 u_matrix;
 
 varying vec4 v_color;
 
 void main() {
-    gl_Position = vec4(a_position, 1.0);
+    gl_Position = u_matrix * vec4(a_position, 1.0);
+    // Depth bias: push arrows slightly toward camera to prevent Z-fighting with terrain
+    gl_Position.z -= 0.0015 * gl_Position.w;
     v_color = a_color;
 }
 `;
@@ -69,6 +71,7 @@ export function createWindProgram(gl: WebGL2RenderingContext): ParticleProgram {
     program,
     a_position: gl.getAttribLocation(program, 'a_position'),
     a_color: gl.getAttribLocation(program, 'a_color'),
+    u_matrix: gl.getUniformLocation(program, 'u_matrix'),
   };
 }
 

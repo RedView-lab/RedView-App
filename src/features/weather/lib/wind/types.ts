@@ -42,6 +42,7 @@ export interface ParticleProgram {
   program: WebGLProgram;
   a_position: number;
   a_color: number;
+  u_matrix: WebGLUniformLocation | null;
 }
 
 export interface SavedGLState {

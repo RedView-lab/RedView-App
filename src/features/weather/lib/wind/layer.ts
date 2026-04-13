@@ -10,6 +10,10 @@ import { TrailGeometryBuilder } from './geometry';
 // Thin orchestrator: composes WindSampler + ParticleSystem + ArrowGeometryBuilder.
 // Owns GPU resources (program + VBO) and the Mapbox lifecycle hooks.
 
+/** Below this zoom Mapbox uses globe projection which distorts custom layers.
+ *  Wind trails are hidden and particles reset when zooming back in. */
+const MIN_WIND_ZOOM = 3.0;
+
 export class WindCustomLayer implements CustomLayerInterface {
   readonly id = LAYER_ID;
   readonly type = 'custom' as const;
@@ -38,8 +42,14 @@ export class WindCustomLayer implements CustomLayerInterface {
     if (!this.vertexBuffer) throw new Error('Unable to create wind vertex buffer');
   }
 
-  prerender(_gl: WebGL2RenderingContext, matrix: number[]): void {
+  prerender(_gl: WebGL2RenderingContext, _matrix: number[]): void {
     if (!this.map || !this.gl || !this.program || !this.vertexBuffer || !this.sampler.hasData) return;
+
+    // Hide wind when zoomed out past the globe projection threshold
+    if (this.map.getZoom() < MIN_WIND_ZOOM) {
+      this.vertexCount = 0;
+      return;
+    }
 
     const bounds = this.sampler.currentBounds!;
 
@@ -56,21 +66,8 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.sampler.advanceBlend(now);
     this.particles.advance(now, this.map, this.sampler, bounds);
 
-    // Build trail geometry (NDC-based: project through globe matrix on CPU)
-    this.matrix.set(matrix);
-    const canvas = this.map.getCanvas();
-    const dpr = typeof devicePixelRatio === 'number' ? devicePixelRatio : 1;
-    const center = this.map.getCenter();
-    const vertexCount = this.geometry.build(
-      this.particles,
-      this.matrix,
-      canvas.width,
-      canvas.height,
-      this.map.getZoom(),
-      dpr,
-      center.lng,
-      center.lat,
-    );
+    // Build trail geometry
+    const vertexCount = this.geometry.build(this.particles, this.map);
     this.vertexCount = vertexCount;
     if (vertexCount === 0) return;
 
@@ -86,13 +83,16 @@ export class WindCustomLayer implements CustomLayerInterface {
     this.gl.bindBuffer(this.gl.ARRAY_BUFFER, prevBuf);
   }
 
-  render(gl: WebGL2RenderingContext, _matrix: number[]): void {
+  render(gl: WebGL2RenderingContext, matrix: number[]): void {
     if (!this.program || !this.vertexBuffer || this.vertexCount === 0) return;
+
+    this.matrix.set(matrix);
 
     const attribs = [this.program.a_position, this.program.a_color];
     const saved = saveGLState(gl, attribs);
 
     gl.useProgram(this.program.program);
+    gl.uniformMatrix4fv(this.program.u_matrix, false, this.matrix);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
     const stride = VERTEX_STRIDE * Float32Array.BYTES_PER_ELEMENT;
