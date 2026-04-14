@@ -13,10 +13,13 @@ function applyCategory(
   const { mapping } = cat;
 
   if (mapping.type === 'config') {
-    try {
-      map.setConfigProperty('basemap', mapping.configKey, visible);
-    } catch {
-      // Config property may not exist on current style variant
+    const keys = Array.isArray(mapping.configKey) ? mapping.configKey : [mapping.configKey];
+    for (const key of keys) {
+      try {
+        map.setConfigProperty('basemap', key, visible);
+      } catch {
+        // Config property may not exist on current style variant
+      }
     }
     return;
   }

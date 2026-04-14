@@ -19,7 +19,7 @@ export const LABEL_CATEGORIES: LabelCategoryDef[] = [
     id: 'roads',
     label: 'Routes',
     defaultEnabled: true,
-    mapping: { type: 'config', configKey: 'showRoadLabels' },
+    mapping: { type: 'config', configKey: ['showRoadLabels', 'showRoadsAndTransit', 'showPedestrianRoads'] },
   },
   {
     id: 'places',

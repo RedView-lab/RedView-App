@@ -16,7 +16,7 @@ export type LabelCategory = (typeof LABEL_CATEGORIES)[number];
 // ── How a category maps to the Mapbox API ─────────────────────────────
 
 export type LabelCategoryKind =
-  | { type: 'config'; configKey: string }
+  | { type: 'config'; configKey: string | string[] }
   | { type: 'layers'; pattern: RegExp };
 
 export interface LabelCategoryDef {

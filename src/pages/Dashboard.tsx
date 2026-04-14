@@ -5,6 +5,7 @@ import { FitPredictionPanel } from '@/features/fitPredictor';
 import { MapToolsPanel } from '@/features/weather';
 import { PoiPanel } from '@/features/poi';
 import { LabelsPanel } from '@/features/labels';
+import { SlopePanel } from '@/features/slope';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -76,6 +77,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <div style={rightDockStyle}>
         <MapToolsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
+        <SlopePanel map={mapRef.current} isMapLoaded={mapLoaded} />
       </div>
     </div>
     </LidarProvider>
@@ -97,4 +99,7 @@ const rightDockStyle: React.CSSProperties = {
   top: 50,
   right: 12,
   zIndex: 20,
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 8,
 };

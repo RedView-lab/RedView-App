@@ -24,6 +24,7 @@ importScripts(
   '/sw-dem/build-tile.js',
   '/sw-dem/composite.js',
   '/sw-dem/ortho.js',
+  '/sw-dem/slope.js',
 );
 
 // Shared mutable state (used by sub-modules via global scope)
@@ -85,6 +86,13 @@ self.addEventListener('fetch', (event) => {
   if (orthoMatch) {
     event.respondWith(handleOrthoRequest(
       parseInt(orthoMatch[1], 10), parseInt(orthoMatch[2], 10), parseInt(orthoMatch[3], 10)));
+    return;
+  }
+
+  const slopeMatch = url.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  if (slopeMatch) {
+    event.respondWith(handleSlopeRequest(
+      parseInt(slopeMatch[1], 10), parseInt(slopeMatch[2], 10), parseInt(slopeMatch[3], 10)));
     return;
   }
 });
@@ -157,6 +165,51 @@ async function handleDemRequest(request, z, x, y) {
     return response;
   } catch (err) {
     console.error('[sw-dem] Error processing tile', z, x, y, err);
+    return new Response(null, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Slope request handler
+// ---------------------------------------------------------------------------
+
+async function handleSlopeRequest(z, x, y) {
+  const slopeCache = await caches.open(SLOPE_CACHE_NAME);
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}`);
+  const cached = await slopeCache.match(cacheKey);
+  if (cached) return cached;
+
+  // Fetch the DEM tile (may come from DEM cache or be freshly built)
+  const demCache = await caches.open(CACHE_NAME);
+  const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+  let demResponse = await demCache.match(demKey);
+
+  if (!demResponse || demResponse.status !== 200) {
+    // Trigger DEM generation by calling handleDemRequest
+    demResponse = await handleDemRequest(demKey, z, x, y);
+  }
+
+  if (!demResponse || demResponse.status !== 200) {
+    return new Response(null, { status: 204 });
+  }
+
+  try {
+    const demBlob = await demResponse.clone().blob();
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y);
+
+    const response = new Response(slopeBlob, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=604800',
+        'X-Tile-Type': 'slope',
+      },
+    });
+
+    slopeCache.put(cacheKey, response.clone());
+    return response;
+  } catch (err) {
+    console.error('[sw-dem] Error building slope tile', z, x, y, err);
     return new Response(null, { status: 500 });
   }
 }
