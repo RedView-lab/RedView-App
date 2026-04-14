@@ -170,6 +170,24 @@ async function handleDemRequest(request, z, x, y) {
 }
 
 // ---------------------------------------------------------------------------
+// Slope helpers
+// ---------------------------------------------------------------------------
+
+// Minimal 1×1 transparent PNG (68 bytes) returned when no DEM data is available.
+// Mapbox can decode this without error and renders nothing.
+const TRANSPARENT_PNG = Uint8Array.from(atob(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQAB' +
+  'Nl7BcQAAAABJRU5ErkJggg=='
+), c => c.charCodeAt(0));
+
+function transparentTileResponse() {
+  return new Response(TRANSPARENT_PNG.slice(), {
+    status: 200,
+    headers: { 'Content-Type': 'image/png' },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Slope request handler
 // ---------------------------------------------------------------------------
 
@@ -190,7 +208,8 @@ async function handleSlopeRequest(z, x, y) {
   }
 
   if (!demResponse || demResponse.status !== 200) {
-    return new Response(null, { status: 204 });
+    // Return a transparent 1×1 PNG so Mapbox can decode it without error
+    return transparentTileResponse();
   }
 
   try {
@@ -210,6 +229,6 @@ async function handleSlopeRequest(z, x, y) {
     return response;
   } catch (err) {
     console.error('[sw-dem] Error building slope tile', z, x, y, err);
-    return new Response(null, { status: 500 });
+    return transparentTileResponse();
   }
 }

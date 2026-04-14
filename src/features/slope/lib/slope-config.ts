@@ -23,6 +23,14 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
 // Produces an interpolate or step expression mapping slope degrees → RGBA.
 // The input is the decoded raster value via `raster-color-mix`.
 
+// raster-value is normalised to [0, 1] by raster-color-range.
+// With range [0, MAX_SLOPE_DEG], normalised = deg / MAX_SLOPE_DEG.
+export const MAX_SLOPE_DEG = 90;
+
+function degNorm(deg: number): number {
+  return deg / MAX_SLOPE_DEG;
+}
+
 export function buildSlopeColorExpression(
   categories: SlopeCategory[],
   mode: SlopeColorMode,
@@ -31,7 +39,7 @@ export function buildSlopeColorExpression(
     // Step: flat bands of color
     const expr: unknown[] = ['step', ['raster-value'], 'transparent'];
     for (const cat of categories) {
-      expr.push(cat.minDeg, cat.color);
+      expr.push(degNorm(cat.minDeg), cat.color);
     }
     return expr;
   }
@@ -42,12 +50,12 @@ export function buildSlopeColorExpression(
   ];
 
   for (const cat of categories) {
-    expr.push(cat.minDeg, cat.color);
+    expr.push(degNorm(cat.minDeg), cat.color);
   }
   // Extend the last color to 90°
   const last = categories[categories.length - 1];
-  if (last.maxDeg < 90) {
-    expr.push(90, last.color);
+  if (last.maxDeg < MAX_SLOPE_DEG) {
+    expr.push(1, last.color);
   }
 
   return expr;
@@ -55,7 +63,8 @@ export function buildSlopeColorExpression(
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-/** Convert degrees to approximate percentage (tan) */
-export function degToPercent(deg: number): number {
-  return Math.round(Math.tan((deg * Math.PI) / 180) * 100);
+/** Convert degrees to approximate percentage (tan). Caps at 90° → ∞ */
+export function degToPercent(deg: number): string {
+  if (deg >= 90) return '∞';
+  return String(Math.round(Math.tan((deg * Math.PI) / 180) * 100));
 }
