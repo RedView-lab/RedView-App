@@ -68,8 +68,18 @@ export function useGpxRoute(
     const onStyleLoad = () => {
       const route = routeRef.current;
       if (route && !isGpxRouteOnMap(map)) {
-        // Style reload wiped our layers — re-add them
-        try { addGpxRoute(map, route.points); } catch { /* */ }
+        // Defer so useMap's async handler (await swReady → addSource/addLayer)
+        // completes first — ensures GPX layers are added AFTER the IGN ortho
+        // raster, so they render on top in the draped rendering batch.
+        setTimeout(() => {
+          try {
+            if (routeRef.current && !isGpxRouteOnMap(map)) {
+              addGpxRoute(map, routeRef.current.points);
+            }
+          } catch (err) {
+            console.warn('[gpx] style.load re-add failed:', err);
+          }
+        }, 0);
       }
     };
 

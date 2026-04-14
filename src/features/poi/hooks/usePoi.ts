@@ -45,6 +45,7 @@ export function usePoi(
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
   radiusRef.current = radiusM;
+  const lastCorridorFeatures = useRef<PoiFeature[]>([]);
 
   // ── Setup source + layers ─────────────────────────────────────────
 
@@ -257,6 +258,7 @@ export function usePoi(
       const sampled = sampleRoutePoints(route.points, 300);
       const features = await fetchPoisAlongRoute(sampled, radiusRef.current, cats, controller.signal);
       if (!controller.signal.aborted) {
+        lastCorridorFeatures.current = features;
         updateSourceData(m, features);
       }
     } catch (err: unknown) {
@@ -346,7 +348,11 @@ export function usePoi(
       if (!gpxRef.current) {
         fetchVisiblePois(map);
 
-        const onMoveEnd = () => debouncedFetch(map);
+        const onMoveEnd = () => {
+          // Guard: if GPX was loaded after this effect started, skip viewport fetch
+          if (gpxRef.current) return;
+          debouncedFetch(map);
+        };
         map.on('moveend', onMoveEnd);
 
         map.on('click', LAYER_ID, handleClick);
@@ -396,6 +402,41 @@ export function usePoi(
       iconsReady.current = false;
     };
   }, [map, isMapLoaded, ensureSourceAndLayers, fetchVisiblePois, debouncedFetch, handleClick, handleMouseEnter, handleMouseLeave]);
+
+  // ── Recover POI layers after style reloads ─────────────────────────
+  // Standard Satellite fires style.load multiple times (imports/terrain),
+  // which wipes custom sources, layers, and images.
+
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    const onStyleLoad = () => {
+      // Defer so useMap's async handler (await swReady → addSource) completes first
+      setTimeout(async () => {
+        try {
+          resetIconRegistration();
+          iconsReady.current = false;
+          await registerPoiIcons(map);
+          iconsReady.current = true;
+
+          ensureSourceAndLayers(map);
+
+          if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
+            // Corridor mode: re-render last corridor results
+            updateSourceData(map, lastCorridorFeatures.current);
+          } else if (!gpxRef.current) {
+            // Viewport mode: re-fetch visible POIs
+            fetchVisiblePois(map);
+          }
+        } catch (err) {
+          console.warn('[poi] style.load recovery failed:', err);
+        }
+      }, 0);
+    };
+
+    map.on('style.load', onStyleLoad);
+    return () => { map.off('style.load', onStyleLoad); };
+  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, fetchVisiblePois]);
 
   // ── Re-fetch when enabled categories change (viewport mode only) ──
 

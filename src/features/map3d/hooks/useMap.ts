@@ -62,29 +62,38 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       }
 
       // Unified DEM source: IGN MNS 0.42m/px France + Mapbox 30m elsewhere
-      map.addSource(unifiedDEMSource.id, {
-        type: 'raster-dem',
-        tiles: unifiedDEMSource.tiles,
-        tileSize: unifiedDEMSource.tileSize,
-        encoding: unifiedDEMSource.encoding,
-        maxzoom: unifiedDEMSource.maxzoom,
-      });
+      if (!map.getSource(unifiedDEMSource.id)) {
+        map.addSource(unifiedDEMSource.id, {
+          type: 'raster-dem',
+          tiles: unifiedDEMSource.tiles,
+          tileSize: unifiedDEMSource.tileSize,
+          encoding: unifiedDEMSource.encoding,
+          maxzoom: unifiedDEMSource.maxzoom,
+        });
+      }
 
       // IGN orthophoto source (20cm/px France overlay on top of satellite base)
-      map.addSource(ignOrthoSource.id, {
-        type: 'raster',
-        tiles: ignOrthoSource.tiles,
-        tileSize: ignOrthoSource.tileSize,
-        minzoom: ignOrthoSource.minzoom,
-        maxzoom: ignOrthoSource.maxzoom,
-        bounds: ignOrthoSource.bounds,
-        attribution: ignOrthoSource.attribution,
-      });
+      if (!map.getSource(ignOrthoSource.id)) {
+        map.addSource(ignOrthoSource.id, {
+          type: 'raster',
+          tiles: ignOrthoSource.tiles,
+          tileSize: ignOrthoSource.tileSize,
+          minzoom: ignOrthoSource.minzoom,
+          maxzoom: ignOrthoSource.maxzoom,
+          bounds: ignOrthoSource.bounds,
+          attribution: ignOrthoSource.attribution,
+        });
+      }
 
       // IGN ortho layer
-      map.addLayer(ignOrthoLayer);
+      if (!map.getLayer(ignOrthoLayer.id)) {
+        map.addLayer(ignOrthoLayer);
+      }
 
       // Terrain with natural exaggeration
+      if (terrainRef.current) {
+        terrainRef.current.destroy();
+      }
       const terrain = new TerrainManager(map, unifiedDEMSource.id);
       terrain.init();
       terrainRef.current = terrain;
