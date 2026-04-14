@@ -27,7 +27,7 @@ function buildWMTSTileURL(
 
 export function buildDEMTileURL(z: number, col: number, row: number): string {
   return buildWMTSTileURL(
-    IGN_LAYERS.ELEVATION_MNT,
+    IGN_LAYERS.ELEVATION_MNS,
     IGN_DEM_FORMAT,
     IGN_DEM_TILEMATRIXSET,
     z,

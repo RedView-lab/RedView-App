@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
 import Dashboard from './pages/Dashboard'
+import PayWall from './components/PayWall'
 import './index.css'
 
 function App() {
-  const [session, setSession] = useState<{ user: { email?: string } } | null>(null)
+  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+
+  const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
 
   useEffect(() => {
     const hash = window.location.hash.substring(1)
@@ -34,13 +38,29 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  // Check subscription status after session is available
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setIsSubscribed(null)
+      return
+    }
+
+    supabase
+      .from('user_subscription_status')
+      .select('is_subscribed')
+      .eq('user_id', session.user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        setIsSubscribed(data?.is_subscribed ?? false)
+      })
+  }, [session?.user?.id])
+
   const handleLogout = async () => {
     await supabase.auth.signOut()
-    const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
     window.location.href = landingUrl
   }
 
-  if (loading) {
+  if (loading || isSubscribed === null) {
     return (
       <div className="loading">
         <p>Loading...</p>
@@ -49,13 +69,16 @@ function App() {
   }
 
   if (!session) {
-    const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
     window.location.href = `${landingUrl}/auth/login`
     return (
       <div className="loading">
         <p>Redirecting...</p>
       </div>
     )
+  }
+
+  if (!isSubscribed) {
+    return <PayWall landingUrl={landingUrl} />
   }
 
   return <Dashboard email={session.user.email || 'unknown'} onLogout={handleLogout} />
