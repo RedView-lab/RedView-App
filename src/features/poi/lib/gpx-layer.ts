@@ -29,14 +29,19 @@ export function addGpxRoute(
     },
   });
 
-  // Outer glow layer (draped on terrain)
-  // No slot — appended at end of layer list so it renders above the IGN ortho
-  // raster (which also has no slot). moveLayer() calls below guarantee ordering.
+  // Outer glow layer — elevated above terrain so it escapes the draped
+  // rendering batch where Mapbox GL may rearrange raster/line ordering.
   map.addLayer({
     id: GPX_GLOW_LAYER_ID,
     type: 'line',
     source: GPX_SOURCE_ID,
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 3 as unknown as undefined,
+    },
     paint: {
       'line-color': '#ff6b35',
       'line-width': 10,
@@ -46,12 +51,18 @@ export function addGpxRoute(
     },
   });
 
-  // Core line layer — fully emissive so it stays bright on satellite/terrain
+  // Core line layer — elevated + emissive so it stays visible above IGN ortho
   map.addLayer({
     id: GPX_LINE_LAYER_ID,
     type: 'line',
     source: GPX_SOURCE_ID,
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 3 as unknown as undefined,
+    },
     paint: {
       'line-color': '#ff6b35',
       'line-width': 4,
@@ -63,8 +74,8 @@ export function addGpxRoute(
     },
   });
 
-  // Force GPX layers to the very top of the layer stack so they render
-  // above IGN ortho raster in the draped rendering batch.
+  // Elevated lines render above draped content (raster/terrain) by design.
+  // moveLayer keeps them at the end of the layer list as extra insurance.
   map.moveLayer(GPX_GLOW_LAYER_ID);
   map.moveLayer(GPX_LINE_LAYER_ID);
 }
