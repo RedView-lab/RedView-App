@@ -30,11 +30,12 @@ export function addGpxRoute(
   });
 
   // Outer glow layer (draped on terrain)
+  // No slot — appended at end of layer list so it renders above the IGN ortho
+  // raster (which also has no slot). moveLayer() calls below guarantee ordering.
   map.addLayer({
     id: GPX_GLOW_LAYER_ID,
     type: 'line',
     source: GPX_SOURCE_ID,
-    slot: 'top',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': '#ff6b35',
@@ -50,7 +51,6 @@ export function addGpxRoute(
     id: GPX_LINE_LAYER_ID,
     type: 'line',
     source: GPX_SOURCE_ID,
-    slot: 'top',
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': '#ff6b35',
@@ -62,6 +62,11 @@ export function addGpxRoute(
       'line-occlusion-opacity': 0.85,
     },
   });
+
+  // Force GPX layers to the very top of the layer stack so they render
+  // above IGN ortho raster in the draped rendering batch.
+  map.moveLayer(GPX_GLOW_LAYER_ID);
+  map.moveLayer(GPX_LINE_LAYER_ID);
 }
 
 /** Remove GPX route layers & source from the map. */
