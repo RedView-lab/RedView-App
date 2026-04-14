@@ -61,19 +61,35 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
   const computedWkg = parsedFtp > 0 && parsedRiderWeight > 0 ? parsedFtp / parsedRiderWeight : 0;
   const wkgColor = computedWkg <= 0 ? '#8d97a7' : computedWkg < 2.5 ? '#f87171' : computedWkg < 3.5 ? '#fb923c' : computedWkg < 4.5 ? '#4ade80' : '#60a5fa';
 
+  const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+
+  const validateFileSize = (file: File): boolean => {
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File "${file.name}" exceeds 100 MB limit`);
+      return false;
+    }
+    return true;
+  };
+
   const handleFitChange = (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files ? Array.from(event.target.files) : [];
-    setFitFiles(files);
+    const valid = files.filter(validateFileSize);
+    if (valid.length !== files.length) return;
+    setFitFiles(valid);
     resetOutputs();
   };
 
   const handleGpxChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setGpxFile(event.target.files?.[0] ?? null);
+    const file = event.target.files?.[0] ?? null;
+    if (file && !validateFileSize(file)) return;
+    setGpxFile(file);
     resetOutputs();
   };
 
   const handleValidationChange = (event: ChangeEvent<HTMLInputElement>) => {
-    setValidationFile(event.target.files?.[0] ?? null);
+    const file = event.target.files?.[0] ?? null;
+    if (file && !validateFileSize(file)) return;
+    setValidationFile(file);
     resetOutputs();
   };
 
