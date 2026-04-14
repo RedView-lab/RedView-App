@@ -143,6 +143,7 @@ export function usePoi(
     }
 
     const bounds = m.getBounds();
+    if (!bounds) return;
     const south = bounds.getSouth();
     const west = bounds.getWest();
     const north = bounds.getNorth();
