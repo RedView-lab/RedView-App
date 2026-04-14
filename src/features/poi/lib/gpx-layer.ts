@@ -22,21 +22,23 @@ export function addGpxRoute(
     },
   });
 
-  // Outer glow layer
+  // Outer glow layer (draped on terrain)
   map.addLayer({
     id: GPX_GLOW_LAYER_ID,
     type: 'line',
     source: GPX_SOURCE_ID,
     slot: 'top',
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': '#ff6b35',
-      'line-width': 7,
-      'line-opacity': 0.35,
-      'line-blur': 3,
+      'line-width': 10,
+      'line-opacity': 0.4,
+      'line-blur': 4,
+      'line-emissive-strength': 1,
     },
   });
 
-  // Core line layer
+  // Core line layer — fully emissive so it stays bright on satellite/terrain
   map.addLayer({
     id: GPX_LINE_LAYER_ID,
     type: 'line',
@@ -45,8 +47,12 @@ export function addGpxRoute(
     layout: { 'line-cap': 'round', 'line-join': 'round' },
     paint: {
       'line-color': '#ff6b35',
-      'line-width': 3,
-      'line-opacity': 0.9,
+      'line-width': 4,
+      'line-opacity': 1,
+      'line-emissive-strength': 1,
+      'line-border-width': 1,
+      'line-border-color': 'rgba(255,255,255,0.6)',
+      'line-occlusion-opacity': 0.85,
     },
   });
 }

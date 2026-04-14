@@ -397,16 +397,15 @@ export function usePoi(
     };
   }, [map, isMapLoaded, ensureSourceAndLayers, fetchVisiblePois, debouncedFetch, handleClick, handleMouseEnter, handleMouseLeave]);
 
-  // ── Re-fetch when enabled categories change ───────────────────────
+  // ── Re-fetch when enabled categories change (viewport mode only) ──
 
   useEffect(() => {
     if (!map || !isMapLoaded || !iconsReady.current) return;
-    if (gpxRef.current) {
-      fetchCorridorPois(map);
-    } else {
+    // In corridor mode the user triggers search manually via the button
+    if (!gpxRef.current) {
       fetchVisiblePois(map);
     }
-  }, [map, isMapLoaded, enabledCategories, fetchVisiblePois, fetchCorridorPois]);
+  }, [map, isMapLoaded, enabledCategories, fetchVisiblePois]);
 
   return { loading, error, poiCount, searchCorridor };
 }
