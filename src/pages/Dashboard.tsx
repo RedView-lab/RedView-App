@@ -4,6 +4,7 @@ import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { MapToolsPanel } from '@/features/weather';
 import { PoiPanel } from '@/features/poi';
+import { LabelsPanel } from '@/features/labels';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -50,6 +51,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
         <PoiPanel map={mapRef.current} isMapLoaded={mapLoaded} />
+        <LabelsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
       </div>
 
       <button
