@@ -83,3 +83,9 @@ export interface OverpassElement {
 export interface OverpassResponse {
   elements: OverpassElement[];
 }
+
+/** Parsed GPX route (coordinates only, no gradient/curvature) */
+export interface GpxRoute {
+  name: string | null;
+  points: { lat: number; lon: number }[];
+}

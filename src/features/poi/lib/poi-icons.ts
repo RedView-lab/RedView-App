@@ -47,14 +47,18 @@ function svgToImageData(
   color: string,
   size: number,
 ): Promise<ImageData> {
-  return new Promise((resolve, reject) => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="11" fill="${color}" fill-opacity="0.9" stroke="white" stroke-width="1.5"/>
-      <path d="${path}" fill="white" transform="scale(0.55) translate(9.8, 9.8)"/>
-    </svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="11" fill="${color}" fill-opacity="0.9" stroke="white" stroke-width="1.5"/>
+    <path d="${path}" fill="white" transform="scale(0.55) translate(9.8, 9.8)"/>
+  </svg>`;
 
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+
+  return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
+      URL.revokeObjectURL(url);
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
@@ -62,8 +66,11 @@ function svgToImageData(
       ctx.drawImage(img, 0, 0, size, size);
       resolve(ctx.getImageData(0, 0, size, size));
     };
-    img.onerror = reject;
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error(`Failed to render icon: ${color}`));
+    };
+    img.src = url;
   });
 }
 

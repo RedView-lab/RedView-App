@@ -3,6 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { PoiCategory } from '../types';
 import { POI_GROUPS, POI_LABELS, POI_COLORS, POI_CATEGORIES } from '../types';
 import { usePoi } from '../hooks/usePoi';
+import { useGpxRoute } from '../hooks/useGpxRoute';
+import { GpxSection } from './GpxSection';
 
 interface PoiPanelProps {
   map: MapboxMap | null;
@@ -13,7 +15,10 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
   const [open, setOpen] = useState(false);
   const [enabledCategories, setEnabledCategories] = useState<Set<PoiCategory>>(new Set());
 
-  const { loading, error, poiCount } = usePoi(map, isMapLoaded, enabledCategories);
+  const gpx = useGpxRoute(map, isMapLoaded);
+  const { loading, error, poiCount, searchCorridor } = usePoi(
+    map, isMapLoaded, enabledCategories, gpx.gpxRoute, gpx.radiusM,
+  );
 
   const hasAny = enabledCategories.size > 0;
 
@@ -62,6 +67,18 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
               <button onClick={selectNone} style={quickBtnStyle}>Rien</button>
             </div>
           </div>
+
+          <GpxSection
+            gpxRoute={gpx.gpxRoute}
+            radiusM={gpx.radiusM}
+            gpxLoading={gpx.gpxLoading}
+            gpxError={gpx.gpxError}
+            poiLoading={loading}
+            onLoadGpx={gpx.loadGpx}
+            onClearGpx={gpx.clearGpx}
+            onRadiusChange={gpx.setRadiusM}
+            onSearch={searchCorridor}
+          />
 
           {POI_GROUPS.map((group) => (
             <div key={group.label} style={groupStyle}>

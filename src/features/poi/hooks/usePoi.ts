@@ -1,9 +1,10 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
-import type { PoiCategory, PoiFeature } from '../types';
+import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { POI_CATEGORIES } from '../types';
-import { fetchPoisInBbox } from '../lib/overpass';
+import { fetchPoisInBbox, fetchPoisAlongRoute } from '../lib/overpass';
+import { sampleRoutePoints } from '../lib/gpx-loader';
 import {
   tileZoomForMapZoom,
   getTilesForBounds,
@@ -28,6 +29,8 @@ export function usePoi(
   map: MapboxMap | null,
   isMapLoaded: boolean,
   enabledCategories: Set<PoiCategory>,
+  gpxRoute: GpxRoute | null = null,
+  radiusM: number = 1000,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +41,10 @@ export function usePoi(
   const iconsReady = useRef(false);
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
+  const gpxRef = useRef(gpxRoute);
+  gpxRef.current = gpxRoute;
+  const radiusRef = useRef(radiusM);
+  radiusRef.current = radiusM;
 
   // ── Setup source + layers ─────────────────────────────────────────
 
@@ -229,6 +236,45 @@ export function usePoi(
     }
   }, [updateSourceData]);
 
+  // ── Corridor fetch (along GPX route) ──────────────────────────────
+
+  const fetchCorridorPois = useCallback(async (m: MapboxMap) => {
+    const route = gpxRef.current;
+    const cats = Array.from(enabledRef.current);
+    if (!route || cats.length === 0) {
+      updateSourceData(m, []);
+      return;
+    }
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const sampled = sampleRoutePoints(route.points, 300);
+      const features = await fetchPoisAlongRoute(sampled, radiusRef.current, cats, controller.signal);
+      if (!controller.signal.aborted) {
+        updateSourceData(m, features);
+      }
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Erreur POI corridor');
+    } finally {
+      if (!controller.signal.aborted) setLoading(false);
+    }
+  }, [updateSourceData]);
+
+  // ── Public trigger for corridor search ────────────────────────────
+
+  const searchCorridor = useCallback(() => {
+    if (map && isMapLoaded && iconsReady.current && gpxRef.current) {
+      fetchCorridorPois(map);
+    }
+  }, [map, isMapLoaded, fetchCorridorPois]);
+
   // ── Debounced handler ─────────────────────────────────────────────
 
   const debouncedFetch = useCallback((m: MapboxMap) => {
@@ -295,18 +341,32 @@ export function usePoi(
 
       ensureSourceAndLayers(map);
 
-      // Initial fetch
-      fetchVisiblePois(map);
+      // In viewport mode, auto-fetch on map movements
+      // In corridor mode, wait for explicit searchCorridor trigger
+      if (!gpxRef.current) {
+        fetchVisiblePois(map);
 
-      // Listen for map movements
-      const onMoveEnd = () => debouncedFetch(map);
-      map.on('moveend', onMoveEnd);
+        const onMoveEnd = () => debouncedFetch(map);
+        map.on('moveend', onMoveEnd);
+
+        map.on('click', LAYER_ID, handleClick);
+        map.on('mouseenter', LAYER_ID, handleMouseEnter);
+        map.on('mouseleave', LAYER_ID, handleMouseLeave);
+
+        return () => {
+          map.off('moveend', onMoveEnd);
+          map.off('click', LAYER_ID, handleClick);
+          map.off('mouseenter', LAYER_ID, handleMouseEnter);
+          map.off('mouseleave', LAYER_ID, handleMouseLeave);
+        };
+      }
+
+      // Corridor mode: no auto-fetch, but still register click/hover
       map.on('click', LAYER_ID, handleClick);
       map.on('mouseenter', LAYER_ID, handleMouseEnter);
       map.on('mouseleave', LAYER_ID, handleMouseLeave);
 
       return () => {
-        map.off('moveend', onMoveEnd);
         map.off('click', LAYER_ID, handleClick);
         map.off('mouseenter', LAYER_ID, handleMouseEnter);
         map.off('mouseleave', LAYER_ID, handleMouseLeave);
@@ -341,10 +401,14 @@ export function usePoi(
 
   useEffect(() => {
     if (!map || !isMapLoaded || !iconsReady.current) return;
-    fetchVisiblePois(map);
-  }, [map, isMapLoaded, enabledCategories, fetchVisiblePois]);
+    if (gpxRef.current) {
+      fetchCorridorPois(map);
+    } else {
+      fetchVisiblePois(map);
+    }
+  }, [map, isMapLoaded, enabledCategories, fetchVisiblePois, fetchCorridorPois]);
 
-  return { loading, error, poiCount };
+  return { loading, error, poiCount, searchCorridor };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

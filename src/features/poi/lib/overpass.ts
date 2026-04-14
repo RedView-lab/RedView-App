@@ -136,3 +136,72 @@ export async function fetchPoisInBbox(
 
   throw lastError ?? new Error('All Overpass endpoints failed');
 }
+
+// ── Corridor query (around a polyline) ────────────────────────────────
+
+function buildCorridorQuery(
+  points: { lat: number; lon: number }[],
+  radiusM: number,
+  categories: PoiCategory[],
+): string {
+  const enabled = TAG_MAPPINGS.filter((m) => categories.includes(m.category));
+  if (enabled.length === 0 || points.length === 0) return '';
+
+  const coords = points.map((p) => `${p.lat},${p.lon}`).join(',');
+  const around = `(around:${radiusM},${coords})`;
+
+  const nodeQueries = enabled
+    .map((m) => `  node[${m.key}=${m.value}]${around};`)
+    .join('\n');
+
+  const wayQueries = enabled
+    .filter((m) => m.category === 'camp_site' || m.category === 'hospital')
+    .map((m) => `  way[${m.key}=${m.value}]${around};`)
+    .join('\n');
+
+  return `[out:json][timeout:45];
+(
+${nodeQueries}
+${wayQueries}
+);
+out center body qt;`;
+}
+
+export async function fetchPoisAlongRoute(
+  points: { lat: number; lon: number }[],
+  radiusM: number,
+  categories: PoiCategory[],
+  signal?: AbortSignal,
+): Promise<PoiFeature[]> {
+  const query = buildCorridorQuery(points, radiusM, categories);
+  if (!query) return [];
+
+  let lastError: Error | null = null;
+
+  for (const endpoint of ENDPOINTS) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal,
+      });
+
+      if (res.status === 429 || res.status >= 500) {
+        lastError = new Error(`Overpass ${res.status}`);
+        continue;
+      }
+
+      if (!res.ok) throw new Error(`Overpass HTTP ${res.status}`);
+
+      const json: OverpassResponse = await res.json();
+      return parseResponse(json);
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      lastError = err instanceof Error ? err : new Error(String(err));
+      continue;
+    }
+  }
+
+  throw lastError ?? new Error('All Overpass endpoints failed');
+}
