@@ -2,7 +2,6 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { POI_CATEGORIES } from '../types';
 import { fetchPoisInBbox, fetchPoisAlongRoute } from '../lib/overpass';
 import { sampleRoutePoints } from '../lib/gpx-loader';
 import {
@@ -12,7 +11,7 @@ import {
   tileToBbox,
   isTileCached,
   setCachedTile,
-  collectFeatures,
+  collectAllCachedFeatures,
 } from '../lib/poi-cache';
 import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
 
@@ -71,9 +70,9 @@ export function usePoi(
             12, 0.7,
             16, 1.0,
           ],
-          'icon-allow-overlap': false,
-          'icon-ignore-placement': false,
-          'icon-padding': 4,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-padding': 2,
           'icon-pitch-alignment': 'viewport',
           'icon-rotation-alignment': 'viewport',
           'symbol-z-elevate': true,
@@ -168,20 +167,19 @@ export function usePoi(
     const config = tileZoomForMapZoom(mapZoom);
 
     if (!config) {
-      // Too zoomed out — still show whatever is cached from previous views
-      updateSourceData(m, []);
+      // Too zoomed out — still show all accumulated cached POIs
+      updateSourceData(m, collectAllCachedFeatures(cats));
       return;
     }
 
     const { tz, maxTiles } = config;
     const tiles = getTilesForBounds(south, west, north, east, tz, maxTiles);
-    const allKeys = tiles.map(tileKeyToString);
 
     // Determine which tiles need fetching
     const missingTiles = tiles.filter((t) => !isTileCached(tileKeyToString(t), cats));
 
     if (missingTiles.length === 0) {
-      updateSourceData(m, collectFeatures(allKeys, cats));
+      updateSourceData(m, collectAllCachedFeatures(cats));
       return;
     }
 
@@ -219,19 +217,19 @@ export function usePoi(
           const tileFeatures = features.filter(
             (f) => f.lat >= s && f.lat <= n && f.lon >= w && f.lon <= e,
           );
-          setCachedTile(tileKeyToString(t), tileFeatures, [...POI_CATEGORIES]);
+          setCachedTile(tileKeyToString(t), tileFeatures, cats);
         }
 
-        // Progressive render: update map after each batch
+        // Progressive render: update map after each batch with ALL accumulated POIs
         if (!controller.signal.aborted) {
-          updateSourceData(m, collectFeatures(allKeys, cats));
+          updateSourceData(m, collectAllCachedFeatures(cats));
         }
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Erreur POI');
       // Still show whatever is cached
-      updateSourceData(m, collectFeatures(allKeys, cats));
+      updateSourceData(m, collectAllCachedFeatures(cats));
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }

@@ -46,9 +46,8 @@ function buildQuery(
     .map((m) => `  node[${m.key}=${m.value}]${bbox};`)
     .join('\n');
 
-  // Also fetch ways for camp_site (often mapped as areas)
+  // Fetch ways/areas too — many POIs (shops, pharmacies, shelters…) are mapped as areas in OSM
   const wayQueries = enabledMappings
-    .filter((m) => m.category === 'camp_site' || m.category === 'hospital')
     .map((m) => `  way[${m.key}=${m.value}]${bbox};`)
     .join('\n');
 
@@ -155,7 +154,6 @@ function buildCorridorQuery(
     .join('\n');
 
   const wayQueries = enabled
-    .filter((m) => m.category === 'camp_site' || m.category === 'hospital')
     .map((m) => `  way[${m.key}=${m.value}]${around};`)
     .join('\n');
 

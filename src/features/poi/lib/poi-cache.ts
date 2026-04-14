@@ -200,6 +200,34 @@ export function collectFeatures(tileKeys: string[], categories: PoiCategory[]): 
   return result;
 }
 
+/**
+ * Collect ALL cached features across every tile in memory, filtered by categories.
+ * Unlike collectFeatures(), this is not limited to specific tile keys — it iterates
+ * over the entire cache so that POIs from previously-visited areas remain visible.
+ */
+export function collectAllCachedFeatures(categories: PoiCategory[]): PoiFeature[] {
+  const catSet = new Set<PoiCategory>(categories);
+  const seen = new Set<number>();
+  const result: PoiFeature[] = [];
+  const now = Date.now();
+
+  for (const [key, entry] of memoryCache) {
+    if (now - entry.ts > CACHE_TTL) {
+      memoryCache.delete(key);
+      try { localStorage.removeItem(LS_PREFIX + key); } catch { /* */ }
+      continue;
+    }
+    for (const f of entry.features) {
+      if (!catSet.has(f.category)) continue;
+      if (seen.has(f.id)) continue;
+      seen.add(f.id);
+      result.push(f);
+    }
+  }
+
+  return result;
+}
+
 /** Invalidate all cache */
 export function clearCache(): void {
   memoryCache.clear();
