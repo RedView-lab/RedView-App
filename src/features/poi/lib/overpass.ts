@@ -3,8 +3,8 @@ import type { PoiCategory, PoiFeature, OverpassResponse } from '../types';
 // ── Overpass endpoints (fallback chain) ───────────────────────────────
 
 const ENDPOINTS = [
+  'https://overpass.kumi.systems/api/interpreter',
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.private.coffee/api/interpreter',
 ];
 
 // ── OSM tag → PoiCategory mapping ─────────────────────────────────────
