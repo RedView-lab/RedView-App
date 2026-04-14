@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, ExpressionSpecification } from 'mapbox-gl';
 import type { SlopeColorMode } from '../types';
 import { buildSlopeColorExpression, SLOPE_CATEGORIES } from '../lib/slope-config';
 import {
@@ -80,7 +80,7 @@ export function useSlope(
         map.setPaintProperty(
           SLOPE_LAYER_ID,
           'raster-color',
-          buildSlopeColorExpression(SLOPE_CATEGORIES, colorMode) as Parameters<MapboxMap['setPaintProperty']>[2],
+          buildSlopeColorExpression(SLOPE_CATEGORIES, colorMode) as unknown as ExpressionSpecification,
         );
       }
     } catch { /* layer may not exist yet */ }
