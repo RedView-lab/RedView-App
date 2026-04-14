@@ -4,6 +4,13 @@ const GPX_SOURCE_ID = 'gpx-route-source';
 const GPX_GLOW_LAYER_ID = 'gpx-route-glow';
 const GPX_LINE_LAYER_ID = 'gpx-route-line';
 
+/** Check if the GPX source still exists on the map. */
+export function isGpxRouteOnMap(map: MapboxMap): boolean {
+  try {
+    return !!map.getSource(GPX_SOURCE_ID);
+  } catch { return false; }
+}
+
 /** Add a GPX route as a styled line on the map. */
 export function addGpxRoute(
   map: MapboxMap,

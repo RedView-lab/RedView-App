@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { GpxRoute } from '../types';
 import { parseGpxFile } from '../lib/gpx-loader';
-import { addGpxRoute, removeGpxRoute, fitMapToRoute } from '../lib/gpx-layer';
+import { addGpxRoute, removeGpxRoute, fitMapToRoute, isGpxRouteOnMap } from '../lib/gpx-layer';
 
 export interface UseGpxRouteReturn {
   gpxRoute: GpxRoute | null;
@@ -22,7 +22,8 @@ export function useGpxRoute(
   const [radiusM, setRadiusM] = useState(1000);
   const [gpxLoading, setGpxLoading] = useState(false);
   const [gpxError, setGpxError] = useState<string | null>(null);
-  const layerAdded = useRef(false);
+  const routeRef = useRef<GpxRoute | null>(null);
+  routeRef.current = gpxRoute;
 
   const loadGpx = useCallback((file: File) => {
     setGpxLoading(true);
@@ -43,26 +44,38 @@ export function useGpxRoute(
     setGpxError(null);
   }, []);
 
-  // Sync GPX route display on map
+  // Add / remove GPX layer on map
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
     if (gpxRoute) {
       addGpxRoute(map, gpxRoute.points);
       fitMapToRoute(map, gpxRoute.points);
-      layerAdded.current = true;
-    } else if (layerAdded.current) {
+    } else {
       removeGpxRoute(map);
-      layerAdded.current = false;
     }
 
     return () => {
-      if (layerAdded.current) {
-        try { removeGpxRoute(map); } catch { /* */ }
-        layerAdded.current = false;
-      }
+      try { removeGpxRoute(map); } catch { /* */ }
     };
   }, [map, isMapLoaded, gpxRoute]);
+
+  // Re-add GPX after style reloads (Standard Satellite fires style.load
+  // multiple times as imports/terrain finish loading, wiping custom layers)
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    const onStyleLoad = () => {
+      const route = routeRef.current;
+      if (route && !isGpxRouteOnMap(map)) {
+        // Style reload wiped our layers — re-add them
+        try { addGpxRoute(map, route.points); } catch { /* */ }
+      }
+    };
+
+    map.on('style.load', onStyleLoad);
+    return () => { map.off('style.load', onStyleLoad); };
+  }, [map, isMapLoaded]);
 
   return { gpxRoute, radiusM, gpxLoading, gpxError, setRadiusM, loadGpx, clearGpx };
 }

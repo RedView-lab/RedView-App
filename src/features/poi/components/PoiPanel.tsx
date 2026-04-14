@@ -4,7 +4,7 @@ import type { PoiCategory } from '../types';
 import { POI_GROUPS, POI_LABELS, POI_COLORS, POI_CATEGORIES } from '../types';
 import { usePoi } from '../hooks/usePoi';
 import { useGpxRoute } from '../hooks/useGpxRoute';
-import { GpxSection } from './GpxSection';
+import { GpxUpload, RadiusSlider, SearchButton } from './GpxSection';
 
 interface PoiPanelProps {
   map: MapboxMap | null;
@@ -62,23 +62,32 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
             <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.92)' }}>
               Points d'intérêt
             </span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={selectAll} style={quickBtnStyle}>Tout</button>
-              <button onClick={selectNone} style={quickBtnStyle}>Rien</button>
-            </div>
           </div>
 
-          <GpxSection
+          <GpxUpload
             gpxRoute={gpx.gpxRoute}
-            radiusM={gpx.radiusM}
             gpxLoading={gpx.gpxLoading}
             gpxError={gpx.gpxError}
-            poiLoading={loading}
             onLoadGpx={gpx.loadGpx}
             onClearGpx={gpx.clearGpx}
-            onRadiusChange={gpx.setRadiusM}
-            onSearch={searchCorridor}
           />
+
+          {gpx.gpxRoute && (
+            <RadiusSlider
+              radiusM={gpx.radiusM}
+              onRadiusChange={gpx.setRadiusM}
+            />
+          )}
+
+          <div style={{ ...sectionStyle, paddingBottom: 0, borderBottom: 'none' }}>
+            <div style={stepStyle}>
+              <span style={stepNumStyle}>3</span> Catégories
+              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                <button onClick={selectAll} style={quickBtnStyle}>Tout</button>
+                <button onClick={selectNone} style={quickBtnStyle}>Rien</button>
+              </div>
+            </div>
+          </div>
 
           {POI_GROUPS.map((group) => (
             <div key={group.label} style={groupStyle}>
@@ -103,6 +112,14 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
             </div>
           ))}
 
+          {gpx.gpxRoute && (
+            <SearchButton
+              poiLoading={loading}
+              disabled={enabledCategories.size === 0}
+              onSearch={searchCorridor}
+            />
+          )}
+
           {error && (
             <div style={errorMsgStyle}>{error}</div>
           )}
@@ -113,6 +130,39 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
 }
 
 // ── Styles ────────────────────────────────────────────────────────────
+
+const sectionStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
+  paddingBottom: 8,
+  borderBottom: '1px solid rgba(255,255,255,0.06)',
+};
+
+const stepStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
+  fontSize: 10,
+  fontWeight: 600,
+  color: 'rgba(255,255,255,0.4)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+};
+
+const stepNumStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  borderRadius: '50%',
+  background: 'rgba(255,107,53,0.25)',
+  color: '#ff9a6c',
+  fontSize: 9,
+  fontWeight: 700,
+  flexShrink: 0,
+};
 
 const dockStyle: React.CSSProperties = {
   display: 'flex',

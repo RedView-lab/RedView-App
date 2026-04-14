@@ -2,29 +2,17 @@ import type { ChangeEvent } from 'react';
 import { useRef } from 'react';
 import type { GpxRoute } from '../types';
 
-interface GpxSectionProps {
+// ── Step 1 : GPX upload / info ────────────────────────────────────────
+
+interface GpxUploadProps {
   gpxRoute: GpxRoute | null;
-  radiusM: number;
   gpxLoading: boolean;
   gpxError: string | null;
-  poiLoading: boolean;
   onLoadGpx: (file: File) => void;
   onClearGpx: () => void;
-  onRadiusChange: (v: number) => void;
-  onSearch: () => void;
 }
 
-export function GpxSection({
-  gpxRoute,
-  radiusM,
-  gpxLoading,
-  gpxError,
-  poiLoading,
-  onLoadGpx,
-  onClearGpx,
-  onRadiusChange,
-  onSearch,
-}: GpxSectionProps) {
+export function GpxUpload({ gpxRoute, gpxLoading, gpxError, onLoadGpx, onClearGpx }: GpxUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -35,11 +23,11 @@ export function GpxSection({
 
   return (
     <div style={sectionStyle}>
-      <div style={sectionLabelStyle}>Trace GPX</div>
+      <div style={stepStyle}><span style={stepNumStyle}>1</span> Trace GPX</div>
 
       {!gpxRoute ? (
         <label style={uploadBtnStyle}>
-          {gpxLoading ? 'Chargement...' : '+ Charger GPX'}
+          {gpxLoading ? 'Chargement...' : '+ Charger un fichier GPX'}
           <input
             ref={inputRef}
             type="file"
@@ -49,43 +37,65 @@ export function GpxSection({
           />
         </label>
       ) : (
-        <>
-          <div style={routeInfoStyle}>
-            <span style={routeNameStyle}>
-              {gpxRoute.name ?? 'Sans nom'}
-            </span>
-            <span style={routeMetaStyle}>
-              {gpxRoute.points.length.toLocaleString()} pts
-            </span>
-            <button onClick={onClearGpx} style={clearBtnStyle}>✕</button>
-          </div>
-
-          <div style={sliderRowStyle}>
-            <span style={sliderLabelStyle}>Rayon</span>
-            <input
-              type="range"
-              min={100}
-              max={5000}
-              step={100}
-              value={radiusM}
-              onChange={(e) => onRadiusChange(Number(e.target.value))}
-              style={sliderStyle}
-            />
-            <span style={sliderValueStyle}>{radiusM >= 1000 ? `${radiusM / 1000}km` : `${radiusM}m`}</span>
-          </div>
-
-          <button
-            onClick={onSearch}
-            disabled={poiLoading}
-            style={{ ...searchBtnStyle, ...(poiLoading ? searchBtnDisabledStyle : null) }}
-          >
-            {poiLoading ? 'Recherche...' : 'Rechercher POI'}
-          </button>
-        </>
+        <div style={routeInfoStyle}>
+          <span style={routeNameStyle}>{gpxRoute.name ?? 'Sans nom'}</span>
+          <span style={routeMetaStyle}>{gpxRoute.points.length.toLocaleString()} pts</span>
+          <button onClick={onClearGpx} style={clearBtnStyle}>✕</button>
+        </div>
       )}
 
       {gpxError && <div style={gpxErrorStyle}>{gpxError}</div>}
     </div>
+  );
+}
+
+// ── Step 2 : Radius slider ────────────────────────────────────────────
+
+interface RadiusSliderProps {
+  radiusM: number;
+  onRadiusChange: (v: number) => void;
+}
+
+export function RadiusSlider({ radiusM, onRadiusChange }: RadiusSliderProps) {
+  return (
+    <div style={sectionStyle}>
+      <div style={stepStyle}><span style={stepNumStyle}>2</span> Rayon de recherche</div>
+      <div style={sliderRowStyle}>
+        <input
+          type="range"
+          min={100}
+          max={5000}
+          step={100}
+          value={radiusM}
+          onChange={(e) => onRadiusChange(Number(e.target.value))}
+          style={sliderStyle}
+        />
+        <span style={sliderValueStyle}>{radiusM >= 1000 ? `${radiusM / 1000}km` : `${radiusM}m`}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Step 4 : Search button ────────────────────────────────────────────
+
+interface SearchButtonProps {
+  poiLoading: boolean;
+  disabled: boolean;
+  onSearch: () => void;
+}
+
+export function SearchButton({ poiLoading, disabled, onSearch }: SearchButtonProps) {
+  return (
+    <button
+      onClick={onSearch}
+      disabled={disabled || poiLoading}
+      style={{
+        ...searchBtnStyle,
+        ...((disabled || poiLoading) ? searchBtnDisabledStyle : null),
+      }}
+    >
+      {poiLoading ? 'Recherche en cours...' : 'Rechercher les POI'}
+    </button>
   );
 }
 
@@ -99,12 +109,29 @@ const sectionStyle: React.CSSProperties = {
   borderBottom: '1px solid rgba(255,255,255,0.06)',
 };
 
-const sectionLabelStyle: React.CSSProperties = {
+const stepStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 6,
   fontSize: 10,
   fontWeight: 600,
   color: 'rgba(255,255,255,0.4)',
   textTransform: 'uppercase',
   letterSpacing: '0.06em',
+};
+
+const stepNumStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: 16,
+  height: 16,
+  borderRadius: '50%',
+  background: 'rgba(255,107,53,0.25)',
+  color: '#ff9a6c',
+  fontSize: 9,
+  fontWeight: 700,
+  flexShrink: 0,
 };
 
 const uploadBtnStyle: React.CSSProperties = {
@@ -162,13 +189,6 @@ const sliderRowStyle: React.CSSProperties = {
   gap: 6,
 };
 
-const sliderLabelStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: 'rgba(255,255,255,0.5)',
-  flexShrink: 0,
-  width: 34,
-};
-
 const sliderStyle: React.CSSProperties = {
   flex: 1,
   height: 4,
@@ -176,27 +196,30 @@ const sliderStyle: React.CSSProperties = {
 };
 
 const sliderValueStyle: React.CSSProperties = {
-  fontSize: 10,
-  color: 'rgba(255,255,255,0.6)',
+  fontSize: 11,
+  color: 'rgba(255,255,255,0.7)',
   fontVariantNumeric: 'tabular-nums',
-  width: 32,
+  fontWeight: 600,
+  width: 36,
   textAlign: 'right',
   flexShrink: 0,
 };
 
 const searchBtnStyle: React.CSSProperties = {
-  padding: '7px 0',
-  borderRadius: 8,
-  border: '1px solid rgba(255,107,53,0.4)',
-  background: 'rgba(255,107,53,0.18)',
+  padding: '9px 0',
+  borderRadius: 10,
+  border: '1px solid rgba(255,107,53,0.5)',
+  background: 'rgba(255,107,53,0.22)',
   color: '#ffb088',
-  fontSize: 11,
-  fontWeight: 600,
+  fontSize: 12,
+  fontWeight: 700,
   cursor: 'pointer',
+  letterSpacing: '0.02em',
+  marginTop: 2,
 };
 
 const searchBtnDisabledStyle: React.CSSProperties = {
-  opacity: 0.5,
+  opacity: 0.4,
   cursor: 'default',
 };
 
