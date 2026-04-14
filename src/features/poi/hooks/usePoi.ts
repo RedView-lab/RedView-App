@@ -5,13 +5,13 @@ import type { PoiCategory, PoiFeature } from '../types';
 import { POI_CATEGORIES } from '../types';
 import { fetchPoisInBbox } from '../lib/overpass';
 import {
+  tileZoomForMapZoom,
   getTilesForBounds,
   tileKeyToString,
   tileToBbox,
   isTileCached,
   setCachedTile,
   collectFeatures,
-  MAX_FETCH_SPAN,
 } from '../lib/poi-cache';
 import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
 
@@ -155,24 +155,24 @@ export function usePoi(
     const north = bounds.getNorth();
     const east = bounds.getEast();
 
-    // Skip if viewport too large
-    if (north - south > MAX_FETCH_SPAN || east - west > MAX_FETCH_SPAN) {
-      // Still show cached data if available
-      const tiles = getTilesForBounds(south, west, north, east);
-      const keys = tiles.map(tileKeyToString);
-      const cached = collectFeatures(keys, cats);
-      updateSourceData(m, cached);
+    // Determine tile zoom level based on current map zoom
+    const mapZoom = m.getZoom();
+    const config = tileZoomForMapZoom(mapZoom);
+
+    if (!config) {
+      // Too zoomed out — still show whatever is cached from previous views
+      updateSourceData(m, []);
       return;
     }
 
-    const tiles = getTilesForBounds(south, west, north, east);
+    const { tz, maxTiles } = config;
+    const tiles = getTilesForBounds(south, west, north, east, tz, maxTiles);
     const allKeys = tiles.map(tileKeyToString);
 
-    // Determine which tiles need fetching (all categories fetched together)
+    // Determine which tiles need fetching
     const missingTiles = tiles.filter((t) => !isTileCached(tileKeyToString(t), cats));
 
     if (missingTiles.length === 0) {
-      // Everything cached — just update source
       updateSourceData(m, collectFeatures(allKeys, cats));
       return;
     }
@@ -186,12 +186,16 @@ export function usePoi(
     setError(null);
 
     try {
-      // Fetch all missing tiles — batch into a single Overpass request by merging bboxes
-      // For efficiency, if ≤4 missing tiles, merge into one bbox; otherwise fetch individually
-      if (missingTiles.length <= 6) {
-        // Merge into one bbox encompassing all missing tiles
+      // Batch missing tiles into groups of ≤6 and merge each group into one bbox request
+      const BATCH_SIZE = 6;
+      for (let i = 0; i < missingTiles.length; i += BATCH_SIZE) {
+        if (controller.signal.aborted) break;
+
+        const batch = missingTiles.slice(i, i + BATCH_SIZE);
+
+        // Compute merged bbox for this batch
         let mSouth = 90, mWest = 180, mNorth = -90, mEast = -180;
-        for (const t of missingTiles) {
+        for (const t of batch) {
           const [s, w, n, e] = tileToBbox(t);
           mSouth = Math.min(mSouth, s);
           mWest = Math.min(mWest, w);
@@ -202,27 +206,18 @@ export function usePoi(
         const features = await fetchPoisInBbox(mSouth, mWest, mNorth, mEast, cats, controller.signal);
 
         // Distribute features into tile buckets for caching
-        for (const t of missingTiles) {
+        for (const t of batch) {
           const [s, w, n, e] = tileToBbox(t);
           const tileFeatures = features.filter(
             (f) => f.lat >= s && f.lat <= n && f.lon >= w && f.lon <= e,
           );
           setCachedTile(tileKeyToString(t), tileFeatures, [...POI_CATEGORIES]);
         }
-      } else {
-        // Fetch tiles individually (rare — only if viewport spans many tiles)
-        for (const t of missingTiles) {
-          if (controller.signal.aborted) break;
-          const [s, w, n, e] = tileToBbox(t);
-          const features = await fetchPoisInBbox(s, w, n, e, cats, controller.signal);
-          setCachedTile(tileKeyToString(t), features, [...POI_CATEGORIES]);
-        }
-      }
 
-      // Collect all features from cache for current viewport
-      if (!controller.signal.aborted) {
-        const allFeatures = collectFeatures(allKeys, cats);
-        updateSourceData(m, allFeatures);
+        // Progressive render: update map after each batch
+        if (!controller.signal.aborted) {
+          updateSourceData(m, collectFeatures(allKeys, cats));
+        }
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;

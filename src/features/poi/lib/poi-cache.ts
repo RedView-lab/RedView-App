@@ -3,17 +3,32 @@ import { POI_CATEGORIES } from '../types';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-/** Tile zoom level for cache partitioning (~10 km per tile at z12) */
-const TILE_ZOOM = 12;
-
 /** Cache TTL in milliseconds (24 hours) */
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
 /** localStorage key prefix */
 const LS_PREFIX = 'poi_cache_';
 
-/** Max lon/lat span before we skip fetching (°, ~100 km) */
-export const MAX_FETCH_SPAN = 1.0;
+/**
+ * Adaptive tile zoom based on map zoom level.
+ * Lower map zoom → coarser tiles (fewer, bigger requests).
+ * Higher map zoom → finer tiles (more precise caching).
+ *
+ * | map zoom | tile zoom | tile size  | max tiles |
+ * |----------|-----------|------------|-----------|
+ * | < 7      | skip      | —          | 0         |
+ * | 7–9      | 8         | ~150 km    | 9         |
+ * | 9–11     | 9         | ~80 km     | 12        |
+ * | 11–13    | 10        | ~40 km     | 16        |
+ * | 13+      | 12        | ~10 km     | 25        |
+ */
+export function tileZoomForMapZoom(mapZoom: number): { tz: number; maxTiles: number } | null {
+  if (mapZoom < 7) return null;         // too zoomed out — skip
+  if (mapZoom < 9) return { tz: 8, maxTiles: 9 };
+  if (mapZoom < 11) return { tz: 9, maxTiles: 12 };
+  if (mapZoom < 13) return { tz: 10, maxTiles: 16 };
+  return { tz: 12, maxTiles: 25 };
+}
 
 // ── Tile math ─────────────────────────────────────────────────────────
 
@@ -27,8 +42,7 @@ export function tileKeyToString(t: TileKey): string {
   return `${t.z}/${t.x}/${t.y}`;
 }
 
-export function lngLatToTile(lng: number, lat: number): TileKey {
-  const z = TILE_ZOOM;
+export function lngLatToTile(lng: number, lat: number, z: number): TileKey {
   const n = 2 ** z;
   const x = Math.floor(((lng + 180) / 360) * n);
   const latRad = (lat * Math.PI) / 180;
@@ -49,29 +63,42 @@ export function tileToBbox(t: TileKey): [south: number, west: number, north: num
   return [south, west, north, east];
 }
 
-/** Return all tile keys covering a geographic bounding box */
+/** Return tile keys covering a bounding box at a specific tile zoom, capped at maxTiles (center-first). */
 export function getTilesForBounds(
   south: number,
   west: number,
   north: number,
   east: number,
+  tz: number,
+  maxTiles: number,
 ): TileKey[] {
-  const sw = lngLatToTile(west, south);
-  const ne = lngLatToTile(east, north);
+  const sw = lngLatToTile(west, south, tz);
+  const ne = lngLatToTile(east, north, tz);
 
-  // ne.y can be < sw.y because y increases downward in slippy tiles
   const minX = Math.min(sw.x, ne.x);
   const maxX = Math.max(sw.x, ne.x);
   const minY = Math.min(sw.y, ne.y);
   const maxY = Math.max(sw.y, ne.y);
 
-  const tiles: TileKey[] = [];
+  const all: TileKey[] = [];
   for (let x = minX; x <= maxX; x++) {
     for (let y = minY; y <= maxY; y++) {
-      tiles.push({ x, y, z: TILE_ZOOM });
+      all.push({ x, y, z: tz });
     }
   }
-  return tiles;
+
+  // If within budget, return all
+  if (all.length <= maxTiles) return all;
+
+  // Otherwise return tiles closest to center first
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  all.sort((a, b) => {
+    const da = (a.x - cx) ** 2 + (a.y - cy) ** 2;
+    const db = (b.x - cx) ** 2 + (b.y - cy) ** 2;
+    return da - db;
+  });
+  return all.slice(0, maxTiles);
 }
 
 // ── Cache entry ───────────────────────────────────────────────────────
