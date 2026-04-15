@@ -29,12 +29,10 @@ function addSlopeLayer(map: MapboxMap, opacity: number, colorMode: SlopeColorMod
   map.addSource(SLOPE_SOURCE_ID, slopeTileSource);
 
   const layer = buildSlopeLayer(opacity, colorMode);
-  // Insert below symbol layers so labels stay on top
-  const firstSymbol = map.getStyle()?.layers?.find(l => l.type === 'symbol');
-  map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0], firstSymbol?.id);
+  map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
 
   console.log(
-    `[slope][map] %c LAYER ADDED %c source=${SLOPE_SOURCE_ID} layer=${SLOPE_LAYER_ID} opacity=${opacity} colorMode=${colorMode} beforeLayer=${firstSymbol?.id ?? 'none'}`,
+    `[slope][map] %c LAYER ADDED %c source=${SLOPE_SOURCE_ID} layer=${SLOPE_LAYER_ID} opacity=${opacity} colorMode=${colorMode} slot=middle`,
     'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
   );
   console.log('[slope][map] paint:', JSON.stringify(layer.paint, null, 2));

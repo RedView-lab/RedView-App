@@ -22,6 +22,7 @@ export function buildSlopeLayer(opacity: number, colorMode: SlopeColorMode) {
     id: SLOPE_LAYER_ID,
     type: 'raster' as const,
     source: SLOPE_SOURCE_ID,
+    slot: 'middle',
     paint: {
       'raster-opacity': opacity,
       // Decode Terrain-RGB back to slope degrees:
