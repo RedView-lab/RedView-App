@@ -18,6 +18,14 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "`n[2/2] Build complete!" -ForegroundColor Green
 
+# Copy WASM binary to public/ for reliable worker loading
+$publicDir = Join-Path $scriptRoot "..\..\public"
+$wasmSrc = Join-Path $outputDir "redviewalgo_bg.wasm"
+if (Test-Path $wasmSrc) {
+    Copy-Item $wasmSrc (Join-Path $publicDir "redviewalgo_bg.wasm") -Force
+    Write-Host "Copied WASM to public/redviewalgo_bg.wasm" -ForegroundColor Green
+}
+
 # Show output files
 Write-Host "`nOutput files in app pkg/:" -ForegroundColor Cyan
 Get-ChildItem $outputDir | Format-Table Name, @{Label="Size (KB)"; Expression={[math]::Round($_.Length / 1KB, 1)}}
