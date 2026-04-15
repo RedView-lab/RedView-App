@@ -113,45 +113,82 @@ function computeSlopes(elevations, tileSize, cellSizeX, cellSizeY) {
   return slopes;
 }
 
+// ── Slope color ramp ──────────────────────────────────────────────────
+// Must match src/features/slope/lib/slope-config.ts SLOPE_CATEGORIES.
+const SLOPE_COLOR_STOPS = [
+  { deg:  0, r: 0x2D, g: 0xBF, b: 0x5E }, // #2DBF5E — flat
+  { deg:  7, r: 0xFF, g: 0xD8, b: 0x4D }, // #FFD84D — moderate
+  { deg: 15, r: 0xFF, g: 0xA0, b: 0x33 }, // #FFA033 — steep
+  { deg: 25, r: 0xFF, g: 0x57, b: 0x33 }, // #FF5733 — very steep
+  { deg: 35, r: 0xE5, g: 0x26, b: 0x1F }, // #E5261F — extreme
+  { deg: 45, r: 0x8B, g: 0x00, b: 0x00 }, // #8B0000 — cliff
+];
+
+function slopeToColorGradient(deg) {
+  const stops = SLOPE_COLOR_STOPS;
+  if (deg <= stops[0].deg) return stops[0];
+  if (deg >= stops[stops.length - 1].deg) return stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i++) {
+    if (deg >= stops[i].deg && deg < stops[i + 1].deg) {
+      const t = (deg - stops[i].deg) / (stops[i + 1].deg - stops[i].deg);
+      return {
+        r: Math.round(stops[i].r + t * (stops[i + 1].r - stops[i].r)),
+        g: Math.round(stops[i].g + t * (stops[i + 1].g - stops[i].g)),
+        b: Math.round(stops[i].b + t * (stops[i + 1].b - stops[i].b)),
+      };
+    }
+  }
+  return stops[stops.length - 1];
+}
+
+function slopeToColorStep(deg) {
+  const stops = SLOPE_COLOR_STOPS;
+  for (let i = stops.length - 1; i >= 0; i--) {
+    if (deg >= stops[i].deg) return stops[i];
+  }
+  return stops[0];
+}
+
 /**
- * Encode slope degrees as Terrain-RGB PNG.
- * Uses the same formula as DEM: value = (slope + 10000) / 0.1
- * This gives 0.1° precision and is compatible with `raster-color-mix`.
+ * Encode slope degrees as a pre-colored RGBA PNG.
+ * Colors are baked in so the raster layer needs no raster-color-mix decode.
  *
  * Alpha channel: 255 for valid data, 0 for NODATA pixels.
  */
-async function encodeSlopePng(slopes, elevations) {
+async function encodeSlopePng(slopes, elevations, colorMode) {
   const size = DEM_TILE_SIZE;
   const rgba = new Uint8Array(size * size * 4);
   let noDataCount = 0;
+  const colorFn = colorMode === 'step' ? slopeToColorStep : slopeToColorGradient;
 
   for (let j = 0; j < slopes.length; j++) {
     const elev = elevations[j];
     const isNoData = elev <= DEM_NODATA_THRESHOLD;
     if (isNoData) noDataCount++;
 
-    const slopeDeg = isNoData ? 0 : slopes[j];
-    const val = Math.max(0, Math.min(16777215, Math.round((slopeDeg + 10000) / 0.1)));
     const idx = j * 4;
-    rgba[idx]     = (val >> 16) & 0xff;
-    rgba[idx + 1] = (val >>  8) & 0xff;
-    rgba[idx + 2] =  val        & 0xff;
-    rgba[idx + 3] = isNoData ? 0 : 255;
+    if (isNoData) {
+      rgba[idx] = rgba[idx + 1] = rgba[idx + 2] = 0;
+      rgba[idx + 3] = 0;
+    } else {
+      const c = colorFn(slopes[j]);
+      rgba[idx]     = c.r;
+      rgba[idx + 1] = c.g;
+      rgba[idx + 2] = c.b;
+      rgba[idx + 3] = 255;
+    }
   }
 
   // ── DEBUG: encode verification ──
-  // Verify round-trip: pick center pixel and check slope → RGB → decoded slope
   const mid = Math.floor(size / 2) * size + Math.floor(size / 2);
   const samples = [];
   for (let s = 0; s < 3; s++) {
-    const pi = mid + s * 53; // spaced samples
+    const pi = mid + s * 53;
     const si = pi * 4;
-    const r = rgba[si], g = rgba[si+1], b = rgba[si+2], a = rgba[si+3];
-    const decoded = -10000 + (r * 65536 + g * 256 + b) * 0.1;
-    samples.push(`slope=${slopes[pi]?.toFixed(2)}° → RGB(${r},${g},${b},a=${a}) → decoded=${decoded.toFixed(2)}°`);
+    samples.push(`slope=${slopes[pi]?.toFixed(2)}° → RGBA(${rgba[si]},${rgba[si+1]},${rgba[si+2]},${rgba[si+3]}) mode=${colorMode}`);
   }
   console.log(
-    `[slope][encode] noData=${noDataCount}/${size*size} (${(noDataCount/(size*size)*100).toFixed(1)}%) | round-trip: ${samples.join(' | ')}`
+    `[slope][encode] noData=${noDataCount}/${size*size} (${(noDataCount/(size*size)*100).toFixed(1)}%) | ${samples.join(' | ')}`
   );
 
   return buildRawPng(size, size, rgba);
@@ -160,16 +197,17 @@ async function encodeSlopePng(slopes, elevations) {
 /**
  * Full pipeline: DEM blob → slope PNG blob.
  * Returns null if decoding fails.
+ * @param {string} colorMode — 'gradient' or 'step'
  */
-async function buildSlopeTile(demBlob, z, x, y) {
+async function buildSlopeTile(demBlob, z, x, y, colorMode) {
   const t0 = performance.now();
-  console.log(`[slope][build] ━━━ START ${z}/${x}/${y} ━━━`);
+  console.log(`[slope][build] ━━━ START ${z}/${x}/${y} mode=${colorMode} ━━━`);
   const elevations = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
   const slopes = computeSlopes(elevations, DEM_TILE_SIZE, cellSizeX, cellSizeY);
   const t2 = performance.now();
-  const blob = await encodeSlopePng(slopes, elevations);
+  const blob = await encodeSlopePng(slopes, elevations, colorMode);
   const t3 = performance.now();
   console.log(
     `[slope][build] ━━━ DONE ${z}/${x}/${y} ━━━ decode=${(t1-t0).toFixed(0)}ms compute=${(t2-t1).toFixed(0)}ms encode=${(t3-t2).toFixed(0)}ms total=${(t3-t0).toFixed(0)}ms`

@@ -98,8 +98,9 @@ self.addEventListener('fetch', (event) => {
 
   const slopeMatch = url.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (slopeMatch) {
+    const slopeMode = url.searchParams.get('mode') || 'gradient';
     event.respondWith(handleSlopeRequest(
-      parseInt(slopeMatch[1], 10), parseInt(slopeMatch[2], 10), parseInt(slopeMatch[3], 10)));
+      parseInt(slopeMatch[1], 10), parseInt(slopeMatch[2], 10), parseInt(slopeMatch[3], 10), slopeMode));
     return;
   }
 });
@@ -228,10 +229,10 @@ function transparentTileResponse() {
 // Slope request handler
 // ---------------------------------------------------------------------------
 
-async function handleSlopeRequest(z, x, y) {
+async function handleSlopeRequest(z, x, y, colorMode) {
   const t0 = performance.now();
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}`);
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}`);
   const cached = await slopeCache.match(cacheKey);
   if (cached) {
     console.log(`[slope] %c CACHE HIT %c ${z}/${x}/${y}`, 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
@@ -263,7 +264,7 @@ async function handleSlopeRequest(z, x, y) {
   try {
     const demBlob = await demResponse.clone().blob();
     console.log(`[slope] ${z}/${x}/${y} — DEM blob size: ${demBlob.size} bytes`);
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y);
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode);
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[slope] ${z}/${x}/${y} — slope blob size: ${slopeBlob.size} bytes, total: ${dt}ms`);
 

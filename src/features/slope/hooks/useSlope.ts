@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
-import type { Map as MapboxMap, ExpressionSpecification } from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import type { SlopeColorMode } from '../types';
-import { buildSlopeColorExpression, SLOPE_CATEGORIES } from '../lib/slope-config';
 import {
   SLOPE_SOURCE_ID,
   SLOPE_LAYER_ID,
-  slopeTileSource,
+  buildSlopeTileSource,
   buildSlopeLayer,
 } from '../lib/slope-source';
 
@@ -26,9 +25,9 @@ function addSlopeLayer(map: MapboxMap, opacity: number, colorMode: SlopeColorMod
     return;
   }
 
-  map.addSource(SLOPE_SOURCE_ID, slopeTileSource);
+  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(colorMode));
 
-  const layer = buildSlopeLayer(opacity, colorMode);
+  const layer = buildSlopeLayer(opacity);
   map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
 
   console.log(
@@ -89,19 +88,17 @@ export function useSlope(
     } catch { /* layer may not exist yet */ }
   }, [map, isMapLoaded, enabled, opacity]);
 
-  // Update color mode when it changes
+  // Update color mode — must rebuild source with new tile URL
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
     try {
-      if (map.getLayer(SLOPE_LAYER_ID)) {
-        map.setPaintProperty(
-          SLOPE_LAYER_ID,
-          'raster-color',
-          buildSlopeColorExpression(SLOPE_CATEGORIES, colorMode) as unknown as ExpressionSpecification,
-        );
+      if (map.getSource(SLOPE_SOURCE_ID)) {
+        removeSlopeLayer(map);
+        addSlopeLayer(map, opacity, colorMode);
+        console.log(`[slope][map] %c MODE CHANGED %c colorMode=${colorMode} — source rebuilt`, 'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', '');
       }
     } catch { /* layer may not exist yet */ }
-  }, [map, isMapLoaded, enabled, colorMode]);
+  }, [map, isMapLoaded, enabled, colorMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-add layer after style reload
   useEffect(() => {
