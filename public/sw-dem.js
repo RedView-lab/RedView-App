@@ -68,6 +68,11 @@ self.addEventListener('message', (e) => {
   if (e.data?.type === 'SET_MAPBOX_TOKEN') {
     mapboxToken = e.data.token;
   }
+  if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
+    caches.delete(SLOPE_CACHE_NAME).then(() => {
+      console.log('[slope] %c SLOPE CACHE CLEARED %c via message', 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -194,29 +199,43 @@ function transparentTileResponse() {
 // ---------------------------------------------------------------------------
 
 async function handleSlopeRequest(z, x, y) {
+  const t0 = performance.now();
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
   const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}`);
   const cached = await slopeCache.match(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    console.log(`[slope] %c CACHE HIT %c ${z}/${x}/${y}`, 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
+    return cached;
+  }
+  console.log(`[slope] %c CACHE MISS %c ${z}/${x}/${y} — building fresh`, 'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', '');
 
   // Fetch the DEM tile (may come from DEM cache or be freshly built)
   const demCache = await caches.open(CACHE_NAME);
   const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
   let demResponse = await demCache.match(demKey);
+  const demFromCache = !!demResponse;
 
   if (!demResponse || demResponse.status !== 200) {
     // Trigger DEM generation by calling handleDemRequest
+    console.log(`[slope] ${z}/${x}/${y} — DEM not in cache, triggering handleDemRequest`);
     demResponse = await handleDemRequest(demKey, z, x, y);
   }
 
   if (!demResponse || demResponse.status !== 200) {
     // Return a transparent 1×1 PNG so Mapbox can decode it without error
+    console.warn(`[slope] %c NO DEM %c ${z}/${x}/${y} — demResponse status=${demResponse?.status}, returning transparent`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
     return transparentTileResponse();
   }
 
+  const demSource = demResponse.headers.get('X-DEM-Source') || 'unknown';
+  console.log(`[slope] ${z}/${x}/${y} — DEM source: ${demSource}, fromCache: ${demFromCache}`);
+
   try {
     const demBlob = await demResponse.clone().blob();
+    console.log(`[slope] ${z}/${x}/${y} — DEM blob size: ${demBlob.size} bytes`);
     const slopeBlob = await buildSlopeTile(demBlob, z, x, y);
+    const dt = (performance.now() - t0).toFixed(1);
+    console.log(`[slope] ${z}/${x}/${y} — slope blob size: ${slopeBlob.size} bytes, total: ${dt}ms`);
 
     const response = new Response(slopeBlob, {
       status: 200,
@@ -230,7 +249,7 @@ async function handleSlopeRequest(z, x, y) {
     slopeCache.put(cacheKey, response.clone());
     return response;
   } catch (err) {
-    console.error('[sw-dem] Error building slope tile', z, x, y, err);
+    console.error(`[slope] %c ERROR %c ${z}/${x}/${y}`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '', err);
     return transparentTileResponse();
   }
 }

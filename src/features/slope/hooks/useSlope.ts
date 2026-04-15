@@ -11,8 +11,20 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+// DEBUG: expose cache-clear utility in DevTools console
+// Usage: window.__clearSlopeCache() → clears slope tile cache, forces fresh generation
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).__clearSlopeCache = () => {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_SLOPE_CACHE' });
+    console.log('[slope][debug] Sent CLEAR_SLOPE_CACHE to service worker. Reload the map to see fresh tiles.');
+  };
+}
+
 function addSlopeLayer(map: MapboxMap, opacity: number, colorMode: SlopeColorMode) {
-  if (map.getSource(SLOPE_SOURCE_ID)) return;
+  if (map.getSource(SLOPE_SOURCE_ID)) {
+    console.log('[slope][map] source already exists, skipping addSlopeLayer');
+    return;
+  }
 
   map.addSource(SLOPE_SOURCE_ID, slopeTileSource);
 
@@ -20,14 +32,21 @@ function addSlopeLayer(map: MapboxMap, opacity: number, colorMode: SlopeColorMod
   // Insert below symbol layers so labels stay on top
   const firstSymbol = map.getStyle()?.layers?.find(l => l.type === 'symbol');
   map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0], firstSymbol?.id);
+
+  console.log(
+    `[slope][map] %c LAYER ADDED %c source=${SLOPE_SOURCE_ID} layer=${SLOPE_LAYER_ID} opacity=${opacity} colorMode=${colorMode} beforeLayer=${firstSymbol?.id ?? 'none'}`,
+    'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
+  );
+  console.log('[slope][map] paint:', JSON.stringify(layer.paint, null, 2));
 }
 
 function removeSlopeLayer(map: MapboxMap) {
   try {
     if (map.getLayer(SLOPE_LAYER_ID)) map.removeLayer(SLOPE_LAYER_ID);
     if (map.getSource(SLOPE_SOURCE_ID)) map.removeSource(SLOPE_SOURCE_ID);
+    console.log('[slope][map] %c LAYER REMOVED %c', 'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', '');
   } catch {
-    // Style may be transitioning
+    console.warn('[slope][map] removeSlopeLayer caught error (style may be transitioning)');
   }
 }
 
@@ -93,6 +112,7 @@ export function useSlope(
     const onStyleLoad = () => {
       setTimeout(() => {
         if (enabledRef.current) {
+          console.log('[slope][map] %c STYLE RELOAD %c re-adding slope layer', 'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', '');
           addSlopeLayer(map, opacityRef.current, colorModeRef.current);
         }
       }, 0);

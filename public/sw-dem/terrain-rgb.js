@@ -131,5 +131,30 @@ async function decodeTerrainRGBBlob(blob) {
     const b = pixels[idx + 2];
     elevations[i] = -10000 + (r * 65536 + g * 256 + b) * 0.1;
   }
+
+  // ── DEBUG: log decode diagnostics ──
+  let minE = Infinity, maxE = -Infinity, sumE = 0;
+  for (let i = 0; i < elevations.length; i++) {
+    const e = elevations[i];
+    if (e < minE) minE = e;
+    if (e > maxE) maxE = e;
+    sumE += e;
+  }
+  const meanE = sumE / elevations.length;
+  // Sample 5 pixels from the center of the tile
+  const mid = Math.floor(img.height / 2) * img.width + Math.floor(img.width / 2);
+  const sampleRGB = [];
+  for (let s = 0; s < 5; s++) {
+    const si = (mid + s) * 4;
+    sampleRGB.push(`(${pixels[si]},${pixels[si+1]},${pixels[si+2]},a=${pixels[si+3]})`);
+  }
+  console.log(
+    `[slope][decode] %c DEM decoded %c ${img.width}x${img.height}, blob=${blob.size}B | elev min=${minE.toFixed(1)} max=${maxE.toFixed(1)} mean=${meanE.toFixed(1)} range=${(maxE-minE).toFixed(1)}m | center RGB: ${sampleRGB.join(' ')}`,
+    'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
+  );
+  if (maxE - minE < 1) {
+    console.warn(`[slope][decode] %c FLAT DEM %c Elevation range < 1m — slopes will all be ~0°! Check DEM source.`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
+  }
+
   return elevations;
 }
