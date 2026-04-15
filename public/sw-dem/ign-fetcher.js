@@ -18,16 +18,25 @@ function evict(cache, max) {
   }
 }
 
+// Maximum queued tasks before oldest (least relevant) get pruned
+const IGN_QUEUE_MAX = 50;
+
 function scheduleIGN(fn) {
   return new Promise((resolve, reject) => {
     ignQueue.push({ fn, resolve, reject });
+    // Prune oldest entries when queue grows too large (user zoomed/panned away)
+    while (ignQueue.length > IGN_QUEUE_MAX) {
+      const stale = ignQueue.shift();
+      stale.resolve(null); // Return null for pruned stale requests
+    }
     drainIGN();
   });
 }
 
 function drainIGN() {
   while (activeIGN < IGN_CONCURRENCY && ignQueue.length > 0) {
-    const { fn, resolve, reject } = ignQueue.shift();
+    // LIFO: pop newest item — prioritise current-viewport tiles over stale ones
+    const { fn, resolve, reject } = ignQueue.pop();
     activeIGN++;
     fn()
       .then(resolve)

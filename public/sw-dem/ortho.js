@@ -189,71 +189,129 @@ async function transparentResponse() {
 }
 
 // ---------------------------------------------------------------------------
-// Ortho request handler
+// Ortho request handler — uses shared IGN concurrency limiter
 // ---------------------------------------------------------------------------
 
+// In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-fetcher.js)
+const orthoInflight = new Map();
+
+// In-memory negative cache for failed ortho tiles { key → { ts, ttl } }
+const orthoNegCache = new Map();
+const ORTHO_NEG_TTL_TRANSIENT = 30_000;  // 30s — timeout, 5xx, network
+const ORTHO_NEG_TTL_PERMANENT = 3600_000; // 1h — 404
+
+function orthoNegGet(key) {
+  if (!orthoNegCache.has(key)) return false;
+  const entry = orthoNegCache.get(key);
+  if (Date.now() - entry.ts < entry.ttl) return true;
+  orthoNegCache.delete(key);
+  return false;
+}
+
+function orthoNegSet(key, errorType) {
+  const ttl = errorType === 'permanent' ? ORTHO_NEG_TTL_PERMANENT : ORTHO_NEG_TTL_TRANSIENT;
+  orthoNegCache.set(key, { ts: Date.now(), ttl });
+  // Evict if too large
+  if (orthoNegCache.size > 2000) {
+    const iter = orthoNegCache.keys();
+    for (let i = 0; i < 500; i++) {
+      const k = iter.next().value;
+      if (k !== undefined) orthoNegCache.delete(k);
+    }
+  }
+}
+
 async function handleOrthoRequest(z, x, y) {
+  const tileKey = `${z}/${x}/${y}`;
   const cache = await caches.open(ORTHO_CACHE_NAME);
-  const cacheKey = new Request(`/ortho-tiles/${z}/${x}/${y}`);
+  const cacheKey = new Request(`/ortho-tiles/${tileKey}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
-  try {
-    const polyLoaded = await ensureFrancePoly();
-
-    if (!polyLoaded) {
-      const url = buildOrthoTileURL(z, x, y);
-      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-      if (!res.ok) return await transparentResponse();
-      return new Response(await res.blob(), {
-        status: 200,
-        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
-      });
-    }
-
-    if (!tileOverlapsFrance(z, x, y)) {
-      return await transparentResponse();
-    }
-
-    const classification = classifyOrthoTile(z, x, y);
-
-    if (classification === 'outside') {
-      return await transparentResponse();
-    }
-
-    const url = buildOrthoTileURL(z, x, y);
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
-    if (!res.ok) return await transparentResponse();
-
-    // Validate that the IGN response is actually an image
-    const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
-    if (!contentType.startsWith('image/')) {
-      return await transparentResponse();
-    }
-
-    let response;
-    if (classification === 'inside') {
-      response = new Response(await res.blob(), {
-        status: 200,
-        headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
-      });
-    } else {
-      const imgBlob = await res.blob();
-      const maskedPng = await maskOrthoTile(imgBlob, z, x, y);
-      response = new Response(maskedPng, {
-        status: 200,
-        headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' },
-      });
-    }
-
-    cache.put(cacheKey, response.clone());
-    return response;
-  } catch (err) {
-    // Silently handle aborted requests (user panning/zooming cancels stale tiles)
-    if (err && err.name === 'AbortError') {
-      return await transparentResponse();
-    }
-    console.error('[sw-dem] Ortho error', z, x, y, err);
+  // Negative cache — skip tiles that recently failed
+  if (orthoNegGet(tileKey)) {
     return await transparentResponse();
   }
+
+  // Deduplicate: reuse in-flight promise for the same tile
+  if (orthoInflight.has(tileKey)) {
+    const result = await orthoInflight.get(tileKey);
+    // Clone if it's a real response, otherwise make a new transparent response
+    return result ? result.clone() : await transparentResponse();
+  }
+
+  const promise = (async () => {
+    try {
+      const polyLoaded = await ensureFrancePoly();
+
+      if (!polyLoaded) {
+        // Fallback: fetch without clipping, still through concurrency limiter
+        const response = await scheduleIGN(async () => {
+          const url = buildOrthoTileURL(z, x, y);
+          const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+          if (!res.ok) return null;
+          return new Response(await res.blob(), {
+            status: 200,
+            headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
+          });
+        });
+        if (!response) return null;
+        cache.put(cacheKey, response.clone());
+        return response;
+      }
+
+      if (!tileOverlapsFrance(z, x, y)) return null;
+
+      const classification = classifyOrthoTile(z, x, y);
+      if (classification === 'outside') return null;
+
+      // Fetch IGN tile through the shared concurrency limiter
+      const fetchResult = await scheduleIGN(async () => {
+        const url = buildOrthoTileURL(z, x, y);
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        if (!res.ok) {
+          const errorType = res.status === 404 ? 'permanent' : 'transient';
+          orthoNegSet(tileKey, errorType);
+          return null;
+        }
+        const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+        if (!contentType.startsWith('image/')) {
+          orthoNegSet(tileKey, 'permanent');
+          return null;
+        }
+        return await res.blob();
+      });
+
+      // scheduleIGN may return null if the request was pruned from the queue
+      if (!fetchResult) return null;
+
+      let response;
+      if (classification === 'inside') {
+        response = new Response(fetchResult, {
+          status: 200,
+          headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
+        });
+      } else {
+        const maskedPng = await maskOrthoTile(fetchResult, z, x, y);
+        response = new Response(maskedPng, {
+          status: 200,
+          headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' },
+        });
+      }
+
+      cache.put(cacheKey, response.clone());
+      return response;
+    } catch (err) {
+      if (err && err.name === 'AbortError') return null;
+      orthoNegSet(tileKey, 'transient');
+      console.error('[sw-dem] Ortho error', z, x, y, err);
+      return null;
+    }
+  })().finally(() => {
+    orthoInflight.delete(tileKey);
+  });
+
+  orthoInflight.set(tileKey, promise);
+  const result = await promise;
+  return result ? result : await transparentResponse();
 }

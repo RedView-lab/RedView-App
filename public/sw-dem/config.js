@@ -28,7 +28,7 @@ const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 3000;
-const IGN_CONCURRENCY = 6;
+const IGN_CONCURRENCY = 8;
 
 // Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
 const IGN_NULL_TTL_TRANSIENT = 30_000;   // 30s — timeout, 5xx, network error
