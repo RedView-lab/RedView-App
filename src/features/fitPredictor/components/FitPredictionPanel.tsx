@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent, CSSProperties } from 'react';
 import { createFitPredictionEngine } from '../engine/api';
+import { exportPredictionToExcel } from '../export';
 import type {
   ComparisonResult,
   FitPanelMode,
@@ -339,7 +340,16 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
             <div style={cardStyle}>
               <div style={cardHeaderStyle}>
                 <span style={sectionTitleStyle}>Resultat</span>
-                <span style={mutedTextStyle}>Prediction route</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={mutedTextStyle}>Prediction route</span>
+                  <button
+                    type="button"
+                    style={exportBtnStyle}
+                    onClick={() => exportPredictionToExcel(predictionResult)}
+                  >
+                    Export Excel
+                  </button>
+                </div>
               </div>
               <div style={metricsGridStyle}>
                 <Metric label="Temps predit" value={formatDuration(predictionResult.total_time_s)} accent />
@@ -717,6 +727,18 @@ const metricsGridStyle: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
   gap: 8,
+};
+
+const exportBtnStyle: CSSProperties = {
+  padding: '3px 10px',
+  fontSize: 10,
+  fontWeight: 600,
+  borderRadius: 6,
+  border: '1px solid rgba(230,126,34,0.5)',
+  background: 'rgba(230,126,34,0.15)',
+  color: '#e67e22',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
 };
 
 const metricCardStyle: CSSProperties = {
