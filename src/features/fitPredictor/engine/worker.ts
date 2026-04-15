@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import init, { predict, predict_vs_actual } from './pkg/redviewalgo.js';
+import wasmUrl from './pkg/redviewalgo_bg.wasm?url';
 import type { FitWorkerRequest, FitWorkerResponse } from '../types';
 
 let wasmReady = false;
@@ -12,7 +13,7 @@ async function ensureInit(): Promise<void> {
   }
 
   if (!initPromise) {
-    initPromise = init().then(() => {
+    initPromise = init({ module_or_path: wasmUrl }).then(() => {
       wasmReady = true;
     });
   }
