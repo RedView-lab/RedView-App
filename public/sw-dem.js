@@ -131,15 +131,21 @@ async function handleDemRequest(request, z, x, y, _depth) {
     let demSource = 'none';
 
     if (tileOverlapsFrance(z, x, y) && z >= IGN_DEM_MINZOOM) {
-      const ignResult = await buildIGNTile(z, x, y);
+      // Use polygon classification to avoid fetching IGN for tiles outside France
+      await ensureFrancePoly();
+      const tileClass = classifyDemTile(z, x, y);
 
-      if (ignResult) {
-        if (ignResult.blob) {
-          pngBlob = ignResult.blob;
-          demSource = ignResult.source || 'ign-full';
-        } else {
-          pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
-          demSource = `composite(${ignResult.source || 'ign-partial'})`;
+      if (tileClass !== 'outside') {
+        const ignResult = await buildIGNTile(z, x, y, tileClass);
+
+        if (ignResult) {
+          if (ignResult.blob) {
+            pngBlob = ignResult.blob;
+            demSource = ignResult.source || 'ign-full';
+          } else {
+            pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+            demSource = `composite(${ignResult.source || 'ign-partial'})`;
+          }
         }
       }
     }

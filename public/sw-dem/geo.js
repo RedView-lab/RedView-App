@@ -32,3 +32,23 @@ function tileOverlapsFrance(z, x, y) {
   const [w, s, e, n] = FRANCE_BOUNDS;
   return !(b.east < w || b.west > e || b.south > n || b.north < s);
 }
+
+// Polygon-based DEM tile classification (requires ensureFrancePoly() loaded)
+// Returns 'inside' | 'border' | 'outside'
+function classifyDemTile(z, x, y) {
+  if (!francePoly) return 'inside'; // fallback if polygon not loaded
+  const b = mercatorTileBounds(z, x, y);
+  let insideCount = 0;
+  const N = 4;
+  for (let i = 0; i < N; i++) {
+    for (let j = 0; j < N; j++) {
+      const lng = b.west + (b.east - b.west) * (i + 0.5) / N;
+      const lat = b.south + (b.north - b.south) * (j + 0.5) / N;
+      if (pointInFrance(lng, lat)) insideCount++;
+    }
+  }
+  const total = N * N;
+  if (insideCount > 0 && insideCount < total) return 'border';
+  if (hasPolyVertexInTile(b)) return 'border';
+  return insideCount === total ? 'inside' : 'outside';
+}

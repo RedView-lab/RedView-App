@@ -4,7 +4,8 @@
 // Uses zoom-level fallback: if tile missing at demZ, tries lower zoom levels
 // ---------------------------------------------------------------------------
 
-async function buildIGNTile(mercZ, mercX, mercY) {
+async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
+  const isBorder = tileClass === 'border';
   const demZ = Math.max(IGN_DEM_MINZOOM, Math.min(mercZ, IGN_DEM_MAXZOOM));
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
   const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
@@ -48,6 +49,9 @@ async function buildIGNTile(mercZ, mercX, mercY) {
       const matrixHeight = 1 << demZ;
       const col = Math.max(0, Math.min(Math.floor(((lng + 180) / 360) * matrixWidth), matrixWidth - 1));
       const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
+
+      // For border tiles, skip pixels outside France polygon
+      if (isBorder && francePoly && !pointInFrance(lng, lat)) continue;
 
       const result = tileMap.get(`${col}/${row}`);
       if (result && result.data) {
