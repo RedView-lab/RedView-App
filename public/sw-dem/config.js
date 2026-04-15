@@ -20,11 +20,11 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-const CACHE_NAME = 'dem-tiles-v10';
+const CACHE_NAME = 'dem-tiles-v11';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v5';
 const NEGATIVE_TTL = 3600;
 const ORTHO_CACHE_NAME = 'ortho-tiles-v1';
-const SLOPE_CACHE_NAME = 'slope-tiles-v1';
+const SLOPE_CACHE_NAME = 'slope-tiles-v2';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 3000;

@@ -81,10 +81,7 @@ function computeSlopes(elevations, tileSize, cellSizeX, cellSizeY) {
  */
 async function encodeSlopePng(slopes, elevations) {
   const size = DEM_TILE_SIZE;
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext('2d');
-  const imageData = ctx.createImageData(size, size);
-  const pixels = imageData.data;
+  const rgba = new Uint8Array(size * size * 4);
 
   for (let j = 0; j < slopes.length; j++) {
     const elev = elevations[j];
@@ -93,14 +90,13 @@ async function encodeSlopePng(slopes, elevations) {
     const slopeDeg = isNoData ? 0 : slopes[j];
     const val = Math.max(0, Math.min(16777215, Math.round((slopeDeg + 10000) / 0.1)));
     const idx = j * 4;
-    pixels[idx]     = (val >> 16) & 0xff;
-    pixels[idx + 1] = (val >>  8) & 0xff;
-    pixels[idx + 2] =  val        & 0xff;
-    pixels[idx + 3] = isNoData ? 0 : 255;
+    rgba[idx]     = (val >> 16) & 0xff;
+    rgba[idx + 1] = (val >>  8) & 0xff;
+    rgba[idx + 2] =  val        & 0xff;
+    rgba[idx + 3] = isNoData ? 0 : 255;
   }
 
-  ctx.putImageData(imageData, 0, 0);
-  return canvas.convertToBlob({ type: 'image/png' });
+  return buildRawPng(size, size, rgba);
 }
 
 /**
