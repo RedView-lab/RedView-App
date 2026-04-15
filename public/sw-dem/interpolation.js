@@ -90,7 +90,7 @@ function bicubicSample(data, fx, fy) {
     if (p10v) return sampleAt(data, ix + 1, iy);
     if (p01v) return sampleAt(data, ix, iy + 1);
     if (p11v) return sampleAt(data, ix + 1, iy + 1);
-    return 0;
+    return NaN; // Propagate as NODATA — prevents 0m sea-level cliffs at borders
   }
 
   // Weighted bilinear: substitute invalid pixels with average of valid ones

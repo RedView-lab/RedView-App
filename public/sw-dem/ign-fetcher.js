@@ -4,6 +4,7 @@
 // ---------------------------------------------------------------------------
 
 const ignTileCache = new Map();
+const ignInflight = new Map(); // Deduplication: in-progress fetches by key
 let activeIGN = 0;
 const ignQueue = [];
 
@@ -82,7 +83,10 @@ async function getIGNTile(z, col, row) {
   const cached = getCached(key);
   if (cached.hit) return cached.data;
 
-  return scheduleIGN(async () => {
+  // Deduplicate: if this tile is already being fetched, reuse the in-flight promise
+  if (ignInflight.has(key)) return ignInflight.get(key);
+
+  const promise = scheduleIGN(async () => {
     // Re-check after acquiring the concurrency slot
     const cached2 = getCached(key);
     if (cached2.hit) return cached2.data;
@@ -108,7 +112,12 @@ async function getIGNTile(z, col, row) {
       cacheNull(key, 'transient');
       return null;
     }
+  }).finally(() => {
+    ignInflight.delete(key);
   });
+
+  ignInflight.set(key, promise);
+  return promise;
 }
 
 // ---------------------------------------------------------------------------

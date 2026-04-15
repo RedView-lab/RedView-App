@@ -87,7 +87,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
         const mb = sampleMB(px, py);
         if (mb > -9000) {
           const off = ignElevations[idx] - mb;
-          if (off > -200 && off < 200) {
+          if (off > -500 && off < 500) {
             borderSamples.push({ px, py, offset: off });
           }
         }

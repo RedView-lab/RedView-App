@@ -84,7 +84,7 @@ function pointInFrance(lng, lat) {
 function classifyOrthoTile(z, x, y) {
   const b = mercatorTileBounds(z, x, y);
   let insideCount = 0;
-  const N = 3;
+  const N = 5;
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const lng = b.west + (b.east - b.west) * (i + 0.5) / N;
@@ -151,7 +151,9 @@ async function maskOrthoTile(imgBlob, z, tileX, tileY) {
   }
   ctx.clip();
   ctx.drawImage(img, 0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
-  return canvas.convertToBlob({ type: 'image/png' });
+  img.close(); // Release GPU memory
+  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  return blob;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +203,7 @@ async function handleOrthoRequest(z, x, y) {
 
     if (!polyLoaded) {
       const url = buildOrthoTileURL(z, x, y);
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
       if (!res.ok) return await transparentResponse();
       return new Response(await res.blob(), {
         status: 200,
@@ -220,7 +222,7 @@ async function handleOrthoRequest(z, x, y) {
     }
 
     const url = buildOrthoTileURL(z, x, y);
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
     if (!res.ok) return await transparentResponse();
 
     // Validate that the IGN response is actually an image
@@ -247,6 +249,10 @@ async function handleOrthoRequest(z, x, y) {
     cache.put(cacheKey, response.clone());
     return response;
   } catch (err) {
+    // Silently handle aborted requests (user panning/zooming cancels stale tiles)
+    if (err && err.name === 'AbortError') {
+      return await transparentResponse();
+    }
     console.error('[sw-dem] Ortho error', z, x, y, err);
     return await transparentResponse();
   }

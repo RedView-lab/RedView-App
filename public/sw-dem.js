@@ -39,15 +39,19 @@ const OLD_CACHES = [
   'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3',
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
   'dem-tiles-v7', 'dem-tiles-v8', 'dem-tiles-v9',
-  'dem-tiles-v10',
+  'dem-tiles-v10', 'dem-tiles-v11',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
-  'slope-tiles-v1',
+  'dem-negative-v4', 'dem-negative-v5',
+  'ortho-tiles-v1',
+  'slope-tiles-v1', 'slope-tiles-v2',
 ];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(STATIC_CACHE_NAME)
       .then(cache => cache.add('/france-border.json'))
+      // Pre-warm France polygon so first tile requests don't block on it
+      .then(() => ensureFrancePoly())
       .then(() => self.skipWaiting())
   );
 });

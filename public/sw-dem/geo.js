@@ -39,7 +39,7 @@ function classifyDemTile(z, x, y) {
   if (!francePoly) return 'inside'; // fallback if polygon not loaded
   const b = mercatorTileBounds(z, x, y);
   let insideCount = 0;
-  const N = 4;
+  const N = 6;
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const lng = b.west + (b.east - b.west) * (i + 0.5) / N;

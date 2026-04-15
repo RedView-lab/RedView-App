@@ -20,15 +20,15 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-const CACHE_NAME = 'dem-tiles-v11';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v5';
+const CACHE_NAME = 'dem-tiles-v12';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v6';
 const NEGATIVE_TTL = 3600;
-const ORTHO_CACHE_NAME = 'ortho-tiles-v1';
-const SLOPE_CACHE_NAME = 'slope-tiles-v2';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v2';
+const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 3000;
-const IGN_CONCURRENCY = 4;
+const IGN_CONCURRENCY = 6;
 
 // Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
 const IGN_NULL_TTL_TRANSIENT = 30_000;   // 30s — timeout, 5xx, network error
