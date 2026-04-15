@@ -2,6 +2,8 @@ export type FitPanelMode = 'route' | 'compare';
 
 export type RiderType = 'elite' | 'trained' | 'recreational';
 
+export type Gender = 'male' | 'female' | 'unspecified';
+
 export interface PredictionConfig {
   ftp_w?: number;
   rider_weight_kg?: number;
@@ -21,6 +23,7 @@ export interface PredictionConfig {
   surface_types?: number[];
   ambient_temperature_c?: number;
   headwind_ms?: number;
+  gender?: Gender;
 }
 
 export interface RiderProfile {

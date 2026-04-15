@@ -333,7 +333,7 @@ mod tests {
             "Expected >100 samples, got {}",
             model.samples.len()
         );
-        assert_eq!(model.norms.len(), 6);
+        assert_eq!(model.norms.len(), 8);
         assert!(model.is_usable());
     }
 

@@ -31,6 +31,9 @@ pub fn predict(
     let pacing = config.pacing_factor;
     let drivetrain_eff = config.drivetrain_efficiency.unwrap_or(DRIVETRAIN_EFFICIENCY);
 
+    // Gender-based speed modifier
+    let gender_factor = config.gender.speed_factor();
+
     // Apply fatigue overrides from config
     let mut profile = profile.clone();
     if let Some(floor) = config.fatigue_floor {
@@ -62,12 +65,40 @@ pub fn predict(
 
     // Estimate riding time for stop schedule generation (rough: distance / 25 km/h)
     let estimated_riding_time_s = route.total_distance_m / (25.0 / 3.6);
-    let has_sleep_stops = matches!(config.sleep_strategy, SleepStrategy::SleepStops);
+    let estimated_riding_h = estimated_riding_time_s / 3600.0;
+
+    // Auto-enable sleep stops for ultra events (>24h estimated riding)
+    // Sleep deprivation is a major performance factor that cannot be ignored.
+    let effective_sleep_strategy = match &config.sleep_strategy {
+        SleepStrategy::None => {
+            if estimated_riding_h > 24.0 {
+                SleepStrategy::SleepStops
+            } else if estimated_riding_h > 12.0 {
+                SleepStrategy::MicroNaps
+            } else {
+                SleepStrategy::None
+            }
+        }
+        other => other.clone(),
+    };
+
+    let has_sleep_stops = matches!(effective_sleep_strategy, SleepStrategy::SleepStops);
     let mut stop_schedule = stops::generate_stop_schedule(
         estimated_riding_time_s,
         &effective_stop_strategy,
         has_sleep_stops,
     );
+
+    // Auto-set start time for ultra events if not provided.
+    // Without start_time_h, ALL circadian effects (night dip, morning rebound) are disabled.
+    // For multi-day events this creates dangerously optimistic predictions.
+    let effective_start_time_h = config.start_time_h.or_else(|| {
+        if estimated_riding_h > 12.0 {
+            Some(8.0) // Default: 8 AM start
+        } else {
+            None
+        }
+    });
 
     // Terrain-aware stop placement: shift stops to valley bottoms
     let estimated_avg_speed = 25.0 / 3.6; // rough estimate for terrain search
@@ -102,11 +133,12 @@ pub fn predict(
     // stops are integrated into the loop for recovery effects
     let (mut pred_points, riding_time_s) = speed::predict_single_pass(
         &profile, route_ref, knn, mass_kg, cda, crr, pacing, drivetrain_eff,
-        config.start_time_h,
-        &config.sleep_strategy,
+        effective_start_time_h,
+        &effective_sleep_strategy,
         config.race_mode,
         &stop_schedule,
         config.ambient_temperature_c.unwrap_or(18.0),
+        gender_factor,
     );
 
     // Build segment summaries
@@ -205,6 +237,13 @@ mod tests {
                 slow_lambda: None,
             },
             has_power: true,
+            rider_weight_kg: 68.0,
+            bike_weight_kg: 7.0,
+            wkg: 3.68,
+            training_dplus_per_km: 12.0,
+            training_max_climb_rate_mh: 900.0,
+            training_avg_climb_rate_mh: 650.0,
+            training_max_dplus_m: 3000.0,
         }
     }
 

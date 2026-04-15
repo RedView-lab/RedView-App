@@ -7,9 +7,9 @@ use std::collections::VecDeque;
 /// These are default weights; can be optimized via LOO-CV in `optimize_feature_weights()`.
 const WEIGHT_GRADIENT: f64 = 3.0;
 const WEIGHT_ELAPSED_H: f64 = 2.5;
-const WEIGHT_CUM_CLIMB: f64 = 1.2;
-const WEIGHT_RECENT_GRAD: f64 = 1.5;
-const WEIGHT_ELEVATION: f64 = 0.3;
+const WEIGHT_CUM_CLIMB: f64 = 2.2;     // ↑ from 1.2: D+ state is critical for speed prediction
+const WEIGHT_RECENT_GRAD: f64 = 2.0;   // ↑ from 1.5: recent terrain has strong speed impact
+const WEIGHT_ELEVATION: f64 = 0.8;     // ↑ from 0.3: altitude matters more (air density + fatigue)
 const WEIGHT_CUM_DISTANCE: f64 = 1.5;
 const WEIGHT_HEART_RATE: f64 = 2.0;
 const WEIGHT_TEMPERATURE: f64 = 1.0;

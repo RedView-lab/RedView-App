@@ -30,7 +30,8 @@ const KNN_BASE_WEIGHT: f64 = 0.7;
 const CDA_TUCK_FACTOR: f64 = 0.80;
 
 /// Reference climbing rate for climbing load (600m D+/30min = very hard sustained climbing).
-const CLIMBING_LOAD_REFERENCE: f64 = 600.0;
+/// This is the default; overridden dynamically if training data provides a better reference.
+const CLIMBING_LOAD_REFERENCE_DEFAULT: f64 = 600.0;
 /// Climbing load penalty coefficient (short-term).
 const CLIMBING_LOAD_COEFF: f64 = 0.08;
 /// Climbing load sliding window (seconds) — short-term (30min).
@@ -38,7 +39,7 @@ const CLIMBING_LOAD_WINDOW_S: f64 = 1800.0;
 /// Long-term climbing load window (4h) — accumulated fatigue from repeated climbs.
 const CLIMBING_LOAD_LONG_WINDOW_S: f64 = 14400.0;
 /// Long-term climbing load reference (2500m D+/4h).
-const CLIMBING_LOAD_LONG_REFERENCE: f64 = 2500.0;
+const CLIMBING_LOAD_LONG_REFERENCE_DEFAULT: f64 = 2500.0;
 /// Long-term climbing load penalty coefficient (milder but persistent).
 const CLIMBING_LOAD_LONG_COEFF: f64 = 0.06;
 /// Recovery boost after descent (maximum 3% speed boost at start of new climb).
@@ -59,11 +60,11 @@ fn combined_micro_factor_floor(total_route_km: f64) -> f64 {
     if total_route_km < 200.0 {
         1.0 // no floor for short rides
     } else {
-        // Smooth sigmoid transition: 0.82 at 200km, converging to 0.65 at 3000km+
-        // Prevents catastrophic stacking of many independent micro-penalties
+        // Smooth sigmoid transition: 0.78 at 200km, converging to 0.55 at 3000km+
+        // Allows real penalty stacking for ultra events
         let x = (total_route_km - 200.0) / 1000.0;
-        let floor = 0.65 + 0.17 / (1.0 + x);
-        floor.clamp(0.65, 0.82)
+        let floor = 0.55 + 0.23 / (1.0 + x);
+        floor.clamp(0.55, 0.78)
     }
 }
 
@@ -71,17 +72,94 @@ fn combined_micro_factor_floor(total_route_km: f64) -> f64 {
 /// Models the cumulative overhead of navigation, resupply, bike maintenance,
 /// and general "off-bike" inefficiency that increases with distance.
 ///
-/// Based on TCR/RAAM data: self-supported riders lose 3-8% of effective speed
+/// Based on TCR/RAAM data: self-supported riders lose 5-12% of effective speed
 /// purely to logistical overhead beyond what stop time captures.
 ///
-/// Returns a factor in [0.90, 1.0]. Negligible under 300km.
+/// Returns a factor in [0.88, 1.0]. Negligible under 300km.
 fn logistics_efficiency_factor(distance_km: f64) -> f64 {
     if distance_km < 300.0 {
         return 1.0;
     }
-    // Logarithmic decay: ~1.5% at 500km, ~3% at 1500km, ~4% at 3000km
-    let penalty = 0.02 * (1.0 + (distance_km - 300.0) / 500.0).ln();
-    (1.0 - penalty).clamp(0.93, 1.0)
+    // Logarithmic decay: ~2.5% at 500km, ~5% at 1500km, ~7% at 3000km
+    let penalty = 0.035 * (1.0 + (distance_km - 300.0) / 500.0).ln();
+    (1.0 - penalty).clamp(0.88, 1.0)
+}
+
+/// Altitude × climbing interaction penalty.
+///
+/// Climbing at altitude is disproportionately harder than climbing at sea level:
+/// - VO2max drops ~6% per 1000m above 1500m (already modeled by altitude_power_factor)
+/// - But climbing EFFORT at altitude is compounded: lower O2 + high power demand
+/// - Steeper gradients at altitude amplify this since climbing is intensity-limited
+///
+/// This factor represents the *additional* penalty beyond what altitude_power_factor
+/// already captures — the interaction effect.
+///
+/// Returns a factor in [0.88, 1.0].
+fn altitude_climbing_interaction(gradient_pct: f64, elevation_m: f64) -> f64 {
+    if gradient_pct < 3.0 || elevation_m < 1200.0 {
+        return 1.0;
+    }
+    // Scale with both gradient steepness and altitude
+    let grad_intensity = ((gradient_pct - 3.0) / 10.0).min(1.0); // 0 at 3%, 1 at 13%+
+    let alt_severity = ((elevation_m - 1200.0) / 2000.0).min(1.0); // 0 at 1200m, 1 at 3200m+
+    let penalty = 0.12 * grad_intensity * alt_severity; // max 12% additional penalty
+    (1.0 - penalty).clamp(0.88, 1.0)
+}
+
+/// Cumulative D+ fatigue factor.
+///
+/// Models progressive muscular damage from repeated climbing that is separate
+/// from time-based fatigue. The eccentric muscle contractions during climbing
+/// cause micro-damage that accumulates over the ride.
+///
+/// This is particularly significant for mountainous ultra events where total D+
+/// exceeds 5000m. The penalty is proportional to cumulative climbing and
+/// accelerates as total climb accumulates.
+///
+/// Returns a factor in [0.88, 1.0].
+fn cumulative_dplus_fatigue(cum_climb_m: f64) -> f64 {
+    if cum_climb_m < 2000.0 {
+        return 1.0;
+    }
+    // Sigmoid-based fatigue onset at 2000m D+, converging to 0.88 at ~15000m+
+    let x = (cum_climb_m - 2000.0) / 5000.0;
+    let penalty = 0.12 * x / (1.0 + x); // approaches 0.12 asymptotically
+    (1.0 - penalty).clamp(0.88, 1.0)
+}
+
+/// Route D+ intensity correction.
+///
+/// Compares the route's D+ per km against the rider's training D+ per km.
+/// If the route is significantly more mountainous than what the rider trains on,
+/// the prediction should be more conservative (the rider is outside their
+/// comfort zone and will likely be slower than the model predicts).
+///
+/// Returns a factor in [0.90, 1.0]. No penalty if route is similar or easier
+/// than training.
+fn route_dplus_intensity_correction(
+    route_dplus_per_km: f64,
+    training_dplus_per_km: f64,
+) -> f64 {
+    if training_dplus_per_km < 1.0 {
+        // No training data — can't compare; apply mild conservative penalty
+        // if route is mountainous
+        if route_dplus_per_km > 15.0 {
+            return 0.96;
+        }
+        return 1.0;
+    }
+    let ratio = route_dplus_per_km / training_dplus_per_km;
+    if ratio <= 1.2 {
+        // Route is similar or easier than training
+        1.0
+    } else {
+        // Route is harder: penalty scales with how far outside training range
+        // ratio 1.5 → ~3% penalty, ratio 2.0 → ~5%, ratio 3.0 → ~8%
+        let excess = ratio - 1.2;
+        let penalty = 0.10 * excess / (1.0 + excess); // max 10%
+        (1.0 - penalty).clamp(0.90, 1.0)
+    }
 }
 
 /// Run a single prediction pass with per-point fatigue.
@@ -99,6 +177,7 @@ pub fn predict_single_pass(
     race_mode: bool,
     stop_schedule: &[StopEvent],
     ambient_temperature_c: f64,
+    gender_factor: f64,
 ) -> (Vec<PredictionPoint>, f64) {
     let n = route.points.len();
     let use_knn = knn.is_usable();
@@ -145,6 +224,39 @@ pub fn predict_single_pass(
     // Hoist constant micro-factor floor out of loop
     let total_route_km = route.total_distance_m / 1000.0;
     let micro_floor = combined_micro_factor_floor(total_route_km);
+
+    // ── Route D+ characterization ──
+    // Compute route D+ per km for comparison against training
+    let route_total_dplus: f64 = route.points.windows(2)
+        .map(|w| (w[1].elevation_m - w[0].elevation_m).max(0.0))
+        .sum();
+    let route_dplus_per_km = if total_route_km > 0.0 {
+        route_total_dplus / total_route_km
+    } else {
+        0.0
+    };
+
+    // Dynamic climbing load references based on training data
+    // If training data shows rider's actual climbing rate, use that as reference
+    // (harder reference = less penalty for a strong climber, and vice versa)
+    let climbing_load_ref = if profile.training_avg_climb_rate_mh > 100.0 {
+        // Training climb rate is in m/h; convert to m per 30min window
+        (profile.training_avg_climb_rate_mh * 0.5).clamp(250.0, 900.0)
+    } else {
+        CLIMBING_LOAD_REFERENCE_DEFAULT
+    };
+    let climbing_load_long_ref = if profile.training_avg_climb_rate_mh > 100.0 {
+        // 4h equivalent: sustained rate reduces with time
+        (profile.training_avg_climb_rate_mh * 3.5).clamp(1500.0, 4000.0)
+    } else {
+        CLIMBING_LOAD_LONG_REFERENCE_DEFAULT
+    };
+
+    // Route vs training D+ intensity correction (constant for the whole route)
+    let dplus_intensity_corr = route_dplus_intensity_correction(
+        route_dplus_per_km,
+        profile.training_dplus_per_km,
+    );
 
     for i in 0..n {
         let rp = &route.points[i];
@@ -261,7 +373,7 @@ pub fn predict_single_pass(
 
         // Short-term climbing load penalty (30min window)
         let climbing_load_factor = if rp.gradient_pct > 2.0 && recent_climb_m > 10.0 {
-            let load_ratio = recent_climb_m / CLIMBING_LOAD_REFERENCE;
+            let load_ratio = recent_climb_m / climbing_load_ref;
             1.0 / (1.0 + CLIMBING_LOAD_COEFF * load_ratio)
         } else {
             1.0
@@ -269,7 +381,7 @@ pub fn predict_single_pass(
 
         // Long-term climbing load penalty (4h window) — accumulated fatigue from repeated climbs
         let long_climb_factor = if rp.gradient_pct > 2.0 && long_climb_m > 100.0 {
-            let load_ratio = long_climb_m / CLIMBING_LOAD_LONG_REFERENCE;
+            let load_ratio = long_climb_m / climbing_load_long_ref;
             1.0 / (1.0 + CLIMBING_LOAD_LONG_COEFF * load_ratio)
         } else {
             1.0
@@ -470,6 +582,8 @@ pub fn predict_single_pass(
         // Compute combined micro-factor with anti-stacking floor
         let logistics_eff = logistics_efficiency_factor(cum_distance_km);
         let surface_penalty = surface_speed_penalty(rp.surface_type, rp.gradient_pct);
+        let alt_climb_interaction = altitude_climbing_interaction(rp.gradient_pct, rp.elevation_m);
+        let cum_dplus_fatigue = cumulative_dplus_fatigue(cum_climb_m);
         let micro_combined = climbing_load_factor
             * long_climb_factor
             * effective_dist_eff
@@ -479,13 +593,17 @@ pub fn predict_single_pass(
             * surface_penalty
             * thermal
             * glycogen
-            * sleep_inertia;
+            * sleep_inertia
+            * alt_climb_interaction
+            * cum_dplus_fatigue
+            * dplus_intensity_corr;
         let micro_clamped = micro_combined.max(micro_floor);
 
         let raw_speed_ms = raw_speed_ms
             * micro_clamped
             * recovery_factor
-            * (1.0 + effective_recovery_boost);
+            * (1.0 + effective_recovery_boost)
+            * gender_factor;
 
         // Gradient transition momentum: smooth speed changes to model
         // real-world inertia (rider doesn't instantly change speed at gradient transitions).

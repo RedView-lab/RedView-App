@@ -5,6 +5,7 @@ import { exportPredictionToExcel } from '../export';
 import type {
   ComparisonResult,
   FitPanelMode,
+  Gender,
   PredictionConfig,
   PredictionResult,
 } from '../types';
@@ -27,6 +28,8 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
   const [riderWeightKg, setRiderWeightKg] = useState('');
   const [bikeWeightKg, setBikeWeightKg] = useState('10');
   const [pacingFactor, setPacingFactor] = useState('1.0');
+  const [gender, setGender] = useState<Gender>('unspecified');
+  const [startTimeH, setStartTimeH] = useState('');
   const [busy, setBusy] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +105,8 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
     setRiderWeightKg('');
     setBikeWeightKg('10');
     setPacingFactor('1.0');
+    setGender('unspecified');
+    setStartTimeH('');
     resetOutputs();
 
     if (fitInputRef.current) {
@@ -120,7 +125,7 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
       return;
     }
 
-    const config = buildConfig(ftpWatts, riderWeightKg, bikeWeightKg, pacingFactor);
+    const config = buildConfig(ftpWatts, riderWeightKg, bikeWeightKg, pacingFactor, gender, startTimeH);
     setBusy(true);
     setError(null);
     setPredictionResult(null);
@@ -300,6 +305,29 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
                   <option value="1.1">Agressif</option>
                 </select>
               </div>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>Sexe</label>
+                <select value={gender} onChange={(event) => setGender(event.target.value as Gender)} style={textInputStyle}>
+                  <option value="unspecified">Non précisé</option>
+                  <option value="male">Homme</option>
+                  <option value="female">Femme</option>
+                </select>
+              </div>
+              <div style={configFieldStyle}>
+                <label style={fieldLabelStyle}>Départ (h)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="23"
+                  step="1"
+                  value={startTimeH}
+                  onChange={(event) => setStartTimeH(event.target.value)}
+                  placeholder="ex: 8"
+                  style={textInputStyle}
+                />
+              </div>
+            </div>
+            <div style={{ ...configGridStyle, marginTop: 8 }}>
               <div style={{ ...configFieldStyle, justifyContent: 'flex-end' }}>
                 <p style={fieldMetaStyle}>
                   Total: {(parsedRiderWeight > 0 && Number.parseFloat(bikeWeightKg) > 0) ? `${(parsedRiderWeight + Number.parseFloat(bikeWeightKg)).toFixed(1)} kg` : '—'}
@@ -406,9 +434,10 @@ function Metric({ label, value, accent = false }: { label: string; value: string
   );
 }
 
-function buildConfig(ftpWatts: string, riderWeightKg: string, bikeWeightKg: string, pacingFactor: string): PredictionConfig {
+function buildConfig(ftpWatts: string, riderWeightKg: string, bikeWeightKg: string, pacingFactor: string, gender: Gender, startTimeH: string): PredictionConfig {
   const config: PredictionConfig = {
     pacing_factor: Number.parseFloat(pacingFactor),
+    gender,
   };
   const parsedFtp = Number.parseFloat(ftpWatts);
   if (!Number.isNaN(parsedFtp) && parsedFtp > 0) {
@@ -421,6 +450,10 @@ function buildConfig(ftpWatts: string, riderWeightKg: string, bikeWeightKg: stri
   const parsedBikeWeight = Number.parseFloat(bikeWeightKg);
   if (!Number.isNaN(parsedBikeWeight) && parsedBikeWeight > 0) {
     config.bike_weight_kg = parsedBikeWeight;
+  }
+  const parsedStartTime = Number.parseFloat(startTimeH);
+  if (!Number.isNaN(parsedStartTime) && parsedStartTime >= 0 && parsedStartTime < 24) {
+    config.start_time_h = parsedStartTime;
   }
   return config;
 }

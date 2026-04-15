@@ -1,5 +1,41 @@
 use serde::{Deserialize, Serialize};
 
+// ─── Gender / sex (physiological model) ──────────────────────────────────────
+
+/// Rider gender for physiological adjustments.
+/// Affects sustainable power-to-speed efficiency in ultra-distance events.
+/// Research: Knechtle et al. 2021, Speechly et al. 1996.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Gender {
+    /// Male physiology (baseline)
+    Male,
+    /// Female physiology — ~8% lower absolute VO2max on average,
+    /// but potentially better fatigue resistance in ultra events.
+    Female,
+    /// Not specified — uses male baseline (conservative for prediction).
+    Unspecified,
+}
+
+impl Default for Gender {
+    fn default() -> Self {
+        Gender::Unspecified
+    }
+}
+
+impl Gender {
+    /// Speed modifier for ultra-distance cycling.
+    /// Female riders average ~8% slower in ultra cycling events (Knechtle et al. 2021,
+    /// RAAM/TCR data). This accounts for average VO2max differences.
+    /// Returns a factor applied to predicted speed.
+    pub fn speed_factor(&self) -> f64 {
+        match self {
+            Gender::Female => 0.92,
+            _ => 1.0,
+        }
+    }
+}
+
 // ─── Surface type (from OpenStreetMap data) ─────────────────────────────────
 
 /// Surface type detected from OSM data.
@@ -225,6 +261,23 @@ pub struct RiderProfile {
     pub fatigue: FatigueModel,
     /// Whether power data was available
     pub has_power: bool,
+
+    // ── Training D+ statistics (computed from historical FIT files) ──
+
+    /// Average D+ per km across all training rides (m/km).
+    /// Typical: flat = 5-8, rolling = 10-15, mountainous = 15-25, alpine = 25-40.
+    #[serde(default)]
+    pub training_dplus_per_km: f64,
+    /// Maximum climbing rate observed in training (m/h of D+ gain).
+    /// Typical trained cyclist: 800-1200 m/h, elite: 1500-1800 m/h.
+    #[serde(default)]
+    pub training_max_climb_rate_mh: f64,
+    /// Average climbing rate in training (m/h of D+ during climbing segments).
+    #[serde(default)]
+    pub training_avg_climb_rate_mh: f64,
+    /// Maximum D+ in a single training ride (m).
+    #[serde(default)]
+    pub training_max_dplus_m: f64,
 }
 
 // ─── Prediction output ──────────────────────────────────────────────────────
@@ -406,6 +459,10 @@ pub struct PredictionConfig {
     /// Default: 0.0 (no wind). Average expected wind for the route.
     #[serde(default)]
     pub headwind_ms: Option<f64>,
+    /// Rider gender for physiological adjustments.
+    /// Affects speed prediction via VO2max/power-to-speed differences.
+    #[serde(default)]
+    pub gender: Gender,
 }
 
 fn default_pacing() -> f64 {
@@ -436,6 +493,7 @@ impl Default for PredictionConfig {
             surface_types: None,
             ambient_temperature_c: None,
             headwind_ms: None,
+            gender: Gender::Unspecified,
         }
     }
 }

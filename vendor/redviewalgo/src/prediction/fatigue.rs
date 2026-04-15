@@ -118,18 +118,18 @@ pub fn circadian_factor(
 ///
 /// Important: this captures ONLY distance-specific mechanical degradation.
 /// Time-dependent fatigue, glycogen, circadian etc are separate factors.
-/// RAAM 15-20% is the total from ALL causes — mechanical alone is ~8-10%.
+/// RAAM 15-20% is the total from ALL causes — mechanical alone is ~10-15%.
 ///
-/// Returns factor in [0.90, 1.0]. Negligible for rides <200km.
+/// Returns factor in [0.85, 1.0]. Negligible for rides <200km.
 pub fn distance_efficiency_factor(distance_km: f64) -> f64 {
     if distance_km < 200.0 {
         return 1.0;
     }
-    // Sigmoidal decay: onset ~300km, inflection ~1000km, floor 0.90
-    // At 750km: ~3%, at 1500km: ~8%, at 3000km+: ~10%
-    let sigmoid = 1.0 / (1.0 + (-0.004 * (distance_km - 1000.0)).exp());
-    let decay = 0.10 * sigmoid;
-    (1.0 - decay).clamp(0.90, 1.0)
+    // Sigmoidal decay: onset ~300km, inflection ~800km, floor 0.85
+    // At 500km: ~4%, at 1000km: ~10%, at 1500km: ~13%, at 3000km+: ~15%
+    let sigmoid = 1.0 / (1.0 + (-0.005 * (distance_km - 800.0)).exp());
+    let decay = 0.15 * sigmoid;
+    (1.0 - decay).clamp(0.85, 1.0)
 }
 
 /// Compute partial fatigue recovery after a rest stop.
@@ -223,6 +223,10 @@ pub fn glycogen_factor(glycogen_level: f64) -> f64 {
 /// Depletion rate depends on intensity (gradient proxy: steeper = more glycolytic).
 /// Assumes well-fueled rider with consistent on-bike nutrition.
 ///
+/// The climbing factor now accounts for sustained climbing blocks: if the rider
+/// has been climbing continuously, glycogen burns faster due to higher average
+/// intensity and reduced ability to eat efficiently on steep gradients.
+///
 /// Returns new glycogen level after dt_h hours.
 pub fn update_glycogen(
     current_level: f64,
@@ -231,21 +235,44 @@ pub fn update_glycogen(
     is_stopped: bool,
 ) -> f64 {
     if is_stopped {
-        // Eating at stops: restore ~20% per hour stopped, but never above current level
-        // (stops refuel, they don't magically deplete)
+        // Eating at stops: restore ~20% per hour stopped
         return (current_level + 0.20 * dt_h).min(1.0);
     }
 
     // Depletion rate: base 0.06/h for well-fueled rider with nutrition strategy
     // (~16h to bonk from full — realistic for riders eating 60-90g carbs/h)
     let base_rate = 0.06;
+
+    // Climbing intensity factor: steeper = more glycolytic demand
+    // Additionally, steep climbing reduces eating efficiency (harder to eat at >8% grade)
     let climb_factor = if gradient_pct > 5.0 {
-        1.0 + 0.06 * (gradient_pct - 5.0).min(10.0) // up to 1.6x on 15%+ grades
+        let excess = (gradient_pct - 5.0).min(12.0);
+        1.0 + 0.08 * excess // up to 1.96x on 17%+ grades (increased from 0.06)
+    } else if gradient_pct > 2.0 {
+        // Mild climbing: moderate increase
+        1.0 + 0.02 * (gradient_pct - 2.0) // up to 1.06x at 5%
     } else {
         1.0
     };
-    // On-bike feeding: continuous intake (~0.045/h recovery from eating while riding)
-    let net_depletion = (base_rate * climb_factor - 0.045).max(0.0);
+
+    // On-bike feeding efficiency: reduced when climbing hard (hard to eat at high intensity)
+    let feeding_rate = if gradient_pct > 8.0 {
+        0.030 // hard to eat on steep climbs (down from 0.045)
+    } else if gradient_pct > 5.0 {
+        0.038 // reduced eating efficiency
+    } else {
+        0.045 // normal on flats/mild gradients
+    };
+
+    // Low glycogen accelerates depletion (metabolic desperation — body burns
+    // remaining stores faster as it dips below 30%)
+    let low_glycogen_accel = if current_level < 0.3 {
+        1.0 + 0.5 * (0.3 - current_level) / 0.3 // up to 1.5x faster depletion
+    } else {
+        1.0
+    };
+
+    let net_depletion = (base_rate * climb_factor * low_glycogen_accel - feeding_rate).max(0.0);
     (current_level - net_depletion * dt_h).max(0.0)
 }
 
@@ -455,16 +482,16 @@ mod tests {
         let f500 = distance_efficiency_factor(500.0);
         let f1000 = distance_efficiency_factor(1000.0);
         let f2000 = distance_efficiency_factor(2000.0);
-        assert!(f500 > 0.90 && f500 < 0.98, "500km: expected ~0.91, got {f500}");
-        assert!(f1000 > 0.84 && f1000 < 0.92, "1000km: expected ~0.86, got {f1000}");
-        assert!(f2000 > 0.81 && f2000 < 0.86, "2000km: expected ~0.83, got {f2000}");
+        assert!(f500 > 0.88 && f500 < 0.98, "500km: expected ~0.94, got {f500}");
+        assert!(f1000 > 0.85 && f1000 < 0.93, "1000km: expected ~0.88, got {f1000}");
+        assert!(f2000 > 0.85 && f2000 < 0.88, "2000km: expected ~0.86, got {f2000}");
         assert!(f1000 < f500, "1000km should be lower than 500km");
     }
 
     #[test]
     fn test_distance_efficiency_floor() {
         let f3000 = distance_efficiency_factor(3000.0);
-        assert!(f3000 >= 0.82, "Should never go below 0.82, got {f3000}");
+        assert!(f3000 >= 0.85, "Should never go below 0.85, got {f3000}");
     }
 
     #[test]

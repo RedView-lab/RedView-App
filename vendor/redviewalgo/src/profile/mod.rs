@@ -65,6 +65,11 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
 
     let cda = auto_cda;
 
+    // Compute training D+ statistics from historical activities
+    let (training_dplus_per_km, training_max_climb_rate_mh,
+         training_avg_climb_rate_mh, training_max_dplus_m)
+        = compute_training_dplus_stats(activities);
+
     RiderProfile {
         gradient_bins,
         fatigued_bins,
@@ -77,7 +82,85 @@ pub fn build_rider_profile(activities: &[ActivityData], config: &PredictionConfi
         crr: DEFAULT_CRR,
         fatigue,
         has_power,
+        training_dplus_per_km,
+        training_max_climb_rate_mh,
+        training_avg_climb_rate_mh,
+        training_max_dplus_m,
     }
+}
+
+/// Compute D+ training statistics from historical activities.
+/// These stats are used to compare route difficulty vs training experience.
+fn compute_training_dplus_stats(activities: &[ActivityData]) -> (f64, f64, f64, f64) {
+    let mut total_dplus = 0.0_f64;
+    let mut total_distance_km = 0.0_f64;
+    let mut max_dplus_single = 0.0_f64;
+    let mut climb_rates: Vec<f64> = Vec::new();
+
+    for activity in activities {
+        let pts = &activity.points;
+        if pts.len() < 20 || activity.summary.duration_s < 1800.0 {
+            continue;
+        }
+
+        let mut activity_dplus = 0.0_f64;
+        // Track climbing blocks: accumulate D+ and time while gradient > 2%
+        let mut block_dplus = 0.0_f64;
+        let mut block_time_s = 0.0_f64;
+
+        for i in 1..pts.len() {
+            let ele_diff = pts[i].altitude_m - pts[i - 1].altitude_m;
+            let dt = pts[i].timestamp_s - pts[i - 1].timestamp_s;
+
+            if ele_diff > 0.0 {
+                activity_dplus += ele_diff;
+            }
+
+            let dist = pts[i].distance_m - pts[i - 1].distance_m;
+            let grad_pct = if dist > 1.0 { (ele_diff / dist) * 100.0 } else { 0.0 };
+
+            if grad_pct > 2.0 && dt > 0.0 && dt < 120.0 {
+                block_dplus += ele_diff.max(0.0);
+                block_time_s += dt;
+            } else {
+                // End of climbing block — record climb rate if significant
+                if block_dplus > 50.0 && block_time_s > 300.0 {
+                    let rate_mh = block_dplus / (block_time_s / 3600.0);
+                    climb_rates.push(rate_mh);
+                }
+                block_dplus = 0.0;
+                block_time_s = 0.0;
+            }
+        }
+
+        // Final climbing block
+        if block_dplus > 50.0 && block_time_s > 300.0 {
+            let rate_mh = block_dplus / (block_time_s / 3600.0);
+            climb_rates.push(rate_mh);
+        }
+
+        let dist_km = activity.summary.distance_m / 1000.0;
+        total_dplus += activity_dplus;
+        total_distance_km += dist_km;
+        if activity_dplus > max_dplus_single {
+            max_dplus_single = activity_dplus;
+        }
+    }
+
+    let dplus_per_km = if total_distance_km > 0.0 {
+        total_dplus / total_distance_km
+    } else {
+        10.0 // default moderate terrain
+    };
+
+    let max_climb_rate = climb_rates.iter().cloned().fold(0.0_f64, f64::max);
+    let avg_climb_rate = if !climb_rates.is_empty() {
+        climb_rates.iter().sum::<f64>() / climb_rates.len() as f64
+    } else {
+        600.0 // default moderate climber
+    };
+
+    (dplus_per_km, max_climb_rate, avg_climb_rate, max_dplus_single)
 }
 
 /// Lookup speed for a given gradient from the rider profile bins.
