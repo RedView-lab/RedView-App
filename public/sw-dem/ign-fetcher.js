@@ -7,6 +7,7 @@ const ignTileCache = new Map();
 const ignInflight = new Map(); // Deduplication: in-progress fetches by key
 let activeIGN = 0;
 const ignQueue = [];
+let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
 function evict(cache, max) {
   if (cache.size <= max) return;
@@ -18,16 +19,22 @@ function evict(cache, max) {
   }
 }
 
-// Maximum queued tasks before oldest (least relevant) get pruned
-const IGN_QUEUE_MAX = 50;
-
 function scheduleIGN(fn) {
   return new Promise((resolve, reject) => {
     ignQueue.push({ fn, resolve, reject });
     // Prune oldest entries when queue grows too large (user zoomed/panned away)
+    let pruned = 0;
     while (ignQueue.length > IGN_QUEUE_MAX) {
       const stale = ignQueue.shift();
-      stale.resolve(null); // Return null for pruned stale requests
+      stale.resolve(PRUNED_SENTINEL); // Sentinel — callers must NOT cache this as a real failure
+      pruned++;
+    }
+    if (pruned > 0) {
+      ignPrunedTotal += pruned;
+      console.warn(
+        `[sw-dem][queue] %c PRUNED %c ${pruned} stale DEM requests (queue=${ignQueue.length}, active=${activeIGN}/${IGN_CONCURRENCY}, lifetime=${ignPrunedTotal})`,
+        'background:#FF5722;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
     }
     drainIGN();
   });
@@ -121,6 +128,10 @@ async function getIGNTile(z, col, row) {
       cacheNull(key, 'transient');
       return null;
     }
+  }).then((result) => {
+    // If the request was pruned from the queue, do NOT cache — return null
+    if (result === PRUNED_SENTINEL) return null;
+    return result;
   }).finally(() => {
     ignInflight.delete(key);
   });

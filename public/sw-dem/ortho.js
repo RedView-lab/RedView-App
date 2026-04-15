@@ -189,8 +189,47 @@ async function transparentResponse() {
 }
 
 // ---------------------------------------------------------------------------
-// Ortho request handler — uses shared IGN concurrency limiter
+// Ortho request handler — uses SEPARATE concurrency limiter from DEM
 // ---------------------------------------------------------------------------
+
+// Separate concurrency limiter for ortho tiles (prevents ortho from starving DEM)
+let activeOrtho = 0;
+const orthoQueue = [];
+let orthoPrunedTotal = 0;
+
+function scheduleOrtho(fn) {
+  return new Promise((resolve, reject) => {
+    orthoQueue.push({ fn, resolve, reject });
+    let pruned = 0;
+    while (orthoQueue.length > ORTHO_QUEUE_MAX) {
+      const stale = orthoQueue.shift();
+      stale.resolve(PRUNED_SENTINEL);
+      pruned++;
+    }
+    if (pruned > 0) {
+      orthoPrunedTotal += pruned;
+      console.warn(
+        `[sw-dem][ortho-queue] %c PRUNED %c ${pruned} stale ortho requests (queue=${orthoQueue.length}, active=${activeOrtho}/${ORTHO_CONCURRENCY}, lifetime=${orthoPrunedTotal})`,
+        'background:#FF5722;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
+    }
+    drainOrtho();
+  });
+}
+
+function drainOrtho() {
+  while (activeOrtho < ORTHO_CONCURRENCY && orthoQueue.length > 0) {
+    const { fn, resolve, reject } = orthoQueue.pop();
+    activeOrtho++;
+    fn()
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        activeOrtho--;
+        drainOrtho();
+      });
+  }
+}
 
 // In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-fetcher.js)
 const orthoInflight = new Map();
@@ -245,8 +284,8 @@ async function handleOrthoRequest(z, x, y) {
       const polyLoaded = await ensureFrancePoly();
 
       if (!polyLoaded) {
-        // Fallback: fetch without clipping, still through concurrency limiter
-        const response = await scheduleIGN(async () => {
+        // Fallback: fetch without clipping, through ortho concurrency limiter
+        const response = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
           const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
           if (!res.ok) return null;
@@ -255,7 +294,7 @@ async function handleOrthoRequest(z, x, y) {
             headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
           });
         });
-        if (!response) return null;
+        if (!response || response === PRUNED_SENTINEL) return null;
         cache.put(cacheKey, response.clone());
         return response;
       }
@@ -265,8 +304,8 @@ async function handleOrthoRequest(z, x, y) {
       const classification = classifyOrthoTile(z, x, y);
       if (classification === 'outside') return null;
 
-      // Fetch IGN tile through the shared concurrency limiter
-      const fetchResult = await scheduleIGN(async () => {
+      // Fetch IGN tile through the ortho concurrency limiter
+      const fetchResult = await scheduleOrtho(async () => {
         const url = buildOrthoTileURL(z, x, y);
         const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!res.ok) {
@@ -282,8 +321,8 @@ async function handleOrthoRequest(z, x, y) {
         return await res.blob();
       });
 
-      // scheduleIGN may return null if the request was pruned from the queue
-      if (!fetchResult) return null;
+      // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue
+      if (!fetchResult || fetchResult === PRUNED_SENTINEL) return null;
 
       let response;
       if (classification === 'inside') {

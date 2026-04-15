@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
+  const t0 = performance.now();
   const isBorder = tileClass === 'border';
   const demZ = Math.max(IGN_DEM_MINZOOM, Math.min(mercZ, IGN_DEM_MAXZOOM));
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
@@ -15,8 +16,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // tileMap stores: { data, actualZ, actualCol, actualRow } or null
   const tileMap = new Map();
   const fetches = [];
+  let fetchCount = 0;
   for (let row = tl.row; row <= br.row; row++) {
     for (let col = tl.col; col <= br.col; col++) {
+      fetchCount++;
       fetches.push(
         getIGNTileWithFallback(demZ, col, row).then((result) => {
           tileMap.set(`${col}/${row}`, result);
@@ -24,7 +27,22 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
       );
     }
   }
-  await Promise.all(fetches);
+
+  // Batch timeout — proceed with whatever tiles completed rather than hanging forever
+  let batchTimedOut = false;
+  await Promise.race([
+    Promise.all(fetches),
+    new Promise((resolve) => {
+      setTimeout(() => { batchTimedOut = true; resolve(); }, BUILD_IGN_BATCH_TIMEOUT);
+    }),
+  ]);
+
+  if (batchTimedOut) {
+    console.warn(
+      `[sw-dem][build] %c BATCH TIMEOUT %c ${mercZ}/${mercX}/${mercY} — ${tileMap.size}/${fetchCount} tiles completed in ${BUILD_IGN_BATCH_TIMEOUT}ms`,
+      'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', ''
+    );
+  }
 
   // Track whether any fallback zoom was used (for diagnostics)
   let usedFallback = false;
@@ -82,12 +100,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     }
   }
 
-  if (coveredCount === 0) return null;
+  if (coveredCount === 0) {
+    const dt = (performance.now() - t0).toFixed(1);
+    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
+    return null;
+  }
 
   // Determine source label for diagnostics
   const source = usedFallback ? `ign-fallback-z${minFallbackZ}` : 'ign';
 
   if (coveredCount === totalPixels) {
+    const dt = (performance.now() - t0).toFixed(1);
+    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — full coverage, src=${source}, ${fetchCount} sub-tiles, ${dt}ms`);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
   }
 
@@ -157,8 +181,13 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   if (coveredCount >= totalPixels) {
+    const dt = (performance.now() - t0).toFixed(1);
+    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
   }
 
+  const dt = (performance.now() - t0).toFixed(1);
+  const covPct = (coveredCount / totalPixels * 100).toFixed(1);
+  console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
   return { blob: null, elevations, coverage, source };
 }

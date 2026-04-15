@@ -71,6 +71,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'SET_MAPBOX_TOKEN') {
     mapboxToken = e.data.token;
+    console.log('[sw-dem] %c TOKEN SET %c mapboxToken received', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
   }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
     caches.delete(SLOPE_CACHE_NAME).then(() => {
@@ -115,6 +116,7 @@ self.addEventListener('fetch', (event) => {
 
 async function handleDemRequest(request, z, x, y, _depth) {
   if (_depth === undefined) _depth = 0;
+  const t0 = performance.now();
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
   const cached = await cache.match(cacheKey);
@@ -124,7 +126,10 @@ async function handleDemRequest(request, z, x, y, _depth) {
   const negCached = await negCache.match(cacheKey);
   if (negCached) {
     const age = negCached.headers.get('x-cached-at');
-    if (age && (Date.now() - parseInt(age, 10)) < NEGATIVE_TTL * 1000) {
+    const negTtl = parseInt(negCached.headers.get('x-neg-ttl') || String(NEGATIVE_TTL_PIPELINE), 10);
+    if (age && (Date.now() - parseInt(age, 10)) < negTtl * 1000) {
+      const ageSec = ((Date.now() - parseInt(age, 10)) / 1000).toFixed(0);
+      console.log(`[sw-dem][neg-cache] HIT ${z}/${x}/${y} age=${ageSec}s ttl=${negTtl}s`);
       return new Response(null, { status: 204 });
     }
     negCache.delete(cacheKey);
@@ -159,6 +164,10 @@ async function handleDemRequest(request, z, x, y, _depth) {
       if (pngBlob) demSource = 'mapbox';
     }
 
+    if (!pngBlob && !mapboxToken) {
+      console.warn(`[sw-dem] ${z}/${x}/${y} — no mapboxToken available, cannot fall back to Mapbox`);
+    }
+
     // ③ Overzoom: fetch a lower-zoom DEM and upsample (only at top-level)
     if (!pngBlob && _depth === 0) {
       const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
@@ -189,15 +198,32 @@ async function handleDemRequest(request, z, x, y, _depth) {
     }
 
     if (!pngBlob) {
+      const dt = (performance.now() - t0).toFixed(1);
+
+      // Do NOT negative-cache if failure was transient (queue overflow, network blip)
+      // Only cache if this is a genuine "tile does not exist" situation
+      // Heuristic: if tile is outside France and Mapbox also failed → likely confirmed empty
+      const isOutsideFrance = !tileOverlapsFrance(z, x, y);
+      const negTtl = isOutsideFrance ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
+
+      console.warn(
+        `[sw-dem] %c NO DATA %c ${z}/${x}/${y} — neg-cache ttl=${negTtl}s, depth=${_depth}, hasToken=${!!mapboxToken}, ${dt}ms`,
+        'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
+
       negCache.put(cacheKey, new Response(null, {
         status: 204,
-        headers: { 'x-cached-at': String(Date.now()) },
+        headers: {
+          'x-cached-at': String(Date.now()),
+          'x-neg-ttl': String(negTtl),
+        },
       }));
       return new Response(null, { status: 204 });
     }
 
-    if (demSource.includes('fallback')) {
-      console.warn(`[sw-dem] ${z}/${x}/${y} used ${demSource}`);
+    const dt = (performance.now() - t0).toFixed(1);
+    if (demSource.includes('fallback') || dt > 2000) {
+      console.warn(`[sw-dem] ${z}/${x}/${y} → ${demSource} (${dt}ms)`);
     }
 
     const response = new Response(pngBlob, {
