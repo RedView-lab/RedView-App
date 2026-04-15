@@ -158,3 +158,67 @@ async function decodeTerrainRGBBlob(blob) {
 
   return elevations;
 }
+
+// ── Overzoom: extract & upsample a sub-tile from a lower-zoom DEM ─────
+
+/**
+ * Given a parent DEM tile blob at (parentZ, parentX, parentY), extract the
+ * sub-region corresponding to (targetZ, targetX, targetY) and bilinear-
+ * upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
+ *
+ * Returns a Terrain-RGB PNG Blob, or null on failure.
+ */
+async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, targetX, targetY) {
+  const parentElevations = await decodeTerrainRGBBlob(parentBlob);
+  const size = DEM_TILE_SIZE; // 512
+
+  const dz = targetZ - parentZ;
+  const nChildren = 1 << dz; // e.g. dz=2 → 4 sub-tiles per axis
+
+  // Which child within the parent grid
+  const childX = targetX - (parentX << dz);
+  const childY = targetY - (parentY << dz);
+
+  // Source pixel region in the parent tile
+  const srcSize = size / nChildren; // pixels covered by one child
+  const srcX0 = childX * srcSize;
+  const srcY0 = childY * srcSize;
+
+  // Bilinear upsample from srcSize×srcSize region → size×size
+  const out = new Float32Array(size * size);
+
+  for (let py = 0; py < size; py++) {
+    // Map output pixel to fractional source coordinate
+    const sy = srcY0 + (py + 0.5) * srcSize / size - 0.5;
+    const iy = Math.floor(sy);
+    const fy = sy - iy;
+
+    for (let px = 0; px < size; px++) {
+      const sx = srcX0 + (px + 0.5) * srcSize / size - 0.5;
+      const ix = Math.floor(sx);
+      const fx = sx - ix;
+
+      // Clamp to parent tile bounds
+      const x0 = Math.max(0, Math.min(ix, size - 1));
+      const x1 = Math.max(0, Math.min(ix + 1, size - 1));
+      const y0 = Math.max(0, Math.min(iy, size - 1));
+      const y1 = Math.max(0, Math.min(iy + 1, size - 1));
+
+      const e00 = parentElevations[y0 * size + x0];
+      const e10 = parentElevations[y0 * size + x1];
+      const e01 = parentElevations[y1 * size + x0];
+      const e11 = parentElevations[y1 * size + x1];
+
+      const top = e00 + (e10 - e00) * fx;
+      const bot = e01 + (e11 - e01) * fx;
+      out[py * size + px] = top + (bot - top) * fy;
+    }
+  }
+
+  console.log(
+    `[sw-dem][overzoom] %c OVERZOOM %c ${parentZ}/${parentX}/${parentY} → ${targetZ}/${targetX}/${targetY} (dz=${dz}, child=${childX},${childY}, srcRegion=${srcSize}px)`,
+    'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+  );
+
+  return encodeTerrainRGBPng(out);
+}

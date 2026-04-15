@@ -108,7 +108,8 @@ self.addEventListener('fetch', (event) => {
 // DEM request handler
 // ---------------------------------------------------------------------------
 
-async function handleDemRequest(request, z, x, y) {
+async function handleDemRequest(request, z, x, y, _depth) {
+  if (_depth === undefined) _depth = 0;
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
   const cached = await cache.match(cacheKey);
@@ -145,6 +146,35 @@ async function handleDemRequest(request, z, x, y) {
     if (!pngBlob && mapboxToken) {
       pngBlob = await fetchMapboxTile(z, x, y);
       if (pngBlob) demSource = 'mapbox';
+    }
+
+    // ③ Overzoom: fetch a lower-zoom DEM and upsample (only at top-level)
+    if (!pngBlob && _depth === 0) {
+      const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
+      for (let pZ = z - 1; pZ >= minParentZ; pZ--) {
+        const pX = x >> (z - pZ);
+        const pY = y >> (z - pZ);
+        const parentKey = new Request(`/dem-tiles/${pZ}/${pX}/${pY}`);
+
+        // Try cache first, then generate parent (with _depth=1 to prevent recursion)
+        let parentResp = await cache.match(parentKey);
+        if (!parentResp || parentResp.status !== 200) {
+          parentResp = await handleDemRequest(parentKey, pZ, pX, pY, _depth + 1);
+        }
+
+        if (parentResp && parentResp.status === 200) {
+          try {
+            const parentBlob = await parentResp.clone().blob();
+            pngBlob = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
+            if (pngBlob) {
+              demSource = `overzoom-z${pZ}`;
+              break;
+            }
+          } catch (ozErr) {
+            console.warn(`[sw-dem] overzoom failed ${pZ}/${pX}/${pY} → ${z}/${x}/${y}`, ozErr);
+          }
+        }
+      }
     }
 
     if (!pngBlob) {

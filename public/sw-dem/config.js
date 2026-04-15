@@ -35,3 +35,5 @@ const IGN_NULL_TTL_TRANSIENT = 30_000;   // 30s — timeout, 5xx, network error
 const IGN_NULL_TTL_PERMANENT = 3600_000; // 1h  — 404, invalid size
 // Maximum zoom levels to fall back when IGN tile is missing
 const IGN_FALLBACK_MAX_DEPTH = 3;
+// Maximum zoom levels to overzoom DEM when native tile is missing
+const DEM_OVERZOOM_MAX_DEPTH = 4;
