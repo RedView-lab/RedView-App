@@ -49,7 +49,7 @@ function buildCheckpointSheet(
   ws.columns = [
     { header: 'KM', key: 'km', width: 8 },
     { header: 'Distance (km)', key: 'dist', width: 14 },
-    { header: 'Temps cumulé', key: 'cumTime', width: 15 },
+    { header: 'Temps roulé', key: 'cumTime', width: 15 },
     { header: 'Temps section', key: 'segTime', width: 15 },
     { header: 'Vit. moy (km/h)', key: 'speed', width: 16 },
     { header: 'D+ (m)', key: 'gain', width: 10 },

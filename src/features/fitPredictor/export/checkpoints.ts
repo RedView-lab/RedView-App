@@ -60,6 +60,9 @@ function aggregateSection(
 /**
  * Build checkpoint rows at regular intervals from the prediction points array.
  *
+ * Uses cumulative riding time (sum of segment_time_s) rather than elapsed_time_s,
+ * so the exported times reflect pure ride time without stops.
+ *
  * The first checkpoint is always km 0 (start). Intermediate checkpoints are
  * placed at every `intervalKm`. The final checkpoint is always the finish,
  * even if it does not land on a multiple of `intervalKm`.
@@ -71,6 +74,14 @@ export function buildCheckpoints(
   if (points.length === 0) return [];
 
   const totalDistM = points[points.length - 1].distance_m;
+
+  // Pre-compute cumulative riding time (excludes stop durations)
+  const ridingTimeS = new Float64Array(points.length);
+  ridingTimeS[0] = 0;
+  for (let i = 1; i < points.length; i++) {
+    ridingTimeS[i] = ridingTimeS[i - 1] + (points[i].segment_time_s ?? 0);
+  }
+
   const checkpoints: CheckpointRow[] = [];
 
   // Helper: find the pair of points surrounding a given distance
@@ -80,6 +91,15 @@ export function buildCheckpoints(
       searchIdx++;
     }
     return [searchIdx, points[searchIdx], points[Math.min(searchIdx + 1, points.length - 1)]];
+  }
+
+  /** Interpolate cumulative riding time at a given distance */
+  function lerpRidingTime(distM: number, bracketIdx: number, pA: PredictionPoint, pB: PredictionPoint): number {
+    const rA = ridingTimeS[bracketIdx];
+    const rB = ridingTimeS[Math.min(bracketIdx + 1, points.length - 1)];
+    if (pB.distance_m === pA.distance_m) return rA;
+    const t = (distM - pA.distance_m) / (pB.distance_m - pA.distance_m);
+    return rA + t * (rB - rA);
   }
 
   // Start checkpoint (km 0)
@@ -100,7 +120,7 @@ export function buildCheckpoints(
   // Intermediate checkpoints every intervalKm
   let cpKm = intervalKm;
   let prevDistM = 0;
-  let prevElapsedS = 0;
+  let prevRidingS = 0;
   let prevSearchIdx = 0;
 
   while (cpKm * 1000 < totalDistM) {
@@ -108,9 +128,9 @@ export function buildCheckpoints(
     searchIdx = prevSearchIdx;
     const [bracketIdx, pA, pB] = findBracket(targetDistM);
 
-    const elapsedS = lerp(targetDistM, pA, pB, 'elapsed_time_s');
+    const cumRidingS = lerpRidingTime(targetDistM, bracketIdx, pA, pB);
     const elevationM = lerp(targetDistM, pA, pB, 'elevation_m');
-    const segmentTimeS = elapsedS - prevElapsedS;
+    const segmentTimeS = cumRidingS - prevRidingS;
     const sectionDistKm = (targetDistM - prevDistM) / 1000;
     const sectionTimeH = segmentTimeS / 3600;
 
@@ -119,7 +139,7 @@ export function buildCheckpoints(
     checkpoints.push({
       km: cpKm,
       distanceCumM: targetDistM,
-      elapsedTimeS: elapsedS,
+      elapsedTimeS: cumRidingS,
       segmentTimeS,
       avgSpeedKmh: sectionTimeH > 0 ? sectionDistKm / sectionTimeH : 0,
       elevationM: Math.round(elevationM),
@@ -127,7 +147,7 @@ export function buildCheckpoints(
     });
 
     prevDistM = targetDistM;
-    prevElapsedS = elapsedS;
+    prevRidingS = cumRidingS;
     prevSearchIdx = bracketIdx;
     cpKm += intervalKm;
   }
@@ -135,9 +155,10 @@ export function buildCheckpoints(
   // Finish checkpoint (always included)
   const pLast = points[points.length - 1];
   const finishKm = totalDistM / 1000;
+  const totalRidingS = ridingTimeS[points.length - 1];
   // Skip if finish coincides with last interval checkpoint
   if (checkpoints.length === 0 || Math.abs(checkpoints[checkpoints.length - 1].distanceCumM - totalDistM) > 10) {
-    const segmentTimeS = pLast.elapsed_time_s - prevElapsedS;
+    const segmentTimeS = totalRidingS - prevRidingS;
     const sectionDistKm = (totalDistM - prevDistM) / 1000;
     const sectionTimeH = segmentTimeS / 3600;
 
@@ -146,7 +167,7 @@ export function buildCheckpoints(
     checkpoints.push({
       km: Math.round(finishKm * 10) / 10,
       distanceCumM: totalDistM,
-      elapsedTimeS: pLast.elapsed_time_s,
+      elapsedTimeS: totalRidingS,
       segmentTimeS,
       avgSpeedKmh: sectionTimeH > 0 ? sectionDistKm / sectionTimeH : 0,
       elevationM: Math.round(pLast.elevation_m),

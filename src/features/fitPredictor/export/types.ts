@@ -3,7 +3,7 @@ export interface CheckpointRow {
   km: number;
   /** Cumulative distance from start in meters */
   distanceCumM: number;
-  /** Cumulative elapsed riding time in seconds (no pauses) */
+  /** Cumulative riding time in seconds (pure ride time, excludes stops) */
   elapsedTimeS: number;
   /** Time for this section only (delta with previous checkpoint) in seconds */
   segmentTimeS: number;
