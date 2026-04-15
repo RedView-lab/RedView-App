@@ -8,13 +8,29 @@ import { loadViewport, saveViewport } from '../lib/viewport-persist';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
-// Register DEM Service Worker and send Mapbox token
+// Register DEM Service Worker and wait until it's actually controlling this page.
+// navigator.serviceWorker.ready only means the SW is "active" — it does NOT mean
+// it's intercepting fetch events yet (clients.claim() may still be in progress).
+// We must wait for controllerchange to guarantee fetch interception.
 const swReady = (async () => {
   if (!('serviceWorker' in navigator)) return;
   try {
+    // Set up listener BEFORE register() so we can't miss the event
+    const controllerReady = navigator.serviceWorker.controller
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => {
+          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+        });
+
     await navigator.serviceWorker.register('/sw-dem.js');
-    const reg = await navigator.serviceWorker.ready;
-    reg.active?.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+    await controllerReady;
+
+    // SW is now intercepting fetch events — send Mapbox token
+    navigator.serviceWorker.controller!.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+
+    // Yield to let the SW event loop process the token message before we add
+    // sources that trigger tile requests (prevents Mapbox fallback returning null)
+    await new Promise((r) => setTimeout(r, 0));
   } catch (e) {
     console.error('[sw-dem] Registration failed:', e);
   }
@@ -97,6 +113,23 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       const terrain = new TerrainManager(map, unifiedDEMSource.id);
       terrain.init();
       terrainRef.current = terrain;
+
+      // Safety net: re-apply terrain once the DEM source has actually loaded tiles.
+      // If the initial setTerrain() ran before any tile data arrived, the map stays
+      // flat. Re-applying after source data is confirmed fixes it.
+      let terrainVerified = false;
+      const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
+        if (terrainVerified) return;
+        if (e.sourceId === unifiedDEMSource.id && e.isSourceLoaded) {
+          terrainVerified = true;
+          map.off('sourcedata', onSourceData);
+          // Re-apply terrain to ensure it uses the now-available tile data
+          if (terrainRef.current) {
+            terrainRef.current.init();
+          }
+        }
+      };
+      map.on('sourcedata', onSourceData);
 
       setIsLoaded(true);
     });
