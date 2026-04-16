@@ -10,6 +10,7 @@ export const unifiedDEMSource = {
   tiles: ['/dem-tiles/{z}/{x}/{y}'],
   tileSize: 512,
   encoding: 'mapbox' as const,
+  minzoom: 0,
   maxzoom: DEM_SOURCE_MAXZOOM,
 };
 

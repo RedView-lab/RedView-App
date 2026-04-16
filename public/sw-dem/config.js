@@ -28,7 +28,7 @@ const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 3000;
 const IGN_CONCURRENCY = 8;
-const IGN_QUEUE_MAX = 200; // Max queued DEM tasks (was 50 — too low for 60° pitch 3D)
+const IGN_QUEUE_MAX = 400; // Max queued DEM tasks (increased for 60° pitch 3D globe views)
 
 // Separate ortho concurrency — prevents ortho from starving DEM and vice versa
 const ORTHO_CONCURRENCY = 8;
@@ -40,7 +40,7 @@ const IGN_NULL_TTL_PERMANENT = 3600_000; // 1h  — 404, invalid size
 
 // Negative cache TTL for the CacheStorage-level negative cache (seconds)
 const NEGATIVE_TTL_CONFIRMED = 3600;     // 1h — tile genuinely does not exist
-const NEGATIVE_TTL_PIPELINE = 60;        // 60s — pipeline failed (network, queue, etc.)
+const NEGATIVE_TTL_PIPELINE = 15;        // 15s — pipeline failed (network, queue, etc.)
 
 // Sentinel object returned by queue pruning — never cache these failures
 const PRUNED_SENTINEL = Object.freeze({ _pruned: true });

@@ -72,10 +72,25 @@ self.addEventListener('message', (e) => {
   if (e.data?.type === 'SET_MAPBOX_TOKEN') {
     mapboxToken = e.data.token;
     console.log('[sw-dem] %c TOKEN SET %c mapboxToken received', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
+
+    // Flush negative cache so tiles that failed before the token arrived are retried
+    caches.delete(NEGATIVE_CACHE_NAME).then(() => {
+      console.log('[sw-dem] %c NEG-CACHE FLUSHED %c on token arrival — tiles will be retried', 'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', '');
+    });
+
+    // Acknowledge receipt so the main thread knows it's safe to add sources
+    if (e.source) {
+      e.source.postMessage({ type: 'TOKEN_ACK' });
+    }
   }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
     caches.delete(SLOPE_CACHE_NAME).then(() => {
       console.log('[slope] %c SLOPE CACHE CLEARED %c via message', 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
+    });
+  }
+  if (e.data?.type === 'CLEAR_NEGATIVE_CACHE') {
+    caches.delete(NEGATIVE_CACHE_NAME).then(() => {
+      console.log('[sw-dem] %c NEG-CACHE CLEARED %c via message', 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
     });
   }
 });
@@ -200,8 +215,17 @@ async function handleDemRequest(request, z, x, y, _depth) {
     if (!pngBlob) {
       const dt = (performance.now() - t0).toFixed(1);
 
-      // Do NOT negative-cache if failure was transient (queue overflow, network blip)
-      // Only cache if this is a genuine "tile does not exist" situation
+      // Do NOT negative-cache if the Mapbox token hasn't been delivered yet —
+      // the failure is guaranteed to be transient and caching it would lock out
+      // the tile for up to 1 hour.
+      if (!mapboxToken) {
+        console.warn(
+          `[sw-dem] %c NO DATA (no token) %c ${z}/${x}/${y} — NOT caching, depth=${_depth}, ${dt}ms`,
+          'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+        );
+        return new Response(null, { status: 204 });
+      }
+
       // Heuristic: if tile is outside France and Mapbox also failed → likely confirmed empty
       const isOutsideFrance = !tileOverlapsFrance(z, x, y);
       const negTtl = isOutsideFrance ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
@@ -289,8 +313,10 @@ async function handleSlopeRequest(z, x, y, colorMode) {
   }
 
   if (!demResponse || demResponse.status !== 200) {
-    // Return a transparent 1×1 PNG so Mapbox can decode it without error
-    console.warn(`[slope] %c NO DEM %c ${z}/${x}/${y} — demResponse status=${demResponse?.status}, returning transparent`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
+    // Return a transparent 1×1 PNG so Mapbox can decode it without error.
+    // Do NOT cache this transparent tile — the DEM failure may be transient
+    // (token race, queue overflow). Caching would poison the slope cache for 7 days.
+    console.warn(`[slope] %c NO DEM %c ${z}/${x}/${y} — demResponse status=${demResponse?.status}, returning transparent (NOT cached)`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
     return transparentTileResponse();
   }
 
@@ -316,7 +342,8 @@ async function handleSlopeRequest(z, x, y, colorMode) {
     slopeCache.put(cacheKey, response.clone());
     return response;
   } catch (err) {
-    console.error(`[slope] %c ERROR %c ${z}/${x}/${y}`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '', err);
+    // Do NOT cache error results — prevents slope cache poisoning from transient failures
+    console.error(`[slope] %c ERROR %c ${z}/${x}/${y} (NOT cached)`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '', err);
     return transparentTileResponse();
   }
 }

@@ -28,9 +28,20 @@ const swReady = (async () => {
     // SW is now intercepting fetch events — send Mapbox token
     navigator.serviceWorker.controller!.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
 
-    // Yield to let the SW event loop process the token message before we add
-    // sources that trigger tile requests (prevents Mapbox fallback returning null)
-    await new Promise((r) => setTimeout(r, 0));
+    // Wait for the SW to acknowledge the token before adding sources.
+    // Without this, tile requests may arrive before the token is set,
+    // causing Mapbox fallback tiles to fail and get negative-cached.
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, 2000); // Safety fallback: 2s max
+      const onMessage = (event: MessageEvent) => {
+        if (event.data?.type === 'TOKEN_ACK') {
+          clearTimeout(timeout);
+          navigator.serviceWorker.removeEventListener('message', onMessage);
+          resolve();
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', onMessage);
+    });
   } catch (e) {
     console.error('[sw-dem] Registration failed:', e);
   }
@@ -84,6 +95,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
           tiles: unifiedDEMSource.tiles,
           tileSize: unifiedDEMSource.tileSize,
           encoding: unifiedDEMSource.encoding,
+          minzoom: unifiedDEMSource.minzoom,
           maxzoom: unifiedDEMSource.maxzoom,
         });
       }
