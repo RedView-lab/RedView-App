@@ -209,6 +209,7 @@ async function flatDemResponse() {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
+      'Cache-Control': 'no-store',
       'X-DEM-Source': 'flat-fallback',
     },
   });

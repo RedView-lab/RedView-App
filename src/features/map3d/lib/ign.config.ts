@@ -22,8 +22,11 @@ export const IGN_DEM_MINZOOM = 4;
 export const IGN_DEM_MAXZOOM = 17;
 
 // Mapbox requests tiles up to this zoom from our protocol.
-// IGN MNS LiDAR HD goes up to z17 WGS84G; higher Mercator zooms use bicubic upsampling + Mapbox composite.
-export const DEM_SOURCE_MAXZOOM = 17;
+// IGN MNS LiDAR HD native data goes to z17 WGS84G; z18-19 use bicubic overzoom
+// from z17 parents in the Service Worker. Setting this to 19 allows Mapbox to
+// request higher-zoom DEM tiles so elevation detail improves when zooming in,
+// matching the ortho source maxzoom (19).
+export const DEM_SOURCE_MAXZOOM = 19;
 
 export const DEM_TILE_SIZE = 512;
 export const DEM_NODATA_THRESHOLD = -10000;

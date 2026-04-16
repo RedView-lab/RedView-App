@@ -141,12 +141,10 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         terrainRef.current.destroy();
       }
       const terrain = new TerrainManager(map, unifiedDEMSource.id);
-      terrain.init();
       terrainRef.current = terrain;
 
-      // Safety net: re-apply terrain once the DEM source has actually loaded tiles.
-      // If the initial setTerrain() ran before any tile data arrived, the map stays
-      // flat. Re-applying after source data is confirmed fixes it.
+      // Register the sourcedata listener BEFORE calling terrain.init() so the
+      // event can't fire between init() and listener registration.
       let terrainVerified = false;
       const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
         if (terrainVerified) return;
@@ -160,6 +158,10 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         }
       };
       map.on('sourcedata', onSourceData);
+
+      // Now apply terrain — if tiles haven't loaded yet the listener above
+      // will re-apply once they do.
+      terrain.init();
 
       setIsLoaded(true);
     });
@@ -184,6 +186,37 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       console.error('[mapbox]', e.error?.message || e);
     });
 
+    // Handle WebGL context loss — prevents STATUS_ACCESS_VIOLATION on GPU
+    // memory pressure. Allows the browser to recover the context instead of
+    // crashing the entire tab.
+    const canvas = map.getCanvas();
+    const onContextLost = (e: Event) => {
+      e.preventDefault(); // Allow context restoration
+      console.warn('[mapbox] WebGL context lost — waiting for restoration');
+    };
+    const onContextRestored = () => {
+      console.log('[mapbox] WebGL context restored — reloading DEM source');
+      const src = map.getSource(unifiedDEMSource.id);
+      if (src && 'reload' in src) {
+        (src as mapboxgl.RasterDemTileSource).reload();
+      }
+      if (terrainRef.current) {
+        terrainRef.current.init();
+      }
+    };
+    canvas.addEventListener('webglcontextlost', onContextLost);
+    canvas.addEventListener('webglcontextrestored', onContextRestored);
+
+    // Free WebGL context synchronously before reload so the new page load
+    // doesn't compete with the old context for GPU memory.
+    const onBeforeUnload = () => {
+      terrainRef.current?.destroy();
+      terrainRef.current = null;
+      map.remove();
+      mapRef.current = null;
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+
     // When SW recovers a token after restart, force-reload DEM source so
     // tiles that were served as flat 0m get re-fetched with real elevation.
     const onTokenRecovered = (event: MessageEvent) => {
@@ -199,6 +232,9 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
     return () => {
       navigator.serviceWorker?.removeEventListener('message', onTokenRecovered);
+      canvas.removeEventListener('webglcontextlost', onContextLost);
+      canvas.removeEventListener('webglcontextrestored', onContextRestored);
+      window.removeEventListener('beforeunload', onBeforeUnload);
       if (saveTimer) clearTimeout(saveTimer);
       // Final save before teardown
       if (mapRef.current) {

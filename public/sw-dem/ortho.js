@@ -129,31 +129,34 @@ function latToTilePy(lat, z, tileY, size) {
 
 async function maskOrthoTile(imgBlob, z, tileX, tileY) {
   const img = await createImageBitmap(imgBlob);
-  const canvas = new OffscreenCanvas(ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
-  const ctx = canvas.getContext('2d');
-  const b = mercatorTileBounds(z, tileX, tileY);
+  try {
+    const canvas = new OffscreenCanvas(ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
+    const ctx = canvas.getContext('2d');
+    const b = mercatorTileBounds(z, tileX, tileY);
 
-  ctx.beginPath();
-  for (let p = 0; p < francePoly.length; p++) {
-    const [bw, bs, be, bn] = francePolyBBoxes[p];
-    if (be < b.west - 1 || bw > b.east + 1 || bn < b.south - 1 || bs > b.north + 1) continue;
+    ctx.beginPath();
+    for (let p = 0; p < francePoly.length; p++) {
+      const [bw, bs, be, bn] = francePolyBBoxes[p];
+      if (be < b.west - 1 || bw > b.east + 1 || bn < b.south - 1 || bs > b.north + 1) continue;
 
-    for (const ring of francePoly[p]) {
-      let first = true;
-      for (const [lng, lat] of ring) {
-        const px = lngToTilePx(lng, z, tileX, ORTHO_TILE_SIZE);
-        const py = latToTilePy(lat, z, tileY, ORTHO_TILE_SIZE);
-        if (first) { ctx.moveTo(px, py); first = false; }
-        else ctx.lineTo(px, py);
+      for (const ring of francePoly[p]) {
+        let first = true;
+        for (const [lng, lat] of ring) {
+          const px = lngToTilePx(lng, z, tileX, ORTHO_TILE_SIZE);
+          const py = latToTilePy(lat, z, tileY, ORTHO_TILE_SIZE);
+          if (first) { ctx.moveTo(px, py); first = false; }
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
       }
-      ctx.closePath();
     }
+    ctx.clip();
+    ctx.drawImage(img, 0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    return blob;
+  } finally {
+    img.close(); // Release GPU texture memory even if convertToBlob fails
   }
-  ctx.clip();
-  ctx.drawImage(img, 0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
-  img.close(); // Release GPU memory
-  const blob = await canvas.convertToBlob({ type: 'image/png' });
-  return blob;
 }
 
 // ---------------------------------------------------------------------------
