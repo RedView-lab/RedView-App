@@ -22,11 +22,14 @@ export const IGN_DEM_MINZOOM = 4;
 export const IGN_DEM_MAXZOOM = 17;
 
 // Mapbox requests tiles up to this zoom from our protocol.
-// IGN MNS LiDAR HD native data goes to z17 WGS84G; z18-19 use bicubic overzoom
-// from z17 parents in the Service Worker. Setting this to 19 allows Mapbox to
-// request higher-zoom DEM tiles so elevation detail improves when zooming in,
-// matching the ortho source maxzoom (19).
-export const DEM_SOURCE_MAXZOOM = 19;
+// IGN MNS LiDAR HD native data goes to z17 WGS84G, but Mapbox Terrain DEM v1
+// (used outside France) is only native to z14. Setting this to 15 means:
+// - z0-15: Service Worker generates tiles (IGN native or Mapbox native)
+// - z16+: Mapbox GL GPU overzooms z15 tiles internally → preserves terrain
+//   mesh topology so mountains DON'T flatten at high zoom.
+// Previously set to 19, which forced the SW to generate z16-19 tiles via
+// bilinear upsampling of z14/z17 parents → progressive terrain flattening.
+export const DEM_SOURCE_MAXZOOM = 15;
 
 export const DEM_TILE_SIZE = 512;
 export const DEM_NODATA_THRESHOLD = -10000;

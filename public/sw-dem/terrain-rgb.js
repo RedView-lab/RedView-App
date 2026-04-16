@@ -189,8 +189,11 @@ async function decodeTerrainRGBBlob(blob) {
 
 /**
  * Given a parent DEM tile blob at (parentZ, parentX, parentY), extract the
- * sub-region corresponding to (targetZ, targetX, targetY) and bilinear-
- * upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
+ * sub-region corresponding to (targetZ, targetX, targetY) and bicubic
+ * (Catmull-Rom) upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
+ *
+ * Uses cubicHermite() from interpolation.js for higher-quality upsampling
+ * that preserves ridge/valley detail better than bilinear.
  *
  * Returns a Terrain-RGB PNG Blob, or null on failure.
  */
@@ -210,11 +213,18 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
   const srcX0 = childX * srcSize;
   const srcY0 = childY * srcSize;
 
-  // Bilinear upsample from srcSize×srcSize region → size×size
+  // Helper: clamp-sample parent elevations
+  const pSample = (px, py) => {
+    const cx = Math.max(0, Math.min(px, size - 1));
+    const cy = Math.max(0, Math.min(py, size - 1));
+    return parentElevations[cy * size + cx];
+  };
+
+  // Catmull-Rom bicubic upsample from srcSize×srcSize region → size×size
   const out = new Float32Array(size * size);
+  let minE = Infinity, maxE = -Infinity;
 
   for (let py = 0; py < size; py++) {
-    // Map output pixel to fractional source coordinate
     const sy = srcY0 + (py + 0.5) * srcSize / size - 0.5;
     const iy = Math.floor(sy);
     const fy = sy - iy;
@@ -224,26 +234,27 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
       const ix = Math.floor(sx);
       const fx = sx - ix;
 
-      // Clamp to parent tile bounds
-      const x0 = Math.max(0, Math.min(ix, size - 1));
-      const x1 = Math.max(0, Math.min(ix + 1, size - 1));
-      const y0 = Math.max(0, Math.min(iy, size - 1));
-      const y1 = Math.max(0, Math.min(iy + 1, size - 1));
-
-      const e00 = parentElevations[y0 * size + x0];
-      const e10 = parentElevations[y0 * size + x1];
-      const e01 = parentElevations[y1 * size + x0];
-      const e11 = parentElevations[y1 * size + x1];
-
-      const top = e00 + (e10 - e00) * fx;
-      const bot = e01 + (e11 - e01) * fx;
-      out[py * size + px] = top + (bot - top) * fy;
+      // Catmull-Rom 4×4 kernel — uses cubicHermite() from interpolation.js
+      const rows = [];
+      for (let j = -1; j <= 2; j++) {
+        const c0 = pSample(ix - 1, iy + j);
+        const c1 = pSample(ix,     iy + j);
+        const c2 = pSample(ix + 1, iy + j);
+        const c3 = pSample(ix + 2, iy + j);
+        rows.push(cubicHermite(c0, c1, c2, c3, fx));
+      }
+      const val = cubicHermite(rows[0], rows[1], rows[2], rows[3], fy);
+      out[py * size + px] = val;
+      if (val < minE) minE = val;
+      if (val > maxE) maxE = val;
     }
   }
 
+  const elevRange = maxE - minE;
+  const rangeColor = elevRange < 5 ? '#f44336' : elevRange < 50 ? '#FF9800' : '#4CAF50';
   console.log(
-    `[sw-dem][overzoom] %c OVERZOOM %c ${parentZ}/${parentX}/${parentY} → ${targetZ}/${targetX}/${targetY} (dz=${dz}, child=${childX},${childY}, srcRegion=${srcSize}px)`,
-    'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+    `[sw-dem][overzoom] %c BICUBIC %c ${parentZ}/${parentX}/${parentY} → ${targetZ}/${targetX}/${targetY} (dz=${dz}, child=${childX},${childY}, srcRegion=${srcSize}px, elev=[${minE.toFixed(1)}..${maxE.toFixed(1)}] range=${elevRange.toFixed(1)}m)`,
+    `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
   );
 
   return encodeTerrainRGBPng(out);

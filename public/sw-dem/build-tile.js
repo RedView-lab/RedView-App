@@ -12,6 +12,14 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
   const br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
 
+  // Log zoom clamping — key indicator of overzoom-induced flattening
+  if (demZ < mercZ) {
+    console.log(
+      `[sw-dem][build] %c ZOOM CLAMP %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ} but IGN maxzoom=${IGN_DEM_MAXZOOM}, using demZ=${demZ} (Δ=${mercZ - demZ})`,
+      'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+    );
+  }
+
   // Fetch all needed IGN tiles — with zoom-level fallback
   // tileMap stores: { data, actualZ, actualCol, actualRow } or null
   const tileMap = new Map();
@@ -41,6 +49,23 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     console.warn(
       `[sw-dem][build] %c BATCH TIMEOUT %c ${mercZ}/${mercX}/${mercY} — ${tileMap.size}/${fetchCount} tiles completed in ${BUILD_IGN_BATCH_TIMEOUT}ms`,
       'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', ''
+    );
+  }
+
+  // Log IGN sub-tile fetch results
+  let ignOk = 0, ignFallback = 0, ignMissing = 0;
+  for (const [key, result] of tileMap) {
+    if (result && result.data) {
+      if (result.actualZ < demZ) ignFallback++;
+      else ignOk++;
+    } else {
+      ignMissing++;
+    }
+  }
+  if (ignMissing > 0 || ignFallback > 0) {
+    console.log(
+      `[sw-dem][build] %c IGN FETCH %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${ignOk} fallback=${ignFallback} missing=${ignMissing} (demZ=${demZ})`,
+      'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
 
@@ -111,7 +136,24 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
 
   if (coveredCount === totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — full coverage, src=${source}, ${fetchCount} sub-tiles, ${dt}ms`);
+    // Log elevation range for full-coverage tiles
+    let eMin = Infinity, eMax = -Infinity;
+    for (let i = 0; i < totalPixels; i++) {
+      if (elevations[i] < eMin) eMin = elevations[i];
+      if (elevations[i] > eMax) eMax = elevations[i];
+    }
+    const eRange = eMax - eMin;
+    const rangeColor = eRange < 5 ? '#f44336' : eRange < 50 ? '#FF9800' : '#4CAF50';
+    console.log(
+      `[sw-dem][build] %c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, elev=[${eMin.toFixed(1)}..${eMax.toFixed(1)}] range=${eRange.toFixed(1)}m, ${fetchCount} sub-tiles, ${dt}ms`,
+      `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
+    );
+    if (eRange < 5) {
+      console.warn(
+        `[sw-dem][build] %c ⚠ FLAT OUTPUT %c ${mercZ}/${mercX}/${mercY} — elevation range ${eRange.toFixed(1)}m → terrain will be flat! demZ=${demZ} mercZ=${mercZ}`,
+        'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
+      );
+    }
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
   }
 

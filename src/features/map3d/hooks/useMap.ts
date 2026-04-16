@@ -182,6 +182,18 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
     };
     map.on('moveend', onMoveEnd);
 
+    // ── Zoom observer: log terrain state at each zoom change ──
+    const onZoomEnd = () => {
+      const z = map.getZoom();
+      const terrain = map.getTerrain();
+      const exagg = terrain?.exaggeration ?? 'none';
+      console.log(
+        `[map3d][zoom] %c z=${z.toFixed(2)} %c terrain=${terrain ? 'ON' : 'OFF'} exaggeration=${exagg}`,
+        'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
+    };
+    map.on('zoomend', onZoomEnd);
+
     map.on('error', (e) => {
       console.error('[mapbox]', e.error?.message || e);
     });

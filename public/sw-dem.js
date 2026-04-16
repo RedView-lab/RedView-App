@@ -32,6 +32,27 @@ let mapboxToken = '';
 let _tokenRecoveryInFlight = false;
 
 // ---------------------------------------------------------------------------
+// Zoom-level DEM stats tracker — logs summary per zoom level
+// ---------------------------------------------------------------------------
+const _demZoomStats = {};
+function trackDemTile(z, source, dt, elevMin, elevMax) {
+  if (!_demZoomStats[z]) _demZoomStats[z] = { count: 0, sources: {}, totalMs: 0, flatCount: 0 };
+  const s = _demZoomStats[z];
+  s.count++;
+  s.sources[source] = (s.sources[source] || 0) + 1;
+  s.totalMs += dt;
+  if (elevMax - elevMin < 1) s.flatCount++;
+  // Print summary every 10 tiles at this zoom
+  if (s.count % 10 === 0) {
+    const srcStr = Object.entries(s.sources).map(([k,v]) => `${k}:${v}`).join(', ');
+    console.log(
+      `[sw-dem][stats] %c z${z} SUMMARY %c ${s.count} tiles, avg=${(s.totalMs/s.count).toFixed(0)}ms, flat=${s.flatCount}, sources=[${srcStr}]`,
+      'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', ''
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Token persistence — survives SW termination/restart
 // ---------------------------------------------------------------------------
 const TOKEN_CACHE_KEY = '/internal/mapbox-token';
@@ -101,9 +122,9 @@ const OLD_CACHES = [
   'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3',
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
   'dem-tiles-v7', 'dem-tiles-v8', 'dem-tiles-v9',
-  'dem-tiles-v10', 'dem-tiles-v11',
+  'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
-  'dem-negative-v4', 'dem-negative-v5',
+  'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'ortho-tiles-v1',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
@@ -305,6 +326,13 @@ async function handleDemRequest(request, z, x, y, _depth) {
 
     if (!pngBlob) {
       const dt = (performance.now() - t0).toFixed(1);
+      const dtNum = performance.now() - t0;
+      trackDemTile(z, 'flat-fallback', dtNum, 0, 0);
+
+      console.warn(
+        `[sw-dem] %c FLAT TILE %c ${z}/${x}/${y} — returning flat DEM (no pngBlob), depth=${_depth}, hasToken=${!!mapboxToken}, inFrance=${tileOverlapsFrance(z,x,y)}, ${dt}ms`,
+        'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
+      );
 
       // Do NOT negative-cache if the Mapbox token hasn't been delivered yet —
       // the failure is guaranteed to be transient and caching it would lock out
@@ -337,6 +365,35 @@ async function handleDemRequest(request, z, x, y, _depth) {
     }
 
     const dt = (performance.now() - t0).toFixed(1);
+    const dtNum = performance.now() - t0;
+
+    // ── Decode tile to log elevation range (diagnostic) ──
+    let elevMin = 0, elevMax = 0, elevRange = 0;
+    try {
+      const diagElev = await decodeTerrainRGBBlob(pngBlob.slice());
+      elevMin = Infinity; elevMax = -Infinity;
+      for (let i = 0; i < diagElev.length; i++) {
+        if (diagElev[i] < elevMin) elevMin = diagElev[i];
+        if (diagElev[i] > elevMax) elevMax = diagElev[i];
+      }
+      elevRange = elevMax - elevMin;
+    } catch (_) { /* diagnostic only */ }
+
+    trackDemTile(z, demSource, dtNum, elevMin, elevMax);
+
+    // Log every tile with elevation info — key for diagnosing flattening
+    const elevColor = elevRange < 5 ? '#f44336' : elevRange < 50 ? '#FF9800' : '#4CAF50';
+    console.log(
+      `[sw-dem] %c ${demSource} %c ${z}/${x}/${y} elev=[${elevMin.toFixed(1)}..${elevMax.toFixed(1)}] range=${elevRange.toFixed(1)}m ${dt}ms`,
+      `background:${elevColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
+    );
+    if (elevRange < 5) {
+      console.warn(
+        `[sw-dem] %c ⚠ NEARLY FLAT %c ${z}/${x}/${y} range=${elevRange.toFixed(1)}m — terrain will appear flat at this zoom! src=${demSource}`,
+        'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
+      );
+    }
+
     if (demSource.includes('fallback') || dt > 2000) {
       console.warn(`[sw-dem] ${z}/${x}/${y} → ${demSource} (${dt}ms)`);
     }
@@ -347,6 +404,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=604800',
         'X-DEM-Source': demSource,
+        'X-DEM-Elev-Range': `${elevMin.toFixed(1)}..${elevMax.toFixed(1)}`,
       },
     });
 
