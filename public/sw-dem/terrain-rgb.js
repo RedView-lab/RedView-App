@@ -199,7 +199,7 @@ async function decodeTerrainRGBBlob(blob) {
  */
 async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, targetX, targetY) {
   const parentElevations = await decodeTerrainRGBBlob(parentBlob);
-  const size = DEM_TILE_SIZE; // 512
+  const size = DEM_TILE_SIZE; // 256
 
   const dz = targetZ - parentZ;
   const nChildren = 1 << dz; // e.g. dz=2 → 4 sub-tiles per axis

@@ -10,7 +10,7 @@ const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
 const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
-const DEM_TILE_SIZE = 512;
+const DEM_TILE_SIZE = 256;
 const IGN_SRC_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
 const IGN_DEM_MINZOOM = 4;
@@ -20,15 +20,15 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-const CACHE_NAME = 'dem-tiles-v13';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v7';
+const CACHE_NAME = 'dem-tiles-v14';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v8';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v2';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
-const IGN_CACHE_MAX = 3000;
+const IGN_CACHE_MAX = 500;
 const IGN_CONCURRENCY = 8;
-const IGN_QUEUE_MAX = 400; // Max queued DEM tasks (increased for 60° pitch 3D globe views)
+const IGN_QUEUE_MAX = 100; // Max queued DEM tasks — kept low to avoid SW memory exhaustion
 
 // Separate ortho concurrency — prevents ortho from starving DEM and vice versa
 const ORTHO_CONCURRENCY = 8;

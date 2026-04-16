@@ -8,7 +8,7 @@ export const unifiedDEMSource = {
   id: 'unified-dem',
   type: 'raster-dem' as const,
   tiles: ['/dem-tiles/{z}/{x}/{y}'],
-  tileSize: 512,
+  tileSize: 256,
   encoding: 'mapbox' as const,
   minzoom: 0,
   maxzoom: DEM_SOURCE_MAXZOOM,

@@ -109,3 +109,40 @@ function bicubicSample(data, fx, fy) {
   const bot = s01 + (s11 - s01) * dx;
   return top + (bot - top) * dy;
 }
+
+// Lightweight bilinear-only sampling (no 4×4 kernel overhead)
+function bilinearSample(data, fx, fy) {
+  const ix = Math.floor(fx);
+  const iy = Math.floor(fy);
+  const dx = fx - ix;
+  const dy = fy - iy;
+
+  const p00v = isRawValid(data, ix, iy);
+  const p10v = isRawValid(data, ix + 1, iy);
+  const p01v = isRawValid(data, ix, iy + 1);
+  const p11v = isRawValid(data, ix + 1, iy + 1);
+  const validCount = (p00v ? 1 : 0) + (p10v ? 1 : 0) + (p01v ? 1 : 0) + (p11v ? 1 : 0);
+
+  if (validCount === 0) return NaN;
+  if (validCount < 2) {
+    if (p00v) return sampleAt(data, ix, iy);
+    if (p10v) return sampleAt(data, ix + 1, iy);
+    if (p01v) return sampleAt(data, ix, iy + 1);
+    return sampleAt(data, ix + 1, iy + 1);
+  }
+
+  const p00 = p00v ? sampleAt(data, ix, iy) : 0;
+  const p10 = p10v ? sampleAt(data, ix + 1, iy) : 0;
+  const p01 = p01v ? sampleAt(data, ix, iy + 1) : 0;
+  const p11 = p11v ? sampleAt(data, ix + 1, iy + 1) : 0;
+  const validAvg = (p00 * (p00v ? 1 : 0) + p10 * (p10v ? 1 : 0) + p01 * (p01v ? 1 : 0) + p11 * (p11v ? 1 : 0)) / validCount;
+
+  const s00 = p00v ? p00 : validAvg;
+  const s10 = p10v ? p10 : validAvg;
+  const s01 = p01v ? p01 : validAvg;
+  const s11 = p11v ? p11 : validAvg;
+
+  const top = s00 + (s10 - s00) * dx;
+  const bot = s01 + (s11 - s01) * dx;
+  return top + (bot - top) * dy;
+}

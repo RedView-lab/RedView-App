@@ -109,7 +109,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         const fy = (((90 - lat) / 180) * aMatH - aRow) * IGN_SRC_TILE_SIZE;
 
         if (hasValidRawElevation(result.data, fx, fy)) {
-          const sampled = bicubicSample(result.data, fx, fy);
+          const sampled = bilinearSample(result.data, fx, fy);
           if (!Number.isNaN(sampled)) {
             elevations[py * DEM_TILE_SIZE + px] = sampled;
             coverage[py * DEM_TILE_SIZE + px] = 1;
@@ -124,6 +124,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
       }
     }
   }
+
+  // Release IGN source tile references — no longer needed after resampling
+  tileMap.clear();
 
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
@@ -189,9 +192,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   // --- Adaptive border pixel dilation (8-connected) ---
-  // More passes when coverage is sparse (larger gaps need more dilation)
+  // Capped at 4 passes max to limit memory pressure in the SW.
+  // Mapbox prefill already covers uncovered pixels, so fewer passes suffice.
   const coverageRatio = coveredCount / totalPixels;
-  const dilationPasses = coverageRatio > 0.9 ? 2 : coverageRatio > 0.75 ? 4 : coverageRatio > 0.5 ? 8 : 12;
+  const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
 
   for (let pass = 0; pass < dilationPasses; pass++) {
     const newElevations = new Float32Array(elevations);

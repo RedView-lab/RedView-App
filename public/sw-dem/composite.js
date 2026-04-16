@@ -161,5 +161,10 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     }
   }
 
+  // Release heavy intermediates before PNG encoding
+  distToBorder.fill(0);
+  borderSamples.length = 0;
+  samplesForIDW = null;
+
   return encodeTerrainRGBPng(result);
 }

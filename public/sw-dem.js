@@ -31,6 +31,25 @@ importScripts(
 let mapboxToken = '';
 let _tokenRecoveryInFlight = false;
 
+// Composite concurrency limiter — caps peak memory from simultaneous blends
+const COMPOSITE_MAX_CONCURRENT = 2;
+let _compositeActive = 0;
+const _compositeQueue = [];
+function acquireComposite() {
+  if (_compositeActive < COMPOSITE_MAX_CONCURRENT) {
+    _compositeActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _compositeQueue.push(resolve));
+}
+function releaseComposite() {
+  _compositeActive--;
+  if (_compositeQueue.length > 0) {
+    _compositeActive++;
+    _compositeQueue.shift()();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Zoom-level DEM stats tracker — logs summary per zoom level
 // ---------------------------------------------------------------------------
@@ -123,8 +142,10 @@ const OLD_CACHES = [
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
   'dem-tiles-v7', 'dem-tiles-v8', 'dem-tiles-v9',
   'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
+  'dem-tiles-v13',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
+  'dem-negative-v7',
   'ortho-tiles-v1',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
@@ -279,7 +300,12 @@ async function handleDemRequest(request, z, x, y, _depth) {
             pngBlob = ignResult.blob;
             demSource = ignResult.source || 'ign-full';
           } else {
-            pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+            await acquireComposite();
+            try {
+              pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+            } finally {
+              releaseComposite();
+            }
             demSource = `composite(${ignResult.source || 'ign-partial'})`;
           }
         }
@@ -367,32 +393,12 @@ async function handleDemRequest(request, z, x, y, _depth) {
     const dt = (performance.now() - t0).toFixed(1);
     const dtNum = performance.now() - t0;
 
-    // ── Decode tile to log elevation range (diagnostic) ──
-    let elevMin = 0, elevMax = 0, elevRange = 0;
-    try {
-      const diagElev = await decodeTerrainRGBBlob(pngBlob.slice());
-      elevMin = Infinity; elevMax = -Infinity;
-      for (let i = 0; i < diagElev.length; i++) {
-        if (diagElev[i] < elevMin) elevMin = diagElev[i];
-        if (diagElev[i] > elevMax) elevMax = diagElev[i];
-      }
-      elevRange = elevMax - elevMin;
-    } catch (_) { /* diagnostic only */ }
-
-    trackDemTile(z, demSource, dtNum, elevMin, elevMax);
-
-    // Log every tile with elevation info — key for diagnosing flattening
-    const elevColor = elevRange < 5 ? '#f44336' : elevRange < 50 ? '#FF9800' : '#4CAF50';
+    // Lightweight tracking without decoding (avoids 1MB+ alloc per tile)
+    trackDemTile(z, demSource, dtNum, 0, 0);
     console.log(
-      `[sw-dem] %c ${demSource} %c ${z}/${x}/${y} elev=[${elevMin.toFixed(1)}..${elevMax.toFixed(1)}] range=${elevRange.toFixed(1)}m ${dt}ms`,
-      `background:${elevColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
+      `[sw-dem] %c ${demSource} %c ${z}/${x}/${y} ${dt}ms`,
+      'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
-    if (elevRange < 5) {
-      console.warn(
-        `[sw-dem] %c ⚠ NEARLY FLAT %c ${z}/${x}/${y} range=${elevRange.toFixed(1)}m — terrain will appear flat at this zoom! src=${demSource}`,
-        'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
-      );
-    }
 
     if (demSource.includes('fallback') || dt > 2000) {
       console.warn(`[sw-dem] ${z}/${x}/${y} → ${demSource} (${dt}ms)`);
@@ -404,7 +410,6 @@ async function handleDemRequest(request, z, x, y, _depth) {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=604800',
         'X-DEM-Source': demSource,
-        'X-DEM-Elev-Range': `${elevMin.toFixed(1)}..${elevMax.toFixed(1)}`,
       },
     });
 
