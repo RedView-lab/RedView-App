@@ -9,17 +9,22 @@ async function fetchMapboxTile(z, x, y) {
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) return null;
     const blob = await res.blob();
-    const img = await createImageBitmap(blob);
+    const img = await createImageBitmap(blob, {
+      colorSpaceConversion: 'none',
+      premultiplyAlpha: 'none',
+    });
     if (img.width === DEM_TILE_SIZE && img.height === DEM_TILE_SIZE) {
-      img.close(); // Release GPU memory
+      img.close();
       return blob;
     }
-    // Resample to DEM_TILE_SIZE x DEM_TILE_SIZE
+    // Resample to DEM_TILE_SIZE × DEM_TILE_SIZE using raw PNG encoder
+    // to avoid sRGB gamma corruption of terrain-RGB elevation data.
     const canvas = new OffscreenCanvas(DEM_TILE_SIZE, DEM_TILE_SIZE);
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
     ctx.drawImage(img, 0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
-    img.close(); // Release GPU memory
-    return canvas.convertToBlob({ type: 'image/png' });
+    img.close();
+    const imageData = ctx.getImageData(0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
+    return buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, imageData.data);
   } catch {
     return null;
   }

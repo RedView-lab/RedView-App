@@ -29,6 +29,68 @@ importScripts(
 
 // Shared mutable state (used by sub-modules via global scope)
 let mapboxToken = '';
+let _tokenRecoveryInFlight = false;
+
+// ---------------------------------------------------------------------------
+// Token persistence — survives SW termination/restart
+// ---------------------------------------------------------------------------
+const TOKEN_CACHE_KEY = '/internal/mapbox-token';
+
+async function persistToken(token) {
+  try {
+    const cache = await caches.open(STATIC_CACHE_NAME);
+    await cache.put(TOKEN_CACHE_KEY, new Response(token, {
+      headers: { 'Content-Type': 'text/plain', 'x-stored-at': String(Date.now()) },
+    }));
+  } catch (e) {
+    console.warn('[sw-dem] Failed to persist token:', e);
+  }
+}
+
+async function loadPersistedToken() {
+  try {
+    const cache = await caches.open(STATIC_CACHE_NAME);
+    const resp = await cache.match(TOKEN_CACHE_KEY);
+    if (resp) {
+      const token = await resp.text();
+      if (token && token.length > 10) return token;
+    }
+  } catch (e) {
+    console.warn('[sw-dem] Failed to load persisted token:', e);
+  }
+  return null;
+}
+
+// Try to recover the token from CacheStorage + request from clients as last resort.
+// Sets mapboxToken and returns true if recovered, false otherwise.
+async function ensureToken() {
+  if (mapboxToken) return true;
+  if (_tokenRecoveryInFlight) return false;
+  _tokenRecoveryInFlight = true;
+  try {
+    const cached = await loadPersistedToken();
+    if (cached) {
+      mapboxToken = cached;
+      console.log('[sw-dem] %c TOKEN RECOVERED %c from CacheStorage', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
+      // Notify all clients so they can reload stale DEM tiles
+      const clients = await self.clients.matchAll();
+      for (const client of clients) {
+        client.postMessage({ type: 'TOKEN_RECOVERED' });
+      }
+      return true;
+    }
+    // Last resort: ask clients to resend the token
+    const clients = await self.clients.matchAll();
+    for (const client of clients) {
+      client.postMessage({ type: 'REQUEST_TOKEN' });
+    }
+    // Give client 500ms to respond before giving up for this request
+    await new Promise(r => setTimeout(r, 500));
+    return !!mapboxToken;
+  } finally {
+    _tokenRecoveryInFlight = false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // SW Lifecycle
@@ -64,14 +126,23 @@ self.addEventListener('activate', (e) => {
           .filter(k => OLD_CACHES.includes(k))
           .map(k => caches.delete(k))
       )
-    ).then(() => self.clients.claim())
+    )
+    .then(() => loadPersistedToken())
+    .then(token => {
+      if (token) {
+        mapboxToken = token;
+        console.log('[sw-dem] %c TOKEN RESTORED %c on activate from CacheStorage', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
+      }
+    })
+    .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'SET_MAPBOX_TOKEN') {
     mapboxToken = e.data.token;
-    console.log('[sw-dem] %c TOKEN SET %c mapboxToken received', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
+    persistToken(e.data.token); // Survive SW restart
+    console.log('[sw-dem] %c TOKEN SET %c mapboxToken received & persisted', 'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '');
 
     // Flush negative cache so tiles that failed before the token arrived are retried
     caches.delete(NEGATIVE_CACHE_NAME).then(() => {
@@ -162,6 +233,11 @@ async function handleDemRequest(request, z, x, y, _depth) {
       return flatDemResponse();
     }
     negCache.delete(cacheKey);
+  }
+
+  // Recover token from persistent storage if SW was restarted
+  if (!mapboxToken) {
+    await ensureToken();
   }
 
   try {

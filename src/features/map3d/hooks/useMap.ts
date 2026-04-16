@@ -8,6 +8,25 @@ import { loadViewport, saveViewport } from '../lib/viewport-persist';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+// ---------------------------------------------------------------------------
+// Helpers: send token to active SW controller and wait for ACK
+// ---------------------------------------------------------------------------
+function sendTokenToSW(): Promise<void> {
+  if (!navigator.serviceWorker.controller) return Promise.resolve();
+  navigator.serviceWorker.controller.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+  return new Promise<void>((resolve) => {
+    const timeout = setTimeout(resolve, 2000);
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'TOKEN_ACK') {
+        clearTimeout(timeout);
+        navigator.serviceWorker.removeEventListener('message', onMessage);
+        resolve();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+  });
+}
+
 // Register DEM Service Worker and wait until it's actually controlling this page.
 // navigator.serviceWorker.ready only means the SW is "active" — it does NOT mean
 // it's intercepting fetch events yet (clients.claim() may still be in progress).
@@ -26,21 +45,20 @@ const swReady = (async () => {
     await controllerReady;
 
     // SW is now intercepting fetch events — send Mapbox token
-    navigator.serviceWorker.controller!.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+    await sendTokenToSW();
 
-    // Wait for the SW to acknowledge the token before adding sources.
-    // Without this, tile requests may arrive before the token is set,
-    // causing Mapbox fallback tiles to fail and get negative-cached.
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 2000); // Safety fallback: 2s max
-      const onMessage = (event: MessageEvent) => {
-        if (event.data?.type === 'TOKEN_ACK') {
-          clearTimeout(timeout);
-          navigator.serviceWorker.removeEventListener('message', onMessage);
-          resolve();
-        }
-      };
-      navigator.serviceWorker.addEventListener('message', onMessage);
+    // Re-send token whenever the SW is replaced (update, restart, etc.)
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      console.log('[sw-dem] controllerchange — re-sending token to new SW');
+      sendTokenToSW();
+    });
+
+    // Handle SW requesting the token (e.g. after SW restart with empty memory)
+    navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
+      if (event.data?.type === 'REQUEST_TOKEN') {
+        console.log('[sw-dem] SW requested token — sending');
+        sendTokenToSW();
+      }
     });
   } catch (e) {
     console.error('[sw-dem] Registration failed:', e);
@@ -166,7 +184,21 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       console.error('[mapbox]', e.error?.message || e);
     });
 
+    // When SW recovers a token after restart, force-reload DEM source so
+    // tiles that were served as flat 0m get re-fetched with real elevation.
+    const onTokenRecovered = (event: MessageEvent) => {
+      if (event.data?.type === 'TOKEN_RECOVERED' && mapRef.current) {
+        console.log('[sw-dem] TOKEN_RECOVERED — clearing neg cache & reloading DEM source');
+        const src = mapRef.current.getSource(unifiedDEMSource.id);
+        if (src && 'reload' in src) {
+          (src as mapboxgl.RasterDemTileSource).reload();
+        }
+      }
+    };
+    navigator.serviceWorker?.addEventListener('message', onTokenRecovered);
+
     return () => {
+      navigator.serviceWorker?.removeEventListener('message', onTokenRecovered);
       if (saveTimer) clearTimeout(saveTimer);
       // Final save before teardown
       if (mapRef.current) {
