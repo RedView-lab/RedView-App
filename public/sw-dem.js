@@ -129,6 +129,20 @@ self.addEventListener('fetch', (event) => {
 // DEM request handler
 // ---------------------------------------------------------------------------
 
+// Returns a valid 200 response with a flat sea-level DEM tile.
+// Mapbox GL JS needs a valid terrain mesh for every tile area — otherwise
+// satellite imagery cannot be draped and the area renders as WHITE.
+async function flatDemResponse() {
+  const flatBlob = await getFlatDemTile();
+  return new Response(flatBlob.slice(), {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'X-DEM-Source': 'flat-fallback',
+    },
+  });
+}
+
 async function handleDemRequest(request, z, x, y, _depth) {
   if (_depth === undefined) _depth = 0;
   const t0 = performance.now();
@@ -145,7 +159,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
     if (age && (Date.now() - parseInt(age, 10)) < negTtl * 1000) {
       const ageSec = ((Date.now() - parseInt(age, 10)) / 1000).toFixed(0);
       console.log(`[sw-dem][neg-cache] HIT ${z}/${x}/${y} age=${ageSec}s ttl=${negTtl}s`);
-      return new Response(null, { status: 204 });
+      return flatDemResponse();
     }
     negCache.delete(cacheKey);
   }
@@ -223,7 +237,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
           `[sw-dem] %c NO DATA (no token) %c ${z}/${x}/${y} — NOT caching, depth=${_depth}, ${dt}ms`,
           'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
         );
-        return new Response(null, { status: 204 });
+        return flatDemResponse();
       }
 
       // Heuristic: if tile is outside France and Mapbox also failed → likely confirmed empty
@@ -242,7 +256,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
           'x-neg-ttl': String(negTtl),
         },
       }));
-      return new Response(null, { status: 204 });
+      return flatDemResponse();
     }
 
     const dt = (performance.now() - t0).toFixed(1);
@@ -263,7 +277,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
     return response;
   } catch (err) {
     console.error('[sw-dem] Error processing tile', z, x, y, err);
-    return new Response(null, { status: 500 });
+    return flatDemResponse();
   }
 }
 

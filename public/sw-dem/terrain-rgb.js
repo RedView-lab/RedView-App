@@ -93,6 +93,25 @@ async function buildRawPng(width, height, rgba) {
 
 // ── Encode elevations → Terrain-RGB PNG ───────────────────────────────
 
+// Pre-computed flat sea-level DEM tile (all pixels at elevation=0).
+// Lazily generated once — returned for any failed DEM request so that Mapbox GL
+// always has a valid terrain mesh to drape satellite imagery onto.
+// Without this, Mapbox renders white for areas with no DEM → broken globe.
+let _flatDemTilePromise = null;
+
+function getFlatDemTile() {
+  if (!_flatDemTilePromise) {
+    _flatDemTilePromise = (async () => {
+      const size = DEM_TILE_SIZE;
+      const elevations = new Float32Array(size * size); // All zeros = sea level
+      const blob = await encodeTerrainRGBPng(elevations);
+      console.log(`[sw-dem] Flat DEM tile generated: ${blob.size} bytes (${size}x${size})`);
+      return blob;
+    })();
+  }
+  return _flatDemTilePromise;
+}
+
 async function encodeTerrainRGBPng(elevations) {
   const size = DEM_TILE_SIZE;
   const rgba = new Uint8Array(size * size * 4);
