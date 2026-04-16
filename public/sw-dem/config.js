@@ -20,27 +20,27 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-const CACHE_NAME = 'dem-tiles-v14';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v8';
+const CACHE_NAME = 'dem-tiles-v15';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v9';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v2';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 const IGN_CACHE_MAX = 500;
 const IGN_CONCURRENCY = 8;
-const IGN_QUEUE_MAX = 100; // Max queued DEM tasks — kept low to avoid SW memory exhaustion
+const IGN_QUEUE_MAX = 200; // High-pitch 3D views can request 100+ DEM tiles at once
 
 // Separate ortho concurrency — prevents ortho from starving DEM and vice versa
 const ORTHO_CONCURRENCY = 8;
 const ORTHO_QUEUE_MAX = 150;
 
 // Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
-const IGN_NULL_TTL_TRANSIENT = 30_000;   // 30s — timeout, 5xx, network error
+const IGN_NULL_TTL_TRANSIENT = 10_000;   // 10s — timeout, 5xx, network error
 const IGN_NULL_TTL_PERMANENT = 3600_000; // 1h  — 404, invalid size
 
 // Negative cache TTL for the CacheStorage-level negative cache (seconds)
 const NEGATIVE_TTL_CONFIRMED = 3600;     // 1h — tile genuinely does not exist
-const NEGATIVE_TTL_PIPELINE = 15;        // 15s — pipeline failed (network, queue, etc.)
+const NEGATIVE_TTL_PIPELINE = 5;         // 5s  — transient France pipeline failure; retry quickly
 
 // Sentinel object returned by queue pruning — never cache these failures
 const PRUNED_SENTINEL = Object.freeze({ _pruned: true });

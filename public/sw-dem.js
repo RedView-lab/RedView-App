@@ -142,10 +142,10 @@ const OLD_CACHES = [
   'dem-tiles-v4', 'dem-tiles-v5', 'dem-tiles-v6',
   'dem-tiles-v7', 'dem-tiles-v8', 'dem-tiles-v9',
   'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
-  'dem-tiles-v13',
+  'dem-tiles-v13', 'dem-tiles-v14',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
-  'dem-negative-v7',
+  'dem-negative-v7', 'dem-negative-v8',
   'ortho-tiles-v1',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
@@ -245,16 +245,76 @@ self.addEventListener('fetch', (event) => {
 // Returns a valid 200 response with a flat sea-level DEM tile.
 // Mapbox GL JS needs a valid terrain mesh for every tile area — otherwise
 // satellite imagery cannot be draped and the area renders as WHITE.
-async function flatDemResponse() {
-  const flatBlob = await getFlatDemTile();
-  return new Response(flatBlob.slice(), {
+function buildDemResponse(pngBlob, demSource, cacheControl = 'public, max-age=604800') {
+  return new Response(pngBlob, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'no-store',
-      'X-DEM-Source': 'flat-fallback',
+      'Cache-Control': cacheControl,
+      'X-DEM-Source': demSource,
     },
   });
+}
+
+async function flatDemResponse() {
+  const flatBlob = await getFlatDemTile();
+  return buildDemResponse(flatBlob.slice(), 'flat-fallback', 'no-store');
+}
+
+async function finalizeDemSuccess(cache, cacheKey, z, x, y, t0, pngBlob, demSource) {
+  const dtNum = performance.now() - t0;
+  const dt = dtNum.toFixed(1);
+
+  trackDemTile(z, demSource, dtNum, 0, 0);
+  console.log(
+    `[sw-dem] %c ${demSource} %c ${z}/${x}/${y} ${dt}ms`,
+    'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
+  );
+
+  if (demSource.includes('fallback') || dtNum > 2000) {
+    console.warn(`[sw-dem] ${z}/${x}/${y} → ${demSource} (${dt}ms)`);
+  }
+
+  const response = buildDemResponse(pngBlob, demSource);
+  cache.put(cacheKey, response.clone());
+  return response;
+}
+
+async function tryParentOverzoom(cache, z, x, y, depth, reason) {
+  if (depth > 0) return null;
+
+  const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
+  for (let pZ = z - 1; pZ >= minParentZ; pZ--) {
+    const pX = x >> (z - pZ);
+    const pY = y >> (z - pZ);
+    const parentKey = new Request(`/dem-tiles/${pZ}/${pX}/${pY}`);
+
+    let parentResp = await cache.match(parentKey);
+    if (!parentResp || parentResp.status !== 200) {
+      parentResp = await handleDemRequest(parentKey, pZ, pX, pY, depth + 1);
+    }
+
+    if (!parentResp || parentResp.status !== 200) continue;
+
+    const parentSource = parentResp.headers.get('X-DEM-Source') || 'unknown';
+    if (parentSource === 'flat-fallback') continue;
+
+    try {
+      const parentBlob = await parentResp.clone().blob();
+      const overzoomed = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
+      if (overzoomed) {
+        console.warn(
+          `[sw-dem][fallback] %c PARENT OVERZOOM %c ${z}/${x}/${y} ← ${pZ}/${pX}/${pY} (${reason}, parent=${parentSource})`,
+          'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+        );
+        return { blob: overzoomed, source: `overzoom-z${pZ}` };
+      }
+    } catch (ozErr) {
+      console.warn(`[sw-dem][fallback] overzoom failed ${pZ}/${pX}/${pY} → ${z}/${x}/${y}`, ozErr);
+    }
+  }
+
+  return null;
 }
 
 async function handleDemRequest(request, z, x, y, _depth) {
@@ -262,6 +322,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
   const t0 = performance.now();
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+  const inFrance = tileOverlapsFrance(z, x, y);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
@@ -273,6 +334,12 @@ async function handleDemRequest(request, z, x, y, _depth) {
     if (age && (Date.now() - parseInt(age, 10)) < negTtl * 1000) {
       const ageSec = ((Date.now() - parseInt(age, 10)) / 1000).toFixed(0);
       console.log(`[sw-dem][neg-cache] HIT ${z}/${x}/${y} age=${ageSec}s ttl=${negTtl}s`);
+
+      const negFallback = await tryParentOverzoom(cache, z, x, y, _depth, 'neg-cache');
+      if (negFallback) {
+        return finalizeDemSuccess(cache, cacheKey, z, x, y, t0, negFallback.blob, negFallback.source);
+      }
+
       return flatDemResponse();
     }
     negCache.delete(cacheKey);
@@ -287,7 +354,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
     let pngBlob;
     let demSource = 'none';
 
-    if (tileOverlapsFrance(z, x, y) && z >= IGN_DEM_MINZOOM) {
+    if (inFrance && z >= IGN_DEM_MINZOOM) {
       // Use polygon classification to avoid fetching IGN for tiles outside France
       await ensureFrancePoly();
       const tileClass = classifyDemTile(z, x, y);
@@ -321,32 +388,12 @@ async function handleDemRequest(request, z, x, y, _depth) {
       console.warn(`[sw-dem] ${z}/${x}/${y} — no mapboxToken available, cannot fall back to Mapbox`);
     }
 
-    // ③ Overzoom: fetch a lower-zoom DEM and upsample (only at top-level)
-    if (!pngBlob && _depth === 0) {
-      const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
-      for (let pZ = z - 1; pZ >= minParentZ; pZ--) {
-        const pX = x >> (z - pZ);
-        const pY = y >> (z - pZ);
-        const parentKey = new Request(`/dem-tiles/${pZ}/${pX}/${pY}`);
-
-        // Try cache first, then generate parent (with _depth=1 to prevent recursion)
-        let parentResp = await cache.match(parentKey);
-        if (!parentResp || parentResp.status !== 200) {
-          parentResp = await handleDemRequest(parentKey, pZ, pX, pY, _depth + 1);
-        }
-
-        if (parentResp && parentResp.status === 200) {
-          try {
-            const parentBlob = await parentResp.clone().blob();
-            pngBlob = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
-            if (pngBlob) {
-              demSource = `overzoom-z${pZ}`;
-              break;
-            }
-          } catch (ozErr) {
-            console.warn(`[sw-dem] overzoom failed ${pZ}/${pX}/${pY} → ${z}/${x}/${y}`, ozErr);
-          }
-        }
+    // ③ Overzoom: reuse a lower-zoom DEM before falling back to a flat tile.
+    if (!pngBlob) {
+      const overzoomFallback = await tryParentOverzoom(cache, z, x, y, _depth, 'miss');
+      if (overzoomFallback) {
+        pngBlob = overzoomFallback.blob;
+        demSource = overzoomFallback.source;
       }
     }
 
@@ -356,7 +403,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
       trackDemTile(z, 'flat-fallback', dtNum, 0, 0);
 
       console.warn(
-        `[sw-dem] %c FLAT TILE %c ${z}/${x}/${y} — returning flat DEM (no pngBlob), depth=${_depth}, hasToken=${!!mapboxToken}, inFrance=${tileOverlapsFrance(z,x,y)}, ${dt}ms`,
+        `[sw-dem] %c FLAT TILE %c ${z}/${x}/${y} — returning flat DEM (no pngBlob), depth=${_depth}, hasToken=${!!mapboxToken}, inFrance=${inFrance}, ${dt}ms`,
         'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
       );
 
@@ -372,7 +419,7 @@ async function handleDemRequest(request, z, x, y, _depth) {
       }
 
       // Heuristic: if tile is outside France and Mapbox also failed → likely confirmed empty
-      const isOutsideFrance = !tileOverlapsFrance(z, x, y);
+      const isOutsideFrance = !inFrance;
       const negTtl = isOutsideFrance ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
 
       console.warn(
@@ -390,33 +437,15 @@ async function handleDemRequest(request, z, x, y, _depth) {
       return flatDemResponse();
     }
 
-    const dt = (performance.now() - t0).toFixed(1);
-    const dtNum = performance.now() - t0;
-
-    // Lightweight tracking without decoding (avoids 1MB+ alloc per tile)
-    trackDemTile(z, demSource, dtNum, 0, 0);
-    console.log(
-      `[sw-dem] %c ${demSource} %c ${z}/${x}/${y} ${dt}ms`,
-      'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
-    );
-
-    if (demSource.includes('fallback') || dt > 2000) {
-      console.warn(`[sw-dem] ${z}/${x}/${y} → ${demSource} (${dt}ms)`);
-    }
-
-    const response = new Response(pngBlob, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=604800',
-        'X-DEM-Source': demSource,
-      },
-    });
-
-    cache.put(cacheKey, response.clone());
-    return response;
+    return finalizeDemSuccess(cache, cacheKey, z, x, y, t0, pngBlob, demSource);
   } catch (err) {
     console.error('[sw-dem] Error processing tile', z, x, y, err);
+
+    const errorFallback = await tryParentOverzoom(cache, z, x, y, _depth, 'error');
+    if (errorFallback) {
+      return finalizeDemSuccess(cache, cacheKey, z, x, y, t0, errorFallback.blob, errorFallback.source);
+    }
+
     return flatDemResponse();
   }
 }
