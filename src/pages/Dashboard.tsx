@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MapView } from '@/features/map3d';
+import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
@@ -60,6 +60,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     readStoredLeftWidth(),
   );
   const [isLeftResizing, setIsLeftResizing] = useState(false);
+  const [viewport, setViewport] = useState(() => ({
+    w: window.innerWidth,
+    h: window.innerHeight,
+  }));
+
+  useEffect(() => {
+    const onResize = () =>
+      setViewport({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth)); } catch { /* ignore */ }
@@ -167,20 +178,42 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <LidarProvider>
-    <div
-      style={{
-        position: 'relative',
-        width: '100vw',
-        height: '100dvh',
-        // `isolation: isolate` puts the Mapbox WebGL canvas and every
-        // overlay panel inside the same isolated stacking context. That is
-        // what allows CSS `backdrop-filter` on the panels to actually
-        // sample the canvas pixels (otherwise Chromium falls back to the
-        // page background and the glassmorphism looks like a flat tint).
-        isolation: 'isolate',
-      }}
-    >
+    <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
+
+      {/*
+        Glass-effect blur backdrops. Each one is a 2D canvas that mirrors
+        a slice of the Mapbox WebGL canvas every frame with a CSS
+        `filter: blur()` applied. This works around the fact that CSS
+        `backdrop-filter` does not reliably sample a sibling WebGL canvas
+        in Chromium / Safari (compositor-layer boundaries break backdrop
+        sampling). The mirror sits BELOW the panel (z-index 24 vs 25), so
+        the panel only needs a translucent tint as background — no
+        `backdrop-filter` required.
+      */}
+      {mapLoaded && leftPanelOpen && (
+        <MapBlurMirror
+          map={mapRef.current}
+          top={PANEL_PADDING}
+          left={PANEL_PADDING}
+          width={leftPanelWidth}
+          height={Math.max(0, viewport.h - PANEL_PADDING * 2)}
+          borderRadius={8}
+        />
+      )}
+      {mapLoaded && (
+        <MapBlurMirror
+          map={mapRef.current}
+          top={PANEL_PADDING}
+          left={Math.max(
+            0,
+            viewport.w - panelWidth - PANEL_PADDING,
+          )}
+          width={panelWidth}
+          height={Math.max(0, viewport.h - PANEL_PADDING * 2)}
+          borderRadius={8}
+        />
+      )}
 
       <div style={leftPanelStyle}>
         <ItineraryPanel
