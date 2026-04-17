@@ -114,6 +114,9 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
+      // CRITICAL FOR GLASSMORPHISM (backdrop-filter):
+      // Allows the browser compositor to read the WebGL canvas pixels so CSS blur can work.
+      preserveDrawingBuffer: true,
       // Sized for SaaS production use on laptops/desktops: at ~60 KB per raster
       // tile in VRAM, 1200 tiles ≈ 70 MB — well below any discrete-GPU budget
       // and roughly matching the tile count needed to cover a full-France
