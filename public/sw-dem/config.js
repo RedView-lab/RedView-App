@@ -3,18 +3,19 @@
 // ---------------------------------------------------------------------------
 
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
-// MNT LiDAR HD (Modèle Numérique de Terrain — bare-earth, trees/buildings removed).
-// We use MNT, NOT MNS, because Mapbox Terrain-RGB is bare-earth: mixing the two
-// at tile seams produces 15–40 m vertical cliffs in forested France (canopy
-// offset).
+// MNS LiDAR HD (Modèle Numérique de Surface — top-of-canopy, trees, rocks,
+// buildings included). This is what gives the user the "20 cm detail with
+// rocks and trees" relief they want to see. LiDAR HD native grid is ~1 m,
+// published up to z17 on TileMatrixSet WGS84G_4_17.
 //
-// IMPORTANT: the HIGHRES (MNT) layer is published on TileMatrixSet WGS84G_6_14
-// (zoom 6–14), NOT on WGS84G_4_17 like MNS. At z14 the ground sample distance
-// is ~1 m which still exceeds LiDAR HD's native 1 m grid, so no resolution is
-// lost; higher-zoom mercator tiles (z15–16) are handled by GPU overzoom on
-// the resulting Terrain-RGB PNG — same behaviour as Mapbox's own DEM past z14.
-const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES';
-const IGN_DEM_TILEMATRIXSET = 'WGS84G_6_14';
+// The MNS↔MNT canopy offset that used to produce cliffs at tile seams where
+// IGN tiles met Mapbox Terrain-RGB (bare-earth) is handled by the median-bias
+// correction in compositeIGNMapbox (composite.js): the 1-px border ring
+// offset is sampled against Mapbox, the median is applied as a constant
+// subtraction, so the MNS elevation surface snaps onto Mapbox at the seam
+// without any visible step.
+const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
+const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
 const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
@@ -37,27 +38,19 @@ const MAX_VALID_ELEVATION_M = 9_000;
 // erasing real ridgelines (real cliffs span multiple pixels).
 const DESPIKE_THRESHOLD_M = 80;
 
-const IGN_DEM_MINZOOM = 6;
-const IGN_DEM_MAXZOOM = 14;
+const IGN_DEM_MINZOOM = 4;
+const IGN_DEM_MAXZOOM = 17;
 
 // Zoom gate for running the IGN composite pipeline. Pixel-density based: we
 // only invest the IGN fetch + composite cost when the rendered pixel is
 // meaningfully smaller than what Mapbox Terrain-RGB already delivers.
 //
-// At latitude φ, mercator z=Z pixel size = cos(φ) · 40075000 / (256 · 2^Z) m.
-// The IGN_ENGAGE_MPP threshold is what matters for perceptible LOD gain:
-//   * Mapbox Terrain-RGB native sample ~30 m/px — usable up to ~z12.
-//   * At a rendered pixel density of ~10 m/px the user starts perceiving
-//     sub-Mapbox detail, and LiDAR HD (0.4 m native) delivers a huge win.
-//   * Above 10 m/px the composite cost (~3 s/tile, plus compositeSem queue
-//     saturation) vastly outweighs any visual gain — we'd stall the pipeline
-//     for zero perceptible improvement, producing the "3 min of blur" bug.
-//
-// At France median φ≈46° this crosses 10 m/px between z13 and z14, i.e. the
-// IGN composite engages exclusively at z14+ where it actually matters.
-// Continuous on lat so Corsica (~42°) engages at z14 and Dunkirk (~51°)
-// at z14 as well — consistent UX across the country.
-const IGN_ENGAGE_MPP = 10;
+// Threshold = 20 m/px. At France median φ≈46° this crosses between z12 and
+// z13, so the IGN composite engages at z13+ where the user starts perceiving
+// sub-Mapbox detail (MNS canopy, rock outcrops, ridgelines). Below that,
+// Mapbox Terrain-RGB (~30 m native) is visually indistinguishable — running
+// IGN there only saturates the composite semaphore during fast dezoom.
+const IGN_ENGAGE_MPP = 20;
 function shouldUseIGN(mercZ, lat) {
   if (mercZ < IGN_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -78,8 +71,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v23';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v17';
+const CACHE_NAME = 'dem-tiles-v24';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v18';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';

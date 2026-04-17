@@ -22,15 +22,12 @@ export const IGN_DEM_MINZOOM = 4;
 export const IGN_DEM_MAXZOOM = 17;
 
 // Mapbox requests tiles up to this zoom from our protocol.
-// IGN MNS LiDAR HD native data goes to z17 WGS84G, but Mapbox Terrain DEM v1
-// (used outside France) is only native to z14. Setting this to 16 means:
-// - z0-16: Service Worker can still provide real z16 IGN detail over France,
-//   matching the working reference app and avoiding early mesh coarsening.
-// - z17+: Mapbox GL GPU overzooms z16 tiles internally, which is cheaper than
-//   asking the worker for even denser synthetic tiles.
-// Previously set to 19, which forced the SW to generate z16-19 tiles via
-// lossy upsampling of z14/z17 parents → progressive terrain flattening.
-export const DEM_SOURCE_MAXZOOM = 16;
+// MNS LiDAR HD is published natively up to z17 (WGS84G_4_17). At mercator z17
+// in France the ground sample distance drops to ~1 m — matching LiDAR HD's
+// native 1 m grid — so fetching IGN directly at z17 yields TRUE 1 m detail
+// instead of GPU-overzooming a z16 tile (which softens the DEM). Mapbox GL
+// will still overzoom past z17 for the rare very-close view.
+export const DEM_SOURCE_MAXZOOM = 17;
 
 export const DEM_TILE_SIZE = 512;
 export const DEM_NODATA_THRESHOLD = -10000;
