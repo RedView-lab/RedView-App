@@ -40,24 +40,30 @@ const DESPIKE_THRESHOLD_M = 80;
 const IGN_DEM_MINZOOM = 6;
 const IGN_DEM_MAXZOOM = 14;
 
-// Zoom gate for running the IGN composite pipeline (replaces the former
-// hardcoded IGN_BUILD_MINZOOM=12). Pixel-density based: we only invest the
-// IGN fetch+resample cost when the rendered pixel is smaller than Mapbox's
-// native ~30 m/px — otherwise the visual delta is imperceptible and we'd
-// just saturate the WMTS queue during fast dezoom.
+// Zoom gate for running the IGN composite pipeline. Pixel-density based: we
+// only invest the IGN fetch + composite cost when the rendered pixel is
+// meaningfully smaller than what Mapbox Terrain-RGB already delivers.
 //
 // At latitude φ, mercator z=Z pixel size = cos(φ) · 40075000 / (256 · 2^Z) m.
-// Solving for pixel < MAPBOX_NATIVE_MPP gives Z >= log2(C / cos(φ)); at
-// France median φ≈46° this crosses 30 m/px between z11 and z12. The function
-// returns that continuously, so high-latitude (Dunkirk) and low-latitude
-// (Corsica) tiles are both handled correctly without a hard constant.
-const MAPBOX_NATIVE_MPP = 30; // Mapbox mapbox-terrain-dem-v1 ground sample distance
+// The IGN_ENGAGE_MPP threshold is what matters for perceptible LOD gain:
+//   * Mapbox Terrain-RGB native sample ~30 m/px — usable up to ~z12.
+//   * At a rendered pixel density of ~10 m/px the user starts perceiving
+//     sub-Mapbox detail, and LiDAR HD (0.4 m native) delivers a huge win.
+//   * Above 10 m/px the composite cost (~3 s/tile, plus compositeSem queue
+//     saturation) vastly outweighs any visual gain — we'd stall the pipeline
+//     for zero perceptible improvement, producing the "3 min of blur" bug.
+//
+// At France median φ≈46° this crosses 10 m/px between z13 and z14, i.e. the
+// IGN composite engages exclusively at z14+ where it actually matters.
+// Continuous on lat so Corsica (~42°) engages at z14 and Dunkirk (~51°)
+// at z14 as well — consistent UX across the country.
+const IGN_ENGAGE_MPP = 10;
 function shouldUseIGN(mercZ, lat) {
   if (mercZ < IGN_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
   // Earth circumference at equator in metres
   const mppAtZ = (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
-  return mppAtZ < MAPBOX_NATIVE_MPP;
+  return mppAtZ < IGN_ENGAGE_MPP;
 }
 
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
@@ -135,9 +141,13 @@ const DEM_OVERZOOM_MAX_DEPTH = 4;
 // a cache-replace with the full-quality IGN blob — see scheduleBackgroundUpgrade
 // in sw-dem.js. The user never waits longer than this for first paint, and
 // every tile eventually converges to best quality.
-// Zoom-adaptive: low zoom needs many more sub-tiles, so we cap earlier to
-// avoid starving the Mapbox base-map fetches on the same origin.
+//
+// Shorter than before (was 3 s) — with IGN_ENGAGE_MPP=10 we only composite
+// at z14+, where each tile needs at most 2×2 = 4 IGN sub-tiles. Those are
+// small (512x512 BIL32 ≈ 1 MB) and return in 300–800 ms on HTTP/2. Beyond
+// 1.2 s the remaining sub-tiles are tail-latency outliers — we'd rather
+// ship the partial composite + background-upgrade them than block.
 function ignSoftDeadlineMs(mercZ) {
-  return mercZ <= 11 ? 1_500 : 3_000;
+  return mercZ <= 13 ? 1_200 : 1_500;
 }
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_000; // fallback/legacy const
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 1_500; // fallback/legacy const

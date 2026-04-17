@@ -20,10 +20,10 @@ export const unifiedDEMSource = {
  * SW clips tiles to France border polygon so areas outside France are transparent,
  * letting the Mapbox satellite base layer show through at borders.
  *
- * minzoom=9: below this (~150 m/px at France latitude) the 20 cm IGN ortho is
+ * minzoom=11: below this (~75 m/px at France latitude) the 20 cm IGN ortho is
  * visually indistinguishable from Mapbox Standard-Satellite, while the fan-out
  * of tile requests saturates the ortho WMTS queue during fast dezoom and
- * produces the "patchwork of missing tiles" artifact. Above z9 the IGN overlay
+ * produces the "patchwork of missing tiles" artifact. Above z11 the IGN overlay
  * kicks in smoothly (raster-fade-duration handles the crossfade — see layers.ts).
  */
 export const ignOrthoSource = {
@@ -31,7 +31,7 @@ export const ignOrthoSource = {
   type: 'raster' as const,
   tiles: ['/ortho-tiles/{z}/{x}/{y}'],
   tileSize: 256,
-  minzoom: 9,
+  minzoom: 11,
   maxzoom: 19,
   bounds: FRANCE_BOUNDS,
   attribution: '&copy; IGN - Géoplateforme',

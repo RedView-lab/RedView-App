@@ -6,7 +6,7 @@ export const ignOrthoLayer = {
   type: 'raster' as const,
   source: 'ign-ortho',
   slot: 'top',
-  minzoom: 9,
+  minzoom: 11,
   paint: {
     'raster-opacity': 1,
     // Crossfade from parent to child tile over 250 ms. With 0 ms (previous
