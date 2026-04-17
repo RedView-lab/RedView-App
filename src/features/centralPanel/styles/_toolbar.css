@@ -152,15 +152,15 @@
   left: 0;
   top: 0;
   bottom: 0;
-  background: var(--rvc-text);
+  background: #c50000;
   border-radius: 4px;
 }
 .rvc-slider__handle {
   position: absolute;
   top: 50%;
-  width: 16px;
-  height: 16px;
-  background: var(--rvc-text);
+  width: 14px;
+  height: 14px;
+  background: #c50000;
   border-radius: 50%;
   transform: translate(-50%, -50%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);

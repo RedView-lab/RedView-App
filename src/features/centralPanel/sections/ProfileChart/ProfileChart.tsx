@@ -142,6 +142,7 @@ export function ProfileChart({
   const primaryMetric = PRIMARY_METRIC_OPTIONS.find(
     (o) => o.value === ui.primaryMetric,
   );
+  void primaryMetric;
   const secondaryMetric = SECONDARY_METRIC_OPTIONS.find(
     (o) => o.value === ui.secondaryMetric,
   );
@@ -182,46 +183,48 @@ export function ProfileChart({
             ))
           : null}
 
-        {/* Horizontal gridlines (using primary ticks). */}
-        {y1Ticks.map((t) => (
-          <line
-            key={`g-${t}`}
-            x1={PADDING.left}
-            x2={PADDING.left + innerW}
-            y1={y1Scale.toPx(t)}
-            y2={y1Scale.toPx(t)}
-            stroke="rgba(255,255,255,0.06)"
-            strokeWidth={1}
-          />
-        ))}
+        {/* Horizontal gridlines (using primary ticks). Hidden when empty. */}
+        {!isEmpty &&
+          y1Ticks.map((t) => (
+            <line
+              key={`g-${t}`}
+              x1={PADDING.left}
+              x2={PADDING.left + innerW}
+              y1={y1Scale.toPx(t)}
+              y2={y1Scale.toPx(t)}
+              stroke="rgba(255,255,255,0.06)"
+              strokeWidth={1}
+            />
+          ))}
 
-        {/* Y1 axis labels (left). */}
-        {y1Ticks.map((t) => (
-          <text
-            key={`y1-${t}`}
-            x={PADDING.left - 8}
-            y={y1Scale.toPx(t) + 4}
-            textAnchor="end"
-            className="rvc-chart__axis-label"
-          >
-            {Math.round(t)}
-            {primaryMetric ? '' : ''}
-          </text>
-        ))}
+        {/* Y1 axis labels (left). Hidden when there's no primary data. */}
+        {primarySeries.length > 0 &&
+          y1Ticks.map((t) => (
+            <text
+              key={`y1-${t}`}
+              x={PADDING.left - 8}
+              y={y1Scale.toPx(t) + 4}
+              textAnchor="end"
+              className="rvc-chart__axis-label"
+            >
+              {Math.round(t)}
+            </text>
+          ))}
 
-        {/* Y2 axis labels (right). */}
-        {y2Ticks.map((t) => (
-          <text
-            key={`y2-${t}`}
-            x={PADDING.left + innerW + 8}
-            y={y2Scale.toPx(t) + 4}
-            textAnchor="start"
-            className="rvc-chart__axis-label"
-          >
-            {Math.round(t)}
-            {secondaryMetric?.unit ?? ''}
-          </text>
-        ))}
+        {/* Y2 axis labels (right). Hidden when there's no secondary data. */}
+        {secondarySeries.length > 0 &&
+          y2Ticks.map((t) => (
+            <text
+              key={`y2-${t}`}
+              x={PADDING.left + innerW + 8}
+              y={y2Scale.toPx(t) + 4}
+              textAnchor="start"
+              className="rvc-chart__axis-label"
+            >
+              {Math.round(t)}
+              {secondaryMetric?.unit ?? ''}
+            </text>
+          ))}
 
         {/* Sun / Moon overlay glyphs at top of day/night bands. */}
         {ui.overlays.daynight
