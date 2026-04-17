@@ -6,10 +6,15 @@ const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
 // MNT LiDAR HD (Modèle Numérique de Terrain — bare-earth, trees/buildings removed).
 // We use MNT, NOT MNS, because Mapbox Terrain-RGB is bare-earth: mixing the two
 // at tile seams produces 15–40 m vertical cliffs in forested France (canopy
-// offset). The MNT layer shares the SAME WGS84G_4_17 tilematrix and BIL32
-// format as the MNS layer, so the rest of the pipeline is unchanged.
+// offset).
+//
+// IMPORTANT: the HIGHRES (MNT) layer is published on TileMatrixSet WGS84G_6_14
+// (zoom 6–14), NOT on WGS84G_4_17 like MNS. At z14 the ground sample distance
+// is ~1 m which still exceeds LiDAR HD's native 1 m grid, so no resolution is
+// lost; higher-zoom mercator tiles (z15–16) are handled by GPU overzoom on
+// the resulting Terrain-RGB PNG — same behaviour as Mapbox's own DEM past z14.
 const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES';
-const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
+const IGN_DEM_TILEMATRIXSET = 'WGS84G_6_14';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
 const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
@@ -32,8 +37,8 @@ const MAX_VALID_ELEVATION_M = 9_000;
 // erasing real ridgelines (real cliffs span multiple pixels).
 const DESPIKE_THRESHOLD_M = 80;
 
-const IGN_DEM_MINZOOM = 4;
-const IGN_DEM_MAXZOOM = 17;
+const IGN_DEM_MINZOOM = 6;
+const IGN_DEM_MAXZOOM = 14;
 
 // Zoom gate for running the IGN composite pipeline (replaces the former
 // hardcoded IGN_BUILD_MINZOOM=12). Pixel-density based: we only invest the
@@ -62,12 +67,14 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-// v22 / v16 / v7 — evicts DEM tiles encoded with the MNS (canopy) layer,
-// which produced 15–40 m vertical cliffs at every tile seam where an IGN
-// MNS tile met a Mapbox bare-earth tile. Post-v22 the layer is MNT.
-const CACHE_NAME = 'dem-tiles-v22';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v16';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v7';
+// v23 / v17 / v8 — evicts:
+//   (a) MNS-era tiles (canopy offset producing 15–40 m cliffs)
+//   (b) v22 tiles cached during the brief window where HIGHRES was queried
+//       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
+//       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
+const CACHE_NAME = 'dem-tiles-v23';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v17';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v8';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 

@@ -348,123 +348,115 @@ async function handleOrthoRequest(z, x, y) {
     return await transparentResponse();
   }
 
-  // Deduplicate: reuse in-flight promise for the same tile. If the in-flight
-  // fetch takes longer than ORTHO_INFLIGHT_PROMOTE_MS, we serve a cropped
-  // parent tile *now* while letting the real fetch continue in the background
-  // and replace the cache entry when it completes. This is what eliminates
-  // the dezoom "white holes" without cancelling useful work.
-  if (orthoInflight.has(tileKey)) {
-    const inflight = orthoInflight.get(tileKey);
-    const promoted = await Promise.race([
-      inflight.then((r) => ({ ok: true, result: r })),
-      new Promise((resolve) => setTimeout(() => resolve({ ok: false }), ORTHO_INFLIGHT_PROMOTE_MS)),
-    ]);
-    if (promoted.ok) {
-      return promoted.result ? promoted.result.clone() : await transparentResponse();
-    }
-    // Still in flight after the promotion window — serve a parent crop.
-    const fb = await tryParentOrthoOverzoom(cache, z, x, y);
-    if (fb) return fb;
-    // No parent available either — wait the inflight out (no alternative).
-    const result = await inflight;
-    return result ? result.clone() : await transparentResponse();
-  }
+  // Get (or start) the in-flight primary fetch for this tile.
+  let inflight = orthoInflight.get(tileKey);
+  if (!inflight) {
+    inflight = (async () => {
+      try {
+        const polyLoaded = await ensureFrancePoly();
 
-  const promise = (async () => {
-    try {
-      const polyLoaded = await ensureFrancePoly();
+        if (!polyLoaded) {
+          // Fallback: fetch without clipping, through ortho concurrency limiter
+          const response = await scheduleOrtho(async () => {
+            const url = buildOrthoTileURL(z, x, y);
+            const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
+            if (!res.ok) return null;
+            return new Response(await res.blob(), {
+              status: 200,
+              headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
+            });
+          });
+          if (!response || response === PRUNED_SENTINEL) return null;
+          cache.put(cacheKey, response.clone());
+          return response;
+        }
 
-      if (!polyLoaded) {
-        // Fallback: fetch without clipping, through ortho concurrency limiter
-        const response = await scheduleOrtho(async () => {
+        if (!tileOverlapsFrance(z, x, y)) return null;
+
+        // Always run the real 5×5 point-in-polygon classifier. The former
+        // `z <= 10 → 'border'` short-circuit forced canvas-mask clipping on
+        // every low-zoom tile, saturating the OffscreenCanvas pool during fast
+        // dezoom (root cause of the "patchwork of missing tiles" artifact).
+        // With minzoom=9 on the layer there are now ≤16 ortho tiles at z9 for
+        // the full French bbox, so the classifier cost is negligible.
+        const classification = classifyOrthoTile(z, x, y);
+        if (classification === 'outside') return null;
+
+        // Fetch IGN tile through the ortho concurrency limiter
+        const fetchResult = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
           const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
-          if (!res.ok) return null;
-          return new Response(await res.blob(), {
+          if (!res.ok) {
+            const errorType = res.status === 404 ? 'permanent' : 'transient';
+            orthoNegSet(tileKey, errorType);
+            return null;
+          }
+          const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+          if (!contentType.startsWith('image/')) {
+            orthoNegSet(tileKey, 'permanent');
+            return null;
+          }
+          return await res.blob();
+        });
+
+        // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue
+        if (!fetchResult || fetchResult === PRUNED_SENTINEL) {
+          return null;
+        }
+
+        let response;
+        if (classification === 'inside') {
+          response = new Response(fetchResult, {
             status: 200,
             headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
           });
-        });
-        if (!response || response === PRUNED_SENTINEL) return null;
+        } else {
+          const maskedPng = await maskOrthoTile(fetchResult, z, x, y);
+          response = new Response(maskedPng, {
+            status: 200,
+            headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' },
+          });
+        }
+
         cache.put(cacheKey, response.clone());
         return response;
-      }
-
-      if (!tileOverlapsFrance(z, x, y)) return null;
-
-      // Always run the real 5×5 point-in-polygon classifier. The former
-      // `z <= 10 → 'border'` short-circuit forced canvas-mask clipping on
-      // every low-zoom tile, saturating the OffscreenCanvas pool during fast
-      // dezoom (root cause of the "patchwork of missing tiles" artifact).
-      // With minzoom=9 on the layer there are now ≤16 ortho tiles at z9 for
-      // the full French bbox, so the classifier cost is negligible.
-      const classification = classifyOrthoTile(z, x, y);
-      if (classification === 'outside') return null;
-
-      // Fetch IGN tile through the ortho concurrency limiter
-      const fetchResult = await scheduleOrtho(async () => {
-        const url = buildOrthoTileURL(z, x, y);
-        const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
-        if (!res.ok) {
-          const errorType = res.status === 404 ? 'permanent' : 'transient';
-          orthoNegSet(tileKey, errorType);
+      } catch (err) {
+        const name = err && err.name;
+        if (name === 'TimeoutError' || name === 'AbortError') {
+          orthoNegSet(tileKey, 'transient');
           return null;
         }
-        const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
-        if (!contentType.startsWith('image/')) {
-          orthoNegSet(tileKey, 'permanent');
-          return null;
-        }
-        return await res.blob();
-      });
-
-      // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue
-      if (!fetchResult || fetchResult === PRUNED_SENTINEL) {
-        // Parent-tile overzoom fallback — serve a cropped cached ancestor so
-        // the user sees imagery (slightly blurry) instead of transparent,
-        // matching how Mapbox natively handles missing raster tiles.
-        const fb = await tryParentOrthoOverzoom(cache, z, x, y);
-        if (fb) return fb;
-        return null;
-      }
-
-      let response;
-      if (classification === 'inside') {
-        response = new Response(fetchResult, {
-          status: 200,
-          headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
-        });
-      } else {
-        const maskedPng = await maskOrthoTile(fetchResult, z, x, y);
-        response = new Response(maskedPng, {
-          status: 200,
-          headers: { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=604800' },
-        });
-      }
-
-      cache.put(cacheKey, response.clone());
-      return response;
-    } catch (err) {
-      // AbortSignal.timeout() throws with name === 'TimeoutError'; manual
-      // AbortController signals throw 'AbortError'. Both are non-error flow
-      // control: mark the tile as transiently failed, attempt the cropped
-      // parent-overzoom, and stay quiet in the console.
-      const name = err && err.name;
-      if (name === 'TimeoutError' || name === 'AbortError') {
         orthoNegSet(tileKey, 'transient');
-        const fb = await tryParentOrthoOverzoom(cache, z, x, y);
-        if (fb) return fb;
+        console.error('[sw-dem] Ortho error', z, x, y, err);
         return null;
       }
-      orthoNegSet(tileKey, 'transient');
-      console.error('[sw-dem] Ortho error', z, x, y, err);
-      return null;
-    }
-  })().finally(() => {
-    orthoInflight.delete(tileKey);
-  });
+    })().finally(() => {
+      orthoInflight.delete(tileKey);
+    });
+    orthoInflight.set(tileKey, inflight);
+  }
 
-  orthoInflight.set(tileKey, promise);
-  const result = await promise;
-  return result ? result : await transparentResponse();
+  // Race the in-flight fetch against the promotion window. If the real tile
+  // arrives within ORTHO_INFLIGHT_PROMOTE_MS → return it. Otherwise serve a
+  // cropped parent tile immediately while the real fetch keeps running in
+  // the background (it will populate the cache so the next request is
+  // instant). This applies to BOTH primary and duplicate requests: any slow
+  // tile falls back to a blurry parent within 800 ms instead of leaving a
+  // hole visible for up to 8 seconds.
+  const raced = await Promise.race([
+    inflight.then((r) => ({ ok: true, result: r })),
+    new Promise((resolve) => setTimeout(() => resolve({ ok: false }), ORTHO_INFLIGHT_PROMOTE_MS)),
+  ]);
+  if (raced.ok) {
+    return raced.result ? raced.result.clone() : await transparentResponse();
+  }
+  const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+  if (fb) {
+    // Let the primary finish in the background so it populates the cache.
+    inflight.catch(() => {});
+    return fb;
+  }
+  // No parent available — wait for the primary (no better option).
+  const result = await inflight;
+  return result ? result.clone() : await transparentResponse();
 }
