@@ -219,3 +219,25 @@ export const IconCheckpointEnd = ({ size = 20, ...p }: IconProps) => (
     <rect x="11.5" y="3" width="2" height="14" />
   </svg>
 );
+
+export const IconDroplet = ({ size = 12, ...p }: IconProps) => (
+  <svg {...base(size)} {...p} strokeWidth={1.8} fill="currentColor" stroke="none">
+    <path d="M12 2c-1.5 3-6 6.5-6 11a6 6 0 0 0 12 0c0-4.5-4.5-8-6-11z" />
+  </svg>
+);
+
+export const IconShoppingCart = ({ size = 12, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="9" cy="21" r="1.5" />
+    <circle cx="18" cy="21" r="1.5" />
+    <path d="M2 3h3l2.68 11.39a2 2 0 0 0 2 1.61h7.72a2 2 0 0 0 2-1.61L22 6H6" />
+  </svg>
+);
+
+export const IconPauseCircle = ({ size = 12, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <line x1="10" y1="9" x2="10" y2="15" />
+    <line x1="14" y1="9" x2="14" y2="15" />
+  </svg>
+);

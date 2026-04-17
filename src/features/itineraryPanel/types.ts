@@ -109,6 +109,25 @@ export interface TimelineItem {
 
 export type TimelineView = 'sheet' | 'timeline';
 
+/**
+ * Configuration for the "Timeline" (vertical km-rail) view.
+ *
+ * The rail is a stack of fixed-height rows, each representing `kmPerRow`
+ * kilometres. Items are absolutely positioned on top of the rail at a
+ * pixel offset of `(distanceKm / kmPerRow) * rowHeightPx`.
+ */
+export interface TimelineRailConfig {
+  /** Kilometres represented by each row. Defaults to 10. */
+  kmPerRow: number;
+  /** Pixel height of a single row. Defaults to 32. */
+  rowHeightPx: number;
+}
+
+export const DEFAULT_TIMELINE_RAIL: TimelineRailConfig = {
+  kmPerRow: 10,
+  rowHeightPx: 32,
+};
+
 export interface Itinerary {
   id: string;
   name: string;

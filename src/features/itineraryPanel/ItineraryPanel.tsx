@@ -7,7 +7,7 @@ import { TracageSection } from './sections/TracageSection';
 import { RythmeSection } from './sections/RythmeSection';
 import { PoiSection } from './sections/PoiSection';
 import { ComingSoonSection } from './sections/ComingSoonSection';
-import { TimelinePanel } from './sections/TimelinePanel';
+import { TimelinePanel } from './sections/timeline';
 import type { ItineraryPanelProps } from './types';
 import './styles/index.css';
 
