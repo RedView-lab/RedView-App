@@ -40,6 +40,36 @@ export interface RoadTypesState {
   cities: RoadPreference;
 }
 
+/** One POI type row: enabled + search radius (metres, or null when disabled). */
+export interface PoiEntry {
+  enabled: boolean;
+  /** Search radius in metres. Null when the row is fully disabled. */
+  distanceM: number | null;
+}
+
+export type PoiCategory =
+  | 'fountains'
+  | 'bakeries'
+  | 'supermarkets'
+  | 'restaurants'
+  | 'hotels'
+  | 'refuges'
+  | 'bars'
+  | 'passes';
+
+export interface PoiState {
+  fountains: PoiEntry;
+  bakeries: PoiEntry;
+  supermarkets: PoiEntry;
+  restaurants: PoiEntry;
+  hotels: PoiEntry;
+  refuges: PoiEntry;
+  bars: PoiEntry;
+  passes: PoiEntry;
+  /** "Affiner les résultats (beta)" toggle. */
+  refineResults: boolean;
+}
+
 export interface RhythmState {
   /** ISO date (yyyy-mm-dd) or null when empty. */
   startDate: string | null;
@@ -87,6 +117,7 @@ export interface Itinerary {
   priorities: PrioritiesState;
   roadTypes: RoadTypesState;
   rhythm: RhythmState;
+  poi: PoiState;
   timeline: TimelineItem[];
 }
 
@@ -144,6 +175,12 @@ export interface ItineraryPanelProps {
   onChangeRhythm?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
   onCalculate?: () => void;
+
+  // poi
+  onChangePoiEntry?: (category: PoiCategory, next: PoiEntry) => void;
+  onChangePoiRefine?: (value: boolean) => void;
+  onOpenPoiCategories?: () => void;
+  onLoadPois?: () => void;
 
   // timeline
   onChangeTimelineView?: (view: TimelineView) => void;

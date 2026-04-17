@@ -89,6 +89,17 @@ export function createDefaultItinerary(
       pauseAtFavoritePois: false,
       pauseEveryIntervalMin: null,
     },
+    poi: {
+      fountains: { enabled: true, distanceM: 40 },
+      bakeries: { enabled: true, distanceM: 40 },
+      supermarkets: { enabled: true, distanceM: 40 },
+      restaurants: { enabled: true, distanceM: 40 },
+      hotels: { enabled: true, distanceM: 40 },
+      refuges: { enabled: true, distanceM: 40 },
+      bars: { enabled: true, distanceM: 40 },
+      passes: { enabled: true, distanceM: 40 },
+      refineResults: true,
+    },
     timeline: [DEFAULT_TIMELINE_START, DEFAULT_TIMELINE_END],
   };
 }

@@ -226,7 +226,7 @@ export function RythmeSection({
         className="rvi-redbtn rvi-redbtn--full"
         onClick={onCalculate}
       >
-        <IconRepeat size={14} />
+        <IconRepeat size={16} />
         <span>Calculer</span>
       </button>
     </div>

@@ -5,6 +5,7 @@ import { ModeTabs } from './components/ModeTabs';
 import { ProfileBar } from './components/ProfileBar';
 import { TracageSection } from './sections/TracageSection';
 import { RythmeSection } from './sections/RythmeSection';
+import { PoiSection } from './sections/PoiSection';
 import { ComingSoonSection } from './sections/ComingSoonSection';
 import { TimelinePanel } from './sections/TimelinePanel';
 import type { ItineraryPanelProps } from './types';
@@ -36,6 +37,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onChangeRhythm,
     onUploadFit,
     onCalculate,
+    onChangePoiEntry,
+    onChangePoiRefine,
+    onOpenPoiCategories,
+    onLoadPois,
     onChangeTimelineView,
     onAddTimelineItem,
     onToggleTimelineItem,
@@ -108,7 +113,17 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           />
         ) : null}
         {project.activeMode === 'poi' ? (
-          <ComingSoonSection title="Points d'intérêt" />
+          active ? (
+            <PoiSection
+              poi={active.poi}
+              onChangeEntry={onChangePoiEntry}
+              onChangeRefine={onChangePoiRefine}
+              onOpenCategories={onOpenPoiCategories}
+              onLoad={onLoadPois}
+            />
+          ) : (
+            <ComingSoonSection title="Points d'intérêt" />
+          )
         ) : null}
         {project.activeMode === 'nutrition' ? (
           <ComingSoonSection title="Nutrition" />

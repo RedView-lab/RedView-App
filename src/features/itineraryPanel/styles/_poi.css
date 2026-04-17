@@ -1,0 +1,45 @@
+/* POI section — refine row + Catégories dropdown button.
+   Source of truth: Figma 1539:20343 / 1539:20347. */
+
+.rvi-poi-refine {
+  align-items: center;
+  gap: 8px;
+}
+
+.rvi-poi-refine__toggle {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.rvi-poi-refine__toggle .rvi-toggle-row {
+  padding: 0;
+  min-height: 0;
+}
+
+.rvi-categories-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 8px 8px 8px 8px;
+  border: 1px solid var(--rvi-border);
+  border-radius: var(--rvi-radius-md);
+  color: var(--rvi-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+.rvi-categories-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rvi-categories-btn__label {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.rvi-categories-btn__chevron {
+  opacity: 0.8;
+}

@@ -115,6 +115,18 @@ export function ItineraryPanelContainer({
       }
       onUploadFit={() => {}}
       onCalculate={() => {}}
+      onChangePoiEntry={(category, next) =>
+        updateActive((it) => {
+          it.poi[category] = next;
+        })
+      }
+      onChangePoiRefine={(value) =>
+        updateActive((it) => {
+          it.poi.refineResults = value;
+        })
+      }
+      onOpenPoiCategories={() => {}}
+      onLoadPois={() => {}}
       onChangeTimelineView={(view: TimelineView) =>
         setProject((p) => ({ ...p, timelineView: view }))
       }

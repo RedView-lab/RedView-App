@@ -73,6 +73,14 @@ export const IconDownload = ({ size = 16, ...p }: IconProps) => (
   </svg>
 );
 
+export const IconDownloadCircle = ({ size = 16, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="12" cy="12" r="10" />
+    <polyline points="8 12 12 16 16 12" />
+    <line x1="12" y1="8" x2="12" y2="16" />
+  </svg>
+);
+
 export const IconShare = ({ size = 16, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
