@@ -9,22 +9,6 @@ let activeIGN = 0;
 const ignQueue = [];
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
-// Last-failure reason keyed by `z/col/row` — diagnostic only. Populated by
-// getIGNTile on null returns, consumed by build-tile.js when logging the
-// FETCH histogram so we can tell 404 vs timeout vs pruned apart instead of
-// just seeing a bare "missing=9". Weak-ish: capped to 2000 entries.
-const ignLastReason = new Map();
-function _setReason(key, reason) {
-  if (ignLastReason.size > 2000) {
-    const first = ignLastReason.keys().next().value;
-    if (first !== undefined) ignLastReason.delete(first);
-  }
-  ignLastReason.set(key, reason);
-}
-function getIGNLastReason(z, col, row) {
-  return ignLastReason.get(`${z}/${col}/${row}`) || 'unknown';
-}
-
 function evict(cache, max) {
   if (cache.size <= max) return;
   const iter = cache.keys();
@@ -133,32 +117,24 @@ async function getIGNTile(z, col, row) {
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
         cacheNull(key, errorType);
-        _setReason(key, `http-${res.status}`);
         return null;
       }
       const buf = await res.arrayBuffer();
       if (buf.byteLength !== IGN_SRC_TILE_SIZE * IGN_SRC_TILE_SIZE * 4) {
         cacheNull(key, 'permanent');
-        _setReason(key, `size-${buf.byteLength}`);
         return null;
       }
       const data = decodeBIL32(buf);
       evict(ignTileCache, IGN_CACHE_MAX);
       ignTileCache.set(key, data);
-      ignLastReason.delete(key);
       return data;
-    } catch (err) {
+    } catch {
       cacheNull(key, 'transient');
-      const name = err && err.name ? err.name : 'error';
-      _setReason(key, name === 'TimeoutError' ? 'timeout' : `exc-${name}`);
       return null;
     }
   }).then((result) => {
     // If the request was pruned from the queue, do NOT cache — return null
-    if (result === PRUNED_SENTINEL) {
-      _setReason(key, 'pruned');
-      return null;
-    }
+    if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {
     ignInflight.delete(key);
