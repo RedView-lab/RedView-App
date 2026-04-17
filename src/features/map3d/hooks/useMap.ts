@@ -126,6 +126,8 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
     mapRef.current = map;
 
     let cancelled = false;
+    // SW → client upgrade listener (hoisted so cleanup can deregister it).
+    let onSwMessage: ((e: MessageEvent) => void) | null = null;
 
     // Wait for BOTH style.load AND swReady before adding sources.
     (async () => {
@@ -196,6 +198,37 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       };
       map.on('sourcedata', onSourceData);
 
+      // SW → client: DEM tile upgraded in background (LiDAR blob replaced
+      // earlier Mapbox/partial result). Debounce-reload the DEM source so
+      // Mapbox GL re-reads the HTTP endpoint; the new CacheStorage entry is
+      // served instantly. Only runs when the map is idle — avoids flicker
+      // during pan/zoom. This is what makes "the user stays put and the 3D
+      // quality ramps up to LiDAR HD" actually work.
+      let reloadTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleDemReload = () => {
+        if (reloadTimer) clearTimeout(reloadTimer);
+        reloadTimer = setTimeout(() => {
+          reloadTimer = null;
+          if (!map || map.isMoving() || map.isZooming()) {
+            // Retry once the user stops moving
+            map.once('idle', () => {
+              const src = map.getSource(unifiedDEMSource.id) as
+                (mapboxgl.RasterDemTileSource & { reload?: () => void }) | undefined;
+              if (src && typeof src.reload === 'function') src.reload();
+            });
+            return;
+          }
+          const src = map.getSource(unifiedDEMSource.id) as
+            (mapboxgl.RasterDemTileSource & { reload?: () => void }) | undefined;
+          if (src && typeof src.reload === 'function') src.reload();
+        }, 600);
+      };
+      onSwMessage = (e: MessageEvent) => {
+        if (e.data?.type !== 'DEM_TILE_UPGRADED') return;
+        scheduleDemReload();
+      };
+      navigator.serviceWorker.addEventListener('message', onSwMessage);
+
       setIsLoaded(true);
     })().catch((err) => {
       console.error('[map3d] init failed', err);
@@ -225,6 +258,10 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
     return () => {
       cancelled = true;
       if (saveTimer) clearTimeout(saveTimer);
+      if (onSwMessage) {
+        navigator.serviceWorker.removeEventListener('message', onSwMessage);
+        onSwMessage = null;
+      }
       if (mapRef.current) {
         const center = mapRef.current.getCenter();
         saveViewport({

@@ -70,8 +70,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v26';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v20';
+const CACHE_NAME = 'dem-tiles-v27';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v21';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
@@ -97,9 +97,15 @@ const IGN_QUEUE_MAX = 600;
 const ORTHO_CONCURRENCY = 16;
 const ORTHO_QUEUE_MAX = 400;
 
-// IGN WMTS fetch timeout (ms). Geoplateforme can spike to 10+ s during peak
-// hours; 15 s avoids false-positive permanent-error caching.
-const IGN_FETCH_TIMEOUT_MS = 15_000;
+// IGN WMTS fetch timeout (ms). A single sub-tile hitting this timeout and then
+// cascading through the zoom-level fallback (up to IGN_FALLBACK_MAX_DEPTH+1
+// attempts) used to take 15 s × 4 = 60 s worst-case, which blew EVERY
+// soft-deadline at z≥14 and made buildIGNTile return 0-coverage while the
+// real data arrived 10 s later — directly causing the "ok=0 missing=9" logs.
+// 6 s matches the tail latency of data.geopf.fr under normal load; genuine
+// slow responses (>6 s) are almost always indistinguishable from dead
+// connections and should be retried via the short transient negative-cache.
+const IGN_FETCH_TIMEOUT_MS = 6_000;
 
 // Orthophoto fetch timeout — lower than DEM because a stuck ortho tile keeps
 // the blurred parent on screen and blocks the ortho queue. 8 s is enough for

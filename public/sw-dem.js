@@ -66,7 +66,7 @@ const OLD_CACHES = [
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
   'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
-  'dem-tiles-v25',
+  'dem-tiles-v25', 'dem-tiles-v26',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -76,6 +76,7 @@ const OLD_CACHES = [
   'dem-negative-v17',
   'dem-negative-v18',
   'dem-negative-v19',
+  'dem-negative-v20',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3',
@@ -272,9 +273,16 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         if (tileClass !== 'outside') {
           const ignResult = await buildIGNTile(z, x, y, tileClass);
           if (ignResult) {
-            if (ignResult.blob) {
+            // 0-coverage placeholder: sub-tiles still in flight — capture
+            // pendingFetches so the background upgrade can rebuild the tile
+            // once they land, even though we have nothing to serve now.
+            // Fall through to Mapbox/overzoom for the immediate response.
+            if (ignResult.emptyPending) {
+              upgradePending = ignResult.pendingFetches;
+            } else if (ignResult.blob) {
               pngBlob = ignResult.blob;
               demSource = ignResult.source || 'ign';
+              upgradePending = ignResult.pendingFetches;
             } else {
               await acquireComposite();
               try {
@@ -283,8 +291,8 @@ async function handleDemRequest(_request, z, x, y, _depth) {
                 releaseComposite();
               }
               demSource = 'ign-composite';
+              upgradePending = ignResult.pendingFetches;
             }
-            upgradePending = ignResult.pendingFetches;
           }
         }
       }
@@ -344,6 +352,20 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
     //    confirmed empty (outside France, no Mapbox token, etc.)
     if (!pngBlob) {
+      // If IGN sub-tiles are still in flight, skip negative caching AND
+      // schedule the background upgrade so the next request picks up LiDAR
+      // instead of the stale 204. Without this, a user who stops panning in
+      // France at z=14 sees perma-Mapbox-flat because the 60 s neg-cache TTL
+      // keeps serving 204 → Mapbox GL uses parent tile → never requests
+      // again → upgrade never runs.
+      if (upgradePending && upgradePending.length) {
+        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
+        if (DEBUG) {
+          const dt = (performance.now() - t0).toFixed(0);
+          console.log(`[sw-dem] 204+upgrade ${z}/${x}/${y} — sub-tiles in flight, ${dt}ms`);
+        }
+        return noTileResponse('ign-pending');
+      }
       const isConfirmedEmpty = !inFrance || !mapboxToken;
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
       const reason = !mapboxToken
@@ -433,6 +455,15 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
 
       await cache.put(cacheKey, buildDemResponse(upgradedBlob, upgradedSource + '+upgrade'));
       if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgradedSource}`);
+      // Notify all open clients so Mapbox GL can refresh the DEM source and
+      // pick up the fresh LiDAR blob from CacheStorage. Without this message,
+      // a stationary user sees the original (Mapbox or dilated partial)
+      // tile forever — the cache is upgraded but Mapbox GL never re-reads
+      // the HTTP endpoint until the viewport changes.
+      try {
+        const clients = await self.clients.matchAll({ type: 'window' });
+        for (const c of clients) c.postMessage({ type: 'DEM_TILE_UPGRADED', z, x, y });
+      } catch { /* client iteration best-effort */ }
     } catch (e) {
       if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);
     } finally {

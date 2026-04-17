@@ -75,17 +75,27 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
 
   // Log IGN sub-tile fetch results
   let ignOk = 0, ignFallback = 0, ignMissing = 0;
+  const missReasons = new Map();
   for (const [key, result] of tileMap) {
     if (result && result.data) {
       if (result.actualZ < demZ) ignFallback++;
       else ignOk++;
     } else {
       ignMissing++;
+      // key is "col/row" — ask the fetcher for the last error reason at demZ
+      const [col, row] = key.split('/').map(Number);
+      const reason = (typeof getIGNLastReason === 'function')
+        ? getIGNLastReason(demZ, col, row)
+        : 'unknown';
+      missReasons.set(reason, (missReasons.get(reason) || 0) + 1);
     }
   }
   if (ignMissing > 0 || ignFallback > 0) {
+    const reasonStr = ignMissing > 0
+      ? ' [' + [...missReasons.entries()].map(([r, n]) => `${r}×${n}`).join(' ') + ']'
+      : '';
     console.log(
-      `[sw-dem][build] %c IGN FETCH %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${ignOk} fallback=${ignFallback} missing=${ignMissing} (demZ=${demZ})`,
+      `[sw-dem][build] %c IGN FETCH %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${ignOk} fallback=${ignFallback} missing=${ignMissing} (demZ=${demZ})${reasonStr}`,
       'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
@@ -155,7 +165,17 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
 
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
+    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms${hasPending ? ` (${pendingCount} in flight — will upgrade)` : ''}`);
+    // IMPORTANT: if any sub-tile is still in flight, we hand the caller a
+    // "pending placeholder" so it can serve the Mapbox fallback NOW but
+    // schedule a background rebuild as soon as stragglers land in the IGN
+    // memory cache. Without this, a 0-coverage result caused the pipeline
+    // to positive-cache a `mapbox` blob at the tile key for a full week —
+    // LiDAR HD never got a chance to replace it even after the fetches
+    // completed 2 s later.
+    if (hasPending) {
+      return { blob: null, elevations: null, coverage: null, source: 'ign-pending', pendingFetches: fetches, emptyPending: true };
+    }
     return null;
   }
 
