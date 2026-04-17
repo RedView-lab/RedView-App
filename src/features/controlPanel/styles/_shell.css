@@ -34,6 +34,15 @@
      Inset highlight + subtle outer border sell the glass edge. */
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
+  
+  /* CRITICAL MAPBOX GL FIXES: Mapbox uses WebGL which renders on a separate 
+     hardware layer. To allow CSS backdrop-filter to "see" and blur the map, 
+     we must force this panel into its own compositing layer. */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  isolation: isolate;
+  
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
