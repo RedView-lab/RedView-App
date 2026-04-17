@@ -67,7 +67,7 @@ const OLD_CACHES = [
   'dem-negative-v13', 'dem-negative-v14',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5',
-  'slope-tiles-v1', 'slope-tiles-v2',
+  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3',
 ];
 
 self.addEventListener('install', (e) => {
@@ -425,7 +425,7 @@ async function handleSlopeRequest(z, x, y, colorMode) {
 
   try {
     const demBlob = await demResponse.clone().blob();
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode);
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache);
     const response = new Response(slopeBlob, {
       status: 200,
       headers: {

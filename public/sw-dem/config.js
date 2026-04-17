@@ -54,7 +54,7 @@ const ORTHO_TILE_SIZE = 256;
 const CACHE_NAME = 'dem-tiles-v21';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v15';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v6';
-const SLOPE_CACHE_NAME = 'slope-tiles-v3';
+const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 // Debug flag — gate verbose per-tile logging. Warnings and errors always log.
