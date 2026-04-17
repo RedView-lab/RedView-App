@@ -66,6 +66,7 @@ const OLD_CACHES = [
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
   'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
+  'dem-tiles-v25',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -74,6 +75,7 @@ const OLD_CACHES = [
   'dem-negative-v16',
   'dem-negative-v17',
   'dem-negative-v18',
+  'dem-negative-v19',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3',
@@ -290,14 +292,48 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       // below — running IGN without the polygon would misclassify every tile.
     }
 
-    // 4. Mapbox global fallback
-    if (!pngBlob && mapboxToken) {
+    // 3b. High-zoom-in-France LiDAR-preserving fallback.
+    //
+    // Problem we are solving: when IGN fails transiently on a single tile
+    // inside France at mercZ > MAPBOX_DEM_MAXZOOM (queue prune, LiDAR-HD
+    // nodata pocket, 10 s timeout) the legacy step 4 below would call
+    // fetchMapboxTile(), which clamps to z14 and server-overzooms a flat
+    // 30 m tile up to z15/16/17. That blob is geometrically smooth but
+    // elevationally flat — EXACTLY the "je perds tout, 30 m en zoom-in"
+    // symptom — and then it gets positive-cached for 1 week with
+    // X-DEM-Source: mapbox, so the bad tile persists long after IGN
+    // recovers.
+    //
+    // At this zoom the only admissible fallback is our OWN cache: mid-zoom
+    // parent tiles (z ≤ 14) in France are already LiDAR-HD composites.
+    // Bicubic-overzooming a z14 LiDAR tile to z17 preserves real relief
+    // (rocks, ridgelines, couloirs) — infinitely better than stretching a
+    // 30 m Mapbox pixel. If no LiDAR parent is available either, we return
+    // 204 with a very short TTL so Mapbox GL falls back to its own cached
+    // parent mesh (which is again the LiDAR blob one zoom level up) and
+    // retries the IGN pipeline on the next pan/zoom.
+    if (!pngBlob && inFrance && z > MAPBOX_DEM_MAXZOOM) {
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+      if (fb) {
+        pngBlob = fb.blob;
+        demSource = fb.source + '-lidar-parent';
+      }
+    }
+
+    // 4. Mapbox global fallback — only at low zoom or outside France.
+    // Inside France at mercZ > MAPBOX_DEM_MAXZOOM we deliberately skip this:
+    // Mapbox Terrain-DEM is already overzoomed server-side there (flat 30 m)
+    // and masking that as "detail" actively degrades the mesh vs the LiDAR
+    // parent-overzoom path above.
+    const skipMapboxHighZoomInFrance = inFrance && z > MAPBOX_DEM_MAXZOOM;
+    if (!pngBlob && mapboxToken && !skipMapboxHighZoomInFrance) {
       pngBlob = await fetchMapboxTile(z, x, y);
       if (pngBlob) demSource = 'mapbox';
     }
 
-    // 5. Single-step parent overzoom
-    if (!pngBlob) {
+    // 5. Single-step parent overzoom (outside-France & low-zoom path).
+    //    In-France high-zoom already tried parent-overzoom at step 3b.
+    if (!pngBlob && !skipMapboxHighZoomInFrance) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -310,7 +346,9 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     if (!pngBlob) {
       const isConfirmedEmpty = !inFrance || !mapboxToken;
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
-      const reason = !mapboxToken ? 'no-token' : (inFrance ? 'pipeline-error' : 'no-coverage');
+      const reason = !mapboxToken
+        ? 'no-token'
+        : (skipMapboxHighZoomInFrance ? 'ign-pending-highzoom' : (inFrance ? 'pipeline-error' : 'no-coverage'));
       negCache.put(cacheKey, new Response(null, {
         status: 204,
         headers: {

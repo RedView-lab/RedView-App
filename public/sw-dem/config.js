@@ -70,8 +70,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v25';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v19';
+const CACHE_NAME = 'dem-tiles-v26';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v20';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
