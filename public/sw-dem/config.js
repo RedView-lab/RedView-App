@@ -45,12 +45,11 @@ const IGN_DEM_MAXZOOM = 17;
 // only invest the IGN fetch + composite cost when the rendered pixel is
 // meaningfully smaller than what Mapbox Terrain-RGB already delivers.
 //
-// Threshold = 20 m/px. At France median φ≈46° this crosses between z12 and
-// z13, so the IGN composite engages at z13+ where the user starts perceiving
-// sub-Mapbox detail (MNS canopy, rock outcrops, ridgelines). Below that,
+// Threshold = 25 m/px. At France median φ≈46° this crosses just above z12,
+// so the IGN composite engages at z13+ across the country. Below that,
 // Mapbox Terrain-RGB (~30 m native) is visually indistinguishable — running
 // IGN there only saturates the composite semaphore during fast dezoom.
-const IGN_ENGAGE_MPP = 20;
+const IGN_ENGAGE_MPP = 25;
 function shouldUseIGN(mercZ, lat) {
   if (mercZ < IGN_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -71,8 +70,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v24';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v18';
+const CACHE_NAME = 'dem-tiles-v25';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v19';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
@@ -129,24 +128,27 @@ const IGN_FALLBACK_MAX_DEPTH = 3;
 // Maximum zoom levels to overzoom DEM when native tile is missing
 const DEM_OVERZOOM_MAX_DEPTH = 4;
 
-// Soft deadline for the per-Mapbox-tile batch of IGN sub-tile fetches.
-// When this fires we serve the best-quality result we have right now
-// (composited with Mapbox for any still-pending sub-tiles) and let the
-// stragglers continue in the background. The background completion triggers
-// a cache-replace with the full-quality IGN blob — see scheduleBackgroundUpgrade
-// in sw-dem.js. The user never waits longer than this for first paint, and
-// every tile eventually converges to best quality.
+// Zoom-adaptive soft deadline. When close to the terrain the user expects
+// LiDAR-HD detail — NOT a Mapbox 30 m fallback. The deadline is the maximum
+// the pipeline will wait for all IGN sub-tiles before compositing with
+// whatever it has; any stragglers are deliberately allowed to dominate the
+// wall-clock budget at high zoom because:
+//   1. Mapbox Terrain-RGB at z≥14 is server-overzoomed (flat), so falling
+//      back to it actively harms visual quality.
+//   2. IGN sub-tile fetches are cached + deduplicated in-memory; the user
+//      pays the cost once per tile, then every subsequent render is instant.
+//   3. At z≥16 the Mapbox prefill path hides real rock detail under a
+//      bilinear 30-m blur — worse than a brief loading delay.
 //
-// Zoom-adaptive:
-//   * z≤13: ~1.2 s — few sub-tiles per tile, hot cache.
-//   * z14–15: 2.5 s — viewport-wide IGN engage, bursty queue.
-//   * z≥16: 3.5 s — high-zoom viewport can demand 80+ sub-tiles at once;
-//     a tight deadline here was the root cause of "zoom-in collapses to
-//     30 m Mapbox detail" — the IGN requests WERE 200-ing, we were just
-//     cutting them off before they finished.
+// Deadlines:
+//   * z≤12: 1.2 s — overview, Mapbox is fine anyway (IGN isn't engaged).
+//   * z=13:  2.0 s — IGN just engaged, balance between wait and coverage.
+//   * z=14:  4.0 s — first LiDAR zoom, need the detail.
+//   * z≥15: 8.0 s — close-up; the user absolutely wants LiDAR-HD, never 30 m.
 function ignSoftDeadlineMs(mercZ) {
-  if (mercZ <= 13) return 1_200;
-  if (mercZ <= 15) return 2_500;
-  return 3_500;
+  if (mercZ <= 12) return 1_200;
+  if (mercZ === 13) return 2_000;
+  if (mercZ === 14) return 4_000;
+  return 8_000;
 }
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_500; // fallback/legacy const
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 8_000; // fallback/legacy const

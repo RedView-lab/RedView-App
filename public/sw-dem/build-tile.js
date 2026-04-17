@@ -202,7 +202,16 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // not only at France borders. Composite.js handles the smooth blend for
   // border tiles; this prefill is the raw-elevation safety net for the
   // *inside* path where the dilation stage would otherwise propagate 0 m.
-  if (coveredCount < totalPixels) {
+  //
+  // GUARD: at mercZ > MAPBOX_DEM_MAXZOOM (=14) any Mapbox tile we fetch is
+  // server-side overzoomed — i.e. visually flat 30 m. Prefilling IGN holes
+  // with that coarse data is exactly what the user described as "qualité
+  // LiDAR qui disparaît quand je zoome in": even tiny sensor gaps in the
+  // LiDAR HD grid got filled with 30 m Mapbox blur, turning crisp rock
+  // detail into a smeared surface. At high zoom we rely solely on IGN
+  // dilation below (cardinal + diagonal neighbours from LiDAR-covered
+  // pixels), keeping the tile 100 % LiDAR-sourced.
+  if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
     try {
       const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
       if (mbBlob) {
