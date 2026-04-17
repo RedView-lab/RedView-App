@@ -18,6 +18,14 @@ const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
 const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
+// HIGHRES fallback: 5 m DEM covering all of France (vs LiDAR HD ~1 m but
+// patchy coverage). Used when MNS returns 0 coverage — 6× better than Mapbox
+// 30 m. Same WGS84G grid formula as MNS but different TileMatrixSet (z6-14).
+const IGN_DEM_FALLBACK_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES';
+const IGN_DEM_FALLBACK_TILEMATRIXSET = 'WGS84G_6_14';
+const IGN_DEM_FALLBACK_MINZOOM = 6;
+const IGN_DEM_FALLBACK_MAXZOOM = 14;
+
 const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
 const DEM_TILE_SIZE = 256;
 const IGN_SRC_TILE_SIZE = 256;
@@ -70,8 +78,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v26';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v20';
+const CACHE_NAME = 'dem-tiles-v27';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v21';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';

@@ -66,7 +66,7 @@ const OLD_CACHES = [
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
   'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
-  'dem-tiles-v25',
+  'dem-tiles-v25', 'dem-tiles-v26',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -76,6 +76,7 @@ const OLD_CACHES = [
   'dem-negative-v17',
   'dem-negative-v18',
   'dem-negative-v19',
+  'dem-negative-v20',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3',
@@ -169,12 +170,12 @@ self.addEventListener('fetch', (event) => {
 // DEM request handler
 // ---------------------------------------------------------------------------
 
-function buildDemResponse(pngBlob, demSource) {
+function buildDemResponse(pngBlob, demSource, shortCache) {
   return new Response(pngBlob, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
+      'Cache-Control': shortCache ? 'public, max-age=300' : 'public, max-age=604800',
       'X-DEM-Source': demSource,
     },
   });
@@ -263,6 +264,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // (low lat, earlier crossover) and Dunkirk (high lat, later crossover)
     // with the same continuous function instead of a magic-number zoom.
     let upgradePending = null; // in-flight IGN sub-tile fetches for background re-cache
+    let ignHadSomeData = false; // true when MNS returned partial/full coverage
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
     if (inFrance && shouldUseIGN(z, tileCenterLat)) {
@@ -272,24 +274,65 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         if (tileClass !== 'outside') {
           const ignResult = await buildIGNTile(z, x, y, tileClass);
           if (ignResult) {
-            if (ignResult.blob) {
-              pngBlob = ignResult.blob;
-              demSource = ignResult.source || 'ign';
-            } else {
-              await acquireComposite();
-              try {
-                pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
-              } finally {
-                releaseComposite();
-              }
-              demSource = 'ign-composite';
-            }
             upgradePending = ignResult.pendingFetches;
+            if (ignResult.elevations) {
+              // MNS returned actual elevation data (partial or full coverage)
+              ignHadSomeData = true;
+              if (ignResult.blob) {
+                pngBlob = ignResult.blob;
+                demSource = ignResult.source || 'ign';
+              } else {
+                await acquireComposite();
+                try {
+                  pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+                } finally {
+                  releaseComposite();
+                }
+                demSource = 'ign-composite';
+              }
+            }
+            // else: 0-coverage result — elevations is null. MNS had no data
+            // for this tile. Record in area negative cache for fast skip on
+            // adjacent tiles. Fall through to HIGHRES fallback below.
+            if (!ignHadSomeData && ignResult.allPermanent404) {
+              mnsAreaNegSet(z, x, y);
+            }
           }
         }
       }
       // If polyOk is false we deliberately fall through to the Mapbox branch
       // below — running IGN without the polygon would misclassify every tile.
+    }
+
+    // 3a. HIGHRES (5 m DEM) fallback — broader coverage than MNS LiDAR HD.
+    // Used when MNS returned 0 coverage (no LiDAR HD data for this area).
+    // HIGHRES covers all of France at ~5 m resolution — 6× better than
+    // Mapbox 30 m. Only fires when MNS had no data; when MNS returned
+    // partial data the composite path above already handled it.
+    if (!pngBlob && inFrance && !ignHadSomeData && shouldUseIGN(z, tileCenterLat)) {
+      const highresResult = await buildIGNFallbackTile(z, x, y);
+      if (highresResult) {
+        if (highresResult.elevations) {
+          if (highresResult.blob) {
+            pngBlob = highresResult.blob;
+            demSource = highresResult.source || 'ign-highres';
+          } else {
+            await acquireComposite();
+            try {
+              pngBlob = await compositeIGNMapbox(highresResult.elevations, highresResult.coverage, z, x, y);
+            } finally {
+              releaseComposite();
+            }
+            demSource = 'ign-highres-composite';
+          }
+        }
+        // Merge pending fetches from HIGHRES (if any) with MNS pending
+        if (highresResult.pendingFetches) {
+          upgradePending = upgradePending
+            ? [...upgradePending, ...highresResult.pendingFetches]
+            : highresResult.pendingFetches;
+        }
+      }
     }
 
     // 3b. High-zoom-in-France LiDAR-preserving fallback.
@@ -321,11 +364,10 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     }
 
     // 4. Mapbox global fallback — only at low zoom or outside France.
-    // Inside France at mercZ > MAPBOX_DEM_MAXZOOM we deliberately skip this:
-    // Mapbox Terrain-DEM is already overzoomed server-side there (flat 30 m)
-    // and masking that as "detail" actively degrades the mesh vs the LiDAR
-    // parent-overzoom path above.
-    const skipMapboxHighZoomInFrance = inFrance && z > MAPBOX_DEM_MAXZOOM;
+    // Inside France at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
+    // IGN returned some data (partial/full). When IGN had zero coverage
+    // (no MNS, no HIGHRES), Mapbox overzoomed 30 m is better than nothing.
+    const skipMapboxHighZoomInFrance = inFrance && z > MAPBOX_DEM_MAXZOOM && ignHadSomeData;
     if (!pngBlob && mapboxToken && !skipMapboxHighZoomInFrance) {
       pngBlob = await fetchMapboxTile(z, x, y);
       if (pngBlob) demSource = 'mapbox';
@@ -363,17 +405,21 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending);
+    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance);
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source);
+    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inFrance);
     return noTileResponse('error');
   }
 }
 
-async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending) {
-  const response = buildDemResponse(pngBlob, demSource);
+async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance) {
+  // Short cache (5 min) for Mapbox fallback tiles inside France at z≥13.
+  // These should eventually be replaced by IGN data; caching them for a week
+  // permanently masks the LiDAR upgrade path.
+  const shortCache = inFrance && z >= 13 && (demSource === 'mapbox' || demSource.startsWith('overzoom'));
+  const response = buildDemResponse(pngBlob, demSource, shortCache);
   cache.put(cacheKey, response.clone());
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
