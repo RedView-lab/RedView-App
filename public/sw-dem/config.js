@@ -81,10 +81,12 @@ const STATIC_CACHE_NAME = 'dem-static-v1';
 const DEBUG = false;
 
 const IGN_CACHE_MAX = 500;
-// HTTP/2 on data.geopf.fr comfortably multiplexes 20+ streams per connection.
-// Higher concurrency dramatically reduces queue wait — the main source of
-// sub-tile tail latency.
-const IGN_CONCURRENCY = 20;
+// HTTP/2 on data.geopf.fr comfortably multiplexes 40+ streams per connection.
+// At zoom-in the viewport needs ~80 sub-tiles in a single burst (20 Mapbox
+// tiles × 4 WGS84G sub-tiles). With concurrency=20 the 60-deep queue stretched
+// the effective fetch time past the 1.5 s soft deadline → tiles fell back to
+// overzoomed Mapbox (flat 30 m) even though IGN was serving 200s.
+const IGN_CONCURRENCY = 40;
 // Sized for 60° pitch at z14 across a widescreen viewport — burst can exceed
 // 300 tile requests in < 500 ms. Below this we start pruning, which is fine
 // but degrades the pan experience.
@@ -135,12 +137,16 @@ const DEM_OVERZOOM_MAX_DEPTH = 4;
 // in sw-dem.js. The user never waits longer than this for first paint, and
 // every tile eventually converges to best quality.
 //
-// Shorter than before (was 3 s) — with IGN_ENGAGE_MPP=10 we only composite
-// at z14+, where each tile needs at most 2×2 = 4 IGN sub-tiles. Those are
-// small (512x512 BIL32 ≈ 1 MB) and return in 300–800 ms on HTTP/2. Beyond
-// 1.2 s the remaining sub-tiles are tail-latency outliers — we'd rather
-// ship the partial composite + background-upgrade them than block.
+// Zoom-adaptive:
+//   * z≤13: ~1.2 s — few sub-tiles per tile, hot cache.
+//   * z14–15: 2.5 s — viewport-wide IGN engage, bursty queue.
+//   * z≥16: 3.5 s — high-zoom viewport can demand 80+ sub-tiles at once;
+//     a tight deadline here was the root cause of "zoom-in collapses to
+//     30 m Mapbox detail" — the IGN requests WERE 200-ing, we were just
+//     cutting them off before they finished.
 function ignSoftDeadlineMs(mercZ) {
-  return mercZ <= 13 ? 1_200 : 1_500;
+  if (mercZ <= 13) return 1_200;
+  if (mercZ <= 15) return 2_500;
+  return 3_500;
 }
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 1_500; // fallback/legacy const
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_500; // fallback/legacy const

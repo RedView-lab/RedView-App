@@ -30,8 +30,13 @@ importScripts(
 // Shared mutable state (used by sub-modules via global scope)
 let mapboxToken = '';
 
-// Composite concurrency limiter — caps peak memory from simultaneous blends
-const COMPOSITE_MAX_CONCURRENT = 2;
+// Composite concurrency limiter — caps peak memory from simultaneous blends.
+// Raised from 2 → 6: compositeIGNMapbox uses ≤2 MB per call (2× Float32(256²)
+// + a 512² Mapbox elev array) so 6 concurrent ≈ 12 MB — trivial. With 2 we
+// bottlenecked every zoom-in: a 20-tile viewport queued 10 composite cycles
+// of 300–500 ms each = 5 s wall-clock of pipeline pressure, causing
+// soft-deadline overflow downstream.
+const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
 function acquireComposite() {
