@@ -167,7 +167,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <LidarProvider>
-    <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: '100vw',
+        height: '100dvh',
+        // `isolation: isolate` puts the Mapbox WebGL canvas and every
+        // overlay panel inside the same isolated stacking context. That is
+        // what allows CSS `backdrop-filter` on the panels to actually
+        // sample the canvas pixels (otherwise Chromium falls back to the
+        // page background and the glassmorphism looks like a flat tint).
+        isolation: 'isolate',
+      }}
+    >
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
 
       <div style={leftPanelStyle}>

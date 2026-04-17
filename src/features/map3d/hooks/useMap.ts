@@ -114,8 +114,14 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
-      // CRITICAL FOR GLASSMORPHISM (backdrop-filter):
-      // Allows the browser compositor to read the WebGL canvas pixels so CSS blur can work.
+      // CRITICAL FOR GLASSMORPHISM (CSS `backdrop-filter` over the map):
+      // With the default (false), Chromium is allowed to discard the WebGL
+      // back-buffer immediately after compositing each frame. When the
+      // compositor then needs to read the canvas pixels to build the backdrop
+      // image for a `backdrop-filter` blur on an overlay panel, the buffer is
+      // already empty -> the panel blurs nothing and looks flat. Forcing the
+      // buffer to be preserved keeps the canvas content available as a
+      // backdrop source so the frosted-glass effect actually shows the map.
       preserveDrawingBuffer: true,
       // Sized for SaaS production use on laptops/desktops: at ~60 KB per raster
       // tile in VRAM, 1200 tiles ≈ 70 MB — well below any discrete-GPU budget

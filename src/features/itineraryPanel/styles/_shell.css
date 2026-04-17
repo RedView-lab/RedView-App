@@ -35,14 +35,13 @@
      inset highlight + outer shadow to sell the glass edge. */
   backdrop-filter: blur(30px) saturate(180%);
   -webkit-backdrop-filter: blur(30px) saturate(180%);
-  
-  /* CRITICAL MAPBOX GL FIXES: Mapbox uses WebGL which renders on a separate 
-     hardware layer. To allow CSS backdrop-filter to "see" and blur the map, 
-     we must force this panel into its own compositing layer. */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  will-change: transform;
-  isolation: isolate;
+
+  /* DO NOT add `transform`, `will-change`, `filter` or `isolation` here.
+     Mapbox already promotes its WebGL canvas to its own GPU layer; if this
+     panel is ALSO promoted to a separate compositor layer, Chromium can no
+     longer sample the sibling canvas as the backdrop image and falls back to
+     the page background (transparent -> looks opaque). `backdrop-filter`
+     itself triggers the layer promotion it needs. */
 
   border: 1px solid rgba(255, 255, 255, 0.10);
   box-shadow:
