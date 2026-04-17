@@ -180,10 +180,13 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
-  // --- Pre-fill uncovered border pixels with Mapbox elevation ---
-  // Prevents 0m sea-level default from creating km-high vertical cliffs
-  // at France borders where IGN stops and uncovered pixels remain.
-  if (isBorder && coveredCount < totalPixels) {
+  // --- Pre-fill uncovered pixels with Mapbox elevation ---
+  // Prevents 0 m sea-level default from creating km-high vertical cliffs
+  // anywhere IGN has NODATA holes (sensor gaps, water bodies, NaN pixels),
+  // not only at France borders. Composite.js handles the smooth blend for
+  // border tiles; this prefill is the raw-elevation safety net for the
+  // *inside* path where the dilation stage would otherwise propagate 0 m.
+  if (coveredCount < totalPixels) {
     try {
       const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
       if (mbBlob) {
@@ -206,7 +209,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
           }
         }
       }
-    } catch (e) {
+    } catch {
       // Mapbox prefill is best-effort; continue with dilation if it fails
     }
   }

@@ -208,6 +208,15 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
   const childX = targetX - (parentX << dz);
   const childY = targetY - (parentY << dz);
 
+  // Guard: target tile must actually lie inside the parent. This can fail on
+  // Mercator dateline wrap or if a caller passes mismatched coordinates.
+  if (childX < 0 || childY < 0 || childX >= nChildren || childY >= nChildren) {
+    if (DEBUG) console.warn(
+      `[sw-dem][overzoom] child OOB: target ${targetZ}/${targetX}/${targetY} not inside parent ${parentZ}/${parentX}/${parentY} (child=${childX},${childY} max=${nChildren - 1})`,
+    );
+    return null;
+  }
+
   // Source pixel region in the parent tile
   const srcSize = size / nChildren; // pixels covered by one child
   const srcX0 = childX * srcSize;
@@ -243,7 +252,11 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
         const c3 = pSample(ix + 2, iy + j);
         rows.push(cubicHermite(c0, c1, c2, c3, fx));
       }
-      const val = cubicHermite(rows[0], rows[1], rows[2], rows[3], fy);
+      // Catmull-Rom can overshoot near ridges/valleys; clamp to physical
+      // elevation bounds so spikes cannot survive the encode path.
+      let val = cubicHermite(rows[0], rows[1], rows[2], rows[3], fy);
+      if (val < MIN_VALID_ELEVATION_M) val = MIN_VALID_ELEVATION_M;
+      else if (val > MAX_VALID_ELEVATION_M) val = MAX_VALID_ELEVATION_M;
       out[py * size + px] = val;
       if (val < minE) minE = val;
       if (val > maxE) maxE = val;

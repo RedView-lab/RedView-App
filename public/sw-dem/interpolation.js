@@ -143,7 +143,7 @@ function despikeElevations(elevations, coverage, size) {
           neigh[n++] = elevations[nIdx];
         }
       }
-      if (n < 5) continue; // not enough neighbours to trust
+      if (n < 3) continue; // need at least 3 to compute a trustworthy median
       // Partial selection sort — enough to find the median
       for (let i = 0; i < n; i++) {
         let minJ = i;
@@ -151,7 +151,10 @@ function despikeElevations(elevations, coverage, size) {
         if (minJ !== i) { const t = neigh[i]; neigh[i] = neigh[minJ]; neigh[minJ] = t; }
         if (i >= (n >> 1)) break;
       }
-      const median = neigh[n >> 1];
+      // True median for even n: average of two middle elements. Prevents a
+      // single outlier that happened to be ordered middle-ish from surviving.
+      const mid = n >> 1;
+      const median = (n & 1) ? neigh[mid] : (neigh[mid - 1] + neigh[mid]) / 2;
       if (Math.abs(elevations[idx] - median) > DESPIKE_THRESHOLD_M) {
         out[idx] = median;
       }

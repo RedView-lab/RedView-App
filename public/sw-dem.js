@@ -59,12 +59,13 @@ const OLD_CACHES = [
   'dem-tiles-v5', 'dem-tiles-v6', 'dem-tiles-v7', 'dem-tiles-v8',
   'dem-tiles-v9', 'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
-  'dem-tiles-v17', 'dem-tiles-v18',
+  'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
   'dem-negative-v10', 'dem-negative-v11', 'dem-negative-v12',
-  'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3',
+  'dem-negative-v13',
+  'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
 
@@ -240,26 +241,30 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // imperceptible at that pixel density and the build jams the IGN queue.
     let upgradePending = null; // in-flight IGN sub-tile fetches for background re-cache
     if (inFrance && z >= IGN_BUILD_MINZOOM) {
-      await ensureFrancePoly();
-      const tileClass = classifyDemTile(z, x, y);
-      if (tileClass !== 'outside') {
-        const ignResult = await buildIGNTile(z, x, y, tileClass);
-        if (ignResult) {
-          if (ignResult.blob) {
-            pngBlob = ignResult.blob;
-            demSource = ignResult.source || 'ign';
-          } else {
-            await acquireComposite();
-            try {
-              pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
-            } finally {
-              releaseComposite();
+      const polyOk = await ensureFrancePoly();
+      if (polyOk) {
+        const tileClass = classifyDemTile(z, x, y);
+        if (tileClass !== 'outside') {
+          const ignResult = await buildIGNTile(z, x, y, tileClass);
+          if (ignResult) {
+            if (ignResult.blob) {
+              pngBlob = ignResult.blob;
+              demSource = ignResult.source || 'ign';
+            } else {
+              await acquireComposite();
+              try {
+                pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+              } finally {
+                releaseComposite();
+              }
+              demSource = 'ign-composite';
             }
-            demSource = 'ign-composite';
+            upgradePending = ignResult.pendingFetches;
           }
-          upgradePending = ignResult.pendingFetches;
         }
       }
+      // If polyOk is false we deliberately fall through to the Mapbox branch
+      // below — running IGN without the polygon would misclassify every tile.
     }
 
     // 4. Mapbox global fallback
@@ -334,6 +339,15 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
   (async () => {
     try {
       await Promise.allSettled(fetches);
+      // Skip if a concurrent request already upgraded this tile.
+      const existing = await cache.match(cacheKey);
+      if (existing) {
+        const src = existing.headers.get('X-DEM-Source') || '';
+        if (src.endsWith('+upgrade') || src === 'ign' || src.startsWith('ign-fallback-z')) {
+          // Already full-quality — nothing to gain.
+          return;
+        }
+      }
       // All sub-tiles are now in the IGN memory cache (either as data or as
       // cached-null with TTL). Rebuild — second pass is near-free.
       const tileClass = classifyDemTile(z, x, y);

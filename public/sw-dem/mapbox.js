@@ -37,39 +37,37 @@ async function fetchMapboxTile(z, x, y) {
       premultiplyAlpha: 'none',
     });
 
-    console.log(
-      `[sw-dem][mapbox] %c OK %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ})` : ''} ${img.width}x${img.height} blob=${blob.size}B, ${dt}ms`,
-      'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
-    );
+    try {
+      console.log(
+        `[sw-dem][mapbox] %c OK %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ})` : ''} ${img.width}x${img.height} blob=${blob.size}B, ${dt}ms`,
+        'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
 
-    // If we clamped zoom, extract the sub-tile via overzoom
-    if (clamped) {
-      // Return the parent blob — the caller (handleDemRequest) will
-      // overzoom it via overzoomDemTile if needed, OR we can do it here
-      // for a single-step fetch+overzoom.
-      const result = await overzoomDemTile(blob, fetchZ, fetchX, fetchY, z, x, y);
-      img.close();
-      if (result) {
-        console.log(
-          `[sw-dem][mapbox] %c OVERZOOM %c ${fetchZ}/${fetchX}/${fetchY}→${z}/${x}/${y} (mapbox clamped overzoom)`,
-          'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
-        );
+      // If we clamped zoom, extract the sub-tile via overzoom
+      if (clamped) {
+        const result = await overzoomDemTile(blob, fetchZ, fetchX, fetchY, z, x, y);
+        if (result) {
+          console.log(
+            `[sw-dem][mapbox] %c OVERZOOM %c ${fetchZ}/${fetchX}/${fetchY}→${z}/${x}/${y} (mapbox clamped overzoom)`,
+            'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
+          );
+        }
+        return result;
       }
-      return result;
-    }
 
-    if (img.width === DEM_TILE_SIZE && img.height === DEM_TILE_SIZE) {
+      if (img.width === DEM_TILE_SIZE && img.height === DEM_TILE_SIZE) {
+        return blob;
+      }
+      // Resample to DEM_TILE_SIZE × DEM_TILE_SIZE using raw PNG encoder
+      // to avoid sRGB gamma corruption of terrain-RGB elevation data.
+      const canvas = new OffscreenCanvas(DEM_TILE_SIZE, DEM_TILE_SIZE);
+      const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
+      ctx.drawImage(img, 0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
+      const imageData = ctx.getImageData(0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
+      return buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, imageData.data);
+    } finally {
       img.close();
-      return blob;
     }
-    // Resample to DEM_TILE_SIZE × DEM_TILE_SIZE using raw PNG encoder
-    // to avoid sRGB gamma corruption of terrain-RGB elevation data.
-    const canvas = new OffscreenCanvas(DEM_TILE_SIZE, DEM_TILE_SIZE);
-    const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
-    ctx.drawImage(img, 0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
-    img.close();
-    const imageData = ctx.getImageData(0, 0, DEM_TILE_SIZE, DEM_TILE_SIZE);
-    return buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, imageData.data);
   } catch (err) {
     console.warn(`[sw-dem][mapbox] %c ERROR %c ${z}/${x}/${y} — ${err.message || err}`, 'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', '');
     return null;

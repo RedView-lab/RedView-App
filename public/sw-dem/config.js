@@ -45,9 +45,9 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-const CACHE_NAME = 'dem-tiles-v19';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v13';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v4';
+const CACHE_NAME = 'dem-tiles-v20';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v14';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v5';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 

@@ -62,6 +62,7 @@ function pointInRing(lng, lat, ring) {
 }
 
 function pointInFrance(lng, lat) {
+  if (!francePoly) return false;
   for (let p = 0; p < francePoly.length; p++) {
     const [bw, bs, be, bn] = francePolyBBoxes[p];
     if (lng < bw || lng > be || lat < bs || lat > bn) continue;
@@ -82,6 +83,7 @@ function pointInFrance(lng, lat) {
 // ---------------------------------------------------------------------------
 
 function classifyOrthoTile(z, x, y) {
+  if (!francePoly) return 'outside';
   const b = mercatorTileBounds(z, x, y);
   let insideCount = 0;
   const N = 5;
@@ -99,6 +101,7 @@ function classifyOrthoTile(z, x, y) {
 }
 
 function hasPolyVertexInTile(b) {
+  if (!francePoly) return false;
   for (let p = 0; p < francePoly.length; p++) {
     const [bw, bs, be, bn] = francePolyBBoxes[p];
     if (be < b.west || bw > b.east || bn < b.south || bs > b.north) continue;
@@ -202,18 +205,24 @@ let orthoPrunedTotal = 0;
 
 function scheduleOrtho(fn) {
   return new Promise((resolve, reject) => {
-    orthoQueue.push({ fn, resolve, reject });
+    orthoQueue.push({ fn, resolve, reject, ts: performance.now() });
+    // Drop oldest-by-timestamp entries on overflow so the current viewport
+    // survives rapid pans (same strategy as the IGN queue).
     let pruned = 0;
     while (orthoQueue.length > ORTHO_QUEUE_MAX) {
-      const stale = orthoQueue.shift();
+      let oldestIdx = 0;
+      let oldestTs = orthoQueue[0].ts;
+      for (let i = 1; i < orthoQueue.length; i++) {
+        if (orthoQueue[i].ts < oldestTs) { oldestTs = orthoQueue[i].ts; oldestIdx = i; }
+      }
+      const stale = orthoQueue.splice(oldestIdx, 1)[0];
       stale.resolve(PRUNED_SENTINEL);
       pruned++;
     }
     if (pruned > 0) {
       orthoPrunedTotal += pruned;
-      console.warn(
-        `[sw-dem][ortho-queue] %c PRUNED %c ${pruned} stale ortho requests (queue=${orthoQueue.length}, active=${activeOrtho}/${ORTHO_CONCURRENCY}, lifetime=${orthoPrunedTotal})`,
-        'background:#FF5722;color:#fff;padding:2px 4px;border-radius:2px', ''
+      if (DEBUG) console.warn(
+        `[sw-dem][ortho-queue] pruned ${pruned} (queue=${orthoQueue.length}, active=${activeOrtho}/${ORTHO_CONCURRENCY}, lifetime=${orthoPrunedTotal})`,
       );
     }
     drainOrtho();
