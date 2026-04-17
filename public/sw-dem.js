@@ -59,10 +59,11 @@ const OLD_CACHES = [
   'dem-tiles-v5', 'dem-tiles-v6', 'dem-tiles-v7', 'dem-tiles-v8',
   'dem-tiles-v9', 'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
+  'dem-tiles-v17',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
-  'dem-negative-v10',
+  'dem-negative-v10', 'dem-negative-v11',
   'ortho-tiles-v1', 'ortho-tiles-v2',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
@@ -237,6 +238,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 3. IGN France pipeline — only at zooms where LiDAR HD detail is visible.
     // Below IGN_BUILD_MINZOOM we serve Mapbox directly: LiDAR detail would be
     // imperceptible at that pixel density and the build jams the IGN queue.
+    let upgradePending = null; // in-flight IGN sub-tile fetches for background re-cache
     if (inFrance && z >= IGN_BUILD_MINZOOM) {
       await ensureFrancePoly();
       const tileClass = classifyDemTile(z, x, y);
@@ -255,6 +257,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
             }
             demSource = 'ign-composite';
           }
+          upgradePending = ignResult.pendingFetches;
         }
       }
     }
@@ -294,7 +297,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource);
+    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending);
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth);
@@ -303,14 +306,64 @@ async function handleDemRequest(_request, z, x, y, _depth) {
   }
 }
 
-async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource) {
+async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending) {
   const response = buildDemResponse(pngBlob, demSource);
   cache.put(cacheKey, response.clone());
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
     console.log(`[sw-dem] ${demSource} ${z}/${x}/${y} ${dt}ms`);
   }
+  // Fire-and-forget: if IGN sub-tiles were still in flight at the soft
+  // deadline, let them finish in the background and replace the cached blob
+  // with a full-quality IGN build. Next time Mapbox requests this tile
+  // (natural tile-cache cycling while panning/zooming) it gets best quality.
+  if (upgradePending && upgradePending.length) {
+    scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
+  }
   return response;
+}
+
+// Coalesce concurrent upgrade jobs for the same tile.
+const pendingUpgrades = new Set();
+
+function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
+  const key = `${z}/${x}/${y}`;
+  if (pendingUpgrades.has(key)) return;
+  pendingUpgrades.add(key);
+
+  (async () => {
+    try {
+      await Promise.allSettled(fetches);
+      // All sub-tiles are now in the IGN memory cache (either as data or as
+      // cached-null with TTL). Rebuild — second pass is near-free.
+      const tileClass = classifyDemTile(z, x, y);
+      if (tileClass === 'outside') return;
+      const ignResult = await buildIGNTile(z, x, y, tileClass);
+      if (!ignResult) return;
+
+      let upgradedBlob = ignResult.blob;
+      let upgradedSource = ignResult.source || 'ign';
+      if (!upgradedBlob) {
+        await acquireComposite();
+        try {
+          upgradedBlob = await compositeIGNMapbox(
+            ignResult.elevations, ignResult.coverage, z, x, y,
+          );
+        } finally {
+          releaseComposite();
+        }
+        upgradedSource = 'ign-composite';
+      }
+      if (!upgradedBlob) return;
+
+      await cache.put(cacheKey, buildDemResponse(upgradedBlob, upgradedSource + '+upgrade'));
+      if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgradedSource}`);
+    } catch (e) {
+      if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);
+    } finally {
+      pendingUpgrades.delete(key);
+    }
+  })();
 }
 
 // ---------------------------------------------------------------------------

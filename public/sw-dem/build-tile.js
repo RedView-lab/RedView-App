@@ -20,35 +20,50 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     );
   }
 
-  // Fetch all needed IGN tiles — with zoom-level fallback
-  // tileMap stores: { data, actualZ, actualCol, actualRow } or null
+  // Fetch all needed IGN tiles — with zoom-level fallback.
+  // tileMap stores: { data, actualZ, actualCol, actualRow } or null.
+  // Each fetch writes its result into tileMap on completion; entries that
+  // haven't settled by the soft deadline remain `undefined` and are treated
+  // as null for the immediate build. The original promises are kept alive
+  // (`fetches`) so the caller can await them in background and trigger a
+  // cache-upgrade once the tail stragglers arrive.
   const tileMap = new Map();
   const fetches = [];
+  const keys = [];
   let fetchCount = 0;
   for (let row = tl.row; row <= br.row; row++) {
     for (let col = tl.col; col <= br.col; col++) {
       fetchCount++;
+      const key = `${col}/${row}`;
+      keys.push(key);
+      tileMap.set(key, undefined); // placeholder — "pending"
       fetches.push(
         getIGNTileWithFallback(demZ, col, row).then((result) => {
-          tileMap.set(`${col}/${row}`, result);
+          tileMap.set(key, result);
         }),
       );
     }
   }
 
-  // Batch timeout — proceed with whatever tiles completed rather than hanging forever
-  let batchTimedOut = false;
+  // Soft per-build deadline — serve best available result ASAP, let stragglers
+  // finish in the background (see `pendingFetches` in return value).
   await Promise.race([
     Promise.all(fetches),
-    new Promise((resolve) => {
-      setTimeout(() => { batchTimedOut = true; resolve(); }, BUILD_IGN_BATCH_TIMEOUT);
-    }),
+    new Promise((resolve) => setTimeout(resolve, IGN_SUBTILE_SOFT_DEADLINE_MS)),
   ]);
 
-  if (batchTimedOut) {
-    console.warn(
-      `[sw-dem][build] %c BATCH TIMEOUT %c ${mercZ}/${mercX}/${mercY} — ${tileMap.size}/${fetchCount} tiles completed in ${BUILD_IGN_BATCH_TIMEOUT}ms`,
-      'background:#f44336;color:#fff;padding:2px 4px;border-radius:2px', ''
+  // Count / clear still-pending entries so the resampling loop below sees null.
+  let pendingCount = 0;
+  for (const k of keys) {
+    if (tileMap.get(k) === undefined) {
+      tileMap.set(k, null);
+      pendingCount++;
+    }
+  }
+  const hasPending = pendingCount > 0;
+  if (hasPending && DEBUG) {
+    console.log(
+      `[sw-dem][build] soft-deadline ${mercZ}/${mercX}/${mercY} — ${fetchCount - pendingCount}/${fetchCount} settled, ${pendingCount} continuing in background`,
     );
   }
 
@@ -128,6 +143,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // Release IGN source tile references — no longer needed after resampling
   tileMap.clear();
 
+  // Expose in-flight promises to the caller so it can schedule a background
+  // cache upgrade once slow stragglers eventually settle.
+  const pendingFetches = hasPending ? fetches : null;
+
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
@@ -157,7 +176,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
       );
     }
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
   // --- Pre-fill uncovered border pixels with Mapbox elevation ---
@@ -229,11 +248,11 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source };
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
   console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
-  return { blob: null, elevations, coverage, source };
+  return { blob: null, elevations, coverage, source, pendingFetches };
 }

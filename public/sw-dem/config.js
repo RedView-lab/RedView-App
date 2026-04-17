@@ -29,8 +29,8 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-const CACHE_NAME = 'dem-tiles-v17';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v11';
+const CACHE_NAME = 'dem-tiles-v18';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v12';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v3';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
@@ -39,7 +39,10 @@ const STATIC_CACHE_NAME = 'dem-static-v1';
 const DEBUG = false;
 
 const IGN_CACHE_MAX = 500;
-const IGN_CONCURRENCY = 10;
+// HTTP/2 on data.geopf.fr comfortably multiplexes 20+ streams per connection.
+// Higher concurrency dramatically reduces queue wait — the main source of
+// sub-tile tail latency.
+const IGN_CONCURRENCY = 20;
 // Sized for 60° pitch at z14 across a widescreen viewport — burst can exceed
 // 300 tile requests in < 500 ms. Below this we start pruning, which is fine
 // but degrades the pan experience.
@@ -69,7 +72,11 @@ const IGN_FALLBACK_MAX_DEPTH = 3;
 // Maximum zoom levels to overzoom DEM when native tile is missing
 const DEM_OVERZOOM_MAX_DEPTH = 4;
 
-// Batch timeout for buildIGNTile — proceed with partial coverage if exceeded.
-// Kept short so a slow France tile never blocks the DEM request handler for
-// long enough to stall other zoom levels behind it.
-const BUILD_IGN_BATCH_TIMEOUT = 6_000; // 6s
+// Soft deadline for the per-Mapbox-tile batch of IGN sub-tile fetches.
+// When this fires we serve the best-quality result we have right now
+// (composited with Mapbox for any still-pending sub-tiles) and let the
+// stragglers continue in the background. The background completion triggers
+// a cache-replace with the full-quality IGN blob — see scheduleBackgroundUpgrade
+// in sw-dem.js. The user never waits longer than this for first paint, and
+// every tile eventually converges to best quality.
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_000;
