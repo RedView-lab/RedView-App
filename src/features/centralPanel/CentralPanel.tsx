@@ -34,6 +34,8 @@ export function CentralPanel(props: CentralPanelProps) {
     onToggleVisibility,
     onRowAction,
     onOpenSettings,
+    selectedItineraryId,
+    onSelectItinerary,
     onChangeAxis1,
     onChangePrimaryMetric,
     onChangeSecondaryMetric,
@@ -69,6 +71,8 @@ export function CentralPanel(props: CentralPanelProps) {
     >
       <SynthesisTable
         itineraries={itineraries}
+        selectedId={selectedItineraryId ?? itineraries[0]?.id ?? null}
+        onSelect={onSelectItinerary}
         onToggleVisibility={onToggleVisibility}
         onRowAction={onRowAction}
         onOpenSettings={onOpenSettings}

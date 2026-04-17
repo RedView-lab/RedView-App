@@ -13,7 +13,7 @@
 import { useCallback, useState } from 'react';
 
 import { CentralPanel } from './CentralPanel';
-import { DEFAULT_UI_STATE } from './defaultState';
+import { DEFAULT_UI_STATE, SAMPLE_ITINERARIES } from './defaultState';
 import type {
   AnalysisAxisX,
   AnalysisAxisYMetric,
@@ -52,7 +52,7 @@ interface CentralPanelContainerProps {
 }
 
 export function CentralPanelContainer({
-  itineraries = [],
+  itineraries = SAMPLE_ITINERARIES,
   markers = [],
   dayNight = [],
   initialUi,
@@ -73,6 +73,10 @@ export function CentralPanelContainer({
     ...initialUi,
     overlays: { ...DEFAULT_UI_STATE.overlays, ...(initialUi?.overlays ?? {}) },
   }));
+
+  const [selectedItineraryId, setSelectedItineraryId] = useState<string | null>(
+    () => itineraries[0]?.id ?? null,
+  );
 
   const setAxis1 = useCallback(
     (next: AnalysisAxisX) =>
@@ -124,6 +128,8 @@ export function CentralPanelContainer({
       onToggleVisibility={onToggleItineraryVisibility}
       onRowAction={onItineraryAction}
       onOpenSettings={onOpenSynthesisSettings}
+      selectedItineraryId={selectedItineraryId}
+      onSelectItinerary={setSelectedItineraryId}
       onChangeAxis1={setAxis1}
       onChangePrimaryMetric={setPrimary}
       onChangeSecondaryMetric={setSecondary}

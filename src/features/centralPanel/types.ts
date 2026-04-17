@@ -192,6 +192,12 @@ export interface CentralPanelProps {
   isResizing?: boolean;
 
   /* ---- synthesis ------------------------------------------------------- */
+  /**
+   * Itinerary visually highlighted in the synthesis table (larger row, dark
+   * background). Defaults to the first itinerary when omitted.
+   */
+  selectedItineraryId?: string | null;
+  onSelectItinerary?: (itineraryId: string) => void;
   onToggleVisibility?: (itineraryId: string) => void;
   onRowAction?: (itineraryId: string, action: 'menu') => void;
   onOpenSettings?: () => void;

@@ -1,39 +1,69 @@
-/* Synthesis table (top of the panel). */
+/* Synthesis table — Figma 1036:17515.
+
+   Sub-frames (top → bottom):
+     • header row    — bg rgba(0,0,0,.6), opacity-50 column titles, settings chip
+     • selected row  — bg rgba(0,0,0,.6), 16px Medium values (highlighted itinerary)
+     • other rows    — bg rgba(0,0,0,.12), 12px Medium values
+
+   Each row = [label slot 120px] + [flex cells, gap 2px, text-right] + [trailing 32px]. */
 
 .rvc-synthesis {
   display: flex;
   flex-direction: column;
   gap: 4px;
   flex-shrink: 0;
+  width: 100%;
 }
+
+/* ---------- Row shell ---------- */
 
 .rvc-synthesis__row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 2px;
+  padding: 0 2px;
   border-radius: var(--rvc-radius-md);
   min-height: 32px;
+  width: 100%;
+  transition: background-color 0.15s ease;
 }
 
-.rvc-synthesis__row--header {
-  font-weight: 700;
+.rvc-synthesis__row--header,
+.rvc-synthesis__row--data.is-selected {
+  background: rgba(0, 0, 0, 0.6);
 }
+
+.rvc-synthesis__row--data {
+  background: rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  outline: none;
+}
+.rvc-synthesis__row--data:hover:not(.is-selected) {
+  background: rgba(0, 0, 0, 0.28);
+}
+.rvc-synthesis__row--data:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+/* ---------- Label slot (120px) ---------- */
 
 .rvc-synthesis__label {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 160px;
+  width: 120px;
   flex-shrink: 0;
-  font-size: 13px;
+  padding: 7px 8px;
+  border-radius: var(--rvc-radius-md);
+  font-size: 14px;
   font-weight: 600;
   color: var(--rvc-text);
   overflow: hidden;
 }
 
-.rvc-synthesis__row--header .rvc-synthesis__label {
-  padding-left: 8px;
+.rvc-synthesis__label--header {
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .rvc-synthesis__eye {
@@ -41,11 +71,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--rvc-text-dim);
+  width: 16px;
+  height: 16px;
+  color: var(--rvc-text);
   cursor: pointer;
   border-radius: 3px;
+  flex-shrink: 0;
   transition: color 0.15s ease, background 0.15s ease;
 }
 .rvc-synthesis__eye:hover {
@@ -56,16 +87,19 @@
 .rvc-synthesis__swatch {
   width: 12px;
   height: 12px;
-  border-radius: 3px;
+  border-radius: 2px;
   flex-shrink: 0;
 }
 
 .rvc-synthesis__name {
+  flex: 1 1 0;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  min-width: 0;
 }
+
+/* ---------- Value cells ---------- */
 
 .rvc-synthesis__cells {
   display: flex;
@@ -73,9 +107,26 @@
   min-width: 0;
   align-items: center;
   gap: 2px;
-  font-size: 12px;
-  font-weight: 600;
+  overflow: hidden;
   text-align: right;
+  color: var(--rvc-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Header cells: dim & bold per Figma. */
+.rvc-synthesis__cells--header {
+  font-size: 12px;
+  font-weight: 700;
+}
+.rvc-synthesis__cells--header .rvc-synthesis__cell {
+  opacity: 0.5;
+}
+
+/* Selected row: larger 16px values (Figma "Default" variant). */
+.rvc-synthesis__row--data.is-selected .rvc-synthesis__cells {
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .rvc-synthesis__cell {
@@ -85,13 +136,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 4px;
+}
+/* First column is slightly narrower per Figma (max-w 80px). */
+.rvc-synthesis__cell:first-child {
+  max-width: 80px;
 }
 
-.rvc-synthesis__cell--header {
-  opacity: 0.5;
-  font-weight: 700;
-}
+/* ---------- Trailing slot ---------- */
 
 .rvc-synthesis__settings {
   all: unset;
@@ -100,15 +151,15 @@
   justify-content: center;
   height: 32px;
   padding: 0 12px;
-  background: var(--rvc-bg-chip);
+  background: rgba(255, 255, 255, 0.12);
   border-radius: var(--rvc-radius-md);
   color: var(--rvc-text);
   cursor: pointer;
-  transition: background 0.15s ease;
   flex-shrink: 0;
+  transition: background 0.15s ease;
 }
 .rvc-synthesis__settings:hover {
-  background: var(--rvc-bg-chip-hover);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .rvc-synthesis__menu {
@@ -116,18 +167,19 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: var(--rvc-text-dim);
+  width: 32px;
+  height: 32px;
+  color: var(--rvc-text);
   cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.15s ease, color 0.15s ease;
+  border-radius: var(--rvc-radius-sm);
   flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .rvc-synthesis__menu:hover {
   background: rgba(255, 255, 255, 0.08);
-  color: var(--rvc-text);
 }
+
+/* ---------- Empty state ---------- */
 
 .rvc-synthesis__empty {
   padding: 12px 8px;

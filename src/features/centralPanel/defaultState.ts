@@ -102,3 +102,62 @@ export function createEmptyItinerary(
     temperaturesC: [],
   };
 }
+
+/**
+ * Sample itineraries used as a visual placeholder while the routing engine
+ * is not yet wired to the dashboard. Mirrors the Figma "SYNTHESIS" mock
+ * (1036:17515) so the panel feels alive in the meantime.
+ */
+export const SAMPLE_ITINERARIES: CentralPanelItinerary[] = [
+  {
+    id: 'sample-1',
+    name: 'Itinéraire 1',
+    color: ITINERARY_PALETTE[0],
+    visible: true,
+    stats: {
+      distanceKm: 12.78,
+      durationSec: 23,
+      elevationGainM: 346,
+      elevationLossM: 33,
+      avgSlopePercent: 7,
+      surface: { tarmac: 7, gravel: 7, offroad: 7 },
+    },
+    primary: [],
+    secondary: [],
+    temperaturesC: [],
+  },
+  {
+    id: 'sample-2',
+    name: 'Variante 2',
+    color: ITINERARY_PALETTE[1],
+    visible: true,
+    stats: {
+      distanceKm: 12.78,
+      durationSec: 23,
+      elevationGainM: 346,
+      elevationLossM: 33,
+      avgSlopePercent: 7,
+      surface: { tarmac: 7, gravel: 7, offroad: 7 },
+    },
+    primary: [],
+    secondary: [],
+    temperaturesC: [],
+  },
+  {
+    id: 'sample-3',
+    name: 'GPX Jerem',
+    color: ITINERARY_PALETTE[2],
+    visible: true,
+    stats: {
+      distanceKm: 12.78,
+      durationSec: 23,
+      elevationGainM: 346,
+      elevationLossM: 33,
+      avgSlopePercent: 7,
+      surface: { tarmac: 7, gravel: 7, offroad: 7 },
+    },
+    primary: [],
+    secondary: [],
+    temperaturesC: [],
+  },
+];

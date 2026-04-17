@@ -1,9 +1,12 @@
 /**
  * Synthesis table — top section of the Central Panel.
  *
- * Figma 1528:18339. One header row + one row per itinerary, plus optional
- * delta / total / average rows (hidden in the empty state, kept here as
- * declarative slots so the container can flip them on later).
+ * Source of truth: Figma 1036:17515 ("SYNTHESIS"). Layout, per sub-frame:
+ *   • Header row    — "Synthèse" label + dim column titles + settings cog
+ *   • Selected row  — dark background, larger 16px values
+ *   • Other rows    — translucent background, 12px values
+ * Each itinerary row exposes: eye toggle, color swatch, name, value cells,
+ * and an overflow ("more") menu trigger.
  */
 import { IconDots, IconEye, IconEyeOff, IconSettings } from '../../components/icons';
 import {
@@ -39,6 +42,9 @@ export const DEFAULT_SYNTHESIS_COLUMNS: SynthesisColumn[] = [
 interface SynthesisTableProps {
   itineraries: CentralPanelItinerary[];
   columns?: SynthesisColumn[];
+  /** Itinerary visually highlighted (dark bg + larger text). */
+  selectedId?: string | null;
+  onSelect?: (id: string) => void;
   onToggleVisibility?: (id: string) => void;
   onRowAction?: (id: string, action: 'menu') => void;
   onOpenSettings?: () => void;
@@ -47,33 +53,18 @@ interface SynthesisTableProps {
 export function SynthesisTable({
   itineraries,
   columns = DEFAULT_SYNTHESIS_COLUMNS,
+  selectedId,
+  onSelect,
   onToggleVisibility,
   onRowAction,
   onOpenSettings,
 }: SynthesisTableProps) {
+  const effectiveSelectedId = selectedId ?? itineraries[0]?.id ?? null;
+
   return (
     <section className="rvc-synthesis" aria-label="Synthèse des itinéraires">
-      {/* Header row: label "Synthèse" + column titles + settings cog. */}
-      <div className="rvc-synthesis__row rvc-synthesis__row--header">
-        <div className="rvc-synthesis__label">Synthèse</div>
-        <div className="rvc-synthesis__cells">
-          {columns.map((c) => (
-            <div key={c.id} className="rvc-synthesis__cell rvc-synthesis__cell--header">
-              {c.label}
-            </div>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="rvc-synthesis__settings"
-          aria-label="Paramètres de la synthèse"
-          onClick={onOpenSettings}
-        >
-          <IconSettings size={16} />
-        </button>
-      </div>
+      <SynthesisHeader columns={columns} onOpenSettings={onOpenSettings} />
 
-      {/* Data rows. Empty state: render placeholders. */}
       {itineraries.length === 0 ? (
         <div className="rvc-synthesis__empty">
           Ajoutez un itinéraire pour voir sa synthèse.
@@ -84,6 +75,8 @@ export function SynthesisTable({
             key={it.id}
             itinerary={it}
             columns={columns}
+            selected={it.id === effectiveSelectedId}
+            onSelect={onSelect}
             onToggleVisibility={onToggleVisibility}
             onRowAction={onRowAction}
           />
@@ -93,9 +86,49 @@ export function SynthesisTable({
   );
 }
 
+/* -------------------------------------------------------------------------- */
+/* Header                                                                     */
+/* -------------------------------------------------------------------------- */
+
+interface SynthesisHeaderProps {
+  columns: SynthesisColumn[];
+  onOpenSettings?: () => void;
+}
+
+function SynthesisHeader({ columns, onOpenSettings }: SynthesisHeaderProps) {
+  return (
+    <div className="rvc-synthesis__row rvc-synthesis__row--header">
+      <div className="rvc-synthesis__label rvc-synthesis__label--header">
+        Synthèse
+      </div>
+      <div className="rvc-synthesis__cells rvc-synthesis__cells--header">
+        {columns.map((c) => (
+          <div key={c.id} className="rvc-synthesis__cell">
+            {c.label}
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        className="rvc-synthesis__settings"
+        aria-label="Paramètres de la synthèse"
+        onClick={onOpenSettings}
+      >
+        <IconSettings size={16} />
+      </button>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Itinerary row                                                              */
+/* -------------------------------------------------------------------------- */
+
 interface SynthesisRowProps {
   itinerary: CentralPanelItinerary;
   columns: SynthesisColumn[];
+  selected?: boolean;
+  onSelect?: (id: string) => void;
   onToggleVisibility?: (id: string) => void;
   onRowAction?: (id: string, action: 'menu') => void;
 }
@@ -103,11 +136,31 @@ interface SynthesisRowProps {
 function SynthesisRow({
   itinerary,
   columns,
+  selected,
+  onSelect,
   onToggleVisibility,
   onRowAction,
 }: SynthesisRowProps) {
+  const rowClass = `rvc-synthesis__row rvc-synthesis__row--data${
+    selected ? ' is-selected' : ''
+  }`;
+
   return (
-    <div className="rvc-synthesis__row">
+    <div
+      className={rowClass}
+      onClick={() => {
+        if (!selected) onSelect?.(itinerary.id);
+      }}
+      role={onSelect ? 'button' : undefined}
+      tabIndex={onSelect ? 0 : undefined}
+      aria-pressed={onSelect ? selected : undefined}
+      onKeyDown={(e) => {
+        if (onSelect && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onSelect(itinerary.id);
+        }
+      }}
+    >
       <div className="rvc-synthesis__label">
         <button
           type="button"
@@ -117,9 +170,12 @@ function SynthesisRow({
               ? `Masquer ${itinerary.name}`
               : `Afficher ${itinerary.name}`
           }
-          onClick={() => onToggleVisibility?.(itinerary.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleVisibility?.(itinerary.id);
+          }}
         >
-          {itinerary.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
+          {itinerary.visible ? <IconEye size={16} /> : <IconEyeOff size={16} />}
         </button>
         <span
           className="rvc-synthesis__swatch"
@@ -141,7 +197,10 @@ function SynthesisRow({
         type="button"
         className="rvc-synthesis__menu"
         aria-label={`Actions pour ${itinerary.name}`}
-        onClick={() => onRowAction?.(itinerary.id, 'menu')}
+        onClick={(e) => {
+          e.stopPropagation();
+          onRowAction?.(itinerary.id, 'menu');
+        }}
       >
         <IconDots size={16} />
       </button>
