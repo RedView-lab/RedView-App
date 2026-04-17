@@ -436,27 +436,22 @@ async function handleOrthoRequest(z, x, y) {
     orthoInflight.set(tileKey, inflight);
   }
 
-  // Race the in-flight fetch against the promotion window. If the real tile
-  // arrives within ORTHO_INFLIGHT_PROMOTE_MS → return it. Otherwise serve a
-  // cropped parent tile immediately while the real fetch keeps running in
-  // the background (it will populate the cache so the next request is
-  // instant). This applies to BOTH primary and duplicate requests: any slow
-  // tile falls back to a blurry parent within 800 ms instead of leaving a
-  // hole visible for up to 8 seconds.
-  const raced = await Promise.race([
-    inflight.then((r) => ({ ok: true, result: r })),
-    new Promise((resolve) => setTimeout(() => resolve({ ok: false }), ORTHO_INFLIGHT_PROMOTE_MS)),
-  ]);
-  if (raced.ok) {
-    return raced.result ? raced.result.clone() : await transparentResponse();
-  }
-  const fb = await tryParentOrthoOverzoom(cache, z, x, y);
-  if (fb) {
-    // Let the primary finish in the background so it populates the cache.
-    inflight.catch(() => {});
-    return fb;
-  }
-  // No parent available — wait for the primary (no better option).
+  // Wait for the primary fetch. We intentionally do NOT race against a
+  // timeout-based parent-overzoom promotion here: Mapbox already shows its
+  // own ancestor tile (already in GPU cache) during loading, and gracefully
+  // swaps it for the z=N tile when our 200 arrives (raster-fade-duration).
+  //
+  // If the SW were to return a cropped parent for a "slow" request, Mapbox
+  // would cache that ultra-blurry response in its GPU texture atlas and
+  // NEVER re-request the tile — producing the permanent sharp/blurry
+  // patchwork the user reported. Parent overzoom is therefore only used on
+  // definitive failures below (404, timeout, negative cache): cases where
+  // Mapbox would otherwise receive nothing and leave a transparent hole.
   const result = await inflight;
-  return result ? result.clone() : await transparentResponse();
+  if (result) return result.clone();
+  // Primary returned null → definitive failure. Try parent overzoom so the
+  // user sees blurry imagery instead of a transparent hole.
+  const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+  if (fb) return fb;
+  return await transparentResponse();
 }

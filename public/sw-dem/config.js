@@ -74,7 +74,7 @@ const ORTHO_TILE_SIZE = 256;
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
 const CACHE_NAME = 'dem-tiles-v23';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v17';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v8';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
