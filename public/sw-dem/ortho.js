@@ -332,14 +332,19 @@ async function tryParentOrthoOverzoom(cache, z, x, y) {
   return null;
 }
 
-async function handleOrthoRequest(z, x, y) {  const tileKey = `${z}/${x}/${y}`;
+async function handleOrthoRequest(z, x, y) {
+  const tileKey = `${z}/${x}/${y}`;
   const cache = await caches.open(ORTHO_CACHE_NAME);
   const cacheKey = new Request(`/ortho-tiles/${tileKey}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
-  // Negative cache — skip tiles that recently failed
+  // Negative cache — skip tiles that recently failed. Try the cropped-parent
+  // overzoom before giving up: a recently-timed-out tile is exactly the case
+  // where a blurry ancestor tile is better than a transparent hole.
   if (orthoNegGet(tileKey)) {
+    const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+    if (fb) return fb;
     return await transparentResponse();
   }
 
@@ -423,9 +428,13 @@ async function handleOrthoRequest(z, x, y) {  const tileKey = `${z}/${x}/${y}`;
       cache.put(cacheKey, response.clone());
       return response;
     } catch (err) {
-      if (err && err.name === 'AbortError') {
-        // Timeout — try to serve a cropped cached parent so the user sees
-        // imagery (blurry) instead of transparent during the TTL window.
+      // AbortSignal.timeout() throws with name === 'TimeoutError'; manual
+      // AbortController signals throw 'AbortError'. Both are non-error flow
+      // control: mark the tile as transiently failed, attempt the cropped
+      // parent-overzoom, and stay quiet in the console.
+      const name = err && err.name;
+      if (name === 'TimeoutError' || name === 'AbortError') {
+        orthoNegSet(tileKey, 'transient');
         const fb = await tryParentOrthoOverzoom(cache, z, x, y);
         if (fb) return fb;
         return null;
