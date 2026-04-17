@@ -348,10 +348,25 @@ async function handleOrthoRequest(z, x, y) {
     return await transparentResponse();
   }
 
-  // Deduplicate: reuse in-flight promise for the same tile
+  // Deduplicate: reuse in-flight promise for the same tile. If the in-flight
+  // fetch takes longer than ORTHO_INFLIGHT_PROMOTE_MS, we serve a cropped
+  // parent tile *now* while letting the real fetch continue in the background
+  // and replace the cache entry when it completes. This is what eliminates
+  // the dezoom "white holes" without cancelling useful work.
   if (orthoInflight.has(tileKey)) {
-    const result = await orthoInflight.get(tileKey);
-    // Clone if it's a real response, otherwise make a new transparent response
+    const inflight = orthoInflight.get(tileKey);
+    const promoted = await Promise.race([
+      inflight.then((r) => ({ ok: true, result: r })),
+      new Promise((resolve) => setTimeout(() => resolve({ ok: false }), ORTHO_INFLIGHT_PROMOTE_MS)),
+    ]);
+    if (promoted.ok) {
+      return promoted.result ? promoted.result.clone() : await transparentResponse();
+    }
+    // Still in flight after the promotion window — serve a parent crop.
+    const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+    if (fb) return fb;
+    // No parent available either — wait the inflight out (no alternative).
+    const result = await inflight;
     return result ? result.clone() : await transparentResponse();
   }
 
@@ -377,11 +392,13 @@ async function handleOrthoRequest(z, x, y) {
 
       if (!tileOverlapsFrance(z, x, y)) return null;
 
-      // Skip the 5×5 point-in-polygon classifier at low zoom — every tile
-      // that overlaps France's bbox touches the border there, so the result
-      // is always 'border'. Classifier cost is non-trivial (polygon rings)
-      // and adds up during fast dezoom when the SW is already saturated.
-      const classification = z <= 10 ? 'border' : classifyOrthoTile(z, x, y);
+      // Always run the real 5×5 point-in-polygon classifier. The former
+      // `z <= 10 → 'border'` short-circuit forced canvas-mask clipping on
+      // every low-zoom tile, saturating the OffscreenCanvas pool during fast
+      // dezoom (root cause of the "patchwork of missing tiles" artifact).
+      // With minzoom=9 on the layer there are now ≤16 ortho tiles at z9 for
+      // the full French bbox, so the classifier cost is negligible.
+      const classification = classifyOrthoTile(z, x, y);
       if (classification === 'outside') return null;
 
       // Fetch IGN tile through the ortho concurrency limiter

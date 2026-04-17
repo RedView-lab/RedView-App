@@ -162,20 +162,28 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // Determine source label for diagnostics
   const source = usedFallback ? `ign-fallback-z${minFallbackZ}` : 'ign';
 
+  // NOTE: the former "full-coverage fast path" that encoded the raw IGN
+  // elevations directly (bypassing compositeIGNMapbox) has been removed.
+  // Even on full-coverage tiles, neighbour tiles can be pure-Mapbox or
+  // partial-composite, and encoding the raw bare-earth values without any
+  // reference to the Mapbox datum produces C0-discontinuous meshes at every
+  // IGN↔Mapbox seam. compositeIGNMapbox() now handles full-coverage inputs
+  // via a fast ring-only offset-alignment path — see composite.js.
   if (coveredCount === totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
-    // Log elevation range for full-coverage tiles
     let eMin = Infinity, eMax = -Infinity;
     for (let i = 0; i < totalPixels; i++) {
       if (elevations[i] < eMin) eMin = elevations[i];
       if (elevations[i] > eMax) eMax = elevations[i];
     }
     const eRange = eMax - eMin;
-    const rangeColor = eRange < 5 ? '#f44336' : eRange < 50 ? '#FF9800' : '#4CAF50';
-    console.log(
-      `[sw-dem][build] %c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, elev=[${eMin.toFixed(1)}..${eMax.toFixed(1)}] range=${eRange.toFixed(1)}m, ${fetchCount} sub-tiles, ${dt}ms`,
-      `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
-    );
+    if (DEBUG) {
+      const rangeColor = eRange < 5 ? '#f44336' : eRange < 50 ? '#FF9800' : '#4CAF50';
+      console.log(
+        `[sw-dem][build] %c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, elev=[${eMin.toFixed(1)}..${eMax.toFixed(1)}] range=${eRange.toFixed(1)}m, ${fetchCount} sub-tiles, ${dt}ms`,
+        `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
+      );
+    }
     if (eRange < 5) {
       console.warn(
         `[sw-dem][build] %c ⚠ FLAT OUTPUT %c ${mercZ}/${mercX}/${mercY} — elevation range ${eRange.toFixed(1)}m → terrain will be flat! demZ=${demZ} mercZ=${mercZ}`,
@@ -183,7 +191,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
       );
     }
     despikeElevations(elevations, coverage, DEM_TILE_SIZE);
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
+    // Return elevations without blob → composite.js applies the border-ring
+    // offset alignment so the output mesh is watertight with neighbour tiles.
+    return { blob: null, elevations, coverage, source, pendingFetches };
   }
 
   // --- Pre-fill uncovered pixels with Mapbox elevation ---

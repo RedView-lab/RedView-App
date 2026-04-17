@@ -3,9 +3,12 @@
 // ---------------------------------------------------------------------------
 
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
-// MNS LiDAR HD (Modèle Numérique de Surface) = surface with trees/buildings
-// Much more precise than old MNT bare-ground model
-const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
+// MNT LiDAR HD (Modèle Numérique de Terrain — bare-earth, trees/buildings removed).
+// We use MNT, NOT MNS, because Mapbox Terrain-RGB is bare-earth: mixing the two
+// at tile seams produces 15–40 m vertical cliffs in forested France (canopy
+// offset). The MNT layer shares the SAME WGS84G_4_17 tilematrix and BIL32
+// format as the MNS layer, so the rest of the pipeline is unchanged.
+const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES';
 const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
@@ -32,15 +35,25 @@ const DESPIKE_THRESHOLD_M = 80;
 const IGN_DEM_MINZOOM = 4;
 const IGN_DEM_MAXZOOM = 17;
 
-// Minimum Mapbox zoom at which we run the IGN composite pipeline.
-// Below this, Mapbox's 30 m global DEM is visually indistinguishable from
-// IGN LiDAR HD at the rendered pixel density, while the IGN build would
-// enqueue 20-40 WGS84G sub-tiles per Mapbox tile (one Mapbox z10 tile spans
-// ~6 WGS84G z10 rows × ~6 cols = 36 sub-tiles) and jam the queue for 30-60 s,
-// aborting in-flight Mapbox base-map fetches → white globe on fast dezoom.
-// At z12 each Mapbox tile covers ~38 m/pixel — still far below LiDAR's
-// sub-metre resolution, so detail is preserved where it visibly matters.
-const IGN_BUILD_MINZOOM = 12;
+// Zoom gate for running the IGN composite pipeline (replaces the former
+// hardcoded IGN_BUILD_MINZOOM=12). Pixel-density based: we only invest the
+// IGN fetch+resample cost when the rendered pixel is smaller than Mapbox's
+// native ~30 m/px — otherwise the visual delta is imperceptible and we'd
+// just saturate the WMTS queue during fast dezoom.
+//
+// At latitude φ, mercator z=Z pixel size = cos(φ) · 40075000 / (256 · 2^Z) m.
+// Solving for pixel < MAPBOX_NATIVE_MPP gives Z >= log2(C / cos(φ)); at
+// France median φ≈46° this crosses 30 m/px between z11 and z12. The function
+// returns that continuously, so high-latitude (Dunkirk) and low-latitude
+// (Corsica) tiles are both handled correctly without a hard constant.
+const MAPBOX_NATIVE_MPP = 30; // Mapbox mapbox-terrain-dem-v1 ground sample distance
+function shouldUseIGN(mercZ, lat) {
+  if (mercZ < IGN_DEM_MINZOOM) return false;
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  // Earth circumference at equator in metres
+  const mppAtZ = (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
+  return mppAtZ < MAPBOX_NATIVE_MPP;
+}
 
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
@@ -49,11 +62,12 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-// v21 / v15 / v6 — evicts DEM/ortho tiles poisoned by the pre-fix Mapbox
-// terrain-RGB resample corruption (single-pixel spikes on the mesh).
-const CACHE_NAME = 'dem-tiles-v21';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v15';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v6';
+// v22 / v16 / v7 — evicts DEM tiles encoded with the MNS (canopy) layer,
+// which produced 15–40 m vertical cliffs at every tile seam where an IGN
+// MNS tile met a Mapbox bare-earth tile. Post-v22 the layer is MNT.
+const CACHE_NAME = 'dem-tiles-v22';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v16';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v7';
 const SLOPE_CACHE_NAME = 'slope-tiles-v4';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
@@ -84,6 +98,12 @@ const IGN_FETCH_TIMEOUT_MS = 15_000;
 // the blurred parent on screen and blocks the ortho queue. 8 s is enough for
 // geopf hot JPEGs while letting us fail fast onto the parent-overzoom path.
 const ORTHO_FETCH_TIMEOUT_MS = 8_000;
+
+// If an in-flight ortho tile fetch hasn't completed within this window,
+// promote a cropped parent tile immediately to the renderer and let the
+// real fetch continue in the background. Eliminates the "white hole during
+// dezoom" artifact without cancelling useful work.
+const ORTHO_INFLIGHT_PROMOTE_MS = 800;
 
 // Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
 const IGN_NULL_TTL_TRANSIENT = 10_000;   // 10s — timeout, 5xx, network error

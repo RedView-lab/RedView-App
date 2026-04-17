@@ -1,9 +1,87 @@
 // ---------------------------------------------------------------------------
 // Composite IGN + Mapbox elevations with blend zone at coverage boundary
 // Uses: Chamfer distance transform + IDW offset correction + smoothstep blend
+//
+// Full-coverage fast path: when every pixel has IGN data we don't need the
+// expensive blend — we only need to align the IGN bare-earth elevations to
+// the Mapbox bare-earth datum on the tile *border* so the output mesh is
+// C0-continuous with neighbour tiles (which may be pure-Mapbox or partial
+// composite at the same LOD). This is O(4·TILE_SIZE) instead of O(TILE²).
 // ---------------------------------------------------------------------------
 
 async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
+  const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
+
+  // Fast path: uniform full coverage → border-ring offset alignment only.
+  let fullCoverageFast = true;
+  for (let i = 0; i < totalPixels; i++) {
+    if (!coverage[i]) { fullCoverageFast = false; break; }
+  }
+
+  if (fullCoverageFast) {
+    const mapboxBlob = await fetchMapboxTile(z, x, y);
+    if (!mapboxBlob) {
+      // No Mapbox reference available — encode IGN as-is. Neighbour tiles in
+      // the same situation will share the same (un-shifted) datum, so seams
+      // remain continuous among IGN-only tiles; the only visible offset can
+      // appear against pure-Mapbox tiles that did fetch successfully, and
+      // that's the same failure mode as pre-composite.
+      return encodeTerrainRGBPng(ignElevations);
+    }
+    const mbElevations = await decodeTerrainRGBBlob(mapboxBlob);
+    if (mbElevations.length === 0) return encodeTerrainRGBPng(ignElevations);
+
+    // Defensive despike of Mapbox before sampling offsets.
+    const mbSize = Math.round(Math.sqrt(mbElevations.length));
+    {
+      const mbCov = new Uint8Array(mbElevations.length).fill(1);
+      despikeElevations(mbElevations, mbCov, mbSize);
+    }
+
+    const scale = mbSize / DEM_TILE_SIZE;
+    const sampleMB = (px, py) => {
+      if (scale === 1) return mbElevations[py * DEM_TILE_SIZE + px];
+      const mx = Math.min((px * scale) | 0, mbSize - 1);
+      const my = Math.min((py * scale) | 0, mbSize - 1);
+      return mbElevations[my * mbSize + mx];
+    };
+
+    // Collect offsets on the 4 borders (1-px ring). These are the only
+    // pixels shared (geographically) with neighbour tiles, so aligning them
+    // suffices for mesh watertightness at every LOD.
+    const offsets = [];
+    const last = DEM_TILE_SIZE - 1;
+    const pushOff = (px, py) => {
+      const mb = sampleMB(px, py);
+      if (mb <= -9000) return;
+      const off = ignElevations[py * DEM_TILE_SIZE + px] - mb;
+      if (off > -500 && off < 500) offsets.push(off);
+    };
+    for (let px = 0; px < DEM_TILE_SIZE; px++) { pushOff(px, 0); pushOff(px, last); }
+    for (let py = 1; py < last; py++) { pushOff(0, py); pushOff(last, py); }
+
+    let bias = 0;
+    if (offsets.length > 0) {
+      offsets.sort((a, b) => a - b);
+      const mid = offsets.length >> 1;
+      bias = offsets.length & 1
+        ? offsets[mid]
+        : (offsets[mid - 1] + offsets[mid]) / 2;
+    }
+
+    // Apply constant bias so border pixels match Mapbox; interior IGN detail
+    // is preserved (only shifted by a constant → no distortion of slopes).
+    if (bias !== 0) {
+      const out = new Float32Array(totalPixels);
+      for (let i = 0; i < totalPixels; i++) out[i] = ignElevations[i] - bias;
+      const fullCoverage = new Uint8Array(totalPixels).fill(1);
+      despikeElevations(out, fullCoverage, DEM_TILE_SIZE);
+      return encodeTerrainRGBPng(out);
+    }
+    return encodeTerrainRGBPng(ignElevations);
+  }
+
+  // --- Original partial-coverage path (distance transform + IDW blend) ---
   const mapboxBlob = await fetchMapboxTile(z, x, y);
   if (!mapboxBlob) {
     return encodeTerrainRGBPng(ignElevations);
@@ -23,8 +101,6 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     const mbCov = new Uint8Array(mbElevations.length).fill(1);
     despikeElevations(mbElevations, mbCov, mbSize);
   }
-
-  const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
   // Adaptive blend radius: wider at low zoom (each pixel covers more ground)
   const BLEND_RADIUS = Math.max(96, Math.round(192 / Math.pow(1.1, Math.max(0, z - 5))));

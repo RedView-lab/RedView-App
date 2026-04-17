@@ -114,8 +114,13 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
-      maxTileCacheSize: 512,
-      minTileCacheSize: 128,
+      // Sized for SaaS production use on laptops/desktops: at ~60 KB per raster
+      // tile in VRAM, 1200 tiles ≈ 70 MB — well below any discrete-GPU budget
+      // and roughly matching the tile count needed to cover a full-France
+      // dezoom at z9 + zoom-in to z14 without re-fetch churn. Low minimum keeps
+      // mobile devices happy: the cache only grows when actually needed.
+      maxTileCacheSize: 1200,
+      minTileCacheSize: 400,
     });
 
     mapRef.current = map;
