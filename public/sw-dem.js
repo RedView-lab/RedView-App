@@ -59,13 +59,14 @@ const OLD_CACHES = [
   'dem-tiles-v5', 'dem-tiles-v6', 'dem-tiles-v7', 'dem-tiles-v8',
   'dem-tiles-v9', 'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
-  'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19',
+  'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
   'dem-negative-v10', 'dem-negative-v11', 'dem-negative-v12',
-  'dem-negative-v13',
+  'dem-negative-v13', 'dem-negative-v14',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
+  'ortho-tiles-v5',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
 
@@ -207,6 +208,14 @@ async function tryParentOverzoom(cache, z, x, y, depth) {
 
 async function handleDemRequest(_request, z, x, y, _depth) {
   if (_depth === undefined) _depth = 0;
+
+  // World-zoom short-circuit: no visible terrain relief below z4, and at that
+  // zoom Mapbox tiles are tiny fractions of the globe. Returning 204 instantly
+  // lets Mapbox GL reuse parent/empty meshes and prevents the SW from ever
+  // blocking the Standard-Satellite base-map fetches on origin contention
+  // during fast pinch-zoom-out (root cause of the "white earth" symptom).
+  if (z < 4) return noTileResponse('world-zoom');
+
   const t0 = performance.now();
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);

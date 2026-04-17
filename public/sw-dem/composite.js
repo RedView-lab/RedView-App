@@ -14,6 +14,16 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
     return encodeTerrainRGBPng(ignElevations);
   }
 
+  // Defensive despike: even after the terrain-RGB resample-corruption fix in
+  // mapbox.js, a rogue outlier in the Mapbox DEM would drag the IDW offset
+  // below by hundreds of metres and reintroduce visible spikes along the
+  // blend ring. 3×3 median clamp is cheap and preserves real relief.
+  {
+    const mbSize = Math.round(Math.sqrt(mbElevations.length));
+    const mbCov = new Uint8Array(mbElevations.length).fill(1);
+    despikeElevations(mbElevations, mbCov, mbSize);
+  }
+
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
   // Adaptive blend radius: wider at low zoom (each pixel covers more ground)

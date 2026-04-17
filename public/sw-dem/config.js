@@ -35,8 +35,12 @@ const IGN_DEM_MAXZOOM = 17;
 // Minimum Mapbox zoom at which we run the IGN composite pipeline.
 // Below this, Mapbox's 30 m global DEM is visually indistinguishable from
 // IGN LiDAR HD at the rendered pixel density, while the IGN build would
-// enqueue 6-9 WGS84G sub-tiles per Mapbox tile and jam the queue.
-const IGN_BUILD_MINZOOM = 10;
+// enqueue 20-40 WGS84G sub-tiles per Mapbox tile (one Mapbox z10 tile spans
+// ~6 WGS84G z10 rows × ~6 cols = 36 sub-tiles) and jam the queue for 30-60 s,
+// aborting in-flight Mapbox base-map fetches → white globe on fast dezoom.
+// At z12 each Mapbox tile covers ~38 m/pixel — still far below LiDAR's
+// sub-metre resolution, so detail is preserved where it visibly matters.
+const IGN_BUILD_MINZOOM = 12;
 
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
@@ -45,9 +49,11 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-const CACHE_NAME = 'dem-tiles-v20';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v14';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v5';
+// v21 / v15 / v6 — evicts DEM/ortho tiles poisoned by the pre-fix Mapbox
+// terrain-RGB resample corruption (single-pixel spikes on the mesh).
+const CACHE_NAME = 'dem-tiles-v21';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v15';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v6';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
@@ -64,13 +70,20 @@ const IGN_CONCURRENCY = 20;
 // but degrades the pan experience.
 const IGN_QUEUE_MAX = 600;
 
-// Separate ortho concurrency — prevents ortho from starving DEM and vice versa
-const ORTHO_CONCURRENCY = 10;
+// Separate ortho concurrency — prevents ortho from starving DEM and vice versa.
+// Bumped from 10 → 16: geopf HTTP/2 comfortably multiplexes 20+ streams, and
+// at 10 the queue head-of-line blocked the viewport during fast dezoom.
+const ORTHO_CONCURRENCY = 16;
 const ORTHO_QUEUE_MAX = 400;
 
 // IGN WMTS fetch timeout (ms). Geoplateforme can spike to 10+ s during peak
 // hours; 15 s avoids false-positive permanent-error caching.
 const IGN_FETCH_TIMEOUT_MS = 15_000;
+
+// Orthophoto fetch timeout — lower than DEM because a stuck ortho tile keeps
+// the blurred parent on screen and blocks the ortho queue. 8 s is enough for
+// geopf hot JPEGs while letting us fail fast onto the parent-overzoom path.
+const ORTHO_FETCH_TIMEOUT_MS = 8_000;
 
 // Null-cache TTLs (ms) — distinguish transient errors from permanent 404s
 const IGN_NULL_TTL_TRANSIENT = 10_000;   // 10s — timeout, 5xx, network error
@@ -95,4 +108,9 @@ const DEM_OVERZOOM_MAX_DEPTH = 4;
 // a cache-replace with the full-quality IGN blob — see scheduleBackgroundUpgrade
 // in sw-dem.js. The user never waits longer than this for first paint, and
 // every tile eventually converges to best quality.
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_000;
+// Zoom-adaptive: low zoom needs many more sub-tiles, so we cap earlier to
+// avoid starving the Mapbox base-map fetches on the same origin.
+function ignSoftDeadlineMs(mercZ) {
+  return mercZ <= 11 ? 1_500 : 3_000;
+}
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 3_000; // fallback/legacy const

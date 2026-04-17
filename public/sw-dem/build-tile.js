@@ -46,10 +46,16 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   // Soft per-build deadline — serve best available result ASAP, let stragglers
-  // finish in the background (see `pendingFetches` in return value).
+  // finish in the background (see `pendingFetches` in return value). The
+  // deadline is zoom-adaptive: at low zoom a single Mapbox tile enqueues
+  // dozens of WGS84G sub-tiles; waiting the full 3 s means the SW stalls for
+  // 30+ s across a dezoom viewport and starves Mapbox base-map fetches.
+  const softDeadlineMs = typeof ignSoftDeadlineMs === 'function'
+    ? ignSoftDeadlineMs(mercZ)
+    : IGN_SUBTILE_SOFT_DEADLINE_MS;
   await Promise.race([
     Promise.all(fetches),
-    new Promise((resolve) => setTimeout(resolve, IGN_SUBTILE_SOFT_DEADLINE_MS)),
+    new Promise((resolve) => setTimeout(resolve, softDeadlineMs)),
   ]);
 
   // Count / clear still-pending entries so the resampling loop below sees null.

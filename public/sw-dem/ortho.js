@@ -248,7 +248,9 @@ const orthoInflight = new Map();
 
 // In-memory negative cache for failed ortho tiles { key → { ts, ttl } }
 const orthoNegCache = new Map();
-const ORTHO_NEG_TTL_TRANSIENT = 30_000;  // 30s — timeout, 5xx, network
+// Shorter transient TTL than before (was 30 s): a single timeout used to
+// freeze a tile through an entire gesture, leaving the map blurry too long.
+const ORTHO_NEG_TTL_TRANSIENT = 8_000;   // 8s  — timeout, 5xx, network
 const ORTHO_NEG_TTL_PERMANENT = 3600_000; // 1h — 404
 
 function orthoNegGet(key) {
@@ -272,8 +274,65 @@ function orthoNegSet(key, errorType) {
   }
 }
 
-async function handleOrthoRequest(z, x, y) {
-  const tileKey = `${z}/${x}/${y}`;
+// Maximum zoom levels to walk up looking for a cached parent ortho tile
+const ORTHO_OVERZOOM_MAX_DEPTH = 3;
+
+// Extract the sub-rectangle of a cached parent tile that corresponds to
+// (z, x, y) and upscale it (nearest-neighbor — imagery tolerates it, and
+// bilinear doesn't matter visually once Mapbox GL itself resamples).
+// Returns a Response or null. Caches the crop under the child key so the
+// next identical request is a straight cache hit.
+async function tryParentOrthoOverzoom(cache, z, x, y) {
+  for (let dz = 1; dz <= ORTHO_OVERZOOM_MAX_DEPTH; dz++) {
+    const pZ = z - dz;
+    if (pZ < 0) break;
+    const pX = x >> dz;
+    const pY = y >> dz;
+    const parentResp = await cache.match(new Request(`/ortho-tiles/${pZ}/${pX}/${pY}`));
+    if (!parentResp) continue;
+    try {
+      const parentBlob = await parentResp.clone().blob();
+      const img = await createImageBitmap(parentBlob);
+      try {
+        const nChildren = 1 << dz;
+        const srcSize = ORTHO_TILE_SIZE / nChildren;
+        const cx = x - (pX << dz);
+        const cy = y - (pY << dz);
+        const srcX = cx * srcSize;
+        const srcY = cy * srcSize;
+        const canvas = new OffscreenCanvas(ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(
+          img,
+          srcX, srcY, srcSize, srcSize,
+          0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE,
+        );
+        const blob = await canvas.convertToBlob({ type: 'image/png' });
+        const response = new Response(blob, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/png',
+            // Short TTL so a real tile can replace this crop quickly
+            'Cache-Control': 'public, max-age=60',
+            'X-Ortho-Source': `overzoom-z${pZ}`,
+          },
+        });
+        // Do NOT cache the crop under the child key — we want a real fetch
+        // to overwrite it next time instead of a positive-cache hit masking
+        // genuine ortho data for the full TTL.
+        return response;
+      } finally {
+        img.close();
+      }
+    } catch {
+      // Try next parent level
+    }
+  }
+  return null;
+}
+
+async function handleOrthoRequest(z, x, y) {  const tileKey = `${z}/${x}/${y}`;
   const cache = await caches.open(ORTHO_CACHE_NAME);
   const cacheKey = new Request(`/ortho-tiles/${tileKey}`);
   const cached = await cache.match(cacheKey);
@@ -299,7 +358,7 @@ async function handleOrthoRequest(z, x, y) {
         // Fallback: fetch without clipping, through ortho concurrency limiter
         const response = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
-          const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+          const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
           if (!res.ok) return null;
           return new Response(await res.blob(), {
             status: 200,
@@ -313,13 +372,17 @@ async function handleOrthoRequest(z, x, y) {
 
       if (!tileOverlapsFrance(z, x, y)) return null;
 
-      const classification = classifyOrthoTile(z, x, y);
+      // Skip the 5×5 point-in-polygon classifier at low zoom — every tile
+      // that overlaps France's bbox touches the border there, so the result
+      // is always 'border'. Classifier cost is non-trivial (polygon rings)
+      // and adds up during fast dezoom when the SW is already saturated.
+      const classification = z <= 10 ? 'border' : classifyOrthoTile(z, x, y);
       if (classification === 'outside') return null;
 
       // Fetch IGN tile through the ortho concurrency limiter
       const fetchResult = await scheduleOrtho(async () => {
         const url = buildOrthoTileURL(z, x, y);
-        const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+        const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
         if (!res.ok) {
           const errorType = res.status === 404 ? 'permanent' : 'transient';
           orthoNegSet(tileKey, errorType);
@@ -334,7 +397,14 @@ async function handleOrthoRequest(z, x, y) {
       });
 
       // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue
-      if (!fetchResult || fetchResult === PRUNED_SENTINEL) return null;
+      if (!fetchResult || fetchResult === PRUNED_SENTINEL) {
+        // Parent-tile overzoom fallback — serve a cropped cached ancestor so
+        // the user sees imagery (slightly blurry) instead of transparent,
+        // matching how Mapbox natively handles missing raster tiles.
+        const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+        if (fb) return fb;
+        return null;
+      }
 
       let response;
       if (classification === 'inside') {
@@ -353,7 +423,13 @@ async function handleOrthoRequest(z, x, y) {
       cache.put(cacheKey, response.clone());
       return response;
     } catch (err) {
-      if (err && err.name === 'AbortError') return null;
+      if (err && err.name === 'AbortError') {
+        // Timeout — try to serve a cropped cached parent so the user sees
+        // imagery (blurry) instead of transparent during the TTL window.
+        const fb = await tryParentOrthoOverzoom(cache, z, x, y);
+        if (fb) return fb;
+        return null;
+      }
       orthoNegSet(tileKey, 'transient');
       console.error('[sw-dem] Ortho error', z, x, y, err);
       return null;
