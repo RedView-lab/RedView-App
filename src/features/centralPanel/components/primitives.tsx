@@ -78,7 +78,9 @@ export function Select<T extends string>({
       <span className="rvc-select__value">
         {options.find((o) => o.value === value)?.label ?? '—'}
       </span>
-      <IconChevronDown size={16} />
+      <span className="rvc-select__chevron" aria-hidden>
+        <IconChevronDown size={20} />
+      </span>
       <select
         aria-label={ariaLabel}
         className="rvc-select__native"

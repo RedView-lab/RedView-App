@@ -81,7 +81,7 @@ export function AnalysisToolbar({
         />
 
         <span className="rvc-toolbar__axis-tag" aria-hidden>
-          Axe 1
+          <span className="rvc-toolbar__axis-tag-text">Axe 1</span>
           <span className="rvc-toolbar__axis-tag-line" />
         </span>
         <Select
@@ -92,7 +92,7 @@ export function AnalysisToolbar({
         />
 
         <span className="rvc-toolbar__axis-tag" aria-hidden>
-          Axe 2
+          <span className="rvc-toolbar__axis-tag-text">Axe 2</span>
           <span className="rvc-toolbar__axis-tag-line" />
         </span>
         <Select
@@ -104,13 +104,15 @@ export function AnalysisToolbar({
 
         <div className="rvc-toolbar__detail">
           <span className="rvc-toolbar__detail-label">Détail</span>
-          <span className="rvc-toolbar__detail-glyph" aria-hidden>−</span>
-          <Slider
-            value={ui.detail}
-            onChange={(v) => onChangeDetail?.(v)}
-            ariaLabel="Niveau de détail"
-          />
-          <span className="rvc-toolbar__detail-glyph" aria-hidden>+</span>
+          <div className="rvc-toolbar__detail-slider">
+            <span className="rvc-toolbar__detail-glyph" aria-hidden>−</span>
+            <Slider
+              value={ui.detail}
+              onChange={(v) => onChangeDetail?.(v)}
+              ariaLabel="Niveau de détail"
+            />
+            <span className="rvc-toolbar__detail-glyph" aria-hidden>+</span>
+          </div>
         </div>
       </div>
 

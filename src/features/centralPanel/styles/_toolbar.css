@@ -1,212 +1,279 @@
-/* Analysis toolbar — between synthesis table and chart. */
+﻿/* Analysis toolbar â€” Figma 1572:21456.
+   Layout: Analyse | [Distance|Temps] | Axe1 [DÃ©nivelÃ©â–¼] | Axe2 [TempÃ©â–¼] | DÃ©tail [- â—â” +]
+   â”€â”€ divider â”€â”€ | â˜‘Waypoint â˜‘POI â˜‘Pause â˜‘Alertes â˜‘Pente â˜‘Jour/nuit
+   Heights: outer row sized by tallest child (32px). Items vertically centered. */
 
 .rvc-toolbar {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-shrink: 0;
-  flex-wrap: wrap;
-  padding: 0 2px;
+  flex-wrap: nowrap;
+  min-height: 32px;
+  padding: 0;
 }
 
 .rvc-toolbar__group {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.rvc-toolbar__group--left {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .rvc-toolbar__group--right {
-  margin-left: auto;
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
+/* "Analyse" header label. */
 .rvc-toolbar__title {
   font-size: 13px;
   font-weight: 600;
   color: var(--rvc-text);
-  margin-right: 4px;
+  white-space: nowrap;
 }
 
 .rvc-toolbar__divider {
   width: 1px;
   height: 24px;
   background: var(--rvc-border);
+  flex-shrink: 0;
 }
 
+/* "Axe 1" / "Axe 2" tag â€” text on top, short underline below. */
 .rvc-toolbar__axis-tag {
-  position: relative;
   display: inline-flex;
-  align-items: flex-end;
-  font-size: 11px;
-  color: var(--rvc-text-dim);
-  padding: 0 4px 6px;
-  margin-right: -2px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.rvc-toolbar__axis-tag-text {
+  width: 32px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--rvc-text);
+  opacity: 0.5;
 }
 .rvc-toolbar__axis-tag-line {
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
   width: 12px;
-  height: 1px;
+  height: 1.5px;
   background: var(--rvc-border-strong);
+  border-radius: 1px;
 }
 
+/* DÃ©tail (label + slider) cluster. */
 .rvc-toolbar__detail {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 6px;
+  gap: 12px;
+  height: 24px;
+  padding: 3px 0;
+  flex-shrink: 0;
 }
 .rvc-toolbar__detail-label {
   font-size: 12px;
-  color: var(--rvc-text-dim);
+  font-weight: 700;
+  line-height: 16px;
+  color: var(--rvc-text);
+  opacity: 0.5;
+  text-align: right;
+  white-space: nowrap;
+}
+.rvc-toolbar__detail-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 140px;
 }
 .rvc-toolbar__detail-glyph {
-  font-size: 14px;
-  color: var(--rvc-text-dim);
-  width: 8px;
-  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  line-height: 1;
+  user-select: none;
 }
 
-/* Segmented (Distance | Temps) */
+/* Segmented (Distance | Temps) â€” bg rgba(255,255,255,0.04), 30h, padding 2, gap 2. */
 .rvc-segmented {
   display: inline-flex;
-  background: var(--rvc-bg-chip);
-  border-radius: var(--rvc-radius-md);
-  padding: 2px;
+  align-items: center;
+  justify-content: center;
   gap: 2px;
+  height: 30px;
+  padding: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 .rvc-segmented__btn {
   all: unset;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--rvc-text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--rvc-text);
   cursor: pointer;
-  border-radius: 4px;
-  line-height: 1.4;
-  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+  transition: background 0.15s ease;
 }
 .rvc-segmented__btn:hover {
-  color: var(--rvc-text);
+  background: rgba(255, 255, 255, 0.06);
 }
 .rvc-segmented__btn.is-active {
-  background: var(--rvc-bg-active);
-  color: var(--rvc-text);
+  background: rgba(0, 0, 0, 0.64);
 }
 
-/* Select */
+/* Select (DÃ©nivelÃ© / TempÃ©rature) â€” bordered, flex-grows in row. */
 .rvc-select {
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
-  padding: 4px 6px 4px 10px;
+  flex: 1 0 0;
+  min-width: 0;
+  height: 32px;
+  padding: 6px 8px 6px 12px;
   background: transparent;
-  border-radius: var(--rvc-radius-md);
+  border: 1.5px solid #444444;
+  border-radius: 6px;
   color: var(--rvc-text);
-  font-size: 12px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 .rvc-select:hover {
-  background: var(--rvc-bg-chip);
-}
-.rvc-select__prefix {
-  font-size: 11px;
-  color: var(--rvc-text-dim);
+  border-color: #5a5a5a;
+  background: rgba(255, 255, 255, 0.03);
 }
 .rvc-select__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
   font-weight: 500;
+  line-height: 16px;
   color: var(--rvc-text);
-  max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rvc-select__chevron {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rvc-text);
+}
 .rvc-select__native {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
   opacity: 0;
   cursor: pointer;
   font-family: inherit;
 }
 
-/* Slider */
+/* Slider â€” 48Ã—24, track 8h centered, progress red, white handle w/ red ring. */
 .rvc-slider {
   position: relative;
-  display: inline-flex;
-  align-items: center;
+  display: inline-block;
   width: 48px;
-  height: 16px;
+  height: 24px;
+  flex-shrink: 0;
 }
 .rvc-slider__track {
   position: absolute;
-  inset: 4px 0;
-  background: rgba(255, 255, 255, 0.12);
-  border-radius: 4px;
+  left: 0;
+  right: 0;
+  top: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
 }
 .rvc-slider__progress {
   position: absolute;
   left: 0;
   top: 0;
-  bottom: 0;
-  background: #c50000;
-  border-radius: 4px;
+  height: 100%;
+  background: #890000;
+  border-radius: 9999px;
 }
 .rvc-slider__handle {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  background: #c50000;
-  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border: 2px solid #700000;
+  border-radius: 9999px;
   transform: translate(-50%, -50%);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    0 4px 6px -1px rgba(10, 13, 18, 0.1),
+    0 2px 4px -2px rgba(10, 13, 18, 0.06);
 }
 .rvc-slider__input {
   position: absolute;
-  inset: -4px 0;
+  inset: 0;
   width: 100%;
-  height: 24px;
+  height: 100%;
   opacity: 0;
   cursor: pointer;
   margin: 0;
 }
 
-/* Checkbox */
+/* Checkbox (right-side overlay toggles) â€” chip with mini checkbox + icon + label. */
 .rvc-checkbox {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  background: var(--rvc-bg-chip);
-  border-radius: var(--rvc-radius-md);
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
   font-size: 12px;
-  font-weight: 500;
-  color: var(--rvc-text-dim);
+  font-weight: 600;
+  color: var(--rvc-text);
   cursor: pointer;
   user-select: none;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease;
+  white-space: nowrap;
 }
 .rvc-checkbox:hover {
-  background: var(--rvc-bg-chip-hover);
-  color: var(--rvc-text);
+  background: rgba(255, 255, 255, 0.08);
 }
 .rvc-checkbox__box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   background: rgba(0, 0, 0, 0.64);
-  border-radius: var(--rvc-radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 3px;
   color: var(--rvc-text);
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 .rvc-checkbox__box.is-checked {
-  background: rgba(255, 255, 255, 0.18);
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #0a0a0c;
 }
 .rvc-checkbox__input {
   position: absolute;
@@ -219,8 +286,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   color: var(--rvc-text);
 }
 .rvc-checkbox__label {
