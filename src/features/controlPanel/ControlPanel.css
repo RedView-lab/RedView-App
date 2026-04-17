@@ -1,0 +1,802 @@
+/* ==========================================================================
+   RedView Control Panel — styles
+   Source of truth: Figma node 1407:17211 (Frame 576669)
+   Width 300px, dark glass, red primary #890000 / border #700000
+   ========================================================================== */
+
+.rvc-panel {
+  --rvc-red: #890000;
+  --rvc-red-border: #700000;
+  --rvc-accent: #c50000;
+  --rvc-bg: rgba(0, 0, 0, 0.6);
+  --rvc-bg-chip: rgba(255, 255, 255, 0.08);
+  --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
+  --rvc-bg-row: #3d3d3d;
+  --rvc-bg-row-alt: #383838;
+  --rvc-bg-row-dark: #232323;
+  --rvc-border: rgba(255, 255, 255, 0.08);
+  --rvc-text: #ffffff;
+  --rvc-text-dim: rgba(255, 255, 255, 0.64);
+  --rvc-text-dim-40: rgba(255, 255, 255, 0.4);
+  --rvc-ghost-btn: rgba(145, 145, 145, 0.4);
+  --rvc-radius: 8px;
+  --rvc-radius-md: 6px;
+  --rvc-radius-sm: 4px;
+
+  box-sizing: border-box;
+  width: 300px;
+  min-height: 100%;
+  max-height: 100%;
+  padding: 0 12px;
+  background: var(--rvc-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--rvc-radius);
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.rvc-panel *,
+.rvc-panel *::before,
+.rvc-panel *::after {
+  box-sizing: border-box;
+}
+
+.rvc-panel ::-webkit-scrollbar { width: 6px; }
+.rvc-panel ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }
+
+/* --------------------------------------------------------------------------
+   Section
+   -------------------------------------------------------------------------- */
+
+.rvc-section {
+  border-top: 1px solid var(--rvc-border);
+  border-bottom: 1px solid var(--rvc-border);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rvc-section--no-top {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.rvc-section__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 8px 12px 0;
+  width: 100%;
+  color: var(--rvc-text);
+}
+
+.rvc-section__icon {
+  display: inline-flex;
+  color: var(--rvc-text);
+}
+
+.rvc-section__title-btn {
+  all: unset;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-section__chevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  color: var(--rvc-text);
+  transition: transform 0.18s ease;
+}
+
+.rvc-section__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.rvc-section__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+/* --------------------------------------------------------------------------
+   Toggle switch
+   -------------------------------------------------------------------------- */
+
+.rvc-toggle {
+  all: unset;
+  position: relative;
+  width: 32px;
+  height: 16px;
+  border-radius: 9999px;
+  background: var(--rvc-bg-chip);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease;
+}
+
+.rvc-toggle.is-on {
+  background: var(--rvc-red);
+}
+
+.rvc-toggle__knob {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 1px solid var(--rvc-red-border);
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+  transition: transform 0.18s ease;
+}
+
+.rvc-toggle.is-on .rvc-toggle__knob {
+  transform: translateX(16px);
+}
+
+/* --------------------------------------------------------------------------
+   Checkbox
+   -------------------------------------------------------------------------- */
+
+.rvc-checkbox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.rvc-checkbox__box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid #d5d7da;
+  background: transparent;
+  color: #ffffff;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.rvc-checkbox__box.is-checked {
+  background: var(--rvc-red);
+  border-color: var(--rvc-red);
+}
+
+.rvc-checkbox__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.rvc-checkbox__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Select
+   -------------------------------------------------------------------------- */
+
+.rvc-select {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 5px 5px 8px;
+  background: var(--rvc-bg-chip);
+  border-radius: var(--rvc-radius-md);
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  height: 28px;
+}
+
+.rvc-select__adornment {
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.rvc-select__value {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-select__chevron {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+}
+
+.rvc-select__native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  color: #000;
+  font-size: 14px;
+}
+
+.rvc-select__native option {
+  color: #000;
+  background: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   Slider
+   -------------------------------------------------------------------------- */
+
+.rvc-slider {
+  position: relative;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.rvc-slider__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: #e9eaeb;
+}
+
+.rvc-slider__fill {
+  position: absolute;
+  left: 0;
+  top: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--rvc-red);
+}
+
+.rvc-slider__handle {
+  position: absolute;
+  top: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid var(--rvc-red-border);
+  box-shadow: 0 4px 6px -1px rgba(10, 13, 18, 0.1), 0 2px 4px -2px rgba(10, 13, 18, 0.06);
+  pointer-events: none;
+}
+
+.rvc-slider__input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Icon button
+   -------------------------------------------------------------------------- */
+
+.rvc-icon-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--rvc-text);
+  padding: 3px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.rvc-icon-btn--ghost:hover { background: rgba(255, 255, 255, 0.06); }
+
+.rvc-icon-btn--chip {
+  width: 20px;
+  height: 20px;
+  background: var(--rvc-bg-chip);
+  border-radius: 4px;
+  padding-right: 6px;
+}
+
+.rvc-icon-btn--chipActive {
+  width: 20px;
+  height: 20px;
+  background: var(--rvc-bg-chip-active);
+  border-radius: 4px;
+  padding-right: 6px;
+}
+
+/* --------------------------------------------------------------------------
+   Visibility button (20x20 chip used in basemap / LIDAR rows)
+   -------------------------------------------------------------------------- */
+
+.rvc-visibility {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: var(--rvc-bg-chip-active);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--rvc-text);
+  flex-shrink: 0;
+  padding: 3px 6px 3px 3px;
+  box-sizing: border-box;
+}
+
+.rvc-visibility--chip { background: var(--rvc-bg-row); }
+.rvc-visibility--sm { width: 16px; height: 16px; padding: 3px; }
+
+/* --------------------------------------------------------------------------
+   Color swatch
+   -------------------------------------------------------------------------- */
+
+.rvc-swatch {
+  display: inline-block;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Basemaps section
+   -------------------------------------------------------------------------- */
+
+.rvc-basemaps__list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rvc-basemaps__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: var(--rvc-radius-md);
+  width: 100%;
+}
+
+.rvc-basemaps__row.is-active {
+  background: var(--rvc-bg);
+}
+
+.rvc-basemaps__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-basemaps__label.is-dim { opacity: 0.4; }
+
+/* --------------------------------------------------------------------------
+   LIDAR section
+   -------------------------------------------------------------------------- */
+
+.rvc-lidar__list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rvc-lidar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 0;
+  border-radius: var(--rvc-radius-md);
+  width: 100%;
+}
+
+.rvc-lidar__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Buttons (primary / ghost)
+   -------------------------------------------------------------------------- */
+
+.rvc-btn-primary {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  margin-top: 4px;
+  background: var(--rvc-red);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--rvc-radius-md);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s;
+}
+
+.rvc-btn-primary:hover { background: #a00000; }
+
+.rvc-btn-ghost {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  background: var(--rvc-ghost-btn);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--rvc-radius-md);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s;
+}
+
+.rvc-btn-ghost:hover { background: rgba(145, 145, 145, 0.55); }
+
+/* --------------------------------------------------------------------------
+   Labels section
+   -------------------------------------------------------------------------- */
+
+.rvc-labels__grid {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+.rvc-labels__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Routes section
+   -------------------------------------------------------------------------- */
+
+.rvc-routes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-routes__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-routes__color-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 2px 5px 9px;
+  background: var(--rvc-bg-row);
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.rvc-routes__label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.rvc-routes__opacity {
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 5px;
+  background: var(--rvc-bg-row);
+  border-radius: 5px;
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rvc-routes__opacity-range {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Slopes section
+   -------------------------------------------------------------------------- */
+
+.rvc-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-row--split { justify-content: space-between; }
+
+.rvc-row__label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+}
+
+.rvc-row__value-sm {
+  color: var(--rvc-text);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.rvc-slopes__bands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.rvc-slopes__band {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.rvc-slopes__band-range {
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-slopes__band-sep {
+  color: var(--rvc-text);
+  opacity: 0.25;
+  font-size: 10px;
+}
+
+.rvc-slopes__band-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 5px 5px 8px;
+  background: var(--rvc-bg-chip);
+  border-radius: var(--rvc-radius-md);
+  width: 100px;
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.rvc-slopes__band-color span {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Weather section
+   -------------------------------------------------------------------------- */
+
+.rvc-weather__tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.rvc-weather__tab {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  background: var(--rvc-bg-chip);
+  border-radius: var(--rvc-radius-md);
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.rvc-weather__tab.is-active { background: var(--rvc-bg-row-dark); }
+
+.rvc-weather__range {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-weather__range-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.rvc-weather__range-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-weather__range-label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 10px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-weather__input {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--rvc-bg-row-alt);
+  border-radius: var(--rvc-radius-md);
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  width: 76px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.rvc-weather__input--date { width: 92px; }
+
+.rvc-weather__native-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: transparent;
+}
+
+.rvc-weather__layers {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.rvc-weather__layer-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-weather__layer-label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  padding: 0 2px;
+}
+
+.rvc-weather__layer-opacity {
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 4px;
+  background: var(--rvc-bg-row);
+  border-radius: var(--rvc-radius-sm);
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Simple toggle sections (Vent / Neige / Ensoleillement)
+   -------------------------------------------------------------------------- */
+
+.rvc-simple-section__placeholder {
+  min-height: 0;
+  padding: 0;
+}
