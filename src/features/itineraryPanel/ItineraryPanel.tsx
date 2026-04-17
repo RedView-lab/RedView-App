@@ -44,6 +44,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onOpenPoiCategories,
     onLoadPois,
     poiLoading,
+    poiProgress,
     poiCount,
     poiError,
     poiLoadDisabled,
@@ -129,6 +130,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
               onOpenCategories={onOpenPoiCategories}
               onLoad={onLoadPois}
               loading={poiLoading}
+              progress={poiProgress}
               poiCount={poiCount}
               error={poiError}
               disabled={poiLoadDisabled}

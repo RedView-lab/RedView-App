@@ -222,6 +222,8 @@ export interface ItineraryPanelProps {
   onLoadPois?: () => void;
   /** Map-level POI loading state (corridor / viewport fetch). */
   poiLoading?: boolean;
+  /** 0..1 progress for the chunked corridor search (null when idle). */
+  poiProgress?: number | null;
   /** Number of POIs currently rendered on the map. */
   poiCount?: number;
   /** Last error from the POI engine (Overpass / network). */

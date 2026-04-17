@@ -2,8 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { fetchPoisInBbox, fetchPoisAlongRoute } from '../lib/overpass';
-import { sampleRoutePoints } from '../lib/gpx-loader';
+import { fetchPoisInBbox, fetchPoisAlongRouteChunked } from '../lib/overpass';
+import { sampleRouteByDistance } from '../lib/gpx-loader';
 import {
   tileZoomForMapZoom,
   getTilesForBounds,
@@ -34,6 +34,10 @@ export function usePoi(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [poiCount, setPoiCount] = useState(0);
+  /** 0..1 progress for corridor fetches; null when not running. */
+  const [corridorProgress, setCorridorProgress] = useState<number | null>(
+    null,
+  );
 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -235,7 +239,7 @@ export function usePoi(
     }
   }, [updateSourceData]);
 
-  // ── Corridor fetch (along GPX route) ──────────────────────────────
+  // ── Corridor fetch (along GPX route, chunked & progressive) ──────
 
   const fetchCorridorPois = useCallback(async (m: MapboxMap) => {
     const route = gpxRef.current;
@@ -251,10 +255,45 @@ export function usePoi(
 
     setLoading(true);
     setError(null);
+    setCorridorProgress(0);
+
+    // Spacing chosen so consecutive Overpass `around:r` disks overlap
+    // (no gaps in the corridor). Three constraints:
+    //   1. spacing >= radius * 1.6  → adjacent disks overlap.
+    //   2. spacing >= 200 m         → tiny user radii still produce a
+    //      reasonable sample count (avoids 10 000+ samples for 40 m).
+    //   3. spacing chosen so total samples never exceed ~1500          →
+    //      caps the number of sequential Overpass chunks for huge GPX
+    //      routes (e.g. multi-day alpine tours) at ~20 calls.
+    const radius = radiusRef.current;
+    let approxLenM = 0;
+    for (let i = 1; i < route.points.length; i++) {
+      const a = route.points[i - 1];
+      const b = route.points[i];
+      const dLat = (b.lat - a.lat) * 111_320;
+      const dLon =
+        (b.lon - a.lon) *
+        111_320 *
+        Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
+      approxLenM += Math.sqrt(dLat * dLat + dLon * dLon);
+    }
+    const lenBasedSpacing = approxLenM > 0 ? approxLenM / 1_500 : 0;
+    const spacing = Math.max(200, radius * 1.6, lenBasedSpacing);
+    const sampled = sampleRouteByDistance(route.points, spacing, 8_000);
 
     try {
-      const sampled = sampleRoutePoints(route.points, 300);
-      const features = await fetchPoisAlongRoute(sampled, radiusRef.current, cats, controller.signal);
+      const features = await fetchPoisAlongRouteChunked({
+        samples: sampled,
+        radiusM: radius,
+        categories: cats,
+        signal: controller.signal,
+        onProgress: (deduped, { done, total }) => {
+          if (controller.signal.aborted) return;
+          lastCorridorFeatures.current = deduped;
+          updateSourceData(m, deduped);
+          setCorridorProgress(total > 0 ? done / total : 0);
+        },
+      });
       if (!controller.signal.aborted) {
         lastCorridorFeatures.current = features;
         updateSourceData(m, features);
@@ -263,7 +302,10 @@ export function usePoi(
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setError(err instanceof Error ? err.message : 'Erreur POI corridor');
     } finally {
-      if (!controller.signal.aborted) setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setCorridorProgress(null);
+      }
     }
   }, [updateSourceData]);
 
@@ -446,7 +488,7 @@ export function usePoi(
     }
   }, [map, isMapLoaded, enabledCategories, fetchVisiblePois]);
 
-  return { loading, error, poiCount, searchCorridor };
+  return { loading, error, poiCount, corridorProgress, searchCorridor };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────

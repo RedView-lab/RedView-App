@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { ItineraryPanel } from './ItineraryPanel';
@@ -69,6 +69,7 @@ export function ItineraryPanelContainer({
     loading: poiLoading,
     error: poiError,
     poiCount,
+    corridorProgress: poiProgress,
     searchCorridor,
     hasGpxRoute,
     hasEnabledCategories,
@@ -136,7 +137,7 @@ export function ItineraryPanelContainer({
   const poiLoadDisabledReason = !hasGpxRoute
     ? 'Importez un fichier GPX pour rechercher les POI le long du parcours.'
     : !hasEnabledCategories
-      ? 'Activez au moins une catÃ©gorie ci-dessus.'
+      ? 'Activez au moins une catégorie ci-dessus.'
       : null;
 
   const panel = (
@@ -221,6 +222,7 @@ export function ItineraryPanelContainer({
       onOpenPoiCategories={() => {}}
       onLoadPois={() => searchCorridor()}
       poiLoading={poiLoading}
+      poiProgress={poiProgress}
       poiCount={poiCount}
       poiError={poiError}
       poiLoadDisabled={poiLoadDisabled}

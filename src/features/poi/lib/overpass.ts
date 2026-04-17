@@ -203,3 +203,65 @@ export async function fetchPoisAlongRoute(
 
   throw lastError ?? new Error('All Overpass endpoints failed');
 }
+
+// ── Chunked corridor fetch (long GPX) ─────────────────────────────────
+
+/** Maximum sample points per Overpass `around:` call. Each disk costs
+ * server time; ~80 points per chunk keeps a single request well under
+ * the 45 s timeout even with all 11 categories enabled. */
+const CORRIDOR_CHUNK_SIZE = 80;
+
+interface CorridorChunkedOptions {
+  /** Sample points already spaced so disks of radius `radiusM` overlap. */
+  samples: { lat: number; lon: number }[];
+  radiusM: number;
+  categories: PoiCategory[];
+  signal?: AbortSignal;
+  /** Fired after each chunk merges into the running result set. */
+  onProgress?: (
+    deduped: PoiFeature[],
+    progress: { done: number; total: number },
+  ) => void;
+}
+
+/**
+ * Run the corridor query in sequential chunks of {@link CORRIDOR_CHUNK_SIZE}
+ * sample points, deduplicating features by id and streaming partial
+ * results to {@link CorridorChunkedOptions.onProgress}.
+ *
+ * Sequential (not parallel) on purpose: Overpass enforces a per-IP slot
+ * limit and rejects bursts with HTTP 429. Sequential calls keep us inside
+ * the slot budget while still giving the user incremental visual feedback.
+ */
+export async function fetchPoisAlongRouteChunked(
+  options: CorridorChunkedOptions,
+): Promise<PoiFeature[]> {
+  const { samples, radiusM, categories, signal, onProgress } = options;
+  if (samples.length === 0 || categories.length === 0) return [];
+
+  const chunks: { lat: number; lon: number }[][] = [];
+  for (let i = 0; i < samples.length; i += CORRIDOR_CHUNK_SIZE) {
+    chunks.push(samples.slice(i, i + CORRIDOR_CHUNK_SIZE));
+  }
+
+  const seen = new Map<number, PoiFeature>();
+  const total = chunks.length;
+
+  for (let i = 0; i < chunks.length; i++) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    const features = await fetchPoisAlongRoute(
+      chunks[i],
+      radiusM,
+      categories,
+      signal,
+    );
+    for (const f of features) {
+      if (!seen.has(f.id)) seen.set(f.id, f);
+    }
+    onProgress?.(Array.from(seen.values()), { done: i + 1, total });
+  }
+
+  return Array.from(seen.values());
+}

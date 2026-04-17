@@ -15,12 +15,14 @@ interface PoiSectionProps {
   onLoad?: () => void;
   /** Map-level POI loading state. */
   loading?: boolean;
+  /** 0..1 progress of the corridor search (chunks completed / total). */
+  progress?: number | null;
   /** Number of POIs currently rendered on the map (0 when none). */
   poiCount?: number;
   /** Last error from the POI engine (Overpass / network). */
   error?: string | null;
   /**
-   * When true, the "Charger" button is greyed out â€” typically because no
+   * When true, the "Charger" button is greyed out — typically because no
    * GPX route is attached to the active itinerary or no category is on.
    */
   disabled?: boolean;
@@ -34,11 +36,11 @@ const POI_ROWS: { key: PoiCategory; label: string }[][] = [
     { key: 'bakeries', label: 'Boulangeries' },
   ],
   [
-    { key: 'supermarkets', label: 'SupermarchÃ©s' },
+    { key: 'supermarkets', label: 'Supermarchés' },
     { key: 'restaurants', label: 'Restaurants' },
   ],
   [
-    { key: 'hotels', label: 'HÃ´tels' },
+    { key: 'hotels', label: 'Hôtels' },
     { key: 'refuges', label: 'Refuges' },
   ],
   [
@@ -83,17 +85,24 @@ export function PoiSection({
   onOpenCategories,
   onLoad,
   loading = false,
+  progress = null,
   poiCount = 0,
   error = null,
   disabled = false,
   disabledReason = null,
 }: PoiSectionProps) {
   const buttonDisabled = disabled || loading;
+  const pct =
+    progress !== null && Number.isFinite(progress)
+      ? Math.max(0, Math.min(100, Math.round(progress * 100)))
+      : null;
   const buttonLabel = loading
-    ? 'Rechercheâ€¦'
+    ? pct !== null
+      ? `Recherche… ${pct}%`
+      : 'Recherche…'
     : poiCount > 0
       ? `Recharger (${poiCount})`
-      : 'Charger';
+      : 'Rechercher';
 
   return (
     <div className="rvi-params">
@@ -135,7 +144,7 @@ export function PoiSection({
           <ToggleRow
             checked={poi.refineResults}
             onChange={(v) => onChangeRefine?.(v)}
-            label="Affiner les rÃ©sultats (beta)"
+            label="Affiner les résultats (beta)"
           />
         </div>
         <button
@@ -144,7 +153,7 @@ export function PoiSection({
           onClick={onOpenCategories}
         >
           <IconPlusCircle size={16} />
-          <span className="rvi-categories-btn__label">CatÃ©gories</span>
+          <span className="rvi-categories-btn__label">Catégories</span>
           <IconChevronDown size={14} className="rvi-categories-btn__chevron" />
         </button>
       </div>
@@ -169,4 +178,4 @@ export function PoiSection({
       ) : null}
     </div>
   );
-}
+}
