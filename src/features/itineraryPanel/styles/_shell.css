@@ -7,9 +7,9 @@
   --rvi-bg: rgba(15, 15, 15, 0.74);
   --rvi-bg-chip: rgba(255, 255, 255, 0.08);
   --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
-  --rvi-bg-row: #1c1c1c;
-  --rvi-bg-row-alt: #232323;
-  --rvi-bg-row-muted: #383838;
+  --rvi-bg-row: rgba(28, 28, 28, 0.55);
+  --rvi-bg-row-alt: rgba(35, 35, 35, 0.55);
+  --rvi-bg-row-muted: rgba(56, 56, 56, 0.55);
   --rvi-border: rgba(255, 255, 255, 0.08);
   --rvi-border-strong: #444;
   --rvi-text: #ffffff;

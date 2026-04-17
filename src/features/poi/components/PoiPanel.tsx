@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { PoiCategory } from '../types';
 import { POI_GROUPS, POI_LABELS, POI_COLORS, POI_CATEGORIES } from '../types';
 import { usePoi } from '../hooks/usePoi';
 import { useGpxRoute } from '../hooks/useGpxRoute';
 import { GpxUpload, RadiusSlider, SearchButton } from './GpxSection';
+import { useActiveItinerary } from '@/features/itineraryPanel/ActiveItineraryContext';
+import { addGpxRoute, fitMapToRoute, removeGpxRoute, isGpxRouteOnMap } from '../lib/gpx-layer';
 
 interface PoiPanelProps {
   map: MapboxMap | null;
@@ -15,10 +17,59 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
   const [open, setOpen] = useState(false);
   const [enabledCategories, setEnabledCategories] = useState<Set<PoiCategory>>(new Set());
 
+  const ctx = useActiveItinerary();
+  const itineraryGpxRoute = ctx.active?.gpxRoute ?? null;
+
   const gpx = useGpxRoute(map, isMapLoaded);
-  const { loading, error, poiCount, searchCorridor } = usePoi(
-    map, isMapLoaded, enabledCategories, gpx.gpxRoute, gpx.radiusM,
+
+  // Effective route: prefer the active itinerary's GPX (loaded via the
+  // "Nouvel itinéraire → Importer un GPX" dialog) over the local upload.
+  const effectiveRoute = useMemo(
+    () => itineraryGpxRoute ?? gpx.gpxRoute,
+    [itineraryGpxRoute, gpx.gpxRoute],
   );
+
+  const { loading, error, poiCount, searchCorridor } = usePoi(
+    map, isMapLoaded, enabledCategories, effectiveRoute, gpx.radiusM,
+  );
+
+  // Render the itinerary GPX as a Mapbox layer when no local upload is active.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    if (gpx.gpxRoute) return; // local upload owns the layer
+    if (itineraryGpxRoute) {
+      addGpxRoute(map, itineraryGpxRoute.points);
+      fitMapToRoute(map, itineraryGpxRoute.points);
+    } else if (isGpxRouteOnMap(map)) {
+      try { removeGpxRoute(map); } catch { /* noop */ }
+    }
+    return () => {
+      if (!gpx.gpxRoute) {
+        try { removeGpxRoute(map); } catch { /* noop */ }
+      }
+    };
+  }, [map, isMapLoaded, itineraryGpxRoute, gpx.gpxRoute]);
+
+  // Auto-enable POI categories from the active itinerary's panel toggles
+  // (mapped via the ActiveItineraryContext).
+  useEffect(() => {
+    if (ctx.enabledPoiCategories.size === 0) return;
+    setEnabledCategories((prev) => {
+      // Don't override if user has already manually picked categories.
+      if (prev.size > 0) return prev;
+      return new Set(ctx.enabledPoiCategories);
+    });
+  }, [ctx.enabledPoiCategories]);
+
+  // Open the panel + run corridor search when the itinerary container fires
+  // the "search corridor" event (e.g. right after a GPX import).
+  useEffect(() => {
+    return ctx.onCorridorSearchRequested(() => {
+      setOpen(true);
+      // Defer so usePoi has the latest effectiveRoute reference.
+      setTimeout(() => searchCorridor(), 50);
+    });
+  }, [ctx, searchCorridor]);
 
   const hasAny = enabledCategories.size > 0;
 
@@ -65,14 +116,14 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
           </div>
 
           <GpxUpload
-            gpxRoute={gpx.gpxRoute}
+            gpxRoute={effectiveRoute}
             gpxLoading={gpx.gpxLoading}
             gpxError={gpx.gpxError}
             onLoadGpx={gpx.loadGpx}
             onClearGpx={gpx.clearGpx}
           />
 
-          {gpx.gpxRoute && (
+          {effectiveRoute && (
             <RadiusSlider
               radiusM={gpx.radiusM}
               onRadiusChange={gpx.setRadiusM}
@@ -112,7 +163,7 @@ export function PoiPanel({ map, isMapLoaded }: PoiPanelProps) {
             </div>
           ))}
 
-          {gpx.gpxRoute && (
+          {effectiveRoute && (
             <SearchButton
               poiLoading={loading}
               disabled={enabledCategories.size === 0}

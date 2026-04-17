@@ -1,11 +1,14 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ItineraryPanel } from './ItineraryPanel';
+import { AddItineraryDialog } from './components/AddItineraryDialog';
+import { useActiveItinerary } from './ActiveItineraryContext';
 import {
   createDefaultItinerary,
   createDefaultProject,
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
 } from './defaultState';
+import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import type {
   ItineraryProject,
   PanelMode,
@@ -35,6 +38,18 @@ export function ItineraryPanelContainer({
   const [project, setProject] = useState<ItineraryProject>(() =>
     createDefaultProject(),
   );
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+
+  const ctx = useActiveItinerary();
+  // Keep the shared context in sync with our internal project state so other
+  // dock panels (PoiPanel) can react to the active itinerary's GPX route.
+  useEffect(() => {
+    const active =
+      project.itineraries.find((i) => i.id === project.activeItineraryId) ??
+      null;
+    ctx.setActive(active);
+    ctx.setItineraries(project.itineraries);
+  }, [project, ctx]);
 
   const updateActive = useCallback(
     (mut: (it: ItineraryProject['itineraries'][number]) => void) => {
@@ -51,7 +66,7 @@ export function ItineraryPanelContainer({
     [],
   );
 
-  return (
+  const panel = (
     <ItineraryPanel
       project={project}
       profiles={DEFAULT_PROFILES}
@@ -72,17 +87,22 @@ export function ItineraryPanelContainer({
       onSelectItinerary={(id) =>
         setProject((p) => ({ ...p, activeItineraryId: id }))
       }
-      onAddItinerary={() =>
+      onAddItinerary={() => addItinerary()}
+      onOpenAddItinerary={() => setAddDialogOpen(true)}
+      onAddItineraryFromGpx={async (file) => {
+        const route = await parseGpxFile(file);
+        addItinerary({
+          name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
+          gpxRoute: { name: route.name, points: route.points },
+        });
+      }}
+      onRemoveItinerary={(id) =>
         setProject((p) => {
-          const idx = p.itineraries.length;
-          const color =
-            ITINERARY_COLORS[idx % ITINERARY_COLORS.length] ?? ITINERARY_COLORS[0];
-          const next = createDefaultItinerary(idx + 1, color);
-          return {
-            ...p,
-            itineraries: [...p.itineraries, next],
-            activeItineraryId: next.id,
-          };
+          if (p.itineraries.length <= 1) return p;
+          const remaining = p.itineraries.filter((i) => i.id !== id);
+          const nextActive =
+            p.activeItineraryId === id ? remaining[0].id : p.activeItineraryId;
+          return { ...p, itineraries: remaining, activeItineraryId: nextActive };
         })
       }
       onChangeMode={(mode: PanelMode) =>
@@ -165,5 +185,42 @@ export function ItineraryPanelContainer({
       onSearchTimeline={() => {}}
       onOpenTimelineSettings={() => {}}
     />
+  );
+
+  function addItinerary(
+    overrides: Partial<ReturnType<typeof createDefaultItinerary>> = {},
+  ) {
+    setProject((p) => {
+      const idx = p.itineraries.length;
+      const color =
+        ITINERARY_COLORS[idx % ITINERARY_COLORS.length] ?? ITINERARY_COLORS[0];
+      const base = createDefaultItinerary(idx + 1, color);
+      const next = { ...base, ...overrides };
+      return {
+        ...p,
+        itineraries: [...p.itineraries, next],
+        activeItineraryId: next.id,
+      };
+    });
+  }
+
+  return (
+    <>
+      {panel}
+      <AddItineraryDialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        onPickScratch={() => addItinerary()}
+        onPickGpx={async (file) => {
+          const route = await parseGpxFile(file);
+          addItinerary({
+            name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
+            gpxRoute: { name: route.name, points: route.points },
+          });
+          // Auto-trigger corridor POI search (the PoiPanel listens via context).
+          ctx.triggerCorridorSearch();
+        }}
+      />
+    </>
   );
 }

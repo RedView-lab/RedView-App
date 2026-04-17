@@ -7,9 +7,9 @@
   --rvc-bg: rgba(0, 0, 0, 0.616);
   --rvc-bg-chip: rgba(255, 255, 255, 0.08);
   --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
-  --rvc-bg-row: #3d3d3d;
-  --rvc-bg-row-alt: #383838;
-  --rvc-bg-row-dark: #232323;
+  --rvc-bg-row: rgba(61, 61, 61, 0.55);
+  --rvc-bg-row-alt: rgba(56, 56, 56, 0.55);
+  --rvc-bg-row-dark: rgba(35, 35, 35, 0.55);
   --rvc-border: rgba(255, 255, 255, 0.08);
   --rvc-text: #ffffff;
   --rvc-text-dim: rgba(255, 255, 255, 0.64);

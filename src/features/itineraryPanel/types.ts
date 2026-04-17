@@ -138,6 +138,14 @@ export interface Itinerary {
   rhythm: RhythmState;
   poi: PoiState;
   timeline: TimelineItem[];
+  /**
+   * Optional GPX track loaded for this itinerary. When present, the POI
+   * search runs in "corridor" mode along these points instead of bbox mode.
+   */
+  gpxRoute?: {
+    name: string | null;
+    points: { lat: number; lon: number }[];
+  };
 }
 
 export interface ItineraryProject {
@@ -171,6 +179,18 @@ export interface ItineraryPanelProps {
   // itineraries
   onSelectItinerary?: (id: string) => void;
   onAddItinerary?: () => void;
+  /**
+   * Open the "Nouvel itinéraire" picker (from-scratch vs from-GPX).
+   * If wired, replaces `onAddItinerary` UX in the tab bar.
+   */
+  onOpenAddItinerary?: () => void;
+  /**
+   * Add a brand-new itinerary loaded from a GPX file.
+   * The container is expected to call `parseGpxFile()` and store the route.
+   */
+  onAddItineraryFromGpx?: (file: File) => Promise<void> | void;
+  /** Remove an itinerary by id. The container should refuse if it's the last one. */
+  onRemoveItinerary?: (id: string) => void;
 
   // mode tabs
   onChangeMode?: (mode: PanelMode) => void;

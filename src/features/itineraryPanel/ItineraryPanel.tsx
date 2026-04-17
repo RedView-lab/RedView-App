@@ -27,6 +27,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onRenameProject,
     onSelectItinerary,
     onAddItinerary,
+    onOpenAddItinerary,
+    onRemoveItinerary,
     onChangeMode,
     onChangeProfile,
     onUndo,
@@ -77,7 +79,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         itineraries={project.itineraries}
         activeId={project.activeItineraryId}
         onSelect={onSelectItinerary}
-        onAdd={onAddItinerary}
+        onAdd={onOpenAddItinerary ?? onAddItinerary}
+        onRemove={onRemoveItinerary}
       />
 
       <ModeTabs active={project.activeMode} onChange={onChangeMode} />

@@ -330,8 +330,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   flex-shrink: 0;
   color: #fff;
 }
@@ -342,35 +342,32 @@
   background: var(--rvi-red-accent);
   box-shadow: 0 0 0 2px rgba(197, 0, 0, 0.25);
 }
-.rvi-kind__circle {
+.rvi-kind--pause { color: rgba(255, 255, 255, 0.85); }
+
+/* Teardrop pin */
+.rvi-kind__pin {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+}
+.rvi-kind__pin-shape {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+.rvi-kind__pin-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Center the icon inside the rounded "head" of the pin (top ~40% of the bounding box). */
+  transform: translateY(-12%);
   color: #fff;
 }
-.rvi-kind--pinned .rvi-kind__tail {
-  position: absolute;
-  bottom: -1px;
-  right: 2px;
-  width: 6px;
-  height: 6px;
-  transform: rotate(45deg);
-  border-radius: 0 0 2px 0;
-}
-.rvi-kind--water .rvi-kind__circle,
-.rvi-kind--water .rvi-kind__tail { background: #3d8bff; }
-.rvi-kind--supermarket .rvi-kind__circle,
-.rvi-kind--supermarket .rvi-kind__tail { background: #ff8a3d; }
-.rvi-kind--pause .rvi-kind__circle {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--rvi-text);
-}
-.rvi-kind--waypoint { color: var(--rvi-red-accent); }
-.rvi-kind--start,
-.rvi-kind--end { color: #fff; }
 
 /* ---------- "Ajouter un élément" row (sheet view) ---------- */
 

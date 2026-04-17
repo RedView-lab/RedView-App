@@ -1,4 +1,4 @@
-import { IconPlusCircle } from './icons';
+import { IconPlusCircle, IconTrash } from './icons';
 import type { Itinerary } from '../types';
 
 interface ItineraryTabsProps {
@@ -6,6 +6,9 @@ interface ItineraryTabsProps {
   activeId: string;
   onSelect?: (id: string) => void;
   onAdd?: () => void;
+  /** Optional remove-itinerary handler. When provided AND there is more than
+   * one itinerary, each tab shows a small trash button next to its name. */
+  onRemove?: (id: string) => void;
 }
 
 export function ItineraryTabs({
@@ -13,21 +16,45 @@ export function ItineraryTabs({
   activeId,
   onSelect,
   onAdd,
+  onRemove,
 }: ItineraryTabsProps) {
+  const canRemove = itineraries.length > 1 && Boolean(onRemove);
   return (
     <nav className="rvi-itins" aria-label="Itinéraires">
       {itineraries.map((it) => (
-        <button
+        <span
           key={it.id}
-          type="button"
-          className={`rvi-itin${it.id === activeId ? ' is-active' : ''}`}
-          onClick={() => onSelect?.(it.id)}
+          className={`rvi-itin-wrap${it.id === activeId ? ' is-active' : ''}`}
         >
-          <span className="rvi-itin__swatch" style={{ background: it.color }} />
-          <span className="rvi-itin__label">{it.name}</span>
-        </button>
+          <button
+            type="button"
+            className={`rvi-itin${it.id === activeId ? ' is-active' : ''}`}
+            onClick={() => onSelect?.(it.id)}
+          >
+            <span className="rvi-itin__swatch" style={{ background: it.color }} />
+            <span className="rvi-itin__label">{it.name}</span>
+            {it.gpxRoute ? (
+              <span className="rvi-itin__badge" title="Itinéraire chargé depuis un GPX">
+                GPX
+              </span>
+            ) : null}
+          </button>
+          {canRemove ? (
+            <button
+              type="button"
+              className="rvi-itin__remove"
+              aria-label={`Supprimer ${it.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove?.(it.id);
+              }}
+            >
+              <IconTrash size={11} />
+            </button>
+          ) : null}
+        </span>
       ))}
-      <button type="button" className="rvi-itin" onClick={onAdd}>
+      <button type="button" className="rvi-itin rvi-itin--add" onClick={onAdd}>
         <IconPlusCircle size={12} />
         <span className="rvi-itin__label">Nouvel itinéraire</span>
       </button>

@@ -48,6 +48,51 @@
   white-space: nowrap;
 }
 
+/* GPX-loaded marker (small badge after the name) */
+.rvi-itin__badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(61, 139, 255, 0.18);
+  color: #6ea7ff;
+  letter-spacing: 0.4px;
+  margin-left: 2px;
+}
+
+/* Wrapper hosts the trash button next to the itinerary tab */
+.rvi-itin-wrap {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  transition: background 0.15s ease;
+  position: relative;
+}
+.rvi-itin-wrap.is-active { background: var(--rvi-bg-row); }
+.rvi-itin-wrap.is-active .rvi-itin { background: transparent; }
+
+.rvi-itin__remove {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  color: var(--rvi-text-dim);
+  cursor: pointer;
+  opacity: 0;
+  margin-right: 4px;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.rvi-itin-wrap:hover .rvi-itin__remove,
+.rvi-itin-wrap.is-active .rvi-itin__remove,
+.rvi-itin__remove:focus-visible { opacity: 1; }
+.rvi-itin__remove:hover {
+  background: rgba(255, 96, 96, 0.16);
+  color: #ff7070;
+}
+
 /* ── Mode tabs ────────────────────────────────────────────────── */
 .rvi-modes {
   display: flex;
