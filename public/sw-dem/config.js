@@ -16,6 +16,12 @@ const DEM_NODATA_THRESHOLD = -10000;
 const IGN_DEM_MINZOOM = 4;
 const IGN_DEM_MAXZOOM = 17;
 
+// Minimum Mapbox zoom at which we run the IGN composite pipeline.
+// Below this, Mapbox's 30 m global DEM is visually indistinguishable from
+// IGN LiDAR HD at the rendered pixel density, while the IGN build would
+// enqueue 6-9 WGS84G sub-tiles per Mapbox tile and jam the queue.
+const IGN_BUILD_MINZOOM = 10;
+
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
@@ -23,8 +29,8 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-const CACHE_NAME = 'dem-tiles-v16';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v10';
+const CACHE_NAME = 'dem-tiles-v17';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v11';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v3';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
@@ -63,5 +69,7 @@ const IGN_FALLBACK_MAX_DEPTH = 3;
 // Maximum zoom levels to overzoom DEM when native tile is missing
 const DEM_OVERZOOM_MAX_DEPTH = 4;
 
-// Batch timeout for buildIGNTile — proceed with partial coverage if exceeded
-const BUILD_IGN_BATCH_TIMEOUT = 15_000; // 15s
+// Batch timeout for buildIGNTile — proceed with partial coverage if exceeded.
+// Kept short so a slow France tile never blocks the DEM request handler for
+// long enough to stall other zoom levels behind it.
+const BUILD_IGN_BATCH_TIMEOUT = 6_000; // 6s

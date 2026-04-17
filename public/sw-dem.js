@@ -58,10 +58,11 @@ const OLD_CACHES = [
   'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3', 'dem-tiles-v4',
   'dem-tiles-v5', 'dem-tiles-v6', 'dem-tiles-v7', 'dem-tiles-v8',
   'dem-tiles-v9', 'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
-  'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15',
+  'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
+  'dem-negative-v10',
   'ortho-tiles-v1', 'ortho-tiles-v2',
   'slope-tiles-v1', 'slope-tiles-v2',
 ];
@@ -233,8 +234,10 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     let pngBlob;
     let demSource = 'none';
 
-    // 3. IGN France pipeline
-    if (inFrance && z >= IGN_DEM_MINZOOM) {
+    // 3. IGN France pipeline — only at zooms where LiDAR HD detail is visible.
+    // Below IGN_BUILD_MINZOOM we serve Mapbox directly: LiDAR detail would be
+    // imperceptible at that pixel density and the build jams the IGN queue.
+    if (inFrance && z >= IGN_BUILD_MINZOOM) {
       await ensureFrancePoly();
       const tileClass = classifyDemTile(z, x, y);
       if (tileClass !== 'outside') {
