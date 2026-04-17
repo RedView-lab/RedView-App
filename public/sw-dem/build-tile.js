@@ -176,6 +176,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
       );
     }
+    despikeElevations(elevations, coverage, DEM_TILE_SIZE);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
@@ -248,11 +249,13 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+    despikeElevations(elevations, coverage, DEM_TILE_SIZE);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
   console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+  despikeElevations(elevations, coverage, DEM_TILE_SIZE);
   return { blob: null, elevations, coverage, source, pendingFetches };
 }

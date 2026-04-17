@@ -11,16 +11,20 @@ function decodeBIL32(buffer) {
 }
 
 function sanitizeElevation(value) {
-  if (Number.isNaN(value) || value < DEM_NODATA_THRESHOLD) return 0;
+  if (Number.isNaN(value)) return 0;
+  if (value < MIN_VALID_ELEVATION_M) return 0;
+  if (value > MAX_VALID_ELEVATION_M) return 0;
   return value;
 }
 
-// Check if a single BIL pixel is valid (not NaN, not NODATA)
+// Check if a single BIL pixel is valid (not NaN, not NODATA, not out-of-range)
 function isRawValid(data, x, y) {
   const cx = Math.max(0, Math.min(x, IGN_SRC_TILE_SIZE - 1));
   const cy = Math.max(0, Math.min(y, IGN_SRC_TILE_SIZE - 1));
   const val = data[cy * IGN_SRC_TILE_SIZE + cx];
-  return !Number.isNaN(val) && val >= DEM_NODATA_THRESHOLD;
+  return !Number.isNaN(val)
+    && val >= MIN_VALID_ELEVATION_M
+    && val <= MAX_VALID_ELEVATION_M;
 }
 
 // Check if the raw elevation at nearest pixel is actually valid data
@@ -28,7 +32,9 @@ function hasValidRawElevation(data, fx, fy) {
   const ix = Math.max(0, Math.min(Math.round(fx), IGN_SRC_TILE_SIZE - 1));
   const iy = Math.max(0, Math.min(Math.round(fy), IGN_SRC_TILE_SIZE - 1));
   const val = data[iy * IGN_SRC_TILE_SIZE + ix];
-  return !Number.isNaN(val) && val >= DEM_NODATA_THRESHOLD;
+  return !Number.isNaN(val)
+    && val >= MIN_VALID_ELEVATION_M
+    && val <= MAX_VALID_ELEVATION_M;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +116,49 @@ function bicubicSample(data, fx, fy) {
   return top + (bot - top) * dy;
 }
 
-// Lightweight bilinear-only sampling (no 4×4 kernel overhead)
+// ---------------------------------------------------------------------------
+// Despike filter — 3×3 median, applied on the already-resampled tile.
+// Removes isolated single-pixel outliers (LiDAR hot pixels, scanner artifacts)
+// without erasing real terrain: real cliffs / ridgelines span multiple pixels,
+// so the neighborhood median agrees with the centre value and nothing changes.
+// Only pixels differing from the median by more than DESPIKE_THRESHOLD_M are
+// rewritten.
+// ---------------------------------------------------------------------------
+function despikeElevations(elevations, coverage, size) {
+  const out = new Float32Array(elevations);
+  const neigh = new Float32Array(9);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = y * size + x;
+      if (!coverage[idx]) continue;
+      let n = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= size) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= size) continue;
+          const nIdx = yy * size + xx;
+          if (!coverage[nIdx]) continue;
+          neigh[n++] = elevations[nIdx];
+        }
+      }
+      if (n < 5) continue; // not enough neighbours to trust
+      // Partial selection sort — enough to find the median
+      for (let i = 0; i < n; i++) {
+        let minJ = i;
+        for (let j = i + 1; j < n; j++) if (neigh[j] < neigh[minJ]) minJ = j;
+        if (minJ !== i) { const t = neigh[i]; neigh[i] = neigh[minJ]; neigh[minJ] = t; }
+        if (i >= (n >> 1)) break;
+      }
+      const median = neigh[n >> 1];
+      if (Math.abs(elevations[idx] - median) > DESPIKE_THRESHOLD_M) {
+        out[idx] = median;
+      }
+    }
+  }
+  elevations.set(out);
+}
 function bilinearSample(data, fx, fy) {
   const ix = Math.floor(fx);
   const iy = Math.floor(fy);

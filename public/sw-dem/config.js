@@ -13,6 +13,22 @@ const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
 const DEM_TILE_SIZE = 256;
 const IGN_SRC_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
+
+// Physical elevation bounds used to reject sentinel values (IGN occasionally
+// serves -9999.0 as nodata instead of the documented -99999). France's lowest
+// real point is ~-5 m (Rhône delta) so any value below -500 m is sentinel
+// garbage; any value above 9 000 m is impossible (Mont Blanc is 4 810 m) and
+// comes from LiDAR hot pixels / scanner artefacts. Values outside this range
+// are treated exactly like NaN.
+const MIN_VALID_ELEVATION_M = -500;
+const MAX_VALID_ELEVATION_M = 9_000;
+
+// Despike threshold — if a pixel differs from its 3×3 neighborhood median by
+// more than this many metres, it is clamped to the median. Catches isolated
+// LiDAR hot-pixel outliers that survived IGN's own pre-processing without
+// erasing real ridgelines (real cliffs span multiple pixels).
+const DESPIKE_THRESHOLD_M = 80;
+
 const IGN_DEM_MINZOOM = 4;
 const IGN_DEM_MAXZOOM = 17;
 
@@ -29,9 +45,9 @@ const ORTHO_TILE_SIZE = 256;
 // Bumped cache versions — invalidates tiles cached during the "système D"
 // era that served fake flat 200s. Old cache names are listed in
 // sw-dem.js OLD_CACHES and purged on activate.
-const CACHE_NAME = 'dem-tiles-v18';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v12';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v3';
+const CACHE_NAME = 'dem-tiles-v19';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v13';
+const ORTHO_CACHE_NAME = 'ortho-tiles-v4';
 const SLOPE_CACHE_NAME = 'slope-tiles-v3';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 

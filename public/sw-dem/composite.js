@@ -166,5 +166,12 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
   borderSamples.length = 0;
   samplesForIDW = null;
 
+  // Single-pixel despike — removes LiDAR hot pixels that survived source
+  // validation (MNS can still show tree-top / bird / cloud outliers a few
+  // hundred metres above local terrain). Real cliffs span multiple pixels so
+  // the 3×3 median agrees and nothing is altered.
+  const fullCoverage = new Uint8Array(DEM_TILE_SIZE * DEM_TILE_SIZE).fill(1);
+  despikeElevations(result, fullCoverage, DEM_TILE_SIZE);
+
   return encodeTerrainRGBPng(result);
 }
