@@ -22,6 +22,7 @@ export function ControlPanel({
   onLidarTileToggle,
   onLidarTileDelete,
   onLidarTileDownload,
+  onLidarTileOpen,
   onLabelsEnabledChange,
   onLabelToggle,
   onRoutesEnabledChange,
@@ -57,6 +58,7 @@ export function ControlPanel({
       <LidarTilesSection
         tiles={state.lidarTiles}
         onTileToggle={onLidarTileToggle}
+        onTileOpen={onLidarTileOpen}
         onTileDelete={onLidarTileDelete}
         onDownload={onLidarTileDownload}
       />

@@ -2,9 +2,7 @@ import { useRef, useState } from 'react';
 import { MapView } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
-import { MapToolsPanel } from '@/features/weather';
 import { PoiPanel } from '@/features/poi';
-import { LabelsPanel } from '@/features/labels';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -52,7 +50,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
         <PoiPanel map={mapRef.current} isMapLoaded={mapLoaded} />
-        <LabelsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
       </div>
 
       <button
@@ -75,10 +72,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         Logout
       </button>
 
-      <div style={rightDockStyle}>
-        <MapToolsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
-      </div>
-
       <div style={rightPanelStyle}>
         <ControlPanelContainer
           map={mapRef.current}
@@ -100,16 +93,6 @@ const leftDockStackStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
-};
-
-const rightDockStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 50,
-  right: 324,
-  zIndex: 20,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 8,
 };
 
 const rightPanelStyle: React.CSSProperties = {

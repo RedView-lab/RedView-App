@@ -115,6 +115,8 @@ export interface ControlPanelHandlers {
   onLidarTileToggle?: (id: string) => void;
   onLidarTileDelete?: (id: string) => void;
   onLidarTileDownload?: () => void;
+  /** Triggered when the user clicks the eye icon on a tile — opens 3D viewer. */
+  onLidarTileOpen?: (id: string) => void;
 
   onLabelsEnabledChange?: (enabled: boolean) => void;
   onLabelToggle?: (key: LabelKey, checked: boolean) => void;

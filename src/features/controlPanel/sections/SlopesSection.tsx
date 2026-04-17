@@ -2,7 +2,7 @@ import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
 import { ColorSwatch } from '../components/ColorSwatch';
-import { IconEye } from '../icons';
+import { IconEye, IconEyeOff } from '../icons';
 import type {
   ControlPanelHandlers,
   ControlPanelState,
@@ -68,28 +68,35 @@ export function SlopesSection({
 
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Opacité</span>
-        <span className="rvc-row__value-sm">{state.opacity} %</span>
-        <Slider value={state.opacity} onChange={onOpacityChange} width={100} />
+        <span className="rvc-row__value-sm">{state.opacity}%</span>
+        <Slider value={state.opacity} onChange={onOpacityChange} width={110} />
       </div>
 
       <div className="rvc-slopes__bands">
         {state.bands.map((band) => (
-          <div key={band.id} className="rvc-slopes__band">
+          <div
+            key={band.id}
+            className={`rvc-slopes__band${band.visible ? '' : ' is-hidden'}`}
+          >
             <button
               type="button"
-              className="rvc-icon-btn rvc-icon-btn--ghost"
+              className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
               onClick={() => onBandVisibilityToggle?.(band.id)}
               aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
+              title={band.degreeRange}
             >
-              <IconEye size={10} />
+              {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
             </button>
-            <span className="rvc-slopes__band-range">{band.percentRange}</span>
-            <span className="rvc-slopes__band-sep">|</span>
-            <span className="rvc-slopes__band-range">{band.degreeRange}</span>
-            <div className="rvc-slopes__band-color">
-              <ColorSwatch color={band.color} />
-              <span>{band.color.replace('#', '').toUpperCase()}</span>
-            </div>
+            <span className="rvc-slopes__band-swatch">
+              <ColorSwatch color={band.color} size={10} />
+              <span>{band.color.replace('#', '').toUpperCase().slice(0, 3)}</span>
+            </span>
+            <span className="rvc-slopes__band-pct" title={band.percentRange}>
+              {band.percentRange}
+            </span>
+            <span className="rvc-slopes__band-deg" title={band.degreeRange}>
+              {band.degreeRange}
+            </span>
           </div>
         ))}
       </div>

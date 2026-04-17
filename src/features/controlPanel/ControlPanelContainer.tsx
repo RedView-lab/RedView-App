@@ -9,10 +9,18 @@ import { SLOPE_CATEGORIES, degToPercent } from '@/features/slope/lib/slope-confi
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode } from '@/features/slope/types';
 
+import { loadLabelState, saveLabelState } from '@/features/labels/lib/label-persist';
+import { useLabels } from '@/features/labels/hooks/useLabels';
+import type { LabelCategory } from '@/features/labels/types';
+
+import { useWind } from '@/features/weather/hooks/useWind';
+
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 import type {
   ControlPanelState,
+  LabelKey,
+  LabelsState,
   SlopeBand,
   SlopeColorization,
 } from './types';
@@ -20,18 +28,12 @@ import type {
 interface ControlPanelContainerProps {
   map: MapboxMap | null;
   isMapLoaded: boolean;
-  /** When true, a click on the map will trigger a LIDAR tile download. */
   onToggleLidarDownloadMode?: () => void;
-  /** Currently active LIDAR click-to-download selection mode. */
   lidarDownloadModeActive?: boolean;
 }
 
-// ── Adapters: backend ⇄ ControlPanel types ─────────────────────────────────
+// ── Adapters ──────────────────────────────────────────────────────────
 
-/**
- * slope backend ("gradient" | "step") ⇄ panel ("gradient" | "stepped").
- * Panel labels say "Dégradé" / "Par paliers".
- */
 function colorModeToPanel(m: SlopeColorMode): SlopeColorization {
   return m === 'step' ? 'stepped' : 'gradient';
 }
@@ -39,7 +41,17 @@ function colorModeFromPanel(c: SlopeColorization): SlopeColorMode {
   return c === 'stepped' ? 'step' : 'gradient';
 }
 
-/** Build panel bands from shared SLOPE_CATEGORIES so the legend stays in sync. */
+/** Panel label key → backend label category (null = ui-only key, no backend). */
+const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
+  poiLabels: 'poi',
+  roads: 'roads',
+  cities: 'places',
+  states: null, // no backend equivalent — ui-only toggle
+  naturalParks: 'naturalParks',
+  countries: 'countries',
+  waterBody: 'waterBody',
+};
+
 function buildSlopeBandsFromCategories(visibilityById: Record<string, boolean>): SlopeBand[] {
   return SLOPE_CATEGORIES.map((cat) => ({
     id: cat.id,
@@ -50,26 +62,17 @@ function buildSlopeBandsFromCategories(visibilityById: Record<string, boolean>):
   }));
 }
 
-/** Format a cached LIDAR tile into the label shown in the Figma design. */
 function formatLidarTileLabel(info: CachedTileInfo): string {
   const sizeMb = Math.round(info.sizeBytes / (1024 * 1024));
   const year = new Date(info.cachedAt).getFullYear();
   return `Tuile ${info.coord.xKm}×${info.coord.yKm} (LIDAR) (${sizeMb}mo) (${year} IGN)`;
 }
-
 function tileKey(c: TileCoord): string {
   return `${c.xKm}_${c.yKm}_${c.projection}`;
 }
 
 // ── Container ─────────────────────────────────────────────────────────
 
-/**
- * Wires the ControlPanel to live LIDAR (cached tiles + delete) and slope
- * (enable / opacity / color mode / layer injection) backends.
- *
- * Everything else (basemaps, labels, routes, weather, …) stays on the
- * default mock state for now — handlers are stubbed and safe.
- */
 export function ControlPanelContainer({
   map,
   isMapLoaded,
@@ -78,14 +81,13 @@ export function ControlPanelContainer({
 }: ControlPanelContainerProps) {
   const lidarManager = useLidarManager();
 
-  // ── LIDAR: cached tiles + per-tile hidden state (ui-only) ─────────────
+  // ── LIDAR ──────────────────────────────────────────────────────────
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
   const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>({});
 
   const refreshTiles = useCallback(async () => {
     try {
-      const list = await lidarManager.getCachedTiles();
-      setCachedTiles(list);
+      setCachedTiles(await lidarManager.getCachedTiles());
     } catch (err) {
       console.warn('[controlPanel] getCachedTiles failed', err);
     }
@@ -93,15 +95,12 @@ export function ControlPanelContainer({
 
   useEffect(() => {
     void refreshTiles();
-    const unsubscribe = lidarManager.on((evt) => {
-      if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') {
-        void refreshTiles();
-      }
+    return lidarManager.on((evt) => {
+      if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') void refreshTiles();
     });
-    return unsubscribe;
   }, [lidarManager, refreshTiles]);
 
-  // ── Slope: persisted backend state ────────────────────────────────────
+  // ── Slope ──────────────────────────────────────────────────────────
   const [slopeState, setSlopeState] = useState(loadSlopeState);
   const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>({});
 
@@ -110,7 +109,6 @@ export function ControlPanelContainer({
     saveSlopeState(next);
   }, []);
 
-  // Inject slope layer into the map when enabled.
   useSlope(
     isMapLoaded ? map : null,
     isMapLoaded,
@@ -119,9 +117,37 @@ export function ControlPanelContainer({
     slopeState.colorMode,
   );
 
-  // ── Build the full ControlPanel state ─────────────────────────────────
+  // ── Labels ─────────────────────────────────────────────────────────
+  const [labelBackend, setLabelBackend] = useState(() => loadLabelState());
+  const [labelsEnabled, setLabelsEnabled] = useState(true);
+  const [statesUiToggle, setStatesUiToggle] = useState(true); // ui-only, no backend
+
+  // When master toggle is off, force every backend category to false.
+  const effectiveLabelState = useMemo(() => {
+    if (labelsEnabled) return labelBackend;
+    const off = { ...labelBackend };
+    for (const k of Object.keys(off) as LabelCategory[]) off[k] = false;
+    return off;
+  }, [labelBackend, labelsEnabled]);
+
+  useLabels(map, isMapLoaded, effectiveLabelState);
+
+  // ── Wind ───────────────────────────────────────────────────────────
+  const [windEnabled, setWindEnabled] = useState(false);
+  useWind(isMapLoaded ? map : null, windEnabled);
+
+  // ── Build ControlPanel state ───────────────────────────────────────
   const state: ControlPanelState = useMemo(() => {
     const base = DEFAULT_CONTROL_PANEL_STATE;
+    const panelLabels: LabelsState = {
+      poiLabels: labelBackend.poi,
+      roads: labelBackend.roads,
+      cities: labelBackend.places,
+      states: statesUiToggle,
+      naturalParks: labelBackend.naturalParks,
+      countries: labelBackend.countries,
+      waterBody: labelBackend.waterBody,
+    };
 
     return {
       ...base,
@@ -133,6 +159,7 @@ export function ControlPanelContainer({
         source: 'LIDAR',
         visible: !hiddenTiles[tileKey(info.coord)],
       })),
+      labels: { enabled: labelsEnabled, state: panelLabels },
       slopes: {
         enabled: slopeState.enabled,
         resolution: '1m (LIDAR)',
@@ -140,26 +167,39 @@ export function ControlPanelContainer({
         opacity: Math.round(slopeState.opacity * 100),
         bands: buildSlopeBandsFromCategories(slopeBandVisibility),
       },
+      wind: { enabled: windEnabled },
     };
-  }, [cachedTiles, hiddenTiles, slopeState, slopeBandVisibility]);
+  }, [
+    cachedTiles,
+    hiddenTiles,
+    labelBackend,
+    labelsEnabled,
+    statesUiToggle,
+    slopeState,
+    slopeBandVisibility,
+    windEnabled,
+  ]);
 
-  // ── Handlers ──────────────────────────────────────────────────────────
+  // ── Handlers ───────────────────────────────────────────────────────
 
   const handleLidarTileToggle = useCallback((id: string) => {
     setHiddenTiles((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
-
   const handleLidarTileDelete = useCallback(
     (id: string) => {
       const info = cachedTiles.find((t) => tileKey(t.coord) === id);
-      if (!info) return;
-      void lidarManager.removeTile(info.coord);
+      if (info) void lidarManager.removeTile(info.coord);
     },
     [cachedTiles, lidarManager],
   );
-
+  const handleLidarTileOpen = useCallback(
+    (id: string) => {
+      const info = cachedTiles.find((t) => tileKey(t.coord) === id);
+      if (info) lidarManager.openViewer(info.coord);
+    },
+    [cachedTiles, lidarManager],
+  );
   const handleLidarDownload = useCallback(() => {
-    // Figma button "Télécharger une tuile LIDAR" — enters map-click selection mode.
     onToggleLidarDownloadMode?.();
   }, [onToggleLidarDownloadMode]);
 
@@ -179,7 +219,23 @@ export function ControlPanelContainer({
     setSlopeBandVisibility((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
   }, []);
 
-  // Visual feedback on the "Télécharger" button when selection mode is on.
+  const handleLabelsEnabled = useCallback((enabled: boolean) => setLabelsEnabled(enabled), []);
+  const handleLabelToggle = useCallback((key: LabelKey, checked: boolean) => {
+    if (key === 'states') {
+      setStatesUiToggle(checked);
+      return;
+    }
+    const backendKey = PANEL_TO_BACKEND_LABEL[key];
+    if (!backendKey) return;
+    setLabelBackend((prev) => {
+      const next = { ...prev, [backendKey]: checked };
+      saveLabelState(next);
+      return next;
+    });
+  }, []);
+
+  const handleWindEnabled = useCallback((enabled: boolean) => setWindEnabled(enabled), []);
+
   const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
   return (
@@ -188,14 +244,19 @@ export function ControlPanelContainer({
       className={className}
       /* LIDAR */
       onLidarTileToggle={handleLidarTileToggle}
+      onLidarTileOpen={handleLidarTileOpen}
       onLidarTileDelete={handleLidarTileDelete}
       onLidarTileDownload={handleLidarDownload}
+      /* Labels */
+      onLabelsEnabledChange={handleLabelsEnabled}
+      onLabelToggle={handleLabelToggle}
       /* Slopes */
       onSlopesEnabledChange={handleSlopesEnabled}
       onSlopeColorizationChange={handleSlopeColorization}
       onSlopeOpacityChange={handleSlopeOpacity}
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
-      /* resolution is fixed to 1m for now — kept as a no-op */
+      /* Wind */
+      onWindEnabledChange={handleWindEnabled}
     />
   );
 }

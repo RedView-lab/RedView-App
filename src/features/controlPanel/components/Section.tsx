@@ -64,7 +64,14 @@ export function Section({
           <IconChevronDown size={16} />
         </button>
       </header>
-      {isOpen && children ? <div className="rvc-section__body">{children}</div> : null}
+      <div
+        className={`rvc-section__body-wrap${isOpen ? ' is-open' : ''}`}
+        aria-hidden={!isOpen}
+      >
+        <div className="rvc-section__body-inner">
+          <div className="rvc-section__body">{children}</div>
+        </div>
+      </div>
     </section>
   );
 }
