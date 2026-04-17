@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
@@ -30,6 +31,9 @@ interface ControlPanelContainerProps {
   isMapLoaded: boolean;
   onToggleLidarDownloadMode?: () => void;
   lidarDownloadModeActive?: boolean;
+  width?: number;
+  onResizeStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
+  isResizing?: boolean;
 }
 
 // ── Adapters ──────────────────────────────────────────────────────────
@@ -78,6 +82,9 @@ export function ControlPanelContainer({
   isMapLoaded,
   onToggleLidarDownloadMode,
   lidarDownloadModeActive,
+  width,
+  onResizeStart,
+  isResizing,
 }: ControlPanelContainerProps) {
   const lidarManager = useLidarManager();
 
@@ -115,6 +122,13 @@ export function ControlPanelContainer({
     slopeState.enabled,
     slopeState.opacity,
     slopeState.colorMode,
+    useMemo(
+      () =>
+        SLOPE_CATEGORIES.filter((cat) => slopeBandVisibility[cat.id] === false).map(
+          (cat) => [cat.minDeg, cat.maxDeg] as [number, number],
+        ),
+      [slopeBandVisibility],
+    ),
   );
 
   // ── Labels ─────────────────────────────────────────────────────────
@@ -242,6 +256,9 @@ export function ControlPanelContainer({
     <ControlPanel
       state={state}
       className={className}
+      width={width}
+      onResizeStart={onResizeStart}
+      isResizing={isResizing}
       /* LIDAR */
       onLidarTileToggle={handleLidarTileToggle}
       onLidarTileOpen={handleLidarTileOpen}

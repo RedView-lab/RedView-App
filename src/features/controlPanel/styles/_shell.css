@@ -1,0 +1,50 @@
+/* Panel shell: CSS variables, box, scrollbar */
+
+.rvc-panel {
+  --rvc-red: #890000;
+  --rvc-red-border: #700000;
+  --rvc-accent: #c50000;
+  --rvc-bg: rgba(0, 0, 0, 0.616);
+  --rvc-bg-chip: rgba(255, 255, 255, 0.08);
+  --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
+  --rvc-bg-row: #3d3d3d;
+  --rvc-bg-row-alt: #383838;
+  --rvc-bg-row-dark: #232323;
+  --rvc-border: rgba(255, 255, 255, 0.08);
+  --rvc-text: #ffffff;
+  --rvc-text-dim: rgba(255, 255, 255, 0.64);
+  --rvc-text-dim-40: rgba(255, 255, 255, 0.4);
+  --rvc-ghost-btn: rgba(145, 145, 145, 0.4);
+  --rvc-radius: 8px;
+  --rvc-radius-md: 6px;
+  --rvc-radius-sm: 4px;
+
+  box-sizing: border-box;
+  width: 300px;
+  min-height: 100%;
+  max-height: 100%;
+  padding: 0 12px;
+  background: var(--rvc-bg);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--rvc-radius);
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.rvc-panel *,
+.rvc-panel *::before,
+.rvc-panel *::after {
+  box-sizing: border-box;
+}
+
+.rvc-panel ::-webkit-scrollbar { width: 6px; }
+.rvc-panel ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 3px; }

@@ -1,0 +1,42 @@
+/* Primary / ghost buttons */
+
+.rvc-btn-primary {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  margin-top: 4px;
+  background: var(--rvc-red);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: var(--rvc-radius-md);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s;
+}
+
+.rvc-btn-primary:hover { background: #a00000; }
+
+.rvc-btn-ghost {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px;
+  background: var(--rvc-ghost-btn);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--rvc-radius-md);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s;
+}
+
+.rvc-btn-ghost:hover { background: rgba(145, 145, 145, 0.55); }

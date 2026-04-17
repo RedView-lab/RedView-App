@@ -28,13 +28,16 @@ export function LabelsSection({ enabled, state, onEnabledChange, onLabelToggle }
       title="Étiquettes"
       toggle={{ checked: enabled, onChange: onEnabledChange }}
     >
-      <div className="rvc-labels__grid">
+      <div
+        className="rvc-labels__grid"
+        style={{ opacity: enabled ? 1 : 0.45, pointerEvents: enabled ? 'auto' : 'none' }}
+      >
         <div className="rvc-labels__col">
           {COLUMN_A.map(({ key, label }) => (
             <Checkbox
               key={key}
               id={`lbl-${key}`}
-              checked={state[key]}
+              checked={enabled && state[key]}
               onChange={(v) => onLabelToggle?.(key, v)}
               label={label}
             />
@@ -45,7 +48,7 @@ export function LabelsSection({ enabled, state, onEnabledChange, onLabelToggle }
             <Checkbox
               key={key}
               id={`lbl-${key}`}
-              checked={state[key]}
+              checked={enabled && state[key]}
               onChange={(v) => onLabelToggle?.(key, v)}
               label={label}
             />

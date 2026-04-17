@@ -1,0 +1,15 @@
+/* Labels section */
+
+.rvc-labels__grid {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+}
+
+.rvc-labels__col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 0;
+  min-width: 0;
+}

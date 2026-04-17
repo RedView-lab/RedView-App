@@ -1,0 +1,63 @@
+/* Routes section */
+
+.rvc-routes__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-routes__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-routes__color-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 2px 5px 9px;
+  background: var(--rvc-bg-row);
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.rvc-routes__label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 2px;
+}
+
+.rvc-routes__opacity {
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 5px;
+  background: var(--rvc-bg-row);
+  border-radius: 5px;
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rvc-routes__opacity-range {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}

@@ -19,13 +19,18 @@ if (typeof window !== 'undefined') {
   };
 }
 
-function addSlopeLayer(map: MapboxMap, opacity: number, colorMode: SlopeColorMode) {
+function addSlopeLayer(
+  map: MapboxMap,
+  opacity: number,
+  colorMode: SlopeColorMode,
+  hiddenRanges?: [number, number][],
+) {
   if (map.getSource(SLOPE_SOURCE_ID)) {
     console.log('[slope][map] source already exists, skipping addSlopeLayer');
     return;
   }
 
-  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(colorMode));
+  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(colorMode, hiddenRanges));
 
   const layer = buildSlopeLayer(opacity);
   map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
@@ -55,20 +60,28 @@ export function useSlope(
   enabled: boolean,
   opacity: number,
   colorMode: SlopeColorMode,
+  hiddenRanges?: [number, number][],
 ) {
   const opacityRef = useRef(opacity);
   const colorModeRef = useRef(colorMode);
   const enabledRef = useRef(enabled);
+  const hiddenRangesRef = useRef(hiddenRanges);
   opacityRef.current = opacity;
   colorModeRef.current = colorMode;
   enabledRef.current = enabled;
+  hiddenRangesRef.current = hiddenRanges;
+
+  // Serialize ranges to a stable string for dependency comparison.
+  const hiddenKey = hiddenRanges
+    ? hiddenRanges.map(([a, b]) => `${a}-${b}`).join(',')
+    : '';
 
   // Add / remove layer when enabled changes
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
     if (enabled) {
-      addSlopeLayer(map, opacity, colorMode);
+      addSlopeLayer(map, opacity, colorMode, hiddenRanges);
     } else {
       removeSlopeLayer(map);
     }
@@ -88,17 +101,17 @@ export function useSlope(
     } catch { /* layer may not exist yet */ }
   }, [map, isMapLoaded, enabled, opacity]);
 
-  // Update color mode — must rebuild source with new tile URL
+  // Update color mode OR hidden-bands — must rebuild source with new tile URL
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
     try {
       if (map.getSource(SLOPE_SOURCE_ID)) {
         removeSlopeLayer(map);
-        addSlopeLayer(map, opacity, colorMode);
-        console.log(`[slope][map] %c MODE CHANGED %c colorMode=${colorMode} — source rebuilt`, 'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', '');
+        addSlopeLayer(map, opacity, colorMode, hiddenRanges);
+        console.log(`[slope][map] %c SOURCE REBUILT %c colorMode=${colorMode} hidden=${hiddenKey || '∅'}`, 'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', '');
       }
     } catch { /* layer may not exist yet */ }
-  }, [map, isMapLoaded, enabled, colorMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, enabled, colorMode, hiddenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-add layer after style reload
   useEffect(() => {
@@ -108,7 +121,7 @@ export function useSlope(
       setTimeout(() => {
         if (enabledRef.current) {
           console.log('[slope][map] %c STYLE RELOAD %c re-adding slope layer', 'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', '');
-          addSlopeLayer(map, opacityRef.current, colorModeRef.current);
+          addSlopeLayer(map, opacityRef.current, colorModeRef.current, hiddenRangesRef.current);
         }
       }, 0);
     };

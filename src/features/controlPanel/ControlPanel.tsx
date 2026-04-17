@@ -1,12 +1,14 @@
+import type { CSSProperties } from 'react';
 import { BasemapsSection } from './sections/BasemapsSection';
 import { LidarTilesSection } from './sections/LidarTilesSection';
 import { LabelsSection } from './sections/LabelsSection';
 import { RoutesSection } from './sections/RoutesSection';
 import { SlopesSection } from './sections/SlopesSection';
 import { WeatherSection } from './sections/WeatherSection';
+import { WindSection } from './sections/WindSection';
 import { SimpleToggleSection } from './sections/SimpleToggleSection';
 import type { ControlPanelProps } from './types';
-import './ControlPanel.css';
+import './styles/index.css';
 
 /**
  * Unified left-dock control panel for RedView (Figma frame 1407:17211).
@@ -46,9 +48,25 @@ export function ControlPanel({
   onWindEnabledChange,
   onSnowEnabledChange,
   onSunlightEnabledChange,
+  width,
+  onResizeStart,
+  isResizing,
 }: ControlPanelProps) {
+  const panelClass = `rvc-panel${className ? ` ${className}` : ''}${
+    isResizing ? ' is-resizing' : ''
+  }`;
+  const style: CSSProperties | undefined = width ? { width } : undefined;
   return (
-    <aside className={`rvc-panel${className ? ` ${className}` : ''}`}>
+    <aside className={panelClass} style={style}>
+      {onResizeStart && (
+        <div
+          className={`rvc-panel__resize-handle${isResizing ? ' is-dragging' : ''}`}
+          onMouseDown={onResizeStart}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionner le panneau"
+        />
+      )}
       <BasemapsSection
         basemaps={state.basemaps}
         onBasemapToggle={onBasemapToggle}
@@ -107,8 +125,7 @@ export function ControlPanel({
         onAddAlert={onWeatherAddAlert}
       />
 
-      <SimpleToggleSection
-        title="Vent"
+      <WindSection
         enabled={state.wind.enabled}
         onEnabledChange={onWindEnabledChange}
       />

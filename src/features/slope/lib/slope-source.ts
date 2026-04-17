@@ -7,13 +7,20 @@ export const SLOPE_LAYER_ID = 'slope-overlay';
 
 // ── Raster source definition ──────────────────────────────────────────
 
-export function buildSlopeTileSource(colorMode: SlopeColorMode) {
+/**
+ * `hiddenRanges` is an optional list of `[minDeg, maxDeg)` bands that must be
+ * rendered fully transparent by the service worker. Used by the Control
+ * Panel to let the user hide a specific slope category (e.g. "masquer tout
+ * ce qui est plat / vert"). The ranges are baked into the tile URL so the
+ * SW can honour them without any client-side post-processing.
+ */
+export function buildSlopeTileSource(colorMode: SlopeColorMode, hiddenRanges?: [number, number][]) {
+  const hideQuery = hiddenRanges && hiddenRanges.length
+    ? `&hide=${hiddenRanges.map(([a, b]) => `${a}-${b}`).join(',')}`
+    : '';
   return {
     type: 'raster' as const,
-    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}`],
-    // tileSize 256 matches the SW output; the previous 512 forced Mapbox
-    // to request one tile and display it at 2× on-screen, blurring the
-    // pre-coloured band boundaries.
+    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}`],
     tileSize: 256,
     minzoom: 6,
     maxzoom: 17,

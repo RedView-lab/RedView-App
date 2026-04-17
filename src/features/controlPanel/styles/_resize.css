@@ -1,0 +1,25 @@
+/* Drag-to-resize handle on the left edge of the panel */
+
+.rvc-panel { position: relative; }
+
+.rvc-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 5;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.rvc-panel__resize-handle:hover,
+.rvc-panel__resize-handle.is-dragging {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-panel.is-resizing,
+.rvc-panel.is-resizing * {
+  user-select: none !important;
+}

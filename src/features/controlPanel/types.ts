@@ -150,4 +150,10 @@ export interface ControlPanelHandlers {
 export interface ControlPanelProps extends ControlPanelHandlers {
   state: ControlPanelState;
   className?: string;
+  /** Optional px width the panel shell should render at. */
+  width?: number;
+  /** Mouse-down handler on the drag-to-resize handle (left edge). */
+  onResizeStart?: (ev: import('react').MouseEvent<HTMLDivElement>) => void;
+  /** Toggles an active visual state while dragging. */
+  isResizing?: boolean;
 }

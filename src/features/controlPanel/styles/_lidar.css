@@ -1,0 +1,30 @@
+/* LIDAR tiles section */
+
+.rvc-lidar__list {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.rvc-lidar__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 0;
+  border-radius: var(--rvc-radius-md);
+  width: 100%;
+}
+
+.rvc-lidar__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

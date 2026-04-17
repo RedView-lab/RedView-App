@@ -159,11 +159,12 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
 }
 
 // ── Pre-coloured RGBA PNG with LUT + NoData alpha ─────────────────────
-async function encodeSlopePng(slopes, ownElev, colorMode) {
+async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
   const lut = colorMode === 'step' ? SLOPE_LUT_STEP : SLOPE_LUT_GRADIENT;
+  const hasHide = Array.isArray(hiddenRanges) && hiddenRanges.length > 0;
 
   for (let j = 0; j < n; j++) {
     const elev = ownElev[j];
@@ -173,10 +174,21 @@ async function encodeSlopePng(slopes, ownElev, colorMode) {
       rgba[idx + 3] = 0;
       continue;
     }
-    // Clamp degrees to [0, 90] and index into the 91-entry LUT
+    // Clamp degrees to [0, 90]
     let d = slopes[j];
     if (d < 0) d = 0; else if (d > 90) d = 90;
-    const k = (d + 0.5) | 0; // round to nearest integer bucket
+
+    // Hidden-band check: make pixels in those degree ranges fully transparent
+    if (hasHide) {
+      let hidden = false;
+      for (let h = 0; h < hiddenRanges.length; h++) {
+        const r = hiddenRanges[h];
+        if (d >= r[0] && d < r[1]) { hidden = true; break; }
+      }
+      if (hidden) { rgba[idx + 3] = 0; continue; }
+    }
+
+    const k = (d + 0.5) | 0;
     const lo = k * 3;
     rgba[idx]     = lut[lo];
     rgba[idx + 1] = lut[lo + 1];
@@ -190,7 +202,7 @@ async function encodeSlopePng(slopes, ownElev, colorMode) {
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
-async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache) {
+async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
@@ -199,7 +211,7 @@ async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache) {
   const t2 = performance.now();
   const slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   const t3 = performance.now();
-  const blob = await encodeSlopePng(slopes, ownElev, colorMode);
+  const blob = await encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges);
   const t4 = performance.now();
 
   if (DEBUG) {
