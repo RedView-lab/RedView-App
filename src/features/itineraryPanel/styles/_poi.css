@@ -43,3 +43,34 @@
 .rvi-categories-btn__chevron {
   opacity: 0.8;
 }
+
+/* "Charger" button — disabled state (no GPX or no enabled category). */
+.rvi-redbtn.is-disabled,
+.rvi-redbtn[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: var(--rvi-red);
+}
+.rvi-redbtn.is-disabled:hover,
+.rvi-redbtn[disabled]:hover {
+  background: var(--rvi-red);
+}
+
+/* Inline POI status messages (errors / hints) below the load button. */
+.rvi-poi-msg {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: var(--rvi-radius-sm);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.rvi-poi-msg--error {
+  color: #ffd3d3;
+  background: rgba(127, 29, 29, 0.32);
+  border: 1px solid rgba(248, 113, 113, 0.28);
+}
+.rvi-poi-msg--hint {
+  color: var(--rvi-text-dim);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--rvi-border);
+}

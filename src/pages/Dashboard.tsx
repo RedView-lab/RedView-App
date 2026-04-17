@@ -2,11 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { MapView } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
-import { PoiPanel } from '@/features/poi';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ItineraryPanel } from '@/features/itineraryPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
-import { ActiveItineraryProvider } from '@/features/itineraryPanel/ActiveItineraryContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
@@ -169,12 +167,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <LidarProvider>
-    <ActiveItineraryProvider>
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
 
       <div style={leftPanelStyle}>
         <ItineraryPanel
+          map={mapRef.current}
+          isMapLoaded={mapLoaded}
           width={leftPanelWidth}
           onResizeStart={handleLeftResizeStart}
           isResizing={isLeftResizing}
@@ -194,7 +193,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           open={fitPanelOpen}
           onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
-        <PoiPanel map={mapRef.current} isMapLoaded={mapLoaded} />
       </div>
 
       <button onClick={onLogout} style={logoutStyle}>
@@ -213,7 +211,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         />
       </div>
     </div>
-    </ActiveItineraryProvider>
     </LidarProvider>
   );
 }

@@ -43,6 +43,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onChangePoiRefine,
     onOpenPoiCategories,
     onLoadPois,
+    poiLoading,
+    poiCount,
+    poiError,
+    poiLoadDisabled,
+    poiLoadDisabledReason,
     onChangeTimelineView,
     onAddTimelineItem,
     onToggleTimelineItem,
@@ -123,6 +128,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
               onChangeRefine={onChangePoiRefine}
               onOpenCategories={onOpenPoiCategories}
               onLoad={onLoadPois}
+              loading={poiLoading}
+              poiCount={poiCount}
+              error={poiError}
+              disabled={poiLoadDisabled}
+              disabledReason={poiLoadDisabledReason}
             />
           ) : (
             <ComingSoonSection title="Points d'intérêt" />

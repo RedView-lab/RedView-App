@@ -1,0 +1,155 @@
+import { useEffect, useMemo } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
+
+import { usePoi } from '@/features/poi/hooks/usePoi';
+import {
+  addGpxRoute,
+  fitMapToRoute,
+  isGpxRouteOnMap,
+  removeGpxRoute,
+} from '@/features/poi/lib/gpx-layer';
+import type { PoiCategory as FeaturePoiCategory } from '@/features/poi/types';
+
+import type {
+  Itinerary,
+  PoiCategory as PanelPoiCategory,
+  PoiEntry,
+} from '../types';
+
+/**
+ * Mapping from the panel's per-row POI keys (Figma taxonomy) to the
+ * underlying OSM/Overpass categories used by the POI engine.
+ *
+ * Empty arrays mean the row is shown in the UI but not yet wired to
+ * an OSM tag — the corridor search will simply ignore it.
+ */
+const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
+  fountains: ['drinking_water'],
+  bakeries: ['bakery'],
+  supermarkets: ['supermarket', 'convenience'],
+  restaurants: [],
+  hotels: [],
+  refuges: ['shelter', 'camp_site'],
+  bars: [],
+  passes: [],
+};
+
+const DEFAULT_RADIUS_M = 1000;
+
+export interface UseItineraryPoiMapResult {
+  loading: boolean;
+  error: string | null;
+  poiCount: number;
+  /** Trigger a corridor search along the active itinerary's GPX route. */
+  searchCorridor: () => void;
+  hasGpxRoute: boolean;
+  hasEnabledCategories: boolean;
+  /** Effective radius (max of enabled rows) used by the corridor search. */
+  radiusM: number;
+}
+
+/**
+ * Bridges the left-dock Itinerary Panel's POI editor with the Mapbox map:
+ *
+ * - Renders the active itinerary's GPX track as a styled line.
+ * - Translates the panel's POI rows into Overpass categories.
+ * - Forwards loading / count / error state back to the panel.
+ *
+ * The hook is intentionally side-effect-only on the map; it never owns
+ * UI state beyond what `usePoi` already exposes.
+ */
+export function useItineraryPoiMap(
+  map: MapboxMap | null,
+  isMapLoaded: boolean,
+  active: Itinerary | null,
+): UseItineraryPoiMapResult {
+  // ── Derive enabled OSM categories from the panel POI rows ─────────
+  const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
+    const set = new Set<FeaturePoiCategory>();
+    if (!active) return set;
+    for (const [panelKey, raw] of Object.entries(active.poi)) {
+      if (panelKey === 'refineResults') continue;
+      const entry = raw as PoiEntry;
+      if (!entry.enabled) continue;
+      const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
+      for (const fk of mapped) set.add(fk);
+    }
+    return set;
+  }, [active]);
+
+  // ── Effective corridor radius: max of enabled rows ────────────────
+  const radiusM = useMemo(() => {
+    if (!active) return DEFAULT_RADIUS_M;
+    let max = 0;
+    for (const [k, raw] of Object.entries(active.poi)) {
+      if (k === 'refineResults') continue;
+      const entry = raw as PoiEntry;
+      if (entry.enabled && entry.distanceM && entry.distanceM > max) {
+        max = entry.distanceM;
+      }
+    }
+    return max > 0 ? max : DEFAULT_RADIUS_M;
+  }, [active]);
+
+  const gpxRoute = active?.gpxRoute ?? null;
+
+  const { loading, error, poiCount, searchCorridor } = usePoi(
+    map,
+    isMapLoaded,
+    enabledCategories,
+    gpxRoute,
+    radiusM,
+  );
+
+  // ── Render the active itinerary's GPX track ───────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    if (gpxRoute) {
+      try {
+        addGpxRoute(map, gpxRoute.points);
+        fitMapToRoute(map, gpxRoute.points);
+      } catch {
+        /* map may be tearing down */
+      }
+    } else if (isGpxRouteOnMap(map)) {
+      try {
+        removeGpxRoute(map);
+      } catch {
+        /* noop */
+      }
+    }
+  }, [map, isMapLoaded, gpxRoute]);
+
+  // Re-add the GPX after a Mapbox style.load (Standard Satellite fires
+  // style.load multiple times as imports/terrain settle, wiping custom
+  // layers). Defer so useMap's async setup completes first.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const onStyleLoad = () => {
+      if (!gpxRoute || isGpxRouteOnMap(map)) return;
+      setTimeout(() => {
+        if (gpxRoute && !isGpxRouteOnMap(map)) {
+          try {
+            addGpxRoute(map, gpxRoute.points);
+          } catch {
+            /* noop */
+          }
+        }
+      }, 0);
+    };
+    map.on('style.load', onStyleLoad);
+    return () => {
+      map.off('style.load', onStyleLoad);
+    };
+  }, [map, isMapLoaded, gpxRoute]);
+
+  return {
+    loading,
+    error,
+    poiCount,
+    searchCorridor,
+    hasGpxRoute: gpxRoute !== null,
+    hasEnabledCategories: enabledCategories.size > 0,
+    radiusM,
+  };
+}

@@ -220,6 +220,16 @@ export interface ItineraryPanelProps {
   onChangePoiRefine?: (value: boolean) => void;
   onOpenPoiCategories?: () => void;
   onLoadPois?: () => void;
+  /** Map-level POI loading state (corridor / viewport fetch). */
+  poiLoading?: boolean;
+  /** Number of POIs currently rendered on the map. */
+  poiCount?: number;
+  /** Last error from the POI engine (Overpass / network). */
+  poiError?: string | null;
+  /** Disable the "Charger" button (e.g. no GPX route attached). */
+  poiLoadDisabled?: boolean;
+  /** Optional helper text rendered when the load button is disabled. */
+  poiLoadDisabledReason?: string | null;
 
   // timeline
   onChangeTimelineView?: (view: TimelineView) => void;
