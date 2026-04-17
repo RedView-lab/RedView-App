@@ -4,6 +4,7 @@ import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { PoiPanel } from '@/features/poi';
 import { ControlPanelContainer } from '@/features/controlPanel';
+import { ItineraryPanel } from '@/features/itineraryPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -17,6 +18,23 @@ const PANEL_WIDTH_MIN = 260;
 const PANEL_WIDTH_MAX = 560;
 const PANEL_WIDTH_DEFAULT = 300;
 const PANEL_PADDING = 12;
+
+const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
+const LEFT_PANEL_WIDTH_MIN = 300;
+const LEFT_PANEL_WIDTH_MAX = 520;
+const LEFT_PANEL_WIDTH_DEFAULT = 360;
+
+function readStoredLeftWidth(): number {
+  try {
+    const raw = localStorage.getItem(LEFT_PANEL_WIDTH_KEY);
+    if (!raw) return LEFT_PANEL_WIDTH_DEFAULT;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return LEFT_PANEL_WIDTH_DEFAULT;
+    return Math.min(LEFT_PANEL_WIDTH_MAX, Math.max(LEFT_PANEL_WIDTH_MIN, n));
+  } catch {
+    return LEFT_PANEL_WIDTH_DEFAULT;
+  }
+}
 
 function readStoredWidth(): number {
   try {
@@ -38,10 +56,23 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [fitPanelOpen, setFitPanelOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
   const [isResizing, setIsResizing] = useState(false);
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() =>
+    readStoredLeftWidth(),
+  );
+  const [isLeftResizing, setIsLeftResizing] = useState(false);
 
   useEffect(() => {
     try { localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth)); } catch { /* ignore */ }
   }, [panelWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEFT_PANEL_WIDTH_KEY, String(leftPanelWidth));
+    } catch {
+      /* ignore */
+    }
+  }, [leftPanelWidth]);
 
   const handleResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -53,6 +84,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     };
     const onUp = () => {
       setIsResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const handleLeftResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    setIsLeftResizing(true);
+    const onMove = (e: MouseEvent) => {
+      const raw = e.clientX - PANEL_PADDING;
+      const clamped = Math.min(
+        LEFT_PANEL_WIDTH_MAX,
+        Math.max(LEFT_PANEL_WIDTH_MIN, raw),
+      );
+      setLeftPanelWidth(clamped);
+    };
+    const onUp = () => {
+      setIsLeftResizing(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -85,6 +136,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     display: 'flex',
   };
 
+  const leftPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    width: leftPanelWidth + PANEL_PADDING * 2,
+    zIndex: 25,
+    padding: PANEL_PADDING,
+    boxSizing: 'border-box',
+    display: leftPanelOpen ? 'flex' : 'none',
+  };
+
+  const leftDockOffset =
+    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
+
   const logoutStyle: React.CSSProperties = {
     position: 'absolute',
     top: 12,
@@ -105,7 +171,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
 
-      <div style={leftDockStackStyle}>
+      <div style={leftPanelStyle}>
+        <ItineraryPanel
+          width={leftPanelWidth}
+          onResizeStart={handleLeftResizeStart}
+          isResizing={isLeftResizing}
+          onClose={() => setLeftPanelOpen(false)}
+        />
+      </div>
+
+      <div style={{ ...leftDockStackStyle, left: leftDockOffset }}>
         <LidarPanel
           modeActive={lidarModeEnabled}
           detailsOpen={lidarDetailsOpen}

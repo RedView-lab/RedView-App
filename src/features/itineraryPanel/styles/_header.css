@@ -1,0 +1,121 @@
+/* Top header: back button, title, privacy chip, save date/size, action icons */
+
+.rvi-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.rvi-header__title-group {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.rvi-header__back {
+  all: unset;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5.5px;
+  border-radius: 77px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--rvi-text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-header__back:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvi-header__info {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvi-header__title {
+  all: unset;
+  display: block;
+  width: 100%;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+.rvi-header__title:focus {
+  outline: 1px solid var(--rvi-border);
+  border-radius: 4px;
+}
+
+.rvi-header__meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.rvi-header__badge {
+  background: var(--rvi-bg-row-muted);
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--rvi-text);
+  line-height: 1;
+}
+
+.rvi-header__saved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--rvi-text);
+  opacity: 0.4;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.rvi-header__size {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--rvi-text);
+  opacity: 0.4;
+}
+
+.rvi-header__actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.rvi-iconbtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--rvi-text);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease;
+}
+.rvi-iconbtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.rvi-iconbtn:disabled,
+.rvi-iconbtn[aria-disabled='true'] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

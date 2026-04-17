@@ -1,0 +1,143 @@
+import type { CSSProperties } from 'react';
+import { PanelHeader } from './components/PanelHeader';
+import { ItineraryTabs } from './components/ItineraryTabs';
+import { ModeTabs } from './components/ModeTabs';
+import { ProfileBar } from './components/ProfileBar';
+import { TracageSection } from './sections/TracageSection';
+import { RythmeSection } from './sections/RythmeSection';
+import { ComingSoonSection } from './sections/ComingSoonSection';
+import { TimelinePanel } from './sections/TimelinePanel';
+import type { ItineraryPanelProps } from './types';
+import './styles/index.css';
+
+export function ItineraryPanel(props: ItineraryPanelProps) {
+  const {
+    project,
+    profiles,
+    canUndo,
+    canRedo,
+    width,
+    isResizing,
+    onResizeStart,
+    onClose,
+    onSaveProject,
+    onDownloadProject,
+    onShareProject,
+    onRenameProject,
+    onSelectItinerary,
+    onAddItinerary,
+    onChangeMode,
+    onChangeProfile,
+    onUndo,
+    onRedo,
+    onSaveProfile,
+    onChangePriority,
+    onChangeRoadType,
+    onChangeRhythm,
+    onUploadFit,
+    onCalculate,
+    onChangeTimelineView,
+    onAddTimelineItem,
+    onToggleTimelineItem,
+    onRemoveTimelineItem,
+    onFavoriteTimelineItem,
+    onSearchTimeline,
+    onOpenTimelineSettings,
+  } = props;
+
+  const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
+
+  const style: CSSProperties | undefined =
+    width !== undefined ? { width: `${width}px` } : undefined;
+
+  return (
+    <aside
+      className={`rvi-panel${isResizing ? ' is-resizing' : ''}`}
+      style={style}
+      aria-label="Panneau d'itinéraire"
+    >
+      <PanelHeader
+        title={project.name}
+        savedAt={project.savedAt}
+        sizeBytes={project.sizeBytes}
+        privacy={project.privacy}
+        onClose={onClose}
+        onRename={onRenameProject}
+        onSettings={onSaveProject}
+        onDownload={onDownloadProject}
+        onShare={onShareProject}
+      />
+
+      <ItineraryTabs
+        itineraries={project.itineraries}
+        activeId={project.activeItineraryId}
+        onSelect={onSelectItinerary}
+        onAdd={onAddItinerary}
+      />
+
+      <ModeTabs active={project.activeMode} onChange={onChangeMode} />
+
+      {active ? (
+        <ProfileBar
+          profiles={profiles}
+          activeProfileId={active.profileId}
+          onChange={onChangeProfile}
+          onUndo={onUndo}
+          onRedo={onRedo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onSave={onSaveProfile}
+        />
+      ) : null}
+
+      <div className="rvi-panel__scroll">
+        {active && project.activeMode === 'tracage' ? (
+          <TracageSection
+            priorities={active.priorities}
+            roadTypes={active.roadTypes}
+            onChangePriority={onChangePriority}
+            onChangeRoadType={onChangeRoadType}
+          />
+        ) : null}
+        {active && project.activeMode === 'rythme' ? (
+          <RythmeSection
+            rhythm={active.rhythm}
+            onChange={onChangeRhythm}
+            onUploadFit={onUploadFit}
+            onCalculate={onCalculate}
+          />
+        ) : null}
+        {project.activeMode === 'poi' ? (
+          <ComingSoonSection title="Points d'intérêt" />
+        ) : null}
+        {project.activeMode === 'nutrition' ? (
+          <ComingSoonSection title="Nutrition" />
+        ) : null}
+
+        {active ? (
+          <TimelinePanel
+            items={active.timeline}
+            view={project.timelineView}
+            onChangeView={onChangeTimelineView}
+            onSearch={onSearchTimeline}
+            onOpenSettings={onOpenTimelineSettings}
+            onAdd={onAddTimelineItem}
+            onToggleItem={onToggleTimelineItem}
+            onFavoriteItem={onFavoriteTimelineItem}
+            onRemoveItem={onRemoveTimelineItem}
+          />
+        ) : null}
+      </div>
+
+      {onResizeStart ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionner le panneau"
+          className={`rvi-panel__resize-handle${isResizing ? ' is-dragging' : ''}`}
+          onMouseDown={onResizeStart}
+        />
+      ) : null}
+    </aside>
+  );
+}

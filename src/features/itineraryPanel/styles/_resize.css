@@ -1,0 +1,34 @@
+/* Resize handle (mirrors the right panel's _resize.css, flipped) */
+
+.rvi-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 30;
+  user-select: none;
+}
+
+.rvi-panel__resize-handle::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 36px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  transition: background 0.15s ease;
+}
+.rvi-panel__resize-handle:hover::before {
+  background: rgba(255, 255, 255, 0.3);
+}
+.rvi-panel__resize-handle.is-dragging::before {
+  background: var(--rvi-red-accent);
+}
+.rvi-panel.is-resizing {
+  user-select: none;
+}

@@ -1,0 +1,399 @@
+/* Section titles, sliders, selects, inputs, toggles, checkboxes */
+
+.rvi-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  margin: 0;
+  padding: 0;
+  line-height: 1.2;
+}
+
+.rvi-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+  width: 100%;
+}
+
+/* ── Labeled slider (- [track] +) ────────────────────────────── */
+.rvi-sfield {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 24px;
+  padding: 3px 0;
+  width: 100%;
+}
+
+.rvi-sfield__label {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvi-sfield__control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 100px;
+  max-width: 140px;
+}
+
+.rvi-sfield__sign {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  flex-shrink: 0;
+  width: 6px;
+  text-align: center;
+}
+
+.rvi-slider {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+.rvi-slider__track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+}
+.rvi-slider__fill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 8px;
+  background: var(--rvi-red);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+.rvi-slider__handle {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border: 2px solid var(--rvi-red-border);
+  border-radius: 9999px;
+  box-shadow: 0 4px 6px -1px rgba(10, 13, 18, 0.1),
+    0 2px 4px -2px rgba(10, 13, 18, 0.06);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.rvi-slider__native {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ── Labeled select ──────────────────────────────────────────── */
+.rvi-lfield {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  width: 100%;
+}
+.rvi-lfield__label {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvi-select {
+  position: relative;
+  flex-shrink: 0;
+  width: 100px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 12px;
+  border: 1px solid var(--rvi-border);
+  border-radius: var(--rvi-radius-sm);
+  color: var(--rvi-text);
+  font-size: 14px;
+  font-weight: 600;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-select:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.rvi-select--wide { width: 100%; min-width: 0; }
+.rvi-select__value {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-select__chevron {
+  flex-shrink: 0;
+  color: var(--rvi-text);
+}
+.rvi-select__native {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  color: var(--rvi-text);
+  background: var(--rvi-bg-row-alt);
+}
+.rvi-select__native option {
+  background: var(--rvi-bg-row-alt);
+  color: var(--rvi-text);
+}
+
+/* ── Input / chip input ──────────────────────────────────────── */
+.rvi-input {
+  position: relative;
+  flex-shrink: 0;
+  width: 100px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 8px 5px 12px;
+  border: 1px solid var(--rvi-border);
+  border-radius: var(--rvi-radius-sm);
+  background: transparent;
+}
+.rvi-input__native {
+  all: unset;
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  font-family: inherit;
+  width: 100%;
+}
+.rvi-input__native::placeholder {
+  color: var(--rvi-text-faint);
+}
+
+.rvi-chip-input {
+  background: var(--rvi-bg-chip);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  height: 28px;
+  flex-shrink: 0;
+  width: 64px;
+  display: inline-flex;
+  align-items: center;
+}
+.rvi-chip-input__native {
+  all: unset;
+  width: 100%;
+  min-width: 24px;
+  max-width: 64px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  font-family: inherit;
+}
+.rvi-chip-input__native::placeholder {
+  color: var(--rvi-text-faint);
+}
+
+/* ── Chip (button-like) for date/time ───────────────────────── */
+.rvi-datechip {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 6px 4px;
+  background: var(--rvi-bg-chip);
+  border-radius: 6px;
+  color: var(--rvi-text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+.rvi-datechip:hover { background: var(--rvi-bg-chip-hover); }
+.rvi-datechip__icon {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+.rvi-datechip__native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* ── Checkbox ────────────────────────────────────────────────── */
+.rvi-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+.rvi-checkbox__box {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--rvi-text);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rvi-checkbox__box.is-checked {
+  background: var(--rvi-red);
+  border-color: var(--rvi-red-border);
+}
+.rvi-checkbox__native {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* ── Checkbox + label + trailing input/chip row ──────────────── */
+.rvi-cfield {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.rvi-cfield__label {
+  flex: 1 1 0;
+  min-width: 40px;
+  max-width: 120px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Toggle row (full-width toggle + label + trailing icon) ──── */
+.rvi-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 5px 0;
+  min-height: 30px;
+}
+.rvi-toggle-row__text {
+  all: unset;
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.rvi-toggle-row__trailing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--rvi-text);
+  opacity: 0.6;
+}
+
+/* ── Toggle switch ───────────────────────────────────────────── */
+.rvi-toggle {
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  height: 16px;
+  background: rgba(245, 245, 245, 0.08);
+  border: 1px solid rgba(233, 234, 235, 0.3);
+  border-radius: 9999px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease;
+}
+.rvi-toggle__knob {
+  position: absolute;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border: 1px solid #3f3f3f;
+  border-radius: 9999px;
+  box-shadow: 0 1px 2px 0 rgba(10, 13, 18, 0.05);
+  transition: left 0.2s ease, border-color 0.2s ease;
+}
+.rvi-toggle.is-on {
+  background: var(--rvi-red);
+  border-color: var(--rvi-red-border);
+}
+.rvi-toggle.is-on .rvi-toggle__knob {
+  left: calc(100% - 16px);
+  border-color: var(--rvi-red-border);
+}
+
+/* Params block wrapper */
+.rvi-params {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+/* Small-width adaptation */
+@media (max-width: 340px) {
+  .rvi-grid-2 { grid-template-columns: 1fr; }
+  .rvi-lfield { flex-wrap: wrap; }
+  .rvi-select,
+  .rvi-input { width: 100%; }
+}

@@ -1,0 +1,86 @@
+/* Panel shell — dimensions, background, typography, scrollbar */
+
+.rvi-panel {
+  --rvi-red: #890000;
+  --rvi-red-border: #700000;
+  --rvi-red-accent: #c50000;
+  --rvi-bg: rgba(15, 15, 15, 0.74);
+  --rvi-bg-chip: rgba(255, 255, 255, 0.08);
+  --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
+  --rvi-bg-row: #1c1c1c;
+  --rvi-bg-row-alt: #232323;
+  --rvi-bg-row-muted: #383838;
+  --rvi-border: rgba(255, 255, 255, 0.08);
+  --rvi-border-strong: #444;
+  --rvi-text: #ffffff;
+  --rvi-text-dim: rgba(255, 255, 255, 0.64);
+  --rvi-text-faint: rgba(255, 255, 255, 0.4);
+  --rvi-radius: 8px;
+  --rvi-radius-md: 6px;
+  --rvi-radius-sm: 5px;
+
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  padding: 12px;
+  background: var(--rvi-bg);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  border-radius: var(--rvi-radius);
+  color: var(--rvi-text);
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-size: 14px;
+  line-height: 1.2;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.rvi-panel *,
+.rvi-panel *::before,
+.rvi-panel *::after {
+  box-sizing: border-box;
+}
+
+.rvi-panel__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  margin-right: -6px;
+  padding-right: 6px;
+}
+
+.rvi-panel__scroll::-webkit-scrollbar { width: 6px; }
+.rvi-panel__scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.rvi-divider {
+  height: 1px;
+  width: 100%;
+  background: var(--rvi-border);
+  flex-shrink: 0;
+}
+.rvi-divider--strong {
+  background: var(--rvi-border-strong);
+}
+
+.rvi-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.rvi-row--grow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}

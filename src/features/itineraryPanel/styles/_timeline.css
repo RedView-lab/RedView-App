@@ -1,0 +1,218 @@
+/* Bottom Feuille de route / Timeline sub-panel */
+
+.rvi-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--rvi-radius);
+  flex-shrink: 0;
+  min-height: 260px;
+}
+
+.rvi-timeline__head {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+  align-items: stretch;
+  margin-bottom: 8px;
+}
+
+.rvi-timeline__viewgroup {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  background: var(--rvi-bg-row-muted);
+  border-radius: var(--rvi-radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
+.rvi-timeline__viewbtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  justify-content: center;
+  border-radius: var(--rvi-radius-md);
+  color: var(--rvi-text);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-timeline__viewbtn:hover { background: rgba(255, 255, 255, 0.04); }
+.rvi-timeline__viewbtn.is-active { background: var(--rvi-bg-row-alt); }
+
+.rvi-timeline__viewbtn > span {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.rvi-timeline__tool {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  background: var(--rvi-bg-row-muted);
+  border-radius: var(--rvi-radius-md);
+  color: var(--rvi-text);
+  cursor: pointer;
+  transition: background 0.15s ease;
+  flex-shrink: 0;
+}
+.rvi-timeline__tool:hover { background: #444; }
+.rvi-timeline__tool--red {
+  background: var(--rvi-red);
+  padding: 0 8px;
+  gap: 8px;
+  width: auto;
+}
+.rvi-timeline__tool--red:hover { background: #a00000; }
+
+.rvi-timeline__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+}
+
+.rvi-timeline__header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  min-height: 30px;
+  color: var(--rvi-text-dim);
+}
+.rvi-timeline__header-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--rvi-text-dim);
+}
+.rvi-timeline__header-label--flex {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-timeline__header-label--right {
+  margin-left: auto;
+  text-align: right;
+  min-width: 56px;
+}
+
+.rvi-timeline__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  min-height: 30px;
+}
+
+.rvi-timeline__row--placeholder {
+  background: rgba(255, 255, 255, 0.04);
+  cursor: pointer;
+  padding: 1px 2px;
+}
+
+.rvi-timeline__kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  color: var(--rvi-text);
+}
+
+.rvi-timeline__kind-text {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rvi-text-dim);
+  width: 52px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.rvi-timeline__title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-timeline__title--placeholder { color: var(--rvi-text-dim); }
+
+.rvi-timeline__distance {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  text-align: right;
+  min-width: 40px;
+  flex-shrink: 0;
+}
+
+.rvi-timeline__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.rvi-timeline__action {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--rvi-text);
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.rvi-timeline__action:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.06);
+}
+.rvi-timeline__action.is-on { opacity: 1; color: var(--rvi-red-accent); }
+
+.rvi-timeline__add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  min-height: 30px;
+}
+.rvi-timeline__add:hover { background: rgba(255, 255, 255, 0.1); }
+
+.rvi-timeline__add-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+}
