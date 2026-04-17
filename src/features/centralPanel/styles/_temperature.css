@@ -1,0 +1,85 @@
+/* Temperature rows under the chart. */
+
+.rvc-temp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.rvc-temp__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+}
+
+.rvc-temp__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 95px;
+  flex-shrink: 0;
+}
+
+.rvc-temp__swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.rvc-temp__cells {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--rvc-temp-cols, 11), 1fr);
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--rvc-text);
+}
+
+.rvc-temp__cell {
+  padding: 4px 8px;
+  font-weight: 500;
+  color: var(--rvc-text);
+}
+
+.rvc-temp__remove {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--rvc-text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+  flex-shrink: 0;
+}
+.rvc-temp__remove:hover {
+  color: var(--rvc-text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-temp__row--add {
+  margin-top: 2px;
+}
+
+.rvc-temp__add {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--rvc-text-dim);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.rvc-temp__add:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--rvc-text);
+}

@@ -4,11 +4,9 @@
   --rvc-red: #890000;
   --rvc-red-border: #700000;
   --rvc-accent: #c50000;
-  /* Glassmorphism: keep the base translucent enough for the backdrop blur
-     to actually be visible. A high alpha (>0.6) effectively kills the
-     frosted-glass effect because almost no light gets through to be
-     blurred. 0.42 leaves room for the blur+saturate to do their work. */
-  --rvc-bg: rgba(18, 18, 20, 0.42);
+  /* Glassmorphism: darker base for stronger contrast over the map while
+     keeping enough translucency for the backdrop blur to remain visible. */
+  --rvc-bg: rgba(10, 10, 12, 0.72);
   --rvc-bg-chip: rgba(255, 255, 255, 0.08);
   --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
   --rvc-bg-row: rgba(61, 61, 61, 0.55);

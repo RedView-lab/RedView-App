@@ -4,8 +4,8 @@
   --rvi-red: #890000;
   --rvi-red-border: #700000;
   --rvi-red-accent: #c50000;
-  /* Glassmorphism: low alpha so the backdrop blur is actually visible. */
-  --rvi-bg: rgba(18, 18, 20, 0.42);
+  /* Glassmorphism: darker base for stronger contrast over the map. */
+  --rvi-bg: rgba(10, 10, 12, 0.72);
   --rvi-bg-chip: rgba(255, 255, 255, 0.08);
   --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
   --rvi-bg-row: rgba(28, 28, 28, 0.55);

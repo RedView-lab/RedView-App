@@ -2,17 +2,8 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { fetchPoisInBbox, fetchPoisAlongRouteChunked } from '../lib/overpass';
+import { fetchPoisAlongRouteChunked } from '../lib/overpass';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
-import {
-  tileZoomForMapZoom,
-  getTilesForBounds,
-  tileKeyToString,
-  tileToBbox,
-  isTileCached,
-  setCachedTile,
-  collectAllCachedFeatures,
-} from '../lib/poi-cache';
 import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
 
 // ── Constants ─────────────────────────────────────────────────────────
@@ -20,7 +11,6 @@ import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
 const SOURCE_ID = 'poi-source';
 const LAYER_ID = 'poi-layer';
 const TEXT_LAYER_ID = 'poi-text-layer';
-const DEBOUNCE_MS = 500;
 
 // ── Hook ──────────────────────────────────────────────────────────────
 
@@ -150,95 +140,6 @@ export function usePoi(
     setPoiCount(features.length);
   }, []);
 
-  // ── Fetch missing tiles ───────────────────────────────────────────
-
-  const fetchVisiblePois = useCallback(async (m: MapboxMap) => {
-    const cats = Array.from(enabledRef.current);
-    if (cats.length === 0) {
-      updateSourceData(m, []);
-      return;
-    }
-
-    const bounds = m.getBounds();
-    if (!bounds) return;
-    const south = bounds.getSouth();
-    const west = bounds.getWest();
-    const north = bounds.getNorth();
-    const east = bounds.getEast();
-
-    // Determine tile zoom level based on current map zoom
-    const mapZoom = m.getZoom();
-    const config = tileZoomForMapZoom(mapZoom);
-
-    if (!config) {
-      // Too zoomed out — still show all accumulated cached POIs
-      updateSourceData(m, collectAllCachedFeatures(cats));
-      return;
-    }
-
-    const { tz, maxTiles } = config;
-    const tiles = getTilesForBounds(south, west, north, east, tz, maxTiles);
-
-    // Determine which tiles need fetching
-    const missingTiles = tiles.filter((t) => !isTileCached(tileKeyToString(t), cats));
-
-    if (missingTiles.length === 0) {
-      updateSourceData(m, collectAllCachedFeatures(cats));
-      return;
-    }
-
-    // Cancel previous in-flight request
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Batch missing tiles into groups of ≤6 and merge each group into one bbox request
-      const BATCH_SIZE = 6;
-      for (let i = 0; i < missingTiles.length; i += BATCH_SIZE) {
-        if (controller.signal.aborted) break;
-
-        const batch = missingTiles.slice(i, i + BATCH_SIZE);
-
-        // Compute merged bbox for this batch
-        let mSouth = 90, mWest = 180, mNorth = -90, mEast = -180;
-        for (const t of batch) {
-          const [s, w, n, e] = tileToBbox(t);
-          mSouth = Math.min(mSouth, s);
-          mWest = Math.min(mWest, w);
-          mNorth = Math.max(mNorth, n);
-          mEast = Math.max(mEast, e);
-        }
-
-        const features = await fetchPoisInBbox(mSouth, mWest, mNorth, mEast, cats, controller.signal);
-
-        // Distribute features into tile buckets for caching
-        for (const t of batch) {
-          const [s, w, n, e] = tileToBbox(t);
-          const tileFeatures = features.filter(
-            (f) => f.lat >= s && f.lat <= n && f.lon >= w && f.lon <= e,
-          );
-          setCachedTile(tileKeyToString(t), tileFeatures, cats);
-        }
-
-        // Progressive render: update map after each batch with ALL accumulated POIs
-        if (!controller.signal.aborted) {
-          updateSourceData(m, collectAllCachedFeatures(cats));
-        }
-      }
-    } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : 'Erreur POI');
-      // Still show whatever is cached
-      updateSourceData(m, collectAllCachedFeatures(cats));
-    } finally {
-      if (!controller.signal.aborted) setLoading(false);
-    }
-  }, [updateSourceData]);
-
   // ── Corridor fetch (along GPX route, chunked & progressive) ──────
 
   const fetchCorridorPois = useCallback(async (m: MapboxMap) => {
@@ -317,13 +218,6 @@ export function usePoi(
     }
   }, [map, isMapLoaded, fetchCorridorPois]);
 
-  // ── Debounced handler ─────────────────────────────────────────────
-
-  const debouncedFetch = useCallback((m: MapboxMap) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchVisiblePois(m), DEBOUNCE_MS);
-  }, [fetchVisiblePois]);
-
   // ── Popup on click ────────────────────────────────────────────────
 
   const popupRef = useRef<mapboxgl.Popup | null>(null);
@@ -383,31 +277,12 @@ export function usePoi(
 
       ensureSourceAndLayers(map);
 
-      // In viewport mode, auto-fetch on map movements
-      // In corridor mode, wait for explicit searchCorridor trigger
-      if (!gpxRef.current) {
-        fetchVisiblePois(map);
+      // POIs are now corridor-only: nothing renders until the user
+      // loads a GPX and explicitly triggers `searchCorridor`. Viewport
+      // auto-fetch was removed to avoid flooding the map with thousands
+      // of POIs before any itinerary is selected.
+      updateSourceData(map, []);
 
-        const onMoveEnd = () => {
-          // Guard: if GPX was loaded after this effect started, skip viewport fetch
-          if (gpxRef.current) return;
-          debouncedFetch(map);
-        };
-        map.on('moveend', onMoveEnd);
-
-        map.on('click', LAYER_ID, handleClick);
-        map.on('mouseenter', LAYER_ID, handleMouseEnter);
-        map.on('mouseleave', LAYER_ID, handleMouseLeave);
-
-        return () => {
-          map.off('moveend', onMoveEnd);
-          map.off('click', LAYER_ID, handleClick);
-          map.off('mouseenter', LAYER_ID, handleMouseEnter);
-          map.off('mouseleave', LAYER_ID, handleMouseLeave);
-        };
-      }
-
-      // Corridor mode: no auto-fetch, but still register click/hover
       map.on('click', LAYER_ID, handleClick);
       map.on('mouseenter', LAYER_ID, handleMouseEnter);
       map.on('mouseleave', LAYER_ID, handleMouseLeave);
@@ -441,7 +316,7 @@ export function usePoi(
       resetIconRegistration();
       iconsReady.current = false;
     };
-  }, [map, isMapLoaded, ensureSourceAndLayers, fetchVisiblePois, debouncedFetch, handleClick, handleMouseEnter, handleMouseLeave]);
+  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, handleClick, handleMouseEnter, handleMouseLeave]);
 
   // ── Recover POI layers after style reloads ─────────────────────────
   // Standard Satellite fires style.load multiple times (imports/terrain),
@@ -464,9 +339,9 @@ export function usePoi(
           if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
             // Corridor mode: re-render last corridor results
             updateSourceData(map, lastCorridorFeatures.current);
-          } else if (!gpxRef.current) {
-            // Viewport mode: re-fetch visible POIs
-            fetchVisiblePois(map);
+          } else {
+            // No GPX or no prior corridor search → keep map empty
+            updateSourceData(map, []);
           }
         } catch (err) {
           console.warn('[poi] style.load recovery failed:', err);
@@ -476,17 +351,20 @@ export function usePoi(
 
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
-  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, fetchVisiblePois]);
+  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData]);
 
-  // ── Re-fetch when enabled categories change (viewport mode only) ──
+  // ── Re-fetch when enabled categories change (corridor mode only) ──
 
   useEffect(() => {
     if (!map || !isMapLoaded || !iconsReady.current) return;
-    // In corridor mode the user triggers search manually via the button
-    if (!gpxRef.current) {
-      fetchVisiblePois(map);
+    // POIs are corridor-only now: viewport auto-fetch removed.
+    // The user must explicitly press the search button after loading a GPX.
+    if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
+      // Re-run corridor search if a previous search exists, so toggling
+      // categories updates the visible POIs along the route.
+      fetchCorridorPois(map);
     }
-  }, [map, isMapLoaded, enabledCategories, fetchVisiblePois]);
+  }, [map, isMapLoaded, enabledCategories, fetchCorridorPois]);
 
   return { loading, error, poiCount, corridorProgress, searchCorridor };
 }

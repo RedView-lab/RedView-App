@@ -4,6 +4,7 @@ import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ItineraryPanel } from '@/features/itineraryPanel';
+import { CentralPanel } from '@/features/centralPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -22,6 +23,11 @@ const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
 const LEFT_PANEL_WIDTH_MIN = 300;
 const LEFT_PANEL_WIDTH_MAX = 520;
 const LEFT_PANEL_WIDTH_DEFAULT = 360;
+
+const CENTRAL_PANEL_HEIGHT_KEY = 'rvc-panel-height';
+const CENTRAL_PANEL_HEIGHT_MIN = 220;
+const CENTRAL_PANEL_HEIGHT_MAX = 720;
+const CENTRAL_PANEL_HEIGHT_DEFAULT = 360;
 
 function readStoredLeftWidth(): number {
   try {
@@ -47,6 +53,21 @@ function readStoredWidth(): number {
   }
 }
 
+function readStoredCentralHeight(): number {
+  try {
+    const raw = localStorage.getItem(CENTRAL_PANEL_HEIGHT_KEY);
+    if (!raw) return CENTRAL_PANEL_HEIGHT_DEFAULT;
+    const n = parseInt(raw, 10);
+    if (!Number.isFinite(n)) return CENTRAL_PANEL_HEIGHT_DEFAULT;
+    return Math.min(
+      CENTRAL_PANEL_HEIGHT_MAX,
+      Math.max(CENTRAL_PANEL_HEIGHT_MIN, n),
+    );
+  } catch {
+    return CENTRAL_PANEL_HEIGHT_DEFAULT;
+  }
+}
+
 export default function Dashboard({ onLogout }: DashboardProps) {
   const mapRef = useRef<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -60,6 +81,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     readStoredLeftWidth(),
   );
   const [isLeftResizing, setIsLeftResizing] = useState(false);
+  const [centralHeight, setCentralHeight] = useState<number>(() =>
+    readStoredCentralHeight(),
+  );
+  const [isCentralResizing, setIsCentralResizing] = useState(false);
   const [viewport, setViewport] = useState(() => ({
     w: window.innerWidth,
     h: window.innerHeight,
@@ -83,6 +108,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       /* ignore */
     }
   }, [leftPanelWidth]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CENTRAL_PANEL_HEIGHT_KEY, String(centralHeight));
+    } catch {
+      /* ignore */
+    }
+  }, [centralHeight]);
 
   const handleResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -114,6 +147,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     };
     const onUp = () => {
       setIsLeftResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const handleCentralResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    setIsCentralResizing(true);
+    const onMove = (e: MouseEvent) => {
+      const raw = window.innerHeight - e.clientY - PANEL_PADDING;
+      const clamped = Math.min(
+        CENTRAL_PANEL_HEIGHT_MAX,
+        Math.max(CENTRAL_PANEL_HEIGHT_MIN, raw),
+      );
+      setCentralHeight(clamped);
+    };
+    const onUp = () => {
+      setIsCentralResizing(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -160,6 +213,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const leftDockOffset =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
+
+  const centralLeft =
+    leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : PANEL_PADDING;
+  const centralRight = panelWidth + PANEL_PADDING * 2;
+  const centralWidth = Math.max(
+    0,
+    viewport.w - centralLeft - centralRight - PANEL_PADDING,
+  );
+
+  const centralPanelStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: 0,
+    left: centralLeft,
+    width: centralWidth + PANEL_PADDING * 2,
+    height: centralHeight + PANEL_PADDING * 2,
+    zIndex: 24,
+    padding: PANEL_PADDING,
+    boxSizing: 'border-box',
+    display: centralWidth > 200 ? 'flex' : 'none',
+  };
 
   const logoutStyle: React.CSSProperties = {
     position: 'absolute',
@@ -243,6 +316,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <button onClick={onLogout} style={logoutStyle}>
         Logout
       </button>
+
+      {mapLoaded && centralWidth > 200 && (
+        <MapBlurMirror
+          map={mapRef.current}
+          top={Math.max(0, viewport.h - centralHeight - PANEL_PADDING)}
+          left={centralLeft + PANEL_PADDING}
+          width={centralWidth}
+          height={centralHeight}
+          borderRadius={8}
+        />
+      )}
+
+      <div style={centralPanelStyle}>
+        <CentralPanel
+          onResizeStart={handleCentralResizeStart}
+          isResizing={isCentralResizing}
+        />
+      </div>
 
       <div style={rightPanelStyle}>
         <ControlPanelContainer

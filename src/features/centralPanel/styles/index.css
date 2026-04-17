@@ -1,0 +1,10 @@
+/* Central Panel — bottom-center analysis dock.
+   Source of truth: Figma 1528:18338. */
+
+@import './_shell.css';
+@import './_synthesis.css';
+@import './_toolbar.css';
+@import './_chart.css';
+@import './_temperature.css';
+@import './_scrollbar.css';
+@import './_resize.css';
