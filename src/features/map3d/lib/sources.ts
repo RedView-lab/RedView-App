@@ -8,6 +8,7 @@ export const unifiedDEMSource = {
   id: 'unified-dem',
   type: 'raster-dem' as const,
   tiles: ['/dem-tiles/{z}/{x}/{y}'],
+  // 256px to match the SW output (DEM_TILE_SIZE in config.js)
   tileSize: 256,
   encoding: 'mapbox' as const,
   minzoom: 0,

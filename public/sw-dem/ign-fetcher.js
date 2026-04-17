@@ -21,20 +21,24 @@ function evict(cache, max) {
 
 function scheduleIGN(fn) {
   return new Promise((resolve, reject) => {
-    ignQueue.push({ fn, resolve, reject });
-    // Prune oldest entries when queue grows too large (user zoomed/panned away)
+    ignQueue.push({ fn, resolve, reject, ts: performance.now() });
+    // When the queue overflows, drop the OLDEST entries by enqueue timestamp
+    // (tiles requested during an earlier pan gesture) instead of the head.
+    // Ensures the current viewport survives rapid panning.
     let pruned = 0;
     while (ignQueue.length > IGN_QUEUE_MAX) {
-      const stale = ignQueue.shift();
-      stale.resolve(PRUNED_SENTINEL); // Sentinel — callers must NOT cache this as a real failure
+      let oldestIdx = 0;
+      let oldestTs = ignQueue[0].ts;
+      for (let i = 1; i < ignQueue.length; i++) {
+        if (ignQueue[i].ts < oldestTs) { oldestTs = ignQueue[i].ts; oldestIdx = i; }
+      }
+      const stale = ignQueue.splice(oldestIdx, 1)[0];
+      stale.resolve(PRUNED_SENTINEL);
       pruned++;
     }
     if (pruned > 0) {
       ignPrunedTotal += pruned;
-      console.warn(
-        `[sw-dem][queue] %c PRUNED %c ${pruned} stale DEM requests (queue=${ignQueue.length}, active=${activeIGN}/${IGN_CONCURRENCY}, lifetime=${ignPrunedTotal})`,
-        'background:#FF5722;color:#fff;padding:2px 4px;border-radius:2px', ''
-      );
+      if (DEBUG) console.warn(`[sw-dem][queue] pruned ${pruned} stale (queue=${ignQueue.length}, lifetime=${ignPrunedTotal})`);
     }
     drainIGN();
   });
@@ -109,7 +113,7 @@ async function getIGNTile(z, col, row) {
 
     const url = buildDEMTileURL(z, col, row);
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
         cacheNull(key, errorType);

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+﻿import { useRef, useEffect, useState } from 'react';
 import mapboxgl from 'mapbox-gl';
 import { MAPBOX_TOKEN, MAPBOX_STYLE, DEFAULT_VIEW, FOG_CONFIG } from '../lib/mapbox.config';
 import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
@@ -9,61 +9,91 @@ import { loadViewport, saveViewport } from '../lib/viewport-persist';
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
 // ---------------------------------------------------------------------------
-// Helpers: send token to active SW controller and wait for ACK
+// Service Worker bootstrap â€” deterministic contract:
+//   register â†’ activated â†’ controller â†’ token ACK â†’ READY
+// No tile request is issued before the SW reports READY. If the SW can't be
+// made ready, the app continues WITHOUT SW interception (Mapbox GL falls back
+// to its native DEM/satellite sources â€” identical to "plain Mapbox" behaviour).
 // ---------------------------------------------------------------------------
-function sendTokenToSW(): Promise<void> {
-  if (!navigator.serviceWorker.controller) return Promise.resolve();
-  navigator.serviceWorker.controller.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
-  return new Promise<void>((resolve) => {
-    const timeout = setTimeout(resolve, 2000);
-    const onMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'TOKEN_ACK') {
-        clearTimeout(timeout);
-        navigator.serviceWorker.removeEventListener('message', onMessage);
-        resolve();
-      }
-    };
-    navigator.serviceWorker.addEventListener('message', onMessage);
-  });
+
+const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
+const TOKEN_ACK_MAX_ATTEMPTS = 3;
+
+async function sendTokenWithAck(controller: ServiceWorker): Promise<boolean> {
+  for (let attempt = 1; attempt <= TOKEN_ACK_MAX_ATTEMPTS; attempt++) {
+    const ack = new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        navigator.serviceWorker.removeEventListener('message', onMsg);
+        resolve(false);
+      }, TOKEN_ACK_TIMEOUT);
+      const onMsg = (e: MessageEvent) => {
+        if (e.data?.type === 'TOKEN_ACK') {
+          clearTimeout(timer);
+          navigator.serviceWorker.removeEventListener('message', onMsg);
+          resolve(true);
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', onMsg);
+    });
+
+    controller.postMessage({ type: 'SET_MAPBOX_TOKEN', token: MAPBOX_TOKEN });
+    const ok = await ack;
+    if (ok) return true;
+    console.warn(`[sw-dem] TOKEN_ACK missed (attempt ${attempt}/${TOKEN_ACK_MAX_ATTEMPTS})`);
+  }
+  return false;
 }
 
-// Register DEM Service Worker and wait until it's actually controlling this page.
-// navigator.serviceWorker.ready only means the SW is "active" — it does NOT mean
-// it's intercepting fetch events yet (clients.claim() may still be in progress).
-// We must wait for controllerchange to guarantee fetch interception.
-const swReady = (async () => {
-  if (!('serviceWorker' in navigator)) return;
+// Resolves to true when the SW is controlling this page AND has acknowledged
+// the Mapbox token. Resolves to false on any failure â€” the caller should
+// proceed without SW interception (graceful degradation to plain Mapbox).
+const swReady: Promise<boolean> = (async () => {
+  if (!('serviceWorker' in navigator)) return false;
   try {
-    // Set up listener BEFORE register() so we can't miss the event
-    const controllerReady = navigator.serviceWorker.controller
-      ? Promise.resolve()
-      : new Promise<void>((resolve) => {
-          navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
-        });
+    await navigator.serviceWorker.register('/sw-dem.js', { scope: '/' });
 
-    await navigator.serviceWorker.register('/sw-dem.js');
-    await controllerReady;
+    // Wait until an SW is active AND controlling this page
+    if (!navigator.serviceWorker.controller) {
+      await new Promise<void>((resolve) => {
+        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+      });
+    }
+    const controller = navigator.serviceWorker.controller;
+    if (!controller) {
+      console.error('[sw-dem] No controller after registration');
+      return false;
+    }
 
-    // SW is now intercepting fetch events — send Mapbox token
-    await sendTokenToSW();
+    const acked = await sendTokenWithAck(controller);
+    if (!acked) {
+      console.error('[sw-dem] Token ACK failed â€” proceeding without IGN enhancement');
+      return false;
+    }
 
-    // Re-send token whenever the SW is replaced (update, restart, etc.)
+    // Re-send token on SW updates (new controller takes over mid-session)
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('[sw-dem] controllerchange — re-sending token to new SW');
-      sendTokenToSW();
+      const c = navigator.serviceWorker.controller;
+      if (c) sendTokenWithAck(c).catch(() => {});
     });
 
-    // Handle SW requesting the token (e.g. after SW restart with empty memory)
-    navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
-      if (event.data?.type === 'REQUEST_TOKEN') {
-        console.log('[sw-dem] SW requested token — sending');
-        sendTokenToSW();
+    // SW asked for token (cold activation with empty memory)
+    navigator.serviceWorker.addEventListener('message', (e: MessageEvent) => {
+      if (e.data?.type === 'REQUEST_TOKEN') {
+        const c = navigator.serviceWorker.controller;
+        if (c) sendTokenWithAck(c).catch(() => {});
       }
     });
+
+    return true;
   } catch (e) {
     console.error('[sw-dem] Registration failed:', e);
+    return false;
   }
 })();
+
+// ---------------------------------------------------------------------------
+// useMap hook
+// ---------------------------------------------------------------------------
 
 export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -73,7 +103,6 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    // Restore viewport from previous session if available
     const savedVp = loadViewport();
 
     const map = new mapboxgl.Map({
@@ -85,28 +114,41 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: true,
-      maxTileCacheSize: 800,
-      minTileCacheSize: 200,
+      maxTileCacheSize: 512,
+      minTileCacheSize: 128,
     });
 
     mapRef.current = map;
 
-    // style.load fires earlier than load — terrain appears sooner
-    map.on('style.load', async () => {
-      // Wait for Service Worker to be ready before adding DEM source
-      await swReady;
+    let cancelled = false;
 
-      // Globe atmosphere
+    // Wait for BOTH style.load AND swReady before adding sources.
+    (async () => {
+      const styleLoaded = new Promise<void>((resolve) => {
+        if (map.isStyleLoaded()) return resolve();
+        map.once('style.load', () => resolve());
+      });
+      const [, swOk] = await Promise.all([styleLoaded, swReady]);
+      if (cancelled) return;
+
+      // Atmosphere + lighting
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
-
-      // Standard Satellite style: set daytime lighting for clearer, brighter look
       try {
         map.setConfigProperty('basemap', 'lightPreset', 'day');
       } catch {
-        // Ignore if style doesn't support config properties
+        /* style may not support config properties */
       }
 
-      // Unified DEM source: IGN MNS 0.42m/px France + Mapbox 30m elsewhere
+      if (!swOk) {
+        // Plain Mapbox mode: SW is unavailable. Don't add /dem-tiles/ or
+        // /ortho-tiles/ sources â€” they would 404. The Standard Satellite style
+        // already ships its own terrain + satellite imagery.
+        console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
+        setIsLoaded(true);
+        return;
+      }
+
+      // DEM source
       if (!map.getSource(unifiedDEMSource.id)) {
         map.addSource(unifiedDEMSource.id, {
           type: 'raster-dem',
@@ -118,7 +160,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         });
       }
 
-      // IGN orthophoto source (20cm/px France overlay on top of satellite base)
+      // IGN ortho overlay
       if (!map.getSource(ignOrthoSource.id)) {
         map.addSource(ignOrthoSource.id, {
           type: 'raster',
@@ -130,43 +172,32 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
           attribution: ignOrthoSource.attribution,
         });
       }
-
-      // IGN ortho layer
       if (!map.getLayer(ignOrthoLayer.id)) {
         map.addLayer(ignOrthoLayer);
       }
 
-      // Terrain with natural exaggeration
-      if (terrainRef.current) {
-        terrainRef.current.destroy();
-      }
-      const terrain = new TerrainManager(map, unifiedDEMSource.id);
-      terrainRef.current = terrain;
-
-      // Register the sourcedata listener BEFORE calling terrain.init() so the
-      // event can't fire between init() and listener registration.
-      let terrainVerified = false;
+      // Terrain is applied ONCE, after the first DEM tile has loaded. Prevents
+      // the "flat flicker" where setTerrain() runs against an empty source and
+      // the mesh renders at zero elevation for a few frames.
+      terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+      let applied = false;
       const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
-        if (terrainVerified) return;
-        if (e.sourceId === unifiedDEMSource.id && e.isSourceLoaded) {
-          terrainVerified = true;
-          map.off('sourcedata', onSourceData);
-          // Re-apply terrain to ensure it uses the now-available tile data
-          if (terrainRef.current) {
-            terrainRef.current.init();
-          }
-        }
+        if (applied) return;
+        if (e.sourceId !== unifiedDEMSource.id) return;
+        if (!e.isSourceLoaded) return;
+        applied = true;
+        map.off('sourcedata', onSourceData);
+        terrainRef.current?.init();
       };
       map.on('sourcedata', onSourceData);
 
-      // Now apply terrain — if tiles haven't loaded yet the listener above
-      // will re-apply once they do.
-      terrain.init();
-
+      setIsLoaded(true);
+    })().catch((err) => {
+      console.error('[map3d] init failed', err);
       setIsLoaded(true);
     });
 
-    // Persist viewport on move (debounced)
+    // Persist viewport (debounced)
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     const onMoveEnd = () => {
       if (saveTimer) clearTimeout(saveTimer);
@@ -182,73 +213,13 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
     };
     map.on('moveend', onMoveEnd);
 
-    // ── Zoom observer: log terrain state at each zoom change ──
-    const onZoomEnd = () => {
-      const z = map.getZoom();
-      const terrain = map.getTerrain();
-      const exagg = terrain?.exaggeration ?? 'none';
-      console.log(
-        `[map3d][zoom] %c z=${z.toFixed(2)} %c terrain=${terrain ? 'ON' : 'OFF'} exaggeration=${exagg}`,
-        'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
-      );
-    };
-    map.on('zoomend', onZoomEnd);
-
     map.on('error', (e) => {
       console.error('[mapbox]', e.error?.message || e);
     });
 
-    // Handle WebGL context loss — prevents STATUS_ACCESS_VIOLATION on GPU
-    // memory pressure. Allows the browser to recover the context instead of
-    // crashing the entire tab.
-    const canvas = map.getCanvas();
-    const onContextLost = (e: Event) => {
-      e.preventDefault(); // Allow context restoration
-      console.warn('[mapbox] WebGL context lost — waiting for restoration');
-    };
-    const onContextRestored = () => {
-      console.log('[mapbox] WebGL context restored — reloading DEM source');
-      const src = map.getSource(unifiedDEMSource.id);
-      if (src && 'reload' in src) {
-        (src as mapboxgl.RasterDemTileSource).reload();
-      }
-      if (terrainRef.current) {
-        terrainRef.current.init();
-      }
-    };
-    canvas.addEventListener('webglcontextlost', onContextLost);
-    canvas.addEventListener('webglcontextrestored', onContextRestored);
-
-    // Free WebGL context synchronously before reload so the new page load
-    // doesn't compete with the old context for GPU memory.
-    const onBeforeUnload = () => {
-      terrainRef.current?.destroy();
-      terrainRef.current = null;
-      map.remove();
-      mapRef.current = null;
-    };
-    window.addEventListener('beforeunload', onBeforeUnload);
-
-    // When SW recovers a token after restart, force-reload DEM source so
-    // tiles that were served as flat 0m get re-fetched with real elevation.
-    const onTokenRecovered = (event: MessageEvent) => {
-      if (event.data?.type === 'TOKEN_RECOVERED' && mapRef.current) {
-        console.log('[sw-dem] TOKEN_RECOVERED — clearing neg cache & reloading DEM source');
-        const src = mapRef.current.getSource(unifiedDEMSource.id);
-        if (src && 'reload' in src) {
-          (src as mapboxgl.RasterDemTileSource).reload();
-        }
-      }
-    };
-    navigator.serviceWorker?.addEventListener('message', onTokenRecovered);
-
     return () => {
-      navigator.serviceWorker?.removeEventListener('message', onTokenRecovered);
-      canvas.removeEventListener('webglcontextlost', onContextLost);
-      canvas.removeEventListener('webglcontextrestored', onContextRestored);
-      window.removeEventListener('beforeunload', onBeforeUnload);
+      cancelled = true;
       if (saveTimer) clearTimeout(saveTimer);
-      // Final save before teardown
       if (mapRef.current) {
         const center = mapRef.current.getCenter();
         saveViewport({

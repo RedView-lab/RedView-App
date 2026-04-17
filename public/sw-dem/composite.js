@@ -17,7 +17,7 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
   // Adaptive blend radius: wider at low zoom (each pixel covers more ground)
-  const BLEND_RADIUS = Math.max(64, Math.round(160 / Math.pow(1.1, Math.max(0, z - 5))));
+  const BLEND_RADIUS = Math.max(96, Math.round(192 / Math.pow(1.1, Math.max(0, z - 5))));
 
   function smoothstep(t) {
     const c = Math.max(0, Math.min(1, t));

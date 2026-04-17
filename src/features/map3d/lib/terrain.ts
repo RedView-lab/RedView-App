@@ -6,14 +6,18 @@ export class TerrainManager {
   private map: MapboxMap;
   private sourceId: string;
   private exaggeration = DEFAULT_EXAGGERATION;
+  private applied = false;
 
   constructor(map: MapboxMap, sourceId: string) {
     this.map = map;
     this.sourceId = sourceId;
   }
 
+  /** Idempotent. Safe to call multiple times. */
   init(): void {
+    if (this.applied) return;
     this.applyTerrain();
+    this.applied = true;
   }
 
   private applyTerrain(): void {
@@ -25,7 +29,7 @@ export class TerrainManager {
 
   setExaggeration(value: number): void {
     this.exaggeration = value;
-    this.applyTerrain();
+    if (this.applied) this.applyTerrain();
   }
 
   getExaggeration(): number {
@@ -33,6 +37,8 @@ export class TerrainManager {
   }
 
   destroy(): void {
-    this.map.setTerrain(null);
+    if (!this.applied) return;
+    try { this.map.setTerrain(null); } catch { /* map may already be destroyed */ }
+    this.applied = false;
   }
 }
