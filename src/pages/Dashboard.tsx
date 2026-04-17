@@ -5,7 +5,7 @@ import { FitPredictionPanel } from '@/features/fitPredictor';
 import { MapToolsPanel } from '@/features/weather';
 import { PoiPanel } from '@/features/poi';
 import { LabelsPanel } from '@/features/labels';
-import { SlopePanel } from '@/features/slope';
+import { ControlPanelContainer } from '@/features/controlPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -60,7 +60,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         style={{
           position: 'absolute',
           top: 12,
-          right: 12,
+          right: 324,
           zIndex: 20,
           background: 'rgba(17,17,17,0.7)',
           color: 'rgba(255,255,255,0.8)',
@@ -77,7 +77,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <div style={rightDockStyle}>
         <MapToolsPanel map={mapRef.current} isMapLoaded={mapLoaded} />
-        <SlopePanel map={mapRef.current} isMapLoaded={mapLoaded} />
+      </div>
+
+      <div style={rightPanelStyle}>
+        <ControlPanelContainer
+          map={mapRef.current}
+          isMapLoaded={mapLoaded}
+          lidarDownloadModeActive={lidarModeEnabled}
+          onToggleLidarDownloadMode={() => setLidarModeEnabled((v) => !v)}
+        />
       </div>
     </div>
     </LidarProvider>
@@ -97,9 +105,21 @@ const leftDockStackStyle: React.CSSProperties = {
 const rightDockStyle: React.CSSProperties = {
   position: 'absolute',
   top: 50,
-  right: 12,
+  right: 324,
   zIndex: 20,
   display: 'flex',
   flexDirection: 'column',
   gap: 8,
+};
+
+const rightPanelStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  right: 0,
+  bottom: 0,
+  width: 300,
+  zIndex: 25,
+  padding: 12,
+  boxSizing: 'border-box',
+  display: 'flex',
 };
