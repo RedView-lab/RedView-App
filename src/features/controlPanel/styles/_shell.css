@@ -4,7 +4,11 @@
   --rvc-red: #890000;
   --rvc-red-border: #700000;
   --rvc-accent: #c50000;
-  --rvc-bg: rgba(0, 0, 0, 0.616);
+  /* Glassmorphism: keep the base translucent enough for the backdrop blur
+     to actually be visible. A high alpha (>0.6) effectively kills the
+     frosted-glass effect because almost no light gets through to be
+     blurred. 0.42 leaves room for the blur+saturate to do their work. */
+  --rvc-bg: rgba(18, 18, 20, 0.42);
   --rvc-bg-chip: rgba(255, 255, 255, 0.08);
   --rvc-bg-chip-active: rgba(255, 255, 255, 0.12);
   --rvc-bg-row: rgba(61, 61, 61, 0.55);
@@ -25,8 +29,15 @@
   max-height: 100%;
   padding: 0 12px;
   background: var(--rvc-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  /* Strong frosted-glass effect: high blur + saturate keeps colour and
+     creates the proper "depth of field" glass look (vs. pure transparency).
+     Inset highlight + subtle outer border sell the glass edge. */
+  backdrop-filter: blur(30px) saturate(180%);
+  -webkit-backdrop-filter: blur(30px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.35);
   border-radius: var(--rvc-radius);
   color: var(--rvc-text);
   font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
