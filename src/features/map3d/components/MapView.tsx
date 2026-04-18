@@ -7,13 +7,14 @@ import { useLidarSelection } from '@/features/lidar/components/useLidarSelection
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
   lidarSelectionEnabled?: boolean;
+  onLidarSelectionDisable?: () => void;
 }
 
-export default function MapView({ onMapReady, lidarSelectionEnabled = false }: MapViewProps) {
+export default function MapView({ onMapReady, lidarSelectionEnabled = false, onLidarSelectionDisable }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { map, isLoaded } = useMap(containerRef);
 
-  useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled);
+  useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
 
   useEffect(() => {
     if (isLoaded && map.current && onMapReady) {

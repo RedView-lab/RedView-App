@@ -50,8 +50,10 @@ export function isCorsica(xLamb93: number, yLamb93: number): boolean {
 
 export function buildTileFileName(xKm: number, yKm: number, crs: DetectedCrs, altRef?: AltitudeRef): string {
   const info = getTileInfo(crs);
+  // IGN LiDAR HD naming convention: tiles are identified by their NW corner.
+  // X = west edge km (xKm), Y = north edge km (yKm + 1) since yKm is the south edge.
   const x4 = String(xKm).padStart(4, '0');
-  const y4 = String(yKm).padStart(4, '0');
+  const y4 = String(yKm + 1).padStart(4, '0');
   return `LHD_${info.territory}_${x4}_${y4}_PTS_${crs}_${altRef ?? info.altRef}`;
 }
 

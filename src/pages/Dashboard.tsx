@@ -309,7 +309,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   return (
     <LidarProvider>
     <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
-      <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} />
+      <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} onLidarSelectionDisable={() => setLidarModeEnabled(false)} />
 
       {/*
         Glass-effect blur backdrops. Each one is a 2D canvas that mirrors

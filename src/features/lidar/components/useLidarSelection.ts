@@ -132,15 +132,24 @@ function removeSelectionLayers(map: MapboxMap): void {
   }
 }
 
-export function useLidarSelection(map: MapboxMap | null, enabled: boolean) {
+export function useLidarSelection(
+  map: MapboxMap | null,
+  enabled: boolean,
+  onDisable?: () => void,
+) {
   const manager = useLidarManager();
   const enabledRef = useRef(enabled);
   const hoveredRef = useRef<TileCoord | null>(null);
   const selectedRef = useRef<TileCoord | null>(null);
+  const onDisableRef = useRef(onDisable);
 
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
+
+  useEffect(() => {
+    onDisableRef.current = onDisable;
+  }, [onDisable]);
 
   useEffect(() => {
     if (!map) return;
@@ -184,8 +193,17 @@ export function useLidarSelection(map: MapboxMap | null, enabled: boolean) {
       updateSourceData();
     };
 
+    const handleContextMenu = (event: MapMouseEvent) => {
+      if (!enabledRef.current) return;
+      event.preventDefault();
+      hoveredRef.current = null;
+      updateSourceData();
+      onDisableRef.current?.();
+    };
+
     map.on('mousemove', handleMouseMove);
     map.on('click', handleClick);
+    map.on('contextmenu', handleContextMenu);
     map.on('style.load', handleStyleLoad);
     map.getCanvas().addEventListener('mouseleave', handleMouseLeave);
 
@@ -201,6 +219,7 @@ export function useLidarSelection(map: MapboxMap | null, enabled: boolean) {
     return () => {
       map.off('mousemove', handleMouseMove);
       map.off('click', handleClick);
+      map.off('contextmenu', handleContextMenu);
       map.off('style.load', handleStyleLoad);
       map.getCanvas().removeEventListener('mouseleave', handleMouseLeave);
       map.getCanvas().style.cursor = '';
