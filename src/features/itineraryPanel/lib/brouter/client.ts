@@ -47,8 +47,12 @@ export async function fetchBrouterRoute(
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    const upstream = res.headers.get('x-brouter-upstream-error');
+    const detail = text || upstream || '';
     throw new Error(
-      `BRouter HTTP ${res.status} ${res.statusText}${text ? ` — ${text.slice(0, 200)}` : ''}`,
+      `BRouter HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${
+        detail ? ` — ${detail.slice(0, 300)}` : ''
+      }`,
     );
   }
 

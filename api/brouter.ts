@@ -135,6 +135,15 @@ async function handleRouteQuery(
 
   res.setHeader('Content-Type', contentType);
   res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=300');
+  if (looksLikeError) {
+    // Surface upstream error text in a custom header too, in case the
+    // body is consumed/filtered on the way back to the browser (some
+    // CDNs strip plain-text 422 bodies). Truncate to keep headers small.
+    res.setHeader(
+      'x-brouter-upstream-error',
+      body.replace(/[\r\n]+/g, ' ').slice(0, 400),
+    );
+  }
   return res.status(looksLikeError ? 422 : upstreamRes.status).send(body);
 }
 

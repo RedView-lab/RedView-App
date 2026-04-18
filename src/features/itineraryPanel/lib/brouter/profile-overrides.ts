@@ -111,14 +111,13 @@ export function basicStateToOverrides(
   // already covers tracks indirectly. We expose these as Expert-only.
 
   // ── Slope cap ────────────────────────────────────────────────────
-  if (roads.maxSlopePercent > 0 && roads.maxSlopePercent < 100) {
-    // If the user sets a max slope, use the maxslope cost knobs.
-    o.uphillmaxslope = String(roads.maxSlopePercent);
-    o.downhillmaxslope = String(roads.maxSlopePercent);
-    // High cost above the cap.
-    o.uphillmaxslopecost = '500';
-    o.downhillmaxslopecost = '500';
-  }
+  // NOTE: `uphillmaxslope` / `downhillmaxslope` / *cost are NOT declared as
+  // global `assign` in stock trekking.brf, so sending them as URL overrides
+  // makes BRouter throw "unknown variable" → HTTP 422. The slope cap is
+  // therefore enforced post-route client-side (see route-layer / fitPredictor)
+  // rather than via the BRouter cost function. To use it server-side the
+  // user must switch to Expert Mode and upload a custom profile.
+  void roads.maxSlopePercent;
 
   // Discourage steps when on road preset.
   if (roads.bikeLanes === 'forbid') o.allow_steps = 'false';
