@@ -208,6 +208,13 @@ export const IconPlus = ({ size = 14, ...p }: IconProps) => (
   </svg>
 );
 
+// Matches Figma node 853:19503 (minus) — horizontal line inset 20.83% of a 20x20 square.
+export const IconMinus = ({ size = 20, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
+
 export const IconRepeat = ({ size = 14, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <polyline points="17 1 21 5 17 9" />

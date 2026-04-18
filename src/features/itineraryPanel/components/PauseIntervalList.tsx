@@ -1,4 +1,4 @@
-import { IconClose } from './icons';
+import { IconMinus } from './icons';
 import type { PauseIntervalRow } from '../types';
 
 interface PauseIntervalListProps {
@@ -82,7 +82,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
             aria-label={`Supprimer ${row.label}`}
             onClick={() => remove(row.id)}
           >
-            <IconClose size={12} />
+            <IconMinus size={20} />
           </button>
         </div>
       ))}

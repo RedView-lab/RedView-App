@@ -1,10 +1,26 @@
-/* Pause-par-interval rows (Rythme section).
-   Source of truth: Figma 1695:22397 — Pause 1/2/3 list block. */
+/* ============================================================================
+   Pause-par-interval rows (Rythme section).
+   Pixel-perfect implementation of Figma node 1695:22639 (PacingBreaksExt —
+   Variant2, "Ajouter des pauses par interval" expanded state).
+
+   Auto-layout spec, left→right inside each row (gap: 8px, align: center):
+     • Name pill .......... flex: 1 0 0, min-w 0, bg rgba(255,255,255,.08),
+                            radius 6, padding 6/8, text 14px SemiBold white.
+     • Field group ........ hug content, gap 4, align center. Contains:
+         – Label .......... 13px SemiBold white @ opacity .64 ("Durée" /
+                            "Interval").
+         – Chip ........... fixed 60px wide, radius 4, padding 6/8, bg
+                            rgba(255,255,255,.08). Inner text 14px SemiBold
+                            white, left-aligned, min-w 24 / max-w 48.
+     • Minus button ....... 20×20 hug, stroke icon, hover turns red.
+   List gap (row-to-row) is 8px, matching Figma.
+============================================================================ */
 
 .rvi-pause-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
 }
 
@@ -13,26 +29,30 @@
   align-items: center;
   gap: 8px;
   width: 100%;
+  border-radius: 6px;
 }
 
+/* ---- Name pill (flex:1, hug height via padding) ---------------------------- */
 .rvi-pause-row__name {
   flex: 1 1 0;
   min-width: 0;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 6px 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--rvi-text);
-  height: 28px;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
+  color: var(--rvi-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* ---- Label + chip group (Durée / Interval) -------------------------------- */
 .rvi-pause-row__field {
   display: inline-flex;
   align-items: center;
@@ -41,39 +61,51 @@
 }
 
 .rvi-pause-row__field-label {
+  font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 600; /* SemiBold, per Figma */
+  line-height: normal;
   color: var(--rvi-text);
   opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Compact pill: 60px wide, radius 4 (per Figma). */
+/* Numeric chip: fixed 60px wide, radius 4 (Figma 1695:22013). */
 .rvi-pause-chip {
+  box-sizing: border-box;
+  width: 60px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   padding: 6px 8px;
-  width: 60px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  flex-shrink: 0;
 }
 
 .rvi-pause-chip__native {
   all: unset;
+  display: block;
+  box-sizing: border-box;
+  min-width: 24px;
+  max-width: 48px;
   width: 100%;
-  text-align: center;
+  text-align: left;
+  font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
   color: var(--rvi-text);
-  font-family: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rvi-pause-chip__native::placeholder {
   color: var(--rvi-text-faint);
 }
 
+/* ---- Remove (minus) button ------------------------------------------------- */
 .rvi-pause-row__remove {
   all: unset;
   display: inline-flex;
@@ -82,12 +114,18 @@
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  color: var(--rvi-text-dim);
+  color: var(--rvi-text);
   cursor: pointer;
   flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+  opacity: 0.72;
 }
 .rvi-pause-row__remove:hover {
   background: rgba(255, 96, 96, 0.16);
   color: #ff7070;
+  opacity: 1;
+}
+.rvi-pause-row__remove:focus-visible {
+  outline: 2px solid rgba(255, 96, 96, 0.6);
+  outline-offset: 1px;
 }
