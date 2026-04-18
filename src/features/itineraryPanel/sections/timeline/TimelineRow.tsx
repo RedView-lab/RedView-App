@@ -80,10 +80,10 @@ export function TimelineRow({
         <span className="rvi-tl-row__check-box" aria-hidden />
       </label>
 
-      <KindBadge kind={item.kind} />
+      <KindBadge kind={item.kind} poiCategory={item.poiCategory} />
 
-      <span className="rvi-tl-row__kind-text" title={kindLabel(item.kind)}>
-        {kindLabel(item.kind)}
+      <span className="rvi-tl-row__kind-text" title={kindLabel(item.kind, item.poiCategory)}>
+        {kindLabel(item.kind, item.poiCategory)}
       </span>
 
       {useSearchInput ? (

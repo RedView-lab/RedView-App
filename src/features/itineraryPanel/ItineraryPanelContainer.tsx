@@ -6,6 +6,7 @@ import { AddItineraryDialog } from './components/AddItineraryDialog';
 import { ExpertProfileEditor } from './expert/ExpertProfileEditor';
 import { createDefaultExpertState } from './expert/defaults';
 import { useItineraryPoiMap } from './hooks/useItineraryPoiMap';
+import { poiFeaturesToTimelineItems } from './lib/poi-to-timeline';
 import {
   createDefaultItinerary,
   createDefaultProject,
@@ -13,6 +14,7 @@ import {
   ITINERARY_COLORS,
 } from './defaultState';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
+import type { PoiFeature } from '@/features/poi/types';
 import {
   fetchBrouterRoute,
   fetchBrouterRouteBestOfN,
@@ -89,6 +91,49 @@ export function ItineraryPanelContainer({
     [project],
   );
 
+  /**
+   * After a POI corridor search completes, replace the previously-injected
+   * `kind: 'poi'` rows of the *target* itinerary with fresh ones — sorted
+   * by their projected distance from the start so the feuille de route
+   * shows them in physical order between Départ and Fin.
+   *
+   * The target is captured at call time via the active id at fire-time so
+   * that switching itineraries mid-search doesn't pollute the wrong one.
+   */
+  const activeIdRef = useRef(project.activeItineraryId);
+  activeIdRef.current = project.activeItineraryId;
+
+  const handleCorridorComplete = useCallback((features: PoiFeature[]) => {
+    const targetId = activeIdRef.current;
+    setProject((p) => {
+      const target = p.itineraries.find((i) => i.id === targetId);
+      if (!target) return p;
+      const route = target.gpxRoute?.points;
+      if (!route || route.length < 2) return p;
+
+      const newPoiRows = poiFeaturesToTimelineItems(features, route);
+
+      // Strip previously-injected POI rows and merge fresh ones in
+      // distance order between Départ and Fin (waypoints/pauses keep
+      // their author-defined positions).
+      const stripped = target.timeline.filter((r) => r.kind !== 'poi');
+      const endIdx = stripped.findIndex((r) => r.kind === 'end');
+      const insertAt = endIdx >= 0 ? endIdx : stripped.length;
+      const merged = [
+        ...stripped.slice(0, insertAt),
+        ...newPoiRows,
+        ...stripped.slice(insertAt),
+      ];
+
+      return {
+        ...p,
+        itineraries: p.itineraries.map((it) =>
+          it.id === targetId ? { ...it, timeline: merged } : it,
+        ),
+      };
+    });
+  }, []);
+
   const {
     loading: poiLoading,
     error: poiError,
@@ -97,7 +142,7 @@ export function ItineraryPanelContainer({
     searchCorridor,
     hasGpxRoute,
     hasEnabledCategories,
-  } = useItineraryPoiMap(map, isMapLoaded, active);
+  } = useItineraryPoiMap(map, isMapLoaded, active, handleCorridorComplete);
 
   const updateActive = useCallback(
     (mut: (it: ItineraryProject['itineraries'][number]) => void) => {

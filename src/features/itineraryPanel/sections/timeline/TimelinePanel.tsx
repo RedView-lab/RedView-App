@@ -86,7 +86,7 @@ export function TimelinePanel({
     if (it.kind === 'start' || it.kind === 'end') return filters.etape;
     if (it.kind === 'waypoint') return filters.waypoint;
     if (it.kind === 'pause') return filters.pause;
-    // water + supermarket + future POI variants
+    // water + supermarket + poi (corridor-injected) → all under the POI filter
     return filters.poi;
   });
 

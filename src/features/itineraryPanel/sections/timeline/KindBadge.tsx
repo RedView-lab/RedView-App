@@ -42,16 +42,19 @@ interface KindBadgeProps {
   kind: TimelineItemKind;
   /** Pixel size — defaults to the 20px Figma value. */
   size?: number;
+  /** Required when `kind === 'poi'` — selects the teardrop pin color/icon. */
+  poiCategory?: PoiCategory;
 }
 
 /** French labels (Figma copy — Étape / Waypoint / POI / Pause). */
-export function kindLabel(kind: TimelineItemKind): string {
+export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): string {
   switch (kind) {
     case 'start':       return 'Étape';
     case 'end':         return 'Étape';
     case 'waypoint':    return 'Waypoint';
     case 'water':       return 'POI';
     case 'supermarket': return 'POI';
+    case 'poi':         return poiCategory ? poiLabel(poiCategory) : 'POI';
     case 'pause':       return 'Pause';
     default:            return '';
   }
@@ -64,6 +67,7 @@ export const kindColor: Record<TimelineItemKind, string> = {
   waypoint:    '#c50000',
   water:       '#1e5fc7',
   supermarket: '#a85a1a',
+  poi:         '#3a3a3a',
   pause:       '#3a3a3a',
 };
 
@@ -140,7 +144,7 @@ export function PoiBadge({
 
 /* ------------------------------ Main badge ------------------------------ */
 
-export function KindBadge({ kind, size = 20 }: KindBadgeProps) {
+export function KindBadge({ kind, size = 20, poiCategory }: KindBadgeProps) {
   if (kind === 'start') {
     return (
       <span
@@ -187,6 +191,11 @@ export function KindBadge({ kind, size = 20 }: KindBadgeProps) {
         <IconPauseBadge size={size} />
       </span>
     );
+  }
+
+  // Generic POI row injected by corridor search → use the typed teardrop pin.
+  if (kind === 'poi' && poiCategory) {
+    return <PoiBadge category={poiCategory} size={size} />;
   }
 
   // water / supermarket → teardrop pin variants

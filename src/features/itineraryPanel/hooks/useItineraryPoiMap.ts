@@ -8,7 +8,10 @@ import {
   isGpxRouteOnMap,
   removeGpxRoute,
 } from '@/features/poi/lib/gpx-layer';
-import type { PoiCategory as FeaturePoiCategory } from '@/features/poi/types';
+import type {
+  PoiCategory as FeaturePoiCategory,
+  PoiFeature,
+} from '@/features/poi/types';
 
 import type {
   Itinerary,
@@ -69,6 +72,7 @@ export function useItineraryPoiMap(
   map: MapboxMap | null,
   isMapLoaded: boolean,
   active: Itinerary | null,
+  onCorridorComplete?: (features: PoiFeature[]) => void,
 ): UseItineraryPoiMapResult {
   // ── Derive enabled OSM categories from the panel POI rows ─────────
   const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
@@ -106,6 +110,7 @@ export function useItineraryPoiMap(
     enabledCategories,
     gpxRoute,
     radiusM,
+    onCorridorComplete,
   );
 
   // ── Render the active itinerary's GPX track ───────────────────────

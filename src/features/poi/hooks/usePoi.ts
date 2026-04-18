@@ -20,6 +20,7 @@ export function usePoi(
   enabledCategories: Set<PoiCategory>,
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
+  onCorridorComplete?: (features: PoiFeature[]) => void,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +40,8 @@ export function usePoi(
   const radiusRef = useRef(radiusM);
   radiusRef.current = radiusM;
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
+  const onCorridorCompleteRef = useRef(onCorridorComplete);
+  onCorridorCompleteRef.current = onCorridorComplete;
 
   // ── Setup source + layers ─────────────────────────────────────────
 
@@ -198,6 +201,7 @@ export function usePoi(
       if (!controller.signal.aborted) {
         lastCorridorFeatures.current = features;
         updateSourceData(m, features);
+        onCorridorCompleteRef.current?.(features);
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;

@@ -141,6 +141,7 @@ export type TimelineItemKind =
   | 'waypoint'
   | 'water'
   | 'supermarket'
+  | 'poi'
   | 'pause';
 
 export interface TimelineItem {
@@ -156,6 +157,14 @@ export interface TimelineItem {
   /** Geo coordinates once the user has resolved a place via search. */
   lat?: number;
   lon?: number;
+  /**
+   * For `kind: 'poi'` items injected by the corridor search — the panel
+   * POI category, used by `KindBadge` to render the right teardrop pin
+   * and by `kindLabel` to display the sub-category name (Eau, Boulangerie…).
+   */
+  poiCategory?: PoiCategory;
+  /** Stable OSM id of the source feature, when the row was injected by POI search. */
+  osmId?: number;
 }
 
 export type TimelineView = 'sheet' | 'timeline';
