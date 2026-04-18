@@ -523,8 +523,10 @@
 
 .rvi-tl-filters__chips {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 4px;
+  min-width: 0;
+  width: 100%;
 }
 
 .rvi-tl-chip {
@@ -538,6 +540,8 @@
   user-select: none;
   transition: background 0.15s ease, color 0.15s ease;
   position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .rvi-tl-chip:hover { background: rgba(255, 255, 255, 0.14); }
 .rvi-tl-chip input {
@@ -577,6 +581,10 @@
   font-weight: 500;
   color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .rvi-tl-chip.is-on .rvi-tl-chip__label { color: #fff; }
 
@@ -585,8 +593,10 @@
 .rvi-tl-table__row {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
+  min-width: 0;
+  width: 100%;
 }
 
 .rvi-tl-table__check {
@@ -596,6 +606,9 @@
   cursor: pointer;
   user-select: none;
   position: relative;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
 }
 .rvi-tl-table__check input {
   position: absolute;
@@ -634,6 +647,9 @@
   font-weight: 500;
   color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .rvi-tl-table__field {
@@ -647,6 +663,7 @@
   min-width: 64px;
   height: 28px;
   box-sizing: border-box;
+  flex-shrink: 0;
 }
 .rvi-tl-table__field input {
   all: unset;
@@ -688,6 +705,8 @@
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease;
   margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .rvi-tl-table__columns:hover {
   background: rgba(255, 255, 255, 0.04);

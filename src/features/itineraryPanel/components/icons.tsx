@@ -374,7 +374,7 @@ export const IconCheckpointEndMarker = ({ size = 20, ...p }: IconProps) => (
  */
 export const IconWaypointDot = ({ size = 20, ...p }: IconProps) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
-    <circle cx="10" cy="10" r="8.2" fill="#0e0e0e" />
+    <circle cx="10" cy="10" r="8.2" fill="#fff" />
     <circle cx="10" cy="10" r="5.4" fill="#c50000" />
     <circle cx="10" cy="10" r="2.2" fill="#fff" fillOpacity="0.92" />
   </svg>
