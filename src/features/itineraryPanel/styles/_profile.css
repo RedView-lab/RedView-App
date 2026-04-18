@@ -55,13 +55,20 @@
 }
 .rvi-redbtn:hover { background: #a00000; }
 
+/* Pixel-perfect "Calculer" button — Figma I1713:27356;1695:22640.
+   Spec: bg #890000, w_full, hug height (≈30px = 7+16+7), gap 4,
+   pl 8 / pr 10 / py 7, radius 6, icon 16, text 14 Medium white.
+   IMPORTANT: do NOT set min-height — the parent (.rvi-redbtn) already
+   forces 32px which made the button taller than the Figma spec; we
+   reset to `auto` so the button hugs its content like in Figma. */
 .rvi-redbtn--full {
   width: 100%;
   height: auto;
-  min-height: 32px;
+  min-height: 0;
+  border-radius: 6px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
-  font-weight: 500; /* Medium — Figma 1695:22642 (Rethink_Sans:Medium) */
+  font-weight: 500; /* Medium — Figma I1713:27356;1695:22642 */
   line-height: normal;
   padding: 7px 10px 7px 8px;
   gap: 4px;
