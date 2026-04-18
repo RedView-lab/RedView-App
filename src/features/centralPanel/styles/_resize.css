@@ -4,18 +4,30 @@
 .rvc-panel__resize-handle {
   position: absolute;
   top: 0;
-  left: 12px;
-  right: 12px;
-  height: 8px;
+  left: 0;
+  right: 0;
+  height: 12px;
   cursor: ns-resize;
-  z-index: 20;
-  border-radius: 0 0 4px 4px;
+  z-index: 30;
+  border-radius: var(--rvc-radius) var(--rvc-radius) 0 0;
   background: transparent;
   transition: background 0.15s ease;
 }
-.rvc-panel__resize-handle:hover,
-.rvc-panel__resize-handle.is-dragging {
-  background: rgba(255, 255, 255, 0.18);
+.rvc-panel__resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0);
+  transform: translateX(-50%);
+  transition: background 0.15s ease;
+}
+.rvc-panel__resize-handle:hover::after,
+.rvc-panel__resize-handle.is-dragging::after {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .rvc-panel__resize-handle--left,

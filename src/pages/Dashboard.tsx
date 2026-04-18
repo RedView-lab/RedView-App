@@ -378,7 +378,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         />
       )}
 
-      <div style={centralPanelStyle}>
+      <div style={{ ...centralPanelStyle, position: 'absolute' as const }}>
+        {/* Top edge handle covers the wrapper's top padding so the
+            resize hit area spans the entire visible top edge of the
+            panel (the in-panel handle alone leaves a dead zone). */}
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Redimensionner le panneau"
+          onMouseDown={handleCentralResizeStart}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: PANEL_PADDING,
+            cursor: 'ns-resize',
+            zIndex: 30,
+          }}
+        />
         <CentralPanel
           onResizeStart={handleCentralResizeStart}
           onResizeLeftStart={handleCentralLeftResizeStart}
