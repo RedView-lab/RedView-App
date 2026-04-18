@@ -8,18 +8,11 @@ import { useMemo } from 'react';
 
 import { SynthesisTable } from './sections/SynthesisTable/SynthesisTable';
 import { AnalysisToolbar } from './sections/AnalysisToolbar/AnalysisToolbar';
-import { ProfileChart } from './sections/ProfileChart/ProfileChart';
-import { ChartXAxis } from './sections/ProfileChart/ChartXAxis';
-import { TemperatureRows } from './sections/TemperatureRows/TemperatureRows';
+import { ChartCard } from './sections/ChartCard/ChartCard';
 import { ZoomScrollbar } from './sections/ZoomScrollbar/ZoomScrollbar';
-import { xExtent } from './sections/ProfileChart/scales';
-import { visibleSeries } from './sections/ProfileChart/scales';
+import { xExtent, visibleSeries } from './sections/ProfileChart/scales';
 import type { CentralPanelProps } from './types';
 import './styles/index.css';
-
-const CHART_PADDING_LEFT = 56;
-const CHART_PADDING_RIGHT = 56;
-const X_TICK_TARGET = 11;
 
 export function CentralPanel(props: CentralPanelProps) {
   const {
@@ -47,14 +40,6 @@ export function CentralPanel(props: CentralPanelProps) {
     onChangeTemperatureMode,
     onChangeZoom,
   } = props;
-
-  const xDomain = useMemo<[number, number]>(() => {
-    const all = [
-      ...visibleSeries(itineraries, 'primary'),
-      ...visibleSeries(itineraries, 'secondary'),
-    ].map((s) => s.samples);
-    return ui.zoomRangeKm ?? xExtent(all);
-  }, [itineraries, ui.zoomRangeKm]);
 
   const totalKm = useMemo(() => {
     const all = visibleSeries(itineraries, 'primary').map((s) => s.samples);
@@ -90,30 +75,15 @@ export function CentralPanel(props: CentralPanelProps) {
       />
 
       <div className="rvc-panel__chart-area">
-        <ProfileChart
+        <ChartCard
           itineraries={itineraries}
           ui={ui}
           markers={markers}
           dayNight={dayNight}
           onHover={onHover}
-        />
-
-        <ChartXAxis
-          domain={xDomain}
-          unit={ui.axis1 === 'distance' ? 'km' : 's'}
-          targetCount={X_TICK_TARGET}
-          paddingLeft={CHART_PADDING_LEFT}
-          paddingRight={CHART_PADDING_RIGHT}
-        />
-
-        <TemperatureRows
-          itineraries={itineraries}
-          binCount={X_TICK_TARGET}
-          paddingLeft={CHART_PADDING_LEFT}
-          paddingRight={CHART_PADDING_RIGHT}
-          onChangeMode={onChangeTemperatureMode}
-          onRemoveRow={onRemoveTemperatureRow}
-          onAddRow={onAddTemperatureRow}
+          onAddTemperatureRow={onAddTemperatureRow}
+          onRemoveTemperatureRow={onRemoveTemperatureRow}
+          onChangeTemperatureMode={onChangeTemperatureMode}
         />
       </div>
 

@@ -1,8 +1,11 @@
-/* Bottom zoom scrollbar. */
+/* Bottom zoom scrollbar — Figma 1688:22973.
+   16 px tall pill spanning the full panel width. Inner draggable handle
+   shows a vertical-dots grip in its center. */
 
 .rvc-zoom {
   flex-shrink: 0;
-  padding: 4px 0 2px;
+  padding: 0;
+  margin-top: 4px;
 }
 
 .rvc-zoom__track {
@@ -50,6 +53,6 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
   pointer-events: none;
 }

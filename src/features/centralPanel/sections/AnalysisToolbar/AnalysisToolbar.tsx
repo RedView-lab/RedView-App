@@ -34,12 +34,12 @@ const AXIS1_OPTIONS = [
 ];
 
 const OVERLAY_ICONS: Record<ChartOverlay, ReactNode> = {
-  waypoint: <IconWaypointMarker size={12} />,
-  poi: <IconPoiPin size={12} />,
-  pause: <IconPause size={12} />,
-  alerts: <IconAlertTriangle size={12} />,
-  slope: <IconSlope size={12} />,
-  daynight: <IconDayNight size={12} />,
+  waypoint: <IconWaypointMarker size={20} />,
+  poi: <IconPoiPin size={20} />,
+  pause: <IconPause size={20} />,
+  alerts: <IconAlertTriangle size={20} />,
+  slope: <IconSlope size={20} />,
+  daynight: <IconDayNight size={20} />,
 };
 
 const OVERLAY_ORDER: ChartOverlay[] = [

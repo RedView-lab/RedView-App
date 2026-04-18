@@ -70,7 +70,7 @@ export const IconMoon = ({ size = 14, ...p }: IconProps) => (
 
 export const IconWaypointMarker = ({ size = 12, ...p }: IconProps) => (
   <svg {...p} width={size} height={size} viewBox="0 0 16 16" fill="none">
-    <circle cx="8" cy="8" r="6" fill="currentColor" />
+    <circle cx="8" cy="8" r="6" fill="#E10600" />
     <circle cx="8" cy="8" r="2.4" fill="#0a0a0c" />
   </svg>
 );

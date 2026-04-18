@@ -33,7 +33,7 @@ export function Checkbox({
         className={`rvc-checkbox__box${checked ? ' is-checked' : ''}`}
         aria-hidden
       >
-        {checked ? <IconCheck size={10} /> : null}
+        {checked ? <IconCheck size={12} /> : null}
       </span>
       <input
         type="checkbox"

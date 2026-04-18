@@ -13,7 +13,12 @@
 import { useCallback, useState } from 'react';
 
 import { CentralPanel } from './CentralPanel';
-import { DEFAULT_UI_STATE, SAMPLE_ITINERARIES } from './defaultState';
+import {
+  DEFAULT_UI_STATE,
+  SAMPLE_DAYNIGHT,
+  SAMPLE_ITINERARIES_WITH_CURVES,
+  SAMPLE_MARKERS,
+} from './defaultState';
 import type {
   AnalysisAxisX,
   AnalysisAxisYMetric,
@@ -52,9 +57,9 @@ interface CentralPanelContainerProps {
 }
 
 export function CentralPanelContainer({
-  itineraries = SAMPLE_ITINERARIES,
-  markers = [],
-  dayNight = [],
+  itineraries = SAMPLE_ITINERARIES_WITH_CURVES,
+  markers = SAMPLE_MARKERS,
+  dayNight = SAMPLE_DAYNIGHT,
   initialUi,
   className,
   style,
