@@ -22,6 +22,7 @@ import type {
 } from '../../types';
 import type { ExpertProfileState } from '../../expert/types';
 import { expertStateToOverrides } from '../../expert/state-to-overrides';
+import { safeOverride } from './param-encoding';
 import type { BrouterParamOverrides, RedviewProfileId } from './types';
 
 /** Convert the panel-side preset id to an actual BRouter profile name. */
@@ -77,34 +78,35 @@ export function basicStateToOverrides(
   // ── Priorities ────────────────────────────────────────────────────
   // "Dénivelé" slider: 0 = hilly OK, 100 = flat-as-possible.
   // We translate it to uphill/downhill cost (default 60 in trekking).
-  o.consider_elevation = priorities.elevation > 25 ? 'true' : 'false';
-  if (priorities.elevation > 25) {
+  const considerElevation = priorities.elevation > 25;
+  safeOverride(o, 'consider_elevation', considerElevation);
+  if (considerElevation) {
     const k = priorities.elevation / 50; // 0.5..2 around the default.
-    o.uphillcost = String(Math.round(60 * k));
-    o.downhillcost = String(Math.round(60 * k));
+    safeOverride(o, 'uphillcost', Math.round(60 * k));
+    safeOverride(o, 'downhillcost', Math.round(60 * k));
   }
 
   // "Tranquilité" → bias toward consider_traffic + town avoidance.
   if (priorities.tranquility > 60) {
-    o.consider_traffic = 'true';
-    o.consider_town = 'true';
-    o.avoid_unsafe = 'true';
+    safeOverride(o, 'consider_traffic', true);
+    safeOverride(o, 'consider_town', true);
+    safeOverride(o, 'avoid_unsafe', true);
   } else if (priorities.tranquility < 25) {
-    o.consider_traffic = 'false';
-    o.consider_town = 'false';
-    o.avoid_unsafe = 'false';
+    safeOverride(o, 'consider_traffic', false);
+    safeOverride(o, 'consider_town', false);
+    safeOverride(o, 'avoid_unsafe', false);
   }
 
   // "Distance" → shortcut: lower = avoid detours via cycle routes.
   if (priorities.distance < 30) {
-    o.ignore_cycleroutes = 'true';
+    safeOverride(o, 'ignore_cycleroutes', true);
   }
 
   // ── Road types ────────────────────────────────────────────────────
   // We can't redefine the costfactor table from the URL, but the trekking
   // profile already exposes a number of toggles we can flip.
-  if (roads.ferry === 'forbid') o.allow_ferries = 'false';
-  if (roads.ferry === 'prefer') o.allow_ferries = 'true';
+  if (roads.ferry === 'forbid') safeOverride(o, 'allow_ferries', false);
+  if (roads.ferry === 'prefer') safeOverride(o, 'allow_ferries', true);
 
   // Gravel/singletrack/offroad influence: surface & track preferences live
   // inside the BRF body. Use the closest exposed knob — `consider_elevation`
@@ -120,7 +122,7 @@ export function basicStateToOverrides(
   void roads.maxSlopePercent;
 
   // Discourage steps when on road preset.
-  if (roads.bikeLanes === 'forbid') o.allow_steps = '0';
+  if (roads.bikeLanes === 'forbid') safeOverride(o, 'allow_steps', false);
 
   // Tag for analytics. Multiply factor — currently informational.
   // (Not actually consumed by BRouter, but keeps the URL stable while we

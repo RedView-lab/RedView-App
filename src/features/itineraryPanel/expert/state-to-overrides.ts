@@ -4,67 +4,20 @@
  * We diff the user values against the parameter defaults: only changed
  * values are sent over the wire, keeping URLs short and the cache hit
  * ratio high.
+ *
+ * Encoding rules + the URL-safe whitelist live in
+ * `lib/brouter/param-encoding.ts` so this path and `basicStateToOverrides`
+ * can never diverge.
  */
+import {
+  URL_SAFE_PARAMETER_IDS,
+  encodeParamValue,
+} from '../lib/brouter/param-encoding';
 import { ALL_PARAMETERS } from './parameters';
 import type { ExpertProfileState, ParameterValue } from './types';
 
-/**
- * Whitelist of parameters declared as `assign` in the global section of
- * the stock `trekking.brf` shipped with BRouter. Only these can be
- * overridden via the `profile:<id>=value` URL syntax — anything else
- * triggers a server-side "unknown variable" error (HTTP 422 from our
- * proxy). For the remaining knobs the user must upload a full custom
- * profile (Expert Mode → "Téléverser le profil complet").
- */
-export const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
-  // Behaviour switches
-  'allow_steps',
-  'allow_ferries',
-  'ignore_cycleroutes',
-  'stick_to_cycleroutes',
-  'use_proposed_cycleroutes',
-  'avoid_unsafe',
-  'add_beeline',
-  'consider_noise',
-  'consider_river',
-  'consider_forest',
-  'consider_town',
-  'consider_traffic',
-  // Elevation
-  'consider_elevation',
-  'downhillcost',
-  'downhillcutoff',
-  'uphillcost',
-  'uphillcutoff',
-  // Kinematic model
-  'totalMass',
-  'maxSpeed',
-  'S_C_x',
-  'C_r',
-  'bikerPower',
-  // Turn instructions
-  'turnInstructionMode',
-  'turnInstructionCatchingRange',
-  'turnInstructionRoundabouts',
-  'considerTurnRestrictions',
-  // Engine
-  'correctMisplacedViaPoints',
-  'correctMisplacedViaPointsDistance',
-  'processUnusedTags',
-]);
-
-function fmt(v: ParameterValue): string {
-  // BRouter standalone parses every URL `profile:xxx=value` through
-  // `Float.parseFloat`, so booleans MUST be encoded as 1/0 — sending
-  // "true"/"false" makes the server reply HTTP 500 with empty body.
-  if (typeof v === 'boolean') return v ? '1' : '0';
-  if (typeof v === 'number') {
-    return Number.isInteger(v)
-      ? String(v)
-      : v.toFixed(4).replace(/\.?0+$/, '');
-  }
-  return String(v);
-}
+// Re-exported for backward compatibility with any external import.
+export { URL_SAFE_PARAMETER_IDS };
 
 function eq(a: ParameterValue, b: ParameterValue): boolean {
   if (typeof a === 'number' && typeof b === 'number') {
@@ -87,7 +40,7 @@ export function expertStateToOverrides(
       skipped.push(param.id);
       continue;
     }
-    out[param.id] = fmt(v);
+    out[param.id] = encodeParamValue(v);
   }
   if (skipped.length > 0 && typeof console !== 'undefined') {
     console.warn(

@@ -13,6 +13,12 @@ export {
   buildOverridesForItinerary,
 } from './profile-overrides';
 export {
+  URL_SAFE_PARAMETER_IDS,
+  encodeParamValue,
+  safeOverride,
+  sanitizeOverrides,
+} from './param-encoding';
+export {
   generateBrfFromExpertState,
   validateBrfText,
 } from './profile-template';

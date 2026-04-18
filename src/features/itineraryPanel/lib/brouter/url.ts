@@ -10,6 +10,7 @@ import {
   type BrouterPoint,
   type BrouterRequest,
 } from './types';
+import { sanitizeOverrides } from './param-encoding';
 
 interface ResolvedEndpoint {
   /** Base URL (no trailing slash). */
@@ -45,10 +46,11 @@ export function buildBrouterUrl(req: BrouterRequest): string {
   if (req.polygons) params.set('polygons', req.polygons);
   if (req.nogos) params.set('nogos', req.nogos);
   if (req.overrides) {
-    for (const [key, value] of Object.entries(req.overrides)) {
-      if (value === '' || value == null) continue;
-      // Keys must always be prefixed with "profile:" — caller sends bare
-      // names (e.g. "consider_elevation"), we add the prefix here.
+    const safe = sanitizeOverrides(req.overrides);
+    for (const [key, value] of Object.entries(safe)) {
+      // Final guard: every override key must be prefixed with "profile:".
+      // `sanitizeOverrides` already encoded the value and dropped unknown
+      // / empty keys, so we only need the prefix here.
       const k = key.startsWith('profile:') ? key : `profile:${key}`;
       params.set(k, value);
     }
