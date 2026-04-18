@@ -189,8 +189,8 @@ export function RythmeSection({
           label="Météo"
           trailing={
             <ChipInput
-              value={`${rhythm.weatherWeight}%`}
-              placeholder="100%"
+              value={rhythm.useWeather ? `${rhythm.weatherWeight}%` : ''}
+              placeholder={`${rhythm.weatherWeight}%`}
               onChange={(v) => {
                 const n = parseInt(v, 10);
                 if (Number.isFinite(n)) onChange?.('weatherWeight', n);
@@ -205,8 +205,8 @@ export function RythmeSection({
           label="Surfaces"
           trailing={
             <ChipInput
-              value={`${rhythm.surfacesWeight}%`}
-              placeholder="100%"
+              value={rhythm.useSurfaces ? `${rhythm.surfacesWeight}%` : ''}
+              placeholder={`${rhythm.surfacesWeight}%`}
               onChange={(v) => {
                 const n = parseInt(v, 10);
                 if (Number.isFinite(n)) onChange?.('surfacesWeight', n);
