@@ -120,7 +120,11 @@ export function PlaceSearchInput({
       const el = inputRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setMenuRect({ left: r.left, top: r.bottom + 4, width: r.width });
+      // Anchor right edge to the input so the dropdown can grow leftward
+      // and stay readable even when the input is narrow (Figma 1765:62695).
+      const width = Math.max(r.width, 220);
+      const left = Math.max(8, r.right - width);
+      setMenuRect({ left, top: r.bottom + 4, width });
     };
     update();
     window.addEventListener('scroll', update, true);
@@ -235,11 +239,9 @@ export function PlaceSearchInput({
                   }`}
                   onMouseEnter={() => setActiveIdx(i)}
                   onClick={() => commit(s)}
+                  title={s.fullName}
                 >
-                  <span className="rvi-place-search__name">{s.name}</span>
-                  <span className="rvi-place-search__sub">
-                    {s.fullName.replace(`${s.name}, `, '')}
-                  </span>
+                  <span className="rvi-place-search__name">{s.fullName}</span>
                 </li>
               ))}
           </ul>,

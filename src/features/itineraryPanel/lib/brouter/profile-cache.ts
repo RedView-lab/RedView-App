@@ -34,18 +34,27 @@ export async function ensureProfileUploaded(
   const key = hashBrf(brf);
   const cached = cache.get(key);
   if (cached) {
-    if (cached.profileId) return cached.profileId;
-    if (cached.pending) return cached.pending;
+    if (cached.profileId) {
+      console.log('[BRouter] profile cache HIT', key, '→', cached.profileId);
+      return cached.profileId;
+    }
+    if (cached.pending) {
+      console.log('[BRouter] profile upload in-flight, sharing', key);
+      return cached.pending;
+    }
   }
 
+  console.log('[BRouter] profile cache MISS', key, '→ uploading', brf.length, 'B');
   const pending = (async () => {
     const result = await uploadCustomProfile(brf, undefined, signal);
     if (result.error) {
       // Compile-error: drop the cache entry and surface the message.
       cache.delete(key);
+      console.error('[BRouter] profile compile error', key, result.error);
       throw new Error(`BRouter a refusé le profil : ${result.error}`);
     }
     cache.set(key, { profileId: result.profileId });
+    console.log('[BRouter] profile uploaded', key, '→', result.profileId);
     return result.profileId;
   })();
 

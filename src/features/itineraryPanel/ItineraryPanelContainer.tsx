@@ -206,8 +206,20 @@ export function ItineraryPanelContainer({
         roadTypes: active.roadTypes,
         expert: active.expertProfile,
       });
-      return hashBrf(brf);
-    } catch {
+      const h = hashBrf(brf);
+      console.log(
+        '[BRouter] BRF hash =',
+        h,
+        '| size =',
+        brf.length,
+        'B | profile =',
+        active.profileId,
+        '| priorities =',
+        active.priorities,
+      );
+      return h;
+    } catch (e) {
+      console.warn('[BRouter] buildBrfProfile threw:', e);
       return '';
     }
   }, [active]);
@@ -257,12 +269,25 @@ export function ItineraryPanelContainer({
     const itineraryForRouting = active;
     if (!itineraryForRouting) return;
 
+    const t0 = performance.now();
+    console.log(
+      '[BRouter] recompute START hash=', brfHash,
+      'climbing=', climbing,
+      'start=', startKey, 'end=', endKey,
+      'via=', viaKey || '∅',
+    );
+
     // Two-stage: 1) upload (cached) custom profile, 2) route with it.
     // In climbing mode we run BRouter with alternativeidx 0..3 in
     // parallel and keep whichever variant climbs the most (EE3D recipe).
     resolveItineraryRouting(itineraryForRouting, ctrl.signal)
       .then((resolved: ResolvedRouting) => {
         if (ctrl.signal.aborted) throw new DOMException('aborted', 'AbortError');
+        console.log(
+          '[BRouter] profile resolved →', resolved.profileId,
+          '| brf=', resolved.brf ? `${resolved.brf.length}B` : 'stock',
+          '| warnings=', resolved.roadTypes.warnings.length,
+        );
         setRouteWarnings(resolved.roadTypes.warnings);
         const reqBase = {
           start: { lat: startLat, lon: startLon },
@@ -277,6 +302,12 @@ export function ItineraryPanelContainer({
       })
       .then((route: BrouterRoute) => {
         if (ctrl.signal.aborted) return;
+        console.log(
+          '[BRouter] route OK in', Math.round(performance.now() - t0), 'ms',
+          '| dist=', (route.distanceM / 1000).toFixed(2), 'km',
+          '| ascent=', Math.round(route.ascentM), 'm',
+          '| pts=', route.coordinates.length,
+        );
         try {
           addRoute(map, route.coordinates, [
             { lat: startLat, lon: startLon, kind: 'start' },
