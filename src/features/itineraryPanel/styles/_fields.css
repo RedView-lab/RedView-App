@@ -302,7 +302,9 @@
 }
 .rvi-uploadchip__text {
   flex: 1 1 0;
-  min-width: 56px;
+  /* Was 56 — reduced so the Upload chip can hug tighter at the panel's
+     minimum width without pushing the sibling FTP cell out. */
+  min-width: 44px;
   max-width: 74px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 12px;
@@ -356,10 +358,18 @@
   gap: 4px;
   width: 100%;
   min-width: 0;
+  /* Safety net: prevents the checkbox + chip from visually overlapping
+     the sibling cell when the panel is at its resize floor. If inner
+     children would exceed the cell, the LABEL is the only element that
+     truncates (it already has flex:1 + ellipsis). */
+  overflow: hidden;
 }
 .rvi-cfield__label {
   flex: 1 1 0;
-  min-width: 32px;
+  /* Allow the label to shrink further than the chip can, so the chip
+     never has to shrink below its own min-width. 24 px keeps at least
+     two ellipsed characters visible (“Ac…”). */
+  min-width: 24px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — Figma I855:19882;1251:19160 (Rethink_Sans:Medium) */

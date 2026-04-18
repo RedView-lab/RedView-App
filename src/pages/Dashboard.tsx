@@ -20,7 +20,14 @@ const PANEL_WIDTH_DEFAULT = 300;
 const PANEL_PADDING = 12;
 
 const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
-const LEFT_PANEL_WIDTH_MIN = 300;
+// Hard minimum computed from the Rythme section's narrowest row:
+//   [checkbox 16 + gap 4 + label min 28 + gap 4 + upload min 88]
+// + gap 8
+// + [checkbox 16 + gap 4 + label min 28 + gap 4 + chip min 64]
+// = 264 px inner content, + 24 px panel padding + 8 px safety = 296.
+// We round up to 320 so the scrollbar + browser rounding never push
+// cells into overlap when the user drags the handle all the way left.
+const LEFT_PANEL_WIDTH_MIN = 320;
 const LEFT_PANEL_WIDTH_MAX = 520;
 const LEFT_PANEL_WIDTH_DEFAULT = 360;
 

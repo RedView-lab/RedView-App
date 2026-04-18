@@ -98,6 +98,12 @@
   gap: 8px;
   align-items: center;
   width: 100%;
+  /* Hard floor: the row can never shrink below the sum of its children's
+     own minimums. Combined with the panel resize clamp, this guarantees
+     that checkboxes / chips from adjacent cells can never overlap — when
+     the user drags the handle past the floor, the panel starts clipping
+     horizontally instead of letting children collide. */
+  min-width: min-content;
 }
 .rvi-row--grow > * {
   flex: 1 1 0;
