@@ -574,6 +574,38 @@
   width: 100%;
 }
 
+/* ── Two-cell row hard-equalization ─────────────────────────────
+   When a `.rvi-row` holds two `.rvi-cfield` or `.rvi-lfield` cells
+   (POI categories, Rythme rows like FTP/Pneus/Météo, Tracage road
+   types), flex `1 1 0` is not enough to keep both columns the same
+   width once the panel is shrunk: each cell's intrinsic min-content
+   depends on its trailing chip (chip-input 64px, upload chip ≤104px,
+   datechip ≈auto), and flex distributes the row leftover relative to
+   that min-content. The result is a column 2 whose checkboxes drift
+   horizontally from row to row.
+   Switching these rows to a strict `1fr 1fr` grid forces both cells
+   to occupy exactly half the row width (minus the gap), so checkboxes
+   and trailing chips stay column-aligned across stacked rows. */
+.rvi-row:has(> .rvi-cfield + .rvi-cfield),
+.rvi-row:has(> .rvi-cfield + .rvi-lfield),
+.rvi-row:has(> .rvi-lfield + .rvi-cfield),
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+/* Reset the flex sizing inherited from `.rvi-row > .rvi-lfield/.rvi-cfield`
+   so the grid track (1fr) is the sole authority on cell width. */
+.rvi-row:has(> .rvi-cfield + .rvi-cfield) > .rvi-cfield,
+.rvi-row:has(> .rvi-cfield + .rvi-lfield) > .rvi-cfield,
+.rvi-row:has(> .rvi-cfield + .rvi-lfield) > .rvi-lfield,
+.rvi-row:has(> .rvi-lfield + .rvi-cfield) > .rvi-cfield,
+.rvi-row:has(> .rvi-lfield + .rvi-cfield) > .rvi-lfield,
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
+  flex: initial;
+  width: auto;
+  min-width: 0;
+}
+
 /* Small-width adaptation */
 @media (max-width: 340px) {
   .rvi-grid-2 { grid-template-columns: 1fr; }
