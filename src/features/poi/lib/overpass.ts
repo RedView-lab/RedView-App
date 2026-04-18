@@ -1,11 +1,48 @@
 import type { PoiCategory, PoiFeature, OverpassResponse } from '../types';
 
 // ── Overpass endpoints (fallback chain) ───────────────────────────────
-
+// Ordered by observed reliability. `overpass-api.de` is the canonical
+// instance and is generally up; `kumi.systems` is fast when healthy but
+// has been intermittently unreachable (DNS/timeout) — keep it as a
+// fallback so a regional outage doesn't break the corridor search.
 const ENDPOINTS = [
-  'https://overpass.kumi.systems/api/interpreter',
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
 ];
+
+/** Per-request hard timeout. Without this, a TCP-level hang on an
+ * unreachable mirror would block the whole corridor search at 0% for
+ * ~2 minutes (browser default) before the fallback gets a chance. */
+const ENDPOINT_TIMEOUT_MS = 35_000;
+
+/**
+ * Fetch with a hard timeout that races against any caller-supplied
+ * AbortSignal. Aborting either signal cancels the underlying request
+ * and rejects with the appropriate AbortError.
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  callerSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const onCallerAbort = () => ctrl.abort();
+  if (callerSignal) {
+    if (callerSignal.aborted) {
+      throw new DOMException('Aborted', 'AbortError');
+    }
+    callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+  }
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+    callerSignal?.removeEventListener('abort', onCallerAbort);
+  }
+}
 
 // ── OSM tag → PoiCategory mapping ─────────────────────────────────────
 
@@ -110,12 +147,16 @@ export async function fetchPoisInBbox(
 
   for (const endpoint of ENDPOINTS) {
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
+      const res = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+        },
         signal,
-      });
+        ENDPOINT_TIMEOUT_MS,
+      );
 
       if (res.status === 429 || res.status >= 500) {
         lastError = new Error(`Overpass ${res.status}`);
@@ -127,9 +168,15 @@ export async function fetchPoisInBbox(
       const json: OverpassResponse = await res.json();
       return parseResponse(json);
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      // Caller-initiated abort propagates; timeout-aborts (caller signal
+      // not aborted) fall through to the next mirror.
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        if (signal?.aborted) throw err;
+        lastError = new Error(`Overpass timeout (${endpoint})`);
+        continue;
+      }
       lastError = err instanceof Error ? err : new Error(String(err));
-      continue; // try fallback
+      continue; // try fallback (network error, JSON parse, etc.)
     }
   }
 
@@ -178,12 +225,16 @@ export async function fetchPoisAlongRoute(
 
   for (const endpoint of ENDPOINTS) {
     try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
+      const res = await fetchWithTimeout(
+        endpoint,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `data=${encodeURIComponent(query)}`,
+        },
         signal,
-      });
+        ENDPOINT_TIMEOUT_MS,
+      );
 
       if (res.status === 429 || res.status >= 500) {
         lastError = new Error(`Overpass ${res.status}`);
@@ -195,7 +246,11 @@ export async function fetchPoisAlongRoute(
       const json: OverpassResponse = await res.json();
       return parseResponse(json);
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') throw err;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        if (signal?.aborted) throw err;
+        lastError = new Error(`Overpass timeout (${endpoint})`);
+        continue;
+      }
       lastError = err instanceof Error ? err : new Error(String(err));
       continue;
     }
