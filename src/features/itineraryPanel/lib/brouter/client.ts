@@ -159,8 +159,15 @@ export async function fetchBrouterRouteBestOfN(
   for (const r of results) {
     if (!r.ok) {
       lastError = r.error;
+      console.warn(
+        `[BRouter] best-of-N: alt ${r.idx} failed —`,
+        r.error.message,
+      );
       continue;
     }
+    console.log(
+      `[BRouter] best-of-N: alt ${r.idx} OK — ascent=${Math.round(r.route.ascentM)} m, dist=${(r.route.distanceM / 1000).toFixed(1)} km`,
+    );
     if (!best || r.route.ascentM > best.ascentM) {
       best = r.route;
       bestIdx = r.idx;
@@ -169,6 +176,7 @@ export async function fetchBrouterRouteBestOfN(
   if (!best) {
     throw lastError ?? new Error('BRouter best-of-N: every alternative failed');
   }
+  console.log(`[BRouter] best-of-N: picked alt ${bestIdx} (max ascent)`);
   // Tag the chosen idx on the result for diagnostics (tests log this).
   (best as BrouterRoute & { alternativeIdx?: number }).alternativeIdx = bestIdx;
   return best;
