@@ -5,6 +5,7 @@
  * has four editing modes (Traçage, Rythme, POI, Nutrition) and a shared
  * timeline (Feuille de route) at the bottom.
  */
+import type { ExpertProfileState } from './expert/types';
 
 export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';
 
@@ -196,6 +197,13 @@ export interface Itinerary {
     name: string | null;
     points: { lat: number; lon: number }[];
   };
+  /**
+   * Expert Mode profile state. When `enabled`, every parameter the user
+   * has changed is sent to BRouter as a `profile:xxx` URL override on top
+   * of the active preset. Defaults to a disabled state with stock values
+   * mirroring `trekking.brf`.
+   */
+  expertProfile?: ExpertProfileState;
 }
 
 export interface ItineraryProject {
@@ -252,6 +260,10 @@ export interface ItineraryPanelProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onSaveProfile?: () => void;
+  /** Open the Expert Mode profile editor modal. */
+  onOpenExpertEditor?: () => void;
+  /** Whether Expert Mode is currently enabled for the active itinerary. */
+  expertEnabled?: boolean;
 
   // tracage
   onChangePriority?: (key: keyof PrioritiesState, value: number) => void;

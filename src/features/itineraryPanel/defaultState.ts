@@ -4,6 +4,7 @@ import type {
   RouteProfile,
   TimelineItem,
 } from './types';
+import { createDefaultExpertState } from './expert/defaults';
 
 /**
  * Defaults for a brand-new session ("début d'utilisation").
@@ -124,6 +125,7 @@ export function createDefaultItinerary(
       refineResults: true,
     },
     timeline: [DEFAULT_TIMELINE_START, DEFAULT_TIMELINE_END],
+    expertProfile: createDefaultExpertState(),
   };
 }
 

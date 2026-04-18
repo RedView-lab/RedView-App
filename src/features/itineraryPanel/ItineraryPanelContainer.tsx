@@ -3,6 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { ItineraryPanel } from './ItineraryPanel';
 import { AddItineraryDialog } from './components/AddItineraryDialog';
+import { ExpertProfileEditor } from './expert/ExpertProfileEditor';
+import { createDefaultExpertState } from './expert/defaults';
 import { useItineraryPoiMap } from './hooks/useItineraryPoiMap';
 import {
   createDefaultItinerary,
@@ -14,6 +16,9 @@ import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import {
   fetchBrouterRoute,
   panelProfileToBrouter,
+  buildOverridesForItinerary,
+  checkRouteWithinFrance,
+  type BrouterRoute,
 } from './lib/brouter';
 import {
   addRoute,
@@ -29,6 +34,7 @@ import type {
   RoadTypesState,
   TimelineView,
 } from './types';
+import type { ExpertProfileState } from './expert/types';
 
 interface ItineraryPanelContainerProps {
   /** Mapbox map instance (provided by the Dashboard). */
@@ -64,6 +70,7 @@ export function ItineraryPanelContainer({
     createDefaultProject(),
   );
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [expertOpen, setExpertOpen] = useState(false);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(
     null,
   );
@@ -177,8 +184,19 @@ export function ItineraryPanelContainer({
     : '';
   const profileId = active?.profileId ?? 'gravel-default';
 
+  // Stable signature of the routing parameters (basic + expert) so the
+  // effect re-runs when the user tweaks ANY override, but not when the
+  // selected itinerary keeps the same options.
+  const overridesKey = useMemo(() => {
+    if (!active) return '';
+    const o = buildOverridesForItinerary(active, active.expertProfile);
+    return Object.entries(o)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([k, v]) => `${k}=${v}`)
+      .join('&');
+  }, [active]);
+
   useEffect(() => {
-    console.log('[BRouter effect]', { hasMap: !!map, isMapLoaded, startKey, endKey, viaKey, profileId });
     if (!map || !isMapLoaded) return;
     if (!startKey || !endKey) {
       if (isRouteOnMap(map)) {
@@ -197,22 +215,42 @@ export function ItineraryPanelContainer({
         })
       : [];
 
+    // ── France-only guard (temporary) ─────────────────────────────
+    const allPoints = [
+      { lat: startLat, lon: startLon },
+      { lat: endLat, lon: endLon },
+      ...via,
+    ];
+    const bounds = checkRouteWithinFrance(allPoints);
+    if (!bounds.ok) {
+      if (isRouteOnMap(map)) {
+        try { removeRoute(map); } catch { /* noop */ }
+      }
+      setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
+      setRouteLoading(false);
+      return;
+    }
+
     routeAbortRef.current?.abort();
     const ctrl = new AbortController();
     routeAbortRef.current = ctrl;
     setRouteLoading(true);
     setRouteError(null);
 
+    const overrides = active
+      ? buildOverridesForItinerary(active, active.expertProfile)
+      : {};
+
     fetchBrouterRoute({
       start: { lat: startLat, lon: startLon },
       end: { lat: endLat, lon: endLon },
       via,
       profile: panelProfileToBrouter(profileId),
+      overrides,
       signal: ctrl.signal,
     })
-      .then((route) => {
+      .then((route: BrouterRoute) => {
         if (ctrl.signal.aborted) return;
-        console.log('[BRouter ok]', { points: route.coordinates.length, distanceM: route.distanceM });
         try {
           addRoute(map, route.coordinates, [
             { lat: startLat, lon: startLon, kind: 'start' },
@@ -225,8 +263,6 @@ export function ItineraryPanelContainer({
           return;
         }
         // Persist total distance on the "end" row so the timeline shows it.
-        // Skip the update when the value is already correct — extra guard
-        // against any future dep that might include `active` itself.
         const distanceKm = Math.round(route.distanceM / 100) / 10;
         setProject((p) => {
           const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
@@ -257,7 +293,11 @@ export function ItineraryPanelContainer({
       });
 
     return () => ctrl.abort();
-  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId]);
+    // active is intentionally omitted — overridesKey is the stable
+    // signature derived from it; including `active` would re-trigger on
+    // every setProject().
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, overridesKey]);
 
   // Re-add the route after a Mapbox style.load.
   useEffect(() => {
@@ -272,13 +312,17 @@ export function ItineraryPanelContainer({
             return { lat, lon };
           })
         : [];
+      const overrides = active
+        ? buildOverridesForItinerary(active, active.expertProfile)
+        : {};
       fetchBrouterRoute({
         start: { lat: startLat, lon: startLon },
         end: { lat: endLat, lon: endLon },
         via,
         profile: panelProfileToBrouter(profileId),
+        overrides,
       })
-        .then((route) => {
+        .then((route: BrouterRoute) => {
           try {
             if (!isRouteOnMap(map)) {
               addRoute(map, route.coordinates, [
@@ -292,7 +336,8 @@ export function ItineraryPanelContainer({
     };
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
-  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, overridesKey]);
 
   const panel = (
     <ItineraryPanel
@@ -346,6 +391,8 @@ export function ItineraryPanelContainer({
       canUndo={false}
       canRedo={false}
       onSaveProfile={() => {}}
+      onOpenExpertEditor={() => setExpertOpen(true)}
+      expertEnabled={active?.expertProfile?.enabled === true}
       onChangePriority={(key: keyof PrioritiesState, value) =>
         updateActive((it) => {
           it.priorities[key] = value;
@@ -447,6 +494,16 @@ export function ItineraryPanelContainer({
           });
           if (id) setPendingCorridorFor(id);
         }}
+      />
+      <ExpertProfileEditor
+        open={expertOpen}
+        state={active?.expertProfile ?? createDefaultExpertState()}
+        onChange={(next: ExpertProfileState) =>
+          updateActive((it) => {
+            it.expertProfile = next;
+          })
+        }
+        onClose={() => setExpertOpen(false)}
       />
     </>
   );

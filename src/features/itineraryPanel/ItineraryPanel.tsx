@@ -34,6 +34,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onUndo,
     onRedo,
     onSaveProfile,
+    onOpenExpertEditor,
+    expertEnabled,
     onChangePriority,
     onChangeRoadType,
     onChangeRhythm,
@@ -110,6 +112,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
               canUndo={canUndo}
               canRedo={canRedo}
               onSave={onSaveProfile}
+              onOpenExpert={onOpenExpertEditor}
+              expertActive={expertEnabled}
             />
             <TracageSection
               priorities={active.priorities}
