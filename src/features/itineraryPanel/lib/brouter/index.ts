@@ -5,7 +5,7 @@
  * reorganise internals freely.
  */
 export * from './types';
-export { fetchBrouterRoute, uploadCustomProfile } from './client';
+export { fetchBrouterRoute, uploadCustomProfile, fetchBrouterRouteBestOfN } from './client';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './url';
 export {
   panelProfileToBrouter,
@@ -28,3 +28,18 @@ export {
   type LatLon,
   type FranceBoundsCheck,
 } from './france-bounds';
+export { buildBrfProfile, hashBrf, type BrfBuildInputs } from './brf-template';
+export {
+  ensureProfileUploaded,
+  clearProfileCache,
+  profileCacheSize,
+} from './profile-cache';
+export {
+  resolveRoadTypes,
+  type RoadTypesResolution,
+} from './road-types-resolver';
+export {
+  resolveItineraryRouting,
+  type ResolvedRouting,
+} from './routing-resolver';
+export { isClimbingMode, CLIMBING_SLIDER_THRESHOLD } from './climb-mode';

@@ -15,10 +15,14 @@ import {
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import {
   fetchBrouterRoute,
-  panelProfileToBrouter,
-  buildOverridesForItinerary,
+  fetchBrouterRouteBestOfN,
+  buildBrfProfile,
+  hashBrf,
+  resolveItineraryRouting,
   checkRouteWithinFrance,
+  isClimbingMode,
   type BrouterRoute,
+  type ResolvedRouting,
 } from './lib/brouter';
 import {
   addRoute,
@@ -182,18 +186,30 @@ export function ItineraryPanelContainer({
         .map((i) => `${i.lon},${i.lat}`)
         .join('|')
     : '';
+  // Dénivelé slider: above CLIMBING_SLIDER_THRESHOLD (=70) we switch to
+  // EE3D-style climbing mode — the BRF inflates flat-road costfactors
+  // and the routing layer fans out best-of-N alternatives, picking
+  // whichever climbs the most.
   const profileId = active?.profileId ?? 'gravel-default';
+  const climbing = active ? isClimbingMode(active.priorities) : false;
 
-  // Stable signature of the routing parameters (basic + expert) so the
-  // effect re-runs when the user tweaks ANY override, but not when the
-  // selected itinerary keeps the same options.
-  const overridesKey = useMemo(() => {
+  // Stable signature derived from the FULL generated BRF (basic + expert).
+  // Hashing the BRF means: if any panel knob (priorities, road types,
+  // expert overrides) actually changes how BRouter computes costs, the
+  // hash flips and the effect re-runs. Otherwise we sit on the cache.
+  const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
+  const brfHash = useMemo(() => {
     if (!active) return '';
-    const o = buildOverridesForItinerary(active, active.expertProfile);
-    return Object.entries(o)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${k}=${v}`)
-      .join('&');
+    try {
+      const brf = buildBrfProfile({
+        priorities: active.priorities,
+        roadTypes: active.roadTypes,
+        expert: active.expertProfile,
+      });
+      return hashBrf(brf);
+    } catch {
+      return '';
+    }
   }, [active]);
 
   useEffect(() => {
@@ -208,12 +224,13 @@ export function ItineraryPanelContainer({
 
     const [startLon, startLat] = startKey.split(',').map(Number);
     const [endLon, endLat] = endKey.split(',').map(Number);
-    const via = viaKey
+    const userVia = viaKey
       ? viaKey.split('|').map((s) => {
           const [lon, lat] = s.split(',').map(Number);
           return { lat, lon };
         })
       : [];
+    const via = userVia.slice(0, 14);
 
     // ── France-only guard (temporary) ─────────────────────────────
     const allPoints = [
@@ -237,18 +254,27 @@ export function ItineraryPanelContainer({
     setRouteLoading(true);
     setRouteError(null);
 
-    const overrides = active
-      ? buildOverridesForItinerary(active, active.expertProfile)
-      : {};
+    const itineraryForRouting = active;
+    if (!itineraryForRouting) return;
 
-    fetchBrouterRoute({
-      start: { lat: startLat, lon: startLon },
-      end: { lat: endLat, lon: endLon },
-      via,
-      profile: panelProfileToBrouter(profileId),
-      overrides,
-      signal: ctrl.signal,
-    })
+    // Two-stage: 1) upload (cached) custom profile, 2) route with it.
+    // In climbing mode we run BRouter with alternativeidx 0..3 in
+    // parallel and keep whichever variant climbs the most (EE3D recipe).
+    resolveItineraryRouting(itineraryForRouting, ctrl.signal)
+      .then((resolved: ResolvedRouting) => {
+        if (ctrl.signal.aborted) throw new DOMException('aborted', 'AbortError');
+        setRouteWarnings(resolved.roadTypes.warnings);
+        const reqBase = {
+          start: { lat: startLat, lon: startLon },
+          end: { lat: endLat, lon: endLon },
+          via,
+          profile: resolved.profileId,
+          signal: ctrl.signal,
+        };
+        return climbing
+          ? fetchBrouterRouteBestOfN(reqBase, 4)
+          : fetchBrouterRoute(reqBase);
+      })
       .then((route: BrouterRoute) => {
         if (ctrl.signal.aborted) return;
         try {
@@ -293,11 +319,11 @@ export function ItineraryPanelContainer({
       });
 
     return () => ctrl.abort();
-    // active is intentionally omitted — overridesKey is the stable
-    // signature derived from it; including `active` would re-trigger on
-    // every setProject().
+    // active is intentionally omitted — brfHash is the stable signature
+    // derived from it; including `active` would re-trigger on every
+    // setProject().
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, overridesKey]);
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, brfHash, climbing]);
 
   // Re-add the route after a Mapbox style.load.
   useEffect(() => {
@@ -306,22 +332,26 @@ export function ItineraryPanelContainer({
     const onStyleLoad = () => {
       const [startLon, startLat] = startKey.split(',').map(Number);
       const [endLon, endLat] = endKey.split(',').map(Number);
-      const via = viaKey
+      const userVia = viaKey
         ? viaKey.split('|').map((s) => {
             const [lon, lat] = s.split(',').map(Number);
             return { lat, lon };
           })
         : [];
-      const overrides = active
-        ? buildOverridesForItinerary(active, active.expertProfile)
-        : {};
-      fetchBrouterRoute({
-        start: { lat: startLat, lon: startLon },
-        end: { lat: endLat, lon: endLon },
-        via,
-        profile: panelProfileToBrouter(profileId),
-        overrides,
-      })
+      const via = userVia.slice(0, 14);
+      if (!active) return;
+      resolveItineraryRouting(active)
+        .then((resolved: ResolvedRouting) => {
+          const reqBase = {
+            start: { lat: startLat, lon: startLon },
+            end: { lat: endLat, lon: endLon },
+            via,
+            profile: resolved.profileId,
+          };
+          return climbing
+            ? fetchBrouterRouteBestOfN(reqBase, 4)
+            : fetchBrouterRoute(reqBase);
+        })
         .then((route: BrouterRoute) => {
           try {
             if (!isRouteOnMap(map)) {
@@ -337,7 +367,7 @@ export function ItineraryPanelContainer({
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, overridesKey]);
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, brfHash, climbing]);
 
   const panel = (
     <ItineraryPanel
@@ -476,6 +506,7 @@ export function ItineraryPanelContainer({
       }
       routeLoading={routeLoading}
       routeError={routeError}
+      routeWarnings={routeWarnings}
     />
   );
 

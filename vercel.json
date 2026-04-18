@@ -1,6 +1,7 @@
 {
   "functions": {
-    "api/brouter.ts": { "maxDuration": 60 }
+    "api/brouter.ts": { "maxDuration": 60 },
+    "api/overpass.ts": { "maxDuration": 90 }
   },
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },

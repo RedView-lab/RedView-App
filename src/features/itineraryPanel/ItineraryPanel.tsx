@@ -59,6 +59,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onSearchTimeline,
     onOpenTimelineSettings,
     onSelectTimelinePlace,
+    routeError,
+    routeWarnings,
   } = props;
 
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
@@ -101,6 +103,18 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       <div className="rvi-divider" />
 
       <div className="rvi-panel__scroll">
+        {routeError ? (
+          <div className="rvi-route-banner rvi-route-banner--error" role="alert">
+            {routeError}
+          </div>
+        ) : null}
+        {routeWarnings && routeWarnings.length > 0 ? (
+          <div className="rvi-route-banner rvi-route-banner--warn" role="status">
+            {routeWarnings.map((w, i) => (
+              <div key={i}>{w}</div>
+            ))}
+          </div>
+        ) : null}
         {active && project.activeMode === 'tracage' ? (
           <>
             <ProfileBar

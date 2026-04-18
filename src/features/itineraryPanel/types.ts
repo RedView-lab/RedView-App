@@ -318,4 +318,10 @@ export interface ItineraryPanelProps {
   routeLoading?: boolean;
   /** Last BRouter error, if any. */
   routeError?: string | null;
+  /**
+   * Smart-validator messages for the active itinerary's road-type
+   * filters (e.g. "tout interdit → on relâche les voies cyclables"). Empty
+   * array when the user's selection is internally consistent.
+   */
+  routeWarnings?: string[];
 }

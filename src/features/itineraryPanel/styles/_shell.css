@@ -109,3 +109,26 @@
   flex: 1 1 0;
   min-width: 0;
 }
+
+/* Routing feedback banners (errors / smart-validator warnings). */
+.rvi-route-banner {
+  margin: 8px 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+.rvi-route-banner--error {
+  background: rgba(197, 0, 0, 0.18);
+  border-color: rgba(197, 0, 0, 0.45);
+  color: #ffd3d3;
+}
+.rvi-route-banner--warn {
+  background: rgba(255, 170, 0, 0.12);
+  border-color: rgba(255, 170, 0, 0.35);
+  color: #ffe5b3;
+}
+.rvi-route-banner > div + div {
+  margin-top: 4px;
+}

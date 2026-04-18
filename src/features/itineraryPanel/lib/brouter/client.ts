@@ -12,7 +12,6 @@ import {
   type UploadedProfile,
 } from './types';
 import { buildBrouterUrl, buildProfileUploadUrl } from './url';
-
 interface BrouterFeatureProps {
   'track-length'?: string;
   'total-time'?: string;
@@ -124,4 +123,53 @@ export async function uploadCustomProfile(
     throw new Error(`BRouter upload: pas de profileid — ${text.slice(0, 200)}`);
   }
   return { profileId: parsed.profileid, error: parsed.error };
+}
+/* ------------------------------------------------------------------ */
+/* Best-of-N alternative routing (climb-seeker mode)                   */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Run BRouter `numAlternatives` times with `alternativeidx` 0..N-1 and
+ * return whichever alternative climbs the most. Ported verbatim from
+ * earth-explorer-3d's `callBRouterBestOfN` (`server/routes/brouter.ts`).
+ *
+ * BRouter standalone exposes 4 alternatives (idx 0..3). Asking for a
+ * higher idx is harmless — it just returns the same as idx=3. We default
+ * to 4 so we get the full spread.
+ *
+ * Failed alternatives are silently skipped; if every attempt fails the
+ * last error is rethrown.
+ */
+export async function fetchBrouterRouteBestOfN(
+  req: Omit<BrouterRequest, 'alternativeIdx'>,
+  numAlternatives = 4,
+): Promise<BrouterRoute> {
+  const n = Math.max(1, Math.min(4, Math.floor(numAlternatives)));
+  const attempts = Array.from({ length: n }, (_, i) =>
+    fetchBrouterRoute({ ...req, alternativeIdx: i as 0 | 1 | 2 | 3 }).then(
+      (r) => ({ ok: true as const, route: r, idx: i }),
+      (e) => ({ ok: false as const, error: e as Error, idx: i }),
+    ),
+  );
+  const results = await Promise.all(attempts);
+
+  let best: BrouterRoute | null = null;
+  let bestIdx = -1;
+  let lastError: Error | null = null;
+  for (const r of results) {
+    if (!r.ok) {
+      lastError = r.error;
+      continue;
+    }
+    if (!best || r.route.ascentM > best.ascentM) {
+      best = r.route;
+      bestIdx = r.idx;
+    }
+  }
+  if (!best) {
+    throw lastError ?? new Error('BRouter best-of-N: every alternative failed');
+  }
+  // Tag the chosen idx on the result for diagnostics (tests log this).
+  (best as BrouterRoute & { alternativeIdx?: number }).alternativeIdx = bestIdx;
+  return best;
 }
