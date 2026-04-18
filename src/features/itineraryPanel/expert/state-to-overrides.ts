@@ -54,7 +54,10 @@ export const URL_SAFE_PARAMETER_IDS: ReadonlySet<string> = new Set([
 ]);
 
 function fmt(v: ParameterValue): string {
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  // BRouter standalone parses every URL `profile:xxx=value` through
+  // `Float.parseFloat`, so booleans MUST be encoded as 1/0 — sending
+  // "true"/"false" makes the server reply HTTP 500 with empty body.
+  if (typeof v === 'boolean') return v ? '1' : '0';
   if (typeof v === 'number') {
     return Number.isInteger(v)
       ? String(v)

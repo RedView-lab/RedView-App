@@ -120,7 +120,7 @@ export function basicStateToOverrides(
   void roads.maxSlopePercent;
 
   // Discourage steps when on road preset.
-  if (roads.bikeLanes === 'forbid') o.allow_steps = 'false';
+  if (roads.bikeLanes === 'forbid') o.allow_steps = '0';
 
   // Tag for analytics. Multiply factor — currently informational.
   // (Not actually consumed by BRouter, but keeps the URL stable while we
