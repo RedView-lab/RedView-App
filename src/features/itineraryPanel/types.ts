@@ -70,6 +70,17 @@ export interface PoiState {
   refineResults: boolean;
 }
 
+/** A single user-defined pause inserted at a recurring interval. */
+export interface PauseIntervalRow {
+  id: string;
+  /** Display label ("Pause 1", "Pause 2", …). */
+  label: string;
+  /** Pause duration in minutes (e.g. 5, 210 → 3h30). */
+  durationMin: number;
+  /** Repetition interval in minutes (e.g. 60 → every hour). */
+  intervalMin: number;
+}
+
 export interface RhythmState {
   /** ISO date (yyyy-mm-dd) or null when empty. */
   startDate: string | null;
@@ -84,7 +95,20 @@ export interface RhythmState {
   useSurfaces: boolean;
   surfacesWeight: number;
   pauseAtFavoritePois: boolean;
+  /**
+   * Master toggle for "pauses par interval". When false the rows are kept in
+   * `pauseIntervals` but the routing engine ignores them. When true and the
+   * list is empty, the section auto-creates a single default row.
+   */
+  pauseEveryIntervalEnabled: boolean;
+  /**
+   * @deprecated kept for backward compatibility with previously-saved
+   * projects that only stored a single "every N minutes" value. New code
+   * should rely on `pauseIntervals`.
+   */
   pauseEveryIntervalMin: number | null;
+  /** User-defined pause rows displayed when the master toggle is on. */
+  pauseIntervals: PauseIntervalRow[];
 }
 
 export type TimelineItemKind =

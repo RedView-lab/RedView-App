@@ -51,7 +51,7 @@
   display: flex;
   flex: 1 1 0;
   min-width: 0;
-  background: var(--rvi-bg-row-muted);
+  background: #383838;
   border-radius: var(--rvi-radius-md);
   padding: 2px;
   gap: 2px;
@@ -75,7 +75,7 @@
 .rvi-tl-tabs__btn:hover { background: rgba(255, 255, 255, 0.04); }
 .rvi-tl-tabs__btn:active { transform: scale(0.98); }
 .rvi-tl-tabs__btn.is-active {
-  background: var(--rvi-bg-row-alt);
+  background: #232323;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 .rvi-tl-tabs__btn.is-active .rvi-tl-tabs__label { color: #fff; }
@@ -95,7 +95,7 @@
   align-items: center;
   justify-content: center;
   width: 34px;
-  background: var(--rvi-bg-row-muted);
+  background: #383838;
   border-radius: var(--rvi-radius-md);
   color: var(--rvi-text);
   cursor: pointer;

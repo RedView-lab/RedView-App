@@ -212,19 +212,22 @@
   padding: 6px 8px;
   height: 28px;
   flex-shrink: 0;
-  width: 64px;
+  min-width: 64px;
+  max-width: 104px;
+  width: auto;
   display: inline-flex;
   align-items: center;
+  box-sizing: border-box;
 }
 .rvi-chip-input__native {
   all: unset;
   width: 100%;
-  min-width: 24px;
-  max-width: 64px;
+  min-width: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--rvi-text);
   font-family: inherit;
+  text-align: left;
 }
 .rvi-chip-input__native::placeholder {
   color: var(--rvi-text-faint);
@@ -235,8 +238,8 @@
   all: unset;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px 6px 4px;
+  gap: 6px;
+  padding: 6px 8px;
   background: var(--rvi-bg-chip);
   border-radius: 6px;
   color: var(--rvi-text);
@@ -245,6 +248,8 @@
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
+  box-sizing: border-box;
+  height: 28px;
 }
 .rvi-datechip:hover { background: var(--rvi-bg-chip-hover); }
 .rvi-datechip__icon {

@@ -1,4 +1,4 @@
-import { IconPlusCircle, IconTrash } from './icons';
+import { IconEye, IconPlusCircle, IconTrash } from './icons';
 import type { Itinerary } from '../types';
 
 interface ItineraryTabsProps {
@@ -31,6 +31,9 @@ export function ItineraryTabs({
             className={`rvi-itin${it.id === activeId ? ' is-active' : ''}`}
             onClick={() => onSelect?.(it.id)}
           >
+            <span className="rvi-itin__eye" aria-hidden>
+              <IconEye size={16} />
+            </span>
             <span className="rvi-itin__swatch" style={{ background: it.color }} />
             <span className="rvi-itin__label">{it.name}</span>
             {it.gpxRoute ? (

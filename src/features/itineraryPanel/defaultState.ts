@@ -87,7 +87,9 @@ export function createDefaultItinerary(
       useSurfaces: false,
       surfacesWeight: 100,
       pauseAtFavoritePois: false,
+      pauseEveryIntervalEnabled: false,
       pauseEveryIntervalMin: null,
+      pauseIntervals: [],
     },
     poi: {
       fountains: { enabled: true, distanceM: 40 },

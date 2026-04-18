@@ -1,0 +1,93 @@
+/* Pause-par-interval rows (Rythme section).
+   Source of truth: Figma 1695:22397 — Pause 1/2/3 list block. */
+
+.rvi-pause-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.rvi-pause-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvi-pause-row__name {
+  flex: 1 1 0;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvi-pause-row__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.rvi-pause-row__field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  opacity: 0.64;
+}
+
+/* Compact pill: 60px wide, radius 4 (per Figma). */
+.rvi-pause-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 6px 8px;
+  width: 60px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.rvi-pause-chip__native {
+  all: unset;
+  width: 100%;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvi-text);
+  font-family: inherit;
+}
+.rvi-pause-chip__native::placeholder {
+  color: var(--rvi-text-faint);
+}
+
+.rvi-pause-row__remove {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--rvi-text-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.rvi-pause-row__remove:hover {
+  background: rgba(255, 96, 96, 0.16);
+  color: #ff7070;
+}

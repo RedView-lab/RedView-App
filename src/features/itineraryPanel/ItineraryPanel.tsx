@@ -81,6 +81,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onShare={onShareProject}
       />
 
+      <div className="rvi-divider" />
+
       <ItineraryTabs
         itineraries={project.itineraries}
         activeId={project.activeItineraryId}
@@ -89,7 +91,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onRemove={onRemoveItinerary}
       />
 
+      <div className="rvi-divider" />
+
       <ModeTabs active={project.activeMode} onChange={onChangeMode} />
+
+      <div className="rvi-divider" />
 
       {active ? (
         <ProfileBar

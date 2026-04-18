@@ -1,5 +1,6 @@
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
+import { PauseIntervalList } from '../components/PauseIntervalList';
 import {
   IconCalendar,
   IconClock,
@@ -8,7 +9,7 @@ import {
   IconPlus,
   IconRepeat,
 } from '../components/icons';
-import type { RhythmState } from '../types';
+import type { PauseIntervalRow, RhythmState } from '../types';
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
@@ -213,11 +214,43 @@ export function RythmeSection({
       <div className="rvi-divider" />
 
       <ToggleRow
-        checked={rhythm.pauseEveryIntervalMin !== null}
-        onChange={(v) => onChange?.('pauseEveryIntervalMin', v ? 60 : null)}
+        checked={rhythm.pauseEveryIntervalEnabled}
+        onChange={(v) => {
+          onChange?.('pauseEveryIntervalEnabled', v);
+          // First time we turn it on with no rows yet → seed one row.
+          if (v && rhythm.pauseIntervals.length === 0) {
+            onChange?.('pauseIntervals', [createPauseRow(1)]);
+          }
+        }}
         label="Ajouter des pauses par interval"
-        trailing={<IconPlus size={14} />}
+        trailing={
+          <button
+            type="button"
+            className="rvi-iconbtn"
+            aria-label="Ajouter une pause"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!rhythm.pauseEveryIntervalEnabled) {
+                onChange?.('pauseEveryIntervalEnabled', true);
+              }
+              const next = [
+                ...rhythm.pauseIntervals,
+                createPauseRow(rhythm.pauseIntervals.length + 1),
+              ];
+              onChange?.('pauseIntervals', next);
+            }}
+          >
+            <IconPlus size={14} />
+          </button>
+        }
       />
+
+      {rhythm.pauseEveryIntervalEnabled && rhythm.pauseIntervals.length > 0 ? (
+        <PauseIntervalList
+          rows={rhythm.pauseIntervals}
+          onChange={(next) => onChange?.('pauseIntervals', relabel(next))}
+        />
+      ) : null}
 
       <div className="rvi-divider" />
 
@@ -238,4 +271,19 @@ function formatDateFr(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+}
+
+/** Default new pause row: 5 min duration every hour. */
+function createPauseRow(index: number): PauseIntervalRow {
+  return {
+    id: `pause-${Date.now()}-${index}`,
+    label: `Pause ${index}`,
+    durationMin: 5,
+    intervalMin: 60,
+  };
+}
+
+/** Re-numbers rows after add/remove so labels stay sequential. */
+function relabel(rows: PauseIntervalRow[]): PauseIntervalRow[] {
+  return rows.map((r, i) => ({ ...r, label: `Pause ${i + 1}` }));
 }
