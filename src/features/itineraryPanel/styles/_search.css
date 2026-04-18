@@ -39,11 +39,6 @@
 }
 
 .rvi-place-search__list {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
-  z-index: 30;
   list-style: none;
   margin: 0;
   padding: 4px;
@@ -56,6 +51,7 @@
   max-height: 240px;
   overflow-y: auto;
   scrollbar-width: thin;
+  z-index: 9999;
 }
 
 .rvi-place-search__option {

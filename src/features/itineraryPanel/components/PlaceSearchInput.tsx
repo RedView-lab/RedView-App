@@ -11,10 +11,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import {
   geocodePlaces,
   type GeocodeSuggestion,
@@ -57,6 +59,12 @@ export function PlaceSearchInput({
   const abortRef = useRef<AbortController | null>(null);
   const listId = useId();
   const blurTimerRef = useRef<number | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [menuRect, setMenuRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+  } | null>(null);
 
   // Keep local text in sync if the parent resets the value (e.g. itinerary switch).
   useEffect(() => {
@@ -105,6 +113,24 @@ export function PlaceSearchInput({
     return () => abortRef.current?.abort();
   }, []);
 
+  // Track the input position so the (portaled, fixed) dropdown follows it.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const el = inputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setMenuRect({ left: r.left, top: r.bottom + 4, width: r.width });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
+
   const commit = useCallback(
     (s: GeocodeSuggestion) => {
       setText(s.name);
@@ -138,6 +164,7 @@ export function PlaceSearchInput({
   return (
     <div className={`rvi-place-search${className ? ` ${className}` : ''}`}>
       <input
+        ref={inputRef}
         type="text"
         className="rvi-place-search__input"
         value={text}
@@ -169,47 +196,55 @@ export function PlaceSearchInput({
         }
       />
 
-      {open && (text.trim().length >= 2 || loading || error) && (
-        <ul
-          id={listId}
-          role="listbox"
-          className="rvi-place-search__list"
-          onMouseDown={(e) => e.preventDefault() /* keep input focused */}
-        >
-          {loading && (
-            <li className="rvi-place-search__hint" role="presentation">
-              Recherche…
-            </li>
-          )}
-          {!loading && error && (
-            <li className="rvi-place-search__hint rvi-place-search__hint--error">
-              {error}
-            </li>
-          )}
-          {!loading && !error && suggestions.length === 0 && (
-            <li className="rvi-place-search__hint">Aucun résultat</li>
-          )}
-          {!loading &&
-            suggestions.map((s, i) => (
-              <li
-                key={s.id}
-                id={`${listId}-opt-${i}`}
-                role="option"
-                aria-selected={i === activeIdx}
-                className={`rvi-place-search__option${
-                  i === activeIdx ? ' is-active' : ''
-                }`}
-                onMouseEnter={() => setActiveIdx(i)}
-                onClick={() => commit(s)}
-              >
-                <span className="rvi-place-search__name">{s.name}</span>
-                <span className="rvi-place-search__sub">
-                  {s.fullName.replace(`${s.name}, `, '')}
-                </span>
+      {open && menuRect && (text.trim().length >= 2 || loading || error) &&
+        createPortal(
+          <ul
+            id={listId}
+            role="listbox"
+            className="rvi-place-search__list"
+            style={{
+              position: 'fixed',
+              left: menuRect.left,
+              top: menuRect.top,
+              width: menuRect.width,
+            }}
+            onMouseDown={(e) => e.preventDefault() /* keep input focused */}
+          >
+            {loading && (
+              <li className="rvi-place-search__hint" role="presentation">
+                Recherche…
               </li>
-            ))}
-        </ul>
-      )}
+            )}
+            {!loading && error && (
+              <li className="rvi-place-search__hint rvi-place-search__hint--error">
+                {error}
+              </li>
+            )}
+            {!loading && !error && suggestions.length === 0 && (
+              <li className="rvi-place-search__hint">Aucun résultat</li>
+            )}
+            {!loading &&
+              suggestions.map((s, i) => (
+                <li
+                  key={s.id}
+                  id={`${listId}-opt-${i}`}
+                  role="option"
+                  aria-selected={i === activeIdx}
+                  className={`rvi-place-search__option${
+                    i === activeIdx ? ' is-active' : ''
+                  }`}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  onClick={() => commit(s)}
+                >
+                  <span className="rvi-place-search__name">{s.name}</span>
+                  <span className="rvi-place-search__sub">
+                    {s.fullName.replace(`${s.name}, `, '')}
+                  </span>
+                </li>
+              ))}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }
