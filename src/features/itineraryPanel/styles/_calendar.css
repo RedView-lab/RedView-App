@@ -1,0 +1,257 @@
+/* ============================================================================
+   Calendar — pixel-perfect implementation of Figma node 1710:47397.
+
+   Container spec (Figma):
+     • backdrop-filter: blur(24px)
+     • bg: black + 16% white overlay (frosted glass)
+     • radius 8, padding pb-12 / pt-4 / px-12
+     • flex column, gap 4
+
+   Sub-blocks:
+     • Month header  ──  height 32, justify-between, items-center.
+                         Title: Rethink Sans 13 SemiBold white.
+                         Nav buttons: 16×16 hug, radius 6, icon 20×20.
+     • Actions row   ──  height 30, gap 12, items-start.
+                         Active pill: bg rgba(255,255,255,.08), radius 6,
+                                      pad 7/8, text 14 SemiBold, flex 1.
+                         Today btn:   width 74, same chip styling.
+     • Dates grid    ──  flex-wrap, gap 4 vertical, 7 cols of 40×40 cells.
+                         Weekday header text 13 SemiBold white opacity .64.
+                         Day text 14 SemiBold white centered, w 24.
+                         Out-of-month days: opacity .23.
+                         Today marker dot: 5×5 absolute bottom 4 center.
+                         Selected day: bg #890000 round.
+
+   Popover wrapper: portal-rendered, fixed-positioned, width 304 px.
+============================================================================ */
+
+.rvi-calendar-popover {
+  position: fixed;
+  z-index: 9999;
+  /* Match the panel's glass language so the popover blends with the dock. */
+  pointer-events: auto;
+  /* Subtle drop shadow to lift it off the map. */
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.45));
+  animation: rvi-cal-pop-in 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes rvi-cal-pop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.rvi-calendar {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 12px 12px 12px;
+  border-radius: 8px;
+  /* Black base + 16% white overlay → matches Figma fill stack. */
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.16)),
+    rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #ffffff;
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.rvi-calendar *,
+.rvi-calendar *::before,
+.rvi-calendar *::after {
+  box-sizing: border-box;
+}
+
+/* ---- Month header --------------------------------------------------------- */
+.rvi-calendar__month {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  width: 100%;
+}
+
+.rvi-calendar__navbtn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 6px;       /* keeps the 20×20 icon centred inside 16+12 hit-area */
+  box-sizing: content-box;
+  border-radius: 6px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.rvi-calendar__navbtn:hover  { background: rgba(255, 255, 255, 0.08); }
+.rvi-calendar__navbtn:active { background: rgba(255, 255, 255, 0.14); }
+.rvi-calendar__navbtn:focus-visible {
+  outline: 2px solid rgba(197, 0, 0, 0.6);
+  outline-offset: 2px;
+}
+
+.rvi-calendar__title {
+  font-size: 13px;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
+  white-space: nowrap;
+}
+
+/* ---- Actions row ---------------------------------------------------------- */
+.rvi-calendar__actions {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  height: 30px;
+  width: 100%;
+}
+
+.rvi-calendar__active {
+  flex: 1 1 0;
+  min-width: 64px;
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvi-calendar__today {
+  all: unset;
+  flex-shrink: 0;
+  width: 74px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-calendar__today:hover  { background: rgba(255, 255, 255, 0.14); }
+.rvi-calendar__today:active { background: rgba(255, 255, 255, 0.18); }
+.rvi-calendar__today:focus-visible {
+  outline: 2px solid rgba(197, 0, 0, 0.6);
+  outline-offset: 2px;
+}
+
+/* ---- Dates grid ----------------------------------------------------------- */
+.rvi-calendar__dates {
+  display: grid;
+  grid-template-columns: repeat(7, 40px);
+  grid-auto-rows: 40px;
+  row-gap: 4px;
+  column-gap: 0;
+  width: 280px; /* 7 × 40 — matches Figma exactly */
+  margin: 0 auto;
+}
+
+.rvi-calendar__cell {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: transparent;
+  /* Buttons inherit unset reset further down. */
+}
+
+.rvi-calendar__cell--head {
+  cursor: default;
+}
+
+.rvi-calendar__weekday {
+  font-size: 13px;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
+  color: rgba(255, 255, 255, 0.8);
+  opacity: 0.64;
+  text-align: center;
+  width: 24px;
+}
+
+.rvi-calendar__cell--day {
+  all: unset;
+  position: relative;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+  color: #ffffff;
+}
+.rvi-calendar__cell--day:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.rvi-calendar__cell--day:focus-visible {
+  outline: 2px solid rgba(197, 0, 0, 0.7);
+  outline-offset: -3px;
+}
+
+.rvi-calendar__day {
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
+  text-align: center;
+  width: 24px;
+}
+
+.rvi-calendar__cell--day.is-muted .rvi-calendar__day {
+  opacity: 0.23;
+}
+
+.rvi-calendar__cell--day.is-selected {
+  background: #890000;
+}
+.rvi-calendar__cell--day.is-selected:hover {
+  background: #a00000;
+}
+.rvi-calendar__cell--day.is-selected .rvi-calendar__day {
+  opacity: 1;
+}
+
+/* Today (when not selected) — keep neutral, the dot under the digit
+   conveys "today" the same way Figma does. */
+.rvi-calendar__cell--day.is-today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #c50000;
+}
+
+/* Marker dot (Figma 7365:57927) — generic external markers. */
+.rvi-calendar__dot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(197, 0, 0, 0.85);
+}

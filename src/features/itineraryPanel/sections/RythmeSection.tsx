@@ -1,7 +1,10 @@
+import { useRef, useState } from 'react';
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
 import { PauseIntervalList } from '../components/PauseIntervalList';
 import { PoiPauseGrid } from '../components/PoiPauseGrid';
+import { Collapse } from '../components/Collapse';
+import { CalendarPopover } from '../components/calendar';
 import {
   IconCalendar,
   IconClock,
@@ -49,6 +52,9 @@ export function RythmeSection({
   onUploadFit,
   onCalculate,
 }: RythmeSectionProps) {
+  const dateChipRef = useRef<HTMLButtonElement | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
   return (
     <div className="rvi-params">
       <div className="rvi-divider" />
@@ -57,21 +63,29 @@ export function RythmeSection({
       <div className="rvi-row">
         <div className="rvi-lfield">
           <span className="rvi-lfield__label">Départ :</span>
-          <label className="rvi-datechip">
+          <button
+            type="button"
+            ref={dateChipRef}
+            className="rvi-datechip"
+            onClick={() => setCalendarOpen((v) => !v)}
+            aria-haspopup="dialog"
+            aria-expanded={calendarOpen}
+            aria-label="Date de départ"
+          >
             <span className="rvi-datechip__icon">
               <IconCalendar size={12} />
             </span>
             <span>
               {rhythm.startDate ? formatDateFr(rhythm.startDate) : '--/--/--'}
             </span>
-            <input
-              type="date"
-              className="rvi-datechip__native"
-              value={rhythm.startDate ?? ''}
-              onChange={(e) => onChange?.('startDate', e.target.value || null)}
-              aria-label="Date de départ"
-            />
-          </label>
+          </button>
+          <CalendarPopover
+            open={calendarOpen}
+            anchorRef={dateChipRef}
+            onClose={() => setCalendarOpen(false)}
+            value={rhythm.startDate}
+            onSelect={(iso) => onChange?.('startDate', iso)}
+          />
         </div>
         <div className="rvi-lfield">
           <span className="rvi-lfield__label">Heure :</span>
@@ -212,12 +226,12 @@ export function RythmeSection({
         trailing={<IconInfo size={14} />}
       />
 
-      {rhythm.pauseAtFavoritePois ? (
+      <Collapse open={rhythm.pauseAtFavoritePois}>
         <PoiPauseGrid
           durations={rhythm.poiPauseDurations}
           onChange={(next) => onChange?.('poiPauseDurations', next)}
         />
-      ) : null}
+      </Collapse>
 
       <div className="rvi-divider" />
 
@@ -253,12 +267,14 @@ export function RythmeSection({
         }
       />
 
-      {rhythm.pauseEveryIntervalEnabled && rhythm.pauseIntervals.length > 0 ? (
+      <Collapse
+        open={rhythm.pauseEveryIntervalEnabled && rhythm.pauseIntervals.length > 0}
+      >
         <PauseIntervalList
           rows={rhythm.pauseIntervals}
           onChange={(next) => onChange?.('pauseIntervals', relabel(next))}
         />
-      ) : null}
+      </Collapse>
 
       <div className="rvi-divider" />
 

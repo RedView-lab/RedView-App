@@ -1,0 +1,28 @@
+/* ============================================================================
+   Collapse — smooth grid-template-rows expand/collapse used by the Rythme
+   "Ajouter des pauses…" sections. Children animate in (height + opacity),
+   stay interactive while open, animate out, then unmount.
+============================================================================ */
+
+.rvi-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--rvi-collapse-duration, 220ms) cubic-bezier(0.22, 1, 0.36, 1),
+    opacity calc(var(--rvi-collapse-duration, 220ms) - 40ms) ease-out;
+  width: 100%;
+  /* Reserve a tiny pixel-tolerant overflow guard so focus rings don't get
+     clipped while the grid row is animating. */
+  overflow: hidden;
+}
+
+.rvi-collapse.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.rvi-collapse__inner {
+  min-height: 0; /* required so the 0fr → 1fr trick can collapse to 0 */
+  width: 100%;
+}
