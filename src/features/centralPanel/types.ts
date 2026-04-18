@@ -189,6 +189,10 @@ export interface CentralPanelProps {
   style?: CSSProperties;
   /** When provided, renders the bottom resize handle. */
   onResizeStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Drag the panel's LEFT edge — used to push/shrink the left side panel. */
+  onResizeLeftStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
+  /** Drag the panel's RIGHT edge — used to push/shrink the right side panel. */
+  onResizeRightStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
 
   /* ---- synthesis ------------------------------------------------------- */

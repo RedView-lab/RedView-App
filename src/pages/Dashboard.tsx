@@ -174,6 +174,56 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     document.addEventListener('mouseup', onUp);
   };
 
+  /* Drag the central panel's LEFT edge — grows/shrinks the left side panel
+     so the central panel reclaims/yields horizontal space. */
+  const handleCentralLeftResizeStart = (
+    ev: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    ev.preventDefault();
+    setIsCentralResizing(true);
+    setIsLeftResizing(true);
+    if (!leftPanelOpen) setLeftPanelOpen(true);
+    const onMove = (e: MouseEvent) => {
+      const raw = e.clientX - PANEL_PADDING;
+      const clamped = Math.min(
+        LEFT_PANEL_WIDTH_MAX,
+        Math.max(LEFT_PANEL_WIDTH_MIN, raw),
+      );
+      setLeftPanelWidth(clamped);
+    };
+    const onUp = () => {
+      setIsCentralResizing(false);
+      setIsLeftResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  /* Drag the central panel's RIGHT edge — grows/shrinks the right control
+     panel symmetrically. */
+  const handleCentralRightResizeStart = (
+    ev: React.MouseEvent<HTMLDivElement>,
+  ) => {
+    ev.preventDefault();
+    setIsCentralResizing(true);
+    setIsResizing(true);
+    const onMove = (e: MouseEvent) => {
+      const raw = window.innerWidth - e.clientX - PANEL_PADDING;
+      const clamped = Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, raw));
+      setPanelWidth(clamped);
+    };
+    const onUp = () => {
+      setIsCentralResizing(false);
+      setIsResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
   const handleMapReady = (map: MapboxMap) => {
     mapRef.current = map;
     setMapLoaded(true);
@@ -331,6 +381,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <div style={centralPanelStyle}>
         <CentralPanel
           onResizeStart={handleCentralResizeStart}
+          onResizeLeftStart={handleCentralLeftResizeStart}
+          onResizeRightStart={handleCentralRightResizeStart}
           isResizing={isCentralResizing}
         />
       </div>

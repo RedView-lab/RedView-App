@@ -41,6 +41,8 @@ interface CentralPanelContainerProps {
   className?: string;
   style?: React.CSSProperties;
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
+  onResizeLeftStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
+  onResizeRightStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
 
   /* External wiring (left for the dashboard / engine). */
@@ -64,6 +66,8 @@ export function CentralPanelContainer({
   className,
   style,
   onResizeStart,
+  onResizeLeftStart,
+  onResizeRightStart,
   isResizing,
   onToggleItineraryVisibility,
   onItineraryAction,
@@ -129,6 +133,8 @@ export function CentralPanelContainer({
       className={className}
       style={style}
       onResizeStart={onResizeStart}
+      onResizeLeftStart={onResizeLeftStart}
+      onResizeRightStart={onResizeRightStart}
       isResizing={isResizing}
       onToggleVisibility={onToggleItineraryVisibility}
       onRowAction={onItineraryAction}

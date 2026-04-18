@@ -23,6 +23,8 @@ export function CentralPanel(props: CentralPanelProps) {
     className,
     style,
     onResizeStart,
+    onResizeLeftStart,
+    onResizeRightStart,
     isResizing,
     onToggleVisibility,
     onRowAction,
@@ -100,6 +102,26 @@ export function CentralPanel(props: CentralPanelProps) {
           aria-label="Redimensionner le panneau"
           className={`rvc-panel__resize-handle${isResizing ? ' is-dragging' : ''}`}
           onMouseDown={onResizeStart}
+        />
+      ) : null}
+
+      {onResizeLeftStart ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionner depuis la gauche"
+          className="rvc-panel__resize-handle--left"
+          onMouseDown={onResizeLeftStart}
+        />
+      ) : null}
+
+      {onResizeRightStart ? (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Redimensionner depuis la droite"
+          className="rvc-panel__resize-handle--right"
+          onMouseDown={onResizeRightStart}
         />
       ) : null}
     </section>
