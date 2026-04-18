@@ -25,6 +25,10 @@ interface TimelinePanelProps {
   onToggleItem?: (id: string, visible: boolean) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
   onRemoveItem?: (id: string) => void;
+  onSelectPlace?: (
+    id: string,
+    place: { name: string; fullName: string; lat: number; lon: number },
+  ) => void;
 
   /** Optional multi-select callback. */
   onSelectionChange?: (selectedIds: string[]) => void;
@@ -42,6 +46,7 @@ export function TimelinePanel({
   onToggleItem,
   onFavoriteItem,
   onRemoveItem,
+  onSelectPlace,
   onSelectionChange,
 }: TimelinePanelProps) {
   // Selection is local UI state; parent is notified via onSelectionChange.
@@ -82,6 +87,7 @@ export function TimelinePanel({
             onRemove={onRemoveItem}
             onAdd={onAdd}
             onOpenKindMenu={onOpenKindMenu}
+            onSelectPlace={onSelectPlace}
           />
         ) : (
           <TimelineTimelineView

@@ -1,7 +1,7 @@
 {
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },
-    { "source": "/((?!assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

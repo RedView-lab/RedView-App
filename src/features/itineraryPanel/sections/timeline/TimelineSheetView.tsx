@@ -20,6 +20,10 @@ interface TimelineSheetViewProps {
   onRemove?: (id: string) => void;
   onAdd?: () => void;
   onOpenKindMenu?: () => void;
+  onSelectPlace?: (
+    id: string,
+    place: { name: string; fullName: string; lat: number; lon: number },
+  ) => void;
 }
 
 export function TimelineSheetView({
@@ -31,6 +35,7 @@ export function TimelineSheetView({
   onRemove,
   onAdd,
   onOpenKindMenu,
+  onSelectPlace,
 }: TimelineSheetViewProps) {
   return (
     <div className="rvi-tl-list" role="list" aria-label="Liste des étapes">
@@ -55,6 +60,7 @@ export function TimelineSheetView({
             onToggleVisibility={onToggleVisibility}
             onToggleFavorite={onToggleFavorite}
             onRemove={onRemove}
+            onSelectPlace={onSelectPlace}
           />
         </div>
       ))}

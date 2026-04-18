@@ -56,6 +56,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onFavoriteTimelineItem,
     onSearchTimeline,
     onOpenTimelineSettings,
+    onSelectTimelinePlace,
   } = props;
 
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
@@ -160,6 +161,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onToggleItem={onToggleTimelineItem}
             onFavoriteItem={onFavoriteTimelineItem}
             onRemoveItem={onRemoveTimelineItem}
+            onSelectPlace={onSelectTimelinePlace}
           />
         ) : null}
       </div>

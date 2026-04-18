@@ -152,6 +152,9 @@ export interface TimelineItem {
   durationMin?: number;
   favorite?: boolean;
   visible?: boolean;
+  /** Geo coordinates once the user has resolved a place via search. */
+  lat?: number;
+  lon?: number;
 }
 
 export type TimelineView = 'sheet' | 'timeline';
@@ -288,4 +291,19 @@ export interface ItineraryPanelProps {
   onFavoriteTimelineItem?: (id: string, favorite: boolean) => void;
   onSearchTimeline?: () => void;
   onOpenTimelineSettings?: () => void;
+
+  /**
+   * Called when the user picks a geocoded place for a timeline row
+   * (typically Départ / Fin). The container persists the lon/lat on the
+   * row and triggers a BRouter recompute when both endpoints are set.
+   */
+  onSelectTimelinePlace?: (
+    id: string,
+    place: { name: string; fullName: string; lat: number; lon: number },
+  ) => void;
+
+  /** True while a BRouter request is in-flight. */
+  routeLoading?: boolean;
+  /** Last BRouter error, if any. */
+  routeError?: string | null;
 }

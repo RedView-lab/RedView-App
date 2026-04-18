@@ -10,6 +10,7 @@
  * ready to wire to any backend.
  */
 import { IconEye, IconStar, IconTrash } from '../../components/icons';
+import { PlaceSearchInput } from '../../components/PlaceSearchInput';
 import type { TimelineItem } from '../../types';
 import { KindBadge, kindLabel } from './KindBadge';
 
@@ -24,6 +25,11 @@ interface TimelineRowProps {
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
+  /** When provided, start/end placeholder rows render an inline place search. */
+  onSelectPlace?: (
+    id: string,
+    place: { name: string; fullName: string; lat: number; lon: number },
+  ) => void;
 }
 
 function formatDistance(km: number | null): string {
@@ -42,10 +48,14 @@ export function TimelineRow({
   onToggleVisibility,
   onToggleFavorite,
   onRemove,
+  onSelectPlace,
 }: TimelineRowProps) {
   const isPlaceholder =
     item.label === 'Rechercher un lieu' || item.label.trim() === '';
   const visible = item.visible !== false;
+  const isLocationRow =
+    item.kind === 'start' || item.kind === 'end' || item.kind === 'waypoint';
+  const useSearchInput = !!onSelectPlace && isLocationRow;
 
   // For "pause" items, the primary label is the duration.
   const primaryLabel =
@@ -76,14 +86,29 @@ export function TimelineRow({
         {kindLabel(item.kind)}
       </span>
 
-      <span
-        className={`rvi-tl-row__title${
-          isPlaceholder ? ' rvi-tl-row__title--placeholder' : ''
-        }`}
-        title={primaryLabel}
-      >
-        {primaryLabel}
-      </span>
+      {useSearchInput ? (
+        <PlaceSearchInput
+          value={isPlaceholder ? '' : item.label}
+          onPick={(s) =>
+            onSelectPlace?.(item.id, {
+              name: s.name,
+              fullName: s.fullName,
+              lat: s.lat,
+              lon: s.lon,
+            })
+          }
+          placeholder="Rechercher un lieu"
+        />
+      ) : (
+        <span
+          className={`rvi-tl-row__title${
+            isPlaceholder ? ' rvi-tl-row__title--placeholder' : ''
+          }`}
+          title={primaryLabel}
+        >
+          {primaryLabel}
+        </span>
+      )}
 
       <span className="rvi-tl-row__distance">{formatDistance(item.distanceKm)}</span>
 
