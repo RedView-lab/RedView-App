@@ -1,5 +1,21 @@
 /* POI section — refine row + Catégories dropdown button.
-   Source of truth: Figma 1539:20343 / 1539:20347. */
+   Source of truth: Figma 1716:52683 (POI) — gap-[8px] between rows. */
+
+/* Figma 1716:52683 — the POI block uses an 8px vertical rhythm (gap-[8px]),
+   NOT the 12px fallback used by other parameter blocks. We scope this
+   override to `.rvi-params:has(.rvi-poi-refine)` so only the POI tab
+   inherits the tighter rhythm; Rythme/Traçage keep their 12px stack. */
+.rvi-params:has(.rvi-poi-refine) {
+  gap: 8px;
+}
+
+/* Figma 1716:52620 — "Charger" red CTA.
+   Spec: bg #890000, gap-[8px], px-[8px] py-[7px], rounded-6, w_full,
+   icon 16, label 14px Medium white. */
+.rvi-params:has(.rvi-poi-refine) > .rvi-redbtn--full {
+  gap: 8px;
+  padding: 7px 8px;
+}
 
 .rvi-poi-refine {
   align-items: center;
@@ -9,39 +25,59 @@
 .rvi-poi-refine__toggle {
   flex: 1 1 0;
   min-width: 0;
+  /* Figma 1716:52612 — pr-[8px] py-[8px] padding on the toggle cell. */
+  padding: 8px 8px 8px 0;
+  box-sizing: border-box;
 }
 
 .rvi-poi-refine__toggle .rvi-toggle-row {
   padding: 0;
   min-height: 0;
+  /* Figma 1716:52612 — toggle ↔ label gap 8px. */
+  gap: 8px;
 }
 
+/* Figma 1716:52614 — "Affiner les résultats (beta)" is 11px SemiBold white
+   at full opacity (NOT 12px like other toggle rows). */
+.rvi-poi-refine__toggle .rvi-toggle-row__text {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: normal;
+  color: var(--rvi-text);
+}
+
+/* Figma 1716:52615 — Catégories button.
+   Spec: h-32, gap-8, px-8 py-7, rounded-6, border-[0.5px] solid white. */
 .rvi-categories-btn {
   all: unset;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   height: 32px;
-  padding: 8px 8px 8px 8px;
-  border: 1px solid var(--rvi-border);
+  padding: 7px 8px;
+  border: 0.5px solid #ffffff;
   border-radius: var(--rvi-radius-md);
   color: var(--rvi-text);
   cursor: pointer;
   flex-shrink: 0;
+  box-sizing: border-box;
   transition: background 0.15s ease;
 }
 .rvi-categories-btn:hover {
   background: rgba(255, 255, 255, 0.04);
 }
 
+/* Figma 1716:52618 — label 13px SemiBold (Rethink_Sans:SemiBold). */
 .rvi-categories-btn__label {
-  font-size: 11px;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1;
+  line-height: normal;
 }
 
 .rvi-categories-btn__chevron {
-  opacity: 0.8;
+  opacity: 1;
 }
 
 /* "Charger" button — disabled state (no GPX or no enabled category). */
