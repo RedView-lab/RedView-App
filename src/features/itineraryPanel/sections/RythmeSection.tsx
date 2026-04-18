@@ -224,6 +224,7 @@ export function RythmeSection({
         onChange={(v) => onChange?.('pauseAtFavoritePois', v)}
         label="Ajouter des pauses à chaque POI favori"
         trailing={<IconInfo size={14} />}
+        trailingTight
       />
 
       <Collapse open={rhythm.pauseAtFavoritePois}>

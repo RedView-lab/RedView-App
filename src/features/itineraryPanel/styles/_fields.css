@@ -302,9 +302,10 @@
 }
 .rvi-uploadchip__text {
   flex: 1 1 0;
-  /* Was 56 — reduced so the Upload chip can hug tighter at the panel's
-     minimum width without pushing the sibling FTP cell out. */
-  min-width: 44px;
+  /* Figma I1695:22390;855:19882;1251:19163 prescribes min-w-[56px]. Paired
+     with the cfield label min-w-[32px], the whole cell fits exactly at the
+     320 px panel floor (cell = 144 px → 16+4+32+4+88 chip = 144). */
+  min-width: 56px;
   max-width: 74px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 12px;
@@ -366,10 +367,12 @@
 }
 .rvi-cfield__label {
   flex: 1 1 0;
-  /* Allow the label to shrink further than the chip can, so the chip
-     never has to shrink below its own min-width. 24 px keeps at least
-     two ellipsed characters visible (“Ac…”). */
-  min-width: 24px;
+  /* Figma I1695:22390;855:19882;1251:19160 prescribes min-w-[32px]. With the
+     panel resize floor clamped to 320 px (content = 296 px), the two cells
+     each get 144 px, which fits 16(checkbox)+4+32(label-min)+4+64(chip-min)=
+     120 px comfortably — i.e. the Figma minimum never forces overflow at the
+     smallest resize stop. */
+  min-width: 32px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — Figma I855:19882;1251:19160 (Rethink_Sans:Medium) */
@@ -419,6 +422,19 @@
   height: 16px;
   color: var(--rvi-text);
   opacity: 0.6;
+}
+
+/* Tight-trailing variant — Figma 855:19587 (PacingBreaksExt POI favori).
+   In the design the label + info-icon live inside a flex-[1_0_0] gap-4
+   wrapper, so the info icon sits 4 px from the label while the toggle
+   stays 12 px from that group. We reproduce this by letting the text
+   button absorb the full row via flex:1 and pulling the trailing slot
+   back by 8 px so the effective gap becomes 12 − 8 = 4 px. No extra
+   DOM nesting is required, so the Interval variant (gap-12 between
+   label and Plus button) stays untouched when this modifier is absent.
+*/
+.rvi-toggle-row--tighttrail .rvi-toggle-row__trailing {
+  margin-left: -8px;
 }
 
 /* ── Toggle switch ───────────────────────────────────────────── */
