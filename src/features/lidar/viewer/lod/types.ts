@@ -57,6 +57,8 @@ export interface PlatformProfile {
   maxCanvasDim: number;
   dprCap: number;
   isApple: boolean;
+  /** Target frame time in ms used by adaptive budget (lower = aim for higher FPS). */
+  targetFrameMs: number;
 }
 
 /** Axis-aligned bounding box */

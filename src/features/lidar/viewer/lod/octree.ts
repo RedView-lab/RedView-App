@@ -109,6 +109,33 @@ interface FlattenContext {
   voxelOffset: number;
 }
 
+/**
+ * Deterministic 32-bit hash → used as PRNG seed for in-leaf shuffle.
+ * Keeps build reproducible across runs.
+ */
+function pcg32(state: number): number {
+  state = (Math.imul(state, 747796405) + 2891336453) >>> 0;
+  const word = (Math.imul((state >>> ((state >>> 28) + 4)) ^ state, 277803737)) >>> 0;
+  return ((word >>> 22) ^ word) >>> 0;
+}
+
+/**
+ * Fisher–Yates shuffle of a slice of point indices using a seeded PRNG.
+ * After this, taking the first N entries yields a spatially-uniform random
+ * subset of the leaf — required so CPU-side density (instanceCount reduction)
+ * doesn't produce visible spatial banding.
+ */
+function shuffleIndices(indices: number[], seed: number): void {
+  let state = (seed | 0) || 1;
+  for (let i = indices.length - 1; i > 0; i--) {
+    state = pcg32(state);
+    const j = state % (i + 1);
+    const tmp = indices[i];
+    indices[i] = indices[j];
+    indices[j] = tmp;
+  }
+}
+
 function flattenNode(
   node: BuildNode,
   positions: Float32Array,
@@ -129,6 +156,10 @@ function flattenNode(
   };
 
   if (node.isLeaf && node.pointIndices.length > 0) {
+    // Shuffle so first N points form a spatially-uniform random subset.
+    // Used by renderer for CPU-side density (drawCount = count * density).
+    shuffleIndices(node.pointIndices, node.id + 1);
+
     serialized.pointOffset = ctx.leafOffset;
     serialized.pointCount = node.pointIndices.length;
 

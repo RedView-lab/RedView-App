@@ -51,8 +51,11 @@ export class LodManager {
   private pointBudget = INITIAL_POINT_BUDGET;
   private minBudget = MIN_POINT_BUDGET;
   private maxBudget = MAX_POINT_BUDGET;
-  private frameTimes: number[] = [];
-  private frameIdx = 0;
+  /** Per-platform target frame time (16.6ms desktop, 33.3ms Apple/integrated). */
+  private targetFrameMs = TARGET_FRAME_MS;
+  /** EWMA-smoothed frame time — more stable than sliding window mean. */
+  private avgFrameMs = TARGET_FRAME_MS;
+  private framesSeen = 0;
   private slowFrameCount = 0;
   private fastFrameCount = 0;
 
@@ -97,8 +100,13 @@ export class LodManager {
     this.pointBudget = profile.initialBudget;
     this.minBudget = Math.min(profile.initialBudget, MIN_POINT_BUDGET);
     this.maxBudget = profile.maxBudget;
+    this.targetFrameMs = profile.targetFrameMs;
+    this.avgFrameMs = profile.targetFrameMs;
     this.stats.pointBudget = this.pointBudget;
-    console.log(`[LOD] Platform budget: ${(this.pointBudget / 1e6).toFixed(1)}M (max ${(this.maxBudget / 1e6).toFixed(1)}M)`);
+    console.log(
+      `[LOD] Platform budget: ${(this.pointBudget / 1e6).toFixed(1)}M ` +
+      `(max ${(this.maxBudget / 1e6).toFixed(1)}M) target ${this.targetFrameMs.toFixed(1)}ms`,
+    );
   }
 
   getVoxelPointSize(basePointSize: number): number {
@@ -428,28 +436,31 @@ export class LodManager {
   }
 
   private updateBudget(deltaMs: number): void {
-    if (this.frameTimes.length < FRAME_WINDOW) {
-      this.frameTimes.push(deltaMs);
-    } else {
-      this.frameTimes[this.frameIdx % FRAME_WINDOW] = deltaMs;
-    }
-    this.frameIdx++;
+    // Clamp pathological values (tab switch, GC pause) so they don't poison
+    // the EWMA and trigger spurious budget cuts on the next frame.
+    const sample = Math.max(1, Math.min(deltaMs, this.targetFrameMs * 4));
 
-    if (this.frameTimes.length < FRAME_WINDOW) return;
+    // EWMA: gives recent frames more weight than a sliding window mean,
+    // and updates every frame instead of only when the window is full.
+    // alpha = 1/8 → ~half-life of ~5 frames.
+    const alpha = 1 / 8;
+    this.avgFrameMs = this.avgFrameMs * (1 - alpha) + sample * alpha;
+    this.framesSeen++;
 
-    let sum = 0;
-    for (let i = 0; i < this.frameTimes.length; i++) sum += this.frameTimes[i];
-    const avgMs = sum / this.frameTimes.length;
+    if (this.framesSeen < FRAME_WINDOW) return; // warm-up
+
+    const avgMs = this.avgFrameMs;
     this.stats.fps = Math.round(1000 / avgMs);
 
-    if (avgMs > TARGET_FRAME_MS * 1.15) {
+    const target = this.targetFrameMs;
+    if (avgMs > target * 1.15) {
       this.slowFrameCount++;
       this.fastFrameCount = 0;
       if (this.slowFrameCount >= 4) {
         this.pointBudget = Math.max(this.minBudget, Math.floor(this.pointBudget * 0.90));
         this.slowFrameCount = 0;
       }
-    } else if (avgMs < TARGET_FRAME_MS * 0.80) {
+    } else if (avgMs < target * 0.80) {
       this.fastFrameCount++;
       this.slowFrameCount = 0;
       if (this.fastFrameCount >= 4) {

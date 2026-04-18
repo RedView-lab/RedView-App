@@ -111,8 +111,11 @@ fn computeSobelNormal(worldPos: vec3<f32>) -> vec3<f32> {
   let hLU = textureLoad(heightTex, vec2<i32>(pxL, pyU), 0).r;
   let hRU = textureLoad(heightTex, vec2<i32>(pxR, pyU), 0).r;
 
-  let dzdx = (hR + 2.0 * hR + hRU) - (hL + 2.0 * hL + hLU);
-  let dzdy = (hU + 2.0 * hLU + hRU) - (hD + 2.0 * hLD + hRD);
+  // Sobel 3x3 kernel:
+  //  dz/dx = [-1 0 +1; -2 0 +2; -1 0 +1] applied to neighborhood
+  //  dz/dy = [-1 -2 -1; 0 0 0; +1 +2 +1] applied to neighborhood
+  let dzdx = (hRD + 2.0 * hR + hRU) - (hLD + 2.0 * hL + hLU);
+  let dzdy = (hLU + 2.0 * hU + hRU) - (hLD + 2.0 * hD + hRD);
 
   let cellWorldX = camera.hmScaleX / dimsF.x;
   let cellWorldZ = camera.hmScaleZ / dimsF.y;
@@ -373,6 +376,11 @@ export class LidarRenderer {
   private uniformCache = new Float32Array(44);
   private _tempFloat = new Float32Array(1);
   private _densityFloat = new Float32Array(1);
+  /** Cached viewProj product to avoid re-multiplying when matrices are unchanged. */
+  private _cachedViewProj = new Float32Array(16);
+  private _lastView = new Float32Array(16);
+  private _lastProj = new Float32Array(16);
+  private _viewProjValid = false;
 
   private buffers: { pos: GPUBuffer; col: GPUBuffer; count: number }[] = [];
   private terrainMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
@@ -412,8 +420,8 @@ export class LidarRenderer {
     const desc = (adapterInfo?.description ?? adapterInfo?.device ?? '').toLowerCase();
     const isApple = vendor.includes('apple') || arch.includes('apple') || desc.includes('apple');
     this.platform = isApple
-      ? { initialBudget: 5_000_000, maxBudget: 12_000_000, maxCanvasDim: 4096, dprCap: 1.5, isApple: true }
-      : { initialBudget: 8_000_000, maxBudget: 25_000_000, maxCanvasDim: 8192, dprCap: 3.0, isApple: false };
+      ? { initialBudget: 5_000_000, maxBudget: 12_000_000, maxCanvasDim: 4096, dprCap: 1.5, isApple: true,  targetFrameMs: 33.3 }  // 30 fps target — modest hardware
+      : { initialBudget: 8_000_000, maxBudget: 25_000_000, maxCanvasDim: 8192, dprCap: 3.0, isApple: false, targetFrameMs: 16.6 }; // 60 fps target — desktop dGPU
 
     console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
     console.log(`[LiDAR GPU] Platform profile: ${isApple ? 'Apple (Metal)' : 'Desktop'}`);
@@ -718,40 +726,57 @@ export class LidarRenderer {
   ): void {
     const chunkState = { index: -1 };
     let batchStart = -1;
-    let batchCount = 0;
+    let batchCount = 0;       // instances actually drawn (count * density, ceil)
+    let batchSrcCount = 0;    // points consumed in source buffer (full count)
     let batchDensity = 1.0;
 
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i];
       if (n.isVoxel !== isVoxel || n.count === 0) continue;
 
-      // Quantize density coarsely to reduce uniform buffer writes
-      const d = n.density > 0.995 ? 1.0 : Math.round(n.density * 100) / 100;
+      // CPU-side density: draw only the first `count*density` points of each
+      // node. Leaf points were Fisher–Yates shuffled at build time so this
+      // produces a spatially-uniform random subset without per-vertex hashing.
+      // Voxels are already a coarse representation → never thinned (density=1).
+      const d = isVoxel ? 1.0 : (n.density > 0.995 ? 1.0 : Math.round(n.density * 100) / 100);
+      const drawCount = isVoxel ? n.count : Math.max(1, Math.ceil(n.count * d));
 
-      // Can this node extend the current batch?
+      // We can extend the current batch only if source ranges are contiguous
+      // AND we're drawing every point of both nodes (d == 1). With d < 1, the
+      // tail of the current node is intentionally skipped — extending the
+      // draw would incorrectly render those skipped points instead of the
+      // head of the next node.
       const canBatch = batchStart >= 0
-        && n.offset === batchStart + batchCount
-        && Math.abs(d - batchDensity) < 0.005;
+        && n.offset === batchStart + batchSrcCount
+        && d === 1.0
+        && batchDensity === 1.0;
 
       if (canBatch) {
-        batchCount += n.count;
+        batchCount += drawCount;
+        batchSrcCount += n.count;
       } else {
-        // Flush previous batch
         if (batchStart >= 0) {
-          this.setDensityUniform(camBuffer, batchDensity, isVoxel);
           this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
         }
         batchStart = n.offset;
-        batchCount = n.count;
+        batchCount = drawCount;
+        batchSrcCount = n.count;
         batchDensity = d;
       }
     }
     if (batchStart >= 0) {
-      this.setDensityUniform(camBuffer, batchDensity, isVoxel);
       this.drawRange(pass, chunks, batchStart, batchCount, chunkState);
     }
+    // Suppress unused-parameter warning while keeping signature stable for
+    // potential reuse by future GPU-side density variants.
+    void camBuffer;
   }
 
+  /**
+   * @deprecated Replaced by CPU-side density (instanceCount reduction).
+   * Kept for potential future use if we re-introduce per-fragment thinning.
+   */
+  // @ts-expect-error - intentionally retained for future use
   private setDensityUniform(camBuffer: GPUBuffer, density: number, isVoxel: boolean): void {
     const current = isVoxel ? this.currentDensityVoxel : this.currentDensityLeaf;
     if (Math.abs(density - current) < 0.001) return;
@@ -908,7 +933,23 @@ export class LidarRenderer {
   }
 
   updateCamera(view: Float32Array, proj: Float32Array) {
-    const vp = mat4Multiply(proj, view);
+    // Cache viewProj when view/proj are bit-identical to last call
+    // (camera idle / paused). Avoids 64 muls + Float32Array(16) alloc per frame.
+    let same = this._viewProjValid;
+    if (same) {
+      for (let i = 0; i < 16; i++) {
+        if (this._lastView[i] !== view[i] || this._lastProj[i] !== proj[i]) { same = false; break; }
+      }
+    }
+    let vp: Float32Array;
+    if (same) {
+      vp = this._cachedViewProj;
+    } else {
+      vp = mat4MultiplyInto(proj, view, this._cachedViewProj);
+      this._lastView.set(view);
+      this._lastProj.set(proj);
+      this._viewProjValid = true;
+    }
 
     const right = [view[0], view[4], view[8], 0];
     const up = [view[1], view[5], view[9], 0];
@@ -1005,8 +1046,7 @@ export class LidarRenderer {
   }
 }
 
-function mat4Multiply(a: Float32Array, b: Float32Array): Float32Array {
-  const out = new Float32Array(16);
+function mat4MultiplyInto(a: Float32Array, b: Float32Array, out: Float32Array): Float32Array {
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       out[j * 4 + i] =
