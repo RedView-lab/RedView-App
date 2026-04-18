@@ -50,6 +50,8 @@ export function PanelSelect<T extends string = string>({
       className={`rvi-select${wide ? ' rvi-select--wide' : ''}${open ? ' is-open' : ''}`}
     >
       {startAdornment}
+      <span className="rvi-select__value">{label}</span>
+      <IconChevronDown size={20} className="rvi-select__chevron" />
       <button
         type="button"
         className="rvi-select__trigger"
@@ -57,10 +59,7 @@ export function PanelSelect<T extends string = string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-      >
-        <span className="rvi-select__value">{label}</span>
-        <IconChevronDown size={20} className="rvi-select__chevron" />
-      </button>
+      />
       {open && (
         <div className="rvi-select__menu" role="listbox" aria-label={ariaLabel}>
           {options.map((o) => {

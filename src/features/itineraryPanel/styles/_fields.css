@@ -198,14 +198,8 @@
   all: unset;
   position: absolute;
   inset: 0;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 6px 5px 10px;
   cursor: pointer;
-  color: var(--rvi-text);
-  font: inherit;
-  min-width: 0;
+  border-radius: var(--rvi-radius-sm);
 }
 .rvi-select__trigger:focus-visible {
   outline: 2px solid var(--rvi-red, #c8102e);

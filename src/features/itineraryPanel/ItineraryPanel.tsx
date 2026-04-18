@@ -97,27 +97,26 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <div className="rvi-divider" />
 
-      {active ? (
-        <ProfileBar
-          profiles={profiles}
-          activeProfileId={active.profileId}
-          onChange={onChangeProfile}
-          onUndo={onUndo}
-          onRedo={onRedo}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          onSave={onSaveProfile}
-        />
-      ) : null}
-
       <div className="rvi-panel__scroll">
         {active && project.activeMode === 'tracage' ? (
-          <TracageSection
-            priorities={active.priorities}
-            roadTypes={active.roadTypes}
-            onChangePriority={onChangePriority}
-            onChangeRoadType={onChangeRoadType}
-          />
+          <>
+            <ProfileBar
+              profiles={profiles}
+              activeProfileId={active.profileId}
+              onChange={onChangeProfile}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onSave={onSaveProfile}
+            />
+            <TracageSection
+              priorities={active.priorities}
+              roadTypes={active.roadTypes}
+              onChangePriority={onChangePriority}
+              onChangeRoadType={onChangeRoadType}
+            />
+          </>
         ) : null}
         {active && project.activeMode === 'rythme' ? (
           <RythmeSection
