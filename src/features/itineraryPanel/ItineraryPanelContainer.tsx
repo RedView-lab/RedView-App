@@ -156,34 +156,45 @@ export function ItineraryPanelContainer({
   // ── BRouter routing ───────────────────────────────────────────────
   // Compute a route whenever the active itinerary has both a start and an
   // end with valid lon/lat. Previous in-flight requests are aborted.
-  const startPoint = useMemo(() => {
-    const row = active?.timeline.find((i) => i.kind === 'start');
-    if (!row || row.lat == null || row.lon == null) return null;
-    return { lat: row.lat, lon: row.lon };
-  }, [active]);
-  const endPoint = useMemo(() => {
-    const row = active?.timeline.find((i) => i.kind === 'end');
-    if (!row || row.lat == null || row.lon == null) return null;
-    return { lat: row.lat, lon: row.lon };
-  }, [active]);
-  const viaPoints = useMemo(() => {
-    if (!active) return [] as { lat: number; lon: number }[];
-    return active.timeline
-      .filter((i) => i.kind === 'waypoint' && i.lat != null && i.lon != null)
-      .map((i) => ({ lat: i.lat as number, lon: i.lon as number }));
-  }, [active]);
+  //
+  // IMPORTANT: deps are PRIMITIVE strings, not object memos. After each
+  // successful fetch we call setProject() to persist distanceKm on the
+  // "end" row — that recreates `active`, and useMemo objects derived from
+  // it would change identity each render → infinite refetch loop.
+  const startKey = (() => {
+    const r = active?.timeline.find((i) => i.kind === 'start');
+    return r && r.lat != null && r.lon != null ? `${r.lon},${r.lat}` : '';
+  })();
+  const endKey = (() => {
+    const r = active?.timeline.find((i) => i.kind === 'end');
+    return r && r.lat != null && r.lon != null ? `${r.lon},${r.lat}` : '';
+  })();
+  const viaKey = active
+    ? active.timeline
+        .filter((i) => i.kind === 'waypoint' && i.lat != null && i.lon != null)
+        .map((i) => `${i.lon},${i.lat}`)
+        .join('|')
+    : '';
   const profileId = active?.profileId ?? 'gravel-default';
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (!startPoint || !endPoint) {
-      // Drop a stale route when the user clears one of the endpoints.
+    if (!startKey || !endKey) {
       if (isRouteOnMap(map)) {
         try { removeRoute(map); } catch { /* noop */ }
       }
       setRouteError(null);
       return;
     }
+
+    const [startLon, startLat] = startKey.split(',').map(Number);
+    const [endLon, endLat] = endKey.split(',').map(Number);
+    const via = viaKey
+      ? viaKey.split('|').map((s) => {
+          const [lon, lat] = s.split(',').map(Number);
+          return { lat, lon };
+        })
+      : [];
 
     routeAbortRef.current?.abort();
     const ctrl = new AbortController();
@@ -192,9 +203,9 @@ export function ItineraryPanelContainer({
     setRouteError(null);
 
     fetchBrouterRoute({
-      start: startPoint,
-      end: endPoint,
-      via: viaPoints,
+      start: { lat: startLat, lon: startLon },
+      end: { lat: endLat, lon: endLon },
+      via,
       profile: panelProfileToBrouter(profileId),
       signal: ctrl.signal,
     })
@@ -202,8 +213,8 @@ export function ItineraryPanelContainer({
         if (ctrl.signal.aborted) return;
         try {
           addRoute(map, route.coordinates, [
-            { ...startPoint, kind: 'start' },
-            { ...endPoint, kind: 'end' },
+            { lat: startLat, lon: startLon, kind: 'start' },
+            { lat: endLat, lon: endLon, kind: 'end' },
           ]);
           fitToRoute(map, route.coordinates);
         } catch (e) {
@@ -211,20 +222,27 @@ export function ItineraryPanelContainer({
           return;
         }
         // Persist total distance on the "end" row so the timeline shows it.
+        // Skip the update when the value is already correct — extra guard
+        // against any future dep that might include `active` itself.
         const distanceKm = Math.round(route.distanceM / 100) / 10;
-        setProject((p) => ({
-          ...p,
-          itineraries: p.itineraries.map((it) =>
-            it.id === p.activeItineraryId
-              ? {
-                  ...it,
-                  timeline: it.timeline.map((row) =>
-                    row.kind === 'end' ? { ...row, distanceKm } : row,
-                  ),
-                }
-              : it,
-          ),
-        }));
+        setProject((p) => {
+          const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
+          const endRow = it?.timeline.find((r) => r.kind === 'end');
+          if (!it || !endRow || endRow.distanceKm === distanceKm) return p;
+          return {
+            ...p,
+            itineraries: p.itineraries.map((curr) =>
+              curr.id === p.activeItineraryId
+                ? {
+                    ...curr,
+                    timeline: curr.timeline.map((row) =>
+                      row.kind === 'end' ? { ...row, distanceKm } : row,
+                    ),
+                  }
+                : curr,
+            ),
+          };
+        });
       })
       .catch((e: unknown) => {
         if ((e as { name?: string }).name === 'AbortError') return;
@@ -235,28 +253,33 @@ export function ItineraryPanelContainer({
       });
 
     return () => ctrl.abort();
-  }, [map, isMapLoaded, startPoint, endPoint, viaPoints, profileId]);
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId]);
 
-  // Re-add the route after a Mapbox style.load (Standard Satellite wipes
-  // custom layers). Mirrors the GPX layer logic in useItineraryPoiMap.
+  // Re-add the route after a Mapbox style.load.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
+    if (!startKey || !endKey) return;
     const onStyleLoad = () => {
-      if (!startPoint || !endPoint) return;
-      // Trigger a re-fetch by toggling a no-op state — simplest is to
-      // call fetchBrouterRoute again here directly.
+      const [startLon, startLat] = startKey.split(',').map(Number);
+      const [endLon, endLat] = endKey.split(',').map(Number);
+      const via = viaKey
+        ? viaKey.split('|').map((s) => {
+            const [lon, lat] = s.split(',').map(Number);
+            return { lat, lon };
+          })
+        : [];
       fetchBrouterRoute({
-        start: startPoint,
-        end: endPoint,
-        via: viaPoints,
+        start: { lat: startLat, lon: startLon },
+        end: { lat: endLat, lon: endLon },
+        via,
         profile: panelProfileToBrouter(profileId),
       })
         .then((route) => {
           try {
             if (!isRouteOnMap(map)) {
               addRoute(map, route.coordinates, [
-                { ...startPoint, kind: 'start' },
-                { ...endPoint, kind: 'end' },
+                { lat: startLat, lon: startLon, kind: 'start' },
+                { lat: endLat, lon: endLon, kind: 'end' },
               ]);
             }
           } catch { /* noop */ }
@@ -265,7 +288,7 @@ export function ItineraryPanelContainer({
     };
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
-  }, [map, isMapLoaded, startPoint, endPoint, viaPoints, profileId]);
+  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId]);
 
   const panel = (
     <ItineraryPanel
