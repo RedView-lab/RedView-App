@@ -38,15 +38,25 @@ if (isNaN(xKm) || isNaN(yKm)) {
 }
 
 const tileFileName = `${buildTileFileName(xKm, yKm, crs, altRef)}.copc.laz`;
+// Legacy naming used yKm directly instead of yKm+1 (NW corner). Fall back to it
+// for tiles downloaded before the naming convention fix.
+const legacyTileFileName = `${buildTileFileName(xKm, yKm - 1, crs, altRef)}.copc.laz`;
 document.title = `LiDAR — ${tileFileName}`;
 
 // --- Load tile from OPFS ---
 async function loadFromOPFS(): Promise<ArrayBuffer> {
   const root = await navigator.storage.getDirectory();
   const dir = await root.getDirectoryHandle('lidar-hd');
-  const handle = await dir.getFileHandle(tileFileName);
-  const file = await handle.getFile();
-  return file.arrayBuffer();
+  for (const name of [tileFileName, legacyTileFileName]) {
+    try {
+      const handle = await dir.getFileHandle(name);
+      const file = await handle.getFile();
+      return file.arrayBuffer();
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error(`Tile not found in OPFS: ${tileFileName}`);
 }
 
 /** Run parse+colorize in a Web Worker */
