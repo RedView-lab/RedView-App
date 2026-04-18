@@ -114,9 +114,12 @@ export function useItineraryPoiMap(
   );
 
   // ── Render the active itinerary's GPX track ───────────────────────
+  // Skip when the route was synthesised from BRouter — the BRouter layer
+  // already paints it, and stacking two lines would tint the colour.
+  const gpxNeedsRender = gpxRoute && gpxRoute.source !== 'brouter';
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (gpxRoute) {
+    if (gpxNeedsRender && gpxRoute) {
       try {
         addGpxRoute(map, gpxRoute.points);
         fitMapToRoute(map, gpxRoute.points);
@@ -130,7 +133,7 @@ export function useItineraryPoiMap(
         /* noop */
       }
     }
-  }, [map, isMapLoaded, gpxRoute]);
+  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender]);
 
   // Re-add the GPX after a Mapbox style.load (Standard Satellite fires
   // style.load multiple times as imports/terrain settle, wiping custom
@@ -138,7 +141,7 @@ export function useItineraryPoiMap(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const onStyleLoad = () => {
-      if (!gpxRoute || isGpxRouteOnMap(map)) return;
+      if (!gpxNeedsRender || !gpxRoute || isGpxRouteOnMap(map)) return;
       setTimeout(() => {
         if (gpxRoute && !isGpxRouteOnMap(map)) {
           try {
@@ -153,7 +156,7 @@ export function useItineraryPoiMap(
     return () => {
       map.off('style.load', onStyleLoad);
     };
-  }, [map, isMapLoaded, gpxRoute]);
+  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender]);
 
   return {
     loading,

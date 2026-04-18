@@ -201,10 +201,16 @@ export interface Itinerary {
   /**
    * Optional GPX track loaded for this itinerary. When present, the POI
    * search runs in "corridor" mode along these points instead of bbox mode.
+   *
+   * `source: 'brouter'` means the polyline was synthesised from a BRouter
+   * computation (no user GPX upload) — in that case the route is already
+   * rendered by the BRouter layer and `useItineraryPoiMap` skips its own
+   * GPX rendering to avoid drawing two stacked lines.
    */
   gpxRoute?: {
     name: string | null;
     points: { lat: number; lon: number }[];
+    source?: 'gpx' | 'brouter';
   };
   /**
    * Expert Mode profile state. When `enabled`, every parameter the user

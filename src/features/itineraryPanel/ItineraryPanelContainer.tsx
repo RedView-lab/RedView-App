@@ -364,18 +364,36 @@ export function ItineraryPanelContainer({
           setRouteError(e instanceof Error ? e.message : 'Erreur d\u2019affichage');
           return;
         }
-        // Persist total distance on the "end" row so the timeline shows it.
+        // Persist total distance on the "end" row so the timeline shows it,
+        // AND store the BRouter polyline as `gpxRoute` so the POI corridor
+        // search has a route to project onto (the "Rechercher" button stays
+        // disabled until `gpxRoute` is set).
         const distanceKm = Math.round(route.distanceM / 100) / 10;
+        const routePoints = route.coordinates.map((c: [number, number]) => ({
+          lat: c[1],
+          lon: c[0],
+        }));
         setProject((p) => {
           const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
-          const endRow = it?.timeline.find((r) => r.kind === 'end');
-          if (!it || !endRow || endRow.distanceKm === distanceKm) return p;
+          if (!it) return p;
+          const endRow = it.timeline.find((r) => r.kind === 'end');
+          const endAlreadyOk = endRow?.distanceKm === distanceKm;
+          const gpxAlreadyOk =
+            it.gpxRoute?.points.length === routePoints.length &&
+            it.gpxRoute?.points[0]?.lat === routePoints[0]?.lat &&
+            it.gpxRoute?.points[0]?.lon === routePoints[0]?.lon;
+          if (endAlreadyOk && gpxAlreadyOk) return p;
           return {
             ...p,
             itineraries: p.itineraries.map((curr) =>
               curr.id === p.activeItineraryId
                 ? {
                     ...curr,
+                    gpxRoute: {
+                      name: curr.gpxRoute?.name ?? null,
+                      points: routePoints,
+                      source: 'brouter',
+                    },
                     timeline: curr.timeline.map((row) =>
                       row.kind === 'end' ? { ...row, distanceKm } : row,
                     ),
