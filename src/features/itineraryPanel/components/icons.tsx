@@ -294,3 +294,223 @@ export const IconFlagCheckered = ({ size = 10, ...p }: IconProps) => (
     <rect x="7" y="8" width="3" height="3" />
   </svg>
 );
+
+/**
+ * Untitled-UI "magnifying glass" — matches Figma node 855:22699
+ * (`Icon / magnifyingglass`). 14×14, 1.6 stroke.
+ */
+export const IconMagnifyingGlass = ({ size = 14, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="6.2" cy="6.2" r="4.4" />
+    <line x1="12.2" y1="12.2" x2="9.4" y2="9.4" />
+  </svg>
+);
+
+/**
+ * Untitled-UI "settings-04" — matches Figma node 170:4952. Two horizontal
+ * sliders with knobs (top knob right, bottom knob left).
+ */
+export const IconSettings04 = ({ size = 16, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <line x1="2" y1="5" x2="14" y2="5" />
+    <line x1="2" y1="11" x2="14" y2="11" />
+    <circle cx="10.5" cy="5" r="1.6" fill="#000" />
+    <circle cx="5.5" cy="11" r="1.6" fill="#000" />
+  </svg>
+);
+
+/**
+ * Untitled-UI "plus-circle" filled — matches Figma node 855:22703.
+ * White plus inside a transparent ring; used by the red split-button.
+ */
+export const IconPlusCircleFilled = ({ size = 16, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="8" cy="8" r="6.5" />
+    <line x1="8" y1="5" x2="8" y2="11" />
+    <line x1="5" y1="8" x2="11" y2="8" />
+  </svg>
+);
+
+/**
+ * "Mobile_Ios_Map_Checkpoint" — Figma node 855:20895. Black filled circle
+ * with a white play-triangle inside, used as the "Départ" marker.
+ */
+export const IconCheckpointStart = ({ size = 20, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
+    <circle cx="10" cy="10" r="9" fill="#0e0e0e" stroke="rgba(255,255,255,0.18)" strokeWidth="0.6" />
+    <path d="M8 6.6 L13.6 10 L8 13.4 Z" fill="#fff" />
+  </svg>
+);
+
+/**
+ * "Fin" iOS-style checkered flag map marker — Figma node 855:20564.
+ * White/black grid pattern on a flag pole in a rounded square.
+ */
+export const IconCheckpointEndMarker = ({ size = 20, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
+    <rect x="1.6" y="1.6" width="16.8" height="16.8" rx="4.4" fill="#0e0e0e" stroke="rgba(255,255,255,0.18)" strokeWidth="0.6" />
+    {/* 4×4 checker pattern centred. Cells 2×2 starting at (5,5) */}
+    <g fill="#fff">
+      <rect x="5"  y="5"  width="2" height="2" />
+      <rect x="9"  y="5"  width="2" height="2" />
+      <rect x="13" y="5"  width="2" height="2" />
+      <rect x="7"  y="7"  width="2" height="2" />
+      <rect x="11" y="7"  width="2" height="2" />
+      <rect x="5"  y="9"  width="2" height="2" />
+      <rect x="9"  y="9"  width="2" height="2" />
+      <rect x="13" y="9"  width="2" height="2" />
+      <rect x="7"  y="11" width="2" height="2" />
+      <rect x="11" y="11" width="2" height="2" />
+      <rect x="5"  y="13" width="2" height="2" />
+      <rect x="9"  y="13" width="2" height="2" />
+      <rect x="13" y="13" width="2" height="2" />
+    </g>
+  </svg>
+);
+
+/**
+ * Waypoint dot — Figma node 855:20775. Red filled circle with a
+ * darker red ring (Group12635). Used for the generic "Point de passage".
+ */
+export const IconWaypointDot = ({ size = 20, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
+    <circle cx="10" cy="10" r="8.2" fill="#0e0e0e" />
+    <circle cx="10" cy="10" r="5.4" fill="#c50000" />
+    <circle cx="10" cy="10" r="2.2" fill="#fff" fillOpacity="0.92" />
+  </svg>
+);
+
+/**
+ * Teardrop pin (Ellipse + tooltip-shape composite from Figma — nodes
+ * 855:20633 + 855:20635). A circular head with a small downward tip,
+ * filled with `color`. Renders the white icon centred in the head.
+ *
+ * The tip points downward at ~42° from the bottom of the head.
+ */
+export const IconTeardropPin = ({
+  size = 20,
+  color = '#1e5fc7',
+  ...p
+}: IconProps & { color?: string }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
+    {/* Soft drop shadow under the pin head */}
+    <ellipse cx="10" cy="17.5" rx="3.4" ry="0.7" fill="#000" fillOpacity="0.35" />
+    {/* Tip — slim triangle tucked under the circle (Figma rotated rect with -4° skew) */}
+    <path
+      d={`M ${10 - 1.7} ${10 + 5}
+          L ${10 + 1.7} ${10 + 5}
+          L 10 ${10 + 8.2}
+          Z`}
+      fill={color}
+    />
+    {/* Head */}
+    <circle cx="10" cy="10" r="6.7" fill={color} />
+    {/* Subtle inner ring (matches Figma's translucent stroke on the ellipse) */}
+    <circle cx="10" cy="10" r="6.7" fill="none" stroke="rgba(0,0,0,0.18)" strokeWidth="0.7" />
+  </svg>
+);
+
+/**
+ * "Pause" badge — Figma node 855:20798. Filled dark circle with the
+ * pause-circle icon centred. Smaller than the teardrop pins.
+ */
+export const IconPauseBadge = ({ size = 20, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" {...p}>
+    <circle cx="10" cy="10" r="8.2" fill="#3a3a3a" stroke="rgba(255,255,255,0.22)" strokeWidth="0.7" />
+    <circle cx="10" cy="10" r="4.6" fill="none" stroke="#fff" strokeWidth="1.4" />
+    <line x1="8.6" y1="8.4" x2="8.6" y2="11.6" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
+    <line x1="11.4" y1="8.4" x2="11.4" y2="11.6" stroke="#fff" strokeWidth="1.4" strokeLinecap="round" />
+  </svg>
+);
+
+/* -- POI category icons (white glyphs sized for the teardrop pin head) -- */
+
+export const IconToilet = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" {...p}>
+    <circle cx="4.5" cy="2.5" r="1.5" />
+    <path d="M3 5h3l1 5H5l-.5 4h-2L2 10H1z" />
+    <circle cx="11.5" cy="2.5" r="1.5" />
+    <path d="M9.5 5h4l1 4h-1.5v5h-3V9H8.5z" />
+  </svg>
+);
+
+export const IconFuel = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <rect x="2" y="2" width="7" height="12" rx="1" />
+    <line x1="2" y1="6" x2="9" y2="6" />
+    <path d="M9 7l3 1v4a1.5 1.5 0 0 0 1.5 1.5" />
+    <path d="M11 4l1.5 2" />
+  </svg>
+);
+
+export const IconBakery = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" {...p}>
+    <ellipse cx="8" cy="8.5" rx="6" ry="3.5" />
+    <path d="M5 6l1 5M8 5l0 6M11 6l-1 5" stroke="#000" strokeOpacity="0.25" strokeWidth="1" fill="none" strokeLinecap="round" />
+  </svg>
+);
+
+export const IconBurger = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" {...p}>
+    <path d="M2 5a6 6 0 0 1 12 0z" />
+    <rect x="1.5" y="6.5" width="13" height="2" rx="1" />
+    <path d="M2 10h12a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z" />
+  </svg>
+);
+
+export const IconCoffee = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M2 5h9v5a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3z" />
+    <path d="M11 6h1.5a1.5 1.5 0 0 1 0 3H11" />
+    <path d="M4 2v1.5M7 2v1.5" />
+  </svg>
+);
+
+export const IconBeer = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M3.5 3.5h7v9.5a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1z" />
+    <path d="M10.5 5.5h1.5a1.5 1.5 0 0 1 1.5 1.5v3.5a1.5 1.5 0 0 1-1.5 1.5h-1.5" />
+    <line x1="5.5" y1="6" x2="5.5" y2="11" />
+    <line x1="8.5" y1="6" x2="8.5" y2="11" />
+  </svg>
+);
+
+export const IconUtensils = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M4 2v5a2 2 0 0 0 2 2v5" />
+    <line x1="4" y1="2" x2="4" y2="9" />
+    <path d="M10 14V8c0-2 2-3 2-5V2h-2v6" />
+  </svg>
+);
+
+export const IconBicycle = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <circle cx="3.5" cy="11" r="2.5" />
+    <circle cx="12.5" cy="11" r="2.5" />
+    <path d="M3.5 11l3-5h3.5l2.5 5" />
+    <path d="M6.5 6h2" />
+  </svg>
+);
+
+export const IconBed = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M2 12V5" />
+    <path d="M2 9h12v3" />
+    <path d="M14 12V8a2 2 0 0 0-2-2H7v3" />
+    <circle cx="5" cy="7.5" r="1.2" />
+  </svg>
+);
+
+export const IconTent = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <path d="M8 2L2 13h12z" />
+    <path d="M8 2v11" />
+    <path d="M5 13l3-4 3 4" />
+  </svg>
+);
+
+export const IconMountain = ({ size = 10, ...p }: IconProps) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor" {...p}>
+    <path d="M1 13l4.5-7 3 4.5 1.5-2 5 4.5z" />
+  </svg>
+);

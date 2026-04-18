@@ -40,6 +40,9 @@ export function TimelineSheetView({
   return (
     <div className="rvi-tl-list" role="list" aria-label="Liste des étapes">
       <div className="rvi-tl-list__header" role="presentation">
+        <span className="rvi-tl-list__col-check" aria-hidden>
+          <span className="rvi-tl-list__col-checkbox" />
+        </span>
         <span className="rvi-tl-list__col-type">Type</span>
         <span className="rvi-tl-list__col-flex" />
         <span className="rvi-tl-list__col-distance">Distance</span>

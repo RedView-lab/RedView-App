@@ -8,9 +8,9 @@ import {
   IconChevronDown,
   IconClockFastForward,
   IconLayoutGrid,
-  IconPlusCircle,
-  IconSearch,
-  IconSettingsSliders,
+  IconMagnifyingGlass,
+  IconPlusCircleFilled,
+  IconSettings04,
 } from '../../components/icons';
 import type { TimelineView } from '../../types';
 
@@ -62,7 +62,7 @@ export function TimelineHeader({
         onClick={onSearch}
         aria-label="Rechercher"
       >
-        <IconSearch size={14} />
+        <IconMagnifyingGlass size={14} />
       </button>
       <button
         type="button"
@@ -70,7 +70,7 @@ export function TimelineHeader({
         onClick={onOpenSettings}
         aria-label="Paramètres de la feuille de route"
       >
-        <IconSettingsSliders size={14} />
+        <IconSettings04 size={16} />
       </button>
 
       <span className="rvi-tl-add-split">
@@ -80,7 +80,7 @@ export function TimelineHeader({
           onClick={onAdd}
           aria-label="Ajouter un élément"
         >
-          <IconPlusCircle size={16} />
+          <IconPlusCircleFilled size={16} />
         </button>
         <button
           type="button"

@@ -1,5 +1,5 @@
-/* ========================================================================
-   Feuille de route / Timeline — bottom sub-panel of the Itinerary Panel.
+﻿/* ========================================================================
+   Feuille de route / Timeline â€” bottom sub-panel of the Itinerary Panel.
    Source of truth: Figma nodes 1539:20638 (Sheet) & 1539:21068 (Timeline).
    ======================================================================== */
 
@@ -8,7 +8,7 @@
 .rvi-timeline {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
   width: 100%;
   padding: 12px;
   background: rgba(0, 0, 0, 0.6);
@@ -24,6 +24,7 @@
 .rvi-timeline__body {
   display: flex;
   flex-direction: column;
+  gap: 12px;
   min-height: 0;
   flex: 1 1 auto;
   overflow: auto;
@@ -40,10 +41,10 @@
   display: flex;
   gap: 4px;
   align-items: stretch;
-  margin-bottom: 8px;
   position: sticky;
   top: 0;
   z-index: 2;
+  flex-shrink: 0;
 }
 
 /* Segmented view switcher */
@@ -155,16 +156,34 @@
 .rvi-tl-list__header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   padding: 5px 8px;
   min-height: 30px;
   color: var(--rvi-text-dim);
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.rvi-tl-list__col-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+.rvi-tl-list__col-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 4px;
+  display: inline-block;
 }
 .rvi-tl-list__col-type {
   flex: 0 0 auto;
-  padding-left: 48px;
+  /* Align with the .rvi-tl-row__kind-text column.
+     Row layout: check 16 + gap 4 + badge 20 + gap 4 + kind-text margin 4 = 48
+     Header before this padding has: col-check 16 + gap 4 = 20 → need 28 left padding. */
+  padding-left: 28px;
   min-width: 56px;
 }
 .rvi-tl-list__col-flex { flex: 1 1 0; min-width: 0; }
@@ -189,7 +208,7 @@
 .rvi-tl-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   padding: 6px 8px;
   border-radius: var(--rvi-radius-md);
   background: rgba(255, 255, 255, 0.08);
@@ -258,8 +277,9 @@
   font-size: 12px;
   font-weight: 500;
   color: var(--rvi-text-dim);
-  width: 52px;
+  width: 40px;
   min-width: 40px;
+  margin-left: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -295,6 +315,7 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
+  margin-left: 4px;
 }
 .rvi-tl-row__action {
   all: unset;
@@ -330,46 +351,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
   color: #fff;
+  filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.35));
 }
-.rvi-kind__dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--rvi-red-accent);
-  box-shadow: 0 0 0 2px rgba(197, 0, 0, 0.25);
-}
-.rvi-kind--pause { color: rgba(255, 255, 255, 0.85); }
 
-/* Teardrop pin */
-.rvi-kind__pin {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.rvi-kind__pin-shape {
-  position: absolute;
-  inset: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
-}
+/* Teardrop pin: head SVG + centred white glyph */
+.rvi-kind--pin .rvi-kind__pin-icon,
 .rvi-kind__pin-icon {
-  position: relative;
+  position: absolute;
+  /* Head is centred on (cx=10, cy=10) of a 20-viewBox SVG â†’ translate to keep glyph above the tip. */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, calc(-50% - 1px));
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* Center the icon inside the rounded "head" of the pin (top ~40% of the bounding box). */
-  transform: translateY(-12%);
   color: #fff;
+  pointer-events: none;
 }
 
-/* ---------- "Ajouter un élément" row (sheet view) ---------- */
+/* ---------- "Ajouter un Ã©lÃ©ment" row (sheet view) ---------- */
 
 .rvi-tl-add {
   display: flex;
@@ -493,221 +497,209 @@
   .rvi-tl-tabs__btn,
   .rvi-tl-row__action { transition: none; }
 }
-/* Bottom Feuille de route / Timeline sub-panel */
 
-.rvi-timeline {
+/* ========================================================================
+   Filtres + Tableau sub-sections (Figma 1694:18364).
+   Both share the same eyebrow label + body row pattern.
+   ======================================================================== */
+
+.rvi-tl-filters,
+.rvi-tl-table {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border-radius: var(--rvi-radius);
-  flex-shrink: 0;
-  min-height: 260px;
-}
-
-.rvi-timeline__head {
-  display: flex;
-  gap: 4px;
-  width: 100%;
-  align-items: stretch;
-  margin-bottom: 8px;
-}
-
-.rvi-timeline__viewgroup {
-  display: flex;
-  flex: 1 1 0;
-  min-width: 0;
-  background: var(--rvi-bg-row-muted);
-  border-radius: var(--rvi-radius-md);
-  padding: 2px;
-  gap: 2px;
-}
-
-.rvi-timeline__viewbtn {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1 1 0;
-  min-width: 0;
-  padding: 6px 8px;
-  justify-content: center;
-  border-radius: var(--rvi-radius-md);
-  color: var(--rvi-text);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.rvi-timeline__viewbtn:hover { background: rgba(255, 255, 255, 0.04); }
-.rvi-timeline__viewbtn.is-active { background: var(--rvi-bg-row-alt); }
-
-.rvi-timeline__viewbtn > span {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.rvi-timeline__tool {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  background: var(--rvi-bg-row-muted);
-  border-radius: var(--rvi-radius-md);
-  color: var(--rvi-text);
-  cursor: pointer;
-  transition: background 0.15s ease;
+  gap: 6px;
   flex-shrink: 0;
 }
-.rvi-timeline__tool:hover { background: #444; }
-.rvi-timeline__tool--red {
-  background: var(--rvi-red);
-  padding: 0 8px;
-  gap: 8px;
-  width: auto;
-}
-.rvi-timeline__tool--red:hover { background: #a00000; }
 
-.rvi-timeline__list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  overflow: auto;
-}
-
-.rvi-timeline__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 5px 8px;
-  min-height: 30px;
-  color: var(--rvi-text-dim);
-}
-.rvi-timeline__header-label {
-  font-size: 11px;
+.rvi-tl-filters__label,
+.rvi-tl-table__label {
+  font-size: 12px;
   font-weight: 700;
   color: var(--rvi-text-dim);
-}
-.rvi-timeline__header-label--flex {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rvi-timeline__header-label--right {
-  margin-left: auto;
-  text-align: right;
-  min-width: 56px;
+  letter-spacing: 0.01em;
 }
 
-.rvi-timeline__row {
+/* ---- Filtres chips ---- */
+
+.rvi-tl-filters__chips {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  min-height: 30px;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
-.rvi-timeline__row--placeholder {
-  background: rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  padding: 1px 2px;
-}
-
-.rvi-timeline__kind {
+.rvi-tl-chip {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  flex-shrink: 0;
-  color: var(--rvi-text);
+  gap: 4px;
+  padding: 5px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--rvi-radius-md);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease, color 0.15s ease;
+  position: relative;
 }
-
-.rvi-timeline__kind-text {
+.rvi-tl-chip:hover { background: rgba(255, 255, 255, 0.14); }
+.rvi-tl-chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.rvi-tl-chip__check {
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 3px;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rvi-tl-chip.is-on .rvi-tl-chip__check {
+  background: var(--rvi-red-accent);
+  border-color: var(--rvi-red-accent);
+}
+.rvi-tl-chip.is-on .rvi-tl-chip__check::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 7px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+.rvi-tl-chip__label {
   font-size: 12px;
   font-weight: 500;
-  color: var(--rvi-text-dim);
-  width: 52px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.rvi-timeline__title {
-  flex: 1 1 0;
-  min-width: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--rvi-text);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
 }
-.rvi-timeline__title--placeholder { color: var(--rvi-text-dim); }
+.rvi-tl-chip.is-on .rvi-tl-chip__label { color: #fff; }
 
-.rvi-timeline__distance {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--rvi-text);
-  text-align: right;
-  min-width: 40px;
-  flex-shrink: 0;
+/* ---- Tableau row ---- */
+
+.rvi-tl-table__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.rvi-timeline__actions {
+.rvi-tl-table__check {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+}
+.rvi-tl-table__check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.rvi-tl-table__check-box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 3px;
+  display: inline-block;
+  position: relative;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rvi-tl-table__check input:checked + .rvi-tl-table__check-box {
+  background: var(--rvi-red-accent);
+  border-color: var(--rvi-red-accent);
+}
+.rvi-tl-table__check input:checked + .rvi-tl-table__check-box::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 7px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+.rvi-tl-table__check-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.64);
+  white-space: nowrap;
+}
+
+.rvi-tl-table__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: var(--rvi-radius-md);
+  max-width: 104px;
+  min-width: 64px;
+  height: 28px;
+  box-sizing: border-box;
+}
+.rvi-tl-table__field input {
+  all: unset;
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.rvi-tl-table__field input::-webkit-outer-spin-button,
+.rvi-tl-table__field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.rvi-tl-table__field input:disabled { color: rgba(255, 255, 255, 0.32); }
+.rvi-tl-table__field-suffix {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.56);
   flex-shrink: 0;
 }
-.rvi-timeline__action {
+
+.rvi-tl-table__columns {
   all: unset;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--rvi-radius-md);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--rvi-text);
-  border-radius: 4px;
   cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  margin-left: auto;
 }
-.rvi-timeline__action:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.06);
+.rvi-tl-table__columns:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.16);
 }
-.rvi-timeline__action.is-on { opacity: 1; color: var(--rvi-red-accent); }
 
-.rvi-timeline__add {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-  min-height: 30px;
-}
-.rvi-timeline__add:hover { background: rgba(255, 255, 255, 0.1); }
+/* ---- Divider between Tableau and the list ---- */
 
-.rvi-timeline__add-text {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--rvi-text);
+.rvi-tl-divider {
+  border: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0;
+  flex-shrink: 0;
 }

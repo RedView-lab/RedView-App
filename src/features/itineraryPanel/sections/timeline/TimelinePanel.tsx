@@ -10,6 +10,16 @@ import type { TimelineItem, TimelineRailConfig, TimelineView } from '../../types
 import { TimelineHeader } from './TimelineHeader';
 import { TimelineSheetView } from './TimelineSheetView';
 import { TimelineTimelineView } from './TimelineTimelineView';
+import {
+  TimelineFilters,
+  type TimelineFilterState,
+  DEFAULT_TIMELINE_FILTER,
+} from './TimelineFilters';
+import {
+  TimelineTableSettings,
+  type TimelineTableSettingsState,
+  DEFAULT_TIMELINE_TABLE_SETTINGS,
+} from './TimelineTableSettings';
 
 interface TimelinePanelProps {
   items: TimelineItem[];
@@ -52,6 +62,15 @@ export function TimelinePanel({
   // Selection is local UI state; parent is notified via onSelectionChange.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
 
+  // Filter + table-settings state — local for now; the wiring to backend
+  // will move these into the project state once persistence lands.
+  const [filters, setFilters] = useState<TimelineFilterState>(
+    DEFAULT_TIMELINE_FILTER,
+  );
+  const [tableSettings, setTableSettings] = useState<TimelineTableSettingsState>(
+    DEFAULT_TIMELINE_TABLE_SETTINGS,
+  );
+
   const handleToggleSelect = (id: string, selected: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -61,6 +80,15 @@ export function TimelinePanel({
       return next;
     });
   };
+
+  // Apply filter chips to the items list before rendering.
+  const visibleItems = items.filter((it) => {
+    if (it.kind === 'start' || it.kind === 'end') return filters.etape;
+    if (it.kind === 'waypoint') return filters.waypoint;
+    if (it.kind === 'pause') return filters.pause;
+    // water + supermarket + future POI variants
+    return filters.poi;
+  });
 
   return (
     <section
@@ -78,20 +106,28 @@ export function TimelinePanel({
 
       <div className="rvi-timeline__body">
         {view === 'sheet' ? (
-          <TimelineSheetView
-            items={items}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onToggleVisibility={onToggleItem}
-            onToggleFavorite={onFavoriteItem}
-            onRemove={onRemoveItem}
-            onAdd={onAdd}
-            onOpenKindMenu={onOpenKindMenu}
-            onSelectPlace={onSelectPlace}
-          />
+          <>
+            <TimelineFilters value={filters} onChange={setFilters} />
+            <TimelineTableSettings
+              value={tableSettings}
+              onChange={setTableSettings}
+            />
+            <hr className="rvi-tl-divider" aria-hidden />
+            <TimelineSheetView
+              items={visibleItems}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleVisibility={onToggleItem}
+              onToggleFavorite={onFavoriteItem}
+              onRemove={onRemoveItem}
+              onAdd={onAdd}
+              onOpenKindMenu={onOpenKindMenu}
+              onSelectPlace={onSelectPlace}
+            />
+          </>
         ) : (
           <TimelineTimelineView
-            items={items}
+            items={visibleItems}
             config={railConfig}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}
