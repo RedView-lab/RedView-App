@@ -29,7 +29,7 @@ export function PanelSelect<T extends string = string>({
     <div className={`rvi-select${wide ? ' rvi-select--wide' : ''}`}>
       {startAdornment}
       <span className="rvi-select__value">{label}</span>
-      <IconChevronDown size={16} className="rvi-select__chevron" />
+      <IconChevronDown size={20} className="rvi-select__chevron" />
       <select
         aria-label={ariaLabel}
         className="rvi-select__native"

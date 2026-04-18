@@ -74,6 +74,7 @@ export function createDefaultItinerary(
       turns: 'avoid',
       maxSlopePercent: 20,
       cities: 'tolerate',
+      applyToAllItineraries: false,
     },
     rhythm: {
       startDate: null,

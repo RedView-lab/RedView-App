@@ -16,11 +16,32 @@
   width: 100%;
 }
 
-/* ── Labeled slider (- [track] +) ────────────────────────────── */
+/* ── Priorities grid — Figma 1697:23227 ──────────────────────────
+   Two vertical columns (Durée+Distance | Dénivelé+Tranquilité) with
+   8px column gap and 2px row gap inside each column. */
+.rvi-priorities {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+.rvi-priorities__col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ── Types de route rows — Figma 1697:23276…1697:23321 ──────────
+   Five horizontal rows of two cells. The generic `.rvi-row` already
+   handles gap-8 + flex-1 distribution via `.rvi-row > .rvi-lfield`. */
+
+/* ── Labeled slider (- [track] +) — Figma 1697:23229 ─────────── */
 .rvi-sfield {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px; /* Figma 1697:23229 gap-[8px] */
   height: 24px;
   padding: 3px 0;
   width: 100%;
@@ -30,7 +51,7 @@
   flex: 1 1 0;
   min-width: 0;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500; /* Medium — Figma 1697:23230 (Rethink_Sans:Medium) */
   color: var(--rvi-text);
   opacity: 0.64;
   overflow: hidden;
@@ -43,8 +64,8 @@
   align-items: center;
   gap: 4px;
   flex: 1 1 0;
-  min-width: 100px;
-  max-width: 140px;
+  min-width: 80px; /* Figma 1697:23231 min-w-[80px] */
+  max-width: 140px; /* Figma 1697:23231 max-w-[140px] */
 }
 
 .rvi-sfield__sign {
@@ -52,8 +73,6 @@
   font-weight: 600;
   color: var(--rvi-text);
   flex-shrink: 0;
-  width: 6px;
-  text-align: center;
 }
 
 .rvi-slider {
@@ -122,7 +141,7 @@
   min-width: 32px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
-  font-weight: 600; /* SemiBold — Figma 1251:19618 */
+  font-weight: 500; /* Medium — Figma 1697:23278 (Rethink_Sans:Medium) */
   color: var(--rvi-text);
   opacity: 0.64;
   overflow: hidden;
@@ -131,19 +150,22 @@
 }
 
 .rvi-select {
+  /* Default (cell) variant — Figma 1697:23279.
+     Flex:1 cell, clamped to max 104 / min 80 so 2 cells fit on a row. */
   position: relative;
-  flex-shrink: 0;
-  width: 100px;
+  flex: 1 1 0;
+  min-width: 80px;
+  max-width: 104px;
   height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 8px 5px 12px;
+  gap: 4px; /* Figma gap-[4px] */
+  padding: 5px 6px 5px 10px; /* Figma pl-10 pr-6 py-5 */
   border: 1px solid var(--rvi-border);
   border-radius: var(--rvi-radius-sm);
   color: var(--rvi-text);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 600; /* SemiBold — Figma 1697:23280 */
   background: transparent;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -151,7 +173,15 @@
 .rvi-select:hover {
   background: rgba(255, 255, 255, 0.04);
 }
-.rvi-select--wide { width: 100%; min-width: 0; }
+/* Wide variant — ProfileBar "Gravel (défaut)", Figma 1697:23208.
+   Takes all available width, interior gap 10, padding 6/6/6/10. */
+.rvi-select--wide {
+  max-width: none;
+  min-width: 0;
+  gap: 10px;
+  padding: 6px 6px 6px 10px;
+  justify-content: center;
+}
 .rvi-select__value {
   flex: 1 1 0;
   min-width: 0;
@@ -181,9 +211,12 @@
 
 /* ── Input / chip input ──────────────────────────────────────── */
 .rvi-input {
+  /* Figma 1697:23324 — Pentes max. cell.
+     Flex:1 cell, clamped to max 104 / min 80, padding pl-12 pr-8 py-5. */
   position: relative;
-  flex-shrink: 0;
-  width: 100px;
+  flex: 1 1 0;
+  min-width: 80px;
+  max-width: 104px;
   height: 30px;
   display: inline-flex;
   align-items: center;
@@ -485,5 +518,8 @@
   .rvi-grid-2 { grid-template-columns: 1fr; }
   .rvi-lfield { flex-wrap: wrap; }
   .rvi-select,
-  .rvi-input { width: 100%; }
+  .rvi-input {
+    max-width: 100%;
+    width: 100%;
+  }
 }

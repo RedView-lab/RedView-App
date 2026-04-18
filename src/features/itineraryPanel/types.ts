@@ -38,6 +38,11 @@ export interface RoadTypesState {
   /** Max slope in percent (0–100). */
   maxSlopePercent: number;
   cities: RoadPreference;
+  /**
+   * When true, the current road-type settings are applied to every itinerary
+   * of the project. Figma 1705:23497 (Appliquer à tout les itinéraires).
+   */
+  applyToAllItineraries: boolean;
 }
 
 /** One POI type row: enabled + search radius (metres, or null when disabled). */
