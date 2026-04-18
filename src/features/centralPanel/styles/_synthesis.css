@@ -28,7 +28,12 @@
   transition: background-color 0.15s ease;
 }
 
-.rvc-synthesis__row--header,
+/* Header row: taller, no dark gray frame (Figma update). */
+.rvc-synthesis__row--header {
+  background: transparent;
+  min-height: 44px;
+}
+
 .rvc-synthesis__row--data.is-selected {
   background: rgba(0, 0, 0, 0.6);
 }

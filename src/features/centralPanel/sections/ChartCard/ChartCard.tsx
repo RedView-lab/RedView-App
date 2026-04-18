@@ -341,12 +341,17 @@ export function ChartCard({
               );
             })}
 
-            {/* Floating tooltip cards (top-right of the plot area). */}
-            <ChartTooltipStack
-              itineraries={itineraries}
-              maxCards={3}
-              hoverX={hoverX}
-            />
+            {/* Floating tooltip cards — only on hover, anchored top-right of
+               the white guide line. */}
+            {hoverX !== null && plotW > 0 ? (
+              <ChartTooltipStack
+                itineraries={itineraries}
+                maxCards={3}
+                hoverX={hoverX}
+                hoverPx={xScale.toPx(hoverX)}
+                plotW={plotW}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -509,24 +514,38 @@ function DropletMarker({ x, y }: { x: number; y: number }) {
 
 interface TooltipStackProps {
   itineraries: CentralPanelItinerary[];
-  hoverX: number | null;
+  hoverX: number;
+  hoverPx: number;
+  plotW: number;
   maxCards: number;
 }
 
 /**
- * Per the Figma the 3 cards are always-visible snapshots (one per visible
- * itinerary). When the user hovers over the chart we override the snapshot
- * distance with the hover position, otherwise we fall back to the route
- * total.
+ * Hover-only tooltip stack. Anchored to the right of the white guide line;
+ * flips to the left if there isn't enough room in the plot area.
  */
-function ChartTooltipStack({ itineraries, hoverX, maxCards }: TooltipStackProps) {
+function ChartTooltipStack({
+  itineraries,
+  hoverX,
+  hoverPx,
+  plotW,
+  maxCards,
+}: TooltipStackProps) {
   const visible = itineraries
     .filter((it) => it.visible && it.primary && it.primary.length > 0)
     .slice(0, maxCards);
   if (visible.length === 0) return null;
 
+  // Rough width estimate so we can flip when overflowing the right edge.
+  const estWidth = visible.length * 116 + 8;
+  const gap = 6;
+  const flip = hoverPx + gap + estWidth > plotW;
+  const style: CSSProperties = flip
+    ? { right: Math.max(4, plotW - hoverPx + gap), top: 4 }
+    : { left: hoverPx + gap, top: 4 };
+
   return (
-    <div className="rvc-card__tt">
+    <div className="rvc-card__tt" style={style}>
       {visible.map((it) => {
         const last = it.primary?.[it.primary.length - 1];
         const total = last?.x ?? 0;
