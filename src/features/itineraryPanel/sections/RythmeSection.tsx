@@ -55,7 +55,7 @@ export function RythmeSection({
 
       {/* Départ / Heure */}
       <div className="rvi-row">
-        <div className="rvi-lfield" style={{ flex: 1 }}>
+        <div className="rvi-lfield">
           <span className="rvi-lfield__label">Départ :</span>
           <label className="rvi-datechip">
             <span className="rvi-datechip__icon">
@@ -73,7 +73,7 @@ export function RythmeSection({
             />
           </label>
         </div>
-        <div className="rvi-lfield" style={{ flex: 1 }}>
+        <div className="rvi-lfield">
           <span className="rvi-lfield__label">Heure :</span>
           <label className="rvi-datechip">
             <span className="rvi-datechip__icon">
@@ -100,14 +100,14 @@ export function RythmeSection({
           trailing={
             <button
               type="button"
-              className="rvi-datechip"
-              style={{ paddingLeft: 4 }}
+              className="rvi-uploadchip"
               onClick={onUploadFit}
+              aria-label="Uploader un fichier .fit"
             >
-              <span className="rvi-datechip__icon">
+              <span className="rvi-uploadchip__icon">
                 <IconUpload size={8} />
               </span>
-              <span style={{ fontSize: 12, opacity: 0.8 }}>Upload .fit</span>
+              <span className="rvi-uploadchip__text">Upload .fit</span>
             </button>
           }
         />

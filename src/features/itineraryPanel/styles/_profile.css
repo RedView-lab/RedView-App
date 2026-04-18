@@ -57,10 +57,14 @@
 
 .rvi-redbtn--full {
   width: 100%;
-  height: 32px;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 8px 10px 8px 8px;
+  height: auto;
+  min-height: 32px;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500; /* Medium — Figma 1695:22642 (Rethink_Sans:Medium) */
+  line-height: normal;
+  padding: 7px 10px 7px 8px;
+  gap: 4px;
 }
 
 .rvi-redbtn--sm {
