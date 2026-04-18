@@ -178,6 +178,7 @@ export function ItineraryPanelContainer({
   const profileId = active?.profileId ?? 'gravel-default';
 
   useEffect(() => {
+    console.log('[BRouter effect]', { hasMap: !!map, isMapLoaded, startKey, endKey, viaKey, profileId });
     if (!map || !isMapLoaded) return;
     if (!startKey || !endKey) {
       if (isRouteOnMap(map)) {
@@ -211,6 +212,7 @@ export function ItineraryPanelContainer({
     })
       .then((route) => {
         if (ctrl.signal.aborted) return;
+        console.log('[BRouter ok]', { points: route.coordinates.length, distanceM: route.distanceM });
         try {
           addRoute(map, route.coordinates, [
             { lat: startLat, lon: startLon, kind: 'start' },
@@ -218,6 +220,7 @@ export function ItineraryPanelContainer({
           ]);
           fitToRoute(map, route.coordinates);
         } catch (e) {
+          console.error('[BRouter addRoute fail]', e);
           setRouteError(e instanceof Error ? e.message : 'Erreur d\u2019affichage');
           return;
         }
@@ -246,6 +249,7 @@ export function ItineraryPanelContainer({
       })
       .catch((e: unknown) => {
         if ((e as { name?: string }).name === 'AbortError') return;
+        console.error('[BRouter fetch fail]', e);
         setRouteError(e instanceof Error ? e.message : 'Erreur BRouter');
       })
       .finally(() => {
