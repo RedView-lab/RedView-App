@@ -300,15 +300,16 @@
 }
 
 .rvi-chip-input {
+  /* Fixed 64 px so chips line up column-wise across every row in a
+     CheckboxField stack, regardless of content width (FTP "300" vs
+     "95 kg" vs "100%"). Label absorbs the remaining width via flex. */
   background: var(--rvi-bg-chip);
   border: none;
   border-radius: 6px;
   padding: 6px 8px;
   height: 28px;
   flex-shrink: 0;
-  min-width: 64px;
-  max-width: 104px;
-  width: auto;
+  width: 64px;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
@@ -322,6 +323,9 @@
   color: var(--rvi-text);
   font-family: inherit;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rvi-chip-input__native::placeholder {
   color: var(--rvi-text-faint);
@@ -460,12 +464,9 @@
 }
 .rvi-cfield__label {
   flex: 1 1 0;
-  /* Figma I1695:22390;855:19882;1251:19160 prescribes min-w-[32px]. With the
-     panel resize floor clamped to 320 px (content = 296 px), the two cells
-     each get 144 px, which fits 16(checkbox)+4+32(label-min)+4+64(chip-min)=
-     120 px comfortably — i.e. the Figma minimum never forces overflow at the
-     smallest resize stop. */
-  min-width: 32px;
+  /* min-width:0 lets the label ellipsis ("Mét…") so the trailing chip
+     stays column-aligned even when the panel is at its resize floor. */
+  min-width: 0;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — Figma I855:19882;1251:19160 (Rethink_Sans:Medium) */
