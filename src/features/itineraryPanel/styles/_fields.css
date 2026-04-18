@@ -138,7 +138,7 @@
 }
 .rvi-lfield__label {
   flex: 1 1 0;
-  min-width: 32px;
+  min-width: 0; /* allow ellipsis "Mai…" when row is narrow */
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — Figma 1697:23278 (Rethink_Sans:Medium) */
@@ -151,10 +151,11 @@
 
 .rvi-select {
   /* Default (cell) variant — Figma 1697:23279.
-     Flex:1 cell, clamped to max 104 / min 80 so 2 cells fit on a row. */
+     Flex:1 cell, clamped to max 104. min-width:0 so the value text can
+     ellipsis-truncate ("Prio…") instead of breaking the row layout. */
   position: relative;
   flex: 1 1 0;
-  min-width: 80px;
+  min-width: 0;
   max-width: 104px;
   height: 30px;
   display: inline-flex;
@@ -193,29 +194,88 @@
   flex-shrink: 0;
   color: var(--rvi-text);
 }
-.rvi-select__native {
-  appearance: none;
+.rvi-select__trigger {
+  all: unset;
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px 5px 10px;
   cursor: pointer;
   color: var(--rvi-text);
-  background: var(--rvi-bg-row-alt);
+  font: inherit;
+  min-width: 0;
 }
-.rvi-select__native option {
-  background: var(--rvi-bg-row-alt);
-  color: var(--rvi-text);
+.rvi-select__trigger:focus-visible {
+  outline: 2px solid var(--rvi-red, #c8102e);
+  outline-offset: -2px;
+  border-radius: var(--rvi-radius-sm);
+}
+
+/* ── Dropdown menu (Figma DROPDOWN — node 1710:44458) ───────── */
+.rvi-select__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 104px;
+  min-width: 100%;
+  overflow: hidden;
+  border-radius: 5px;
+  box-shadow: 2px 2px 8px 0 rgba(0, 0, 0, 0.24);
+  /* Figma fills: black base + 16% white overlay (8% on the selected row). */
+  background: linear-gradient(0deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.16)), #000;
+}
+.rvi-select__option {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  min-width: 80px;
+  padding: 6px 6px 6px 10px;
+  color: #fff;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  cursor: pointer;
+}
+.rvi-select__option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.rvi-select__option.is-selected {
+  /* Figma overlay 0.08 white on top of black base => slightly lighter row. */
+  background: linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.08),
+    rgba(0, 0, 0, 0.08)
+  );
+}
+.rvi-select__option-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-select__option-check {
+  flex-shrink: 0;
+  color: #fff;
 }
 
 /* ── Input / chip input ──────────────────────────────────────── */
 .rvi-input {
   /* Figma 1697:23324 — Pentes max. cell.
-     Flex:1 cell, clamped to max 104 / min 80, padding pl-12 pr-8 py-5. */
+     Flex:1 cell, clamped to max 104. min-width:0 keeps the row aligned
+     when the panel is narrow (input contents truncate cleanly). */
   position: relative;
   flex: 1 1 0;
-  min-width: 80px;
+  min-width: 0;
   max-width: 104px;
   height: 30px;
   display: inline-flex;
