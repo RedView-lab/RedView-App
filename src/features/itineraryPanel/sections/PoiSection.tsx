@@ -33,19 +33,27 @@ interface PoiSectionProps {
 const POI_ROWS: { key: PoiCategory; label: string }[][] = [
   [
     { key: 'fountains', label: 'Fontaines' },
-    { key: 'bakeries', label: 'Boulangeries' },
+    { key: 'toilets', label: 'Toilettes' },
   ],
   [
     { key: 'supermarkets', label: 'Supermarchés' },
-    { key: 'restaurants', label: 'Restaurants' },
+    { key: 'gasStations', label: 'Station Service' },
+  ],
+  [
+    { key: 'bakeries', label: 'Boulangerie' },
+    { key: 'fastFood', label: 'Fast-food' },
+  ],
+  [
+    { key: 'cafes', label: 'Café' },
+    { key: 'bars', label: 'Bar' },
+  ],
+  [
+    { key: 'restaurants', label: 'Restaurant' },
+    { key: 'bikeShops', label: 'Magasin de vélo' },
   ],
   [
     { key: 'hotels', label: 'Hôtels' },
     { key: 'refuges', label: 'Refuges' },
-  ],
-  [
-    { key: 'bars', label: 'Bar' },
-    { key: 'passes', label: 'Cols' },
   ],
 ];
 
@@ -89,7 +97,6 @@ export function PoiSection({
   poiCount = 0,
   error = null,
   disabled = false,
-  disabledReason = null,
 }: PoiSectionProps) {
   const buttonDisabled = disabled || loading;
   const pct =
@@ -173,9 +180,7 @@ export function PoiSection({
         <div className="rvi-poi-msg rvi-poi-msg--error" role="alert">
           {error}
         </div>
-      ) : disabled && disabledReason ? (
-        <div className="rvi-poi-msg rvi-poi-msg--hint">{disabledReason}</div>
       ) : null}
     </div>
   );
-}
+}

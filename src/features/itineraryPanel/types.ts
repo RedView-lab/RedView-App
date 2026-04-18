@@ -54,22 +54,32 @@ export interface PoiEntry {
 
 export type PoiCategory =
   | 'fountains'
-  | 'bakeries'
+  | 'toilets'
   | 'supermarkets'
+  | 'gasStations'
+  | 'bakeries'
+  | 'fastFood'
+  | 'cafes'
+  | 'bars'
   | 'restaurants'
+  | 'bikeShops'
   | 'hotels'
   | 'refuges'
-  | 'bars'
   | 'passes';
 
 export interface PoiState {
   fountains: PoiEntry;
-  bakeries: PoiEntry;
+  toilets: PoiEntry;
   supermarkets: PoiEntry;
+  gasStations: PoiEntry;
+  bakeries: PoiEntry;
+  fastFood: PoiEntry;
+  cafes: PoiEntry;
+  bars: PoiEntry;
   restaurants: PoiEntry;
+  bikeShops: PoiEntry;
   hotels: PoiEntry;
   refuges: PoiEntry;
-  bars: PoiEntry;
   passes: PoiEntry;
   /** "Affiner les résultats (beta)" toggle. */
   refineResults: boolean;

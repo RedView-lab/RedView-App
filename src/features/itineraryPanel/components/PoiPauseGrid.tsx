@@ -21,16 +21,20 @@ export interface PoiPauseGridProps {
   onChange: (next: Record<PoiCategory, number | null>) => void;
 }
 
-/** Display order + French labels, matching Figma 1695:22638. */
+/** Display order + French labels, mirroring the POI section grid. */
 const ROWS: ReadonlyArray<[PoiCategory, string, number]> = [
   ['fountains', 'Fontaines', 5],
-  ['bakeries', 'Boulangeries', 15],
+  ['toilets', 'Toilettes', 5],
   ['supermarkets', 'Supermarchés', 15],
-  ['restaurants', 'Restaurants', 40],
+  ['gasStations', 'Station Service', 10],
+  ['bakeries', 'Boulangerie', 15],
+  ['fastFood', 'Fast-food', 20],
+  ['cafes', 'Café', 15],
+  ['bars', 'Bar', 30],
+  ['restaurants', 'Restaurant', 40],
+  ['bikeShops', 'Magasin de vélo', 15],
   ['hotels', 'Hôtels', 240],
   ['refuges', 'Refuges', 40],
-  ['bars', 'Bar', 30],
-  ['passes', 'Cols', 10],
 ];
 
 export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {

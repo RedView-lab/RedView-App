@@ -48,7 +48,9 @@
 }
 
 /* Figma 1716:52615 — Catégories button.
-   Spec: h-32, gap-8, px-8 py-7, rounded-6, border-[0.5px] solid white. */
+   Spec: h-32, gap-8, px-8 py-7, rounded-6. The Figma border spec is
+   0.5px but on standard DPI that snaps up to a visual 1px; per design
+   feedback we halve it again (0.25px) so the stroke looks hairline. */
 .rvi-categories-btn {
   all: unset;
   display: inline-flex;
@@ -56,7 +58,7 @@
   gap: 8px;
   height: 32px;
   padding: 7px 8px;
-  border: 0.5px solid #ffffff;
+  border: 0.25px solid #ffffff;
   border-radius: var(--rvi-radius-md);
   color: var(--rvi-text);
   cursor: pointer;
