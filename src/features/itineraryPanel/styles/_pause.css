@@ -129,3 +129,95 @@
   outline: 2px solid rgba(255, 96, 96, 0.6);
   outline-offset: 1px;
 }
+
+/* ============================================================================
+   POI-favori pause grid (Rythme section).
+   Pixel-perfect implementation of Figma node 1695:22638 (PacingBreaksExt —
+   Variant2, "Ajouter des pauses à chaque POI favori" expanded state).
+
+   Grid spec (top-level container: w_full, gap 8 vertical):
+     • Row ............... horizontal auto-layout, gap 8, align center, w_full.
+     • Cell .............. flex: 1 0 0, gap 4, align center, min-w 0. Contains:
+         – Checkbox ...... 16×16 (.rvi-checkbox).
+         – Label ......... Rethink Sans 13 Medium white, opacity .64,
+                           flex: 1, min-w 32, ellipsis.
+         – Chip .......... hug height, max-w 104, min-w 64, radius 6,
+                           padding 6/8, bg rgba(255,255,255,.08). Inner text
+                           Rethink Sans 14 SemiBold white, min-w 24, max-w 64,
+                           width 48, left-aligned.
+     • Disabled row ...... opacity .5 (border-only checkbox shown via .is-off).
+============================================================================ */
+
+.rvi-poipause-grid {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvi-poipause-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvi-poipause-cell {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  transition: opacity 0.15s ease;
+}
+.rvi-poipause-cell.is-off {
+  opacity: 0.5;
+}
+
+.rvi-poipause-cell__label {
+  flex: 1 1 0;
+  min-width: 32px;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500; /* Medium — matches Figma Rethink_Sans:Medium */
+  line-height: normal;
+  color: var(--rvi-text);
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvi-poipause-cell__chip {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  min-width: 64px;
+  max-width: 104px;
+  display: inline-flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.rvi-poipause-cell__native {
+  all: unset;
+  display: block;
+  box-sizing: border-box;
+  width: 48px;
+  min-width: 24px;
+  max-width: 64px;
+  text-align: left;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600; /* SemiBold */
+  line-height: normal;
+  color: var(--rvi-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-poipause-cell__native:disabled {
+  cursor: not-allowed;
+}

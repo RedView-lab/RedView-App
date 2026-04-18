@@ -96,6 +96,14 @@ export interface RhythmState {
   surfacesWeight: number;
   pauseAtFavoritePois: boolean;
   /**
+   * Per-POI pause durations (in minutes). Displayed in the expanded grid
+   * below the "Ajouter des pauses à chaque POI favori" toggle (Figma
+   * 1695:22638 Variant2). A value of `null` means the user has unchecked
+   * that POI category — it still appears in the grid (greyed out) but is
+   * excluded from routing. Keys mirror `PoiCategory`.
+   */
+  poiPauseDurations: Record<PoiCategory, number | null>;
+  /**
    * Master toggle for "pauses par interval". When false the rows are kept in
    * `pauseIntervals` but the routing engine ignores them. When true and the
    * list is empty, the section auto-creates a single default row.

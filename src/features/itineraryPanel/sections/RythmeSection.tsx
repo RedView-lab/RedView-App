@@ -1,6 +1,7 @@
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
 import { PauseIntervalList } from '../components/PauseIntervalList';
+import { PoiPauseGrid } from '../components/PoiPauseGrid';
 import {
   IconCalendar,
   IconClock,
@@ -210,6 +211,13 @@ export function RythmeSection({
         label="Ajouter des pauses à chaque POI favori"
         trailing={<IconInfo size={14} />}
       />
+
+      {rhythm.pauseAtFavoritePois ? (
+        <PoiPauseGrid
+          durations={rhythm.poiPauseDurations}
+          onChange={(next) => onChange?.('poiPauseDurations', next)}
+        />
+      ) : null}
 
       <div className="rvi-divider" />
 
