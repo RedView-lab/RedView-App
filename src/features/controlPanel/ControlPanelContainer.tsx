@@ -16,6 +16,7 @@ import { useLabels } from '@/features/labels/hooks/useLabels';
 import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
+import { useSunlight } from '@/features/sunlight';
 
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
@@ -257,6 +258,14 @@ export function ControlPanelContainer({
   const [snowEnabled, setSnowEnabled] = useState(false);
   const [sunlightState, setSunlightState] = useState(DEFAULT_CONTROL_PANEL_STATE.sunlight);
 
+  // Drives Mapbox sun + atmosphere; returns sunrise/sunset for the current
+  // map center and date so the SunlightSection panel can display them.
+  const sunlightTimes = useSunlight(isMapLoaded ? map : null, isMapLoaded, {
+    enabled: sunlightState.enabled,
+    date: sunlightState.date,
+    time: sunlightState.time,
+  });
+
   // ── Build ControlPanel state ───────────────────────────────────────
   const state: ControlPanelState = useMemo(() => {
     const base = DEFAULT_CONTROL_PANEL_STATE;
@@ -293,7 +302,11 @@ export function ControlPanelContainer({
       weather: weatherState,
       wind: { enabled: windEnabled },
       snow: { enabled: snowEnabled },
-      sunlight: sunlightState,
+      sunlight: {
+        ...sunlightState,
+        sunriseTime: sunlightTimes.sunriseTime,
+        sunsetTime: sunlightTimes.sunsetTime,
+      },
     };
   }, [
     cachedTiles,
@@ -309,6 +322,7 @@ export function ControlPanelContainer({
     weatherState,
     snowEnabled,
     sunlightState,
+    sunlightTimes,
     dynamicCategories,
   ]);
 
