@@ -3,8 +3,6 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { ItineraryPanel } from './ItineraryPanel';
 import { AddItineraryDialog } from './components/AddItineraryDialog';
-import { ExpertProfileEditor } from './expert/ExpertProfileEditor';
-import { createDefaultExpertState } from './expert/defaults';
 import { useItineraryPoiMap } from './hooks/useItineraryPoiMap';
 import { poiFeaturesToTimelineItems } from './lib/poi-to-timeline';
 import {
@@ -40,7 +38,6 @@ import type {
   RoadTypesState,
   TimelineView,
 } from './types';
-import type { ExpertProfileState } from './expert/types';
 
 interface ItineraryPanelContainerProps {
   /** Mapbox map instance (provided by the Dashboard). */
@@ -76,7 +73,7 @@ export function ItineraryPanelContainer({
     createDefaultProject(),
   );
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [expertOpen, setExpertOpen] = useState(false);
+
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(
     null,
   );
@@ -243,6 +240,11 @@ export function ItineraryPanelContainer({
   // expert overrides) actually changes how BRouter computes costs, the
   // hash flips and the effect re-runs. Otherwise we sit on the cache.
   const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
+  // Stabilise deps: only recompute when the actual BRF inputs change,
+  // not on every project update (e.g. storing distanceKm/gpxRoute back).
+  const prioritiesJson = active ? JSON.stringify(active.priorities) : '';
+  const roadTypesJson = active ? JSON.stringify(active.roadTypes) : '';
+  const expertJson = active ? JSON.stringify(active.expertProfile) : '';
   const brfHash = useMemo(() => {
     if (!active) return '';
     try {
@@ -267,7 +269,8 @@ export function ItineraryPanelContainer({
       console.warn('[BRouter] buildBrfProfile threw:', e);
       return '';
     }
-  }, [active]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prioritiesJson, roadTypesJson, expertJson]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -515,8 +518,7 @@ export function ItineraryPanelContainer({
       canUndo={false}
       canRedo={false}
       onSaveProfile={() => {}}
-      onOpenExpertEditor={() => setExpertOpen(true)}
-      expertEnabled={active?.expertProfile?.enabled === true}
+
       onChangePriority={(key: keyof PrioritiesState, value) =>
         updateActive((it) => {
           it.priorities[key] = value;
@@ -620,16 +622,7 @@ export function ItineraryPanelContainer({
           if (id) setPendingCorridorFor(id);
         }}
       />
-      <ExpertProfileEditor
-        open={expertOpen}
-        state={active?.expertProfile ?? createDefaultExpertState()}
-        onChange={(next: ExpertProfileState) =>
-          updateActive((it) => {
-            it.expertProfile = next;
-          })
-        }
-        onClose={() => setExpertOpen(false)}
-      />
+
     </>
   );
 }

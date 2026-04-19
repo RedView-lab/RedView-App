@@ -126,8 +126,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
               canUndo={canUndo}
               canRedo={canRedo}
               onSave={onSaveProfile}
-              onOpenExpert={onOpenExpertEditor}
-              expertActive={expertEnabled}
+
             />
             <TracageSection
               priorities={active.priorities}

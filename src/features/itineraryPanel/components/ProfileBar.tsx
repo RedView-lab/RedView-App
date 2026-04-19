@@ -16,8 +16,6 @@ interface ProfileBarProps {
   canUndo?: boolean;
   canRedo?: boolean;
   onSave?: () => void;
-  onOpenExpert?: () => void;
-  expertActive?: boolean;
 }
 
 export function ProfileBar({
@@ -29,8 +27,6 @@ export function ProfileBar({
   canUndo,
   canRedo,
   onSave,
-  onOpenExpert,
-  expertActive,
 }: ProfileBarProps) {
   return (
     <div className="rvi-profile">
@@ -43,16 +39,6 @@ export function ProfileBar({
           ariaLabel="Profil de routage"
         />
       </div>
-      {onOpenExpert ? (
-        <button
-          type="button"
-          className={`rvi-expert-pillbtn${expertActive ? ' is-active' : ''}`}
-          onClick={onOpenExpert}
-          title="Mode Expert — personnaliser tous les paramètres BRouter"
-        >
-          {expertActive ? '★ Expert' : 'Expert'}
-        </button>
-      ) : null}
       <button
         type="button"
         className="rvi-ghostbtn"
