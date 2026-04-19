@@ -24,12 +24,16 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
 // Produces an interpolate or step expression mapping slope degrees → RGBA.
 // The input is the decoded raster value via `raster-color-mix`.
 
-// raster-value is normalised to [0, 1] by raster-color-range.
-// With range [0, MAX_SLOPE_DEG], normalised = deg / MAX_SLOPE_DEG.
+// `["raster-value"]` returns the value decoded by raster-color-mix and
+// clamped to raster-color-range, **in the same units as the range**
+// (NOT normalised to [0, 1]). With our setup the range is [0, 90] degrees,
+// so stop positions in the interpolate/step expression must also be in
+// degrees — otherwise any pixel above ~1° lands past the last stop and the
+// whole tile renders with the final band's color.
 export const MAX_SLOPE_DEG = 90;
 
-function degNorm(deg: number): number {
-  return deg / MAX_SLOPE_DEG;
+function degStop(deg: number): number {
+  return deg;
 }
 
 /**
@@ -60,7 +64,7 @@ export function buildSlopeColorExpression(
     // color from there until the next breakpoint.
     const expr: unknown[] = ['step', ['raster-value'], 'transparent'];
     for (const cat of categories) {
-      expr.push(degNorm(cat.minDeg), colorOf(cat));
+      expr.push(degStop(cat.minDeg), colorOf(cat));
     }
     return expr;
   }
@@ -71,12 +75,12 @@ export function buildSlopeColorExpression(
   // than a hard cut and consistent with the gradient ethos.
   const expr: unknown[] = ['interpolate', ['linear'], ['raster-value']];
   for (const cat of categories) {
-    expr.push(degNorm(cat.minDeg), colorOf(cat));
+    expr.push(degStop(cat.minDeg), colorOf(cat));
   }
   // Extend the last color out to 90° so we never get a black/transparent tail
   const last = categories[categories.length - 1];
   if (last.maxDeg < MAX_SLOPE_DEG) {
-    expr.push(1, colorOf(last));
+    expr.push(degStop(MAX_SLOPE_DEG), colorOf(last));
   }
 
   return expr;
