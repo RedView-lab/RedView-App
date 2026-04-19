@@ -131,9 +131,8 @@
   height: 30px;
   min-width: 80px;
   padding: 6px 6px 6px 10px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.24)),
-              linear-gradient(90deg, #000, #000);
-  color: var(--rvc-text);
+  background: #3d3d3d;
+  color: #ffffff;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -141,13 +140,11 @@
 }
 
 .rvc-select__option.is-selected {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.16)),
-              linear-gradient(90deg, #000, #000);
+  background: #0f0f0f;
 }
 
 .rvc-select__option:hover:not(.is-selected) {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0.30)),
-              linear-gradient(90deg, #000, #000);
+  background: #4a4a4a;
 }
 
 .rvc-select__option-label {
@@ -160,7 +157,7 @@
 
 .rvc-select__option-check {
   flex-shrink: 0;
-  color: var(--rvc-text);
+  color: #ffffff;
 }
 
 .rvc-slider {
