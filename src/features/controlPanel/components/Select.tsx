@@ -1,4 +1,5 @@
-import { type ReactNode, useState, useRef, useEffect } from 'react';
+import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { IconChevronDown, IconCheck } from '../icons';
 
 interface SelectOption<T extends string = string> {
@@ -28,6 +29,7 @@ export function Select<T extends string = string>({
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -38,21 +40,32 @@ export function Select<T extends string = string>({
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  return (
-    <div
-      ref={ref}
-      className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}`}
-      style={width !== undefined ? { width } : undefined}
-      onClick={() => setOpen((v) => !v)}
-    >
-      {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
-      <span className="rvc-select__value">
-        {options.find((o) => o.value === value)?.label ?? value}
-      </span>
-      <IconChevronDown size={20} className="rvc-select__chevron" />
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const dropdownHeight = options.length * 30;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const placeAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow;
+    setDropPos({
+      top: placeAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      left: rect.left,
+      width: Math.max(140, rect.width),
+    });
+  }, [open, options.length]);
 
-      {open && (
-        <div className="rvc-select__dropdown">
+  const dropdown = open && dropPos
+    ? createPortal(
+        <div
+          className="rvc-select__dropdown"
+          style={{
+            position: 'fixed',
+            top: dropPos.top,
+            left: dropPos.left,
+            width: dropPos.width,
+            zIndex: 9999,
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           {options.map((o) => (
             <div
               key={o.value}
@@ -67,8 +80,26 @@ export function Select<T extends string = string>({
               {o.value === value && <IconCheck size={16} className="rvc-select__option-check" />}
             </div>
           ))}
-        </div>
-      )}
-    </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
+  return (
+    <>
+      <div
+        ref={ref}
+        className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}`}
+        style={width !== undefined ? { width } : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
+        <span className="rvc-select__value">
+          {options.find((o) => o.value === value)?.label ?? value}
+        </span>
+        <IconChevronDown size={20} className="rvc-select__chevron" />
+      </div>
+      {dropdown}
+    </>
   );
 }

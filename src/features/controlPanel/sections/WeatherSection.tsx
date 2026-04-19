@@ -1,9 +1,11 @@
+import { useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
 import { IconCalendar, IconClock, IconInfo } from '../icons';
+import { CalendarPopover } from '@/features/itineraryPanel/components/calendar';
 import type {
   ControlPanelHandlers,
   WeatherLayerKey,
@@ -73,6 +75,9 @@ export function WeatherSection({
     onDateChange?.({ ...state, time: `${h}:${m}` });
   };
 
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const calendarAnchorRef = useRef<HTMLDivElement>(null);
+
   const timeParts = (state.time || '00:00').split(':');
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
@@ -104,16 +109,22 @@ export function WeatherSection({
           onChange={(checked) => onDateChange?.({ ...state, customDateEnabled: checked })}
         />
         <span className="rvc-weather__date-label">Choisir une date personalisée</span>
-        <div className="rvc-weather__date-input">
+        <div
+          ref={calendarAnchorRef}
+          className="rvc-weather__date-input"
+          onClick={() => setCalendarOpen((v) => !v)}
+          style={{ cursor: 'pointer' }}
+        >
           <IconCalendar size={12} />
           <span>{formatDateShort(state.date)}</span>
-          <input
-            type="date"
-            value={state.date}
-            onChange={(e) => onDateChange?.({ ...state, date: e.target.value })}
-            className="rvc-weather__native-input"
-          />
         </div>
+        <CalendarPopover
+          open={calendarOpen}
+          anchorRef={calendarAnchorRef}
+          onClose={() => setCalendarOpen(false)}
+          value={state.date}
+          onSelect={(iso) => onDateChange?.({ ...state, date: iso })}
+        />
       </div>
 
       {/* Time row */}
