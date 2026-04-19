@@ -32,31 +32,51 @@ function degNorm(deg: number): number {
   return deg / MAX_SLOPE_DEG;
 }
 
+/**
+ * Build a Mapbox raster-color expression from a list of categories.
+ *
+ * @param categories  Sorted slope bands (ascending minDeg).
+ * @param mode        'gradient' = smooth lerp between band colors;
+ *                    'step'     = flat color per band.
+ * @param hiddenIds   Optional category ids whose pixels must render fully
+ *                    transparent (band-visibility toggles in the panel).
+ *                    Hidden bands are emitted as `'transparent'` stops, so
+ *                    visibility changes never invalidate any tile — they
+ *                    swap the paint expression in-place.
+ */
 export function buildSlopeColorExpression(
   categories: SlopeCategory[],
   mode: SlopeColorMode,
+  hiddenIds?: ReadonlySet<string> | string[],
 ): unknown[] {
+  const hidden = hiddenIds
+    ? (hiddenIds instanceof Set ? hiddenIds : new Set(hiddenIds))
+    : new Set<string>();
+  const colorOf = (cat: SlopeCategory) =>
+    hidden.has(cat.id) ? 'transparent' : cat.color;
+
   if (mode === 'step') {
-    // Step: flat bands of color
+    // Step: hard-edged bands. First band starts at 0°, each stop fixes the
+    // color from there until the next breakpoint.
     const expr: unknown[] = ['step', ['raster-value'], 'transparent'];
     for (const cat of categories) {
-      expr.push(degNorm(cat.minDeg), cat.color);
+      expr.push(degNorm(cat.minDeg), colorOf(cat));
     }
     return expr;
   }
 
-  // Gradient: smooth interpolation between midpoints
-  const expr: unknown[] = [
-    'interpolate', ['linear'], ['raster-value'],
-  ];
-
+  // Gradient: linear interpolation across band-start colors.
+  // For hidden bands we still emit 'transparent' as the stop value — Mapbox
+  // lerps RGBA which gives a soft fade in/out at the boundary, visually nicer
+  // than a hard cut and consistent with the gradient ethos.
+  const expr: unknown[] = ['interpolate', ['linear'], ['raster-value']];
   for (const cat of categories) {
-    expr.push(degNorm(cat.minDeg), cat.color);
+    expr.push(degNorm(cat.minDeg), colorOf(cat));
   }
-  // Extend the last color to 90°
+  // Extend the last color out to 90° so we never get a black/transparent tail
   const last = categories[categories.length - 1];
   if (last.maxDeg < MAX_SLOPE_DEG) {
-    expr.push(1, last.color);
+    expr.push(1, colorOf(last));
   }
 
   return expr;

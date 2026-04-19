@@ -2,8 +2,19 @@
 // Slope computation from DEM elevations
 // Uses Horn's method (3×3 neighborhood) on a 258×258 padded buffer stitched
 // from the DEM cache — eliminates the visible seams that edge-replication
-// produces between adjacent slope tiles. Output is a pre-coloured RGBA PNG
-// so the raster layer renders with zero GPU-side decode cost.
+// produces between adjacent slope tiles.
+//
+// Output: 8-bit slope-only RGBA PNG.
+//   - R channel encodes slope angle: R = round(deg * 255 / 90)
+//                                    deg = R * 90 / 255  (recovered GPU-side)
+//   - G, B = 0 (reserved for future encodings)
+//   - A    = 0 on NoData, 255 otherwise
+//
+// Colorisation, hide-bands, and colour-mode (gradient/step) are applied
+// GPU-side via Mapbox `raster-color` + `raster-color-mix` paint properties.
+// This means the SW caches a SINGLE PNG per (z, x, y, resFactor) — colour
+// changes, band-toggles and mode swaps are instantaneous (no tile refetch,
+// no SW round-trip, no DEM re-decode, no PNG re-encode).
 // ---------------------------------------------------------------------------
 
 // ── Ground-cell size (meters per DEM pixel) ───────────────────────────
@@ -15,58 +26,6 @@ function computeCellSize(z, x, y, tileSize) {
   const metersY = ((bounds.north - bounds.south) * Math.PI * 6378137) / 180;
   return { cellSizeX: metersX / tileSize, cellSizeY: metersY / tileSize };
 }
-
-// ── Colour LUT (1° buckets, 0..90) ────────────────────────────────────
-// Pre-built once per colour mode. Encode loop becomes a single table lookup
-// per pixel which is ~3× faster than the former per-pixel interpolation.
-const SLOPE_COLOR_STOPS = [
-  { deg:  0, r: 0x2D, g: 0xBF, b: 0x5E },
-  { deg:  7, r: 0xFF, g: 0xD8, b: 0x4D },
-  { deg: 15, r: 0xFF, g: 0xA0, b: 0x33 },
-  { deg: 25, r: 0xFF, g: 0x57, b: 0x33 },
-  { deg: 35, r: 0xE5, g: 0x26, b: 0x1F },
-  { deg: 45, r: 0x8B, g: 0x00, b: 0x00 },
-];
-
-function _lutGradient() {
-  const lut = new Uint8Array(91 * 3);
-  const stops = SLOPE_COLOR_STOPS;
-  for (let d = 0; d <= 90; d++) {
-    let r, g, b;
-    if (d <= stops[0].deg) { r = stops[0].r; g = stops[0].g; b = stops[0].b; }
-    else if (d >= stops[stops.length - 1].deg) {
-      const s = stops[stops.length - 1]; r = s.r; g = s.g; b = s.b;
-    } else {
-      for (let i = 0; i < stops.length - 1; i++) {
-        if (d >= stops[i].deg && d < stops[i + 1].deg) {
-          const t = (d - stops[i].deg) / (stops[i + 1].deg - stops[i].deg);
-          r = Math.round(stops[i].r + t * (stops[i + 1].r - stops[i].r));
-          g = Math.round(stops[i].g + t * (stops[i + 1].g - stops[i].g));
-          b = Math.round(stops[i].b + t * (stops[i + 1].b - stops[i].b));
-          break;
-        }
-      }
-    }
-    lut[d * 3] = r; lut[d * 3 + 1] = g; lut[d * 3 + 2] = b;
-  }
-  return lut;
-}
-
-function _lutStep() {
-  const lut = new Uint8Array(91 * 3);
-  const stops = SLOPE_COLOR_STOPS;
-  for (let d = 0; d <= 90; d++) {
-    let s = stops[0];
-    for (let i = stops.length - 1; i >= 0; i--) {
-      if (d >= stops[i].deg) { s = stops[i]; break; }
-    }
-    lut[d * 3] = s.r; lut[d * 3 + 1] = s.g; lut[d * 3 + 2] = s.b;
-  }
-  return lut;
-}
-
-const SLOPE_LUT_GRADIENT = _lutGradient();
-const SLOPE_LUT_STEP = _lutStep();
 
 // ── Padded elevation buffer: 258×258 with 1 px border from neighbour tiles ──
 // When a neighbour tile is absent from the DEM cache (not yet loaded or
@@ -158,42 +117,24 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
   return slopes;
 }
 
-// ── Pre-coloured RGBA PNG with LUT + NoData alpha ─────────────────────
-async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicStops) {
+// ── Slope-only RGBA PNG (R = encoded angle, A = NoData mask) ──────────
+async function encodeSlopePng(slopes, ownElev) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
 
   // ── Border slope clamping ───────────────────────────────────────────
-  // The slope computation at tile edges can produce discontinuities because
-  // neighbour DEM tiles are decoded independently (Terrain-RGB encode/decode
-  // round-trip introduces ±0.1 m rounding). Even with padded elevations the
-  // last column/row of one tile and the first column/row of the neighbour may
-  // disagree by a few centimetres, producing a thin seam of abnormally high
-  // slope (the red lines the user sees).
-  //
-  // Fix: replace border pixel slopes with the nearest interior pixel's slope.
-  // This removes the artificial spike while keeping all pixels opaque and
-  // correctly coloured. The 1-pixel inaccuracy is invisible at render scale.
-  // Top row (row 0) ← copy from row 1
+  // Slope at tile edges can spike because adjacent DEM tiles round-trip
+  // independently through Terrain-RGB encoding (±0.1 m). Replace border
+  // pixels with the nearest interior slope to remove the 1-pixel seam.
   for (let c = 0; c < size; c++) slopes[c] = slopes[size + c];
-  // Bottom row (row size-1) ← copy from row size-2
   for (let c = 0; c < size; c++) slopes[(size - 1) * size + c] = slopes[(size - 2) * size + c];
-  // Left col (col 0) ← copy from col 1
   for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
-  // Right col (col size-1) ← copy from col size-2
   for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
 
-  // Build LUT: use dynamic stops if provided, else fallback to hardcoded
-  const stops = dynamicStops || SLOPE_COLOR_STOPS;
-  let lut;
-  if (colorMode === 'step') {
-    lut = _buildLutStep(stops);
-  } else {
-    lut = _buildLutGradient(stops);
-  }
-
-  const hasHide = Array.isArray(hiddenRanges) && hiddenRanges.length > 0;
+  // Encode: R = round(deg * 255 / 90). 0° → 0, 90° → 255 (~0.353° per step).
+  // Mapbox decodes via raster-color-mix [90/255, 0, 0, 0] → degrees.
+  const SCALE = 255 / 90;
 
   for (let j = 0; j < n; j++) {
     const elev = ownElev[j];
@@ -203,65 +144,16 @@ async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicS
       rgba[idx + 3] = 0;
       continue;
     }
-    // Clamp degrees to [0, 90]
     let d = slopes[j];
     if (d < 0) d = 0; else if (d > 90) d = 90;
-
-    // Hidden-band check: make pixels in those degree ranges fully transparent
-    if (hasHide) {
-      let hidden = false;
-      for (let h = 0; h < hiddenRanges.length; h++) {
-        const r = hiddenRanges[h];
-        if (d >= r[0] && d < r[1]) { hidden = true; break; }
-      }
-      if (hidden) { rgba[idx + 3] = 0; continue; }
-    }
-
-    const k = (d + 0.5) | 0;
-    const lo = k * 3;
-    rgba[idx]     = lut[lo];
-    rgba[idx + 1] = lut[lo + 1];
-    rgba[idx + 2] = lut[lo + 2];
+    const enc = (d * SCALE + 0.5) | 0;
+    rgba[idx]     = enc > 255 ? 255 : enc;
+    rgba[idx + 1] = 0;
+    rgba[idx + 2] = 0;
     rgba[idx + 3] = 255;
   }
 
   return buildRawPng(size, size, rgba);
-}
-
-// Dynamic LUT builders that accept any stops array [{deg, r, g, b}, ...]
-function _buildLutGradient(stops) {
-  const lut = new Uint8Array(91 * 3);
-  for (let d = 0; d <= 90; d++) {
-    let r, g, b;
-    if (d <= stops[0].deg) { r = stops[0].r; g = stops[0].g; b = stops[0].b; }
-    else if (d >= stops[stops.length - 1].deg) {
-      const s = stops[stops.length - 1]; r = s.r; g = s.g; b = s.b;
-    } else {
-      for (let i = 0; i < stops.length - 1; i++) {
-        if (d >= stops[i].deg && d < stops[i + 1].deg) {
-          const t = (d - stops[i].deg) / (stops[i + 1].deg - stops[i].deg);
-          r = Math.round(stops[i].r + t * (stops[i + 1].r - stops[i].r));
-          g = Math.round(stops[i].g + t * (stops[i + 1].g - stops[i].g));
-          b = Math.round(stops[i].b + t * (stops[i + 1].b - stops[i].b));
-          break;
-        }
-      }
-    }
-    lut[d * 3] = r; lut[d * 3 + 1] = g; lut[d * 3 + 2] = b;
-  }
-  return lut;
-}
-
-function _buildLutStep(stops) {
-  const lut = new Uint8Array(91 * 3);
-  for (let d = 0; d <= 90; d++) {
-    let s = stops[0];
-    for (let i = stops.length - 1; i >= 0; i--) {
-      if (d >= stops[i].deg) { s = stops[i]; break; }
-    }
-    lut[d * 3] = s.r; lut[d * 3 + 1] = s.g; lut[d * 3 + 2] = s.b;
-  }
-  return lut;
 }
 
 // ── Resolution downsampling ──────────────────────────────────────────
@@ -300,7 +192,7 @@ function downsampleSlopes(slopes, factor) {
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
-async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops, resFactor) {
+async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
@@ -310,7 +202,7 @@ async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRange
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
-  const blob = await encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicStops);
+  const blob = await encodeSlopePng(slopes, ownElev);
   const t4 = performance.now();
 
   if (DEBUG) {

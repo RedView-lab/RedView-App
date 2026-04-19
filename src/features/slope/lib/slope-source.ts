@@ -1,5 +1,5 @@
-import type { SlopeColorMode } from '../types';
-import type { SlopeCategory, SlopeResolutionKey } from '../types';
+import type { SlopeColorMode, SlopeCategory, SlopeResolutionKey } from '../types';
+import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
 
@@ -23,38 +23,18 @@ export function resolutionToFactor(res: SlopeResolutionKey | undefined): number 
 }
 
 // ── Raster source definition ──────────────────────────────────────────
+//
+// Tile URL only varies on `resFactor` (the only parameter that actually
+// changes the slope numbers). Color mode, category breakpoints and
+// band-visibility are applied GPU-side via raster-color paint properties,
+// so changing them never invalidates the SW tile cache and never refetches
+// any tile — `setPaintProperty` is instant and synchronous on the GPU.
 
-/**
- * Encodes dynamic color stops into the tile URL so the service worker
- * can build its LUT dynamically. Format: "0:2DBF8C,45:5C0000,90:5C0000"
- */
-function encodeColorStops(categories: SlopeCategory[]): string {
-  return categories.map(c => `${c.minDeg}:${c.color.replace('#', '')}`).join(',');
-}
-
-/**
- * `hiddenRanges` is an optional list of `[minDeg, maxDeg)` bands that must be
- * rendered fully transparent by the service worker. Used by the Control
- * Panel to let the user hide a specific slope category (e.g. "masquer tout
- * ce qui est plat / vert"). The ranges are baked into the tile URL so the
- * SW can honour them without any client-side post-processing.
- */
-export function buildSlopeTileSource(
-  colorMode: SlopeColorMode,
-  hiddenRanges?: [number, number][],
-  categories?: SlopeCategory[],
-  resolutionFactor: number = 1,
-) {
-  const hideQuery = hiddenRanges && hiddenRanges.length
-    ? `&hide=${hiddenRanges.map(([a, b]) => `${a}-${b}`).join(',')}`
-    : '';
-  const stopsQuery = categories && categories.length
-    ? `&stops=${encodeColorStops(categories)}`
-    : '';
-  const resQuery = resolutionFactor > 1 ? `&res=${resolutionFactor}` : '';
+export function buildSlopeTileSource(resolutionFactor: number = 1) {
+  const resQuery = resolutionFactor > 1 ? `?res=${resolutionFactor}` : '';
   return {
     type: 'raster' as const,
-    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}${stopsQuery}${resQuery}`],
+    tiles: [`/slope-tiles/{z}/{x}/{y}${resQuery}`],
     tileSize: 256,
     minzoom: 6,
     maxzoom: 17,
@@ -62,12 +42,29 @@ export function buildSlopeTileSource(
 }
 
 // ── Build layer definition ────────────────────────────────────────────
-// Colors are pre-rendered in the service worker PNG — no raster-color decode needed.
+//
+// SW PNG encoding:
+//   R = round(slopeDeg * 255 / 90)   (0° → 0, 90° → 255)
+//   G = B = 0
+//   A = 0 on NoData, 255 otherwise
+//
+// raster-color-mix decodes back to degrees: deg = R * (90 / 255)
+// raster-color-range [0, 90] then normalises into [0, 1] for the
+// raster-color expression (which uses degNorm = deg / 90).
+//
 // slot: 'top' — must match the IGN ortho layer's slot so the overlay paints
 // ABOVE the orthophoto. With slot: 'middle' the ortho tiles fully occlude
 // the slope raster inside France and the user sees nothing.
 
-export function buildSlopeLayer(opacity: number) {
+const SLOPE_DECODE_MIX: [number, number, number, number] = [MAX_SLOPE_DEG / 255, 0, 0, 0];
+const SLOPE_DECODE_RANGE: [number, number] = [0, MAX_SLOPE_DEG];
+
+export function buildSlopeLayer(
+  opacity: number,
+  colorMode: SlopeColorMode,
+  categories: SlopeCategory[],
+  hiddenIds?: ReadonlySet<string> | string[],
+) {
   return {
     id: SLOPE_LAYER_ID,
     type: 'raster' as const,
@@ -79,6 +76,13 @@ export function buildSlopeLayer(opacity: number) {
       // Nearest produced blocky pixel staircases that read as data errors.
       'raster-resampling': 'linear' as const,
       'raster-fade-duration': 0,
+      'raster-color-mix': SLOPE_DECODE_MIX,
+      'raster-color-range': SLOPE_DECODE_RANGE,
+      'raster-color': buildSlopeColorExpression(categories, colorMode, hiddenIds),
     },
   };
 }
+
+// Re-exported so callers (the hook) can rebuild just the color expression
+// when category/mode/hidden state changes without touching the source.
+export { buildSlopeColorExpression };

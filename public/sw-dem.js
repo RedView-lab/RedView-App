@@ -79,7 +79,7 @@ const OLD_CACHES = [
   'dem-negative-v20',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
-  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6',
+  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7',
 ];
 
 self.addEventListener('install', (e) => {
@@ -155,17 +155,11 @@ self.addEventListener('fetch', (event) => {
 
   const slopeMatch = url.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (slopeMatch) {
-    const slopeMode = url.searchParams.get('mode') || 'gradient';
-    const slopeHide = url.searchParams.get('hide') || '';
-    const slopeStops = url.searchParams.get('stops') || '';
     const slopeRes = url.searchParams.get('res') || '';
     event.respondWith(handleSlopeRequest(
       parseInt(slopeMatch[1], 10),
       parseInt(slopeMatch[2], 10),
       parseInt(slopeMatch[3], 10),
-      slopeMode,
-      slopeHide,
-      slopeStops,
       slopeRes,
     ));
     return;
@@ -510,16 +504,14 @@ function transparentTileResponse() {
   });
 }
 
-async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam, resParam) {
+async function handleSlopeRequest(z, x, y, resParam) {
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
-  const hideSuffix = hideParam ? `&hide=${hideParam}` : '';
-  const stopsSuffix = stopsParam ? `&stops=${stopsParam}` : '';
   const resFactor = (() => {
     const n = parseInt(resParam, 10);
     return Number.isFinite(n) && n > 1 ? Math.min(n, 64) : 1;
   })();
-  const resSuffix = resFactor > 1 ? `&res=${resFactor}` : '';
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}${hideSuffix}${stopsSuffix}${resSuffix}`);
+  const resSuffix = resFactor > 1 ? `?res=${resFactor}` : '';
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}${resSuffix}`);
   const cached = await slopeCache.match(cacheKey);
   if (cached) return cached;
 
@@ -548,37 +540,9 @@ async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam, res
     try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
   }));
 
-  // Parse hide param: "0-7,25-35" → [[0,7],[25,35]]
-  const hiddenRanges = [];
-  if (hideParam) {
-    for (const seg of hideParam.split(',')) {
-      const [a, b] = seg.split('-').map((s) => parseInt(s, 10));
-      if (Number.isFinite(a) && Number.isFinite(b)) hiddenRanges.push([a, b]);
-    }
-  }
-
-  // Parse stops param: "0:2DBF8C,45:5C0000" → [{deg:0, r:0x2D, g:0xBF, b:0x8C}, ...]
-  let dynamicStops = null;
-  if (stopsParam) {
-    dynamicStops = [];
-    for (const seg of stopsParam.split(',')) {
-      const [degStr, hex] = seg.split(':');
-      const deg = parseInt(degStr, 10);
-      if (Number.isFinite(deg) && hex && hex.length === 6) {
-        dynamicStops.push({
-          deg,
-          r: parseInt(hex.slice(0, 2), 16),
-          g: parseInt(hex.slice(2, 4), 16),
-          b: parseInt(hex.slice(4, 6), 16),
-        });
-      }
-    }
-    if (dynamicStops.length === 0) dynamicStops = null;
-  }
-
   try {
     const demBlob = await demResponse.clone().blob();
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops, resFactor);
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor);
     const response = new Response(slopeBlob, {
       status: 200,
       headers: {
