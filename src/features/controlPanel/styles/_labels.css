@@ -1,15 +1,20 @@
-/* Labels section */
+/* Labels section — pixel-perfect match for Figma frame 1749:57639 */
 
 .rvc-labels__grid {
   display: flex;
-  gap: 2px;
+  gap: 8px;
   width: 100%;
 }
 
 .rvc-labels__col {
   display: flex;
   flex-direction: column;
-  gap: 8px;
   flex: 1 1 0;
   min-width: 0;
+}
+
+/* Each checkbox row: 30px tall, 6px vertical padding (Figma spec) */
+.rvc-labels__col .rvc-checkbox {
+  height: 30px;
+  padding: 6px 0;
 }
