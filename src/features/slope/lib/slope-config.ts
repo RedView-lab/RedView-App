@@ -3,12 +3,12 @@ import type { SlopeCategory, SlopeColorMode, SlopeState } from '../types';
 // ── Slope categories ──────────────────────────────────────────────────
 
 export const SLOPE_CATEGORIES: SlopeCategory[] = [
-  { id: 'flat',      label: 'Plat',            minDeg: 0,  maxDeg: 7,  color: '#2DBF5E' },
-  { id: 'moderate',  label: 'Pente modérée',   minDeg: 7,  maxDeg: 15, color: '#FFD84D' },
-  { id: 'steep',     label: 'Pente forte',     minDeg: 15, maxDeg: 25, color: '#FFA033' },
-  { id: 'very-steep',label: 'Très raide',      minDeg: 25, maxDeg: 35, color: '#FF5733' },
-  { id: 'extreme',   label: 'Extrême',         minDeg: 35, maxDeg: 45, color: '#E5261F' },
-  { id: 'cliff',     label: 'Falaise',         minDeg: 45, maxDeg: 90, color: '#8B0000' },
+  { id: 'flat',      label: 'Modéré',     minDeg: 0,  maxDeg: 7,  color: '#2DBF8C', displayRange: '0 - 7%'    },
+  { id: 'moderate',  label: 'Pentu',      minDeg: 7,  maxDeg: 15, color: '#FFD800', displayRange: '7% - 12%'  },
+  { id: 'steep',     label: 'Très pentu', minDeg: 15, maxDeg: 25, color: '#FF7200', displayRange: '12% - 24%' },
+  { id: 'very-steep',label: 'Vertical',   minDeg: 25, maxDeg: 35, color: '#E50C0C', displayRange: '<24%'      },
+  { id: 'extreme',   label: 'Extrême',    minDeg: 35, maxDeg: 45, color: '#A30000', displayRange: '24% - 70%' },
+  { id: 'cliff',     label: 'Falaise',    minDeg: 45, maxDeg: 90, color: '#5C0000', displayRange: '>70%'      },
 ];
 
 // ── Default state ─────────────────────────────────────────────────────

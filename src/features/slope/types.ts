@@ -11,6 +11,9 @@ export interface SlopeCategory {
   maxDeg: number;
   /** Display color (hex) */
   color: string;
+  /** Pre-formatted range label as it should appear in the UI legend
+   *  (e.g. "0 - 7%", "7% - 12%", "<24%"). Matches Figma node 1749:57744. */
+  displayRange: string;
 }
 
 // ── Colorization mode ─────────────────────────────────────────────────

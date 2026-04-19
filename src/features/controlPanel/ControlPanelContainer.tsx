@@ -6,7 +6,7 @@ import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
 
 import { loadSlopeState, saveSlopeState } from '@/features/slope/lib/slope-persist';
-import { SLOPE_CATEGORIES, degToPercent } from '@/features/slope/lib/slope-config';
+import { SLOPE_CATEGORIES } from '@/features/slope/lib/slope-config';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode } from '@/features/slope/types';
 
@@ -59,18 +59,14 @@ const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
 };
 
 function buildSlopeBandsFromCategories(visibilityById: Record<string, boolean>): SlopeBand[] {
-  return SLOPE_CATEGORIES.map((cat) => {
-    const pctMin = degToPercent(cat.minDeg);
-    const pctMax = degToPercent(cat.maxDeg);
-    return {
-      id: cat.id,
-      percentRange: `${pctMin}% - ${pctMax}%`,
-      degreeRange: `${cat.minDeg}° - ${cat.maxDeg}° (${cat.label})`,
-      label: `${pctMin}% - ${pctMax}% (${cat.label})`,
-      color: cat.color,
-      visible: visibilityById[cat.id] ?? true,
-    };
-  });
+  return SLOPE_CATEGORIES.map((cat) => ({
+    id: cat.id,
+    percentRange: cat.displayRange,
+    degreeRange: `${cat.minDeg}° - ${cat.maxDeg}° (${cat.label})`,
+    label: `${cat.displayRange} (${cat.label})`,
+    color: cat.color,
+    visible: visibilityById[cat.id] ?? true,
+  }));
 }
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
