@@ -32,6 +32,7 @@ import type {
   WeatherRenderMode,
   WeatherState,
   WeatherTab,
+  SunlightState,
 } from './types';
 import type { SlopeCategory } from '@/features/slope/types';
 

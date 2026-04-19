@@ -112,6 +112,10 @@ export interface WeatherState {
   layers: WeatherLayer[];
 }
 
+export interface ToggleOnlySection {
+  enabled: boolean;
+}
+
 export interface SunlightState {
   enabled: boolean;
   customDateEnabled: boolean;
