@@ -16,7 +16,7 @@ import { useLabels } from '@/features/labels/hooks/useLabels';
 import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
-import { useSunlight } from '@/features/sunlight';
+import { useSunlight, useShadowTiles } from '@/features/sunlight';
 
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
@@ -264,6 +264,14 @@ export function ControlPanelContainer({
     enabled: sunlightState.enabled,
     date: sunlightState.date,
     time: sunlightState.time,
+  });
+
+  // DEM ray-traced terrain shadows
+  useShadowTiles(isMapLoaded ? map : null, isMapLoaded, {
+    enabled: sunlightState.enabled && sunlightState.shadowEnabled,
+    sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
+    sunAltitudeDeg: sunlightTimes.sunAltitudeDeg,
+    opacity: sunlightState.shadowOpacity / 100,
   });
 
   // ── Build ControlPanel state ───────────────────────────────────────

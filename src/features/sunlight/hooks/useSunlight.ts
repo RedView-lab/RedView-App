@@ -3,6 +3,7 @@ import type { Map as MapboxMap, FogSpecification, LightsSpecification } from 'ma
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
+import { addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition, SUN_DISK_LAYER_ID } from '../lib/sun-disk-layer';
 
 /**
  * Drives Mapbox sun + atmosphere from a date/time and the map center.
@@ -37,6 +38,10 @@ export interface UseSunlightOptions {
 export interface UseSunlightResult {
   sunriseTime: string;
   sunsetTime: string;
+  /** Current sun azimuth in degrees (0=N, CW). Updated on each apply. */
+  sunAzimuthDeg: number;
+  /** Current sun altitude in degrees (-90..+90). Updated on each apply. */
+  sunAltitudeDeg: number;
 }
 
 const DEFAULT_FOG: FogSpecification = {
@@ -133,10 +138,11 @@ export function useSunlight(
   isMapLoaded: boolean,
   opts: UseSunlightOptions,
 ): UseSunlightResult {
-  const [times, setTimes] = useState<UseSunlightResult>({
+  const [times, setTimes] = useState<Pick<UseSunlightResult, 'sunriseTime' | 'sunsetTime'>>({
     sunriseTime: '--:--',
     sunsetTime: '--:--',
   });
+  const [sunPos, setSunPos] = useState({ azimuthDeg: 180, altitudeDeg: 45 });
 
   // Stable refs so the moveend listener always sees the latest values without
   // re-subscribing on every render.
@@ -171,6 +177,7 @@ export function useSunlight(
       if (Number.isNaN(dt.getTime())) return;
 
       const { azimuth, altitude } = getSunPosition(dt, lat, lon);
+      setSunPos({ azimuthDeg: azimuth, altitudeDeg: altitude });
       const noonDate = new Date(`${optsRef.current.date}T12:00:00`);
       const isMorning = dt.getTime() < noonDate.getTime();
       const preset = classifyPreset(altitude, isMorning);
@@ -189,6 +196,15 @@ export function useSunlight(
         map.setFog(buildFog(altitude));
       } catch (err) {
         console.warn('[sunlight] setFog failed', err);
+      }
+
+      // Sun disk custom layer
+      try {
+        addSunDiskLayer(map);
+        updateSunDiskPosition(azimuth, altitude);
+        map.triggerRepaint();
+      } catch (err) {
+        console.warn('[sunlight] sun disk failed', err);
       }
     };
 
@@ -218,7 +234,12 @@ export function useSunlight(
     } catch {
       /* no-op */
     }
+    try {
+      removeSunDiskLayer(map);
+    } catch {
+      /* no-op */
+    }
   }, [map, isMapLoaded, opts.enabled]);
 
-  return times;
+  return { ...times, sunAzimuthDeg: sunPos.azimuthDeg, sunAltitudeDeg: sunPos.altitudeDeg };
 }

@@ -119,6 +119,33 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
           <div className="rvc-sunlight__sun-value">{state.sunsetTime}</div>
         </div>
       </div>
+
+      {/* Shadow overlay controls */}
+      <div className="rvc-weather__trend-options" style={{ marginTop: '8px' }}>
+        <div className="rvc-weather__trend-option">
+          <Checkbox
+            id="sunlight-shadow"
+            checked={state.shadowEnabled}
+            onChange={(checked) => onChange?.({ shadowEnabled: checked })}
+          />
+          <span className="rvc-weather__trend-label">Ombres sur le terrain</span>
+        </div>
+      </div>
+      {state.shadowEnabled && (
+        <div className="rvc-weather__time-row" style={{ marginTop: '4px' }}>
+          <span className="rvc-weather__time-bound" style={{ fontSize: '10px' }}>0%</span>
+          <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+            <Slider
+              min={0}
+              max={100}
+              value={state.shadowOpacity}
+              onChange={(val) => onChange?.({ shadowOpacity: val })}
+              width="100%"
+            />
+          </div>
+          <span className="rvc-weather__time-bound" style={{ fontSize: '10px' }}>100%</span>
+        </div>
+      )}
     </Section>
   );
 }

@@ -79,5 +79,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     time: '09:30',
     sunriseTime: '06:45',
     sunsetTime: '19:33',
+    shadowEnabled: true,
+    shadowOpacity: 50,
   },
 };

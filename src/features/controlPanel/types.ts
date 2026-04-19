@@ -123,6 +123,10 @@ export interface SunlightState {
   time: string;
   sunriseTime: string;
   sunsetTime: string;
+  /** DEM ray-traced terrain shadows */
+  shadowEnabled: boolean;
+  /** Shadow overlay opacity 0..100 */
+  shadowOpacity: number;
 }
 
 export interface ControlPanelState {
