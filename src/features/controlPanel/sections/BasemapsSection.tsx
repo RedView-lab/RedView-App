@@ -1,15 +1,14 @@
 import { Section } from '../components/Section';
 import { VisibilityButton } from '../components/VisibilityButton';
-import { IconMap, IconPlusCircle } from '../icons';
+import { IconMap } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState } from '../types';
 
 interface Props {
   basemaps: ControlPanelState['basemaps'];
   onBasemapToggle: ControlPanelHandlers['onBasemapToggle'];
-  onBasemapAdd: ControlPanelHandlers['onBasemapAdd'];
 }
 
-export function BasemapsSection({ basemaps, onBasemapToggle, onBasemapAdd }: Props) {
+export function BasemapsSection({ basemaps, onBasemapToggle }: Props) {
   return (
     <Section title="Fonds de carte" icon={<IconMap size={12} />} noTopBorder>
       <div className="rvc-basemaps__list">
