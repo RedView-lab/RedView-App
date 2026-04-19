@@ -1,15 +1,25 @@
 // ── POI categories relevant to ultra cyclists / outdoor sports ─────────
+//
+// Aligné sur la taxonomie du panneau Itinerary (Figma) ET sur les tags
+// indexés par le serveur self-hosted (`redview-poi-server/filter.txt`).
 
 export const POI_CATEGORIES = [
   'drinking_water',
+  'toilets',
+  'fuel',
+  'fast_food',
+  'cafe',
+  'bar',
+  'restaurant',
   'bakery',
-  'convenience',
   'supermarket',
+  'convenience',
   'bicycle',
   'bicycle_repair',
-  'toilets',
-  'shelter',
+  'hotel',
+  'alpine_hut',
   'camp_site',
+  'shelter',
   'pharmacy',
   'hospital',
 ] as const;
@@ -25,22 +35,30 @@ export interface PoiGroup {
 export const POI_GROUPS: PoiGroup[] = [
   { label: 'Eau', categories: ['drinking_water'] },
   { label: 'Alimentation', categories: ['bakery', 'convenience', 'supermarket'] },
+  { label: 'Restauration', categories: ['restaurant', 'fast_food', 'cafe', 'bar'] },
   { label: 'Vélo', categories: ['bicycle', 'bicycle_repair'] },
-  { label: 'Services', categories: ['toilets', 'shelter', 'pharmacy', 'hospital'] },
-  { label: 'Bivouac', categories: ['camp_site'] },
+  { label: 'Hébergement', categories: ['hotel', 'alpine_hut', 'camp_site', 'shelter'] },
+  { label: 'Services', categories: ['toilets', 'fuel', 'pharmacy', 'hospital'] },
 ];
 
-/** Human-readable labels */
+/** Human-readable labels (FR) */
 export const POI_LABELS: Record<PoiCategory, string> = {
   drinking_water: 'Fontaine / eau',
+  toilets: 'Toilettes',
+  fuel: 'Station-service',
+  fast_food: 'Fast-food',
+  cafe: 'Café',
+  bar: 'Bar',
+  restaurant: 'Restaurant',
   bakery: 'Boulangerie',
-  convenience: 'Supérette',
   supermarket: 'Supermarché',
+  convenience: 'Supérette',
   bicycle: 'Magasin vélo',
   bicycle_repair: 'Réparation vélo',
-  toilets: 'Toilettes',
-  shelter: 'Abri',
+  hotel: 'Hôtel',
+  alpine_hut: 'Refuge',
   camp_site: 'Camping',
+  shelter: 'Abri',
   pharmacy: 'Pharmacie',
   hospital: 'Hôpital',
 };
@@ -48,16 +66,23 @@ export const POI_LABELS: Record<PoiCategory, string> = {
 /** Colors per category for icons */
 export const POI_COLORS: Record<PoiCategory, string> = {
   drinking_water: '#38bdf8',
+  toilets: '#a78bfa',
+  fuel: '#facc15',
+  fast_food: '#fb7185',
+  cafe: '#a16207',
+  bar: '#c084fc',
+  restaurant: '#ef4444',
   bakery: '#fbbf24',
-  convenience: '#fb923c',
   supermarket: '#f97316',
+  convenience: '#fb923c',
   bicycle: '#34d399',
   bicycle_repair: '#10b981',
-  toilets: '#a78bfa',
-  shelter: '#94a3b8',
+  hotel: '#60a5fa',
+  alpine_hut: '#15803d',
   camp_site: '#22c55e',
+  shelter: '#94a3b8',
   pharmacy: '#f472b6',
-  hospital: '#ef4444',
+  hospital: '#dc2626',
 };
 
 /** A single POI feature */
@@ -70,18 +95,9 @@ export interface PoiFeature {
   tags: Record<string, string>;
 }
 
-/** Overpass API JSON response element */
-export interface OverpassElement {
-  type: 'node' | 'way' | 'relation';
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-export interface OverpassResponse {
-  elements: OverpassElement[];
+/** Backend response (Fastify /bbox and /corridor) */
+export interface PoiApiResponse {
+  features: PoiFeature[];
 }
 
 /** Parsed GPX route (coordinates only, no gradient/curvature) */

@@ -2,7 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import mapboxgl from 'mapbox-gl';
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
-import { fetchPoisAlongRouteChunked } from '../lib/overpass';
+import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
 import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
 
