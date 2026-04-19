@@ -7,6 +7,7 @@ import { SlopesSection } from './sections/SlopesSection';
 import { WeatherSection } from './sections/WeatherSection';
 import { WindSection } from './sections/WindSection';
 import { SimpleToggleSection } from './sections/SimpleToggleSection';
+import { SunlightSection } from './sections/SunlightSection';
 import type { ControlPanelProps } from './types';
 import './styles/index.css';
 
@@ -50,6 +51,7 @@ export function ControlPanel({
   onWindEnabledChange,
   onSnowEnabledChange,
   onSunlightEnabledChange,
+  onSunlightStateChange,
   width,
   onResizeStart,
   isResizing,
@@ -141,10 +143,10 @@ export function ControlPanel({
         enabled={state.snow.enabled}
         onEnabledChange={onSnowEnabledChange}
       />
-      <SimpleToggleSection
-        title="Ensoleillement"
-        enabled={state.sunlight.enabled}
+      <SunlightSection
+        state={state.sunlight}
         onEnabledChange={onSunlightEnabledChange}
+        onChange={onSunlightStateChange}
       />
       </div>
     </aside>

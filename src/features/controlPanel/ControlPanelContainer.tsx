@@ -254,7 +254,7 @@ export function ControlPanelContainer({
 
   // ── Snow & Sunlight ────────────────────────────────────────────────
   const [snowEnabled, setSnowEnabled] = useState(false);
-  const [sunlightEnabled, setSunlightEnabled] = useState(false);
+  const [sunlightState, setSunlightState] = useState(DEFAULT_CONTROL_PANEL_STATE.sunlight);
 
   // ── Build ControlPanel state ───────────────────────────────────────
   const state: ControlPanelState = useMemo(() => {
@@ -292,7 +292,7 @@ export function ControlPanelContainer({
       weather: weatherState,
       wind: { enabled: windEnabled },
       snow: { enabled: snowEnabled },
-      sunlight: { enabled: sunlightEnabled },
+      sunlight: sunlightState,
     };
   }, [
     cachedTiles,
@@ -307,7 +307,7 @@ export function ControlPanelContainer({
     windEnabled,
     weatherState,
     snowEnabled,
-    sunlightEnabled,
+    sunlightState,
     dynamicCategories,
   ]);
 
@@ -411,7 +411,8 @@ export function ControlPanelContainer({
 
   const handleWindEnabled = useCallback((enabled: boolean) => setWindEnabled(enabled), []);
   const handleSnowEnabled = useCallback((enabled: boolean) => setSnowEnabled(enabled), []);
-  const handleSunlightEnabled = useCallback((enabled: boolean) => setSunlightEnabled(enabled), []);
+  const handleSunlightEnabled = useCallback((enabled: boolean) => setSunlightState((prev) => ({ ...prev, enabled })), []);
+  const handleSunlightStateChange = useCallback((changes: Partial<SunlightState>) => setSunlightState((prev) => ({ ...prev, ...changes })), []);
 
   const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
@@ -451,6 +452,7 @@ export function ControlPanelContainer({
       /* Snow & Sunlight */
       onSnowEnabledChange={handleSnowEnabled}
       onSunlightEnabledChange={handleSunlightEnabled}
+      onSunlightStateChange={handleSunlightStateChange}
     />
   );
 }

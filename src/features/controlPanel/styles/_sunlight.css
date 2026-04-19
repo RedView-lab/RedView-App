@@ -1,0 +1,42 @@
+/* Sunlight section specific styles */
+
+.rvc-sunlight__sun-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.rvc-sunlight__sun-item {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+}
+
+.rvc-sunlight__sun-label {
+  flex: 1;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-sunlight__sun-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 64px;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}

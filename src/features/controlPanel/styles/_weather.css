@@ -186,11 +186,12 @@
   gap: 4px;
   width: 100%;
   margin-top: 8px;
+  padding: 0 8px;
+  box-sizing: border-box;
 }
 
 .rvc-weather__day-slider-wrapper {
   width: 100%;
-  padding: 0 4px;
 }
 
 .rvc-weather__day-labels {

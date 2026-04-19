@@ -72,5 +72,12 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   wind: { enabled: true },
   snow: { enabled: true },
-  sunlight: { enabled: true },
+  sunlight: {
+    enabled: true,
+    customDateEnabled: true,
+    date: '2026-04-22',
+    time: '09:30',
+    sunriseTime: '06:45',
+    sunsetTime: '19:33',
+  },
 };

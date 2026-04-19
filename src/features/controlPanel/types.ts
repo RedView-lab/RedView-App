@@ -112,8 +112,13 @@ export interface WeatherState {
   layers: WeatherLayer[];
 }
 
-export interface ToggleOnlySection {
+export interface SunlightState {
   enabled: boolean;
+  customDateEnabled: boolean;
+  date: string;
+  time: string;
+  sunriseTime: string;
+  sunsetTime: string;
 }
 
 export interface ControlPanelState {
@@ -125,7 +130,7 @@ export interface ControlPanelState {
   weather: WeatherState;
   wind: ToggleOnlySection;
   snow: ToggleOnlySection;
-  sunlight: ToggleOnlySection;
+  sunlight: SunlightState;
 }
 
 export interface ControlPanelHandlers {
@@ -169,6 +174,7 @@ export interface ControlPanelHandlers {
   onWindEnabledChange?: (enabled: boolean) => void;
   onSnowEnabledChange?: (enabled: boolean) => void;
   onSunlightEnabledChange?: (enabled: boolean) => void;
+  onSunlightStateChange?: (changes: Partial<SunlightState>) => void;
 }
 
 export interface ControlPanelProps extends ControlPanelHandlers {
