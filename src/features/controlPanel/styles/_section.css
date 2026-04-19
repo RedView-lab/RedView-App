@@ -79,6 +79,10 @@
   overflow: hidden;
 }
 
+.rvc-section__body-inner.is-fully-open {
+  overflow: visible;
+}
+
 .rvc-section__body-wrap .rvc-section__body {
   opacity: 0;
   transform: translateY(-4px);

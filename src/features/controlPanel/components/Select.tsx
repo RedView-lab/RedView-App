@@ -41,7 +41,7 @@ export function Select<T extends string = string>({
   return (
     <div
       ref={ref}
-      className={`rvc-select rvc-select--${variant}`}
+      className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}`}
       style={width !== undefined ? { width } : undefined}
       onClick={() => setOpen((v) => !v)}
     >

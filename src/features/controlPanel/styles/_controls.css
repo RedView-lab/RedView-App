@@ -95,6 +95,10 @@
   box-sizing: border-box;
 }
 
+.rvc-select.is-open {
+  z-index: 100;
+}
+
 .rvc-select__adornment { display: inline-flex; flex-shrink: 0; }
 
 .rvc-select__value {

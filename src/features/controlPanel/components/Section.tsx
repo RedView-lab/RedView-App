@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { IconChevronDown } from '../icons';
 import { Toggle } from './Toggle';
 
@@ -29,6 +29,16 @@ export function Section({
 }: SectionProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const isOpen = open ?? uncontrolledOpen;
+  const [fullyOpen, setFullyOpen] = useState(isOpen);
+
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => setFullyOpen(true), 280); // matches CSS transition duration
+      return () => clearTimeout(timer);
+    } else {
+      setFullyOpen(false);
+    }
+  }, [isOpen]);
 
   const toggleOpen = () => {
     const next = !isOpen;
@@ -68,7 +78,7 @@ export function Section({
         className={`rvc-section__body-wrap${isOpen ? ' is-open' : ''}`}
         aria-hidden={!isOpen}
       >
-        <div className="rvc-section__body-inner">
+        <div className={`rvc-section__body-inner${fullyOpen ? ' is-fully-open' : ''}`}>
           <div className="rvc-section__body">{children}</div>
         </div>
       </div>
