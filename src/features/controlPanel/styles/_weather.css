@@ -2,75 +2,64 @@
 
 .rvc-weather__tabs {
   display: flex;
-  gap: 4px;
+  gap: 8px;
+  width: 100%;
 }
 
 .rvc-weather__tab {
   all: unset;
-  display: inline-flex;
+  display: flex;
+  flex: 1;
   align-items: center;
   justify-content: center;
-  padding: 4px 8px;
-  background: var(--rvc-bg-chip);
-  border-radius: var(--rvc-radius-md);
-  color: var(--rvc-text);
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
 }
 
-.rvc-weather__tab.is-active { background: var(--rvc-bg-row-dark); }
-
-.rvc-weather__range {
-  display: flex;
-  gap: 4px;
-  width: 100%;
+.rvc-weather__tab.is-active {
+  background: #232323;
 }
 
-.rvc-weather__range-col {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.rvc-weather__range-row {
+.rvc-weather__date-row {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
+  margin-top: 8px;
 }
 
-.rvc-weather__range-label {
-  flex: 1 1 0;
-  min-width: 0;
-  color: var(--rvc-text);
-  font-size: 10px;
-  font-weight: 700;
+.rvc-weather__date-label {
+  flex: 1;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.rvc-weather__input {
-  position: relative;
-  display: inline-flex;
+.rvc-weather__date-input {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: var(--rvc-bg-row-alt);
-  border-radius: var(--rvc-radius-md);
-  color: var(--rvc-text);
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
-  width: 76px;
-  box-sizing: border-box;
-  flex-shrink: 0;
+  position: relative;
 }
-
-.rvc-weather__input--date { width: 92px; }
 
 .rvc-weather__native-input {
   position: absolute;
@@ -84,12 +73,68 @@
   color: transparent;
 }
 
+.rvc-weather__time-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-weather__time-bound {
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.rvc-weather__time-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px 8px;
+  height: 30px;
+  box-sizing: border-box;
+  position: relative;
+  width: 95px;
+}
+
+.rvc-weather__time-display {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.rvc-weather__time-display-colon {
+  width: 6px;
+  display: flex;
+  justify-content: center;
+}
+
+.rvc-weather__time-display-segment {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 100%;
+}
+
 .rvc-weather__layers {
   display: flex;
   flex-direction: column;
   gap: 4px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 8px;
 }
 
 .rvc-weather__layer-row {
@@ -99,29 +144,35 @@
   width: 100%;
 }
 
-.rvc-weather__layer-label {
-  flex: 1 1 0;
-  min-width: 0;
-  color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.64;
-  padding: 0 2px;
+.rvc-weather__layer-row[data-disabled="true"] {
+  opacity: 0.5;
 }
 
-.rvc-weather__layer-opacity {
-  all: unset;
-  position: relative;
-  display: inline-flex;
+.rvc-weather__layer-label {
+  flex: 1;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-weather__add-alert {
+  display: flex;
   align-items: center;
-  gap: 4px;
-  height: 20px;
-  padding: 0 4px;
-  background: var(--rvc-bg-row);
-  border-radius: var(--rvc-radius-sm);
-  color: var(--rvc-text);
-  font-size: 14px;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 0;
+  margin-top: 4px;
+}
+
+.rvc-weather__add-alert-text {
+  flex: 1;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 12px;
   font-weight: 600;
-  cursor: pointer;
-  flex-shrink: 0;
 }

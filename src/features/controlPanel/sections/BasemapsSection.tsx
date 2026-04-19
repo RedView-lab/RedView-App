@@ -30,10 +30,6 @@ export function BasemapsSection({ basemaps, onBasemapToggle, onBasemapAdd }: Pro
           </div>
         ))}
       </div>
-      <button type="button" className="rvc-btn-ghost" onClick={onBasemapAdd}>
-        <IconPlusCircle size={12} />
-        <span>Ajouter des fonds de carte</span>
-      </button>
     </Section>
   );
 }

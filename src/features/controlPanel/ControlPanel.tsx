@@ -43,10 +43,9 @@ export function ControlPanel({
   onSlopeBandBreakpointChange,
   onWeatherEnabledChange,
   onWeatherTabChange,
-  onWeatherRangeChange,
+  onWeatherDateChange,
   onWeatherLayerToggle,
   onWeatherLayerModeChange,
-  onWeatherLayerOpacityChange,
   onWeatherAddAlert,
   onWindEnabledChange,
   onSnowEnabledChange,
@@ -127,10 +126,9 @@ export function ControlPanel({
         state={state.weather}
         onEnabledChange={onWeatherEnabledChange}
         onTabChange={onWeatherTabChange}
-        onRangeChange={onWeatherRangeChange}
+        onDateChange={onWeatherDateChange}
         onLayerToggle={onWeatherLayerToggle}
         onLayerModeChange={onWeatherLayerModeChange}
-        onLayerOpacityChange={onWeatherLayerOpacityChange}
         onAddAlert={onWeatherAddAlert}
       />
 

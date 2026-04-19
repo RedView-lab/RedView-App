@@ -80,25 +80,30 @@ export interface SlopesState {
 }
 
 export type WeatherTab = 'forecast' | 'trends';
-export type WeatherLayerKey = 'temperature' | 'weather' | 'wind';
-export type WeatherRenderMode = 'gradient' | 'slope' | 'arrows' | string;
+export type WeatherLayerKey =
+  | 'temperature'
+  | 'feelsLike'
+  | 'rain'
+  | 'wind'
+  | 'cloudCover'
+  | 'humidity'
+  | 'sunshine';
+export type WeatherRenderMode = 'gradient' | 'slope' | 'arrows' | 'text' | '-' | string;
 
 export interface WeatherLayer {
   key: WeatherLayerKey;
   enabled: boolean;
   mode: WeatherRenderMode;
-  opacity: number;
 }
 
 export interface WeatherState {
   enabled: boolean;
   tab: WeatherTab;
+  customDateEnabled: boolean;
   /** ISO yyyy-mm-dd */
-  startDate: string;
+  date: string;
   /** HH:mm */
-  startTime: string;
-  endDate: string;
-  endTime: string;
+  time: string;
   layers: WeatherLayer[];
 }
 
@@ -151,10 +156,9 @@ export interface ControlPanelHandlers {
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
   onWeatherTabChange?: (tab: WeatherTab) => void;
-  onWeatherRangeChange?: (range: Pick<WeatherState, 'startDate' | 'startTime' | 'endDate' | 'endTime'>) => void;
+  onWeatherDateChange?: (dateState: Pick<WeatherState, 'customDateEnabled' | 'date' | 'time'>) => void;
   onWeatherLayerToggle?: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange?: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;
-  onWeatherLayerOpacityChange?: (key: WeatherLayerKey, opacity: number) => void;
   onWeatherAddAlert?: () => void;
 
   onWindEnabledChange?: (enabled: boolean) => void;

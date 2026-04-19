@@ -1,7 +1,9 @@
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
-import { IconCalendar, IconClock, IconEye, IconPlusCircle } from '../icons';
+import { Toggle } from '../components/Toggle';
+import { Slider } from '../components/Slider';
+import { IconCalendar, IconClock, IconInfo } from '../icons';
 import type {
   ControlPanelHandlers,
   WeatherLayerKey,
@@ -14,10 +16,9 @@ interface Props {
   state: WeatherState;
   onEnabledChange: ControlPanelHandlers['onWeatherEnabledChange'];
   onTabChange: ControlPanelHandlers['onWeatherTabChange'];
-  onRangeChange: ControlPanelHandlers['onWeatherRangeChange'];
+  onDateChange: ControlPanelHandlers['onWeatherDateChange'];
   onLayerToggle: ControlPanelHandlers['onWeatherLayerToggle'];
   onLayerModeChange: ControlPanelHandlers['onWeatherLayerModeChange'];
-  onLayerOpacityChange: ControlPanelHandlers['onWeatherLayerOpacityChange'];
   onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
 
@@ -27,20 +28,24 @@ const TABS: { value: WeatherTab; label: string }[] = [
 ];
 
 const LAYER_LABEL: Record<WeatherLayerKey, string> = {
-  temperature: 'Température',
-  weather: 'Météo',
-  wind: 'Vent',
+  temperature: 'Température (°)',
+  feelsLike: 'Température ressentie (°)',
+  rain: 'Pluie (mm)',
+  wind: 'Vent (km/h)',
+  cloudCover: 'Couverture nuageuse (%)',
+  humidity: 'Humidité (%)',
+  sunshine: 'Ensoleillement (min)',
 };
 
 const MODE_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
+  { value: 'texte', label: 'Texte' },
   { value: 'gradient', label: 'Dégradé' },
-  { value: 'slope', label: 'Pente' },
   { value: 'arrows', label: 'Flèches' },
+  { value: '-', label: '-' },
 ];
 
 /**
  * Converts ISO YYYY-MM-DD to display DD/MM/YY.
- * (Matches the compact format shown in the Figma design: "22/04/26".)
  */
 function formatDateShort(iso: string): string {
   if (!iso || iso.length < 10) return iso;
@@ -52,12 +57,26 @@ export function WeatherSection({
   state,
   onEnabledChange,
   onTabChange,
-  onRangeChange,
+  onDateChange,
   onLayerToggle,
   onLayerModeChange,
-  onLayerOpacityChange,
   onAddAlert,
 }: Props) {
+  const getMinutes = (timeStr: string) => {
+    const [h, m] = timeStr.split(':').map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  const handleTimeSliderChange = (val: number) => {
+    const h = Math.floor(val / 60).toString().padStart(2, '0');
+    const m = (val % 60).toString().padStart(2, '0');
+    onDateChange?.({ ...state, time: `${h}:${m}` });
+  };
+
+  const timeParts = (state.time || '00:00').split(':');
+  const h = timeParts[0] || '00';
+  const m = timeParts[1] || '00';
+
   return (
     <Section
       title="Météo"
@@ -77,98 +96,59 @@ export function WeatherSection({
         ))}
       </div>
 
-      {/* Date / time range — two columns */}
-      <div className="rvc-weather__range">
-        <div className="rvc-weather__range-col">
-          <div className="rvc-weather__range-row">
-            <span className="rvc-weather__range-label">Départ :</span>
-            <div className="rvc-weather__input rvc-weather__input--date">
-              <IconCalendar size={12} />
-              <input
-                type="date"
-                value={state.startDate}
-                onChange={(e) =>
-                  onRangeChange?.({
-                    startDate: e.target.value,
-                    startTime: state.startTime,
-                    endDate: state.endDate,
-                    endTime: state.endTime,
-                  })
-                }
-                className="rvc-weather__native-input"
-              />
-              <span>{formatDateShort(state.startDate)}</span>
-            </div>
-          </div>
-          <div className="rvc-weather__range-row">
-            <span className="rvc-weather__range-label">Heure :</span>
-            <div className="rvc-weather__input">
-              <IconClock size={12} />
-              <input
-                type="time"
-                value={state.startTime}
-                onChange={(e) =>
-                  onRangeChange?.({
-                    startDate: state.startDate,
-                    startTime: e.target.value,
-                    endDate: state.endDate,
-                    endTime: state.endTime,
-                  })
-                }
-                className="rvc-weather__native-input"
-              />
-              <span>{state.startTime}</span>
-            </div>
-          </div>
+      {/* Date row */}
+      <div className="rvc-weather__date-row">
+        <Checkbox
+          id="weather-custom-date"
+          checked={state.customDateEnabled}
+          onChange={(checked) => onDateChange?.({ ...state, customDateEnabled: checked })}
+        />
+        <span className="rvc-weather__date-label">Choisir une date personalisée</span>
+        <div className="rvc-weather__date-input">
+          <IconCalendar size={12} />
+          <span>{formatDateShort(state.date)}</span>
+          <input
+            type="date"
+            value={state.date}
+            onChange={(e) => onDateChange?.({ ...state, date: e.target.value })}
+            className="rvc-weather__native-input"
+          />
         </div>
-        <div className="rvc-weather__range-col">
-          <div className="rvc-weather__range-row">
-            <span className="rvc-weather__range-label">Fin :</span>
-            <div className="rvc-weather__input rvc-weather__input--date">
-              <IconCalendar size={12} />
-              <input
-                type="date"
-                value={state.endDate}
-                onChange={(e) =>
-                  onRangeChange?.({
-                    startDate: state.startDate,
-                    startTime: state.startTime,
-                    endDate: e.target.value,
-                    endTime: state.endTime,
-                  })
-                }
-                className="rvc-weather__native-input"
-              />
-              <span>{formatDateShort(state.endDate)}</span>
-            </div>
+      </div>
+
+      {/* Time row */}
+      <div className="rvc-weather__time-row">
+        <span className="rvc-weather__time-bound">00:00</span>
+        <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+          <Slider
+            min={0}
+            max={1439}
+            value={getMinutes(state.time)}
+            onChange={handleTimeSliderChange}
+            width="100%"
+          />
+        </div>
+        <span className="rvc-weather__time-bound">23:59</span>
+        <div className="rvc-weather__time-input">
+          <IconClock size={12} />
+          <div className="rvc-weather__time-display">
+            <div className="rvc-weather__time-display-segment">{h}</div>
+            <div className="rvc-weather__time-display-colon">:</div>
+            <div className="rvc-weather__time-display-segment">{m}</div>
           </div>
-          <div className="rvc-weather__range-row">
-            <span className="rvc-weather__range-label">Heure :</span>
-            <div className="rvc-weather__input">
-              <IconClock size={12} />
-              <input
-                type="time"
-                value={state.endTime}
-                onChange={(e) =>
-                  onRangeChange?.({
-                    startDate: state.startDate,
-                    startTime: state.startTime,
-                    endDate: state.endDate,
-                    endTime: e.target.value,
-                  })
-                }
-                className="rvc-weather__native-input"
-              />
-              <span>{state.endTime}</span>
-            </div>
-          </div>
+          <input
+            type="time"
+            value={state.time}
+            onChange={(e) => onDateChange?.({ ...state, time: e.target.value })}
+            className="rvc-weather__native-input"
+          />
         </div>
       </div>
 
       {/* Layer list */}
       <div className="rvc-weather__layers">
         {state.layers.map((layer) => (
-          <div key={layer.key} className="rvc-weather__layer-row">
+          <div key={layer.key} className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
             <Checkbox
               id={`weather-${layer.key}`}
               checked={layer.enabled}
@@ -176,35 +156,21 @@ export function WeatherSection({
             />
             <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
             <Select
-              width={80}
+              width={104}
               value={layer.mode}
               options={MODE_OPTIONS}
               onChange={(v) => onLayerModeChange?.(layer.key, v)}
             />
-            <button
-              type="button"
-              className="rvc-weather__layer-opacity"
-              aria-label="Opacité"
-            >
-              <IconEye size={10} />
-              <span>{layer.opacity} %</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={layer.opacity}
-                onChange={(e) => onLayerOpacityChange?.(layer.key, Number(e.target.value))}
-                className="rvc-routes__opacity-range"
-              />
-            </button>
           </div>
         ))}
       </div>
 
-      <button type="button" className="rvc-btn-ghost" onClick={onAddAlert}>
-        <IconPlusCircle size={12} />
-        <span>Ajouter des alertes sur l’itinéraire</span>
-      </button>
+      {/* Add alert toggle */}
+      <div className="rvc-weather__add-alert">
+        <Toggle checked={false} onChange={onAddAlert} />
+        <span className="rvc-weather__add-alert-text">Ajouter des alertes</span>
+        <IconInfo size={16} />
+      </div>
     </Section>
   );
 }
