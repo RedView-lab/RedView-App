@@ -60,6 +60,24 @@ function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
+function formatBandLabel(band: SlopeBand, scale: SlopeScale): string {
+  // Extract category name from label, e.g. "0 - 7% (Modéré)" → "Modéré"
+  const categoryMatch = band.label?.match(/\(([^)]+)\)/);
+  const category = categoryMatch ? categoryMatch[1] : '';
+
+  if (scale === 'degree') {
+    // Extract just the degree range without its own parenthetical
+    // e.g. "0° - 7° (Plat)" → "0° - 7°"
+    const degMatch = band.degreeRange.match(/^([^(]+)/);
+    const degRange = degMatch ? degMatch[1].trim() : band.degreeRange;
+    return category ? `${degRange} (${category})` : degRange;
+  }
+
+  // Percent mode: use the correct percentRange (already computed via tan)
+  // e.g. "0% - 12%" + "Modéré" → "0% - 12% (Modéré)"
+  return category ? `${band.percentRange} (${category})` : band.percentRange;
+}
+
 export function SlopesSection({
   enabled,
   state,
@@ -71,10 +89,10 @@ export function SlopesSection({
   onOpacityChange,
   onBandVisibilityToggle,
 }: Props) {
-  const isGradient = state.colorization === 'gradient';
-  const visibleBands: SlopeBand[] = isGradient
-    ? state.bands.slice(0, bandCountForSetting(state.scaleSetting))
-    : state.bands;
+  const visibleBands: SlopeBand[] = state.bands.slice(
+    0,
+    bandCountForSetting(state.scaleSetting)
+  );
 
   return (
     <Section
@@ -101,28 +119,25 @@ export function SlopesSection({
         />
       </div>
 
-      {isGradient && (
-        <>
-          <div className="rvc-row rvc-row--split">
-            <span className="rvc-row__label">Échelle</span>
-            <Select
-              width={140}
-              value={state.scale}
-              options={SCALE_OPTIONS}
-              onChange={(v) => onScaleChange?.(v as SlopeScale)}
-            />
-          </div>
-          <div className="rvc-row rvc-row--split">
-            <span className="rvc-row__label">Réglage échelle</span>
-            <Select
-              width={140}
-              value={state.scaleSetting}
-              options={SCALE_SETTING_OPTIONS}
-              onChange={(v) => onScaleSettingChange?.(v as SlopeScaleSetting)}
-            />
-          </div>
-        </>
-      )}
+      <div className="rvc-row rvc-row--split">
+        <span className="rvc-row__label">Échelle</span>
+        <Select
+          width={140}
+          value={state.scale}
+          options={SCALE_OPTIONS}
+          onChange={(v) => onScaleChange?.(v as SlopeScale)}
+        />
+      </div>
+
+      <div className="rvc-row rvc-row--split">
+        <span className="rvc-row__label">Réglage échelle</span>
+        <Select
+          width={140}
+          value={state.scaleSetting}
+          options={SCALE_SETTING_OPTIONS}
+          onChange={(v) => onScaleSettingChange?.(v as SlopeScaleSetting)}
+        />
+      </div>
 
       <div className="rvc-row rvc-row--split rvc-slopes__opacity-row">
         <span className="rvc-row__label">Opacité</span>
@@ -143,15 +158,15 @@ export function SlopesSection({
               className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
               onClick={() => onBandVisibilityToggle?.(band.id)}
               aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
-              title={band.label ?? band.percentRange}
+              title={formatBandLabel(band, state.scale)}
             >
               {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
             </button>
             <span
               className="rvc-slopes__band-label"
-              title={band.label ?? band.percentRange}
+              title={formatBandLabel(band, state.scale)}
             >
-              {band.label ?? band.percentRange}
+              {formatBandLabel(band, state.scale)}
             </span>
             <div className="rvc-slopes__color-chip">
               <ColorSwatch color={band.color} size={12} />
