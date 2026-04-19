@@ -14,7 +14,7 @@
 }
 
 /* Each checkbox row: 30px tall, 6px vertical padding (Figma spec) */
-.rvc-labels__col .rvc-checkbox {
+.rvc-labels__col .rvc-cp-checkbox {
   height: 30px;
   padding: 6px 0;
 }

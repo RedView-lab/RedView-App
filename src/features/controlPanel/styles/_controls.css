@@ -30,7 +30,7 @@
 
 .rvc-toggle.is-on .rvc-toggle__knob { transform: translateX(16px); }
 
-.rvc-checkbox {
+.rvc-cp-checkbox {
   position: relative;
   display: flex;
   align-items: center;
@@ -39,7 +39,7 @@
   cursor: pointer;
 }
 
-.rvc-checkbox__box {
+.rvc-cp-checkbox__box {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -53,12 +53,12 @@
   transition: background 0.15s, border-color 0.15s;
 }
 
-.rvc-checkbox__box.is-checked {
+.rvc-cp-checkbox__box.is-checked {
   background: var(--rvc-red);
   border-color: var(--rvc-red);
 }
 
-.rvc-checkbox__input {
+.rvc-cp-checkbox__input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -66,7 +66,7 @@
   height: 0;
 }
 
-.rvc-checkbox__label {
+.rvc-cp-checkbox__label {
   font-size: 13px;
   font-weight: 600;
   color: var(--rvc-text);
