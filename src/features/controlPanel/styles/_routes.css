@@ -1,27 +1,27 @@
-/* Routes section */
+/* Routes section — pixel-perfect from Figma node 1749:57675 */
 
 .rvc-routes__list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   width: 100%;
 }
 
 .rvc-routes__row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   width: 100%;
 }
 
 .rvc-routes__color-picker {
   display: flex;
   align-items: center;
-  gap: 4px;
   padding: 5px 2px 5px 9px;
   background: var(--rvc-bg-row);
   border-radius: 5px;
   flex-shrink: 0;
+  cursor: pointer;
 }
 
 .rvc-routes__label {

@@ -1,7 +1,7 @@
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { ColorSwatch } from '../components/ColorSwatch';
-import { IconEye } from '../icons';
+import { IconEye, IconChevronDown } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState, RouteRenderMode } from '../types';
 
 interface Props {
@@ -37,8 +37,8 @@ export function RoutesSection({
         {items.map((route) => (
           <div key={route.id} className="rvc-routes__row">
             <div className="rvc-routes__color-picker">
-              {/* native color input for swatch selection */}
               <ColorSwatch color={route.color} />
+              <IconChevronDown size={20} />
             </div>
             <div className="rvc-routes__label">{route.label}</div>
             <Select
