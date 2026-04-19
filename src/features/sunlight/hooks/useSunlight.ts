@@ -3,7 +3,7 @@ import type { Map as MapboxMap, FogSpecification, LightsSpecification } from 'ma
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
-import { addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition, SUN_DISK_LAYER_ID } from '../lib/sun-disk-layer';
+import { addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition } from '../lib/sun-disk-layer';
 
 /**
  * Drives Mapbox sun + atmosphere from a date/time and the map center.
