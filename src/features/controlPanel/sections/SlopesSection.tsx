@@ -60,28 +60,58 @@ function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
-// ── Inline editable degree input ──────────────────────────────────────
+// ── Inline editable numeric input ─────────────────────────────────────
 // Renders as text by default. Click to enter edit mode, type a number,
-// commit on Enter / blur, cancel on Escape. Validates 0–90 range.
+// commit on Enter / blur, cancel on Escape. Supports two units:
+//   - 'degree' : raw degrees, range 0..90, suffix "°", maxLength 2
+//   - 'percent': percent slope, range 0..1000, suffix "%", maxLength 4
+// On commit, the value is converted back to degrees (the canonical unit)
+// before being passed to the parent via `onCommit`.
 
-interface InlineDegreeInputProps {
-  value: number;
+type InlineUnit = 'degree' | 'percent';
+
+interface InlineNumericInputProps {
+  /** Current value in degrees (canonical unit). */
+  valueDeg: number;
+  /** Display unit. */
+  unit: InlineUnit;
   /** Is this value editable? First band min (0°) and last band max (90°) are not. */
   editable: boolean;
-  /** Called with new degree value on commit */
+  /** Called with the new value in DEGREES on commit. */
   onCommit: (deg: number) => void;
   className?: string;
 }
 
-function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegreeInputProps) {
+function degToPct(deg: number): number {
+  if (deg >= 90) return 9999; // sentinel — caller never commits this
+  return Math.round(Math.tan((deg * Math.PI) / 180) * 100);
+}
+function pctToDeg(pct: number): number {
+  const rad = Math.atan(pct / 100);
+  return Math.round((rad * 180) / Math.PI);
+}
+
+function InlineNumericInput({
+  valueDeg,
+  unit,
+  editable,
+  onCommit,
+  className,
+}: InlineNumericInputProps) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(String(value));
+  const isPercent = unit === 'percent';
+
+  const display = isPercent ? degToPct(valueDeg) : valueDeg;
+  const suffix = isPercent ? '%' : '°';
+  const maxLength = isPercent ? 4 : 2;
+
+  const [draft, setDraft] = useState(String(display));
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync draft when external value changes (e.g. after clamping)
+  // Sync draft when external value changes (e.g. after clamping or unit toggle)
   useEffect(() => {
-    if (!editing) setDraft(String(value));
-  }, [value, editing]);
+    if (!editing) setDraft(String(display));
+  }, [display, editing]);
 
   // Auto-focus & select when entering edit mode
   useEffect(() => {
@@ -95,10 +125,16 @@ function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegre
     setEditing(false);
     const parsed = parseInt(draft, 10);
     if (Number.isNaN(parsed)) return; // revert silently
-    // Clamp to valid range — the backend will also clamp, but give user immediate feedback
-    const clamped = Math.max(0, Math.min(90, parsed));
-    if (clamped !== value) onCommit(clamped);
-  }, [draft, value, onCommit]);
+    let nextDeg: number;
+    if (isPercent) {
+      // Clamp percent to [0, 9999] then convert to degrees
+      const pct = Math.max(0, Math.min(9999, parsed));
+      nextDeg = Math.max(0, Math.min(90, pctToDeg(pct)));
+    } else {
+      nextDeg = Math.max(0, Math.min(90, parsed));
+    }
+    if (nextDeg !== valueDeg) onCommit(nextDeg);
+  }, [draft, valueDeg, onCommit, isPercent]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -106,15 +142,19 @@ function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegre
         e.preventDefault();
         commit();
       } else if (e.key === 'Escape') {
-        setDraft(String(value));
+        setDraft(String(display));
         setEditing(false);
       }
     },
-    [commit, value],
+    [commit, display],
   );
 
   if (!editable) {
-    return <span className={`rvc-slopes__deg-value ${className ?? ''}`}>{value}°</span>;
+    return (
+      <span className={`rvc-slopes__deg-value ${className ?? ''}`}>
+        {display}{suffix}
+      </span>
+    );
   }
 
   if (!editing) {
@@ -123,9 +163,9 @@ function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegre
         type="button"
         className={`rvc-slopes__deg-btn ${className ?? ''}`}
         onClick={() => setEditing(true)}
-        title="Cliquer pour modifier l'angle"
+        title={isPercent ? 'Cliquer pour modifier le pourcentage' : "Cliquer pour modifier l'angle"}
       >
-        {value}°
+        {display}{suffix}
       </button>
     );
   }
@@ -144,8 +184,8 @@ function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegre
       }}
       onBlur={commit}
       onKeyDown={handleKeyDown}
-      maxLength={2}
-      aria-label="Angle en degrés"
+      maxLength={maxLength}
+      aria-label={isPercent ? 'Pourcentage de pente' : 'Angle en degrés'}
     />
   );
 }
@@ -180,7 +220,7 @@ function BandRow({
     [bandIndex, onBreakpointChange],
   );
 
-  // Build the label — show degree range with inline editable values
+  // Build the label — show range with inline editable values
   const minEditable = !isFirst; // first band always starts at 0°
   const maxEditable = !isLast;  // last band always ends at 90°
 
@@ -188,16 +228,10 @@ function BandRow({
   const categoryMatch = band.label?.match(/\(([^)]+)\)/);
   const category = categoryMatch ? categoryMatch[1] : '';
 
-  // In percent mode we show a static percent range pulled from the band
-  // metadata (computed in the container from the same degree breakpoints,
-  // so the two scales stay in sync). Inline editing is only available in
-  // degree mode where the user enters integers in degrees.
-  const isPercent = scale === 'percent';
-  const percentText = (() => {
-    // Strip any trailing "(Catégorie)" — we re-append it below
-    const m = band.percentRange.match(/^([^(]+)/);
-    return (m ? m[1] : band.percentRange).trim();
-  })();
+  // The displayed unit (% or °) toggles via `scale`. The breakpoints stored
+  // in the container are always in degrees — InlineNumericInput converts
+  // back to degrees on commit so the canonical state stays unit-free.
+  const unit: InlineUnit = scale === 'percent' ? 'percent' : 'degree';
 
   return (
     <div className={`rvc-slopes__band-row${band.visible ? '' : ' is-hidden'}`}>
@@ -211,23 +245,19 @@ function BandRow({
       </button>
 
       <div className="rvc-slopes__band-label-editable">
-        {isPercent ? (
-          <span className="rvc-slopes__deg-value">{percentText}</span>
-        ) : (
-          <>
-            <InlineDegreeInput
-              value={band.minDeg}
-              editable={minEditable}
-              onCommit={handleMinCommit}
-            />
-            <span className="rvc-slopes__deg-sep">–</span>
-            <InlineDegreeInput
-              value={band.maxDeg}
-              editable={maxEditable}
-              onCommit={handleMaxCommit}
-            />
-          </>
-        )}
+        <InlineNumericInput
+          valueDeg={band.minDeg}
+          unit={unit}
+          editable={minEditable}
+          onCommit={handleMinCommit}
+        />
+        <span className="rvc-slopes__deg-sep">–</span>
+        <InlineNumericInput
+          valueDeg={band.maxDeg}
+          unit={unit}
+          editable={maxEditable}
+          onCommit={handleMaxCommit}
+        />
         {category && (
           <span className="rvc-slopes__band-category">({category})</span>
         )}
