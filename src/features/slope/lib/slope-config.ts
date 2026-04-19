@@ -68,3 +68,74 @@ export function degToPercent(deg: number): string {
   if (deg >= 90) return '∞';
   return String(Math.round(Math.tan((deg * Math.PI) / 180) * 100));
 }
+
+// ── Color ramp for dynamic bands ──────────────────────────────────────
+
+/** Base color ramp from green (flat) → dark red (cliff). */
+const COLOR_RAMP = [
+  '#2DBF8C', // green — flat
+  '#8DD35F', // light green
+  '#FFD800', // yellow
+  '#FFA500', // orange
+  '#FF7200', // dark orange
+  '#E50C0C', // red
+  '#C40000', // dark red
+  '#A30000', // darker red
+  '#7B0000', // very dark red
+  '#5C0000', // near-black red
+];
+
+/** Interpolate a hex color between two hex colors. t ∈ [0, 1]. */
+function lerpColor(a: string, b: string, t: number): string {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
+  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
+  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${bl.toString(16).padStart(2, '0')}`.toUpperCase();
+}
+
+/** Pick a color from the ramp for position t ∈ [0, 1]. */
+function rampColor(t: number): string {
+  const n = COLOR_RAMP.length - 1;
+  const i = Math.min(Math.floor(t * n), n - 1);
+  const frac = t * n - i;
+  return lerpColor(COLOR_RAMP[i], COLOR_RAMP[i + 1], frac);
+}
+
+/** Category labels assigned by slope severity. */
+const SEVERITY_LABELS = [
+  'Plat', 'Modéré', 'Pentu', 'Très pentu', 'Raide',
+  'Très raide', 'Vertical', 'Extrême', 'Falaise', 'Surplomb',
+];
+
+function severityLabel(index: number, total: number): string {
+  // Map band index onto the severity labels array
+  const i = Math.round((index / Math.max(total - 1, 1)) * (SEVERITY_LABELS.length - 1));
+  return SEVERITY_LABELS[Math.min(i, SEVERITY_LABELS.length - 1)];
+}
+
+/**
+ * Generate N evenly-spaced slope categories that always cover 0° → 90°.
+ * More bands = more precision.
+ */
+export function generateDynamicCategories(count: number): SlopeCategory[] {
+  const step = 90 / count;
+  return Array.from({ length: count }, (_, i) => {
+    const minDeg = Math.round(step * i);
+    const maxDeg = i === count - 1 ? 90 : Math.round(step * (i + 1));
+    const minPct = degToPercent(minDeg);
+    const maxPct = degToPercent(maxDeg);
+    const pctRange = maxDeg >= 90 ? `>${minPct}%` : `${minPct}% - ${maxPct}%`;
+    const label = severityLabel(i, count);
+
+    return {
+      id: `band-${i}`,
+      label,
+      minDeg,
+      maxDeg,
+      color: rampColor(i / Math.max(count - 1, 1)),
+      displayRange: pctRange,
+    };
+  });
+}

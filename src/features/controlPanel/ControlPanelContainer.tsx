@@ -6,7 +6,7 @@ import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
 
 import { loadSlopeState, saveSlopeState } from '@/features/slope/lib/slope-persist';
-import { SLOPE_CATEGORIES } from '@/features/slope/lib/slope-config';
+import { SLOPE_CATEGORIES, generateDynamicCategories } from '@/features/slope/lib/slope-config';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode } from '@/features/slope/types';
 
@@ -27,6 +27,7 @@ import type {
   SlopeScale,
   SlopeScaleSetting,
 } from './types';
+import type { SlopeCategory } from '@/features/slope/types';
 
 interface ControlPanelContainerProps {
   map: MapboxMap | null;
@@ -58,8 +59,16 @@ const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
   waterBody: 'waterBody',
 };
 
-function buildSlopeBandsFromCategories(visibilityById: Record<string, boolean>): SlopeBand[] {
-  return SLOPE_CATEGORIES.map((cat) => ({
+function bandCountFromSetting(setting: SlopeScaleSetting): number {
+  const m = /^(\d+)/.exec(setting);
+  return m ? Number(m[1]) : 4;
+}
+
+function buildSlopeBandsFromDynamic(
+  categories: SlopeCategory[],
+  visibilityById: Record<string, boolean>,
+): SlopeBand[] {
+  return categories.map((cat) => ({
     id: cat.id,
     percentRange: cat.displayRange,
     degreeRange: `${cat.minDeg}° - ${cat.maxDeg}° (${cat.label})`,
@@ -121,6 +130,12 @@ export function ControlPanelContainer({
     saveSlopeState(next);
   }, []);
 
+  // Dynamic categories based on scaleSetting
+  const dynamicCategories = useMemo(
+    () => generateDynamicCategories(bandCountFromSetting(slopeScaleSetting)),
+    [slopeScaleSetting],
+  );
+
   useSlope(
     isMapLoaded ? map : null,
     isMapLoaded,
@@ -129,10 +144,10 @@ export function ControlPanelContainer({
     slopeState.colorMode,
     useMemo(
       () =>
-        SLOPE_CATEGORIES.filter((cat) => slopeBandVisibility[cat.id] === false).map(
+        dynamicCategories.filter((cat) => slopeBandVisibility[cat.id] === false).map(
           (cat) => [cat.minDeg, cat.maxDeg] as [number, number],
         ),
-      [slopeBandVisibility],
+      [slopeBandVisibility, dynamicCategories],
     ),
   );
 
@@ -186,7 +201,7 @@ export function ControlPanelContainer({
         scale: slopeScale,
         scaleSetting: slopeScaleSetting,
         opacity: Math.round(slopeState.opacity * 100),
-        bands: buildSlopeBandsFromCategories(slopeBandVisibility),
+        bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
       },
       wind: { enabled: windEnabled },
     };

@@ -49,12 +49,11 @@ const SCALE_SETTING_OPTIONS: { value: SlopeScaleSetting; label: string }[] = [
   { value: '3 couleurs', label: '3 couleurs' },
   { value: '4 couleurs', label: '4 couleurs' },
   { value: '6 couleurs', label: '6 couleurs' },
+  { value: '8 couleurs', label: '8 couleurs' },
+  { value: '10 couleurs', label: '10 couleurs' },
 ];
 
-function bandCountForSetting(setting: SlopeScaleSetting): number {
-  const m = /^(\d+)/.exec(setting);
-  return m ? Number(m[1]) : 4;
-}
+
 
 function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
@@ -89,10 +88,8 @@ export function SlopesSection({
   onOpacityChange,
   onBandVisibilityToggle,
 }: Props) {
-  const visibleBands: SlopeBand[] = state.bands.slice(
-    0,
-    bandCountForSetting(state.scaleSetting)
-  );
+  // Bands are already dynamically generated to match scaleSetting count
+  const visibleBands = state.bands;
 
   return (
     <Section
