@@ -33,9 +33,9 @@
   margin-top: 4px;
 }
 
-/* ── Stepped mode legend (Remplissage) ────────────────────────────── */
+/* ── Unified band list (Expert Mode) ──────────────────────────────── */
 
-.rvc-slopes__band {
+.rvc-slopes__band-row {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -52,61 +52,7 @@
   height: 16px;
 }
 
-.rvc-slopes__band-swatch {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  width: 48px;
-  color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-.rvc-slopes__band-swatch span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.rvc-slopes__band-pct,
-.rvc-slopes__band-deg {
-  min-width: 0;
-  color: var(--rvc-text);
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.rvc-slopes__band-pct { 
-  flex: 1;
-  text-align: left; 
-}
-.rvc-slopes__band-deg { 
-  opacity: 0.64; 
-  text-align: right;
-}
-
-.rvc-slopes__band.is-hidden .rvc-slopes__band-swatch,
-.rvc-slopes__band.is-hidden .rvc-slopes__band-pct,
-.rvc-slopes__band.is-hidden .rvc-slopes__band-deg {
-  opacity: 0.28;
-}
-
-/* ── Gradient mode color-picker rows (Dégradé) ────────────────────── */
-
-.rvc-slopes__grad-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  min-width: 0;
-}
-
-.rvc-slopes__grad-label {
+.rvc-slopes__band-label {
   flex: 1 1 0;
   min-width: 0;
   color: var(--rvc-text);
@@ -154,7 +100,10 @@
   color: var(--rvc-text);
 }
 
-.rvc-slopes__grad-row.is-hidden .rvc-slopes__grad-label,
-.rvc-slopes__grad-row.is-hidden .rvc-slopes__color-chip {
+.rvc-slopes__band-row.is-hidden .rvc-slopes__band-label,
+.rvc-slopes__band-row.is-hidden .rvc-slopes__color-chip {
   opacity: 0.4;
+}
+.rvc-slopes__band-row.is-hidden .rvc-slopes__band-eye {
+  opacity: 0.28;
 }

@@ -132,66 +132,35 @@ export function SlopesSection({
         </div>
       </div>
 
-      {isGradient ? (
-        <div className="rvc-slopes__bands">
-          {visibleBands.map((band) => (
-            <div
-              key={band.id}
-              className={`rvc-slopes__grad-row${band.visible ? '' : ' is-hidden'}`}
+      <div className="rvc-slopes__bands">
+        {visibleBands.map((band) => (
+          <div
+            key={band.id}
+            className={`rvc-slopes__band-row${band.visible ? '' : ' is-hidden'}`}
+          >
+            <button
+              type="button"
+              className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
+              onClick={() => onBandVisibilityToggle?.(band.id)}
+              aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
+              title={band.label ?? band.percentRange}
             >
-              <button
-                type="button"
-                className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
-                onClick={() => onBandVisibilityToggle?.(band.id)}
-                aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
-                title={band.label ?? band.percentRange}
-              >
-                {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
-              </button>
-              <span
-                className="rvc-slopes__grad-label"
-                title={band.label ?? band.percentRange}
-              >
-                {band.label ?? band.percentRange}
-              </span>
-              <div className="rvc-slopes__color-chip">
-                <ColorSwatch color={band.color} size={12} />
-                <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
-                <IconChevronDown size={20} className="rvc-slopes__color-chevron" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="rvc-slopes__bands">
-          {visibleBands.map((band) => (
-            <div
-              key={band.id}
-              className={`rvc-slopes__band${band.visible ? '' : ' is-hidden'}`}
+              {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
+            </button>
+            <span
+              className="rvc-slopes__band-label"
+              title={band.label ?? band.percentRange}
             >
-              <button
-                type="button"
-                className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
-                onClick={() => onBandVisibilityToggle?.(band.id)}
-                aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
-                title={band.degreeRange}
-              >
-                {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
-              </button>
-              <span className="rvc-slopes__band-swatch">
-                <ColorSwatch color={band.color} size={12} />
-                <span>{hexLabel(band.color).slice(0, 4)}</span>
-              </span>
-              <span className="rvc-slopes__band-pct" title={band.percentRange}>
-                {band.percentRange}
-              </span>
-              <span className="rvc-slopes__band-deg" title={band.degreeRange}>
-                {band.degreeRange}
-              </span>
+              {band.label ?? band.percentRange}
+            </span>
+            <div className="rvc-slopes__color-chip">
+              <ColorSwatch color={band.color} size={12} />
+              <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
+              <IconChevronDown size={20} className="rvc-slopes__color-chevron" />
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        ))}
+      </div>
     </Section>
   );
 }
