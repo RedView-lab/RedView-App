@@ -314,7 +314,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <LidarProvider>
-    <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} onLidarSelectionDisable={() => setLidarModeEnabled(false)} />
 
       {/*

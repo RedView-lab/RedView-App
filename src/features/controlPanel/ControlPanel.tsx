@@ -70,6 +70,7 @@ export function ControlPanel({
           aria-label="Redimensionner le panneau"
         />
       )}
+      <div className="rvc-panel__content">
       <BasemapsSection
         basemaps={state.basemaps}
         onBasemapToggle={onBasemapToggle}
@@ -147,6 +148,7 @@ export function ControlPanel({
         enabled={state.sunlight.enabled}
         onEnabledChange={onSunlightEnabledChange}
       />
+      </div>
     </aside>
   );
 }
