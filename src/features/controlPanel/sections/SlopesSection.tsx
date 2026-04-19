@@ -179,7 +179,7 @@ export function SlopesSection({
                 {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
               </button>
               <span className="rvc-slopes__band-swatch">
-                <ColorSwatch color={band.color} size={10} />
+                <ColorSwatch color={band.color} size={12} />
                 <span>{hexLabel(band.color).slice(0, 4)}</span>
               </span>
               <span className="rvc-slopes__band-pct" title={band.percentRange}>

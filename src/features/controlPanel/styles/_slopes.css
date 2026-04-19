@@ -36,28 +36,30 @@
 /* ── Stepped mode legend (Remplissage) ────────────────────────────── */
 
 .rvc-slopes__band {
-  display: grid;
-  grid-template-columns: 16px 48px 1fr 1fr;
+  display: flex;
   align-items: center;
-  column-gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
-  padding: 2px 0;
+  padding: 3px 0;
 }
 
 .rvc-slopes__band-eye {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 16px;
+  height: 16px;
 }
 
 .rvc-slopes__band-swatch {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
+  width: 48px;
   color: var(--rvc-text);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -72,16 +74,21 @@
 .rvc-slopes__band-deg {
   min-width: 0;
   color: var(--rvc-text);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  opacity: 0.7;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.rvc-slopes__band-pct { text-align: left; }
-.rvc-slopes__band-deg { text-align: right; opacity: 0.55; }
+.rvc-slopes__band-pct { 
+  flex: 1;
+  text-align: left; 
+}
+.rvc-slopes__band-deg { 
+  opacity: 0.64; 
+  text-align: right;
+}
 
 .rvc-slopes__band.is-hidden .rvc-slopes__band-swatch,
 .rvc-slopes__band.is-hidden .rvc-slopes__band-pct,
