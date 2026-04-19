@@ -254,6 +254,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     padding: PANEL_PADDING,
     boxSizing: 'border-box',
     display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   const leftPanelStyle: React.CSSProperties = {
@@ -266,6 +268,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     padding: PANEL_PADDING,
     boxSizing: 'border-box',
     display: leftPanelOpen ? 'flex' : 'none',
+    flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   const leftDockOffset =
@@ -289,6 +293,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     padding: PANEL_PADDING,
     boxSizing: 'border-box',
     display: centralWidth > 200 ? 'flex' : 'none',
+    flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   const logoutStyle: React.CSSProperties = {
