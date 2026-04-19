@@ -33,7 +33,7 @@
   margin-top: 4px;
 }
 
-/* ── Unified band list (Expert Mode) ──────────────────────────────── */
+/* ── Unified band list ────────────────────────────────────────────── */
 
 .rvc-slopes__band-row {
   display: flex;
@@ -51,6 +51,118 @@
   width: 16px;
   height: 16px;
 }
+
+/* ── Editable band label (replaces old band-label) ────────────────── */
+
+.rvc-slopes__band-label-editable {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Static degree value (non-editable: 0° first, 90° last) */
+.rvc-slopes__deg-value {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 3px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  opacity: 0.5;
+  min-width: 24px;
+  text-align: center;
+}
+
+/* Clickable degree button — shows hover state, indicates editability */
+.rvc-slopes__deg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 4px;
+  min-width: 28px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  user-select: none;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.rvc-slopes__deg-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  opacity: 1;
+}
+
+.rvc-slopes__deg-btn:focus-visible {
+  outline: 2px solid rgba(45, 191, 140, 0.6);
+  outline-offset: 1px;
+}
+
+/* Active edit input — inline text field */
+.rvc-slopes__deg-input {
+  display: inline-flex;
+  align-items: center;
+  width: 32px;
+  min-width: 32px;
+  padding: 1px 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(45, 191, 140, 0.5);
+  border-radius: 4px;
+  outline: none;
+  text-align: center;
+  font-family: inherit;
+  line-height: 1.4;
+  caret-color: #2DBF8C;
+  box-shadow: 0 0 0 2px rgba(45, 191, 140, 0.15);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.rvc-slopes__deg-input:focus {
+  border-color: rgba(45, 191, 140, 0.8);
+  box-shadow: 0 0 0 3px rgba(45, 191, 140, 0.2);
+}
+
+/* Separator between min and max */
+.rvc-slopes__deg-sep {
+  opacity: 0.4;
+  font-weight: 400;
+  padding: 0 1px;
+  user-select: none;
+}
+
+/* Category label after the degree range */
+.rvc-slopes__band-category {
+  opacity: 0.45;
+  font-weight: 500;
+  font-size: 12px;
+  margin-left: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Legacy band-label (kept for backwards compat) ────────────────── */
 
 .rvc-slopes__band-label {
   flex: 1 1 0;
@@ -100,6 +212,7 @@
   color: var(--rvc-text);
 }
 
+.rvc-slopes__band-row.is-hidden .rvc-slopes__band-label-editable,
 .rvc-slopes__band-row.is-hidden .rvc-slopes__band-label,
 .rvc-slopes__band-row.is-hidden .rvc-slopes__color-chip {
   opacity: 0.4;

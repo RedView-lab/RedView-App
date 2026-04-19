@@ -54,15 +54,19 @@ export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 
 
 export interface SlopeBand {
   id: string;
-  /** e.g. "0 - 7%" */
+  /** e.g. "0% - 12%" */
   percentRange: string;
-  /** e.g. "0° - 23° (Plat)" */
+  /** e.g. "0° - 7° (Plat)" */
   degreeRange: string;
-  /** Optional richer label used in gradient mode, e.g. "0 - 7% (Modéré)" */
+  /** Optional richer label, e.g. "0% - 12% (Modéré)" */
   label?: string;
   /** hex with or without # */
   color: string;
   visible: boolean;
+  /** Numeric lower bound in degrees (inclusive). Always 0 for first band. */
+  minDeg: number;
+  /** Numeric upper bound in degrees (exclusive). Always 90 for last band. */
+  maxDeg: number;
 }
 
 export interface SlopesState {
@@ -141,6 +145,9 @@ export interface ControlPanelHandlers {
   onSlopeOpacityChange?: (value: number) => void;
   onSlopeBandColorChange?: (id: string, color: string) => void;
   onSlopeBandVisibilityToggle?: (id: string) => void;
+  /** Called when the user edits a band's degree breakpoint inline.
+   *  bandIndex is 0-based. field is 'min' or 'max'. valueDeg is the new angle in degrees. */
+  onSlopeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
   onWeatherTabChange?: (tab: WeatherTab) => void;

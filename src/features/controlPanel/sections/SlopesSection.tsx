@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
@@ -24,6 +25,7 @@ interface Props {
   onOpacityChange: ControlPanelHandlers['onSlopeOpacityChange'];
   onBandColorChange: ControlPanelHandlers['onSlopeBandColorChange'];
   onBandVisibilityToggle: ControlPanelHandlers['onSlopeBandVisibilityToggle'];
+  onBandBreakpointChange?: ControlPanelHandlers['onSlopeBandBreakpointChange'];
 }
 
 const RESOLUTION_OPTIONS: { value: SlopeResolution; label: string }[] = [
@@ -53,29 +55,176 @@ const SCALE_SETTING_OPTIONS: { value: SlopeScaleSetting; label: string }[] = [
   { value: '10 couleurs', label: '10 couleurs' },
 ];
 
-
-
 function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
-function formatBandLabel(band: SlopeBand, scale: SlopeScale): string {
-  // Extract category name from label, e.g. "0 - 7% (Modéré)" → "Modéré"
+// ── Inline editable degree input ──────────────────────────────────────
+// Renders as text by default. Click to enter edit mode, type a number,
+// commit on Enter / blur, cancel on Escape. Validates 0–90 range.
+
+interface InlineDegreeInputProps {
+  value: number;
+  /** Is this value editable? First band min (0°) and last band max (90°) are not. */
+  editable: boolean;
+  /** Called with new degree value on commit */
+  onCommit: (deg: number) => void;
+  className?: string;
+}
+
+function InlineDegreeInput({ value, editable, onCommit, className }: InlineDegreeInputProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Sync draft when external value changes (e.g. after clamping)
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
+
+  // Auto-focus & select when entering edit mode
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = useCallback(() => {
+    setEditing(false);
+    const parsed = parseInt(draft, 10);
+    if (Number.isNaN(parsed)) return; // revert silently
+    // Clamp to valid range — the backend will also clamp, but give user immediate feedback
+    const clamped = Math.max(0, Math.min(90, parsed));
+    if (clamped !== value) onCommit(clamped);
+  }, [draft, value, onCommit]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Escape') {
+        setDraft(String(value));
+        setEditing(false);
+      }
+    },
+    [commit, value],
+  );
+
+  if (!editable) {
+    return <span className={`rvc-slopes__deg-value ${className ?? ''}`}>{value}°</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={`rvc-slopes__deg-btn ${className ?? ''}`}
+        onClick={() => setEditing(true)}
+        title="Cliquer pour modifier l'angle"
+      >
+        {value}°
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      className={`rvc-slopes__deg-input ${className ?? ''}`}
+      value={draft}
+      onChange={(e) => {
+        // Allow only digits
+        const v = e.target.value.replace(/[^\d]/g, '');
+        setDraft(v);
+      }}
+      onBlur={commit}
+      onKeyDown={handleKeyDown}
+      maxLength={2}
+      aria-label="Angle en degrés"
+    />
+  );
+}
+
+// ── Band row component ────────────────────────────────────────────────
+
+interface BandRowProps {
+  band: SlopeBand;
+  bandIndex: number;
+  isFirst: boolean;
+  isLast: boolean;
+  scale: SlopeScale;
+  onVisibilityToggle?: (id: string) => void;
+  onBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
+}
+
+function BandRow({
+  band,
+  bandIndex,
+  isFirst,
+  isLast,
+  scale,
+  onVisibilityToggle,
+  onBreakpointChange,
+}: BandRowProps) {
+  const handleMinCommit = useCallback(
+    (deg: number) => onBreakpointChange?.(bandIndex, 'min', deg),
+    [bandIndex, onBreakpointChange],
+  );
+  const handleMaxCommit = useCallback(
+    (deg: number) => onBreakpointChange?.(bandIndex, 'max', deg),
+    [bandIndex, onBreakpointChange],
+  );
+
+  // Build the label — show degree range with inline editable values
+  const minEditable = !isFirst; // first band always starts at 0°
+  const maxEditable = !isLast;  // last band always ends at 90°
+
+  // Category name from label, e.g. "0 - 7% (Modéré)" → "Modéré"
   const categoryMatch = band.label?.match(/\(([^)]+)\)/);
   const category = categoryMatch ? categoryMatch[1] : '';
 
-  if (scale === 'degree') {
-    // Extract just the degree range without its own parenthetical
-    // e.g. "0° - 7° (Plat)" → "0° - 7°"
-    const degMatch = band.degreeRange.match(/^([^(]+)/);
-    const degRange = degMatch ? degMatch[1].trim() : band.degreeRange;
-    return category ? `${degRange} (${category})` : degRange;
-  }
+  return (
+    <div className={`rvc-slopes__band-row${band.visible ? '' : ' is-hidden'}`}>
+      <button
+        type="button"
+        className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
+        onClick={() => onVisibilityToggle?.(band.id)}
+        aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
+      >
+        {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
+      </button>
 
-  // Percent mode: use the correct percentRange (already computed via tan)
-  // e.g. "0% - 12%" + "Modéré" → "0% - 12% (Modéré)"
-  return category ? `${band.percentRange} (${category})` : band.percentRange;
+      <div className="rvc-slopes__band-label-editable">
+        <InlineDegreeInput
+          value={band.minDeg}
+          editable={minEditable}
+          onCommit={handleMinCommit}
+        />
+        <span className="rvc-slopes__deg-sep">–</span>
+        <InlineDegreeInput
+          value={band.maxDeg}
+          editable={maxEditable}
+          onCommit={handleMaxCommit}
+        />
+        {category && (
+          <span className="rvc-slopes__band-category">({category})</span>
+        )}
+      </div>
+
+      <div className="rvc-slopes__color-chip">
+        <ColorSwatch color={band.color} size={12} />
+        <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
+        <IconChevronDown size={20} className="rvc-slopes__color-chevron" />
+      </div>
+    </div>
+  );
 }
+
+// ── Main section ──────────────────────────────────────────────────────
 
 export function SlopesSection({
   enabled,
@@ -87,8 +236,8 @@ export function SlopesSection({
   onScaleSettingChange,
   onOpacityChange,
   onBandVisibilityToggle,
+  onBandBreakpointChange,
 }: Props) {
-  // Bands are already dynamically generated to match scaleSetting count
   const visibleBands = state.bands;
 
   return (
@@ -145,32 +294,17 @@ export function SlopesSection({
       </div>
 
       <div className="rvc-slopes__bands">
-        {visibleBands.map((band) => (
-          <div
+        {visibleBands.map((band, i) => (
+          <BandRow
             key={band.id}
-            className={`rvc-slopes__band-row${band.visible ? '' : ' is-hidden'}`}
-          >
-            <button
-              type="button"
-              className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
-              onClick={() => onBandVisibilityToggle?.(band.id)}
-              aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
-              title={formatBandLabel(band, state.scale)}
-            >
-              {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
-            </button>
-            <span
-              className="rvc-slopes__band-label"
-              title={formatBandLabel(band, state.scale)}
-            >
-              {formatBandLabel(band, state.scale)}
-            </span>
-            <div className="rvc-slopes__color-chip">
-              <ColorSwatch color={band.color} size={12} />
-              <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
-              <IconChevronDown size={20} className="rvc-slopes__color-chevron" />
-            </div>
-          </div>
+            band={band}
+            bandIndex={i}
+            isFirst={i === 0}
+            isLast={i === visibleBands.length - 1}
+            scale={state.scale}
+            onVisibilityToggle={onBandVisibilityToggle}
+            onBreakpointChange={onBandBreakpointChange}
+          />
         ))}
       </div>
     </Section>

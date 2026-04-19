@@ -2,6 +2,7 @@ import type { SlopeState } from '../types';
 import { DEFAULT_SLOPE_STATE } from './slope-config';
 
 const STORAGE_KEY = 'redview_slope_prefs';
+const BREAKPOINTS_KEY = 'redview_slope_breakpoints';
 
 export function loadSlopeState(): SlopeState {
   try {
@@ -24,6 +25,43 @@ export function loadSlopeState(): SlopeState {
 export function saveSlopeState(state: SlopeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Quota exceeded — silently ignore
+  }
+}
+
+// ── Custom breakpoints persistence ────────────────────────────────────
+
+export interface PersistedBreakpoints {
+  /** Number of bands (e.g. 4) */
+  bandCount: number;
+  /** Internal breakpoints between bands (length = bandCount - 1).
+   *  Key is the band count so each count has its own breakpoints. */
+  byCount: Record<number, number[]>;
+}
+
+const DEFAULT_PERSISTED: PersistedBreakpoints = {
+  bandCount: 4,
+  byCount: {},
+};
+
+export function loadBreakpoints(): PersistedBreakpoints {
+  try {
+    const raw = localStorage.getItem(BREAKPOINTS_KEY);
+    if (!raw) return { ...DEFAULT_PERSISTED };
+    const parsed = JSON.parse(raw) as Partial<PersistedBreakpoints>;
+    return {
+      bandCount: typeof parsed.bandCount === 'number' ? parsed.bandCount : DEFAULT_PERSISTED.bandCount,
+      byCount: parsed.byCount && typeof parsed.byCount === 'object' ? parsed.byCount : {},
+    };
+  } catch {
+    return { ...DEFAULT_PERSISTED };
+  }
+}
+
+export function saveBreakpoints(data: PersistedBreakpoints): void {
+  try {
+    localStorage.setItem(BREAKPOINTS_KEY, JSON.stringify(data));
   } catch {
     // Quota exceeded — silently ignore
   }

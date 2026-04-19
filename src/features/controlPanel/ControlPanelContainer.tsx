@@ -5,8 +5,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
 
-import { loadSlopeState, saveSlopeState } from '@/features/slope/lib/slope-persist';
-import { generateDynamicCategories } from '@/features/slope/lib/slope-config';
+import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
+import { generateDynamicCategories, clampBreakpoints, generateBreakpointsForCount } from '@/features/slope/lib/slope-config';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode } from '@/features/slope/types';
 
@@ -75,6 +75,8 @@ function buildSlopeBandsFromDynamic(
     label: `${cat.displayRange} (${cat.label})`,
     color: cat.color,
     visible: visibilityById[cat.id] ?? true,
+    minDeg: cat.minDeg,
+    maxDeg: cat.maxDeg,
   }));
 }
 
@@ -125,15 +127,30 @@ export function ControlPanelContainer({
   const [slopeScale, setSlopeScale] = useState<SlopeScale>('percent');
   const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('4 couleurs');
 
+  // Custom breakpoints state — keyed by band count for independent persistence
+  const [breakpointsByCount, setBreakpointsByCount] = useState<Record<number, number[]>>(() => {
+    const persisted = loadBreakpoints();
+    return persisted.byCount;
+  });
+
   const persistSlope = useCallback((next: typeof slopeState) => {
     setSlopeState(next);
     saveSlopeState(next);
   }, []);
 
-  // Dynamic categories based on scaleSetting
+  // Current band count
+  const bandCount = useMemo(() => bandCountFromSetting(slopeScaleSetting), [slopeScaleSetting]);
+
+  // Current custom breakpoints for this band count (undefined = use defaults)
+  const currentBreakpoints = useMemo(
+    () => breakpointsByCount[bandCount],
+    [breakpointsByCount, bandCount],
+  );
+
+  // Dynamic categories based on scaleSetting + custom breakpoints
   const dynamicCategories = useMemo(
-    () => generateDynamicCategories(bandCountFromSetting(slopeScaleSetting)),
-    [slopeScaleSetting],
+    () => generateDynamicCategories(bandCount, currentBreakpoints),
+    [bandCount, currentBreakpoints],
   );
 
   useSlope(
@@ -151,6 +168,58 @@ export function ControlPanelContainer({
     ),
     dynamicCategories,
   );
+
+  // ── Breakpoint edit handler ────────────────────────────────────────
+  // Called when user edits a band's min or max degree inline.
+  // bandIndex: 0-based band index
+  // field: 'min' → edits the lower boundary, 'max' → edits the upper boundary
+  // valueDeg: raw user-entered angle in degrees
+  const handleBreakpointChange = useCallback(
+    (bandIndex: number, field: 'min' | 'max', valueDeg: number) => {
+      // Build the current internal breakpoints from dynamic categories
+      const cats = dynamicCategories;
+      const count = cats.length;
+
+      // Internal breakpoints are the boundaries between bands (length = count - 1)
+      const bp = cats.slice(1).map((c) => c.minDeg);
+
+      // Determine which internal breakpoint is being edited:
+      //   - Editing band[i].min → internal breakpoint index i - 1 (band 0 min is always 0°)
+      //   - Editing band[i].max → internal breakpoint index i (last band max is always 90°)
+      let bpIndex: number;
+      if (field === 'min') {
+        // First band min is fixed at 0° — ignore
+        if (bandIndex === 0) return;
+        bpIndex = bandIndex - 1;
+      } else {
+        // Last band max is fixed at 90° — ignore
+        if (bandIndex === count - 1) return;
+        bpIndex = bandIndex;
+      }
+
+      // Sanity check
+      if (bpIndex < 0 || bpIndex >= bp.length) return;
+
+      // Set the new value
+      bp[bpIndex] = valueDeg;
+
+      // Validate and clamp
+      const clamped = clampBreakpoints(bp, count);
+
+      // Persist
+      setBreakpointsByCount((prev) => {
+        const next = { ...prev, [count]: clamped };
+        saveBreakpoints({ bandCount: count, byCount: next });
+        return next;
+      });
+    },
+    [dynamicCategories],
+  );
+
+  // When band count changes, clear slope tile cache so new breakpoints take effect
+  useEffect(() => {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_SLOPE_CACHE' });
+  }, [bandCount, currentBreakpoints]);
 
   // ── Labels ─────────────────────────────────────────────────────────
   const [labelBackend, setLabelBackend] = useState(() => loadLabelState());
@@ -217,6 +286,7 @@ export function ControlPanelContainer({
     slopeScale,
     slopeScaleSetting,
     windEnabled,
+    dynamicCategories,
   ]);
 
   // ── Handlers ───────────────────────────────────────────────────────
@@ -299,6 +369,7 @@ export function ControlPanelContainer({
       onSlopeScaleSettingChange={setSlopeScaleSetting}
       onSlopeOpacityChange={handleSlopeOpacity}
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
+      onSlopeBandBreakpointChange={handleBreakpointChange}
       /* Wind */
       onWindEnabledChange={handleWindEnabled}
     />

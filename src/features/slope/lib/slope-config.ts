@@ -115,15 +115,107 @@ function severityLabel(index: number, total: number): string {
   return SEVERITY_LABELS[Math.min(i, SEVERITY_LABELS.length - 1)];
 }
 
+// ── Breakpoint validation ─────────────────────────────────────────────
+// Robust clamping & deduplication for user-entered breakpoints.
+//
+// Rules enforced:
+//   1. First breakpoint is always 0° (immutable)
+//   2. Last band always ends at 90° (immutable)
+//   3. All breakpoints clamped to [0, 90]
+//   4. Breakpoints must be strictly ascending — if the user sets a value
+//      that violates ordering we push neighbours up/down by ≥1° each
+//   5. Minimum 1° gap between consecutive breakpoints
+//   6. If full correction is impossible (too many bands for the 0–90 range)
+//      we fall back to evenly-spaced breakpoints
+
 /**
- * Generate N evenly-spaced slope categories that always cover 0° → 90°.
- * More bands = more precision.
+ * Given `count` bands, produce the default evenly-spaced internal breakpoints.
+ * Returns an array of length `count - 1` (the boundaries between bands).
+ * The implicit boundaries are 0° on the left and 90° on the right.
  */
-export function generateDynamicCategories(count: number): SlopeCategory[] {
+export function generateBreakpointsForCount(count: number): number[] {
   const step = 90 / count;
+  const bp: number[] = [];
+  for (let i = 1; i < count; i++) {
+    bp.push(Math.round(step * i));
+  }
+  return bp;
+}
+
+/**
+ * Validate and clamp an array of internal breakpoints.
+ *
+ * @param breakpoints  Raw user-edited breakpoints (length = bandCount - 1).
+ *                     Implicit: band[0] starts at 0°, band[last] ends at 90°.
+ * @param bandCount    Total number of bands.
+ * @returns            Sanitised breakpoints, guaranteed strictly ascending in (0, 90).
+ */
+export function clampBreakpoints(breakpoints: number[], bandCount: number): number[] {
+  const n = bandCount - 1; // number of internal breakpoints
+
+  // Degenerate: single band → no internal breakpoints
+  if (n <= 0) return [];
+
+  // Too many bands to fit with ≥1° gaps? Fall back to even spacing.
+  if (n >= 90) return generateBreakpointsForCount(bandCount);
+
+  // 1. Clamp each value individually to [1, 89]
+  const bp = breakpoints.slice(0, n).map((v) => {
+    const rounded = Math.round(v);
+    return Math.max(1, Math.min(89, Number.isFinite(rounded) ? rounded : 1));
+  });
+
+  // Pad with defaults if too few values provided
+  while (bp.length < n) {
+    const defaults = generateBreakpointsForCount(bandCount);
+    bp.push(defaults[bp.length] ?? bp[bp.length - 1] + 1);
+  }
+
+  // 2. Forward pass: ensure strictly ascending with ≥1° gap
+  for (let i = 1; i < n; i++) {
+    if (bp[i] <= bp[i - 1]) {
+      bp[i] = bp[i - 1] + 1;
+    }
+  }
+
+  // 3. If last breakpoint overflows 89°, backward pass to compress
+  if (bp[n - 1] > 89) {
+    bp[n - 1] = 89;
+    for (let i = n - 2; i >= 0; i--) {
+      if (bp[i] >= bp[i + 1]) {
+        bp[i] = bp[i + 1] - 1;
+      }
+    }
+  }
+
+  // 4. If first breakpoint underflows 1°, it means the space is too cramped.
+  //    Fall back to evenly-spaced.
+  if (bp[0] < 1) {
+    return generateBreakpointsForCount(bandCount);
+  }
+
+  return bp;
+}
+
+/**
+ * Generate N slope categories from an array of internal breakpoints.
+ * breakpoints.length must equal count - 1.
+ * If no breakpoints are provided, evenly-spaced defaults are used.
+ */
+export function generateDynamicCategories(
+  count: number,
+  customBreakpoints?: number[],
+): SlopeCategory[] {
+  // Build the full boundary array: [0, bp1, bp2, ..., 90]
+  const bp = customBreakpoints && customBreakpoints.length === count - 1
+    ? clampBreakpoints(customBreakpoints, count)
+    : generateBreakpointsForCount(count);
+
+  const boundaries = [0, ...bp, 90];
+
   return Array.from({ length: count }, (_, i) => {
-    const minDeg = Math.round(step * i);
-    const maxDeg = i === count - 1 ? 90 : Math.round(step * (i + 1));
+    const minDeg = boundaries[i];
+    const maxDeg = boundaries[i + 1];
     const minPct = degToPercent(minDeg);
     const maxPct = degToPercent(maxDeg);
     const pctRange = maxDeg >= 90 ? `>${minPct}%` : `${minPct}% - ${maxPct}%`;

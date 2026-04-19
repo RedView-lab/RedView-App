@@ -40,6 +40,7 @@ export function ControlPanel({
   onSlopeOpacityChange,
   onSlopeBandColorChange,
   onSlopeBandVisibilityToggle,
+  onSlopeBandBreakpointChange,
   onWeatherEnabledChange,
   onWeatherTabChange,
   onWeatherRangeChange,
@@ -118,6 +119,7 @@ export function ControlPanel({
         onOpacityChange={onSlopeOpacityChange}
         onBandColorChange={onSlopeBandColorChange}
         onBandVisibilityToggle={onSlopeBandVisibilityToggle}
+        onBandBreakpointChange={onSlopeBandBreakpointChange}
       />
 
       <WeatherSection
