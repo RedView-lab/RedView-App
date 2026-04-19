@@ -205,6 +205,30 @@ async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicS
     rgba[idx + 3] = 255;
   }
 
+  // ── Border feathering ─────────────────────────────────────────────────
+  // The slope computation at tile edges can produce discontinuities because
+  // neighbour DEM tiles are decoded independently (Terrain-RGB encode/decode
+  // round-trip introduces ±0.1 m rounding). Even with padded elevations the
+  // last column/row of one tile and the first column/row of the neighbour may
+  // disagree by a few centimetres, producing a thin seam of abnormally high
+  // slope (the red lines the user sees).
+  //
+  // Fix: make the outermost 1-pixel ring fully transparent. Mapbox GL's
+  // raster-resampling: 'linear' will blend these transparent edges with the
+  // opaque interior of the adjacent tile, producing a seamless join.
+  for (let c = 0; c < size; c++) {
+    // Top row (row 0)
+    rgba[(0 * size + c) * 4 + 3] = 0;
+    // Bottom row (row size-1)
+    rgba[((size - 1) * size + c) * 4 + 3] = 0;
+  }
+  for (let r = 1; r < size - 1; r++) {
+    // Left column (col 0)
+    rgba[(r * size + 0) * 4 + 3] = 0;
+    // Right column (col size-1)
+    rgba[(r * size + (size - 1)) * 4 + 3] = 0;
+  }
+
   return buildRawPng(size, size, rgba);
 }
 
