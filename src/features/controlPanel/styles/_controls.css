@@ -91,6 +91,8 @@
   font-weight: 600;
   cursor: pointer;
   user-select: none;
+  min-height: 28px;
+  box-sizing: border-box;
 }
 
 .rvc-select__adornment { display: inline-flex; flex-shrink: 0; }

@@ -10,15 +10,16 @@
 .rvc-routes__row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
 }
 
 .rvc-routes__color-picker {
   display: flex;
   align-items: center;
+  gap: 0;
   padding: 5px 2px 5px 9px;
-  background: var(--rvc-bg-row);
+  background: #3d3d3d;
   border-radius: 5px;
   flex-shrink: 0;
   cursor: pointer;
@@ -45,7 +46,7 @@
   align-items: center;
   gap: 4px;
   padding: 6px 8px 6px 5px;
-  background: var(--rvc-bg-row);
+  background: #3d3d3d;
   border-radius: 5px;
   color: var(--rvc-text);
   font-size: 14px;
