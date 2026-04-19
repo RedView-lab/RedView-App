@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Map as MapboxMap, LightsSpecification } from 'mapbox-gl';
+import type { Map as MapboxMap, FogSpecification, LightsSpecification } from 'mapbox-gl';
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
+import { getSkyAppearance } from '../lib/sky-appearance';
 
 /**
- * Drives Mapbox's built-in sun + atmosphere from a date/time and the map
- * center. Uses the Mapbox Standard "lightPreset" config property for
- * atmospheric mood (dawn/day/dusk/night) and `setLights` for an accurate
- * directional sun aligned with the real solar azimuth and altitude.
+ * Drives Mapbox sun + atmosphere from a date/time and the map center.
+ *
+ * Two complementary mechanisms are used:
+ *   1. `setLights` with a directional light positioned at the real sun
+ *      azimuth/altitude, with `cast-shadows: true` for Shadowmap-style
+ *      terrain shadows.
+ *   2. `setFog` with continuous `space-color`, `high-color`, `color`,
+ *      `star-intensity` and `horizon-blend` values driven by sun altitude.
+ *      The Mapbox Standard `lightPreset` config is locked to four discrete
+ *      presets (dawn/day/dusk/night) and is not granular enough to keep
+ *      stars hidden at 13:44 nor to fade in stars only after astronomical
+ *      twilight — we drive the sky ourselves via setFog.
  *
  * Returned `sunriseTime` / `sunsetTime` are HH:mm strings in the host
- * timezone, recomputed whenever the date or map center change.
+ * timezone, recomputed whenever the date or the map center changes.
  *
  * Docs:
  *   - https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setlights
- *   - https://docs.mapbox.com/mapbox-gl-js/style-spec/light/
+ *   - https://docs.mapbox.com/mapbox-gl-js/style-spec/fog/
  *   - https://docs.mapbox.com/mapbox-gl-js/guides/styles/work-with-standard/
  */
 export interface UseSunlightOptions {
@@ -29,6 +38,15 @@ export interface UseSunlightResult {
   sunriseTime: string;
   sunsetTime: string;
 }
+
+const DEFAULT_FOG: FogSpecification = {
+  range: [2, 20],
+  color: 'rgb(225, 235, 245)',
+  'high-color': 'rgb(90, 150, 230)',
+  'horizon-blend': 0.02,
+  'space-color': 'rgb(11, 11, 25)',
+  'star-intensity': 0.5,
+};
 
 const DEFAULT_LIGHTS: LightsSpecification[] = [
   { id: 'ambient', type: 'ambient', properties: { color: 'white', intensity: 0.5 } },
@@ -51,26 +69,32 @@ function classifyPreset(altitudeDeg: number, isMorning: boolean): 'dawn' | 'day'
 }
 
 function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecification[] {
-  // Polar angle: 0° = sun directly overhead, 90° = sun at the horizon.
-  // Clamp at 90° when the sun is below the horizon so the directional light
-  // still rakes across the surface instead of lighting it from underneath.
-  const polar = Math.min(90, Math.max(0, 90 - altitudeDeg));
+  // Mapbox `direction` = [azimuth (deg from north, CW), polar (deg from zenith)].
+  // Polar 0° = light from straight overhead; 90° = at the horizon. Clamp at
+  // 88° so that when the sun is below the horizon the rake angle stays
+  // grazing instead of lighting terrain from underneath.
+  const polar = Math.min(88, Math.max(0, 90 - altitudeDeg));
 
-  // Intensity ramps from ~0.1 at the horizon up to 0.85 at zenith. Below the
-  // horizon we keep a faint moonlight-like contribution.
   const sunAbove = Math.max(0, altitudeDeg);
   const directionalIntensity =
-    altitudeDeg <= 0 ? 0.05 : Math.min(0.85, 0.1 + (sunAbove / 60) * 0.75);
+    altitudeDeg <= -6 ? 0 : Math.min(0.95, 0.15 + (sunAbove / 50) * 0.8);
   const ambientIntensity =
-    altitudeDeg < -6 ? 0.15 : altitudeDeg < 6 ? 0.3 : 0.5;
+    altitudeDeg < -12 ? 0.1 : altitudeDeg < 0 ? 0.2 : altitudeDeg < 10 ? 0.35 : 0.5;
 
-  // Warm color near the horizon (golden hour), neutral white otherwise.
+  // Warm color near the horizon (golden hour), neutral white at midday,
+  // cool moonlight when below.
   const directionalColor =
-    altitudeDeg > 6
+    altitudeDeg > 10
       ? '#ffffff'
-      : altitudeDeg > -6
-        ? '#ffb27d'
-        : '#3a4a78';
+      : altitudeDeg > 0
+        ? '#ffd2a6'
+        : altitudeDeg > -6
+          ? '#ff9560'
+          : '#3a4a78';
+
+  // Cast longer / softer shadows when the sun is low. `shadow-intensity`
+  // 0..1 — higher = darker shadow.
+  const shadowIntensity = altitudeDeg <= 0 ? 0 : Math.min(0.9, 0.3 + (sunAbove / 90) * 0.6);
 
   return [
     {
@@ -86,9 +110,22 @@ function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecificati
         intensity: directionalIntensity,
         direction: [azimuthDeg, polar],
         'cast-shadows': true,
+        'shadow-intensity': shadowIntensity,
       },
     },
   ];
+}
+
+function buildFog(altitudeDeg: number): FogSpecification {
+  const sky = getSkyAppearance(altitudeDeg);
+  return {
+    range: [0.5, 20],
+    color: sky.color,
+    'high-color': sky.highColor,
+    'horizon-blend': sky.horizonBlend,
+    'space-color': sky.spaceColor,
+    'star-intensity': sky.starIntensity,
+  };
 }
 
 export function useSunlight(
@@ -148,6 +185,11 @@ export function useSunlight(
       } catch (err) {
         console.warn('[sunlight] setLights failed', err);
       }
+      try {
+        map.setFog(buildFog(altitude));
+      } catch (err) {
+        console.warn('[sunlight] setFog failed', err);
+      }
     };
 
     apply();
@@ -168,6 +210,11 @@ export function useSunlight(
     }
     try {
       map.setLights(DEFAULT_LIGHTS);
+    } catch {
+      /* no-op */
+    }
+    try {
+      map.setFog(DEFAULT_FOG);
     } catch {
       /* no-op */
     }
