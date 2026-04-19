@@ -6,7 +6,7 @@ import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
-import { generateDynamicCategories, clampBreakpoints, generateBreakpointsForCount } from '@/features/slope/lib/slope-config';
+import { generateDynamicCategories, clampBreakpoints } from '@/features/slope/lib/slope-config';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode } from '@/features/slope/types';
 

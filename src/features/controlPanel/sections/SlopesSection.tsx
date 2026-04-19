@@ -166,7 +166,7 @@ function BandRow({
   bandIndex,
   isFirst,
   isLast,
-  scale,
+  scale: _scale,
   onVisibilityToggle,
   onBreakpointChange,
 }: BandRowProps) {
