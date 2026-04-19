@@ -28,6 +28,10 @@ import type {
   SlopeResolution,
   SlopeScale,
   SlopeScaleSetting,
+  WeatherLayerKey,
+  WeatherRenderMode,
+  WeatherState,
+  WeatherTab,
 } from './types';
 import type { SlopeCategory } from '@/features/slope/types';
 
@@ -239,9 +243,18 @@ export function ControlPanelContainer({
 
   useLabels(map, isMapLoaded, effectiveLabelState);
 
+  // ── Weather ────────────────────────────────────────────────────────
+  const [weatherState, setWeatherState] = useState<WeatherState>(
+    DEFAULT_CONTROL_PANEL_STATE.weather,
+  );
+
   // ── Wind ───────────────────────────────────────────────────────────
   const [windEnabled, setWindEnabled] = useState(false);
   useWind(isMapLoaded ? map : null, windEnabled);
+
+  // ── Snow & Sunlight ────────────────────────────────────────────────
+  const [snowEnabled, setSnowEnabled] = useState(false);
+  const [sunlightEnabled, setSunlightEnabled] = useState(false);
 
   // ── Build ControlPanel state ───────────────────────────────────────
   const state: ControlPanelState = useMemo(() => {
@@ -276,7 +289,10 @@ export function ControlPanelContainer({
         opacity: Math.round(slopeState.opacity * 100),
         bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
       },
+      weather: weatherState,
       wind: { enabled: windEnabled },
+      snow: { enabled: snowEnabled },
+      sunlight: { enabled: sunlightEnabled },
     };
   }, [
     cachedTiles,
@@ -289,6 +305,9 @@ export function ControlPanelContainer({
     slopeScale,
     slopeScaleSetting,
     windEnabled,
+    weatherState,
+    snowEnabled,
+    sunlightEnabled,
     dynamicCategories,
   ]);
 
@@ -355,7 +374,44 @@ export function ControlPanelContainer({
     });
   }, []);
 
+  // ── Weather handlers ───────────────────────────────────────────────
+  const handleWeatherEnabled = useCallback(
+    (enabled: boolean) => setWeatherState((prev) => ({ ...prev, enabled })),
+    [],
+  );
+  const handleWeatherTabChange = useCallback(
+    (tab: WeatherTab) => setWeatherState((prev) => ({ ...prev, tab })),
+    [],
+  );
+  const handleWeatherDateChange = useCallback(
+    (dateState: Pick<WeatherState, 'customDateEnabled' | 'date' | 'time'>) =>
+      setWeatherState((prev) => ({ ...prev, ...dateState })),
+    [],
+  );
+  const handleWeatherLayerToggle = useCallback(
+    (key: WeatherLayerKey, enabled: boolean) =>
+      setWeatherState((prev) => ({
+        ...prev,
+        layers: prev.layers.map((l) => (l.key === key ? { ...l, enabled } : l)),
+      })),
+    [],
+  );
+  const handleWeatherLayerModeChange = useCallback(
+    (key: WeatherLayerKey, mode: WeatherRenderMode) =>
+      setWeatherState((prev) => ({
+        ...prev,
+        layers: prev.layers.map((l) => (l.key === key ? { ...l, mode } : l)),
+      })),
+    [],
+  );
+  const handleWeatherAddAlert = useCallback(() => {
+    // TODO: implement alert UI
+    console.log('[weather] add alert triggered');
+  }, []);
+
   const handleWindEnabled = useCallback((enabled: boolean) => setWindEnabled(enabled), []);
+  const handleSnowEnabled = useCallback((enabled: boolean) => setSnowEnabled(enabled), []);
+  const handleSunlightEnabled = useCallback((enabled: boolean) => setSunlightEnabled(enabled), []);
 
   const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
@@ -383,8 +439,18 @@ export function ControlPanelContainer({
       onSlopeOpacityChange={handleSlopeOpacity}
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
       onSlopeBandBreakpointChange={handleBreakpointChange}
+      /* Weather */
+      onWeatherEnabledChange={handleWeatherEnabled}
+      onWeatherTabChange={handleWeatherTabChange}
+      onWeatherDateChange={handleWeatherDateChange}
+      onWeatherLayerToggle={handleWeatherLayerToggle}
+      onWeatherLayerModeChange={handleWeatherLayerModeChange}
+      onWeatherAddAlert={handleWeatherAddAlert}
       /* Wind */
       onWindEnabledChange={handleWindEnabled}
+      /* Snow & Sunlight */
+      onSnowEnabledChange={handleSnowEnabled}
+      onSunlightEnabledChange={handleSunlightEnabled}
     />
   );
 }

@@ -2,18 +2,21 @@
 
 .rvc-weather__tabs {
   display: flex;
-  gap: 8px;
+  gap: 0;
   width: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .rvc-weather__tab {
   all: unset;
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   align-items: center;
   justify-content: center;
   padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: transparent;
   border-radius: 6px;
   color: white;
   font-family: 'Rethink Sans', sans-serif;
@@ -21,6 +24,8 @@
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .rvc-weather__tab.is-active {
