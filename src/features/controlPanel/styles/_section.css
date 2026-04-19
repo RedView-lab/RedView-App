@@ -5,6 +5,7 @@
   border-bottom: 1px solid var(--rvc-border);
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   width: 100%;
 }
 
@@ -80,7 +81,7 @@
 }
 
 .rvc-section__body-inner.is-fully-open {
-  overflow: visible;
+  overflow: clip;
 }
 
 .rvc-section__body-wrap .rvc-section__body {
