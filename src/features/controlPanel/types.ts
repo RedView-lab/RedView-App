@@ -49,6 +49,8 @@ export interface RouteItem {
 
 export type SlopeResolution = '1m (LIDAR)' | '5m' | '10m' | string;
 export type SlopeColorization = 'gradient' | 'stepped' | string;
+export type SlopeScale = 'percent' | 'degree' | string;
+export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 
 export interface SlopeBand {
   id: string;
@@ -56,7 +58,9 @@ export interface SlopeBand {
   percentRange: string;
   /** e.g. "0° - 23° (Plat)" */
   degreeRange: string;
-  /** hex without # */
+  /** Optional richer label used in gradient mode, e.g. "0 - 7% (Modéré)" */
+  label?: string;
+  /** hex with or without # */
   color: string;
   visible: boolean;
 }
@@ -64,6 +68,8 @@ export interface SlopeBand {
 export interface SlopesState {
   resolution: SlopeResolution;
   colorization: SlopeColorization;
+  scale: SlopeScale;
+  scaleSetting: SlopeScaleSetting;
   /** 0..100 */
   opacity: number;
   bands: SlopeBand[];
@@ -130,6 +136,8 @@ export interface ControlPanelHandlers {
   onSlopesEnabledChange?: (enabled: boolean) => void;
   onSlopeResolutionChange?: (value: SlopeResolution) => void;
   onSlopeColorizationChange?: (value: SlopeColorization) => void;
+  onSlopeScaleChange?: (value: SlopeScale) => void;
+  onSlopeScaleSettingChange?: (value: SlopeScaleSetting) => void;
   onSlopeOpacityChange?: (value: number) => void;
   onSlopeBandColorChange?: (id: string, color: string) => void;
   onSlopeBandVisibilityToggle?: (id: string) => void;

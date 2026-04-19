@@ -35,6 +35,8 @@ export function ControlPanel({
   onSlopesEnabledChange,
   onSlopeResolutionChange,
   onSlopeColorizationChange,
+  onSlopeScaleChange,
+  onSlopeScaleSettingChange,
   onSlopeOpacityChange,
   onSlopeBandColorChange,
   onSlopeBandVisibilityToggle,
@@ -103,12 +105,16 @@ export function ControlPanel({
         state={{
           resolution: state.slopes.resolution,
           colorization: state.slopes.colorization,
+          scale: state.slopes.scale,
+          scaleSetting: state.slopes.scaleSetting,
           opacity: state.slopes.opacity,
           bands: state.slopes.bands,
         }}
         onEnabledChange={onSlopesEnabledChange}
         onResolutionChange={onSlopeResolutionChange}
         onColorizationChange={onSlopeColorizationChange}
+        onScaleChange={onSlopeScaleChange}
+        onScaleSettingChange={onSlopeScaleSettingChange}
         onOpacityChange={onSlopeOpacityChange}
         onBandColorChange={onSlopeBandColorChange}
         onBandVisibilityToggle={onSlopeBandVisibilityToggle}

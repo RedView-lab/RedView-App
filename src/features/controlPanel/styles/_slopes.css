@@ -1,4 +1,29 @@
-/* Slopes section (also reused by Wind legend) */
+/* Slopes section — Figma node 1749:57724 (Pentes / SETTINGS frame).
+   Two render modes:
+   - Gradient (Dégradé): Échelle + Réglage échelle dropdowns + color-picker rows
+   - Stepped (Remplissage): legend grid (eye | hex | %-range | °-range)
+*/
+
+/* ── Opacity row ──────────────────────────────────────────────────── */
+
+.rvc-slopes__opacity-row {
+  padding: 3px 0; /* matches Figma py-[3px] */
+}
+
+.rvc-slopes__opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.rvc-slopes__opacity-control .rvc-slider {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* ── Bands container (shared) ─────────────────────────────────────── */
 
 .rvc-slopes__bands {
   display: flex;
@@ -7,6 +32,8 @@
   width: 100%;
   margin-top: 4px;
 }
+
+/* ── Stepped mode legend (Remplissage) ────────────────────────────── */
 
 .rvc-slopes__band {
   display: grid;
@@ -62,6 +89,65 @@
   opacity: 0.28;
 }
 
-.rvc-slopes__band-range { display: none; }
-.rvc-slopes__band-sep { display: none; }
-.rvc-slopes__band-color { display: none; }
+/* ── Gradient mode color-picker rows (Dégradé) ────────────────────── */
+
+.rvc-slopes__grad-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvc-slopes__grad-label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Color picker chip — bordered, transparent bg, 140px wide.
+   Matches Figma node 1791:73022 (border rgba(255,255,255,0.08),
+   pl-[10px] pr-[6px] py-[5px], gap-[4px], rounded-[5px]).
+*/
+.rvc-slopes__color-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  flex-shrink: 0;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--rvc-text);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  min-height: 28px;
+}
+
+.rvc-slopes__color-hex {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-slopes__color-chevron {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+}
+
+.rvc-slopes__grad-row.is-hidden .rvc-slopes__grad-label,
+.rvc-slopes__grad-row.is-hidden .rvc-slopes__color-chip {
+  opacity: 0.4;
+}

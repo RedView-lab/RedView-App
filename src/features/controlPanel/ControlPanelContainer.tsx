@@ -24,6 +24,8 @@ import type {
   LabelsState,
   SlopeBand,
   SlopeColorization,
+  SlopeScale,
+  SlopeScaleSetting,
 } from './types';
 
 interface ControlPanelContainerProps {
@@ -57,13 +59,18 @@ const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
 };
 
 function buildSlopeBandsFromCategories(visibilityById: Record<string, boolean>): SlopeBand[] {
-  return SLOPE_CATEGORIES.map((cat) => ({
-    id: cat.id,
-    percentRange: `${degToPercent(cat.minDeg)}% - ${degToPercent(cat.maxDeg)}%`,
-    degreeRange: `${cat.minDeg}° - ${cat.maxDeg}° (${cat.label})`,
-    color: cat.color,
-    visible: visibilityById[cat.id] ?? true,
-  }));
+  return SLOPE_CATEGORIES.map((cat) => {
+    const pctMin = degToPercent(cat.minDeg);
+    const pctMax = degToPercent(cat.maxDeg);
+    return {
+      id: cat.id,
+      percentRange: `${pctMin}% - ${pctMax}%`,
+      degreeRange: `${cat.minDeg}° - ${cat.maxDeg}° (${cat.label})`,
+      label: `${pctMin}% - ${pctMax}% (${cat.label})`,
+      color: cat.color,
+      visible: visibilityById[cat.id] ?? true,
+    };
+  });
 }
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
@@ -110,6 +117,8 @@ export function ControlPanelContainer({
   // ── Slope ──────────────────────────────────────────────────────────
   const [slopeState, setSlopeState] = useState(loadSlopeState);
   const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>({});
+  const [slopeScale, setSlopeScale] = useState<SlopeScale>('percent');
+  const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('4 couleurs');
 
   const persistSlope = useCallback((next: typeof slopeState) => {
     setSlopeState(next);
@@ -178,6 +187,8 @@ export function ControlPanelContainer({
         enabled: slopeState.enabled,
         resolution: '1m (LIDAR)',
         colorization: colorModeToPanel(slopeState.colorMode),
+        scale: slopeScale,
+        scaleSetting: slopeScaleSetting,
         opacity: Math.round(slopeState.opacity * 100),
         bands: buildSlopeBandsFromCategories(slopeBandVisibility),
       },
@@ -191,6 +202,8 @@ export function ControlPanelContainer({
     statesUiToggle,
     slopeState,
     slopeBandVisibility,
+    slopeScale,
+    slopeScaleSetting,
     windEnabled,
   ]);
 
@@ -270,6 +283,8 @@ export function ControlPanelContainer({
       /* Slopes */
       onSlopesEnabledChange={handleSlopesEnabled}
       onSlopeColorizationChange={handleSlopeColorization}
+      onSlopeScaleChange={setSlopeScale}
+      onSlopeScaleSettingChange={setSlopeScaleSetting}
       onSlopeOpacityChange={handleSlopeOpacity}
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
       /* Wind */
