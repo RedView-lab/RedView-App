@@ -157,12 +157,14 @@ self.addEventListener('fetch', (event) => {
   if (slopeMatch) {
     const slopeMode = url.searchParams.get('mode') || 'gradient';
     const slopeHide = url.searchParams.get('hide') || '';
+    const slopeStops = url.searchParams.get('stops') || '';
     event.respondWith(handleSlopeRequest(
       parseInt(slopeMatch[1], 10),
       parseInt(slopeMatch[2], 10),
       parseInt(slopeMatch[3], 10),
       slopeMode,
       slopeHide,
+      slopeStops,
     ));
     return;
   }
@@ -506,10 +508,11 @@ function transparentTileResponse() {
   });
 }
 
-async function handleSlopeRequest(z, x, y, colorMode, hideParam) {
+async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam) {
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
   const hideSuffix = hideParam ? `&hide=${hideParam}` : '';
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}${hideSuffix}`);
+  const stopsSuffix = stopsParam ? `&stops=${stopsParam}` : '';
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}${hideSuffix}${stopsSuffix}`);
   const cached = await slopeCache.match(cacheKey);
   if (cached) return cached;
 
@@ -532,9 +535,28 @@ async function handleSlopeRequest(z, x, y, colorMode, hideParam) {
     }
   }
 
+  // Parse stops param: "0:2DBF8C,45:5C0000" → [{deg:0, r:0x2D, g:0xBF, b:0x8C}, ...]
+  let dynamicStops = null;
+  if (stopsParam) {
+    dynamicStops = [];
+    for (const seg of stopsParam.split(',')) {
+      const [degStr, hex] = seg.split(':');
+      const deg = parseInt(degStr, 10);
+      if (Number.isFinite(deg) && hex && hex.length === 6) {
+        dynamicStops.push({
+          deg,
+          r: parseInt(hex.slice(0, 2), 16),
+          g: parseInt(hex.slice(2, 4), 16),
+          b: parseInt(hex.slice(4, 6), 16),
+        });
+      }
+    }
+    if (dynamicStops.length === 0) dynamicStops = null;
+  }
+
   try {
     const demBlob = await demResponse.clone().blob();
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges);
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops);
     const response = new Response(slopeBlob, {
       status: 200,
       headers: {

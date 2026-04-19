@@ -1,4 +1,5 @@
 import type { SlopeColorMode } from '../types';
+import type { SlopeCategory } from '../types';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
 
@@ -8,19 +9,34 @@ export const SLOPE_LAYER_ID = 'slope-overlay';
 // ── Raster source definition ──────────────────────────────────────────
 
 /**
+ * Encodes dynamic color stops into the tile URL so the service worker
+ * can build its LUT dynamically. Format: "0:2DBF8C,45:5C0000,90:5C0000"
+ */
+function encodeColorStops(categories: SlopeCategory[]): string {
+  return categories.map(c => `${c.minDeg}:${c.color.replace('#', '')}`).join(',');
+}
+
+/**
  * `hiddenRanges` is an optional list of `[minDeg, maxDeg)` bands that must be
  * rendered fully transparent by the service worker. Used by the Control
  * Panel to let the user hide a specific slope category (e.g. "masquer tout
  * ce qui est plat / vert"). The ranges are baked into the tile URL so the
  * SW can honour them without any client-side post-processing.
  */
-export function buildSlopeTileSource(colorMode: SlopeColorMode, hiddenRanges?: [number, number][]) {
+export function buildSlopeTileSource(
+  colorMode: SlopeColorMode,
+  hiddenRanges?: [number, number][],
+  categories?: SlopeCategory[],
+) {
   const hideQuery = hiddenRanges && hiddenRanges.length
     ? `&hide=${hiddenRanges.map(([a, b]) => `${a}-${b}`).join(',')}`
     : '';
+  const stopsQuery = categories && categories.length
+    ? `&stops=${encodeColorStops(categories)}`
+    : '';
   return {
     type: 'raster' as const,
-    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}`],
+    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}${stopsQuery}`],
     tileSize: 256,
     minzoom: 6,
     maxzoom: 17,

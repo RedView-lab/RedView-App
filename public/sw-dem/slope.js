@@ -159,11 +159,20 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
 }
 
 // ── Pre-coloured RGBA PNG with LUT + NoData alpha ─────────────────────
-async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges) {
+async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicStops) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
-  const lut = colorMode === 'step' ? SLOPE_LUT_STEP : SLOPE_LUT_GRADIENT;
+
+  // Build LUT: use dynamic stops if provided, else fallback to hardcoded
+  const stops = dynamicStops || SLOPE_COLOR_STOPS;
+  let lut;
+  if (colorMode === 'step') {
+    lut = _buildLutStep(stops);
+  } else {
+    lut = _buildLutGradient(stops);
+  }
+
   const hasHide = Array.isArray(hiddenRanges) && hiddenRanges.length > 0;
 
   for (let j = 0; j < n; j++) {
@@ -199,10 +208,46 @@ async function encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges) {
   return buildRawPng(size, size, rgba);
 }
 
+// Dynamic LUT builders that accept any stops array [{deg, r, g, b}, ...]
+function _buildLutGradient(stops) {
+  const lut = new Uint8Array(91 * 3);
+  for (let d = 0; d <= 90; d++) {
+    let r, g, b;
+    if (d <= stops[0].deg) { r = stops[0].r; g = stops[0].g; b = stops[0].b; }
+    else if (d >= stops[stops.length - 1].deg) {
+      const s = stops[stops.length - 1]; r = s.r; g = s.g; b = s.b;
+    } else {
+      for (let i = 0; i < stops.length - 1; i++) {
+        if (d >= stops[i].deg && d < stops[i + 1].deg) {
+          const t = (d - stops[i].deg) / (stops[i + 1].deg - stops[i].deg);
+          r = Math.round(stops[i].r + t * (stops[i + 1].r - stops[i].r));
+          g = Math.round(stops[i].g + t * (stops[i + 1].g - stops[i].g));
+          b = Math.round(stops[i].b + t * (stops[i + 1].b - stops[i].b));
+          break;
+        }
+      }
+    }
+    lut[d * 3] = r; lut[d * 3 + 1] = g; lut[d * 3 + 2] = b;
+  }
+  return lut;
+}
+
+function _buildLutStep(stops) {
+  const lut = new Uint8Array(91 * 3);
+  for (let d = 0; d <= 90; d++) {
+    let s = stops[0];
+    for (let i = stops.length - 1; i >= 0; i--) {
+      if (d >= stops[i].deg) { s = stops[i]; break; }
+    }
+    lut[d * 3] = s.r; lut[d * 3 + 1] = s.g; lut[d * 3 + 2] = s.b;
+  }
+  return lut;
+}
+
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
-async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges) {
+async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
@@ -211,7 +256,7 @@ async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRange
   const t2 = performance.now();
   const slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   const t3 = performance.now();
-  const blob = await encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges);
+  const blob = await encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicStops);
   const t4 = performance.now();
 
   if (DEBUG) {
@@ -221,3 +266,4 @@ async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRange
   }
   return blob;
 }
+

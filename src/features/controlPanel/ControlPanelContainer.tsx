@@ -149,6 +149,7 @@ export function ControlPanelContainer({
         ),
       [slopeBandVisibility, dynamicCategories],
     ),
+    dynamicCategories,
   );
 
   // ── Labels ─────────────────────────────────────────────────────────
