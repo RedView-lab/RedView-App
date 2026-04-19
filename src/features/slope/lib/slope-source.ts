@@ -55,8 +55,19 @@ export function buildSlopeTileSource(resolutionFactor: number = 1) {
 // slot: 'top' — must match the IGN ortho layer's slot so the overlay paints
 // ABOVE the orthophoto. With slot: 'middle' the ortho tiles fully occlude
 // the slope raster inside France and the user sees nothing.
+//
+// raster-color-mix decoding:
+//   Mapbox normalises raster channel values to [0, 1] before applying the
+//   mix coefficients, so for an R-encoded slope (R_byte = round(deg*255/90))
+//   the decoder is:
+//     decoded_deg = R_norm * 90
+//                 = (R_byte / 255) * 90
+//                 = original deg ✓
+//   Hence mix = [90, 0, 0, 0]. (Using 90/255 here was the bug that made
+//   every tile look almost entirely flat — the decoded value never exceeded
+//   ~0.35° even on cliffs.)
 
-const SLOPE_DECODE_MIX: [number, number, number, number] = [MAX_SLOPE_DEG / 255, 0, 0, 0];
+const SLOPE_DECODE_MIX: [number, number, number, number] = [MAX_SLOPE_DEG, 0, 0, 0];
 const SLOPE_DECODE_RANGE: [number, number] = [0, MAX_SLOPE_DEG];
 
 export function buildSlopeLayer(
