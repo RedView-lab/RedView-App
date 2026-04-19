@@ -11,7 +11,7 @@ import type {
 } from '../src/features/itineraryPanel/types';
 
 const UPSTREAM =
-  process.env.BROUTER_UPSTREAM?.replace(/\/+$/, '') ?? 'http://135.116.81.157';
+  process.env.BROUTER_UPSTREAM?.replace(/\/+$/, '') ?? 'http://localhost:17777';
 
 const PT = {
   chamonix: { lat: 45.9237, lon: 6.8694 },

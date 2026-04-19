@@ -1,5 +1,5 @@
 /**
- * Vercel serverless proxy → RedView POI server (Azure VPS).
+ * Vercel serverless proxy → RedView POI server (DigitalOcean droplet).
  *
  * Deux endpoints muxés via `?op=` :
  *
@@ -20,7 +20,7 @@
  *       • Vercel met en cache les bbox identiques à l'edge.
  *
  * Variable d'env requise :
- *   POI_UPSTREAM=http://135.116.81.157/poi
+ *   POI_UPSTREAM=http://<DROPLET_IP>/poi
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 

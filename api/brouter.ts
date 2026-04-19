@@ -1,5 +1,5 @@
 /**
- * Vercel serverless proxy → BRouter standalone (Azure VPS).
+ * Vercel serverless proxy → BRouter standalone (DigitalOcean droplet).
  *
  * Two endpoints muxed on a single function:
  *
@@ -21,9 +21,9 @@
  *       • CORS is simply not an issue.
  *
  * Required env var on Vercel:
- *   BROUTER_UPSTREAM=http://135.116.81.157         (nginx on port 80)
+ *   BROUTER_UPSTREAM=http://<DROPLET_IP>          (nginx on port 80)
  *   # or
- *   BROUTER_UPSTREAM=http://135.116.81.157:17777   (BRouter direct)
+ *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
