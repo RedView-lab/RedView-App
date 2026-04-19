@@ -384,7 +384,7 @@ export function ControlPanelContainer({
     [],
   );
   const handleWeatherDateChange = useCallback(
-    (dateState: Pick<WeatherState, 'customDateEnabled' | 'date' | 'time'>) =>
+    (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) =>
       setWeatherState((prev) => ({ ...prev, ...dateState })),
     [],
   );

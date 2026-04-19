@@ -58,6 +58,8 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     customDateEnabled: true,
     date: '2026-04-22',
     time: '09:30',
+    forecastDay: 0,
+    trendMode: 'date',
     layers: [
       { key: 'temperature', enabled: true, mode: 'text' },
       { key: 'feelsLike', enabled: false, mode: '-' },

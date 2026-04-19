@@ -80,6 +80,7 @@ export interface SlopesState {
 }
 
 export type WeatherTab = 'forecast' | 'trends';
+export type TrendMode = 'date' | 'week';
 export type WeatherLayerKey =
   | 'temperature'
   | 'feelsLike'
@@ -104,6 +105,10 @@ export interface WeatherState {
   date: string;
   /** HH:mm */
   time: string;
+  /** 0 | 1 | 2 — forecast day offset from today */
+  forecastDay: number;
+  /** In trends tab: pick a specific date or a whole week */
+  trendMode: TrendMode;
   layers: WeatherLayer[];
 }
 
@@ -156,7 +161,7 @@ export interface ControlPanelHandlers {
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
   onWeatherTabChange?: (tab: WeatherTab) => void;
-  onWeatherDateChange?: (dateState: Pick<WeatherState, 'customDateEnabled' | 'date' | 'time'>) => void;
+  onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
   onWeatherLayerToggle?: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange?: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;
   onWeatherAddAlert?: () => void;

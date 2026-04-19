@@ -177,3 +177,75 @@
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Day selector (forecast tab) */
+
+.rvc-weather__day-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.rvc-weather__day-slider-wrapper {
+  width: 100%;
+  padding: 0 4px;
+}
+
+.rvc-weather__day-labels {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.rvc-weather__day-label {
+  all: unset;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+
+.rvc-weather__day-label.is-active {
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rvc-weather__day-label:hover {
+  color: white;
+}
+
+/* Trend options (trends tab) */
+
+.rvc-weather__trend-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.rvc-weather__trend-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-weather__trend-label {
+  flex: 1;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
