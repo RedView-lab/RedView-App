@@ -1,8 +1,10 @@
-import type { SlopeState } from '../types';
+import type { SlopeResolutionKey, SlopeState } from '../types';
 import { DEFAULT_SLOPE_STATE } from './slope-config';
 
 const STORAGE_KEY = 'redview_slope_prefs';
 const BREAKPOINTS_KEY = 'redview_slope_breakpoints';
+
+const VALID_RESOLUTIONS: SlopeResolutionKey[] = ['0.40m (LIDAR)', '1m', '5m', '10m'];
 
 export function loadSlopeState(): SlopeState {
   try {
@@ -16,6 +18,10 @@ export function loadSlopeState(): SlopeState {
       colorMode: parsed.colorMode === 'gradient' || parsed.colorMode === 'step'
         ? parsed.colorMode
         : DEFAULT_SLOPE_STATE.colorMode,
+      resolution:
+        parsed.resolution && VALID_RESOLUTIONS.includes(parsed.resolution as SlopeResolutionKey)
+          ? (parsed.resolution as SlopeResolutionKey)
+          : DEFAULT_SLOPE_STATE.resolution,
     };
   } catch {
     return { ...DEFAULT_SLOPE_STATE };

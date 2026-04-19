@@ -29,7 +29,8 @@ interface Props {
 }
 
 const RESOLUTION_OPTIONS: { value: SlopeResolution; label: string }[] = [
-  { value: '1m (LIDAR)', label: '1m (LIDAR)' },
+  { value: '0.40m (LIDAR)', label: '0.40m (LIDAR)' },
+  { value: '1m', label: '1m' },
   { value: '5m', label: '5m' },
   { value: '10m', label: '10m' },
 ];
@@ -166,7 +167,7 @@ function BandRow({
   bandIndex,
   isFirst,
   isLast,
-  scale: _scale,
+  scale,
   onVisibilityToggle,
   onBreakpointChange,
 }: BandRowProps) {
@@ -187,6 +188,17 @@ function BandRow({
   const categoryMatch = band.label?.match(/\(([^)]+)\)/);
   const category = categoryMatch ? categoryMatch[1] : '';
 
+  // In percent mode we show a static percent range pulled from the band
+  // metadata (computed in the container from the same degree breakpoints,
+  // so the two scales stay in sync). Inline editing is only available in
+  // degree mode where the user enters integers in degrees.
+  const isPercent = scale === 'percent';
+  const percentText = (() => {
+    // Strip any trailing "(Catégorie)" — we re-append it below
+    const m = band.percentRange.match(/^([^(]+)/);
+    return (m ? m[1] : band.percentRange).trim();
+  })();
+
   return (
     <div className={`rvc-slopes__band-row${band.visible ? '' : ' is-hidden'}`}>
       <button
@@ -199,17 +211,23 @@ function BandRow({
       </button>
 
       <div className="rvc-slopes__band-label-editable">
-        <InlineDegreeInput
-          value={band.minDeg}
-          editable={minEditable}
-          onCommit={handleMinCommit}
-        />
-        <span className="rvc-slopes__deg-sep">–</span>
-        <InlineDegreeInput
-          value={band.maxDeg}
-          editable={maxEditable}
-          onCommit={handleMaxCommit}
-        />
+        {isPercent ? (
+          <span className="rvc-slopes__deg-value">{percentText}</span>
+        ) : (
+          <>
+            <InlineDegreeInput
+              value={band.minDeg}
+              editable={minEditable}
+              onCommit={handleMinCommit}
+            />
+            <span className="rvc-slopes__deg-sep">–</span>
+            <InlineDegreeInput
+              value={band.maxDeg}
+              editable={maxEditable}
+              onCommit={handleMaxCommit}
+            />
+          </>
+        )}
         {category && (
           <span className="rvc-slopes__band-category">({category})</span>
         )}

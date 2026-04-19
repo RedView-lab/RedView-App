@@ -244,24 +244,58 @@ function _buildLutStep(stops) {
   return lut;
 }
 
+// ── Resolution downsampling ──────────────────────────────────────────
+// The user picks a target ground resolution in the Control Panel. We honour
+// it by box-averaging the per-pixel slope values into N×N blocks ("on fait
+// une moyenne" — see UX request). Block-fill keeps the output buffer the
+// same 256×256 grid so all downstream encoding stays unchanged.
+function downsampleSlopes(slopes, factor) {
+  if (!factor || factor <= 1) return slopes;
+  const S = DEM_TILE_SIZE;
+  const out = new Float32Array(S * S);
+  for (let by = 0; by < S; by += factor) {
+    const yEnd = Math.min(by + factor, S);
+    for (let bx = 0; bx < S; bx += factor) {
+      const xEnd = Math.min(bx + factor, S);
+      let sum = 0, n = 0;
+      for (let y = by; y < yEnd; y++) {
+        const row = y * S;
+        for (let x = bx; x < xEnd; x++) {
+          sum += slopes[row + x];
+          n++;
+        }
+      }
+      const avg = n > 0 ? sum / n : 0;
+      for (let y = by; y < yEnd; y++) {
+        const row = y * S;
+        for (let x = bx; x < xEnd; x++) {
+          out[row + x] = avg;
+        }
+      }
+    }
+  }
+  return out;
+}
+
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
-async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops) {
+async function buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops, resFactor) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
   const pad = await buildPaddedElevations(ownElev, z, x, y, demCache);
   const t2 = performance.now();
-  const slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
+  let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
+  if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
   const blob = await encodeSlopePng(slopes, ownElev, colorMode, hiddenRanges, dynamicStops);
   const t4 = performance.now();
 
   if (DEBUG) {
     console.log(
-      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms`
+      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1}`
     );
   }
   return blob;

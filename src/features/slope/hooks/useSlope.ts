@@ -25,19 +25,20 @@ function addSlopeLayer(
   colorMode: SlopeColorMode,
   hiddenRanges?: [number, number][],
   categories?: SlopeCategory[],
+  resolutionFactor: number = 1,
 ) {
   if (map.getSource(SLOPE_SOURCE_ID)) {
     console.log('[slope][map] source already exists, skipping addSlopeLayer');
     return;
   }
 
-  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(colorMode, hiddenRanges, categories));
+  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(colorMode, hiddenRanges, categories, resolutionFactor));
 
   const layer = buildSlopeLayer(opacity);
   map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
 
   console.log(
-    `[slope][map] %c LAYER ADDED %c source=${SLOPE_SOURCE_ID} layer=${SLOPE_LAYER_ID} opacity=${opacity} colorMode=${colorMode} stops=${categories?.length ?? '?'} slot=top`,
+    `[slope][map] %c LAYER ADDED %c source=${SLOPE_SOURCE_ID} layer=${SLOPE_LAYER_ID} opacity=${opacity} colorMode=${colorMode} stops=${categories?.length ?? '?'} res=${resolutionFactor} slot=top`,
     'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', ''
   );
   console.log('[slope][map] paint:', JSON.stringify(layer.paint, null, 2));
@@ -63,17 +64,20 @@ export function useSlope(
   colorMode: SlopeColorMode,
   hiddenRanges?: [number, number][],
   categories?: SlopeCategory[],
+  resolutionFactor: number = 1,
 ) {
   const opacityRef = useRef(opacity);
   const colorModeRef = useRef(colorMode);
   const enabledRef = useRef(enabled);
   const hiddenRangesRef = useRef(hiddenRanges);
   const categoriesRef = useRef(categories);
+  const resolutionFactorRef = useRef(resolutionFactor);
   opacityRef.current = opacity;
   colorModeRef.current = colorMode;
   enabledRef.current = enabled;
   hiddenRangesRef.current = hiddenRanges;
   categoriesRef.current = categories;
+  resolutionFactorRef.current = resolutionFactor;
 
   // Serialize ranges to a stable string for dependency comparison.
   const hiddenKey = hiddenRanges
@@ -90,7 +94,7 @@ export function useSlope(
     if (!map || !isMapLoaded) return;
 
     if (enabled) {
-      addSlopeLayer(map, opacity, colorMode, hiddenRanges, categories);
+      addSlopeLayer(map, opacity, colorMode, hiddenRanges, categories, resolutionFactor);
     } else {
       removeSlopeLayer(map);
     }
@@ -110,17 +114,18 @@ export function useSlope(
     } catch { /* layer may not exist yet */ }
   }, [map, isMapLoaded, enabled, opacity]);
 
-  // Update color mode, hidden-bands, or categories — must rebuild source with new tile URL
+  // Update color mode, hidden-bands, categories, or resolution — must rebuild
+  // source with new tile URL.
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
     try {
       if (map.getSource(SLOPE_SOURCE_ID)) {
         removeSlopeLayer(map);
-        addSlopeLayer(map, opacity, colorMode, hiddenRanges, categories);
-        console.log(`[slope][map] %c SOURCE REBUILT %c colorMode=${colorMode} stops=${categories?.length ?? '?'} hidden=${hiddenKey || '∅'}`, 'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', '');
+        addSlopeLayer(map, opacity, colorMode, hiddenRanges, categories, resolutionFactor);
+        console.log(`[slope][map] %c SOURCE REBUILT %c colorMode=${colorMode} stops=${categories?.length ?? '?'} hidden=${hiddenKey || '∅'} res=${resolutionFactor}`, 'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', '');
       }
     } catch { /* layer may not exist yet */ }
-  }, [map, isMapLoaded, enabled, colorMode, hiddenKey, categoriesKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, enabled, colorMode, hiddenKey, categoriesKey, resolutionFactor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-add layer after style reload
   useEffect(() => {
@@ -130,7 +135,7 @@ export function useSlope(
       setTimeout(() => {
         if (enabledRef.current) {
           console.log('[slope][map] %c STYLE RELOAD %c re-adding slope layer', 'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', '');
-          addSlopeLayer(map, opacityRef.current, colorModeRef.current, hiddenRangesRef.current, categoriesRef.current);
+          addSlopeLayer(map, opacityRef.current, colorModeRef.current, hiddenRangesRef.current, categoriesRef.current, resolutionFactorRef.current);
         }
       }, 0);
     };

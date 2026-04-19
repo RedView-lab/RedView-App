@@ -79,7 +79,7 @@ const OLD_CACHES = [
   'dem-negative-v20',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
-  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3',
+  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4',
 ];
 
 self.addEventListener('install', (e) => {
@@ -158,6 +158,7 @@ self.addEventListener('fetch', (event) => {
     const slopeMode = url.searchParams.get('mode') || 'gradient';
     const slopeHide = url.searchParams.get('hide') || '';
     const slopeStops = url.searchParams.get('stops') || '';
+    const slopeRes = url.searchParams.get('res') || '';
     event.respondWith(handleSlopeRequest(
       parseInt(slopeMatch[1], 10),
       parseInt(slopeMatch[2], 10),
@@ -165,6 +166,7 @@ self.addEventListener('fetch', (event) => {
       slopeMode,
       slopeHide,
       slopeStops,
+      slopeRes,
     ));
     return;
   }
@@ -508,11 +510,16 @@ function transparentTileResponse() {
   });
 }
 
-async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam) {
+async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam, resParam) {
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
   const hideSuffix = hideParam ? `&hide=${hideParam}` : '';
   const stopsSuffix = stopsParam ? `&stops=${stopsParam}` : '';
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}${hideSuffix}${stopsSuffix}`);
+  const resFactor = (() => {
+    const n = parseInt(resParam, 10);
+    return Number.isFinite(n) && n > 1 ? Math.min(n, 64) : 1;
+  })();
+  const resSuffix = resFactor > 1 ? `&res=${resFactor}` : '';
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}?mode=${colorMode}${hideSuffix}${stopsSuffix}${resSuffix}`);
   const cached = await slopeCache.match(cacheKey);
   if (cached) return cached;
 
@@ -525,6 +532,21 @@ async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam) {
   if (!demResponse || demResponse.status !== 200) {
     return transparentTileResponse();
   }
+
+  // Pre-warm the 4 neighbour DEM tiles so the slope padding always uses
+  // real elevations, not the own-edge replication that produces visible
+  // 1-pixel seams between adjacent slope tiles. We allow each neighbour to
+  // fail silently — `buildPaddedElevations` still has its replicate-edge
+  // fallback for tiles outside coverage / 204'd by Mapbox.
+  await Promise.all([
+    [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
+  ].map(async ([nx, ny]) => {
+    if (ny < 0 || nx < 0) return;
+    const nKey = new Request(`/dem-tiles/${z}/${nx}/${ny}`);
+    const existing = await demCache.match(nKey);
+    if (existing && existing.status === 200) return;
+    try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
+  }));
 
   // Parse hide param: "0-7,25-35" → [[0,7],[25,35]]
   const hiddenRanges = [];
@@ -556,7 +578,7 @@ async function handleSlopeRequest(z, x, y, colorMode, hideParam, stopsParam) {
 
   try {
     const demBlob = await demResponse.clone().blob();
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops);
+    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, colorMode, demCache, hiddenRanges, dynamicStops, resFactor);
     const response = new Response(slopeBlob, {
       status: 200,
       headers: {

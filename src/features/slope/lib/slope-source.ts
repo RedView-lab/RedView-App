@@ -1,10 +1,26 @@
 import type { SlopeColorMode } from '../types';
-import type { SlopeCategory } from '../types';
+import type { SlopeCategory, SlopeResolutionKey } from '../types';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
 
 export const SLOPE_SOURCE_ID = 'slope-tiles';
 export const SLOPE_LAYER_ID = 'slope-overlay';
+
+// ── Resolution → downsample factor ────────────────────────────────────
+// '0.40m (LIDAR)' is the native LIDAR resolution (no downsampling). The
+// other options instruct the SW to box-average the elevation grid before
+// computing slope, producing a coarser/smoother look.
+const RESOLUTION_FACTOR: Record<SlopeResolutionKey, number> = {
+  '0.40m (LIDAR)': 1,
+  '1m': 2,
+  '5m': 8,
+  '10m': 16,
+};
+
+export function resolutionToFactor(res: SlopeResolutionKey | undefined): number {
+  if (!res) return 1;
+  return RESOLUTION_FACTOR[res] ?? 1;
+}
 
 // ── Raster source definition ──────────────────────────────────────────
 
@@ -27,6 +43,7 @@ export function buildSlopeTileSource(
   colorMode: SlopeColorMode,
   hiddenRanges?: [number, number][],
   categories?: SlopeCategory[],
+  resolutionFactor: number = 1,
 ) {
   const hideQuery = hiddenRanges && hiddenRanges.length
     ? `&hide=${hiddenRanges.map(([a, b]) => `${a}-${b}`).join(',')}`
@@ -34,9 +51,10 @@ export function buildSlopeTileSource(
   const stopsQuery = categories && categories.length
     ? `&stops=${encodeColorStops(categories)}`
     : '';
+  const resQuery = resolutionFactor > 1 ? `&res=${resolutionFactor}` : '';
   return {
     type: 'raster' as const,
-    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}${stopsQuery}`],
+    tiles: [`/slope-tiles/{z}/{x}/{y}?mode=${colorMode}${hideQuery}${stopsQuery}${resQuery}`],
     tileSize: 256,
     minzoom: 6,
     maxzoom: 17,

@@ -7,8 +7,9 @@ import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
 import { generateDynamicCategories, clampBreakpoints } from '@/features/slope/lib/slope-config';
+import { resolutionToFactor } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
-import type { SlopeColorMode } from '@/features/slope/types';
+import type { SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types';
 
 import { loadLabelState, saveLabelState } from '@/features/labels/lib/label-persist';
 import { useLabels } from '@/features/labels/hooks/useLabels';
@@ -24,6 +25,7 @@ import type {
   LabelsState,
   SlopeBand,
   SlopeColorization,
+  SlopeResolution,
   SlopeScale,
   SlopeScaleSetting,
 } from './types';
@@ -167,6 +169,7 @@ export function ControlPanelContainer({
       [slopeBandVisibility, dynamicCategories],
     ),
     dynamicCategories,
+    resolutionToFactor(slopeState.resolution),
   );
 
   // ── Breakpoint edit handler ────────────────────────────────────────
@@ -266,7 +269,7 @@ export function ControlPanelContainer({
       labels: { enabled: labelsEnabled, state: panelLabels },
       slopes: {
         enabled: slopeState.enabled,
-        resolution: '1m (LIDAR)',
+        resolution: slopeState.resolution,
         colorization: colorModeToPanel(slopeState.colorMode),
         scale: slopeScale,
         scaleSetting: slopeScaleSetting,
@@ -320,6 +323,15 @@ export function ControlPanelContainer({
     (c: SlopeColorization) => persistSlope({ ...slopeState, colorMode: colorModeFromPanel(c) }),
     [persistSlope, slopeState],
   );
+  const handleSlopeResolution = useCallback(
+    (r: SlopeResolution) => {
+      // Validate against the known set; ignore unknown values silently.
+      const valid: SlopeResolutionKey[] = ['0.40m (LIDAR)', '1m', '5m', '10m'];
+      if (!valid.includes(r as SlopeResolutionKey)) return;
+      persistSlope({ ...slopeState, resolution: r as SlopeResolutionKey });
+    },
+    [persistSlope, slopeState],
+  );
   const handleSlopeOpacity = useCallback(
     (v: number) => persistSlope({ ...slopeState, opacity: Math.max(0, Math.min(1, v / 100)) }),
     [persistSlope, slopeState],
@@ -364,6 +376,7 @@ export function ControlPanelContainer({
       onLabelToggle={handleLabelToggle}
       /* Slopes */
       onSlopesEnabledChange={handleSlopesEnabled}
+      onSlopeResolutionChange={handleSlopeResolution}
       onSlopeColorizationChange={handleSlopeColorization}
       onSlopeScaleChange={setSlopeScale}
       onSlopeScaleSettingChange={setSlopeScaleSetting}
