@@ -35,7 +35,7 @@ export function useShadowTiles(
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  const shadowEnabled = opts.enabled && opts.sunAltitudeDeg > 0;
+  const shadowEnabled = opts.enabled;
 
   // Add / remove layer as the feature toggles.
   useEffect(() => {
@@ -69,7 +69,7 @@ export function useShadowTiles(
 
     const onStyleLoad = () => {
       setTimeout(() => {
-        if (!shadowEnabled) return;
+        if (!optsRef.current.enabled) return;
         ensureShadowLayer(map, optsRef.current);
         syncShadowPaint(map, optsRef.current);
       }, 0);

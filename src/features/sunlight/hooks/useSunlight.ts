@@ -3,7 +3,6 @@ import type { FogSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
-import { addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition } from '../lib/sun-disk-layer';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
 
 /**
@@ -12,7 +11,7 @@ import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
  * We intentionally do NOT modulate the whole scene brightness anymore. The
  * previous fog/lightPreset cycle made the entire screen brighten/darken so much
  * that terrain shadows became hard to read. The sunlight system now focuses on
- * solar position, sunrise/sunset times, the sun disk, and a restrained
+ * solar position, sunrise/sunset times, and a restrained
  * sky-only fog so dawn/dusk remains visible without washing the ground.
  */
 export interface UseSunlightOptions {
@@ -117,15 +116,6 @@ export function useSunlight(
       } catch (err) {
         console.warn('[sunlight] setFog failed', err);
       }
-
-      // Sun disk custom layer
-      try {
-        addSunDiskLayer(map);
-        updateSunDiskPosition(azimuth, altitude);
-        map.triggerRepaint();
-      } catch (err) {
-        console.warn('[sunlight] sun disk failed', err);
-      }
     };
 
     apply();
@@ -141,11 +131,6 @@ export function useSunlight(
     if (opts.enabled) return;
     try {
       map.setFog(FOG_CONFIG as FogSpecification);
-    } catch {
-      /* no-op */
-    }
-    try {
-      removeSunDiskLayer(map);
     } catch {
       /* no-op */
     }

@@ -17,6 +17,11 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = clamp01((x - edge0) / (edge1 - edge0));
+  return t * t * (3 - 2 * t);
+}
+
 function formatAlpha(value: number): string {
   return clamp01(value).toFixed(3);
 }
@@ -41,17 +46,19 @@ export function buildShadowTileSource(sunAzDeg: number, sunAltDeg: number) {
 
 export function buildShadowPaint(opts: ShadowPaintOptions) {
   const opacity = clamp01(opts.opacity);
-  const sunAltitude = Math.max(0, opts.sunAltitudeDeg);
+  const rawSunAltitude = opts.sunAltitudeDeg;
+  const sunAltitude = Math.max(0, rawSunAltitude);
   const lowSunFactor = clamp01(1 - sunAltitude / 70);
   const highSunFactor = 1 - lowSunFactor;
-  const darkness = clamp01(opacity * (0.82 + lowSunFactor * 0.18));
-  const accent = clamp01(opacity * (0.28 + lowSunFactor * 0.22));
-  const highlight = clamp01(opacity * (0.01 + highSunFactor * 0.025));
+  const visibility = smoothstep(-2.5, 4, rawSunAltitude);
+  const darkness = clamp01(opacity * visibility * (0.82 + lowSunFactor * 0.18));
+  const accent = clamp01(opacity * visibility * (0.28 + lowSunFactor * 0.22));
+  const highlight = clamp01(opacity * visibility * (0.01 + highSunFactor * 0.025));
 
   return {
     'hillshade-illumination-anchor': 'map' as const,
     'hillshade-illumination-direction': ((opts.sunAzimuthDeg % 360) + 360) % 360,
-    'hillshade-exaggeration': 0.72 + lowSunFactor * 0.28,
+    'hillshade-exaggeration': 0.45 + visibility * (0.35 + lowSunFactor * 0.2),
     'hillshade-shadow-color': `rgba(0, 0, 0, ${formatAlpha(darkness)})`,
     'hillshade-highlight-color': `rgba(255, 246, 225, ${formatAlpha(highlight)})`,
     'hillshade-accent-color': `rgba(16, 28, 48, ${formatAlpha(accent)})`,
