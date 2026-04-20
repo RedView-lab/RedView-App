@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
@@ -35,10 +35,7 @@ export function useShadowTiles(
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  const shadowEnabled = useMemo(
-    () => opts.enabled && opts.sunAltitudeDeg > 0,
-    [opts.enabled, opts.sunAltitudeDeg],
-  );
+  const shadowEnabled = opts.enabled && opts.sunAltitudeDeg > 0;
 
   // Add / remove layer as the feature toggles.
   useEffect(() => {
@@ -60,19 +57,10 @@ export function useShadowTiles(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!shadowEnabled) return;
+    ensureShadowLayer(map, opts);
     if (!map.getLayer(SHADOW_LAYER_ID)) return;
 
-    const paint = buildShadowPaint(opts);
-    try {
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-anchor', paint['hillshade-illumination-anchor']);
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-direction', paint['hillshade-illumination-direction']);
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-exaggeration', paint['hillshade-exaggeration']);
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-shadow-color', paint['hillshade-shadow-color']);
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-highlight-color', paint['hillshade-highlight-color']);
-      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-accent-color', paint['hillshade-accent-color']);
-    } catch {
-      /* layer may not exist yet */
-    }
+    syncShadowPaint(map, opts);
   }, [map, isMapLoaded, shadowEnabled, opts.opacity, opts.sunAzimuthDeg, opts.sunAltitudeDeg]);
 
   // Re-add after a style reload.
@@ -83,12 +71,31 @@ export function useShadowTiles(
       setTimeout(() => {
         if (!shadowEnabled) return;
         ensureShadowLayer(map, optsRef.current);
+        syncShadowPaint(map, optsRef.current);
       }, 0);
     };
 
     map.on('style.load', onStyleLoad);
     return () => {
       map.off('style.load', onStyleLoad);
+    };
+  }, [map, isMapLoaded, shadowEnabled]);
+
+  // Re-attach when the DEM source finishes loading or when Mapbox drops the
+  // layer during internal style/source churn.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    if (!shadowEnabled) return;
+
+    const onSourceData = (event: mapboxgl.MapSourceDataEvent) => {
+      if (event.sourceId !== unifiedDEMSource.id) return;
+      ensureShadowLayer(map, optsRef.current);
+      syncShadowPaint(map, optsRef.current);
+    };
+
+    map.on('sourcedata', onSourceData);
+    return () => {
+      map.off('sourcedata', onSourceData);
     };
   }, [map, isMapLoaded, shadowEnabled]);
 
@@ -114,6 +121,21 @@ export function useShadowTiles(
       }) as any);
     } catch (err) {
       console.warn('[shadow] addLayer failed', err);
+    }
+  }
+
+  function syncShadowPaint(m: MapboxMap, o: UseShadowTilesOptions) {
+    const paint = buildShadowPaint(o);
+    try {
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-anchor', paint['hillshade-illumination-anchor']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-direction', paint['hillshade-illumination-direction']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-exaggeration', paint['hillshade-exaggeration']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-shadow-color', paint['hillshade-shadow-color']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-highlight-color', paint['hillshade-highlight-color']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-accent-color', paint['hillshade-accent-color']);
+      m.triggerRepaint();
+    } catch {
+      /* layer may not exist yet */
     }
   }
 }

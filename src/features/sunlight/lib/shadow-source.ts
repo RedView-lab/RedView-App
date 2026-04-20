@@ -44,14 +44,17 @@ export function buildShadowPaint(opts: ShadowPaintOptions) {
   const sunAltitude = Math.max(0, opts.sunAltitudeDeg);
   const lowSunFactor = clamp01(1 - sunAltitude / 70);
   const highSunFactor = 1 - lowSunFactor;
+  const darkness = clamp01(opacity * (0.82 + lowSunFactor * 0.18));
+  const accent = clamp01(opacity * (0.28 + lowSunFactor * 0.22));
+  const highlight = clamp01(opacity * (0.01 + highSunFactor * 0.025));
 
   return {
     'hillshade-illumination-anchor': 'map' as const,
     'hillshade-illumination-direction': ((opts.sunAzimuthDeg % 360) + 360) % 360,
-    'hillshade-exaggeration': 0.16 + lowSunFactor * 0.94,
-    'hillshade-shadow-color': `rgba(6, 12, 22, ${formatAlpha(opacity * (0.22 + lowSunFactor * 0.58))})`,
-    'hillshade-highlight-color': `rgba(255, 244, 214, ${formatAlpha(opacity * (0.02 + highSunFactor * 0.08))})`,
-    'hillshade-accent-color': `rgba(68, 104, 146, ${formatAlpha(opacity * (0.05 + lowSunFactor * 0.12))})`,
+    'hillshade-exaggeration': 0.9 + lowSunFactor * 1.9,
+    'hillshade-shadow-color': `rgba(0, 0, 0, ${formatAlpha(darkness)})`,
+    'hillshade-highlight-color': `rgba(255, 246, 225, ${formatAlpha(highlight)})`,
+    'hillshade-accent-color': `rgba(16, 28, 48, ${formatAlpha(accent)})`,
   };
 }
 

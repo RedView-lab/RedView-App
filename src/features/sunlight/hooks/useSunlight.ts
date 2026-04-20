@@ -1,31 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Map as MapboxMap, FogSpecification, LightsSpecification } from 'mapbox-gl';
+import type { FogSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
 import { addSunDiskLayer, removeSunDiskLayer, updateSunDiskPosition } from '../lib/sun-disk-layer';
+import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
 
 /**
- * Drives Mapbox sun + atmosphere from a date/time and the map center.
+ * Computes real sun position from date/time and map center.
  *
- * Two complementary mechanisms are used:
- *   1. `setLights` with a directional light positioned at the real sun
- *      azimuth/altitude, with `cast-shadows: true` for Shadowmap-style
- *      terrain shadows.
- *   2. `setFog` with continuous `space-color`, `high-color`, `color`,
- *      `star-intensity` and `horizon-blend` values driven by sun altitude.
- *      The Mapbox Standard `lightPreset` config is locked to four discrete
- *      presets (dawn/day/dusk/night) and is not granular enough to keep
- *      stars hidden at 13:44 nor to fade in stars only after astronomical
- *      twilight — we drive the sky ourselves via setFog.
- *
- * Returned `sunriseTime` / `sunsetTime` are HH:mm strings in the host
- * timezone, recomputed whenever the date or the map center changes.
- *
- * Docs:
- *   - https://docs.mapbox.com/mapbox-gl-js/api/map/#map#setlights
- *   - https://docs.mapbox.com/mapbox-gl-js/style-spec/fog/
- *   - https://docs.mapbox.com/mapbox-gl-js/guides/styles/work-with-standard/
+ * We intentionally do NOT modulate the whole scene brightness anymore. The
+ * previous fog/lightPreset cycle made the entire screen brighten/darken so much
+ * that terrain shadows became hard to read. The sunlight system now focuses on
+ * solar position, sunrise/sunset times, the sun disk, and a restrained
+ * sky-only fog so dawn/dusk remains visible without washing the ground.
  */
 export interface UseSunlightOptions {
   enabled: boolean;
@@ -44,92 +32,38 @@ export interface UseSunlightResult {
   sunAltitudeDeg: number;
 }
 
-const DEFAULT_FOG: FogSpecification = {
-  range: [2, 20],
-  color: 'rgb(225, 235, 245)',
-  'high-color': 'rgb(90, 150, 230)',
-  'horizon-blend': 0.02,
-  'space-color': 'rgb(11, 11, 25)',
-  'star-intensity': 0.5,
-};
-
-const DEFAULT_LIGHTS: LightsSpecification[] = [
-  { id: 'ambient', type: 'ambient', properties: { color: 'white', intensity: 0.5 } },
-  {
-    id: 'directional',
-    type: 'directional',
-    properties: {
-      color: 'white',
-      intensity: 0.5,
-      direction: [180, 30],
-      'cast-shadows': true,
-    },
-  },
-];
-
-function classifyPreset(altitudeDeg: number, isMorning: boolean): 'dawn' | 'day' | 'dusk' | 'night' {
-  if (altitudeDeg > 6) return 'day';
-  if (altitudeDeg < -6) return 'night';
-  return isMorning ? 'dawn' : 'dusk';
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
-function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecification[] {
-  // Mapbox `direction` = [azimuth (deg from north, CW), polar (deg from zenith)].
-  // Polar 0° = light from straight overhead; 90° = at the horizon. Clamp at
-  // 88° so that when the sun is below the horizon the rake angle stays
-  // grazing instead of lighting terrain from underneath.
-  const polar = Math.min(88, Math.max(0, 90 - altitudeDeg));
-
-  const sunAbove = Math.max(0, altitudeDeg);
-  const directionalIntensity =
-    altitudeDeg <= -6 ? 0 : Math.min(0.95, 0.15 + (sunAbove / 50) * 0.8);
-  const ambientIntensity =
-    altitudeDeg < -12 ? 0.1 : altitudeDeg < 0 ? 0.2 : altitudeDeg < 10 ? 0.35 : 0.5;
-
-  // Warm color near the horizon (golden hour), neutral white at midday,
-  // cool moonlight when below.
-  const directionalColor =
-    altitudeDeg > 10
-      ? '#ffffff'
-      : altitudeDeg > 0
-        ? '#ffd2a6'
-        : altitudeDeg > -6
-          ? '#ff9560'
-          : '#3a4a78';
-
-  // Cast longer / softer shadows when the sun is low. `shadow-intensity`
-  // 0..1 — higher = darker shadow.
-  const shadowIntensity = altitudeDeg <= 0 ? 0 : Math.min(0.9, 0.3 + (sunAbove / 90) * 0.6);
-
-  return [
-    {
-      id: 'ambient',
-      type: 'ambient',
-      properties: { color: 'white', intensity: ambientIntensity },
-    },
-    {
-      id: 'directional',
-      type: 'directional',
-      properties: {
-        color: directionalColor,
-        intensity: directionalIntensity,
-        direction: [azimuthDeg, polar],
-        'cast-shadows': true,
-        'shadow-intensity': shadowIntensity,
-      },
-    },
-  ];
+function parseRgb(rgb: string): [number, number, number] {
+  const match = rgb.match(/\d+/g);
+  if (!match || match.length < 3) return [0, 0, 0];
+  return [Number(match[0]), Number(match[1]), Number(match[2])];
 }
 
-function buildFog(altitudeDeg: number): FogSpecification {
+function mixColor(a: string, b: string, t: number): string {
+  const mix = clamp01(t);
+  const [ar, ag, ab] = parseRgb(a);
+  const [br, bg, bb] = parseRgb(b);
+  const r = Math.round(ar + (br - ar) * mix);
+  const g = Math.round(ag + (bg - ag) * mix);
+  const bCh = Math.round(ab + (bb - ab) * mix);
+  return `rgb(${r}, ${g}, ${bCh})`;
+}
+
+function buildSkyOnlyFog(altitudeDeg: number): FogSpecification {
   const sky = getSkyAppearance(altitudeDeg);
+  const twilightFactor = clamp01((12 - Math.max(altitudeDeg, -18)) / 30);
+
   return {
-    range: [0.5, 20],
-    color: sky.color,
-    'high-color': sky.highColor,
-    'horizon-blend': sky.horizonBlend,
+    ...FOG_CONFIG,
+    range: [12, 24],
+    color: mixColor(FOG_CONFIG.color, sky.color, 0.18 + twilightFactor * 0.12),
+    'high-color': mixColor(FOG_CONFIG['high-color'], sky.highColor, 0.72),
     'space-color': sky.spaceColor,
     'star-intensity': sky.starIntensity,
+    'horizon-blend': Math.min(0.018, 0.006 + sky.horizonBlend * 0.18),
   };
 }
 
@@ -154,8 +88,7 @@ export function useSunlight(
     return Number.isNaN(dt.getTime()) ? null : dt;
   }, [opts.date, opts.time]);
 
-  // Apply lights + recompute sunrise/sunset whenever inputs change or the user
-  // pans the map.
+  // Recompute sunrise/sunset whenever inputs change or the user pans the map.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
@@ -178,22 +111,9 @@ export function useSunlight(
 
       const { azimuth, altitude } = getSunPosition(dt, lat, lon);
       setSunPos({ azimuthDeg: azimuth, altitudeDeg: altitude });
-      const noonDate = new Date(`${optsRef.current.date}T12:00:00`);
-      const isMorning = dt.getTime() < noonDate.getTime();
-      const preset = classifyPreset(altitude, isMorning);
 
       try {
-        map.setConfigProperty('basemap', 'lightPreset', preset);
-      } catch {
-        /* style may not expose config properties */
-      }
-      try {
-        map.setLights(buildLights(azimuth, altitude));
-      } catch (err) {
-        console.warn('[sunlight] setLights failed', err);
-      }
-      try {
-        map.setFog(buildFog(altitude));
+        map.setFog(buildSkyOnlyFog(altitude));
       } catch (err) {
         console.warn('[sunlight] setFog failed', err);
       }
@@ -215,22 +135,12 @@ export function useSunlight(
     };
   }, [map, isMapLoaded, opts.enabled, dateTime]);
 
-  // Restore neutral lights when the panel is disabled.
+  // Restore neutral sky when the panel is disabled.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (opts.enabled) return;
     try {
-      map.setConfigProperty('basemap', 'lightPreset', 'day');
-    } catch {
-      /* no-op */
-    }
-    try {
-      map.setLights(DEFAULT_LIGHTS);
-    } catch {
-      /* no-op */
-    }
-    try {
-      map.setFog(DEFAULT_FOG);
+      map.setFog(FOG_CONFIG as FogSpecification);
     } catch {
       /* no-op */
     }
