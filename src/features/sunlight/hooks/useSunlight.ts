@@ -58,7 +58,7 @@ function buildSkyOnlyFog(altitudeDeg: number): FogSpecification {
 
   return {
     ...FOG_CONFIG,
-    range: [12, 24],
+    range: [12, 20],
     color: mixColor(FOG_CONFIG.color, sky.color, 0.18 + twilightFactor * 0.12),
     'high-color': mixColor(FOG_CONFIG['high-color'], sky.highColor, 0.72),
     'space-color': sky.spaceColor,

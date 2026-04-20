@@ -51,7 +51,7 @@ export function buildShadowPaint(opts: ShadowPaintOptions) {
   return {
     'hillshade-illumination-anchor': 'map' as const,
     'hillshade-illumination-direction': ((opts.sunAzimuthDeg % 360) + 360) % 360,
-    'hillshade-exaggeration': 0.9 + lowSunFactor * 1.9,
+    'hillshade-exaggeration': 0.72 + lowSunFactor * 0.28,
     'hillshade-shadow-color': `rgba(0, 0, 0, ${formatAlpha(darkness)})`,
     'hillshade-highlight-color': `rgba(255, 246, 225, ${formatAlpha(highlight)})`,
     'hillshade-accent-color': `rgba(16, 28, 48, ${formatAlpha(accent)})`,
