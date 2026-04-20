@@ -134,12 +134,15 @@ export function useShadowImage(
             id: LAYER_ID,
             type: 'raster',
             source: SOURCE_ID,
+            // Standard style requires an explicit slot, otherwise the layer
+            // lands under the satellite imagery and stays invisible.
+            slot: 'top',
             paint: {
               'raster-opacity': 1,
               'raster-fade-duration': 0,
               'raster-resampling': 'linear',
             },
-          });
+          } as never);
         } catch (err) {
           console.warn('[shadow] addLayer failed', err);
         }
@@ -189,12 +192,17 @@ export function useShadowImage(
         console.warn('[shadow] sample failed', sampleAck.message);
         return;
       }
-      if (sampleAck.tooMany || sampleAck.filled === 0) {
-        // No DEM coverage in view — drop the layer so the user isn't left
-        // with a stale dark blob from a previous viewport.
+      if (sampleAck.tooMany) {
+        console.warn('[shadow] sample skipped: viewport spans too many DEM tiles');
         removeSourceAndLayer();
         return;
       }
+      if (sampleAck.filled === 0) {
+        console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: [w, s, e, n] });
+        removeSourceAndLayer();
+        return;
+      }
+      console.log('[shadow] sample ok', { filled: sampleAck.filled, total: sampleAck.total, demZoom });
       sampledRef.current = true;
       await runComputeAndApply([w, s, e, n]);
     };
@@ -219,7 +227,11 @@ export function useShadowImage(
         opacity: o.opacity * visibility,
       });
       if (cancelled) return;
-      if (ack.type !== 'compute-ok') return;
+      if (ack.type !== 'compute-ok') {
+        console.warn('[shadow] compute returned', ack.type);
+        return;
+      }
+      console.log('[shadow] compute ok', { blobSize: ack.blob.size, az: o.sunAzimuthDeg.toFixed(1), alt: o.sunAltitudeDeg.toFixed(1) });
 
       const url = URL.createObjectURL(ack.blob);
       const coords: [[number, number], [number, number], [number, number], [number, number]] = [
