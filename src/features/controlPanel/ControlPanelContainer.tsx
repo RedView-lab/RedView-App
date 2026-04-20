@@ -16,7 +16,7 @@ import { useLabels } from '@/features/labels/hooks/useLabels';
 import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
-import { useSunlight, useShadowTiles } from '@/features/sunlight';
+import { useSunlight, useShadowImage } from '@/features/sunlight';
 
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
@@ -266,8 +266,10 @@ export function ControlPanelContainer({
     time: sunlightState.time,
   });
 
-  // DEM-driven terrain shadows
-  useShadowTiles(isMapLoaded ? map : null, isMapLoaded, {
+  // DEM-driven cast shadows — single ImageSource updated in place by a
+  // dedicated worker. Time changes only re-run the sweep + image upload
+  // (no Mapbox tile fetch cycle, no source rebuild).
+  useShadowImage(isMapLoaded ? map : null, isMapLoaded, {
     enabled: sunlightState.enabled && sunlightState.shadowEnabled,
     sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
     sunAltitudeDeg: sunlightTimes.sunAltitudeDeg,

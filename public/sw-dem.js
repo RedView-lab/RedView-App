@@ -25,7 +25,6 @@ importScripts(
   '/sw-dem/composite.js',
   '/sw-dem/ortho.js',
   '/sw-dem/slope.js',
-  '/sw-dem/shadow.js',
 );
 
 // Shared mutable state (used by sub-modules via global scope)
@@ -81,6 +80,7 @@ const OLD_CACHES = [
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7',
+  'shadow-tiles-v1',
 ];
 
 self.addEventListener('install', (e) => {
@@ -121,7 +121,9 @@ self.addEventListener('message', (e) => {
     return;
   }
   if (e.data?.type === 'CLEAR_SHADOW_CACHE') {
-    caches.delete(SHADOW_CACHE_NAME);
+    // Retired endpoint — kept for compatibility with any in-flight client
+    // build that still posts the message.
+    caches.delete('shadow-tiles-v1');
     return;
   }
   if (e.data?.type === 'CLEAR_NEGATIVE_CACHE') {
@@ -172,15 +174,10 @@ self.addEventListener('fetch', (event) => {
 
   const shadowMatch = url.pathname.match(/^\/shadow-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (shadowMatch) {
-    const sunAz = parseFloat(url.searchParams.get('az') || '180');
-    const sunAlt = parseFloat(url.searchParams.get('alt') || '45');
-    event.respondWith(handleShadowRequest(
-      parseInt(shadowMatch[1], 10),
-      parseInt(shadowMatch[2], 10),
-      parseInt(shadowMatch[3], 10),
-      sunAz,
-      sunAlt,
-    ));
+    // Legacy per-tile shadow endpoint — retired in favour of the in-page
+    // ImageSource pipeline (src/features/sunlight). Return 410 so any stale
+    // SW client requesting it doesn't trigger a build.
+    event.respondWith(new Response(null, { status: 410, headers: { 'X-DEM-Reason': 'shadow-retired' } }));
     return;
   }
 });
@@ -507,75 +504,13 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
 }
 
 // ---------------------------------------------------------------------------
-// Shadow request handler — DEM-based ray-traced shadows
+// Shadow request handler — RETIRED.
 // ---------------------------------------------------------------------------
-// Shadow tiles are NOT cached across sun-position changes (the sun moves
-// continuously). Instead, each tile URL includes ?az=…&alt=… query params
-// so that when the source is recreated with new sun params, Mapbox fetches
-// fresh tiles. We DO cache per (z,x,y,az,alt) combo for the session so
-// scrubbing back to the same time is instant.
-
-async function handleShadowRequest(z, x, y, sunAzDeg, sunAltDeg) {
-  // Sun below horizon → fully shadowed transparent tile
-  if (sunAltDeg <= 0) return transparentTileResponse();
-
-  // Round sun params to 1 decimal to improve cache hit rate during scrubbing
-  const azKey = sunAzDeg.toFixed(1);
-  const altKey = sunAltDeg.toFixed(1);
-
-  const shadowCache = await caches.open(SHADOW_CACHE_NAME);
-  const cacheKey = new Request(`/shadow-tiles/${z}/${x}/${y}?az=${azKey}&alt=${altKey}`);
-  const cached = await shadowCache.match(cacheKey);
-  if (cached) return cached;
-
-  const demCache = await caches.open(CACHE_NAME);
-  const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
-  let demResponse = await demCache.match(demKey);
-  if (!demResponse || demResponse.status !== 200) {
-    demResponse = await handleDemRequest(demKey, z, x, y);
-  }
-  if (!demResponse || demResponse.status !== 200) {
-    return transparentTileResponse();
-  }
-
-  // Pre-warm the 8 neighbour DEM tiles so the shadow ray-march can cross
-  // tile boundaries. Same pattern as slope handler but with 8 neighbours
-  // (diagonals matter for shadow rays at oblique azimuths).
-  const neighbours = [
-    [x - 1, y - 1], [x, y - 1], [x + 1, y - 1],
-    [x - 1, y],                  [x + 1, y],
-    [x - 1, y + 1], [x, y + 1], [x + 1, y + 1],
-  ];
-  await Promise.all(neighbours.map(async ([nx, ny]) => {
-    if (ny < 0 || nx < 0) return;
-    const nKey = new Request(`/dem-tiles/${z}/${nx}/${ny}`);
-    const existing = await demCache.match(nKey);
-    if (existing && existing.status === 200) return;
-    try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
-  }));
-
-  try {
-    const demBlob = await demResponse.clone().blob();
-    const shadowBlob = await buildShadowTile(
-      demBlob, z, x, y,
-      parseFloat(azKey), parseFloat(altKey),
-      demCache,
-    );
-    const response = new Response(shadowBlob, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=300',
-        'X-Tile-Type': 'shadow',
-      },
-    });
-    shadowCache.put(cacheKey, response.clone());
-    return response;
-  } catch (err) {
-    console.error('[shadow]', z, x, y, err);
-    return transparentTileResponse();
-  }
-}
+// Cast shadows are now computed in-page by a dedicated worker that owns a
+// single viewport-sized elevation grid (see src/features/sunlight). The
+// per-tile pipeline served here was paying a full Mapbox tile-fetch cycle
+// every time the sun moved one degree; the new design only re-runs the
+// horizon sweep on the cached grid, no tile churn at all.
 
 // ---------------------------------------------------------------------------
 // Slope request handler (unchanged behaviour — relies on DEM cache)
