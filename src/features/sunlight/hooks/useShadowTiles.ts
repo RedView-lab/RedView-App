@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
   SHADOW_SOURCE_ID,
   SHADOW_LAYER_ID,
-  buildShadowTileSource,
   buildShadowLayer,
+  buildShadowPaint,
 } from '../lib/shadow-source';
+import { unifiedDEMSource } from '../../map3d/lib/sources';
 
 export interface UseShadowTilesOptions {
   enabled: boolean;
@@ -19,60 +20,77 @@ export interface UseShadowTilesOptions {
 }
 
 /**
- * Manages the shadow tile raster overlay on the Mapbox map.
+ * Manages DEM-driven terrain shadows on the Mapbox map.
  *
- * When the sun position changes (debounced), the source is recreated with new
- * query parameters so the SW computes fresh shadow tiles for the new angle.
+ * The old SW-generated raster mask has been retired here because it behaved as
+ * a screen-darkening overlay on pitched 3D views. We now use a hillshade layer
+ * backed directly by the live terrain DEM, which produces relief-aware shading
+ * that follows the actual terrain model.
  */
 export function useShadowTiles(
   map: MapboxMap | null,
   isMapLoaded: boolean,
   opts: UseShadowTilesOptions,
 ): void {
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevKeyRef = useRef<string>('');
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
 
-  // Add / update / remove shadow source + layer
+  const shadowEnabled = useMemo(
+    () => opts.enabled && opts.sunAltitudeDeg > 0,
+    [opts.enabled, opts.sunAltitudeDeg],
+  );
+
+  // Add / remove layer as the feature toggles.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
-    if (!opts.enabled || opts.sunAltitudeDeg <= 0) {
-      // Remove if present
+    if (!shadowEnabled) {
       removeShadow(map);
-      prevKeyRef.current = '';
       return;
     }
 
-    // Debounce sun position updates to avoid re-creating source on every
-    // frame during time slider scrubbing. 150 ms is enough now that the
-    // sweep-line shadow computation is near-instant (~10 ms per tile).
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      applyShadow(map, opts);
-    }, 150);
+    ensureShadowLayer(map, optsRef.current);
 
     return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      if (map.getStyle()) removeShadow(map);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    map,
-    isMapLoaded,
-    opts.enabled,
-    // Round to 1 decimal to avoid too-frequent updates
-    Math.round(opts.sunAzimuthDeg * 10),
-    Math.round(opts.sunAltitudeDeg * 10),
-  ]);
+  }, [map, isMapLoaded, shadowEnabled]);
 
-  // Update opacity immediately (no debounce needed — no tile refetch)
+  // Update the live hillshade paint as the sun moves or opacity changes.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (!opts.enabled) return;
+    if (!shadowEnabled) return;
     if (!map.getLayer(SHADOW_LAYER_ID)) return;
+
+    const paint = buildShadowPaint(opts);
     try {
-      map.setPaintProperty(SHADOW_LAYER_ID, 'raster-opacity', opts.opacity);
-    } catch { /* layer may not exist yet */ }
-  }, [map, isMapLoaded, opts.enabled, opts.opacity]);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-anchor', paint['hillshade-illumination-anchor']);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-direction', paint['hillshade-illumination-direction']);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-exaggeration', paint['hillshade-exaggeration']);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-shadow-color', paint['hillshade-shadow-color']);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-highlight-color', paint['hillshade-highlight-color']);
+      map.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-accent-color', paint['hillshade-accent-color']);
+    } catch {
+      /* layer may not exist yet */
+    }
+  }, [map, isMapLoaded, shadowEnabled, opts.opacity, opts.sunAzimuthDeg, opts.sunAltitudeDeg]);
+
+  // Re-add after a style reload.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    const onStyleLoad = () => {
+      setTimeout(() => {
+        if (!shadowEnabled) return;
+        ensureShadowLayer(map, optsRef.current);
+      }, 0);
+    };
+
+    map.on('style.load', onStyleLoad);
+    return () => {
+      map.off('style.load', onStyleLoad);
+    };
+  }, [map, isMapLoaded, shadowEnabled]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -84,22 +102,18 @@ export function useShadowTiles(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function applyShadow(m: MapboxMap, o: UseShadowTilesOptions) {
-    const azRounded = parseFloat(o.sunAzimuthDeg.toFixed(1));
-    const altRounded = parseFloat(o.sunAltitudeDeg.toFixed(1));
-    const key = `${azRounded}_${altRounded}`;
-
-    if (key === prevKeyRef.current && m.getSource(SHADOW_SOURCE_ID)) return;
-    prevKeyRef.current = key;
-
-    // Remove existing source + layer before re-adding
-    removeShadow(m);
+  function ensureShadowLayer(m: MapboxMap, o: UseShadowTilesOptions) {
+    if (!m.getSource(unifiedDEMSource.id)) return;
+    if (m.getLayer(SHADOW_LAYER_ID)) return;
 
     try {
-      m.addSource(SHADOW_SOURCE_ID, buildShadowTileSource(azRounded, altRounded) as any);
-      m.addLayer(buildShadowLayer(o.opacity) as any);
+      m.addLayer(buildShadowLayer({
+        opacity: o.opacity,
+        sunAzimuthDeg: o.sunAzimuthDeg,
+        sunAltitudeDeg: o.sunAltitudeDeg,
+      }) as any);
     } catch (err) {
-      console.warn('[shadow] addSource/addLayer failed', err);
+      console.warn('[shadow] addLayer failed', err);
     }
   }
 }

@@ -1,21 +1,31 @@
 /**
- * Shadow overlay — Mapbox raster layer definitions for DEM-based shadows.
+ * Terrain shadows — Mapbox hillshade layer driven by the live DEM.
  *
- * Encoding (from shadow.js service worker):
- *   R = shadow factor: 0 = fully lit, 255 = fully shadowed
- *   G = B = 0
- *   A = 0 on NoData, 255 otherwise
- *
- * Decoding via raster-color-mix: value = R_norm * 1.0  →  [0, 1]
- * raster-color maps 0 → transparent, 1 → dark shadow.
+ * The previous implementation projected a precomputed raster mask over the
+ * map. In practice that behaved like a global darkening veil on pitched views
+ * more often than like relief-aware terrain shadows. We now let Mapbox derive
+ * shading directly from the active DEM source so the shadowing follows the
+ * terrain model itself.
  */
 
-// ── Source & Layer IDs ────────────────────────────────────────────────
-
 export const SHADOW_SOURCE_ID = 'shadow-tiles';
-export const SHADOW_LAYER_ID  = 'shadow-overlay';
+export const SHADOW_LAYER_ID = 'shadow-overlay';
 
-// ── Raster source (re-created when sun position changes) ──────────────
+const SHADOW_TERRAIN_SOURCE_ID = 'unified-dem';
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function formatAlpha(value: number): string {
+  return clamp01(value).toFixed(3);
+}
+
+export interface ShadowPaintOptions {
+  opacity: number;
+  sunAzimuthDeg: number;
+  sunAltitudeDeg: number;
+}
 
 export function buildShadowTileSource(sunAzDeg: number, sunAltDeg: number) {
   const az = sunAzDeg.toFixed(1);
@@ -29,36 +39,28 @@ export function buildShadowTileSource(sunAzDeg: number, sunAltDeg: number) {
   };
 }
 
-// ── Layer definition ──────────────────────────────────────────────────
-//
-// The raster-color expression turns the R-channel shadow factor into a
-// semi-transparent dark overlay. 0 (lit) → transparent, 1 (shadow) → black
-// at the configured opacity.
+export function buildShadowPaint(opts: ShadowPaintOptions) {
+  const opacity = clamp01(opts.opacity);
+  const sunAltitude = Math.max(0, opts.sunAltitudeDeg);
+  const lowSunFactor = clamp01(1 - sunAltitude / 70);
+  const highSunFactor = 1 - lowSunFactor;
 
-const SHADOW_DECODE_MIX: [number, number, number, number] = [1, 0, 0, 0];
-const SHADOW_DECODE_RANGE: [number, number] = [0, 1];
+  return {
+    'hillshade-illumination-anchor': 'map' as const,
+    'hillshade-illumination-direction': ((opts.sunAzimuthDeg % 360) + 360) % 360,
+    'hillshade-exaggeration': 0.16 + lowSunFactor * 0.94,
+    'hillshade-shadow-color': `rgba(6, 12, 22, ${formatAlpha(opacity * (0.22 + lowSunFactor * 0.58))})`,
+    'hillshade-highlight-color': `rgba(255, 244, 214, ${formatAlpha(opacity * (0.02 + highSunFactor * 0.08))})`,
+    'hillshade-accent-color': `rgba(68, 104, 146, ${formatAlpha(opacity * (0.05 + lowSunFactor * 0.12))})`,
+  };
+}
 
-export function buildShadowLayer(opacity: number) {
+export function buildShadowLayer(opts: ShadowPaintOptions) {
   return {
     id: SHADOW_LAYER_ID,
-    type: 'raster' as const,
-    source: SHADOW_SOURCE_ID,
+    type: 'hillshade' as const,
+    source: SHADOW_TERRAIN_SOURCE_ID,
     slot: 'top',
-    paint: {
-      'raster-opacity': opacity,
-      'raster-resampling': 'linear' as const,
-      'raster-fade-duration': 150,
-      'raster-color-mix': SHADOW_DECODE_MIX,
-      'raster-color-range': SHADOW_DECODE_RANGE,
-      'raster-color': [
-        'interpolate',
-        ['linear'],
-        ['raster-value'],
-        0,    'rgba(0, 0, 0, 0)',      // fully lit → transparent
-        0.15, 'rgba(0, 0, 0, 0)',      // small threshold to avoid noise
-        0.4,  'rgba(0, 0, 20, 0.35)',  // penumbra — soft partial shadow
-        1,    'rgba(0, 0, 30, 0.7)',   // full shadow → dark blue-black
-      ],
-    },
+    paint: buildShadowPaint(opts),
   };
 }

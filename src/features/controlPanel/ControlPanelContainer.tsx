@@ -266,7 +266,7 @@ export function ControlPanelContainer({
     time: sunlightState.time,
   });
 
-  // DEM ray-traced terrain shadows
+  // DEM-driven terrain shadows
   useShadowTiles(isMapLoaded ? map : null, isMapLoaded, {
     enabled: sunlightState.enabled && sunlightState.shadowEnabled,
     sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
