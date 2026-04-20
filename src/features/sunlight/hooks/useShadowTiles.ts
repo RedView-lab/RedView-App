@@ -4,10 +4,10 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   SHADOW_SOURCE_ID,
   SHADOW_LAYER_ID,
+  buildShadowTileSource,
   buildShadowLayer,
   buildShadowPaint,
 } from '../lib/shadow-source';
-import { unifiedDEMSource } from '../../map3d/lib/sources';
 
 export interface UseShadowTilesOptions {
   enabled: boolean;
@@ -34,6 +34,7 @@ export function useShadowTiles(
 ): void {
   const optsRef = useRef(opts);
   optsRef.current = opts;
+  const prevSourceKeyRef = useRef('');
 
   const shadowEnabled = opts.enabled;
 
@@ -43,10 +44,11 @@ export function useShadowTiles(
 
     if (!shadowEnabled) {
       removeShadow(map);
+      prevSourceKeyRef.current = '';
       return;
     }
 
-    ensureShadowLayer(map, optsRef.current);
+    ensureShadowPresentation(map, optsRef.current);
 
     return () => {
       if (map.getStyle()) removeShadow(map);
@@ -57,7 +59,7 @@ export function useShadowTiles(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!shadowEnabled) return;
-    ensureShadowLayer(map, opts);
+    ensureShadowPresentation(map, opts);
     if (!map.getLayer(SHADOW_LAYER_ID)) return;
 
     syncShadowPaint(map, opts);
@@ -70,7 +72,7 @@ export function useShadowTiles(
     const onStyleLoad = () => {
       setTimeout(() => {
         if (!optsRef.current.enabled) return;
-        ensureShadowLayer(map, optsRef.current);
+        ensureShadowPresentation(map, optsRef.current);
         syncShadowPaint(map, optsRef.current);
       }, 0);
     };
@@ -87,9 +89,8 @@ export function useShadowTiles(
     if (!map || !isMapLoaded) return;
     if (!shadowEnabled) return;
 
-    const onSourceData = (event: mapboxgl.MapSourceDataEvent) => {
-      if (event.sourceId !== unifiedDEMSource.id) return;
-      ensureShadowLayer(map, optsRef.current);
+    const onSourceData = () => {
+      ensureShadowPresentation(map, optsRef.current);
       syncShadowPaint(map, optsRef.current);
     };
 
@@ -109,14 +110,49 @@ export function useShadowTiles(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function ensureShadowLayer(m: MapboxMap, o: UseShadowTilesOptions) {
-    if (!m.getSource(unifiedDEMSource.id)) return;
+  function shadowVisibility(altitudeDeg: number): number {
+    const t = Math.max(0, Math.min(1, (altitudeDeg + 2.5) / 6.5));
+    return t * t * (3 - 2 * t);
+  }
+
+  function effectiveShadowAltitude(altitudeDeg: number): number {
+    return Math.max(0.15, altitudeDeg);
+  }
+
+  function ensureShadowPresentation(m: MapboxMap, o: UseShadowTilesOptions) {
+    const visibility = shadowVisibility(o.sunAltitudeDeg);
+    if (visibility <= 0) return;
+
+    const azRounded = parseFloat(o.sunAzimuthDeg.toFixed(1));
+    const altRounded = parseFloat(effectiveShadowAltitude(o.sunAltitudeDeg).toFixed(1));
+    const sourceKey = `${azRounded}_${altRounded}`;
+
+    if (sourceKey !== prevSourceKeyRef.current || !m.getSource(SHADOW_SOURCE_ID)) {
+      prevSourceKeyRef.current = sourceKey;
+      try {
+        if (m.getLayer(SHADOW_LAYER_ID)) m.removeLayer(SHADOW_LAYER_ID);
+      } catch {
+        /* layer may not exist yet */
+      }
+      try {
+        if (m.getSource(SHADOW_SOURCE_ID)) m.removeSource(SHADOW_SOURCE_ID);
+      } catch {
+        /* source may not exist yet */
+      }
+
+      try {
+        m.addSource(SHADOW_SOURCE_ID, buildShadowTileSource(azRounded, altRounded) as any);
+      } catch (err) {
+        console.warn('[shadow] addSource failed', err);
+        return;
+      }
+    }
+
     if (m.getLayer(SHADOW_LAYER_ID)) return;
 
     try {
       m.addLayer(buildShadowLayer({
         opacity: o.opacity,
-        sunAzimuthDeg: o.sunAzimuthDeg,
         sunAltitudeDeg: o.sunAltitudeDeg,
       }) as any);
     } catch (err) {
@@ -127,12 +163,12 @@ export function useShadowTiles(
   function syncShadowPaint(m: MapboxMap, o: UseShadowTilesOptions) {
     const paint = buildShadowPaint(o);
     try {
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-anchor', paint['hillshade-illumination-anchor']);
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-illumination-direction', paint['hillshade-illumination-direction']);
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-exaggeration', paint['hillshade-exaggeration']);
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-shadow-color', paint['hillshade-shadow-color']);
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-highlight-color', paint['hillshade-highlight-color']);
-      m.setPaintProperty(SHADOW_LAYER_ID, 'hillshade-accent-color', paint['hillshade-accent-color']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-opacity', paint['raster-opacity']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-resampling', paint['raster-resampling']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-fade-duration', paint['raster-fade-duration']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-color-mix', paint['raster-color-mix']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-color-range', paint['raster-color-range']);
+      m.setPaintProperty(SHADOW_LAYER_ID, 'raster-color', paint['raster-color'] as unknown as string);
       m.triggerRepaint();
     } catch {
       /* layer may not exist yet */
