@@ -23,7 +23,11 @@ export default function MapView({ onMapReady, lidarSelectionEnabled = false, onL
   }, [isLoaded, map, onMapReady]);
 
   return (
-    <div style={{ position: 'relative', width: '100vw', height: '100dvh' }}>
+    // width/height: 100% (not 100vw/100dvh) so the map fills its parent
+    // container. The Dashboard wraps everything in a scaled box whose
+    // logical size is `viewport / appScale`, so vw/dvh would only cover
+    // a fraction of the wrapper and leave empty space on small screens.
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={containerRef}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
