@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   AnalysisHoverCards,
   defaultAnalysisHoverCards,
@@ -8,7 +8,20 @@ import { IconCheck, IconChevronDown, IconMoon, IconSun } from './CenterPanelIcon
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 
 const filters = ['Waypoint', 'POI', 'Pause', 'Alertes', 'Pente', 'Jour/nuit'];
-const xTicks = ['0', '10', '20', '30', '40', '50', '60', '70', '80', '90', '100'];
+
+/** Domain for the X axis (km, may become dynamic later). */
+const X_DOMAIN_MIN = 0;
+const X_DOMAIN_MAX = 100;
+/** Domain for the Y axis (m, may become dynamic later). */
+const Y_DOMAIN_MIN = 0;
+const Y_DOMAIN_MAX = 3000;
+
+/** Target spacing in CSS px between successive ticks. */
+const X_MAJOR_TARGET_PX = 80;
+const X_MINOR_TARGET_PX = 28;
+const Y_MAJOR_TARGET_PX = 56;
+const Y_MINOR_TARGET_PX = 22;
+
 const axisOptions: AxisOption[] = [
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
@@ -35,30 +48,6 @@ const axisOptions: AxisOption[] = [
   { value: 'Humidité (%)__bis', label: 'Humidité (%)', tone: 'secondary' },
 ];
 
-const yAxisLevels = [
-  { label: '3000', value: 1 },
-  { label: '2000', value: 2 / 3 },
-  { label: '1000', value: 1 / 3 },
-  { label: '0', value: 0 },
-] as const;
-
-const profileSamples = [
-  { position: 0, value: 0.18 },
-  { position: 0.06, value: 0.34 },
-  { position: 0.12, value: 0.52 },
-  { position: 0.2, value: 0.68 },
-  { position: 0.28, value: 0.54 },
-  { position: 0.36, value: 0.82 },
-  { position: 0.43, value: 0.63 },
-  { position: 0.51, value: 0.57 },
-  { position: 0.61, value: 0.76 },
-  { position: 0.7, value: 0.46 },
-  { position: 0.79, value: 0.69 },
-  { position: 0.88, value: 0.38 },
-  { position: 0.94, value: 0.58 },
-  { position: 1, value: 0.31 },
-] as const;
-
 type HeightTier = 'xs' | 'sm' | 'md' | 'lg';
 
 interface PlotMetrics {
@@ -71,9 +60,7 @@ interface PlotMetrics {
   axisBottom: number;
   bandBottom: number;
   markerTop: number;
-  gridStep: number;
   usableHeight: number;
-  verticalScale: number;
   heightTier: HeightTier;
 }
 
@@ -86,19 +73,6 @@ function getHeightTier(plotHeight: number): HeightTier {
   if (plotHeight < 220) return 'sm';
   if (plotHeight < 300) return 'md';
   return 'lg';
-}
-
-function getVerticalScale(heightTier: HeightTier) {
-  switch (heightTier) {
-    case 'xs':
-      return 0.92;
-    case 'sm':
-      return 0.98;
-    case 'md':
-      return 1.06;
-    case 'lg':
-      return 1.14;
-  }
 }
 
 function createPlotMetrics(plotWidth: number, plotHeight: number): PlotMetrics {
@@ -114,7 +88,6 @@ function createPlotMetrics(plotWidth: number, plotHeight: number): PlotMetrics {
   );
   const bandBottom = axisBottom + Math.round(clampNumber(safeHeight * 0.07, 14, 20));
   const usableHeight = Math.max(72, safeHeight - scaleTop - axisBottom);
-  const gridStep = usableHeight / 3;
   const markerTop = Math.max(8, overlayTop - Math.round(clampNumber(safeHeight * 0.025, 4, 8)));
 
   return {
@@ -127,40 +100,76 @@ function createPlotMetrics(plotWidth: number, plotHeight: number): PlotMetrics {
     axisBottom,
     bandBottom,
     markerTop,
-    gridStep,
     usableHeight,
-    verticalScale: getVerticalScale(heightTier),
     heightTier,
   };
 }
 
-function projectNormalizedY(
-  value: number,
-  metrics: PlotMetrics,
-  exaggeration = metrics.verticalScale,
-) {
-  const normalizedValue = clampNumber(value, 0, 1);
-  const scaledValue = clampNumber((normalizedValue - 0.5) * exaggeration + 0.5, 0, 1);
-  return metrics.scaleTop + (1 - scaledValue) * metrics.usableHeight;
+/**
+ * Project a normalized [0..1] anchor (used by hover cards) to an absolute Y
+ * pixel coordinate inside the plot. No exaggeration is applied so the value
+ * matches the displayed Y grid.
+ */
+function projectNormalizedY(value: number, metrics: PlotMetrics) {
+  const normalized = clampNumber(value, 0, 1);
+  return metrics.scaleTop + (1 - normalized) * metrics.usableHeight;
 }
 
-function buildProfilePaths(metrics: PlotMetrics) {
-  const points = profileSamples.map((sample) => {
-    const x = metrics.plotGutter + metrics.plotContentWidth * sample.position;
-    const y = projectNormalizedY(sample.value, metrics);
-    return { x, y };
-  });
+/**
+ * Compute a "nice" axis tick step (1, 2, 2.5, 5 or 10) × 10ⁿ given a numeric
+ * range and a desired tick count. Returns ticks aligned on the chosen step.
+ */
+function buildNiceTicks(min: number, max: number, targetCount: number): number[] {
+  const range = Math.max(1e-9, max - min);
+  const desired = Math.max(2, targetCount);
+  const rough = range / desired;
+  const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / pow10;
+  let nice: number;
+  if (norm < 1.5) nice = 1;
+  else if (norm < 3) nice = 2;
+  else if (norm < 4) nice = 2.5;
+  else if (norm < 7) nice = 5;
+  else nice = 10;
+  const step = nice * pow10;
+  const start = Math.ceil(min / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v <= max + step * 1e-6; v += step) {
+    ticks.push(Number((Math.round(v / step) * step).toFixed(10)));
+  }
+  if (ticks.length === 0 || ticks[0] > min + step * 1e-6) ticks.unshift(min);
+  if (ticks[ticks.length - 1] < max - step * 1e-6) ticks.push(max);
+  const seen = new Set<number>();
+  return ticks.filter((v) => (seen.has(v) ? false : (seen.add(v), true)));
+}
 
-  const linePath = points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
-    .join(' ');
+/**
+ * For each interval between two consecutive {@link majors}, generate evenly
+ * spaced subdivisions when the available pixel range allows them.
+ */
+function buildMinorTicks(
+  majors: number[],
+  domainMin: number,
+  domainMax: number,
+  rangePx: number,
+  minSpacingPx: number,
+): number[] {
+  if (majors.length < 2 || rangePx <= 0) return [];
+  const span = domainMax - domainMin;
+  const intervalPx = (rangePx * (majors[1] - majors[0])) / span;
+  const subdivisions = Math.max(0, Math.floor(intervalPx / minSpacingPx) - 1);
+  if (subdivisions === 0) return [];
+  const minors: number[] = [];
+  for (let i = 0; i < majors.length - 1; i++) {
+    const seg = (majors[i + 1] - majors[i]) / (subdivisions + 1);
+    for (let m = 1; m <= subdivisions; m++) minors.push(majors[i] + seg * m);
+  }
+  return minors;
+}
 
-  const baselineY = metrics.plotHeight - metrics.axisBottom;
-  const firstPoint = points[0];
-  const lastPoint = points[points.length - 1];
-  const areaPath = `${linePath} L ${lastPoint.x.toFixed(2)} ${baselineY.toFixed(2)} L ${firstPoint.x.toFixed(2)} ${baselineY.toFixed(2)} Z`;
-
-  return { areaPath, linePath };
+function formatTickLabel(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return Number(value.toFixed(2)).toString();
 }
 
 interface CenterPanelAnalysisProps {
@@ -238,13 +247,40 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
     '--rvc-center-plot-scale-top': `${plotMetrics.scaleTop}px`,
     '--rvc-center-plot-axis-bottom': `${plotMetrics.axisBottom}px`,
     '--rvc-center-plot-band-bottom': `${plotMetrics.bandBottom}px`,
-    '--rvc-center-grid-step': `${plotMetrics.gridStep}px`,
     '--rvc-center-marker-top': `${plotMetrics.markerTop}px`,
   } as CSSProperties;
 
-  const yLabels = yAxisLevels.map((level) => ({
-    ...level,
-    top: projectNormalizedY(level.value, plotMetrics, 1),
+  const xMajors = useMemo(() => {
+    const w = plotMetrics.plotContentWidth;
+    if (w <= 0) return buildNiceTicks(X_DOMAIN_MIN, X_DOMAIN_MAX, 5);
+    return buildNiceTicks(X_DOMAIN_MIN, X_DOMAIN_MAX, Math.max(2, Math.round(w / X_MAJOR_TARGET_PX)));
+  }, [plotMetrics.plotContentWidth]);
+
+  const xMinors = useMemo(
+    () => buildMinorTicks(xMajors, X_DOMAIN_MIN, X_DOMAIN_MAX, plotMetrics.plotContentWidth, X_MINOR_TARGET_PX),
+    [xMajors, plotMetrics.plotContentWidth],
+  );
+
+  const yMajors = useMemo(() => {
+    const h = plotMetrics.usableHeight;
+    if (h <= 0) return buildNiceTicks(Y_DOMAIN_MIN, Y_DOMAIN_MAX, 4);
+    return buildNiceTicks(Y_DOMAIN_MIN, Y_DOMAIN_MAX, Math.max(2, Math.round(h / Y_MAJOR_TARGET_PX)));
+  }, [plotMetrics.usableHeight]);
+
+  const yMinors = useMemo(
+    () => buildMinorTicks(yMajors, Y_DOMAIN_MIN, Y_DOMAIN_MAX, plotMetrics.usableHeight, Y_MINOR_TARGET_PX),
+    [yMajors, plotMetrics.usableHeight],
+  );
+
+  const xToPx = (value: number) =>
+    plotMetrics.plotGutter + plotMetrics.plotContentWidth * ((value - X_DOMAIN_MIN) / (X_DOMAIN_MAX - X_DOMAIN_MIN));
+  const yToPx = (value: number) =>
+    plotMetrics.scaleTop + (1 - (value - Y_DOMAIN_MIN) / (Y_DOMAIN_MAX - Y_DOMAIN_MIN)) * plotMetrics.usableHeight;
+
+  const yLabels = yMajors.map((value) => ({
+    value,
+    label: formatTickLabel(value),
+    top: yToPx(value),
   }));
 
   const tooltipVerticalOffset =
@@ -284,8 +320,6 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
           groupWidth: hoverCardGroupWidth,
         }
       : null;
-
-  const { areaPath, linePath } = buildProfilePaths(plotMetrics);
 
   return (
     <section
@@ -357,13 +391,63 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
           <div className="rvc-center-analysis__band rvc-center-analysis__band--right" />
 
           <svg
-            className="rvc-center-analysis__profile"
+            className="rvc-center-analysis__grid"
             viewBox={`0 0 ${plotMetrics.plotWidth} ${plotMetrics.plotHeight}`}
             preserveAspectRatio="none"
             aria-hidden="true"
           >
-            <path className="rvc-center-analysis__profile-area" d={areaPath} />
-            <path className="rvc-center-analysis__profile-line" d={linePath} />
+            {yMinors.map((value) => {
+              const y = yToPx(value);
+              return (
+                <line
+                  key={`ymin-${value}`}
+                  x1={plotMetrics.plotGutter}
+                  x2={plotMetrics.plotWidth}
+                  y1={y}
+                  y2={y}
+                  className="rvc-center-analysis__grid-line rvc-center-analysis__grid-line--minor"
+                />
+              );
+            })}
+            {yMajors.map((value) => {
+              const y = yToPx(value);
+              return (
+                <line
+                  key={`ymaj-${value}`}
+                  x1={plotMetrics.plotGutter}
+                  x2={plotMetrics.plotWidth}
+                  y1={y}
+                  y2={y}
+                  className="rvc-center-analysis__grid-line rvc-center-analysis__grid-line--major"
+                />
+              );
+            })}
+            {xMinors.map((value) => {
+              const x = xToPx(value);
+              return (
+                <line
+                  key={`xmin-${value}`}
+                  x1={x}
+                  x2={x}
+                  y1={plotMetrics.scaleTop}
+                  y2={plotMetrics.plotHeight - plotMetrics.axisBottom}
+                  className="rvc-center-analysis__grid-line rvc-center-analysis__grid-line--minor"
+                />
+              );
+            })}
+            {xMajors.map((value) => {
+              const x = xToPx(value);
+              return (
+                <line
+                  key={`xmaj-${value}`}
+                  x1={x}
+                  x2={x}
+                  y1={plotMetrics.scaleTop}
+                  y2={plotMetrics.plotHeight - plotMetrics.axisBottom}
+                  className="rvc-center-analysis__grid-line rvc-center-analysis__grid-line--major"
+                />
+              );
+            })}
           </svg>
 
           <div className="rvc-center-analysis__focus-line" />
@@ -385,7 +469,7 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
 
           {yLabels.map((label) => (
             <div
-              key={label.label}
+              key={`y-${label.value}`}
               className="rvc-center-analysis__y-label"
               style={{ top: `${label.top}px` }}
             >
@@ -394,9 +478,27 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
           ))}
 
           <div className="rvc-center-analysis__x-axis">
-            {xTicks.map((tick) => (
-              <span key={tick}>{tick}</span>
-            ))}
+            {xMajors.map((value) => {
+              const ratio = (value - X_DOMAIN_MIN) / (X_DOMAIN_MAX - X_DOMAIN_MIN);
+              const isFirst = value === xMajors[0];
+              const isLast = value === xMajors[xMajors.length - 1];
+              return (
+                <span
+                  key={`xlbl-${value}`}
+                  className="rvc-center-analysis__x-tick"
+                  style={{
+                    left: `${plotMetrics.plotGutter + plotMetrics.plotContentWidth * ratio}px`,
+                    transform: isFirst
+                      ? 'translateX(0)'
+                      : isLast
+                        ? 'translateX(-100%)'
+                        : 'translateX(-50%)',
+                  }}
+                >
+                  {formatTickLabel(value)}
+                </span>
+              );
+            })}
           </div>
         </div>
 
