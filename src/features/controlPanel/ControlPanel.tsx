@@ -4,6 +4,7 @@ import { LidarTilesSection } from './sections/LidarTilesSection';
 import { LabelsSection } from './sections/LabelsSection';
 import { RoutesSection } from './sections/RoutesSection';
 import { SlopesSection } from './sections/SlopesSection';
+import { AltitudeSection } from './sections/AltitudeSection';
 import { WeatherSection } from './sections/WeatherSection';
 import { WindSection } from './sections/WindSection';
 import { SimpleToggleSection } from './sections/SimpleToggleSection';
@@ -123,6 +124,8 @@ export function ControlPanel({
         onBandVisibilityToggle={onSlopeBandVisibilityToggle}
         onBandBreakpointChange={onSlopeBandBreakpointChange}
       />
+
+      <AltitudeSection />
 
       <WeatherSection
         state={state.weather}

@@ -1,0 +1,108 @@
+/* Altitude section — Figma node 2002:34256 */
+
+.rvc-altitude__opacity-row {
+  padding: 3px 0;
+}
+
+.rvc-altitude__opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  flex-shrink: 0;
+}
+
+.rvc-altitude__opacity-slider-wrap {
+  width: 112px;
+  flex: 0 0 112px;
+}
+
+.rvc-altitude__opacity-slider-wrap .rvc-slider {
+  width: 100%;
+}
+
+.rvc-altitude__opacity-value {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.rvc-altitude__bands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.rvc-altitude__band-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvc-altitude__band-eye {
+  width: 20px;
+  height: 20px;
+  padding: 3.75px;
+  border-radius: 3.75px;
+  color: var(--rvc-text-dim);
+}
+
+.rvc-altitude__band-label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-altitude__color-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  min-height: 28px;
+  flex-shrink: 0;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--rvc-text);
+}
+
+.rvc-altitude__color-hex {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-altitude__color-chevron {
+  flex-shrink: 0;
+  color: var(--rvc-text-dim);
+}
+
+.rvc-altitude__band-row.is-hidden .rvc-altitude__band-eye,
+.rvc-altitude__band-row.is-hidden .rvc-altitude__band-label,
+.rvc-altitude__band-row.is-hidden .rvc-altitude__color-chip {
+  opacity: 0.4;
+}
