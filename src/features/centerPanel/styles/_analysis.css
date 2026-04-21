@@ -346,8 +346,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 12px;
-  padding-bottom: 12px;
+  gap: 0;
+  padding-bottom: 0;
 }
 
 .rvc-center-analysis__series-row {
@@ -744,14 +744,14 @@
 
 .rvc-center-analysis__scrollbar {
   position: relative;
-  height: 16px;
+  height: 40px;
   flex: 0 0 auto;
-  background: transparent;
+  background: var(--rvc-center-bg);
 }
 
 .rvc-center-analysis__scrollbar-track {
   position: absolute;
-  top: 0;
+  top: 12px;
   left: 18px;
   right: 18px;
   height: 16px;
@@ -760,7 +760,7 @@
 
 .rvc-center-analysis__scrollbar-thumb {
   position: absolute;
-  top: 0;
+  top: 12px;
   left: 14%;
   width: 60%;
   height: 16px;
@@ -771,7 +771,7 @@
 
 .rvc-center-analysis__scrollbar-grip {
   position: absolute;
-  top: 0;
+  top: 12px;
   left: 50%;
   transform: translateX(-50%);
   color: rgba(255, 255, 255, 0.9);
