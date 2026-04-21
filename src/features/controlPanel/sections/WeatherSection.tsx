@@ -1,11 +1,10 @@
-import { useRef, useState } from 'react';
+import { useMemo } from 'react';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
 import { IconCalendar, IconClock, IconInfo } from '../icons';
-import { CalendarPopover } from '@/features/itineraryPanel/components/calendar';
 import type {
   ControlPanelHandlers,
   WeatherLayerKey,
@@ -25,9 +24,20 @@ interface Props {
 }
 
 const TABS: { value: WeatherTab; label: string }[] = [
-  { value: 'forecast', label: 'Prochains jours' },
+  { value: 'forecast', label: 'Forecast (+4j)' },
   { value: 'trends', label: 'Tendances' },
 ];
+
+const TREND_LAYER_ORDER: WeatherLayerKey[] = [
+  'temperature',
+  'feelsLike',
+  'humidity',
+  'rain',
+  'cloudCover',
+];
+
+const MONTH_LABELS_SHORT = ['Jan.', 'Fev.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Aout', 'Sep.', 'Oct.', 'Nov.', 'Dec.'] as const;
+const MONTH_LABELS_LONG = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'] as const;
 
 const LAYER_LABEL: Record<WeatherLayerKey, string> = {
   temperature: 'Température (°)',
@@ -40,7 +50,7 @@ const LAYER_LABEL: Record<WeatherLayerKey, string> = {
 };
 
 const MODE_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
-  { value: 'texte', label: 'Texte' },
+  { value: 'text', label: 'Texte' },
   { value: 'gradient', label: 'Dégradé' },
   { value: 'arrows', label: 'Flèches' },
   { value: '-', label: '-' },
@@ -57,33 +67,28 @@ function getForecastDayLabels(): string[] {
   ];
 }
 
-/**
- * Converts ISO YYYY-MM-DD to display DD/MM/YY.
- */
-function formatDateShort(iso: string): string {
-  if (!iso || iso.length < 10) return iso;
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y.slice(2)}`;
+function getMonthIndexFromIso(iso: string): number {
+  const value = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return 0;
+  return value.getMonth();
 }
 
-function getMonday(iso: string): string {
-  const d = new Date(iso + 'T00:00:00');
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  return d.toISOString().slice(0, 10);
+function setMonthOnIsoDate(iso: string, monthIndex: number): string {
+  const base = new Date(`${iso}T00:00:00`);
+  const safeDate = Number.isNaN(base.getTime()) ? new Date() : base;
+  safeDate.setMonth(monthIndex, 1);
+  return safeDate.toISOString().slice(0, 10);
 }
 
-function getSunday(mondayIso: string): string {
-  const d = new Date(mondayIso + 'T00:00:00');
-  d.setDate(d.getDate() + 6);
-  return d.toISOString().slice(0, 10);
+function formatMonthInputValue(iso: string): string {
+  const value = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return '';
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  return `${value.getFullYear()}-${month}`;
 }
 
-function formatWeekRange(iso: string): string {
-  const monday = getMonday(iso);
-  const sunday = getSunday(monday);
-  return `${formatDateShort(monday)} - ${formatDateShort(sunday)}`;
+function getMonthLabel(iso: string): string {
+  return MONTH_LABELS_LONG[getMonthIndexFromIso(iso)] ?? MONTH_LABELS_LONG[0];
 }
 
 export function WeatherSection({
@@ -106,17 +111,24 @@ export function WeatherSection({
     onDateChange?.({ time: `${h}:${m}` });
   };
 
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const calendarAnchorRef = useRef<HTMLDivElement>(null);
-
   const timeParts = (state.time || '00:00').split(':');
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
 
   const dayLabels = getForecastDayLabels();
   const isForecast = state.tab === 'forecast';
-  const trendMode = state.trendMode ?? 'date';
   const forecastDay = state.forecastDay ?? 0;
+  const trendMonth = getMonthIndexFromIso(state.date);
+  const trendMonthLabel = getMonthLabel(state.date);
+  const trendMonthValue = formatMonthInputValue(state.date);
+
+  const displayedLayers = useMemo(() => {
+    if (isForecast) return state.layers;
+
+    return TREND_LAYER_ORDER.map((key) => state.layers.find((layer) => layer.key === key)).filter(
+      (layer): layer is WeatherState['layers'][number] => Boolean(layer),
+    );
+  }, [isForecast, state.layers]);
 
   return (
     <Section
@@ -194,71 +206,38 @@ export function WeatherSection({
           </div>
         </>
       ) : (
-        <>
-          {/* Trends: date or week selection */}
-          <div className="rvc-weather__trend-options">
-            <div className="rvc-weather__trend-option">
-              <Checkbox
-                id="weather-trend-date"
-                checked={trendMode === 'date'}
-                onChange={() => {
-                  setCalendarOpen(false);
-                  onDateChange?.({ trendMode: 'date' });
-                }}
-              />
-              <span className="rvc-weather__trend-label">Choisir une date personnalisée</span>
-              {trendMode === 'date' && (
-                <div
-                  ref={calendarAnchorRef}
-                  className="rvc-weather__date-input"
-                  onClick={() => setCalendarOpen((v) => !v)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <IconCalendar size={12} />
-                  <span>{formatDateShort(state.date)}</span>
-                </div>
-              )}
-            </div>
-            <div className="rvc-weather__trend-option">
-              <Checkbox
-                id="weather-trend-week"
-                checked={trendMode === 'week'}
-                onChange={() => {
-                  setCalendarOpen(false);
-                  onDateChange?.({ trendMode: 'week' });
-                }}
-              />
-              <span className="rvc-weather__trend-label">Choisir une semaine personnalisée</span>
-              {trendMode === 'week' && (
-                <div
-                  ref={calendarAnchorRef}
-                  className="rvc-weather__date-input"
-                  onClick={() => setCalendarOpen((v) => !v)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <IconCalendar size={12} />
-                  <span>{formatWeekRange(state.date)}</span>
-                </div>
-              )}
-            </div>
+        <div className="rvc-weather__month-row">
+          <span className="rvc-weather__month-bound">{MONTH_LABELS_SHORT[0]}</span>
+          <div className="rvc-weather__month-slider">
+            <Slider
+              min={0}
+              max={11}
+              value={trendMonth}
+              onChange={(value) => onDateChange?.({ date: setMonthOnIsoDate(state.date, value), trendMode: 'date' })}
+              width="100%"
+            />
           </div>
-          <CalendarPopover
-            open={calendarOpen}
-            anchorRef={calendarAnchorRef}
-            onClose={() => setCalendarOpen(false)}
-            value={state.date}
-            onSelect={(iso) => {
-              const finalDate = trendMode === 'week' ? getMonday(iso) : iso;
-              onDateChange?.({ date: finalDate });
-              setCalendarOpen(false);
-            }}
-          />
-        </>
+          <span className="rvc-weather__month-bound">{MONTH_LABELS_SHORT[11]}</span>
+          <label className="rvc-weather__month-chip">
+            <IconCalendar size={12} />
+            <span className="rvc-weather__month-chip-label">{trendMonthLabel}</span>
+            <input
+              type="month"
+              value={trendMonthValue}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [year, month] = e.target.value.split('-');
+                onDateChange?.({ date: `${year}-${month}-01`, trendMode: 'date' });
+              }}
+              className="rvc-weather__native-input"
+            />
+          </label>
+        </div>
       )}
 
       {/* Layer list */}
       <div className="rvc-weather__layers">
-        {state.layers.map((layer) => (
+        {displayedLayers.map((layer) => (
           <div key={layer.key} className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
             <Checkbox
               id={`weather-${layer.key}`}
@@ -271,6 +250,7 @@ export function WeatherSection({
               value={layer.mode}
               options={MODE_OPTIONS}
               onChange={(v) => onLayerModeChange?.(layer.key, v)}
+              className="rvc-weather__layer-select"
             />
           </div>
         ))}

@@ -81,6 +81,54 @@
   width: 100%;
 }
 
+.rvc-weather__month-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-weather__month-bound {
+  flex-shrink: 0;
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.rvc-weather__month-slider {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.rvc-weather__month-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 108px;
+  min-width: 108px;
+  max-width: 140px;
+  height: 30px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: white;
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  position: relative;
+  cursor: pointer;
+}
+
+.rvc-weather__month-chip-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rvc-weather__time-bound {
   color: white;
   font-family: 'Rethink Sans', sans-serif;
@@ -143,6 +191,7 @@
   align-items: center;
   gap: 4px;
   width: 100%;
+  min-height: 30px;
 }
 
 .rvc-weather__layer-row[data-disabled="true"] {
@@ -159,6 +208,20 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.rvc-weather__layer-select {
+  width: 108px !important;
+  min-width: 108px;
+  max-width: 140px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: transparent;
+  padding: 5px 6px 5px 10px;
+}
+
+.rvc-weather__layer-select .rvc-select__chevron {
+  color: var(--rvc-text-dim);
 }
 
 .rvc-weather__add-alert {
@@ -222,31 +285,3 @@
   color: white;
 }
 
-/* Trend options (trends tab) */
-
-.rvc-weather__trend-options {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  margin-top: 8px;
-}
-
-.rvc-weather__trend-option {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-}
-
-.rvc-weather__trend-label {
-  flex: 1;
-  color: white;
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  opacity: 0.64;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
