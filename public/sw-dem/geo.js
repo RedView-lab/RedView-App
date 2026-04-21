@@ -35,6 +35,15 @@ function tileOverlapsFrance(z, x, y) {
 
 // Polygon-based DEM tile classification (requires ensureFrancePoly() loaded)
 // Returns 'inside' | 'border' | 'outside'
+//
+// IGN-first bias at high zoom: at z≥12 any tile whose Mercator bounds
+// overlap FRANCE_BOUNDS is classified as at least 'border' — i.e. IGN is
+// attempted even when the 6×6 polygon sampling finds 0 inside points.
+// This fixes the Mont Blanc / Pyrénées / Corsican-coast summit bug where
+// a z15-17 tile (~20-80 m wide) at a ridgeline can have every sample fall
+// outside the France polygon while the LiDAR HD grid still covers part
+// of the tile. Without this promotion we'd skip IGN entirely and fall
+// back to Mapbox 30 m — exactly the symptom the user reported.
 function classifyDemTile(z, x, y) {
   if (!francePoly) return 'inside'; // fallback if polygon not loaded
   const b = mercatorTileBounds(z, x, y);
@@ -50,5 +59,12 @@ function classifyDemTile(z, x, y) {
   const total = N * N;
   if (insideCount > 0 && insideCount < total) return 'border';
   if (hasPolyVertexInTile(b)) return 'border';
-  return insideCount === total ? 'inside' : 'outside';
+  if (insideCount === total) return 'inside';
+  // 0 inside points + no polygon vertex: normally 'outside', but at high
+  // zoom we give IGN a chance when the Mercator bbox overlaps France
+  // (summit/border tiles where sampling misses the French sliver).
+  const [w, s, e, n] = FRANCE_BOUNDS;
+  const overlapsBounds = !(b.east < w || b.west > e || b.south > n || b.north < s);
+  if (overlapsBounds && z >= 12) return 'border';
+  return 'outside';
 }

@@ -78,8 +78,8 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v27';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v21';
+const CACHE_NAME = 'dem-tiles-v28';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v22';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';
 const STATIC_CACHE_NAME = 'dem-static-v1';
@@ -150,13 +150,18 @@ const DEM_OVERZOOM_MAX_DEPTH = 4;
 //
 // Deadlines:
 //   * z≤12: 1.2 s — overview, Mapbox is fine anyway (IGN isn't engaged).
-//   * z=13:  2.0 s — IGN just engaged, balance between wait and coverage.
-//   * z=14:  4.0 s — first LiDAR zoom, need the detail.
-//   * z≥15: 8.0 s — close-up; the user absolutely wants LiDAR-HD, never 30 m.
+//   * z=13:  2.5 s — IGN just engaged, balance between wait and coverage.
+//   * z=14:  5.0 s — first LiDAR zoom, need the detail.
+//   * z=15:  9.0 s — close-up; LiDAR is critical, Mapbox is visually flat.
+//   * z≥16: 14.0 s — summit / rock detail; waiting longer is always better
+//     than serving 30 m Mapbox. On Mac / slower links the original 8 s was
+//     short enough that Mont Blanc-style peaks consistently tripped the
+//     deadline → composite with partial coverage → visual quality drop.
 function ignSoftDeadlineMs(mercZ) {
   if (mercZ <= 12) return 1_200;
-  if (mercZ === 13) return 2_000;
-  if (mercZ === 14) return 4_000;
-  return 8_000;
+  if (mercZ === 13) return 2_500;
+  if (mercZ === 14) return 5_000;
+  if (mercZ === 15) return 9_000;
+  return 14_000;
 }
-const IGN_SUBTILE_SOFT_DEADLINE_MS = 8_000; // fallback/legacy const
+const IGN_SUBTILE_SOFT_DEADLINE_MS = 14_000; // fallback/legacy const
