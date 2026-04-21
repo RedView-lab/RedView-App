@@ -284,6 +284,19 @@ async function loadTile(
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
+    if (elev.length === 0) {
+      console.warn('[shadow-worker] tile decoded empty', {
+        z, x, y, source,
+        blobSize: blob.size,
+        blobType: blob.type,
+        respHeaders: {
+          ct: resp.headers.get('content-type'),
+          len: resp.headers.get('content-length'),
+          xTileType: resp.headers.get('x-tile-type'),
+          xDemReason: resp.headers.get('x-dem-reason'),
+        },
+      });
+    }
     return { x, y, elev };
   } catch (err) {
     console.warn('[shadow-worker] tile decode failed', { z, x, y, err });
@@ -296,6 +309,13 @@ async function decodeTerrainRGB(blob: Blob): Promise<Float32Array> {
     colorSpaceConversion: 'none',
     premultiplyAlpha: 'none',
   });
+  if (img.width === 0 || img.height === 0) {
+    console.warn('[shadow-worker] decoded image is 0-dim', {
+      w: img.width, h: img.height, blobSize: blob.size, blobType: blob.type,
+    });
+    img.close();
+    return new Float32Array(0);
+  }
   let canvas: OffscreenCanvas;
   let ctx: OffscreenCanvasRenderingContext2D;
   let imageData: ImageData;
