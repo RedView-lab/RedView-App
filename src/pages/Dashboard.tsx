@@ -45,6 +45,9 @@ const CENTER_PANEL_MIN_MAP_STAGE = 112;
 const CENTER_TOOLBAR_HEIGHT = 48;
 const CENTER_PANEL_STACK_GAP = PANEL_PADDING;
 const CENTER_PANEL_RESIZE_HIT_AREA = 18;
+const APP_SCALE_MIN = 0.8;
+const APP_SCALE_DESIGN_WIDTH = 1800;
+const APP_SCALE_DESIGN_HEIGHT = 1000;
 
 function readStoredCenterPanelHeight(): number | null {
   try {
@@ -133,11 +136,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [centerPanelHeightOverride]);
 
+  const appScale = clampNumber(
+    Math.min(
+      viewport.w / APP_SCALE_DESIGN_WIDTH,
+      viewport.h / APP_SCALE_DESIGN_HEIGHT,
+    ),
+    APP_SCALE_MIN,
+    1,
+  );
+  const scaledViewportWidth = viewport.w / appScale;
+  const scaledViewportHeight = viewport.h / appScale;
+
   const handleResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
     ev.preventDefault();
     setIsResizing(true);
     const onMove = (e: MouseEvent) => {
-      const raw = window.innerWidth - e.clientX - PANEL_PADDING;
+      const raw = scaledViewportWidth - e.clientX / appScale - PANEL_PADDING;
       const clamped = Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, raw));
       setPanelWidth(clamped);
     };
@@ -154,7 +168,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     ev.preventDefault();
     setIsLeftResizing(true);
     const onMove = (e: MouseEvent) => {
-      const raw = e.clientX - PANEL_PADDING;
+      const raw = e.clientX / appScale - PANEL_PADDING;
       const clamped = Math.min(
         LEFT_PANEL_WIDTH_MAX,
         Math.max(LEFT_PANEL_WIDTH_MIN, raw),
@@ -173,7 +187,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleCenterPanelResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
     ev.preventDefault();
     const onMove = (e: MouseEvent) => {
-      const raw = window.innerHeight - PANEL_PADDING - e.clientY;
+      const raw = scaledViewportHeight - PANEL_PADDING - e.clientY / appScale;
       setCenterPanelHeightOverride(raw);
     };
     const onUp = () => {
@@ -301,6 +315,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   return (
     <LidarProvider>
     <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: `${scaledViewportWidth}px`,
+          height: `${scaledViewportHeight}px`,
+          overflow: 'hidden',
+          transform: `scale(${appScale})`,
+          transformOrigin: 'top left',
+        }}
+      >
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} onLidarSelectionDisable={() => setLidarModeEnabled(false)} />
 
       {/*
@@ -446,6 +472,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onResizeStart={handleResizeStart}
           isResizing={isResizing}
         />
+      </div>
       </div>
     </div>
     </LidarProvider>
