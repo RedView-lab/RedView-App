@@ -197,21 +197,39 @@ async function handleSample(msg: SampleRequest) {
       }
       return { lng, lat, tx, ty, key: `${tx}/${ty}`, v };
     };
-    console.warn('[shadow-worker] filled=0 diagnostic', {
-      demZoom,
-      bounds,
-      tileRange: { xMin, xMax, yMin, yMax },
-      tilesOk,
-      tilesRequested: tileCount,
-      tileKeys: Array.from(tileMap.keys()).slice(0, 12),
-      corners: [
-        sample(w, n),
-        sample(e, n),
-        sample(w, s),
-        sample(e, s),
-        sample((w + e) / 2, (n + s) / 2),
-      ],
+    // Per-tile stats so we can tell if tiles are all-zero, all -10000, NaN, etc.
+    const tileStats = Array.from(tileMap.entries()).map(([key, t]) => {
+      let mn = Infinity, mx = -Infinity, nan = 0, nodata = 0;
+      const sampleVals: number[] = [];
+      for (let i = 0; i < t.length; i++) {
+        const v = t[i];
+        if (Number.isNaN(v)) { nan++; continue; }
+        if (v <= DEM_NODATA_THRESHOLD) { nodata++; continue; }
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      // First 3 raw values from each tile.
+      for (let i = 0; i < 3 && i < t.length; i++) sampleVals.push(t[i]);
+      return { key, len: t.length, min: mn, max: mx, nan, nodata, first3: sampleVals };
     });
+    const c1 = sample(w, n);
+    const c2 = sample(e, n);
+    const c3 = sample(w, s);
+    const c4 = sample(e, s);
+    const c5 = sample((w + e) / 2, (n + s) / 2);
+    console.warn('[shadow-worker] filled=0 diagnostic',
+      JSON.stringify({
+        demZoom,
+        bounds,
+        tileRange: { xMin, xMax, yMin, yMax },
+        tilesOk,
+        tilesRequested: tileCount,
+        tileStats,
+        corners: [c1, c2, c3, c4, c5],
+      }, (_k, v) =>
+        typeof v === 'number' && !Number.isFinite(v) ? String(v) : v,
+      ),
+    );
   }
 
   state = {
