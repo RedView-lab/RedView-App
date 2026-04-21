@@ -44,16 +44,17 @@ export function HoverDebugDot() {
   };
 
   const badgeStyle: CSSProperties = {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    padding: '4px 8px',
-    background: 'yellow',
+    position: 'fixed',
+    top: 8,
+    left: 8,
+    padding: '6px 10px',
+    background: 'lime',
     color: 'black',
-    font: '12px monospace',
+    font: 'bold 14px monospace',
+    border: '2px solid black',
     borderRadius: 4,
     pointerEvents: 'none',
-    zIndex: 99999,
+    zIndex: 2147483647,
   };
 
   const dotStyle: CSSProperties | undefined = pos
