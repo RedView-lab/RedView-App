@@ -318,6 +318,7 @@
 }
 
 .rvc-center-analysis__plot-grid {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -642,6 +643,7 @@
 
 .rvc-center-analysis__hover-cards {
   position: absolute;
+  pointer-events: none;
   display: flex;
   align-items: flex-start;
   gap: 10px;
