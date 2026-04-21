@@ -181,6 +181,39 @@ async function handleSample(msg: SampleRequest) {
   const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
   const latExtentM = ((n - s) * Math.PI * 6378137) / 180;
 
+  if (filled === 0) {
+    // Diagnostic dump: sample a few corners + show what keys exist.
+    const sample = (lng: number, lat: number) => {
+      const txf = ((lng + 180) / 360) * nTiles;
+      const tyf = latToMercY(lat) * nTiles;
+      const tx = Math.floor(txf);
+      const ty = Math.floor(tyf);
+      const t = tileMap.get(`${tx}/${ty}`);
+      let v: number | string = 'no-tile';
+      if (t) {
+        const px = (txf - tx) * DEM_TILE_SIZE;
+        const py = (tyf - ty) * DEM_TILE_SIZE;
+        v = bilinearSample(t, DEM_TILE_SIZE, DEM_TILE_SIZE, px, py);
+      }
+      return { lng, lat, tx, ty, key: `${tx}/${ty}`, v };
+    };
+    console.warn('[shadow-worker] filled=0 diagnostic', {
+      demZoom,
+      bounds,
+      tileRange: { xMin, xMax, yMin, yMax },
+      tilesOk,
+      tilesRequested: tileCount,
+      tileKeys: Array.from(tileMap.keys()).slice(0, 12),
+      corners: [
+        sample(w, n),
+        sample(e, n),
+        sample(w, s),
+        sample(e, s),
+        sample((w + e) / 2, (n + s) / 2),
+      ],
+    });
+  }
+
   state = {
     bounds,
     gridW,
