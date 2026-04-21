@@ -33,9 +33,10 @@ const LEFT_PANEL_WIDTH_MAX = 520;
 const LEFT_PANEL_WIDTH_DEFAULT = 360;
 const CENTER_PANEL_MIN_WIDTH = 420;
 const CENTER_PANEL_MAX_HEIGHT = 456;
-const CENTER_PANEL_MIN_HEIGHT = 300;
+const CENTER_PANEL_MIN_HEIGHT = 220;
+const CENTER_PANEL_HEIGHT_RATIO = 0.42;
 const CENTER_TOOLBAR_HEIGHT = 48;
-const CENTER_TOOLBAR_GAP = 8;
+const CENTER_TOOLBAR_GAP = 12;
 
 function readStoredLeftWidth(): number {
   try {
@@ -187,19 +188,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     viewport.w - centerPanelRegionLeft - centerPanelRegionRight,
   );
   const centerPanelVisible =
-    centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH &&
-    viewport.h >=
-      CENTER_PANEL_MIN_HEIGHT +
-        CENTER_TOOLBAR_HEIGHT +
-        CENTER_TOOLBAR_GAP +
-        PANEL_PADDING * 2;
+    centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH;
   const centerPanelWidth = centerPanelAvailableWidth;
-  const centerPanelHeight = Math.max(
-    CENTER_PANEL_MIN_HEIGHT,
-    Math.min(
-      CENTER_PANEL_MAX_HEIGHT,
-      viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_TOOLBAR_GAP,
-    ),
+  const centerPanelAvailableHeight = Math.max(
+    0,
+    viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_TOOLBAR_GAP,
+  );
+  const centerPanelDesiredHeight = Math.round(
+    centerPanelAvailableHeight * CENTER_PANEL_HEIGHT_RATIO,
+  );
+  const centerPanelHeight = Math.min(
+    centerPanelAvailableHeight,
+    CENTER_PANEL_MAX_HEIGHT,
+    Math.max(CENTER_PANEL_MIN_HEIGHT, centerPanelDesiredHeight),
   );
   const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
