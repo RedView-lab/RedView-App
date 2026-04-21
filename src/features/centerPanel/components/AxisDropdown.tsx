@@ -36,8 +36,9 @@ export function AxisDropdown({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         onClick={onToggle}
+        title={value || '-'}
       >
-        <span>{value || '-'}</span>
+        <span className="rvc-center-analysis__select-value">{value || '-'}</span>
         <IconChevronDown size={18} />
       </button>
 

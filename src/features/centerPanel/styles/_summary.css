@@ -2,15 +2,17 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .rvc-center-summary__row {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr) 42px;
+  grid-template-columns: clamp(88px, 10cqi, 120px) minmax(0, 1fr) 32px;
   align-items: center;
-  gap: 8px;
+  gap: clamp(4px, 0.8cqi, 8px);
   padding: 0 2px;
   border-radius: 6px;
+  min-width: 0;
 }
 
 .rvc-center-summary__row--header {
@@ -23,10 +25,11 @@
 }
 
 .rvc-center-summary__title {
-  width: 120px;
+  width: 100%;
+  min-width: 0;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: 13px;
+  font-size: clamp(11px, 1.05cqi, 13px);
   font-weight: 600;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -35,8 +38,9 @@
 .rvc-center-summary__route {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 120px;
+  gap: clamp(4px, 0.8cqi, 8px);
+  width: 100%;
+  min-width: 0;
   padding: 7px 8px;
 }
 
@@ -59,7 +63,7 @@
   min-width: 0;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: 14px;
+  font-size: clamp(11px, 1.08cqi, 14px);
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -67,7 +71,7 @@
 
 .rvc-center-summary__metrics {
   display: grid;
-  grid-template-columns: repeat(10, minmax(64px, 1fr));
+  grid-template-columns: repeat(10, minmax(0, 1fr));
   gap: 2px;
   min-width: 0;
   align-items: center;
@@ -75,10 +79,9 @@
 
 .rvc-center-summary__metric {
   min-width: 0;
-  max-width: 88px;
   overflow: hidden;
   color: var(--rvc-center-text);
-  font-size: 14px;
+  font-size: clamp(10px, 1.08cqi, 14px);
   font-weight: 500;
   text-align: right;
   text-overflow: ellipsis;
@@ -87,7 +90,7 @@
 
 .rvc-center-summary__metric--header {
   color: var(--rvc-center-text-dim);
-  font-size: 13px;
+  font-size: clamp(10px, 1.02cqi, 13px);
 }
 
 .rvc-center-summary__icon-button,
@@ -106,4 +109,18 @@
 
 .rvc-center-summary__icon-button {
   background: rgba(255, 255, 255, 0.12);
+}
+
+@container center-panel (max-width: 980px) {
+  .rvc-center-summary__row {
+    grid-template-columns: 80px minmax(0, 1fr) 28px;
+  }
+
+  .rvc-center-summary__route {
+    padding-inline: 6px;
+  }
+
+  .rvc-center-summary__metrics {
+    gap: 1px;
+  }
 }

@@ -132,7 +132,7 @@ export function CenterPanelAnalysis() {
               <span className="rvc-center-analysis__checkbox" aria-hidden="true">
                 <IconCheck size={10} />
               </span>
-              <span>{filter}</span>
+              <span className="rvc-center-analysis__filter-label" title={filter}>{filter}</span>
             </label>
           ))}
         </div>

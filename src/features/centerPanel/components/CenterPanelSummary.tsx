@@ -26,7 +26,7 @@ export function CenterPanelSummary() {
         <div className="rvc-center-summary__title">Synthèse</div>
         <div className="rvc-center-summary__metrics" aria-hidden="true">
           {headerCells.map((cell) => (
-            <div key={cell} className="rvc-center-summary__metric rvc-center-summary__metric--header">
+            <div key={cell} className="rvc-center-summary__metric rvc-center-summary__metric--header" title={cell}>
               {cell}
             </div>
           ))}
@@ -42,11 +42,11 @@ export function CenterPanelSummary() {
             <IconEye size={14} />
           </span>
           <span className="rvc-center-summary__color" aria-hidden="true" />
-          <span className="rvc-center-summary__name">Itinéraire 1</span>
+          <span className="rvc-center-summary__name" title="Itinéraire 1">Itinéraire 1</span>
         </div>
         <div className="rvc-center-summary__metrics">
           {values.map((cell, index) => (
-            <div key={`${cell}-${index}`} className="rvc-center-summary__metric">
+            <div key={`${cell}-${index}`} className="rvc-center-summary__metric" title={cell}>
               {cell}
             </div>
           ))}

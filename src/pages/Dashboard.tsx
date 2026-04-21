@@ -30,8 +30,9 @@ const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
 const LEFT_PANEL_WIDTH_MIN = 320;
 const LEFT_PANEL_WIDTH_MAX = 520;
 const LEFT_PANEL_WIDTH_DEFAULT = 360;
-const CENTER_PANEL_DESIGN_WIDTH = 1308;
-const CENTER_PANEL_DESIGN_HEIGHT = 456;
+const CENTER_PANEL_MIN_WIDTH = 420;
+const CENTER_PANEL_MAX_HEIGHT = 456;
+const CENTER_PANEL_MIN_HEIGHT = 300;
 
 function readStoredLeftWidth(): number {
   try {
@@ -176,23 +177,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
 
   const centerPanelRegionLeft =
-    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + 8;
-  const centerPanelRegionRight = panelWidth + PANEL_PADDING * 2 + 8;
+    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
+  const centerPanelRegionRight = panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
   const centerPanelAvailableWidth = Math.max(
     0,
     viewport.w - centerPanelRegionLeft - centerPanelRegionRight,
   );
-  const centerPanelScale = Math.min(
-    1,
-    centerPanelAvailableWidth / CENTER_PANEL_DESIGN_WIDTH,
+  const centerPanelVisible =
+    centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH &&
+    viewport.h >= CENTER_PANEL_MIN_HEIGHT + PANEL_PADDING * 2;
+  const centerPanelWidth = centerPanelAvailableWidth;
+  const centerPanelHeight = Math.max(
+    CENTER_PANEL_MIN_HEIGHT,
+    Math.min(CENTER_PANEL_MAX_HEIGHT, viewport.h - PANEL_PADDING * 2),
   );
-  const centerPanelVisible = centerPanelAvailableWidth >= 420;
-  const centerPanelWidth = CENTER_PANEL_DESIGN_WIDTH * centerPanelScale;
-  const centerPanelHeight = CENTER_PANEL_DESIGN_HEIGHT * centerPanelScale;
-  const centerPanelLeft = centerPanelRegionLeft + Math.max(
-    0,
-    (centerPanelAvailableWidth - centerPanelWidth) / 2,
-  );
+  const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
 
   const logoutStyle: React.CSSProperties = {
@@ -248,14 +247,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           borderRadius={8}
         />
       )}
-      {mapLoaded && centerPanelVisible && centerPanelScale > 0 && (
+      {mapLoaded && centerPanelVisible && (
         <MapBlurMirror
           map={mapRef.current}
           top={centerPanelTop}
           left={centerPanelLeft}
           width={centerPanelWidth}
           height={centerPanelHeight}
-          borderRadius={Math.max(4, 8 * centerPanelScale)}
+          borderRadius={8}
         />
       )}
 
@@ -284,7 +283,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         />
       </div>
 
-      {centerPanelVisible && centerPanelScale > 0 ? (
+      {centerPanelVisible ? (
         <div
           style={{
             position: 'absolute',
@@ -296,16 +295,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             overflow: 'hidden',
           }}
         >
-          <div
-            style={{
-              width: CENTER_PANEL_DESIGN_WIDTH,
-              height: CENTER_PANEL_DESIGN_HEIGHT,
-              transform: `scale(${centerPanelScale})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            <CenterPanel />
-          </div>
+          <CenterPanel />
         </div>
       ) : null}
 
