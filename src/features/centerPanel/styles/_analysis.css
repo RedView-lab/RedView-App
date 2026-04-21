@@ -109,6 +109,7 @@
 }
 
 .rvc-center-analysis__axis-wrap {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -137,6 +138,59 @@
   gap: 12px;
   font-size: 12px;
   font-weight: 500;
+  cursor: pointer;
+}
+
+.rvc-center-analysis__dropdown {
+  position: absolute;
+  top: 38px;
+  left: 42px;
+  z-index: 8;
+  width: 140px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(15, 15, 15, 0.74);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
+.rvc-center-analysis__dropdown-option {
+  width: 100%;
+  height: 30px;
+  min-width: 80px;
+  padding: 6px 6px 6px 10px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rvc-center-text);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.rvc-center-analysis__dropdown-text {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-center-analysis__dropdown-text--primary {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rvc-center-analysis__dropdown-text--secondary {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rvc-center-analysis__dropdown-check {
+  flex-shrink: 0;
+  color: #fff;
 }
 
 .rvc-center-analysis__separator {
