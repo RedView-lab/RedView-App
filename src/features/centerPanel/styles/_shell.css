@@ -10,6 +10,10 @@
   --rvc-center-red-strong: #700000;
   --rvc-center-red-accent: #c50000;
   --rvc-center-amber: rgba(112, 73, 20, 0.44);
+  --rvc-center-font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  --rvc-center-font-weight-medium: 500;
+  --rvc-center-font-weight-semibold: 600;
+  --rvc-center-font-weight-bold: 700;
 
   width: 100%;
   height: 100%;
@@ -23,7 +27,9 @@
   flex-direction: column;
   gap: 12px;
   overflow: hidden;
-  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  font-family: var(--rvc-center-font-family);
+  font-optical-sizing: auto;
+  font-synthesis: none;
   container-type: inline-size;
   container-name: center-panel;
   box-shadow:

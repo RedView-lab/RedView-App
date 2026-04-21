@@ -12,6 +12,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
+  font-family: inherit;
   min-width: 0;
   min-height: 0;
 }
@@ -30,8 +31,10 @@
 
 .rvc-center-analysis__label {
   flex: 0 0 auto;
+  font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--rvc-center-font-weight-semibold);
+  line-height: normal;
   white-space: nowrap;
 }
 
@@ -51,8 +54,10 @@
   padding: 4px 8px;
   background: transparent;
   color: var(--rvc-center-text);
+  font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: var(--rvc-center-font-weight-semibold);
+  line-height: normal;
 }
 
 .rvc-center-analysis__segment--active {
@@ -72,8 +77,10 @@
 .rvc-center-analysis__axis-label {
   position: relative;
   color: rgba(255, 255, 255, 0.5);
+  font-family: inherit;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: var(--rvc-center-font-weight-bold);
+  line-height: normal;
   white-space: nowrap;
 }
 
@@ -83,8 +90,10 @@
   flex: 0 0 auto;
   gap: 4px;
   color: var(--rvc-center-text);
+  font-family: inherit;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: var(--rvc-center-font-weight-semibold);
+  line-height: normal;
 }
 
 .rvc-center-analysis__slider {
@@ -159,8 +168,10 @@
   align-items: center;
   justify-content: space-between;
   gap: clamp(6px, 1cqi, 12px);
+  font-family: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--rvc-center-font-weight-medium);
+  line-height: normal;
   cursor: pointer;
   overflow: hidden;
 }
@@ -212,12 +223,12 @@
 
 .rvc-center-analysis__dropdown-text--primary {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: var(--rvc-center-font-weight-semibold);
 }
 
 .rvc-center-analysis__dropdown-text--secondary {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: var(--rvc-center-font-weight-medium);
 }
 
 .rvc-center-analysis__dropdown-check {
@@ -253,8 +264,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-family: inherit;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: var(--rvc-center-font-weight-medium);
+  line-height: normal;
   overflow: hidden;
 }
 
