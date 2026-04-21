@@ -11,6 +11,7 @@ export interface AnalysisChartSeries {
   id: string;
   color: string;
   points: AnalysisChartPoint[];
+  cellValues?: string[];
   fillColor?: string;
   strokeWidth?: number;
   opacity?: number;
@@ -63,8 +64,6 @@ const Y_MAJOR_TARGET_PX = 40;
 const Y_MINOR_TARGET_PX = 18;
 /** Width of the left-hand label gutter (must match grid label column). */
 const LABEL_GUTTER_PX = 95;
-/** Width of the right-hand padding column. */
-const RIGHT_GUTTER_PX = 48;
 
 const PLOT_Y_MIN = 0;
 const PLOT_Y_MAX = 3000;
@@ -83,6 +82,7 @@ export function AnalysisResults({
 
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+  const totalChartWidth = Math.max(0, gridSize.width - LABEL_GUTTER_PX);
 
   useEffect(() => {
     const node = gridRef.current;
@@ -101,16 +101,26 @@ export function AnalysisResults({
     return () => ro.disconnect();
   }, []);
 
-  const usableWidth = Math.max(0, gridSize.width - LABEL_GUTTER_PX - RIGHT_GUTTER_PX);
-
   const xMajorTicks = useMemo(() => {
     if (xAxisTicks && xAxisTicks.length > 0) {
       return [...xAxisTicks].sort((a, b) => a - b);
     }
-    if (usableWidth <= 0) return buildNiceTicks(xDomain.min, xDomain.max, 4);
-    const targetCount = Math.max(2, Math.round(usableWidth / X_MAJOR_TARGET_PX));
+    if (totalChartWidth <= 0) return buildNiceTicks(xDomain.min, xDomain.max, 4);
+    const targetCount = Math.max(2, Math.round(totalChartWidth / X_MAJOR_TARGET_PX));
     return buildNiceTicks(xDomain.min, xDomain.max, targetCount);
-  }, [xAxisTicks, usableWidth, xDomain.min, xDomain.max]);
+  }, [xAxisTicks, totalChartWidth, xDomain.min, xDomain.max]);
+
+  const provisionalColumns = useMemo(
+    () => buildXColumns(xMajorTicks, totalChartWidth),
+    [xMajorTicks, totalChartWidth],
+  );
+
+  const rightColumnWidth = useMemo(() => {
+    if (totalChartWidth <= 0 || provisionalColumns.length === 0) return 48;
+    return Math.max(48, totalChartWidth / provisionalColumns.length);
+  }, [provisionalColumns.length, totalChartWidth]);
+
+  const usableWidth = Math.max(0, totalChartWidth - rightColumnWidth);
 
   const xColumns = useMemo(
     () => buildXColumns(xMajorTicks, usableWidth),
@@ -135,7 +145,12 @@ export function AnalysisResults({
       data-node-id="1894:39014"
       data-name="RESULTS"
     >
-      <AnalysisResultsGrid ref={gridRef} columns={xColumns} plotRows={plotRows}>
+      <AnalysisResultsGrid
+        ref={gridRef}
+        columns={xColumns}
+        plotRows={plotRows}
+        rightColumnWidth={rightColumnWidth}
+      >
         <div
           className="absolute inset-0 overflow-hidden pointer-events-none"
           data-node-id="1894:39015"
@@ -221,16 +236,16 @@ export function AnalysisResults({
           ) : null}
         </div>
       </AnalysisResultsGrid>
-      <AxisRow columns={xColumns} />
+      <AxisRow columns={xColumns} rightColumnWidth={rightColumnWidth} />
       {series.map((s) => (
-        <SeriesRow key={s.id} series={s} columns={xColumns} />
+        <SeriesRow key={s.id} series={s} columns={xColumns} rightColumnWidth={rightColumnWidth} />
       ))}
-      <AddLineRow columns={xColumns} />
+      <AddLineRow columns={xColumns} rightColumnWidth={rightColumnWidth} />
     </div>
   );
 }
 
-function AxisRow({ columns }: { columns: GridColumn[] }) {
+function AxisRow({ columns, rightColumnWidth }: { columns: GridColumn[]; rightColumnWidth: number }) {
   const innerCols = columns.slice(0, -1);
   const lastCol = columns[columns.length - 1];
 
@@ -271,7 +286,10 @@ function AxisRow({ columns }: { columns: GridColumn[] }) {
             ) : null}
           </div>
         ))}
-        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-white content-stretch flex h-full items-center justify-start px-[8px] py-[2px] relative shrink-0 w-[48px]">
+        <div
+          className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-white content-stretch flex h-full items-center justify-start px-[8px] py-[2px] relative shrink-0"
+          style={{ width: `${rightColumnWidth}px` }}
+        >
           {lastCol?.major && lastCol?.label ? (
              <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-ellipsis text-white whitespace-nowrap pl-[4px]" style={FONT_OPSZ_STYLE}>
                <p className="leading-[normal] overflow-hidden text-ellipsis">{lastCol.label}</p>
@@ -287,7 +305,7 @@ function AxisRow({ columns }: { columns: GridColumn[] }) {
   );
 }
 
-function AddLineRow({ columns }: { columns: GridColumn[] }) {
+function AddLineRow({ columns, rightColumnWidth }: { columns: GridColumn[]; rightColumnWidth: number }) {
   const innerCols = columns.slice(0, -1);
   return (
     <div
@@ -323,7 +341,10 @@ function AddLineRow({ columns }: { columns: GridColumn[] }) {
             }
           />
         ))}
-        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0 w-[48px]">
+        <div
+          className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0"
+          style={{ width: `${rightColumnWidth}px` }}
+        >
           <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
             <p className="leading-[normal] overflow-hidden text-ellipsis">{` `}</p>
           </div>
@@ -335,8 +356,17 @@ function AddLineRow({ columns }: { columns: GridColumn[] }) {
 
 import { imgIcon1 } from './assets';
 
-function SeriesRow({ series, columns }: { series: AnalysisChartSeries, columns: GridColumn[] }) {
+function SeriesRow({
+  series,
+  columns,
+  rightColumnWidth,
+}: {
+  series: AnalysisChartSeries;
+  columns: GridColumn[];
+  rightColumnWidth: number;
+}) {
   const innerCols = columns.slice(0, -1);
+  let majorIndex = -1;
   return (
     <div className="border-[rgba(255,255,255,0.08)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] items-center max-h-[28px] min-h-[24px] relative w-full">
       <div className="bg-[rgba(0,0,0,0.64)] content-stretch flex flex-col h-full items-start justify-center px-[4px] relative shrink-0 w-[95px]">
@@ -356,18 +386,33 @@ function SeriesRow({ series, columns }: { series: AnalysisChartSeries, columns: 
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative">
         {innerCols.map((col, index) => (
-          <div
-            key={`${index}-${col.value}`}
-            className={
-              index === 0
-                ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
-                : col.major
-                  ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
-                  : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
-            }
-          />
+          (() => {
+            if (col.major) majorIndex += 1;
+            const value = col.major ? series.cellValues?.[majorIndex] : undefined;
+            return (
+              <div
+                key={`${index}-${col.value}`}
+                className={
+                  index === 0
+                    ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+                    : col.major
+                      ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+                      : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+                }
+              >
+                {value ? (
+                  <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
+                    <p className="leading-[normal] overflow-hidden text-ellipsis">{value}</p>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })()
         ))}
-        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0 w-[48px]">
+        <div
+          className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0"
+          style={{ width: `${rightColumnWidth}px` }}
+        >
           <button type="button" className="content-stretch flex items-center justify-center overflow-clip p-[3.75px] relative rounded-[3.75px] shrink-0 size-[20px] hover:bg-[rgba(255,255,255,0.1)] transition-colors">
             <div className="overflow-clip relative shrink-0 size-[12.5px]">
               <div className="absolute inset-[8.33%_12.5%]">
