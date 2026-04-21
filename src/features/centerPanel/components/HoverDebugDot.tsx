@@ -1,48 +1,38 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 /**
- * Minimal debug overlay: renders a red dot that follows the cursor
- * inside its parent. Drop it as a child of any `position: relative`
- * container to verify pointer tracking is alive.
- *
- * Usage:
- *   <div style={{ position: 'relative' }}>
- *     ...content...
- *     <HoverDebugDot />
- *   </div>
+ * Diagnostic overlay. Always visible so you can confirm it mounted.
+ * - Yellow badge top-right shows mount + last pointer position.
+ * - Red dot follows the cursor inside the parent container.
  */
 export function HoverDebugDot() {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const [events, setEvents] = useState(0);
 
   useEffect(() => {
     const el = surfaceRef.current;
     if (!el) return;
     const parent = el.parentElement;
+    // eslint-disable-next-line no-console
+    console.log('[HoverDebugDot] mounted, parent =', parent);
     if (!parent) return;
 
     const handleMove = (event: PointerEvent) => {
       const rect = parent.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
-      if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
-        setPos(null);
-        return;
-      }
+      setEvents((n) => n + 1);
       setPos({ x, y });
     };
     const handleLeave = () => setPos(null);
 
     parent.addEventListener('pointermove', handleMove);
-    parent.addEventListener('pointerenter', handleMove);
     parent.addEventListener('pointerleave', handleLeave);
-    parent.addEventListener('pointercancel', handleLeave);
 
     return () => {
       parent.removeEventListener('pointermove', handleMove);
-      parent.removeEventListener('pointerenter', handleMove);
       parent.removeEventListener('pointerleave', handleLeave);
-      parent.removeEventListener('pointercancel', handleLeave);
     };
   }, []);
 
@@ -50,7 +40,20 @@ export function HoverDebugDot() {
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none',
-    zIndex: 9999,
+    zIndex: 99999,
+  };
+
+  const badgeStyle: CSSProperties = {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    padding: '4px 8px',
+    background: 'yellow',
+    color: 'black',
+    font: '12px monospace',
+    borderRadius: 4,
+    pointerEvents: 'none',
+    zIndex: 99999,
   };
 
   const dotStyle: CSSProperties | undefined = pos
@@ -58,19 +61,23 @@ export function HoverDebugDot() {
         position: 'absolute',
         left: pos.x,
         top: pos.y,
-        width: 16,
-        height: 16,
-        marginLeft: -8,
-        marginTop: -8,
+        width: 20,
+        height: 20,
+        marginLeft: -10,
+        marginTop: -10,
         borderRadius: '50%',
         background: 'red',
-        boxShadow: '0 0 0 2px rgba(255,255,255,0.9)',
+        boxShadow: '0 0 0 3px white',
         pointerEvents: 'none',
       }
     : undefined;
 
   return (
     <div ref={surfaceRef} style={surfaceStyle} aria-hidden="true">
+      <div style={badgeStyle}>
+        DBG mounted | events={events} | pos=
+        {pos ? `${Math.round(pos.x)},${Math.round(pos.y)}` : 'null'}
+      </div>
       {dotStyle ? <div style={dotStyle} /> : null}
     </div>
   );
