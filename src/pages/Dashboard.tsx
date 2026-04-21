@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { CenterPanel } from '@/features/centerPanel';
+import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { ItineraryPanel } from '@/features/itineraryPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -33,6 +34,8 @@ const LEFT_PANEL_WIDTH_DEFAULT = 360;
 const CENTER_PANEL_MIN_WIDTH = 420;
 const CENTER_PANEL_MAX_HEIGHT = 456;
 const CENTER_PANEL_MIN_HEIGHT = 300;
+const CENTER_TOOLBAR_HEIGHT = 48;
+const CENTER_TOOLBAR_GAP = 8;
 
 function readStoredLeftWidth(): number {
   try {
@@ -59,7 +62,7 @@ function readStoredWidth(): number {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
-  const mapRef = useRef<MapboxMap | null>(null);
+  const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
@@ -133,14 +136,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleMapReady = (map: MapboxMap) => {
-    mapRef.current = map;
+    setMapInstance(map);
     setMapLoaded(true);
   };
 
   const handleFlyTo = (lon: number, lat: number) => {
-    mapRef.current?.flyTo({
+    mapInstance?.flyTo({
       center: [lon, lat],
-      zoom: Math.max(mapRef.current.getZoom(), 13),
+      zoom: Math.max(mapInstance.getZoom(), 13),
       essential: true,
     });
   };
@@ -185,14 +188,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
   const centerPanelVisible =
     centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH &&
-    viewport.h >= CENTER_PANEL_MIN_HEIGHT + PANEL_PADDING * 2;
+    viewport.h >=
+      CENTER_PANEL_MIN_HEIGHT +
+        CENTER_TOOLBAR_HEIGHT +
+        CENTER_TOOLBAR_GAP +
+        PANEL_PADDING * 2;
   const centerPanelWidth = centerPanelAvailableWidth;
   const centerPanelHeight = Math.max(
     CENTER_PANEL_MIN_HEIGHT,
-    Math.min(CENTER_PANEL_MAX_HEIGHT, viewport.h - PANEL_PADDING * 2),
+    Math.min(
+      CENTER_PANEL_MAX_HEIGHT,
+      viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_TOOLBAR_GAP,
+    ),
   );
   const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
+  const centerToolbarTop = centerPanelTop - CENTER_TOOLBAR_GAP - CENTER_TOOLBAR_HEIGHT;
 
   const logoutStyle: React.CSSProperties = {
     position: 'absolute',
@@ -226,7 +237,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       */}
       {mapLoaded && leftPanelOpen && (
         <MapBlurMirror
-          map={mapRef.current}
+          map={mapInstance}
           top={PANEL_PADDING}
           left={PANEL_PADDING}
           width={leftPanelWidth}
@@ -236,7 +247,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       )}
       {mapLoaded && (
         <MapBlurMirror
-          map={mapRef.current}
+          map={mapInstance}
           top={PANEL_PADDING}
           left={Math.max(
             0,
@@ -249,7 +260,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       )}
       {mapLoaded && centerPanelVisible && (
         <MapBlurMirror
-          map={mapRef.current}
+          map={mapInstance}
+          top={centerToolbarTop}
+          left={centerPanelLeft}
+          width={centerPanelWidth}
+          height={CENTER_TOOLBAR_HEIGHT}
+          borderRadius={8}
+        />
+      )}
+      {mapLoaded && centerPanelVisible && (
+        <MapBlurMirror
+          map={mapInstance}
           top={centerPanelTop}
           left={centerPanelLeft}
           width={centerPanelWidth}
@@ -260,7 +281,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <div style={leftPanelStyle}>
         <ItineraryPanel
-          map={mapRef.current}
+          map={mapInstance}
           isMapLoaded={mapLoaded}
           width={leftPanelWidth}
           onResizeStart={handleLeftResizeStart}
@@ -287,6 +308,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <div
           style={{
             position: 'absolute',
+            top: centerToolbarTop,
+            left: centerPanelLeft,
+            width: centerPanelWidth,
+            height: CENTER_TOOLBAR_HEIGHT,
+            zIndex: 25,
+            overflow: 'hidden',
+          }}
+        >
+          <CenterPanelToolbar />
+        </div>
+      ) : null}
+
+      {centerPanelVisible ? (
+        <div
+          style={{
+            position: 'absolute',
             top: centerPanelTop,
             left: centerPanelLeft,
             width: centerPanelWidth,
@@ -305,7 +342,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <div style={rightPanelStyle}>
         <ControlPanelContainer
-          map={mapRef.current}
+          map={mapInstance}
           isMapLoaded={mapLoaded}
           lidarDownloadModeActive={lidarModeEnabled}
           onToggleLidarDownloadMode={() => setLidarModeEnabled((v) => !v)}

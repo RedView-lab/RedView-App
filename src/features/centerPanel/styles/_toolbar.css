@@ -1,5 +1,9 @@
 .rvc-center-toolbar {
   min-width: 0;
+  width: 100%;
+  height: 100%;
+  container-type: inline-size;
+  container-name: center-panel-toolbar;
 }
 
 .rvc-center-toolbar__viewport {
@@ -97,7 +101,7 @@
   line-height: 1.2;
 }
 
-@container center-panel (max-width: 1120px) {
+@container center-panel-toolbar (max-width: 1120px) {
   .rvc-center-toolbar__track {
     gap: 6px;
     padding: 6px;
@@ -108,7 +112,7 @@
   }
 }
 
-@container center-panel (max-width: 840px) {
+@container center-panel-toolbar (max-width: 840px) {
   .rvc-center-toolbar__track {
     min-height: 44px;
     border-radius: 7px;
@@ -125,7 +129,7 @@
   }
 }
 
-@container center-panel (max-width: 640px) {
+@container center-panel-toolbar (max-width: 640px) {
   .rvc-center-toolbar__metrics {
     width: 68px;
     font-size: 9px;
