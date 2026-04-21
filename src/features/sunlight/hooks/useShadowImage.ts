@@ -97,6 +97,11 @@ interface ComputeJob {
   quality: ComputeQuality;
 }
 
+function smoothstep01(t: number): number {
+  const clamped = Math.max(0, Math.min(1, t));
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
 /**
  * Cast-shadow visibility curve.
  *   alt ≥  0°  : full strength (1.0) — shadows are at their longest and most
@@ -113,21 +118,41 @@ function shadowVisibility(altitudeDeg: number): number {
 }
 
 /**
+ * Just below the horizon there must never be a sudden return to a clear,
+ * sunlit-looking terrain. In that short twilight band the whole terrain stays
+ * uniformly shadowed, then hands off progressively to the night veil.
+ */
+function belowHorizonShadowStrength(altitudeDeg: number): number {
+  if (altitudeDeg >= 0) return 1;
+  if (altitudeDeg <= -4) return 0;
+  return smoothstep01((altitudeDeg + 4) / 4);
+}
+
+/**
  * Twilight darkening curve. Returns 0..1 alpha for a uniform black veil that
  * eases the map from full daylight into night through the standard twilight
- * phases:
- *   alt > +1°  : 0   (full daylight, no veil)
- *   alt 0°     : light bluing begins
- *   -6° civil  : ~0.30
- *   -12° nautical: ~0.55
- *   -18° astro : ~0.72 (capped — keep terrain readable)
+ * phases while staying monotonic across sunrise/sunset:
+ *   alt ≥ +3°   : 0.00
+ *   alt =  0°   : 0.18
+ *   alt = -6°   : 0.40
+ *   alt = -12°  : 0.58
+ *   alt ≤ -18°  : 0.72
  */
 function nightVeilAlpha(altitudeDeg: number): number {
-  if (altitudeDeg >= 1) return 0;
-  // Smooth cubic ramp from +1° to -18°, then clamp.
-  const t = Math.max(0, Math.min(1, (1 - altitudeDeg) / 19));
-  const eased = t * t * (3 - 2 * t);
-  return eased * 0.72;
+  if (altitudeDeg >= 3) return 0;
+  if (altitudeDeg >= 0) {
+    return 0.18 * smoothstep01((3 - altitudeDeg) / 3);
+  }
+  if (altitudeDeg >= -6) {
+    return 0.18 + (0.40 - 0.18) * smoothstep01(-altitudeDeg / 6);
+  }
+  if (altitudeDeg >= -12) {
+    return 0.40 + (0.58 - 0.40) * smoothstep01((-altitudeDeg - 6) / 6);
+  }
+  if (altitudeDeg >= -18) {
+    return 0.58 + (0.72 - 0.58) * smoothstep01((-altitudeDeg - 12) / 6);
+  }
+  return 0.72;
 }
 
 /**
@@ -375,8 +400,10 @@ export function useShadowImage(
 
       const o = optsRef.current;
       const visibility = shadowVisibility(o.sunAltitudeDeg);
+      const fullShadow = belowHorizonShadowStrength(o.sunAltitudeDeg);
       const veil = nightVeilAlpha(o.sunAltitudeDeg);
-      if (!o.enabled || o.opacity <= 0 || (visibility <= 0 && veil <= 0)) {
+      const shadowStrength = o.sunAltitudeDeg >= 0 ? visibility : fullShadow;
+      if (!o.enabled || o.opacity <= 0 || (shadowStrength <= 0 && veil <= 0)) {
         setLayerOpacity(0);
         return;
       }
@@ -385,7 +412,7 @@ export function useShadowImage(
         type: 'compute',
         sunAzDeg: o.sunAzimuthDeg,
         sunAltDeg: o.sunAltitudeDeg,
-        shadowStrength: visibility,
+        shadowStrength,
         nightFloor: veil,
         quality: job.quality,
       });
