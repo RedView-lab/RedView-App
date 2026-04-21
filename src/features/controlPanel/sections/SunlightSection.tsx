@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Slider } from '../components/Slider';
-import { IconCalendar, IconClock } from '../icons';
+import { Select } from '../components/Select';
+import { Toggle } from '../components/Toggle';
+import { ColorPalettePicker } from '../components/ColorPalettePicker';
+import { ColorSwatch } from '../components/ColorSwatch';
+import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff } from '../icons';
 import { IconSunrise, IconSunset } from '../icons';
 import { CalendarPopover } from '@/features/itineraryPanel/components/calendar';
 import type { ControlPanelHandlers, SunlightState } from '../types';
@@ -13,6 +17,26 @@ interface Props {
   onChange: ControlPanelHandlers['onSunlightStateChange'];
 }
 
+type SunlightScaleSetting = '4 couleurs';
+
+interface SunlightBand {
+  id: string;
+  label: string;
+  color: string;
+  visible: boolean;
+}
+
+const SUNLIGHT_SCALE_OPTIONS: { value: SunlightScaleSetting; label: string }[] = [
+  { value: '4 couleurs', label: '4 couleurs' },
+];
+
+const DEFAULT_SUNLIGHT_BANDS: SunlightBand[] = [
+  { id: '0-1', label: '0 - 1h', color: '#2DBF8C', visible: true },
+  { id: '1-2', label: '1h - 2h', color: '#FFD800', visible: true },
+  { id: '2-3', label: '2h - 3h', color: '#FF7200', visible: true },
+  { id: '3-4', label: '3h - 4h', color: '#E50C0C', visible: true },
+];
+
 /**
  * Converts ISO YYYY-MM-DD to display DD/MM/YY.
  */
@@ -22,10 +46,18 @@ function formatDateShort(iso: string): string {
   return `${d}/${m}/${y.slice(2)}`;
 }
 
+function formatHexLabel(color: string): string {
+  return color.replace('#', '').toUpperCase();
+}
+
 export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
+  const [sunlightMapExpanded, setSunlightMapExpanded] = useState(true);
+  const [scaleSetting, setScaleSetting] = useState<SunlightScaleSetting>('4 couleurs');
+  const [sunlightBands, setSunlightBands] = useState<SunlightBand[]>(DEFAULT_SUNLIGHT_BANDS);
+  const [trajectoryEnabled, setTrajectoryEnabled] = useState(true);
   const calendarAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -69,117 +101,176 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
 
+  const handleBandColorChange = (bandId: string, color: string) => {
+    setSunlightBands((prev) => prev.map((band) => (band.id === bandId ? { ...band, color } : band)));
+  };
+
+  const handleBandVisibilityToggle = (bandId: string) => {
+    setSunlightBands((prev) => prev.map((band) => (band.id === bandId ? { ...band, visible: !band.visible } : band)));
+  };
+
   return (
     <Section
       title="Ensoleillement"
       toggle={{ checked: state.enabled, onChange: onEnabledChange }}
     >
-      <div className="rvc-weather__trend-options">
-        <div className="rvc-weather__trend-option">
-          <Checkbox
-            id="sunlight-custom-date"
-            checked={state.customDateEnabled}
-            onChange={(checked) => onChange?.({ customDateEnabled: checked })}
-          />
-          <span className="rvc-weather__trend-label">Choisir une date personnalisée</span>
-          {state.customDateEnabled && (
-            <div
-              ref={calendarAnchorRef}
-              className="rvc-weather__date-input"
-              onClick={() => setCalendarOpen((v) => !v)}
-              style={{ cursor: 'pointer' }}
-            >
-              <IconCalendar size={12} />
-              <span>{formatDateShort(state.date)}</span>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      <CalendarPopover
-        open={calendarOpen}
-        anchorRef={calendarAnchorRef}
-        onClose={() => setCalendarOpen(false)}
-        value={state.date}
-        onSelect={(iso) => {
-          onChange?.({ date: iso });
-          setCalendarOpen(false);
-        }}
-      />
-
-      <div className="rvc-weather__time-row" style={{ marginTop: '8px' }}>
-        <span className="rvc-weather__time-bound">00:00</span>
-        <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
-          <Slider
-            min={0}
-            max={1439}
-            value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(state.time)}
-            onChange={handleTimeSliderChange}
-            onCommit={handleTimeSliderCommit}
-            width="100%"
-          />
-        </div>
-        <span className="rvc-weather__time-bound">23:59</span>
-        <div className="rvc-weather__time-input">
-          <IconClock size={12} />
-          <div className="rvc-weather__time-display">
-            <div className="rvc-weather__time-display-segment">{h}</div>
-            <div className="rvc-weather__time-display-colon">:</div>
-            <div className="rvc-weather__time-display-segment">{m}</div>
+      <div className="rvc-sunlight">
+        <div className="rvc-sunlight__option-row">
+          <div className="rvc-sunlight__option-main">
+            <Checkbox
+              id="sunlight-custom-date"
+              checked={state.customDateEnabled}
+              onChange={(checked) => onChange?.({ customDateEnabled: checked })}
+            />
+            <span className="rvc-sunlight__option-label">Choisir une date personnalisée</span>
+            {state.customDateEnabled && (
+              <div
+                ref={calendarAnchorRef}
+                className="rvc-sunlight__date-input"
+                onClick={() => setCalendarOpen((value) => !value)}
+              >
+                <IconCalendar size={12} />
+                <span>{formatDateShort(state.date)}</span>
+              </div>
+            )}
           </div>
-          <input
-            type="time"
-            value={displayTime}
-            onChange={(e) => {
-              const nextMinutes = getMinutesFromTime(e.target.value);
-              setIsScrubbingTime(false);
-              setTimeDraftMinutes(nextMinutes);
-              emitTimeChange(nextMinutes, false);
-            }}
-            className="rvc-weather__native-input"
-          />
         </div>
-      </div>
 
-      <div className="rvc-sunlight__sun-row">
-        <div className="rvc-sunlight__sun-item">
-          <IconSunrise size={16} />
-          <div className="rvc-sunlight__sun-label">Lever</div>
-          <div className="rvc-sunlight__sun-value">{state.sunriseTime}</div>
-        </div>
-        <div className="rvc-sunlight__sun-item">
-          <IconSunset size={16} />
-          <div className="rvc-sunlight__sun-label">Coucher</div>
-          <div className="rvc-sunlight__sun-value">{state.sunsetTime}</div>
-        </div>
-      </div>
+        <CalendarPopover
+          open={calendarOpen}
+          anchorRef={calendarAnchorRef}
+          onClose={() => setCalendarOpen(false)}
+          value={state.date}
+          onSelect={(iso) => {
+            onChange?.({ date: iso });
+            setCalendarOpen(false);
+          }}
+        />
 
-      {/* Shadow overlay controls */}
-      <div className="rvc-weather__trend-options" style={{ marginTop: '8px' }}>
-        <div className="rvc-weather__trend-option">
-          <Checkbox
-            id="sunlight-shadow"
-            checked={state.shadowEnabled}
-            onChange={(checked) => onChange?.({ shadowEnabled: checked })}
-          />
-          <span className="rvc-weather__trend-label">Ombres sur le terrain</span>
-        </div>
-      </div>
-      {state.shadowEnabled && (
-        <div className="rvc-weather__time-row" style={{ marginTop: '4px' }}>
-          <span className="rvc-weather__time-bound" style={{ fontSize: '10px' }}>0%</span>
-          <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
+        <div className="rvc-sunlight__time-row">
+          <span className="rvc-sunlight__time-bound">00:00</span>
+          <div className="rvc-sunlight__slider-shell">
             <Slider
               min={0}
-              max={100}
-              value={state.shadowOpacity}
-              onChange={(val) => onChange?.({ shadowOpacity: val })}
+              max={1439}
+              value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(state.time)}
+              onChange={handleTimeSliderChange}
+              onCommit={handleTimeSliderCommit}
               width="100%"
             />
           </div>
-          <span className="rvc-weather__time-bound" style={{ fontSize: '10px' }}>100%</span>
+          <span className="rvc-sunlight__time-bound">23:59</span>
+          <div className="rvc-sunlight__time-input">
+            <IconClock size={12} />
+            <div className="rvc-sunlight__time-display">
+              <div className="rvc-sunlight__time-display-segment">{h}</div>
+              <div className="rvc-sunlight__time-display-colon">:</div>
+              <div className="rvc-sunlight__time-display-segment">{m}</div>
+            </div>
+            <input
+              type="time"
+              value={displayTime}
+              onChange={(e) => {
+                const nextMinutes = getMinutesFromTime(e.target.value);
+                setIsScrubbingTime(false);
+                setTimeDraftMinutes(nextMinutes);
+                emitTimeChange(nextMinutes, false);
+              }}
+              className="rvc-sunlight__native-input"
+            />
+          </div>
         </div>
-      )}
+
+        <div className="rvc-sunlight__sun-row">
+          <div className="rvc-sunlight__sun-item">
+            <IconSunrise size={16} className="rvc-sunlight__sun-icon" />
+            <div className="rvc-sunlight__sun-label">Lever</div>
+            <div className="rvc-sunlight__sun-value">{state.sunriseTime}</div>
+          </div>
+          <div className="rvc-sunlight__sun-item">
+            <IconSunset size={16} className="rvc-sunlight__sun-icon" />
+            <div className="rvc-sunlight__sun-label">Coucher</div>
+            <div className="rvc-sunlight__sun-value">{state.sunsetTime}</div>
+          </div>
+        </div>
+
+        <div className="rvc-sunlight__toggle-row">
+          <Toggle
+            checked={state.shadowEnabled}
+            onChange={(checked) => onChange?.({ shadowEnabled: checked })}
+            ariaLabel="Afficher la carte d'ensoleillement"
+          />
+          <button
+            type="button"
+            className="rvc-sunlight__toggle-label"
+            onClick={() => setSunlightMapExpanded((value) => !value)}
+            aria-expanded={sunlightMapExpanded}
+          >
+            <span className="rvc-sunlight__toggle-text">Afficher la carte d’ensoleillement</span>
+          </button>
+          <button
+            type="button"
+            className={`rvc-sunlight__toggle-chevron${sunlightMapExpanded ? ' is-open' : ''}`}
+            onClick={() => setSunlightMapExpanded((value) => !value)}
+            aria-label={sunlightMapExpanded ? 'Réduire la carte d’ensoleillement' : 'Développer la carte d’ensoleillement'}
+          >
+            <IconChevronDown size={16} />
+          </button>
+        </div>
+
+        {state.shadowEnabled && sunlightMapExpanded ? (
+          <div className="rvc-sunlight__map-settings">
+            <div className="rvc-sunlight__row rvc-sunlight__row--split">
+              <span className="rvc-sunlight__row-label">Échelle</span>
+              <Select
+                width={140}
+                value={scaleSetting}
+                options={SUNLIGHT_SCALE_OPTIONS}
+                onChange={(value) => setScaleSetting(value as SunlightScaleSetting)}
+                className="rvc-sunlight__scale-select"
+              />
+            </div>
+
+            <div className="rvc-sunlight__bands">
+              {sunlightBands.map((band) => (
+                <div
+                  key={band.id}
+                  className={`rvc-sunlight__band-row${band.visible ? '' : ' is-hidden'}`}
+                >
+                  <button
+                    type="button"
+                    className="rvc-sunlight__band-eye"
+                    onClick={() => handleBandVisibilityToggle(band.id)}
+                    aria-label={band.visible ? `Masquer ${band.label}` : `Afficher ${band.label}`}
+                  >
+                    {band.visible ? <IconEye size={12.5} /> : <IconEyeOff size={12.5} />}
+                  </button>
+                  <span className="rvc-sunlight__band-label">{band.label}</span>
+                  <ColorPalettePicker
+                    color={band.color}
+                    onChange={(color) => handleBandColorChange(band.id, color)}
+                    className="rvc-sunlight__color-chip"
+                    ariaLabel={`Choisir la couleur pour ${band.label}`}
+                  >
+                    <ColorSwatch color={band.color} size={12} />
+                    <span className="rvc-sunlight__color-hex">{formatHexLabel(band.color)}</span>
+                    <IconChevronDown size={20} className="rvc-sunlight__color-chevron" />
+                  </ColorPalettePicker>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="rvc-sunlight__toggle-row rvc-sunlight__toggle-row--compact">
+          <Toggle
+            checked={trajectoryEnabled}
+            onChange={setTrajectoryEnabled}
+            ariaLabel="Afficher la trajectoire"
+          />
+          <span className="rvc-sunlight__toggle-text">Afficher la trajectoire</span>
+        </div>
+      </div>
     </Section>
   );
 }

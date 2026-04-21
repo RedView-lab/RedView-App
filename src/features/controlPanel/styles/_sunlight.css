@@ -1,23 +1,168 @@
 /* Sunlight section specific styles */
 
-.rvc-sunlight__sun-row {
+.rvc-sunlight {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
   width: 100%;
-  margin-top: 8px;
+}
+
+.rvc-sunlight__option-row,
+.rvc-sunlight__time-row,
+.rvc-sunlight__sun-row,
+.rvc-sunlight__toggle-row,
+.rvc-sunlight__row,
+.rvc-sunlight__band-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvc-sunlight__option-row,
+.rvc-sunlight__row,
+.rvc-sunlight__band-row {
+  gap: 4px;
+}
+
+.rvc-sunlight__time-row,
+.rvc-sunlight__sun-row {
+  gap: 8px;
+}
+
+.rvc-sunlight__option-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+}
+
+.rvc-sunlight__option-main .rvc-cp-checkbox {
+  flex-shrink: 0;
+}
+
+.rvc-sunlight__option-label,
+.rvc-sunlight__row-label,
+.rvc-sunlight__band-label {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.64;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-sunlight__date-input,
+.rvc-sunlight__time-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.rvc-sunlight__date-input {
+  min-width: 108px;
+  max-width: 140px;
+  height: 30px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.rvc-sunlight__time-input {
+  width: 108px;
+  height: 30px;
+  padding: 2px 8px;
+}
+
+.rvc-sunlight__native-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  margin: 0;
+  padding: 0;
+}
+
+.rvc-sunlight__slider-shell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.rvc-sunlight__slider-shell .rvc-slider {
+  width: 100%;
+}
+
+.rvc-sunlight__time-bound {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.rvc-sunlight__time-display {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  color: var(--rvc-text);
+}
+
+.rvc-sunlight__time-display-segment,
+.rvc-sunlight__time-display-colon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.rvc-sunlight__time-display-segment {
+  width: 17px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-sunlight__time-display-colon {
+  width: 6px;
+}
+
+.rvc-sunlight__sun-row {
+  margin-top: 2px;
 }
 
 .rvc-sunlight__sun-item {
   display: flex;
-  flex: 1;
+  flex: 1 1 0;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+}
+
+.rvc-sunlight__sun-icon {
+  flex-shrink: 0;
+  color: var(--rvc-text);
 }
 
 .rvc-sunlight__sun-label {
-  flex: 1;
-  color: white;
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500;
@@ -31,12 +176,152 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 6px;
-  padding: 6px 8px;
   min-width: 64px;
-  color: white;
+  max-width: 104px;
+  height: 30px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rvc-text);
   font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
+}
+
+.rvc-sunlight__toggle-row {
+  gap: 12px;
+  min-height: 30px;
+  padding: 8px 0;
+}
+
+.rvc-sunlight__toggle-row--compact {
+  padding-bottom: 0;
+}
+
+.rvc-sunlight__toggle-label {
+  all: unset;
+  display: flex;
+  align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.rvc-sunlight__toggle-text {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-sunlight__toggle-chevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--rvc-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.rvc-sunlight__toggle-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.rvc-sunlight__map-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-sunlight__row--split {
+  justify-content: space-between;
+}
+
+.rvc-sunlight__scale-select.rvc-select {
+  width: 140px;
+  min-height: 30px;
+  padding: 5px 5px 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-sunlight__bands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-sunlight__band-eye {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3.75px;
+  color: var(--rvc-text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rvc-sunlight__band-eye:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rvc-sunlight__color-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  min-height: 28px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--rvc-text);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.rvc-sunlight__color-chip:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline-offset: 2px;
+}
+
+.rvc-sunlight__color-hex {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvc-sunlight__color-chevron {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+}
+
+.rvc-sunlight__band-row.is-hidden .rvc-sunlight__band-label,
+.rvc-sunlight__band-row.is-hidden .rvc-sunlight__color-chip {
+  opacity: 0.4;
+}
+
+.rvc-sunlight__band-row.is-hidden .rvc-sunlight__band-eye {
+  opacity: 0.35;
 }

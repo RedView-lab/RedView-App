@@ -11,14 +11,16 @@
   width: 128px;
   padding: 10px;
   border-radius: 6px;
-  background: #3d3d3d;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(22, 22, 24, 0.98);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .rvc-color-palette__grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   width: 108px;
 }
 
@@ -29,6 +31,12 @@
   border-radius: 2px;
   cursor: pointer;
   box-sizing: border-box;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.rvc-color-palette__swatch:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 
 .rvc-color-palette__swatch.is-active {
