@@ -1,23 +1,43 @@
 /**
  * Live cast-shadow overlay backed by a single Mapbox `ImageSource`.
  *
- * This hook replaces the legacy per-tile raster pipeline. The previous
- * design re-fetched ~30 tiles + ran a per-tile padded sweep + PNG encode in
- * the service worker every time the user scrubbed the time slider, because
- * the tile URL embedded `?az=…&alt=…`. Even with caching that was a
- * multi-hundred-millisecond churn, with a visible flicker on the way through
- * Mapbox's tile-fade pipeline.
+ * v3 — Apr 21 2026 — stability/precision pass.
  *
- * The new model:
- *   • ONE Mapbox ImageSource covering the current viewport bounds.
- *   • A dedicated worker holds the live elevation grid.
- *   • Viewport change → `sample` the grid from the SW DEM cache (~80 ms).
- *   • Time / opacity change → `compute` only (~30 ms total in the worker, no
- *     tile fetch, no source rebuild). The result is a single PNG blob fed to
- *     `ImageSource.updateImage`.
+ * Symptom we're fixing: during a zoom (or rapid pan) the shadow briefly
+ * "jumps" to a wrong location for a few frames before settling back. Three
+ * root causes were addressed:
  *
- * Net effect: scrubbing the sun is one frame of latency on the worker plus
- * one image upload — no Mapbox tile cycling.
+ *  1. Texture-swap gap. `ImageSource.updateImage({url, coordinates})`
+ *     swaps the *coordinates* synchronously but loads the new URL async.
+ *     During that ~1–3 frame window Mapbox draws the previous texture
+ *     stretched onto the new geographic coordinates → the shadow appears
+ *     in the wrong place. Fix: pre-decode the blob via
+ *     `HTMLImageElement.decode()` BEFORE calling `updateImage`. The URL
+ *     is then in the browser's image cache, so Mapbox's internal load
+ *     resolves on the same frame as the coordinate update.
+ *
+ *  2. Race condition. Multiple `sample+compute` rounds could finish out
+ *     of order; the older result would clobber the newer one. Fix: a
+ *     monotonic generation counter; any worker ack older than the
+ *     current generation is discarded.
+ *
+ *  3. Edge starvation on pan/zoom. After a resample the image was
+ *     pinned to the exact viewport bounds, so any subsequent pan/zoom
+ *     immediately revealed shadow-less pixels at the edges. Fix: sample
+ *     with a configurable overshoot (default 15 %) so the user can pan
+ *     within that buffer without seeing a hole.
+ *
+ * Additional precision/perf work:
+ *
+ *  • Grid resolution is now adaptive to the actual map canvas size,
+ *    capped at GRID_MAX_W × GRID_MAX_H (1600 × 1200) so large monitors
+ *    get sharper shadows without blowing up worker time.
+ *  • Resample is scheduled on both `moveend` and `zoomend`; debounce
+ *    dropped from 180 ms → 80 ms (still long enough to absorb a single
+ *    moveend storm but no longer perceptible).
+ *  • Worker requests are strictly serialized: at most one inflight + one
+ *    pending. Intermediate requests collapse into the pending slot, so
+ *    a long zoom storm produces O(1) work instead of one job per event.
  */
 
 import { useEffect, useRef } from 'react';
@@ -25,9 +45,27 @@ import type { Map as MapboxMap, ImageSource } from 'mapbox-gl';
 
 const SOURCE_ID = 'shadow-image';
 const LAYER_ID = 'shadow-image';
-const SAMPLE_DEBOUNCE_MS = 180;
-const GRID_W = 1024;
-const GRID_H = 768;
+
+// Debounce after move/zoom end before triggering a resample. Short enough
+// to feel responsive, long enough to coalesce a burst of events.
+const SAMPLE_DEBOUNCE_MS = 80;
+
+// Adaptive grid bounds. Small floor so we don't waste cycles on tiny
+// viewports; large cap so Retina/4K monitors still get crisp output
+// without exploding the worker sweep cost (≈linear in W×H).
+const GRID_MIN_W = 768;
+const GRID_MIN_H = 576;
+const GRID_MAX_W = 1600;
+const GRID_MAX_H = 1200;
+
+// Geographic overshoot applied to the sampled bounds. Keeps the cast
+// shadow filling the viewport during small pans/zooms that happen
+// between resamples.
+const BOUNDS_OVERSHOOT = 0.15;
+
+// Time-to-live for revoked blob URLs after a swap. Mapbox finishes
+// uploading the new texture in well under this window.
+const BLOB_REVOKE_DELAY_MS = 1500;
 
 export interface UseShadowImageOptions {
   enabled: boolean;
@@ -97,6 +135,79 @@ function chooseDemZoom(map: MapboxMap, gridW: number): number {
   return Math.max(10, Math.min(14, Math.round(ideal)));
 }
 
+/**
+ * Compute the actual grid resolution for the current canvas, capped to
+ * the GRID_MAX_* envelope and floored at GRID_MIN_*. The aspect ratio
+ * always matches the viewport so the resampled shadow doesn't get
+ * non-uniformly stretched.
+ */
+function chooseGridSize(map: MapboxMap): { gridW: number; gridH: number } {
+  const canvas = map.getCanvas();
+  const cw = canvas.width || canvas.clientWidth || GRID_MIN_W;
+  const ch = canvas.height || canvas.clientHeight || GRID_MIN_H;
+  const aspect = cw / Math.max(1, ch);
+  let w = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, cw));
+  let h = Math.round(w / aspect);
+  if (h > GRID_MAX_H) {
+    h = GRID_MAX_H;
+    w = Math.round(h * aspect);
+  }
+  if (h < GRID_MIN_H) {
+    h = GRID_MIN_H;
+    w = Math.round(h * aspect);
+  }
+  // Final clamp so no axis ever exceeds the cap (rounding could push 1px over).
+  w = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, w));
+  h = Math.max(GRID_MIN_H, Math.min(GRID_MAX_H, h));
+  return { gridW: w, gridH: h };
+}
+
+/**
+ * Apply a symmetric geographic overshoot to a bounds tuple. Latitude is
+ * clamped to the Web Mercator usable range so the worker never receives
+ * out-of-domain coordinates.
+ */
+function withOvershoot(
+  b: [number, number, number, number],
+  factor: number,
+): [number, number, number, number] {
+  const [w, s, e, n] = b;
+  const dx = (e - w) * factor;
+  const dy = (n - s) * factor;
+  const ws = w - dx;
+  const es = e + dx;
+  const ss = Math.max(-85.05, s - dy);
+  const ns = Math.min(85.05, n + dy);
+  // Clamp longitudes to ±180 — viewports near the antimeridian are
+  // effectively unsupported by the single-source design anyway.
+  return [Math.max(-180, ws), ss, Math.min(180, es), ns];
+}
+
+/**
+ * Pre-decode a blob URL so the subsequent `ImageSource.updateImage` call
+ * sees it as already-cached and resolves on the same frame as the
+ * coordinate swap. Returns once the bitmap is ready (or immediately on
+ * any failure — the caller still proceeds; worst case we just lose the
+ * gap-elimination benefit for that one frame).
+ */
+async function preloadBlobUrl(url: string): Promise<void> {
+  try {
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = url;
+    if (img.decode) {
+      await img.decode();
+    } else {
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      });
+    }
+  } catch {
+    /* ignore — we'll just have a (very small) chance of a 1-frame swap gap */
+  }
+}
+
 export function useShadowImage(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -110,8 +221,23 @@ export function useShadowImage(
   const lastBlobUrlRef = useRef<string | null>(null);
   const sampleTimerRef = useRef<number | null>(null);
   const sampledRef = useRef(false);
+  /**
+   * Bounds last successfully sampled (with overshoot already applied).
+   * Used as the geographic anchor for the displayed image until the next
+   * resample completes.
+   */
+  const sampledBoundsRef = useRef<[number, number, number, number] | null>(null);
   // Promise resolvers keyed by request id so we can await each round-trip.
   const pendingRef = useRef(new Map<number, (a: WorkerAck) => void>());
+
+  // Generation token. Incremented on every new sample-and-compute run; any
+  // ack belonging to an older generation is dropped before it can clobber
+  // newer state.
+  const sampleGenRef = useRef(0);
+  // Strict serialization: at most one inflight resample, plus one pending
+  // slot that future requests collapse into.
+  const inflightRef = useRef(false);
+  const pendingResampleRef = useRef(false);
 
   // ── Worker lifecycle ──────────────────────────────────────────────────
   useEffect(() => {
@@ -180,6 +306,7 @@ export function useShadowImage(
       try { if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID); } catch { /* */ }
       try { if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID); } catch { /* */ }
       sampledRef.current = false;
+      sampledBoundsRef.current = null;
     };
 
     let cancelled = false;
@@ -199,22 +326,29 @@ export function useShadowImage(
       const o = optsRef.current;
       if (!o.enabled) return;
 
-      const bounds = map.getBounds();
-      if (!bounds) return;
-      const w = bounds.getWest();
-      const s = bounds.getSouth();
-      const e = bounds.getEast();
-      const n = bounds.getNorth();
-      const demZoom = chooseDemZoom(map, GRID_W);
+      // Take the next generation token. Any in-flight ack with an older
+      // token will be ignored when it returns.
+      const myGen = ++sampleGenRef.current;
+
+      const rawBounds = map.getBounds();
+      if (!rawBounds) return;
+      const sampledBounds = withOvershoot([
+        rawBounds.getWest(),
+        rawBounds.getSouth(),
+        rawBounds.getEast(),
+        rawBounds.getNorth(),
+      ], BOUNDS_OVERSHOOT);
+      const { gridW, gridH } = chooseGridSize(map);
+      const demZoom = chooseDemZoom(map, gridW);
 
       const sampleAck = await post<SampleAck | ErrAck>({
         type: 'sample',
-        bounds: [w, s, e, n],
-        gridW: GRID_W,
-        gridH: GRID_H,
+        bounds: sampledBounds,
+        gridW,
+        gridH,
         demZoom,
       });
-      if (cancelled) return;
+      if (cancelled || myGen !== sampleGenRef.current) return;
       if (sampleAck.type === 'error') {
         console.warn('[shadow] sample failed', sampleAck.message);
         return;
@@ -225,17 +359,26 @@ export function useShadowImage(
         return;
       }
       if (sampleAck.filled === 0) {
-        console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: [w, s, e, n] });
+        console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: sampledBounds });
         removeSourceAndLayer();
         return;
       }
-      console.log('[shadow] sample ok', { filled: sampleAck.filled, total: sampleAck.total, demZoom });
       sampledRef.current = true;
-      await runComputeAndApply([w, s, e, n]);
+      sampledBoundsRef.current = sampledBounds;
+      await runComputeAndApply(sampledBounds, myGen);
     };
 
-    const runComputeAndApply = async (b: [number, number, number, number]) => {
+    /**
+     * Compute the shadow for the current sun and push the result into the
+     * single ImageSource. The `gen` token is checked at every async
+     * boundary so a stale path can never clobber a fresher one.
+     */
+    const runComputeAndApply = async (
+      b: [number, number, number, number],
+      gen: number,
+    ) => {
       if (cancelled || !sampledRef.current) return;
+      if (gen !== sampleGenRef.current) return;
       const o = optsRef.current;
       if (!o.enabled) return;
       const visibility = shadowVisibility(o.sunAltitudeDeg);
@@ -257,11 +400,10 @@ export function useShadowImage(
         nightFloor: veil,
       });
       if (cancelled) return;
-      if (ack.type !== 'compute-ok') {
-        console.warn('[shadow] compute returned', ack.type);
-        return;
-      }
-      console.log('[shadow] compute ok', { blobSize: ack.blob.size, az: o.sunAzimuthDeg.toFixed(1), alt: o.sunAltitudeDeg.toFixed(1) });
+      // Compute-only paths (sun/opacity tweaks) re-use the current
+      // generation; only drop if a newer SAMPLE has bumped it past us.
+      if (gen !== sampleGenRef.current) return;
+      if (ack.type !== 'compute-ok') return;
 
       const url = URL.createObjectURL(ack.blob);
       const coords: [[number, number], [number, number], [number, number], [number, number]] = [
@@ -270,6 +412,16 @@ export function useShadowImage(
         [b[2], b[1]],
         [b[0], b[1]],
       ];
+
+      // Pre-decode the blob so the subsequent updateImage swap is
+      // single-frame (eliminates the "wrong place for a few frames"
+      // flicker during zoom).
+      await preloadBlobUrl(url);
+      if (cancelled || gen !== sampleGenRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
       ensureSourceAndLayer(url, coords);
       const src = map.getSource(SOURCE_ID) as ImageSource | undefined;
       if (src) {
@@ -287,8 +439,30 @@ export function useShadowImage(
       const prev = lastBlobUrlRef.current;
       lastBlobUrlRef.current = url;
       if (prev) {
-        setTimeout(() => URL.revokeObjectURL(prev), 1500);
+        setTimeout(() => URL.revokeObjectURL(prev), BLOB_REVOKE_DELAY_MS);
       }
+    };
+
+    /**
+     * Strict serialization: only one resample runs at a time. Concurrent
+     * requests collapse into a single pending slot so a long zoom storm
+     * costs O(1) work instead of one job per event.
+     */
+    const requestResample = () => {
+      if (inflightRef.current) {
+        pendingResampleRef.current = true;
+        return;
+      }
+      inflightRef.current = true;
+      runSampleAndCompute()
+        .catch((err) => console.warn('[shadow] resample error', err))
+        .finally(() => {
+          inflightRef.current = false;
+          if (pendingResampleRef.current && !cancelled && optsRef.current.enabled) {
+            pendingResampleRef.current = false;
+            requestResample();
+          }
+        });
     };
 
     // Schedule a (debounced) full resample after the user stops moving.
@@ -298,7 +472,7 @@ export function useShadowImage(
       }
       sampleTimerRef.current = (setTimeout(() => {
         sampleTimerRef.current = null;
-        runSampleAndCompute();
+        requestResample();
       }, SAMPLE_DEBOUNCE_MS) as unknown) as number;
     };
 
@@ -311,34 +485,37 @@ export function useShadowImage(
     scheduleSample();
 
     const onMoveEnd = () => scheduleSample();
+    const onZoomEnd = () => scheduleSample();
     const onStyleLoad = () => {
       sampledRef.current = false;
+      sampledBoundsRef.current = null;
       scheduleSample();
     };
     map.on('moveend', onMoveEnd);
+    map.on('zoomend', onZoomEnd);
     map.on('style.load', onStyleLoad);
 
     // Compute-only updater for sun/opacity changes.
     (map as unknown as { __shadowImageRecompute?: () => void }).__shadowImageRecompute = () => {
-      if (!sampledRef.current) {
+      if (!sampledRef.current || !sampledBoundsRef.current) {
         scheduleSample();
         return;
       }
-      const bounds = map.getBounds();
-      if (!bounds) return;
-      runComputeAndApply([
-        bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth(),
-      ]);
+      // Compute-only path — re-uses the current generation so the
+      // race-cancel guards still catch a SAMPLE that lands afterwards.
+      runComputeAndApply(sampledBoundsRef.current, sampleGenRef.current).catch(() => { /* */ });
     };
 
     return () => {
       cancelled = true;
       map.off('moveend', onMoveEnd);
+      map.off('zoomend', onZoomEnd);
       map.off('style.load', onStyleLoad);
       if (sampleTimerRef.current !== null) {
         clearTimeout(sampleTimerRef.current);
         sampleTimerRef.current = null;
       }
+      pendingResampleRef.current = false;
       delete (map as unknown as { __shadowImageRecompute?: () => void }).__shadowImageRecompute;
       removeSourceAndLayer();
     };
