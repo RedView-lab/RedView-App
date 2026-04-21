@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Slider } from '../components/Slider';
@@ -24,20 +24,72 @@ function formatDateShort(iso: string): string {
 
 export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
+  const [isScrubbingTime, setIsScrubbingTime] = useState(false);
   const calendarAnchorRef = useRef<HTMLDivElement>(null);
+  const previewTimerRef = useRef<number | null>(null);
+  const previewMinutesRef = useRef<number | null>(null);
 
-  const getMinutes = (timeStr: string) => {
-    const [h, m] = timeStr.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
+  useEffect(() => {
+    if (!isScrubbingTime) {
+      setTimeDraftMinutes(getMinutesFromTime(state.time));
+    }
+  }, [isScrubbingTime, state.time]);
+
+  useEffect(() => () => {
+    if (previewTimerRef.current !== null) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+  }, []);
+
+  function getMinutesFromTime(timeStr: string) {
+    const [hh, mm] = timeStr.split(':').map(Number);
+    return (hh || 0) * 60 + (mm || 0);
+  }
+
+  const formatMinutes = (val: number) => {
+    const h = Math.floor(val / 60).toString().padStart(2, '0');
+    const m = (val % 60).toString().padStart(2, '0');
+    return `${h}:${m}`;
+  };
+
+  const flushTimePreview = (minutes: number) => {
+    previewMinutesRef.current = minutes;
+    startTransition(() => {
+      onChange?.({ time: formatMinutes(minutes) });
+    });
+  };
+
+  const scheduleTimePreview = (minutes: number) => {
+    previewMinutesRef.current = minutes;
+    if (previewTimerRef.current !== null) return;
+    previewTimerRef.current = window.setTimeout(() => {
+      previewTimerRef.current = null;
+      const latestMinutes = previewMinutesRef.current;
+      if (latestMinutes === null) return;
+      flushTimePreview(latestMinutes);
+    }, 70);
   };
 
   const handleTimeSliderChange = (val: number) => {
-    const h = Math.floor(val / 60).toString().padStart(2, '0');
-    const m = (val % 60).toString().padStart(2, '0');
-    onChange?.({ time: `${h}:${m}` });
+    setIsScrubbingTime(true);
+    setTimeDraftMinutes(val);
+    scheduleTimePreview(val);
   };
 
-  const timeParts = (state.time || '00:00').split(':');
+  const handleTimeSliderCommit = (val: number) => {
+    if (previewTimerRef.current !== null) {
+      clearTimeout(previewTimerRef.current);
+      previewTimerRef.current = null;
+    }
+    setIsScrubbingTime(false);
+    setTimeDraftMinutes(val);
+    flushTimePreview(val);
+  };
+
+  const displayTime = isScrubbingTime ? formatMinutes(timeDraftMinutes) : (state.time || '00:00');
+  const timeParts = displayTime.split(':');
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
 
@@ -85,8 +137,9 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
           <Slider
             min={0}
             max={1439}
-            value={getMinutes(state.time)}
+            value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(state.time)}
             onChange={handleTimeSliderChange}
+            onCommit={handleTimeSliderCommit}
             width="100%"
           />
         </div>
@@ -100,8 +153,13 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
           </div>
           <input
             type="time"
-            value={state.time}
-            onChange={(e) => onChange?.({ time: e.target.value })}
+            value={displayTime}
+            onChange={(e) => {
+              const nextMinutes = getMinutesFromTime(e.target.value);
+              setIsScrubbingTime(false);
+              setTimeDraftMinutes(nextMinutes);
+              flushTimePreview(nextMinutes);
+            }}
             className="rvc-weather__native-input"
           />
         </div>

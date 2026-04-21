@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import type { FogSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
@@ -80,36 +80,67 @@ export function useSunlight(
   // Stable refs so the moveend listener always sees the latest values without
   // re-subscribing on every render.
   const optsRef = useRef(opts);
-  optsRef.current = opts;
+  useEffect(() => {
+    optsRef.current = opts;
+  }, [opts]);
 
   const dateTime = useMemo(() => {
     const dt = new Date(`${opts.date}T${opts.time}:00`);
     return Number.isNaN(dt.getTime()) ? null : dt;
   }, [opts.date, opts.time]);
 
-  // Recompute sunrise/sunset whenever inputs change or the user pans the map.
+  // Recompute sunrise/sunset only when the date or map center changes.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
-    const apply = () => {
+    const applyTimes = () => {
       const center = map.getCenter();
       const lat = center.lat;
       const lon = center.lng;
       const noon = new Date(`${optsRef.current.date}T12:00:00`);
       if (!Number.isNaN(noon.getTime())) {
         const { sunrise, sunset } = getSunTimes(noon, lat, lon);
-        setTimes({
-          sunriseTime: formatHHmm(sunrise),
-          sunsetTime: formatHHmm(sunset),
-        });
+        const nextSunrise = formatHHmm(sunrise);
+        const nextSunset = formatHHmm(sunset);
+        setTimes((prev) => (
+          prev.sunriseTime === nextSunrise && prev.sunsetTime === nextSunset
+            ? prev
+            : { sunriseTime: nextSunrise, sunsetTime: nextSunset }
+        ));
       }
+    };
+
+    applyTimes();
+    map.on('moveend', applyTimes);
+    return () => {
+      map.off('moveend', applyTimes);
+    };
+  }, [map, isMapLoaded, opts.date]);
+
+  // Update sun position + sky on time scrubs and center changes.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    let frameId: number | null = null;
+
+    const applySunPosition = () => {
+      frameId = null;
+      const center = map.getCenter();
+      const lat = center.lat;
+      const lon = center.lng;
 
       if (!optsRef.current.enabled) return;
       const dt = new Date(`${optsRef.current.date}T${optsRef.current.time}:00`);
       if (Number.isNaN(dt.getTime())) return;
 
       const { azimuth, altitude } = getSunPosition(dt, lat, lon);
-      setSunPos({ azimuthDeg: azimuth, altitudeDeg: altitude });
+      startTransition(() => {
+        setSunPos((prev) => (
+          Math.abs(prev.azimuthDeg - azimuth) < 0.01 && Math.abs(prev.altitudeDeg - altitude) < 0.01
+            ? prev
+            : { azimuthDeg: azimuth, altitudeDeg: altitude }
+        ));
+      });
 
       try {
         map.setFog(buildSkyOnlyFog(altitude));
@@ -118,10 +149,20 @@ export function useSunlight(
       }
     };
 
-    apply();
-    map.on('moveend', apply);
+    const scheduleApply = () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      frameId = requestAnimationFrame(applySunPosition);
+    };
+
+    scheduleApply();
+    map.on('moveend', scheduleApply);
     return () => {
-      map.off('moveend', apply);
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+      map.off('moveend', scheduleApply);
     };
   }, [map, isMapLoaded, opts.enabled, dateTime]);
 

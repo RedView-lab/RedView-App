@@ -67,6 +67,7 @@ const GRID_MAX_H = 1200;
 // shadow filling the viewport during small pans/zooms that happen
 // between resamples.
 const BOUNDS_OVERSHOOT = 0.15;
+const SUN_RECOMPUTE_DEBOUNCE_MS = 48;
 
 // Time-to-live for revoked blob URLs after a swap. Mapbox finishes
 // uploading the new texture in well under this window.
@@ -232,6 +233,7 @@ export function useShadowImage(
   const reqIdRef = useRef(0);
   const lastBlobUrlRef = useRef<string | null>(null);
   const sampleTimerRef = useRef<number | null>(null);
+  const sunRecomputeTimerRef = useRef<number | null>(null);
   const sampledRef = useRef(false);
   /**
    * Bounds last successfully sampled (with overshoot already applied).
@@ -280,6 +282,10 @@ export function useShadowImage(
       if (lastBlobUrlRef.current) {
         URL.revokeObjectURL(lastBlobUrlRef.current);
         lastBlobUrlRef.current = null;
+      }
+      if (sunRecomputeTimerRef.current !== null) {
+        clearTimeout(sunRecomputeTimerRef.current);
+        sunRecomputeTimerRef.current = null;
       }
     };
   }, []);
@@ -574,6 +580,10 @@ export function useShadowImage(
         clearTimeout(sampleTimerRef.current);
         sampleTimerRef.current = null;
       }
+      if (sunRecomputeTimerRef.current !== null) {
+        clearTimeout(sunRecomputeTimerRef.current);
+        sunRecomputeTimerRef.current = null;
+      }
       inflightRef.current = false;
       pendingResampleRef.current = false;
       computeInflightRef.current = false;
@@ -611,6 +621,19 @@ export function useShadowImage(
   // Sun/time changes reuse the sampled grid and coalesce to the latest state.
   useEffect(() => {
     if (!map || !isMapLoaded || !opts.enabled) return;
-    recomputeRef.current?.();
+    if (sunRecomputeTimerRef.current !== null) {
+      clearTimeout(sunRecomputeTimerRef.current);
+    }
+    sunRecomputeTimerRef.current = window.setTimeout(() => {
+      sunRecomputeTimerRef.current = null;
+      recomputeRef.current?.();
+    }, SUN_RECOMPUTE_DEBOUNCE_MS);
+
+    return () => {
+      if (sunRecomputeTimerRef.current !== null) {
+        clearTimeout(sunRecomputeTimerRef.current);
+        sunRecomputeTimerRef.current = null;
+      }
+    };
   }, [map, isMapLoaded, opts.sunAzimuthDeg, opts.sunAltitudeDeg]);
 }
