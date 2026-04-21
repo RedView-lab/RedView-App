@@ -12,6 +12,7 @@ interface SelectProps<T extends string = string> {
   options: SelectOption<T>[];
   onChange?: (value: T) => void;
   width?: number | string;
+  className?: string;
   /** Rendered on the left side of the value, e.g. a color swatch. */
   startAdornment?: ReactNode;
   /** Optional class variant. */
@@ -24,6 +25,7 @@ export function Select<T extends string = string>({
   options,
   onChange,
   width,
+  className,
   startAdornment,
   variant = 'default',
 }: SelectProps<T>) {
@@ -89,7 +91,7 @@ export function Select<T extends string = string>({
     <>
       <div
         ref={ref}
-        className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}`}
+        className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}
         style={width !== undefined ? { width } : undefined}
         onClick={() => setOpen((v) => !v)}
       >

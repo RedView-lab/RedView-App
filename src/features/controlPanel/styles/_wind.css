@@ -1,0 +1,233 @@
+/* Wind section — Figma node 1922:45821 */
+
+.rvc-wind {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-wind[data-disabled='true'] {
+  opacity: 0.72;
+}
+
+.rvc-wind__slider-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto 108px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-wind__slider-row .rvc-slider {
+  width: 100%;
+  min-width: 0;
+}
+
+.rvc-wind__bound {
+  color: var(--rvc-text);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.rvc-wind__picker-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 108px;
+  max-width: 140px;
+  min-height: 30px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--rvc-bg-chip);
+  color: var(--rvc-text);
+  overflow: hidden;
+}
+
+.rvc-wind__picker-chip--time {
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
+
+.rvc-wind__picker-icon {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+}
+
+.rvc-wind__picker-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.rvc-wind__picker-input,
+.rvc-wind__color-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.rvc-wind__time-display {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.rvc-wind__time-segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 100%;
+  padding: 0 1px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-wind__time-colon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+}
+
+.rvc-wind__field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 30px;
+}
+
+.rvc-wind__field-label {
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: normal;
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-wind__field-label--semibold {
+  font-weight: 600;
+}
+
+.rvc-wind__select {
+  min-height: 30px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.rvc-wind__select--outlined {
+  padding-left: 10px;
+  padding-right: 6px;
+  border: 1px solid var(--rvc-border);
+  border-radius: 5px;
+  background: transparent;
+}
+
+.rvc-wind__select--solid {
+  gap: 8px;
+  padding-left: 8px;
+  padding-right: 5px;
+  border-radius: 6px;
+  background: var(--rvc-bg-chip);
+}
+
+.rvc-wind__bands {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-wind__band-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 140px;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-wind__band-row[data-disabled='true'] {
+  opacity: 0.68;
+}
+
+.rvc-wind__band-row .rvc-icon-btn {
+  width: 20px;
+  height: 20px;
+  padding: 3.75px;
+  border-radius: 3.75px;
+}
+
+.rvc-wind__band-eye {
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.rvc-wind__band-threshold {
+  min-width: 0;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+  opacity: 0.64;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-wind__color-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 140px;
+  min-height: 30px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--rvc-border);
+  border-radius: 5px;
+  color: var(--rvc-text);
+  cursor: pointer;
+}
+
+.rvc-wind__color-swatch {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.rvc-wind__color-value {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.rvc-wind__color-chevron {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+}
