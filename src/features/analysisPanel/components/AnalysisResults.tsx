@@ -61,8 +61,8 @@ const DEFAULT_DAY_WINDOWS: AnalysisDayWindow[] = [
 /** Target spacing (px) between successive major ticks on each axis. */
 const X_MAJOR_TARGET_PX = 80;
 const X_MINOR_TARGET_PX = 32;
-const Y_MAJOR_TARGET_PX = 40;
-const Y_MINOR_TARGET_PX = 18;
+const Y_MAJOR_TARGET_PX = 26;
+const Y_MINOR_TARGET_PX = 14;
 /** Width of the left-hand label gutter (must match grid label column). */
 const LABEL_GUTTER_PX = 95;
 
@@ -80,7 +80,14 @@ export function AnalysisResults({
   yDomain = DEFAULT_Y_DOMAIN,
 }: AnalysisResultsProps) {
   const plotSeries = series.filter((entry) => entry.points.length > 1);
-  const hoverLeftPercent = cursor ? clamp(cursor.xPercent, 24, 76) : 50;
+  const cursorPercent = cursor ? clamp(cursor.xPercent, 0, 100) : 50;
+  // Anchor the tooltip directly to the cursor line: place its left edge a few
+  // px to the right of the line; flip to the other side once we're past the
+  // midpoint so it stays on screen and "collé" to the trait blanc.
+  const hoverFlip = cursorPercent > 50;
+  const hoverTransform = hoverFlip
+    ? 'translateX(calc(-100% - 6px))'
+    : 'translateX(6px)';
 
   const gridRef = useRef<HTMLDivElement>(null);
   const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
@@ -230,7 +237,7 @@ export function AnalysisResults({
             {cursor && cursor.summaries.length > 0 ? (
               <div
                 className="absolute backdrop-blur-[60px] bg-[rgba(255,255,255,0.04)] content-stretch flex gap-[8px] items-start px-[4px] py-[8px] top-[24px]"
-                style={{ left: `${hoverLeftPercent}%`, transform: 'translateX(-50%)' }}
+                style={{ left: `${cursorPercent}%`, transform: hoverTransform }}
               >
                 {cursor.summaries.map((summary, index) => (
                   <HoverSummaryCard key={summary.seriesId} summary={summary} showDivider={index > 0} />
