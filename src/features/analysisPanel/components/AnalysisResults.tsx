@@ -1,6 +1,6 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { imgPlusCircle, imgIcon5, imgIcon6, imgIcon7 } from './assets';
-import { AnalysisResultsGrid } from './AnalysisResultsGrid';
+import { AnalysisResultsGrid, type GridColumn } from './AnalysisResultsGrid';
 
 export interface AnalysisChartPoint {
   x: number;
@@ -41,14 +41,28 @@ interface AnalysisResultsProps {
   series?: AnalysisChartSeries[];
   dayWindows?: AnalysisDayWindow[];
   cursor?: AnalysisCursor | null;
+  /** Optional explicit X tick values (km). Disables auto-scaling when provided. */
   xAxisTicks?: number[];
+  /** X axis numeric domain (km). */
+  xDomain?: { min: number; max: number };
+  /** Y axis numeric domain (m). */
+  yDomain?: { min: number; max: number };
 }
 
-const DEFAULT_X_AXIS_TICKS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const DEFAULT_X_DOMAIN = { min: 0, max: 100 };
+const DEFAULT_Y_DOMAIN = { min: 0, max: 3000 };
 const DEFAULT_DAY_WINDOWS: AnalysisDayWindow[] = [
   { id: 'day-1', startPercent: 5.8, endPercent: 27.6 },
   { id: 'day-2', startPercent: 60.6, endPercent: 78.9 },
 ];
+
+/** Target spacing (px) between successive major ticks on each axis. */
+const X_MAJOR_TARGET_PX = 80;
+const X_MINOR_TARGET_PX = 32;
+const Y_MAJOR_TARGET_PX = 40;
+const Y_MINOR_TARGET_PX = 18;
+/** Width of the left-hand label gutter (must match grid label column). */
+const LABEL_GUTTER_PX = 95;
 
 const PLOT_Y_MIN = 0;
 const PLOT_Y_MAX = 3000;
@@ -58,10 +72,60 @@ export function AnalysisResults({
   series = [],
   dayWindows = DEFAULT_DAY_WINDOWS,
   cursor = null,
-  xAxisTicks = DEFAULT_X_AXIS_TICKS,
+  xAxisTicks,
+  xDomain = DEFAULT_X_DOMAIN,
+  yDomain = DEFAULT_Y_DOMAIN,
 }: AnalysisResultsProps) {
   const plotSeries = series.filter((entry) => entry.points.length > 1);
   const hoverLeftPercent = cursor ? clamp(cursor.xPercent, 24, 76) : 50;
+
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [gridSize, setGridSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const node = gridRef.current;
+    if (!node) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      setGridSize((prev) => {
+        if (Math.abs(prev.width - cr.width) < 0.5 && Math.abs(prev.height - cr.height) < 0.5) {
+          return prev;
+        }
+        return { width: cr.width, height: cr.height };
+      });
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, []);
+
+  const usableWidth = Math.max(0, gridSize.width - LABEL_GUTTER_PX);
+
+  const xMajorTicks = useMemo(() => {
+    if (xAxisTicks && xAxisTicks.length > 0) {
+      return [...xAxisTicks].sort((a, b) => a - b);
+    }
+    if (usableWidth <= 0) return buildNiceTicks(xDomain.min, xDomain.max, 4);
+    const targetCount = Math.max(2, Math.round(usableWidth / X_MAJOR_TARGET_PX));
+    return buildNiceTicks(xDomain.min, xDomain.max, targetCount);
+  }, [xAxisTicks, usableWidth, xDomain.min, xDomain.max]);
+
+  const xColumns = useMemo(
+    () => buildXColumns(xMajorTicks, usableWidth),
+    [xMajorTicks, usableWidth],
+  );
+
+  const yMajorTicks = useMemo(() => {
+    const h = gridSize.height;
+    if (h <= 0) return buildNiceTicks(yDomain.min, yDomain.max, 4).slice().reverse();
+    const targetCount = Math.max(2, Math.round(h / Y_MAJOR_TARGET_PX));
+    return buildNiceTicks(yDomain.min, yDomain.max, targetCount).slice().reverse();
+  }, [gridSize.height, yDomain.min, yDomain.max]);
+
+  const plotRows = useMemo(
+    () => buildPlotRows(yMajorTicks, gridSize.height),
+    [yMajorTicks, gridSize.height],
+  );
 
   return (
     <div
@@ -154,14 +218,14 @@ export function AnalysisResults({
         ) : null}
       </div>
 
-      <AnalysisResultsGrid columnCount={xAxisTicks.length} />
-      <AxisRow ticks={xAxisTicks} />
-      <AddLineRow columnCount={xAxisTicks.length} />
+      <AnalysisResultsGrid ref={gridRef} columns={xColumns} plotRows={plotRows} />
+      <AxisRow columns={xColumns} />
+      <AddLineRow columns={xColumns} />
     </div>
   );
 }
 
-function AxisRow({ ticks }: { ticks: number[] }) {
+function AxisRow({ columns }: { columns: GridColumn[] }) {
   return (
     <div
       className="border-[rgba(255,255,255,0.8)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] gap-[4px] items-center max-h-[24px] min-h-[16px] relative w-full"
@@ -178,19 +242,25 @@ function AxisRow({ ticks }: { ticks: number[] }) {
         </div>
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative" data-node-id="1894:39038">
-        {ticks.map((tick, index) => (
+        {columns.map((col, index) => (
           <div
-            key={tick}
-            className={index === 0
-              ? "border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] py-[2px] relative"
-              : "border-[rgba(255,255,255,0.24)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] py-[2px] relative"}
+            key={`${index}-${col.value}`}
+            className={
+              index === 0
+                ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px py-[2px] relative'
+                : col.major
+                  ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px py-[2px] relative'
+                  : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px py-[2px] relative'
+            }
           >
-            <div
-              className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-ellipsis text-white w-[40px] whitespace-nowrap"
-              style={FONT_OPSZ_STYLE}
-            >
-              <p className="leading-[normal] overflow-hidden text-ellipsis">{tick}</p>
-            </div>
+            {col.major && col.label ? (
+              <div
+                className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-ellipsis text-white whitespace-nowrap pl-[4px]"
+                style={FONT_OPSZ_STYLE}
+              >
+                <p className="leading-[normal] overflow-hidden text-ellipsis">{col.label}</p>
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
@@ -198,7 +268,7 @@ function AxisRow({ ticks }: { ticks: number[] }) {
   );
 }
 
-function AddLineRow({ columnCount }: { columnCount: number }) {
+function AddLineRow({ columns }: { columns: GridColumn[] }) {
   return (
     <div
       className="border-[rgba(255,255,255,0.08)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] gap-[4px] items-center max-h-[28px] min-h-[24px] relative w-full"
@@ -221,20 +291,17 @@ function AddLineRow({ columnCount }: { columnCount: number }) {
         </div>
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative" data-node-id="1894:39070">
-        {Array.from({ length: columnCount }).map((_, index) => (
+        {columns.map((col, index) => (
           <div
-            key={index}
-            className={index === 0
-              ? "border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative"
-              : "border-[rgba(255,255,255,0.24)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative"}
-          >
-            <div
-              className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap"
-              style={FONT_OPSZ_STYLE}
-            >
-              <p className="leading-[normal] overflow-hidden text-ellipsis"> </p>
-            </div>
-          </div>
+            key={`${index}-${col.value}`}
+            className={
+              index === 0
+                ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+                : col.major
+                  ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+                  : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+            }
+          />
         ))}
       </div>
     </div>
@@ -321,4 +388,93 @@ function clamp(value: number, min: number, max: number): number {
 
 function formatPathNumber(value: number): string {
   return value.toFixed(3).replace(/\.0+$|(?<=\.\d*[1-9])0+$/u, '');
+}
+
+/**
+ * Compute a "nice" step (1, 2, 2.5, 5 or 10) × 10ⁿ for the given range and
+ * desired number of intervals. Returns at least two ticks aligned on the step.
+ */
+function buildNiceTicks(min: number, max: number, targetCount: number): number[] {
+  const range = Math.max(1e-9, max - min);
+  const desired = Math.max(2, targetCount);
+  const rough = range / desired;
+  const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / pow10;
+  let nice: number;
+  if (norm < 1.5) nice = 1;
+  else if (norm < 3) nice = 2;
+  else if (norm < 4) nice = 2.5;
+  else if (norm < 7) nice = 5;
+  else nice = 10;
+  const step = nice * pow10;
+  const start = Math.ceil(min / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v <= max + step * 1e-6; v += step) {
+    const rounded = Math.round(v / step) * step;
+    ticks.push(Number(rounded.toFixed(10)));
+  }
+  if (ticks.length === 0 || ticks[0] > min + step * 1e-6) ticks.unshift(min);
+  if (ticks[ticks.length - 1] < max - step * 1e-6) ticks.push(max);
+  // Deduplicate while preserving order.
+  const seen = new Set<number>();
+  return ticks.filter((v) => {
+    if (seen.has(v)) return false;
+    seen.add(v);
+    return true;
+  });
+}
+
+/**
+ * Build the X axis column descriptors. Inserts evenly spaced minor columns
+ * between consecutive majors when the available width allows it.
+ */
+function buildXColumns(majors: number[], usableWidth: number): GridColumn[] {
+  if (majors.length === 0) return [];
+  if (majors.length === 1) {
+    return [{ value: majors[0], major: true, label: formatTickLabel(majors[0]) }];
+  }
+  const intervalPx = usableWidth > 0 ? usableWidth / (majors.length - 1) : 0;
+  const minorPerInterval =
+    intervalPx > 0 ? Math.max(0, Math.floor(intervalPx / X_MINOR_TARGET_PX) - 1) : 0;
+  const cols: GridColumn[] = [];
+  for (let i = 0; i < majors.length - 1; i++) {
+    cols.push({ value: majors[i], major: true, label: formatTickLabel(majors[i]) });
+    if (minorPerInterval > 0) {
+      const segment = (majors[i + 1] - majors[i]) / (minorPerInterval + 1);
+      for (let m = 1; m <= minorPerInterval; m++) {
+        cols.push({ value: majors[i] + segment * m, major: false });
+      }
+    }
+  }
+  const last = majors[majors.length - 1];
+  cols.push({ value: last, major: true, label: formatTickLabel(last) });
+  return cols;
+}
+
+/**
+ * Build the Y plot rows. Majors come from {@link buildNiceTicks} sorted
+ * descending; minors are inserted as `null` rows when vertical space allows.
+ * Mirrors the original spacing: an optional leading minor pushes the top
+ * label slightly below the chart edge for readability.
+ */
+function buildPlotRows(majorsDescending: number[], usableHeight: number): Array<number | null> {
+  if (majorsDescending.length === 0) return [null];
+  const N = majorsDescending.length;
+  const intervalPx = N > 1 && usableHeight > 0 ? usableHeight / (N - 1) : usableHeight;
+  const minorPerInterval =
+    intervalPx > 0 ? Math.max(0, Math.floor(intervalPx / Y_MINOR_TARGET_PX) - 1) : 0;
+  const rows: Array<number | null> = [];
+  if (minorPerInterval >= 1 && usableHeight > 48) rows.push(null);
+  for (let i = 0; i < N; i++) {
+    rows.push(majorsDescending[i]);
+    if (i < N - 1) {
+      for (let m = 0; m < minorPerInterval; m++) rows.push(null);
+    }
+  }
+  return rows;
+}
+
+function formatTickLabel(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return Number(value.toFixed(2)).toString();
 }
