@@ -31,7 +31,7 @@
   overflow: hidden;
   color: var(--rvc-center-text);
   font-size: clamp(11px, 1.05cqi, 13px);
-  font-weight: 600;
+  font-weight: 400;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -65,7 +65,7 @@
   overflow: hidden;
   color: var(--rvc-center-text);
   font-size: clamp(11px, 1.08cqi, 14px);
-  font-weight: 600;
+  font-weight: 400;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -83,7 +83,7 @@
   overflow: hidden;
   color: var(--rvc-center-text);
   font-size: clamp(10px, 1.08cqi, 14px);
-  font-weight: 500;
+  font-weight: 400;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;

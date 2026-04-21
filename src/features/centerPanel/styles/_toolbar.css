@@ -43,7 +43,7 @@
   gap: 6px;
   flex: 0 0 auto;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1;
 }
 
@@ -97,7 +97,7 @@
   flex-direction: column;
   gap: 2px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.2;
 }
 
