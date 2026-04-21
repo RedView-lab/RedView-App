@@ -1,7 +1,7 @@
 /**
  * Live cast-shadow overlay backed by a single Mapbox `ImageSource`.
  *
- * v3 — Apr 21 2026 — stability/precision pass.
+ * v4 — Apr 21 2026 — responsiveness/stability pass.
  *
  * Symptom we're fixing: during a zoom (or rapid pan) the shadow briefly
  * "jumps" to a wrong location for a few frames before settling back. Three
@@ -38,6 +38,11 @@
  *  • Worker requests are strictly serialized: at most one inflight + one
  *    pending. Intermediate requests collapse into the pending slot, so
  *    a long zoom storm produces O(1) work instead of one job per event.
+ *  • User opacity no longer triggers worker compute. The worker now renders
+ *    geometry-only shadow content while the final intensity is applied via
+ *    the raster layer's `raster-opacity`, making slider drags instant.
+ *  • Toggle-off now hides the layer without discarding the sampled DEM grid,
+ *    so a rapid re-enable can reuse warm state instead of restarting cold.
  */
 
 import { useEffect, useRef } from 'react';
@@ -81,6 +86,13 @@ interface ComputeEmpty { id: number; type: 'compute-empty' }
 interface ResetAck { id: number; type: 'reset-ok' }
 interface ErrAck { id: number; type: 'error'; message: string }
 type WorkerAck = SampleAck | ComputeAck | ComputeEmpty | ResetAck | ErrAck;
+type BoundsTuple = [number, number, number, number];
+
+interface ComputeJob {
+  bounds: BoundsTuple;
+  sampleGen: number;
+  computeSeq: number;
+}
 
 /**
  * Cast-shadow visibility curve.
@@ -168,9 +180,9 @@ function chooseGridSize(map: MapboxMap): { gridW: number; gridH: number } {
  * out-of-domain coordinates.
  */
 function withOvershoot(
-  b: [number, number, number, number],
+  b: BoundsTuple,
   factor: number,
-): [number, number, number, number] {
+): BoundsTuple {
   const [w, s, e, n] = b;
   const dx = (e - w) * factor;
   const dy = (n - s) * factor;
@@ -226,7 +238,7 @@ export function useShadowImage(
    * Used as the geographic anchor for the displayed image until the next
    * resample completes.
    */
-  const sampledBoundsRef = useRef<[number, number, number, number] | null>(null);
+  const sampledBoundsRef = useRef<BoundsTuple | null>(null);
   // Promise resolvers keyed by request id so we can await each round-trip.
   const pendingRef = useRef(new Map<number, (a: WorkerAck) => void>());
 
@@ -238,6 +250,14 @@ export function useShadowImage(
   // slot that future requests collapse into.
   const inflightRef = useRef(false);
   const pendingResampleRef = useRef(false);
+  // Compute-only updates are also latest-wins: one inflight worker compute,
+  // plus one pending slot overwritten by the newest sun/time state.
+  const computeSeqRef = useRef(0);
+  const computeInflightRef = useRef(false);
+  const pendingComputeRef = useRef<ComputeJob | null>(null);
+  const scheduleSampleRef = useRef<(() => void) | null>(null);
+  const recomputeRef = useRef<(() => void) | null>(null);
+  const setLayerOpacityRef = useRef<((opacity: number) => void) | null>(null);
 
   // ── Worker lifecycle ──────────────────────────────────────────────────
   useEffect(() => {
@@ -264,9 +284,23 @@ export function useShadowImage(
     };
   }, []);
 
-  // ── Source / layer ensure & teardown ──────────────────────────────────
+  // ── Source / layer ensure, resample, compute and visibility ───────────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
+
+    const setLayerOpacity = (opacity: number) => {
+      if (!map.getLayer(LAYER_ID)) return;
+      try {
+        map.setPaintProperty(LAYER_ID, 'raster-opacity', Math.max(0, Math.min(1, opacity)));
+      } catch {
+        /* no-op */
+      }
+    };
+
+    const applyVisibleOpacity = () => {
+      const o = optsRef.current;
+      setLayerOpacity(o.enabled ? o.opacity : 0);
+    };
 
     const ensureSourceAndLayer = (initialBlobUrl: string, coords: [[number, number], [number, number], [number, number], [number, number]]) => {
       if (!map.getSource(SOURCE_ID)) {
@@ -291,7 +325,7 @@ export function useShadowImage(
             // lands under the satellite imagery and stays invisible.
             slot: 'top',
             paint: {
-              'raster-opacity': 1,
+              'raster-opacity': optsRef.current.enabled ? optsRef.current.opacity : 0,
               'raster-fade-duration': 0,
               'raster-resampling': 'linear',
             },
@@ -302,14 +336,19 @@ export function useShadowImage(
       }
     };
 
-    const removeSourceAndLayer = () => {
+    const removeSourceAndLayer = (clearSample: boolean) => {
       try { if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID); } catch { /* */ }
       try { if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID); } catch { /* */ }
-      sampledRef.current = false;
-      sampledBoundsRef.current = null;
+      if (clearSample) {
+        sampledRef.current = false;
+        sampledBoundsRef.current = null;
+        computeSeqRef.current++;
+        pendingComputeRef.current = null;
+      }
     };
 
     let cancelled = false;
+    setLayerOpacityRef.current = setLayerOpacity;
 
     const post = <T extends WorkerAck>(msg: object): Promise<T> => {
       const w = workerRef.current;
@@ -321,13 +360,107 @@ export function useShadowImage(
       });
     };
 
+    const runComputeAndApply = async (job: ComputeJob) => {
+      if (cancelled || !sampledRef.current) return;
+      if (job.sampleGen !== sampleGenRef.current) return;
+      if (job.computeSeq !== computeSeqRef.current) return;
+
+      const o = optsRef.current;
+      const visibility = shadowVisibility(o.sunAltitudeDeg);
+      const veil = nightVeilAlpha(o.sunAltitudeDeg);
+      if (!o.enabled || o.opacity <= 0 || (visibility <= 0 && veil <= 0)) {
+        setLayerOpacity(0);
+        return;
+      }
+
+      const ack = await post<ComputeAck | ComputeEmpty | ErrAck>({
+        type: 'compute',
+        sunAzDeg: o.sunAzimuthDeg,
+        sunAltDeg: o.sunAltitudeDeg,
+        shadowStrength: visibility,
+        nightFloor: veil,
+      });
+      if (cancelled) return;
+      if (job.sampleGen !== sampleGenRef.current) return;
+      if (job.computeSeq !== computeSeqRef.current) return;
+      if (ack.type === 'error') {
+        console.warn('[shadow] compute failed', ack.message);
+        return;
+      }
+      if (ack.type !== 'compute-ok') {
+        setLayerOpacity(0);
+        return;
+      }
+
+      const url = URL.createObjectURL(ack.blob);
+      const coords: [[number, number], [number, number], [number, number], [number, number]] = [
+        [job.bounds[0], job.bounds[3]],
+        [job.bounds[2], job.bounds[3]],
+        [job.bounds[2], job.bounds[1]],
+        [job.bounds[0], job.bounds[1]],
+      ];
+
+      await preloadBlobUrl(url);
+      if (cancelled || job.sampleGen !== sampleGenRef.current || job.computeSeq !== computeSeqRef.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+
+      ensureSourceAndLayer(url, coords);
+      const src = map.getSource(SOURCE_ID) as ImageSource | undefined;
+      if (src) {
+        try {
+          src.updateImage({ url, coordinates: coords });
+          applyVisibleOpacity();
+        } catch (err) {
+          console.warn('[shadow] updateImage failed', err);
+        }
+      }
+
+      const prev = lastBlobUrlRef.current;
+      lastBlobUrlRef.current = url;
+      if (prev) {
+        setTimeout(() => URL.revokeObjectURL(prev), BLOB_REVOKE_DELAY_MS);
+      }
+    };
+
+    const processComputeQueue = async (initialJob: ComputeJob) => {
+      if (computeInflightRef.current) {
+        pendingComputeRef.current = initialJob;
+        return;
+      }
+
+      computeInflightRef.current = true;
+      let job: ComputeJob | null = initialJob;
+      try {
+        while (job && !cancelled) {
+          pendingComputeRef.current = null;
+          await runComputeAndApply(job);
+          job = pendingComputeRef.current;
+        }
+      } finally {
+        computeInflightRef.current = false;
+      }
+    };
+
+    const requestCompute = (bounds: BoundsTuple, sampleGen: number) => {
+      const job: ComputeJob = {
+        bounds,
+        sampleGen,
+        computeSeq: ++computeSeqRef.current,
+      };
+      if (computeInflightRef.current) {
+        pendingComputeRef.current = job;
+        return;
+      }
+      void processComputeQueue(job).catch((err) => console.warn('[shadow] compute queue error', err));
+    };
+
     const runSampleAndCompute = async () => {
       if (cancelled || !map.getStyle()) return;
       const o = optsRef.current;
       if (!o.enabled) return;
 
-      // Take the next generation token. Any in-flight ack with an older
-      // token will be ignored when it returns.
       const myGen = ++sampleGenRef.current;
 
       const rawBounds = map.getBounds();
@@ -355,99 +488,21 @@ export function useShadowImage(
       }
       if (sampleAck.tooMany) {
         console.warn('[shadow] sample skipped: viewport spans too many DEM tiles');
-        removeSourceAndLayer();
+        removeSourceAndLayer(true);
+        setLayerOpacity(0);
         return;
       }
       if (sampleAck.filled === 0) {
         console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: sampledBounds });
-        removeSourceAndLayer();
+        removeSourceAndLayer(true);
+        setLayerOpacity(0);
         return;
       }
       sampledRef.current = true;
       sampledBoundsRef.current = sampledBounds;
-      await runComputeAndApply(sampledBounds, myGen);
+      requestCompute(sampledBounds, myGen);
     };
 
-    /**
-     * Compute the shadow for the current sun and push the result into the
-     * single ImageSource. The `gen` token is checked at every async
-     * boundary so a stale path can never clobber a fresher one.
-     */
-    const runComputeAndApply = async (
-      b: [number, number, number, number],
-      gen: number,
-    ) => {
-      if (cancelled || !sampledRef.current) return;
-      if (gen !== sampleGenRef.current) return;
-      const o = optsRef.current;
-      if (!o.enabled) return;
-      const visibility = shadowVisibility(o.sunAltitudeDeg);
-      const veil = nightVeilAlpha(o.sunAltitudeDeg) * o.opacity;
-      // Nothing to draw at all (sun fully up AND veil zero — only happens
-      // when user disabled shadows; handled above).
-      if (visibility <= 0 && veil <= 0) {
-        if (map.getLayer(LAYER_ID)) {
-          try { map.setPaintProperty(LAYER_ID, 'raster-opacity', 0); } catch { /* */ }
-        }
-        return;
-      }
-
-      const ack = await post<ComputeAck | ComputeEmpty | ErrAck>({
-        type: 'compute',
-        sunAzDeg: o.sunAzimuthDeg,
-        sunAltDeg: o.sunAltitudeDeg,
-        opacity: o.opacity * visibility,
-        nightFloor: veil,
-      });
-      if (cancelled) return;
-      // Compute-only paths (sun/opacity tweaks) re-use the current
-      // generation; only drop if a newer SAMPLE has bumped it past us.
-      if (gen !== sampleGenRef.current) return;
-      if (ack.type !== 'compute-ok') return;
-
-      const url = URL.createObjectURL(ack.blob);
-      const coords: [[number, number], [number, number], [number, number], [number, number]] = [
-        [b[0], b[3]],
-        [b[2], b[3]],
-        [b[2], b[1]],
-        [b[0], b[1]],
-      ];
-
-      // Pre-decode the blob so the subsequent updateImage swap is
-      // single-frame (eliminates the "wrong place for a few frames"
-      // flicker during zoom).
-      await preloadBlobUrl(url);
-      if (cancelled || gen !== sampleGenRef.current) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-
-      ensureSourceAndLayer(url, coords);
-      const src = map.getSource(SOURCE_ID) as ImageSource | undefined;
-      if (src) {
-        try {
-          src.updateImage({ url, coordinates: coords });
-          if (map.getLayer(LAYER_ID)) {
-            map.setPaintProperty(LAYER_ID, 'raster-opacity', 1);
-          }
-        } catch (err) {
-          console.warn('[shadow] updateImage failed', err);
-        }
-      }
-      // Revoke the previous blob URL on the next tick so Mapbox finishes
-      // decoding the new one first (avoids a 1-frame transparent gap).
-      const prev = lastBlobUrlRef.current;
-      lastBlobUrlRef.current = url;
-      if (prev) {
-        setTimeout(() => URL.revokeObjectURL(prev), BLOB_REVOKE_DELAY_MS);
-      }
-    };
-
-    /**
-     * Strict serialization: only one resample runs at a time. Concurrent
-     * requests collapse into a single pending slot so a long zoom storm
-     * costs O(1) work instead of one job per event.
-     */
     const requestResample = () => {
       if (inflightRef.current) {
         pendingResampleRef.current = true;
@@ -465,7 +520,6 @@ export function useShadowImage(
         });
     };
 
-    // Schedule a (debounced) full resample after the user stops moving.
     const scheduleSample = () => {
       if (sampleTimerRef.current !== null) {
         clearTimeout(sampleTimerRef.current);
@@ -476,35 +530,40 @@ export function useShadowImage(
       }, SAMPLE_DEBOUNCE_MS) as unknown) as number;
     };
 
-    if (!opts.enabled) {
-      removeSourceAndLayer();
-      return () => { cancelled = true; };
-    }
+    scheduleSampleRef.current = scheduleSample;
+    recomputeRef.current = () => {
+      const bounds = sampledBoundsRef.current;
+      if (!sampledRef.current || !bounds) {
+        scheduleSample();
+        return;
+      }
+      requestCompute(bounds, sampleGenRef.current);
+    };
 
-    // Initial run.
-    scheduleSample();
+    if (optsRef.current.enabled) {
+      if (sampledRef.current && sampledBoundsRef.current) {
+        requestCompute(sampledBoundsRef.current, sampleGenRef.current);
+      } else {
+        scheduleSample();
+      }
+    } else {
+      setLayerOpacity(0);
+    }
 
     const onMoveEnd = () => scheduleSample();
     const onZoomEnd = () => scheduleSample();
     const onStyleLoad = () => {
-      sampledRef.current = false;
-      sampledBoundsRef.current = null;
-      scheduleSample();
+      removeSourceAndLayer(false);
+      if (!optsRef.current.enabled) return;
+      if (sampledRef.current && sampledBoundsRef.current) {
+        requestCompute(sampledBoundsRef.current, sampleGenRef.current);
+      } else {
+        scheduleSample();
+      }
     };
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onZoomEnd);
     map.on('style.load', onStyleLoad);
-
-    // Compute-only updater for sun/opacity changes.
-    (map as unknown as { __shadowImageRecompute?: () => void }).__shadowImageRecompute = () => {
-      if (!sampledRef.current || !sampledBoundsRef.current) {
-        scheduleSample();
-        return;
-      }
-      // Compute-only path — re-uses the current generation so the
-      // race-cancel guards still catch a SAMPLE that lands afterwards.
-      runComputeAndApply(sampledBoundsRef.current, sampleGenRef.current).catch(() => { /* */ });
-    };
 
     return () => {
       cancelled = true;
@@ -515,16 +574,43 @@ export function useShadowImage(
         clearTimeout(sampleTimerRef.current);
         sampleTimerRef.current = null;
       }
+      inflightRef.current = false;
       pendingResampleRef.current = false;
-      delete (map as unknown as { __shadowImageRecompute?: () => void }).__shadowImageRecompute;
-      removeSourceAndLayer();
+      computeInflightRef.current = false;
+      pendingComputeRef.current = null;
+      scheduleSampleRef.current = null;
+      recomputeRef.current = null;
+      setLayerOpacityRef.current = null;
+      removeSourceAndLayer(true);
     };
+  }, [map, isMapLoaded]);
+
+  // ── Toggle / visibility changes ────────────────────────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const setLayerOpacity = setLayerOpacityRef.current;
+    if (setLayerOpacity) {
+      setLayerOpacity(opts.enabled ? opts.opacity : 0);
+    }
+    if (!opts.enabled) return;
+    if (sampledRef.current && sampledBoundsRef.current) {
+      recomputeRef.current?.();
+    } else {
+      scheduleSampleRef.current?.();
+    }
   }, [map, isMapLoaded, opts.enabled]);
 
-  // ── Sun / opacity change → compute-only path ──────────────────────────
+  // Opacity scrubs stay on the Mapbox paint property and never hit the worker.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const setLayerOpacity = setLayerOpacityRef.current;
+    if (!setLayerOpacity) return;
+    setLayerOpacity(opts.enabled ? opts.opacity : 0);
+  }, [map, isMapLoaded, opts.enabled, opts.opacity]);
+
+  // Sun/time changes reuse the sampled grid and coalesce to the latest state.
   useEffect(() => {
     if (!map || !isMapLoaded || !opts.enabled) return;
-    const fn = (map as unknown as { __shadowImageRecompute?: () => void }).__shadowImageRecompute;
-    if (fn) fn();
-  }, [map, isMapLoaded, opts.enabled, opts.sunAzimuthDeg, opts.sunAltitudeDeg, opts.opacity]);
+    recomputeRef.current?.();
+  }, [map, isMapLoaded, opts.sunAzimuthDeg, opts.sunAltitudeDeg]);
 }

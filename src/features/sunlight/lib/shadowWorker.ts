@@ -11,9 +11,8 @@
  *                       blob to the main thread.
  *
  * Time changes therefore skip the entire DEM resample step and only pay the
- * sweep + encode cost (~30 ms for a 1024×768 grid). No tile fetch, no Mapbox
- * source rebuild — the main thread just feeds the new blob to a single
- * `ImageSource.updateImage()` call.
+ * sweep + encode cost (~30 ms for a 1024×768 grid). User opacity now stays
+ * on the Mapbox raster layer, so slider drags avoid this worker entirely.
  */
 
 const DEM_TILE_SIZE = 256;
@@ -37,8 +36,8 @@ interface ComputeRequest {
   id: number;
   sunAzDeg: number;
   sunAltDeg: number;
-  /** 0..1 darkness multiplier for in-shadow pixels. */
-  opacity: number;
+  /** 0..1 altitude-driven strength for cast shadows only. */
+  shadowStrength: number;
   /** 0..1 uniform alpha floor applied to every pixel (twilight/night veil). */
   nightFloor: number;
 }
@@ -82,8 +81,6 @@ self.onmessage = async (e: MessageEvent<Request>) => {
     });
   }
 };
-
-// ── DEM sampling ────────────────────────────────────────────────────────
 
 async function handleSample(msg: SampleRequest) {
   const { bounds, gridW, gridH, demZoom } = msg;
@@ -292,7 +289,7 @@ function handleCompute(msg: ComputeRequest) {
     (self as unknown as Worker).postMessage({ id: msg.id, type: 'compute-empty' });
     return;
   }
-  const { sunAzDeg, sunAltDeg, opacity, nightFloor } = msg;
+  const { sunAzDeg, sunAltDeg, shadowStrength, nightFloor } = msg;
   const { gridW, gridH, elev, cellSizeX, cellSizeY } = state;
 
   // Sun above horizon → cast shadows. Below horizon → skip the sweep, the
@@ -305,7 +302,7 @@ function handleCompute(msg: ComputeRequest) {
     blurred = new Uint8Array(gridW * gridH);
   }
 
-  const rgba = encodeShadowRgba(blurred, gridW, gridH, opacity, nightFloor);
+  const rgba = encodeShadowRgba(blurred, gridW, gridH, shadowStrength, nightFloor);
   const blob = new Blob([rawPng(gridW, gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
 
   (self as unknown as Worker).postMessage(
@@ -452,14 +449,14 @@ function encodeShadowRgba(
   shadow: Uint8Array,
   W: number,
   H: number,
-  opacity: number,
+  shadowStrength: number,
   nightFloor: number,
 ): Uint8Array {
-  const op = Math.max(0, Math.min(1, opacity));
+  const strength = Math.max(0, Math.min(1, shadowStrength));
   const floor = (Math.max(0, Math.min(1, nightFloor)) * 255) | 0;
   const rgba = new Uint8Array(W * H * 4);
   for (let i = 0; i < shadow.length; i++) {
-    const cast = (shadow[i] * op) | 0;
+    const cast = (shadow[i] * strength) | 0;
     const a = cast > floor ? cast : floor;
     if (a === 0) continue;
     const o = i * 4;
