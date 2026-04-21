@@ -1,0 +1,17 @@
+export const imgIcon = "http://localhost:3845/assets/7bc4f9879e3368ab875a48cc9636d90986b9764e.svg";
+export const imgIcon1 = "http://localhost:3845/assets/072e8e901d23a77cfdfc10cdad0c7e64e69a8247.svg";
+export const imgIcon2 = "http://localhost:3845/assets/57f837628fbc0e7ea0775812ab8e4a0a7cad1f4b.svg";
+export const imgIcon3 = "http://localhost:3845/assets/b3975d2b53fcfe2cd83365937e5cf61eca8e1237.svg";
+export const imgLine33 = "http://localhost:3845/assets/775c4d5a43e140b4ec2d0fd05a50f6441821886b.svg";
+export const imgLine113 = "http://localhost:3845/assets/d94b7b1af1b7c400113306a291e6a15c0f4e1c52.svg";
+export const imgLine112 = "http://localhost:3845/assets/d979f19bdce04098bc9b38fb6a62064aa688d750.svg";
+export const imgLine93 = "http://localhost:3845/assets/ce155e57c090ede5c8f57d61fabb82e84e65d6ea.svg";
+export const imgIcon4 = "http://localhost:3845/assets/0926f42f2ed9768ac8b89f073484593774741b3e.svg";
+export const imgCurves = "http://localhost:3845/assets/cbb750a89f13d08a4e603dab5ad263b8c31ba0e1.svg";
+export const imgPlusCircle = "http://localhost:3845/assets/d0923a84d654fe4e1700fa1376a381145bd1d261.svg";
+export const imgIcon5 = "http://localhost:3845/assets/7744ea3081d4a1ad4af1728c8943b92c5c1b6f41.svg";
+export const imgIcon6 = "http://localhost:3845/assets/1465958976171afa738b181c945371d93f2a2712.svg";
+export const imgIcon7 = "http://localhost:3845/assets/25c70577c6d3fd745eb057575f55b878eeaf0a6a.svg";
+export const imgLine114 = "http://localhost:3845/assets/ec203bb64c9a9ec3810a8c17ba0d6e4c11ef6214.svg";
+export const imgLine94 = "http://localhost:3845/assets/0febfd414200e9353ead1a10c9d20ec47e9f374a.svg";
+export const imgIcon8 = "http://localhost:3845/assets/a2053b0cc66d45d8f57e7274e356f358a0780523.svg";

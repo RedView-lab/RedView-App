@@ -175,7 +175,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const leftDockOffset =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
 
-  const centerPanelRegionLeft = (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + 8;
+  const centerPanelRegionLeft =
+    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + 8;
   const centerPanelRegionRight = panelWidth + PANEL_PADDING * 2 + 8;
   const centerPanelAvailableWidth = Math.max(
     0,
