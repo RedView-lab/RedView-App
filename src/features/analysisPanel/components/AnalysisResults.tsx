@@ -366,7 +366,7 @@ function SeriesRow({
   rightColumnWidth: number;
 }) {
   const innerCols = columns.slice(0, -1);
-  let majorIndex = -1;
+  const cellValuesByColumn = mapSeriesCellValues(innerCols, series.cellValues);
   return (
     <div className="border-[rgba(255,255,255,0.08)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] items-center max-h-[28px] min-h-[24px] relative w-full">
       <div className="bg-[rgba(0,0,0,0.64)] content-stretch flex flex-col h-full items-start justify-center px-[4px] relative shrink-0 w-[95px]">
@@ -386,28 +386,22 @@ function SeriesRow({
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative">
         {innerCols.map((col, index) => (
-          (() => {
-            if (col.major) majorIndex += 1;
-            const value = col.major ? series.cellValues?.[majorIndex] : undefined;
-            return (
-              <div
-                key={`${index}-${col.value}`}
-                className={
-                  index === 0
-                    ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
-                    : col.major
-                      ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
-                      : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
-                }
-              >
-                {value ? (
-                  <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
-                    <p className="leading-[normal] overflow-hidden text-ellipsis">{value}</p>
-                  </div>
-                ) : null}
+          <div
+            key={`${index}-${col.value}`}
+            className={
+              index === 0
+                ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+                : col.major
+                  ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+                  : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px px-[8px] relative'
+            }
+          >
+            {cellValuesByColumn[index] ? (
+              <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
+                <p className="leading-[normal] overflow-hidden text-ellipsis">{cellValuesByColumn[index]}</p>
               </div>
-            );
-          })()
+            ) : null}
+          </div>
         ))}
         <div
           className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0"
@@ -494,6 +488,16 @@ function buildSeriesPath(points: AnalysisChartPoint[], closeToBaseline: boolean)
   const firstX = formatPathNumber(clamp(points[0].x, 0, 100));
   const lastX = formatPathNumber(clamp(points[points.length - 1].x, 0, 100));
   return `${commands} L ${lastX} 100 L ${firstX} 100 Z`;
+}
+
+function mapSeriesCellValues(columns: GridColumn[], cellValues?: string[]): Array<string | undefined> {
+  let valueIndex = 0;
+  return columns.map((col) => {
+    if (!col.major) return undefined;
+    const value = cellValues?.[valueIndex];
+    valueIndex += 1;
+    return value;
+  });
 }
 
 function projectY(value: number): number {
