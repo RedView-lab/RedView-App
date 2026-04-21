@@ -325,6 +325,7 @@
   min-height: 120px;
   background: rgba(0, 0, 0, 0.64);
   cursor: crosshair;
+  isolation: isolate;
 }
 
 .rvc-center-analysis__hover-surface {
