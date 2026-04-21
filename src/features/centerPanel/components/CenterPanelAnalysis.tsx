@@ -246,7 +246,7 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
       </div>
 
       <div className="rvc-center-analysis__chart-shell">
-        <AnalysisResults series={demoSeries} cursor={cursor} />
+        <AnalysisResults series={demoSeries} cursor={cursor} showPlot={false} />
         <AnalysisSlider />
       </div>
     </section>

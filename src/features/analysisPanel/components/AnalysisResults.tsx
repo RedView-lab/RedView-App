@@ -42,6 +42,7 @@ interface AnalysisResultsProps {
   series?: AnalysisChartSeries[];
   dayWindows?: AnalysisDayWindow[];
   cursor?: AnalysisCursor | null;
+  showPlot?: boolean;
   /** Optional explicit X tick values (km). Disables auto-scaling when provided. */
   xAxisTicks?: number[];
   /** X axis numeric domain (km). */
@@ -73,6 +74,7 @@ export function AnalysisResults({
   series = [],
   dayWindows = DEFAULT_DAY_WINDOWS,
   cursor = null,
+  showPlot = true,
   xAxisTicks,
   xDomain = DEFAULT_X_DOMAIN,
   yDomain = DEFAULT_Y_DOMAIN,
@@ -145,97 +147,99 @@ export function AnalysisResults({
       data-node-id="1894:39014"
       data-name="RESULTS"
     >
-      <AnalysisResultsGrid
-        ref={gridRef}
-        columns={xColumns}
-        plotRows={plotRows}
-        rightColumnWidth={rightColumnWidth}
-      >
-        <div
-          className="absolute inset-0 overflow-hidden pointer-events-none"
-          data-node-id="1894:39015"
-          data-name="PLOT"
+      {showPlot ? (
+        <AnalysisResultsGrid
+          ref={gridRef}
+          columns={xColumns}
+          plotRows={plotRows}
+          rightColumnWidth={rightColumnWidth}
         >
-          {dayWindows.map((window) => (
-            <div
-              key={window.id}
-              className="absolute inset-y-0 bg-[rgba(255,166,48,0.14)]"
-              style={{
-                left: `${clamp(window.startPercent, 0, 100)}%`,
-                width: `${Math.max(0, window.endPercent - window.startPercent)}%`,
-              }}
-            />
-          ))}
-
-          <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            {plotSeries.map((entry) => {
-              if (!entry.fillColor) return null;
-              const areaPath = buildSeriesPath(entry.points, true);
-              if (!areaPath) return null;
-              return <path key={`${entry.id}-area`} d={areaPath} fill={entry.fillColor} opacity={entry.opacity ?? 1} />;
-            })}
-
-            {plotSeries.map((entry) => {
-              const linePath = buildSeriesPath(entry.points, false);
-              if (!linePath) return null;
-              return (
-                <path
-                  key={entry.id}
-                  d={linePath}
-                  fill="none"
-                  stroke={entry.color}
-                  strokeWidth={entry.strokeWidth ?? 0.42}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                  opacity={entry.opacity ?? 1}
-                />
-              );
-            })}
-
-            {cursor ? (
-              <line
-                x1={clamp(cursor.xPercent, 0, 100)}
-                x2={clamp(cursor.xPercent, 0, 100)}
-                y1="0"
-                y2="100"
-                stroke="rgba(255,255,255,0.96)"
-                strokeWidth="0.22"
-                vectorEffect="non-scaling-stroke"
+          <div
+            className="absolute inset-0 overflow-hidden pointer-events-none"
+            data-node-id="1894:39015"
+            data-name="PLOT"
+          >
+            {dayWindows.map((window) => (
+              <div
+                key={window.id}
+                className="absolute inset-y-0 bg-[rgba(255,166,48,0.14)]"
+                style={{
+                  left: `${clamp(window.startPercent, 0, 100)}%`,
+                  width: `${Math.max(0, window.endPercent - window.startPercent)}%`,
+                }}
               />
+            ))}
+
+            <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              {plotSeries.map((entry) => {
+                if (!entry.fillColor) return null;
+                const areaPath = buildSeriesPath(entry.points, true);
+                if (!areaPath) return null;
+                return <path key={`${entry.id}-area`} d={areaPath} fill={entry.fillColor} opacity={entry.opacity ?? 1} />;
+              })}
+
+              {plotSeries.map((entry) => {
+                const linePath = buildSeriesPath(entry.points, false);
+                if (!linePath) return null;
+                return (
+                  <path
+                    key={entry.id}
+                    d={linePath}
+                    fill="none"
+                    stroke={entry.color}
+                    strokeWidth={entry.strokeWidth ?? 0.42}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    vectorEffect="non-scaling-stroke"
+                    opacity={entry.opacity ?? 1}
+                  />
+                );
+              })}
+
+              {cursor ? (
+                <line
+                  x1={clamp(cursor.xPercent, 0, 100)}
+                  x2={clamp(cursor.xPercent, 0, 100)}
+                  y1="0"
+                  y2="100"
+                  stroke="rgba(255,255,255,0.96)"
+                  strokeWidth="0.22"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ) : null}
+            </svg>
+
+            {dayWindows.map((window) => (
+              <PhaseIcon
+                key={`${window.id}-sun`}
+                src={imgIcon6}
+                name="sun"
+                left={`calc(${clamp(window.startPercent, 0, 100)}% + 4px)`}
+              />
+            ))}
+
+            {dayWindows.map((window) => (
+              <PhaseIcon
+                key={`${window.id}-moon`}
+                src={imgIcon7}
+                name="moon-01"
+                left={`calc(${clamp(window.endPercent, 0, 100)}% - 12px)`}
+              />
+            ))}
+
+            {cursor && cursor.summaries.length > 0 ? (
+              <div
+                className="absolute backdrop-blur-[60px] bg-[rgba(255,255,255,0.04)] content-stretch flex gap-[8px] items-start px-[4px] py-[8px] top-[24px]"
+                style={{ left: `${hoverLeftPercent}%`, transform: 'translateX(-50%)' }}
+              >
+                {cursor.summaries.map((summary, index) => (
+                  <HoverSummaryCard key={summary.seriesId} summary={summary} showDivider={index > 0} />
+                ))}
+              </div>
             ) : null}
-          </svg>
-
-          {dayWindows.map((window) => (
-            <PhaseIcon
-              key={`${window.id}-sun`}
-              src={imgIcon6}
-              name="sun"
-              left={`calc(${clamp(window.startPercent, 0, 100)}% + 4px)`}
-            />
-          ))}
-
-          {dayWindows.map((window) => (
-            <PhaseIcon
-              key={`${window.id}-moon`}
-              src={imgIcon7}
-              name="moon-01"
-              left={`calc(${clamp(window.endPercent, 0, 100)}% - 12px)`}
-            />
-          ))}
-
-          {cursor && cursor.summaries.length > 0 ? (
-            <div
-              className="absolute backdrop-blur-[60px] bg-[rgba(255,255,255,0.04)] content-stretch flex gap-[8px] items-start px-[4px] py-[8px] top-[24px]"
-              style={{ left: `${hoverLeftPercent}%`, transform: 'translateX(-50%)' }}
-            >
-              {cursor.summaries.map((summary, index) => (
-                <HoverSummaryCard key={summary.seriesId} summary={summary} showDivider={index > 0} />
-              ))}
-            </div>
-          ) : null}
-        </div>
-      </AnalysisResultsGrid>
+          </div>
+        </AnalysisResultsGrid>
+      ) : null}
       <AxisRow columns={xColumns} rightColumnWidth={rightColumnWidth} />
       {series.map((s) => (
         <SeriesRow key={s.id} series={s} columns={xColumns} rightColumnWidth={rightColumnWidth} />
