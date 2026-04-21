@@ -342,8 +342,23 @@
   flex-direction: column;
 }
 
+.rvc-center-analysis__lower {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .rvc-center-analysis__series-row {
   min-height: 28px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.rvc-center-analysis__add-row {
+  display: grid;
+  grid-template-columns: var(--rvc-center-results-left-column) repeat(var(--rvc-center-results-rows), minmax(0, 1fr));
+  min-height: 24px;
   border-top: 0.5px solid rgba(255, 255, 255, 0.08);
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
 }
@@ -704,28 +719,21 @@
   line-height: 14px;
 }
 
-.rvc-center-analysis__footer {
-  height: 28px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  border-top: 0.5px solid var(--rvc-center-border);
-}
-
 .rvc-center-analysis__add-button {
-  min-width: 82px;
-  height: 28px;
-  padding: 0 8px;
+  width: 91px;
+  height: 20px;
+  padding: 0 6px;
   border: 0;
-  border-right: 0.5px solid var(--rvc-center-border);
-  background: rgba(0, 0, 0, 0.64);
-  color: rgba(255, 255, 255, 0.78);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
   justify-content: flex-start;
+  overflow: hidden;
 }
 
 .rvc-center-analysis__add-plus {
@@ -737,27 +745,27 @@
   position: relative;
   height: 16px;
   flex: 0 0 auto;
-  background: rgba(0, 0, 0, 0.64);
+  background: transparent;
 }
 
 .rvc-center-analysis__scrollbar-track {
   position: absolute;
-  top: 1px;
+  top: 0;
   left: 18px;
   right: 18px;
-  height: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  height: 16px;
+  background: rgba(255, 255, 255, 0.14);
 }
 
 .rvc-center-analysis__scrollbar-thumb {
   position: absolute;
-  top: 1px;
-  left: 15%;
-  width: 64%;
-  height: 14px;
+  top: 0;
+  left: 14%;
+  width: 60%;
+  height: 16px;
   border-left: 4px solid rgba(255, 255, 255, 0.88);
   border-right: 4px solid rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.32);
 }
 
 .rvc-center-analysis__scrollbar-grip {

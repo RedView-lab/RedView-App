@@ -219,18 +219,24 @@ export function CenterPanelAnalysis() {
           ))}
         </div>
 
-        <div className="rvc-center-analysis__footer">
-          <button className="rvc-center-analysis__add-button" type="button">
-            <IconPlusCircle size={12} />
-            <span>Ajouter</span>
-            <IconChevronDown size={14} className="rvc-center-analysis__footer-caret" aria-hidden="true" />
-          </button>
-        </div>
+        <div className="rvc-center-analysis__lower">
+          <div className="rvc-center-analysis__add-row">
+            <div className="rvc-center-analysis__series-control">
+              <button className="rvc-center-analysis__add-button" type="button">
+                <IconPlusCircle size={12} />
+                <span>Ajouter</span>
+                <IconChevronDown size={14} className="rvc-center-analysis__footer-caret" aria-hidden="true" />
+              </button>
+            </div>
 
-        <div className="rvc-center-analysis__scrollbar" aria-hidden="true">
-          <div className="rvc-center-analysis__scrollbar-track" />
-          <div className="rvc-center-analysis__scrollbar-thumb">
-            <div className="rvc-center-analysis__scrollbar-grip">...</div>
+            {renderCells(Array.from({ length: axisTicks.length }, () => ''), 'muted')}
+          </div>
+
+          <div className="rvc-center-analysis__scrollbar" aria-hidden="true">
+            <div className="rvc-center-analysis__scrollbar-track" />
+            <div className="rvc-center-analysis__scrollbar-thumb">
+              <div className="rvc-center-analysis__scrollbar-grip">...</div>
+            </div>
           </div>
         </div>
       </div>
