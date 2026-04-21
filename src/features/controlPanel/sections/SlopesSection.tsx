@@ -3,6 +3,7 @@ import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
 import { ColorSwatch } from '../components/ColorSwatch';
+import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { IconChevronDown, IconEye, IconEyeOff } from '../icons';
 import type {
   ControlPanelHandlers,
@@ -108,11 +109,6 @@ function InlineNumericInput({
   const [draft, setDraft] = useState(String(display));
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync draft when external value changes (e.g. after clamping or unit toggle)
-  useEffect(() => {
-    if (!editing) setDraft(String(display));
-  }, [display, editing]);
-
   // Auto-focus & select when entering edit mode
   useEffect(() => {
     if (editing && inputRef.current) {
@@ -162,7 +158,10 @@ function InlineNumericInput({
       <button
         type="button"
         className={`rvc-slopes__deg-btn ${className ?? ''}`}
-        onClick={() => setEditing(true)}
+        onClick={() => {
+          setDraft(String(display));
+          setEditing(true);
+        }}
         title={isPercent ? 'Cliquer pour modifier le pourcentage' : "Cliquer pour modifier l'angle"}
       >
         {display}{suffix}
@@ -198,6 +197,7 @@ interface BandRowProps {
   isFirst: boolean;
   isLast: boolean;
   scale: SlopeScale;
+  onColorChange?: (id: string, color: string) => void;
   onVisibilityToggle?: (id: string) => void;
   onBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
 }
@@ -208,6 +208,7 @@ function BandRow({
   isFirst,
   isLast,
   scale,
+  onColorChange,
   onVisibilityToggle,
   onBreakpointChange,
 }: BandRowProps) {
@@ -263,11 +264,16 @@ function BandRow({
         )}
       </div>
 
-      <div className="rvc-slopes__color-chip">
+      <ColorPalettePicker
+        color={band.color}
+        onChange={(color) => onColorChange?.(band.id, color)}
+        className="rvc-slopes__color-chip"
+        ariaLabel={`Choisir la couleur de la bande ${category || band.label || band.id}`}
+      >
         <ColorSwatch color={band.color} size={12} />
         <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
         <IconChevronDown size={20} className="rvc-slopes__color-chevron" />
-      </div>
+      </ColorPalettePicker>
     </div>
   );
 }
@@ -283,6 +289,7 @@ export function SlopesSection({
   onScaleChange,
   onScaleSettingChange,
   onOpacityChange,
+  onBandColorChange,
   onBandVisibilityToggle,
   onBandBreakpointChange,
 }: Props) {
@@ -350,6 +357,7 @@ export function SlopesSection({
             isFirst={i === 0}
             isLast={i === visibleBands.length - 1}
             scale={state.scale}
+            onColorChange={onBandColorChange}
             onVisibilityToggle={onBandVisibilityToggle}
             onBreakpointChange={onBandBreakpointChange}
           />

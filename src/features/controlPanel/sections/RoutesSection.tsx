@@ -1,6 +1,7 @@
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { ColorSwatch } from '../components/ColorSwatch';
+import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { IconEye, IconChevronDown } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState, RouteRenderMode } from '../types';
 
@@ -24,6 +25,7 @@ export function RoutesSection({
   enabled,
   items,
   onEnabledChange,
+  onColorChange,
   onModeChange,
   onOpacityChange,
   onVisibilityToggle,
@@ -36,10 +38,15 @@ export function RoutesSection({
       <div className="rvc-routes__list">
         {items.map((route) => (
           <div key={route.id} className="rvc-routes__row">
-            <div className="rvc-routes__color-picker">
+            <ColorPalettePicker
+              color={route.color}
+              onChange={(nextColor) => onColorChange?.(route.id, nextColor)}
+              className="rvc-routes__color-picker"
+              ariaLabel={`Choisir la couleur de ${route.label}`}
+            >
               <ColorSwatch color={route.color} />
               <IconChevronDown size={20} />
-            </div>
+            </ColorPalettePicker>
             <div className="rvc-routes__label">{route.label}</div>
             <Select
               width={80}

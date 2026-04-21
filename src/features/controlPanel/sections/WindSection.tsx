@@ -1,4 +1,5 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
@@ -87,8 +88,6 @@ function WindBandRow({
   onToggleVisibility: () => void;
   onColorChange: (color: string) => void;
 }) {
-  const colorId = useId();
-
   return (
     <div className="rvc-wind__band-row" data-disabled={!enabled}>
       <button
@@ -102,7 +101,12 @@ function WindBandRow({
 
       <span className="rvc-wind__band-threshold">{band.threshold}</span>
 
-      <label className="rvc-wind__color-chip" htmlFor={colorId}>
+      <ColorPalettePicker
+        color={band.color}
+        onChange={onColorChange}
+        className="rvc-wind__color-chip"
+        ariaLabel={`Choisir la couleur du seuil ${band.threshold}`}
+      >
         <span
           className="rvc-wind__color-swatch"
           style={{ backgroundColor: band.color }}
@@ -110,15 +114,7 @@ function WindBandRow({
         />
         <span className="rvc-wind__color-value">{band.color.replace('#', '').toUpperCase()}</span>
         <IconChevronDown size={20} className="rvc-wind__color-chevron" aria-hidden />
-        <input
-          id={colorId}
-          className="rvc-wind__color-input"
-          type="color"
-          value={band.color}
-          onChange={(event) => onColorChange(event.target.value.toUpperCase())}
-          aria-label={`Couleur du seuil ${band.threshold}`}
-        />
-      </label>
+      </ColorPalettePicker>
     </div>
   );
 }
