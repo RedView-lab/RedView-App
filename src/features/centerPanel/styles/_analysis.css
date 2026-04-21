@@ -302,9 +302,8 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border-radius: 5px;
   background: transparent;
-  border: 0.5px solid rgba(255, 255, 255, 0.08);
+  border: 0;
 }
 
 .rvc-center-analysis__plot-grid {
@@ -744,44 +743,6 @@
 .rvc-center-analysis__add-plus {
   font-size: 14px;
   line-height: 1;
-}
-
-.rvc-center-analysis__scrollbar {
-  position: relative;
-  height: 40px;
-  flex: 0 0 auto;
-  background: transparent;
-}
-
-.rvc-center-analysis__scrollbar-track {
-  position: absolute;
-  top: 12px;
-  left: 18px;
-  right: 18px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.14);
-}
-
-.rvc-center-analysis__scrollbar-thumb {
-  position: absolute;
-  top: 12px;
-  left: 14%;
-  width: 60%;
-  height: 16px;
-  border-left: 4px solid rgba(255, 255, 255, 0.88);
-  border-right: 4px solid rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.32);
-}
-
-.rvc-center-analysis__scrollbar-grip {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 18px;
-  line-height: 16px;
-  letter-spacing: 1px;
 }
 
 .rvc-center-analysis[data-height-tier='xs'] {
