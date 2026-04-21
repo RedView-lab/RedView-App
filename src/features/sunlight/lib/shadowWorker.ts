@@ -138,11 +138,14 @@ async function handleSample(msg: SampleRequest) {
   const dMercY = (sMercY - nMercY) / gridH;
   const dLng = (e - w) / gridW;
 
+  const nTiles = 1 << demZoom;
   for (let r = 0; r < gridH; r++) {
     const my = nMercY + (r + 0.5) * dMercY;
     // (lat derivation skipped — we work in mercator-Y for tile indexing)
     // Compute corresponding tile Y at demZoom (continuous).
-    const tileYf = (1 - my) * (1 << (demZoom - 1));
+    // latToMercY returns normalized mercator-Y in [0..1] (0=north pole,
+    // 1=south pole), matching lngLatToMercTile's `mercY * 2^z` mapping.
+    const tileYf = my * nTiles;
     for (let c = 0; c < gridW; c++) {
       const lng = w + (c + 0.5) * dLng;
       // Continuous tile X.
