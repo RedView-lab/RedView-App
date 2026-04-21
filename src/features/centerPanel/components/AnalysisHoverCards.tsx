@@ -1,3 +1,5 @@
+import { Fragment, type CSSProperties } from 'react';
+
 export interface AnalysisHoverCardMetrics {
   distanceLabel: string;
   ascentLabel: string;
@@ -14,16 +16,15 @@ export interface AnalysisHoverCardData {
   metrics: AnalysisHoverCardMetrics;
 }
 
-export interface AnalysisHoverCardLayout {
-  id: string;
+export interface AnalysisHoverCardsLayout {
   top: number;
   left: number;
-  width: number;
+  groupWidth: number;
 }
 
 interface AnalysisHoverCardsProps {
   cards: AnalysisHoverCardData[];
-  layouts: AnalysisHoverCardLayout[];
+  layout: AnalysisHoverCardsLayout | null;
 }
 
 export const defaultAnalysisHoverCards: AnalysisHoverCardData[] = [
@@ -68,28 +69,37 @@ export const defaultAnalysisHoverCards: AnalysisHoverCardData[] = [
   },
 ];
 
-export function AnalysisHoverCards({ cards, layouts }: AnalysisHoverCardsProps) {
-  return cards.map((card, index) => {
-    const layout = layouts[index];
-    if (!layout) return null;
+export function AnalysisHoverCards({ cards, layout }: AnalysisHoverCardsProps) {
+  if (!layout || cards.length === 0) return null;
 
-    return (
-      <article
-        key={card.id}
-        className="rvc-center-analysis__hover-card"
-        style={{ top: `${layout.top}px`, left: `${layout.left}px`, width: `${layout.width}px` }}
-      >
-        <header className="rvc-center-analysis__hover-card-head">
-          <span className="rvc-center-analysis__hover-card-dot" style={{ backgroundColor: card.color }} />
-          <span className="rvc-center-analysis__hover-card-value">{card.metrics.distanceLabel}</span>
-        </header>
-        <div className="rvc-center-analysis__hover-card-metrics">
-          <div>{card.metrics.ascentLabel}</div>
-          <div>{card.metrics.descentLabel}</div>
-          <div>{card.metrics.durationLabel}</div>
-          <div>{card.metrics.scheduleLabel}</div>
-        </div>
-      </article>
-    );
-  });
+  return (
+    <div
+      className="rvc-center-analysis__hover-cards"
+      style={
+        {
+          top: `${layout.top}px`,
+          left: `${layout.left}px`,
+          '--rvc-center-hover-group-width': `${layout.groupWidth}px`,
+        } as CSSProperties
+      }
+    >
+      {cards.map((card, index) => (
+        <Fragment key={card.id}>
+          {index > 0 ? <div className="rvc-center-analysis__hover-divider" aria-hidden="true" /> : null}
+          <section className="rvc-center-analysis__hover-card">
+            <span className="rvc-center-analysis__hover-card-dot" style={{ backgroundColor: card.color }} />
+            <div className="rvc-center-analysis__hover-card-copy">
+              <div className="rvc-center-analysis__hover-card-value">{card.metrics.distanceLabel}</div>
+              <div className="rvc-center-analysis__hover-card-metrics">
+                <div>{card.metrics.ascentLabel}</div>
+                <div>{card.metrics.descentLabel}</div>
+                <div>{card.metrics.durationLabel}</div>
+                <div>{card.metrics.scheduleLabel}</div>
+              </div>
+            </div>
+          </section>
+        </Fragment>
+      ))}
+    </div>
+  );
 }

@@ -251,42 +251,39 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
     plotMetrics.heightTier === 'xs' ? 48 : plotMetrics.heightTier === 'sm' ? 56 : 64;
 
   const hoverCardGap = 10;
-  const hoverCardHorizontalPadding = 16;
-  const hoverCardWidth = clampNumber(
-    (plotMetrics.plotContentWidth - hoverCardHorizontalPadding - hoverCardGap * (hoverCards.length - 1)) /
-      Math.max(hoverCards.length, 1),
-    80,
-    116,
+  const hoverCardDividerWidth = 1;
+  const hoverCardHorizontalPadding = 20;
+  const hoverCardCount = Math.max(hoverCards.length, 1);
+  const hoverCardGroupWidth = clampNumber(
+    (plotMetrics.plotContentWidth - hoverCardHorizontalPadding - (hoverCardGap + hoverCardDividerWidth) * (hoverCardCount - 1)) /
+      hoverCardCount,
+    88,
+    112,
   );
+  const hoverCardsWidth =
+    hoverCards.length * hoverCardGroupWidth +
+    Math.max(hoverCards.length - 1, 0) * (hoverCardGap + hoverCardDividerWidth) +
+    hoverCardHorizontalPadding;
   const hoverCardMinLeft = plotMetrics.plotGutter + 8;
-  const hoverCardMaxLeft = plotMetrics.plotGutter + plotMetrics.plotContentWidth - hoverCardWidth - 8;
-  const hoverCardLayouts = hoverCards.map((card, index, cards) => {
-    const idealLeft = plotMetrics.plotGutter + plotMetrics.plotContentWidth * card.anchorX - hoverCardWidth / 2;
-    const minLeft =
-      index === 0
-        ? hoverCardMinLeft
-        : clampNumber(
-            hoverCardMinLeft + index * (hoverCardWidth + hoverCardGap),
+  const hoverCardMaxLeft = plotMetrics.plotGutter + plotMetrics.plotContentWidth - hoverCardsWidth - 8;
+  const hoverCardsLayout =
+    hoverCards.length > 0
+      ? {
+          top: clampNumber(
+            Math.min(
+              ...hoverCards.map((card) => projectNormalizedY(card.anchorY, plotMetrics) - tooltipVerticalOffset),
+            ),
+            plotMetrics.overlayTop + 6,
+            plotMetrics.scaleTop + plotMetrics.usableHeight * 0.45,
+          ),
+          left: clampNumber(
+            plotMetrics.plotGutter + plotMetrics.plotContentWidth * hoverCards[0].anchorX + 2,
             hoverCardMinLeft,
-            hoverCardMaxLeft,
-          );
-    const maxLeft = clampNumber(
-      hoverCardMaxLeft - (cards.length - index - 1) * (hoverCardWidth + hoverCardGap),
-      hoverCardMinLeft,
-      hoverCardMaxLeft,
-    );
-
-    return {
-      id: card.id,
-      top: clampNumber(
-        projectNormalizedY(card.anchorY, plotMetrics) - tooltipVerticalOffset,
-        plotMetrics.overlayTop + 6,
-        plotMetrics.scaleTop + plotMetrics.usableHeight * 0.45,
-      ),
-      left: clampNumber(idealLeft, minLeft, Math.max(minLeft, maxLeft)),
-      width: hoverCardWidth,
-    };
-  });
+            Math.max(hoverCardMinLeft, hoverCardMaxLeft),
+          ),
+          groupWidth: hoverCardGroupWidth,
+        }
+      : null;
 
   const { areaPath, linePath } = buildProfilePaths(plotMetrics);
 
@@ -384,7 +381,7 @@ export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: 
             <IconMoon size={12} />
           </div>
 
-          <AnalysisHoverCards cards={hoverCards} layouts={hoverCardLayouts} />
+          <AnalysisHoverCards cards={hoverCards} layout={hoverCardsLayout} />
 
           {yLabels.map((label) => (
             <div
