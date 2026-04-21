@@ -19,6 +19,7 @@ const PANEL_WIDTH_MIN = 260;
 const PANEL_WIDTH_MAX = 560;
 const PANEL_WIDTH_DEFAULT = 300;
 const PANEL_PADDING = 12;
+const CENTER_PANEL_HEIGHT_KEY = 'rvc-center-panel-height';
 
 const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
 // Hard minimum computed from the Rythme section's narrowest row:
@@ -36,7 +37,18 @@ const CENTER_PANEL_MAX_HEIGHT = 456;
 const CENTER_PANEL_MIN_HEIGHT = 220;
 const CENTER_PANEL_HEIGHT_RATIO = 0.42;
 const CENTER_TOOLBAR_HEIGHT = 48;
-const CENTER_TOOLBAR_GAP = 12;
+const CENTER_PANEL_STACK_GAP = PANEL_PADDING;
+
+function readStoredCenterPanelHeight(): number | null {
+  try {
+    const raw = localStorage.getItem(CENTER_PANEL_HEIGHT_KEY);
+    if (!raw) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
 
 function readStoredLeftWidth(): number {
   try {
@@ -75,6 +87,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     readStoredLeftWidth(),
   );
   const [isLeftResizing, setIsLeftResizing] = useState(false);
+  const [centerPanelHeightOverride, setCenterPanelHeightOverride] = useState<number | null>(() =>
+    readStoredCenterPanelHeight(),
+  );
+  const [isCenterPanelResizing, setIsCenterPanelResizing] = useState(false);
   const [viewport, setViewport] = useState(() => ({
     w: window.innerWidth,
     h: window.innerHeight,
@@ -98,6 +114,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       /* ignore */
     }
   }, [leftPanelWidth]);
+
+  useEffect(() => {
+    try {
+      if (centerPanelHeightOverride == null) {
+        localStorage.removeItem(CENTER_PANEL_HEIGHT_KEY);
+      } else {
+        localStorage.setItem(CENTER_PANEL_HEIGHT_KEY, String(centerPanelHeightOverride));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [centerPanelHeightOverride]);
 
   const handleResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -129,6 +157,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     };
     const onUp = () => {
       setIsLeftResizing(false);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
+
+  const handleCenterPanelResizeStart = (ev: React.MouseEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    setIsCenterPanelResizing(true);
+    const onMove = (e: MouseEvent) => {
+      const raw = window.innerHeight - PANEL_PADDING - e.clientY;
+      setCenterPanelHeightOverride(raw);
+    };
+    const onUp = () => {
+      setIsCenterPanelResizing(false);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
     };
@@ -192,19 +236,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const centerPanelWidth = centerPanelAvailableWidth;
   const centerPanelAvailableHeight = Math.max(
     0,
-    viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_TOOLBAR_GAP,
+    viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP,
   );
   const centerPanelDesiredHeight = Math.round(
     centerPanelAvailableHeight * CENTER_PANEL_HEIGHT_RATIO,
   );
+  const centerPanelTargetHeight = centerPanelHeightOverride ?? centerPanelDesiredHeight;
   const centerPanelHeight = Math.min(
     centerPanelAvailableHeight,
     CENTER_PANEL_MAX_HEIGHT,
-    Math.max(CENTER_PANEL_MIN_HEIGHT, centerPanelDesiredHeight),
+    Math.max(CENTER_PANEL_MIN_HEIGHT, centerPanelTargetHeight),
   );
   const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
-  const centerToolbarTop = centerPanelTop - CENTER_TOOLBAR_GAP - CENTER_TOOLBAR_HEIGHT;
+  const centerToolbarTop = centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
 
   const logoutStyle: React.CSSProperties = {
     position: 'absolute',
@@ -318,6 +363,40 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           }}
         >
           <CenterPanelToolbar />
+        </div>
+      ) : null}
+
+      {centerPanelVisible ? (
+        <div
+          aria-hidden="true"
+          onMouseDown={handleCenterPanelResizeStart}
+          style={{
+            position: 'absolute',
+            top: centerToolbarTop + CENTER_TOOLBAR_HEIGHT,
+            left: centerPanelLeft,
+            width: centerPanelWidth,
+            height: CENTER_PANEL_STACK_GAP,
+            zIndex: 26,
+            cursor: 'row-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            userSelect: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 72,
+              height: 4,
+              borderRadius: 999,
+              background: isCenterPanelResizing
+                ? 'rgba(255,255,255,0.48)'
+                : 'rgba(255,255,255,0.18)',
+              boxShadow: isCenterPanelResizing
+                ? '0 0 0 1px rgba(255,255,255,0.08)'
+                : 'none',
+            }}
+          />
         </div>
       ) : null}
 
