@@ -16,7 +16,9 @@
   gap: clamp(6px, 1cqi, 12px);
   min-height: 32px;
   min-width: 0;
-  overflow: hidden;
+  position: relative;
+  z-index: 3;
+  overflow: visible;
 }
 
 .rvc-center-analysis__label {
@@ -171,6 +173,7 @@
   width: min(220px, max(160px, 100%));
   border-radius: 8px;
   overflow: hidden;
+  pointer-events: auto;
   background: rgba(15, 15, 15, 0.74);
   backdrop-filter: blur(60px);
   -webkit-backdrop-filter: blur(60px);
@@ -272,6 +275,8 @@
   flex: 1 1 auto;
   flex-direction: column;
   gap: 0;
+  position: relative;
+  z-index: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
