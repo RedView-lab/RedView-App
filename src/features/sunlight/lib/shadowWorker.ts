@@ -309,26 +309,25 @@ async function decodeTerrainRGB(blob: Blob): Promise<Float32Array> {
     colorSpaceConversion: 'none',
     premultiplyAlpha: 'none',
   });
-  if (img.width === 0 || img.height === 0) {
-    console.warn('[shadow-worker] decoded image is 0-dim', {
-      w: img.width, h: img.height, blobSize: blob.size, blobType: blob.type,
-    });
+  // Capture dimensions BEFORE close() — Chrome resets ImageBitmap.width/height
+  // to 0 after close, which would silently zero-out the output array.
+  const w = img.width;
+  const h = img.height;
+  if (w === 0 || h === 0) {
     img.close();
     return new Float32Array(0);
   }
-  let canvas: OffscreenCanvas;
-  let ctx: OffscreenCanvasRenderingContext2D;
   let imageData: ImageData;
   try {
-    canvas = new OffscreenCanvas(img.width, img.height);
-    ctx = canvas.getContext('2d', { colorSpace: 'srgb' }) as OffscreenCanvasRenderingContext2D;
+    const canvas = new OffscreenCanvas(w, h);
+    const ctx = canvas.getContext('2d', { colorSpace: 'srgb' }) as OffscreenCanvasRenderingContext2D;
     ctx.drawImage(img, 0, 0);
-    imageData = ctx.getImageData(0, 0, img.width, img.height);
+    imageData = ctx.getImageData(0, 0, w, h);
   } finally {
     img.close();
   }
   const px = imageData.data;
-  const out = new Float32Array(img.width * img.height);
+  const out = new Float32Array(w * h);
   for (let i = 0; i < out.length; i++) {
     const o = i * 4;
     out[i] = -10000 + (px[o] * 65536 + px[o + 1] * 256 + px[o + 2]) * 0.1;
