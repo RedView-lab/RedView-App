@@ -5,6 +5,7 @@ import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ItineraryPanel } from '@/features/itineraryPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
+import { CenterPanel } from '@/features/analysisPanel';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
@@ -248,6 +249,23 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <FitPredictionPanel
           open={fitPanelOpen}
           onToggleOpen={() => setFitPanelOpen((current) => !current)}
+        />
+      </div>
+
+      {/* Bottom center analysis panel */}
+      <div style={{
+        position: 'absolute',
+        bottom: PANEL_PADDING,
+        left: leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0,
+        right: panelWidth + PANEL_PADDING * 2,
+        zIndex: 25,
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+      }}>
+        <CenterPanel
+          className="backdrop-blur-[60px] bg-[rgba(15,15,15,0.74)] flex flex-col gap-[12px] items-start min-h-[407px] p-[12px] rounded-[8px] w-full max-w-[1308px]"
+          style={{ pointerEvents: 'auto' }}
         />
       </div>
 
