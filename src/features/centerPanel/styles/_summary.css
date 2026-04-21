@@ -1,5 +1,6 @@
 .rvc-center-summary {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 4px;
   min-width: 0;

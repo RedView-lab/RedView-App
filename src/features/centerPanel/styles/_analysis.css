@@ -1,6 +1,12 @@
 .rvc-center-analysis {
-  --rvc-center-plot-gutter: clamp(56px, 7.25cqi, 95px);
+  --rvc-center-plot-gutter: 72px;
   --rvc-center-plot-width: calc(100% - var(--rvc-center-plot-gutter));
+  --rvc-center-plot-overlay-top: 18px;
+  --rvc-center-plot-scale-top: 34px;
+  --rvc-center-plot-axis-bottom: 36px;
+  --rvc-center-plot-band-bottom: 54px;
+  --rvc-center-grid-step: 54px;
+  --rvc-center-marker-top: 10px;
 
   display: flex;
   flex: 1 1 auto;
@@ -13,6 +19,7 @@
 .rvc-center-analysis__toolbar {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: clamp(6px, 1cqi, 12px);
   min-height: 32px;
   min-width: 0;
@@ -290,6 +297,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  isolation: isolate;
   background:
     linear-gradient(
       to right,
@@ -304,14 +312,25 @@
       rgba(255, 255, 255, 0.12) calc(var(--rvc-center-plot-gutter) + (var(--rvc-center-plot-width) / 10) - 0.5px),
       rgba(255, 255, 255, 0.12) calc(var(--rvc-center-plot-gutter) + (var(--rvc-center-plot-width) / 10))
     ),
-    repeating-linear-gradient(
-      to bottom,
-      rgba(255, 255, 255, 0.08) 0,
-      rgba(255, 255, 255, 0.08) 0.5px,
-      transparent 0.5px,
-      transparent 54px
-    ),
     #050505;
+}
+
+.rvc-center-analysis__plot::before {
+  content: '';
+  position: absolute;
+  top: var(--rvc-center-plot-scale-top);
+  right: 0;
+  bottom: var(--rvc-center-plot-axis-bottom);
+  left: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.08) 0,
+    rgba(255, 255, 255, 0.08) 0.5px,
+    transparent 0.5px,
+    transparent var(--rvc-center-grid-step)
+  );
+  pointer-events: none;
+  z-index: 0;
 }
 
 .rvc-center-analysis__plot::after {
@@ -319,16 +338,18 @@
   position: absolute;
   left: var(--rvc-center-plot-gutter);
   right: 0;
-  bottom: 36px;
+  bottom: var(--rvc-center-plot-axis-bottom);
   height: 1px;
   background: rgba(255, 255, 255, 0.24);
+  z-index: 3;
 }
 
 .rvc-center-analysis__band {
   position: absolute;
-  top: 17px;
-  bottom: 54px;
+  top: var(--rvc-center-plot-overlay-top);
+  bottom: var(--rvc-center-plot-band-bottom);
   background: var(--rvc-center-amber);
+  z-index: 1;
 }
 
 .rvc-center-analysis__band--left {
@@ -344,18 +365,43 @@
 .rvc-center-analysis__focus-line {
   position: absolute;
   top: 0;
-  bottom: 36px;
+  bottom: var(--rvc-center-plot-axis-bottom);
   left: calc(var(--rvc-center-plot-gutter) + var(--rvc-center-plot-width) * 0.3603);
   width: 2px;
   background: rgba(255, 255, 255, 0.92);
+  z-index: 3;
+}
+
+.rvc-center-analysis__profile {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.rvc-center-analysis__profile-area {
+  fill: rgba(197, 0, 0, 0.18);
+}
+
+.rvc-center-analysis__profile-line {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.92);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
 .rvc-center-analysis__marker {
   position: absolute;
+  top: var(--rvc-center-marker-top);
   color: #f9c04e;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  z-index: 4;
 }
 
 .rvc-center-analysis__marker--moon-left,
@@ -364,28 +410,23 @@
 }
 
 .rvc-center-analysis__marker--sun-left {
-  top: 10px;
   left: calc(var(--rvc-center-plot-gutter) + var(--rvc-center-plot-width) * 0.0791);
 }
 
 .rvc-center-analysis__marker--moon-left {
-  top: 9px;
   left: calc(var(--rvc-center-plot-gutter) + var(--rvc-center-plot-width) * 0.282);
 }
 
 .rvc-center-analysis__marker--sun-right {
-  top: 10px;
   left: calc(var(--rvc-center-plot-gutter) + var(--rvc-center-plot-width) * 0.5993);
 }
 
 .rvc-center-analysis__marker--moon-right {
-  top: 9px;
   left: calc(var(--rvc-center-plot-gutter) + var(--rvc-center-plot-width) * 0.7675);
 }
 
 .rvc-center-analysis__tooltip {
   position: absolute;
-  top: 26px;
   width: clamp(92px, 9.5cqi, 124px);
   max-width: calc(var(--rvc-center-plot-width) * 0.18);
   padding: 10px 12px;
@@ -394,6 +435,7 @@
   font-size: clamp(10px, 0.92cqi, 12px);
   font-weight: 600;
   line-height: 1.55;
+  z-index: 5;
 }
 
 .rvc-center-analysis__tooltip--one {
@@ -431,34 +473,21 @@
   font-size: clamp(10px, 0.92cqi, 12px);
   font-weight: 600;
   text-align: right;
-}
-
-.rvc-center-analysis__y-label--3000 {
-  top: 36px;
-}
-
-.rvc-center-analysis__y-label--2000 {
-  top: 90px;
-}
-
-.rvc-center-analysis__y-label--1000 {
-  top: 144px;
-}
-
-.rvc-center-analysis__y-label--0 {
-  top: 198px;
+  transform: translateY(-50%);
+  z-index: 4;
 }
 
 .rvc-center-analysis__x-axis {
   position: absolute;
   left: var(--rvc-center-plot-gutter);
   right: 12px;
-  bottom: 16px;
+  bottom: clamp(12px, calc(var(--rvc-center-plot-axis-bottom) - 20px), 20px);
   display: grid;
   grid-template-columns: repeat(11, 1fr);
   color: #fff;
   font-size: clamp(10px, 0.92cqi, 12px);
   font-weight: 500;
+  z-index: 4;
 }
 
 .rvc-center-analysis__x-axis span:first-child {
@@ -471,6 +500,7 @@
 
 .rvc-center-analysis__footer {
   height: 28px;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   border-top: 0.5px solid var(--rvc-center-border);
@@ -499,6 +529,7 @@
 .rvc-center-analysis__scrollbar {
   position: relative;
   height: 16px;
+  flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.64);
 }
 
@@ -531,6 +562,32 @@
   font-size: 18px;
   line-height: 16px;
   letter-spacing: 1px;
+}
+
+.rvc-center-analysis[data-height-tier='xs'] {
+  gap: 8px;
+}
+
+.rvc-center-analysis[data-height-tier='xs'] .rvc-center-analysis__tooltip {
+  padding: 8px 10px;
+  line-height: 1.35;
+}
+
+.rvc-center-analysis[data-height-tier='xs'] .rvc-center-analysis__tooltip--three {
+  display: none;
+}
+
+.rvc-center-analysis[data-height-tier='xs'] .rvc-center-analysis__profile-line {
+  stroke-width: 2.5;
+}
+
+.rvc-center-analysis[data-height-tier='sm'] .rvc-center-analysis__tooltip {
+  padding: 9px 10px;
+  line-height: 1.4;
+}
+
+.rvc-center-analysis[data-height-tier='sm'] .rvc-center-analysis__tooltip--three {
+  opacity: 0.82;
 }
 
 @container center-panel (max-width: 1120px) {
