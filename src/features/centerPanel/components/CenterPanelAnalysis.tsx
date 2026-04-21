@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import {
+  AnalysisHoverCards,
+  defaultAnalysisHoverCards,
+  type AnalysisHoverCardData,
+} from './AnalysisHoverCards';
 import { IconCheck, IconChevronDown, IconMoon, IconSun } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 
@@ -28,27 +33,6 @@ const axisOptions: AxisOption[] = [
   { value: 'Humidité (%)', label: 'Humidité (%)', tone: 'secondary' },
   { value: 'Ensoleillement (min)', label: 'Ensoleillement (min)', tone: 'secondary' },
   { value: 'Humidité (%)__bis', label: 'Humidité (%)', tone: 'secondary' },
-];
-
-const tooltips = [
-  {
-    className: 'rvc-center-analysis__tooltip--one',
-    color: '#d10000',
-    anchor: 0.81,
-    lines: ['127.23 km', '+839 m', '-420 m', '02:48:59', 'J1 - 08:29'],
-  },
-  {
-    className: 'rvc-center-analysis__tooltip--two',
-    color: '#ffb54a',
-    anchor: 0.72,
-    lines: ['127.23 km', '+1232 m', '-339 m', '02:31:19', 'J1 - 08:12'],
-  },
-  {
-    className: 'rvc-center-analysis__tooltip--three',
-    color: '#ffb54a',
-    anchor: 0.67,
-    lines: ['127.23 km', '+1232 m', '-339 m', '02:31:19', 'J1 - 08:12'],
-  },
 ];
 
 const yAxisLevels = [
@@ -179,7 +163,11 @@ function buildProfilePaths(metrics: PlotMetrics) {
   return { areaPath, linePath };
 }
 
-export function CenterPanelAnalysis() {
+interface CenterPanelAnalysisProps {
+  hoverCards?: AnalysisHoverCardData[];
+}
+
+export function CenterPanelAnalysis({ hoverCards = defaultAnalysisHoverCards }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
   const plotRef = useRef<HTMLDivElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
@@ -262,13 +250,43 @@ export function CenterPanelAnalysis() {
   const tooltipVerticalOffset =
     plotMetrics.heightTier === 'xs' ? 48 : plotMetrics.heightTier === 'sm' ? 56 : 64;
 
-  const tooltipPositions = tooltips.map((tooltip) =>
-    clampNumber(
-      projectNormalizedY(tooltip.anchor, plotMetrics) - tooltipVerticalOffset,
-      plotMetrics.overlayTop + 6,
-      plotMetrics.scaleTop + plotMetrics.usableHeight * 0.45,
-    ),
+  const hoverCardGap = 10;
+  const hoverCardHorizontalPadding = 16;
+  const hoverCardWidth = clampNumber(
+    (plotMetrics.plotContentWidth - hoverCardHorizontalPadding - hoverCardGap * (hoverCards.length - 1)) /
+      Math.max(hoverCards.length, 1),
+    80,
+    116,
   );
+  const hoverCardMinLeft = plotMetrics.plotGutter + 8;
+  const hoverCardMaxLeft = plotMetrics.plotGutter + plotMetrics.plotContentWidth - hoverCardWidth - 8;
+  const hoverCardLayouts = hoverCards.map((card, index, cards) => {
+    const idealLeft = plotMetrics.plotGutter + plotMetrics.plotContentWidth * card.anchorX - hoverCardWidth / 2;
+    const minLeft =
+      index === 0
+        ? hoverCardMinLeft
+        : clampNumber(
+            hoverCardMinLeft + index * (hoverCardWidth + hoverCardGap),
+            hoverCardMinLeft,
+            hoverCardMaxLeft,
+          );
+    const maxLeft = clampNumber(
+      hoverCardMaxLeft - (cards.length - index - 1) * (hoverCardWidth + hoverCardGap),
+      hoverCardMinLeft,
+      hoverCardMaxLeft,
+    );
+
+    return {
+      id: card.id,
+      top: clampNumber(
+        projectNormalizedY(card.anchorY, plotMetrics) - tooltipVerticalOffset,
+        plotMetrics.overlayTop + 6,
+        plotMetrics.scaleTop + plotMetrics.usableHeight * 0.45,
+      ),
+      left: clampNumber(idealLeft, minLeft, Math.max(minLeft, maxLeft)),
+      width: hoverCardWidth,
+    };
+  });
 
   const { areaPath, linePath } = buildProfilePaths(plotMetrics);
 
@@ -366,21 +384,7 @@ export function CenterPanelAnalysis() {
             <IconMoon size={12} />
           </div>
 
-          {tooltips.map((tooltip, index) => (
-            <div
-              key={tooltip.className}
-              className={`rvc-center-analysis__tooltip ${tooltip.className}`}
-              style={{ top: `${tooltipPositions[index]}px` }}
-            >
-              <div className="rvc-center-analysis__tooltip-head">
-                <span className="rvc-center-analysis__tooltip-dot" style={{ background: tooltip.color }} />
-                <span>{tooltip.lines[0]}</span>
-              </div>
-              {tooltip.lines.slice(1).map((line) => (
-                <div key={line}>{line}</div>
-              ))}
-            </div>
-          ))}
+          <AnalysisHoverCards cards={hoverCards} layouts={hoverCardLayouts} />
 
           {yLabels.map((label) => (
             <div
