@@ -1,1 +1,2 @@
-export { default as CenterPanel } from './components/CenterPanel';
+export { AnalysisResults } from './components/AnalysisResults';
+export { AnalysisSlider } from './components/AnalysisSlider';
