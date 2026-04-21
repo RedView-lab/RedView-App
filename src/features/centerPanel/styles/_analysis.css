@@ -303,7 +303,7 @@
   min-height: 0;
   overflow: hidden;
   border-radius: 5px;
-  background: rgba(0, 0, 0, 0.64);
+  background: transparent;
   border: 0.5px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -312,6 +312,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 120px;
+  background: rgba(0, 0, 0, 0.64);
 }
 
 .rvc-center-analysis__scale-row,
@@ -332,6 +333,7 @@
 .rvc-center-analysis__axis-row {
   flex: 0 0 24px;
   min-height: 24px;
+  background: rgba(0, 0, 0, 0.64);
   border-top: 0.5px solid rgba(255, 255, 255, 0.8);
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.8);
 }
@@ -340,6 +342,7 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
+  background: rgba(0, 0, 0, 0.64);
 }
 
 .rvc-center-analysis__lower {
@@ -360,6 +363,7 @@
   display: grid;
   grid-template-columns: var(--rvc-center-results-left-column) repeat(var(--rvc-center-results-rows), minmax(0, 1fr));
   min-height: 24px;
+  background: rgba(0, 0, 0, 0.64);
   border-top: 0.5px solid rgba(255, 255, 255, 0.08);
   border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
 }
@@ -746,7 +750,7 @@
   position: relative;
   height: 40px;
   flex: 0 0 auto;
-  background: var(--rvc-center-bg);
+  background: transparent;
 }
 
 .rvc-center-analysis__scrollbar-track {
