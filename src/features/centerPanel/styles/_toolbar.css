@@ -1,0 +1,133 @@
+.rvc-center-toolbar {
+  min-width: 0;
+}
+
+.rvc-center-toolbar__viewport {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.rvc-center-toolbar__viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.rvc-center-toolbar__track {
+  min-width: max-content;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rvc-center-toolbar__button {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.rvc-center-toolbar__button svg {
+  flex: 0 0 auto;
+}
+
+.rvc-center-toolbar__button--accent {
+  padding-left: 12px;
+  padding-right: 8px;
+  background: var(--rvc-center-red);
+}
+
+.rvc-center-toolbar__button--label {
+  padding-left: 8px;
+  padding-right: 12px;
+  gap: 3px;
+}
+
+.rvc-center-toolbar__button--play {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvc-center-toolbar__button-text {
+  white-space: nowrap;
+}
+
+.rvc-center-toolbar__separator {
+  width: 1px;
+  height: 32px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.rvc-center-toolbar__spacer {
+  flex: 1 0 24px;
+  min-width: 12px;
+}
+
+.rvc-center-toolbar__playback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.rvc-center-toolbar__metrics {
+  width: 74px;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+@container center-panel (max-width: 1120px) {
+  .rvc-center-toolbar__track {
+    gap: 6px;
+    padding: 6px;
+  }
+
+  .rvc-center-toolbar__button {
+    padding-inline: 10px;
+  }
+}
+
+@container center-panel (max-width: 840px) {
+  .rvc-center-toolbar__track {
+    min-height: 44px;
+    border-radius: 7px;
+  }
+
+  .rvc-center-toolbar__button {
+    height: 30px;
+    min-width: 30px;
+    padding-inline: 9px;
+  }
+
+  .rvc-center-toolbar__separator {
+    height: 28px;
+  }
+}
+
+@container center-panel (max-width: 640px) {
+  .rvc-center-toolbar__metrics {
+    width: 68px;
+    font-size: 9px;
+  }
+}

@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: flex-start;
   padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  background: transparent;
   border-radius: 6px;
   color: white;
   font-family: 'Rethink Sans', sans-serif;
@@ -25,7 +25,7 @@
 }
 
 .rvc-weather__tab.is-active {
-  background: #232323;
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .rvc-weather__date-row {

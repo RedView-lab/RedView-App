@@ -7,7 +7,6 @@ import { SlopesSection } from './sections/SlopesSection';
 import { AltitudeSection } from './sections/AltitudeSection';
 import { WeatherSection } from './sections/WeatherSection';
 import { WindSection } from './sections/WindSection';
-import { SimpleToggleSection } from './sections/SimpleToggleSection';
 import { SunlightSection } from './sections/SunlightSection';
 import type { ControlPanelProps } from './types';
 import './styles/index.css';
@@ -50,7 +49,6 @@ export function ControlPanel({
   onWeatherLayerModeChange,
   onWeatherAddAlert,
   onWindEnabledChange,
-  onSnowEnabledChange,
   onSunlightEnabledChange,
   onSunlightStateChange,
   width,
@@ -140,11 +138,6 @@ export function ControlPanel({
       <WindSection
         enabled={state.wind.enabled}
         onEnabledChange={onWindEnabledChange}
-      />
-      <SimpleToggleSection
-        title="Neige"
-        enabled={state.snow.enabled}
-        onEnabledChange={onSnowEnabledChange}
       />
       <SunlightSection
         state={state.sunlight}
