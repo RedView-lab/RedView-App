@@ -3,6 +3,7 @@ import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
+import { CenterPanel } from '@/features/centerPanel';
 import { ItineraryPanel } from '@/features/itineraryPanel';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -29,6 +30,8 @@ const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
 const LEFT_PANEL_WIDTH_MIN = 320;
 const LEFT_PANEL_WIDTH_MAX = 520;
 const LEFT_PANEL_WIDTH_DEFAULT = 360;
+const CENTER_PANEL_DESIGN_WIDTH = 1308;
+const CENTER_PANEL_DESIGN_HEIGHT = 456;
 
 function readStoredLeftWidth(): number {
   try {
@@ -172,6 +175,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const leftDockOffset =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
 
+  const centerPanelRegionLeft = (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + 8;
+  const centerPanelRegionRight = panelWidth + PANEL_PADDING * 2 + 8;
+  const centerPanelAvailableWidth = Math.max(
+    0,
+    viewport.w - centerPanelRegionLeft - centerPanelRegionRight,
+  );
+  const centerPanelScale = Math.min(
+    1,
+    centerPanelAvailableWidth / CENTER_PANEL_DESIGN_WIDTH,
+  );
+  const centerPanelVisible = centerPanelAvailableWidth >= 420;
+  const centerPanelWidth = CENTER_PANEL_DESIGN_WIDTH * centerPanelScale;
+  const centerPanelHeight = CENTER_PANEL_DESIGN_HEIGHT * centerPanelScale;
+  const centerPanelLeft = centerPanelRegionLeft + Math.max(
+    0,
+    (centerPanelAvailableWidth - centerPanelWidth) / 2,
+  );
+  const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
+
   const logoutStyle: React.CSSProperties = {
     position: 'absolute',
     top: 12,
@@ -225,6 +247,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           borderRadius={8}
         />
       )}
+      {mapLoaded && centerPanelVisible && centerPanelScale > 0 && (
+        <MapBlurMirror
+          map={mapRef.current}
+          top={centerPanelTop}
+          left={centerPanelLeft}
+          width={centerPanelWidth}
+          height={centerPanelHeight}
+          borderRadius={Math.max(4, 8 * centerPanelScale)}
+        />
+      )}
 
       <div style={leftPanelStyle}>
         <ItineraryPanel
@@ -250,6 +282,31 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
       </div>
+
+      {centerPanelVisible && centerPanelScale > 0 ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: centerPanelTop,
+            left: centerPanelLeft,
+            width: centerPanelWidth,
+            height: centerPanelHeight,
+            zIndex: 25,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              width: CENTER_PANEL_DESIGN_WIDTH,
+              height: CENTER_PANEL_DESIGN_HEIGHT,
+              transform: `scale(${centerPanelScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <CenterPanel />
+          </div>
+        </div>
+      ) : null}
 
       <button onClick={onLogout} style={logoutStyle}>
         Logout
