@@ -1,8 +1,31 @@
 import { useEffect, useRef, useState } from 'react';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
+import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
+import { IconChevronDown } from './CenterPanelIcons';
 
 const filters = ['Waypoint', 'POI', 'Pause', 'Alertes', 'Pente', 'Jour/nuit'];
+
+const scaleRows = [
+  { left: '', right: '' },
+  { left: '3000', right: '30°' },
+  { left: '', right: '' },
+  { left: '2000', right: '20°' },
+  { left: '', right: '' },
+  { left: '1000', right: '10°' },
+  { left: '', right: '' },
+  { left: '0', right: '0°' },
+];
+
+const axisTicks = ['0', '10', '20', '30', '40', '50', '60', '70', '80', '90', ''];
+
+const temperatureRows = [
+  { color: '#c50000', label: 'Température' },
+  { color: '#ffa630', label: 'Température' },
+  { color: '#f6c95b', label: 'Température' },
+];
+
+const temperatureValues = Array.from({ length: 10 }, () => '17°');
 
 const axisOptions: AxisOption[] = [
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
@@ -64,6 +87,36 @@ export function CenterPanelAnalysis() {
     setOpenAxis(null);
   };
 
+  const renderCells = (values: string[], tone: 'muted' | 'strong', trailing?: React.ReactNode) =>
+    axisTicks.map((tick, index) => {
+      const isFirst = index === 0;
+      const isLast = index === axisTicks.length - 1;
+      const value = values[index] ?? tick;
+
+      return (
+        <div
+          key={`${tone}-${index}`}
+          className={[
+            'rvc-center-analysis__cell',
+            isFirst ? 'rvc-center-analysis__cell--first' : '',
+            isLast ? 'rvc-center-analysis__cell--last' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <span
+            className={
+              tone === 'strong'
+                ? 'rvc-center-analysis__cell-value rvc-center-analysis__cell-value--strong'
+                : 'rvc-center-analysis__cell-value'
+            }
+          >
+            {isLast ? trailing ?? value : value}
+          </span>
+        </div>
+      );
+    });
+
   return (
     <section ref={rootRef} className="rvc-center-analysis" aria-label="Analyse du parcours">
       <div className="rvc-center-analysis__toolbar">
@@ -119,6 +172,66 @@ export function CenterPanelAnalysis() {
               <span className="rvc-center-analysis__filter-label" title={filter}>{filter}</span>
             </label>
           ))}
+        </div>
+      </div>
+
+      <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
+        <div className="rvc-center-analysis__plot-grid" aria-hidden="true">
+          {scaleRows.map((row, rowIndex) => (
+            <div key={`${row.left}-${row.right}-${rowIndex}`} className="rvc-center-analysis__scale-row">
+              <div className="rvc-center-analysis__scale-label">{row.left}</div>
+              {renderCells(
+                Array.from({ length: axisTicks.length }, (_, index) =>
+                  index === axisTicks.length - 1 ? row.right : '',
+                ),
+                'muted',
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="rvc-center-analysis__axis-row" aria-hidden="true">
+          <div className="rvc-center-analysis__axis-label-cell" />
+          {renderCells(axisTicks, 'strong')}
+        </div>
+
+        <div className="rvc-center-analysis__series-list">
+          {temperatureRows.map((row, rowIndex) => (
+            <div key={`${row.label}-${rowIndex}`} className="rvc-center-analysis__series-row">
+              <div className="rvc-center-analysis__series-control">
+                <button className="rvc-center-analysis__series-button" type="button">
+                  <span
+                    className="rvc-center-analysis__series-color"
+                    style={{ backgroundColor: row.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="rvc-center-analysis__series-label">{row.label}</span>
+                  <IconChevronDown size={14} aria-hidden="true" />
+                </button>
+              </div>
+
+              {renderCells(temperatureValues, 'muted',
+                <button className="rvc-center-analysis__series-delete" type="button" aria-label="Supprimer la série">
+                  <IconTrash size={12} />
+                </button>,
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="rvc-center-analysis__footer">
+          <button className="rvc-center-analysis__add-button" type="button">
+            <IconPlusCircle size={12} />
+            <span>Ajouter</span>
+            <IconChevronDown size={14} className="rvc-center-analysis__footer-caret" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="rvc-center-analysis__scrollbar" aria-hidden="true">
+          <div className="rvc-center-analysis__scrollbar-track" />
+          <div className="rvc-center-analysis__scrollbar-thumb">
+            <div className="rvc-center-analysis__scrollbar-grip">...</div>
+          </div>
         </div>
       </div>
 
