@@ -296,6 +296,7 @@
 }
 
 .rvc-center-analysis__results {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -304,6 +305,16 @@
   overflow: hidden;
   background: transparent;
   border: 0;
+}
+
+.rvc-center-analysis__hover-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  z-index: 4;
 }
 
 .rvc-center-analysis__plot-grid {
