@@ -51,6 +51,24 @@ function shadowVisibility(altitudeDeg: number): number {
 }
 
 /**
+ * Twilight darkening curve. Returns 0..1 alpha for a uniform black veil that
+ * eases the map from full daylight into night through the standard twilight
+ * phases:
+ *   alt > +1°  : 0   (full daylight, no veil)
+ *   alt 0°     : light bluing begins
+ *   -6° civil  : ~0.30
+ *   -12° nautical: ~0.55
+ *   -18° astro : ~0.72 (capped — keep terrain readable)
+ */
+function nightVeilAlpha(altitudeDeg: number): number {
+  if (altitudeDeg >= 1) return 0;
+  // Smooth cubic ramp from +1° to -18°, then clamp.
+  const t = Math.max(0, Math.min(1, (1 - altitudeDeg) / 19));
+  const eased = t * t * (3 - 2 * t);
+  return eased * 0.72;
+}
+
+/**
  * Pick a DEM zoom that keeps the sample density close to one DEM pixel per
  * grid cell. Bounded so we never explode the tile count or under-resolve.
  */
@@ -212,8 +230,10 @@ export function useShadowImage(
       const o = optsRef.current;
       if (!o.enabled) return;
       const visibility = shadowVisibility(o.sunAltitudeDeg);
-      if (visibility <= 0) {
-        // Sun below horizon — leave existing image but make layer invisible.
+      const veil = nightVeilAlpha(o.sunAltitudeDeg) * o.opacity;
+      // Nothing to draw at all (sun fully up AND veil zero — only happens
+      // when user disabled shadows; handled above).
+      if (visibility <= 0 && veil <= 0) {
         if (map.getLayer(LAYER_ID)) {
           try { map.setPaintProperty(LAYER_ID, 'raster-opacity', 0); } catch { /* */ }
         }
@@ -225,6 +245,7 @@ export function useShadowImage(
         sunAzDeg: o.sunAzimuthDeg,
         sunAltDeg: o.sunAltitudeDeg,
         opacity: o.opacity * visibility,
+        nightFloor: veil,
       });
       if (cancelled) return;
       if (ack.type !== 'compute-ok') {

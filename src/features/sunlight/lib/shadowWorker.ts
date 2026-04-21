@@ -39,6 +39,8 @@ interface ComputeRequest {
   sunAltDeg: number;
   /** 0..1 darkness multiplier for in-shadow pixels. */
   opacity: number;
+  /** 0..1 uniform alpha floor applied to every pixel (twilight/night veil). */
+  nightFloor: number;
 }
 
 interface ResetRequest {
@@ -127,18 +129,10 @@ async function handleSample(msg: SampleRequest) {
   // For each grid cell, project to lon/lat → tile pixel → bilinear lookup.
   // Cache decoded tiles by (x,y).
   const tileMap = new Map<string, Float32Array>();
-  let tilesOk = 0;
   for (const t of decoded) {
-    if (t.elev) {
+    if (t.elev && t.elev.length > 0) {
       tileMap.set(`${t.x}/${t.y}`, t.elev);
-      tilesOk++;
     }
-  }
-  if (tilesOk === 0) {
-    console.warn('[shadow-worker] no DEM tiles loaded', {
-      demZoom, requested: tileCount,
-      tileRange: { xMin, xMax, yMin, yMax },
-    });
   }
 
   // Inverse mercator: row r → lat from north→south linearly in mercator-Y.
@@ -181,57 +175,6 @@ async function handleSample(msg: SampleRequest) {
   const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
   const latExtentM = ((n - s) * Math.PI * 6378137) / 180;
 
-  if (filled === 0) {
-    // Diagnostic dump: sample a few corners + show what keys exist.
-    const sample = (lng: number, lat: number) => {
-      const txf = ((lng + 180) / 360) * nTiles;
-      const tyf = latToMercY(lat) * nTiles;
-      const tx = Math.floor(txf);
-      const ty = Math.floor(tyf);
-      const t = tileMap.get(`${tx}/${ty}`);
-      let v: number | string = 'no-tile';
-      if (t) {
-        const px = (txf - tx) * DEM_TILE_SIZE;
-        const py = (tyf - ty) * DEM_TILE_SIZE;
-        v = bilinearSample(t, DEM_TILE_SIZE, DEM_TILE_SIZE, px, py);
-      }
-      return { lng, lat, tx, ty, key: `${tx}/${ty}`, v };
-    };
-    // Per-tile stats so we can tell if tiles are all-zero, all -10000, NaN, etc.
-    const tileStats = Array.from(tileMap.entries()).map(([key, t]) => {
-      let mn = Infinity, mx = -Infinity, nan = 0, nodata = 0;
-      const sampleVals: number[] = [];
-      for (let i = 0; i < t.length; i++) {
-        const v = t[i];
-        if (Number.isNaN(v)) { nan++; continue; }
-        if (v <= DEM_NODATA_THRESHOLD) { nodata++; continue; }
-        if (v < mn) mn = v;
-        if (v > mx) mx = v;
-      }
-      // First 3 raw values from each tile.
-      for (let i = 0; i < 3 && i < t.length; i++) sampleVals.push(t[i]);
-      return { key, len: t.length, min: mn, max: mx, nan, nodata, first3: sampleVals };
-    });
-    const c1 = sample(w, n);
-    const c2 = sample(e, n);
-    const c3 = sample(w, s);
-    const c4 = sample(e, s);
-    const c5 = sample((w + e) / 2, (n + s) / 2);
-    console.warn('[shadow-worker] filled=0 diagnostic',
-      JSON.stringify({
-        demZoom,
-        bounds,
-        tileRange: { xMin, xMax, yMin, yMax },
-        tilesOk,
-        tilesRequested: tileCount,
-        tileStats,
-        corners: [c1, c2, c3, c4, c5],
-      }, (_k, v) =>
-        typeof v === 'number' && !Number.isFinite(v) ? String(v) : v,
-      ),
-    );
-  }
-
   state = {
     bounds,
     gridW,
@@ -261,45 +204,21 @@ async function loadTile(
   const url = new URL(`/dem-tiles/${z}/${x}/${y}`, self.location.origin).toString();
   // Try the cache first; if missing, request via the SW (will trigger a build).
   let resp = await cache.match(url);
-  let source: 'cache' | 'fetch' | 'fetch-error' = 'cache';
   if (!resp || resp.status !== 200) {
     try {
       resp = await fetch(url);
-      source = 'fetch';
-    } catch (err) {
-      console.warn('[shadow-worker] tile fetch threw', { z, x, y, err });
+    } catch {
       return { x, y, elev: null };
     }
   }
   if (!resp || resp.status !== 200) {
-    if (resp) {
-      console.warn('[shadow-worker] tile non-200', {
-        z, x, y, status: resp.status, source,
-      });
-    } else {
-      console.warn('[shadow-worker] tile no response', { z, x, y, source });
-    }
     return { x, y, elev: null };
   }
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
-    if (elev.length === 0) {
-      console.warn('[shadow-worker] tile decoded empty', {
-        z, x, y, source,
-        blobSize: blob.size,
-        blobType: blob.type,
-        respHeaders: {
-          ct: resp.headers.get('content-type'),
-          len: resp.headers.get('content-length'),
-          xTileType: resp.headers.get('x-tile-type'),
-          xDemReason: resp.headers.get('x-dem-reason'),
-        },
-      });
-    }
     return { x, y, elev };
-  } catch (err) {
-    console.warn('[shadow-worker] tile decode failed', { z, x, y, err });
+  } catch {
     return { x, y, elev: null };
   }
 }
@@ -373,13 +292,20 @@ function handleCompute(msg: ComputeRequest) {
     (self as unknown as Worker).postMessage({ id: msg.id, type: 'compute-empty' });
     return;
   }
-  const { sunAzDeg, sunAltDeg, opacity } = msg;
+  const { sunAzDeg, sunAltDeg, opacity, nightFloor } = msg;
   const { gridW, gridH, elev, cellSizeX, cellSizeY } = state;
 
-  const shadow = computeSweepShadow(elev, gridW, gridH, sunAzDeg, sunAltDeg, cellSizeX, cellSizeY);
-  const blurred = boxBlur3(shadow, gridW, gridH);
+  // Sun above horizon → cast shadows. Below horizon → skip the sweep, the
+  // night veil alone darkens the map uniformly.
+  let blurred: Uint8Array;
+  if (sunAltDeg > 0) {
+    const shadow = computeSweepShadow(elev, gridW, gridH, sunAzDeg, sunAltDeg, cellSizeX, cellSizeY);
+    blurred = boxBlur3(shadow, gridW, gridH);
+  } else {
+    blurred = new Uint8Array(gridW * gridH);
+  }
 
-  const rgba = encodeShadowRgba(blurred, gridW, gridH, opacity);
+  const rgba = encodeShadowRgba(blurred, gridW, gridH, opacity, nightFloor);
   const blob = new Blob([rawPng(gridW, gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
 
   (self as unknown as Worker).postMessage(
@@ -527,14 +453,17 @@ function encodeShadowRgba(
   W: number,
   H: number,
   opacity: number,
+  nightFloor: number,
 ): Uint8Array {
   const op = Math.max(0, Math.min(1, opacity));
+  const floor = (Math.max(0, Math.min(1, nightFloor)) * 255) | 0;
   const rgba = new Uint8Array(W * H * 4);
   for (let i = 0; i < shadow.length; i++) {
-    const a = (shadow[i] * op) | 0;
+    const cast = (shadow[i] * op) | 0;
+    const a = cast > floor ? cast : floor;
     if (a === 0) continue;
     const o = i * 4;
-    // R,G,B already 0
+    // R,G,B already 0 → black overlay with variable alpha.
     rgba[o + 3] = a;
   }
   return rgba;
