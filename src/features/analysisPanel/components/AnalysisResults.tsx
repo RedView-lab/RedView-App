@@ -63,6 +63,8 @@ const Y_MAJOR_TARGET_PX = 40;
 const Y_MINOR_TARGET_PX = 18;
 /** Width of the left-hand label gutter (must match grid label column). */
 const LABEL_GUTTER_PX = 95;
+/** Width of the right-hand padding column. */
+const RIGHT_GUTTER_PX = 48;
 
 const PLOT_Y_MIN = 0;
 const PLOT_Y_MAX = 3000;
@@ -99,7 +101,7 @@ export function AnalysisResults({
     return () => ro.disconnect();
   }, []);
 
-  const usableWidth = Math.max(0, gridSize.width - LABEL_GUTTER_PX);
+  const usableWidth = Math.max(0, gridSize.width - LABEL_GUTTER_PX - RIGHT_GUTTER_PX);
 
   const xMajorTicks = useMemo(() => {
     if (xAxisTicks && xAxisTicks.length > 0) {
@@ -133,99 +135,105 @@ export function AnalysisResults({
       data-node-id="1894:39014"
       data-name="RESULTS"
     >
-      <div
-        className="absolute inset-[17px_0_70px_97px] overflow-hidden pointer-events-none"
-        data-node-id="1894:39015"
-        data-name="PLOT"
-      >
-        {dayWindows.map((window) => (
-          <div
-            key={window.id}
-            className="absolute inset-y-0 bg-[rgba(255,166,48,0.14)]"
-            style={{
-              left: `${clamp(window.startPercent, 0, 100)}%`,
-              width: `${Math.max(0, window.endPercent - window.startPercent)}%`,
-            }}
-          />
-        ))}
-
-        <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {plotSeries.map((entry) => {
-            if (!entry.fillColor) return null;
-            const areaPath = buildSeriesPath(entry.points, true);
-            if (!areaPath) return null;
-            return <path key={`${entry.id}-area`} d={areaPath} fill={entry.fillColor} opacity={entry.opacity ?? 1} />;
-          })}
-
-          {plotSeries.map((entry) => {
-            const linePath = buildSeriesPath(entry.points, false);
-            if (!linePath) return null;
-            return (
-              <path
-                key={entry.id}
-                d={linePath}
-                fill="none"
-                stroke={entry.color}
-                strokeWidth={entry.strokeWidth ?? 0.42}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-                vectorEffect="non-scaling-stroke"
-                opacity={entry.opacity ?? 1}
-              />
-            );
-          })}
-
-          {cursor ? (
-            <line
-              x1={clamp(cursor.xPercent, 0, 100)}
-              x2={clamp(cursor.xPercent, 0, 100)}
-              y1="0"
-              y2="100"
-              stroke="rgba(255,255,255,0.96)"
-              strokeWidth="0.22"
-              vectorEffect="non-scaling-stroke"
+      <AnalysisResultsGrid ref={gridRef} columns={xColumns} plotRows={plotRows}>
+        <div
+          className="absolute inset-0 overflow-hidden pointer-events-none"
+          data-node-id="1894:39015"
+          data-name="PLOT"
+        >
+          {dayWindows.map((window) => (
+            <div
+              key={window.id}
+              className="absolute inset-y-0 bg-[rgba(255,166,48,0.14)]"
+              style={{
+                left: `${clamp(window.startPercent, 0, 100)}%`,
+                width: `${Math.max(0, window.endPercent - window.startPercent)}%`,
+              }}
             />
+          ))}
+
+          <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            {plotSeries.map((entry) => {
+              if (!entry.fillColor) return null;
+              const areaPath = buildSeriesPath(entry.points, true);
+              if (!areaPath) return null;
+              return <path key={`${entry.id}-area`} d={areaPath} fill={entry.fillColor} opacity={entry.opacity ?? 1} />;
+            })}
+
+            {plotSeries.map((entry) => {
+              const linePath = buildSeriesPath(entry.points, false);
+              if (!linePath) return null;
+              return (
+                <path
+                  key={entry.id}
+                  d={linePath}
+                  fill="none"
+                  stroke={entry.color}
+                  strokeWidth={entry.strokeWidth ?? 0.42}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                  opacity={entry.opacity ?? 1}
+                />
+              );
+            })}
+
+            {cursor ? (
+              <line
+                x1={clamp(cursor.xPercent, 0, 100)}
+                x2={clamp(cursor.xPercent, 0, 100)}
+                y1="0"
+                y2="100"
+                stroke="rgba(255,255,255,0.96)"
+                strokeWidth="0.22"
+                vectorEffect="non-scaling-stroke"
+              />
+            ) : null}
+          </svg>
+
+          {dayWindows.map((window) => (
+            <PhaseIcon
+              key={`${window.id}-sun`}
+              src={imgIcon6}
+              name="sun"
+              left={`calc(${clamp(window.startPercent, 0, 100)}% + 4px)`}
+            />
+          ))}
+
+          {dayWindows.map((window) => (
+            <PhaseIcon
+              key={`${window.id}-moon`}
+              src={imgIcon7}
+              name="moon-01"
+              left={`calc(${clamp(window.endPercent, 0, 100)}% - 12px)`}
+            />
+          ))}
+
+          {cursor && cursor.summaries.length > 0 ? (
+            <div
+              className="absolute backdrop-blur-[60px] bg-[rgba(255,255,255,0.04)] content-stretch flex gap-[8px] items-start px-[4px] py-[8px] top-[24px]"
+              style={{ left: `${hoverLeftPercent}%`, transform: 'translateX(-50%)' }}
+            >
+              {cursor.summaries.map((summary, index) => (
+                <HoverSummaryCard key={summary.seriesId} summary={summary} showDivider={index > 0} />
+              ))}
+            </div>
           ) : null}
-        </svg>
-
-        {dayWindows.map((window) => (
-          <PhaseIcon
-            key={`${window.id}-sun`}
-            src={imgIcon6}
-            name="sun"
-            left={`calc(${clamp(window.startPercent, 0, 100)}% + 4px)`}
-          />
-        ))}
-
-        {dayWindows.map((window) => (
-          <PhaseIcon
-            key={`${window.id}-moon`}
-            src={imgIcon7}
-            name="moon-01"
-            left={`calc(${clamp(window.endPercent, 0, 100)}% - 12px)`}
-          />
-        ))}
-
-        {cursor && cursor.summaries.length > 0 ? (
-          <div
-            className="absolute backdrop-blur-[60px] bg-[rgba(255,255,255,0.04)] content-stretch flex gap-[8px] items-start px-[4px] py-[8px] top-[24px]"
-            style={{ left: `${hoverLeftPercent}%`, transform: 'translateX(-50%)' }}
-          >
-            {cursor.summaries.map((summary, index) => (
-              <HoverSummaryCard key={summary.seriesId} summary={summary} showDivider={index > 0} />
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      <AnalysisResultsGrid ref={gridRef} columns={xColumns} plotRows={plotRows} />
+        </div>
+      </AnalysisResultsGrid>
       <AxisRow columns={xColumns} />
+      {series.map((s) => (
+        <SeriesRow key={s.id} series={s} columns={xColumns} />
+      ))}
       <AddLineRow columns={xColumns} />
     </div>
   );
 }
 
 function AxisRow({ columns }: { columns: GridColumn[] }) {
+  const innerCols = columns.slice(0, -1);
+  const lastCol = columns[columns.length - 1];
+
   return (
     <div
       className="border-[rgba(255,255,255,0.8)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] gap-[4px] items-center max-h-[24px] min-h-[16px] relative w-full"
@@ -242,7 +250,7 @@ function AxisRow({ columns }: { columns: GridColumn[] }) {
         </div>
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative" data-node-id="1894:39038">
-        {columns.map((col, index) => (
+        {innerCols.map((col, index) => (
           <div
             key={`${index}-${col.value}`}
             className={
@@ -263,12 +271,24 @@ function AxisRow({ columns }: { columns: GridColumn[] }) {
             ) : null}
           </div>
         ))}
+        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-white content-stretch flex h-full items-center justify-start px-[8px] py-[2px] relative shrink-0 w-[48px]">
+          {lastCol?.major && lastCol?.label ? (
+             <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-ellipsis text-white whitespace-nowrap pl-[4px]" style={FONT_OPSZ_STYLE}>
+               <p className="leading-[normal] overflow-hidden text-ellipsis">{lastCol.label}</p>
+             </div>
+          ) : (
+            <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-ellipsis text-white w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
+              <p className="leading-[normal] overflow-hidden text-ellipsis">{` `}</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 function AddLineRow({ columns }: { columns: GridColumn[] }) {
+  const innerCols = columns.slice(0, -1);
   return (
     <div
       className="border-[rgba(255,255,255,0.08)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] gap-[4px] items-center max-h-[28px] min-h-[24px] relative w-full"
@@ -291,7 +311,7 @@ function AddLineRow({ columns }: { columns: GridColumn[] }) {
         </div>
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative" data-node-id="1894:39070">
-        {columns.map((col, index) => (
+        {innerCols.map((col, index) => (
           <div
             key={`${index}-${col.value}`}
             className={
@@ -303,6 +323,61 @@ function AddLineRow({ columns }: { columns: GridColumn[] }) {
             }
           />
         ))}
+        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0 w-[48px]">
+          <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
+            <p className="leading-[normal] overflow-hidden text-ellipsis">{` `}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+import { imgIcon1 } from './assets';
+
+function SeriesRow({ series, columns }: { series: AnalysisChartSeries, columns: GridColumn[] }) {
+  const innerCols = columns.slice(0, -1);
+  return (
+    <div className="border-[rgba(255,255,255,0.08)] border-b-[0.5px] border-solid border-t-[0.5px] content-stretch flex flex-[1_0_0] items-center max-h-[28px] min-h-[24px] relative w-full">
+      <div className="bg-[rgba(0,0,0,0.64)] content-stretch flex flex-col h-full items-start justify-center px-[4px] relative shrink-0 w-[95px]">
+        <div className="bg-[rgba(255,255,255,0.08)] content-stretch flex gap-[4px] items-center pl-[6px] relative rounded-[4px] shrink-0 w-[87px]">
+          <div className="rounded-[2px] shrink-0 size-[12px]" style={{ backgroundColor: series.color }} />
+          <div className="flex flex-[1_0_0] flex-col font-['Rethink_Sans:Medium',sans-serif] font-medium justify-center leading-[0] min-w-px overflow-hidden relative text-[11px] text-ellipsis text-white whitespace-nowrap">
+            <p className="leading-[normal] overflow-hidden text-ellipsis">Température</p>
+          </div>
+          <div className="overflow-clip relative shrink-0 size-[20px]">
+            <div className="absolute inset-[45%_36.67%_45%_38.33%]">
+              <div className="absolute inset-[-41.67%_-16.67%]">
+                <img alt="" className="block max-w-none size-full" src={imgIcon5} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative">
+        {innerCols.map((col, index) => (
+          <div
+            key={`${index}-${col.value}`}
+            className={
+              index === 0
+                ? 'border-[rgba(255,255,255,0.8)] border-l border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+                : col.major
+                  ? 'border-[rgba(255,255,255,0.32)] border-l-[0.5px] border-solid content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+                  : 'border-[rgba(255,255,255,0.12)] border-l-[0.5px] border-dashed content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative'
+            }
+          />
+        ))}
+        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-center justify-end px-[8px] py-[2px] relative shrink-0 w-[48px]">
+          <button type="button" className="content-stretch flex items-center justify-center overflow-clip p-[3.75px] relative rounded-[3.75px] shrink-0 size-[20px] hover:bg-[rgba(255,255,255,0.1)] transition-colors">
+            <div className="overflow-clip relative shrink-0 size-[12.5px]">
+              <div className="absolute inset-[8.33%_12.5%]">
+                <div className="absolute inset-[-5.01%_-5.57%]">
+                  <img alt="Supprimer" className="block max-w-none size-full" src={imgIcon1} />
+                </div>
+              </div>
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   );

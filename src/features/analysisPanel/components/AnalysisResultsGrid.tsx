@@ -12,6 +12,7 @@ export interface GridColumn {
 interface AnalysisResultsGridProps {
   columns: GridColumn[];
   plotRows: Array<number | null>;
+  children?: React.ReactNode;
 }
 
 const FONT_OPSZ_STYLE: CSSProperties = { fontVariationSettings: "'opsz' 14" };
@@ -21,12 +22,15 @@ const FONT_OPSZ_STYLE: CSSProperties = { fontVariationSettings: "'opsz' 14" };
  * can measure available width / height and recompute dynamic ticks.
  */
 export const AnalysisResultsGrid = forwardRef<HTMLDivElement, AnalysisResultsGridProps>(
-  function AnalysisResultsGrid({ columns, plotRows }, ref) {
+  function AnalysisResultsGrid({ columns, plotRows, children }, ref) {
     return (
       <div
         ref={ref}
         className="content-stretch flex flex-[1_0_0] flex-col items-stretch min-h-0 relative w-full"
       >
+        <div className="absolute inset-y-0 z-10" style={{ left: '95px', right: '48px', pointerEvents: 'none' }}>
+          {children}
+        </div>
         {plotRows.map((tick, index) => (
           <GridRow
             key={`${index}-${tick ?? 'empty'}`}
@@ -63,6 +67,11 @@ function GridRow({ label, columns }: { label: string; columns: GridColumn[] }) {
             }
           />
         ))}
+        <div className="bg-[rgba(0,0,0,0.64)] border-l border-solid border-[rgba(255,255,255,0.12)] content-stretch flex h-full items-end justify-end px-[4px] py-[2px] relative shrink-0 w-[48px]">
+          <div className="flex flex-col font-['DM_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] overflow-hidden relative shrink-0 text-[12px] text-[rgba(255,255,255,0.64)] text-ellipsis w-[40px] whitespace-nowrap" style={FONT_OPSZ_STYLE}>
+            <p className="leading-[normal] overflow-hidden text-ellipsis">{` `}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
