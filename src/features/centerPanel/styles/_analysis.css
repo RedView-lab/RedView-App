@@ -311,10 +311,10 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.55);
+  width: 2px;
+  background: #ff00ff;
   pointer-events: none;
-  z-index: 6;
+  z-index: 9;
 }
 
 .rvc-center-analysis__plot-grid {
