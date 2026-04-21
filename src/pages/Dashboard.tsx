@@ -247,19 +247,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const leftDockOffset =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
 
+  // IMPORTANT: every layout calculation below MUST be expressed in the
+  // dashboard's *design* coordinate space (the wrapper is sized to
+  // `scaledViewportWidth` x `scaledViewportHeight` and then transformed by
+  // `appScale`). Mixing raw `viewport.w`/`viewport.h` (real device pixels)
+  // with values that are then placed inside the scaled wrapper offsets
+  // every panel + blur mirror by `1 - appScale` — visible on Mac laptops
+  // (1440x900 -> appScale ~0.75) but invisible on >=1920x1080 displays
+  // where appScale === 1.
+  const designW = scaledViewportWidth;
+  const designH = scaledViewportHeight;
+
   const centerPanelRegionLeft =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
   const centerPanelRegionRight = panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
   const centerPanelAvailableWidth = Math.max(
     0,
-    viewport.w - centerPanelRegionLeft - centerPanelRegionRight,
+    designW - centerPanelRegionLeft - centerPanelRegionRight,
   );
   const centerPanelVisible =
     centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH;
   const centerPanelWidth = centerPanelAvailableWidth;
   const centerPanelAvailableHeight = Math.max(
     0,
-    viewport.h - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP,
+    designH - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP,
   );
   const centerPanelMinHeight = Math.min(
     centerPanelAvailableHeight,
@@ -269,7 +280,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     ),
   );
   const centerPanelReservedMapHeight = clampNumber(
-    Math.round(viewport.h * 0.16),
+    Math.round(designH * 0.16),
     CENTER_PANEL_MIN_MAP_STAGE,
     180,
   );
@@ -295,7 +306,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     centerPanelMaxHeight,
   );
   const centerPanelLeft = centerPanelRegionLeft;
-  const centerPanelTop = viewport.h - PANEL_PADDING - centerPanelHeight;
+  const centerPanelTop = designH - PANEL_PADDING - centerPanelHeight;
   const centerToolbarTop = centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
   const centerPanelResizeHitTop =
     centerToolbarTop +
@@ -351,7 +362,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           top={PANEL_PADDING}
           left={PANEL_PADDING}
           width={leftPanelWidth}
-          height={Math.max(0, viewport.h - PANEL_PADDING * 2)}
+          height={Math.max(0, designH - PANEL_PADDING * 2)}
           borderRadius={8}
         />
       )}
@@ -361,10 +372,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           top={PANEL_PADDING}
           left={Math.max(
             0,
-            viewport.w - panelWidth - PANEL_PADDING,
+            designW - panelWidth - PANEL_PADDING,
           )}
           width={panelWidth}
-          height={Math.max(0, viewport.h - PANEL_PADDING * 2)}
+          height={Math.max(0, designH - PANEL_PADDING * 2)}
           borderRadius={8}
         />
       )}
