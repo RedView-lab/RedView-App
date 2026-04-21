@@ -18,6 +18,9 @@
 const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
 const DEM_CACHE_NAME = 'dem-tiles-v27'; // must match sw-dem/config.js CACHE_NAME
+const PREVIEW_MAX_W = 448;
+const PREVIEW_MAX_H = 320;
+type ComputeQuality = 'preview' | 'full';
 
 interface SampleRequest {
   type: 'sample';
@@ -40,6 +43,7 @@ interface ComputeRequest {
   shadowStrength: number;
   /** 0..1 uniform alpha floor applied to every pixel (twilight/night veil). */
   nightFloor: number;
+  quality?: ComputeQuality;
 }
 
 interface ResetRequest {
@@ -56,6 +60,14 @@ interface GridState {
   /** Float32 elevation samples, row-major, NaN for missing data. */
   elev: Float32Array;
   /** Pre-computed cell metric size (m) at the grid's mid-latitude. */
+  cellSizeX: number;
+  cellSizeY: number;
+}
+
+interface ComputeGrid {
+  elev: Float32Array;
+  gridW: number;
+  gridH: number;
   cellSizeX: number;
   cellSizeY: number;
 }
@@ -289,20 +301,21 @@ function handleCompute(msg: ComputeRequest) {
     (self as unknown as Worker).postMessage({ id: msg.id, type: 'compute-empty' });
     return;
   }
-  const { sunAzDeg, sunAltDeg, shadowStrength, nightFloor } = msg;
-  const { gridW, gridH, elev, cellSizeX, cellSizeY } = state;
+  const { sunAzDeg, sunAltDeg, shadowStrength, nightFloor, quality = 'full' } = msg;
+  const computeGrid = selectComputeGrid(state, quality);
+  const { gridW, gridH, elev, cellSizeX, cellSizeY } = computeGrid;
 
   // Sun above horizon → cast shadows. Below horizon → skip the sweep, the
   // night veil alone darkens the map uniformly.
-  let blurred: Uint8Array;
+  let raster: Uint8Array;
   if (sunAltDeg > 0) {
     const shadow = computeSweepShadow(elev, gridW, gridH, sunAzDeg, sunAltDeg, cellSizeX, cellSizeY);
-    blurred = boxBlur3(shadow, gridW, gridH);
+    raster = quality === 'preview' ? shadow : boxBlur3(shadow, gridW, gridH);
   } else {
-    blurred = new Uint8Array(gridW * gridH);
+    raster = new Uint8Array(gridW * gridH);
   }
 
-  const rgba = encodeShadowRgba(blurred, gridW, gridH, shadowStrength, nightFloor);
+  const rgba = encodeShadowRgba(raster, gridW, gridH, shadowStrength, nightFloor);
   const blob = new Blob([rawPng(gridW, gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
 
   (self as unknown as Worker).postMessage(
@@ -313,6 +326,38 @@ function handleCompute(msg: ComputeRequest) {
       bounds: state.bounds,
     },
   );
+}
+
+function selectComputeGrid(state: GridState, quality: ComputeQuality): ComputeGrid {
+  if (quality !== 'preview') {
+    return state;
+  }
+
+  const stepX = Math.max(1, Math.ceil(state.gridW / PREVIEW_MAX_W));
+  const stepY = Math.max(1, Math.ceil(state.gridH / PREVIEW_MAX_H));
+  if (stepX === 1 && stepY === 1) {
+    return state;
+  }
+
+  const gridW = Math.max(1, Math.ceil(state.gridW / stepX));
+  const gridH = Math.max(1, Math.ceil(state.gridH / stepY));
+  const elev = new Float32Array(gridW * gridH);
+
+  for (let r = 0; r < gridH; r++) {
+    const srcR = Math.min(state.gridH - 1, r * stepY + ((stepY - 1) >> 1));
+    for (let c = 0; c < gridW; c++) {
+      const srcC = Math.min(state.gridW - 1, c * stepX + ((stepX - 1) >> 1));
+      elev[r * gridW + c] = state.elev[srcR * state.gridW + srcC];
+    }
+  }
+
+  return {
+    elev,
+    gridW,
+    gridH,
+    cellSizeX: state.cellSizeX * stepX,
+    cellSizeY: state.cellSizeY * stepY,
+  };
 }
 
 /**

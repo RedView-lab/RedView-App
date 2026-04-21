@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Slider } from '../components/Slider';
@@ -27,21 +27,12 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
   const calendarAnchorRef = useRef<HTMLDivElement>(null);
-  const previewTimerRef = useRef<number | null>(null);
-  const previewMinutesRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!isScrubbingTime) {
+    if (!isScrubbingTime && !state.timeScrubbing) {
       setTimeDraftMinutes(getMinutesFromTime(state.time));
     }
-  }, [isScrubbingTime, state.time]);
-
-  useEffect(() => () => {
-    if (previewTimerRef.current !== null) {
-      clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
-  }, []);
+  }, [isScrubbingTime, state.time, state.timeScrubbing]);
 
   function getMinutesFromTime(timeStr: string) {
     const [hh, mm] = timeStr.split(':').map(Number);
@@ -54,38 +45,23 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
     return `${h}:${m}`;
   };
 
-  const flushTimePreview = (minutes: number) => {
-    previewMinutesRef.current = minutes;
-    startTransition(() => {
-      onChange?.({ time: formatMinutes(minutes) });
+  const emitTimeChange = (minutes: number, scrubbing: boolean) => {
+    onChange?.({
+      time: formatMinutes(minutes),
+      timeScrubbing: scrubbing,
     });
-  };
-
-  const scheduleTimePreview = (minutes: number) => {
-    previewMinutesRef.current = minutes;
-    if (previewTimerRef.current !== null) return;
-    previewTimerRef.current = window.setTimeout(() => {
-      previewTimerRef.current = null;
-      const latestMinutes = previewMinutesRef.current;
-      if (latestMinutes === null) return;
-      flushTimePreview(latestMinutes);
-    }, 70);
   };
 
   const handleTimeSliderChange = (val: number) => {
     setIsScrubbingTime(true);
     setTimeDraftMinutes(val);
-    scheduleTimePreview(val);
+    emitTimeChange(val, true);
   };
 
   const handleTimeSliderCommit = (val: number) => {
-    if (previewTimerRef.current !== null) {
-      clearTimeout(previewTimerRef.current);
-      previewTimerRef.current = null;
-    }
     setIsScrubbingTime(false);
     setTimeDraftMinutes(val);
-    flushTimePreview(val);
+    emitTimeChange(val, false);
   };
 
   const displayTime = isScrubbingTime ? formatMinutes(timeDraftMinutes) : (state.time || '00:00');
@@ -158,7 +134,7 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
               const nextMinutes = getMinutesFromTime(e.target.value);
               setIsScrubbingTime(false);
               setTimeDraftMinutes(nextMinutes);
-              flushTimePreview(nextMinutes);
+              emitTimeChange(nextMinutes, false);
             }}
             className="rvc-weather__native-input"
           />

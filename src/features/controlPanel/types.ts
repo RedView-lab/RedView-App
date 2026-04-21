@@ -121,6 +121,8 @@ export interface SunlightState {
   customDateEnabled: boolean;
   date: string;
   time: string;
+  /** True while the user is actively dragging the time slider. */
+  timeScrubbing: boolean;
   sunriseTime: string;
   sunsetTime: string;
   /** DEM ray-traced terrain shadows */

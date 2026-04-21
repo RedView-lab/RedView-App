@@ -67,11 +67,11 @@ const GRID_MAX_H = 1200;
 // shadow filling the viewport during small pans/zooms that happen
 // between resamples.
 const BOUNDS_OVERSHOOT = 0.15;
-const SUN_RECOMPUTE_DEBOUNCE_MS = 48;
 
 // Time-to-live for revoked blob URLs after a swap. Mapbox finishes
 // uploading the new texture in well under this window.
 const BLOB_REVOKE_DELAY_MS = 1500;
+type ComputeQuality = 'preview' | 'full';
 
 export interface UseShadowImageOptions {
   enabled: boolean;
@@ -79,6 +79,7 @@ export interface UseShadowImageOptions {
   sunAltitudeDeg: number;
   /** 0..1 */
   opacity: number;
+  timeScrubbing: boolean;
 }
 
 interface SampleAck { id: number; type: 'sample-ok'; filled: number; total: number; tooMany?: boolean }
@@ -93,6 +94,7 @@ interface ComputeJob {
   bounds: BoundsTuple;
   sampleGen: number;
   computeSeq: number;
+  quality: ComputeQuality;
 }
 
 /**
@@ -233,7 +235,7 @@ export function useShadowImage(
   const reqIdRef = useRef(0);
   const lastBlobUrlRef = useRef<string | null>(null);
   const sampleTimerRef = useRef<number | null>(null);
-  const sunRecomputeTimerRef = useRef<number | null>(null);
+  const sunRecomputeFrameRef = useRef<number | null>(null);
   const sampledRef = useRef(false);
   /**
    * Bounds last successfully sampled (with overshoot already applied).
@@ -283,9 +285,9 @@ export function useShadowImage(
         URL.revokeObjectURL(lastBlobUrlRef.current);
         lastBlobUrlRef.current = null;
       }
-      if (sunRecomputeTimerRef.current !== null) {
-        clearTimeout(sunRecomputeTimerRef.current);
-        sunRecomputeTimerRef.current = null;
+      if (sunRecomputeFrameRef.current !== null) {
+        cancelAnimationFrame(sunRecomputeFrameRef.current);
+        sunRecomputeFrameRef.current = null;
       }
     };
   }, []);
@@ -385,6 +387,7 @@ export function useShadowImage(
         sunAltDeg: o.sunAltitudeDeg,
         shadowStrength: visibility,
         nightFloor: veil,
+        quality: job.quality,
       });
       if (cancelled) return;
       if (job.sampleGen !== sampleGenRef.current) return;
@@ -454,6 +457,7 @@ export function useShadowImage(
         bounds,
         sampleGen,
         computeSeq: ++computeSeqRef.current,
+        quality: optsRef.current.timeScrubbing ? 'preview' : 'full',
       };
       if (computeInflightRef.current) {
         pendingComputeRef.current = job;
@@ -580,9 +584,9 @@ export function useShadowImage(
         clearTimeout(sampleTimerRef.current);
         sampleTimerRef.current = null;
       }
-      if (sunRecomputeTimerRef.current !== null) {
-        clearTimeout(sunRecomputeTimerRef.current);
-        sunRecomputeTimerRef.current = null;
+      if (sunRecomputeFrameRef.current !== null) {
+        cancelAnimationFrame(sunRecomputeFrameRef.current);
+        sunRecomputeFrameRef.current = null;
       }
       inflightRef.current = false;
       pendingResampleRef.current = false;
@@ -621,19 +625,19 @@ export function useShadowImage(
   // Sun/time changes reuse the sampled grid and coalesce to the latest state.
   useEffect(() => {
     if (!map || !isMapLoaded || !opts.enabled) return;
-    if (sunRecomputeTimerRef.current !== null) {
-      clearTimeout(sunRecomputeTimerRef.current);
+    if (sunRecomputeFrameRef.current !== null) {
+      cancelAnimationFrame(sunRecomputeFrameRef.current);
     }
-    sunRecomputeTimerRef.current = window.setTimeout(() => {
-      sunRecomputeTimerRef.current = null;
+    sunRecomputeFrameRef.current = requestAnimationFrame(() => {
+      sunRecomputeFrameRef.current = null;
       recomputeRef.current?.();
-    }, SUN_RECOMPUTE_DEBOUNCE_MS);
+    });
 
     return () => {
-      if (sunRecomputeTimerRef.current !== null) {
-        clearTimeout(sunRecomputeTimerRef.current);
-        sunRecomputeTimerRef.current = null;
+      if (sunRecomputeFrameRef.current !== null) {
+        cancelAnimationFrame(sunRecomputeFrameRef.current);
+        sunRecomputeFrameRef.current = null;
       }
     };
-  }, [map, isMapLoaded, opts.sunAzimuthDeg, opts.sunAltitudeDeg]);
+  }, [map, isMapLoaded, opts.sunAzimuthDeg, opts.sunAltitudeDeg, opts.timeScrubbing]);
 }

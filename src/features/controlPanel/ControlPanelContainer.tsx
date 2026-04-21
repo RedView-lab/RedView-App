@@ -274,6 +274,7 @@ export function ControlPanelContainer({
     sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
     sunAltitudeDeg: sunlightTimes.sunAltitudeDeg,
     opacity: sunlightState.shadowOpacity / 100,
+    timeScrubbing: sunlightState.timeScrubbing,
   });
 
   // ── Build ControlPanel state ───────────────────────────────────────
