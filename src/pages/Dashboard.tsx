@@ -45,9 +45,14 @@ const CENTER_PANEL_MIN_MAP_STAGE = 112;
 const CENTER_TOOLBAR_HEIGHT = 48;
 const CENTER_PANEL_STACK_GAP = PANEL_PADDING;
 const CENTER_PANEL_RESIZE_HIT_AREA = 18;
-const APP_SCALE_MIN = 0.8;
-const APP_SCALE_DESIGN_WIDTH = 1800;
-const APP_SCALE_DESIGN_HEIGHT = 1000;
+// Adaptive UI scale.
+// The whole dashboard is rendered as if the viewport had APP_SCALE_DESIGN_*
+// dimensions, then transformed to fit the real viewport. This keeps the UI
+// readable on small laptops (e.g. 13" / 14" MacBooks) without forcing the
+// user to change browser zoom. Above the design size we never upscale.
+const APP_SCALE_MIN = 0.7;
+const APP_SCALE_DESIGN_WIDTH = 1920;
+const APP_SCALE_DESIGN_HEIGHT = 1080;
 
 function readStoredCenterPanelHeight(): number | null {
   try {
@@ -325,6 +330,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           overflow: 'hidden',
           transform: `scale(${appScale})`,
           transformOrigin: 'top left',
+          ['--app-scale' as string]: String(appScale),
         }}
       >
       <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} onLidarSelectionDisable={() => setLidarModeEnabled(false)} />
