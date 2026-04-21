@@ -343,7 +343,7 @@ function SeriesRow({ series, columns }: { series: AnalysisChartSeries, columns: 
         <div className="bg-[rgba(255,255,255,0.08)] content-stretch flex gap-[4px] items-center pl-[6px] relative rounded-[4px] shrink-0 w-[87px]">
           <div className="rounded-[2px] shrink-0 size-[12px]" style={{ backgroundColor: series.color }} />
           <div className="flex flex-[1_0_0] flex-col font-['Rethink_Sans:Medium',sans-serif] font-medium justify-center leading-[0] min-w-px overflow-hidden relative text-[11px] text-ellipsis text-white whitespace-nowrap">
-            <p className="leading-[normal] overflow-hidden text-ellipsis">Température</p>
+            <p className="leading-[normal] overflow-hidden text-ellipsis">{series.id}</p>
           </div>
           <div className="overflow-clip relative shrink-0 size-[20px]">
             <div className="absolute inset-[45%_36.67%_45%_38.33%]">
