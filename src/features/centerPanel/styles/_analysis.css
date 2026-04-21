@@ -324,14 +324,15 @@
   flex-direction: column;
   min-height: 120px;
   background: rgba(0, 0, 0, 0.64);
+  cursor: crosshair;
 }
 
 .rvc-center-analysis__hover-surface {
   position: absolute;
   inset: 0;
   z-index: 4;
-  cursor: crosshair;
   background: transparent;
+  pointer-events: none;
 }
 
 .rvc-center-analysis__scale-row,
