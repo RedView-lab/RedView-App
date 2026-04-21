@@ -346,7 +346,8 @@
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 2px;
+  gap: 12px;
+  padding-bottom: 12px;
 }
 
 .rvc-center-analysis__series-row {
