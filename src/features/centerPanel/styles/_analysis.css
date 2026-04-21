@@ -33,7 +33,7 @@
   flex: 0 0 auto;
   font-family: inherit;
   font-size: 13px;
-  font-weight: var(--rvc-center-font-weight-bold);
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
 }
@@ -56,12 +56,13 @@
   color: var(--rvc-center-text);
   font-family: inherit;
   font-size: 13px;
-  font-weight: var(--rvc-center-font-weight-bold);
+  font-weight: 500;
   line-height: normal;
 }
 
 .rvc-center-analysis__segment--active {
   background: rgba(0, 0, 0, 0.64);
+  font-weight: 500;
 }
 
 .rvc-center-analysis__detail {
@@ -79,7 +80,7 @@
   color: rgba(255, 255, 255, 0.5);
   font-family: inherit;
   font-size: 12px;
-  font-weight: var(--rvc-center-font-weight-bold);
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
 }
@@ -92,7 +93,7 @@
   color: var(--rvc-center-text);
   font-family: inherit;
   font-size: 11px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: 500;
   line-height: normal;
 }
 
@@ -170,7 +171,7 @@
   gap: clamp(6px, 1cqi, 12px);
   font-family: inherit;
   font-size: 12px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: 500;
   line-height: normal;
   cursor: pointer;
   overflow: hidden;
@@ -223,12 +224,12 @@
 
 .rvc-center-analysis__dropdown-text--primary {
   font-size: 14px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: 500;
 }
 
 .rvc-center-analysis__dropdown-text--secondary {
   font-size: 13px;
-  font-weight: var(--rvc-center-font-weight-medium);
+  font-weight: 400;
 }
 
 .rvc-center-analysis__dropdown-check {
@@ -266,7 +267,7 @@
   gap: 4px;
   font-family: inherit;
   font-size: 12px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: 500;
   line-height: normal;
   overflow: hidden;
 }
@@ -454,7 +455,7 @@
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.28);
   color: #fff;
   font-size: clamp(10px, 0.9cqi, 12px);
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: 500;
   line-height: 1.35;
   z-index: 5;
 }
