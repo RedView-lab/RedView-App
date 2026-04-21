@@ -44,9 +44,18 @@ interface ResetAck { id: number; type: 'reset-ok' }
 interface ErrAck { id: number; type: 'error'; message: string }
 type WorkerAck = SampleAck | ComputeAck | ComputeEmpty | ResetAck | ErrAck;
 
-/** Smooth 0→1 ramp around the horizon so shadows don't pop on/off. */
+/**
+ * Cast-shadow visibility curve.
+ *   alt ≥  0°  : full strength (1.0) — shadows are at their longest and most
+ *                dramatic right at sunrise/sunset; that's exactly when the
+ *                user expects to see them.
+ *   0° → −3°  : smooth fade-out as the sun crosses the horizon.
+ *   alt ≤ −3° : 0 (no cast shadow; the night veil takes over).
+ */
 function shadowVisibility(altitudeDeg: number): number {
-  const t = Math.max(0, Math.min(1, (altitudeDeg + 2.5) / 6.5));
+  if (altitudeDeg >= 0) return 1;
+  if (altitudeDeg <= -3) return 0;
+  const t = (altitudeDeg + 3) / 3; // 0 at -3°, 1 at 0°
   return t * t * (3 - 2 * t);
 }
 
