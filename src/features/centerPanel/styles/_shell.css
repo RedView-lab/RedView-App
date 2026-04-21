@@ -45,7 +45,12 @@
 
 .rvc-center-panel button,
 .rvc-center-panel label {
-  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-style: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  color: inherit;
 }
 
 .rvc-center-panel__divider {

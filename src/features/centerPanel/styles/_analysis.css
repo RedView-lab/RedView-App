@@ -33,7 +33,7 @@
   flex: 0 0 auto;
   font-family: inherit;
   font-size: 13px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: var(--rvc-center-font-weight-bold);
   line-height: normal;
   white-space: nowrap;
 }
@@ -56,7 +56,7 @@
   color: var(--rvc-center-text);
   font-family: inherit;
   font-size: 13px;
-  font-weight: var(--rvc-center-font-weight-semibold);
+  font-weight: var(--rvc-center-font-weight-bold);
   line-height: normal;
 }
 
@@ -170,7 +170,7 @@
   gap: clamp(6px, 1cqi, 12px);
   font-family: inherit;
   font-size: 12px;
-  font-weight: var(--rvc-center-font-weight-medium);
+  font-weight: var(--rvc-center-font-weight-semibold);
   line-height: normal;
   cursor: pointer;
   overflow: hidden;
@@ -266,13 +266,14 @@
   gap: 4px;
   font-family: inherit;
   font-size: 12px;
-  font-weight: var(--rvc-center-font-weight-medium);
+  font-weight: var(--rvc-center-font-weight-semibold);
   line-height: normal;
   overflow: hidden;
 }
 
 .rvc-center-analysis__filter-label {
   min-width: 0;
+  font-weight: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
