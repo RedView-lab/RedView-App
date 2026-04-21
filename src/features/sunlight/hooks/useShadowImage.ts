@@ -97,62 +97,15 @@ interface ComputeJob {
   quality: ComputeQuality;
 }
 
-function smoothstep01(t: number): number {
-  const clamped = Math.max(0, Math.min(1, t));
-  return clamped * clamped * (3 - 2 * clamped);
-}
-
 /**
  * Cast-shadow visibility curve.
  *   alt ≥  0°  : full strength (1.0) — shadows are at their longest and most
  *                dramatic right at sunrise/sunset; that's exactly when the
  *                user expects to see them.
- *   0° → −3°  : smooth fade-out as the sun crosses the horizon.
- *   alt ≤ −3° : 0 (no cast shadow; the night veil takes over).
+ *   alt <  0°  : the worker switches to a full-shadow terrain raster.
  */
 function shadowVisibility(altitudeDeg: number): number {
-  if (altitudeDeg >= 0) return 1;
-  if (altitudeDeg <= -3) return 0;
-  const t = (altitudeDeg + 3) / 3; // 0 at -3°, 1 at 0°
-  return t * t * (3 - 2 * t);
-}
-
-/**
- * Just below the horizon there must never be a sudden return to a clear,
- * sunlit-looking terrain. In that short twilight band the whole terrain stays
- * uniformly shadowed, then hands off progressively to the night veil.
- */
-function belowHorizonShadowStrength(altitudeDeg: number): number {
-  if (altitudeDeg >= 0) return 1;
-  if (altitudeDeg <= -4) return 0;
-  return smoothstep01((altitudeDeg + 4) / 4);
-}
-
-/**
- * Twilight darkening curve. Returns 0..1 alpha for a uniform black veil that
- * eases the map from full daylight into night through the standard twilight
- * phases while staying monotonic across sunrise/sunset:
- *   alt ≥ +3°   : 0.00
- *   alt =  0°   : 0.18
- *   alt = -6°   : 0.40
- *   alt = -12°  : 0.58
- *   alt ≤ -18°  : 0.72
- */
-function nightVeilAlpha(altitudeDeg: number): number {
-  if (altitudeDeg >= 3) return 0;
-  if (altitudeDeg >= 0) {
-    return 0.18 * smoothstep01((3 - altitudeDeg) / 3);
-  }
-  if (altitudeDeg >= -6) {
-    return 0.18 + (0.40 - 0.18) * smoothstep01(-altitudeDeg / 6);
-  }
-  if (altitudeDeg >= -12) {
-    return 0.40 + (0.58 - 0.40) * smoothstep01((-altitudeDeg - 6) / 6);
-  }
-  if (altitudeDeg >= -18) {
-    return 0.58 + (0.72 - 0.58) * smoothstep01((-altitudeDeg - 12) / 6);
-  }
-  return 0.72;
+  return altitudeDeg >= 0 ? 1 : 0;
 }
 
 /**
@@ -399,11 +352,8 @@ export function useShadowImage(
       if (job.computeSeq !== computeSeqRef.current) return;
 
       const o = optsRef.current;
-      const visibility = shadowVisibility(o.sunAltitudeDeg);
-      const fullShadow = belowHorizonShadowStrength(o.sunAltitudeDeg);
-      const veil = nightVeilAlpha(o.sunAltitudeDeg);
-      const shadowStrength = o.sunAltitudeDeg >= 0 ? visibility : fullShadow;
-      if (!o.enabled || o.opacity <= 0 || (shadowStrength <= 0 && veil <= 0)) {
+      const shadowStrength = o.sunAltitudeDeg >= 0 ? shadowVisibility(o.sunAltitudeDeg) : 1;
+      if (!o.enabled || o.opacity <= 0 || shadowStrength <= 0) {
         setLayerOpacity(0);
         return;
       }
@@ -413,7 +363,7 @@ export function useShadowImage(
         sunAzDeg: o.sunAzimuthDeg,
         sunAltDeg: o.sunAltitudeDeg,
         shadowStrength,
-        nightFloor: veil,
+        nightFloor: 0,
         quality: job.quality,
       });
       if (cancelled) return;

@@ -21,7 +21,6 @@ const DEM_CACHE_NAME = 'dem-tiles-v27'; // must match sw-dem/config.js CACHE_NAM
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
 type ComputeQuality = 'preview' | 'full';
-const BELOW_HORIZON_FULL_SHADOW_DEG = -4;
 
 interface SampleRequest {
   type: 'sample';
@@ -306,19 +305,16 @@ function handleCompute(msg: ComputeRequest) {
   const computeGrid = selectComputeGrid(state, quality);
   const { gridW, gridH, elev, cellSizeX, cellSizeY } = computeGrid;
 
-  // Sun above horizon → cast shadows. Below horizon → skip the sweep, the
-  // night veil alone darkens the map uniformly, except in the immediate
-  // post-sunset / pre-sunrise band where the whole terrain must remain in
-  // shadow instead of snapping back to a clear-looking surface.
+  // Sun above horizon → cast terrain shadows. Below horizon → keep the shadow
+  // system active by filling the whole raster, so the terrain stays fully in
+  // shadow instead of switching to a separate dark overlay.
   let raster: Uint8Array;
   if (sunAltDeg > 0) {
     const shadow = computeSweepShadow(elev, gridW, gridH, sunAzDeg, sunAltDeg, cellSizeX, cellSizeY);
     raster = quality === 'preview' ? shadow : boxBlur3(shadow, gridW, gridH);
-  } else if (sunAltDeg > BELOW_HORIZON_FULL_SHADOW_DEG) {
-    raster = new Uint8Array(gridW * gridH);
-    raster.fill(255);
   } else {
     raster = new Uint8Array(gridW * gridH);
+    raster.fill(255);
   }
 
   const rgba = encodeShadowRgba(raster, gridW, gridH, shadowStrength, nightFloor);
