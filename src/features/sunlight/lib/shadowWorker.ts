@@ -127,8 +127,18 @@ async function handleSample(msg: SampleRequest) {
   // For each grid cell, project to lon/lat → tile pixel → bilinear lookup.
   // Cache decoded tiles by (x,y).
   const tileMap = new Map<string, Float32Array>();
+  let tilesOk = 0;
   for (const t of decoded) {
-    if (t.elev) tileMap.set(`${t.x}/${t.y}`, t.elev);
+    if (t.elev) {
+      tileMap.set(`${t.x}/${t.y}`, t.elev);
+      tilesOk++;
+    }
+  }
+  if (tilesOk === 0) {
+    console.warn('[shadow-worker] no DEM tiles loaded', {
+      demZoom, requested: tileCount,
+      tileRange: { xMin, xMax, yMin, yMax },
+    });
   }
 
   // Inverse mercator: row r → lat from north→south linearly in mercator-Y.
@@ -197,21 +207,35 @@ async function loadTile(
   if (x < 0 || y < 0 || x >= 1 << z || y >= 1 << z) {
     return { x, y, elev: null };
   }
+  const url = new URL(`/dem-tiles/${z}/${x}/${y}`, self.location.origin).toString();
   // Try the cache first; if missing, request via the SW (will trigger a build).
-  let resp = await cache.match(new Request(`/dem-tiles/${z}/${x}/${y}`));
+  let resp = await cache.match(url);
+  let source: 'cache' | 'fetch' | 'fetch-error' = 'cache';
   if (!resp || resp.status !== 200) {
     try {
-      resp = await fetch(`/dem-tiles/${z}/${x}/${y}`, { cache: 'force-cache' });
-    } catch {
+      resp = await fetch(url);
+      source = 'fetch';
+    } catch (err) {
+      console.warn('[shadow-worker] tile fetch threw', { z, x, y, err });
       return { x, y, elev: null };
     }
   }
-  if (!resp || resp.status !== 200) return { x, y, elev: null };
+  if (!resp || resp.status !== 200) {
+    if (resp) {
+      console.warn('[shadow-worker] tile non-200', {
+        z, x, y, status: resp.status, source,
+      });
+    } else {
+      console.warn('[shadow-worker] tile no response', { z, x, y, source });
+    }
+    return { x, y, elev: null };
+  }
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
     return { x, y, elev };
-  } catch {
+  } catch (err) {
+    console.warn('[shadow-worker] tile decode failed', { z, x, y, err });
     return { x, y, elev: null };
   }
 }
