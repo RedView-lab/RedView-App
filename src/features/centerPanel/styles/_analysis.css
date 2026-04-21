@@ -314,7 +314,7 @@
   width: 1px;
   background: rgba(255, 255, 255, 0.85);
   pointer-events: none;
-  z-index: 2;
+  z-index: 4;
 }
 
 .rvc-center-analysis__plot-grid {
@@ -324,18 +324,14 @@
   flex-direction: column;
   min-height: 120px;
   background: rgba(0, 0, 0, 0.64);
+  cursor: crosshair;
   isolation: isolate;
 }
 
-/* Single full-bleed interactive layer above the scale rows.
-   Captures the pointer (cursor + hover state) and hosts the
-   vertical hover line and the floating info cards. */
-.rvc-center-analysis__plot-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 10;
-  cursor: crosshair;
-  background: transparent;
+/* The plot grid owns the pointer. Every visual layer above it must let
+   events pass through so the cursor and hover tracking always work. */
+.rvc-center-analysis__plot-grid > * {
+  pointer-events: none;
 }
 
 .rvc-center-analysis__hover-surface {
@@ -678,7 +674,7 @@
   font-size: clamp(10px, 0.9cqi, 12px);
   font-weight: 400;
   line-height: 1.35;
-  z-index: 3;
+  z-index: 5;
 }
 
 .rvc-center-analysis__hover-card {
