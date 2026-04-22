@@ -48,6 +48,21 @@ interface ItineraryPanelContainerProps {
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
   onBackToHome?: () => void;
+  /**
+   * Initial project state to seed the editor with. Typically the row from
+   * Supabase's `projects.data` JSONB column. When omitted, falls back to a
+   * blank `createDefaultProject()` (used in dev / unit tests).
+   *
+   * The container snapshots this once and then owns the live state — to
+   * load a different project, REMOUNT the container with a new `key`
+   * (the Dashboard does this using the project id).
+   */
+  initialProject?: ItineraryProject;
+  /**
+   * Notified after every project mutation. The Dashboard uses this to
+   * persist changes to Supabase (debounced).
+   */
+  onProjectChange?: (project: ItineraryProject) => void;
 }
 
 /**
@@ -68,10 +83,24 @@ export function ItineraryPanelContainer({
   onResizeStart,
   isResizing,
   onBackToHome,
+  initialProject,
+  onProjectChange,
 }: ItineraryPanelContainerProps) {
-  const [project, setProject] = useState<ItineraryProject>(() =>
-    createDefaultProject(),
+  const [project, setProject] = useState<ItineraryProject>(
+    () => initialProject ?? createDefaultProject(),
   );
+
+  // Notify the parent of every project mutation so it can persist to
+  // Supabase. Skip the very first render (the parent already has the
+  // initial state it just handed us).
+  const firstChangeRef = useRef(true);
+  useEffect(() => {
+    if (firstChangeRef.current) {
+      firstChangeRef.current = false;
+      return;
+    }
+    onProjectChange?.(project);
+  }, [project, onProjectChange]);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
@@ -7,8 +7,10 @@ import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { ItineraryPanel } from '@/features/itineraryPanel';
+import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
+import { getProject, saveProject } from '@/lib/projects';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
@@ -106,7 +108,88 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
   const [fitPanelOpen, setFitPanelOpen] = useState(false);
-  const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
+
+  // ── Active project (Supabase-backed) ────────────────────────────
+  // The browser overlay is force-open until the user picks or creates
+  // a project. Once selected, we load `data` from the projects table
+  // and seed the editor; subsequent state changes are auto-saved.
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [activeProjectInitial, setActiveProjectInitial] =
+    useState<ItineraryProject | null>(null);
+  const [projectLoading, setProjectLoading] = useState(false);
+  const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
+
+  const handleOpenProject = useCallback(async (projectId: string) => {
+    setProjectLoading(true);
+    try {
+      const row = await getProject(projectId);
+      if (!row) throw new Error('Project not found');
+      setActiveProjectId(row.id);
+      setActiveProjectInitial(row.data);
+      setProjectBrowserOpen(false);
+    } catch (e) {
+      console.error('[Dashboard] failed to open project', e);
+    } finally {
+      setProjectLoading(false);
+    }
+  }, []);
+
+  // Debounced autosave. Every project mutation pushes the latest snapshot
+  // into a ref; a 1s timer flushes it to Supabase. We also flush on
+  // unmount / pagehide so closing the tab can't drop unsaved edits.
+  const pendingSaveRef = useRef<ItineraryProject | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const activeProjectIdRef = useRef<string | null>(null);
+  activeProjectIdRef.current = activeProjectId;
+
+  const flushSave = useCallback(async () => {
+    const id = activeProjectIdRef.current;
+    const payload = pendingSaveRef.current;
+    if (!id || !payload) return;
+    pendingSaveRef.current = null;
+    try {
+      await saveProject(id, payload);
+    } catch (e) {
+      console.error('[Dashboard] autosave failed', e);
+    }
+  }, []);
+
+  const handleProjectChange = useCallback(
+    (next: ItineraryProject) => {
+      pendingSaveRef.current = next;
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current);
+      }
+      saveTimerRef.current = window.setTimeout(() => {
+        saveTimerRef.current = null;
+        void flushSave();
+      }, 1000);
+    },
+    [flushSave],
+  );
+
+  // Flush on tab close / refresh.
+  useEffect(() => {
+    const onPageHide = () => { void flushSave(); };
+    window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('beforeunload', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('beforeunload', onPageHide);
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current);
+        void flushSave();
+      }
+    };
+  }, [flushSave]);
+
+  const handleBackToBrowser = useCallback(() => {
+    // Force-flush any pending edits before showing the picker so the
+    // updated_at / size_bytes columns reflect the freshest state.
+    void flushSave();
+    setProjectBrowserOpen(true);
+  }, [flushSave]);
+
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
   const [isResizing, setIsResizing] = useState(false);
   const leftPanelOpen = true;
@@ -448,12 +531,15 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
 
       <div style={leftPanelStyle}>
         <ItineraryPanel
+          key={activeProjectId ?? 'no-project'}
           map={mapInstance}
           isMapLoaded={mapLoaded}
           width={leftPanelWidth}
           onResizeStart={handleLeftResizeStart}
           isResizing={isLeftResizing}
-          onBackToHome={() => setProjectBrowserOpen(true)}
+          onBackToHome={handleBackToBrowser}
+          initialProject={activeProjectInitial ?? undefined}
+          onProjectChange={handleProjectChange}
         />
       </div>
 
@@ -543,9 +629,10 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
       </div>
 
       <ProjectBrowserOverlay
-        open={projectBrowserOpen}
+        open={projectBrowserOpen || activeProjectId == null}
         displayName={displayName}
-        onOpenProject={() => setProjectBrowserOpen(false)}
+        canClose={activeProjectId != null && !projectLoading}
+        onOpenProject={handleOpenProject}
         onRequestClose={() => setProjectBrowserOpen(false)}
       />
       </div>

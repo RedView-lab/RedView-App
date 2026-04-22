@@ -352,3 +352,83 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* ── Backend additions ───────────────────────────────────────────── */
+
+.rvpb-empty {
+  grid-column: 1 / -1;
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-error {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(180, 30, 30, 0.18);
+  color: #ffb4b4;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rvpb-card__rename-input {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  outline: none;
+}
+
+.rvpb-card__rename-input:focus {
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.rvpb-search-input {
+  height: 40px;
+  width: 220px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: #383838;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.rvpb-search-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.rvpb-grid-shell.is-list {
+  grid-template-columns: 1fr;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card__preview {
+  display: none;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rvpb-icon-button:disabled,
+.rvpb-square-button:disabled,
+.rvpb-card__open:disabled,
+.rvpb-create-button:disabled,
+.rvpb-card__preview:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
