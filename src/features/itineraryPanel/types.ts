@@ -243,7 +243,7 @@ export interface ItineraryPanelProps {
   isResizing?: boolean;
 
   // project-level
-  onClose?: () => void;
+  onBackToHome?: () => void;
   onSaveProject?: () => void;
   onDownloadProject?: () => void;
   onShareProject?: () => void;

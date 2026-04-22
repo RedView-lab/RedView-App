@@ -180,6 +180,17 @@ export const IconLayoutGrid = ({ size = 12, ...p }: IconProps) => (
   </svg>
 );
 
+export const IconList = ({ size = 16, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <line x1="8" y1="6" x2="20" y2="6" />
+    <line x1="8" y1="12" x2="20" y2="12" />
+    <line x1="8" y1="18" x2="20" y2="18" />
+    <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
+    <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
+    <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 export const IconClockFastForward = ({ size = 12, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <circle cx="12" cy="12" r="9" />

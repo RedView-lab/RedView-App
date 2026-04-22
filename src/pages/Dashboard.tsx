@@ -7,6 +7,7 @@ import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { ItineraryPanel } from '@/features/itineraryPanel';
+import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -90,15 +91,25 @@ function readStoredWidth(): number {
   }
 }
 
-export default function Dashboard({ onLogout }: DashboardProps) {
+function formatDisplayName(email: string): string {
+  const localPart = email.split('@')[0] ?? 'Utilisateur';
+  return localPart
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+export default function Dashboard({ email, onLogout }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
   const [fitPanelOpen, setFitPanelOpen] = useState(false);
+  const [projectBrowserOpen, setProjectBrowserOpen] = useState(false);
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
   const [isResizing, setIsResizing] = useState(false);
-  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const leftPanelOpen = true;
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() =>
     readStoredLeftWidth(),
   );
@@ -361,6 +372,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     cursor: 'pointer',
     backdropFilter: 'blur(8px)',
   };
+  const displayName = formatDisplayName(email);
 
   return (
     <LidarProvider>
@@ -441,7 +453,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           width={leftPanelWidth}
           onResizeStart={handleLeftResizeStart}
           isResizing={isLeftResizing}
-          onClose={() => setLeftPanelOpen(false)}
+          onBackToHome={() => setProjectBrowserOpen(true)}
         />
       </div>
 
@@ -529,6 +541,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           <ExporterPanel width={panelWidth} />
         </div>
       </div>
+
+      <ProjectBrowserOverlay
+        open={projectBrowserOpen}
+        displayName={displayName}
+        onOpenProject={() => setProjectBrowserOpen(false)}
+        onRequestClose={() => setProjectBrowserOpen(false)}
+      />
       </div>
     </div>
     </LidarProvider>

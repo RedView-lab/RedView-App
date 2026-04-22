@@ -47,7 +47,7 @@ interface ItineraryPanelContainerProps {
   width?: number;
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
-  onClose?: () => void;
+  onBackToHome?: () => void;
 }
 
 /**
@@ -67,7 +67,7 @@ export function ItineraryPanelContainer({
   width,
   onResizeStart,
   isResizing,
-  onClose,
+  onBackToHome,
 }: ItineraryPanelContainerProps) {
   const [project, setProject] = useState<ItineraryProject>(() =>
     createDefaultProject(),
@@ -473,7 +473,7 @@ export function ItineraryPanelContainer({
       width={width}
       isResizing={isResizing}
       onResizeStart={onResizeStart}
-      onClose={onClose}
+      onBackToHome={onBackToHome}
       onSaveProject={() => {
         setProject((p) => ({
           ...p,

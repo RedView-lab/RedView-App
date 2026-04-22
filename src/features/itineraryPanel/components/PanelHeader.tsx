@@ -11,7 +11,7 @@ interface PanelHeaderProps {
   savedAt: string | null;
   sizeBytes: number | null;
   privacy: 'private' | 'public';
-  onClose?: () => void;
+  onBack?: () => void;
   onRename?: (next: string) => void;
   onSettings?: () => void;
   onDownload?: () => void;
@@ -38,7 +38,7 @@ export function PanelHeader({
   savedAt,
   sizeBytes,
   privacy,
-  onClose,
+  onBack,
   onRename,
   onSettings,
   onDownload,
@@ -51,8 +51,8 @@ export function PanelHeader({
         <button
           type="button"
           className="rvi-header__back"
-          onClick={onClose}
-          aria-label="Fermer le panneau"
+          onClick={onBack}
+          aria-label="Retour au menu principal"
         >
           <IconArrowLeft size={22} />
         </button>

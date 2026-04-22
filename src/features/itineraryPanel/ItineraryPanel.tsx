@@ -20,7 +20,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     width,
     isResizing,
     onResizeStart,
-    onClose,
+    onBackToHome,
     onSaveProject,
     onDownloadProject,
     onShareProject,
@@ -79,7 +79,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         savedAt={project.savedAt}
         sizeBytes={project.sizeBytes}
         privacy={project.privacy}
-        onClose={onClose}
+        onBack={onBackToHome}
         onRename={onRenameProject}
         onSettings={onSaveProject}
         onDownload={onDownloadProject}
