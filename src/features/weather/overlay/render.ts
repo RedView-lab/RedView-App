@@ -172,13 +172,6 @@ function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Co
   return stops[stops.length - 1][1];
 }
 
-function alphaFor(metric: WeatherOverlayMetric, ratio: number, mode: WeatherOverlayMode): number {
-  const ramp = metric === 'rain' ? Math.sqrt(clamp(ratio, 0, 1)) : clamp(ratio, 0, 1);
-  const base = mode === 'fill' ? 0.45 : 0.18;
-  const span = metric === 'cloudCover' ? 0.35 : metric === 'rain' ? 0.5 : 0.42;
-  return clamp(base + ramp * span, 0, 0.88);
-}
-
 function sampleValue(values: number[], cols: number, row: number, col: number): number {
   const clampedRow = clamp(row, 0, Math.max(0, Math.floor(values.length / cols) - 1));
   const clampedCol = clamp(col, 0, cols - 1);
@@ -207,7 +200,6 @@ export function renderWeatherCanvas(
   samples: WeatherOverlaySample[],
   width: number,
   height: number,
-  opacityPercent?: number,
   paletteBands?: PaletteBandLike[],
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
@@ -219,7 +211,6 @@ export function renderWeatherCanvas(
   const values = samples.map((sample) => sample[metric]);
   const range = paletteRange(metric, samples, paletteBands);
   const normalise = (value: number) => clamp((value - range.min) / Math.max(1e-6, range.max - range.min), 0, 1);
-  const alphaMultiplier = clamp((opacityPercent ?? 100) / 100, 0, 1);
   const stops = paletteStops(metric, paletteBands, range.min, range.max);
 
   if (mode === 'fill') {
@@ -232,7 +223,7 @@ export function renderWeatherCanvas(
         const [r, g, b] = paletteBands?.length
           ? steppedBandColor(paletteBands, raw)
           : interpolatePaletteColor(stops, ratio);
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alphaFor(metric, ratio, mode) * alphaMultiplier})`;
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
         ctx.fillRect(col * cellW, row * cellH, cellW + 1, cellH + 1);
       }
     }
@@ -247,12 +238,11 @@ export function renderWeatherCanvas(
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
       const [r, g, b] = interpolatePaletteColor(stops, ratio);
-      const alpha = alphaFor(metric, ratio, mode) * alphaMultiplier;
       const index = (y * width + x) * 4;
       image.data[index] = r;
       image.data[index + 1] = g;
       image.data[index + 2] = b;
-      image.data[index + 3] = Math.round(alpha * 255);
+      image.data[index + 3] = 255;
     }
   }
   ctx.putImageData(image, 0, 0);

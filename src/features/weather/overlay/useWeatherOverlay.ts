@@ -144,7 +144,7 @@ function hashStr(input: string, seed = 0x811c9dc5): number {
 function paletteSignature(state: WeatherOverlayState, key: WeatherOverlayMetric): string {
   const palette = state.palettes?.[key];
   if (!palette) return '0';
-  let h = hashStr(`${palette.opacity ?? ''}|${palette.scaleSetting ?? ''}`);
+  let h = hashStr(`${palette.scaleSetting ?? ''}`);
   const bands = palette.bands;
   if (bands) {
     for (let i = 0; i < bands.length; i++) {
@@ -171,6 +171,11 @@ function renderSize(map: MapboxMap): { width: number; height: number } {
   return { width: targetWidth, height: targetHeight };
 }
 
+function paletteOpacity(state: WeatherOverlayState, key: WeatherOverlayMetric): number {
+  const opacity = state.palettes?.[key]?.opacity ?? 100;
+  return Math.max(0, Math.min(1, opacity / 100));
+}
+
 export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -188,17 +193,24 @@ export function useWeatherOverlay(
   const scheduleRefreshRef = useRef<((force: boolean) => void) | null>(null);
   const hideAllRef = useRef<(() => void) | null>(null);
   const renderedRef = useRef<Partial<Record<WeatherOverlayMetric, RenderedLayerEntry>>>({});
+  const activeLayers = useMemo(() => activeRenderableLayers(state), [state]);
 
   const activeLayersKey = useMemo(
-    () => activeRenderableLayers(state).map((layer) => `${layer.key}:${layer.mode}`).join('|'),
-    [state],
+    () => activeLayers.map((layer) => `${layer.key}:${layer.mode}`).join('|'),
+    [activeLayers],
   );
   const selectionKey = useMemo(() => selectionFromState(state).key, [state]);
   const paletteKey = useMemo(
-    () => activeRenderableLayers(state)
+    () => activeLayers
       .map((layer) => `${layer.key}:${paletteSignature(state, layer.key)}`)
       .join('|'),
-    [state],
+    [activeLayers, state],
+  );
+  const opacityKey = useMemo(
+    () => activeLayers
+      .map((layer) => `${layer.key}:${state.palettes?.[layer.key]?.opacity ?? 100}`)
+      .join('|'),
+    [activeLayers, state],
   );
 
   useEffect(() => {
@@ -208,6 +220,16 @@ export function useWeatherOverlay(
       try {
         if (map.getLayer(layerId(key))) {
           map.setLayoutProperty(layerId(key), 'visibility', visible ? 'visible' : 'none');
+        }
+      } catch {
+        /* no-op */
+      }
+    };
+
+    const setLayerOpacity = (key: WeatherOverlayMetric) => {
+      try {
+        if (map.getLayer(layerId(key))) {
+          map.setPaintProperty(layerId(key), 'raster-opacity', paletteOpacity(stateRef.current, key));
         }
       } catch {
         /* no-op */
@@ -241,6 +263,7 @@ export function useWeatherOverlay(
       }
       const source = map.getSource(sourceId(key)) as ImageSource | undefined;
       source?.updateImage({ url, coordinates: coords });
+      setLayerOpacity(key);
       setVisibility(key, true);
     };
 
@@ -287,7 +310,6 @@ export function useWeatherOverlay(
           dataset.samples,
           size.width,
           size.height,
-          palette?.opacity,
           palette?.bands,
         );
         const url = await canvasToObjectUrl(canvas);
@@ -403,10 +425,24 @@ export function useWeatherOverlay(
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (!state.enabled || activeRenderableLayers(state).length === 0) {
+    if (!state.enabled || activeLayers.length === 0) {
       hideAllRef.current?.();
       return;
     }
     scheduleRefreshRef.current?.(true);
-  }, [map, isMapLoaded, state.enabled, activeLayersKey, selectionKey, paletteKey]);
+  }, [map, isMapLoaded, state.enabled, activeLayers.length, activeLayersKey, selectionKey, paletteKey]);
+
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    for (const layer of activeLayers) {
+      try {
+        if (map.getLayer(layerId(layer.key))) {
+          const opacity = state.palettes?.[layer.key]?.opacity ?? 100;
+          map.setPaintProperty(layerId(layer.key), 'raster-opacity', Math.max(0, Math.min(1, opacity / 100)));
+        }
+      } catch {
+        /* layer may not exist yet */
+      }
+    }
+  }, [map, isMapLoaded, activeLayers, opacityKey, state.palettes]);
 }
