@@ -10,12 +10,14 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { getProject, saveProject, uploadProjectThumbnail } from '@/lib/projects';
+import { replaceProjectLocation } from '@/lib/projectLocation';
 import { captureMapThumbnail } from '@/lib/mapThumbnail';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
   email: string;
   onLogout: () => void;
+  initialProjectId?: string | null;
 }
 
 function clampNumber(value: number, min: number, max: number) {
@@ -134,7 +136,7 @@ function formatDisplayName(email: string): string {
     .join(' ');
 }
 
-export default function Dashboard({ email, onLogout }: DashboardProps) {
+export default function Dashboard({ email, onLogout, initialProjectId }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
@@ -157,12 +159,21 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
       setActiveProjectId(row.id);
       setActiveProjectInitial(row.data);
       setProjectBrowserOpen(false);
+      replaceProjectLocation({ id: row.id, name: row.name || row.data.name || 'project' });
     } catch (e) {
       console.error('[Dashboard] failed to open project', e);
+      if (activeProjectIdRef.current == null) {
+        replaceProjectLocation(null);
+      }
     } finally {
       setProjectLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!initialProjectId || activeProjectId != null || projectLoading) return;
+    void handleOpenProject(initialProjectId);
+  }, [activeProjectId, handleOpenProject, initialProjectId, projectLoading]);
 
   // Debounced autosave. Every project mutation pushes the latest snapshot
   // into a ref; a 1s timer flushes it to Supabase. We also flush on
@@ -187,6 +198,9 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
   const handleProjectChange = useCallback(
     (next: ItineraryProject) => {
       pendingSaveRef.current = next;
+      if (activeProjectId) {
+        replaceProjectLocation({ id: activeProjectId, name: next.name || 'project' });
+      }
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
       }
@@ -195,7 +209,7 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
         void flushSave();
       }, 1000);
     },
-    [flushSave],
+    [activeProjectId, flushSave],
   );
 
   // Flush on tab close / refresh.
@@ -230,6 +244,7 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
       }
     }
     setProjectBrowserOpen(true);
+    replaceProjectLocation(null);
   }, [flushSave, mapInstance]);
 
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());

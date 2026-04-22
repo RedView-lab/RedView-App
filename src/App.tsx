@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
+import { readProjectIdFromPath } from './lib/projectLocation'
 import Dashboard from './pages/Dashboard'
 import PayWall from './components/PayWall'
 import './index.css'
@@ -8,6 +9,7 @@ function App() {
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(null)
   const [loading, setLoading] = useState(true)
   const [isSubscribed, setIsSubscribed] = useState<boolean | null>(null)
+  const [initialProjectId] = useState(() => readProjectIdFromPath(window.location.pathname))
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
 
@@ -81,7 +83,13 @@ function App() {
     return <PayWall landingUrl={landingUrl} />
   }
 
-  return <Dashboard email={session.user.email || 'unknown'} onLogout={handleLogout} />
+  return (
+    <Dashboard
+      email={session.user.email || 'unknown'}
+      onLogout={handleLogout}
+      initialProjectId={initialProjectId}
+    />
+  )
 }
 
 export default App
