@@ -260,6 +260,89 @@ function smoothElevationValues(values: number[], windowSize = 5): number[] {
   return out;
 }
 
+const GRADIENT_SEGMENT_M = 30;
+
+function gradientWindowIndices(
+  distances: number[],
+  index: number,
+  targetSpanM = GRADIENT_SEGMENT_M,
+): { startIndex: number; endIndex: number } {
+  const lastIndex = distances.length - 1;
+  if (index <= 0) {
+    let endIndex = 0;
+    while (
+      endIndex < lastIndex &&
+      distances[endIndex] - distances[0] < targetSpanM
+    ) {
+      endIndex += 1;
+    }
+    return { startIndex: 0, endIndex };
+  }
+  if (index >= lastIndex) {
+    let startIndex = lastIndex;
+    while (
+      startIndex > 0 &&
+      distances[lastIndex] - distances[startIndex] < targetSpanM
+    ) {
+      startIndex -= 1;
+    }
+    return { startIndex, endIndex: lastIndex };
+  }
+
+  const minDistance = distances[0];
+  const maxDistance = distances[lastIndex];
+  const centerDistance = distances[index];
+  const halfSpanM = targetSpanM / 2;
+  let startTarget = centerDistance - halfSpanM;
+  let endTarget = centerDistance + halfSpanM;
+
+  if (startTarget < minDistance) {
+    endTarget = Math.min(maxDistance, endTarget + (minDistance - startTarget));
+    startTarget = minDistance;
+  }
+  if (endTarget > maxDistance) {
+    startTarget = Math.max(minDistance, startTarget - (endTarget - maxDistance));
+    endTarget = maxDistance;
+  }
+
+  let startIndex = index;
+  while (startIndex > 0 && distances[startIndex] > startTarget) startIndex -= 1;
+
+  let endIndex = index;
+  while (endIndex < lastIndex && distances[endIndex] < endTarget) endIndex += 1;
+
+  while (
+    endIndex < lastIndex &&
+    distances[endIndex] - distances[startIndex] < targetSpanM
+  ) {
+    endIndex += 1;
+  }
+  while (
+    startIndex > 0 &&
+    distances[endIndex] - distances[startIndex] < targetSpanM
+  ) {
+    startIndex -= 1;
+  }
+
+  return { startIndex, endIndex };
+}
+
+function computeGradientPercentAtIndex(
+  distances: number[],
+  elevations: number[],
+  index: number,
+  targetSpanM = GRADIENT_SEGMENT_M,
+): number {
+  const { startIndex, endIndex } = gradientWindowIndices(
+    distances,
+    index,
+    targetSpanM,
+  );
+  const spanM = distances[endIndex] - distances[startIndex];
+  if (spanM <= 0.5) return 0;
+  return ((elevations[endIndex] - elevations[startIndex]) / spanM) * 100;
+}
+
 function computeAscentDescentFromElevations(
   elevations: number[],
   thresholdM = 1,
@@ -283,16 +366,14 @@ function buildRouteProfileFromSamples(samples: ElevationSample[]): RouteProfileP
     samples.map((sample) => sample.ele),
     3,
   );
+  const distances = samples.map((sample) => sample.distanceM);
 
   return samples.map((sample, index) => {
-    const prevIndex = index > 0 ? index - 1 : index;
-    const nextIndex = index < samples.length - 1 ? index + 1 : index;
-    const spanM = samples[nextIndex].distanceM - samples[prevIndex].distanceM;
-    const gradientPct = Number.isFinite(sample.gradientPct)
-      ? (sample.gradientPct as number)
-      : spanM > 0.5
-        ? ((gradientBase[nextIndex] - gradientBase[prevIndex]) / spanM) * 100
-        : 0;
+    const gradientPct = computeGradientPercentAtIndex(
+      distances,
+      gradientBase,
+      index,
+    );
 
     return {
       lat: sample.lat,
@@ -503,11 +584,7 @@ function buildRouteProfile(rows: ParsedRow[]): RouteProfilePoint[] {
   const profile: RouteProfilePoint[] = [];
 
   for (let i = 0; i < rows.length; i++) {
-    const prevIndex = i > 0 ? i - 1 : i;
-    const nextIndex = i < rows.length - 1 ? i + 1 : i;
-    const spanM = distancesM[nextIndex] - distancesM[prevIndex];
-    const gradientPct =
-      spanM > 0.5 ? ((smoothed[nextIndex] - smoothed[prevIndex]) / spanM) * 100 : 0;
+    const gradientPct = computeGradientPercentAtIndex(distancesM, smoothed, i);
     profile.push({
       lat: rows[i].lat,
       lon: rows[i].lon,
