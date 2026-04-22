@@ -9,7 +9,7 @@ interface SelectOption<T extends string = string> {
 
 interface PanelSelectProps<T extends string = string> {
   value: T;
-  options: SelectOption<T>[];
+  options: readonly SelectOption<T>[];
   onChange?: (v: T) => void;
   wide?: boolean;
   startAdornment?: ReactNode;
