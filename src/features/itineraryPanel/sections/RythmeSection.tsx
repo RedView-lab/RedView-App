@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
+import { PanelSelect } from '../components/PanelSelect';
 import { PauseIntervalList } from '../components/PauseIntervalList';
 import { PoiPauseGrid } from '../components/PoiPauseGrid';
 import { Collapse } from '../components/Collapse';
@@ -45,35 +46,6 @@ function ChipInput({
         placeholder={placeholder}
         aria-label={ariaLabel}
       />
-    </div>
-  );
-}
-
-function ChipSelect({
-  value,
-  onChange,
-  ariaLabel,
-  options,
-}: {
-  value: string;
-  onChange?: (v: string) => void;
-  ariaLabel?: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
-}) {
-  return (
-    <div className="rvi-chip-input">
-      <select
-        className="rvi-chip-input__native"
-        value={value}
-        onChange={(e) => onChange?.(e.target.value)}
-        aria-label={ariaLabel}
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
     </div>
   );
 }
@@ -261,9 +233,9 @@ export function RythmeSection({
       <div className="rvi-row">
         <div className="rvi-lfield">
           <span className="rvi-lfield__label">Sexe :</span>
-          <ChipSelect
+          <PanelSelect<RhythmGender>
             value={rhythm.gender ?? 'default'}
-            onChange={(value) => onChange?.('gender', value as RhythmGender)}
+            onChange={(value) => onChange?.('gender', value)}
             ariaLabel="Sexe pour la prédiction"
             options={GENDER_OPTIONS}
           />
