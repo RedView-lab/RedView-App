@@ -89,6 +89,14 @@ export function AnalysisChart({
     return buildNiceTicks(xDomain.min, xDomain.max, target || DEFAULT_TICK_COUNT);
   }, [plotSize.width, xDomain.min, xDomain.max]);
 
+  const plotXDomain = useMemo<AxisDomain>(() => {
+    if (xTicks.length === 0) return xDomain;
+    return {
+      min: xTicks[0] ?? xDomain.min,
+      max: xTicks[xTicks.length - 1] ?? xDomain.max,
+    };
+  }, [xDomain, xTicks]);
+
   const yTicksAsc = useMemo(() => {
     const target =
       plotSize.height > 0
@@ -99,18 +107,34 @@ export function AnalysisChart({
 
   const yTicks = useMemo(() => yTicksAsc.slice().reverse(), [yTicksAsc]);
 
+  const plotYDomain = useMemo<AxisDomain>(() => {
+    if (yTicksAsc.length === 0) return yDomain;
+    return {
+      min: yTicksAsc[0] ?? yDomain.min,
+      max: yTicksAsc[yTicksAsc.length - 1] ?? yDomain.max,
+    };
+  }, [yDomain, yTicksAsc]);
+
   const y2Ticks = useMemo(
     () => buildInterpolatedTicks(y2Domain.max, y2Domain.min, yTicks.length),
     [y2Domain.max, y2Domain.min, yTicks.length],
   );
 
+  const plotY2Domain = useMemo<AxisDomain>(() => {
+    if (y2Ticks.length === 0) return y2Domain;
+    return {
+      min: y2Ticks[y2Ticks.length - 1] ?? y2Domain.min,
+      max: y2Ticks[0] ?? y2Domain.max,
+    };
+  }, [y2Domain, y2Ticks]);
+
   const xPositions = useMemo(
     () =>
       xTicks.map((value) => ({
         value,
-        ratio: ratioFor(value, xDomain),
+        ratio: ratioFor(value, plotXDomain),
       })),
-    [xTicks, xDomain],
+    [plotXDomain, xTicks],
   );
   const yPositions = useMemo(
     () =>
@@ -131,14 +155,19 @@ export function AnalysisChart({
       series.map((s) => ({
         id: s.id,
         color: s.color,
-        path: buildSvgPath(s.points, xDomain, s.axis === 2 ? y2Domain : yDomain),
+        path: buildSvgPath(
+          s.points,
+          plotXDomain,
+          s.axis === 2 ? plotY2Domain : plotYDomain,
+        ),
       })),
-    [series, xDomain, yDomain, y2Domain],
+    [plotXDomain, plotY2Domain, plotYDomain, series],
   );
 
   const hoverData = useMemo(() => {
     if (!hover || !series.length) return null;
-    const hoveredX = xDomain.min + hover.ratioX * (xDomain.max - xDomain.min);
+    const hoveredX =
+      plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
     return series.map((s) => ({
       id: s.id,
       itineraryName: s.itineraryName,
@@ -147,7 +176,7 @@ export function AnalysisChart({
       metric: s.metricId,
       value: interpolateY(s.points, hoveredX),
     }));
-  }, [hover, series, xDomain]);
+  }, [hover, plotXDomain, series]);
 
   return (
     <div className="rvchart" style={style}>
@@ -183,6 +212,7 @@ export function AnalysisChart({
             className="rvchart__layer rvchart__layer--series"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
+            overflow="hidden"
             aria-hidden="true"
           >
             {seriesPaths.map((entry) =>
@@ -209,7 +239,9 @@ export function AnalysisChart({
                 <HoverCardGroup
                   hoverX={hover.x}
                   hoverRatioX={hover.ratioX}
-                  xValue={xDomain.min + hover.ratioX * (xDomain.max - xDomain.min)}
+                  xValue={
+                    plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)
+                  }
                   xMode={xMode}
                   rows={hoverData ?? []}
                 />
@@ -417,12 +449,16 @@ function buildSvgPath(
   let d = '';
   for (let i = 0; i < points.length; i++) {
     const p = points[i];
-    const x = ((p.x - xDomain.min) / xSpan) * 100;
-    const y = 100 - ((p.y - yDomain.min) / ySpan) * 100;
+    const x = clamp(((p.x - xDomain.min) / xSpan) * 100, 0, 100);
+    const y = clamp(100 - ((p.y - yDomain.min) / ySpan) * 100, 0, 100);
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     d += `${i === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)} `;
   }
   return d.trim();
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function interpolateY(points: { x: number; y: number }[], xValue: number): number {

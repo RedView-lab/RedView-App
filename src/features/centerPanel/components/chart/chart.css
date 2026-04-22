@@ -49,6 +49,8 @@
   border-left: 1px solid rgba(255, 255, 255, 0.8);
   border-right: 1px solid rgba(255, 255, 255, 0.96);
   border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+  overflow: hidden;
+  isolation: isolate;
 }
 
 /* ---- Layers ---- */
@@ -59,7 +61,13 @@
 }
 
 .rvchart__layer--bg     { z-index: 1; }
-.rvchart__layer--series { z-index: 2; }
+.rvchart__layer--series {
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
 .rvchart__layer--overlay{ z-index: 3; }
 
 /* ---- Background grid lines ---- */
@@ -139,6 +147,7 @@
 .rvchart__xaxis-cells {
   position: relative;
   height: 100%;
+  overflow: hidden;
 }
 
 .rvchart__xaxis-cell {
@@ -198,6 +207,7 @@
 .rvchart__series-cells {
   position: relative;
   height: 100%;
+  overflow: hidden;
 }
 
 .rvchart__series-cell {

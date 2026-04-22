@@ -190,6 +190,8 @@ export function buildSeriesFromPrediction(
     prevDistanceKm = distKm;
   }
 
+  points.sort((a, b) => a.x - b.x);
+
   return points.length > 1 ? points : null;
 }
 
@@ -228,5 +230,5 @@ export function computeXDomain(series: ChartPoint[][]): AxisDomain | null {
     }
   }
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return null;
-  return { min, max };
+  return { min: min >= 0 ? 0 : min, max };
 }
