@@ -56,6 +56,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.rvi-itin__label--edit {
+  background: rgba(0, 0, 0, 0.55);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font: inherit;
+  outline: none;
+  width: 110px;
+  max-width: 100%;
+}
+.rvi-itin__label--edit:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
 
 /* GPX-loaded marker (small badge after the name) */
 .rvi-itin__badge {

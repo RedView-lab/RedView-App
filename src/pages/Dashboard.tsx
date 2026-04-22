@@ -7,6 +7,7 @@ import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { ItineraryPanel } from '@/features/itineraryPanel';
+import { ProjectProvider } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
@@ -542,17 +543,19 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
         />
       )}
 
+      <ProjectProvider
+        key={activeProjectId ?? 'no-project'}
+        initialProject={activeProjectInitial ?? undefined}
+        onProjectChange={handleProjectChange}
+      >
       <div style={leftPanelStyle}>
         <ItineraryPanel
-          key={activeProjectId ?? 'no-project'}
           map={mapInstance}
           isMapLoaded={mapLoaded}
           width={leftPanelWidth}
           onResizeStart={handleLeftResizeStart}
           isResizing={isLeftResizing}
           onBackToHome={handleBackToBrowser}
-          initialProject={activeProjectInitial ?? undefined}
-          onProjectChange={handleProjectChange}
         />
       </div>
 
@@ -640,6 +643,7 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
           <ExporterPanel width={panelWidth} />
         </div>
       </div>
+      </ProjectProvider>
 
       <ProjectBrowserOverlay
         open={projectBrowserOpen || activeProjectId == null}

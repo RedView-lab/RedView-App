@@ -29,6 +29,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onAddItinerary,
     onOpenAddItinerary,
     onRemoveItinerary,
+    onRenameItinerary,
     onChangeMode,
     onChangeProfile,
     onUndo,
@@ -94,6 +95,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onSelect={onSelectItinerary}
         onAdd={onOpenAddItinerary ?? onAddItinerary}
         onRemove={onRemoveItinerary}
+        onRename={onRenameItinerary}
       />
 
       <div className="rvi-divider" />

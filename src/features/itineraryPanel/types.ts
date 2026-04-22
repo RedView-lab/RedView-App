@@ -188,6 +188,28 @@ export const DEFAULT_TIMELINE_RAIL: TimelineRailConfig = {
   rowHeightPx: 32,
 };
 
+/** How an itinerary's polyline is colorised on the map (right-panel control). */
+export type RouteRenderMode = 'default' | 'slope' | 'speedEst';
+
+/**
+ * Computed metrics persisted on the itinerary after a successful BRouter
+ * routing run. All values are optional — when absent the synth row
+ * displays "--". Distance is also kept on the timeline "end" row for
+ * backward compatibility with previously-saved projects.
+ */
+export interface ItineraryMetrics {
+  distanceKm?: number;
+  /** Moving / cumulative duration in seconds. Not yet wired. */
+  durationSec?: number;
+  ascentM?: number;
+  descentM?: number;
+  /** Average slope in percent (positive). */
+  avgSlopePercent?: number;
+  /** Tarmac vs off-road share (each 0–100). */
+  tarmacPercent?: number;
+  offroadPercent?: number;
+}
+
 export interface Itinerary {
   id: string;
   name: string;
@@ -198,6 +220,14 @@ export interface Itinerary {
   rhythm: RhythmState;
   poi: PoiState;
   timeline: TimelineItem[];
+  /** Map render visibility (right-panel "eye" toggle). Defaults to true. */
+  visible?: boolean;
+  /** Right-panel polyline render mode. Defaults to 'default'. */
+  renderMode?: RouteRenderMode;
+  /** Right-panel opacity slider (0–100). Defaults to 100. */
+  opacity?: number;
+  /** Computed metrics shown in the center synth table. */
+  metrics?: ItineraryMetrics;
   /**
    * Optional GPX track loaded for this itinerary. When present, the POI
    * search runs in "corridor" mode along these points instead of bbox mode.
@@ -264,6 +294,8 @@ export interface ItineraryPanelProps {
   onAddItineraryFromGpx?: (file: File) => Promise<void> | void;
   /** Remove an itinerary by id. The container should refuse if it's the last one. */
   onRemoveItinerary?: (id: string) => void;
+  /** Inline-rename an itinerary from its tab. */
+  onRenameItinerary?: (id: string, name: string) => void;
 
   // mode tabs
   onChangeMode?: (mode: PanelMode) => void;

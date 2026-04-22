@@ -5,9 +5,9 @@ import { ItineraryPanel } from './ItineraryPanel';
 import { AddItineraryDialog } from './components/AddItineraryDialog';
 import { useItineraryPoiMap } from './hooks/useItineraryPoiMap';
 import { poiFeaturesToTimelineItems } from './lib/poi-to-timeline';
+import { useProjectStore } from './context/ProjectStore';
 import {
   createDefaultItinerary,
-  createDefaultProject,
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
 } from './defaultState';
@@ -48,21 +48,6 @@ interface ItineraryPanelContainerProps {
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
   onBackToHome?: () => void;
-  /**
-   * Initial project state to seed the editor with. Typically the row from
-   * Supabase's `projects.data` JSONB column. When omitted, falls back to a
-   * blank `createDefaultProject()` (used in dev / unit tests).
-   *
-   * The container snapshots this once and then owns the live state — to
-   * load a different project, REMOUNT the container with a new `key`
-   * (the Dashboard does this using the project id).
-   */
-  initialProject?: ItineraryProject;
-  /**
-   * Notified after every project mutation. The Dashboard uses this to
-   * persist changes to Supabase (debounced).
-   */
-  onProjectChange?: (project: ItineraryProject) => void;
 }
 
 /**
@@ -83,24 +68,8 @@ export function ItineraryPanelContainer({
   onResizeStart,
   isResizing,
   onBackToHome,
-  initialProject,
-  onProjectChange,
 }: ItineraryPanelContainerProps) {
-  const [project, setProject] = useState<ItineraryProject>(
-    () => initialProject ?? createDefaultProject(),
-  );
-
-  // Notify the parent of every project mutation so it can persist to
-  // Supabase. Skip the very first render (the parent already has the
-  // initial state it just handed us).
-  const firstChangeRef = useRef(true);
-  useEffect(() => {
-    if (firstChangeRef.current) {
-      firstChangeRef.current = false;
-      return;
-    }
-    onProjectChange?.(project);
-  }, [project, onProjectChange]);
+  const { project, setProject, setItineraryName } = useProjectStore();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(
@@ -401,6 +370,8 @@ export function ItineraryPanelContainer({
         // search has a route to project onto (the "Rechercher" button stays
         // disabled until `gpxRoute` is set).
         const distanceKm = Math.round(route.distanceM / 100) / 10;
+        const ascentM = Math.max(0, Math.round(route.ascentM));
+        const descentM = Math.max(0, Math.round(route.descentM));
         const routePoints = route.coordinates.map((c: [number, number]) => ({
           lat: c[1],
           lon: c[0],
@@ -414,7 +385,11 @@ export function ItineraryPanelContainer({
             it.gpxRoute?.points.length === routePoints.length &&
             it.gpxRoute?.points[0]?.lat === routePoints[0]?.lat &&
             it.gpxRoute?.points[0]?.lon === routePoints[0]?.lon;
-          if (endAlreadyOk && gpxAlreadyOk) return p;
+          const metricsAlreadyOk =
+            it.metrics?.distanceKm === distanceKm &&
+            it.metrics?.ascentM === ascentM &&
+            it.metrics?.descentM === descentM;
+          if (endAlreadyOk && gpxAlreadyOk && metricsAlreadyOk) return p;
           return {
             ...p,
             itineraries: p.itineraries.map((curr) =>
@@ -425,6 +400,12 @@ export function ItineraryPanelContainer({
                       name: curr.gpxRoute?.name ?? null,
                       points: routePoints,
                       source: 'brouter',
+                    },
+                    metrics: {
+                      ...curr.metrics,
+                      distanceKm,
+                      ascentM,
+                      descentM,
                     },
                     timeline: curr.timeline.map((row) =>
                       row.kind === 'end' ? { ...row, distanceKm } : row,
@@ -534,6 +515,7 @@ export function ItineraryPanelContainer({
           return { ...p, itineraries: remaining, activeItineraryId: nextActive };
         })
       }
+      onRenameItinerary={setItineraryName}
       onChangeMode={(mode: PanelMode) =>
         setProject((p) => ({ ...p, activeMode: mode }))
       }

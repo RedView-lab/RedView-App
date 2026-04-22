@@ -18,6 +18,9 @@ import type { LabelCategory } from '@/features/labels/types';
 import { useWind } from '@/features/weather/hooks/useWind';
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
+import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
+
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 import type {
@@ -258,6 +261,59 @@ export function ControlPanelContainer({
   const [snowEnabled, setSnowEnabled] = useState(false);
   const [sunlightState, setSunlightState] = useState(DEFAULT_CONTROL_PANEL_STATE.sunlight);
 
+  // ── Routes (right-panel "Itinéraires" section) ─────────────────────
+  // Items are sourced from the active project so the right panel mirrors
+  // the editor on the left in real time. Color / visibility / mode /
+  // opacity edits flow back into the project store via the mutators
+  // exposed by `useProjectStore`.
+  const projectStore = useProjectStoreOptional();
+  const projectItineraries = projectStore?.project.itineraries ?? [];
+  const [routesEnabled, setRoutesEnabled] = useState(true);
+  const routeItems = useMemo(
+    () =>
+      projectItineraries.map((it) => ({
+        id: it.id,
+        label: it.name,
+        color: it.color,
+        mode: (it.renderMode ?? 'default') as ItinRouteRenderMode,
+        opacity: it.opacity ?? 100,
+        visible: it.visible !== false,
+      })),
+    [projectItineraries],
+  );
+
+  const handleRouteColorChange = useCallback(
+    (id: string, color: string) => {
+      projectStore?.setItineraryColor(id, color);
+    },
+    [projectStore],
+  );
+  const handleRouteVisibilityToggle = useCallback(
+    (id: string) => {
+      if (!projectStore) return;
+      const current = projectStore.project.itineraries.find((i) => i.id === id);
+      if (!current) return;
+      projectStore.setItineraryVisibility(id, current.visible === false);
+    },
+    [projectStore],
+  );
+  const handleRouteModeChange = useCallback(
+    (id: string, mode: string) => {
+      const allowed: ItinRouteRenderMode[] = ['default', 'slope', 'speedEst'];
+      const safe = (allowed as string[]).includes(mode)
+        ? (mode as ItinRouteRenderMode)
+        : 'default';
+      projectStore?.setItineraryRenderMode(id, safe);
+    },
+    [projectStore],
+  );
+  const handleRouteOpacityChange = useCallback(
+    (id: string, opacity: number) => {
+      projectStore?.setItineraryOpacity(id, opacity);
+    },
+    [projectStore],
+  );
+
   // Drives Mapbox sun + atmosphere; returns sunrise/sunset for the current
   // map center and date so the SunlightSection panel can display them.
   const sunlightTimes = useSunlight(isMapLoaded ? map : null, isMapLoaded, {
@@ -301,6 +357,10 @@ export function ControlPanelContainer({
         visible: !hiddenTiles[tileKey(info.coord)],
       })),
       labels: { enabled: labelsEnabled, state: panelLabels },
+      routes: {
+        enabled: routesEnabled,
+        items: routeItems,
+      },
       slopes: {
         enabled: slopeState.enabled,
         resolution: slopeState.resolution,
@@ -335,6 +395,8 @@ export function ControlPanelContainer({
     sunlightState,
     sunlightTimes,
     dynamicCategories,
+    routesEnabled,
+    routeItems,
   ]);
 
   // ── Handlers ───────────────────────────────────────────────────────
@@ -479,6 +541,12 @@ export function ControlPanelContainer({
       onSnowEnabledChange={handleSnowEnabled}
       onSunlightEnabledChange={handleSunlightEnabled}
       onSunlightStateChange={handleSunlightStateChange}
+      /* Routes (itineraries from active project) */
+      onRoutesEnabledChange={setRoutesEnabled}
+      onRouteColorChange={handleRouteColorChange}
+      onRouteModeChange={handleRouteModeChange}
+      onRouteOpacityChange={handleRouteOpacityChange}
+      onRouteVisibilityToggle={handleRouteVisibilityToggle}
     />
   );
 }
