@@ -19,7 +19,7 @@ export type AnalysisAxisMetricId =
   | 'Vitesse moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
-  | 'Dénivelé'
+  | 'Altitude'
   | 'Inclinaison (°)'
   | 'Inclinaison (%)'
   | 'Surface'

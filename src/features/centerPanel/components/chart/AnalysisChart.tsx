@@ -443,7 +443,7 @@ function defaultDomainFor(metric: AxisMetricId): AxisDomain {
     case 'Puissance':
     case 'Puissance moyenne':
       return { min: 0, max: 400 };
-    case 'Dénivelé':
+    case 'Altitude':
       return { min: 0, max: 3000 };
     case 'Inclinaison (°)':
       return { min: -90, max: 90 };

@@ -9,7 +9,7 @@ export type AxisMetricId =
   | 'Vitesse moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
-  | 'Dénivelé'
+  | 'Altitude'
   | 'Inclinaison (°)'
   | 'Inclinaison (%)'
   | 'Surface'
@@ -69,7 +69,7 @@ export function unitForMetric(metric: AxisMetricId): string {
     case 'Puissance':
     case 'Puissance moyenne':
       return 'W';
-    case 'Dénivelé':
+    case 'Altitude':
       return 'm';
     case 'Inclinaison (°)':
       return '°';
@@ -126,7 +126,7 @@ export function metricIsAvailable(metric: AxisMetricId): boolean {
     case 'Vitesse moyenne':
     case 'Puissance':
     case 'Puissance moyenne':
-    case 'Dénivelé':
+    case 'Altitude':
     case 'Inclinaison (°)':
     case 'Inclinaison (%)':
       return true;
@@ -144,7 +144,7 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
     case 'Puissance':
     case 'Puissance moyenne':
       return point.predicted_power_w;
-    case 'Dénivelé':
+    case 'Altitude':
       return point.elevation_m;
     case 'Inclinaison (%)':
       return point.gradient_pct;
@@ -159,7 +159,7 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
  * Build a chart series from a prediction result. Returns `null` when the
  * prediction is unavailable or the metric is not supported.
  *
- * - `Vitesse`/`Puissance`/`Dénivelé`/`Inclinaison`: raw timeline value.
+ * - `Vitesse`/`Puissance`/`Altitude`/`Inclinaison`: raw timeline value.
  * - `Vitesse moyenne`/`Puissance moyenne`: raw timeline value too; the chart
  *   aggregates these later by X-axis interval so the average follows the
  *   current graduations.

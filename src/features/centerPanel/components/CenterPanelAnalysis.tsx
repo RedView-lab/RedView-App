@@ -36,7 +36,7 @@ const axisOptions: AxisOption[] = [
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
   { value: 'Puissance moyenne', label: 'Puissance moyenne', tone: 'primary' },
-  { value: 'Dénivelé', label: 'Dénivelé', tone: 'primary' },
+  { value: 'Altitude', label: 'Altitude', tone: 'primary' },
   { value: 'Inclinaison (°)', label: 'Inclinaison (°)', tone: 'primary' },
   { value: 'Inclinaison (%)', label: 'Inclinaison (%)', tone: 'primary' },
   { value: 'Surface', label: 'Surface', tone: 'primary' },
@@ -67,8 +67,16 @@ export function CenterPanelAnalysis() {
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
   // chips). Read from the project so reopening it restores the chart.
-  const analysisState: AnalysisPanelState =
-    projectStore?.project.analysis ?? createDefaultAnalysisPanelState();
+  // Migrate the legacy `Dénivelé` axis label to the new `Altitude` one
+  // so projects saved before the rename keep rendering.
+  const rawAnalysis = projectStore?.project.analysis;
+  const analysisState: AnalysisPanelState = rawAnalysis
+    ? {
+        ...rawAnalysis,
+        axis1: migrateAxisMetric(rawAnalysis.axis1),
+        axis2: migrateAxisMetric(rawAnalysis.axis2),
+      }
+    : createDefaultAnalysisPanelState();
   const axis1Value = analysisState.axis1 as AxisMetricId;
   const axis2Value = analysisState.axis2 as AxisMetricId;
   const xMode = analysisState.xMode as AxisMode;
@@ -176,8 +184,17 @@ export function CenterPanelAnalysis() {
     return result;
   }, [projectStore, predictionStore, axis1Value, axis2Value, xMode]);
 
+  // Show the altitude backdrop whenever the user enables the "Pente"
+  // filter chip. We also show it implicitly when one of the axes is set
+  // to an inclination metric, so the slope curve always reads on top of
+  // the underlying altitude profile.
+  const showAltitudeBackdrop =
+    filters.pente ||
+    isInclinationMetric(axis1Value) ||
+    isInclinationMetric(axis2Value);
+
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
-    if (!isInclinationMetric(axis1Value) && !isInclinationMetric(axis2Value)) return [];
+    if (!showAltitudeBackdrop) return [];
     if (!projectStore || !predictionStore) return [];
 
     const result: ChartBackdropProfile[] = [];
@@ -185,7 +202,7 @@ export function CenterPanelAnalysis() {
       if (itinerary.visible === false) continue;
       const prediction = predictionStore.predictions[itinerary.id];
       if (!prediction) continue;
-      const points = buildSeriesFromPrediction(prediction, 'Dénivelé', xMode);
+      const points = buildSeriesFromPrediction(prediction, 'Altitude', xMode);
       if (!points) continue;
       result.push({
         id: `${itinerary.id}::altitude-backdrop`,
@@ -195,7 +212,7 @@ export function CenterPanelAnalysis() {
       });
     }
     return result;
-  }, [axis1Value, axis2Value, projectStore, predictionStore, xMode]);
+  }, [showAltitudeBackdrop, projectStore, predictionStore, xMode]);
 
   return (
     <section
@@ -325,4 +342,13 @@ function lightenColor(hex: string, amount: number): string {
   const lg = Math.round(g + (255 - g) * t);
   const lb = Math.round(b + (255 - b) * t);
   return `#${((lr << 16) | (lg << 8) | lb).toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * Map legacy axis labels to their current equivalent so projects saved
+ * before a renaming round-trip cleanly through the dropdown selectors.
+ */
+function migrateAxisMetric(value: string): AxisMetricId {
+  if (value === 'Dénivelé') return 'Altitude';
+  return value as AxisMetricId;
 }
