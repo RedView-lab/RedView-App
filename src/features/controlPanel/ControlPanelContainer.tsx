@@ -314,6 +314,35 @@ export function ControlPanelContainer({
     [projectStore],
   );
 
+  // Master "Itinéraires" toggle in the section header — when flipped it
+  // hides / shows every itinerary on the map by writing each one's
+  // `visible` flag in the project store. We keep `routesEnabled` as the
+  // single source of truth for the section's visual state and derive it
+  // from "any itinerary currently visible" so the panel state matches
+  // the underlying store after edits made elsewhere (e.g. from the
+  // center summary or via Supabase rehydration).
+  const anyItineraryVisible = useMemo(
+    () => projectItineraries.some((it) => it.visible !== false),
+    [projectItineraries],
+  );
+  const handleRoutesEnabledChange = useCallback(
+    (enabled: boolean) => {
+      setRoutesEnabled(enabled);
+      if (!projectStore) return;
+      for (const it of projectStore.project.itineraries) {
+        if ((it.visible !== false) !== enabled) {
+          projectStore.setItineraryVisibility(it.id, enabled);
+        }
+      }
+    },
+    [projectStore],
+  );
+  // Keep the local toggle in sync with the store so external changes
+  // (per-row eye click, project load) keep the master in the right state.
+  useEffect(() => {
+    setRoutesEnabled(anyItineraryVisible);
+  }, [anyItineraryVisible]);
+
   // Drives Mapbox sun + atmosphere; returns sunrise/sunset for the current
   // map center and date so the SunlightSection panel can display them.
   const sunlightTimes = useSunlight(isMapLoaded ? map : null, isMapLoaded, {
@@ -542,7 +571,7 @@ export function ControlPanelContainer({
       onSunlightEnabledChange={handleSunlightEnabled}
       onSunlightStateChange={handleSunlightStateChange}
       /* Routes (itineraries from active project) */
-      onRoutesEnabledChange={setRoutesEnabled}
+      onRoutesEnabledChange={handleRoutesEnabledChange}
       onRouteColorChange={handleRouteColorChange}
       onRouteModeChange={handleRouteModeChange}
       onRouteOpacityChange={handleRouteOpacityChange}

@@ -137,6 +137,37 @@ function addEndpoints(map: MapboxMap, endpoints: RouteEndpoint[]): void {
   });
 }
 
+/**
+ * Show / hide the route + endpoint layers without rebuilding the source.
+ * Cheap enough to call from a React effect on every store change.
+ */
+export function setRouteVisibility(map: MapboxMap, visible: boolean): void {
+  const value = visible ? 'visible' : 'none';
+  try {
+    if (map.getLayer(LINE_ID)) map.setLayoutProperty(LINE_ID, 'visibility', value);
+    if (map.getLayer(GLOW_ID)) map.setLayoutProperty(GLOW_ID, 'visibility', value);
+    if (map.getLayer(ENDPOINT_LAYER_ID))
+      map.setLayoutProperty(ENDPOINT_LAYER_ID, 'visibility', value);
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
+/**
+ * Update the line opacity (0–1). The glow layer is scaled so the soft
+ * halo fades together with the core line at low values.
+ */
+export function setRouteOpacity(map: MapboxMap, opacity01: number): void {
+  const v = Math.max(0, Math.min(1, opacity01));
+  try {
+    if (map.getLayer(LINE_ID)) map.setPaintProperty(LINE_ID, 'line-opacity', v);
+    if (map.getLayer(GLOW_ID))
+      map.setPaintProperty(GLOW_ID, 'line-opacity', 0.4 * v);
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
 export function removeRoute(map: MapboxMap): void {
   try {
     if (map.getLayer(LINE_ID)) map.removeLayer(LINE_ID);

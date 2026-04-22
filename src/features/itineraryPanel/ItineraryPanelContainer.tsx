@@ -29,7 +29,13 @@ import {
   fitToRoute,
   removeRoute,
   isRouteOnMap,
+  setRouteVisibility,
+  setRouteOpacity,
 } from './lib/route-layer';
+import {
+  computeRouteMetricsFromBrouter,
+  refineMetricsWithTerrain,
+} from './lib/route-metrics';
 import type {
   ItineraryProject,
   PanelMode,
@@ -85,6 +91,20 @@ export function ItineraryPanelContainer({
       null,
     [project],
   );
+
+  // Sync the route layer's visibility/opacity with the active itinerary's
+  // store flags. Cheap setLayoutProperty/setPaintProperty calls — no
+  // source rebuild. Today only the active route is rendered, so the
+  // master "Itinéraires" toggle in the right panel maps onto every
+  // itinerary's `visible` flag.
+  const activeVisible = active?.visible !== false;
+  const activeOpacity = active?.opacity ?? 100;
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    if (!isRouteOnMap(map)) return;
+    setRouteVisibility(map, activeVisible);
+    setRouteOpacity(map, activeOpacity / 100);
+  }, [map, isMapLoaded, activeVisible, activeOpacity, project.activeItineraryId]);
 
   /**
    * After a POI corridor search completes, replace the previously-injected
@@ -370,8 +390,32 @@ export function ItineraryPanelContainer({
         // search has a route to project onto (the "Rechercher" button stays
         // disabled until `gpxRoute` is set).
         const distanceKm = Math.round(route.distanceM / 100) / 10;
-        const ascentM = Math.max(0, Math.round(route.ascentM));
-        const descentM = Math.max(0, Math.round(route.descentM));
+        // Compute the rich metrics from the BRouter `messages` array
+        // (per-vertex elevation + surface tags). Falls back to BRouter's
+        // own `filtered ascend` totals when messages are unavailable.
+        const detailed = computeRouteMetricsFromBrouter(route);
+        const ascentM = detailed
+          ? Math.max(0, Math.round(detailed.ascentM))
+          : Math.max(0, Math.round(route.ascentM));
+        const descentM = detailed
+          ? Math.max(0, Math.round(detailed.descentM))
+          : Math.max(0, Math.round(route.descentM));
+        const avgSlopePercent = detailed
+          ? Math.round(detailed.avgSlopePercent * 10) / 10
+          : undefined;
+        const tarmacPercent = detailed
+          ? Math.round(detailed.tarmacPercent)
+          : undefined;
+        const offroadPercent = detailed
+          ? Math.round(detailed.offroadPercent)
+          : undefined;
+        console.log(
+          '[BRouter] metrics:',
+          'ascent=', ascentM, 'm',
+          '| descent=', descentM, 'm',
+          '| avg slope=', avgSlopePercent, '%',
+          '| tarmac=', tarmacPercent, '% off-road=', offroadPercent, '%',
+        );
         const routePoints = route.coordinates.map((c: [number, number]) => ({
           lat: c[1],
           lon: c[0],
@@ -388,7 +432,10 @@ export function ItineraryPanelContainer({
           const metricsAlreadyOk =
             it.metrics?.distanceKm === distanceKm &&
             it.metrics?.ascentM === ascentM &&
-            it.metrics?.descentM === descentM;
+            it.metrics?.descentM === descentM &&
+            it.metrics?.avgSlopePercent === avgSlopePercent &&
+            it.metrics?.tarmacPercent === tarmacPercent &&
+            it.metrics?.offroadPercent === offroadPercent;
           if (endAlreadyOk && gpxAlreadyOk && metricsAlreadyOk) return p;
           return {
             ...p,
@@ -406,6 +453,9 @@ export function ItineraryPanelContainer({
                       distanceKm,
                       ascentM,
                       descentM,
+                      avgSlopePercent,
+                      tarmacPercent,
+                      offroadPercent,
                     },
                     timeline: curr.timeline.map((row) =>
                       row.kind === 'end' ? { ...row, distanceKm } : row,
@@ -415,6 +465,63 @@ export function ItineraryPanelContainer({
             ),
           };
         });
+
+        // Schedule a refinement pass once the terrain tiles around the
+        // route have had time to load. Mapbox's terrain DEM is ~10 m at
+        // z14 (vs. BRouter's ~30 m SRTM); when the user has downloaded a
+        // LIDAR tile this drops to 0.4 m. We sample every BRouter vertex
+        // and recompute ascent/descent/slope.
+        if (detailed) {
+          const refineTimer = window.setTimeout(() => {
+            const queryEle = (lng: number, lat: number) => {
+              try {
+                return map.queryTerrainElevation?.([lng, lat]) ?? null;
+              } catch {
+                return null;
+              }
+            };
+            const refined = refineMetricsWithTerrain(route, queryEle);
+            if (!refined) return;
+            const rAscent = Math.max(0, Math.round(refined.ascentM));
+            const rDescent = Math.max(0, Math.round(refined.descentM));
+            const rAvg = Math.round(refined.avgSlopePercent * 10) / 10;
+            console.log(
+              '[BRouter] terrain-refined metrics:',
+              'ascent=', rAscent, 'm',
+              '| descent=', rDescent, 'm',
+              '| avg slope=', rAvg, '%',
+            );
+            setProject((p) => {
+              const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
+              if (!it) return p;
+              if (
+                it.metrics?.ascentM === rAscent &&
+                it.metrics?.descentM === rDescent &&
+                it.metrics?.avgSlopePercent === rAvg
+              )
+                return p;
+              return {
+                ...p,
+                itineraries: p.itineraries.map((curr) =>
+                  curr.id === p.activeItineraryId
+                    ? {
+                        ...curr,
+                        metrics: {
+                          ...curr.metrics,
+                          ascentM: rAscent,
+                          descentM: rDescent,
+                          avgSlopePercent: rAvg,
+                        },
+                      }
+                    : curr,
+                ),
+              };
+            });
+          }, 1500);
+          ctrl.signal.addEventListener('abort', () =>
+            window.clearTimeout(refineTimer),
+          );
+        }
       })
       .catch((e: unknown) => {
         if ((e as { name?: string }).name === 'AbortError') return;

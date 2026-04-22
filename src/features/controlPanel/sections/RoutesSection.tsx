@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { ColorSwatch } from '../components/ColorSwatch';
@@ -20,6 +21,80 @@ const MODE_OPTIONS: { value: RouteRenderMode; label: string }[] = [
   { value: 'slope', label: 'Pente' },
   { value: 'speedEst', label: 'Vitesse est.' },
 ];
+
+interface OpacityPillProps {
+  value: number;
+  onChange: (next: number) => void;
+}
+
+/**
+ * "52 %" pill — clicking turns the label into an inline editable input.
+ * Commits on blur or Enter, cancels on Escape. Values are clamped to
+ * 0–100 and rounded to integers.
+ */
+function OpacityPill({ value, onChange }: OpacityPillProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [value, editing]);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = () => {
+    const n = Number(draft);
+    if (Number.isFinite(n)) {
+      const clamped = Math.max(0, Math.min(100, Math.round(n)));
+      if (clamped !== value) onChange(clamped);
+    }
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <span className="rvc-routes__opacity rvc-routes__opacity--editing">
+        <input
+          ref={inputRef}
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commit();
+            else if (e.key === 'Escape') {
+              setDraft(String(value));
+              setEditing(false);
+            }
+          }}
+          className="rvc-routes__opacity-input"
+          aria-label="Opacité"
+        />
+        <span>%</span>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className="rvc-routes__opacity"
+      onClick={() => setEditing(true)}
+      title="Cliquer pour éditer l’opacité"
+    >
+      <span>{value} %</span>
+    </button>
+  );
+}
 
 export function RoutesSection({
   enabled,
@@ -56,21 +131,19 @@ export function RoutesSection({
             />
             <button
               type="button"
-              className="rvc-routes__opacity"
+              className="rvc-routes__eye"
               onClick={() => onVisibilityToggle?.(route.id)}
+              aria-pressed={route.visible}
+              aria-label={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
+              title={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
+              data-visible={route.visible ? 'true' : 'false'}
             >
-              <IconEye size={10} />
-              <span>{route.opacity} %</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                value={route.opacity}
-                onChange={(e) => onOpacityChange?.(route.id, Number(e.target.value))}
-                className="rvc-routes__opacity-range"
-                aria-label="Opacité"
-              />
+              <IconEye size={14} />
             </button>
+            <OpacityPill
+              value={route.opacity}
+              onChange={(next) => onOpacityChange?.(route.id, next)}
+            />
           </div>
         ))}
       </div>
