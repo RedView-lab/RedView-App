@@ -187,6 +187,15 @@ export function CenterPanelToolbar() {
             <span className="rvc-center-toolbar__button-text">Tracer</span>
           </button>
 
+          <button
+            className="rvc-center-toolbar__button rvc-center-toolbar__button--compact-accent"
+            type="button"
+            aria-label="Analyser"
+            title="Analyser"
+          >
+            <span className="rvc-center-toolbar__button-text">Analyser</span>
+          </button>
+
           <div className="rvc-center-toolbar__separator" aria-hidden="true" />
 
           <ToolbarIconButton label="Inverser">

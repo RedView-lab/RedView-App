@@ -146,26 +146,7 @@
 }
 
 .rvc-exporter-panel__submit {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
   width: 100%;
-  min-height: 38px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: var(--rvc-red);
-  color: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.2;
-  transition: background 0.18s ease;
-}
-
-.rvc-exporter-panel__submit:hover {
-  background: #a00000;
 }
 
 .rvc-exporter-panel__submit:active {

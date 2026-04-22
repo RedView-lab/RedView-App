@@ -105,8 +105,8 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
               ))}
             </div>
 
-            <button type="button" className="rvc-exporter-panel__submit">
-              <IconDownload01 size={20} />
+            <button type="button" className="rvc-btn-primary rvc-exporter-panel__submit">
+              <IconDownload01 size={18} />
               <span>Exporter</span>
             </button>
           </div>
