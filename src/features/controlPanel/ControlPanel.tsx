@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useMiddleClickAutoscroll } from '../../lib/useMiddleClickAutoscroll';
 import { BasemapsSection } from './sections/BasemapsSection';
 import { LidarTilesSection } from './sections/LidarTilesSection';
 import { LabelsSection } from './sections/LabelsSection';
@@ -61,6 +62,7 @@ export function ControlPanel({
   onResizeStart,
   isResizing,
 }: ControlPanelProps) {
+  const { scrollRef, isAutoscrolling } = useMiddleClickAutoscroll<HTMLDivElement>();
   const panelClass = `rvc-panel${className ? ` ${className}` : ''}${
     isResizing ? ' is-resizing' : ''
   }`;
@@ -76,7 +78,10 @@ export function ControlPanel({
           aria-label="Redimensionner le panneau"
         />
       )}
-      <div className="rvc-panel__content">
+      <div
+        ref={scrollRef}
+        className={`rvc-panel__content${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
+      >
       <BasemapsSection
         basemaps={state.basemaps}
         open={sectionsOpen?.basemaps}

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useMiddleClickAutoscroll } from '../../lib/useMiddleClickAutoscroll';
 import { PanelHeader } from './components/PanelHeader';
 import { ItineraryTabs } from './components/ItineraryTabs';
 import { ModeTabs } from './components/ModeTabs';
@@ -12,6 +13,7 @@ import type { ItineraryPanelProps } from './types';
 import './styles/index.css';
 
 export function ItineraryPanel(props: ItineraryPanelProps) {
+  const { scrollRef, isAutoscrolling } = useMiddleClickAutoscroll<HTMLDivElement>();
   const {
     project,
     profiles,
@@ -107,7 +109,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <div className="rvi-divider" />
 
-      <div className="rvi-panel__scroll">
+      <div
+        ref={scrollRef}
+        className={`rvi-panel__scroll${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
+      >
         {routeError ? (
           <div className="rvi-route-banner rvi-route-banner--error" role="alert">
             {routeError}
