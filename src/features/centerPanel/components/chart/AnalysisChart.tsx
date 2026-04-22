@@ -7,7 +7,6 @@ import {
   computeXDomain,
   formatAxisValue,
   isInclinationMetric,
-  isIntervalAverageMetric,
   metricIsAvailable,
   unitForMetric,
   type AxisDomain,
@@ -99,10 +98,7 @@ export function AnalysisChart({
     return buildNiceTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
   }, [plotSize.width, plotXDomain.max, plotXDomain.min]);
 
-  const displaySeries = useMemo(
-    () => series.map((entry) => materializeSeriesForPlot(entry, xTicks)),
-    [series, xTicks],
-  );
+  const displaySeries = series;
 
   const visibleSeries = useMemo(
     () =>
@@ -523,46 +519,6 @@ function normalizeMetricDomain(metric: ChartMetricId, domain: AxisDomain): AxisD
   return { min, max };
 }
 
-function materializeSeriesForPlot(seriesEntry: ChartSeries, xTicks: number[]): ChartSeries {
-  if (!isIntervalAverageMetric(seriesEntry.metricId)) return seriesEntry;
-  return {
-    ...seriesEntry,
-    points: buildIntervalAverageSeries(seriesEntry.points, xTicks),
-  };
-}
-
-function buildIntervalAverageSeries(
-  points: { x: number; y: number }[],
-  xTicks: number[],
-): { x: number; y: number }[] {
-  if (points.length < 2 || xTicks.length < 2) return points;
-
-  const result: Array<{ x: number; y: number }> = [];
-  for (let index = 0; index < xTicks.length - 1; index += 1) {
-    const start = xTicks[index] ?? 0;
-    const end = xTicks[index + 1] ?? start;
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
-    const avg = averageSeriesOverInterval(points, start, end);
-    if (!Number.isFinite(avg)) continue;
-
-    if (result.length === 0) {
-      result.push({ x: start, y: avg });
-    } else {
-      const prev = result[result.length - 1];
-      if (Math.abs(prev.x - start) > 1e-6) {
-        result.push({ x: start, y: prev.y });
-      }
-      if (Math.abs(prev.y - avg) > 1e-6) {
-        result.push({ x: start, y: avg });
-      }
-    }
-
-    result.push({ x: end, y: avg });
-  }
-
-  return result.length >= 2 ? result : points;
-}
-
 function clipPointsToXDomain(
   points: { x: number; y: number }[],
   xDomain: AxisDomain,
@@ -595,34 +551,6 @@ function clipPointsToXDomain(
   }
 
   return deduped;
-}
-
-function averageSeriesOverInterval(
-  points: { x: number; y: number }[],
-  start: number,
-  end: number,
-): number {
-  const span = end - start;
-  if (span <= 0) return Number.NaN;
-
-  const breakpoints = [start];
-  for (const point of points) {
-    if (point.x > start && point.x < end) breakpoints.push(point.x);
-  }
-  breakpoints.push(end);
-
-  let integral = 0;
-  let prevX = breakpoints[0] ?? start;
-  let prevY = interpolateY(points, prevX);
-  for (let index = 1; index < breakpoints.length; index += 1) {
-    const currX = breakpoints[index] ?? prevX;
-    const currY = interpolateY(points, currX);
-    integral += ((prevY + currY) / 2) * (currX - prevX);
-    prevX = currX;
-    prevY = currY;
-  }
-
-  return integral / span;
 }
 
 function ratioFor(value: number, domain: AxisDomain): number {

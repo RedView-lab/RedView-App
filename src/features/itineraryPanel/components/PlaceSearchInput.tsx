@@ -17,6 +17,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import {
   geocodePlaces,
   type GeocodeSuggestion,
@@ -61,9 +62,16 @@ export function PlaceSearchInput({
   const blurTimerRef = useRef<number | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [menuRect, setMenuRect] = useState<{
+    anchorTop: number;
     left: number;
-    top: number;
     width: number;
+    maxHeight: number;
+    placeAbove: boolean;
+    scale: number;
+    fontFamily: string;
+    fontSize: string;
+    fontWeight: string;
+    lineHeight: string;
   } | null>(null);
 
   // Keep local text in sync if the parent resets the value (e.g. itinerary switch).
@@ -116,22 +124,72 @@ export function PlaceSearchInput({
   // Track the input position so the (portaled, fixed) dropdown follows it.
   useLayoutEffect(() => {
     if (!open) return;
+
     const update = () => {
       const el = inputRef.current;
       if (!el) return;
+
       const r = el.getBoundingClientRect();
-      // Anchor right edge to the input so the dropdown can grow leftward
-      // and stay readable even when the input is narrow (Figma 1765:62695).
-      const width = Math.max(r.width, 220);
-      const left = Math.max(8, r.right - width);
-      setMenuRect({ left, top: r.bottom + 4, width });
+      const computed = window.getComputedStyle(el);
+      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
+      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const viewport = window.visualViewport;
+      const viewportLeft = viewport?.offsetLeft ?? 0;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportWidth = viewport?.width ?? window.innerWidth;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const viewportRight = viewportLeft + viewportWidth;
+      const viewportBottom = viewportTop + viewportHeight;
+      const gutter = 8;
+      const offset = 4 * scale;
+      const maxWidth = Math.max(180, viewportWidth - gutter * 2);
+      const desiredWidth = Math.max(r.width, 220 * scale);
+      const width = Math.min(desiredWidth, maxWidth);
+      const left = Math.min(
+        Math.max(viewportLeft + gutter, r.right - width),
+        viewportRight - gutter - width,
+      );
+
+      const spaceBelow = Math.max(96 * scale, viewportBottom - (r.bottom + offset) - gutter);
+      const spaceAbove = Math.max(96 * scale, r.top - viewportTop - offset - gutter);
+      const placeAbove = spaceBelow < 180 * scale && spaceAbove > spaceBelow;
+      const availableHeight = placeAbove ? spaceAbove : spaceBelow;
+      const maxHeight = Math.min(availableHeight, 320 * scale);
+
+      setMenuRect({
+        anchorTop: placeAbove ? r.top - offset : r.bottom + offset,
+        left,
+        width,
+        maxHeight,
+        placeAbove,
+        scale,
+        fontFamily: computed.fontFamily,
+        fontSize: computed.fontSize,
+        fontWeight: computed.fontWeight,
+        lineHeight: computed.lineHeight,
+      });
     };
+
     update();
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('resize', update);
+    window.visualViewport?.addEventListener('scroll', update);
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => update())
+        : null;
+    if (resizeObserver && inputRef.current) {
+      resizeObserver.observe(inputRef.current);
+    }
+
     return () => {
       window.removeEventListener('scroll', update, true);
       window.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('resize', update);
+      window.visualViewport?.removeEventListener('scroll', update);
+      resizeObserver?.disconnect();
     };
   }, [open]);
 
@@ -202,49 +260,69 @@ export function PlaceSearchInput({
 
       {open && menuRect && (text.trim().length >= 2 || loading || error) &&
         createPortal(
-          <ul
-            id={listId}
-            role="listbox"
-            className="rvi-place-search__list"
+          <div
+            className="rvi-place-search__menu-anchor"
             style={{
               position: 'fixed',
               left: menuRect.left,
-              top: menuRect.top,
-              width: menuRect.width,
+              top: menuRect.anchorTop,
+              zIndex: 9999,
+              transform: menuRect.placeAbove ? 'translateY(-100%)' : undefined,
             }}
-            onMouseDown={(e) => e.preventDefault() /* keep input focused */}
           >
-            {loading && (
-              <li className="rvi-place-search__hint" role="presentation">
-                Recherche…
-              </li>
-            )}
-            {!loading && error && (
-              <li className="rvi-place-search__hint rvi-place-search__hint--error">
-                {error}
-              </li>
-            )}
-            {!loading && !error && suggestions.length === 0 && (
-              <li className="rvi-place-search__hint">Aucun résultat</li>
-            )}
-            {!loading &&
-              suggestions.map((s, i) => (
-                <li
-                  key={s.id}
-                  id={`${listId}-opt-${i}`}
-                  role="option"
-                  aria-selected={i === activeIdx}
-                  className={`rvi-place-search__option${
-                    i === activeIdx ? ' is-active' : ''
-                  }`}
-                  onMouseEnter={() => setActiveIdx(i)}
-                  onClick={() => commit(s)}
-                  title={s.fullName}
-                >
-                  <span className="rvi-place-search__name">{s.fullName}</span>
-                </li>
-              ))}
-          </ul>,
+            <div
+              className="rvi-place-search__menu-shell"
+              style={{
+                width: menuRect.width / menuRect.scale,
+                transform: `scale(${menuRect.scale})`,
+                transformOrigin: menuRect.placeAbove ? 'bottom left' : 'top left',
+                fontFamily: menuRect.fontFamily,
+                fontSize: menuRect.fontSize,
+                fontWeight: menuRect.fontWeight,
+                lineHeight: menuRect.lineHeight,
+              }}
+              onMouseDown={(e) => e.preventDefault() /* keep input focused */}
+            >
+              <MapCanvasGlassBackdrop blur={28} saturate={1.7} tint="rgba(12, 12, 14, 0.76)" />
+              <div
+                id={listId}
+                role="listbox"
+                className="rvi-place-search__list"
+                style={{ maxHeight: menuRect.maxHeight / menuRect.scale }}
+              >
+                {loading && (
+                  <div className="rvi-place-search__hint" role="presentation">
+                    Recherche…
+                  </div>
+                )}
+                {!loading && error && (
+                  <div className="rvi-place-search__hint rvi-place-search__hint--error">
+                    {error}
+                  </div>
+                )}
+                {!loading && !error && suggestions.length === 0 && (
+                  <div className="rvi-place-search__hint">Aucun résultat</div>
+                )}
+                {!loading &&
+                  suggestions.map((s, i) => (
+                    <div
+                      key={s.id}
+                      id={`${listId}-opt-${i}`}
+                      role="option"
+                      aria-selected={i === activeIdx}
+                      className={`rvi-place-search__option${
+                        i === activeIdx ? ' is-active' : ''
+                      }`}
+                      onMouseEnter={() => setActiveIdx(i)}
+                      onClick={() => commit(s)}
+                      title={s.fullName}
+                    >
+                      <span className="rvi-place-search__name">{s.fullName}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>,
           document.body,
         )}
     </div>

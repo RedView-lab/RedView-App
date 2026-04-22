@@ -26,29 +26,29 @@ export interface ControlPanelPersistedState {
 }
 
 const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
-  basemaps: true,
-  lidarTiles: true,
-  labels: true,
-  routes: true,
-  slopes: true,
-  altitude: true,
-  weather: true,
-  wind: true,
-  sunlight: true,
+  basemaps: false,
+  lidarTiles: false,
+  labels: false,
+  routes: false,
+  slopes: false,
+  altitude: false,
+  weather: false,
+  wind: false,
+  sunlight: false,
 };
 
 export function createDefaultControlPanelPersistedState(): ControlPanelPersistedState {
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
     toggles: {
-      labelsEnabled: true,
-      slopesEnabled: true,
-      altitudeEnabled: true,
-      weatherEnabled: true,
-      windEnabled: true,
-      snowEnabled: true,
-      sunlightEnabled: true,
+      labelsEnabled: false,
+      slopesEnabled: false,
+      altitudeEnabled: false,
+      weatherEnabled: false,
+      windEnabled: false,
+      snowEnabled: false,
+      sunlightEnabled: false,
     },
-    sunlightMapExpanded: true,
+    sunlightMapExpanded: false,
   };
 }
