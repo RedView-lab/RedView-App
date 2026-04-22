@@ -56,7 +56,6 @@ export function ControlPanel({
   onWeatherAddAlert,
   onWindEnabledChange,
   onAltitudeEnabledChange,
-  onAltitudeResolutionChange,
   onAltitudeColorizationChange,
   onAltitudeScaleSettingChange,
   onAltitudeOpacityChange,
@@ -160,7 +159,6 @@ export function ControlPanel({
         enabled={state.altitude.enabled}
         open={sectionsOpen?.altitude}
         state={{
-          resolution: state.altitude.resolution,
           colorization: state.altitude.colorization,
           scaleSetting: state.altitude.scaleSetting,
           opacity: state.altitude.opacity,
@@ -168,7 +166,6 @@ export function ControlPanel({
         }}
         onEnabledChange={onAltitudeEnabledChange}
         onOpenChange={(open) => onSectionOpenChange?.('altitude', open)}
-        onResolutionChange={onAltitudeResolutionChange}
         onColorizationChange={onAltitudeColorizationChange}
         onScaleSettingChange={onAltitudeScaleSettingChange}
         onOpacityChange={onAltitudeOpacityChange}

@@ -1,5 +1,4 @@
 import type {
-  AltitudeResolutionKey,
   AltitudeScaleSettingKey,
   AltitudeState,
 } from '../types';
@@ -7,8 +6,6 @@ import { DEFAULT_ALTITUDE_STATE } from './altitude-config';
 
 const STORAGE_KEY = 'redview_altitude_prefs';
 const BREAKPOINTS_KEY = 'redview_altitude_breakpoints';
-
-const VALID_RESOLUTIONS: AltitudeResolutionKey[] = ['0.40 m (LIDAR)', '1 m', '5 m', '10 m'];
 const VALID_SCALE_SETTINGS: AltitudeScaleSettingKey[] = [
   '2 couleurs',
   '3 couleurs',
@@ -31,10 +28,6 @@ export function loadAltitudeState(): AltitudeState {
         parsed.colorMode === 'gradient' || parsed.colorMode === 'step'
           ? parsed.colorMode
           : DEFAULT_ALTITUDE_STATE.colorMode,
-      resolution:
-        parsed.resolution && VALID_RESOLUTIONS.includes(parsed.resolution as AltitudeResolutionKey)
-          ? (parsed.resolution as AltitudeResolutionKey)
-          : DEFAULT_ALTITUDE_STATE.resolution,
       scaleSetting:
         parsed.scaleSetting
           && VALID_SCALE_SETTINGS.includes(parsed.scaleSetting as AltitudeScaleSettingKey)

@@ -186,12 +186,10 @@ self.addEventListener('fetch', (event) => {
 
   const altitudeMatch = url.pathname.match(/^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (altitudeMatch) {
-    const altitudeRes = url.searchParams.get('res') || '';
     event.respondWith(handleAltitudeRequest(
       parseInt(altitudeMatch[1], 10),
       parseInt(altitudeMatch[2], 10),
       parseInt(altitudeMatch[3], 10),
-      altitudeRes,
     ));
     return;
   }
@@ -631,18 +629,13 @@ async function handleSlopeRequest(z, x, y, resParam) {
   }
 }
 
-async function handleAltitudeRequest(z, x, y, resParam) {
+async function handleAltitudeRequest(z, x, y) {
   const altitudeCache = await caches.open(ALTITUDE_CACHE_NAME);
-  const resFactor = (() => {
-    const n = parseInt(resParam, 10);
-    return Number.isFinite(n) && n > 1 ? Math.min(n, 64) : 1;
-  })();
-  const resSuffix = resFactor > 1 ? `?res=${resFactor}` : '';
-  const cacheKey = new Request(`/altitude-tiles/${z}/${x}/${y}${resSuffix}`);
+  const cacheKey = new Request(`/altitude-tiles/${z}/${x}/${y}`);
   const cached = await altitudeCache.match(cacheKey);
   if (cached) return cached;
 
-  const inflightKey = `${z}/${x}/${y}?${resFactor}`;
+  const inflightKey = `${z}/${x}/${y}`;
   const existing = ALTITUDE_INFLIGHT.get(inflightKey);
   if (existing) {
     try { return (await existing).clone(); }
@@ -662,7 +655,7 @@ async function handleAltitudeRequest(z, x, y, resParam) {
 
     try {
       const demBlob = await demResponse.clone().blob();
-      const altitudeBlob = await buildAltitudeTile(demBlob, resFactor);
+      const altitudeBlob = await buildAltitudeTile(demBlob);
       const response = new Response(altitudeBlob, {
         status: 200,
         headers: {

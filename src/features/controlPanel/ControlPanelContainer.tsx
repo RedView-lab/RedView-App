@@ -22,12 +22,10 @@ import {
   clampAltitudeBreakpoints,
 } from '@/features/altitude/lib/altitude-config';
 import {
-  resolutionToFactor as altitudeResolutionToFactor,
 } from '@/features/altitude/lib/altitude-source';
 import { useAltitude } from '@/features/altitude/hooks/useAltitude';
 import type {
   AltitudeColorMode,
-  AltitudeResolutionKey,
   AltitudeScaleSettingKey,
 } from '@/features/altitude/types';
 
@@ -52,7 +50,6 @@ import type {
   ControlPanelState,
   AltitudeBand,
   AltitudeColorization,
-  AltitudeResolution,
   AltitudeScaleSetting,
   LabelKey,
   LabelsState,
@@ -398,7 +395,6 @@ export function ControlPanelContainer({
     altitudeState.colorMode,
     altitudeCategories,
     altitudeState.hiddenBandIds,
-    altitudeResolutionToFactor(altitudeState.resolution),
   );
 
   // ── Routes (right-panel "Itinéraires" section) ─────────────────────
@@ -540,7 +536,6 @@ export function ControlPanelContainer({
       },
       altitude: {
         enabled: altitudeState.enabled,
-        resolution: altitudeState.resolution,
         colorization: altitudeColorModeToPanel(altitudeState.colorMode),
         scaleSetting: altitudeState.scaleSetting,
         opacity: Math.round(altitudeState.opacity * 100),
@@ -630,14 +625,6 @@ export function ControlPanelContainer({
   }, []);
   const handleAltitudeEnabled = useCallback(
     (enabled: boolean) => persistAltitude({ ...altitudeState, enabled }),
-    [persistAltitude, altitudeState],
-  );
-  const handleAltitudeResolution = useCallback(
-    (resolution: AltitudeResolution) => {
-      const valid: AltitudeResolutionKey[] = ['0.40 m (LIDAR)', '1 m', '5 m', '10 m'];
-      if (!valid.includes(resolution as AltitudeResolutionKey)) return;
-      persistAltitude({ ...altitudeState, resolution: resolution as AltitudeResolutionKey });
-    },
     [persistAltitude, altitudeState],
   );
   const handleAltitudeColorization = useCallback(
@@ -789,7 +776,6 @@ export function ControlPanelContainer({
           draft.toggles.altitudeEnabled = enabled;
         });
       }}
-      onAltitudeResolutionChange={handleAltitudeResolution}
       onAltitudeColorizationChange={handleAltitudeColorization}
       onAltitudeScaleSettingChange={handleAltitudeScaleSetting}
       onAltitudeOpacityChange={handleAltitudeOpacity}

@@ -54,7 +54,6 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   altitude: {
     enabled: false,
-    resolution: '0.40 m (LIDAR)',
     colorization: 'gradient',
     scaleSetting: '4 couleurs',
     opacity: 20,
@@ -75,10 +74,10 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     trendMode: 'date',
     layers: [
       { key: 'temperature', enabled: true, mode: 'text' },
-      { key: 'feelsLike', enabled: false, mode: '-' },
+      { key: 'feelsLike', enabled: false, mode: 'text' },
       { key: 'rain', enabled: true, mode: 'gradient' },
       { key: 'wind', enabled: true, mode: 'arrows' },
-      { key: 'cloudCover', enabled: false, mode: '-' },
+      { key: 'cloudCover', enabled: false, mode: 'gradient' },
       { key: 'humidity', enabled: false, mode: '-' },
       { key: 'sunshine', enabled: false, mode: '-' },
     ],

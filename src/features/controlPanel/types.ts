@@ -58,7 +58,6 @@ export type SlopeColorization = 'gradient' | 'stepped' | string;
 export type SlopeScale = 'percent' | 'degree' | string;
 export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 
-export type AltitudeResolution = '0.40 m (LIDAR)' | '1 m' | '5 m' | '10 m' | string;
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 
@@ -89,7 +88,6 @@ export interface AltitudeBand {
 }
 
 export interface AltitudeState {
-  resolution: AltitudeResolution;
   colorization: AltitudeColorization;
   scaleSetting: AltitudeScaleSetting;
   opacity: number;
@@ -116,7 +114,7 @@ export type WeatherLayerKey =
   | 'cloudCover'
   | 'humidity'
   | 'sunshine';
-export type WeatherRenderMode = 'gradient' | 'slope' | 'arrows' | 'text' | '-' | string;
+export type WeatherRenderMode = 'gradient' | 'fill' | 'slope' | 'arrows' | 'text' | '-' | string;
 
 export interface WeatherLayer {
   key: WeatherLayerKey;
@@ -203,7 +201,6 @@ export interface ControlPanelHandlers {
   onSlopeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
 
   onAltitudeEnabledChange?: (enabled: boolean) => void;
-  onAltitudeResolutionChange?: (value: AltitudeResolution) => void;
   onAltitudeColorizationChange?: (value: AltitudeColorization) => void;
   onAltitudeScaleSettingChange?: (value: AltitudeScaleSetting) => void;
   onAltitudeOpacityChange?: (value: number) => void;

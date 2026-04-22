@@ -20,7 +20,6 @@ export const DEFAULT_ALTITUDE_STATE: AltitudeState = {
   enabled: false,
   opacity: 0.2,
   colorMode: 'gradient',
-  resolution: '0.40 m (LIDAR)',
   scaleSetting: '4 couleurs',
   hiddenBandIds: [],
   customColors: {},

@@ -8,18 +8,10 @@ import { IconChevronDown, IconEye, IconEyeOff } from '../icons';
 import type {
   AltitudeBand,
   AltitudeColorization,
-  AltitudeResolution,
   AltitudeScaleSetting,
   ControlPanelHandlers,
   ControlPanelState,
 } from '../types';
-
-const RESOLUTION_OPTIONS: { value: AltitudeResolution; label: string }[] = [
-  { value: '0.40 m (LIDAR)', label: '0.40 m (LIDAR)' },
-  { value: '1 m', label: '1 m' },
-  { value: '5 m', label: '5 m' },
-  { value: '10 m', label: '10 m' },
-];
 
 const COLORIZATION_OPTIONS: { value: AltitudeColorization; label: string }[] = [
   { value: 'gradient', label: 'Dégradé' },
@@ -189,7 +181,6 @@ interface AltitudeSectionProps {
   open?: boolean;
   onEnabledChange?: (enabled: boolean) => void;
   onOpenChange?: (open: boolean) => void;
-  onResolutionChange?: ControlPanelHandlers['onAltitudeResolutionChange'];
   onColorizationChange?: ControlPanelHandlers['onAltitudeColorizationChange'];
   onScaleSettingChange?: ControlPanelHandlers['onAltitudeScaleSettingChange'];
   onOpacityChange?: ControlPanelHandlers['onAltitudeOpacityChange'];
@@ -204,7 +195,6 @@ export function AltitudeSection({
   open,
   onEnabledChange,
   onOpenChange,
-  onResolutionChange,
   onColorizationChange,
   onScaleSettingChange,
   onOpacityChange,
@@ -219,16 +209,6 @@ export function AltitudeSection({
       open={open}
       onOpenChange={onOpenChange}
     >
-      <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Résolution</span>
-        <Select
-          width={140}
-          value={state.resolution}
-          options={RESOLUTION_OPTIONS}
-          onChange={(value) => onResolutionChange?.(value as AltitudeResolution)}
-        />
-      </div>
-
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Type de colorisation</span>
         <Select

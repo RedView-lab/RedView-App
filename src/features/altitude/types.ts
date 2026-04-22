@@ -11,15 +11,12 @@ export interface AltitudeCategory {
 
 export type AltitudeColorMode = 'gradient' | 'step';
 
-export type AltitudeResolutionKey = '0.40 m (LIDAR)' | '1 m' | '5 m' | '10 m';
-
 export type AltitudeScaleSettingKey = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs';
 
 export interface AltitudeState {
   enabled: boolean;
   opacity: number;
   colorMode: AltitudeColorMode;
-  resolution: AltitudeResolutionKey;
   scaleSetting: AltitudeScaleSettingKey;
   hiddenBandIds: string[];
   customColors: Record<string, string>;

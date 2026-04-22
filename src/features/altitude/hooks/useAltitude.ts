@@ -22,11 +22,10 @@ function addAltitudeLayer(
   colorMode: AltitudeColorMode,
   categories: AltitudeCategory[],
   hiddenIds: Set<string>,
-  resolutionFactor: number,
 ) {
   try {
     if (!map.getSource(ALTITUDE_SOURCE_ID)) {
-      map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(resolutionFactor));
+      map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource());
     }
     if (!map.getLayer(ALTITUDE_LAYER_ID)) {
       const layer = buildAltitudeLayer(opacity, colorMode, categories, hiddenIds);
@@ -64,7 +63,6 @@ export function useAltitude(
   colorMode: AltitudeColorMode,
   categories: AltitudeCategory[],
   hiddenBandIds?: ReadonlyArray<string>,
-  resolutionFactor: number = 1,
 ) {
   const hiddenIds = useMemo(() => new Set(hiddenBandIds ?? []), [hiddenBandIds]);
   const categoriesKey = useMemo(
@@ -78,16 +76,13 @@ export function useAltitude(
   const enabledRef = useRef(enabled);
   const categoriesRef = useRef(categories);
   const hiddenIdsRef = useRef(hiddenIds);
-  const resolutionFactorRef = useRef(resolutionFactor);
   opacityRef.current = opacity;
   colorModeRef.current = colorMode;
   enabledRef.current = enabled;
   categoriesRef.current = categories;
   hiddenIdsRef.current = hiddenIds;
-  resolutionFactorRef.current = resolutionFactor;
 
   const mountedRef = useRef(false);
-  const mountedResolutionRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
@@ -98,22 +93,9 @@ export function useAltitude(
       colorModeRef.current,
       categoriesRef.current,
       hiddenIdsRef.current,
-      resolutionFactorRef.current,
     );
     mountedRef.current = true;
-    mountedResolutionRef.current = resolutionFactorRef.current;
   }, [map, isMapLoaded, enabled]);
-
-  useEffect(() => {
-    if (!map || !isMapLoaded || !mountedRef.current) return;
-    if (mountedResolutionRef.current === resolutionFactor) return;
-    removeAltitudeLayer(map);
-    mountedRef.current = false;
-    addAltitudeLayer(map, opacityRef.current, colorModeRef.current, categoriesRef.current, hiddenIdsRef.current, resolutionFactor);
-    mountedRef.current = true;
-    mountedResolutionRef.current = resolutionFactor;
-    setAltitudeVisibility(map, enabledRef.current);
-  }, [map, isMapLoaded, resolutionFactor]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
@@ -148,7 +130,6 @@ export function useAltitude(
 
     const onStyleLoad = () => {
       mountedRef.current = false;
-      mountedResolutionRef.current = null;
       setTimeout(() => {
         if (!enabledRef.current) return;
         addAltitudeLayer(
@@ -157,10 +138,8 @@ export function useAltitude(
           colorModeRef.current,
           categoriesRef.current,
           hiddenIdsRef.current,
-          resolutionFactorRef.current,
         );
         mountedRef.current = true;
-        mountedResolutionRef.current = resolutionFactorRef.current;
       }, 0);
     };
 

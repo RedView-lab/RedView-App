@@ -38,6 +38,8 @@ const TREND_LAYER_ORDER: WeatherLayerKey[] = [
   'cloudCover',
 ];
 
+const FORECAST_HIDDEN_LAYER_KEYS = new Set<WeatherLayerKey>(['wind', 'sunshine']);
+
 const MONTH_LABELS_SHORT = ['Jan.', 'Fev.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Aout', 'Sep.', 'Oct.', 'Nov.', 'Dec.'] as const;
 const MONTH_LABELS_LONG = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'] as const;
 
@@ -51,12 +53,28 @@ const LAYER_LABEL: Record<WeatherLayerKey, string> = {
   sunshine: 'Ensoleillement (min)',
 };
 
-const MODE_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
+const TEXT_GRADIENT_FILL_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
   { value: 'text', label: 'Texte' },
   { value: 'gradient', label: 'Dégradé' },
-  { value: 'arrows', label: 'Flèches' },
+  { value: 'fill', label: 'Remplissage' },
+];
+
+const GRADIENT_FILL_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
+  { value: 'gradient', label: 'Dégradé' },
+  { value: 'fill', label: 'Remplissage' },
+];
+
+const DISABLED_ONLY_OPTION: { value: WeatherRenderMode; label: string }[] = [
   { value: '-', label: '-' },
 ];
+
+const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRenderMode; label: string }[]>> = {
+  temperature: TEXT_GRADIENT_FILL_OPTIONS,
+  feelsLike: TEXT_GRADIENT_FILL_OPTIONS,
+  rain: GRADIENT_FILL_OPTIONS,
+  cloudCover: GRADIENT_FILL_OPTIONS,
+  humidity: DISABLED_ONLY_OPTION,
+};
 
 const FRENCH_DAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
@@ -93,6 +111,10 @@ function getMonthLabel(iso: string): string {
   return MONTH_LABELS_LONG[getMonthIndexFromIso(iso)] ?? MONTH_LABELS_LONG[0];
 }
 
+function getModeOptions(key: WeatherLayerKey): { value: WeatherRenderMode; label: string }[] {
+  return MODE_OPTIONS_BY_LAYER[key] ?? DISABLED_ONLY_OPTION;
+}
+
 export function WeatherSection({
   state,
   open,
@@ -127,7 +149,9 @@ export function WeatherSection({
   const trendMonthValue = formatMonthInputValue(state.date);
 
   const displayedLayers = useMemo(() => {
-    if (isForecast) return state.layers;
+    if (isForecast) {
+      return state.layers.filter((layer) => !FORECAST_HIDDEN_LAYER_KEYS.has(layer.key));
+    }
 
     return TREND_LAYER_ORDER.map((key) => state.layers.find((layer) => layer.key === key)).filter(
       (layer): layer is WeatherState['layers'][number] => Boolean(layer),
@@ -243,23 +267,30 @@ export function WeatherSection({
 
       {/* Layer list */}
       <div className="rvc-weather__layers">
-        {displayedLayers.map((layer) => (
-          <div key={layer.key} className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
-            <Checkbox
-              id={`weather-${layer.key}`}
-              checked={layer.enabled}
-              onChange={(v) => onLayerToggle?.(layer.key, v)}
-            />
-            <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
-            <Select
-              width={104}
-              value={layer.mode}
-              options={MODE_OPTIONS}
-              onChange={(v) => onLayerModeChange?.(layer.key, v)}
-              className="rvc-weather__layer-select"
-            />
-          </div>
-        ))}
+        {displayedLayers.map((layer) => {
+          const modeOptions = getModeOptions(layer.key);
+          const selectedMode = modeOptions.some((option) => option.value === layer.mode)
+            ? layer.mode
+            : modeOptions[0]?.value ?? '-';
+
+          return (
+            <div key={layer.key} className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
+              <Checkbox
+                id={`weather-${layer.key}`}
+                checked={layer.enabled}
+                onChange={(v) => onLayerToggle?.(layer.key, v)}
+              />
+              <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
+              <Select
+                width={104}
+                value={selectedMode}
+                options={modeOptions}
+                onChange={(v) => onLayerModeChange?.(layer.key, v)}
+                className="rvc-weather__layer-select"
+              />
+            </div>
+          );
+        })}
       </div>
 
       {/* Add alert toggle */}
