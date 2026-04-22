@@ -4,8 +4,10 @@ import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import {
   AnalysisChart,
   buildSeriesFromPrediction,
+  isInclinationMetric,
   type AxisMetricId,
   type AxisMode,
+  type ChartBackdropProfile,
   type ChartSeries,
 } from './chart';
 import {
@@ -21,7 +23,8 @@ const axisOptions: AxisOption[] = [
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
   { value: 'Puissance moyenne', label: 'Puissance moyenne', tone: 'primary' },
   { value: 'Dénivelé', label: 'Dénivelé', tone: 'primary' },
-  { value: 'Pente', label: 'Pente', tone: 'primary' },
+  { value: 'Inclinaison (°)', label: 'Inclinaison (°)', tone: 'primary' },
+  { value: 'Inclinaison (%)', label: 'Inclinaison (%)', tone: 'primary' },
   { value: 'Surface', label: 'Surface', tone: 'primary' },
   { value: 'Température', label: 'Température', tone: 'secondary' },
   {
@@ -117,6 +120,27 @@ export function CenterPanelAnalysis() {
     return result;
   }, [projectStore, predictionStore, axis1Value, axis2Value, xMode]);
 
+  const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
+    if (!isInclinationMetric(axis1Value) && !isInclinationMetric(axis2Value)) return [];
+    if (!projectStore || !predictionStore) return [];
+
+    const result: ChartBackdropProfile[] = [];
+    for (const itinerary of projectStore.project.itineraries) {
+      if (itinerary.visible === false) continue;
+      const prediction = predictionStore.predictions[itinerary.id];
+      if (!prediction) continue;
+      const points = buildSeriesFromPrediction(prediction, 'Dénivelé', xMode);
+      if (!points) continue;
+      result.push({
+        id: `${itinerary.id}::altitude-backdrop`,
+        itineraryId: itinerary.id,
+        itineraryName: itinerary.name,
+        points,
+      });
+    }
+    return result;
+  }, [axis1Value, axis2Value, projectStore, predictionStore, xMode]);
+
   return (
     <section
       ref={rootRef}
@@ -198,9 +222,11 @@ export function CenterPanelAnalysis() {
       <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
         <AnalysisChart
           series={series}
+          backdropProfiles={altitudeBackdropProfiles}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}
+          showSeriesRows={false}
         />
       </div>
     </section>

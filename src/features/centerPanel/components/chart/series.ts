@@ -10,7 +10,8 @@ export type AxisMetricId =
   | 'Puissance'
   | 'Puissance moyenne'
   | 'Dénivelé'
-  | 'Pente'
+  | 'Inclinaison (°)'
+  | 'Inclinaison (%)'
   | 'Surface'
   | 'Température'
   | 'Température ressentie (°)'
@@ -41,6 +42,17 @@ export interface ChartSeries {
   points: ChartPoint[];
 }
 
+/**
+ * Soft background profile drawn behind the active metrics. Used for example
+ * to show the route elevation profile when the user analyses slope.
+ */
+export interface ChartBackdropProfile {
+  id: string;
+  itineraryId: string;
+  itineraryName: string;
+  points: ChartPoint[];
+}
+
 /** Numeric domain (min/max) used for scaling the chart axes. */
 export interface AxisDomain {
   min: number;
@@ -59,7 +71,9 @@ export function unitForMetric(metric: AxisMetricId): string {
       return 'W';
     case 'Dénivelé':
       return 'm';
-    case 'Pente':
+    case 'Inclinaison (°)':
+      return '°';
+    case 'Inclinaison (%)':
       return '%';
     case 'Surface':
       return '';
@@ -76,6 +90,14 @@ export function unitForMetric(metric: AxisMetricId): string {
     default:
       return '';
   }
+}
+
+export function isIntervalAverageMetric(metric: AxisMetricId): boolean {
+  return metric === 'Vitesse moyenne' || metric === 'Puissance moyenne';
+}
+
+export function isInclinationMetric(metric: AxisMetricId): boolean {
+  return metric === 'Inclinaison (°)' || metric === 'Inclinaison (%)';
 }
 
 /** Format a tick label according to the metric type. */
@@ -105,7 +127,8 @@ export function metricIsAvailable(metric: AxisMetricId): boolean {
     case 'Puissance':
     case 'Puissance moyenne':
     case 'Dénivelé':
-    case 'Pente':
+    case 'Inclinaison (°)':
+    case 'Inclinaison (%)':
       return true;
     default:
       return false;
@@ -116,13 +139,17 @@ export function metricIsAvailable(metric: AxisMetricId): boolean {
 function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): number {
   switch (metric) {
     case 'Vitesse':
+    case 'Vitesse moyenne':
       return point.predicted_speed_kmh;
     case 'Puissance':
+    case 'Puissance moyenne':
       return point.predicted_power_w;
     case 'Dénivelé':
       return point.elevation_m;
-    case 'Pente':
+    case 'Inclinaison (%)':
       return point.gradient_pct;
+    case 'Inclinaison (°)':
+      return gradientPercentToDegrees(point.gradient_pct);
     default:
       return Number.NaN;
   }
@@ -132,9 +159,10 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
  * Build a chart series from a prediction result. Returns `null` when the
  * prediction is unavailable or the metric is not supported.
  *
- * - `Vitesse`/`Puissance`/`Pente`/`Dénivelé`: instantaneous value at each
- *   sample.
- * - `Vitesse moyenne`/`Puissance moyenne`: cumulative running average.
+ * - `Vitesse`/`Puissance`/`Dénivelé`/`Inclinaison`: raw timeline value.
+ * - `Vitesse moyenne`/`Puissance moyenne`: raw timeline value too; the chart
+ *   aggregates these later by X-axis interval so the average follows the
+ *   current graduations.
  * - X axis is the configurable distance (km) or elapsed time (h).
  */
 export function buildSeriesFromPrediction(
@@ -146,53 +174,24 @@ export function buildSeriesFromPrediction(
   if (!metricIsAvailable(metric)) return null;
 
   const points: ChartPoint[] = [];
-  let runningPowerSum = 0;
-  let runningPowerCount = 0;
-  let prevDistanceKm = 0;
-  let runningSpeedNumerator = 0;
-  let runningSpeedDenominator = 0;
 
   for (let i = 0; i < prediction.points.length; i++) {
     const p = prediction.points[i];
-    const distKm = p.distance_m / 1000;
-    const x = xMode === 'distance' ? distKm : p.elapsed_time_s / 3600;
-
-    let y: number;
-    switch (metric) {
-      case 'Vitesse moyenne': {
-        const segmentKm = Math.max(0, distKm - prevDistanceKm);
-        const speed = p.predicted_speed_kmh;
-        if (segmentKm > 0 && Number.isFinite(speed) && speed > 0) {
-          runningSpeedNumerator += segmentKm;
-          runningSpeedDenominator += segmentKm / speed; // hours
-        }
-        y = runningSpeedDenominator > 0
-          ? runningSpeedNumerator / runningSpeedDenominator
-          : speed;
-        break;
-      }
-      case 'Puissance moyenne': {
-        if (Number.isFinite(p.predicted_power_w)) {
-          runningPowerSum += p.predicted_power_w;
-          runningPowerCount += 1;
-        }
-        y = runningPowerCount > 0 ? runningPowerSum / runningPowerCount : 0;
-        break;
-      }
-      default:
-        y = metricValueAtPoint(metric, p);
-        break;
-    }
+    const x = xMode === 'distance' ? p.distance_m / 1000 : p.elapsed_time_s / 3600;
+    const y = metricValueAtPoint(metric, p);
 
     if (Number.isFinite(x) && Number.isFinite(y)) {
       points.push({ x, y });
     }
-    prevDistanceKm = distKm;
   }
 
   points.sort((a, b) => a.x - b.x);
 
   return points.length > 1 ? points : null;
+}
+
+function gradientPercentToDegrees(gradientPercent: number): number {
+  return (Math.atan(gradientPercent / 100) * 180) / Math.PI;
 }
 
 /** Compute a [min,max] domain over a list of series, padded by 5%. */

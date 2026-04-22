@@ -6,16 +6,17 @@ import {
   computeDomain,
   computeXDomain,
   formatAxisValue,
+  isInclinationMetric,
+  isIntervalAverageMetric,
   metricIsAvailable,
   unitForMetric,
   type AxisDomain,
   type AxisMetricId,
   type AxisMode,
+  type ChartBackdropProfile,
   type ChartSeries,
 } from './series';
 import './chart.css';
-
-// ----- Configuration -----------------------------------------------------
 
 const Y_MAJOR_TARGET_PX = 26;
 const X_MAJOR_TARGET_PX = 80;
@@ -23,18 +24,20 @@ const DEFAULT_TICK_COUNT = 6;
 
 interface AnalysisChartProps {
   series: ChartSeries[];
+  backdropProfiles?: ChartBackdropProfile[];
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId;
   xMode: AxisMode;
+  showSeriesRows?: boolean;
 }
-
-// ----- Component ---------------------------------------------------------
 
 export function AnalysisChart({
   series,
+  backdropProfiles = [],
   axis1Metric,
   axis2Metric,
   xMode,
+  showSeriesRows = true,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
   const [plotSize, setPlotSize] = useState({ width: 0, height: 0 });
@@ -63,31 +66,16 @@ export function AnalysisChart({
     return () => ro.disconnect();
   }, [plotAreaRef]);
 
-  const axis1Series = useMemo(() => series.filter((s) => s.axis === 1), [series]);
-  const axis2Series = useMemo(() => series.filter((s) => s.axis === 2), [series]);
-
   const xDomain = useMemo<AxisDomain>(() => {
-    const dom = computeXDomain(series.map((s) => s.points));
+    const dom = computeXDomain(series.map((entry) => entry.points));
     if (dom) return dom;
     return xMode === 'distance' ? { min: 0, max: 90 } : { min: 0, max: 6 };
   }, [series, xMode]);
 
-  const yDomain = useMemo<AxisDomain>(() => {
-    const dom = computeDomain(axis1Series.map((s) => s.points));
-    if (dom) return dom;
-    return { min: 0, max: defaultDomainFor(axis1Metric) };
-  }, [axis1Series, axis1Metric]);
-
-  const y2Domain = useMemo<AxisDomain>(() => {
-    const dom = computeDomain(axis2Series.map((s) => s.points));
-    if (dom) return dom;
-    return { min: 0, max: defaultDomainFor(axis2Metric) };
-  }, [axis2Series, axis2Metric]);
-
   const xTicks = useMemo(() => {
     const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
     return buildNiceTicks(xDomain.min, xDomain.max, target || DEFAULT_TICK_COUNT);
-  }, [plotSize.width, xDomain.min, xDomain.max]);
+  }, [plotSize.width, xDomain.max, xDomain.min]);
 
   const plotXDomain = useMemo<AxisDomain>(() => {
     if (xTicks.length === 0) return xDomain;
@@ -97,13 +85,37 @@ export function AnalysisChart({
     };
   }, [xDomain, xTicks]);
 
+  const displaySeries = useMemo(
+    () => series.map((entry) => materializeSeriesForPlot(entry, xTicks)),
+    [series, xTicks],
+  );
+
+  const axis1Series = useMemo(
+    () => displaySeries.filter((entry) => entry.axis === 1),
+    [displaySeries],
+  );
+  const axis2Series = useMemo(
+    () => displaySeries.filter((entry) => entry.axis === 2),
+    [displaySeries],
+  );
+
+  const yDomain = useMemo<AxisDomain>(() => {
+    const dom = computeDomain(axis1Series.map((entry) => entry.points));
+    return dom ? normalizeMetricDomain(axis1Metric, dom) : defaultDomainFor(axis1Metric);
+  }, [axis1Metric, axis1Series]);
+
+  const y2Domain = useMemo<AxisDomain>(() => {
+    const dom = computeDomain(axis2Series.map((entry) => entry.points));
+    return dom ? normalizeMetricDomain(axis2Metric, dom) : defaultDomainFor(axis2Metric);
+  }, [axis2Metric, axis2Series]);
+
   const yTicksAsc = useMemo(() => {
     const target =
       plotSize.height > 0
         ? Math.max(2, Math.round(plotSize.height / Y_MAJOR_TARGET_PX))
         : DEFAULT_TICK_COUNT;
     return buildNiceTicks(yDomain.min, yDomain.max, target);
-  }, [plotSize.height, yDomain.min, yDomain.max]);
+  }, [plotSize.height, yDomain.max, yDomain.min]);
 
   const yTicks = useMemo(() => yTicksAsc.slice().reverse(), [yTicksAsc]);
 
@@ -136,6 +148,7 @@ export function AnalysisChart({
       })),
     [plotXDomain, xTicks],
   );
+
   const yPositions = useMemo(
     () =>
       yTicks.map((value, index) => ({
@@ -150,37 +163,49 @@ export function AnalysisChart({
     [],
   );
 
+  const backdropYDomain = useMemo<AxisDomain | null>(
+    () => computeDomain(backdropProfiles.map((profile) => profile.points)),
+    [backdropProfiles],
+  );
+
+  const backdropPaths = useMemo(() => {
+    if (!backdropYDomain) return [];
+    return backdropProfiles.map((profile) => ({
+      id: profile.id,
+      fillPath: buildAreaPath(profile.points, plotXDomain, backdropYDomain),
+      strokePath: buildSvgPath(profile.points, plotXDomain, backdropYDomain),
+    }));
+  }, [backdropProfiles, backdropYDomain, plotXDomain]);
+
   const seriesPaths = useMemo(
     () =>
-      series.map((s) => ({
-        id: s.id,
-        color: s.color,
+      displaySeries.map((entry) => ({
+        id: entry.id,
+        color: entry.color,
         path: buildSvgPath(
-          s.points,
+          entry.points,
           plotXDomain,
-          s.axis === 2 ? plotY2Domain : plotYDomain,
+          entry.axis === 2 ? plotY2Domain : plotYDomain,
         ),
       })),
-    [plotXDomain, plotY2Domain, plotYDomain, series],
+    [displaySeries, plotXDomain, plotY2Domain, plotYDomain],
   );
 
   const hoverData = useMemo(() => {
-    if (!hover || !series.length) return null;
-    const hoveredX =
-      plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
-    return series.map((s) => ({
-      id: s.id,
-      itineraryName: s.itineraryName,
-      color: s.color,
-      axis: s.axis,
-      metric: s.metricId,
-      value: interpolateY(s.points, hoveredX),
+    if (!hover || !displaySeries.length) return null;
+    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+    return displaySeries.map((entry) => ({
+      id: entry.id,
+      itineraryName: entry.itineraryName,
+      color: entry.color,
+      axis: entry.axis,
+      metric: entry.metricId,
+      value: interpolateY(entry.points, hoveredX),
     }));
-  }, [hover, plotXDomain, series]);
+  }, [displaySeries, hover, plotXDomain]);
 
   return (
     <div className="rvchart" style={style}>
-      {/* ---- Plot area (Y axes + grid + overlay) ---- */}
       <div className="rvchart__plot">
         <div className="rvchart__yaxis-left" aria-hidden="true">
           {yTicks.map((value, index) => (
@@ -189,7 +214,6 @@ export function AnalysisChart({
         </div>
 
         <div ref={plotAreaRef} className="rvchart__plotarea">
-          {/* Layer 1: background grid */}
           <div className="rvchart__layer rvchart__layer--bg" aria-hidden="true">
             {yPositions.map(({ value, ratio }) => (
               <div
@@ -207,7 +231,6 @@ export function AnalysisChart({
             ))}
           </div>
 
-          {/* Layer 2: series */}
           <svg
             className="rvchart__layer rvchart__layer--series"
             viewBox="0 0 100 100"
@@ -215,6 +238,16 @@ export function AnalysisChart({
             overflow="hidden"
             aria-hidden="true"
           >
+            {backdropPaths.map((entry) =>
+              entry.fillPath ? (
+                <path key={`${entry.id}-fill`} d={entry.fillPath} className="rvchart__backdrop-fill" />
+              ) : null,
+            )}
+            {backdropPaths.map((entry) =>
+              entry.strokePath ? (
+                <path key={`${entry.id}-stroke`} d={entry.strokePath} className="rvchart__backdrop-stroke" />
+              ) : null,
+            )}
             {seriesPaths.map((entry) =>
               entry.path ? (
                 <path
@@ -231,7 +264,6 @@ export function AnalysisChart({
             )}
           </svg>
 
-          {/* Layer 3: overlay (cursor + hover cards) */}
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {hover ? (
               <>
@@ -239,9 +271,7 @@ export function AnalysisChart({
                 <HoverCardGroup
                   hoverX={hover.x}
                   hoverRatioX={hover.ratioX}
-                  xValue={
-                    plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)
-                  }
+                  xValue={plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)}
                   xMode={xMode}
                   rows={hoverData ?? []}
                 />
@@ -257,7 +287,6 @@ export function AnalysisChart({
         </div>
       </div>
 
-      {/* ---- X axis row ---- */}
       <div className="rvchart__xaxis">
         <div />
         <div className="rvchart__xaxis-cells">
@@ -274,16 +303,14 @@ export function AnalysisChart({
         <div />
       </div>
 
-      {/* ---- Series rows (one per visible itinerary axis curve) ---- */}
-      {series.length === 0 ? (
-        <EmptySeriesRow axis1={axis1Metric} axis2={axis2Metric} />
-      ) : (
-        series.map((s) => (
-          <SeriesRow key={s.id} seriesEntry={s} xPositions={xPositions} />
-        ))
-      )}
+      {showSeriesRows
+        ? displaySeries.length === 0
+          ? <EmptySeriesRow axis1={axis1Metric} axis2={axis2Metric} />
+          : displaySeries.map((entry) => (
+              <SeriesRow key={entry.id} seriesEntry={entry} xPositions={xPositions} />
+            ))
+        : null}
 
-      {/* ---- Add row ---- */}
       <div className="rvchart__add">
         <div className="rvchart__series-control">
           <button type="button" className="rvchart__add-button">
@@ -297,8 +324,6 @@ export function AnalysisChart({
     </div>
   );
 }
-
-// ----- Series row --------------------------------------------------------
 
 interface SeriesRowProps {
   seriesEntry: ChartSeries;
@@ -367,8 +392,6 @@ function EmptySeriesRow({ axis1, axis2 }: { axis1: AxisMetricId; axis2: AxisMetr
   );
 }
 
-// ----- Hover cards -------------------------------------------------------
-
 interface HoverCardGroupProps {
   hoverX: number;
   hoverRatioX: number;
@@ -412,23 +435,104 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
   );
 }
 
-// ----- Helpers -----------------------------------------------------------
-
-function defaultDomainFor(metric: AxisMetricId): number {
+function defaultDomainFor(metric: AxisMetricId): AxisDomain {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
-      return 50;
+      return { min: 0, max: 50 };
     case 'Puissance':
     case 'Puissance moyenne':
-      return 400;
+      return { min: 0, max: 400 };
     case 'Dénivelé':
-      return 3000;
-    case 'Pente':
-      return 30;
+      return { min: 0, max: 3000 };
+    case 'Inclinaison (°)':
+      return { min: -90, max: 90 };
+    case 'Inclinaison (%)':
+      return { min: -100, max: 100 };
     default:
-      return 100;
+      return { min: 0, max: 100 };
   }
+}
+
+function normalizeMetricDomain(metric: AxisMetricId, domain: AxisDomain): AxisDomain {
+  if (!isInclinationMetric(metric)) return domain;
+  const min = Math.min(domain.min, 0);
+  const max = Math.max(domain.max, 0);
+  if (metric === 'Inclinaison (°)') {
+    return {
+      min: clamp(min, -90, 90),
+      max: clamp(max, -90, 90),
+    };
+  }
+  return { min, max };
+}
+
+function materializeSeriesForPlot(seriesEntry: ChartSeries, xTicks: number[]): ChartSeries {
+  if (!isIntervalAverageMetric(seriesEntry.metricId)) return seriesEntry;
+  return {
+    ...seriesEntry,
+    points: buildIntervalAverageSeries(seriesEntry.points, xTicks),
+  };
+}
+
+function buildIntervalAverageSeries(
+  points: { x: number; y: number }[],
+  xTicks: number[],
+): { x: number; y: number }[] {
+  if (points.length < 2 || xTicks.length < 2) return points;
+
+  const result: Array<{ x: number; y: number }> = [];
+  for (let index = 0; index < xTicks.length - 1; index += 1) {
+    const start = xTicks[index] ?? 0;
+    const end = xTicks[index + 1] ?? start;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
+    const avg = averageSeriesOverInterval(points, start, end);
+    if (!Number.isFinite(avg)) continue;
+
+    if (result.length === 0) {
+      result.push({ x: start, y: avg });
+    } else {
+      const prev = result[result.length - 1];
+      if (Math.abs(prev.x - start) > 1e-6) {
+        result.push({ x: start, y: prev.y });
+      }
+      if (Math.abs(prev.y - avg) > 1e-6) {
+        result.push({ x: start, y: avg });
+      }
+    }
+
+    result.push({ x: end, y: avg });
+  }
+
+  return result.length >= 2 ? result : points;
+}
+
+function averageSeriesOverInterval(
+  points: { x: number; y: number }[],
+  start: number,
+  end: number,
+): number {
+  const span = end - start;
+  if (span <= 0) return Number.NaN;
+
+  const breakpoints = [start];
+  for (const point of points) {
+    if (point.x > start && point.x < end) breakpoints.push(point.x);
+  }
+  breakpoints.push(end);
+
+  let integral = 0;
+  let prevX = breakpoints[0] ?? start;
+  let prevY = interpolateY(points, prevX);
+  for (let index = 1; index < breakpoints.length; index += 1) {
+    const currX = breakpoints[index] ?? prevX;
+    const currY = interpolateY(points, currX);
+    integral += ((prevY + currY) / 2) * (currX - prevX);
+    prevX = currX;
+    prevY = currY;
+  }
+
+  return integral / span;
 }
 
 function ratioFor(value: number, domain: AxisDomain): number {
@@ -447,14 +551,27 @@ function buildSvgPath(
   const ySpan = yDomain.max - yDomain.min;
   if (xSpan <= 0 || ySpan <= 0) return '';
   let d = '';
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i];
-    const x = clamp(((p.x - xDomain.min) / xSpan) * 100, 0, 100);
-    const y = clamp(100 - ((p.y - yDomain.min) / ySpan) * 100, 0, 100);
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    const x = clamp(((point.x - xDomain.min) / xSpan) * 100, 0, 100);
+    const y = clamp(100 - ((point.y - yDomain.min) / ySpan) * 100, 0, 100);
     if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    d += `${i === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)} `;
+    d += `${index === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)} `;
   }
   return d.trim();
+}
+
+function buildAreaPath(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  yDomain: AxisDomain,
+): string {
+  const linePath = buildSvgPath(points, xDomain, yDomain);
+  const xSpan = xDomain.max - xDomain.min;
+  if (!linePath || points.length < 2 || xSpan <= 0) return '';
+  const firstX = clamp(((points[0].x - xDomain.min) / xSpan) * 100, 0, 100);
+  const lastX = clamp(((points[points.length - 1].x - xDomain.min) / xSpan) * 100, 0, 100);
+  return `${linePath} L ${lastX.toFixed(3)} 100 L ${firstX.toFixed(3)} 100 Z`;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -526,7 +643,7 @@ function formatAxisLabel(value: number, metric: AxisMetricId): string {
   else if (Math.abs(value) >= 10) txt = value.toFixed(1);
   else txt = Number(value.toFixed(2)).toString();
   const unit = unitForMetric(metric);
-  return unit ? `${txt}${unit === '°C' ? '°' : unit}` : txt;
+  return unit ? `${txt}${unit}` : txt;
 }
 
 function formatXTick(value: number, xMode: AxisMode): string {
@@ -552,5 +669,5 @@ function formatCellValue(value: number, metric: AxisMetricId): string {
   if (Math.abs(value) >= 100) txt = String(Math.round(value));
   else if (Math.abs(value) >= 10) txt = value.toFixed(1);
   else txt = value.toFixed(2).replace(/\.?0+$/u, '');
-  return unit ? `${txt}${unit === '°C' ? '°' : unit}` : txt;
+  return unit ? `${txt}${unit}` : txt;
 }
