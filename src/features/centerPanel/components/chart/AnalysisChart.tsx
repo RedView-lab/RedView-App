@@ -193,20 +193,19 @@ export function AnalysisChart({
 
   const backdropPaths = useMemo(() => {
     if (!backdropYDomain) return [];
-    return backdropProfiles.map((profile) => ({
-      id: profile.id,
-      fillPath: buildAreaPath(
+    return backdropProfiles.map((profile) => {
+      const visiblePoints = compressPointsForPlot(
         clipPointsToXDomain(profile.points, plotXDomain),
         plotXDomain,
-        backdropYDomain,
-      ),
-      strokePath: buildSvgPath(
-        clipPointsToXDomain(profile.points, plotXDomain),
-        plotXDomain,
-        backdropYDomain,
-      ),
-    }));
-  }, [backdropProfiles, backdropYDomain, plotXDomain]);
+        plotSize.width,
+      );
+      return {
+        id: profile.id,
+        fillPath: buildAreaPath(visiblePoints, plotXDomain, backdropYDomain),
+        strokePath: buildSvgPath(visiblePoints, plotXDomain, backdropYDomain),
+      };
+    });
+  }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
 
   const dayNightBands = useMemo(
     () =>
@@ -247,12 +246,12 @@ export function AnalysisChart({
         id: entry.id,
         color: entry.color,
         path: buildSvgPath(
-          entry.points,
+          compressPointsForPlot(entry.points, plotXDomain, plotSize.width),
           plotXDomain,
           entry.axis === 2 ? plotY2Domain : plotYDomain,
         ),
       })),
-    [plotXDomain, plotY2Domain, plotYDomain, visibleSeries],
+    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, visibleSeries],
   );
 
   const hoverData = useMemo(() => {
@@ -624,6 +623,59 @@ function clipPointsToXDomain(
   }
 
   return deduped;
+}
+
+function compressPointsForPlot(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  plotWidth: number,
+): { x: number; y: number }[] {
+  const bucketCount = Math.max(32, Math.round(plotWidth * 1.5));
+  const span = xDomain.max - xDomain.min;
+  if (points.length <= bucketCount * 2 || span <= 0 || plotWidth <= 0) return points;
+
+  const compressed: { x: number; y: number }[] = [];
+  let activeBucket = -1;
+  let bucketPoints: { x: number; y: number }[] = [];
+
+  const pushPoint = (point: { x: number; y: number }) => {
+    const previous = compressed[compressed.length - 1];
+    if (previous && Math.abs(previous.x - point.x) < 1e-6 && Math.abs(previous.y - point.y) < 1e-6) {
+      return;
+    }
+    compressed.push(point);
+  };
+
+  const flushBucket = () => {
+    if (bucketPoints.length === 0) return;
+
+    let minPoint = bucketPoints[0];
+    let maxPoint = bucketPoints[0];
+    for (const point of bucketPoints) {
+      if (point.y < minPoint.y) minPoint = point;
+      if (point.y > maxPoint.y) maxPoint = point;
+    }
+
+    const ordered = [bucketPoints[0], minPoint, maxPoint, bucketPoints[bucketPoints.length - 1]]
+      .filter((point, index, arr) => arr.indexOf(point) === index)
+      .sort((left, right) => left.x - right.x);
+
+    for (const point of ordered) pushPoint(point);
+    bucketPoints = [];
+  };
+
+  for (const point of points) {
+    const ratio = (point.x - xDomain.min) / span;
+    const nextBucket = clamp(Math.floor(ratio * bucketCount), 0, bucketCount - 1);
+    if (nextBucket !== activeBucket) {
+      flushBucket();
+      activeBucket = nextBucket;
+    }
+    bucketPoints.push(point);
+  }
+
+  flushBucket();
+  return compressed;
 }
 
 function ratioFor(value: number, domain: AxisDomain): number {

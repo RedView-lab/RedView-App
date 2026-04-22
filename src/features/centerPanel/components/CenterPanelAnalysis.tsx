@@ -61,6 +61,7 @@ const axisOptions: AxisOption[] = [
 
 const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.12;
+const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
 
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
@@ -82,8 +83,55 @@ export function CenterPanelAnalysis() {
   const axis2Value = analysisState.axis2 as AxisMetricId;
   const xMode = analysisState.xMode as AxisMode;
   const filters = analysisState.filters;
-  const detailZoom = analysisState.detailZoom;
-  const detailOffset = analysisState.detailOffset;
+  const storedDetailZoom = analysisState.detailZoom;
+  const storedDetailOffset = analysisState.detailOffset;
+  const [viewportState, setViewportState] = useState(() => ({
+    detailZoom: storedDetailZoom,
+    detailOffset: storedDetailOffset,
+  }));
+  const detailZoom = viewportState.detailZoom;
+  const detailOffset = viewportState.detailOffset;
+
+  useEffect(() => {
+    setViewportState((prev) =>
+      sameViewportValue(prev.detailZoom, storedDetailZoom) &&
+      sameViewportValue(prev.detailOffset, storedDetailOffset)
+        ? prev
+        : { detailZoom: storedDetailZoom, detailOffset: storedDetailOffset },
+    );
+  }, [storedDetailOffset, storedDetailZoom]);
+
+  useEffect(() => {
+    if (!projectStore) return;
+    if (
+      sameViewportValue(detailZoom, storedDetailZoom) &&
+      sameViewportValue(detailOffset, storedDetailOffset)
+    ) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      projectStore.setProject((prev) => {
+        const current = normalizeAnalysisState(prev.analysis);
+        if (
+          sameViewportValue(current.detailZoom, detailZoom) &&
+          sameViewportValue(current.detailOffset, detailOffset)
+        ) {
+          return prev;
+        }
+        return {
+          ...prev,
+          analysis: {
+            ...current,
+            detailZoom,
+            detailOffset,
+          },
+        };
+      });
+    }, VIEWPORT_COMMIT_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [detailOffset, detailZoom, projectStore, storedDetailOffset, storedDetailZoom]);
 
   const activeItinerary = useMemo(() => {
     if (!projectStore) return null;
@@ -150,25 +198,28 @@ export function CenterPanelAnalysis() {
   }, [dayNightStartReady]);
 
   const adjustDetailZoom = (delta: number) => {
-    updateAnalysis((draft) => {
-      const currentZoom = normalizeUnitInterval(draft.detailZoom, draft.detailZoom);
+    setViewportState((prev) => {
+      const currentZoom = normalizeUnitInterval(prev.detailZoom, prev.detailZoom);
       const nextZoom = normalizeUnitInterval(currentZoom + delta, currentZoom);
       const currentVisibleFraction = detailZoomToVisibleFraction(currentZoom);
       const nextVisibleFraction = detailZoomToVisibleFraction(nextZoom);
       const currentCenter =
-        normalizeUnitInterval(draft.detailOffset, draft.detailOffset) *
+        normalizeUnitInterval(prev.detailOffset, prev.detailOffset) *
           (1 - currentVisibleFraction) +
         currentVisibleFraction / 2;
 
-      draft.detailZoom = nextZoom;
-      draft.detailOffset = detailOffsetForCenter(currentCenter, nextVisibleFraction);
+      return {
+        detailZoom: nextZoom,
+        detailOffset: detailOffsetForCenter(currentCenter, nextVisibleFraction),
+      };
     });
   };
 
   const handleDetailOffsetChange = (value: number) => {
-    updateAnalysis((draft) => {
-      draft.detailOffset = normalizeUnitInterval(value);
-    });
+    setViewportState((prev) => ({
+      ...prev,
+      detailOffset: normalizeUnitInterval(value),
+    }));
   };
 
   useEffect(() => {
@@ -513,4 +564,8 @@ function detailOffsetForCenter(center: number, visibleFraction: number): number 
   const remainingSpan = 1 - visibleFraction;
   if (remainingSpan <= 1e-6) return 0;
   return normalizeUnitInterval((center - visibleFraction / 2) / remainingSpan);
+}
+
+function sameViewportValue(left: number, right: number): boolean {
+  return Math.abs(left - right) <= 1e-4;
 }
