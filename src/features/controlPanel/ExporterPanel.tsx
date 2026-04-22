@@ -47,7 +47,11 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
   };
 
   return (
-    <aside className="rvc-panel rvc-exporter-panel" style={style} aria-label="Panneau d'export">
+    <aside
+      className={`rvc-panel rvc-exporter-panel${open ? ' is-open' : ' is-collapsed'}`}
+      style={style}
+      aria-label="Panneau d'export"
+    >
       <div className="rvc-exporter-panel__content">
         <header className="rvc-exporter-panel__header">
           <span className="rvc-exporter-panel__icon" aria-hidden="true">
@@ -72,7 +76,10 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
           </button>
         </header>
 
-        <div className={`rvc-exporter-panel__body${open ? ' is-open' : ''}`}>
+        <div
+          className={`rvc-exporter-panel__body${open ? ' is-open' : ''}`}
+          aria-hidden={!open}
+        >
           <div className="rvc-exporter-panel__body-inner">
             <div className="rvc-exporter-panel__divider" aria-hidden="true" />
 

@@ -3,6 +3,9 @@
 .rvc-exporter-panel {
   flex: 0 0 auto;
   min-height: 0;
+  transform-origin: bottom right;
+  transition: border-color 0.32s ease, box-shadow 0.32s ease,
+    background-color 0.32s ease;
 }
 
 .rvc-exporter-panel__content {
@@ -64,11 +67,14 @@
 .rvc-exporter-panel__body {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.24s ease;
+  opacity: 0;
+  transition: grid-template-rows 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
 }
 
 .rvc-exporter-panel__body.is-open {
   grid-template-rows: 1fr;
+  opacity: 1;
 }
 
 .rvc-exporter-panel__body-inner {
@@ -77,6 +83,16 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  transform: translateY(-10px) scaleY(0.98);
+  transform-origin: top center;
+  filter: blur(6px);
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.24s ease;
+}
+
+.rvc-exporter-panel__body.is-open .rvc-exporter-panel__body-inner {
+  transform: translateY(0) scaleY(1);
+  filter: blur(0);
 }
 
 .rvc-exporter-panel__divider {

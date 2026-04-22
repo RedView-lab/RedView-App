@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
@@ -106,16 +106,34 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [centerPanelHeightOverride, setCenterPanelHeightOverride] = useState<number | null>(() =>
     readStoredCenterPanelHeight(),
   );
+  const [exporterPanelHeight, setExporterPanelHeight] = useState(0);
   const [viewport, setViewport] = useState(() => ({
     w: window.innerWidth,
     h: window.innerHeight,
   }));
+  const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const onResize = () =>
       setViewport({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  useEffect(() => {
+    const node = exporterPanelHostRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+
+    const updateHeight = () => {
+      const next = Math.round(node.getBoundingClientRect().height);
+      setExporterPanelHeight((current) => (current === next ? current : next));
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(() => updateHeight());
+    observer.observe(node);
+
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -259,6 +277,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   // where appScale === 1.
   const designW = scaledViewportWidth;
   const designH = scaledViewportHeight;
+  const rightDockContentHeight = Math.max(0, designH - PANEL_PADDING * 2);
+  const rightPrimaryPanelHeight = Math.max(
+    0,
+    rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
+  );
+  const rightPrimaryPanelStyle: React.CSSProperties = {
+    height: `${rightPrimaryPanelHeight}px`,
+    minHeight: 0,
+    display: 'flex',
+    transition: 'height 360ms cubic-bezier(0.22, 1, 0.36, 1), transform 360ms cubic-bezier(0.22, 1, 0.36, 1), filter 280ms ease',
+    willChange: 'height, transform',
+    transform: exporterPanelHeight > 80 ? 'translateY(0)' : 'translateY(-2px)',
+    filter: exporterPanelHeight > 80 ? 'saturate(1)' : 'saturate(0.96)',
+  };
 
   const centerPanelRegionLeft =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
@@ -482,16 +514,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       </button>
 
       <div style={rightPanelStyle}>
-        <ControlPanelContainer
-          map={mapInstance}
-          isMapLoaded={mapLoaded}
-          lidarDownloadModeActive={lidarModeEnabled}
-          onToggleLidarDownloadMode={() => setLidarModeEnabled((v) => !v)}
-          width={panelWidth}
-          onResizeStart={handleResizeStart}
-          isResizing={isResizing}
-        />
-        <ExporterPanel width={panelWidth} />
+        <div style={rightPrimaryPanelStyle}>
+          <ControlPanelContainer
+            map={mapInstance}
+            isMapLoaded={mapLoaded}
+            lidarDownloadModeActive={lidarModeEnabled}
+            onToggleLidarDownloadMode={() => setLidarModeEnabled((v) => !v)}
+            width={panelWidth}
+            onResizeStart={handleResizeStart}
+            isResizing={isResizing}
+          />
+        </div>
+        <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
+          <ExporterPanel width={panelWidth} />
+        </div>
       </div>
       </div>
     </div>
