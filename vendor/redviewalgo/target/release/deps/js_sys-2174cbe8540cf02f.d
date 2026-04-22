@@ -1,0 +1,10 @@
+C:\Users\runni\Documents\RedViewPRODUCTION\RedView-App\vendor\redviewalgo\target\release\deps\js_sys-2174cbe8540cf02f.d: C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\lib.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\mod.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\queue.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\task\singlethread.rs
+
+C:\Users\runni\Documents\RedViewPRODUCTION\RedView-App\vendor\redviewalgo\target\release\deps\libjs_sys-2174cbe8540cf02f.rlib: C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\lib.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\mod.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\queue.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\task\singlethread.rs
+
+C:\Users\runni\Documents\RedViewPRODUCTION\RedView-App\vendor\redviewalgo\target\release\deps\libjs_sys-2174cbe8540cf02f.rmeta: C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\lib.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\mod.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\queue.rs C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\task\singlethread.rs
+
+C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\lib.rs:
+C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\mod.rs:
+C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\queue.rs:
+C:\Users\runni\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\js-sys-0.3.94\src\futures\task\singlethread.rs:

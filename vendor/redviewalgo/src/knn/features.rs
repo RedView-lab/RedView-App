@@ -143,11 +143,16 @@ pub fn extract_training_samples(activities: &[ActivityData]) -> Vec<TrainingSamp
 
             samples.push(TrainingSample {
                 gradient_pct: grad,
-                elapsed_h: yeo_johnson(elapsed_h),
-                cum_climb_m: yeo_johnson(cum_climb / 1000.0),
+                // Store RAW values — normalize_features_weighted applies
+                // Yeo-Johnson compression once at lookup time. Storing the
+                // compressed form here used to cause a double-compression
+                // bug (elapsed_h → yj → yj) that severely distorted KNN
+                // distances on long activities.
+                elapsed_h,
+                cum_climb_m: cum_climb,
                 recent_avg_gradient: recent_avg,
                 elevation_m: pts[i].altitude_m,
-                cum_distance_m: yeo_johnson(pts[i].distance_m / 100_000.0),
+                cum_distance_m: pts[i].distance_m,
                 heart_rate_zone: hr_zone,
                 temperature_c: temp,
                 speed_ms: speed,
@@ -176,16 +181,19 @@ pub fn compute_norms(samples: &[TrainingSample]) -> Vec<FeatureNorm> {
     let n = samples.len() as f64;
     let mut norms = Vec::with_capacity(N_FEATURES);
 
+    // Compress the raw sample values the same way normalize_features_weighted
+    // does, so the (mean, std) we compute here are in the same numeric space
+    // as the values used at lookup time.
     let raw: Vec<[f64; N_FEATURES]> = samples
         .iter()
         .map(|s| {
             [
                 s.gradient_pct,
-                s.elapsed_h,
-                s.cum_climb_m,
+                yeo_johnson(s.elapsed_h),
+                yeo_johnson(s.cum_climb_m / 1000.0),
                 s.recent_avg_gradient,
                 s.elevation_m,
-                s.cum_distance_m,
+                yeo_johnson(s.cum_distance_m / 100_000.0),
                 s.heart_rate_zone,
                 s.temperature_c,
             ]

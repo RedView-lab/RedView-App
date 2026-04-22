@@ -16,8 +16,11 @@ use crate::profile::gradient_bins::SplineBins;
 use crate::types::{PredictionPoint, RiderProfile, Route, SleepStrategy, StopEvent};
 use std::collections::VecDeque;
 
-/// Maximum descent speed (m/s) ≈ 80 km/h
-const MAX_DESCENT_SPEED_MS: f64 = 22.2;
+/// Hard ceiling on any predicted speed (m/s) ≈ 70 km/h. Sustained ground
+/// speeds above this are unrealistic for amateur cycling outside of pro
+/// races on closed roads. Acts as a final safety clamp on top of the
+/// physics-based descent cap.
+const MAX_DESCENT_SPEED_MS: f64 = 19.5;
 /// Minimum speed (m/s) ≈ 3 km/h (very steep climb)
 const MIN_SPEED_MS: f64 = 0.83;
 /// Default speed fallback (m/s) ≈ 20 km/h
@@ -27,7 +30,19 @@ const FALLBACK_SPEED_MS: f64 = 5.56;
 const KNN_BASE_WEIGHT: f64 = 0.7;
 
 /// CdA multiplier for tuck position on descents (used in terminal velocity).
-const CDA_TUCK_FACTOR: f64 = 0.80;
+/// 0.88 reflects a moderately aggressive but sustainable position for an
+/// amateur rider — not a pro full-tuck (~0.70). Keeps terminal velocity
+/// estimates within realistic open-road bounds.
+const CDA_TUCK_FACTOR: f64 = 0.88;
+
+/// Physical acceleration ceiling (m/s²) between consecutive route
+/// samples. ~2.0 m/s² is already strong cycling acceleration (0→36 km/h
+/// in 5 s). Prevents adjacent-sample speed spikes caused by gradient
+/// noise from creating physically impossible jumps.
+const MAX_ACCEL_MS2: f64 = 2.0;
+/// Physical deceleration ceiling (m/s²) between consecutive samples.
+/// 4.0 m/s² is firm braking on dry tarmac.
+const MAX_DECEL_MS2: f64 = 4.0;
 
 /// Reference climbing rate for climbing load (600m D+/30min = very hard sustained climbing).
 /// This is the default; overridden dynamically if training data provides a better reference.
@@ -260,7 +275,6 @@ pub fn predict_single_pass(
 
     for i in 0..n {
         let rp = &route.points[i];
-        let gradient_frac = rp.gradient_pct / 100.0;
         let segment_len = rp.segment_length_m;
 
         // Track cumulative climb
@@ -282,6 +296,18 @@ pub fn predict_single_pass(
         } else {
             recent_grads.iter().map(|(_, g)| g).sum::<f64>() / recent_grads.len() as f64
         };
+
+        // Smoothed gradient for the physics solver and power estimate.
+        // Per-point gradients on real GPX/brouter data jitter heavily
+        // (±3% step changes between adjacent samples are common), which
+        // would otherwise produce unphysical sample-to-sample speed swings
+        // — sometimes making predicted speed *increase* between two
+        // climbing samples just because the local gradient happens to dip.
+        // We blend 60% raw / 40% 500 m average: enough to kill point noise,
+        // little enough to preserve real terrain features (short ramps,
+        // false flats, etc.).
+        let smoothed_gradient_pct = 0.6 * rp.gradient_pct + 0.4 * recent_avg_gradient;
+        let smoothed_gradient_frac = smoothed_gradient_pct / 100.0;
 
         let elapsed_h = elapsed_s / 3600.0;
 
@@ -455,7 +481,7 @@ pub fn predict_single_pass(
             let physics_speed = solve_speed_from_power_with_efficiency(
                 effective_power,
                 mass_kg,
-                gradient_frac,
+                smoothed_gradient_frac,
                 effective_cda,
                 effective_crr,
                 rp.elevation_m,
@@ -532,7 +558,7 @@ pub fn predict_single_pass(
             let speed = solve_speed_from_power_with_efficiency(
                 available_power,
                 mass_kg,
-                gradient_frac,
+                smoothed_gradient_frac,
                 effective_cda,
                 effective_crr,
                 rp.elevation_m,
@@ -616,10 +642,15 @@ pub fn predict_single_pass(
         };
 
         // Physics-based descent cap (terminal velocity + curvature + reaction)
+        // Use the 500 m smoothed gradient rather than the raw single-point
+        // gradient: per-sample gradients can swing wildly on noisy elevation
+        // data and would otherwise produce spurious 60+ km/h descent spikes
+        // on essentially flat terrain.
         let cda_tuck = cda * CDA_TUCK_FACTOR;
+        let cap_gradient_pct = recent_avg_gradient.min(rp.gradient_pct);
         let capped_speed = cap_descent_speed(
             momentum_speed,
-            rp.gradient_pct,
+            cap_gradient_pct,
             elapsed_h,
             mass_kg,
             cda_tuck,
@@ -627,7 +658,21 @@ pub fn predict_single_pass(
             rp.elevation_m,
             rp.curvature_deg_per_km,
         );
-        let speed_ms = capped_speed.clamp(MIN_SPEED_MS, MAX_DESCENT_SPEED_MS);
+
+        // Acceleration limiter: bound speed change between consecutive
+        // samples to physically plausible accelerations. This eliminates
+        // single-point spikes (e.g. one noisy descent point momentarily
+        // jumping from 30 → 70 km/h) while preserving genuine sustained
+        // descent speeds across multiple samples.
+        let dt_estimate = if prev_speed_ms > 0.5 && segment_len > 0.01 {
+            (segment_len / prev_speed_ms).clamp(0.1, 60.0)
+        } else {
+            1.0
+        };
+        let max_speed_now = prev_speed_ms + MAX_ACCEL_MS2 * dt_estimate;
+        let min_speed_now = (prev_speed_ms - MAX_DECEL_MS2 * dt_estimate).max(MIN_SPEED_MS);
+        let accel_limited = capped_speed.clamp(min_speed_now, max_speed_now);
+        let speed_ms = accel_limited.clamp(MIN_SPEED_MS, MAX_DESCENT_SPEED_MS);
 
         // Time for this segment
         let segment_time = if segment_len > 0.01 {
@@ -643,8 +688,11 @@ pub fn predict_single_pass(
         prev_speed_ms = speed_ms;
 
         // Power estimate for display
+        // Power estimate for display — use the same smoothed gradient as
+        // the speed solver so reported power doesn't spike on noisy GPX
+        // points (a +2% gradient blip would otherwise read as a 100 W jump).
         let predicted_power = estimate_power_from_speed(
-            speed_ms, mass_kg, gradient_frac, effective_cda, effective_crr, rp.elevation_m,
+            speed_ms, mass_kg, smoothed_gradient_frac, effective_cda, effective_crr, rp.elevation_m,
         );
 
         pred_points.push(PredictionPoint {

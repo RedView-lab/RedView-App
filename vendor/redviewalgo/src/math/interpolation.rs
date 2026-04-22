@@ -1,3 +1,32 @@
+/// Median filter on elevations to remove single-sample DEM/GPS glitches
+/// before any further smoothing. Uses a small odd window (typically 5)
+/// over the elevation index space (cheap, no distance lookup needed). A
+/// median is robust to single isolated outliers \u2014 e.g. a +500\u00a0m GPS
+/// glitch on one sample \u2014 unlike Gaussian smoothing which would only
+/// attenuate and spread the spike across neighbours.
+pub fn median_filter_elevations(elevations: &[f64], window: usize) -> Vec<f64> {
+    let n = elevations.len();
+    if n == 0 {
+        return vec![];
+    }
+    let w = window.max(3) | 1; // ensure odd, minimum 3
+    if n < w {
+        return elevations.to_vec();
+    }
+    let half = w / 2;
+    let mut out = Vec::with_capacity(n);
+    let mut buf: Vec<f64> = Vec::with_capacity(w);
+    for i in 0..n {
+        let lo = i.saturating_sub(half);
+        let hi = (i + half + 1).min(n);
+        buf.clear();
+        buf.extend_from_slice(&elevations[lo..hi]);
+        buf.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        out.push(buf[buf.len() / 2]);
+    }
+    out
+}
+
 /// O(n) sliding-window Gaussian-weighted moving average on elevations.
 /// Uses two-pointer approach for efficient windowed smoothing.
 /// `window_distance_m` controls the smoothing radius along cumulative distance.

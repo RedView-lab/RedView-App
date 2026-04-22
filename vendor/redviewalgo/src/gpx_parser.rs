@@ -1,4 +1,4 @@
-use crate::math::{gradient_pct, haversine_distance, smooth_elevations};
+use crate::math::{gradient_pct, haversine_distance, median_filter_elevations, smooth_elevations};
 use crate::types::{Route, RoutePoint, SurfaceType};
 use quick_xml::events::Event;
 use quick_xml::Reader;
@@ -9,8 +9,16 @@ const DEFAULT_MAX_ROUTE_POINTS: usize = 15_000;
 /// Minimum distance between consecutive points (metres).
 const MIN_POINT_SPACING_M: f64 = 5.0;
 
-/// Default smoothing window in metres.
-const DEFAULT_SMOOTH_WINDOW_M: f64 = 50.0;
+/// Default Gaussian smoothing window in metres. Roughly matches the
+/// resolution at which real terrain matters for cycling effort (≈120 m
+/// captures hill segments without erasing short ramps).
+const DEFAULT_SMOOTH_WINDOW_M: f64 = 120.0;
+
+/// Median filter window (number of samples) applied before the Gaussian
+/// smoother. 5 is enough to wipe single-sample DEM glitches while
+/// preserving real terrain features (any ramp longer than ≈3 samples
+/// survives unchanged).
+const MEDIAN_FILTER_WINDOW: usize = 5;
 
 /// Parse a GPX file from raw bytes into a `Route`.
 /// `max_points` controls downsampling (None = use default 15000).
@@ -25,12 +33,15 @@ pub fn parse_gpx(
     // Pre-allocate based on estimated point count (~1 point per 80 bytes of GPX)
     let estimated_points = data.len() / 80;
     let mut reader = Reader::from_str(xml);
-    let mut raw_points: Vec<(f64, f64, f64)> = Vec::with_capacity(estimated_points.min(500_000));
+    // (lat, lon, ele, has_ele) — has_ele = false means the trkpt had no
+    // <ele> child and ele should be treated as missing (interpolated later).
+    let mut raw_points: Vec<(f64, f64, f64, bool)> = Vec::with_capacity(estimated_points.min(500_000));
     let mut in_trkpt = false;
     let mut in_ele = false;
     let mut current_lat: f64 = 0.0;
     let mut current_lon: f64 = 0.0;
     let mut current_ele: f64 = 0.0;
+    let mut current_has_ele: bool = false;
     let mut buf = Vec::with_capacity(256);
 
     loop {
@@ -41,6 +52,7 @@ pub fn parse_gpx(
                     b"trkpt" | b"rtept" => {
                         in_trkpt = true;
                         current_ele = 0.0;
+                        current_has_ele = false;
                         current_lat = 0.0;
                         current_lon = 0.0;
                         read_lat_lon_attrs(e, &mut current_lat, &mut current_lon);
@@ -58,19 +70,22 @@ pub fn parse_gpx(
                     let mut lat = 0.0;
                     let mut lon = 0.0;
                     read_lat_lon_attrs(e, &mut lat, &mut lon);
-                    raw_points.push((lat, lon, 0.0));
+                    raw_points.push((lat, lon, 0.0, false));
                 }
             }
             Ok(Event::Text(ref e)) if in_ele => {
                 let txt = e.unescape().unwrap_or_default();
-                current_ele = txt.trim().parse().unwrap_or(0.0);
+                if let Ok(v) = txt.trim().parse::<f64>() {
+                    current_ele = v;
+                    current_has_ele = true;
+                }
             }
             Ok(Event::End(ref e)) => {
                 let local_name = e.local_name();
                 match local_name.as_ref() {
                     b"trkpt" | b"rtept" => {
                         if in_trkpt {
-                            raw_points.push((current_lat, current_lon, current_ele));
+                            raw_points.push((current_lat, current_lon, current_ele, current_has_ele));
                             in_trkpt = false;
                         }
                     }
@@ -91,9 +106,77 @@ pub fn parse_gpx(
         return Err("GPX must contain at least 2 track points".to_string());
     }
 
+    // Fill in missing elevations by linear interpolation between known
+    // points. Without this, a single missing <ele> in the middle of a
+    // mountain descent would be treated as 0 m and create a fake −800 m
+    // cliff that the smoother cannot fully erase.
+    interpolate_missing_elevations(&mut raw_points);
+    let raw_points: Vec<(f64, f64, f64)> =
+        raw_points.into_iter().map(|(lat, lon, ele, _)| (lat, lon, ele)).collect();
+
     let max_pts = max_points.unwrap_or(DEFAULT_MAX_ROUTE_POINTS);
     let smooth_w = smooth_window_m.unwrap_or(DEFAULT_SMOOTH_WINDOW_M);
     build_route(raw_points, max_pts, smooth_w)
+}
+
+/// Replace missing elevations (`has_ele == false`) by linear interpolation
+/// between the nearest preceding and following known points. Leading and
+/// trailing missing points get the value of the first/last known point
+/// (constant extrapolation, safer than 0). If no point has a known
+/// elevation, leave everything at 0 — the caller will degrade gracefully.
+fn interpolate_missing_elevations(points: &mut [(f64, f64, f64, bool)]) {
+    let n = points.len();
+    if n == 0 {
+        return;
+    }
+    // Quick exit: nothing to interpolate.
+    if points.iter().all(|p| p.3) {
+        return;
+    }
+    // If no elevation at all, keep zeros.
+    if !points.iter().any(|p| p.3) {
+        return;
+    }
+
+    // Index of first known elevation — backfill leading missing points.
+    let first_known = points.iter().position(|p| p.3).unwrap();
+    let first_ele = points[first_known].2;
+    for p in &mut points[..first_known] {
+        p.2 = first_ele;
+        p.3 = true;
+    }
+
+    // Index of last known elevation — forward-fill trailing missing points.
+    let last_known = points.iter().rposition(|p| p.3).unwrap();
+    let last_ele = points[last_known].2;
+    for p in &mut points[last_known + 1..] {
+        p.2 = last_ele;
+        p.3 = true;
+    }
+
+    // Interpolate gaps between known points based on point index (good
+    // enough — cumulative distance isn't yet computed at this stage).
+    let mut i = first_known;
+    while i < last_known {
+        if !points[i + 1].3 {
+            // Find next known point.
+            let mut j = i + 2;
+            while j <= last_known && !points[j].3 {
+                j += 1;
+            }
+            let e0 = points[i].2;
+            let e1 = points[j].2;
+            let span = (j - i) as f64;
+            for k in (i + 1)..j {
+                let t = (k - i) as f64 / span;
+                points[k].2 = e0 + (e1 - e0) * t;
+                points[k].3 = true;
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
 }
 
 fn read_lat_lon_attrs(e: &quick_xml::events::BytesStart<'_>, lat: &mut f64, lon: &mut f64) {
@@ -151,11 +234,16 @@ pub fn build_route(
         };
     let n = filtered.len();
 
-    // Phase 4: Smooth elevations — adaptive window based on point density
+    // Phase 4: Smooth elevations — first a robust median filter to remove
+    // single-sample DEM/GPS glitches, then a distance-aware Gaussian for
+    // gradient stability. Without the median pass, an isolated +500 m
+    // glitch survives the Gaussian and creates a fake spike in the
+    // gradient and downstream power/speed.
     let raw_elevations: Vec<f64> = filtered.iter().map(|p| p.2).collect();
+    let despiked = median_filter_elevations(&raw_elevations, MEDIAN_FILTER_WINDOW);
     let avg_spacing = if n > 1 { total_dist / (n - 1) as f64 } else { 10.0 };
     let smooth_window = smooth_window_m.max(avg_spacing * 3.0);
-    let smoothed_elevations = smooth_elevations(&raw_elevations, &cumulative_distances, smooth_window);
+    let smoothed_elevations = smooth_elevations(&despiked, &cumulative_distances, smooth_window);
 
     // Phase 5: Build RoutePoints
     let mut points: Vec<RoutePoint> = Vec::with_capacity(n);

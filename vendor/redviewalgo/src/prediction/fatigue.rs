@@ -46,8 +46,11 @@ pub fn compute_fatigue_factor(fatigue: &FatigueModel, elapsed_h: f64) -> f64 {
         floor + (baseline - floor) * (-lambda * elapsed_h).exp()
     };
 
-    // Safety: never below floor, never above baseline at t=0
-    factor.max(floor)
+    // Safety: never below floor, never above the model's nominal baseline.
+    // The bi-exponential form floor + a + b can overshoot baseline at t=0
+    // when the fitter clamps a, b, floor independently \u2014 that would
+    // otherwise produce a >100% FTP "boost" during the first hour.
+    factor.clamp(floor, fatigue.baseline)
 }
 
 /// Circadian rhythm performance factor with multi-night sleep debt compounding.

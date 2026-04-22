@@ -1,7 +1,16 @@
 use crate::math::terminal_velocity;
 
-/// Absolute maximum descent speed (m/s) ≈ 80 km/h — safety hard limit.
-const ABSOLUTE_MAX_DESCENT_MS: f64 = 22.2;
+/// Absolute maximum descent speed (m/s) ≈ 65 km/h — realistic safety hard
+/// limit for non-pro recreational riders. Sustained speeds above this on
+/// open road require pro-level handling, dry tarmac, no traffic, and a
+/// full aero tuck. Physics path should never exceed this.
+const ABSOLUTE_MAX_DESCENT_MS: f64 = 18.0;
+
+/// When curvature data is missing (e.g. brouter routes don't extract it),
+/// assume a typical mountain road profile (~120 deg/km of cumulative
+/// bearing change). This produces a mild ~9% penalty rather than treating
+/// every descent as a perfectly straight road.
+const DEFAULT_CURVATURE_DEG_PER_KM: f64 = 120.0;
 
 /// Apply a physics-based descent speed cap.
 ///
@@ -39,8 +48,15 @@ pub fn cap_descent_speed(
         ABSOLUTE_MAX_DESCENT_MS
     };
 
-    // 2. Curvature penalty — twisty roads require braking
-    let curvature_factor = curvature_penalty(curvature_deg_per_km);
+    // 2. Curvature penalty — twisty roads require braking. Treat absence of
+    //    curvature data as "unknown road" rather than "perfectly straight":
+    //    real public roads almost never permit sustained terminal velocity.
+    let effective_curvature = if curvature_deg_per_km <= 1.0 {
+        DEFAULT_CURVATURE_DEG_PER_KM
+    } else {
+        curvature_deg_per_km
+    };
+    let curvature_factor = curvature_penalty(effective_curvature);
 
     // 3. Smooth reaction-time penalty (fatigue reduces descent confidence)
     //    Sigmoid: 1 / (1 + 0.003 * t^1.5)
@@ -89,11 +105,22 @@ mod tests {
 
     #[test]
     fn test_steep_descent_capped_by_terminal_velocity() {
-        // -15% gradient, fresh rider, should be capped well below 80 km/h
+        // -15% gradient, fresh rider, should be capped well below 70 km/h
         let speed = cap_descent_speed(25.0, -15.0, 0.0, 80.0, 0.28, 0.005, 0.0, 0.0);
         let kmh = speed * 3.6;
-        assert!(kmh < 80.0, "Steep descent should be capped: got {kmh:.1} km/h");
+        assert!(kmh < 70.0, "Steep descent should be capped: got {kmh:.1} km/h");
         assert!(kmh > 30.0, "Steep descent shouldn't be too slow: got {kmh:.1} km/h");
+    }
+
+    #[test]
+    fn test_no_curvature_data_still_penalised() {
+        // -10% with curvature=0 should still be penalised by default curvature
+        let with_default = cap_descent_speed(25.0, -10.0, 0.0, 80.0, 0.28, 0.005, 0.0, 0.0);
+        let with_explicit_straight = cap_descent_speed(25.0, -10.0, 0.0, 80.0, 0.28, 0.005, 0.0, 1.5);
+        assert!(
+            with_default <= with_explicit_straight,
+            "Missing curvature ({with_default:.1}) should be at least as penalised as straight road ({with_explicit_straight:.1})"
+        );
     }
 
     #[test]

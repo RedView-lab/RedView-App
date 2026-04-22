@@ -118,7 +118,11 @@ pub fn solve_speed_from_power_with_efficiency(
     efficiency: f64,
 ) -> f64 {
     const MIN_SPEED: f64 = 0.8;
-    const MAX_SPEED: f64 = 22.2;
+    // Hard upper bound on the cubic-solver output (~70 km/h). The descent
+    // module applies a tighter, physics + curvature based cap on top; this
+    // simply prevents the solver from returning extreme values when given
+    // a slightly negative gradient with high power.
+    const MAX_SPEED: f64 = 19.5;
 
     let effective_power = power_w * efficiency;
     let rho = air_density(altitude_m);
