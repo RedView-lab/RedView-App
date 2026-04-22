@@ -13,7 +13,7 @@ const axisOptions: AxisOption[] = [
   { value: 'Dénivelé', label: 'Dénivelé', tone: 'primary' },
   { value: 'Pente', label: 'Pente', tone: 'primary' },
   { value: 'Surface', label: 'Surface', tone: 'primary' },
-  { value: 'Température (°)', label: 'Température (°)', tone: 'secondary' },
+  { value: 'Température', label: 'Température', tone: 'secondary' },
   {
     value: 'Température ressentie (°)',
     label: 'Température ressentie (°)',
@@ -35,7 +35,7 @@ export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [axis1Value, setAxis1Value] = useState('Dénivelé');
-  const [axis2Value, setAxis2Value] = useState('');
+  const [axis2Value, setAxis2Value] = useState('Température');
 
   useEffect(() => {
     if (!openAxis) return;

@@ -25,53 +25,55 @@ export function AxisDropdown({
   onSelect,
 }: AxisDropdownProps) {
   return (
-    <div className="rvc-center-analysis__axis-wrap">
-      <div className="rvc-center-analysis__axis-label">
-        {axisLabel}
-        <span className="rvc-center-analysis__axis-underline" />
+    <div className="rvc-center-analysis__axis">
+      <div className="rvc-center-analysis__axis-meta" aria-hidden="true">
+        <div className="rvc-center-analysis__axis-label">{axisLabel}</div>
+        <span className="rvc-center-analysis__axis-line" />
       </div>
 
-      <button
-        className="rvc-center-analysis__select"
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        onClick={onToggle}
-        title={value || '-'}
-      >
-        <span className="rvc-center-analysis__select-value">{value || '-'}</span>
-        <IconChevronDown size={20} className="rvc-center-analysis__select-icon" />
-      </button>
+      <div className="rvc-center-analysis__axis-wrap">
+        <button
+          className="rvc-center-analysis__select"
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          onClick={onToggle}
+          title={value || '-'}
+        >
+          <span className="rvc-center-analysis__select-value">{value || '-'}</span>
+          <IconChevronDown size={20} className="rvc-center-analysis__select-icon" />
+        </button>
 
-      {isOpen ? (
-        <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={axisLabel}>
-          <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
-          {options.map((option) => {
-            const selected = value === option.value;
-            return (
-              <button
-                key={option.value}
-                className="rvc-center-analysis__dropdown-option"
-                type="button"
-                role="option"
-                aria-selected={selected}
-                onClick={() => onSelect(option.value)}
-              >
-                <span
-                  className={
-                    option.tone === 'primary'
-                      ? 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--primary'
-                      : 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--secondary'
-                  }
+        {isOpen ? (
+          <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={axisLabel}>
+            <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
+            {options.map((option) => {
+              const selected = value === option.value;
+              return (
+                <button
+                  key={option.value}
+                  className="rvc-center-analysis__dropdown-option"
+                  type="button"
+                  role="option"
+                  aria-selected={selected}
+                  onClick={() => onSelect(option.value)}
                 >
-                  {option.label}
-                </span>
-                {selected ? <IconCheck size={16} className="rvc-center-analysis__dropdown-check" /> : null}
-              </button>
-            );
-          })}
-        </div>
-      ) : null}
+                  <span
+                    className={
+                      option.tone === 'primary'
+                        ? 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--primary'
+                        : 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--secondary'
+                    }
+                  >
+                    {option.label}
+                  </span>
+                  {selected ? <IconCheck size={16} className="rvc-center-analysis__dropdown-check" /> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
