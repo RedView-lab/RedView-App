@@ -9,6 +9,8 @@ import type { ControlPanelHandlers, ControlPanelState, RouteRenderMode } from '.
 interface Props {
   enabled: boolean;
   items: ControlPanelState['routes']['items'];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onRoutesEnabledChange'];
   onColorChange: ControlPanelHandlers['onRouteColorChange'];
   onModeChange: ControlPanelHandlers['onRouteModeChange'];
@@ -99,6 +101,8 @@ function OpacityPill({ value, onChange }: OpacityPillProps) {
 export function RoutesSection({
   enabled,
   items,
+  open,
+  onOpenChange,
   onEnabledChange,
   onColorChange,
   onModeChange,
@@ -109,6 +113,8 @@ export function RoutesSection({
     <Section
       title="Itinéraires"
       toggle={{ checked: enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div className="rvc-routes__list">
         {items.map((route) => (

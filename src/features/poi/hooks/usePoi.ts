@@ -35,6 +35,7 @@ export function usePoi(
   const iconsReady = useRef(false);
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
+  const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
@@ -368,7 +369,7 @@ export function usePoi(
       // categories updates the visible POIs along the route.
       fetchCorridorPois(map);
     }
-  }, [map, isMapLoaded, enabledCategories, fetchCorridorPois]);
+  }, [map, isMapLoaded, enabledCategoriesKey, fetchCorridorPois]);
 
   return { loading, error, poiCount, corridorProgress, searchCorridor };
 }

@@ -23,6 +23,11 @@ import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itinerar
 
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
+import {
+  createDefaultControlPanelPersistedState,
+  type ControlPanelPersistedState,
+  type ControlPanelSectionKey,
+} from './persistedState';
 import type {
   ControlPanelState,
   LabelKey,
@@ -112,6 +117,23 @@ export function ControlPanelContainer({
   isResizing,
 }: ControlPanelContainerProps) {
   const lidarManager = useLidarManager();
+  const projectStore = useProjectStoreOptional();
+  const initialControlPanel =
+    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
+
+  const updateProjectControlPanel = useCallback(
+    (mut: (draft: ControlPanelPersistedState) => void) => {
+      if (!projectStore) return;
+      projectStore.setProject((prev) => {
+        const controlPanel = structuredClone(
+          prev.controlPanel ?? createDefaultControlPanelPersistedState(),
+        );
+        mut(controlPanel);
+        return { ...prev, controlPanel };
+      });
+    },
+    [projectStore],
+  );
 
   // ── LIDAR ──────────────────────────────────────────────────────────
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
@@ -133,7 +155,13 @@ export function ControlPanelContainer({
   }, [lidarManager, refreshTiles]);
 
   // ── Slope ──────────────────────────────────────────────────────────
-  const [slopeState, setSlopeState] = useState(loadSlopeState);
+  const [slopeState, setSlopeState] = useState(() => {
+    const loaded = loadSlopeState();
+    return {
+      ...loaded,
+      enabled: initialControlPanel.toggles.slopesEnabled ?? loaded.enabled,
+    };
+  });
   const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>({});
   const [slopeScale, setSlopeScale] = useState<SlopeScale>('percent');
   const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('4 couleurs');
@@ -235,7 +263,9 @@ export function ControlPanelContainer({
 
   // ── Labels ─────────────────────────────────────────────────────────
   const [labelBackend, setLabelBackend] = useState(() => loadLabelState());
-  const [labelsEnabled, setLabelsEnabled] = useState(true);
+  const [labelsEnabled, setLabelsEnabled] = useState(
+    initialControlPanel.toggles.labelsEnabled,
+  );
   const [statesUiToggle, setStatesUiToggle] = useState(true); // ui-only, no backend
 
   // When master toggle is off, force every backend category to false.
@@ -250,23 +280,31 @@ export function ControlPanelContainer({
 
   // ── Weather ────────────────────────────────────────────────────────
   const [weatherState, setWeatherState] = useState<WeatherState>(
-    DEFAULT_CONTROL_PANEL_STATE.weather,
+    () => ({
+      ...DEFAULT_CONTROL_PANEL_STATE.weather,
+      enabled: initialControlPanel.toggles.weatherEnabled,
+    }),
   );
 
   // ── Wind ───────────────────────────────────────────────────────────
-  const [windEnabled, setWindEnabled] = useState(false);
+  const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
   useWind(isMapLoaded ? map : null, windEnabled);
 
   // ── Snow & Sunlight ────────────────────────────────────────────────
-  const [snowEnabled, setSnowEnabled] = useState(false);
-  const [sunlightState, setSunlightState] = useState(DEFAULT_CONTROL_PANEL_STATE.sunlight);
+  const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
+  const [sunlightState, setSunlightState] = useState(() => ({
+    ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
+    enabled: initialControlPanel.toggles.sunlightEnabled,
+  }));
+  const [altitudeEnabled, setAltitudeEnabled] = useState(
+    initialControlPanel.toggles.altitudeEnabled,
+  );
 
   // ── Routes (right-panel "Itinéraires" section) ─────────────────────
   // Items are sourced from the active project so the right panel mirrors
   // the editor on the left in real time. Color / visibility / mode /
   // opacity edits flow back into the project store via the mutators
   // exposed by `useProjectStore`.
-  const projectStore = useProjectStoreOptional();
   const projectItineraries = projectStore?.project.itineraries ?? [];
   const [routesEnabled, setRoutesEnabled] = useState(true);
   const routeItems = useMemo(
@@ -532,11 +570,37 @@ export function ControlPanelContainer({
   const handleSunlightStateChange = useCallback((changes: Partial<SunlightState>) => setSunlightState((prev) => ({ ...prev, ...changes })), []);
 
   const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
+  const projectControlPanel =
+    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
+
+  const handleSectionOpenChange = useCallback(
+    (section: ControlPanelSectionKey, open: boolean) => {
+      updateProjectControlPanel((draft) => {
+        draft.sectionsOpen[section] = open;
+      });
+    },
+    [updateProjectControlPanel],
+  );
 
   return (
     <ControlPanel
       state={state}
       className={className}
+      sectionsOpen={projectControlPanel.sectionsOpen}
+      onSectionOpenChange={handleSectionOpenChange}
+      altitudeEnabled={altitudeEnabled}
+      onAltitudeEnabledChange={(enabled) => {
+        setAltitudeEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.altitudeEnabled = enabled;
+        });
+      }}
+      sunlightMapExpanded={projectControlPanel.sunlightMapExpanded}
+      onSunlightMapExpandedChange={(open) => {
+        updateProjectControlPanel((draft) => {
+          draft.sunlightMapExpanded = open;
+        });
+      }}
       width={width}
       onResizeStart={onResizeStart}
       isResizing={isResizing}
@@ -546,10 +610,20 @@ export function ControlPanelContainer({
       onLidarTileDelete={handleLidarTileDelete}
       onLidarTileDownload={handleLidarDownload}
       /* Labels */
-      onLabelsEnabledChange={handleLabelsEnabled}
+      onLabelsEnabledChange={(enabled) => {
+        handleLabelsEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.labelsEnabled = enabled;
+        });
+      }}
       onLabelToggle={handleLabelToggle}
       /* Slopes */
-      onSlopesEnabledChange={handleSlopesEnabled}
+      onSlopesEnabledChange={(enabled) => {
+        handleSlopesEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.slopesEnabled = enabled;
+        });
+      }}
       onSlopeResolutionChange={handleSlopeResolution}
       onSlopeColorizationChange={handleSlopeColorization}
       onSlopeScaleChange={setSlopeScale}
@@ -558,17 +632,37 @@ export function ControlPanelContainer({
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
       onSlopeBandBreakpointChange={handleBreakpointChange}
       /* Weather */
-      onWeatherEnabledChange={handleWeatherEnabled}
+      onWeatherEnabledChange={(enabled) => {
+        handleWeatherEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.weatherEnabled = enabled;
+        });
+      }}
       onWeatherTabChange={handleWeatherTabChange}
       onWeatherDateChange={handleWeatherDateChange}
       onWeatherLayerToggle={handleWeatherLayerToggle}
       onWeatherLayerModeChange={handleWeatherLayerModeChange}
       onWeatherAddAlert={handleWeatherAddAlert}
       /* Wind */
-      onWindEnabledChange={handleWindEnabled}
+      onWindEnabledChange={(enabled) => {
+        handleWindEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.windEnabled = enabled;
+        });
+      }}
       /* Snow & Sunlight */
-      onSnowEnabledChange={handleSnowEnabled}
-      onSunlightEnabledChange={handleSunlightEnabled}
+      onSnowEnabledChange={(enabled) => {
+        handleSnowEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.snowEnabled = enabled;
+        });
+      }}
+      onSunlightEnabledChange={(enabled) => {
+        handleSunlightEnabled(enabled);
+        updateProjectControlPanel((draft) => {
+          draft.toggles.sunlightEnabled = enabled;
+        });
+      }}
       onSunlightStateChange={handleSunlightStateChange}
       /* Routes (itineraries from active project) */
       onRoutesEnabledChange={handleRoutesEnabledChange}

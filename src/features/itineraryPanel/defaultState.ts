@@ -4,6 +4,7 @@ import type {
   RouteProfile,
   TimelineItem,
 } from './types';
+import { createDefaultControlPanelPersistedState } from '../controlPanel/persistedState';
 import { createDefaultExpertState } from './expert/defaults';
 
 /**
@@ -140,5 +141,6 @@ export function createDefaultProject(): ItineraryProject {
     activeItineraryId: it.id,
     activeMode: 'tracage',
     timelineView: 'sheet',
+    controlPanel: createDefaultControlPanelPersistedState(),
   };
 }

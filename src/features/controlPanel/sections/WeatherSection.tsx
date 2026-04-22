@@ -15,6 +15,8 @@ import type {
 
 interface Props {
   state: WeatherState;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onWeatherEnabledChange'];
   onTabChange: ControlPanelHandlers['onWeatherTabChange'];
   onDateChange: ControlPanelHandlers['onWeatherDateChange'];
@@ -93,6 +95,8 @@ function getMonthLabel(iso: string): string {
 
 export function WeatherSection({
   state,
+  open,
+  onOpenChange,
   onEnabledChange,
   onTabChange,
   onDateChange,
@@ -134,6 +138,8 @@ export function WeatherSection({
     <Section
       title="Météo"
       toggle={{ checked: state.enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       {/* Tabs */}
       <div className="rvc-weather__tabs">

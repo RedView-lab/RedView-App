@@ -83,8 +83,19 @@ function AltitudeBandRow({
   );
 }
 
-export function AltitudeSection() {
-  const [enabled, setEnabled] = useState(true);
+interface AltitudeSectionProps {
+  enabled?: boolean;
+  open?: boolean;
+  onEnabledChange?: (enabled: boolean) => void;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function AltitudeSection({
+  enabled = true,
+  open,
+  onEnabledChange,
+  onOpenChange,
+}: AltitudeSectionProps) {
   const [resolution, setResolution] = useState<AltitudeResolution>('0.40 m (LIDAR)');
   const [colorization, setColorization] = useState<AltitudeColorization>('Dégradé');
   const [opacity, setOpacity] = useState(20);
@@ -94,7 +105,9 @@ export function AltitudeSection() {
   return (
     <Section
       title="Altitude"
-      toggle={{ checked: enabled, onChange: setEnabled }}
+      toggle={{ checked: enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Résolution</span>

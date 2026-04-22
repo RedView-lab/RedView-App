@@ -5,13 +5,21 @@ import type { ControlPanelHandlers, ControlPanelState } from '../types';
 
 interface Props {
   basemaps: ControlPanelState['basemaps'];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onBasemapToggle: ControlPanelHandlers['onBasemapToggle'];
   onBasemapAdd: ControlPanelHandlers['onBasemapAdd'];
 }
 
-export function BasemapsSection({ basemaps, onBasemapToggle }: Props) {
+export function BasemapsSection({ basemaps, open, onOpenChange, onBasemapToggle }: Props) {
   return (
-    <Section title="Fonds de carte" icon={<IconMap size={12} />} noTopBorder>
+    <Section
+      title="Fonds de carte"
+      icon={<IconMap size={12} />}
+      noTopBorder
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <div className="rvc-basemaps__list">
         {basemaps.map((bm) => (
           <div

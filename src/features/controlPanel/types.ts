@@ -3,6 +3,11 @@
  * Maps to backend features: map3d, lidar, labels, fitPredictor, slope, weather
  */
 
+import type {
+  ControlPanelSectionKey,
+  ControlPanelSectionsOpenState,
+} from './persistedState';
+
 export type BasemapId = 'satellite' | 'osm' | 'topographic' | string;
 
 export interface Basemap {
@@ -190,6 +195,12 @@ export interface ControlPanelHandlers {
 export interface ControlPanelProps extends ControlPanelHandlers {
   state: ControlPanelState;
   className?: string;
+  sectionsOpen?: ControlPanelSectionsOpenState;
+  onSectionOpenChange?: (section: ControlPanelSectionKey, open: boolean) => void;
+  altitudeEnabled?: boolean;
+  onAltitudeEnabledChange?: (enabled: boolean) => void;
+  sunlightMapExpanded?: boolean;
+  onSunlightMapExpandedChange?: (open: boolean) => void;
   /** Optional px width the panel shell should render at. */
   width?: number;
   /** Mouse-down handler on the drag-to-resize handle (left edge). */

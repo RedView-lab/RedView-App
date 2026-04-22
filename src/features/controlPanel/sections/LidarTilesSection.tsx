@@ -4,15 +4,29 @@ import type { ControlPanelHandlers, ControlPanelState } from '../types';
 
 interface Props {
   tiles: ControlPanelState['lidarTiles'];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onTileToggle: ControlPanelHandlers['onLidarTileToggle'];
   onTileOpen: ControlPanelHandlers['onLidarTileOpen'];
   onTileDelete: ControlPanelHandlers['onLidarTileDelete'];
   onDownload: ControlPanelHandlers['onLidarTileDownload'];
 }
 
-export function LidarTilesSection({ tiles, onTileOpen, onTileDelete, onDownload }: Props) {
+export function LidarTilesSection({
+  tiles,
+  open,
+  onOpenChange,
+  onTileOpen,
+  onTileDelete,
+  onDownload,
+}: Props) {
   return (
-    <Section title={`Tuiles LIDAR ( ${tiles.length} )`} icon={<IconCube size={12} />}>
+    <Section
+      title={`Tuiles LIDAR ( ${tiles.length} )`}
+      icon={<IconCube size={12} />}
+      open={open}
+      onOpenChange={onOpenChange}
+    >
       <div className="rvc-lidar__list">
         {tiles.map((tile) => (
           <div key={tile.id} className="rvc-lidar__row">

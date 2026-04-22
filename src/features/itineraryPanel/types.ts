@@ -6,6 +6,7 @@
  * timeline (Feuille de route) at the bottom.
  */
 import type { ExpertProfileState } from './expert/types';
+import type { ControlPanelPersistedState } from '../controlPanel/persistedState';
 
 export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';
 
@@ -262,6 +263,8 @@ export interface ItineraryProject {
   activeItineraryId: string;
   activeMode: PanelMode;
   timelineView: TimelineView;
+  /** Persisted UI state for the right-side control panel. */
+  controlPanel?: ControlPanelPersistedState;
 }
 
 export interface ItineraryPanelProps {

@@ -20,6 +20,8 @@ import './styles/index.css';
 export function ControlPanel({
   state,
   className,
+  sectionsOpen,
+  onSectionOpenChange,
   onBasemapToggle,
   onBasemapAdd,
   onLidarTileToggle,
@@ -49,8 +51,12 @@ export function ControlPanel({
   onWeatherLayerModeChange,
   onWeatherAddAlert,
   onWindEnabledChange,
+  altitudeEnabled,
+  onAltitudeEnabledChange,
   onSunlightEnabledChange,
   onSunlightStateChange,
+  sunlightMapExpanded,
+  onSunlightMapExpandedChange,
   width,
   onResizeStart,
   isResizing,
@@ -73,12 +79,16 @@ export function ControlPanel({
       <div className="rvc-panel__content">
       <BasemapsSection
         basemaps={state.basemaps}
+        open={sectionsOpen?.basemaps}
+        onOpenChange={(open) => onSectionOpenChange?.('basemaps', open)}
         onBasemapToggle={onBasemapToggle}
         onBasemapAdd={onBasemapAdd}
       />
 
       <LidarTilesSection
         tiles={state.lidarTiles}
+        open={sectionsOpen?.lidarTiles}
+        onOpenChange={(open) => onSectionOpenChange?.('lidarTiles', open)}
         onTileToggle={onLidarTileToggle}
         onTileOpen={onLidarTileOpen}
         onTileDelete={onLidarTileDelete}
@@ -88,6 +98,8 @@ export function ControlPanel({
       <LabelsSection
         enabled={state.labels.enabled}
         state={state.labels.state}
+        open={sectionsOpen?.labels}
+        onOpenChange={(open) => onSectionOpenChange?.('labels', open)}
         onEnabledChange={onLabelsEnabledChange}
         onLabelToggle={onLabelToggle}
       />
@@ -95,6 +107,8 @@ export function ControlPanel({
       <RoutesSection
         enabled={state.routes.enabled}
         items={state.routes.items}
+        open={sectionsOpen?.routes}
+        onOpenChange={(open) => onSectionOpenChange?.('routes', open)}
         onEnabledChange={onRoutesEnabledChange}
         onColorChange={onRouteColorChange}
         onModeChange={onRouteModeChange}
@@ -104,6 +118,8 @@ export function ControlPanel({
 
       <SlopesSection
         enabled={state.slopes.enabled}
+        open={sectionsOpen?.slopes}
+        onOpenChange={(open) => onSectionOpenChange?.('slopes', open)}
         state={{
           resolution: state.slopes.resolution,
           colorization: state.slopes.colorization,
@@ -123,10 +139,17 @@ export function ControlPanel({
         onBandBreakpointChange={onSlopeBandBreakpointChange}
       />
 
-      <AltitudeSection />
+      <AltitudeSection
+        enabled={altitudeEnabled ?? true}
+        open={sectionsOpen?.altitude}
+        onEnabledChange={onAltitudeEnabledChange}
+        onOpenChange={(open) => onSectionOpenChange?.('altitude', open)}
+      />
 
       <WeatherSection
         state={state.weather}
+        open={sectionsOpen?.weather}
+        onOpenChange={(open) => onSectionOpenChange?.('weather', open)}
         onEnabledChange={onWeatherEnabledChange}
         onTabChange={onWeatherTabChange}
         onDateChange={onWeatherDateChange}
@@ -137,10 +160,16 @@ export function ControlPanel({
 
       <WindSection
         enabled={state.wind.enabled}
+        open={sectionsOpen?.wind}
+        onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
         onEnabledChange={onWindEnabledChange}
       />
       <SunlightSection
         state={state.sunlight}
+        open={sectionsOpen?.sunlight}
+        onOpenChange={(open) => onSectionOpenChange?.('sunlight', open)}
+        mapExpanded={sunlightMapExpanded ?? true}
+        onMapExpandedChange={onSunlightMapExpandedChange}
         onEnabledChange={onSunlightEnabledChange}
         onChange={onSunlightStateChange}
       />

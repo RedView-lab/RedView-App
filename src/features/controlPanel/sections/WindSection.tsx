@@ -13,6 +13,8 @@ import {
 
 interface Props {
   enabled: boolean;
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
   onEnabledChange?: (v: boolean) => void;
 }
 
@@ -119,7 +121,7 @@ function WindBandRow({
   );
 }
 
-export function WindSection({ enabled, onEnabledChange }: Props) {
+export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Props) {
   const today = new Date();
   const startDate = new Date(today);
   startDate.setDate(today.getDate() - 2);
@@ -165,6 +167,8 @@ export function WindSection({ enabled, onEnabledChange }: Props) {
     <Section
       title="Vent"
       toggle={{ checked: enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div className="rvc-wind" aria-hidden={!enabled} data-disabled={!enabled}>
         <div className="rvc-wind__slider-row">

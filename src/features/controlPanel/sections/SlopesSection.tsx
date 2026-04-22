@@ -18,6 +18,8 @@ import type {
 interface Props {
   enabled: boolean;
   state: Omit<ControlPanelState['slopes'], 'enabled'>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onSlopesEnabledChange'];
   onResolutionChange: ControlPanelHandlers['onSlopeResolutionChange'];
   onColorizationChange: ControlPanelHandlers['onSlopeColorizationChange'];
@@ -283,6 +285,8 @@ function BandRow({
 export function SlopesSection({
   enabled,
   state,
+  open,
+  onOpenChange,
   onEnabledChange,
   onResolutionChange,
   onColorizationChange,
@@ -299,6 +303,8 @@ export function SlopesSection({
     <Section
       title="Pentes"
       toggle={{ checked: enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Résolution</span>

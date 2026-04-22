@@ -5,6 +5,8 @@ import type { ControlPanelHandlers, ControlPanelState, LabelKey } from '../types
 interface Props {
   enabled: boolean;
   state: ControlPanelState['labels']['state'];
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onLabelsEnabledChange'];
   onLabelToggle: ControlPanelHandlers['onLabelToggle'];
 }
@@ -22,11 +24,20 @@ const COLUMN_B: { key: LabelKey; label: string }[] = [
   { key: 'waterBody', label: 'Water body' },
 ];
 
-export function LabelsSection({ enabled, state, onEnabledChange, onLabelToggle }: Props) {
+export function LabelsSection({
+  enabled,
+  state,
+  open,
+  onOpenChange,
+  onEnabledChange,
+  onLabelToggle,
+}: Props) {
   return (
     <Section
       title="Étiquettes"
       toggle={{ checked: enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div
         className="rvc-labels__grid"

@@ -13,6 +13,10 @@ import type { ControlPanelHandlers, SunlightState } from '../types';
 
 interface Props {
   state: SunlightState;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  mapExpanded?: boolean;
+  onMapExpandedChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onSunlightEnabledChange'];
   onChange: ControlPanelHandlers['onSunlightStateChange'];
 }
@@ -50,11 +54,18 @@ function formatHexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
-export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
+export function SunlightSection({
+  state,
+  open,
+  onOpenChange,
+  mapExpanded = true,
+  onMapExpandedChange,
+  onEnabledChange,
+  onChange,
+}: Props) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
-  const [sunlightMapExpanded, setSunlightMapExpanded] = useState(true);
   const [scaleSetting, setScaleSetting] = useState<SunlightScaleSetting>('4 couleurs');
   const [sunlightBands, setSunlightBands] = useState<SunlightBand[]>(DEFAULT_SUNLIGHT_BANDS);
   const [trajectoryEnabled, setTrajectoryEnabled] = useState(true);
@@ -113,6 +124,8 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
     <Section
       title="Ensoleillement"
       toggle={{ checked: state.enabled, onChange: onEnabledChange }}
+      open={open}
+      onOpenChange={onOpenChange}
     >
       <div className="rvc-sunlight">
         <div className="rvc-sunlight__option-row">
@@ -203,22 +216,22 @@ export function SunlightSection({ state, onEnabledChange, onChange }: Props) {
           <button
             type="button"
             className="rvc-sunlight__toggle-label"
-            onClick={() => setSunlightMapExpanded((value) => !value)}
-            aria-expanded={sunlightMapExpanded}
+            onClick={() => onMapExpandedChange?.(!mapExpanded)}
+            aria-expanded={mapExpanded}
           >
             <span className="rvc-sunlight__toggle-text">Afficher la carte d’ensoleillement</span>
           </button>
           <button
             type="button"
-            className={`rvc-sunlight__toggle-chevron${sunlightMapExpanded ? ' is-open' : ''}`}
-            onClick={() => setSunlightMapExpanded((value) => !value)}
-            aria-label={sunlightMapExpanded ? 'Réduire la carte d’ensoleillement' : 'Développer la carte d’ensoleillement'}
+            className={`rvc-sunlight__toggle-chevron${mapExpanded ? ' is-open' : ''}`}
+            onClick={() => onMapExpandedChange?.(!mapExpanded)}
+            aria-label={mapExpanded ? 'Réduire la carte d’ensoleillement' : 'Développer la carte d’ensoleillement'}
           >
             <IconChevronDown size={16} />
           </button>
         </div>
 
-        {state.shadowEnabled && sunlightMapExpanded ? (
+        {state.shadowEnabled && mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
             <div className="rvc-sunlight__row rvc-sunlight__row--split">
               <span className="rvc-sunlight__row-label">Échelle</span>
