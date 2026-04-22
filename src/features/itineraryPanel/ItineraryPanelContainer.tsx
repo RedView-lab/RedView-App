@@ -1141,11 +1141,19 @@ function buildRouteGpxFile(
 ): File {
   const routeName = escapeXml(itinerary.gpxRoute?.name ?? itinerary.name);
   const points = itinerary.gpxRoute?.points ?? [];
+  // CRITICAL: include <ele> for every point. Without elevation the WASM
+  // predictor sees a flat 0% gradient profile, which collapses speed and
+  // power into matching constant lines (no descents, no climbs).
   const trackPoints = points
-    .map(
-      (point) =>
-        `      <trkpt lat="${point.lat}" lon="${point.lon}"></trkpt>`,
-    )
+    .map((point) => {
+      const ele = Number.isFinite(point.elevationM as number)
+        ? (point.elevationM as number)
+        : null;
+      if (ele === null) {
+        return `      <trkpt lat="${point.lat}" lon="${point.lon}"></trkpt>`;
+      }
+      return `      <trkpt lat="${point.lat}" lon="${point.lon}"><ele>${ele.toFixed(2)}</ele></trkpt>`;
+    })
     .join('\n');
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
