@@ -22,6 +22,14 @@
  */
 import type { BrouterRoute } from './brouter';
 
+export interface RoutePointInput {
+  lat: number;
+  lon: number;
+  distanceM?: number;
+  elevationM?: number | null;
+  gradientPct?: number | null;
+}
+
 export interface RouteProfilePoint {
   lat: number;
   lon: number;
@@ -40,6 +48,27 @@ export interface RouteMetrics {
   tarmacPercent: number;
   /** Off-road share (0–100), of the segments we could classify. */
   offroadPercent: number;
+}
+
+export interface RouteElevationMetrics {
+  distanceM: number;
+  ascentM: number;
+  descentM: number;
+  avgSlopePercent: number;
+}
+
+export interface RouteSurfaceMetrics {
+  distanceM: number;
+  tarmacPercent: number;
+  offroadPercent: number;
+}
+
+interface ElevationSample {
+  lat: number;
+  lon: number;
+  ele: number;
+  distanceM: number;
+  gradientPct?: number | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -110,6 +139,23 @@ const OFFROAD_HIGHWAYS = new Set([
 
 type Surface = 'tarmac' | 'offroad' | 'unknown';
 
+const EARTH_RADIUS_M = 6_371_008.8;
+
+function haversineM(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+}
+
 function parseWayTags(tagsStr: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!tagsStr) return out;
@@ -153,6 +199,148 @@ interface BrouterFeatureProps {
   [k: string]: unknown;
 }
 
+function buildCumulativeDistances(points: RoutePointInput[]): number[] {
+  const distances = new Array<number>(points.length).fill(0);
+
+  for (let i = 1; i < points.length; i++) {
+    const nextDistance = points[i].distanceM;
+    if (
+      Number.isFinite(nextDistance) &&
+      (nextDistance as number) >= distances[i - 1]
+    ) {
+      distances[i] = nextDistance as number;
+      continue;
+    }
+    distances[i] = distances[i - 1] + haversineM(points[i - 1], points[i]);
+  }
+
+  return distances;
+}
+
+function buildElevationSamplesFromPoints(
+  points: RoutePointInput[],
+): { samples: ElevationSample[]; totalDistanceM: number } {
+  if (points.length === 0) {
+    return { samples: [], totalDistanceM: 0 };
+  }
+
+  const cumulativeDistances = buildCumulativeDistances(points);
+  const samples: ElevationSample[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const point = points[i];
+    const elevationM = Number(point.elevationM);
+    if (!Number.isFinite(elevationM)) continue;
+    samples.push({
+      lat: point.lat,
+      lon: point.lon,
+      ele: elevationM,
+      distanceM: cumulativeDistances[i],
+      gradientPct: point.gradientPct,
+    });
+  }
+
+  return {
+    samples,
+    totalDistanceM: cumulativeDistances[cumulativeDistances.length - 1] ?? 0,
+  };
+}
+
+function smoothElevationValues(values: number[], windowSize = 5): number[] {
+  const n = values.length;
+  const out = new Array<number>(n);
+  const half = Math.floor(windowSize / 2);
+  for (let i = 0; i < n; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(n - 1, i + half);
+    let sum = 0;
+    for (let j = lo; j <= hi; j++) sum += values[j];
+    out[i] = sum / (hi - lo + 1);
+  }
+  return out;
+}
+
+function computeAscentDescentFromElevations(
+  elevations: number[],
+  thresholdM = 1,
+): { ascent: number; descent: number } {
+  if (elevations.length < 2) return { ascent: 0, descent: 0 };
+  let ascent = 0;
+  let descent = 0;
+  let pivot = elevations[0];
+  for (let i = 1; i < elevations.length; i++) {
+    const delta = elevations[i] - pivot;
+    if (Math.abs(delta) < thresholdM) continue;
+    if (delta > 0) ascent += delta;
+    else descent += -delta;
+    pivot = elevations[i];
+  }
+  return { ascent, descent };
+}
+
+function buildRouteProfileFromSamples(samples: ElevationSample[]): RouteProfilePoint[] {
+  const gradientBase = smoothElevationValues(
+    samples.map((sample) => sample.ele),
+    3,
+  );
+
+  return samples.map((sample, index) => {
+    const prevIndex = index > 0 ? index - 1 : index;
+    const nextIndex = index < samples.length - 1 ? index + 1 : index;
+    const spanM = samples[nextIndex].distanceM - samples[prevIndex].distanceM;
+    const gradientPct = Number.isFinite(sample.gradientPct)
+      ? (sample.gradientPct as number)
+      : spanM > 0.5
+        ? ((gradientBase[nextIndex] - gradientBase[prevIndex]) / spanM) * 100
+        : 0;
+
+    return {
+      lat: sample.lat,
+      lon: sample.lon,
+      distanceM: sample.distanceM,
+      elevationM: sample.ele,
+      gradientPct,
+    };
+  });
+}
+
+function interpolateMissingElevations(
+  elevations: Array<number | null>,
+): number[] | null {
+  const knownIndices = elevations.flatMap((value, index) =>
+    value != null && Number.isFinite(value) ? [index] : [],
+  );
+  if (knownIndices.length < 2) return null;
+
+  const filled = elevations.slice();
+  const firstKnown = knownIndices[0];
+  const lastKnown = knownIndices[knownIndices.length - 1];
+
+  for (let i = 0; i < firstKnown; i++) {
+    filled[i] = filled[firstKnown];
+  }
+  for (let i = lastKnown + 1; i < filled.length; i++) {
+    filled[i] = filled[lastKnown];
+  }
+
+  for (let i = 0; i < knownIndices.length - 1; i++) {
+    const startIndex = knownIndices[i];
+    const endIndex = knownIndices[i + 1];
+    const startValue = filled[startIndex] as number;
+    const endValue = filled[endIndex] as number;
+    const span = endIndex - startIndex;
+    for (let j = startIndex + 1; j < endIndex; j++) {
+      const t = (j - startIndex) / span;
+      filled[j] = startValue + (endValue - startValue) * t;
+    }
+  }
+
+  if (filled.some((value) => value == null || !Number.isFinite(value))) {
+    return null;
+  }
+  return filled as number[];
+}
+
 function parseMessages(route: BrouterRoute): ParsedRow[] {
   const feat = route.raw.features?.[0];
   const props = (feat?.properties ?? {}) as BrouterFeatureProps;
@@ -188,23 +376,77 @@ function parseMessages(route: BrouterRoute): ParsedRow[] {
   return rows;
 }
 
+export function extractRouteProfileFromPoints(
+  points: RoutePointInput[],
+): RouteProfilePoint[] | null {
+  const { samples } = buildElevationSamplesFromPoints(points);
+  if (samples.length < 2) return null;
+  return buildRouteProfileFromSamples(samples);
+}
+
+export function computeRouteElevationMetrics(
+  points: RoutePointInput[],
+): RouteElevationMetrics | null {
+  const { samples, totalDistanceM } = buildElevationSamplesFromPoints(points);
+  if (samples.length < 2) return null;
+
+  const smoothedElevations = smoothElevationValues(
+    samples.map((sample) => sample.ele),
+    5,
+  );
+  const { ascent, descent } = computeAscentDescentFromElevations(
+    smoothedElevations,
+    1,
+  );
+
+  return {
+    distanceM: totalDistanceM,
+    ascentM: ascent,
+    descentM: descent,
+    avgSlopePercent: totalDistanceM > 0 ? (ascent / totalDistanceM) * 100 : 0,
+  };
+}
+
+export function sampleRouteProfileWithTerrain(
+  points: RoutePointInput[],
+  queryEle: (lng: number, lat: number) => number | null | undefined,
+  minCoverage = 0.6,
+): RouteProfilePoint[] | null {
+  if (points.length < 2) return null;
+
+  let coverage = 0;
+  const sampledElevations = points.map((point) => {
+    const elevationM = queryEle(point.lon, point.lat);
+    if (elevationM != null && Number.isFinite(elevationM)) {
+      coverage++;
+      return elevationM;
+    }
+    return null;
+  });
+
+  if (coverage / points.length < minCoverage) return null;
+
+  const filledElevations = interpolateMissingElevations(sampledElevations);
+  if (!filledElevations) return null;
+
+  return extractRouteProfileFromPoints(
+    points.map((point, index) => ({
+      ...point,
+      elevationM: filledElevations[index],
+    })),
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* Elevation smoothing & ascent/descent                                */
 /* ------------------------------------------------------------------ */
 
 /** Centred moving-average smoothing — kills DEM quantisation noise. */
 function smoothElevations(rows: ParsedRow[], windowSize = 5): number[] {
-  const n = rows.length;
-  const out = new Array<number>(n);
-  const half = Math.floor(windowSize / 2);
-  for (let i = 0; i < n; i++) {
-    const lo = Math.max(0, i - half);
-    const hi = Math.min(n - 1, i + half);
-    let sum = 0;
-    for (let j = lo; j <= hi; j++) sum += rows[j].ele;
-    out[i] = sum / (hi - lo + 1);
-  }
-  return out;
+  return smoothElevationValues(
+    rows.map((row) => row.ele),
+    windowSize,
+  );
 }
 
 /**
@@ -215,19 +457,7 @@ function computeAscentDescent(
   eles: number[],
   thresholdM = 1,
 ): { ascent: number; descent: number } {
-  if (eles.length < 2) return { ascent: 0, descent: 0 };
-  let ascent = 0;
-  let descent = 0;
-  let pivot = eles[0];
-  for (let i = 1; i < eles.length; i++) {
-    const delta = eles[i] - pivot;
-    if (Math.abs(delta) >= thresholdM) {
-      if (delta > 0) ascent += delta;
-      else descent += -delta;
-      pivot = eles[i];
-    }
-  }
-  return { ascent, descent };
+  return computeAscentDescentFromElevations(eles, thresholdM);
 }
 
 function aggregate(rows: ParsedRow[], totalDistFallback: number): RouteMetrics {
@@ -305,6 +535,31 @@ export function computeRouteMetricsFromBrouter(
   const rows = parseMessages(route);
   if (rows.length < 2) return null;
   return aggregate(rows, route.distanceM);
+}
+
+export function computeRouteSurfaceMetricsFromBrouter(
+  route: BrouterRoute,
+): RouteSurfaceMetrics | null {
+  const rows = parseMessages(route);
+  if (rows.length < 2) return null;
+
+  let totalDist = 0;
+  let tarmacDist = 0;
+  let offroadDist = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const d = rows[i].segDistM;
+    totalDist += d;
+    if (rows[i].surface === 'tarmac') tarmacDist += d;
+    else if (rows[i].surface === 'offroad') offroadDist += d;
+  }
+  if (totalDist <= 0) totalDist = route.distanceM;
+
+  const classifiedDist = tarmacDist + offroadDist;
+  return {
+    distanceM: totalDist,
+    tarmacPercent: classifiedDist > 0 ? (tarmacDist / classifiedDist) * 100 : 0,
+    offroadPercent: classifiedDist > 0 ? (offroadDist / classifiedDist) * 100 : 0,
+  };
 }
 
 export function extractRouteProfileFromBrouter(

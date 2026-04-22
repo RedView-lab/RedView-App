@@ -12,7 +12,7 @@ import {
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
 } from './defaultState';
-import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
+import { parseGpxFile, routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { createFitPredictionEngine } from '@/features/fitPredictor/engine/api';
 import {
   type PredictionConfig,
@@ -41,10 +41,10 @@ import {
   fitToRoute,
 } from './lib/route-layer';
 import {
-  computeRouteMetricsFromBrouter,
-  extractRouteProfileFromBrouter,
-  refineMetricsWithTerrain,
-  refineRouteProfileWithTerrain,
+  computeRouteElevationMetrics,
+  computeRouteSurfaceMetricsFromBrouter,
+  extractRouteProfileFromPoints,
+  sampleRouteProfileWithTerrain,
 } from './lib/route-metrics';
 import type {
   Itinerary,
@@ -484,6 +484,19 @@ export function ItineraryPanelContainer({
       return;
     }
 
+    if (!hasUsableRouteElevation(itinerary.gpxRoute.points)) {
+      updateFitRuntime(itinerary.id, (current) => ({
+        ...current,
+        status: 'error',
+        error:
+          itinerary.gpxRoute?.source === 'brouter'
+            ? 'Le profil altimetrique du trace BRouter n\'est pas encore pret. Attendez le chargement du terrain puis relancez le calcul.'
+            : 'Le GPX actif ne contient pas assez d\'altitudes exploitables pour la prediction.',
+        updatedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
     const engine = fitEngineRef.current;
     if (!engine) {
       updateFitRuntime(itinerary.id, (current) => ({
@@ -747,57 +760,55 @@ export function ItineraryPanelContainer({
         // AND store the BRouter polyline as `gpxRoute` so the POI corridor
         // search has a route to project onto (the "Rechercher" button stays
         // disabled until `gpxRoute` is set).
-        const distanceKm = Math.round(route.distanceM / 100) / 10;
-        // Compute the rich metrics from the BRouter `messages` array
-        // (per-vertex elevation + surface tags). Falls back to BRouter's
-        // own `filtered ascend` totals when messages are unavailable.
-        const detailed = computeRouteMetricsFromBrouter(route);
-        const ascentM = detailed
-          ? Math.max(0, Math.round(detailed.ascentM))
-          : Math.max(0, Math.round(route.ascentM));
-        const descentM = detailed
-          ? Math.max(0, Math.round(detailed.descentM))
-          : Math.max(0, Math.round(route.descentM));
-        const avgSlopePercent = detailed
-          ? Math.round(detailed.avgSlopePercent * 10) / 10
+        const geometryPoints = toGeometryRoutePoints(route.coordinates);
+        const queryEle = (lng: number, lat: number) => {
+          try {
+            return map.queryTerrainElevation?.([lng, lat]) ?? null;
+          } catch {
+            return null;
+          }
+        };
+        const terrainProfile = sampleRouteProfileWithTerrain(
+          geometryPoints,
+          queryEle,
+        );
+        const terrainMetrics = terrainProfile
+          ? computeRouteElevationMetrics(terrainProfile)
+          : null;
+        const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
+        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = terrainProfile
+          ? toStoredRoutePoints(terrainProfile)
+          : geometryPoints;
+        const distanceM = route.distanceM > 0 ? route.distanceM : routeLengthM(routePoints);
+        const distanceKm = Math.round(distanceM / 100) / 10;
+        const ascentM = terrainMetrics
+          ? Math.max(0, Math.round(terrainMetrics.ascentM))
           : undefined;
-        const tarmacPercent = detailed
-          ? Math.round(detailed.tarmacPercent)
+        const descentM = terrainMetrics
+          ? Math.max(0, Math.round(terrainMetrics.descentM))
           : undefined;
-        const offroadPercent = detailed
-          ? Math.round(detailed.offroadPercent)
+        const avgSlopePercent = terrainMetrics
+          ? Math.round(terrainMetrics.avgSlopePercent * 10) / 10
+          : undefined;
+        const tarmacPercent = surfaceMetrics
+          ? Math.round(surfaceMetrics.tarmacPercent)
+          : undefined;
+        const offroadPercent = surfaceMetrics
+          ? Math.round(surfaceMetrics.offroadPercent)
           : undefined;
         console.log(
-          '[BRouter] metrics:',
+          '[BRouter] stored metrics:',
           'ascent=', ascentM, 'm',
           '| descent=', descentM, 'm',
           '| avg slope=', avgSlopePercent, '%',
           '| tarmac=', tarmacPercent, '% off-road=', offroadPercent, '%',
         );
-        const routeProfile = extractRouteProfileFromBrouter(route);
-        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
-          ? routeProfile.map((point) => ({
-              lat: point.lat,
-              lon: point.lon,
-              distanceM: point.distanceM,
-              elevationM: point.elevationM,
-              gradientPct: point.gradientPct,
-            }))
-          : route.coordinates.map((c: [number, number]) => ({
-              lat: c[1],
-              lon: c[0],
-            }));
         setProject((p) => {
           const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
           if (!it) return p;
           const endRow = it.timeline.find((r) => r.kind === 'end');
           const endAlreadyOk = endRow?.distanceKm === distanceKm;
-          const gpxAlreadyOk =
-            it.gpxRoute?.points.length === routePoints.length &&
-            it.gpxRoute?.points[0]?.lat === routePoints[0]?.lat &&
-            it.gpxRoute?.points[0]?.lon === routePoints[0]?.lon &&
-            (it.gpxRoute?.points[0]?.elevationM ?? null) ===
-              (routePoints[0]?.elevationM ?? null);
+          const gpxAlreadyOk = routePointsEqual(it.gpxRoute?.points, routePoints);
           const metricsAlreadyOk =
             it.metrics?.distanceKm === distanceKm &&
             it.metrics?.ascentM === ascentM &&
@@ -835,81 +846,66 @@ export function ItineraryPanelContainer({
           };
         });
 
-        // Schedule a refinement pass once the terrain tiles around the
-        // route have had time to load. Mapbox's terrain DEM is ~10 m at
-        // z14 (vs. BRouter's ~30 m SRTM); when the user has downloaded a
-        // LIDAR tile this drops to 0.4 m. We sample every BRouter vertex
-        // and recompute ascent/descent/slope.
-        if (detailed) {
-          const refineTimer = window.setTimeout(() => {
-            const queryEle = (lng: number, lat: number) => {
-              try {
-                return map.queryTerrainElevation?.([lng, lat]) ?? null;
-              } catch {
-                return null;
-              }
-            };
-            const refined = refineMetricsWithTerrain(route, queryEle);
-            const refinedProfile = refineRouteProfileWithTerrain(route, queryEle);
-            if (!refined) return;
-            const rAscent = Math.max(0, Math.round(refined.ascentM));
-            const rDescent = Math.max(0, Math.round(refined.descentM));
-            const rAvg = Math.round(refined.avgSlopePercent * 10) / 10;
-            console.log(
-              '[BRouter] terrain-refined metrics:',
-              'ascent=', rAscent, 'm',
-              '| descent=', rDescent, 'm',
-              '| avg slope=', rAvg, '%',
-            );
-            setProject((p) => {
-              const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
-              if (!it) return p;
-              const refinedPoints = refinedProfile?.map((point) => ({
-                lat: point.lat,
-                lon: point.lon,
-                distanceM: point.distanceM,
-                elevationM: point.elevationM,
-                gradientPct: point.gradientPct,
-              }));
-              if (
-                it.metrics?.ascentM === rAscent &&
-                it.metrics?.descentM === rDescent &&
-                it.metrics?.avgSlopePercent === rAvg &&
-                (!refinedPoints ||
-                  ((it.gpxRoute?.points[0]?.elevationM ?? null) ===
-                    (refinedPoints[0]?.elevationM ?? null) &&
-                    it.gpxRoute?.points.length === refinedPoints.length))
-              )
-                return p;
-              return {
-                ...p,
-                itineraries: p.itineraries.map((curr) =>
-                  curr.id === p.activeItineraryId
-                    ? {
-                        ...curr,
-                        gpxRoute: refinedPoints
-                          ? {
-                              name: curr.gpxRoute?.name ?? null,
-                              points: refinedPoints,
-                              source: 'brouter',
-                            }
-                          : curr.gpxRoute,
-                        metrics: {
-                          ...curr.metrics,
-                          ascentM: rAscent,
-                          descentM: rDescent,
-                          avgSlopePercent: rAvg,
-                        },
-                      }
-                    : curr,
-                ),
-              };
-            });
-          }, 1500);
-          ctrl.signal.addEventListener('abort', () =>
-            window.clearTimeout(refineTimer),
+        const refreshTerrainProfile = () => {
+          const refreshedProfile = sampleRouteProfileWithTerrain(
+            geometryPoints,
+            queryEle,
           );
-        }
+          if (!refreshedProfile) return;
+          const refreshedMetrics = computeRouteElevationMetrics(refreshedProfile);
+          if (!refreshedMetrics) return;
+
+          const refinedPoints = toStoredRoutePoints(refreshedProfile);
+          const rAscent = Math.max(0, Math.round(refreshedMetrics.ascentM));
+          const rDescent = Math.max(0, Math.round(refreshedMetrics.descentM));
+          const rAvg = Math.round(refreshedMetrics.avgSlopePercent * 10) / 10;
+          console.log(
+            '[BRouter] terrain metrics:',
+            'ascent=', rAscent, 'm',
+            '| descent=', rDescent, 'm',
+            '| avg slope=', rAvg, '%',
+          );
+          setProject((p) => {
+            const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
+            if (!it) return p;
+            if (
+              it.metrics?.ascentM === rAscent &&
+              it.metrics?.descentM === rDescent &&
+              it.metrics?.avgSlopePercent === rAvg &&
+              routePointsEqual(it.gpxRoute?.points, refinedPoints)
+            ) {
+              return p;
+            }
+            return {
+              ...p,
+              itineraries: p.itineraries.map((curr) =>
+                curr.id === p.activeItineraryId
+                  ? {
+                      ...curr,
+                      gpxRoute: {
+                        name: curr.gpxRoute?.name ?? null,
+                        points: refinedPoints,
+                        source: 'brouter',
+                      },
+                      metrics: {
+                        ...curr.metrics,
+                        ascentM: rAscent,
+                        descentM: rDescent,
+                        avgSlopePercent: rAvg,
+                      },
+                    }
+                  : curr,
+              ),
+            };
+          });
+        };
+
+        const refineTimers = [400, 1500, 4000].map((delayMs) =>
+          window.setTimeout(refreshTerrainProfile, delayMs),
+        );
+        ctrl.signal.addEventListener('abort', () => {
+          for (const timer of refineTimers) window.clearTimeout(timer);
+        });
       })
       .catch((e: unknown) => {
         if ((e as { name?: string }).name === 'AbortError') return;
@@ -952,9 +948,24 @@ export function ItineraryPanelContainer({
       onOpenAddItinerary={() => setAddDialogOpen(true)}
       onAddItineraryFromGpx={async (file) => {
         const route = await parseGpxFile(file);
+        const storedPoints = normalizeImportedRoutePoints(route.points);
+        const elevationMetrics = computeRouteElevationMetrics(storedPoints);
+        const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
         addItinerary({
           name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-          gpxRoute: { name: route.name, points: route.points },
+          gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
+          metrics: {
+            distanceKm,
+            ascentM: elevationMetrics
+              ? Math.max(0, Math.round(elevationMetrics.ascentM))
+              : undefined,
+            descentM: elevationMetrics
+              ? Math.max(0, Math.round(elevationMetrics.descentM))
+              : undefined,
+            avgSlopePercent: elevationMetrics
+              ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+              : undefined,
+          },
         });
       }}
       onRemoveItinerary={(id) =>
@@ -1086,9 +1097,24 @@ export function ItineraryPanelContainer({
         onPickScratch={() => addItinerary()}
         onPickGpx={async (file) => {
           const route = await parseGpxFile(file);
+          const storedPoints = normalizeImportedRoutePoints(route.points);
+          const elevationMetrics = computeRouteElevationMetrics(storedPoints);
+          const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
           const id = addItinerary({
             name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-            gpxRoute: { name: route.name, points: route.points },
+            gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
+            metrics: {
+              distanceKm,
+              ascentM: elevationMetrics
+                ? Math.max(0, Math.round(elevationMetrics.ascentM))
+                : undefined,
+              descentM: elevationMetrics
+                ? Math.max(0, Math.round(elevationMetrics.descentM))
+                : undefined,
+              avgSlopePercent: elevationMetrics
+                ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+                : undefined,
+            },
           });
           if (id) setPendingCorridorFor(id);
         }}
@@ -1170,6 +1196,81 @@ function buildRouteGpxFile(
   return new File([xml], `${slugifyFilename(itinerary.name || 'itinerary')}.gpx`, {
     type: 'application/gpx+xml',
   });
+}
+
+function toStoredRoutePoints(
+  profile: Array<{
+    lat: number;
+    lon: number;
+    distanceM: number;
+    elevationM: number;
+    gradientPct: number;
+  }>,
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  return profile.map((point) => ({
+    lat: point.lat,
+    lon: point.lon,
+    distanceM: point.distanceM,
+    elevationM: point.elevationM,
+    gradientPct: point.gradientPct,
+  }));
+}
+
+function toGeometryRoutePoints(
+  coordinates: [number, number][],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  return coordinates.map((coordinate) => ({
+    lat: coordinate[1],
+    lon: coordinate[0],
+  }));
+}
+
+function normalizeImportedRoutePoints(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  const profile = extractRouteProfileFromPoints(points);
+  if (!profile || profile.length !== points.length) return points;
+  return toStoredRoutePoints(profile);
+}
+
+function hasUsableRouteElevation(
+  points: NonNullable<Itinerary['gpxRoute']>['points'] | null | undefined,
+): boolean {
+  if (!points) return false;
+  let count = 0;
+  for (const point of points) {
+    if (Number.isFinite(point.elevationM)) count++;
+    if (count >= 2) return true;
+  }
+  return false;
+}
+
+function routePointsEqual(
+  left: NonNullable<Itinerary['gpxRoute']>['points'] | null | undefined,
+  right: NonNullable<Itinerary['gpxRoute']>['points'] | null | undefined,
+): boolean {
+  return routePointsSignature(left) === routePointsSignature(right);
+}
+
+function routePointsSignature(
+  points: NonNullable<Itinerary['gpxRoute']>['points'] | null | undefined,
+): string {
+  if (!points || points.length === 0) return 'empty';
+  const indices = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]));
+  return [
+    String(points.length),
+    ...indices.map((index) => {
+      const point = points[index];
+      return [
+        index,
+        point.lat.toFixed(6),
+        point.lon.toFixed(6),
+        Number.isFinite(point.distanceM) ? (point.distanceM as number).toFixed(1) : 'null',
+        Number.isFinite(point.elevationM) ? (point.elevationM as number).toFixed(2) : 'null',
+        Number.isFinite(point.gradientPct) ? (point.gradientPct as number).toFixed(3) : 'null',
+      ].join(':');
+    }),
+  ].join('|');
 }
 
 function parseTimeToHourDecimal(value: string): number | null {
