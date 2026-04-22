@@ -34,6 +34,7 @@ import { useLabels } from '@/features/labels/hooks/useLabels';
 import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
+import { useWeatherOverlay } from '@/features/weather/overlay/useWeatherOverlay';
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
@@ -340,6 +341,7 @@ export function ControlPanelContainer({
       enabled: initialControlPanel.toggles.weatherEnabled,
     }),
   );
+  useWeatherOverlay(isMapLoaded ? map : null, isMapLoaded, weatherState);
 
   // ── Wind ───────────────────────────────────────────────────────────
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
