@@ -475,6 +475,20 @@ export function ItineraryPanelContainer({
         }));
       })
       .then((result: PredictionResult) => {
+        setProject((prev) => ({
+          ...prev,
+          itineraries: prev.itineraries.map((curr) =>
+            curr.id === itineraryId
+              ? {
+                  ...curr,
+                  metrics: {
+                    ...curr.metrics,
+                    durationSec: result.total_time_s,
+                  },
+                }
+              : curr,
+          ),
+        }));
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
           predictionResult: result,
@@ -1018,6 +1032,10 @@ function buildPredictionConfigFromRhythm(rhythm: RhythmState): PredictionConfig 
   const config: PredictionConfig = {
     pacing_factor: 1,
   };
+
+  if (rhythm.gender && rhythm.gender !== 'default') {
+    config.gender = rhythm.gender;
+  }
 
   if (typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
     config.ftp_w = rhythm.ftp;

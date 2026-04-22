@@ -98,11 +98,15 @@ export interface PauseIntervalRow {
   intervalMin: number;
 }
 
+export type RhythmGender = 'default' | 'male' | 'female';
+
 export interface RhythmState {
   /** ISO date (yyyy-mm-dd) or null when empty. */
   startDate: string | null;
   /** 24h time (HH:MM) or null when empty. */
   startTime: string | null;
+  /** Prediction engine gender override. `default` lets the backend decide. */
+  gender?: RhythmGender;
   usePastActivities: boolean;
   ftp: number | null;
   systemWeightKg: number | null;

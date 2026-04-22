@@ -13,7 +13,7 @@ import {
   IconPlus,
   IconRepeat,
 } from '../components/icons';
-import type { PauseIntervalRow, RhythmState } from '../types';
+import type { PauseIntervalRow, RhythmGender, RhythmState } from '../types';
 
 interface RythmeSectionProps {
   rhythm: RhythmState;
@@ -45,6 +45,41 @@ function ChipInput({
     </div>
   );
 }
+
+function ChipSelect({
+  value,
+  onChange,
+  ariaLabel,
+  options,
+}: {
+  value: string;
+  onChange?: (v: string) => void;
+  ariaLabel?: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+}) {
+  return (
+    <div className="rvi-chip-input">
+      <select
+        className="rvi-chip-input__native"
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+        aria-label={ariaLabel}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+const GENDER_OPTIONS: ReadonlyArray<{ value: RhythmGender; label: string }> = [
+  { value: 'default', label: 'Défaut' },
+  { value: 'male', label: 'Homme' },
+  { value: 'female', label: 'Femme' },
+];
 
 export function RythmeSection({
   rhythm,
@@ -215,6 +250,18 @@ export function RythmeSection({
             />
           }
         />
+      </div>
+
+      <div className="rvi-row">
+        <div className="rvi-lfield">
+          <span className="rvi-lfield__label">Sexe :</span>
+          <ChipSelect
+            value={rhythm.gender ?? 'default'}
+            onChange={(value) => onChange?.('gender', value as RhythmGender)}
+            ariaLabel="Sexe pour la prédiction"
+            options={GENDER_OPTIONS}
+          />
+        </div>
       </div>
 
       <div className="rvi-divider" />

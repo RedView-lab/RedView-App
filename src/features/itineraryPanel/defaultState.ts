@@ -81,6 +81,7 @@ export function createDefaultItinerary(
     rhythm: {
       startDate: null,
       startTime: null,
+      gender: 'default',
       usePastActivities: false,
       ftp: null,
       systemWeightKg: null,
