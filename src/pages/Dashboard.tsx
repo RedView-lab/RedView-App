@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { ControlPanelContainer } from '@/features/controlPanel';
@@ -24,10 +24,7 @@ function clampNumber(value: number, min: number, max: number) {
 }
 
 const PANEL_WIDTH_KEY = 'rvc-panel-width';
-// The right dock UI is authored for a 300 px content width. Allowing the
-// resize handle below that point introduces horizontal overflow in the panel
-// body on Windows, which surfaces as the bottom scrollbar shown in the dock.
-const PANEL_WIDTH_MIN = 300;
+const PANEL_WIDTH_MIN_FALLBACK = 260;
 const PANEL_WIDTH_MAX = 560;
 const PANEL_WIDTH_DEFAULT = 300;
 const PANEL_PADDING = 12;
@@ -91,10 +88,42 @@ function readStoredWidth(): number {
     if (!raw) return PANEL_WIDTH_DEFAULT;
     const n = parseInt(raw, 10);
     if (!Number.isFinite(n)) return PANEL_WIDTH_DEFAULT;
-    return Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, n));
+    return Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN_FALLBACK, n));
   } catch {
     return PANEL_WIDTH_DEFAULT;
   }
+}
+
+function clampPanelWidth(value: number, minWidth: number) {
+  return Math.min(PANEL_WIDTH_MAX, Math.max(minWidth, value));
+}
+
+function measurePanelMinWidth(node: HTMLDivElement | null): number | null {
+  if (!node || typeof document === 'undefined') return null;
+
+  const panel = node.firstElementChild;
+  if (!(panel instanceof HTMLElement)) return null;
+
+  const clone = panel.cloneNode(true);
+  if (!(clone instanceof HTMLElement)) return null;
+
+  clone.removeAttribute('style');
+  clone.style.position = 'fixed';
+  clone.style.left = '-10000px';
+  clone.style.top = '0';
+  clone.style.width = 'max-content';
+  clone.style.maxWidth = 'none';
+  clone.style.minWidth = '0';
+  clone.style.height = 'auto';
+  clone.style.visibility = 'hidden';
+  clone.style.pointerEvents = 'none';
+  clone.style.overflow = 'visible';
+
+  document.body.appendChild(clone);
+  const width = Math.ceil(clone.getBoundingClientRect().width);
+  clone.remove();
+
+  return Number.isFinite(width) && width > 0 ? width : null;
 }
 
 function formatDisplayName(email: string): string {
@@ -216,10 +245,12 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     readStoredCenterPanelHeight(),
   );
   const [exporterPanelHeight, setExporterPanelHeight] = useState(0);
+  const [panelMinWidth, setPanelMinWidth] = useState(PANEL_WIDTH_DEFAULT);
   const [viewport, setViewport] = useState(() => ({
     w: window.innerWidth,
     h: window.innerHeight,
   }));
+  const rightPrimaryPanelHostRef = useRef<HTMLDivElement | null>(null);
   const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -244,6 +275,65 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
 
     return () => observer.disconnect();
   }, []);
+
+  const measureRightDockMinWidth = useCallback(() => {
+    const measuredWidths = [
+      measurePanelMinWidth(rightPrimaryPanelHostRef.current),
+      measurePanelMinWidth(exporterPanelHostRef.current),
+    ].filter((value): value is number => value != null);
+
+    if (measuredWidths.length === 0) return PANEL_WIDTH_DEFAULT;
+
+    return clampPanelWidth(
+      Math.max(PANEL_WIDTH_MIN_FALLBACK, ...measuredWidths),
+      PANEL_WIDTH_MIN_FALLBACK,
+    );
+  }, []);
+
+  useLayoutEffect(() => {
+    const primaryHost = rightPrimaryPanelHostRef.current;
+    const exporterHost = exporterPanelHostRef.current;
+    if (!primaryHost && !exporterHost) return;
+
+    const syncRightPanelWidth = () => {
+      const nextWidth = measureRightDockMinWidth();
+      setPanelMinWidth((current) => (current === nextWidth ? current : nextWidth));
+      setPanelWidth((current) => clampPanelWidth(current, nextWidth));
+    };
+
+    syncRightPanelWidth();
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncRightPanelWidth) : null;
+    if (resizeObserver && primaryHost) resizeObserver.observe(primaryHost);
+    if (resizeObserver && exporterHost) resizeObserver.observe(exporterHost);
+
+    const mutationObserver =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(syncRightPanelWidth)
+        : null;
+    if (mutationObserver && primaryHost) {
+      mutationObserver.observe(primaryHost, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      });
+    }
+    if (mutationObserver && exporterHost) {
+      mutationObserver.observe(exporterHost, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      });
+    }
+
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver?.disconnect();
+    };
+  }, [measureRightDockMinWidth]);
 
   useEffect(() => {
     try { localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth)); } catch { /* ignore */ }
@@ -285,7 +375,7 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     setIsResizing(true);
     const onMove = (e: MouseEvent) => {
       const raw = scaledViewportWidth - e.clientX / appScale - PANEL_PADDING;
-      const clamped = Math.min(PANEL_WIDTH_MAX, Math.max(PANEL_WIDTH_MIN, raw));
+      const clamped = clampPanelWidth(raw, panelMinWidth);
       setPanelWidth(clamped);
     };
     const onUp = () => {
@@ -626,7 +716,7 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
       </button>
 
       <div style={rightPanelStyle}>
-        <div style={rightPrimaryPanelStyle}>
+        <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>
           <ControlPanelContainer
             map={mapInstance}
             isMapLoaded={mapLoaded}
