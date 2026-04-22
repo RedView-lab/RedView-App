@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
-import { IconMoon } from '../CenterPanelIcons';
-import { IconChevronDown } from '../CenterPanelIcons';
+import { IconChevronDown, IconMoon, IconSun } from '../CenterPanelIcons';
 import type { ChartDayNightOverlay } from './dayNight';
 import { useChartHover } from './useChartHover';
 import {
@@ -77,9 +76,11 @@ export function AnalysisChart({
   }, [plotAreaRef]);
 
   const xDomain = useMemo<AxisDomain>(() => {
-    const dom = computeXDomain(series.map((entry) => entry.points));
+    const dom = computeXDomain(series.map((entry) => entry.points), xMode);
     if (dom) return dom;
-    return xMode === 'distance' ? { min: 0, max: 90 } : { min: 0, max: 6 };
+    if (xMode === 'distance') return { min: 0, max: 90 };
+    if (xMode === 'heure') return { min: 0, max: 24 };
+    return { min: 0, max: 6 };
   }, [series, xMode]);
 
   const visibleFraction = useMemo(
@@ -214,16 +215,26 @@ export function AnalysisChart({
     [dayNightOverlay, plotXDomain],
   );
 
-  const moonMarkers = useMemo(
-    () =>
-      (dayNightOverlay?.moonMarkers ?? [])
-        .map((marker) => ({
-          id: marker.id,
-          ratio: ratioFor(marker.x, plotXDomain),
-        }))
-        .filter((marker) => marker.ratio > 0.01 && marker.ratio < 0.99),
-    [dayNightOverlay, plotXDomain],
-  );
+  const nightFrames = useMemo(() => {
+    if (dayNightBands.length === 0) return [];
+
+    const frames: Array<{ id: string; startRatio: number; endRatio: number }> = [];
+    let cursor = 0;
+    for (const band of dayNightBands) {
+      if (band.startRatio - cursor > 1e-4) {
+        frames.push({
+          id: `night-${frames.length + 1}`,
+          startRatio: cursor,
+          endRatio: band.startRatio,
+        });
+      }
+      cursor = Math.max(cursor, band.endRatio);
+    }
+    if (1 - cursor > 1e-4) {
+      frames.push({ id: `night-${frames.length + 1}`, startRatio: cursor, endRatio: 1 });
+    }
+    return frames.filter((frame) => frame.endRatio - frame.startRatio > 0.06);
+  }, [dayNightBands]);
 
   const seriesPaths = useMemo(
     () =>
@@ -273,6 +284,17 @@ export function AnalysisChart({
                 }}
               />
             ))}
+            {dayNightBands.map(({ id, startRatio, endRatio }) =>
+              endRatio - startRatio > 0.06 ? (
+                <div
+                  key={`${id}-sun`}
+                  className="rvchart__day-night-corner-icon rvchart__day-night-corner-icon--sun"
+                  style={{ left: `calc(${startRatio * 100}% + 6px)` }}
+                >
+                  <IconSun size={16} />
+                </div>
+              ) : null,
+            )}
             {yPositions.map(({ value, ratio }) => (
               <div
                 key={`hl-${value}-${ratio.toFixed(4)}`}
@@ -287,11 +309,11 @@ export function AnalysisChart({
                 style={{ left: `${ratio * 100}%` }}
               />
             ))}
-            {moonMarkers.map(({ id, ratio }) => (
+            {nightFrames.map(({ id, startRatio }) => (
               <div
                 key={id}
-                className="rvchart__day-night-marker"
-                style={{ left: `${ratio * 100}%` }}
+                className="rvchart__day-night-corner-icon rvchart__day-night-corner-icon--moon"
+                style={{ left: `calc(${startRatio * 100}% + 6px)` }}
               >
                 <IconMoon size={16} />
               </div>
@@ -523,7 +545,7 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
                 <div>
                   {row.metric}: {Number.isFinite(row.value) ? formatAxisValue(row.metric, row.value) : '--'}
                 </div>
-                <div>{xMode === 'distance' ? `${xValue.toFixed(1)} km` : formatHours(xValue)}</div>
+                <div>{formatXAxisValue(xValue, xMode)}</div>
               </div>
             </div>
           </section>
@@ -741,6 +763,13 @@ function formatXTick(value: number, xMode: AxisMode): string {
     if (Number.isInteger(value)) return String(value);
     return value.toFixed(1);
   }
+  if (xMode === 'heure') return formatClockHours(value);
+  return formatHours(value);
+}
+
+function formatXAxisValue(value: number, xMode: AxisMode): string {
+  if (xMode === 'distance') return `${value.toFixed(1)} km`;
+  if (xMode === 'heure') return formatClockHours(value);
   return formatHours(value);
 }
 
@@ -756,6 +785,16 @@ function formatHours(hours: number): string {
   const h = Math.floor(totalMin / 60);
   const m = Math.abs(totalMin % 60);
   return `${h}h${m.toString().padStart(2, '0')}`;
+}
+
+function formatClockHours(hours: number): string {
+  if (!Number.isFinite(hours)) return '--:--';
+  const totalMinutes = Math.round(hours * 60);
+  const dayOffset = Math.floor(totalMinutes / 1440);
+  const minutesInDay = ((totalMinutes % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(minutesInDay / 60)).padStart(2, '0');
+  const mm = String(minutesInDay % 60).padStart(2, '0');
+  return dayOffset > 0 ? `J+${dayOffset} ${hh}:${mm}` : `${hh}:${mm}`;
 }
 
 function formatCellValue(value: number, metric: ChartMetricId): string {

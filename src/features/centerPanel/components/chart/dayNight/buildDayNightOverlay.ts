@@ -69,8 +69,8 @@ export function buildChartDayNightOverlay({
 
     const startElapsedSeconds = (daylightStartMs - routeStart.getTime()) / 1000;
     const endElapsedSeconds = (daylightEndMs - routeStart.getTime()) / 1000;
-    const startX = projectElapsedSecondsToX(startElapsedSeconds, timeline, xMode);
-    const endX = projectElapsedSecondsToX(endElapsedSeconds, timeline, xMode);
+    const startX = projectElapsedSecondsToX(startElapsedSeconds, timeline, xMode, routeStart);
+    const endX = projectElapsedSecondsToX(endElapsedSeconds, timeline, xMode, routeStart);
     if (!Number.isFinite(startX) || !Number.isFinite(endX) || endX - startX <= MIN_WINDOW_WIDTH) {
       continue;
     }
@@ -116,9 +116,15 @@ function projectElapsedSecondsToX(
   elapsedSeconds: number,
   timeline: TimelinePoint[],
   xMode: AxisMode,
+  routeStart: Date,
 ): number {
   if (xMode === 'temps') return elapsedSeconds / 3600;
+  if (xMode === 'heure') return elapsedSeconds / 3600 + getClockHours(routeStart);
   return interpolateDistanceAtElapsedSeconds(elapsedSeconds, timeline);
+}
+
+function getClockHours(routeStart: Date): number {
+  return routeStart.getHours() + routeStart.getMinutes() / 60;
 }
 
 function interpolateDistanceAtElapsedSeconds(

@@ -12,7 +12,7 @@ import type { PredictionResult } from '../fitPredictor/types';
 /**
  * Persisted state of the bottom analysis chart (centerPanel). Stored on
  * the project so axis selections, filter chips and the X-axis mode
- * (distance / time) survive across sessions.
+ * (distance / elapsed time / clock time) survive across sessions.
  */
 export type AnalysisAxisMetricId =
   | 'Vitesse'
@@ -30,7 +30,7 @@ export type AnalysisAxisMetricId =
   | 'Humidité (%)'
   | 'Ensoleillement (min)';
 
-export type AnalysisAxisMode = 'distance' | 'temps';
+export type AnalysisAxisMode = 'distance' | 'temps' | 'heure';
 
 export interface AnalysisFiltersState {
   waypoint: boolean;

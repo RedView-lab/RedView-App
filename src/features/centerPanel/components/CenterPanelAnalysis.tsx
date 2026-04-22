@@ -206,7 +206,13 @@ export function CenterPanelAnalysis() {
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
       const routePoints = itinerary.gpxRoute?.points ?? null;
 
-      const axis1Points = buildSeriesFromPrediction(prediction, axis1Value, xMode, routePoints);
+      const axis1Points = buildSeriesFromPrediction(
+        prediction,
+        axis1Value,
+        xMode,
+        routePoints,
+        itinerary.rhythm.startTime,
+      );
       if (axis1Points) {
         result.push({
           id: `${itinerary.id}::axis1`,
@@ -220,7 +226,13 @@ export function CenterPanelAnalysis() {
         });
       }
 
-      const axis2Points = buildSeriesFromPrediction(prediction, axis2Value, xMode, routePoints);
+      const axis2Points = buildSeriesFromPrediction(
+        prediction,
+        axis2Value,
+        xMode,
+        routePoints,
+        itinerary.rhythm.startTime,
+      );
       if (axis2Points) {
         result.push({
           id: `${itinerary.id}::axis2`,
@@ -260,6 +272,7 @@ export function CenterPanelAnalysis() {
         'Altitude',
         xMode,
         itinerary.gpxRoute?.points ?? null,
+        itinerary.rhythm.startTime,
       );
       if (!points) continue;
       result.push({
@@ -331,6 +344,17 @@ export function CenterPanelAnalysis() {
             onClick={() => setXMode('temps')}
           >
             Temps
+          </button>
+          <button
+            className={
+              xMode === 'heure'
+                ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
+                : 'rvc-center-analysis__segment'
+            }
+            type="button"
+            onClick={() => setXMode('heure')}
+          >
+            Heures
           </button>
         </div>
 

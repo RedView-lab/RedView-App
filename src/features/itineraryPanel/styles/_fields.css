@@ -442,6 +442,8 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
+  --rvc-red: var(--rvi-red);
+  --rvc-red-border: var(--rvi-red-border);
 }
 
 .rvi-time-row__slider-shell {
@@ -453,6 +455,14 @@
 
 .rvi-time-row__slider-shell .rvc-slider {
   width: 100%;
+}
+
+.rvi-time-row__slider-shell .rvc-slider__fill {
+  background: var(--rvi-red);
+}
+
+.rvi-time-row__slider-shell .rvc-slider__handle {
+  border-color: var(--rvi-red-border);
 }
 
 .rvi-time-row__bound {

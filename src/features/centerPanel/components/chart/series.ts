@@ -39,7 +39,7 @@ export type AxisMetricId =
 
 export type ChartMetricId = AxisMetricId | 'Altitude';
 
-export type AxisMode = 'distance' | 'temps';
+export type AxisMode = 'distance' | 'temps' | 'heure';
 
 /** Single point of a chart series, expressed in axis units (km / s / metric). */
 export interface ChartPoint {
@@ -379,6 +379,7 @@ function buildSeriesFromRouteProfile(
   prediction: PredictionResult | null | undefined,
   metric: ChartMetricId,
   xMode: AxisMode,
+  startTime?: string | null,
 ): ChartPoint[] | null {
   const profile = normalizeRouteProfile(routePoints);
   if (!profile) return null;
@@ -388,7 +389,11 @@ function buildSeriesFromRouteProfile(
     const x =
       xMode === 'distance'
         ? sample.distanceM / 1000
-        : interpolateElapsedHours(prediction, sample.distanceM);
+        : projectElapsedHoursToX(
+            interpolateElapsedHours(prediction, sample.distanceM),
+            xMode,
+            startTime,
+          );
     const y =
       metric === 'Altitude'
         ? sample.elevationM
@@ -521,6 +526,7 @@ function buildFixedDistanceAverageSeries(
   prediction: PredictionResult,
   metric: ChartMetricId,
   xMode: AxisMode,
+  startTime?: string | null,
 ): ChartPoint[] | null {
   const samples = buildDistanceMetricSamples(prediction, metric);
   if (samples.length < 2) return null;
@@ -541,11 +547,19 @@ function buildFixedDistanceAverageSeries(
     const startX =
       xMode === 'distance'
         ? startDistanceM / 1000
-        : interpolateElapsedHoursAtDistance(samples, startDistanceM);
+        : projectElapsedHoursToX(
+            interpolateElapsedHoursAtDistance(samples, startDistanceM),
+            xMode,
+            startTime,
+          );
     const endX =
       xMode === 'distance'
         ? endDistanceM / 1000
-        : interpolateElapsedHoursAtDistance(samples, endDistanceM);
+        : projectElapsedHoursToX(
+            interpolateElapsedHoursAtDistance(samples, endDistanceM),
+            xMode,
+            startTime,
+          );
 
     if (Number.isFinite(avg) && Number.isFinite(startX) && Number.isFinite(endX) && endX > startX) {
       if (result.length === 0) {
@@ -583,9 +597,16 @@ export function buildSeriesFromPrediction(
   metric: ChartMetricId,
   xMode: AxisMode,
   routePoints?: RouteChartPoint[] | null,
+  startTime?: string | null,
 ): ChartPoint[] | null {
   if (isRouteBackedMetric(metric)) {
-    const routeSeries = buildSeriesFromRouteProfile(routePoints, prediction, metric, xMode);
+    const routeSeries = buildSeriesFromRouteProfile(
+      routePoints,
+      prediction,
+      metric,
+      xMode,
+      startTime,
+    );
     if (routeSeries) return routeSeries;
   }
 
@@ -594,7 +615,7 @@ export function buildSeriesFromPrediction(
   if (!metricIsAvailable(metric)) return null;
 
   if (isIntervalAverageMetric(metric)) {
-    const averageSeries = buildFixedDistanceAverageSeries(prediction, metric, xMode);
+    const averageSeries = buildFixedDistanceAverageSeries(prediction, metric, xMode, startTime);
     if (averageSeries) return averageSeries;
   }
 
@@ -602,7 +623,10 @@ export function buildSeriesFromPrediction(
 
   for (let i = 0; i < prediction.points.length; i++) {
     const p = prediction.points[i];
-    const x = xMode === 'distance' ? p.distance_m / 1000 : p.elapsed_time_s / 3600;
+    const x =
+      xMode === 'distance'
+        ? p.distance_m / 1000
+        : projectElapsedHoursToX(p.elapsed_time_s / 3600, xMode, startTime);
     const y = metricValueAtPoint(metric, p);
 
     if (Number.isFinite(x) && Number.isFinite(y)) {
@@ -644,7 +668,7 @@ export function computeDomain(series: ChartPoint[][]): AxisDomain | null {
 }
 
 /** Compute the X axis domain from the union of all series. */
-export function computeXDomain(series: ChartPoint[][]): AxisDomain | null {
+export function computeXDomain(series: ChartPoint[][], xMode: AxisMode): AxisDomain | null {
   let min = Infinity;
   let max = -Infinity;
   for (const arr of series) {
@@ -654,5 +678,25 @@ export function computeXDomain(series: ChartPoint[][]): AxisDomain | null {
     }
   }
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) return null;
+  if (xMode === 'heure') return { min, max };
   return { min: min >= 0 ? 0 : min, max };
+}
+
+function projectElapsedHoursToX(
+  elapsedHours: number | null,
+  xMode: AxisMode,
+  startTime?: string | null,
+): number {
+  if (!Number.isFinite(elapsedHours)) return Number.NaN;
+  if (xMode !== 'heure') return elapsedHours as number;
+  return (elapsedHours as number) + parseStartTimeHours(startTime);
+}
+
+function parseStartTimeHours(startTime?: string | null): number {
+  if (!startTime) return 0;
+  const [hoursRaw, minutesRaw] = startTime.split(':');
+  const hours = Number.parseInt(hoursRaw ?? '', 10);
+  const minutes = Number.parseInt(minutesRaw ?? '', 10);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+  return hours + minutes / 60;
 }

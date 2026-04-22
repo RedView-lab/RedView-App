@@ -81,14 +81,20 @@
   background: rgba(255, 166, 48, 0.14);
 }
 
-.rvchart__day-night-marker {
+.rvchart__day-night-corner-icon {
   position: absolute;
   top: 4px;
-  color: rgba(255, 255, 255, 0.5);
-  transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.rvchart__day-night-corner-icon--sun {
+  color: rgba(255, 184, 71, 0.72);
+}
+
+.rvchart__day-night-corner-icon--moon {
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .rvchart__backdrop-stroke {
