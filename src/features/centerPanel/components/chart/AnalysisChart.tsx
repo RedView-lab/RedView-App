@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
+import { IconMoon } from '../CenterPanelIcons';
 import { IconChevronDown } from '../CenterPanelIcons';
+import type { ChartDayNightOverlay } from './dayNight';
 import { useChartHover } from './useChartHover';
 import {
   computeDomain,
@@ -25,6 +27,7 @@ const DEFAULT_TICK_COUNT = 6;
 interface AnalysisChartProps {
   series: ChartSeries[];
   backdropProfiles?: ChartBackdropProfile[];
+  dayNightOverlay?: ChartDayNightOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId;
   xMode: AxisMode;
@@ -37,6 +40,7 @@ interface AnalysisChartProps {
 export function AnalysisChart({
   series,
   backdropProfiles = [],
+  dayNightOverlay = null,
   axis1Metric,
   axis2Metric,
   xMode,
@@ -198,6 +202,29 @@ export function AnalysisChart({
     }));
   }, [backdropProfiles, backdropYDomain, plotXDomain]);
 
+  const dayNightBands = useMemo(
+    () =>
+      (dayNightOverlay?.dayWindows ?? [])
+        .map((window) => ({
+          id: window.id,
+          startRatio: ratioFor(window.startX, plotXDomain),
+          endRatio: ratioFor(window.endX, plotXDomain),
+        }))
+        .filter((window) => window.endRatio - window.startRatio > 1e-4),
+    [dayNightOverlay, plotXDomain],
+  );
+
+  const moonMarkers = useMemo(
+    () =>
+      (dayNightOverlay?.moonMarkers ?? [])
+        .map((marker) => ({
+          id: marker.id,
+          ratio: ratioFor(marker.x, plotXDomain),
+        }))
+        .filter((marker) => marker.ratio > 0.01 && marker.ratio < 0.99),
+    [dayNightOverlay, plotXDomain],
+  );
+
   const seriesPaths = useMemo(
     () =>
       visibleSeries.map((entry) => ({
@@ -236,6 +263,16 @@ export function AnalysisChart({
 
         <div ref={plotAreaRef} className="rvchart__plotarea">
           <div className="rvchart__layer rvchart__layer--bg" aria-hidden="true">
+            {dayNightBands.map(({ id, startRatio, endRatio }) => (
+              <div
+                key={id}
+                className="rvchart__day-night-band"
+                style={{
+                  left: `${startRatio * 100}%`,
+                  width: `${(endRatio - startRatio) * 100}%`,
+                }}
+              />
+            ))}
             {yPositions.map(({ value, ratio }) => (
               <div
                 key={`hl-${value}-${ratio.toFixed(4)}`}
@@ -249,6 +286,15 @@ export function AnalysisChart({
                 className="rvchart__vline"
                 style={{ left: `${ratio * 100}%` }}
               />
+            ))}
+            {moonMarkers.map(({ id, ratio }) => (
+              <div
+                key={id}
+                className="rvchart__day-night-marker"
+                style={{ left: `${ratio * 100}%` }}
+              >
+                <IconMoon size={16} />
+              </div>
             ))}
           </div>
 

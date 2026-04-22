@@ -294,6 +294,16 @@
   overflow: hidden;
 }
 
+.rvc-center-analysis__toolbar-warning {
+  margin-left: auto;
+  color: #ff6b6b;
+  font-family: var(--rvc-center-font-family);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .rvc-center-analysis__filter-chip {
   position: relative;
   height: 32px;

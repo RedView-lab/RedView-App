@@ -35,6 +35,12 @@
     gap: 4px;
   }
 
+  .rvc-center-analysis__toolbar-warning {
+    flex-basis: 100%;
+    margin-left: 0;
+    white-space: normal;
+  }
+
   .rvc-center-analysis__filters {
     gap: 3px;
   }

@@ -74,6 +74,23 @@
   fill: rgba(245, 248, 252, 0.08);
 }
 
+.rvchart__day-night-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(255, 166, 48, 0.14);
+}
+
+.rvchart__day-night-marker {
+  position: absolute;
+  top: 4px;
+  color: rgba(255, 255, 255, 0.5);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .rvchart__backdrop-stroke {
   fill: none;
   stroke: rgba(245, 248, 252, 0.4);

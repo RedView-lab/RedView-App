@@ -121,6 +121,11 @@ export interface SunTimes {
   sunset: Date | null;
 }
 
+export interface ResolvedSunTimes extends SunTimes {
+  sunriseTime: string;
+  sunsetTime: string;
+}
+
 /**
  * Returns sunrise and sunset for a given calendar day at the observer location.
  * `date` may be any time during the local day; only the date portion matters.
@@ -150,6 +155,39 @@ export function getSunTimes(date: Date, lat: number, lon: number): SunTimes {
   return { sunrise: fromJulian(Jrise), sunset: fromJulian(Jset) };
 }
 
+/**
+ * Shared local-day resolver used by both the sunlight panel and the analysis
+ * chart overlay so they stay perfectly aligned for a given day/location.
+ */
+export function resolveSunTimesForLocalDay(
+  dateOrIso: Date | string,
+  lat: number,
+  lon: number,
+): ResolvedSunTimes {
+  const noon =
+    typeof dateOrIso === 'string'
+      ? parseLocalIsoDateAtNoon(dateOrIso)
+      : new Date(dateOrIso);
+
+  if (!noon || Number.isNaN(noon.getTime())) {
+    return {
+      sunrise: null,
+      sunset: null,
+      sunriseTime: '--:--',
+      sunsetTime: '--:--',
+    };
+  }
+
+  noon.setHours(12, 0, 0, 0);
+  const { sunrise, sunset } = getSunTimes(noon, lat, lon);
+  return {
+    sunrise,
+    sunset,
+    sunriseTime: formatHHmm(sunrise),
+    sunsetTime: formatHHmm(sunset),
+  };
+}
+
 // Formatting helpers ---------------------------------------------------------
 
 /** Formats a Date as HH:mm in the host timezone. */
@@ -158,4 +196,19 @@ export function formatHHmm(date: Date | null): string {
   const h = date.getHours().toString().padStart(2, '0');
   const m = date.getMinutes().toString().padStart(2, '0');
   return `${h}:${m}`;
+}
+
+function parseLocalIsoDateAtNoon(dateIso: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(dateIso.trim());
+  if (!match) return null;
+
+  const year = Number.parseInt(match[1], 10);
+  const month = Number.parseInt(match[2], 10);
+  const day = Number.parseInt(match[3], 10);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

@@ -1,7 +1,7 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import type { FogSpecification, Map as MapboxMap } from 'mapbox-gl';
 
-import { formatHHmm, getSunPosition, getSunTimes } from '../lib/sun-calc';
+import { getSunPosition, resolveSunTimesForLocalDay } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
 
@@ -97,17 +97,16 @@ export function useSunlight(
       const center = map.getCenter();
       const lat = center.lat;
       const lon = center.lng;
-      const noon = new Date(`${optsRef.current.date}T12:00:00`);
-      if (!Number.isNaN(noon.getTime())) {
-        const { sunrise, sunset } = getSunTimes(noon, lat, lon);
-        const nextSunrise = formatHHmm(sunrise);
-        const nextSunset = formatHHmm(sunset);
-        setTimes((prev) => (
-          prev.sunriseTime === nextSunrise && prev.sunsetTime === nextSunset
-            ? prev
-            : { sunriseTime: nextSunrise, sunsetTime: nextSunset }
-        ));
-      }
+      const { sunriseTime, sunsetTime } = resolveSunTimesForLocalDay(
+        optsRef.current.date,
+        lat,
+        lon,
+      );
+      setTimes((prev) => (
+        prev.sunriseTime === sunriseTime && prev.sunsetTime === sunsetTime
+          ? prev
+          : { sunriseTime, sunsetTime }
+      ));
     };
 
     applyTimes();

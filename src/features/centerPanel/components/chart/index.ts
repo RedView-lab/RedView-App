@@ -1,5 +1,6 @@
 export { AnalysisChart } from './AnalysisChart';
 export { useChartHover } from './useChartHover';
+export { buildChartDayNightOverlay } from './dayNight';
 export type { ChartHoverState } from './useChartHover';
 export {
   buildSeriesFromPrediction,
@@ -17,3 +18,9 @@ export type {
   ChartPoint,
   ChartSeries,
 } from './series';
+
+export type {
+  ChartDayNightMoonMarker,
+  ChartDayNightOverlay,
+  ChartDayNightWindow,
+} from './dayNight';

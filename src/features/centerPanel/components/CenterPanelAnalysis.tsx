@@ -3,11 +3,13 @@ import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import {
   AnalysisChart,
+  buildChartDayNightOverlay,
   buildSeriesFromPrediction,
   isInclinationMetric,
   type AxisMetricId,
   type AxisMode,
   type ChartBackdropProfile,
+  type ChartDayNightOverlay,
   type ChartSeries,
 } from './chart';
 import {
@@ -63,6 +65,7 @@ const DETAIL_MIN_VISIBLE_FRACTION = 0.12;
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
+  const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
@@ -81,6 +84,19 @@ export function CenterPanelAnalysis() {
   const filters = analysisState.filters;
   const detailZoom = analysisState.detailZoom;
   const detailOffset = analysisState.detailOffset;
+
+  const activeItinerary = useMemo(() => {
+    if (!projectStore) return null;
+    return (
+      projectStore.project.itineraries.find(
+        (itinerary) => itinerary.id === projectStore.project.activeItineraryId,
+      ) ?? projectStore.project.itineraries[0] ?? null
+    );
+  }, [projectStore]);
+
+  const dayNightStartReady = Boolean(
+    activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
+  );
 
   const updateAnalysis = (mut: (draft: AnalysisPanelState) => void) => {
     if (!projectStore) return;
@@ -115,10 +131,23 @@ export function CenterPanelAnalysis() {
     });
   };
   const toggleFilter = (key: FilterKey) => {
+    if (key === 'jourNuit') {
+      const wantsEnabled = !filters.jourNuit;
+      if (wantsEnabled && !dayNightStartReady) {
+        setShowDayNightRequirementHint(true);
+        return;
+      }
+      setShowDayNightRequirementHint(false);
+    }
+
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
     });
   };
+
+  useEffect(() => {
+    if (dayNightStartReady) setShowDayNightRequirementHint(false);
+  }, [dayNightStartReady]);
 
   const adjustDetailZoom = (delta: number) => {
     updateAnalysis((draft) => {
@@ -243,6 +272,34 @@ export function CenterPanelAnalysis() {
     return result;
   }, [showAltitudeBackdrop, projectStore, predictionStore, xMode]);
 
+  const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
+    if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;
+
+    const prediction =
+      predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+    if (!prediction) return null;
+
+    const anchorPoint =
+      activeItinerary.gpxRoute?.points?.find(
+        (point) => Number.isFinite(point.lat) && Number.isFinite(point.lon),
+      ) ?? null;
+    if (!anchorPoint) return null;
+
+    return buildChartDayNightOverlay({
+      prediction,
+      startDate: activeItinerary.rhythm.startDate as string,
+      startTime: activeItinerary.rhythm.startTime as string,
+      latitude: anchorPoint.lat,
+      longitude: anchorPoint.lon,
+      xMode,
+    });
+  }, [activeItinerary, dayNightStartReady, filters.jourNuit, predictionStore, xMode]);
+
+  const dayNightWarning =
+    (filters.jourNuit || showDayNightRequirementHint) && !dayNightStartReady
+      ? 'Renseigne une date et une heure de départ pour activer Jour/nuit.'
+      : null;
+
   return (
     <section
       ref={rootRef}
@@ -350,12 +407,19 @@ export function CenterPanelAnalysis() {
             );
           })}
         </div>
+
+        {dayNightWarning ? (
+          <div className="rvc-center-analysis__toolbar-warning" role="status" aria-live="polite">
+            {dayNightWarning}
+          </div>
+        ) : null}
       </div>
 
       <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
         <AnalysisChart
           series={series}
           backdropProfiles={altitudeBackdropProfiles}
+          dayNightOverlay={dayNightOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}
