@@ -131,17 +131,28 @@ function coordsEqual(left: ImageCoords, right: ImageCoords): boolean {
   return left.every((point, index) => point[0] === right[index]?.[0] && point[1] === right[index]?.[1]);
 }
 
+// Fast FNV-1a 32-bit hash. ~50-100x cheaper than JSON.stringify on hot paths.
+function hashStr(input: string, seed = 0x811c9dc5): number {
+  let h = seed >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
 function paletteSignature(state: WeatherOverlayState, key: WeatherOverlayMetric): string {
   const palette = state.palettes?.[key];
-  return JSON.stringify({
-    opacity: palette?.opacity,
-    scaleSetting: palette?.scaleSetting,
-    bands: palette?.bands?.map((band) => ({
-      color: band.color,
-      minValue: band.minValue,
-      maxValue: band.maxValue,
-    })),
-  });
+  if (!palette) return '0';
+  let h = hashStr(`${palette.opacity ?? ''}|${palette.scaleSetting ?? ''}`);
+  const bands = palette.bands;
+  if (bands) {
+    for (let i = 0; i < bands.length; i++) {
+      const band = bands[i];
+      h = hashStr(`|${band.color}|${band.minValue}|${band.maxValue}`, h);
+    }
+  }
+  return h.toString(36);
 }
 
 async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
@@ -184,17 +195,9 @@ export function useWeatherOverlay(
   );
   const selectionKey = useMemo(() => selectionFromState(state).key, [state]);
   const paletteKey = useMemo(
-    () => JSON.stringify(
-      activeRenderableLayers(state).map((layer) => ({
-        key: layer.key,
-        opacity: state.palettes?.[layer.key]?.opacity,
-        bands: state.palettes?.[layer.key]?.bands?.map((band) => ({
-          color: band.color,
-          minValue: band.minValue,
-          maxValue: band.maxValue,
-        })),
-      })),
-    ),
+    () => activeRenderableLayers(state)
+      .map((layer) => `${layer.key}:${paletteSignature(state, layer.key)}`)
+      .join('|'),
     [state],
   );
 

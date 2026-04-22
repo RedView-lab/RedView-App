@@ -66,13 +66,29 @@ export function AnalysisChart({
     const rect = node.getBoundingClientRect();
     update(rect.width, rect.height);
 
+    // Coalesce ResizeObserver bursts (panel drag, exporter height changes,
+    // window resize) into a single RAF-batched update so we don't recompute
+    // 20+ axis/tick useMemos on every intermediate pixel.
+    let rafId = 0;
+    let pendingW = 0;
+    let pendingH = 0;
     const ro = new ResizeObserver((entries) => {
       const cr = entries[0]?.contentRect;
-      if (cr) update(cr.width, cr.height);
+      if (!cr) return;
+      pendingW = cr.width;
+      pendingH = cr.height;
+      if (rafId !== 0) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0;
+        update(pendingW, pendingH);
+      });
     });
 
     ro.observe(node);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (rafId !== 0) window.cancelAnimationFrame(rafId);
+    };
   }, [plotAreaRef]);
 
   const xDomain = useMemo<AxisDomain>(() => {

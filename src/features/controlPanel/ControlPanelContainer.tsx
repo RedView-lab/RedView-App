@@ -533,9 +533,28 @@ export function ControlPanelContainer({
   });
 
   // ── Build ControlPanel state ───────────────────────────────────────
-  const state: ControlPanelState = useMemo(() => {
-    const base = DEFAULT_CONTROL_PANEL_STATE;
-    const panelLabels: LabelsState = {
+  // Each slice is memoised independently so a change to e.g. weather state
+  // doesn't invalidate the slope/altitude/lidar arrays. The assembled
+  // `state` object identity still changes per slice update (which is
+  // necessary for ControlPanel itself), but downstream React.memo
+  // boundaries that pull a single slice will skip re-rendering when their
+  // slice is referentially stable.
+
+  const lidarTiles = useMemo(
+    () => cachedTiles.map((info) => ({
+      id: tileKey(info.coord),
+      label: formatLidarTileLabel(info),
+      sizeMb: Math.round(info.sizeBytes / (1024 * 1024)),
+      year: new Date(info.cachedAt).getFullYear(),
+      source: 'LIDAR' as const,
+      visible: !hiddenTiles[tileKey(info.coord)],
+    })),
+    [cachedTiles, hiddenTiles],
+  );
+
+  const labelsSlice = useMemo(() => ({
+    enabled: labelsEnabled,
+    state: {
       poiLabels: labelBackend.poi,
       roads: labelBackend.roads,
       cities: labelBackend.places,
@@ -543,72 +562,62 @@ export function ControlPanelContainer({
       naturalParks: labelBackend.naturalParks,
       countries: labelBackend.countries,
       waterBody: labelBackend.waterBody,
-    };
+    } as LabelsState,
+  }), [labelsEnabled, labelBackend, statesUiToggle]);
 
-    return {
-      ...base,
-      lidarTiles: cachedTiles.map((info) => ({
-        id: tileKey(info.coord),
-        label: formatLidarTileLabel(info),
-        sizeMb: Math.round(info.sizeBytes / (1024 * 1024)),
-        year: new Date(info.cachedAt).getFullYear(),
-        source: 'LIDAR',
-        visible: !hiddenTiles[tileKey(info.coord)],
-      })),
-      labels: { enabled: labelsEnabled, state: panelLabels },
-      routes: {
-        enabled: routesEnabled,
-        items: routeItems,
-      },
-      slopes: {
-        enabled: slopeState.enabled,
-        resolution: slopeState.resolution,
-        colorization: colorModeToPanel(slopeState.colorMode),
-        scale: slopeScale,
-        scaleSetting: slopeScaleSetting,
-        opacity: Math.round(slopeState.opacity * 100),
-        bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
-      },
-      altitude: {
-        enabled: altitudeState.enabled,
-        colorization: altitudeColorModeToPanel(altitudeState.colorMode),
-        scaleSetting: altitudeState.scaleSetting,
-        opacity: Math.round(altitudeState.opacity * 100),
-        bands: buildAltitudeBandsFromDynamic(altitudeCategories, altitudeHiddenIds),
-      },
-      weather: weatherState,
-      wind: { enabled: windEnabled },
-      snow: { enabled: snowEnabled },
-      sunlight: {
-        ...sunlightState,
-        sunriseTime: sunlightTimes.sunriseTime,
-        sunsetTime: sunlightTimes.sunsetTime,
-      },
-    };
-  }, [
-    cachedTiles,
-    hiddenTiles,
-    labelBackend,
-    labelsEnabled,
-    statesUiToggle,
-    slopeState,
-    slopeBandVisibility,
-    slopeScale,
-    slopeScaleSetting,
-    altitudeState,
-    altitudeBreakpointsByCount,
-    altitudeBandCount,
-    currentAltitudeBreakpoints,
-    altitudeCategories,
-    altitudeHiddenIds,
-    windEnabled,
+  const routesSlice = useMemo(
+    () => ({ enabled: routesEnabled, items: routeItems }),
+    [routesEnabled, routeItems],
+  );
+
+  const slopesSlice = useMemo(() => ({
+    enabled: slopeState.enabled,
+    resolution: slopeState.resolution,
+    colorization: colorModeToPanel(slopeState.colorMode),
+    scale: slopeScale,
+    scaleSetting: slopeScaleSetting,
+    opacity: Math.round(slopeState.opacity * 100),
+    bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
+  }), [slopeState, slopeScale, slopeScaleSetting, dynamicCategories, slopeBandVisibility]);
+
+  const altitudeSlice = useMemo(() => ({
+    enabled: altitudeState.enabled,
+    colorization: altitudeColorModeToPanel(altitudeState.colorMode),
+    scaleSetting: altitudeState.scaleSetting,
+    opacity: Math.round(altitudeState.opacity * 100),
+    bands: buildAltitudeBandsFromDynamic(altitudeCategories, altitudeHiddenIds),
+  }), [altitudeState, altitudeCategories, altitudeHiddenIds]);
+
+  const sunlightSlice = useMemo(() => ({
+    ...sunlightState,
+    sunriseTime: sunlightTimes.sunriseTime,
+    sunsetTime: sunlightTimes.sunsetTime,
+  }), [sunlightState, sunlightTimes]);
+
+  const windSlice = useMemo(() => ({ enabled: windEnabled }), [windEnabled]);
+  const snowSlice = useMemo(() => ({ enabled: snowEnabled }), [snowEnabled]);
+
+  const state: ControlPanelState = useMemo(() => ({
+    ...DEFAULT_CONTROL_PANEL_STATE,
+    lidarTiles,
+    labels: labelsSlice,
+    routes: routesSlice,
+    slopes: slopesSlice,
+    altitude: altitudeSlice,
+    weather: weatherState,
+    wind: windSlice,
+    snow: snowSlice,
+    sunlight: sunlightSlice,
+  }), [
+    lidarTiles,
+    labelsSlice,
+    routesSlice,
+    slopesSlice,
+    altitudeSlice,
     weatherState,
-    snowEnabled,
-    sunlightState,
-    sunlightTimes,
-    dynamicCategories,
-    routesEnabled,
-    routeItems,
+    windSlice,
+    snowSlice,
+    sunlightSlice,
   ]);
 
   // ── Handlers ───────────────────────────────────────────────────────

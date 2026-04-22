@@ -308,43 +308,37 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     const exporterHost = exporterPanelHostRef.current;
     if (!primaryHost && !exporterHost) return;
 
+    // Coalesce many observer callbacks into a single RAF-batched layout pass.
+    // The previous version invoked a full re-measure synchronously on every
+    // ResizeObserver AND MutationObserver event (subtree+characterData), which
+    // caused a layout-thrash storm whenever any panel child changed text.
+    let rafId = 0;
+    let pending = false;
     const syncRightPanelWidth = () => {
       const nextWidth = measureRightDockMinWidth();
       setPanelMinWidth((current) => (current === nextWidth ? current : nextWidth));
       setPanelWidth((current) => clampPanelWidth(current, nextWidth));
     };
+    const scheduleSync = () => {
+      if (pending) return;
+      pending = true;
+      rafId = window.requestAnimationFrame(() => {
+        pending = false;
+        rafId = 0;
+        syncRightPanelWidth();
+      });
+    };
 
     syncRightPanelWidth();
 
     const resizeObserver =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncRightPanelWidth) : null;
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleSync) : null;
     if (resizeObserver && primaryHost) resizeObserver.observe(primaryHost);
     if (resizeObserver && exporterHost) resizeObserver.observe(exporterHost);
 
-    const mutationObserver =
-      typeof MutationObserver !== 'undefined'
-        ? new MutationObserver(syncRightPanelWidth)
-        : null;
-    if (mutationObserver && primaryHost) {
-      mutationObserver.observe(primaryHost, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        characterData: true,
-      });
-    }
-    if (mutationObserver && exporterHost) {
-      mutationObserver.observe(exporterHost, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        characterData: true,
-      });
-    }
-
     return () => {
       resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
+      if (rafId !== 0) window.cancelAnimationFrame(rafId);
     };
   }, [measureRightDockMinWidth]);
 
