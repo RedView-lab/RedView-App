@@ -20,7 +20,6 @@ interface RythmeSectionProps {
   onChange?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
   uploadFitLabel?: string;
-  fitStatusText?: string | null;
   onCalculate?: () => void;
   calculateLabel?: string;
   calculateDisabled?: boolean;
@@ -90,7 +89,6 @@ export function RythmeSection({
   onChange,
   onUploadFit,
   uploadFitLabel,
-  fitStatusText,
   onCalculate,
   calculateLabel,
   calculateDisabled,
@@ -185,12 +183,6 @@ export function RythmeSection({
           }
         />
       </div>
-
-      {fitStatusText ? (
-        <div className="rvi-fit-status" role="status" aria-live="polite">
-          {fitStatusText}
-        </div>
-      ) : null}
 
       {/* Poids + Pneus */}
       <div className="rvi-row">

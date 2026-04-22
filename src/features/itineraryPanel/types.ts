@@ -330,7 +330,6 @@ export interface ItineraryPanelProps {
   onChangeRhythm?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
   uploadFitLabel?: string;
-  fitStatusText?: string | null;
   onCalculate?: () => void;
   calculateLabel?: string;
   calculateDisabled?: boolean;

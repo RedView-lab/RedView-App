@@ -174,10 +174,9 @@ export function ItineraryPanelContainer({
     return null;
   }, [activeFitRuntime]);
   const calculateLabel = useMemo(() => {
-    const status = activeFitRuntime?.status ?? 'idle';
-    if (status === 'running') return 'Calcul en cours...';
+    if (fitStatusText) return fitStatusText;
     return 'Calculer';
-  }, [activeFitRuntime]);
+  }, [fitStatusText]);
   const calculateDisabled = activeFitRuntime?.status === 'running';
 
   // ── Multi-route layer sync ─────────────────────────────────────────
@@ -965,7 +964,6 @@ export function ItineraryPanelContainer({
         fitInputRef.current?.click();
       }}
       uploadFitLabel={uploadFitLabel}
-      fitStatusText={fitStatusText}
       onCalculate={() => {
         handleCalculatePrediction();
       }}

@@ -42,7 +42,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onChangeRhythm,
     onUploadFit,
     uploadFitLabel,
-    fitStatusText,
     onCalculate,
     calculateLabel,
     calculateDisabled,
@@ -148,7 +147,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onChange={onChangeRhythm}
             onUploadFit={onUploadFit}
             uploadFitLabel={uploadFitLabel}
-            fitStatusText={fitStatusText}
             onCalculate={onCalculate}
             calculateLabel={calculateLabel}
             calculateDisabled={calculateDisabled}
