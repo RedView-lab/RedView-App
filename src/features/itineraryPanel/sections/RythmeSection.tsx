@@ -1,4 +1,5 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Slider } from '@/features/controlPanel/components/Slider';
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
 import { PanelSelect } from '../components/PanelSelect';
@@ -51,14 +52,13 @@ function ChipInput({
 }
 
 function TimeChipInput({
-  value,
+  displayTime,
   onChange,
 }: {
-  value: string | null;
+  displayTime: string;
   onChange?: (value: string | null) => void;
 }) {
-  const [hours = '--', minutes = '--'] = value?.split(':') ?? [];
-  const displayTime = value ?? '';
+  const [hours = '--', minutes = '--'] = displayTime.split(':');
 
   return (
     <div className="rvi-time-input">
@@ -100,6 +100,30 @@ export function RythmeSection({
 }: RythmeSectionProps) {
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
+  const [isScrubbingTime, setIsScrubbingTime] = useState(false);
+
+  useEffect(() => {
+    if (!isScrubbingTime) {
+      setTimeDraftMinutes(getMinutesFromTime(rhythm.startTime || '00:00'));
+    }
+  }, [isScrubbingTime, rhythm.startTime]);
+
+  const displayTime = isScrubbingTime
+    ? formatMinutes(timeDraftMinutes)
+    : (rhythm.startTime || '00:00');
+
+  const handleTimeSliderChange = (nextMinutes: number) => {
+    setIsScrubbingTime(true);
+    setTimeDraftMinutes(nextMinutes);
+    onChange?.('startTime', formatMinutes(nextMinutes));
+  };
+
+  const handleTimeSliderCommit = (nextMinutes: number) => {
+    setIsScrubbingTime(false);
+    setTimeDraftMinutes(nextMinutes);
+    onChange?.('startTime', formatMinutes(nextMinutes));
+  };
 
   return (
     <div className="rvi-params">
@@ -136,10 +160,29 @@ export function RythmeSection({
         <div className="rvi-lfield">
           <span className="rvi-lfield__label">Heure :</span>
           <TimeChipInput
-            value={rhythm.startTime}
-            onChange={(nextValue) => onChange?.('startTime', nextValue)}
+            displayTime={displayTime}
+            onChange={(nextValue) => {
+              setIsScrubbingTime(false);
+              setTimeDraftMinutes(getMinutesFromTime(nextValue || '00:00'));
+              onChange?.('startTime', nextValue);
+            }}
           />
         </div>
+      </div>
+
+      <div className="rvi-time-row">
+        <span className="rvi-time-row__bound">00:00</span>
+        <div className="rvi-time-row__slider-shell">
+          <Slider
+            min={0}
+            max={1439}
+            value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(rhythm.startTime || '00:00')}
+            onChange={handleTimeSliderChange}
+            onCommit={handleTimeSliderCommit}
+            width="100%"
+          />
+        </div>
+        <span className="rvi-time-row__bound">23:59</span>
       </div>
 
       {/* Activités passées + FTP */}
@@ -346,6 +389,17 @@ function formatDateFr(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+}
+
+function getMinutesFromTime(timeStr: string): number {
+  const [hh, mm] = timeStr.split(':').map(Number);
+  return (hh || 0) * 60 + (mm || 0);
+}
+
+function formatMinutes(value: number): string {
+  const h = Math.floor(value / 60).toString().padStart(2, '0');
+  const m = (value % 60).toString().padStart(2, '0');
+  return `${h}:${m}`;
 }
 
 /** Default new pause row: 5 min duration every hour. */

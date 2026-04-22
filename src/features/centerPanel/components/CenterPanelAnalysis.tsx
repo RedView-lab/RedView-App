@@ -407,13 +407,13 @@ export function CenterPanelAnalysis() {
             );
           })}
         </div>
-
-        {dayNightWarning ? (
-          <div className="rvc-center-analysis__toolbar-warning" role="status" aria-live="polite">
-            {dayNightWarning}
-          </div>
-        ) : null}
       </div>
+
+      {dayNightWarning ? (
+        <div className="rvc-center-analysis__warning" role="status" aria-live="polite">
+          {dayNightWarning}
+        </div>
+      ) : null}
 
       <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
         <AnalysisChart
