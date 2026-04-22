@@ -53,6 +53,23 @@ export class LodManager {
   private maxBudget = MAX_POINT_BUDGET;
   /** Per-platform target frame time (16.6ms desktop, 33.3ms Apple/integrated). */
   private targetFrameMs = TARGET_FRAME_MS;
+  /**
+   * Scales LOD fade thresholds (see PlatformProfile.lodScreenScale).
+   * Higher = nodes drop to voxels earlier (better perf, less detail far away).
+   */
+  private lodScreenScale = 1.0;
+  /**
+   * Pixels of screen-space size below which a node is skipped entirely.
+   * Even a single voxel batch costs draw call + ~64 fragments minimum,
+   * so dropping invisible-to-the-eye nodes is a clear win.
+   */
+  private minScreenSizePx = 2.0;
+  /**
+   * If true, sort visible nodes near→far each frame so TBDR HSR can reject
+   * overdrawn fragments. Worth it on Apple Silicon, neutral-to-negative on
+   * dGPUs where it would also break contiguous-offset draw batching.
+   */
+  private sortFrontToBack = false;
   /** EWMA-smoothed frame time — more stable than sliding window mean. */
   private avgFrameMs = TARGET_FRAME_MS;
   private framesSeen = 0;
@@ -102,10 +119,18 @@ export class LodManager {
     this.maxBudget = profile.maxBudget;
     this.targetFrameMs = profile.targetFrameMs;
     this.avgFrameMs = profile.targetFrameMs;
+    this.lodScreenScale = profile.lodScreenScale;
+    // Apple TBDR: skip slightly larger nodes since each pixel of overdraw is
+    // costly; on dGPUs we can afford to render down to the pixel.
+    this.minScreenSizePx = profile.isApple ? 3.0 : 2.0;
+    // Front-to-back sort only helps TBDR architectures (Apple). On
+    // immediate-mode dGPUs it just costs CPU and breaks draw batching.
+    this.sortFrontToBack = profile.isApple;
     this.stats.pointBudget = this.pointBudget;
     console.log(
       `[LOD] Platform budget: ${(this.pointBudget / 1e6).toFixed(1)}M ` +
-      `(max ${(this.maxBudget / 1e6).toFixed(1)}M) target ${this.targetFrameMs.toFixed(1)}ms`,
+      `(max ${(this.maxBudget / 1e6).toFixed(1)}M) target ${this.targetFrameMs.toFixed(1)}ms ` +
+      `lodScale ${this.lodScreenScale.toFixed(2)}× minPx ${this.minScreenSizePx}`,
     );
   }
 
@@ -161,10 +186,24 @@ export class LodManager {
     this.stats.frustumCulled = 0;
     this.stats.lodSkipped = 0;
 
-    this.collectVisible(this.octree.root, planes, viewProj, viewportW, viewportH, true);
+    this.collectVisible(this.octree.root, planes, viewProj, viewportW, viewportH, true, camPosX, camPosY, camPosZ);
 
     this.enforceBudget();
     this.applyTemporalSmoothing();
+
+    // Front-to-back sort — critical for Apple TBDR Hidden Surface Removal:
+    // when the GPU draws the nearest points first, subsequent overdrawn
+    // fragments are rejected before fragment shader execution.
+    // Trade-off: breaks the contiguous-offset batching in renderer.ts so we
+    // get 1 draw call per visible node (more CPU work) — but on Apple HSR
+    // dwarfs that cost. On desktop dGPUs we keep the original octree order
+    // which preserves perfect batching.
+    if (this.sortFrontToBack) {
+      this.visibleNodes.sort((a, b) => {
+        if (a.isVoxel !== b.isVoxel) return a.isVoxel ? -1 : 1;
+        return a.camDist2 - b.camDist2;
+      });
+    }
 
     this.stats.visiblePoints = this.visiblePointCount;
     this.stats.visibleNodes = this.visibleNodes.length;
@@ -188,6 +227,9 @@ export class LodManager {
     vpW: number,
     vpH: number,
     testFrustum: boolean,
+    camX: number = 0,
+    camY: number = 0,
+    camZ: number = 0,
   ): void {
     if (node.subtreePointCount === 0 && node.voxelCount === 0) return;
 
@@ -204,9 +246,27 @@ export class LodManager {
 
     const ss = screenSpaceSize(node.aabb, viewProj, vpW, vpH);
 
+    // Micro-node skip: nodes that project to < minScreenSizePx contribute
+    // nothing visually but still cost a draw call + per-vertex shading.
+    // Drop them entirely (their parent's voxels already cover the area).
+    if (ss < this.minScreenSizePx) {
+      this.stats.lodSkipped++;
+      return;
+    }
+
+    // Squared distance from camera to AABB center — used for the
+    // front-to-back sort that drives Apple TBDR HSR.
+    const acx = (node.aabb.minX + node.aabb.maxX) * 0.5;
+    const acy = (node.aabb.minY + node.aabb.maxY) * 0.5;
+    const acz = (node.aabb.minZ + node.aabb.maxZ) * 0.5;
+    const dxC = acx - camX, dyC = acy - camY, dzC = acz - camZ;
+    const camDist2 = dxC * dxC + dyC * dyC + dzC * dzC;
+
     // Hysteresis: refined nodes use lower threshold to avoid oscillation
-    let fadeLow = LOD_FADE_LOW;
-    let fadeHigh = LOD_FADE_HIGH;
+    // lodScreenScale (>1 on Apple) inflates the threshold so nodes drop to
+    // voxels at a larger projected size \u2014 fewer leaves rendered far away.
+    let fadeLow = LOD_FADE_LOW * this.lodScreenScale;
+    let fadeHigh = LOD_FADE_HIGH * this.lodScreenScale;
     if (this.refinedLastFrame.has(node.id)) {
       fadeLow *= HYSTERESIS_FACTOR;
       fadeHigh *= HYSTERESIS_FACTOR;
@@ -223,6 +283,7 @@ export class LodManager {
           screenSize: ss,
           density: 1.0,
           fadeAlpha: 1.0,
+          camDist2,
         });
         this.visiblePointCount += node.pointCount;
       }
@@ -240,6 +301,7 @@ export class LodManager {
           screenSize: ss,
           density: 1.0,
           fadeAlpha: 1.0,
+          camDist2,
         });
         this.visiblePointCount += node.voxelCount;
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
@@ -264,6 +326,7 @@ export class LodManager {
           screenSize: ss,
           density: voxelAlpha,  // GPU stochastic discard handles partial rendering
           fadeAlpha: voxelAlpha,
+          camDist2,
         });
         this.visiblePointCount += Math.ceil(node.voxelCount * voxelAlpha);
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
@@ -275,7 +338,7 @@ export class LodManager {
 
       for (let i = 0; i < 8; i++) {
         const child = node.children[i];
-        if (child) this.collectVisible(child, planes, viewProj, vpW, vpH, testFrustum);
+        if (child) this.collectVisible(child, planes, viewProj, vpW, vpH, testFrustum, camX, camY, camZ);
       }
 
       // Apply fade alpha to all children just added
@@ -304,6 +367,7 @@ export class LodManager {
           screenSize: ss,
           density: 1.0,
           fadeAlpha: 1.0,
+          camDist2,
         });
         this.visiblePointCount += node.voxelCount;
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
@@ -321,7 +385,7 @@ export class LodManager {
     for (let i = 0; i < 8; i++) {
       const child = node.children[i];
       if (child) {
-        this.collectVisible(child, planes, viewProj, vpW, vpH, testFrustum);
+        this.collectVisible(child, planes, viewProj, vpW, vpH, testFrustum, camX, camY, camZ);
       }
     }
 
@@ -336,6 +400,7 @@ export class LodManager {
         screenSize: ss,
         density: 1.0,
         fadeAlpha: 1.0,
+        camDist2,
       });
       this.visiblePointCount += node.voxelCount;
       if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;

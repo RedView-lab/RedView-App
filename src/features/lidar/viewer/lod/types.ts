@@ -59,6 +59,11 @@ export interface PlatformProfile {
   isApple: boolean;
   /** Target frame time in ms used by adaptive budget (lower = aim for higher FPS). */
   targetFrameMs: number;
+  /**
+   * Scales the LOD fade thresholds. >1 means nodes drop to voxels at a
+   * larger projected size (more aggressive LOD on weak GPUs).
+   */
+  lodScreenScale: number;
 }
 
 /** Axis-aligned bounding box */
@@ -118,6 +123,8 @@ export interface VisibleNode {
   density: number;
   /** Cross-fade alpha for smooth LOD transitions (0 = fully transparent, 1 = fully opaque) */
   fadeAlpha: number;
+  /** Squared distance from camera to node center, used for front-to-back sort. */
+  camDist2: number;
 }
 
 /** Camera state for temporal coherence checks */
