@@ -11,6 +11,18 @@ import { resolutionToFactor } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types';
 
+import { loadAltitudeState, saveAltitudeState } from '@/features/altitude/lib/altitude-persist';
+import { buildAltitudeCategories } from '@/features/altitude/lib/altitude-config';
+import {
+  resolutionToFactor as altitudeResolutionToFactor,
+} from '@/features/altitude/lib/altitude-source';
+import { useAltitude } from '@/features/altitude/hooks/useAltitude';
+import type {
+  AltitudeColorMode,
+  AltitudeResolutionKey,
+  AltitudeScaleSettingKey,
+} from '@/features/altitude/types';
+
 import { loadLabelState, saveLabelState } from '@/features/labels/lib/label-persist';
 import { useLabels } from '@/features/labels/hooks/useLabels';
 import type { LabelCategory } from '@/features/labels/types';
@@ -30,6 +42,10 @@ import {
 } from './persistedState';
 import type {
   ControlPanelState,
+  AltitudeBand,
+  AltitudeColorization,
+  AltitudeResolution,
+  AltitudeScaleSetting,
   LabelKey,
   LabelsState,
   SlopeBand,
@@ -63,6 +79,12 @@ function colorModeToPanel(m: SlopeColorMode): SlopeColorization {
 function colorModeFromPanel(c: SlopeColorization): SlopeColorMode {
   return c === 'stepped' ? 'step' : 'gradient';
 }
+function altitudeColorModeToPanel(m: AltitudeColorMode): AltitudeColorization {
+  return m === 'step' ? 'stepped' : 'gradient';
+}
+function altitudeColorModeFromPanel(c: AltitudeColorization): AltitudeColorMode {
+  return c === 'stepped' ? 'step' : 'gradient';
+}
 
 /** Panel label key → backend label category (null = ui-only key, no backend). */
 const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
@@ -93,6 +115,20 @@ function buildSlopeBandsFromDynamic(
     visible: visibilityById[cat.id] ?? true,
     minDeg: cat.minDeg,
     maxDeg: cat.maxDeg,
+  }));
+}
+
+function buildAltitudeBandsFromDynamic(
+  categories: ReturnType<typeof buildAltitudeCategories>,
+  hiddenIds: Set<string>,
+): AltitudeBand[] {
+  return categories.map((cat) => ({
+    id: cat.id,
+    label: cat.displayRange,
+    color: cat.color,
+    visible: !hiddenIds.has(cat.id),
+    minMeters: cat.minMeters,
+    maxMeters: cat.maxMeters,
   }));
 }
 
@@ -310,8 +346,35 @@ export function ControlPanelContainer({
     ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
     enabled: initialControlPanel.toggles.sunlightEnabled,
   }));
-  const [altitudeEnabled, setAltitudeEnabled] = useState(
-    initialControlPanel.toggles.altitudeEnabled,
+  const [altitudeState, setAltitudeState] = useState(() => {
+    const loaded = loadAltitudeState();
+    return {
+      ...loaded,
+      enabled: initialControlPanel.toggles.altitudeEnabled ?? loaded.enabled,
+    };
+  });
+  const persistAltitude = useCallback((next: typeof altitudeState) => {
+    setAltitudeState(next);
+    saveAltitudeState(next);
+  }, []);
+  const altitudeCategories = useMemo(
+    () => buildAltitudeCategories(altitudeState.scaleSetting, altitudeState.customColors),
+    [altitudeState.scaleSetting, altitudeState.customColors],
+  );
+  const altitudeHiddenIds = useMemo(
+    () => new Set(altitudeState.hiddenBandIds),
+    [altitudeState.hiddenBandIds],
+  );
+
+  useAltitude(
+    isMapLoaded ? map : null,
+    isMapLoaded,
+    altitudeState.enabled,
+    altitudeState.opacity,
+    altitudeState.colorMode,
+    altitudeCategories,
+    altitudeState.hiddenBandIds,
+    altitudeResolutionToFactor(altitudeState.resolution),
   );
 
   // ── Routes (right-panel "Itinéraires" section) ─────────────────────
@@ -451,6 +514,14 @@ export function ControlPanelContainer({
         opacity: Math.round(slopeState.opacity * 100),
         bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
       },
+      altitude: {
+        enabled: altitudeState.enabled,
+        resolution: altitudeState.resolution,
+        colorization: altitudeColorModeToPanel(altitudeState.colorMode),
+        scaleSetting: altitudeState.scaleSetting,
+        opacity: Math.round(altitudeState.opacity * 100),
+        bands: buildAltitudeBandsFromDynamic(altitudeCategories, altitudeHiddenIds),
+      },
       weather: weatherState,
       wind: { enabled: windEnabled },
       snow: { enabled: snowEnabled },
@@ -470,6 +541,9 @@ export function ControlPanelContainer({
     slopeBandVisibility,
     slopeScale,
     slopeScaleSetting,
+    altitudeState,
+    altitudeCategories,
+    altitudeHiddenIds,
     windEnabled,
     weatherState,
     snowEnabled,
@@ -527,6 +601,56 @@ export function ControlPanelContainer({
   const handleSlopeBandToggle = useCallback((id: string) => {
     setSlopeBandVisibility((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
   }, []);
+  const handleAltitudeEnabled = useCallback(
+    (enabled: boolean) => persistAltitude({ ...altitudeState, enabled }),
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeResolution = useCallback(
+    (resolution: AltitudeResolution) => {
+      const valid: AltitudeResolutionKey[] = ['0.40 m (LIDAR)', '1 m', '5 m', '10 m'];
+      if (!valid.includes(resolution as AltitudeResolutionKey)) return;
+      persistAltitude({ ...altitudeState, resolution: resolution as AltitudeResolutionKey });
+    },
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeColorization = useCallback(
+    (value: AltitudeColorization) =>
+      persistAltitude({ ...altitudeState, colorMode: altitudeColorModeFromPanel(value) }),
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeScaleSetting = useCallback(
+    (value: AltitudeScaleSetting) => {
+      const valid: AltitudeScaleSettingKey[] = ['2 couleurs', '3 couleurs', '4 couleurs', '6 couleurs'];
+      if (!valid.includes(value as AltitudeScaleSettingKey)) return;
+      persistAltitude({ ...altitudeState, scaleSetting: value as AltitudeScaleSettingKey });
+    },
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeOpacity = useCallback(
+    (value: number) =>
+      persistAltitude({
+        ...altitudeState,
+        opacity: Math.max(0, Math.min(1, value / 100)),
+      }),
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeBandToggle = useCallback(
+    (id: string) => {
+      const hidden = new Set(altitudeState.hiddenBandIds);
+      if (hidden.has(id)) hidden.delete(id);
+      else hidden.add(id);
+      persistAltitude({ ...altitudeState, hiddenBandIds: Array.from(hidden) });
+    },
+    [persistAltitude, altitudeState],
+  );
+  const handleAltitudeBandColorChange = useCallback(
+    (id: string, color: string) =>
+      persistAltitude({
+        ...altitudeState,
+        customColors: { ...altitudeState.customColors, [id]: color },
+      }),
+    [persistAltitude, altitudeState],
+  );
 
   const handleLabelsEnabled = useCallback((enabled: boolean) => setLabelsEnabled(enabled), []);
   const handleLabelToggle = useCallback((key: LabelKey, checked: boolean) => {
@@ -605,13 +729,18 @@ export function ControlPanelContainer({
       className={className}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
-      altitudeEnabled={altitudeEnabled}
       onAltitudeEnabledChange={(enabled) => {
-        setAltitudeEnabled(enabled);
+        handleAltitudeEnabled(enabled);
         updateProjectControlPanel((draft) => {
           draft.toggles.altitudeEnabled = enabled;
         });
       }}
+      onAltitudeResolutionChange={handleAltitudeResolution}
+      onAltitudeColorizationChange={handleAltitudeColorization}
+      onAltitudeScaleSettingChange={handleAltitudeScaleSetting}
+      onAltitudeOpacityChange={handleAltitudeOpacity}
+      onAltitudeBandColorChange={handleAltitudeBandColorChange}
+      onAltitudeBandVisibilityToggle={handleAltitudeBandToggle}
       sunlightMapExpanded={projectControlPanel.sunlightMapExpanded}
       onSunlightMapExpandedChange={(open) => {
         updateProjectControlPanel((draft) => {

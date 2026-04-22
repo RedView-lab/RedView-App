@@ -55,8 +55,13 @@ export function ControlPanel({
   onWeatherLayerModeChange,
   onWeatherAddAlert,
   onWindEnabledChange,
-  altitudeEnabled,
   onAltitudeEnabledChange,
+  onAltitudeResolutionChange,
+  onAltitudeColorizationChange,
+  onAltitudeScaleSettingChange,
+  onAltitudeOpacityChange,
+  onAltitudeBandColorChange,
+  onAltitudeBandVisibilityToggle,
   onSunlightEnabledChange,
   onSunlightStateChange,
   sunlightMapExpanded,
@@ -151,10 +156,23 @@ export function ControlPanel({
       />
 
       <AltitudeSection
-        enabled={altitudeEnabled ?? true}
+        enabled={state.altitude.enabled}
         open={sectionsOpen?.altitude}
+        state={{
+          resolution: state.altitude.resolution,
+          colorization: state.altitude.colorization,
+          scaleSetting: state.altitude.scaleSetting,
+          opacity: state.altitude.opacity,
+          bands: state.altitude.bands,
+        }}
         onEnabledChange={onAltitudeEnabledChange}
         onOpenChange={(open) => onSectionOpenChange?.('altitude', open)}
+        onResolutionChange={onAltitudeResolutionChange}
+        onColorizationChange={onAltitudeColorizationChange}
+        onScaleSettingChange={onAltitudeScaleSettingChange}
+        onOpacityChange={onAltitudeOpacityChange}
+        onBandColorChange={onAltitudeBandColorChange}
+        onBandVisibilityToggle={onAltitudeBandVisibilityToggle}
       />
 
       <WeatherSection

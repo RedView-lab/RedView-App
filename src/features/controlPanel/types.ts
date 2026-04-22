@@ -58,6 +58,10 @@ export type SlopeColorization = 'gradient' | 'stepped' | string;
 export type SlopeScale = 'percent' | 'degree' | string;
 export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 
+export type AltitudeResolution = '0.40 m (LIDAR)' | '1 m' | '5 m' | '10 m' | string;
+export type AltitudeColorization = 'gradient' | 'stepped' | string;
+export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
+
 export interface SlopeBand {
   id: string;
   /** e.g. "0% - 12%" */
@@ -73,6 +77,23 @@ export interface SlopeBand {
   minDeg: number;
   /** Numeric upper bound in degrees (exclusive). Always 90 for last band. */
   maxDeg: number;
+}
+
+export interface AltitudeBand {
+  id: string;
+  label: string;
+  color: string;
+  visible: boolean;
+  minMeters: number;
+  maxMeters: number;
+}
+
+export interface AltitudeState {
+  resolution: AltitudeResolution;
+  colorization: AltitudeColorization;
+  scaleSetting: AltitudeScaleSetting;
+  opacity: number;
+  bands: AltitudeBand[];
 }
 
 export interface SlopesState {
@@ -143,6 +164,7 @@ export interface ControlPanelState {
   labels: { enabled: boolean; state: LabelsState };
   routes: { enabled: boolean; items: RouteItem[] };
   slopes: { enabled: boolean } & SlopesState;
+  altitude: { enabled: boolean } & AltitudeState;
   weather: WeatherState;
   wind: ToggleOnlySection;
   snow: ToggleOnlySection;
@@ -180,6 +202,14 @@ export interface ControlPanelHandlers {
    *  bandIndex is 0-based. field is 'min' or 'max'. valueDeg is the new angle in degrees. */
   onSlopeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueDeg: number) => void;
 
+  onAltitudeEnabledChange?: (enabled: boolean) => void;
+  onAltitudeResolutionChange?: (value: AltitudeResolution) => void;
+  onAltitudeColorizationChange?: (value: AltitudeColorization) => void;
+  onAltitudeScaleSettingChange?: (value: AltitudeScaleSetting) => void;
+  onAltitudeOpacityChange?: (value: number) => void;
+  onAltitudeBandColorChange?: (id: string, color: string) => void;
+  onAltitudeBandVisibilityToggle?: (id: string) => void;
+
   onWeatherEnabledChange?: (enabled: boolean) => void;
   onWeatherTabChange?: (tab: WeatherTab) => void;
   onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
@@ -201,8 +231,6 @@ export interface ControlPanelProps extends ControlPanelHandlers {
   className?: string;
   sectionsOpen?: ControlPanelSectionsOpenState;
   onSectionOpenChange?: (section: ControlPanelSectionKey, open: boolean) => void;
-  altitudeEnabled?: boolean;
-  onAltitudeEnabledChange?: (enabled: boolean) => void;
   sunlightMapExpanded?: boolean;
   onSunlightMapExpandedChange?: (open: boolean) => void;
   /** Optional px width the panel shell should render at. */

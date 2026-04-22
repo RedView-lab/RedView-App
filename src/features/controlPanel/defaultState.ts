@@ -52,6 +52,19 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
       { id: 'band-6', percentRange: '>100%',        degreeRange: '45° - 90° (Falaise)',      label: '>100% (Falaise)',            color: '#8B0000', visible: true, minDeg: 45, maxDeg: 90 },
     ],
   },
+  altitude: {
+    enabled: false,
+    resolution: '0.40 m (LIDAR)',
+    colorization: 'gradient',
+    scaleSetting: '4 couleurs',
+    opacity: 20,
+    bands: [
+      { id: 'alt-0', label: '0 m - 1000 m', color: '#2DBF8C', visible: true, minMeters: 0, maxMeters: 1000 },
+      { id: 'alt-1000', label: '1000 m - 2000 m', color: '#FFD800', visible: true, minMeters: 1000, maxMeters: 2000 },
+      { id: 'alt-2000', label: '2000 m - 3000 m', color: '#FF7200', visible: true, minMeters: 2000, maxMeters: 3000 },
+      { id: 'alt-3000', label: '3000 m - 5000 m', color: '#FF0000', visible: true, minMeters: 3000, maxMeters: 5000 },
+    ],
+  },
   weather: {
     enabled: true,
     tab: 'forecast',

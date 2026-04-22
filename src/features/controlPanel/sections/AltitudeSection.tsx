@@ -1,21 +1,17 @@
-import { useState } from 'react';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
 import { IconChevronDown, IconEye, IconEyeOff } from '../icons';
-
-type AltitudeResolution = '0.40 m (LIDAR)' | '1 m' | '5 m' | '10 m';
-type AltitudeColorization = 'Dégradé' | 'Remplissage';
-type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs';
-
-interface AltitudeBand {
-  id: string;
-  label: string;
-  color: string;
-  visible: boolean;
-}
+import type {
+  AltitudeBand,
+  AltitudeColorization,
+  AltitudeResolution,
+  AltitudeScaleSetting,
+  ControlPanelHandlers,
+  ControlPanelState,
+} from '../types';
 
 const RESOLUTION_OPTIONS: { value: AltitudeResolution; label: string }[] = [
   { value: '0.40 m (LIDAR)', label: '0.40 m (LIDAR)' },
@@ -25,8 +21,8 @@ const RESOLUTION_OPTIONS: { value: AltitudeResolution; label: string }[] = [
 ];
 
 const COLORIZATION_OPTIONS: { value: AltitudeColorization; label: string }[] = [
-  { value: 'Dégradé', label: 'Dégradé' },
-  { value: 'Remplissage', label: 'Remplissage' },
+  { value: 'gradient', label: 'Dégradé' },
+  { value: 'stepped', label: 'Remplissage' },
 ];
 
 const SCALE_OPTIONS: { value: AltitudeScaleSetting; label: string }[] = [
@@ -34,13 +30,6 @@ const SCALE_OPTIONS: { value: AltitudeScaleSetting; label: string }[] = [
   { value: '3 couleurs', label: '3 couleurs' },
   { value: '4 couleurs', label: '4 couleurs' },
   { value: '6 couleurs', label: '6 couleurs' },
-];
-
-const DEFAULT_BANDS: AltitudeBand[] = [
-  { id: 'altitude-band-0', label: '0 m', color: '#2DBF8C', visible: true },
-  { id: 'altitude-band-1000', label: '1000 m', color: '#FFD800', visible: true },
-  { id: 'altitude-band-2000', label: '2000 m', color: '#FF7200', visible: true },
-  { id: 'altitude-band-3000', label: '3000 m', color: '#FF0000', visible: true },
 ];
 
 function hexLabel(color: string): string {
@@ -84,24 +73,32 @@ function AltitudeBandRow({
 }
 
 interface AltitudeSectionProps {
+  state: Omit<ControlPanelState['altitude'], 'enabled'>;
   enabled?: boolean;
   open?: boolean;
   onEnabledChange?: (enabled: boolean) => void;
   onOpenChange?: (open: boolean) => void;
+  onResolutionChange?: ControlPanelHandlers['onAltitudeResolutionChange'];
+  onColorizationChange?: ControlPanelHandlers['onAltitudeColorizationChange'];
+  onScaleSettingChange?: ControlPanelHandlers['onAltitudeScaleSettingChange'];
+  onOpacityChange?: ControlPanelHandlers['onAltitudeOpacityChange'];
+  onBandColorChange?: ControlPanelHandlers['onAltitudeBandColorChange'];
+  onBandVisibilityToggle?: ControlPanelHandlers['onAltitudeBandVisibilityToggle'];
 }
 
 export function AltitudeSection({
+  state,
   enabled = true,
   open,
   onEnabledChange,
   onOpenChange,
+  onResolutionChange,
+  onColorizationChange,
+  onScaleSettingChange,
+  onOpacityChange,
+  onBandColorChange,
+  onBandVisibilityToggle,
 }: AltitudeSectionProps) {
-  const [resolution, setResolution] = useState<AltitudeResolution>('0.40 m (LIDAR)');
-  const [colorization, setColorization] = useState<AltitudeColorization>('Dégradé');
-  const [opacity, setOpacity] = useState(20);
-  const [scale, setScale] = useState<AltitudeScaleSetting>('4 couleurs');
-  const [bands, setBands] = useState<AltitudeBand[]>(DEFAULT_BANDS);
-
   return (
     <Section
       title="Altitude"
@@ -113,9 +110,9 @@ export function AltitudeSection({
         <span className="rvc-row__label">Résolution</span>
         <Select
           width={140}
-          value={resolution}
+          value={state.resolution}
           options={RESOLUTION_OPTIONS}
-          onChange={(value) => setResolution(value as AltitudeResolution)}
+          onChange={(value) => onResolutionChange?.(value as AltitudeResolution)}
         />
       </div>
 
@@ -123,9 +120,9 @@ export function AltitudeSection({
         <span className="rvc-row__label">Type de colorisation</span>
         <Select
           width={140}
-          value={colorization}
+          value={state.colorization}
           options={COLORIZATION_OPTIONS}
-          onChange={(value) => setColorization(value as AltitudeColorization)}
+          onChange={(value) => onColorizationChange?.(value as AltitudeColorization)}
         />
       </div>
 
@@ -133,9 +130,9 @@ export function AltitudeSection({
         <span className="rvc-row__label">Opacité</span>
         <div className="rvc-altitude__opacity-control">
           <div className="rvc-altitude__opacity-slider-wrap">
-            <Slider value={opacity} onChange={setOpacity} width="100%" />
+            <Slider value={state.opacity} onChange={onOpacityChange} width="100%" />
           </div>
-          <span className="rvc-altitude__opacity-value">{opacity} %</span>
+          <span className="rvc-altitude__opacity-value">{state.opacity} %</span>
         </div>
       </div>
 
@@ -143,31 +140,19 @@ export function AltitudeSection({
         <span className="rvc-row__label">Échelle</span>
         <Select
           width={140}
-          value={scale}
+          value={state.scaleSetting}
           options={SCALE_OPTIONS}
-          onChange={(value) => setScale(value as AltitudeScaleSetting)}
+          onChange={(value) => onScaleSettingChange?.(value as AltitudeScaleSetting)}
         />
       </div>
 
       <div className="rvc-altitude__bands">
-        {bands.map((band) => (
+        {state.bands.map((band) => (
           <AltitudeBandRow
             key={band.id}
             band={band}
-            onToggleVisibility={() => {
-              setBands((currentBands) =>
-                currentBands.map((entry) =>
-                  entry.id === band.id ? { ...entry, visible: !entry.visible } : entry,
-                ),
-              );
-            }}
-            onColorChange={(color) => {
-              setBands((currentBands) =>
-                currentBands.map((entry) =>
-                  entry.id === band.id ? { ...entry, color } : entry,
-                ),
-              );
-            }}
+            onToggleVisibility={() => onBandVisibilityToggle?.(band.id)}
+            onColorChange={(color) => onBandColorChange?.(band.id, color)}
           />
         ))}
       </div>

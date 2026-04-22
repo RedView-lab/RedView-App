@@ -25,6 +25,7 @@ importScripts(
   '/sw-dem/composite.js',
   '/sw-dem/ortho.js',
   '/sw-dem/slope.js',
+  '/sw-dem/altitude.js',
 );
 
 // Shared mutable state (used by sub-modules via global scope)
@@ -44,6 +45,7 @@ const _compositeQueue = [];
 // Promise<Response>. Lets concurrent requests for the same tile share
 // the single ongoing computation instead of duplicating the Horn pipeline.
 const SLOPE_INFLIGHT = new Map();
+const ALTITUDE_INFLIGHT = new Map();
 function acquireComposite() {
   if (_compositeActive < COMPOSITE_MAX_CONCURRENT) {
     _compositeActive++;
@@ -126,6 +128,10 @@ self.addEventListener('message', (e) => {
     caches.delete(SLOPE_CACHE_NAME);
     return;
   }
+  if (e.data?.type === 'CLEAR_ALTITUDE_CACHE') {
+    caches.delete(ALTITUDE_CACHE_NAME);
+    return;
+  }
   if (e.data?.type === 'CLEAR_SHADOW_CACHE') {
     // Retired endpoint — kept for compatibility with any in-flight client
     // build that still posts the message.
@@ -174,6 +180,18 @@ self.addEventListener('fetch', (event) => {
       parseInt(slopeMatch[2], 10),
       parseInt(slopeMatch[3], 10),
       slopeRes,
+    ));
+    return;
+  }
+
+  const altitudeMatch = url.pathname.match(/^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  if (altitudeMatch) {
+    const altitudeRes = url.searchParams.get('res') || '';
+    event.respondWith(handleAltitudeRequest(
+      parseInt(altitudeMatch[1], 10),
+      parseInt(altitudeMatch[2], 10),
+      parseInt(altitudeMatch[3], 10),
+      altitudeRes,
     ));
     return;
   }
@@ -610,5 +628,62 @@ async function handleSlopeRequest(z, x, y, resParam) {
     return response.clone();
   } finally {
     SLOPE_INFLIGHT.delete(inflightKey);
+  }
+}
+
+async function handleAltitudeRequest(z, x, y, resParam) {
+  const altitudeCache = await caches.open(ALTITUDE_CACHE_NAME);
+  const resFactor = (() => {
+    const n = parseInt(resParam, 10);
+    return Number.isFinite(n) && n > 1 ? Math.min(n, 64) : 1;
+  })();
+  const resSuffix = resFactor > 1 ? `?res=${resFactor}` : '';
+  const cacheKey = new Request(`/altitude-tiles/${z}/${x}/${y}${resSuffix}`);
+  const cached = await altitudeCache.match(cacheKey);
+  if (cached) return cached;
+
+  const inflightKey = `${z}/${x}/${y}?${resFactor}`;
+  const existing = ALTITUDE_INFLIGHT.get(inflightKey);
+  if (existing) {
+    try { return (await existing).clone(); }
+    catch { /* fall through and recompute */ }
+  }
+
+  const work = (async () => {
+    const demCache = await caches.open(CACHE_NAME);
+    const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+    let demResponse = await demCache.match(demKey);
+    if (!demResponse || demResponse.status !== 200) {
+      demResponse = await handleDemRequest(demKey, z, x, y);
+    }
+    if (!demResponse || demResponse.status !== 200) {
+      return transparentTileResponse();
+    }
+
+    try {
+      const demBlob = await demResponse.clone().blob();
+      const altitudeBlob = await buildAltitudeTile(demBlob, resFactor);
+      const response = new Response(altitudeBlob, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=604800',
+          'X-Tile-Type': 'altitude',
+        },
+      });
+      altitudeCache.put(cacheKey, response.clone());
+      return response;
+    } catch (err) {
+      console.error('[altitude]', z, x, y, err);
+      return transparentTileResponse();
+    }
+  })();
+
+  ALTITUDE_INFLIGHT.set(inflightKey, work);
+  try {
+    const response = await work;
+    return response.clone();
+  } finally {
+    ALTITUDE_INFLIGHT.delete(inflightKey);
   }
 }

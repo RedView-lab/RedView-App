@@ -82,6 +82,7 @@ const CACHE_NAME = 'dem-tiles-v28';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v22';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';
+const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
 // Debug flag — gate verbose per-tile logging. Warnings and errors always log.
