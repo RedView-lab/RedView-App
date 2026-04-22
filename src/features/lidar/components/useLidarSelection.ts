@@ -10,6 +10,7 @@ const HOVER_FILL_ID = 'lidar-selection-hover-fill';
 const HOVER_LINE_ID = 'lidar-selection-hover-line';
 const SELECTED_FILL_ID = 'lidar-selection-selected-fill';
 const SELECTED_LINE_ID = 'lidar-selection-selected-line';
+const LAYER_ORDER = [HOVER_FILL_ID, SELECTED_FILL_ID, HOVER_LINE_ID, SELECTED_LINE_ID] as const;
 
 type SelectionFeature = Feature<Polygon, { role: 'hover' | 'selected'; tileId: string }>;
 
@@ -53,6 +54,17 @@ function buildFeatureCollection(
   };
 }
 
+function restackSelectionLayers(map: MapboxMap): void {
+  for (const layerId of LAYER_ORDER) {
+    if (!map.getLayer(layerId)) continue;
+    try {
+      map.moveLayer(layerId);
+    } catch {
+      // Mapbox can reject a move while the style graph is still settling.
+    }
+  }
+}
+
 function ensureSelectionLayers(map: MapboxMap): void {
   if (!map.getSource(SOURCE_ID)) {
     map.addSource(SOURCE_ID, {
@@ -69,10 +81,12 @@ function ensureSelectionLayers(map: MapboxMap): void {
       id: HOVER_FILL_ID,
       type: 'fill',
       source: SOURCE_ID,
+      slot: 'top',
       filter: ['==', ['get', 'role'], 'hover'],
       paint: {
         'fill-color': '#ff453a',
         'fill-opacity': 0.08,
+        'fill-emissive-strength': 1,
       },
     });
   }
@@ -82,12 +96,15 @@ function ensureSelectionLayers(map: MapboxMap): void {
       id: HOVER_LINE_ID,
       type: 'line',
       source: SOURCE_ID,
+      slot: 'top',
       filter: ['==', ['get', 'role'], 'hover'],
       paint: {
         'line-color': '#ff453a',
         'line-opacity': 0.95,
         'line-width': 2,
         'line-dasharray': [2, 2],
+        'line-emissive-strength': 1,
+        'line-occlusion-opacity': 1,
       },
     });
   }
@@ -97,10 +114,12 @@ function ensureSelectionLayers(map: MapboxMap): void {
       id: SELECTED_FILL_ID,
       type: 'fill',
       source: SOURCE_ID,
+      slot: 'top',
       filter: ['==', ['get', 'role'], 'selected'],
       paint: {
         'fill-color': '#ff3b30',
         'fill-opacity': 0.14,
+        'fill-emissive-strength': 1,
       },
     });
   }
@@ -110,14 +129,19 @@ function ensureSelectionLayers(map: MapboxMap): void {
       id: SELECTED_LINE_ID,
       type: 'line',
       source: SOURCE_ID,
+      slot: 'top',
       filter: ['==', ['get', 'role'], 'selected'],
       paint: {
         'line-color': '#ff3b30',
         'line-opacity': 1,
         'line-width': 2.5,
+        'line-emissive-strength': 1,
+        'line-occlusion-opacity': 1,
       },
     });
   }
+
+  restackSelectionLayers(map);
 }
 
 function removeSelectionLayers(map: MapboxMap): void {
@@ -142,6 +166,8 @@ export function useLidarSelection(
   const hoveredRef = useRef<TileCoord | null>(null);
   const selectedRef = useRef<TileCoord | null>(null);
   const onDisableRef = useRef(onDisable);
+  const syncFrameRef = useRef<number | null>(null);
+  const syncTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -163,6 +189,30 @@ export function useLidarSelection(
       if (!source) return;
 
       source.setData(buildFeatureCollection(hoveredRef.current, selectedRef.current, enabledRef.current));
+    };
+
+    const clearScheduledSync = () => {
+      if (syncFrameRef.current !== null) {
+        window.cancelAnimationFrame(syncFrameRef.current);
+        syncFrameRef.current = null;
+      }
+      if (syncTimeoutRef.current !== null) {
+        window.clearTimeout(syncTimeoutRef.current);
+        syncTimeoutRef.current = null;
+      }
+    };
+
+    const scheduleOverlaySync = () => {
+      clearScheduledSync();
+      updateSourceData();
+      syncFrameRef.current = window.requestAnimationFrame(() => {
+        syncFrameRef.current = null;
+        updateSourceData();
+      });
+      syncTimeoutRef.current = window.setTimeout(() => {
+        syncTimeoutRef.current = null;
+        updateSourceData();
+      }, 150);
     };
 
     const handleMouseMove = (event: MapMouseEvent) => {
@@ -190,7 +240,11 @@ export function useLidarSelection(
     };
 
     const handleStyleLoad = () => {
-      updateSourceData();
+      scheduleOverlaySync();
+    };
+
+    const handleStyleData = () => {
+      scheduleOverlaySync();
     };
 
     const handleContextMenu = (event: MapMouseEvent) => {
@@ -205,22 +259,25 @@ export function useLidarSelection(
     map.on('click', handleClick);
     map.on('contextmenu', handleContextMenu);
     map.on('style.load', handleStyleLoad);
+    map.on('styledata', handleStyleData);
     map.getCanvas().addEventListener('mouseleave', handleMouseLeave);
 
     if (enabled) {
       map.getCanvas().style.cursor = 'crosshair';
-      updateSourceData();
+      scheduleOverlaySync();
     } else {
       hoveredRef.current = null;
       map.getCanvas().style.cursor = '';
-      updateSourceData();
+      scheduleOverlaySync();
     }
 
     return () => {
+      clearScheduledSync();
       map.off('mousemove', handleMouseMove);
       map.off('click', handleClick);
       map.off('contextmenu', handleContextMenu);
       map.off('style.load', handleStyleLoad);
+      map.off('styledata', handleStyleData);
       map.getCanvas().removeEventListener('mouseleave', handleMouseLeave);
       map.getCanvas().style.cursor = '';
       removeSelectionLayers(map);
