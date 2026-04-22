@@ -182,15 +182,6 @@ export function CenterPanelToolbar() {
             <IconChevronDown size={16} />
           </button>
 
-          <button
-            className="rvc-center-toolbar__button rvc-center-toolbar__button--compact-accent"
-            type="button"
-            aria-label="Analyser"
-            title="Analyser"
-          >
-            <span className="rvc-center-toolbar__button-text">Analyser</span>
-          </button>
-
           <button className="rvc-center-toolbar__button rvc-center-toolbar__button--label" type="button" aria-label="Tracer" title="Tracer">
             <IconPencilLine />
             <span className="rvc-center-toolbar__button-text">Tracer</span>
