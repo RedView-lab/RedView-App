@@ -115,6 +115,7 @@
 .rvc-select__dropdown {
   position: fixed;
   z-index: 9999;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   min-width: 80px;
@@ -122,10 +123,12 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   overflow: clip;
-  background: rgba(15, 15, 15, 0.74);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
+.rvc-select__dropdown > * {
+  position: relative;
+  z-index: 1;
 }
 
 .rvc-select__option {

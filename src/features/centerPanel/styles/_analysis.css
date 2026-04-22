@@ -191,15 +191,18 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: 8;
+  isolation: isolate;
   width: min(220px, max(160px, 100%));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   overflow: hidden;
   pointer-events: auto;
-  background: rgba(15, 15, 15, 0.74);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
+.rvc-center-analysis__dropdown > * {
+  position: relative;
+  z-index: 1;
 }
 
 .rvc-center-analysis__dropdown-option {

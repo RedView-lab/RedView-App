@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { IconChevronDown, IconCheck } from './icons';
 
 interface SelectOption<T extends string = string> {
@@ -62,6 +63,7 @@ export function PanelSelect<T extends string = string>({
       />
       {open && (
         <div className="rvi-select__menu" role="listbox" aria-label={ariaLabel}>
+          <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
           {options.map((o) => {
             const selected = o.value === value;
             return (

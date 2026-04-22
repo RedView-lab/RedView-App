@@ -1,5 +1,6 @@
 import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { IconChevronDown, IconCheck } from '../icons';
 
 interface SelectOption<T extends string = string> {
@@ -93,6 +94,7 @@ export function Select<T extends string = string>({
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
+          <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
           {options.map((o) => (
             <div
               key={o.value}

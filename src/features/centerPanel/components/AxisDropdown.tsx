@@ -1,3 +1,4 @@
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { IconCheck, IconChevronDown } from './CenterPanelIcons';
 
 export interface AxisOption {
@@ -44,6 +45,7 @@ export function AxisDropdown({
 
       {isOpen ? (
         <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={axisLabel}>
+          <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
           {options.map((option) => {
             const selected = value === option.value;
             return (

@@ -213,6 +213,7 @@
   top: calc(100% + 4px);
   left: 0;
   z-index: 1000;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -221,10 +222,11 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: rgba(15, 15, 15, 0.74);
-  backdrop-filter: blur(60px);
-  -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+.rvi-select__menu > * {
+  position: relative;
+  z-index: 1;
 }
 .rvi-select__option {
   all: unset;
