@@ -39,6 +39,8 @@ function hiddenIdsFromRanges(
   return out;
 }
 
+// Idempotent: ensures BOTH source and layer exist. Safe to call multiple
+// times — will only add what's missing.
 function addSlopeLayer(
   map: MapboxMap,
   opacity: number,
@@ -47,10 +49,17 @@ function addSlopeLayer(
   hiddenIds: Set<string>,
   resolutionFactor: number,
 ) {
-  if (map.getSource(SLOPE_SOURCE_ID)) return;
-  map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(resolutionFactor));
-  const layer = buildSlopeLayer(opacity, colorMode, categories, hiddenIds);
-  map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
+  try {
+    if (!map.getSource(SLOPE_SOURCE_ID)) {
+      map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(resolutionFactor));
+    }
+    if (!map.getLayer(SLOPE_LAYER_ID)) {
+      const layer = buildSlopeLayer(opacity, colorMode, categories, hiddenIds);
+      map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
+    }
+  } catch {
+    /* style may be transitioning — safe to ignore */
+  }
 }
 
 function removeSlopeLayer(map: MapboxMap) {
@@ -62,25 +71,51 @@ function removeSlopeLayer(map: MapboxMap) {
   }
 }
 
+// Instant visibility flip — one shader uniform, no tile refetch, no PNG
+// pipeline round-trip. This is what makes the toggle feel snappy on rapid
+// on/off clicks: source + textures stay alive in Mapbox; we just hide them.
+function setSlopeVisibility(map: MapboxMap, visible: boolean) {
+  try {
+    if (map.getLayer(SLOPE_LAYER_ID)) {
+      map.setLayoutProperty(
+        SLOPE_LAYER_ID,
+        'visibility',
+        visible ? 'visible' : 'none',
+      );
+    }
+  } catch {
+    /* layer may not exist yet */
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────
 //
-// Update model (this is what makes UI changes feel instant):
+// Update model — designed for instant UX on rapid toggling:
 //
 //   ┌──────────────────────────┬────────────────────────────────────────┐
 //   │ Change                    │ Action                                 │
 //   ├──────────────────────────┼────────────────────────────────────────┤
-//   │ enabled toggle            │ add / remove layer                     │
+//   │ enabled toggle (1st on)   │ add source + layer                     │
+//   │ enabled toggle (later)    │ setLayoutProperty('visibility')        │
+//   │                           │   ↳ NO source rebuild, NO tile refetch │
 //   │ opacity                   │ setPaintProperty('raster-opacity')      │
-//   │ colorMode                 │ setPaintProperty('raster-color')        │
-//   │ categories (breakpoints,  │ setPaintProperty('raster-color')        │
-//   │   colors, count)          │                                         │
-//   │ hidden bands              │ setPaintProperty('raster-color')        │
+//   │ colorMode / categories /  │ setPaintProperty('raster-color')        │
+//   │   hidden bands            │                                         │
 //   │ resolution                │ rebuild source (real data change)       │
 //   │ style.load                │ re-add layer with current state         │
+//   │ unmount                   │ remove layer + source                   │
 //   └──────────────────────────┴────────────────────────────────────────┘
 //
-// The SW caches a single PNG per (z, x, y, resFactor). Color/mode/hide
-// changes never touch the SW cache and never refetch a tile.
+// Why visibility instead of remove+readd on every toggle?
+//   • Removing the source aborts in-flight tile requests and forces Mapbox
+//     to refetch every visible tile on re-add. With a slow SW slope
+//     pipeline (DEM decode → Horn → PNG encode), this caused multi-second
+//     reappearance after a quick toggle and occasional "doesn't appear"
+//     races between teardown and re-add.
+//   • Visibility=none is a single layout-property change. Tiles stay in
+//     the GPU texture cache, so toggling back is instant (≤1 frame).
+//   • Mapbox stops sampling/uploading tiles for invisible raster layers,
+//     so there's no rendering cost while disabled.
 
 export function useSlope(
   map: MapboxMap | null,
@@ -125,34 +160,63 @@ export function useSlope(
   hiddenIdsRef.current = hiddenIds;
   resolutionFactorRef.current = resolutionFactor;
 
-  // ── 1. Toggle: add / remove layer ────────────────────────────────────
-  // Also rebuilds when resolution changes (only data-affecting parameter).
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
+  // Tracks whether the source+layer are currently mounted in the map.
+  // Reset to false whenever the style is reloaded (Mapbox wipes custom
+  // sources/layers on style swap). NOT in sync with `enabled` — we keep
+  // the layer mounted across enable/disable toggles and use visibility.
+  const mountedRef = useRef(false);
+  // Last resolution factor we mounted with — used to detect real
+  // data-affecting changes (the only thing that justifies a rebuild).
+  const mountedResolutionRef = useRef<number | null>(null);
 
-    if (enabled) {
-      // If a previous source exists with a stale resolution, swap it out.
-      if (map.getSource(SLOPE_SOURCE_ID)) removeSlopeLayer(map);
-      addSlopeLayer(
-        map,
-        opacityRef.current,
-        colorModeRef.current,
-        categoriesRef.current ?? [],
-        hiddenIdsRef.current,
-        resolutionFactor,
-      );
-    } else {
-      removeSlopeLayer(map);
-    }
-
-    return () => {
-      if (map.getStyle()) removeSlopeLayer(map);
-    };
-  }, [map, isMapLoaded, enabled, resolutionFactor]);
-
-  // ── 2. Opacity → instant ─────────────────────────────────────────────
+  // ── 1. Mount layer on first enable (idempotent) ──────────────────────
+  // We add the layer the first time the user enables slope. After that,
+  // disable/re-enable cycles only flip visibility (effect 2) — the source
+  // stays mounted so tiles stay in GPU cache and the toggle is instant.
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
+    if (mountedRef.current) return;
+    addSlopeLayer(
+      map,
+      opacityRef.current,
+      colorModeRef.current,
+      categoriesRef.current ?? [],
+      hiddenIdsRef.current,
+      resolutionFactorRef.current,
+    );
+    mountedRef.current = true;
+    mountedResolutionRef.current = resolutionFactorRef.current;
+  }, [map, isMapLoaded, enabled]);
+
+  // ── 1b. Rebuild source on resolution change (real data change) ───────
+  useEffect(() => {
+    if (!map || !isMapLoaded || !mountedRef.current) return;
+    if (mountedResolutionRef.current === resolutionFactor) return;
+    removeSlopeLayer(map);
+    mountedRef.current = false;
+    addSlopeLayer(
+      map,
+      opacityRef.current,
+      colorModeRef.current,
+      categoriesRef.current ?? [],
+      hiddenIdsRef.current,
+      resolutionFactor,
+    );
+    mountedRef.current = true;
+    mountedResolutionRef.current = resolutionFactor;
+    // Re-apply visibility in case the layer is currently disabled.
+    setSlopeVisibility(map, enabledRef.current);
+  }, [map, isMapLoaded, resolutionFactor]);
+
+  // ── 2. Visibility flip → instant on rapid toggles ────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded || !mountedRef.current) return;
+    setSlopeVisibility(map, enabled);
+  }, [map, isMapLoaded, enabled]);
+
+  // ── 3. Opacity → instant ─────────────────────────────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded || !mountedRef.current) return;
     try {
       if (map.getLayer(SLOPE_LAYER_ID)) {
         map.setPaintProperty(SLOPE_LAYER_ID, 'raster-opacity', opacity);
@@ -160,13 +224,13 @@ export function useSlope(
     } catch {
       /* layer may not exist yet */
     }
-  }, [map, isMapLoaded, enabled, opacity]);
+  }, [map, isMapLoaded, opacity]);
 
-  // ── 3. Color expression (mode / categories / hidden) → instant ───────
+  // ── 4. Color expression (mode / categories / hidden) → instant ───────
   // No source rebuild, no tile refetch. Mapbox swaps the GPU shader uniform
   // and the next frame already shows the new colors.
   useEffect(() => {
-    if (!map || !isMapLoaded || !enabled) return;
+    if (!map || !isMapLoaded || !mountedRef.current) return;
     if (!categories?.length) return;
     try {
       if (map.getLayer(SLOPE_LAYER_ID)) {
@@ -185,13 +249,16 @@ export function useSlope(
     }
     // categoriesKey + hiddenKey provide stable dependency identity;
     // colorMode is a primitive.
-  }, [map, isMapLoaded, enabled, colorMode, categoriesKey, hiddenKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, colorMode, categoriesKey, hiddenKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── 4. Style reload: re-add the layer with current state ─────────────
+  // ── 5. Style reload: re-add the layer with current state ─────────────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
     const onStyleLoad = () => {
+      // Style swap wipes all custom sources/layers — reset our mount flag.
+      mountedRef.current = false;
+      mountedResolutionRef.current = null;
       // Defer to the next tick so style.load completes before we touch it.
       setTimeout(() => {
         if (!enabledRef.current) return;
@@ -203,10 +270,25 @@ export function useSlope(
           hiddenIdsRef.current,
           resolutionFactorRef.current,
         );
+        mountedRef.current = true;
+        mountedResolutionRef.current = resolutionFactorRef.current;
       }, 0);
     };
 
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
   }, [map, isMapLoaded]);
+
+  // ── 6. Unmount: actual teardown ──────────────────────────────────────
+  useEffect(() => {
+    if (!map) return;
+    return () => {
+      try {
+        if (map.getStyle && map.getStyle()) removeSlopeLayer(map);
+      } catch {
+        /* map already destroyed */
+      }
+      mountedRef.current = false;
+    };
+  }, [map]);
 }

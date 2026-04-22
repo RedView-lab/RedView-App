@@ -39,6 +39,11 @@ let mapboxToken = '';
 const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
+
+// In-flight slope tile dedup: key = `${z}/${x}/${y}?${resFactor}` →
+// Promise<Response>. Lets concurrent requests for the same tile share
+// the single ongoing computation instead of duplicating the Horn pipeline.
+const SLOPE_INFLIGHT = new Map();
 function acquireComposite() {
   if (_compositeActive < COMPOSITE_MAX_CONCURRENT) {
     _compositeActive++;
@@ -541,46 +546,69 @@ async function handleSlopeRequest(z, x, y, resParam) {
   const cached = await slopeCache.match(cacheKey);
   if (cached) return cached;
 
-  const demCache = await caches.open(CACHE_NAME);
-  const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
-  let demResponse = await demCache.match(demKey);
-  if (!demResponse || demResponse.status !== 200) {
-    demResponse = await handleDemRequest(demKey, z, x, y);
-  }
-  if (!demResponse || demResponse.status !== 200) {
-    return transparentTileResponse();
+  // ── In-flight coalescing ────────────────────────────────────────────
+  // Rapid toggling / panning can spawn duplicate concurrent requests for
+  // the same tile. Without dedup, each one runs the full DEM-decode +
+  // Horn + PNG-encode pipeline. We share the first promise across all
+  // callers and clone the response per-consumer (Response bodies are
+  // single-use streams).
+  const inflightKey = `${z}/${x}/${y}?${resFactor}`;
+  const existing = SLOPE_INFLIGHT.get(inflightKey);
+  if (existing) {
+    try { return (await existing).clone(); }
+    catch { /* fall through and recompute */ }
   }
 
-  // Pre-warm the 4 neighbour DEM tiles so the slope padding always uses
-  // real elevations, not the own-edge replication that produces visible
-  // 1-pixel seams between adjacent slope tiles. We allow each neighbour to
-  // fail silently — `buildPaddedElevations` still has its replicate-edge
-  // fallback for tiles outside coverage / 204'd by Mapbox.
-  await Promise.all([
-    [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
-  ].map(async ([nx, ny]) => {
-    if (ny < 0 || nx < 0) return;
-    const nKey = new Request(`/dem-tiles/${z}/${nx}/${ny}`);
-    const existing = await demCache.match(nKey);
-    if (existing && existing.status === 200) return;
-    try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
-  }));
+  const work = (async () => {
+    const demCache = await caches.open(CACHE_NAME);
+    const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+    let demResponse = await demCache.match(demKey);
+    if (!demResponse || demResponse.status !== 200) {
+      demResponse = await handleDemRequest(demKey, z, x, y);
+    }
+    if (!demResponse || demResponse.status !== 200) {
+      return transparentTileResponse();
+    }
 
+    // Pre-warm the 4 neighbour DEM tiles so the slope padding always uses
+    // real elevations, not the own-edge replication that produces visible
+    // 1-pixel seams between adjacent slope tiles. We allow each neighbour to
+    // fail silently — `buildPaddedElevations` still has its replicate-edge
+    // fallback for tiles outside coverage / 204'd by Mapbox.
+    await Promise.all([
+      [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
+    ].map(async ([nx, ny]) => {
+      if (ny < 0 || nx < 0) return;
+      const nKey = new Request(`/dem-tiles/${z}/${nx}/${ny}`);
+      const existingDem = await demCache.match(nKey);
+      if (existingDem && existingDem.status === 200) return;
+      try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
+    }));
+
+    try {
+      const demBlob = await demResponse.clone().blob();
+      const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor);
+      const response = new Response(slopeBlob, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=604800',
+          'X-Tile-Type': 'slope',
+        },
+      });
+      slopeCache.put(cacheKey, response.clone());
+      return response;
+    } catch (err) {
+      console.error('[slope]', z, x, y, err);
+      return transparentTileResponse();
+    }
+  })();
+
+  SLOPE_INFLIGHT.set(inflightKey, work);
   try {
-    const demBlob = await demResponse.clone().blob();
-    const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor);
-    const response = new Response(slopeBlob, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=604800',
-        'X-Tile-Type': 'slope',
-      },
-    });
-    slopeCache.put(cacheKey, response.clone());
-    return response;
-  } catch (err) {
-    console.error('[slope]', z, x, y, err);
-    return transparentTileResponse();
+    const response = await work;
+    return response.clone();
+  } finally {
+    SLOPE_INFLIGHT.delete(inflightKey);
   }
 }
