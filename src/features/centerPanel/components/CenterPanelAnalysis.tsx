@@ -1,7 +1,17 @@
-﻿import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
-import { AnalysisChart } from './chart';
+import {
+  AnalysisChart,
+  buildSeriesFromPrediction,
+  type AxisMetricId,
+  type AxisMode,
+  type ChartSeries,
+} from './chart';
+import {
+  usePredictionStoreOptional,
+  useProjectStoreOptional,
+} from '@/features/itineraryPanel';
 
 const filters = ['Waypoint', 'POI', 'Pause', 'Alertes', 'Pente', 'Jour/nuit'];
 
@@ -34,8 +44,12 @@ const axisOptions: AxisOption[] = [
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
-  const [axis1Value, setAxis1Value] = useState('Dénivelé');
-  const [axis2Value, setAxis2Value] = useState('Température');
+  const [axis1Value, setAxis1Value] = useState<AxisMetricId>('Vitesse');
+  const [axis2Value, setAxis2Value] = useState<AxisMetricId>('Puissance');
+  const [xMode, setXMode] = useState<AxisMode>('distance');
+
+  const projectStore = useProjectStoreOptional();
+  const predictionStore = usePredictionStoreOptional();
 
   useEffect(() => {
     if (!openAxis) return;
@@ -53,14 +67,55 @@ export function CenterPanelAnalysis() {
   };
 
   const selectAxis1 = (value: string) => {
-    setAxis1Value(value.replace('__bis', ''));
+    setAxis1Value(value.replace('__bis', '') as AxisMetricId);
     setOpenAxis(null);
   };
 
   const selectAxis2 = (value: string) => {
-    setAxis2Value(value.replace('__bis', ''));
+    setAxis2Value(value.replace('__bis', '') as AxisMetricId);
     setOpenAxis(null);
   };
+
+  // Build the dynamic chart series from every visible itinerary that has a
+  // computed prediction. One curve per (itinerary × axis) combination.
+  const series = useMemo<ChartSeries[]>(() => {
+    if (!projectStore || !predictionStore) return [];
+    const result: ChartSeries[] = [];
+    for (const itinerary of projectStore.project.itineraries) {
+      if (itinerary.visible === false) continue;
+      const prediction = predictionStore.predictions[itinerary.id];
+      if (!prediction) continue;
+
+      const axis1Points = buildSeriesFromPrediction(prediction, axis1Value, xMode);
+      if (axis1Points) {
+        result.push({
+          id: `${itinerary.id}::axis1`,
+          itineraryId: itinerary.id,
+          itineraryName: itinerary.name,
+          metricId: axis1Value,
+          color: itinerary.color,
+          axis: 1,
+          unit: '',
+          points: axis1Points,
+        });
+      }
+
+      const axis2Points = buildSeriesFromPrediction(prediction, axis2Value, xMode);
+      if (axis2Points) {
+        result.push({
+          id: `${itinerary.id}::axis2`,
+          itineraryId: itinerary.id,
+          itineraryName: itinerary.name,
+          metricId: axis2Value,
+          color: lightenColor(itinerary.color, 0.4),
+          axis: 2,
+          unit: '',
+          points: axis2Points,
+        });
+      }
+    }
+    return result;
+  }, [projectStore, predictionStore, axis1Value, axis2Value, xMode]);
 
   return (
     <section
@@ -72,10 +127,26 @@ export function CenterPanelAnalysis() {
         <div className="rvc-center-analysis__label">Analyse</div>
 
         <div className="rvc-center-analysis__segmented" role="tablist" aria-label="Mode d'analyse">
-          <button className="rvc-center-analysis__segment rvc-center-analysis__segment--active" type="button">
+          <button
+            className={
+              xMode === 'distance'
+                ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
+                : 'rvc-center-analysis__segment'
+            }
+            type="button"
+            onClick={() => setXMode('distance')}
+          >
             Distance
           </button>
-          <button className="rvc-center-analysis__segment" type="button">
+          <button
+            className={
+              xMode === 'temps'
+                ? 'rvc-center-analysis__segment rvc-center-analysis__segment--active'
+                : 'rvc-center-analysis__segment'
+            }
+            type="button"
+            onClick={() => setXMode('temps')}
+          >
             Temps
           </button>
         </div>
@@ -125,8 +196,32 @@ export function CenterPanelAnalysis() {
       </div>
 
       <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
-        <AnalysisChart />
+        <AnalysisChart
+          series={series}
+          axis1Metric={axis1Value}
+          axis2Metric={axis2Value}
+          xMode={xMode}
+        />
       </div>
     </section>
   );
+}
+
+/**
+ * Lighten a hex color by mixing it with white. Used so the secondary axis
+ * curve for an itinerary can be visually distinguished from the primary
+ * one without picking an unrelated hue.
+ */
+function lightenColor(hex: string, amount: number): string {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return hex;
+  const value = parseInt(match[1], 16);
+  const r = (value >> 16) & 0xff;
+  const g = (value >> 8) & 0xff;
+  const b = value & 0xff;
+  const t = Math.max(0, Math.min(1, amount));
+  const lr = Math.round(r + (255 - r) * t);
+  const lg = Math.round(g + (255 - g) * t);
+  const lb = Math.round(b + (255 - b) * t);
+  return `#${((lr << 16) | (lg << 8) | lb).toString(16).padStart(6, '0')}`;
 }

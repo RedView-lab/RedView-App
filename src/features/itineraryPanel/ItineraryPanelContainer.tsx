@@ -6,6 +6,7 @@ import { AddItineraryDialog } from './components/AddItineraryDialog';
 import { useItineraryPoiMap } from './hooks/useItineraryPoiMap';
 import { poiFeaturesToTimelineItems } from './lib/poi-to-timeline';
 import { useProjectStore } from './context/ProjectStore';
+import { usePredictionStoreOptional } from './context/PredictionStore';
 import {
   createDefaultItinerary,
   DEFAULT_PROFILES,
@@ -107,6 +108,7 @@ export function ItineraryPanelContainer({
   onBackToHome,
 }: ItineraryPanelContainerProps) {
   const { project, setProject, setItineraryName } = useProjectStore();
+  const predictionStore = usePredictionStoreOptional();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
 
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(
@@ -502,6 +504,7 @@ export function ItineraryPanelContainer({
       error: null,
       updatedAt: new Date().toISOString(),
     }));
+    predictionStore?.setPrediction(itineraryId, null);
 
     void engine
       .predict(runtime.fitFiles, gpxFile, config, (message: string) => {
@@ -533,6 +536,7 @@ export function ItineraryPanelContainer({
           error: null,
           updatedAt: new Date().toISOString(),
         }));
+        predictionStore?.setPrediction(itineraryId, result);
       })
       .catch((error: unknown) => {
         console.error('[fit-predictor] prediction failed', error);
@@ -546,8 +550,9 @@ export function ItineraryPanelContainer({
               : 'Erreur inconnue pendant la prediction FIT.',
           updatedAt: new Date().toISOString(),
         }));
+        predictionStore?.setPrediction(itineraryId, null);
       });
-  }, [active, updateFitRuntime]);
+  }, [active, updateFitRuntime, predictionStore]);
 
   // After importing a GPX, automatically run a corridor search so the user
   // immediately sees POIs along the freshly-loaded track.
