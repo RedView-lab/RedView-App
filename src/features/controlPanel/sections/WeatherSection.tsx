@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
@@ -139,6 +139,16 @@ function showsPalette(mode: WeatherRenderMode): mode is 'gradient' | 'fill' {
   return mode === 'gradient' || mode === 'fill';
 }
 
+function sanitizeWeatherDraft(value: string, allowDecimal: boolean): string {
+  const filtered = allowDecimal
+    ? value.replace(/[^\d.,-]/g, '')
+    : value.replace(/[^\d-]/g, '');
+  const withLeadingMinusOnly = filtered.replace(/(?!^)-/g, '');
+  return allowDecimal
+    ? withLeadingMinusOnly.replace(/([.,].*)[.,]/g, '$1')
+    : withLeadingMinusOnly;
+}
+
 interface InlineWeatherNumericInputProps {
   layerKey: WeatherLayerKey;
   value: number;
@@ -153,6 +163,10 @@ function InlineWeatherNumericInput({
   onCommit,
 }: InlineWeatherNumericInputProps) {
   const spec = weatherPaletteMetricSpec(layerKey);
+  const decimals = spec?.decimals ?? 0;
+  const minLimit = spec?.minLimit;
+  const maxLimit = spec?.maxLimit;
+  const unit = spec?.unit ?? '';
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -165,47 +179,46 @@ function InlineWeatherNumericInput({
   }, [editing]);
 
   const display = spec ? formatWeatherPaletteValue(layerKey, value) : `${value}`;
+  const suffix = spec ? (unit === '°C' ? unit : ` ${unit}`) : '';
 
-  const commit = useCallback(() => {
-    if (!spec) {
+  const commit = () => {
+    if (minLimit == null || maxLimit == null) {
       setEditing(false);
       return;
     }
     setEditing(false);
     const parsed = Number.parseFloat(draft.replace(',', '.'));
     if (!Number.isFinite(parsed)) return;
-    const clamped = Math.max(spec.minLimit, Math.min(spec.maxLimit, parsed));
+    const clamped = Math.max(minLimit, Math.min(maxLimit, parsed));
     if (clamped !== value) onCommit(clamped);
-  }, [draft, onCommit, spec, value]);
+  };
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLInputElement>) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        commit();
-      } else if (event.key === 'Escape') {
-        setDraft(display);
-        setEditing(false);
-      }
-    },
-    [commit, display],
-  );
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commit();
+    } else if (event.key === 'Escape') {
+      setDraft(display);
+      setEditing(false);
+    }
+  };
 
   if (!editable || !spec) {
-    return <span className="rvc-slopes__deg-value rvc-weather__threshold-number">{display}</span>;
+      return <span className="rvc-altitude__meter-value rvc-weather__threshold-number">{display}{suffix}</span>;
   }
 
   if (!editing) {
     return (
       <button
         type="button"
-        className="rvc-slopes__deg-btn rvc-weather__threshold-number"
+          className="rvc-altitude__meter-btn rvc-weather__threshold-number"
         onClick={() => {
           setDraft(display);
           setEditing(true);
         }}
+          title={`Cliquer pour modifier la valeur ${suffix.trim()}`}
       >
-        {display}
+          {display}{suffix}
       </button>
     );
   }
@@ -214,18 +227,16 @@ function InlineWeatherNumericInput({
     <input
       ref={inputRef}
       type="text"
-      inputMode={spec.decimals > 0 ? 'decimal' : 'numeric'}
-      className="rvc-slopes__deg-input rvc-weather__threshold-number"
+      inputMode={decimals > 0 ? 'decimal' : 'numeric'}
+      className="rvc-altitude__meter-input rvc-weather__threshold-input"
       value={draft}
       onChange={(event) => {
-        const next = spec.decimals > 0
-          ? event.target.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1')
-          : event.target.value.replace(/\D/g, '');
+        const next = sanitizeWeatherDraft(event.target.value, decimals > 0);
         setDraft(next);
       }}
       onBlur={commit}
       onKeyDown={handleKeyDown}
-      aria-label={`Valeur ${weatherPaletteMetricSpec(layerKey)?.unit ?? ''}`}
+      aria-label={`Valeur ${unit}`}
     />
   );
 }
@@ -246,45 +257,33 @@ function WeatherPaletteRow({
   onBreakpointChange?: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
 }) {
   const spec = weatherPaletteMetricSpec(layerKey);
+  if (!spec) return null;
+
   const isFirst = bandIndex === 0;
   const isLast = bandIndex === totalBands - 1;
-  const suffix = spec?.unit === '°C' ? spec.unit : ` ${spec?.unit ?? ''}`;
-  const marker = isFirst ? '<' : isLast ? '>' : '';
+  const minValue = isFirst ? spec.minLimit : band.minValue;
+  const maxValue = isLast ? spec.maxLimit : band.maxValue;
 
   return (
-    <div className="rvc-altitude__band-row">
-      <div className="rvc-slopes__band-label-editable rvc-weather__band-label">
-        <span className="rvc-slopes__band-category rvc-weather__band-marker">{marker}</span>
-        <span className="rvc-weather__band-slot">
-          {!isFirst || isLast ? (
-            <InlineWeatherNumericInput
-              layerKey={layerKey}
-              value={isLast ? band.minValue : band.minValue}
-              editable
-              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
-            />
-          ) : null}
-        </span>
-        <span className="rvc-slopes__deg-sep rvc-weather__band-sep">{!isFirst && !isLast ? '-' : ''}</span>
-        <span className="rvc-weather__band-slot">
-          {!isFirst && !isLast ? (
-            <InlineWeatherNumericInput
-              layerKey={layerKey}
-              value={band.maxValue}
-              editable
-              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
-            />
-          ) : isFirst ? (
-            <InlineWeatherNumericInput
-              layerKey={layerKey}
-              value={band.maxValue}
-              editable
-              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
-            />
-          ) : null}
-        </span>
-        <span className="rvc-slopes__band-category rvc-weather__band-unit">{suffix}</span>
+    <div className="rvc-altitude__band-row rvc-weather__band-row">
+      <div className="rvc-weather__band-spacer" aria-hidden="true" />
+
+      <div className="rvc-altitude__band-label-editable rvc-weather__band-label-editable">
+        <InlineWeatherNumericInput
+          layerKey={layerKey}
+          value={minValue}
+          editable={!isFirst}
+          onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
+        />
+        <span className="rvc-altitude__meter-sep">–</span>
+        <InlineWeatherNumericInput
+          layerKey={layerKey}
+          value={maxValue}
+          editable={!isLast}
+          onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
+        />
       </div>
+
       <ColorPalettePicker
         color={band.color}
         onChange={(color) => onColorChange?.(layerKey, band.id, color)}
