@@ -112,20 +112,20 @@ export function PanelSelect<T extends string = string>({
             {options.map((o) => {
               const selected = o.value === value;
               return (
-                <button
+                <div
                   key={o.value}
-                  type="button"
                   role="option"
                   aria-selected={selected}
                   className={`rvi-select__option${selected ? ' is-selected' : ''}`}
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onChange?.(o.value);
                     setOpen(false);
                   }}
                 >
                   <span className="rvi-select__option-label">{o.label}</span>
                   {selected && <IconCheck size={16} className="rvi-select__option-check" />}
-                </button>
+                </div>
               );
             })}
           </div>,

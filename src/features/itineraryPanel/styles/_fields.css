@@ -219,7 +219,7 @@
   align-items: stretch;
   width: 104px;
   min-width: 80px;
-  overflow: hidden;
+  overflow: clip;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   color: #ffffff;
@@ -230,7 +230,6 @@
   z-index: 1;
 }
 .rvi-select__option {
-  all: unset;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -243,6 +242,8 @@
   font: inherit;
   font-weight: 500;
   cursor: pointer;
+  position: relative;
+  z-index: 1;
   transition: background 0.16s ease, color 0.16s ease;
 }
 .rvi-select__option + .rvi-select__option {
