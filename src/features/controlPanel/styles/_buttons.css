@@ -18,6 +18,23 @@
   transition: background 0.15s;
 }
 
+.rvc-btn-primary--lidar {
+  align-items: flex-start;
+}
+
+.rvc-btn-primary__content {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.rvc-btn-primary.is-busy {
+  background: #9b1111;
+}
+
 .rvc-btn-primary:hover { background: #a00000; }
 
 .rvc-btn-ghost {

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
-import { LidarPanel } from '@/features/lidar';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
@@ -139,7 +138,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
-  const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
 
   // ── Active project (Supabase-backed) ────────────────────────────
   // The browser overlay is force-open until the user picks or creates
@@ -426,14 +424,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     setMapLoaded(true);
   };
 
-  const handleFlyTo = (lon: number, lat: number) => {
-    mapInstance?.flyTo({
-      center: [lon, lat],
-      zoom: Math.max(mapInstance.getZoom(), 13),
-      essential: true,
-    });
-  };
-
   const rightPanelStyle: React.CSSProperties = {
     position: 'absolute',
     top: 0,
@@ -462,9 +452,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     flexDirection: 'column',
     overflow: 'hidden',
   };
-
-  const leftDockOffset =
-    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
 
   // IMPORTANT: every layout calculation below MUST be expressed in the
   // dashboard's *design* coordinate space (the wrapper is sized to
@@ -650,17 +637,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
           onBackToHome={handleBackToBrowser}
         />
       </div>
-
-      <div style={{ ...leftDockStackStyle, left: leftDockOffset }}>
-        <LidarPanel
-          modeActive={lidarModeEnabled}
-          detailsOpen={lidarDetailsOpen}
-          onToggleMode={() => setLidarModeEnabled((current) => !current)}
-          onToggleDetails={() => setLidarDetailsOpen((current) => !current)}
-          onFlyTo={handleFlyTo}
-        />
-      </div>
-
       {centerPanelVisible ? (
         <div
           style={{
@@ -746,14 +722,4 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     </LidarProvider>
   );
 }
-
-const leftDockStackStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 12,
-  left: 12,
-  zIndex: 20,
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 10,
-};
 

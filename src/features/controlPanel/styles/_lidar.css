@@ -57,3 +57,31 @@
 .rvc-lidar__action-btn:hover {
   background: rgba(255, 255, 255, 0.06);
 }
+
+.rvc-lidar__download-meta {
+  width: 100%;
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.74);
+  white-space: normal;
+}
+
+.rvc-lidar__download-meta.is-error {
+  color: #ffd1d1;
+}
+
+.rvc-lidar__download-bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.rvc-lidar__download-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.95);
+}

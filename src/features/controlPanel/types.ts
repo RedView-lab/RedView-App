@@ -7,6 +7,7 @@ import type {
   ControlPanelSectionKey,
   ControlPanelSectionsOpenState,
 } from './persistedState';
+import type { DownloadProgress } from '@/features/lidar/types';
 
 export type BasemapId = 'satellite' | 'osm' | 'topographic' | string;
 
@@ -194,6 +195,9 @@ export interface ControlPanelHandlers {
 
 export interface ControlPanelProps extends ControlPanelHandlers {
   state: ControlPanelState;
+  lidarDownloadProgress?: DownloadProgress | null;
+  lidarDownloadError?: string | null;
+  lidarDownloadModeActive?: boolean;
   className?: string;
   sectionsOpen?: ControlPanelSectionsOpenState;
   onSectionOpenChange?: (section: ControlPanelSectionKey, open: boolean) => void;

@@ -20,6 +20,9 @@ import './styles/index.css';
  */
 export function ControlPanel({
   state,
+  lidarDownloadProgress,
+  lidarDownloadError,
+  lidarDownloadModeActive,
   className,
   sectionsOpen,
   onSectionOpenChange,
@@ -92,6 +95,9 @@ export function ControlPanel({
 
       <LidarTilesSection
         tiles={state.lidarTiles}
+        progress={lidarDownloadProgress}
+        error={lidarDownloadError}
+        downloadModeActive={lidarDownloadModeActive}
         open={sectionsOpen?.lidarTiles}
         onOpenChange={(open) => onSectionOpenChange?.('lidarTiles', open)}
         onTileToggle={onLidarTileToggle}

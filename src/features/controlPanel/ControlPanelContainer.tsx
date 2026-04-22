@@ -3,7 +3,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
-import type { CachedTileInfo, TileCoord } from '@/features/lidar/types';
+import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
 import { generateDynamicCategories, clampBreakpoints } from '@/features/slope/lib/slope-config';
@@ -138,6 +138,8 @@ export function ControlPanelContainer({
   // ── LIDAR ──────────────────────────────────────────────────────────
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
   const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>({});
+  const [lidarDownloadProgress, setLidarDownloadProgress] = useState<DownloadProgress | null>(null);
+  const [lidarDownloadError, setLidarDownloadError] = useState<string | null>(null);
 
   const refreshTiles = useCallback(async () => {
     try {
@@ -150,7 +152,19 @@ export function ControlPanelContainer({
   useEffect(() => {
     void refreshTiles();
     return lidarManager.on((evt) => {
-      if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') void refreshTiles();
+      if (evt.type === 'progress' && evt.progress) {
+        setLidarDownloadProgress(evt.progress);
+        setLidarDownloadError(null);
+      }
+      if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') {
+        setLidarDownloadProgress(null);
+        if (evt.type === 'tileLoaded') setLidarDownloadError(null);
+        void refreshTiles();
+      }
+      if (evt.type === 'error') {
+        setLidarDownloadProgress(null);
+        setLidarDownloadError(evt.error ?? evt.message ?? 'Erreur LiDAR');
+      }
     });
   }, [lidarManager, refreshTiles]);
 
@@ -585,6 +599,9 @@ export function ControlPanelContainer({
   return (
     <ControlPanel
       state={state}
+      lidarDownloadProgress={lidarDownloadProgress}
+      lidarDownloadError={lidarDownloadError}
+      lidarDownloadModeActive={lidarDownloadModeActive}
       className={className}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
