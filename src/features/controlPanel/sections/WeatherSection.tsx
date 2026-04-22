@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
@@ -16,6 +16,7 @@ import type {
   WeatherState,
   WeatherTab,
 } from '../types';
+import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../weatherPalette';
 
 interface Props {
   state: WeatherState;
@@ -29,6 +30,7 @@ interface Props {
   onPaletteOpacityChange: ControlPanelHandlers['onWeatherPaletteOpacityChange'];
   onPaletteScaleSettingChange: ControlPanelHandlers['onWeatherPaletteScaleSettingChange'];
   onPaletteBandColorChange: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
+  onPaletteBandBreakpointChange: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
   onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
 
@@ -137,25 +139,154 @@ function showsPalette(mode: WeatherRenderMode): mode is 'gradient' | 'fill' {
   return mode === 'gradient' || mode === 'fill';
 }
 
+interface InlineWeatherNumericInputProps {
+  layerKey: WeatherLayerKey;
+  value: number;
+  editable: boolean;
+  onCommit: (value: number) => void;
+}
+
+function InlineWeatherNumericInput({
+  layerKey,
+  value,
+  editable,
+  onCommit,
+}: InlineWeatherNumericInputProps) {
+  const spec = weatherPaletteMetricSpec(layerKey);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const display = spec ? formatWeatherPaletteValue(layerKey, value) : `${value}`;
+
+  const commit = useCallback(() => {
+    if (!spec) {
+      setEditing(false);
+      return;
+    }
+    setEditing(false);
+    const parsed = Number.parseFloat(draft.replace(',', '.'));
+    if (!Number.isFinite(parsed)) return;
+    const clamped = Math.max(spec.minLimit, Math.min(spec.maxLimit, parsed));
+    if (clamped !== value) onCommit(clamped);
+  }, [draft, onCommit, spec, value]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        commit();
+      } else if (event.key === 'Escape') {
+        setDraft(display);
+        setEditing(false);
+      }
+    },
+    [commit, display],
+  );
+
+  if (!editable || !spec) {
+    return <span className="rvc-slopes__deg-value rvc-weather__threshold-number">{display}</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="rvc-slopes__deg-btn rvc-weather__threshold-number"
+        onClick={() => {
+          setDraft(display);
+          setEditing(true);
+        }}
+      >
+        {display}
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode={spec.decimals > 0 ? 'decimal' : 'numeric'}
+      className="rvc-slopes__deg-input rvc-weather__threshold-number"
+      value={draft}
+      onChange={(event) => {
+        const next = spec.decimals > 0
+          ? event.target.value.replace(/[^\d.,]/g, '').replace(/([.,].*)[.,]/g, '$1')
+          : event.target.value.replace(/\D/g, '');
+        setDraft(next);
+      }}
+      onBlur={commit}
+      onKeyDown={handleKeyDown}
+      aria-label={`Valeur ${weatherPaletteMetricSpec(layerKey)?.unit ?? ''}`}
+    />
+  );
+}
+
 function WeatherPaletteRow({
   layerKey,
   band,
+  bandIndex,
+  totalBands,
   onColorChange,
+  onBreakpointChange,
 }: {
   layerKey: WeatherLayerKey;
   band: WeatherPaletteBand;
+  bandIndex: number;
+  totalBands: number;
   onColorChange?: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
+  onBreakpointChange?: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
 }) {
+  const spec = weatherPaletteMetricSpec(layerKey);
+  const isFirst = bandIndex === 0;
+  const isLast = bandIndex === totalBands - 1;
+  const suffix = spec?.unit === '°C' ? spec.unit : ` ${spec?.unit ?? ''}`;
+
   return (
     <div className="rvc-altitude__band-row">
-      <div className="rvc-altitude__band-label-editable">
-        <span className="rvc-altitude__meter-value">{band.label}</span>
+      <div className="rvc-slopes__band-label-editable">
+        {isFirst ? <span className="rvc-slopes__band-category">&lt;</span> : null}
+        {!isFirst ? (
+          <InlineWeatherNumericInput
+            layerKey={layerKey}
+            value={band.minValue}
+            editable
+            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
+          />
+        ) : null}
+        {!isFirst && !isLast ? <span className="rvc-slopes__deg-sep">-</span> : null}
+        {!isLast ? (
+          <InlineWeatherNumericInput
+            layerKey={layerKey}
+            value={band.maxValue}
+            editable
+            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
+          />
+        ) : null}
+        {isLast ? <span className="rvc-slopes__band-category">&gt;</span> : null}
+        {isLast ? (
+          <InlineWeatherNumericInput
+            layerKey={layerKey}
+            value={band.minValue}
+            editable
+            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
+          />
+        ) : null}
+        <span className="rvc-slopes__band-category">{suffix}</span>
       </div>
       <ColorPalettePicker
         color={band.color}
         onChange={(color) => onColorChange?.(layerKey, band.id, color)}
         className="rvc-altitude__color-chip"
-        ariaLabel={`Choisir la couleur ${band.label}`}
+        ariaLabel={`Choisir la couleur ${formatWeatherPaletteBandLabel(layerKey, band, bandIndex, totalBands)}`}
       >
         <ColorSwatch color={band.color} size={12} />
         <span className="rvc-altitude__color-hex">{hexLabel(band.color)}</span>
@@ -177,6 +308,7 @@ export function WeatherSection({
   onPaletteOpacityChange,
   onPaletteScaleSettingChange,
   onPaletteBandColorChange,
+  onPaletteBandBreakpointChange,
   onAddAlert,
 }: Props) {
   const getMinutes = (timeStr: string) => {
@@ -378,7 +510,10 @@ export function WeatherSection({
                         key={band.id}
                         layerKey={layer.key}
                         band={band}
+                        bandIndex={palette.bands.findIndex((candidate) => candidate.id === band.id)}
+                        totalBands={palette.bands.length}
                         onColorChange={onPaletteBandColorChange}
+                        onBreakpointChange={onPaletteBandBreakpointChange}
                       />
                     ))}
                   </div>

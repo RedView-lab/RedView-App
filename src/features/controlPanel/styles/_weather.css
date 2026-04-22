@@ -239,6 +239,11 @@
   padding: 2px 0 6px 20px;
 }
 
+.rvc-weather__threshold-number {
+  min-width: 42px;
+  width: auto;
+}
+
 .rvc-weather__add-alert {
   display: flex;
   align-items: center;

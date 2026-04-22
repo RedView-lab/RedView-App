@@ -122,6 +122,8 @@ export interface WeatherPaletteBand {
   id: string;
   label: string;
   color: string;
+  minValue: number;
+  maxValue: number;
 }
 
 export interface WeatherPaletteConfig {
@@ -231,6 +233,12 @@ export interface ControlPanelHandlers {
   onWeatherPaletteOpacityChange?: (key: WeatherLayerKey, opacity: number) => void;
   onWeatherPaletteScaleSettingChange?: (key: WeatherLayerKey, value: WeatherPaletteScaleSetting) => void;
   onWeatherPaletteBandColorChange?: (key: WeatherLayerKey, bandId: string, color: string) => void;
+  onWeatherPaletteBandBreakpointChange?: (
+    key: WeatherLayerKey,
+    bandIndex: number,
+    field: 'min' | 'max',
+    value: number,
+  ) => void;
   onWeatherAddAlert?: () => void;
 
   onWindEnabledChange?: (enabled: boolean) => void;

@@ -56,6 +56,7 @@ export function ControlPanel({
   onWeatherPaletteOpacityChange,
   onWeatherPaletteScaleSettingChange,
   onWeatherPaletteBandColorChange,
+  onWeatherPaletteBandBreakpointChange,
   onWeatherAddAlert,
   onWindEnabledChange,
   onAltitudeEnabledChange,
@@ -189,6 +190,7 @@ export function ControlPanel({
         onPaletteOpacityChange={onWeatherPaletteOpacityChange}
         onPaletteScaleSettingChange={onWeatherPaletteScaleSettingChange}
         onPaletteBandColorChange={onWeatherPaletteBandColorChange}
+        onPaletteBandBreakpointChange={onWeatherPaletteBandBreakpointChange}
         onAddAlert={onWeatherAddAlert}
       />
 

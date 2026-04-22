@@ -161,6 +161,20 @@ export function useWeatherOverlay(
     [state],
   );
   const selectionKey = useMemo(() => selectionFromState(state).key, [state]);
+  const paletteKey = useMemo(
+    () => JSON.stringify(
+      activeRenderableLayers(state).map((layer) => ({
+        key: layer.key,
+        opacity: state.palettes?.[layer.key]?.opacity,
+        bands: state.palettes?.[layer.key]?.bands?.map((band) => ({
+          color: band.color,
+          minValue: band.minValue,
+          maxValue: band.maxValue,
+        })),
+      })),
+    ),
+    [state],
+  );
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -347,5 +361,5 @@ export function useWeatherOverlay(
       return;
     }
     scheduleRefreshRef.current?.(true);
-  }, [map, isMapLoaded, state.enabled, activeLayersKey, selectionKey]);
+  }, [map, isMapLoaded, state.enabled, activeLayersKey, selectionKey, paletteKey]);
 }

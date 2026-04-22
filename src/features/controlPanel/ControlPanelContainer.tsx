@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
@@ -43,6 +43,12 @@ import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itinerar
 import { ControlPanel } from './ControlPanel';
 import { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 import {
+  buildWeatherPaletteBands,
+  clampWeatherPaletteBreakpoints,
+  resampleWeatherPaletteBands,
+  weatherPaletteMetricSpec,
+} from './weatherPalette';
+import {
   createDefaultControlPanelPersistedState,
   type ControlPanelPersistedState,
   type ControlPanelSectionKey,
@@ -60,7 +66,6 @@ import type {
   SlopeScale,
   SlopeScaleSetting,
   WeatherLayerKey,
-  WeatherPaletteBand,
   WeatherPaletteScaleSetting,
   WeatherRenderMode,
   WeatherState,
@@ -138,30 +143,6 @@ function buildAltitudeBandsFromDynamic(
     minMeters: cat.minMeters,
     maxMeters: cat.maxMeters,
   }));
-}
-
-function weatherPaletteScaleCount(setting: WeatherPaletteScaleSetting): number {
-  const match = /^(\d+)/.exec(setting);
-  return match ? Number(match[1]) : 4;
-}
-
-function resampleWeatherPaletteBands(
-  bands: WeatherPaletteBand[],
-  scaleSetting: WeatherPaletteScaleSetting,
-): WeatherPaletteBand[] {
-  const count = weatherPaletteScaleCount(scaleSetting);
-  if (bands.length === count) return bands;
-  return Array.from({ length: count }, (_, index) => {
-    const sourceIndex = Math.min(
-      bands.length - 1,
-      Math.round((index / Math.max(1, count - 1)) * Math.max(0, bands.length - 1)),
-    );
-    const source = bands[sourceIndex];
-    return {
-      ...source,
-      id: `${source.id.split('-')[0]}-${index}`,
-    };
-  });
 }
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
@@ -362,13 +343,38 @@ export function ControlPanelContainer({
 
   // ── Weather ────────────────────────────────────────────────────────
   const [weatherState, setWeatherState] = useState<WeatherState>(
-    () => ({
-      ...DEFAULT_CONTROL_PANEL_STATE.weather,
-      ...(initialControlPanel.weather ?? {}),
-      enabled: initialControlPanel.toggles.weatherEnabled,
-    }),
+    () => {
+      const merged: WeatherState = {
+        ...DEFAULT_CONTROL_PANEL_STATE.weather,
+        ...(initialControlPanel.weather ?? {}),
+        enabled: initialControlPanel.toggles.weatherEnabled,
+      };
+
+      const nextPalettes: WeatherState['palettes'] = {};
+      for (const layer of merged.layers) {
+        const fallback = DEFAULT_CONTROL_PANEL_STATE.weather.palettes[layer.key];
+        const palette = merged.palettes[layer.key] ?? fallback;
+        if (!palette || !fallback) continue;
+        const sourceBands = (palette.bands?.length ? palette.bands : fallback.bands).map((band, index) => ({
+          ...(fallback.bands[index] ?? fallback.bands[fallback.bands.length - 1]),
+          ...band,
+        }));
+        nextPalettes[layer.key] = {
+          opacity: Math.max(0, Math.min(100, Math.round(palette.opacity ?? fallback.opacity))),
+          scaleSetting: palette.scaleSetting ?? fallback.scaleSetting,
+          bands: resampleWeatherPaletteBands(layer.key, sourceBands, palette.scaleSetting ?? fallback.scaleSetting),
+        };
+      }
+
+      return {
+        ...merged,
+        palettes: nextPalettes,
+      };
+    },
   );
   useWeatherOverlay(isMapLoaded ? map : null, isMapLoaded, weatherState);
+  const weatherPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const weatherPersistSnapshotRef = useRef(weatherState);
 
   // ── Wind ───────────────────────────────────────────────────────────
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
@@ -792,7 +798,7 @@ export function ControlPanelContainer({
             [key]: {
               ...palette,
               scaleSetting: value,
-              bands: resampleWeatherPaletteBands(palette.bands, value),
+              bands: resampleWeatherPaletteBands(key, palette.bands, value),
             },
           },
         };
@@ -817,16 +823,92 @@ export function ControlPanelContainer({
       }),
     [],
   );
+  const handleWeatherPaletteBandBreakpointChange = useCallback(
+    (key: WeatherLayerKey, bandIndex: number, field: 'min' | 'max', value: number) =>
+      setWeatherState((prev) => {
+        const palette = prev.palettes[key];
+        const spec = weatherPaletteMetricSpec(key);
+        if (!palette || !spec) return prev;
+
+        const breakpoints = palette.bands.slice(0, -1).map((band) => band.maxValue);
+        let breakpointIndex: number;
+        if (field === 'min') {
+          if (bandIndex === 0) return prev;
+          breakpointIndex = bandIndex - 1;
+        } else {
+          if (bandIndex === palette.bands.length - 1) return prev;
+          breakpointIndex = bandIndex;
+        }
+        if (breakpointIndex < 0 || breakpointIndex >= breakpoints.length) return prev;
+
+        breakpoints[breakpointIndex] = value;
+        const clamped = clampWeatherPaletteBreakpoints(key, breakpoints, palette.bands.length);
+        return {
+          ...prev,
+          palettes: {
+            ...prev.palettes,
+            [key]: {
+              ...palette,
+              bands: buildWeatherPaletteBands(
+                key,
+                palette.bands.map((band) => band.color),
+                clamped,
+              ),
+            },
+          },
+        };
+      }),
+    [],
+  );
   const handleWeatherAddAlert = useCallback(() => {
     // TODO: implement alert UI
     console.log('[weather] add alert triggered');
   }, []);
 
+  const persistWeatherToProject = useCallback(
+    (nextWeather: WeatherState) => {
+      updateProjectControlPanel((draft) => {
+        draft.weather = structuredClone(nextWeather);
+      });
+    },
+    [updateProjectControlPanel],
+  );
+
   useEffect(() => {
-    updateProjectControlPanel((draft) => {
-      draft.weather = structuredClone(weatherState);
-    });
-  }, [updateProjectControlPanel, weatherState]);
+    weatherPersistSnapshotRef.current = weatherState;
+    if (weatherPersistTimeoutRef.current) clearTimeout(weatherPersistTimeoutRef.current);
+    weatherPersistTimeoutRef.current = setTimeout(() => {
+      weatherPersistTimeoutRef.current = null;
+      persistWeatherToProject(weatherPersistSnapshotRef.current);
+    }, 280);
+    return () => {
+      if (weatherPersistTimeoutRef.current) clearTimeout(weatherPersistTimeoutRef.current);
+    };
+  }, [persistWeatherToProject, weatherState]);
+
+  useEffect(() => {
+    const flushWeatherPersistence = () => {
+      if (weatherPersistTimeoutRef.current) {
+        clearTimeout(weatherPersistTimeoutRef.current);
+        weatherPersistTimeoutRef.current = null;
+      }
+      persistWeatherToProject(weatherPersistSnapshotRef.current);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushWeatherPersistence();
+    };
+
+    window.addEventListener('pagehide', flushWeatherPersistence);
+    window.addEventListener('beforeunload', flushWeatherPersistence);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flushWeatherPersistence);
+      window.removeEventListener('beforeunload', flushWeatherPersistence);
+      flushWeatherPersistence();
+    };
+  }, [persistWeatherToProject]);
 
   const handleWindEnabled = useCallback((enabled: boolean) => setWindEnabled(enabled), []);
   const handleSnowEnabled = useCallback((enabled: boolean) => setSnowEnabled(enabled), []);
@@ -917,6 +999,7 @@ export function ControlPanelContainer({
       onWeatherPaletteOpacityChange={handleWeatherPaletteOpacityChange}
       onWeatherPaletteScaleSettingChange={handleWeatherPaletteScaleSettingChange}
       onWeatherPaletteBandColorChange={handleWeatherPaletteBandColorChange}
+      onWeatherPaletteBandBreakpointChange={handleWeatherPaletteBandBreakpointChange}
       onWeatherAddAlert={handleWeatherAddAlert}
       /* Wind */
       onWindEnabledChange={(enabled) => {

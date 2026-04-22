@@ -7,11 +7,19 @@ import type {
 
 interface PaletteBandLike {
   color: string;
+  minValue?: number;
+  maxValue?: number;
 }
 
 type Color = readonly [number, number, number];
+type ColorStop = readonly [number, Color];
 
-const COLOR_STOPS: Record<WeatherOverlayMetric, readonly [number, Color][]> = {
+interface NumericRange {
+  min: number;
+  max: number;
+}
+
+const COLOR_STOPS: Record<WeatherOverlayMetric, readonly ColorStop[]> = {
   temperature: [
     [0, [44, 108, 255]],
     [0.25, [62, 186, 255]],
@@ -77,7 +85,7 @@ function valuesForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySa
     .sort((left, right) => left - right);
 }
 
-function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySample[]): { min: number; max: number } {
+function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySample[]): NumericRange {
   const values = valuesForMetric(metric, samples);
   if (values.length === 0) return { min: 0, max: 1 };
 
@@ -98,15 +106,57 @@ function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySam
   return { min, max };
 }
 
-function paletteStops(metric: WeatherOverlayMetric, paletteBands?: PaletteBandLike[]): readonly [number, Color][] {
+function paletteStops(
+  metric: WeatherOverlayMetric,
+  paletteBands: PaletteBandLike[] | undefined,
+  minValue: number,
+  maxValue: number,
+): readonly ColorStop[] {
   if (!paletteBands?.length) return COLOR_STOPS[metric];
-  return paletteBands.map((band, index) => {
-    const ratio = paletteBands.length === 1 ? 1 : index / (paletteBands.length - 1);
+
+  const span = Math.max(1e-6, maxValue - minValue);
+  const stops = paletteBands.map((band, index) => {
+    const fallbackRatio = paletteBands.length === 1 ? 1 : index / (paletteBands.length - 1);
+    const startValue = Number.isFinite(band.minValue) ? band.minValue ?? minValue : minValue + span * fallbackRatio;
+    const ratio = clamp((startValue - minValue) / span, 0, 1);
     return [ratio, hexToRgb(band.color)] as const;
   });
+
+  const lastBand = paletteBands[paletteBands.length - 1];
+  const lastRatio = clamp(
+    ((Number.isFinite(lastBand?.maxValue) ? lastBand.maxValue ?? maxValue : maxValue) - minValue) / span,
+    0,
+    1,
+  );
+  const lastColor = hexToRgb(lastBand?.color ?? paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
+  if (lastRatio > (stops[stops.length - 1]?.[0] ?? 0)) stops.push([lastRatio, lastColor] as const);
+  return stops;
 }
 
-function interpolatePaletteColor(stops: readonly [number, Color][], ratio: number): Color {
+function paletteRange(
+  metric: WeatherOverlayMetric,
+  samples: WeatherOverlaySample[],
+  paletteBands?: PaletteBandLike[],
+): NumericRange {
+  const sampleRange = rangeForMetric(metric, samples);
+  if (!paletteBands?.length) return sampleRange;
+  const rawMinValue = paletteBands[0]?.minValue;
+  const rawMaxValue = paletteBands[paletteBands.length - 1]?.maxValue;
+  if (!Number.isFinite(rawMinValue) || !Number.isFinite(rawMaxValue)) return sampleRange;
+  const minValue = rawMinValue as number;
+  const maxValue = rawMaxValue as number;
+  if (maxValue === minValue) return sampleRange;
+  return { min: minValue, max: maxValue };
+}
+
+function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color {
+  for (const band of paletteBands) {
+    if (Number.isFinite(band.maxValue) && value < (band.maxValue as number)) return hexToRgb(band.color);
+  }
+  return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
+}
+
+function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Color {
   const clamped = clamp(ratio, 0, 1);
   for (let index = 1; index < stops.length; index += 1) {
     const [nextT, nextColor] = stops[index];
@@ -167,10 +217,10 @@ export function renderWeatherCanvas(
   if (!ctx) return canvas;
 
   const values = samples.map((sample) => sample[metric]);
-  const range = rangeForMetric(metric, samples);
+  const range = paletteRange(metric, samples, paletteBands);
   const normalise = (value: number) => clamp((value - range.min) / Math.max(1e-6, range.max - range.min), 0, 1);
   const alphaMultiplier = clamp((opacityPercent ?? 100) / 100, 0, 1);
-  const stops = paletteStops(metric, paletteBands);
+  const stops = paletteStops(metric, paletteBands, range.min, range.max);
 
   if (mode === 'fill') {
     const cellW = width / Math.max(1, grid.cols);
@@ -179,7 +229,9 @@ export function renderWeatherCanvas(
       for (let col = 0; col < grid.cols; col += 1) {
         const raw = sampleValue(values, grid.cols, row, col);
         const ratio = normalise(raw);
-        const [r, g, b] = interpolatePaletteColor(stops, ratio);
+        const [r, g, b] = paletteBands?.length
+          ? steppedBandColor(paletteBands, raw)
+          : interpolatePaletteColor(stops, ratio);
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alphaFor(metric, ratio, mode) * alphaMultiplier})`;
         ctx.fillRect(col * cellW, row * cellH, cellW + 1, cellH + 1);
       }
