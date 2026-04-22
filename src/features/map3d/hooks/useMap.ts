@@ -18,6 +18,41 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
+const ORTHO_BOOT_FALLBACK_MS = 1500;
+
+function waitForMapIdleOrTimeout(map: mapboxgl.Map, timeoutMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      map.off('idle', onIdle);
+      resolve();
+    };
+    const onIdle = () => finish();
+    const timer = setTimeout(finish, timeoutMs);
+    map.on('idle', onIdle);
+  });
+}
+
+function addIgnOrthoOverlay(map: mapboxgl.Map): void {
+  if (!map.getSource(ignOrthoSource.id)) {
+    map.addSource(ignOrthoSource.id, {
+      type: 'raster',
+      tiles: ignOrthoSource.tiles,
+      tileSize: ignOrthoSource.tileSize,
+      minzoom: ignOrthoSource.minzoom,
+      maxzoom: ignOrthoSource.maxzoom,
+      bounds: ignOrthoSource.bounds,
+      attribution: ignOrthoSource.attribution,
+    });
+  }
+
+  if (!map.getLayer(ignOrthoLayer.id)) {
+    map.addLayer(ignOrthoLayer);
+  }
+}
 
 async function sendTokenWithAck(controller: ServiceWorker): Promise<boolean> {
   for (let attempt = 1; attempt <= TOKEN_ACK_MAX_ATTEMPTS; attempt++) {
@@ -135,6 +170,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
     mapRef.current = map;
 
     let cancelled = false;
+    let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
 
     // Wait for BOTH style.load AND swReady before adding sources.
     (async () => {
@@ -162,6 +198,16 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         return;
       }
 
+      // The Standard Satellite style already starts its own terrain requests.
+      // Once the SW path is ready we switch to our unified DEM source and stop
+      // the native terrain churn, otherwise cold loads compete for the same
+      // Mapbox origin and the basemap can sit white until retries land.
+      try {
+        map.setTerrain(null);
+      } catch {
+        /* terrain may not be set yet on the initial style */
+      }
+
       // DEM source
       if (!map.getSource(unifiedDEMSource.id)) {
         map.addSource(unifiedDEMSource.id, {
@@ -174,26 +220,23 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         });
       }
 
-      // IGN ortho overlay
-      if (!map.getSource(ignOrthoSource.id)) {
-        map.addSource(ignOrthoSource.id, {
-          type: 'raster',
-          tiles: ignOrthoSource.tiles,
-          tileSize: ignOrthoSource.tileSize,
-          minzoom: ignOrthoSource.minzoom,
-          maxzoom: ignOrthoSource.maxzoom,
-          bounds: ignOrthoSource.bounds,
-          attribution: ignOrthoSource.attribution,
-        });
-      }
-      if (!map.getLayer(ignOrthoLayer.id)) {
-        map.addLayer(ignOrthoLayer);
-      }
-
       // Terrain is applied ONCE, after the first DEM tile has loaded. Prevents
       // the "flat flicker" where setTerrain() runs against an empty source and
       // the mesh renders at zero elevation for a few frames.
       terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+      let orthoAdded = false;
+      const addOrthoWhenReady = async () => {
+        if (cancelled || orthoAdded) return;
+        orthoAdded = true;
+        await waitForMapIdleOrTimeout(map, 500);
+        if (cancelled) return;
+        addIgnOrthoOverlay(map);
+      };
+
+      orthoBootTimer = setTimeout(() => {
+        void addOrthoWhenReady();
+      }, ORTHO_BOOT_FALLBACK_MS);
+
       let applied = false;
       const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
         if (applied) return;
@@ -202,6 +245,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
         applied = true;
         map.off('sourcedata', onSourceData);
         terrainRef.current?.init();
+        void addOrthoWhenReady();
       };
       map.on('sourcedata', onSourceData);
 
@@ -233,6 +277,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
     return () => {
       cancelled = true;
+      if (orthoBootTimer) clearTimeout(orthoBootTimer);
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
         const center = mapRef.current.getCenter();
