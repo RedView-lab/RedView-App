@@ -147,17 +147,19 @@ function WeatherPaletteRow({
   onColorChange?: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
 }) {
   return (
-    <div className="rvc-weather__band-row">
-      <span className="rvc-weather__band-label">{band.label}</span>
+    <div className="rvc-altitude__band-row">
+      <div className="rvc-altitude__band-label-editable">
+        <span className="rvc-altitude__meter-value">{band.label}</span>
+      </div>
       <ColorPalettePicker
         color={band.color}
         onChange={(color) => onColorChange?.(layerKey, band.id, color)}
-        className="rvc-weather__color-chip"
+        className="rvc-altitude__color-chip"
         ariaLabel={`Choisir la couleur ${band.label}`}
       >
         <ColorSwatch color={band.color} size={12} />
-        <span className="rvc-weather__color-hex">{hexLabel(band.color)}</span>
-        <IconChevronDown size={20} className="rvc-weather__color-chevron" />
+        <span className="rvc-altitude__color-hex">{hexLabel(band.color)}</span>
+        <IconChevronDown size={20} className="rvc-altitude__color-chevron" />
       </ColorPalettePicker>
     </div>
   );
@@ -208,11 +210,6 @@ export function WeatherSection({
       (layer): layer is WeatherState['layers'][number] => Boolean(layer),
     );
   }, [isForecast, state.layers]);
-
-  const paletteLayers = useMemo(
-    () => displayedLayers.filter((layer) => layer.enabled && showsPalette(layer.mode)),
-    [displayedLayers],
-  );
 
   return (
     <Section
@@ -328,72 +325,69 @@ export function WeatherSection({
           const selectedMode = modeOptions.some((option) => option.value === layer.mode)
             ? layer.mode
             : modeOptions[0]?.value ?? '-';
+          const palette = state.palettes[layer.key];
+          const paletteVisible = layer.enabled && showsPalette(layer.mode) && Boolean(palette);
 
           return (
-            <div key={layer.key} className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
-              <Checkbox
-                id={`weather-${layer.key}`}
-                checked={layer.enabled}
-                onChange={(v) => onLayerToggle?.(layer.key, v)}
-              />
-              <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
-              <Select
-                width={104}
-                value={selectedMode}
-                options={modeOptions}
-                onChange={(v) => onLayerModeChange?.(layer.key, v)}
-                className="rvc-weather__layer-select"
-              />
+            <div key={layer.key} className="rvc-weather__layer-entry">
+              <div className="rvc-weather__layer-row" data-disabled={!layer.enabled}>
+                <Checkbox
+                  id={`weather-${layer.key}`}
+                  checked={layer.enabled}
+                  onChange={(v) => onLayerToggle?.(layer.key, v)}
+                />
+                <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
+                <Select
+                  width={104}
+                  value={selectedMode}
+                  options={modeOptions}
+                  onChange={(v) => onLayerModeChange?.(layer.key, v)}
+                  className="rvc-weather__layer-select"
+                />
+              </div>
+
+              {paletteVisible && palette ? (
+                <div className="rvc-weather__palette-block">
+                  <div className="rvc-row rvc-row--split rvc-altitude__opacity-row">
+                    <span className="rvc-row__label">Opacité</span>
+                    <div className="rvc-altitude__opacity-control">
+                      <div className="rvc-altitude__opacity-slider-wrap">
+                        <Slider
+                          value={palette.opacity}
+                          onChange={(value) => onPaletteOpacityChange?.(layer.key, value)}
+                          width="100%"
+                        />
+                      </div>
+                      <span className="rvc-altitude__opacity-value">{palette.opacity} %</span>
+                    </div>
+                  </div>
+
+                  <div className="rvc-row rvc-row--split">
+                    <span className="rvc-row__label">Échelle</span>
+                    <Select
+                      width={140}
+                      value={palette.scaleSetting}
+                      options={PALETTE_SCALE_OPTIONS}
+                      onChange={(value) => onPaletteScaleSettingChange?.(layer.key, value as WeatherPaletteScaleSetting)}
+                    />
+                  </div>
+
+                  <div className="rvc-altitude__bands">
+                    {palette.bands.map((band) => (
+                      <WeatherPaletteRow
+                        key={band.id}
+                        layerKey={layer.key}
+                        band={band}
+                        onColorChange={onPaletteBandColorChange}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
           );
         })}
       </div>
-
-      {paletteLayers.map((layer) => {
-        const palette = state.palettes[layer.key];
-        if (!palette) return null;
-
-        return (
-          <div key={`${layer.key}-palette`} className="rvc-weather__palette-block">
-            <div className="rvc-weather__palette-title">{LAYER_LABEL[layer.key]}</div>
-
-            <div className="rvc-row rvc-row--split rvc-weather__opacity-row">
-              <span className="rvc-row__label">Opacité</span>
-              <div className="rvc-weather__opacity-control">
-                <div className="rvc-weather__opacity-slider-wrap">
-                  <Slider
-                    value={palette.opacity}
-                    onChange={(value) => onPaletteOpacityChange?.(layer.key, value)}
-                    width="100%"
-                  />
-                </div>
-                <span className="rvc-weather__opacity-value">{palette.opacity} %</span>
-              </div>
-            </div>
-
-            <div className="rvc-row rvc-row--split">
-              <span className="rvc-row__label">Échelle</span>
-              <Select
-                width={140}
-                value={palette.scaleSetting}
-                options={PALETTE_SCALE_OPTIONS}
-                onChange={(value) => onPaletteScaleSettingChange?.(layer.key, value as WeatherPaletteScaleSetting)}
-              />
-            </div>
-
-            <div className="rvc-weather__bands">
-              {palette.bands.map((band) => (
-                <WeatherPaletteRow
-                  key={band.id}
-                  layerKey={layer.key}
-                  band={band}
-                  onColorChange={onPaletteBandColorChange}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
 
       {/* Add alert toggle */}
       <div className="rvc-weather__add-alert">
