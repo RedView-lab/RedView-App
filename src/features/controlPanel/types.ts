@@ -209,6 +209,7 @@ export interface ControlPanelHandlers {
   onAltitudeOpacityChange?: (value: number) => void;
   onAltitudeBandColorChange?: (id: string, color: string) => void;
   onAltitudeBandVisibilityToggle?: (id: string) => void;
+  onAltitudeBandBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueMeters: number) => void;
 
   onWeatherEnabledChange?: (enabled: boolean) => void;
   onWeatherTabChange?: (tab: WeatherTab) => void;

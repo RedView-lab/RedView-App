@@ -55,9 +55,12 @@
   color: var(--rvc-text-dim);
 }
 
-.rvc-altitude__band-label {
+.rvc-altitude__band-label-editable {
   flex: 1 1 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
   color: var(--rvc-text);
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
@@ -65,8 +68,47 @@
   line-height: normal;
   opacity: 0.64;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.rvc-altitude__meter-value,
+.rvc-altitude__meter-btn,
+.rvc-altitude__meter-input {
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: normal;
+}
+
+.rvc-altitude__meter-value,
+.rvc-altitude__meter-btn {
+  opacity: 0.64;
+}
+
+.rvc-altitude__meter-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rvc-altitude__meter-input {
+  width: 52px;
+  padding: 0 4px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.rvc-altitude__meter-input:focus {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.rvc-altitude__meter-sep {
+  color: var(--rvc-text-dim);
+  opacity: 0.72;
 }
 
 .rvc-altitude__color-chip {
@@ -102,7 +144,7 @@
 }
 
 .rvc-altitude__band-row.is-hidden .rvc-altitude__band-eye,
-.rvc-altitude__band-row.is-hidden .rvc-altitude__band-label,
+.rvc-altitude__band-row.is-hidden .rvc-altitude__band-label-editable,
 .rvc-altitude__band-row.is-hidden .rvc-altitude__color-chip {
   opacity: 0.4;
 }

@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
@@ -36,15 +37,113 @@ function hexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
+interface InlineAltitudeInputProps {
+  valueMeters: number;
+  editable: boolean;
+  onCommit: (meters: number) => void;
+  className?: string;
+}
+
+function InlineAltitudeInput({
+  valueMeters,
+  editable,
+  onCommit,
+  className,
+}: InlineAltitudeInputProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(valueMeters));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commit = useCallback(() => {
+    setEditing(false);
+    const parsed = parseInt(draft, 10);
+    if (Number.isNaN(parsed)) return;
+    const nextMeters = Math.max(0, Math.min(5000, parsed));
+    if (nextMeters !== valueMeters) onCommit(nextMeters);
+  }, [draft, onCommit, valueMeters]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        commit();
+      } else if (e.key === 'Escape') {
+        setDraft(String(valueMeters));
+        setEditing(false);
+      }
+    },
+    [commit, valueMeters],
+  );
+
+  if (!editable) {
+    return <span className={`rvc-altitude__meter-value ${className ?? ''}`}>{valueMeters} m</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={`rvc-altitude__meter-btn ${className ?? ''}`}
+        onClick={() => {
+          setDraft(String(valueMeters));
+          setEditing(true);
+        }}
+        title="Cliquer pour modifier l'altitude"
+      >
+        {valueMeters} m
+      </button>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      inputMode="numeric"
+      className={`rvc-altitude__meter-input ${className ?? ''}`}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+      onBlur={commit}
+      onKeyDown={handleKeyDown}
+      maxLength={4}
+      aria-label="Altitude en mètres"
+    />
+  );
+}
+
 function AltitudeBandRow({
   band,
+  bandIndex,
+  isFirst,
+  isLast,
   onToggleVisibility,
   onColorChange,
+  onBreakpointChange,
 }: {
   band: AltitudeBand;
+  bandIndex: number;
+  isFirst: boolean;
+  isLast: boolean;
   onToggleVisibility: () => void;
   onColorChange: (color: string) => void;
+  onBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueMeters: number) => void;
 }) {
+  const handleMinCommit = useCallback(
+    (meters: number) => onBreakpointChange?.(bandIndex, 'min', meters),
+    [bandIndex, onBreakpointChange],
+  );
+  const handleMaxCommit = useCallback(
+    (meters: number) => onBreakpointChange?.(bandIndex, 'max', meters),
+    [bandIndex, onBreakpointChange],
+  );
+
   return (
     <div className={`rvc-altitude__band-row${band.visible ? '' : ' is-hidden'}`}>
       <button
@@ -56,7 +155,19 @@ function AltitudeBandRow({
         {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
       </button>
 
-      <span className="rvc-altitude__band-label">{band.label}</span>
+      <div className="rvc-altitude__band-label-editable">
+        <InlineAltitudeInput
+          valueMeters={band.minMeters}
+          editable={!isFirst}
+          onCommit={handleMinCommit}
+        />
+        <span className="rvc-altitude__meter-sep">–</span>
+        <InlineAltitudeInput
+          valueMeters={band.maxMeters}
+          editable={!isLast}
+          onCommit={handleMaxCommit}
+        />
+      </div>
 
       <ColorPalettePicker
         color={band.color}
@@ -84,6 +195,7 @@ interface AltitudeSectionProps {
   onOpacityChange?: ControlPanelHandlers['onAltitudeOpacityChange'];
   onBandColorChange?: ControlPanelHandlers['onAltitudeBandColorChange'];
   onBandVisibilityToggle?: ControlPanelHandlers['onAltitudeBandVisibilityToggle'];
+  onBandBreakpointChange?: ControlPanelHandlers['onAltitudeBandBreakpointChange'];
 }
 
 export function AltitudeSection({
@@ -98,6 +210,7 @@ export function AltitudeSection({
   onOpacityChange,
   onBandColorChange,
   onBandVisibilityToggle,
+  onBandBreakpointChange,
 }: AltitudeSectionProps) {
   return (
     <Section
@@ -147,12 +260,16 @@ export function AltitudeSection({
       </div>
 
       <div className="rvc-altitude__bands">
-        {state.bands.map((band) => (
+        {state.bands.map((band, index) => (
           <AltitudeBandRow
             key={band.id}
             band={band}
+            bandIndex={index}
+            isFirst={index === 0}
+            isLast={index === state.bands.length - 1}
             onToggleVisibility={() => onBandVisibilityToggle?.(band.id)}
             onColorChange={(color) => onBandColorChange?.(band.id, color)}
+            onBreakpointChange={onBandBreakpointChange}
           />
         ))}
       </div>

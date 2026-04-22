@@ -6,6 +6,7 @@ import type {
 import { DEFAULT_ALTITUDE_STATE } from './altitude-config';
 
 const STORAGE_KEY = 'redview_altitude_prefs';
+const BREAKPOINTS_KEY = 'redview_altitude_breakpoints';
 
 const VALID_RESOLUTIONS: AltitudeResolutionKey[] = ['0.40 m (LIDAR)', '1 m', '5 m', '10 m'];
 const VALID_SCALE_SETTINGS: AltitudeScaleSettingKey[] = [
@@ -59,6 +60,39 @@ export function loadAltitudeState(): AltitudeState {
 export function saveAltitudeState(state: AltitudeState): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // Quota exceeded — silently ignore.
+  }
+}
+
+export interface PersistedAltitudeBreakpoints {
+  bandCount: number;
+  byCount: Record<number, number[]>;
+}
+
+const DEFAULT_BREAKPOINTS: PersistedAltitudeBreakpoints = {
+  bandCount: 4,
+  byCount: {},
+};
+
+export function loadAltitudeBreakpoints(): PersistedAltitudeBreakpoints {
+  try {
+    const raw = localStorage.getItem(BREAKPOINTS_KEY);
+    if (!raw) return { ...DEFAULT_BREAKPOINTS };
+
+    const parsed = JSON.parse(raw) as Partial<PersistedAltitudeBreakpoints>;
+    return {
+      bandCount: typeof parsed.bandCount === 'number' ? parsed.bandCount : DEFAULT_BREAKPOINTS.bandCount,
+      byCount: parsed.byCount && typeof parsed.byCount === 'object' ? parsed.byCount : {},
+    };
+  } catch {
+    return { ...DEFAULT_BREAKPOINTS };
+  }
+}
+
+export function saveAltitudeBreakpoints(data: PersistedAltitudeBreakpoints): void {
+  try {
+    localStorage.setItem(BREAKPOINTS_KEY, JSON.stringify(data));
   } catch {
     // Quota exceeded — silently ignore.
   }

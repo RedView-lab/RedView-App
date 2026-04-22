@@ -52,11 +52,17 @@ function defaultColorAt(index: number, total: number): string {
 export function buildAltitudeCategories(
   scaleSetting: AltitudeScaleSettingKey,
   customColors?: Record<string, string>,
+  customBreakpoints?: number[],
 ): AltitudeCategory[] {
-  const stops = ALTITUDE_STOPS[scaleSetting] ?? ALTITUDE_STOPS['4 couleurs'];
+  const defaultStops = ALTITUDE_STOPS[scaleSetting] ?? ALTITUDE_STOPS['4 couleurs'];
+  const count = defaultStops.length;
+  const breakpoints = customBreakpoints && customBreakpoints.length === count - 1
+    ? clampAltitudeBreakpoints(customBreakpoints, count)
+    : defaultStops.slice(1);
+  const stops = [0, ...breakpoints];
   return stops.map((minMeters, index) => {
     const maxMeters = stops[index + 1] ?? MAX_ALTITUDE_M;
-    const id = `alt-${minMeters}`;
+    const id = `alt-band-${index}`;
     return {
       id,
       label: `${minMeters} m - ${maxMeters} m`,
@@ -97,4 +103,49 @@ export function buildAltitudeColorExpression(
     expr.push(MAX_ALTITUDE_M, colorOf(last));
   }
   return expr;
+}
+
+export function altitudeBandCountFromSetting(setting: AltitudeScaleSettingKey | string): number {
+  const match = /^(\d+)/.exec(setting);
+  return match ? Number(match[1]) : 4;
+}
+
+export function generateAltitudeBreakpointsForCount(count: number): number[] {
+  const defaults = ALTITUDE_STOPS[`${count} couleurs` as AltitudeScaleSettingKey];
+  if (defaults) return defaults.slice(1);
+
+  const step = MAX_ALTITUDE_M / count;
+  const out: number[] = [];
+  for (let index = 1; index < count; index++) out.push(Math.round(step * index));
+  return out;
+}
+
+export function clampAltitudeBreakpoints(breakpoints: number[], bandCount: number): number[] {
+  const count = bandCount - 1;
+  if (count <= 0) return [];
+  if (count >= MAX_ALTITUDE_M) return generateAltitudeBreakpointsForCount(bandCount);
+
+  const bp = breakpoints.slice(0, count).map((value) => {
+    const rounded = Math.round(value);
+    return Math.max(1, Math.min(MAX_ALTITUDE_M - 1, Number.isFinite(rounded) ? rounded : 1));
+  });
+
+  while (bp.length < count) {
+    const defaults = generateAltitudeBreakpointsForCount(bandCount);
+    bp.push(defaults[bp.length] ?? bp[bp.length - 1] + 1);
+  }
+
+  for (let index = 1; index < count; index++) {
+    if (bp[index] <= bp[index - 1]) bp[index] = bp[index - 1] + 1;
+  }
+
+  if (bp[count - 1] > MAX_ALTITUDE_M - 1) {
+    bp[count - 1] = MAX_ALTITUDE_M - 1;
+    for (let index = count - 2; index >= 0; index--) {
+      if (bp[index] >= bp[index + 1]) bp[index] = bp[index + 1] - 1;
+    }
+  }
+
+  if (bp[0] < 1) return generateAltitudeBreakpointsForCount(bandCount);
+  return bp;
 }

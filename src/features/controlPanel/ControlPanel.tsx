@@ -62,6 +62,7 @@ export function ControlPanel({
   onAltitudeOpacityChange,
   onAltitudeBandColorChange,
   onAltitudeBandVisibilityToggle,
+  onAltitudeBandBreakpointChange,
   onSunlightEnabledChange,
   onSunlightStateChange,
   sunlightMapExpanded,
@@ -173,6 +174,7 @@ export function ControlPanel({
         onOpacityChange={onAltitudeOpacityChange}
         onBandColorChange={onAltitudeBandColorChange}
         onBandVisibilityToggle={onAltitudeBandVisibilityToggle}
+        onBandBreakpointChange={onAltitudeBandBreakpointChange}
       />
 
       <WeatherSection

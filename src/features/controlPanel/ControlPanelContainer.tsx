@@ -14,6 +14,14 @@ import type { SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types'
 import { loadAltitudeState, saveAltitudeState } from '@/features/altitude/lib/altitude-persist';
 import { buildAltitudeCategories } from '@/features/altitude/lib/altitude-config';
 import {
+  loadAltitudeBreakpoints,
+  saveAltitudeBreakpoints,
+} from '@/features/altitude/lib/altitude-persist';
+import {
+  altitudeBandCountFromSetting,
+  clampAltitudeBreakpoints,
+} from '@/features/altitude/lib/altitude-config';
+import {
   resolutionToFactor as altitudeResolutionToFactor,
 } from '@/features/altitude/lib/altitude-source';
 import { useAltitude } from '@/features/altitude/hooks/useAltitude';
@@ -353,13 +361,29 @@ export function ControlPanelContainer({
       enabled: initialControlPanel.toggles.altitudeEnabled ?? loaded.enabled,
     };
   });
+  const [altitudeBreakpointsByCount, setAltitudeBreakpointsByCount] = useState<Record<number, number[]>>(() => {
+    const persisted = loadAltitudeBreakpoints();
+    return persisted.byCount;
+  });
   const persistAltitude = useCallback((next: typeof altitudeState) => {
     setAltitudeState(next);
     saveAltitudeState(next);
   }, []);
+  const altitudeBandCount = useMemo(
+    () => altitudeBandCountFromSetting(altitudeState.scaleSetting),
+    [altitudeState.scaleSetting],
+  );
+  const currentAltitudeBreakpoints = useMemo(
+    () => altitudeBreakpointsByCount[altitudeBandCount],
+    [altitudeBreakpointsByCount, altitudeBandCount],
+  );
   const altitudeCategories = useMemo(
-    () => buildAltitudeCategories(altitudeState.scaleSetting, altitudeState.customColors),
-    [altitudeState.scaleSetting, altitudeState.customColors],
+    () => buildAltitudeCategories(
+      altitudeState.scaleSetting,
+      altitudeState.customColors,
+      currentAltitudeBreakpoints,
+    ),
+    [altitudeState.scaleSetting, altitudeState.customColors, currentAltitudeBreakpoints],
   );
   const altitudeHiddenIds = useMemo(
     () => new Set(altitudeState.hiddenBandIds),
@@ -542,6 +566,9 @@ export function ControlPanelContainer({
     slopeScale,
     slopeScaleSetting,
     altitudeState,
+    altitudeBreakpointsByCount,
+    altitudeBandCount,
+    currentAltitudeBreakpoints,
     altitudeCategories,
     altitudeHiddenIds,
     windEnabled,
@@ -633,6 +660,33 @@ export function ControlPanelContainer({
         opacity: Math.max(0, Math.min(1, value / 100)),
       }),
     [persistAltitude, altitudeState],
+  );
+  const handleAltitudeBreakpointChange = useCallback(
+    (bandIndex: number, field: 'min' | 'max', valueMeters: number) => {
+      const count = altitudeCategories.length;
+      const bp = altitudeCategories.slice(1).map((cat) => cat.minMeters);
+
+      let bpIndex: number;
+      if (field === 'min') {
+        if (bandIndex === 0) return;
+        bpIndex = bandIndex - 1;
+      } else {
+        if (bandIndex === count - 1) return;
+        bpIndex = bandIndex;
+      }
+
+      if (bpIndex < 0 || bpIndex >= bp.length) return;
+
+      bp[bpIndex] = valueMeters;
+      const clamped = clampAltitudeBreakpoints(bp, count);
+
+      setAltitudeBreakpointsByCount((prev) => {
+        const next = { ...prev, [count]: clamped };
+        saveAltitudeBreakpoints({ bandCount: count, byCount: next });
+        return next;
+      });
+    },
+    [altitudeCategories],
   );
   const handleAltitudeBandToggle = useCallback(
     (id: string) => {
@@ -741,6 +795,7 @@ export function ControlPanelContainer({
       onAltitudeOpacityChange={handleAltitudeOpacity}
       onAltitudeBandColorChange={handleAltitudeBandColorChange}
       onAltitudeBandVisibilityToggle={handleAltitudeBandToggle}
+      onAltitudeBandBreakpointChange={handleAltitudeBreakpointChange}
       sunlightMapExpanded={projectControlPanel.sunlightMapExpanded}
       onSunlightMapExpandedChange={(open) => {
         updateProjectControlPanel((draft) => {
