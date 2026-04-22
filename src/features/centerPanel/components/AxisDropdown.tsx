@@ -40,7 +40,7 @@ export function AxisDropdown({
         title={value || '-'}
       >
         <span className="rvc-center-analysis__select-value">{value || '-'}</span>
-        <IconChevronDown size={18} />
+        <IconChevronDown size={20} className="rvc-center-analysis__select-icon" />
       </button>
 
       {isOpen ? (
