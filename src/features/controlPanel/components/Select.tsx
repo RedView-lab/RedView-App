@@ -31,7 +31,16 @@ export function Select<T extends string = string>({
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const [dropPos, setDropPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [dropPos, setDropPos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    scale: number;
+    fontFamily: string;
+    fontSize: string;
+    fontWeight: string;
+    lineHeight: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -45,13 +54,23 @@ export function Select<T extends string = string>({
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
-    const dropdownHeight = options.length * 30;
+    const computed = window.getComputedStyle(ref.current);
+    const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
+    const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+    const rowHeight = 32 * scale;
+    const dropdownHeight = options.length * rowHeight;
+    const offset = 4 * scale;
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const placeAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow;
     setDropPos({
-      top: placeAbove ? rect.top - dropdownHeight - 4 : rect.bottom + 4,
+      top: placeAbove ? rect.top - dropdownHeight - offset : rect.bottom + offset,
       left: rect.left,
-      width: Math.max(140, rect.width),
+      width: Math.max(140, rect.width / scale),
+      scale,
+      fontFamily: computed.fontFamily,
+      fontSize: computed.fontSize,
+      fontWeight: computed.fontWeight,
+      lineHeight: computed.lineHeight,
     });
   }, [open, options.length]);
 
@@ -65,6 +84,12 @@ export function Select<T extends string = string>({
             left: dropPos.left,
             width: dropPos.width,
             zIndex: 9999,
+            transform: `scale(${dropPos.scale})`,
+            transformOrigin: 'top left',
+            fontFamily: dropPos.fontFamily,
+            fontSize: dropPos.fontSize,
+            fontWeight: dropPos.fontWeight,
+            lineHeight: dropPos.lineHeight,
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >

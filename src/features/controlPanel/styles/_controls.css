@@ -119,32 +119,40 @@
   flex-direction: column;
   min-width: 80px;
   width: 140px;
-  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
   overflow: clip;
-  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.24);
+  background: rgba(15, 15, 15, 0.74);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
 }
 
 .rvc-select__option {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  min-height: 32px;
   min-width: 80px;
-  padding: 6px 6px 6px 10px;
-  background: #3d3d3d;
+  padding: 7px 8px 7px 10px;
+  background: transparent;
   color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
+  font: inherit;
   cursor: pointer;
   box-sizing: border-box;
+  transition: background 0.16s ease;
+}
+
+.rvc-select__option + .rvc-select__option {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .rvc-select__option.is-selected {
-  background: #0f0f0f;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvc-select__option:hover:not(.is-selected) {
-  background: #4a4a4a;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvc-select__option-label {
