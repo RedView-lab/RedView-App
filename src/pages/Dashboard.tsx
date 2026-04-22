@@ -3,6 +3,7 @@ import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
 import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
+import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { ItineraryPanel } from '@/features/itineraryPanel';
@@ -227,6 +228,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
+    gap: PANEL_PADDING,
     overflow: 'hidden',
   };
 
@@ -489,6 +491,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onResizeStart={handleResizeStart}
           isResizing={isResizing}
         />
+        <ExporterPanel width={panelWidth} />
       </div>
       </div>
     </div>

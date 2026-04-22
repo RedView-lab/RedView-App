@@ -72,6 +72,22 @@ export const IconExternalLink = ({ size = 14, ...rest }: IconProps) => (
   </svg>
 );
 
+export const IconShare01 = ({ size = 12, ...rest }: IconProps) => (
+  <svg {...base(size)} {...rest}>
+    <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+    <path d="M12 15V4" />
+    <polyline points="8 8 12 4 16 8" />
+  </svg>
+);
+
+export const IconDownload01 = ({ size = 20, ...rest }: IconProps) => (
+  <svg {...base(size)} {...rest}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="M12 3v12" />
+    <polyline points="7 10 12 15 17 10" />
+  </svg>
+);
+
 export const IconExpand = ({ size = 18, ...rest }: IconProps) => (
   <svg {...base(size)} {...rest}>
     <polyline points="15 3 21 3 21 9" />

@@ -1,0 +1,157 @@
+/* Exporter panel — standalone right dock card from Figma node 1949:50927 */
+
+.rvc-exporter-panel {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.rvc-exporter-panel__content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+.rvc-exporter-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 16px;
+}
+
+.rvc-exporter-panel__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  color: var(--rvc-text);
+  flex-shrink: 0;
+}
+
+.rvc-exporter-panel__title-btn {
+  all: unset;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.rvc-exporter-panel__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rvc-text);
+  line-height: 1.2;
+}
+
+.rvc-exporter-panel__chevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--rvc-text);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: transform 0.18s ease;
+}
+
+.rvc-exporter-panel__chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.rvc-exporter-panel__body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.24s ease;
+}
+
+.rvc-exporter-panel__body.is-open {
+  grid-template-rows: 1fr;
+}
+
+.rvc-exporter-panel__body-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rvc-exporter-panel__divider {
+  width: 100%;
+  height: 1px;
+  background: var(--rvc-border);
+}
+
+.rvc-exporter-panel__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvc-exporter-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 30px;
+}
+
+.rvc-exporter-panel__row.is-disabled {
+  opacity: 0.5;
+}
+
+.rvc-exporter-panel__row.is-disabled .rvc-cp-checkbox,
+.rvc-exporter-panel__row.is-disabled .rvc-exporter-panel__select {
+  pointer-events: none;
+}
+
+.rvc-exporter-panel__row .rvc-cp-checkbox {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 4px;
+  height: 30px;
+}
+
+.rvc-exporter-panel__row .rvc-cp-checkbox__label {
+  font-weight: 500;
+}
+
+.rvc-exporter-panel__select.rvc-select {
+  flex: 0 0 108px;
+  min-width: 108px;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--rvc-border);
+  border-radius: 5px;
+  background: transparent;
+}
+
+.rvc-exporter-panel__submit {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--rvc-red);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: background 0.18s ease;
+}
+
+.rvc-exporter-panel__submit:hover {
+  background: #a00000;
+}
+
+.rvc-exporter-panel__submit:active {
+  background: #760000;
+}
