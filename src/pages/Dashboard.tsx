@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MapView, MapBlurMirror } from '@/features/map3d';
 import { LidarPanel } from '@/features/lidar';
-import { FitPredictionPanel } from '@/features/fitPredictor';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
@@ -109,7 +108,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [lidarDetailsOpen, setLidarDetailsOpen] = useState(false);
-  const [fitPanelOpen, setFitPanelOpen] = useState(false);
 
   // ── Active project (Supabase-backed) ────────────────────────────
   // The browser overlay is force-open until the user picks or creates
@@ -566,10 +564,6 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
           onToggleMode={() => setLidarModeEnabled((current) => !current)}
           onToggleDetails={() => setLidarDetailsOpen((current) => !current)}
           onFlyTo={handleFlyTo}
-        />
-        <FitPredictionPanel
-          open={fitPanelOpen}
-          onToggleOpen={() => setFitPanelOpen((current) => !current)}
         />
       </div>
 

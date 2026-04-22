@@ -12,6 +12,11 @@ import {
   ITINERARY_COLORS,
 } from './defaultState';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
+import { createFitPredictionEngine } from '@/features/fitPredictor/engine/api';
+import {
+  type PredictionConfig,
+  type PredictionResult,
+} from '@/features/fitPredictor';
 import type { PoiFeature } from '@/features/poi/types';
 import {
   fetchBrouterRoute,
@@ -58,6 +63,30 @@ interface ItineraryPanelContainerProps {
   onBackToHome?: () => void;
 }
 
+type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
+
+interface ItineraryFitRuntime {
+  fitFiles: File[];
+  fitFileNames: string[];
+  predictionResult: PredictionResult | null;
+  progress: string[];
+  status: FitRuntimeStatus;
+  error: string | null;
+  updatedAt: string | null;
+}
+
+function createEmptyFitRuntime(): ItineraryFitRuntime {
+  return {
+    fitFiles: [],
+    fitFileNames: [],
+    predictionResult: null,
+    progress: [],
+    status: 'idle',
+    error: null,
+    updatedAt: null,
+  };
+}
+
 /**
  * Front-end container for the left-dock Itinerary Panel.
  *
@@ -86,6 +115,25 @@ export function ItineraryPanelContainer({
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const routeAbortRef = useRef<AbortController | null>(null);
+  const fitInputRef = useRef<HTMLInputElement | null>(null);
+  const fitUploadTargetIdRef = useRef<string | null>(null);
+  const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
+    null,
+  );
+  const [fitRuntimeByItineraryId, setFitRuntimeByItineraryId] = useState<
+    Record<string, ItineraryFitRuntime>
+  >({});
+  const fitRuntimeRef = useRef(fitRuntimeByItineraryId);
+  fitRuntimeRef.current = fitRuntimeByItineraryId;
+
+  useEffect(() => {
+    const engine = createFitPredictionEngine();
+    fitEngineRef.current = engine;
+    return () => {
+      engine.terminate();
+      fitEngineRef.current = null;
+    };
+  }, []);
 
   const active = useMemo(
     () =>
@@ -296,6 +344,21 @@ export function ItineraryPanelContainer({
     [],
   );
 
+  const updateFitRuntime = useCallback(
+    (
+      itineraryId: string,
+      mut: (current: ItineraryFitRuntime) => ItineraryFitRuntime,
+    ) => {
+      setFitRuntimeByItineraryId((prev) => {
+        const current = prev[itineraryId] ?? createEmptyFitRuntime();
+        const next = mut(current);
+        if (next === current) return prev;
+        return { ...prev, [itineraryId]: next };
+      });
+    },
+    [],
+  );
+
   const addItinerary = useCallback(
     (overrides: Partial<ReturnType<typeof createDefaultItinerary>> = {}) => {
       let createdId: string | null = null;
@@ -317,6 +380,123 @@ export function ItineraryPanelContainer({
     },
     [],
   );
+
+  const handleFitInputChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const itineraryId = fitUploadTargetIdRef.current;
+      const files = event.target.files ? Array.from(event.target.files) : [];
+      event.target.value = '';
+      if (!itineraryId) return;
+
+      const fitFiles = files.filter((file) => /\.fit$/i.test(file.name));
+      if (fitFiles.length === 0) {
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          fitFiles: [],
+          fitFileNames: [],
+          predictionResult: null,
+          progress: [],
+          status: 'error',
+          error: 'Aucun fichier FIT valide sélectionné.',
+          updatedAt: new Date().toISOString(),
+        }));
+        return;
+      }
+
+      updateFitRuntime(itineraryId, (current) => ({
+        ...current,
+        fitFiles,
+        fitFileNames: fitFiles.map((file) => file.name),
+        predictionResult: null,
+        progress: [],
+        status: 'ready',
+        error: null,
+        updatedAt: new Date().toISOString(),
+      }));
+    },
+    [updateFitRuntime],
+  );
+
+  const handleCalculatePrediction = useCallback(() => {
+    const itinerary = active;
+    if (!itinerary) return;
+
+    const runtime = fitRuntimeRef.current[itinerary.id] ?? createEmptyFitRuntime();
+    if (runtime.fitFiles.length === 0) {
+      updateFitRuntime(itinerary.id, (current) => ({
+        ...current,
+        status: 'error',
+        error: 'Chargez au moins un fichier FIT avant de calculer.',
+        updatedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    if (!itinerary.gpxRoute || itinerary.gpxRoute.points.length < 2) {
+      updateFitRuntime(itinerary.id, (current) => ({
+        ...current,
+        status: 'error',
+        error: 'L’itinéraire actif n’a pas encore de trace GPX exploitable.',
+        updatedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    const engine = fitEngineRef.current;
+    if (!engine) {
+      updateFitRuntime(itinerary.id, (current) => ({
+        ...current,
+        status: 'error',
+        error: 'Le moteur de prediction FIT n’est pas prêt.',
+        updatedAt: new Date().toISOString(),
+      }));
+      return;
+    }
+
+    const itineraryId = itinerary.id;
+    const gpxFile = buildRouteGpxFile(itinerary);
+    const config = buildPredictionConfigFromRhythm(itinerary.rhythm);
+
+    updateFitRuntime(itineraryId, (current) => ({
+      ...current,
+      predictionResult: null,
+      progress: [],
+      status: 'running',
+      error: null,
+      updatedAt: new Date().toISOString(),
+    }));
+
+    void engine
+      .predict(runtime.fitFiles, gpxFile, config, (message: string) => {
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          progress: [...current.progress.slice(-19), message],
+          status: 'running',
+        }));
+      })
+      .then((result: PredictionResult) => {
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          predictionResult: result,
+          status: 'success',
+          error: null,
+          updatedAt: new Date().toISOString(),
+        }));
+      })
+      .catch((error: unknown) => {
+        console.error('[fit-predictor] prediction failed', error);
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          predictionResult: null,
+          status: 'error',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Erreur inconnue pendant la prediction FIT.',
+          updatedAt: new Date().toISOString(),
+        }));
+      });
+  }, [active, updateFitRuntime]);
 
   // After importing a GPX, automatically run a corridor search so the user
   // immediately sees POIs along the freshly-loaded track.
@@ -727,8 +907,14 @@ export function ItineraryPanelContainer({
           (it.rhythm[key] as RhythmState[typeof key]) = value;
         })
       }
-      onUploadFit={() => {}}
-      onCalculate={() => {}}
+      onUploadFit={() => {
+        if (!active) return;
+        fitUploadTargetIdRef.current = active.id;
+        fitInputRef.current?.click();
+      }}
+      onCalculate={() => {
+        handleCalculatePrediction();
+      }}
       onChangePoiEntry={(category, next) =>
         updateActive((it) => {
           it.poi[category] = next;
@@ -815,7 +1001,104 @@ export function ItineraryPanelContainer({
           if (id) setPendingCorridorFor(id);
         }}
       />
+      <input
+        ref={fitInputRef}
+        type="file"
+        accept=".fit"
+        multiple
+        hidden
+        onChange={handleFitInputChange}
+      />
 
     </>
   );
+}
+
+function buildPredictionConfigFromRhythm(rhythm: RhythmState): PredictionConfig {
+  const config: PredictionConfig = {
+    pacing_factor: 1,
+  };
+
+  if (typeof rhythm.ftp === 'number' && rhythm.ftp > 0) {
+    config.ftp_w = rhythm.ftp;
+  }
+
+  if (
+    typeof rhythm.systemWeightKg === 'number' &&
+    rhythm.systemWeightKg > 0
+  ) {
+    config.mass_kg = rhythm.systemWeightKg;
+  }
+
+  if (rhythm.startTime) {
+    const startTimeH = parseTimeToHourDecimal(rhythm.startTime);
+    if (startTimeH !== null) {
+      config.start_time_h = startTimeH;
+    }
+  }
+
+  return config;
+}
+
+function buildRouteGpxFile(
+  itinerary: ItineraryProject['itineraries'][number],
+): File {
+  const routeName = escapeXml(itinerary.gpxRoute?.name ?? itinerary.name);
+  const points = itinerary.gpxRoute?.points ?? [];
+  const trackPoints = points
+    .map(
+      (point) =>
+        `      <trkpt lat="${point.lat}" lon="${point.lon}"></trkpt>`,
+    )
+    .join('\n');
+  const xml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<gpx version="1.1" creator="RedView" xmlns="http://www.topografix.com/GPX/1/1">',
+    '  <trk>',
+    `    <name>${routeName}</name>`,
+    '    <trkseg>',
+    trackPoints,
+    '    </trkseg>',
+    '  </trk>',
+    '</gpx>',
+  ].join('\n');
+
+  return new File([xml], `${slugifyFilename(itinerary.name || 'itinerary')}.gpx`, {
+    type: 'application/gpx+xml',
+  });
+}
+
+function parseTimeToHourDecimal(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number.parseInt(match[1], 10);
+  const minutes = Number.parseInt(match[2], 10);
+  if (
+    !Number.isFinite(hours) ||
+    !Number.isFinite(minutes) ||
+    hours < 0 ||
+    hours >= 24 ||
+    minutes < 0 ||
+    minutes >= 60
+  ) {
+    return null;
+  }
+  return hours + minutes / 60;
+}
+
+function slugifyFilename(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-');
+  return normalized.replace(/^-+|-+$/g, '') || 'itinerary';
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
