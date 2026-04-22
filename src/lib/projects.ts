@@ -167,3 +167,104 @@ export async function deleteProject(id: string): Promise<void> {
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) throw error;
 }
+
+/* ------------------------------------------------------------------ */
+/* Thumbnails (private bucket: project-thumbnails)                     */
+/* ------------------------------------------------------------------ */
+
+const THUMBNAIL_BUCKET = 'project-thumbnails';
+const THUMBNAIL_SIGNED_URL_TTL = 60 * 60; // 1 hour, plenty for a browse session.
+
+function thumbnailPath(userId: string, projectId: string): string {
+  // The storage RLS policies parse `(storage.foldername(name))[1]` and
+  // require the first folder segment to equal auth.uid()::text, so the
+  // path layout MUST stay `<userId>/<projectId>.png`.
+  return `${userId}/${projectId}.png`;
+}
+
+/**
+ * Upload a freshly-captured PNG thumbnail for a project. Overwrites any
+ * previous thumbnail at the same path (`upsert: true`).
+ */
+export async function uploadProjectThumbnail(
+  projectId: string,
+  blob: Blob,
+): Promise<void> {
+  const { data: sessionData, error: sessionErr } =
+    await supabase.auth.getUser();
+  if (sessionErr) throw sessionErr;
+  const user = sessionData.user;
+  if (!user) throw new Error('Not authenticated');
+
+  const path = thumbnailPath(user.id, projectId);
+  const { error } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .upload(path, blob, {
+      contentType: 'image/png',
+      upsert: true,
+      cacheControl: '3600',
+    });
+  if (error) throw error;
+}
+
+/**
+ * Resolve signed URLs for a batch of project thumbnails. Missing or
+ * unreadable thumbnails simply map to `null` so the UI can fall back to
+ * a placeholder.
+ *
+ * Uses `createSignedUrls` (one round-trip) to avoid N+1 queries when
+ * the browser overlay opens with many projects.
+ */
+export async function getProjectThumbnailUrls(
+  projectIds: string[],
+): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  if (projectIds.length === 0) return out;
+
+  const { data: sessionData, error: sessionErr } =
+    await supabase.auth.getUser();
+  if (sessionErr) throw sessionErr;
+  const user = sessionData.user;
+  if (!user) throw new Error('Not authenticated');
+
+  const paths = projectIds.map((id) => thumbnailPath(user.id, id));
+
+  const { data, error } = await supabase.storage
+    .from(THUMBNAIL_BUCKET)
+    .createSignedUrls(paths, THUMBNAIL_SIGNED_URL_TTL);
+
+  // Initialise every id to null so callers can spread without checking.
+  for (const id of projectIds) out[id] = null;
+
+  if (error) {
+    // 404-style errors here just mean nothing has been uploaded yet — the
+    // batch helper still returns per-path entries with their own `error`,
+    // so a top-level error means a real network / auth problem.
+    console.warn('[projects] createSignedUrls failed', error);
+    return out;
+  }
+
+  for (const entry of data ?? []) {
+    if (!entry.path || entry.error || !entry.signedUrl) continue;
+    // entry.path is `<userId>/<projectId>.png` — recover the projectId.
+    const segs = entry.path.split('/');
+    const file = segs[segs.length - 1] ?? '';
+    const id = file.replace(/\.png$/, '');
+    if (id) out[id] = entry.signedUrl;
+  }
+  return out;
+}
+
+/** Remove a project's thumbnail from storage (best-effort, never throws). */
+export async function deleteProjectThumbnail(projectId: string): Promise<void> {
+  try {
+    const { data: sessionData } = await supabase.auth.getUser();
+    const user = sessionData.user;
+    if (!user) return;
+    await supabase.storage
+      .from(THUMBNAIL_BUCKET)
+      .remove([thumbnailPath(user.id, projectId)]);
+  } catch (e) {
+    console.warn('[projects] deleteProjectThumbnail failed', e);
+  }
+}

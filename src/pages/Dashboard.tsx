@@ -10,7 +10,8 @@ import { ItineraryPanel } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
-import { getProject, saveProject } from '@/lib/projects';
+import { getProject, saveProject, uploadProjectThumbnail } from '@/lib/projects';
+import { captureMapThumbnail } from '@/lib/mapThumbnail';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
@@ -183,12 +184,24 @@ export default function Dashboard({ email, onLogout }: DashboardProps) {
     };
   }, [flushSave]);
 
-  const handleBackToBrowser = useCallback(() => {
+  const handleBackToBrowser = useCallback(async () => {
     // Force-flush any pending edits before showing the picker so the
     // updated_at / size_bytes columns reflect the freshest state.
-    void flushSave();
+    await flushSave();
+    // Capture a thumbnail of the current map view BEFORE remounting the
+    // editor (otherwise the canvas would already be torn down). Best-effort:
+    // failures (no map, read-back blocked) just keep the previous thumbnail.
+    const id = activeProjectIdRef.current;
+    if (id) {
+      try {
+        const blob = await captureMapThumbnail(mapInstance);
+        if (blob) await uploadProjectThumbnail(id, blob);
+      } catch (e) {
+        console.warn('[Dashboard] thumbnail upload failed', e);
+      }
+    }
     setProjectBrowserOpen(true);
-  }, [flushSave]);
+  }, [flushSave, mapInstance]);
 
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
   const [isResizing, setIsResizing] = useState(false);

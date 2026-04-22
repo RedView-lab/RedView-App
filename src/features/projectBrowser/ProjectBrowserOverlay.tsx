@@ -19,12 +19,13 @@ import {
 import {
   createProject,
   deleteProject,
+  deleteProjectThumbnail,
+  getProjectThumbnailUrls,
   listProjects,
   renameProject,
   type ProjectSummary,
 } from '@/lib/projects';
 
-import { PROJECT_BROWSER_PREVIEW_URL } from './projectBrowserData';
 import './styles.css';
 
 interface ProjectBrowserOverlayProps {
@@ -70,13 +71,14 @@ function privacyLabel(p: ProjectSummary['privacy']): string {
 
 interface ProjectCardProps {
   project: ProjectSummary;
+  thumbnailUrl: string | null;
   onOpen: (id: string) => void;
   onRename: (id: string, nextName: string) => Promise<void> | void;
   onDelete: (id: string) => Promise<void> | void;
   busy: boolean;
 }
 
-function ProjectCard({ project, onOpen, onRename, onDelete, busy }: ProjectCardProps) {
+function ProjectCard({ project, thumbnailUrl, onOpen, onRename, onDelete, busy }: ProjectCardProps) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -179,7 +181,11 @@ function ProjectCard({ project, onOpen, onRename, onDelete, busy }: ProjectCardP
         disabled={busy}
         aria-label={`Entrer dans ${project.name}`}
       >
-        <img src={PROJECT_BROWSER_PREVIEW_URL} alt="Aperçu de projet" />
+        {thumbnailUrl ? (
+          <img src={thumbnailUrl} alt="Aperçu de projet" />
+        ) : (
+          <div className="rvpb-card__preview-placeholder" aria-hidden="true" />
+        )}
       </button>
     </article>
   );
@@ -197,6 +203,7 @@ export function ProjectBrowserOverlay({
   canClose = true,
 }: ProjectBrowserOverlayProps) {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -220,6 +227,14 @@ export function ProjectBrowserOverlay({
     try {
       const rows = await listProjects();
       setProjects(rows);
+      // Fire-and-forget thumbnail resolution; failures don't block the list.
+      if (rows.length > 0) {
+        getProjectThumbnailUrls(rows.map((r) => r.id))
+          .then((map) => setThumbnails(map))
+          .catch((e) => console.warn('[ProjectBrowser] thumbnails failed', e));
+      } else {
+        setThumbnails({});
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Impossible de charger les projets.');
     } finally {
@@ -294,7 +309,15 @@ export function ProjectBrowserOverlay({
       setBusy(id, true);
       try {
         await deleteProject(id);
+        // Best-effort thumbnail cleanup so storage doesn't fill with orphans.
+        void deleteProjectThumbnail(id);
         setProjects((prev) => prev.filter((p) => p.id !== id));
+        setThumbnails((prev) => {
+          if (!(id in prev)) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Échec de la suppression.');
       } finally {
@@ -448,6 +471,7 @@ export function ProjectBrowserOverlay({
               <ProjectCard
                 key={p.id}
                 project={p}
+                thumbnailUrl={thumbnails[p.id] ?? null}
                 busy={busyIds.has(p.id)}
                 onOpen={onOpenProject}
                 onRename={handleRename}

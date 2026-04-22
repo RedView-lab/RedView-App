@@ -1,0 +1,60 @@
+/**
+ * Capture a downsized PNG snapshot of the live Mapbox canvas.
+ *
+ * Used by the project browser to show a per-project thumbnail.
+ * Requires the Map to have been instantiated with
+ * `preserveDrawingBuffer: true` (already the case in `useMap.ts`).
+ *
+ * The capture pipeline is:
+ *   map canvas (full device-pixel resolution)
+ *     → offscreen canvas at `targetWidth` (object-fit: cover)
+ *     → PNG blob
+ *
+ * Returns null if the map isn't ready or the capture failed for any
+ * reason (read-back blocked, taint, OOM…). Callers should treat null
+ * as "skip thumbnail upload, keep the previous one".
+ */
+import type { Map as MapboxMap } from 'mapbox-gl';
+
+export async function captureMapThumbnail(
+  map: MapboxMap | null,
+  targetWidth = 480,
+  aspectRatio = 16 / 9,
+): Promise<Blob | null> {
+  if (!map) return null;
+  try {
+    // Trigger a fresh render so the buffer matches the current view.
+    map.triggerRepaint();
+    const src = map.getCanvas();
+    if (!src || src.width === 0 || src.height === 0) return null;
+
+    const targetHeight = Math.round(targetWidth / aspectRatio);
+    const off = document.createElement('canvas');
+    off.width = targetWidth;
+    off.height = targetHeight;
+    const ctx = off.getContext('2d');
+    if (!ctx) return null;
+
+    // Cover: scale to fill, crop excess.
+    const srcAspect = src.width / src.height;
+    let sx = 0;
+    let sy = 0;
+    let sw = src.width;
+    let sh = src.height;
+    if (srcAspect > aspectRatio) {
+      sw = Math.round(src.height * aspectRatio);
+      sx = Math.round((src.width - sw) / 2);
+    } else {
+      sh = Math.round(src.width / aspectRatio);
+      sy = Math.round((src.height - sh) / 2);
+    }
+    ctx.drawImage(src, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+
+    return await new Promise<Blob | null>((resolve) => {
+      off.toBlob((b) => resolve(b), 'image/png', 0.85);
+    });
+  } catch (e) {
+    console.warn('[thumbnail] capture failed', e);
+    return null;
+  }
+}
