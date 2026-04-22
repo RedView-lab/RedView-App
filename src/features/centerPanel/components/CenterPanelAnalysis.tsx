@@ -58,6 +58,7 @@ const axisOptions: AxisOption[] = [
 ];
 
 const DETAIL_ZOOM_STEP = 0.1;
+const DETAIL_MIN_VISIBLE_FRACTION = 0.12;
 
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
@@ -121,7 +122,17 @@ export function CenterPanelAnalysis() {
 
   const adjustDetailZoom = (delta: number) => {
     updateAnalysis((draft) => {
-      draft.detailZoom = normalizeUnitInterval(draft.detailZoom + delta, draft.detailZoom);
+      const currentZoom = normalizeUnitInterval(draft.detailZoom, draft.detailZoom);
+      const nextZoom = normalizeUnitInterval(currentZoom + delta, currentZoom);
+      const currentVisibleFraction = detailZoomToVisibleFraction(currentZoom);
+      const nextVisibleFraction = detailZoomToVisibleFraction(nextZoom);
+      const currentCenter =
+        normalizeUnitInterval(draft.detailOffset, draft.detailOffset) *
+          (1 - currentVisibleFraction) +
+        currentVisibleFraction / 2;
+
+      draft.detailZoom = nextZoom;
+      draft.detailOffset = detailOffsetForCenter(currentCenter, nextVisibleFraction);
     });
   };
 
@@ -404,4 +415,14 @@ function normalizeAnalysisState(state?: Partial<AnalysisPanelState> | null): Ana
 function normalizeUnitInterval(value: number | undefined, fallback = 0): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(0, Math.min(1, value ?? fallback));
+}
+
+function detailZoomToVisibleFraction(detailZoom: number): number {
+  return 1 - normalizeUnitInterval(detailZoom) * (1 - DETAIL_MIN_VISIBLE_FRACTION);
+}
+
+function detailOffsetForCenter(center: number, visibleFraction: number): number {
+  const remainingSpan = 1 - visibleFraction;
+  if (remainingSpan <= 1e-6) return 0;
+  return normalizeUnitInterval((center - visibleFraction / 2) / remainingSpan);
 }
