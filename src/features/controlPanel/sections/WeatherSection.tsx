@@ -249,38 +249,41 @@ function WeatherPaletteRow({
   const isFirst = bandIndex === 0;
   const isLast = bandIndex === totalBands - 1;
   const suffix = spec?.unit === '°C' ? spec.unit : ` ${spec?.unit ?? ''}`;
+  const marker = isFirst ? '<' : isLast ? '>' : '';
 
   return (
     <div className="rvc-altitude__band-row">
-      <div className="rvc-slopes__band-label-editable">
-        {isFirst ? <span className="rvc-slopes__band-category">&lt;</span> : null}
-        {!isFirst ? (
-          <InlineWeatherNumericInput
-            layerKey={layerKey}
-            value={band.minValue}
-            editable
-            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
-          />
-        ) : null}
-        {!isFirst && !isLast ? <span className="rvc-slopes__deg-sep">-</span> : null}
-        {!isLast ? (
-          <InlineWeatherNumericInput
-            layerKey={layerKey}
-            value={band.maxValue}
-            editable
-            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
-          />
-        ) : null}
-        {isLast ? <span className="rvc-slopes__band-category">&gt;</span> : null}
-        {isLast ? (
-          <InlineWeatherNumericInput
-            layerKey={layerKey}
-            value={band.minValue}
-            editable
-            onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
-          />
-        ) : null}
-        <span className="rvc-slopes__band-category">{suffix}</span>
+      <div className="rvc-slopes__band-label-editable rvc-weather__band-label">
+        <span className="rvc-slopes__band-category rvc-weather__band-marker">{marker}</span>
+        <span className="rvc-weather__band-slot">
+          {!isFirst || isLast ? (
+            <InlineWeatherNumericInput
+              layerKey={layerKey}
+              value={isLast ? band.minValue : band.minValue}
+              editable
+              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'min', value)}
+            />
+          ) : null}
+        </span>
+        <span className="rvc-slopes__deg-sep rvc-weather__band-sep">{!isFirst && !isLast ? '-' : ''}</span>
+        <span className="rvc-weather__band-slot">
+          {!isFirst && !isLast ? (
+            <InlineWeatherNumericInput
+              layerKey={layerKey}
+              value={band.maxValue}
+              editable
+              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
+            />
+          ) : isFirst ? (
+            <InlineWeatherNumericInput
+              layerKey={layerKey}
+              value={band.maxValue}
+              editable
+              onCommit={(value) => onBreakpointChange?.(layerKey, bandIndex, 'max', value)}
+            />
+          ) : null}
+        </span>
+        <span className="rvc-slopes__band-category rvc-weather__band-unit">{suffix}</span>
       </div>
       <ColorPalettePicker
         color={band.color}
@@ -505,12 +508,12 @@ export function WeatherSection({
                   </div>
 
                   <div className="rvc-altitude__bands">
-                    {palette.bands.map((band) => (
+                    {palette.bands.map((band, bandIndex) => (
                       <WeatherPaletteRow
                         key={band.id}
                         layerKey={layer.key}
                         band={band}
-                        bandIndex={palette.bands.findIndex((candidate) => candidate.id === band.id)}
+                        bandIndex={bandIndex}
                         totalBands={palette.bands.length}
                         onColorChange={onPaletteBandColorChange}
                         onBreakpointChange={onPaletteBandBreakpointChange}

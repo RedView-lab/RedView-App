@@ -29,6 +29,12 @@ interface ViewportBounds {
 
 type ImageCoords = [[number, number], [number, number], [number, number], [number, number]];
 
+interface RenderedLayerEntry {
+  url: string;
+  coords: ImageCoords;
+  signature: string;
+}
+
 function getViewportBounds(map: MapboxMap): ViewportBounds {
   const bounds = map.getBounds();
   if (!bounds) {
@@ -118,14 +124,30 @@ function imageCoords(bounds: [number, number, number, number]): ImageCoords {
 }
 
 async function preload(url: string): Promise<void> {
-  const image = new Image();
-  image.decoding = 'async';
-  image.src = url;
-  try {
-    if (image.decode) await image.decode();
-  } catch {
-    /* ignore */
-  }
+  void url;
+}
+
+function coordsEqual(left: ImageCoords, right: ImageCoords): boolean {
+  return left.every((point, index) => point[0] === right[index]?.[0] && point[1] === right[index]?.[1]);
+}
+
+function paletteSignature(state: WeatherOverlayState, key: WeatherOverlayMetric): string {
+  const palette = state.palettes?.[key];
+  return JSON.stringify({
+    opacity: palette?.opacity,
+    scaleSetting: palette?.scaleSetting,
+    bands: palette?.bands?.map((band) => ({
+      color: band.color,
+      minValue: band.minValue,
+      maxValue: band.maxValue,
+    })),
+  });
+}
+
+async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return canvas.toDataURL('image/png');
+  return URL.createObjectURL(blob);
 }
 
 function renderSize(map: MapboxMap): { width: number; height: number } {
@@ -154,7 +176,7 @@ export function useWeatherOverlay(
   const generationRef = useRef(0);
   const scheduleRefreshRef = useRef<((force: boolean) => void) | null>(null);
   const hideAllRef = useRef<(() => void) | null>(null);
-  const renderedRef = useRef<Partial<Record<WeatherOverlayMetric, { url: string; coords: ImageCoords }>>>({});
+  const renderedRef = useRef<Partial<Record<WeatherOverlayMetric, RenderedLayerEntry>>>({});
 
   const activeLayersKey = useMemo(
     () => activeRenderableLayers(state).map((layer) => `${layer.key}:${layer.mode}`).join('|'),
@@ -233,12 +255,27 @@ export function useWeatherOverlay(
 
       const coords = imageCoords(dataset.grid.bounds);
       const size = renderSize(map);
+      const activeLayerMap = new Map(activeLayers.map((layer) => [layer.key, layer] as const));
       for (const key of SUPPORTED_KEYS) {
-        const activeLayer = activeLayers.find((layer) => layer.key === key);
+        const activeLayer = activeLayerMap.get(key);
         if (!activeLayer) {
           setVisibility(key, false);
           continue;
         }
+
+        const signature = [
+          dataset.selectionKey,
+          dataset.fetchedAt,
+          activeLayer.mode,
+          `${size.width}x${size.height}`,
+          paletteSignature(stateRef.current, key),
+        ].join('|');
+        const rendered = renderedRef.current[key];
+        if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
+          ensureLayer(key, rendered.url, rendered.coords);
+          continue;
+        }
+
         const palette = stateRef.current.palettes?.[key];
         const canvas = renderWeatherCanvas(
           key,
@@ -250,10 +287,13 @@ export function useWeatherOverlay(
           palette?.opacity,
           palette?.bands,
         );
-        const url = canvas.toDataURL('image/png');
+        const url = await canvasToObjectUrl(canvas);
         await preload(url);
         ensureLayer(key, url, coords);
-        renderedRef.current[key] = { url, coords };
+        if (rendered?.url.startsWith('blob:')) {
+          window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
+        }
+        renderedRef.current[key] = { url, coords, signature };
       }
     };
 
@@ -342,6 +382,10 @@ export function useWeatherOverlay(
       hideAllRef.current = null;
       abortRef.current?.abort();
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      for (const rendered of Object.values(renderedRef.current)) {
+        if (rendered?.url.startsWith('blob:')) URL.revokeObjectURL(rendered.url);
+      }
+      renderedRef.current = {};
       for (const key of SUPPORTED_KEYS) {
         try {
           if (map.getLayer(layerId(key))) map.removeLayer(layerId(key));

@@ -239,9 +239,45 @@
   padding: 2px 0 6px 20px;
 }
 
-.rvc-weather__threshold-number {
-  min-width: 42px;
-  width: auto;
+.rvc-weather__band-label {
+  display: grid;
+  grid-template-columns: 12px 46px 10px 46px auto;
+  align-items: center;
+  column-gap: 4px;
+}
+
+.rvc-weather__band-marker {
+  width: 12px;
+  margin-left: 0;
+  text-align: center;
+}
+
+.rvc-weather__band-slot {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.rvc-weather__band-sep {
+  width: 10px;
+  padding: 0;
+  text-align: center;
+}
+
+.rvc-weather__band-unit {
+  margin-left: 0;
+}
+
+.rvc-weather__band-label .rvc-weather__threshold-number {
+  width: 46px;
+  min-width: 46px;
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.rvc-weather__band-label .rvc-slopes__deg-input.rvc-weather__threshold-number {
+  width: 46px;
+  min-width: 46px;
 }
 
 .rvc-weather__add-alert {
