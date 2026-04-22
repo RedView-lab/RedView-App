@@ -209,16 +209,16 @@
 
 /* ── Dropdown menu (Figma DROPDOWN — node 1710:44458) ───────── */
 .rvi-select__menu {
-  position: absolute;
-  top: calc(100% + 4px);
+  position: fixed;
+  top: 0;
   left: 0;
-  z-index: 1000;
+  z-index: 9999;
   isolation: isolate;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   width: 104px;
-  min-width: 100%;
+  min-width: 80px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
