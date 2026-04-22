@@ -22,6 +22,13 @@
  */
 import type { BrouterRoute } from './brouter';
 
+export interface RouteProfilePoint {
+  lat: number;
+  lon: number;
+  distanceM: number;
+  elevationM: number;
+}
+
 export interface RouteMetrics {
   distanceM: number;
   ascentM: number;
@@ -254,6 +261,24 @@ function aggregate(rows: ParsedRow[], totalDistFallback: number): RouteMetrics {
   };
 }
 
+function buildRouteProfile(rows: ParsedRow[]): RouteProfilePoint[] {
+  const smoothed = smoothElevations(rows, 5);
+  const profile: RouteProfilePoint[] = [];
+  let distanceM = 0;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (i > 0) distanceM += Math.max(0, rows[i].segDistM);
+    profile.push({
+      lat: rows[i].lat,
+      lon: rows[i].lon,
+      distanceM,
+      elevationM: smoothed[i],
+    });
+  }
+
+  return profile;
+}
+
 /* ------------------------------------------------------------------ */
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
@@ -269,6 +294,14 @@ export function computeRouteMetricsFromBrouter(
   const rows = parseMessages(route);
   if (rows.length < 2) return null;
   return aggregate(rows, route.distanceM);
+}
+
+export function extractRouteProfileFromBrouter(
+  route: BrouterRoute,
+): RouteProfilePoint[] | null {
+  const rows = parseMessages(route);
+  if (rows.length < 2) return null;
+  return buildRouteProfile(rows);
 }
 
 /**
@@ -297,4 +330,24 @@ export function refineMetricsWithTerrain(
   if (coverage / rows.length < 0.6) return null;
 
   return aggregate(rows, route.distanceM);
+}
+
+export function refineRouteProfileWithTerrain(
+  route: BrouterRoute,
+  queryEle: (lng: number, lat: number) => number | null | undefined,
+): RouteProfilePoint[] | null {
+  const rows = parseMessages(route);
+  if (rows.length < 2) return null;
+
+  let coverage = 0;
+  for (const r of rows) {
+    const e = queryEle(r.lon, r.lat);
+    if (e != null && Number.isFinite(e)) {
+      r.ele = e;
+      coverage++;
+    }
+  }
+  if (coverage / rows.length < 0.6) return null;
+
+  return buildRouteProfile(rows);
 }

@@ -146,14 +146,14 @@ export function CenterPanelAnalysis() {
   // Build the dynamic chart series from every visible itinerary that has a
   // computed prediction. One curve per (itinerary × axis) combination.
   const series = useMemo<ChartSeries[]>(() => {
-    if (!projectStore || !predictionStore) return [];
+    if (!projectStore) return [];
     const result: ChartSeries[] = [];
     for (const itinerary of projectStore.project.itineraries) {
       if (itinerary.visible === false) continue;
-      const prediction = predictionStore.predictions[itinerary.id];
-      if (!prediction) continue;
+      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      const routePoints = itinerary.gpxRoute?.points ?? null;
 
-      const axis1Points = buildSeriesFromPrediction(prediction, axis1Value, xMode);
+      const axis1Points = buildSeriesFromPrediction(prediction, axis1Value, xMode, routePoints);
       if (axis1Points) {
         result.push({
           id: `${itinerary.id}::axis1`,
@@ -167,7 +167,7 @@ export function CenterPanelAnalysis() {
         });
       }
 
-      const axis2Points = buildSeriesFromPrediction(prediction, axis2Value, xMode);
+      const axis2Points = buildSeriesFromPrediction(prediction, axis2Value, xMode, routePoints);
       if (axis2Points) {
         result.push({
           id: `${itinerary.id}::axis2`,
@@ -195,14 +195,18 @@ export function CenterPanelAnalysis() {
 
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
     if (!showAltitudeBackdrop) return [];
-    if (!projectStore || !predictionStore) return [];
+    if (!projectStore) return [];
 
     const result: ChartBackdropProfile[] = [];
     for (const itinerary of projectStore.project.itineraries) {
       if (itinerary.visible === false) continue;
-      const prediction = predictionStore.predictions[itinerary.id];
-      if (!prediction) continue;
-      const points = buildSeriesFromPrediction(prediction, 'Altitude', xMode);
+      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      const points = buildSeriesFromPrediction(
+        prediction,
+        'Altitude',
+        xMode,
+        itinerary.gpxRoute?.points ?? null,
+      );
       if (!points) continue;
       result.push({
         id: `${itinerary.id}::altitude-backdrop`,

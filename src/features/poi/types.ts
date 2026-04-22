@@ -100,8 +100,14 @@ export interface PoiApiResponse {
   features: PoiFeature[];
 }
 
-/** Parsed GPX route (coordinates only, no gradient/curvature) */
+/** Parsed GPX route with optional elevation metadata when available. */
 export interface GpxRoute {
   name: string | null;
-  points: { lat: number; lon: number }[];
+  points: {
+    lat: number;
+    lon: number;
+    distanceM?: number;
+    elevationM?: number | null;
+    gradientPct?: number | null;
+  }[];
 }

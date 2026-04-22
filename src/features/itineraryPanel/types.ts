@@ -285,7 +285,13 @@ export interface Itinerary {
    */
   gpxRoute?: {
     name: string | null;
-    points: { lat: number; lon: number }[];
+    points: {
+      lat: number;
+      lon: number;
+      distanceM?: number;
+      elevationM?: number | null;
+      gradientPct?: number | null;
+    }[];
     source?: 'gpx' | 'brouter';
   };
   /**

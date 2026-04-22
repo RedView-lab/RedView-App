@@ -1,5 +1,21 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor';
 
+interface RouteChartPoint {
+  lat: number;
+  lon: number;
+  distanceM?: number;
+  elevationM?: number | null;
+  gradientPct?: number | null;
+}
+
+interface NormalizedRoutePoint {
+  distanceM: number;
+  elevationM: number;
+  gradientPct: number;
+}
+
+const EARTH_RADIUS_M = 6_371_008.8;
+
 /**
  * Identifier of an axis option exposed by the analysis dropdowns. Keep in
  * sync with the labels rendered in {@link CenterPanelAnalysis}.
@@ -155,6 +171,148 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
   }
 }
 
+function isRouteBackedMetric(metric: AxisMetricId): boolean {
+  return metric === 'Altitude' || isInclinationMetric(metric);
+}
+
+function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+}
+
+function smoothValues(values: number[], windowSize = 5): number[] {
+  const out = new Array<number>(values.length);
+  const half = Math.floor(windowSize / 2);
+  for (let i = 0; i < values.length; i++) {
+    const lo = Math.max(0, i - half);
+    const hi = Math.min(values.length - 1, i + half);
+    let sum = 0;
+    for (let j = lo; j <= hi; j++) sum += values[j];
+    out[i] = sum / (hi - lo + 1);
+  }
+  return out;
+}
+
+function normalizeRouteProfile(
+  routePoints: RouteChartPoint[] | null | undefined,
+): NormalizedRoutePoint[] | null {
+  if (!routePoints || routePoints.length < 2) return null;
+
+  const samples: Array<{ distanceM: number; elevationM: number; gradientPct?: number | null }> = [];
+  let cumulativeDistanceM = 0;
+
+  for (let i = 0; i < routePoints.length; i++) {
+    const point = routePoints[i];
+    if (i > 0) {
+      const nextDistance = point.distanceM;
+      if (Number.isFinite(nextDistance) && (nextDistance as number) >= cumulativeDistanceM) {
+        cumulativeDistanceM = nextDistance as number;
+      } else {
+        cumulativeDistanceM += haversineM(routePoints[i - 1], point);
+      }
+    }
+
+    if (!Number.isFinite(point.elevationM)) continue;
+    samples.push({
+      distanceM: cumulativeDistanceM,
+      elevationM: point.elevationM as number,
+      gradientPct: point.gradientPct,
+    });
+  }
+
+  if (samples.length < 2) return null;
+
+  const smoothedElevations = smoothValues(
+    samples.map((sample) => sample.elevationM),
+    5,
+  );
+
+  return samples.map((sample, index) => {
+    const prevIndex = index > 0 ? index - 1 : index;
+    const nextIndex = index < samples.length - 1 ? index + 1 : index;
+    const distanceSpanM = samples[nextIndex].distanceM - samples[prevIndex].distanceM;
+    const derivedGradientPct =
+      distanceSpanM > 0.5
+        ? ((smoothedElevations[nextIndex] - smoothedElevations[prevIndex]) / distanceSpanM) * 100
+        : 0;
+    return {
+      distanceM: sample.distanceM,
+      elevationM: smoothedElevations[index],
+      gradientPct: Number.isFinite(sample.gradientPct)
+        ? (sample.gradientPct as number)
+        : derivedGradientPct,
+    };
+  });
+}
+
+function interpolateElapsedHours(
+  prediction: PredictionResult | null | undefined,
+  distanceM: number,
+): number | null {
+  if (!prediction || prediction.points.length < 2) return null;
+
+  const timeline = prediction.points.filter(
+    (point) => Number.isFinite(point.distance_m) && Number.isFinite(point.elapsed_time_s),
+  );
+  if (timeline.length < 2) return null;
+
+  if (distanceM <= timeline[0].distance_m) return timeline[0].elapsed_time_s / 3600;
+  const last = timeline[timeline.length - 1];
+  if (distanceM >= last.distance_m) return last.elapsed_time_s / 3600;
+
+  let lo = 0;
+  let hi = timeline.length - 1;
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (timeline[mid].distance_m <= distanceM) lo = mid;
+    else hi = mid;
+  }
+
+  const start = timeline[lo];
+  const end = timeline[hi];
+  const span = end.distance_m - start.distance_m;
+  if (span <= 0) return start.elapsed_time_s / 3600;
+  const t = (distanceM - start.distance_m) / span;
+  return (start.elapsed_time_s + (end.elapsed_time_s - start.elapsed_time_s) * t) / 3600;
+}
+
+function buildSeriesFromRouteProfile(
+  routePoints: RouteChartPoint[] | null | undefined,
+  prediction: PredictionResult | null | undefined,
+  metric: AxisMetricId,
+  xMode: AxisMode,
+): ChartPoint[] | null {
+  const profile = normalizeRouteProfile(routePoints);
+  if (!profile) return null;
+
+  const points: ChartPoint[] = [];
+  for (const sample of profile) {
+    const x =
+      xMode === 'distance'
+        ? sample.distanceM / 1000
+        : interpolateElapsedHours(prediction, sample.distanceM);
+    const y =
+      metric === 'Altitude'
+        ? sample.elevationM
+        : metric === 'Inclinaison (%)'
+          ? sample.gradientPct
+          : gradientPercentToDegrees(sample.gradientPct);
+
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      points.push({ x: x as number, y });
+    }
+  }
+
+  return points.length > 1 ? points : null;
+}
+
 /**
  * Build a chart series from a prediction result. Returns `null` when the
  * prediction is unavailable or the metric is not supported.
@@ -166,10 +324,17 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
  * - X axis is the configurable distance (km) or elapsed time (h).
  */
 export function buildSeriesFromPrediction(
-  prediction: PredictionResult,
+  prediction: PredictionResult | null | undefined,
   metric: AxisMetricId,
   xMode: AxisMode,
+  routePoints?: RouteChartPoint[] | null,
 ): ChartPoint[] | null {
+  if (isRouteBackedMetric(metric)) {
+    const routeSeries = buildSeriesFromRouteProfile(routePoints, prediction, metric, xMode);
+    if (routeSeries) return routeSeries;
+  }
+
+  if (!prediction) return null;
   if (!prediction.points.length) return null;
   if (!metricIsAvailable(metric)) return null;
 

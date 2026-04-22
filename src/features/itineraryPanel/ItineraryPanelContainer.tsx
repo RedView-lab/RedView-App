@@ -42,9 +42,12 @@ import {
 } from './lib/route-layer';
 import {
   computeRouteMetricsFromBrouter,
+  extractRouteProfileFromBrouter,
   refineMetricsWithTerrain,
+  refineRouteProfileWithTerrain,
 } from './lib/route-metrics';
 import type {
+  Itinerary,
   ItineraryProject,
   PanelMode,
   PrioritiesState,
@@ -771,10 +774,18 @@ export function ItineraryPanelContainer({
           '| avg slope=', avgSlopePercent, '%',
           '| tarmac=', tarmacPercent, '% off-road=', offroadPercent, '%',
         );
-        const routePoints = route.coordinates.map((c: [number, number]) => ({
-          lat: c[1],
-          lon: c[0],
-        }));
+        const routeProfile = extractRouteProfileFromBrouter(route);
+        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+          ? routeProfile.map((point) => ({
+              lat: point.lat,
+              lon: point.lon,
+              distanceM: point.distanceM,
+              elevationM: point.elevationM,
+            }))
+          : route.coordinates.map((c: [number, number]) => ({
+              lat: c[1],
+              lon: c[0],
+            }));
         setProject((p) => {
           const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
           if (!it) return p;
@@ -783,7 +794,9 @@ export function ItineraryPanelContainer({
           const gpxAlreadyOk =
             it.gpxRoute?.points.length === routePoints.length &&
             it.gpxRoute?.points[0]?.lat === routePoints[0]?.lat &&
-            it.gpxRoute?.points[0]?.lon === routePoints[0]?.lon;
+            it.gpxRoute?.points[0]?.lon === routePoints[0]?.lon &&
+            (it.gpxRoute?.points[0]?.elevationM ?? null) ===
+              (routePoints[0]?.elevationM ?? null);
           const metricsAlreadyOk =
             it.metrics?.distanceKm === distanceKm &&
             it.metrics?.ascentM === ascentM &&
@@ -836,6 +849,7 @@ export function ItineraryPanelContainer({
               }
             };
             const refined = refineMetricsWithTerrain(route, queryEle);
+            const refinedProfile = refineRouteProfileWithTerrain(route, queryEle);
             if (!refined) return;
             const rAscent = Math.max(0, Math.round(refined.ascentM));
             const rDescent = Math.max(0, Math.round(refined.descentM));
@@ -849,10 +863,20 @@ export function ItineraryPanelContainer({
             setProject((p) => {
               const it = p.itineraries.find((x) => x.id === p.activeItineraryId);
               if (!it) return p;
+              const refinedPoints = refinedProfile?.map((point) => ({
+                lat: point.lat,
+                lon: point.lon,
+                distanceM: point.distanceM,
+                elevationM: point.elevationM,
+              }));
               if (
                 it.metrics?.ascentM === rAscent &&
                 it.metrics?.descentM === rDescent &&
-                it.metrics?.avgSlopePercent === rAvg
+                it.metrics?.avgSlopePercent === rAvg &&
+                (!refinedPoints ||
+                  ((it.gpxRoute?.points[0]?.elevationM ?? null) ===
+                    (refinedPoints[0]?.elevationM ?? null) &&
+                    it.gpxRoute?.points.length === refinedPoints.length))
               )
                 return p;
               return {
@@ -861,6 +885,13 @@ export function ItineraryPanelContainer({
                   curr.id === p.activeItineraryId
                     ? {
                         ...curr,
+                        gpxRoute: refinedPoints
+                          ? {
+                              name: curr.gpxRoute?.name ?? null,
+                              points: refinedPoints,
+                              source: 'brouter',
+                            }
+                          : curr.gpxRoute,
                         metrics: {
                           ...curr.metrics,
                           ascentM: rAscent,

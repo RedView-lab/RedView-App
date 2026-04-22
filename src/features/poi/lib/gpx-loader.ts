@@ -1,7 +1,7 @@
 import type { GpxRoute } from '../types';
 
 /**
- * Parse a .gpx file into a lightweight route (coordinates only).
+ * Parse a .gpx file into a lightweight route.
  * Supports both <trkpt> (tracks) and <rtept> (routes).
  */
 export async function parseGpxFile(file: File): Promise<GpxRoute> {
@@ -22,13 +22,26 @@ export async function parseGpxFile(file: File): Promise<GpxRoute> {
 
   if (raw.length === 0) throw new Error('Aucun point trouvé dans le GPX');
 
-  const points: { lat: number; lon: number }[] = [];
+  const points: GpxRoute['points'] = [];
+  let distanceM = 0;
 
   for (const el of raw) {
     const lat = parseFloat(el.getAttribute('lat') ?? '');
     const lon = parseFloat(el.getAttribute('lon') ?? '');
     if (!isFinite(lat) || !isFinite(lon)) continue;
-    points.push({ lat, lon });
+    const elevationText = el.querySelector('ele')?.textContent?.trim() ?? '';
+    const elevationM = elevationText ? parseFloat(elevationText) : Number.NaN;
+    const nextPoint: GpxRoute['points'][number] = {
+      lat,
+      lon,
+      distanceM,
+      elevationM: Number.isFinite(elevationM) ? elevationM : null,
+    };
+    if (points.length > 0) {
+      distanceM += haversineM(points[points.length - 1], nextPoint);
+      nextPoint.distanceM = distanceM;
+    }
+    points.push(nextPoint);
   }
 
   if (points.length < 2) throw new Error('GPX doit contenir au moins 2 points');
