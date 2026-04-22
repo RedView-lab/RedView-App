@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import {
@@ -70,26 +70,26 @@ export function CenterPanelAnalysis() {
   // rendering without exposing the removed "Altitude" metric anymore.
   const rawAnalysis = projectStore?.project.analysis;
   const analysisState: AnalysisPanelState = rawAnalysis
-    ? {
-        ...rawAnalysis,
-        axis1: migrateAxisMetric(rawAnalysis.axis1),
-        axis2: migrateAxisMetric(rawAnalysis.axis2),
-      }
+    ? normalizeAnalysisState(rawAnalysis)
     : createDefaultAnalysisPanelState();
   const axis1Value = analysisState.axis1 as AxisMetricId;
   const axis2Value = analysisState.axis2 as AxisMetricId;
   const xMode = analysisState.xMode as AxisMode;
   const filters = analysisState.filters;
+  const detailZoom = analysisState.detailZoom;
+  const detailOffset = analysisState.detailOffset;
 
   const updateAnalysis = (mut: (draft: AnalysisPanelState) => void) => {
     if (!projectStore) return;
     projectStore.setProject((prev) => {
-      const current = prev.analysis ?? createDefaultAnalysisPanelState();
+      const current = normalizeAnalysisState(prev.analysis);
       const next: AnalysisPanelState = {
         xMode: current.xMode,
         axis1: current.axis1,
         axis2: current.axis2,
         filters: { ...current.filters },
+        detailZoom: current.detailZoom,
+        detailOffset: current.detailOffset,
       };
       mut(next);
       return { ...prev, analysis: next };
@@ -114,6 +114,19 @@ export function CenterPanelAnalysis() {
   const toggleFilter = (key: FilterKey) => {
     updateAnalysis((draft) => {
       draft.filters[key] = !draft.filters[key];
+    });
+  };
+
+  const handleDetailZoomChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextZoom = normalizeUnitInterval(Number(event.target.value) / 100);
+    updateAnalysis((draft) => {
+      draft.detailZoom = nextZoom;
+    });
+  };
+
+  const handleDetailOffsetChange = (value: number) => {
+    updateAnalysis((draft) => {
+      draft.detailOffset = normalizeUnitInterval(value);
     });
   };
 
@@ -254,13 +267,26 @@ export function CenterPanelAnalysis() {
 
         <div className="rvc-center-analysis__detail">
           <span className="rvc-center-analysis__minor-label">Détail</span>
-          <div className="rvc-center-analysis__slider-group" aria-hidden="true">
-            <span>-</span>
-            <div className="rvc-center-analysis__slider">
-              <div className="rvc-center-analysis__slider-fill" />
-              <div className="rvc-center-analysis__slider-thumb" />
-            </div>
-            <span>+</span>
+          <div className="rvc-center-analysis__slider-group">
+            <span aria-hidden="true">-</span>
+            <label
+              className="rvc-center-analysis__slider"
+              style={{ ['--rvc-center-analysis-slider-ratio' as string]: detailZoom.toString() }}
+            >
+              <input
+                className="rvc-center-analysis__slider-input"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(detailZoom * 100)}
+                onChange={handleDetailZoomChange}
+                aria-label="Zoom du graphique"
+              />
+              <span className="rvc-center-analysis__slider-fill" aria-hidden="true" />
+              <span className="rvc-center-analysis__slider-thumb" aria-hidden="true" />
+            </label>
+            <span aria-hidden="true">+</span>
           </div>
         </div>
 
@@ -322,6 +348,9 @@ export function CenterPanelAnalysis() {
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
           xMode={xMode}
+          detailZoom={detailZoom}
+          detailOffset={detailOffset}
+          onDetailOffsetChange={handleDetailOffsetChange}
           showSeriesRows={false}
         />
       </div>
@@ -355,4 +384,24 @@ function lightenColor(hex: string, amount: number): string {
 function migrateAxisMetric(value: string): AxisMetricId {
   if (value === 'Dénivelé' || value === 'Altitude') return 'Inclinaison (%)';
   return value as AxisMetricId;
+}
+
+function normalizeAnalysisState(state?: Partial<AnalysisPanelState> | null): AnalysisPanelState {
+  const fallback = createDefaultAnalysisPanelState();
+  return {
+    xMode: state?.xMode ?? fallback.xMode,
+    axis1: migrateAxisMetric(state?.axis1 ?? fallback.axis1),
+    axis2: migrateAxisMetric(state?.axis2 ?? fallback.axis2),
+    filters: {
+      ...fallback.filters,
+      ...(state?.filters ?? {}),
+    },
+    detailZoom: normalizeUnitInterval(state?.detailZoom, fallback.detailZoom),
+    detailOffset: normalizeUnitInterval(state?.detailOffset, fallback.detailOffset),
+  };
+}
+
+function normalizeUnitInterval(value: number | undefined, fallback = 0): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(1, value ?? fallback));
 }

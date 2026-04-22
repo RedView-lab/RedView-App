@@ -29,6 +29,9 @@ interface AnalysisChartProps {
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId;
   xMode: AxisMode;
+  detailZoom: number;
+  detailOffset: number;
+  onDetailOffsetChange?: (value: number) => void;
   showSeriesRows?: boolean;
 }
 
@@ -38,6 +41,9 @@ export function AnalysisChart({
   axis1Metric,
   axis2Metric,
   xMode,
+  detailZoom,
+  detailOffset,
+  onDetailOffsetChange,
   showSeriesRows = true,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
@@ -73,25 +79,47 @@ export function AnalysisChart({
     return xMode === 'distance' ? { min: 0, max: 90 } : { min: 0, max: 6 };
   }, [series, xMode]);
 
+  const visibleFraction = useMemo(
+    () => detailZoomToVisibleFraction(normalizeUnitInterval(detailZoom)),
+    [detailZoom],
+  );
+
+  const normalizedDetailOffset = useMemo(
+    () => normalizeUnitInterval(detailOffset),
+    [detailOffset],
+  );
+
+  const plotXDomain = useMemo(
+    () => buildVisibleXDomain(xDomain, visibleFraction, normalizedDetailOffset),
+    [normalizedDetailOffset, visibleFraction, xDomain],
+  );
+
   const xTicks = useMemo(() => {
     const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
-    return buildNiceTicks(xDomain.min, xDomain.max, target || DEFAULT_TICK_COUNT);
-  }, [plotSize.width, xDomain.max, xDomain.min]);
-
-  const plotXDomain = xDomain;
+    return buildNiceTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
+  }, [plotSize.width, plotXDomain.max, plotXDomain.min]);
 
   const displaySeries = useMemo(
     () => series.map((entry) => materializeSeriesForPlot(entry, xTicks)),
     [series, xTicks],
   );
 
+  const visibleSeries = useMemo(
+    () =>
+      displaySeries.map((entry) => ({
+        ...entry,
+        points: clipPointsToXDomain(entry.points, plotXDomain),
+      })),
+    [displaySeries, plotXDomain],
+  );
+
   const axis1Series = useMemo(
-    () => displaySeries.filter((entry) => entry.axis === 1),
-    [displaySeries],
+    () => visibleSeries.filter((entry) => entry.axis === 1),
+    [visibleSeries],
   );
   const axis2Series = useMemo(
-    () => displaySeries.filter((entry) => entry.axis === 2),
-    [displaySeries],
+    () => visibleSeries.filter((entry) => entry.axis === 2),
+    [visibleSeries],
   );
 
   const yDomain = useMemo<AxisDomain>(() => {
@@ -159,22 +187,33 @@ export function AnalysisChart({
   );
 
   const backdropYDomain = useMemo<AxisDomain | null>(
-    () => computeDomain(backdropProfiles.map((profile) => profile.points)),
-    [backdropProfiles],
+    () =>
+      computeDomain(
+        backdropProfiles.map((profile) => clipPointsToXDomain(profile.points, plotXDomain)),
+      ),
+    [backdropProfiles, plotXDomain],
   );
 
   const backdropPaths = useMemo(() => {
     if (!backdropYDomain) return [];
     return backdropProfiles.map((profile) => ({
       id: profile.id,
-      fillPath: buildAreaPath(profile.points, plotXDomain, backdropYDomain),
-      strokePath: buildSvgPath(profile.points, plotXDomain, backdropYDomain),
+      fillPath: buildAreaPath(
+        clipPointsToXDomain(profile.points, plotXDomain),
+        plotXDomain,
+        backdropYDomain,
+      ),
+      strokePath: buildSvgPath(
+        clipPointsToXDomain(profile.points, plotXDomain),
+        plotXDomain,
+        backdropYDomain,
+      ),
     }));
   }, [backdropProfiles, backdropYDomain, plotXDomain]);
 
   const seriesPaths = useMemo(
     () =>
-      displaySeries.map((entry) => ({
+      visibleSeries.map((entry) => ({
         id: entry.id,
         color: entry.color,
         path: buildSvgPath(
@@ -183,13 +222,13 @@ export function AnalysisChart({
           entry.axis === 2 ? plotY2Domain : plotYDomain,
         ),
       })),
-    [displaySeries, plotXDomain, plotY2Domain, plotYDomain],
+    [plotXDomain, plotY2Domain, plotYDomain, visibleSeries],
   );
 
   const hoverData = useMemo(() => {
-    if (!hover || !displaySeries.length) return null;
+    if (!hover || !visibleSeries.length) return null;
     const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
-    return displaySeries.map((entry) => ({
+    return visibleSeries.map((entry) => ({
       id: entry.id,
       itineraryName: entry.itineraryName,
       color: entry.color,
@@ -197,7 +236,7 @@ export function AnalysisChart({
       metric: entry.metricId,
       value: interpolateY(entry.points, hoveredX),
     }));
-  }, [displaySeries, hover, plotXDomain]);
+  }, [hover, plotXDomain, visibleSeries]);
 
   return (
     <div className="rvchart" style={style}>
@@ -301,10 +340,35 @@ export function AnalysisChart({
         <div />
       </div>
 
+      <div className="rvchart__viewport" aria-label="Déplacement horizontal du graphique">
+        <div />
+        <div className="rvchart__viewport-track">
+          <div
+            className="rvchart__viewport-window"
+            style={{
+              width: `${visibleFraction * 100}%`,
+              left: `${normalizedDetailOffset * (1 - visibleFraction) * 100}%`,
+            }}
+          />
+          <input
+            className="rvchart__viewport-input"
+            type="range"
+            min="0"
+            max="1000"
+            step="1"
+            value={Math.round(normalizedDetailOffset * 1000)}
+            onChange={(event) => onDetailOffsetChange?.(Number(event.target.value) / 1000)}
+            disabled={visibleFraction >= 0.999}
+            aria-label="Déplacer la zone visible du graphique"
+          />
+        </div>
+        <div />
+      </div>
+
       {showSeriesRows
-        ? displaySeries.length === 0
+        ? visibleSeries.length === 0
           ? <EmptySeriesRow axis1={axis1Metric} axis2={axis2Metric} />
-          : displaySeries.map((entry) => (
+          : visibleSeries.map((entry) => (
               <SeriesRow key={entry.id} seriesEntry={entry} xPositions={xPositions} />
             ))
         : null}
@@ -508,6 +572,40 @@ function buildIntervalAverageSeries(
   return result.length >= 2 ? result : points;
 }
 
+function clipPointsToXDomain(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+): { x: number; y: number }[] {
+  if (points.length === 0) return [];
+
+  const firstX = points[0]?.x ?? 0;
+  const lastX = points[points.length - 1]?.x ?? 0;
+  const clipped = points
+    .filter((point) => point.x >= xDomain.min && point.x <= xDomain.max)
+    .map((point) => ({ ...point }));
+
+  if (xDomain.min >= firstX && xDomain.min <= lastX) {
+    clipped.push({ x: xDomain.min, y: interpolateY(points, xDomain.min) });
+  }
+  if (xDomain.max >= firstX && xDomain.max <= lastX) {
+    clipped.push({ x: xDomain.max, y: interpolateY(points, xDomain.max) });
+  }
+
+  clipped.sort((left, right) => left.x - right.x);
+
+  const deduped: { x: number; y: number }[] = [];
+  for (const point of clipped) {
+    const prev = deduped[deduped.length - 1];
+    if (prev && Math.abs(prev.x - point.x) < 1e-6) {
+      deduped[deduped.length - 1] = point;
+      continue;
+    }
+    deduped.push(point);
+  }
+
+  return deduped;
+}
+
 function averageSeriesOverInterval(
   points: { x: number; y: number }[],
   start: number,
@@ -577,6 +675,32 @@ function buildAreaPath(
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function normalizeUnitInterval(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return clamp(value, 0, 1);
+}
+
+function detailZoomToVisibleFraction(detailZoom: number): number {
+  return 1 - normalizeUnitInterval(detailZoom) * (1 - MIN_VISIBLE_FRACTION);
+}
+
+function buildVisibleXDomain(
+  xDomain: AxisDomain,
+  visibleFraction: number,
+  detailOffset: number,
+): AxisDomain {
+  const span = xDomain.max - xDomain.min;
+  if (span <= 0) return xDomain;
+
+  const visibleSpan = span * clamp(visibleFraction, MIN_VISIBLE_FRACTION, 1);
+  const remainingSpan = Math.max(0, span - visibleSpan);
+  const start = xDomain.min + remainingSpan * normalizeUnitInterval(detailOffset);
+  return {
+    min: start,
+    max: start + visibleSpan,
+  };
 }
 
 function interpolateY(points: { x: number; y: number }[], xValue: number): number {
@@ -678,3 +802,5 @@ function formatCellValue(value: number, metric: ChartMetricId): string {
   else txt = value.toFixed(2).replace(/\.?0+$/u, '');
   return unit ? `${txt}${unit}` : txt;
 }
+
+const MIN_VISIBLE_FRACTION = 0.12;

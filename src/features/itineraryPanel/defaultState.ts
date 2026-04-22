@@ -145,6 +145,8 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
       pente: true,
       jourNuit: true,
     },
+    detailZoom: 0,
+    detailOffset: 0,
   };
 }
 

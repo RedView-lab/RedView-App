@@ -46,6 +46,8 @@ export interface AnalysisPanelState {
   axis1: AnalysisAxisMetricId;
   axis2: AnalysisAxisMetricId;
   filters: AnalysisFiltersState;
+  detailZoom: number;
+  detailOffset: number;
 }
 
 export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';
