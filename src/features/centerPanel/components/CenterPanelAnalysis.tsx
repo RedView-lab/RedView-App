@@ -14,8 +14,22 @@ import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
+import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/defaultState';
+import type {
+  AnalysisFiltersState,
+  AnalysisPanelState,
+} from '@/features/itineraryPanel/types';
 
-const filters = ['Waypoint', 'POI', 'Pause', 'Alertes', 'Pente', 'Jour/nuit'];
+type FilterKey = keyof AnalysisFiltersState;
+
+const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
+  { key: 'waypoint', label: 'Waypoint' },
+  { key: 'poi', label: 'POI' },
+  { key: 'pause', label: 'Pause' },
+  { key: 'alertes', label: 'Alertes' },
+  { key: 'pente', label: 'Pente' },
+  { key: 'jourNuit', label: 'Jour/nuit' },
+];
 
 const axisOptions: AxisOption[] = [
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
@@ -47,12 +61,54 @@ const axisOptions: AxisOption[] = [
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
-  const [axis1Value, setAxis1Value] = useState<AxisMetricId>('Vitesse');
-  const [axis2Value, setAxis2Value] = useState<AxisMetricId>('Puissance');
-  const [xMode, setXMode] = useState<AxisMode>('distance');
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
+
+  // Persisted analysis UI state (axis selections, X-axis mode, filter
+  // chips). Read from the project so reopening it restores the chart.
+  const analysisState: AnalysisPanelState =
+    projectStore?.project.analysis ?? createDefaultAnalysisPanelState();
+  const axis1Value = analysisState.axis1 as AxisMetricId;
+  const axis2Value = analysisState.axis2 as AxisMetricId;
+  const xMode = analysisState.xMode as AxisMode;
+  const filters = analysisState.filters;
+
+  const updateAnalysis = (mut: (draft: AnalysisPanelState) => void) => {
+    if (!projectStore) return;
+    projectStore.setProject((prev) => {
+      const current = prev.analysis ?? createDefaultAnalysisPanelState();
+      const next: AnalysisPanelState = {
+        xMode: current.xMode,
+        axis1: current.axis1,
+        axis2: current.axis2,
+        filters: { ...current.filters },
+      };
+      mut(next);
+      return { ...prev, analysis: next };
+    });
+  };
+
+  const setAxis1Value = (value: AxisMetricId) => {
+    updateAnalysis((draft) => {
+      draft.axis1 = value;
+    });
+  };
+  const setAxis2Value = (value: AxisMetricId) => {
+    updateAnalysis((draft) => {
+      draft.axis2 = value;
+    });
+  };
+  const setXMode = (value: AxisMode) => {
+    updateAnalysis((draft) => {
+      draft.xMode = value;
+    });
+  };
+  const toggleFilter = (key: FilterKey) => {
+    updateAnalysis((draft) => {
+      draft.filters[key] = !draft.filters[key];
+    });
+  };
 
   useEffect(() => {
     if (!openAxis) return;
@@ -208,14 +264,33 @@ export function CenterPanelAnalysis() {
         <div className="rvc-center-analysis__separator" aria-hidden="true" />
 
         <div className="rvc-center-analysis__filters" aria-label="Filtres">
-          {filters.map((filter) => (
-            <label key={filter} className="rvc-center-analysis__filter-chip">
-              <span className="rvc-center-analysis__checkbox" aria-hidden="true">
-                <IconCheck size={10} />
-              </span>
-              <span className="rvc-center-analysis__filter-label" title={filter}>{filter}</span>
-            </label>
-          ))}
+          {filterDefs.map(({ key, label }) => {
+            const checked = filters[key];
+            return (
+              <label
+                key={key}
+                className={
+                  checked
+                    ? 'rvc-center-analysis__filter-chip'
+                    : 'rvc-center-analysis__filter-chip rvc-center-analysis__filter-chip--off'
+                }
+              >
+                <input
+                  type="checkbox"
+                  className="rvc-center-analysis__filter-input"
+                  checked={checked}
+                  onChange={() => toggleFilter(key)}
+                  aria-label={label}
+                />
+                <span className="rvc-center-analysis__checkbox" aria-hidden="true">
+                  {checked ? <IconCheck size={10} /> : null}
+                </span>
+                <span className="rvc-center-analysis__filter-label" title={label}>
+                  {label}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 

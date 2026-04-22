@@ -7,6 +7,47 @@
  */
 import type { ExpertProfileState } from './expert/types';
 import type { ControlPanelPersistedState } from '../controlPanel/persistedState';
+import type { PredictionResult } from '../fitPredictor/types';
+
+/**
+ * Persisted state of the bottom analysis chart (centerPanel). Stored on
+ * the project so axis selections, filter chips and the X-axis mode
+ * (distance / time) survive across sessions.
+ */
+export type AnalysisAxisMetricId =
+  | 'Vitesse'
+  | 'Vitesse moyenne'
+  | 'Puissance'
+  | 'Puissance moyenne'
+  | 'Dénivelé'
+  | 'Inclinaison (°)'
+  | 'Inclinaison (%)'
+  | 'Surface'
+  | 'Température'
+  | 'Température ressentie (°)'
+  | 'Pluie (mm)'
+  | 'Vent (km/h)'
+  | 'Couverture nuageuse (%)'
+  | 'Humidité (%)'
+  | 'Ensoleillement (min)';
+
+export type AnalysisAxisMode = 'distance' | 'temps';
+
+export interface AnalysisFiltersState {
+  waypoint: boolean;
+  poi: boolean;
+  pause: boolean;
+  alertes: boolean;
+  pente: boolean;
+  jourNuit: boolean;
+}
+
+export interface AnalysisPanelState {
+  xMode: AnalysisAxisMode;
+  axis1: AnalysisAxisMetricId;
+  axis2: AnalysisAxisMetricId;
+  filters: AnalysisFiltersState;
+}
 
 export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';
 
@@ -254,6 +295,13 @@ export interface Itinerary {
    * mirroring `trekking.brf`.
    */
   expertProfile?: ExpertProfileState;
+  /**
+   * Latest successful FIT prediction result for this itinerary. Persisted
+   * on the project so reopening it restores the analysis chart without
+   * having to re-run the (expensive) prediction. Null / undefined means
+   * no prediction has been computed yet.
+   */
+  prediction?: PredictionResult | null;
 }
 
 export interface ItineraryProject {
@@ -269,6 +317,8 @@ export interface ItineraryProject {
   timelineView: TimelineView;
   /** Persisted UI state for the right-side control panel. */
   controlPanel?: ControlPanelPersistedState;
+  /** Persisted UI state for the bottom analysis chart. */
+  analysis?: AnalysisPanelState;
 }
 
 export interface ItineraryPanelProps {

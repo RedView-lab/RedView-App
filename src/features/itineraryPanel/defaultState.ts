@@ -1,4 +1,5 @@
 import type {
+  AnalysisPanelState,
   Itinerary,
   ItineraryProject,
   RouteProfile,
@@ -131,6 +132,22 @@ export function createDefaultItinerary(
   };
 }
 
+export function createDefaultAnalysisPanelState(): AnalysisPanelState {
+  return {
+    xMode: 'distance',
+    axis1: 'Vitesse',
+    axis2: 'Puissance',
+    filters: {
+      waypoint: true,
+      poi: true,
+      pause: true,
+      alertes: true,
+      pente: true,
+      jourNuit: true,
+    },
+  };
+}
+
 export function createDefaultProject(): ItineraryProject {
   const it = createDefaultItinerary(1);
   return {
@@ -143,5 +160,6 @@ export function createDefaultProject(): ItineraryProject {
     activeMode: 'tracage',
     timelineView: 'sheet',
     controlPanel: createDefaultControlPanelPersistedState(),
+    analysis: createDefaultAnalysisPanelState(),
   };
 }
