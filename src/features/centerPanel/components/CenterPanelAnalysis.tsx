@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import {
@@ -56,6 +56,8 @@ const axisOptions: AxisOption[] = [
   { value: 'Ensoleillement (min)', label: 'Ensoleillement (min)', tone: 'secondary' },
   { value: 'Humidité (%)__bis', label: 'Humidité (%)', tone: 'secondary' },
 ];
+
+const DETAIL_ZOOM_STEP = 0.1;
 
 export function CenterPanelAnalysis() {
   const rootRef = useRef<HTMLElement | null>(null);
@@ -117,10 +119,9 @@ export function CenterPanelAnalysis() {
     });
   };
 
-  const handleDetailZoomChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const nextZoom = normalizeUnitInterval(Number(event.target.value) / 100);
+  const adjustDetailZoom = (delta: number) => {
     updateAnalysis((draft) => {
-      draft.detailZoom = nextZoom;
+      draft.detailZoom = normalizeUnitInterval(draft.detailZoom + delta, draft.detailZoom);
     });
   };
 
@@ -267,26 +268,25 @@ export function CenterPanelAnalysis() {
 
         <div className="rvc-center-analysis__detail">
           <span className="rvc-center-analysis__minor-label">Détail</span>
-          <div className="rvc-center-analysis__slider-group">
-            <span aria-hidden="true">-</span>
-            <label
-              className="rvc-center-analysis__slider"
-              style={{ ['--rvc-center-analysis-slider-ratio' as string]: detailZoom.toString() }}
+          <div className="rvc-center-analysis__detail-buttons" role="group" aria-label="Zoom du graphique">
+            <button
+              type="button"
+              className="rvc-center-analysis__detail-button"
+              onClick={() => adjustDetailZoom(-DETAIL_ZOOM_STEP)}
+              disabled={detailZoom <= 0.001}
+              aria-label="Dézoomer le graphique"
             >
-              <input
-                className="rvc-center-analysis__slider-input"
-                type="range"
-                min="0"
-                max="100"
-                step="1"
-                value={Math.round(detailZoom * 100)}
-                onChange={handleDetailZoomChange}
-                aria-label="Zoom du graphique"
-              />
-              <span className="rvc-center-analysis__slider-fill" aria-hidden="true" />
-              <span className="rvc-center-analysis__slider-thumb" aria-hidden="true" />
-            </label>
-            <span aria-hidden="true">+</span>
+              -
+            </button>
+            <button
+              type="button"
+              className="rvc-center-analysis__detail-button"
+              onClick={() => adjustDetailZoom(DETAIL_ZOOM_STEP)}
+              disabled={detailZoom >= 0.999}
+              aria-label="Zoomer le graphique"
+            >
+              +
+            </button>
           </div>
         </div>
 

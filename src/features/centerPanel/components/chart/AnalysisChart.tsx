@@ -113,14 +113,8 @@ export function AnalysisChart({
     [displaySeries, plotXDomain],
   );
 
-  const axis1Series = useMemo(
-    () => visibleSeries.filter((entry) => entry.axis === 1),
-    [visibleSeries],
-  );
-  const axis2Series = useMemo(
-    () => visibleSeries.filter((entry) => entry.axis === 2),
-    [visibleSeries],
-  );
+  const axis1Series = useMemo(() => series.filter((entry) => entry.axis === 1), [series]);
+  const axis2Series = useMemo(() => series.filter((entry) => entry.axis === 2), [series]);
 
   const yDomain = useMemo<AxisDomain>(() => {
     const dom = computeDomain(axis1Series.map((entry) => entry.points));
@@ -187,11 +181,8 @@ export function AnalysisChart({
   );
 
   const backdropYDomain = useMemo<AxisDomain | null>(
-    () =>
-      computeDomain(
-        backdropProfiles.map((profile) => clipPointsToXDomain(profile.points, plotXDomain)),
-      ),
-    [backdropProfiles, plotXDomain],
+    () => computeDomain(backdropProfiles.map((profile) => profile.points)),
+    [backdropProfiles],
   );
 
   const backdropPaths = useMemo(() => {

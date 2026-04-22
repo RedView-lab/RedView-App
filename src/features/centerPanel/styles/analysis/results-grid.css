@@ -1,0 +1,187 @@
+.rvc-center-analysis__hover-surface {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background: transparent;
+  cursor: crosshair;
+}
+
+.rvc-center-analysis__scale-row,
+.rvc-center-analysis__axis-row,
+.rvc-center-analysis__series-row {
+  display: grid;
+  grid-template-columns: var(--rvc-center-results-left-column) repeat(var(--rvc-center-results-rows), minmax(0, 1fr));
+  min-width: 0;
+}
+
+.rvc-center-analysis__scale-row {
+  flex: 1 1 0;
+  min-height: 16px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.rvc-center-analysis__axis-row {
+  flex: 0 0 24px;
+  min-height: 24px;
+  background: rgba(0, 0, 0, 0.64);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.8);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.8);
+}
+
+.rvc-center-analysis__series-list {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.64);
+}
+
+.rvc-center-analysis__lower {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 0;
+}
+
+.rvc-center-analysis__series-row {
+  min-height: 28px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.rvc-center-analysis__add-row {
+  display: grid;
+  grid-template-columns: var(--rvc-center-results-left-column) repeat(var(--rvc-center-results-rows), minmax(0, 1fr));
+  min-height: 24px;
+  background: rgba(0, 0, 0, 0.64);
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+}
+
+.rvc-center-analysis__scale-label,
+.rvc-center-analysis__axis-label-cell,
+.rvc-center-analysis__series-control {
+  min-width: 0;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.64);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.rvc-center-analysis__scale-label,
+.rvc-center-analysis__axis-label-cell {
+  color: rgba(255, 255, 255, 0.64);
+  font-family: 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  text-align: right;
+}
+
+.rvc-center-analysis__series-control {
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.rvc-center-analysis__cell {
+  min-width: 0;
+  padding: 2px 8px;
+  border-left: 0.5px solid rgba(255, 255, 255, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.rvc-center-analysis__scale-row .rvc-center-analysis__cell {
+  align-items: flex-end;
+}
+
+.rvc-center-analysis__cell--first {
+  border-left-width: 1px;
+  border-left-color: rgba(255, 255, 255, 0.8);
+}
+
+.rvc-center-analysis__cell--last {
+  border-left-width: 1px;
+  border-left-color: rgba(255, 255, 255, 0.96);
+  background: rgba(0, 0, 0, 0.64);
+  justify-content: flex-end;
+}
+
+.rvc-center-analysis__cell-value {
+  min-width: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.64);
+  font-family: 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-center-analysis__cell-value--strong {
+  color: #fff;
+}
+
+.rvc-center-analysis__series-button {
+  width: 87px;
+  height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.rvc-center-analysis__series-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+.rvc-center-analysis__series-label {
+  min-width: 0;
+  overflow: hidden;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-center-analysis__series-delete {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.32);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rvc-center-analysis__footer-caret {
+  margin-left: auto;
+}
+
+.rvc-center-analysis__chart-shell {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}

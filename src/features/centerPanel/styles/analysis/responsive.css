@@ -1,0 +1,58 @@
+@container center-panel (max-width: 1120px) {
+  .rvc-center-analysis__filter-chip {
+    max-width: 78px;
+  }
+
+  .rvc-center-analysis__hover-cards {
+    gap: 8px;
+  }
+
+  .rvc-center-analysis__hover-card {
+    width: max(78px, calc(var(--rvc-center-hover-group-width) - 4px));
+  }
+}
+
+@container center-panel (max-width: 980px) {
+  .rvc-center-analysis__detail {
+    display: none;
+  }
+
+  .rvc-center-analysis__filter-chip {
+    max-width: 64px;
+  }
+
+  .rvc-center-analysis__axis-wrap {
+    flex-basis: 132px;
+  }
+
+  .rvc-center-analysis {
+    --rvc-center-results-left-column: 88px;
+  }
+}
+
+@container center-panel (max-width: 840px) {
+  .rvc-center-analysis__toolbar {
+    gap: 4px;
+  }
+
+  .rvc-center-analysis__filters {
+    gap: 3px;
+  }
+
+  .rvc-center-analysis__filter-chip {
+    max-width: 52px;
+    padding-inline: 6px;
+  }
+
+  .rvc-center-analysis__separator {
+    display: none;
+  }
+
+  .rvc-center-analysis {
+    --rvc-center-results-left-column: 80px;
+  }
+
+  .rvc-center-analysis__series-button {
+    width: 72px;
+  }
+}
