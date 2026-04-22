@@ -24,7 +24,10 @@ function clampNumber(value: number, min: number, max: number) {
 }
 
 const PANEL_WIDTH_KEY = 'rvc-panel-width';
-const PANEL_WIDTH_MIN = 260;
+// The right dock UI is authored for a 300 px content width. Allowing the
+// resize handle below that point introduces horizontal overflow in the panel
+// body on Windows, which surfaces as the bottom scrollbar shown in the dock.
+const PANEL_WIDTH_MIN = 300;
 const PANEL_WIDTH_MAX = 560;
 const PANEL_WIDTH_DEFAULT = 300;
 const PANEL_PADDING = 12;
