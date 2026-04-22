@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
 import { PanelSelect } from '../components/PanelSelect';
@@ -57,68 +57,28 @@ function TimeChipInput({
   value: string | null;
   onChange?: (value: string | null) => void;
 }) {
-  const [hoursDraft, setHoursDraft] = useState(() => getTimeDraftPart(value, 0));
-  const [minutesDraft, setMinutesDraft] = useState(() => getTimeDraftPart(value, 1));
-
-  useEffect(() => {
-    setHoursDraft(getTimeDraftPart(value, 0));
-    setMinutesDraft(getTimeDraftPart(value, 1));
-  }, [value]);
-
-  const commit = () => {
-    const next = normalizeTimeDraft(hoursDraft, minutesDraft, value);
-    setHoursDraft(getTimeDraftPart(next, 0));
-    setMinutesDraft(getTimeDraftPart(next, 1));
-    onChange?.(next);
-  };
+  const [hours = '--', minutes = '--'] = value?.split(':') ?? [];
+  const displayTime = value ?? '';
 
   return (
-    <div
-      className="rvi-datechip rvi-datechip--time"
-      onBlurCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
-        commit();
-      }}
-    >
-      <span className="rvi-datechip__icon" aria-hidden="true">
+    <div className="rvi-time-input">
+      <span className="rvi-time-input__icon" aria-hidden="true">
         <IconClock size={12} />
       </span>
-      <div className="rvi-timechip" role="group" aria-label="Heure de départ">
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={2}
-          className="rvi-timechip__segment"
-          value={hoursDraft}
-          placeholder="--"
-          aria-label="Heures de départ"
-          onChange={(event) => setHoursDraft(sanitizeTimePart(event.target.value))}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        <span className="rvi-timechip__colon" aria-hidden="true">
+      <div className="rvi-time-input__display" aria-hidden="true">
+        <div className="rvi-time-input__segment">{hours}</div>
+        <span className="rvi-time-input__colon">
           :
         </span>
-        <input
-          type="text"
-          inputMode="numeric"
-          maxLength={2}
-          className="rvi-timechip__segment"
-          value={minutesDraft}
-          placeholder="--"
-          aria-label="Minutes de départ"
-          onChange={(event) => setMinutesDraft(sanitizeTimePart(event.target.value))}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur();
-            }
-          }}
-        />
+        <div className="rvi-time-input__segment">{minutes}</div>
       </div>
+      <input
+        type="time"
+        value={displayTime}
+        onChange={(event) => onChange?.(event.target.value || null)}
+        className="rvi-time-input__native"
+        aria-label="Heure de départ"
+      />
     </div>
   );
 }
@@ -386,39 +346,6 @@ function formatDateFr(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
-}
-
-function getTimeDraftPart(value: string | null, index: 0 | 1): string {
-  if (!value) return '';
-  const parts = value.split(':');
-  return /^\d{2}$/u.test(parts[index] ?? '') ? parts[index] : '';
-}
-
-function sanitizeTimePart(value: string): string {
-  return value.replace(/\D+/gu, '').slice(0, 2);
-}
-
-function normalizeTimeDraft(
-  hoursDraft: string,
-  minutesDraft: string,
-  fallback: string | null,
-): string | null {
-  const hoursRaw = hoursDraft.trim();
-  const minutesRaw = minutesDraft.trim();
-  if (hoursRaw === '' && minutesRaw === '') return null;
-
-  const [fallbackHours, fallbackMinutes] = fallback?.split(':') ?? [];
-  const hours = clampTimePart(hoursRaw, fallbackHours, 23);
-  const minutes = clampTimePart(minutesRaw, fallbackMinutes, 59);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-}
-
-function clampTimePart(raw: string, fallbackRaw: string | undefined, max: number): number {
-  const parsed = Number.parseInt(raw, 10);
-  if (Number.isFinite(parsed)) return Math.max(0, Math.min(max, parsed));
-  const fallback = Number.parseInt(fallbackRaw ?? '', 10);
-  if (Number.isFinite(fallback)) return Math.max(0, Math.min(max, fallback));
-  return 0;
 }
 
 /** Default new pause row: 5 min duration every hour. */
