@@ -141,6 +141,44 @@ export function ItineraryPanelContainer({
       null,
     [project],
   );
+  const activeFitRuntime = useMemo(
+    () =>
+      active ? fitRuntimeByItineraryId[active.id] ?? createEmptyFitRuntime() : null,
+    [active, fitRuntimeByItineraryId],
+  );
+  const uploadFitLabel = useMemo(() => {
+    const count = activeFitRuntime?.fitFiles.length ?? 0;
+    if (count <= 0) return 'Upload .fit';
+    return count === 1 ? '1 FIT' : `${count} FIT`;
+  }, [activeFitRuntime]);
+  const fitStatusText = useMemo(() => {
+    if (!activeFitRuntime) return null;
+    const count = activeFitRuntime.fitFiles.length;
+    const countLabel =
+      count <= 0 ? null : count === 1 ? '1 fit chargé' : `${count} fit chargés`;
+    if (activeFitRuntime.status === 'error' && activeFitRuntime.error) {
+      return activeFitRuntime.error;
+    }
+    if (activeFitRuntime.status === 'running') {
+      const progress = activeFitRuntime.progress.at(-1);
+      return progress ?? (countLabel ? `${countLabel} · calcul en cours...` : 'Calcul en cours...');
+    }
+    if (activeFitRuntime.status === 'success') {
+      return countLabel
+        ? `${countLabel} · prédiction terminée`
+        : 'Prédiction terminée';
+    }
+    if (countLabel) {
+      return countLabel;
+    }
+    return null;
+  }, [activeFitRuntime]);
+  const calculateLabel = useMemo(() => {
+    const status = activeFitRuntime?.status ?? 'idle';
+    if (status === 'running') return 'Calcul en cours...';
+    return 'Calculer';
+  }, [activeFitRuntime]);
+  const calculateDisabled = activeFitRuntime?.status === 'running';
 
   // ── Multi-route layer sync ─────────────────────────────────────────
   // For every itinerary that has a polyline (gpxRoute) we maintain its
@@ -926,9 +964,13 @@ export function ItineraryPanelContainer({
         fitUploadTargetIdRef.current = active.id;
         fitInputRef.current?.click();
       }}
+      uploadFitLabel={uploadFitLabel}
+      fitStatusText={fitStatusText}
       onCalculate={() => {
         handleCalculatePrediction();
       }}
+      calculateLabel={calculateLabel}
+      calculateDisabled={calculateDisabled}
       onChangePoiEntry={(category, next) =>
         updateActive((it) => {
           it.poi[category] = next;

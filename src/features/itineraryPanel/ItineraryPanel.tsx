@@ -41,7 +41,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onChangeRoadType,
     onChangeRhythm,
     onUploadFit,
+    uploadFitLabel,
+    fitStatusText,
     onCalculate,
+    calculateLabel,
+    calculateDisabled,
     onChangePoiEntry,
     onChangePoiRefine,
     onOpenPoiCategories,
@@ -143,7 +147,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             rhythm={active.rhythm}
             onChange={onChangeRhythm}
             onUploadFit={onUploadFit}
+            uploadFitLabel={uploadFitLabel}
+            fitStatusText={fitStatusText}
             onCalculate={onCalculate}
+            calculateLabel={calculateLabel}
+            calculateDisabled={calculateDisabled}
           />
         ) : null}
         {project.activeMode === 'poi' ? (

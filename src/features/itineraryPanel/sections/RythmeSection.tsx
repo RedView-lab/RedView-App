@@ -19,7 +19,11 @@ interface RythmeSectionProps {
   rhythm: RhythmState;
   onChange?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
+  uploadFitLabel?: string;
+  fitStatusText?: string | null;
   onCalculate?: () => void;
+  calculateLabel?: string;
+  calculateDisabled?: boolean;
 }
 
 function ChipInput({
@@ -85,7 +89,11 @@ export function RythmeSection({
   rhythm,
   onChange,
   onUploadFit,
+  uploadFitLabel,
+  fitStatusText,
   onCalculate,
+  calculateLabel,
+  calculateDisabled,
 }: RythmeSectionProps) {
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -156,7 +164,7 @@ export function RythmeSection({
               <span className="rvi-uploadchip__icon">
                 <IconUpload size={8} />
               </span>
-              <span className="rvi-uploadchip__text">Upload .fit</span>
+              <span className="rvi-uploadchip__text">{uploadFitLabel ?? 'Upload .fit'}</span>
             </button>
           }
         />
@@ -177,6 +185,12 @@ export function RythmeSection({
           }
         />
       </div>
+
+      {fitStatusText ? (
+        <div className="rvi-fit-status" role="status" aria-live="polite">
+          {fitStatusText}
+        </div>
+      ) : null}
 
       {/* Poids + Pneus */}
       <div className="rvi-row">
@@ -330,9 +344,10 @@ export function RythmeSection({
         type="button"
         className="rvi-redbtn rvi-redbtn--full"
         onClick={onCalculate}
+        disabled={calculateDisabled}
       >
         <IconRepeat size={16} />
-        <span>Calculer</span>
+        <span>{calculateLabel ?? 'Calculer'}</span>
       </button>
     </div>
   );
