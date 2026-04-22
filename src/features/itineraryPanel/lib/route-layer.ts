@@ -1,182 +1,297 @@
-/**
- * Mapbox layer helpers for the BRouter-computed route.
+﻿/**
+ * Mapbox layer helpers for the BRouter-computed routes.
  *
- * Mirrors the structure of `features/poi/lib/gpx-layer.ts` (glow + core
- * line, elevated above terrain) but uses different ids so both layers
- * can coexist on the map.
+ * Each itinerary owns its own source + glow + line layer triplet, keyed
+ * by its store id. That way several itineraries can be visible at once
+ * (with their individual colors / opacities / visibilities) without the
+ * layers stomping on one another.
+ *
+ * The start / end endpoint markers stay global â€” only the active
+ * itinerary's endpoints are shown to keep the editing UI focused.
  */
-import type { Map as MapboxMap, LngLatBoundsLike } from 'mapbox-gl';
+import type { Map as MapboxMap, LngLatBoundsLike, GeoJSONSource } from 'mapbox-gl';
 
-const SOURCE_ID = 'brouter-route-source';
-const GLOW_ID = 'brouter-route-glow';
-const LINE_ID = 'brouter-route-line';
+const SOURCE_PREFIX = 'brouter-route-source-';
+const GLOW_PREFIX = 'brouter-route-glow-';
+const LINE_PREFIX = 'brouter-route-line-';
+
 const START_SOURCE_ID = 'brouter-endpoints-source';
 const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
+
+function sanitizeId(id: string): string {
+  // Mapbox source/layer ids must be safe â€” strip anything weird.
+  return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function ids(itineraryId: string) {
+  const safe = sanitizeId(itineraryId);
+  return {
+    source: `${SOURCE_PREFIX}${safe}`,
+    glow: `${GLOW_PREFIX}${safe}`,
+    line: `${LINE_PREFIX}${safe}`,
+  };
+}
 
 export interface RouteEndpoint {
   lon: number;
   lat: number;
-  /** "start" | "end" — used to pick a colour. */
+  /** "start" | "end" â€” used to pick a colour. */
   kind: 'start' | 'end';
   label?: string;
 }
 
-export function isRouteOnMap(map: MapboxMap): boolean {
+export interface RouteLayerOptions {
+  /** CSS hex color (e.g. "#ff0000"). */
+  color: string;
+  /** Line opacity 0..1. The glow layer is scaled to 40 % of this. */
+  opacity01: number;
+  /** Hide the layer without removing it. */
+  visible: boolean;
+}
+
+export function hasRouteLayer(map: MapboxMap, itineraryId: string): boolean {
   try {
-    return !!map.getSource(SOURCE_ID);
+    return !!map.getSource(ids(itineraryId).source);
   } catch {
     return false;
   }
 }
 
-export function addRoute(
+/** True iff at least one itinerary route layer is currently mounted. */
+export function isAnyRouteOnMap(map: MapboxMap): boolean {
+  try {
+    const style = map.getStyle();
+    if (!style?.sources) return false;
+    for (const key of Object.keys(style.sources)) {
+      if (key.startsWith(SOURCE_PREFIX)) return true;
+    }
+  } catch {
+    /* noop */
+  }
+  return false;
+}
+
+/**
+ * Insert or update an itinerary's route layer. If the source already
+ * exists its data is patched in place (no flicker); otherwise a fresh
+ * source + glow + line triplet is created.
+ *
+ * Paint properties (color, opacity, visibility) are always reapplied so
+ * a single call is enough to sync the layer with the latest store state.
+ */
+export function upsertRouteLayer(
   map: MapboxMap,
+  itineraryId: string,
   coordinates: [number, number][],
-  endpoints?: RouteEndpoint[],
+  opts: RouteLayerOptions,
 ): void {
-  removeRoute(map);
+  const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
+  const visibility = opts.visible ? 'visible' : 'none';
+  const opacity = Math.max(0, Math.min(1, opts.opacity01));
 
-  map.addSource(SOURCE_ID, {
-    type: 'geojson',
-    data: {
-      type: 'Feature',
-      properties: {},
-      geometry: { type: 'LineString', coordinates },
-    },
-  });
+  const existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
-  map.addLayer({
-    id: GLOW_ID,
-    type: 'line',
-    source: SOURCE_ID,
-    slot: 'top',
-    layout: {
-      'line-cap': 'round',
-      'line-join': 'round',
-      'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 3 as unknown as undefined,
-    },
-    paint: {
-      'line-color': '#c50000',
-      'line-width': 10,
-      'line-opacity': 0.4,
-      'line-blur': 4,
-      'line-emissive-strength': 1,
-    },
-  });
-
-  map.addLayer({
-    id: LINE_ID,
-    type: 'line',
-    source: SOURCE_ID,
-    slot: 'top',
-    layout: {
-      'line-cap': 'round',
-      'line-join': 'round',
-      'line-elevation-reference': 'ground' as unknown as undefined,
-      'line-z-offset': 3 as unknown as undefined,
-    },
-    paint: {
-      'line-color': '#c50000',
-      'line-width': 4,
-      'line-opacity': 1,
-      'line-emissive-strength': 1,
-      'line-border-width': 1,
-      'line-border-color': 'rgba(255,255,255,0.6)',
-      'line-occlusion-opacity': 0.85,
-    },
-  });
-
-  if (endpoints && endpoints.length > 0) {
-    addEndpoints(map, endpoints);
-  }
-
-  map.moveLayer(GLOW_ID);
-  map.moveLayer(LINE_ID);
-  if (map.getLayer(ENDPOINT_LAYER_ID)) {
-    map.moveLayer(ENDPOINT_LAYER_ID);
-  }
-}
-
-function addEndpoints(map: MapboxMap, endpoints: RouteEndpoint[]): void {
-  if (map.getLayer(ENDPOINT_LAYER_ID)) map.removeLayer(ENDPOINT_LAYER_ID);
-  if (map.getSource(START_SOURCE_ID)) map.removeSource(START_SOURCE_ID);
-
-  map.addSource(START_SOURCE_ID, {
-    type: 'geojson',
-    data: {
-      type: 'FeatureCollection',
-      features: endpoints.map((p) => ({
+  if (existing) {
+    try {
+      existing.setData({
         type: 'Feature',
-        properties: { kind: p.kind, label: p.label ?? '' },
-        geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
-      })),
-    },
-  });
+        properties: {},
+        geometry: { type: 'LineString', coordinates },
+      });
+    } catch {
+      /* noop */
+    }
+  } else {
+    map.addSource(srcId, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: { type: 'LineString', coordinates },
+      },
+    });
+    map.addLayer({
+      id: glowId,
+      type: 'line',
+      source: srcId,
+      slot: 'top',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        'line-elevation-reference': 'ground' as unknown as undefined,
+        'line-z-offset': 3 as unknown as undefined,
+        visibility,
+      },
+      paint: {
+        'line-color': opts.color,
+        'line-width': 10,
+        'line-opacity': 0.4 * opacity,
+        'line-blur': 4,
+        'line-emissive-strength': 1,
+      },
+    });
+    map.addLayer({
+      id: lineId,
+      type: 'line',
+      source: srcId,
+      slot: 'top',
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+        'line-elevation-reference': 'ground' as unknown as undefined,
+        'line-z-offset': 3 as unknown as undefined,
+        visibility,
+      },
+      paint: {
+        'line-color': opts.color,
+        'line-width': 4,
+        'line-opacity': opacity,
+        'line-emissive-strength': 1,
+        'line-border-width': 1,
+        'line-border-color': 'rgba(255,255,255,0.6)',
+        'line-occlusion-opacity': 0.85,
+      },
+    });
+  }
 
-  map.addLayer({
-    id: ENDPOINT_LAYER_ID,
-    type: 'circle',
-    source: START_SOURCE_ID,
-    slot: 'top',
-    paint: {
-      'circle-radius': 7,
-      'circle-color': [
-        'match',
-        ['get', 'kind'],
-        'start',
-        '#34a853',
-        'end',
-        '#c50000',
-        '#ffffff',
-      ],
-      'circle-stroke-width': 2,
-      'circle-stroke-color': '#ffffff',
-      'circle-emissive-strength': 1,
-    },
-  });
-}
-
-/**
- * Show / hide the route + endpoint layers without rebuilding the source.
- * Cheap enough to call from a React effect on every store change.
- */
-export function setRouteVisibility(map: MapboxMap, visible: boolean): void {
-  const value = visible ? 'visible' : 'none';
+  // Always reapply paint / layout â€” cheap, ensures the layer reflects
+  // the current store state regardless of the upsert path taken above.
   try {
-    if (map.getLayer(LINE_ID)) map.setLayoutProperty(LINE_ID, 'visibility', value);
-    if (map.getLayer(GLOW_ID)) map.setLayoutProperty(GLOW_ID, 'visibility', value);
-    if (map.getLayer(ENDPOINT_LAYER_ID))
-      map.setLayoutProperty(ENDPOINT_LAYER_ID, 'visibility', value);
+    if (map.getLayer(glowId)) {
+      map.setPaintProperty(glowId, 'line-color', opts.color);
+      map.setPaintProperty(glowId, 'line-opacity', 0.4 * opacity);
+      map.setLayoutProperty(glowId, 'visibility', visibility);
+    }
+    if (map.getLayer(lineId)) {
+      map.setPaintProperty(lineId, 'line-color', opts.color);
+      map.setPaintProperty(lineId, 'line-opacity', opacity);
+      map.setLayoutProperty(lineId, 'visibility', visibility);
+    }
+    // Keep endpoint markers (if any) on top of the route lines.
+    if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
   } catch {
     /* map may be tearing down */
   }
 }
 
-/**
- * Update the line opacity (0–1). The glow layer is scaled so the soft
- * halo fades together with the core line at low values.
- */
-export function setRouteOpacity(map: MapboxMap, opacity01: number): void {
-  const v = Math.max(0, Math.min(1, opacity01));
+export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
+  const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
   try {
-    if (map.getLayer(LINE_ID)) map.setPaintProperty(LINE_ID, 'line-opacity', v);
-    if (map.getLayer(GLOW_ID))
-      map.setPaintProperty(GLOW_ID, 'line-opacity', 0.4 * v);
+    if (map.getLayer(lineId)) map.removeLayer(lineId);
+    if (map.getLayer(glowId)) map.removeLayer(glowId);
+    if (map.getSource(srcId)) map.removeSource(srcId);
   } catch {
-    /* map may be tearing down */
+    /* noop */
   }
 }
 
-export function removeRoute(map: MapboxMap): void {
+/**
+ * Strip every itinerary route layer from the map (used at unmount and
+ * after a style.load before re-adding the surviving routes).
+ */
+export function removeAllRouteLayers(map: MapboxMap): void {
   try {
-    if (map.getLayer(LINE_ID)) map.removeLayer(LINE_ID);
-    if (map.getLayer(GLOW_ID)) map.removeLayer(GLOW_ID);
+    const style = map.getStyle();
+    if (!style?.sources) return;
+    for (const key of Object.keys(style.sources)) {
+      if (!key.startsWith(SOURCE_PREFIX)) continue;
+      const safe = key.slice(SOURCE_PREFIX.length);
+      const glowId = `${GLOW_PREFIX}${safe}`;
+      const lineId = `${LINE_PREFIX}${safe}`;
+      try {
+        if (map.getLayer(lineId)) map.removeLayer(lineId);
+        if (map.getLayer(glowId)) map.removeLayer(glowId);
+        if (map.getSource(key)) map.removeSource(key);
+      } catch {
+        /* noop */
+      }
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+/** List the sanitised ids of every route layer currently on the map. */
+export function listMountedRouteIds(map: MapboxMap): string[] {
+  const out: string[] = [];
+  try {
+    const style = map.getStyle();
+    if (!style?.sources) return out;
+    for (const key of Object.keys(style.sources)) {
+      if (key.startsWith(SOURCE_PREFIX)) {
+        out.push(key.slice(SOURCE_PREFIX.length));
+      }
+    }
+  } catch {
+    /* noop */
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Endpoints (single global layer â€” follows the active itinerary)      */
+/* ------------------------------------------------------------------ */
+
+export function setRouteEndpoints(
+  map: MapboxMap,
+  endpoints: RouteEndpoint[],
+): void {
+  const features = endpoints.map((p) => ({
+    type: 'Feature' as const,
+    properties: { kind: p.kind, label: p.label ?? '' },
+    geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] },
+  }));
+  const geojson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features,
+  };
+
+  const existing = map.getSource(START_SOURCE_ID) as GeoJSONSource | undefined;
+
+  if (existing) {
+    try {
+      existing.setData(geojson);
+    } catch {
+      /* noop */
+    }
+  } else {
+    map.addSource(START_SOURCE_ID, { type: 'geojson', data: geojson });
+    map.addLayer({
+      id: ENDPOINT_LAYER_ID,
+      type: 'circle',
+      source: START_SOURCE_ID,
+      slot: 'top',
+      paint: {
+        'circle-radius': 7,
+        'circle-color': [
+          'match',
+          ['get', 'kind'],
+          'start',
+          '#34a853',
+          'end',
+          '#c50000',
+          '#ffffff',
+        ],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-emissive-strength': 1,
+      },
+    });
+  }
+
+  try {
+    if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearRouteEndpoints(map: MapboxMap): void {
+  try {
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.removeLayer(ENDPOINT_LAYER_ID);
-    if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
     if (map.getSource(START_SOURCE_ID)) map.removeSource(START_SOURCE_ID);
   } catch {
-    /* map may be tearing down */
+    /* noop */
   }
 }
 

@@ -25,12 +25,14 @@ import {
   type ResolvedRouting,
 } from './lib/brouter';
 import {
-  addRoute,
+  upsertRouteLayer,
+  removeRouteLayer,
+  removeAllRouteLayers,
+  listMountedRouteIds,
+  setRouteEndpoints,
+  clearRouteEndpoints,
+  hasRouteLayer,
   fitToRoute,
-  removeRoute,
-  isRouteOnMap,
-  setRouteVisibility,
-  setRouteOpacity,
 } from './lib/route-layer';
 import {
   computeRouteMetricsFromBrouter,
@@ -92,19 +94,139 @@ export function ItineraryPanelContainer({
     [project],
   );
 
-  // Sync the route layer's visibility/opacity with the active itinerary's
-  // store flags. Cheap setLayoutProperty/setPaintProperty calls — no
-  // source rebuild. Today only the active route is rendered, so the
-  // master "Itinéraires" toggle in the right panel maps onto every
-  // itinerary's `visible` flag.
-  const activeVisible = active?.visible !== false;
-  const activeOpacity = active?.opacity ?? 100;
+  // ── Multi-route layer sync ─────────────────────────────────────────
+  // For every itinerary that has a polyline (gpxRoute) we maintain its
+  // own Mapbox source + line layer keyed by the itinerary id. Color,
+  // opacity and visibility are reapplied on each render — cheap setPaint
+  // / setLayout calls, no source rebuild unless the polyline itself
+  // changed. Itineraries removed from the project also get their layers
+  // cleaned up.
+  //
+  // The start / end markers are a single layer that follows whichever
+  // itinerary is currently active — this keeps the map readable when
+  // editing.
+  const itineraries = project.itineraries;
+  // A stable signature that flips whenever something the layer cares
+  // about changes (polyline length, color, opacity, visibility, the
+  // active id). We can't depend on `itineraries` directly because every
+  // setProject() call recreates the array.
+  const layerSignature = useMemo(() => {
+    return itineraries
+      .map((it) => {
+        const len = it.gpxRoute?.points.length ?? 0;
+        const head = it.gpxRoute?.points[0];
+        const tail = it.gpxRoute?.points[len - 1];
+        const headKey = head ? `${head.lon.toFixed(5)},${head.lat.toFixed(5)}` : '';
+        const tailKey = tail ? `${tail.lon.toFixed(5)},${tail.lat.toFixed(5)}` : '';
+        return [
+          it.id,
+          len,
+          headKey,
+          tailKey,
+          it.color,
+          it.opacity ?? 100,
+          it.visible !== false ? 1 : 0,
+        ].join(':');
+      })
+      .join('|');
+  }, [itineraries]);
+
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (!isRouteOnMap(map)) return;
-    setRouteVisibility(map, activeVisible);
-    setRouteOpacity(map, activeOpacity / 100);
-  }, [map, isMapLoaded, activeVisible, activeOpacity, project.activeItineraryId]);
+    const wantedIds = new Set<string>();
+    for (const it of itineraries) {
+      const pts = it.gpxRoute?.points;
+      if (!pts || pts.length < 2) continue;
+      wantedIds.add(it.id);
+      const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
+      try {
+        upsertRouteLayer(map, it.id, coords, {
+          color: it.color,
+          opacity01: (it.opacity ?? 100) / 100,
+          visible: it.visible !== false,
+        });
+      } catch (e) {
+        console.warn('[route-layer] upsert failed for', it.id, e);
+      }
+    }
+    // Drop layers that no longer correspond to a known itinerary.
+    for (const mountedId of listMountedRouteIds(map)) {
+      const stillWanted = itineraries.some(
+        (it) =>
+          it.id.replace(/[^a-zA-Z0-9_-]/g, '_') === mountedId &&
+          it.gpxRoute &&
+          it.gpxRoute.points.length >= 2,
+      );
+      if (!stillWanted) {
+        // Recover the original id (best-effort): the sanitisation only
+        // touches non-alphanumeric characters, so it's good enough for
+        // the lookup above. For removal we can pass the sanitised id —
+        // upsert/remove use the same sanitiser.
+        removeRouteLayer(map, mountedId);
+      }
+    }
+
+    // Endpoint markers track the active itinerary's start/end timeline rows.
+    if (active) {
+      const start = active.timeline.find((r) => r.kind === 'start');
+      const end = active.timeline.find((r) => r.kind === 'end');
+      const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];
+      if (start && start.lat != null && start.lon != null) {
+        endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start' });
+      }
+      if (end && end.lat != null && end.lon != null) {
+        endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end' });
+      }
+      if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
+      else clearRouteEndpoints(map);
+    } else {
+      clearRouteEndpoints(map);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, layerSignature, project.activeItineraryId]);
+
+  // After a Mapbox style.load wipes custom layers, re-mount everything.
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const onStyleLoad = () => {
+      // Defer one tick so useMap's async setup finishes first.
+      setTimeout(() => {
+        try {
+          removeAllRouteLayers(map);
+          clearRouteEndpoints(map);
+          for (const it of itineraries) {
+            const pts = it.gpxRoute?.points;
+            if (!pts || pts.length < 2) continue;
+            const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
+            upsertRouteLayer(map, it.id, coords, {
+              color: it.color,
+              opacity01: (it.opacity ?? 100) / 100,
+              visible: it.visible !== false,
+            });
+          }
+          if (active) {
+            const start = active.timeline.find((r) => r.kind === 'start');
+            const end = active.timeline.find((r) => r.kind === 'end');
+            const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];
+            if (start && start.lat != null && start.lon != null) {
+              endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start' });
+            }
+            if (end && end.lat != null && end.lon != null) {
+              endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end' });
+            }
+            if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
+          }
+        } catch {
+          /* noop */
+        }
+      }, 0);
+    };
+    map.on('style.load', onStyleLoad);
+    return () => {
+      map.off('style.load', onStyleLoad);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, isMapLoaded, layerSignature, project.activeItineraryId]);
 
   /**
    * After a POI corridor search completes, replace the previously-injected
@@ -293,8 +415,8 @@ export function ItineraryPanelContainer({
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!startKey || !endKey) {
-      if (isRouteOnMap(map)) {
-        try { removeRoute(map); } catch { /* noop */ }
+      if (active && hasRouteLayer(map, active.id)) {
+        try { removeRouteLayer(map, active.id); } catch { /* noop */ }
       }
       setRouteError(null);
       return;
@@ -318,8 +440,8 @@ export function ItineraryPanelContainer({
     ];
     const bounds = checkRouteWithinFrance(allPoints);
     if (!bounds.ok) {
-      if (isRouteOnMap(map)) {
-        try { removeRoute(map); } catch { /* noop */ }
+      if (active && hasRouteLayer(map, active.id)) {
+        try { removeRouteLayer(map, active.id); } catch { /* noop */ }
       }
       setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
       setRouteLoading(false);
@@ -374,16 +496,13 @@ export function ItineraryPanelContainer({
           '| ascent=', Math.round(route.ascentM), 'm',
           '| pts=', route.coordinates.length,
         );
+        // Layer mounting is handled by the multi-route master effect
+        // — it will pick up the new gpxRoute from the store mutation
+        // below. We still want to re-frame the map on a fresh route.
         try {
-          addRoute(map, route.coordinates, [
-            { lat: startLat, lon: startLon, kind: 'start' },
-            { lat: endLat, lon: endLon, kind: 'end' },
-          ]);
           fitToRoute(map, route.coordinates);
         } catch (e) {
-          console.error('[BRouter addRoute fail]', e);
-          setRouteError(e instanceof Error ? e.message : 'Erreur d\u2019affichage');
-          return;
+          console.warn('[BRouter] fitToRoute failed', e);
         }
         // Persist total distance on the "end" row so the timeline shows it,
         // AND store the BRouter polyline as `gpxRoute` so the POI corridor
@@ -536,50 +655,6 @@ export function ItineraryPanelContainer({
     // active is intentionally omitted — brfHash is the stable signature
     // derived from it; including `active` would re-trigger on every
     // setProject().
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, brfHash, climbing]);
-
-  // Re-add the route after a Mapbox style.load.
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
-    if (!startKey || !endKey) return;
-    const onStyleLoad = () => {
-      const [startLon, startLat] = startKey.split(',').map(Number);
-      const [endLon, endLat] = endKey.split(',').map(Number);
-      const userVia = viaKey
-        ? viaKey.split('|').map((s) => {
-            const [lon, lat] = s.split(',').map(Number);
-            return { lat, lon };
-          })
-        : [];
-      const via = userVia.slice(0, 14);
-      if (!active) return;
-      resolveItineraryRouting(active)
-        .then((resolved: ResolvedRouting) => {
-          const reqBase = {
-            start: { lat: startLat, lon: startLon },
-            end: { lat: endLat, lon: endLon },
-            via,
-            profile: resolved.profileId,
-          };
-          return climbing
-            ? fetchBrouterRouteBestOfN(reqBase, 4)
-            : fetchBrouterRoute(reqBase);
-        })
-        .then((route: BrouterRoute) => {
-          try {
-            if (!isRouteOnMap(map)) {
-              addRoute(map, route.coordinates, [
-                { lat: startLat, lon: startLon, kind: 'start' },
-                { lat: endLat, lon: endLon, kind: 'end' },
-              ]);
-            }
-          } catch { /* noop */ }
-        })
-        .catch(() => { /* silent on style reload */ });
-    };
-    map.on('style.load', onStyleLoad);
-    return () => { map.off('style.load', onStyleLoad); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map, isMapLoaded, startKey, endKey, viaKey, profileId, brfHash, climbing]);
 
