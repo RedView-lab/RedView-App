@@ -222,6 +222,7 @@
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
+  color: #ffffff;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
 }
 .rvi-select__menu > * {
@@ -238,7 +239,7 @@
   min-width: 80px;
   padding: 7px 8px 7px 10px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.86);
+  color: #ffffff;
   font: inherit;
   font-weight: 500;
   cursor: pointer;
@@ -258,13 +259,14 @@
 .rvi-select__option-label {
   flex: 1 1 0;
   min-width: 0;
+  color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .rvi-select__option-check {
   flex-shrink: 0;
-  color: var(--rvi-text);
+  color: #ffffff;
 }
 
 /* ── Input / chip input ──────────────────────────────────────── */
