@@ -60,6 +60,8 @@ import type {
   SlopeScale,
   SlopeScaleSetting,
   WeatherLayerKey,
+  WeatherPaletteBand,
+  WeatherPaletteScaleSetting,
   WeatherRenderMode,
   WeatherState,
   WeatherTab,
@@ -136,6 +138,30 @@ function buildAltitudeBandsFromDynamic(
     minMeters: cat.minMeters,
     maxMeters: cat.maxMeters,
   }));
+}
+
+function weatherPaletteScaleCount(setting: WeatherPaletteScaleSetting): number {
+  const match = /^(\d+)/.exec(setting);
+  return match ? Number(match[1]) : 4;
+}
+
+function resampleWeatherPaletteBands(
+  bands: WeatherPaletteBand[],
+  scaleSetting: WeatherPaletteScaleSetting,
+): WeatherPaletteBand[] {
+  const count = weatherPaletteScaleCount(scaleSetting);
+  if (bands.length === count) return bands;
+  return Array.from({ length: count }, (_, index) => {
+    const sourceIndex = Math.min(
+      bands.length - 1,
+      Math.round((index / Math.max(1, count - 1)) * Math.max(0, bands.length - 1)),
+    );
+    const source = bands[sourceIndex];
+    return {
+      ...source,
+      id: `${source.id.split('-')[0]}-${index}`,
+    };
+  });
 }
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
@@ -338,6 +364,7 @@ export function ControlPanelContainer({
   const [weatherState, setWeatherState] = useState<WeatherState>(
     () => ({
       ...DEFAULT_CONTROL_PANEL_STATE.weather,
+      ...(initialControlPanel.weather ?? {}),
       enabled: initialControlPanel.toggles.weatherEnabled,
     }),
   );
@@ -740,10 +767,66 @@ export function ControlPanelContainer({
       })),
     [],
   );
+  const handleWeatherPaletteOpacityChange = useCallback(
+    (key: WeatherLayerKey, opacity: number) =>
+      setWeatherState((prev) => ({
+        ...prev,
+        palettes: {
+          ...prev.palettes,
+          [key]: prev.palettes[key]
+            ? { ...prev.palettes[key], opacity }
+            : prev.palettes[key],
+        },
+      })),
+    [],
+  );
+  const handleWeatherPaletteScaleSettingChange = useCallback(
+    (key: WeatherLayerKey, value: WeatherPaletteScaleSetting) =>
+      setWeatherState((prev) => {
+        const palette = prev.palettes[key];
+        if (!palette) return prev;
+        return {
+          ...prev,
+          palettes: {
+            ...prev.palettes,
+            [key]: {
+              ...palette,
+              scaleSetting: value,
+              bands: resampleWeatherPaletteBands(palette.bands, value),
+            },
+          },
+        };
+      }),
+    [],
+  );
+  const handleWeatherPaletteBandColorChange = useCallback(
+    (key: WeatherLayerKey, bandId: string, color: string) =>
+      setWeatherState((prev) => {
+        const palette = prev.palettes[key];
+        if (!palette) return prev;
+        return {
+          ...prev,
+          palettes: {
+            ...prev.palettes,
+            [key]: {
+              ...palette,
+              bands: palette.bands.map((band) => (band.id === bandId ? { ...band, color } : band)),
+            },
+          },
+        };
+      }),
+    [],
+  );
   const handleWeatherAddAlert = useCallback(() => {
     // TODO: implement alert UI
     console.log('[weather] add alert triggered');
   }, []);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.weather = structuredClone(weatherState);
+    });
+  }, [updateProjectControlPanel, weatherState]);
 
   const handleWindEnabled = useCallback((enabled: boolean) => setWindEnabled(enabled), []);
   const handleSnowEnabled = useCallback((enabled: boolean) => setSnowEnabled(enabled), []);
@@ -831,6 +914,9 @@ export function ControlPanelContainer({
       onWeatherDateChange={handleWeatherDateChange}
       onWeatherLayerToggle={handleWeatherLayerToggle}
       onWeatherLayerModeChange={handleWeatherLayerModeChange}
+      onWeatherPaletteOpacityChange={handleWeatherPaletteOpacityChange}
+      onWeatherPaletteScaleSettingChange={handleWeatherPaletteScaleSettingChange}
+      onWeatherPaletteBandColorChange={handleWeatherPaletteBandColorChange}
       onWeatherAddAlert={handleWeatherAddAlert}
       /* Wind */
       onWindEnabledChange={(enabled) => {

@@ -1,12 +1,16 @@
 import { useMemo } from 'react';
+import { ColorPalettePicker } from '../components/ColorPalettePicker';
+import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
-import { IconCalendar, IconClock, IconInfo } from '../icons';
+import { IconCalendar, IconChevronDown, IconClock, IconInfo } from '../icons';
 import type {
   ControlPanelHandlers,
+  WeatherPaletteBand,
+  WeatherPaletteScaleSetting,
   WeatherLayerKey,
   WeatherRenderMode,
   WeatherState,
@@ -22,6 +26,9 @@ interface Props {
   onDateChange: ControlPanelHandlers['onWeatherDateChange'];
   onLayerToggle: ControlPanelHandlers['onWeatherLayerToggle'];
   onLayerModeChange: ControlPanelHandlers['onWeatherLayerModeChange'];
+  onPaletteOpacityChange: ControlPanelHandlers['onWeatherPaletteOpacityChange'];
+  onPaletteScaleSettingChange: ControlPanelHandlers['onWeatherPaletteScaleSettingChange'];
+  onPaletteBandColorChange: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
   onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
 
@@ -66,6 +73,13 @@ const GRADIENT_FILL_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
 
 const DISABLED_ONLY_OPTION: { value: WeatherRenderMode; label: string }[] = [
   { value: '-', label: '-' },
+];
+
+const PALETTE_SCALE_OPTIONS: { value: WeatherPaletteScaleSetting; label: string }[] = [
+  { value: '2 couleurs', label: '2 couleurs' },
+  { value: '3 couleurs', label: '3 couleurs' },
+  { value: '4 couleurs', label: '4 couleurs' },
+  { value: '6 couleurs', label: '6 couleurs' },
 ];
 
 const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRenderMode; label: string }[]>> = {
@@ -115,6 +129,40 @@ function getModeOptions(key: WeatherLayerKey): { value: WeatherRenderMode; label
   return MODE_OPTIONS_BY_LAYER[key] ?? DISABLED_ONLY_OPTION;
 }
 
+function hexLabel(color: string): string {
+  return color.replace('#', '').toUpperCase();
+}
+
+function showsPalette(mode: WeatherRenderMode): mode is 'gradient' | 'fill' {
+  return mode === 'gradient' || mode === 'fill';
+}
+
+function WeatherPaletteRow({
+  layerKey,
+  band,
+  onColorChange,
+}: {
+  layerKey: WeatherLayerKey;
+  band: WeatherPaletteBand;
+  onColorChange?: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
+}) {
+  return (
+    <div className="rvc-weather__band-row">
+      <span className="rvc-weather__band-label">{band.label}</span>
+      <ColorPalettePicker
+        color={band.color}
+        onChange={(color) => onColorChange?.(layerKey, band.id, color)}
+        className="rvc-weather__color-chip"
+        ariaLabel={`Choisir la couleur ${band.label}`}
+      >
+        <ColorSwatch color={band.color} size={12} />
+        <span className="rvc-weather__color-hex">{hexLabel(band.color)}</span>
+        <IconChevronDown size={20} className="rvc-weather__color-chevron" />
+      </ColorPalettePicker>
+    </div>
+  );
+}
+
 export function WeatherSection({
   state,
   open,
@@ -124,6 +172,9 @@ export function WeatherSection({
   onDateChange,
   onLayerToggle,
   onLayerModeChange,
+  onPaletteOpacityChange,
+  onPaletteScaleSettingChange,
+  onPaletteBandColorChange,
   onAddAlert,
 }: Props) {
   const getMinutes = (timeStr: string) => {
@@ -157,6 +208,11 @@ export function WeatherSection({
       (layer): layer is WeatherState['layers'][number] => Boolean(layer),
     );
   }, [isForecast, state.layers]);
+
+  const paletteLayers = useMemo(
+    () => displayedLayers.filter((layer) => layer.enabled && showsPalette(layer.mode)),
+    [displayedLayers],
+  );
 
   return (
     <Section
@@ -292,6 +348,52 @@ export function WeatherSection({
           );
         })}
       </div>
+
+      {paletteLayers.map((layer) => {
+        const palette = state.palettes[layer.key];
+        if (!palette) return null;
+
+        return (
+          <div key={`${layer.key}-palette`} className="rvc-weather__palette-block">
+            <div className="rvc-weather__palette-title">{LAYER_LABEL[layer.key]}</div>
+
+            <div className="rvc-row rvc-row--split rvc-weather__opacity-row">
+              <span className="rvc-row__label">Opacité</span>
+              <div className="rvc-weather__opacity-control">
+                <div className="rvc-weather__opacity-slider-wrap">
+                  <Slider
+                    value={palette.opacity}
+                    onChange={(value) => onPaletteOpacityChange?.(layer.key, value)}
+                    width="100%"
+                  />
+                </div>
+                <span className="rvc-weather__opacity-value">{palette.opacity} %</span>
+              </div>
+            </div>
+
+            <div className="rvc-row rvc-row--split">
+              <span className="rvc-row__label">Échelle</span>
+              <Select
+                width={140}
+                value={palette.scaleSetting}
+                options={PALETTE_SCALE_OPTIONS}
+                onChange={(value) => onPaletteScaleSettingChange?.(layer.key, value as WeatherPaletteScaleSetting)}
+              />
+            </div>
+
+            <div className="rvc-weather__bands">
+              {palette.bands.map((band) => (
+                <WeatherPaletteRow
+                  key={band.id}
+                  layerKey={layer.key}
+                  band={band}
+                  onColorChange={onPaletteBandColorChange}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
 
       {/* Add alert toggle */}
       <div className="rvc-weather__add-alert">

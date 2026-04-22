@@ -53,6 +53,9 @@ export function ControlPanel({
   onWeatherDateChange,
   onWeatherLayerToggle,
   onWeatherLayerModeChange,
+  onWeatherPaletteOpacityChange,
+  onWeatherPaletteScaleSettingChange,
+  onWeatherPaletteBandColorChange,
   onWeatherAddAlert,
   onWindEnabledChange,
   onAltitudeEnabledChange,
@@ -183,6 +186,9 @@ export function ControlPanel({
         onDateChange={onWeatherDateChange}
         onLayerToggle={onWeatherLayerToggle}
         onLayerModeChange={onWeatherLayerModeChange}
+        onPaletteOpacityChange={onWeatherPaletteOpacityChange}
+        onPaletteScaleSettingChange={onWeatherPaletteScaleSettingChange}
+        onPaletteBandColorChange={onWeatherPaletteBandColorChange}
         onAddAlert={onWeatherAddAlert}
       />
 

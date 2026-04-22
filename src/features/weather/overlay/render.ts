@@ -5,6 +5,10 @@ import type {
   WeatherOverlaySample,
 } from './types';
 
+interface PaletteBandLike {
+  color: string;
+}
+
 type Color = readonly [number, number, number];
 
 const COLOR_STOPS: Record<WeatherOverlayMetric, readonly [number, Color][]> = {
@@ -48,6 +52,18 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+function hexToRgb(hex: string): Color {
+  const safe = hex.replace('#', '').trim();
+  const expanded = safe.length === 3
+    ? safe.split('').map((char) => `${char}${char}`).join('')
+    : safe.padEnd(6, '0').slice(0, 6);
+  return [
+    Number.parseInt(expanded.slice(0, 2), 16),
+    Number.parseInt(expanded.slice(2, 4), 16),
+    Number.parseInt(expanded.slice(4, 6), 16),
+  ];
+}
+
 function percentile(sorted: number[], ratio: number): number {
   if (sorted.length === 0) return 0;
   const index = clamp(Math.round((sorted.length - 1) * ratio), 0, sorted.length - 1);
@@ -82,10 +98,16 @@ function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySam
   return { min, max };
 }
 
-function interpolateColor(metric: WeatherOverlayMetric, ratio: number): Color {
-  const stops = COLOR_STOPS[metric];
-  const clamped = clamp(ratio, 0, 1);
+function paletteStops(metric: WeatherOverlayMetric, paletteBands?: PaletteBandLike[]): readonly [number, Color][] {
+  if (!paletteBands?.length) return COLOR_STOPS[metric];
+  return paletteBands.map((band, index) => {
+    const ratio = paletteBands.length === 1 ? 1 : index / (paletteBands.length - 1);
+    return [ratio, hexToRgb(band.color)] as const;
+  });
+}
 
+function interpolatePaletteColor(stops: readonly [number, Color][], ratio: number): Color {
+  const clamped = clamp(ratio, 0, 1);
   for (let index = 1; index < stops.length; index += 1) {
     const [nextT, nextColor] = stops[index];
     const [prevT, prevColor] = stops[index - 1];
@@ -97,7 +119,6 @@ function interpolateColor(metric: WeatherOverlayMetric, ratio: number): Color {
       Math.round(lerp(prevColor[2], nextColor[2], localT)),
     ];
   }
-
   return stops[stops.length - 1][1];
 }
 
@@ -136,6 +157,8 @@ export function renderWeatherCanvas(
   samples: WeatherOverlaySample[],
   width: number,
   height: number,
+  opacityPercent?: number,
+  paletteBands?: PaletteBandLike[],
 ): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = width;
@@ -146,6 +169,8 @@ export function renderWeatherCanvas(
   const values = samples.map((sample) => sample[metric]);
   const range = rangeForMetric(metric, samples);
   const normalise = (value: number) => clamp((value - range.min) / Math.max(1e-6, range.max - range.min), 0, 1);
+  const alphaMultiplier = clamp((opacityPercent ?? 100) / 100, 0, 1);
+  const stops = paletteStops(metric, paletteBands);
 
   if (mode === 'fill') {
     const cellW = width / Math.max(1, grid.cols);
@@ -154,8 +179,8 @@ export function renderWeatherCanvas(
       for (let col = 0; col < grid.cols; col += 1) {
         const raw = sampleValue(values, grid.cols, row, col);
         const ratio = normalise(raw);
-        const [r, g, b] = interpolateColor(metric, ratio);
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alphaFor(metric, ratio, mode)})`;
+        const [r, g, b] = interpolatePaletteColor(stops, ratio);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alphaFor(metric, ratio, mode) * alphaMultiplier})`;
         ctx.fillRect(col * cellW, row * cellH, cellW + 1, cellH + 1);
       }
     }
@@ -169,8 +194,8 @@ export function renderWeatherCanvas(
       const xRatio = width <= 1 ? 0 : x / (width - 1);
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
-      const [r, g, b] = interpolateColor(metric, ratio);
-      const alpha = alphaFor(metric, ratio, mode);
+      const [r, g, b] = interpolatePaletteColor(stops, ratio);
+      const alpha = alphaFor(metric, ratio, mode) * alphaMultiplier;
       const index = (y * width + x) * 4;
       image.data[index] = r;
       image.data[index + 1] = g;

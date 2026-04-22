@@ -15,6 +15,11 @@ export interface WeatherOverlayState {
   time: string;
   forecastDay: number;
   layers: WeatherOverlayLayer[];
+  palettes?: Partial<Record<string, {
+    opacity: number;
+    scaleSetting: string;
+    bands: Array<{ id: string; label: string; color: string }>;
+  }>>;
 }
 
 export interface WeatherGridPoint {

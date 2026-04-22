@@ -1,3 +1,5 @@
+import type { WeatherState } from './types';
+
 export type ControlPanelSectionKey =
   | 'basemaps'
   | 'lidarTiles'
@@ -23,6 +25,7 @@ export interface ControlPanelPersistedState {
     sunlightEnabled: boolean;
   };
   sunlightMapExpanded: boolean;
+  weather?: WeatherState;
 }
 
 const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
@@ -50,5 +53,6 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       sunlightEnabled: false,
     },
     sunlightMapExpanded: false,
+    weather: undefined,
   };
 }

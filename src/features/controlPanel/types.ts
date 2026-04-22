@@ -116,6 +116,20 @@ export type WeatherLayerKey =
   | 'sunshine';
 export type WeatherRenderMode = 'gradient' | 'fill' | 'slope' | 'arrows' | 'text' | '-' | string;
 
+export type WeatherPaletteScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs';
+
+export interface WeatherPaletteBand {
+  id: string;
+  label: string;
+  color: string;
+}
+
+export interface WeatherPaletteConfig {
+  opacity: number;
+  scaleSetting: WeatherPaletteScaleSetting;
+  bands: WeatherPaletteBand[];
+}
+
 export interface WeatherLayer {
   key: WeatherLayerKey;
   enabled: boolean;
@@ -135,6 +149,7 @@ export interface WeatherState {
   /** In trends tab: pick a specific date or a whole week */
   trendMode: TrendMode;
   layers: WeatherLayer[];
+  palettes: Partial<Record<WeatherLayerKey, WeatherPaletteConfig>>;
 }
 
 export interface ToggleOnlySection {
@@ -213,6 +228,9 @@ export interface ControlPanelHandlers {
   onWeatherDateChange?: (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) => void;
   onWeatherLayerToggle?: (key: WeatherLayerKey, enabled: boolean) => void;
   onWeatherLayerModeChange?: (key: WeatherLayerKey, mode: WeatherRenderMode) => void;
+  onWeatherPaletteOpacityChange?: (key: WeatherLayerKey, opacity: number) => void;
+  onWeatherPaletteScaleSettingChange?: (key: WeatherLayerKey, value: WeatherPaletteScaleSetting) => void;
+  onWeatherPaletteBandColorChange?: (key: WeatherLayerKey, bandId: string, color: string) => void;
   onWeatherAddAlert?: () => void;
 
   onWindEnabledChange?: (enabled: boolean) => void;

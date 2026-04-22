@@ -31,6 +31,15 @@ type ImageCoords = [[number, number], [number, number], [number, number], [numbe
 
 function getViewportBounds(map: MapboxMap): ViewportBounds {
   const bounds = map.getBounds();
+  if (!bounds) {
+    return {
+      north: 0,
+      south: 0,
+      east: 0,
+      west: 0,
+      zoom: map.getZoom(),
+    };
+  }
   return {
     north: bounds.getNorth(),
     south: bounds.getSouth(),
@@ -216,7 +225,17 @@ export function useWeatherOverlay(
           setVisibility(key, false);
           continue;
         }
-        const canvas = renderWeatherCanvas(key, activeLayer.mode, dataset.grid, dataset.samples, size.width, size.height);
+        const palette = stateRef.current.palettes?.[key];
+        const canvas = renderWeatherCanvas(
+          key,
+          activeLayer.mode,
+          dataset.grid,
+          dataset.samples,
+          size.width,
+          size.height,
+          palette?.opacity,
+          palette?.bands,
+        );
         const url = canvas.toDataURL('image/png');
         await preload(url);
         ensureLayer(key, url, coords);

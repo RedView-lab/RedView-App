@@ -219,6 +219,14 @@ async function fetchTrendBatch(
 
 export function buildWeatherGrid(map: MapboxMap, mode: WeatherSelection['mode']): WeatherGridDefinition {
   const bounds = map.getBounds();
+  if (!bounds) {
+    return {
+      bounds: [-180, -85, 180, 85],
+      rows: 0,
+      cols: 0,
+      points: [],
+    };
+  }
   const canvas = map.getCanvas();
   const width = canvas.width || canvas.clientWidth || 1024;
   const height = canvas.height || canvas.clientHeight || 768;
