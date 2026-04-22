@@ -27,7 +27,7 @@ const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: 'poi', label: 'POI' },
   { key: 'pause', label: 'Pause' },
   { key: 'alertes', label: 'Alertes' },
-  { key: 'pente', label: 'Pente' },
+  { key: 'pente', label: "Profil d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
 ];
 
@@ -36,7 +36,6 @@ const axisOptions: AxisOption[] = [
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
   { value: 'Puissance moyenne', label: 'Puissance moyenne', tone: 'primary' },
-  { value: 'Altitude', label: 'Altitude', tone: 'primary' },
   { value: 'Inclinaison (°)', label: 'Inclinaison (°)', tone: 'primary' },
   { value: 'Inclinaison (%)', label: 'Inclinaison (%)', tone: 'primary' },
   { value: 'Surface', label: 'Surface', tone: 'primary' },
@@ -67,8 +66,8 @@ export function CenterPanelAnalysis() {
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
   // chips). Read from the project so reopening it restores the chart.
-  // Migrate the legacy `Dénivelé` axis label to the new `Altitude` one
-  // so projects saved before the rename keep rendering.
+  // Migrate legacy axis labels so projects saved before the rename keep
+  // rendering without exposing the removed "Altitude" metric anymore.
   const rawAnalysis = projectStore?.project.analysis;
   const analysisState: AnalysisPanelState = rawAnalysis
     ? {
@@ -184,7 +183,8 @@ export function CenterPanelAnalysis() {
     return result;
   }, [projectStore, predictionStore, axis1Value, axis2Value, xMode]);
 
-  // Show the altitude backdrop whenever the user enables the "Pente"
+  // Show the altitude backdrop whenever the user enables the
+  // "Profil d'altitude"
   // filter chip. We also show it implicitly when one of the axes is set
   // to an inclination metric, so the slope curve always reads on top of
   // the underlying altitude profile.
@@ -353,6 +353,6 @@ function lightenColor(hex: string, amount: number): string {
  * before a renaming round-trip cleanly through the dropdown selectors.
  */
 function migrateAxisMetric(value: string): AxisMetricId {
-  if (value === 'Dénivelé') return 'Altitude';
+  if (value === 'Dénivelé' || value === 'Altitude') return 'Inclinaison (%)';
   return value as AxisMetricId;
 }

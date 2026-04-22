@@ -27,6 +27,7 @@ export interface RouteProfilePoint {
   lon: number;
   distanceM: number;
   elevationM: number;
+  gradientPct: number;
 }
 
 export interface RouteMetrics {
@@ -263,16 +264,26 @@ function aggregate(rows: ParsedRow[], totalDistFallback: number): RouteMetrics {
 
 function buildRouteProfile(rows: ParsedRow[]): RouteProfilePoint[] {
   const smoothed = smoothElevations(rows, 5);
+  const distancesM = new Array<number>(rows.length).fill(0);
+
+  for (let i = 1; i < rows.length; i++) {
+    distancesM[i] = distancesM[i - 1] + Math.max(0, rows[i].segDistM);
+  }
+
   const profile: RouteProfilePoint[] = [];
-  let distanceM = 0;
 
   for (let i = 0; i < rows.length; i++) {
-    if (i > 0) distanceM += Math.max(0, rows[i].segDistM);
+    const prevIndex = i > 0 ? i - 1 : i;
+    const nextIndex = i < rows.length - 1 ? i + 1 : i;
+    const spanM = distancesM[nextIndex] - distancesM[prevIndex];
+    const gradientPct =
+      spanM > 0.5 ? ((smoothed[nextIndex] - smoothed[prevIndex]) / spanM) * 100 : 0;
     profile.push({
       lat: rows[i].lat,
       lon: rows[i].lon,
-      distanceM,
+      distanceM: distancesM[i],
       elevationM: smoothed[i],
+      gradientPct,
     });
   }
 

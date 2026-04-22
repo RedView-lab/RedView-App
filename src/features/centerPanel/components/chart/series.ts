@@ -25,7 +25,6 @@ export type AxisMetricId =
   | 'Vitesse moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
-  | 'Altitude'
   | 'Inclinaison (°)'
   | 'Inclinaison (%)'
   | 'Surface'
@@ -36,6 +35,8 @@ export type AxisMetricId =
   | 'Couverture nuageuse (%)'
   | 'Humidité (%)'
   | 'Ensoleillement (min)';
+
+export type ChartMetricId = AxisMetricId | 'Altitude';
 
 export type AxisMode = 'distance' | 'temps';
 
@@ -50,7 +51,7 @@ export interface ChartSeries {
   id: string;
   itineraryId: string;
   itineraryName: string;
-  metricId: AxisMetricId;
+  metricId: ChartMetricId;
   /** Stroke color (defaults to itinerary color). */
   color: string;
   axis: 1 | 2;
@@ -76,7 +77,7 @@ export interface AxisDomain {
 }
 
 /** Returns the unit string displayed alongside a metric label. */
-export function unitForMetric(metric: AxisMetricId): string {
+export function unitForMetric(metric: ChartMetricId): string {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
@@ -108,16 +109,16 @@ export function unitForMetric(metric: AxisMetricId): string {
   }
 }
 
-export function isIntervalAverageMetric(metric: AxisMetricId): boolean {
+export function isIntervalAverageMetric(metric: ChartMetricId): boolean {
   return metric === 'Vitesse moyenne' || metric === 'Puissance moyenne';
 }
 
-export function isInclinationMetric(metric: AxisMetricId): boolean {
+export function isInclinationMetric(metric: ChartMetricId): boolean {
   return metric === 'Inclinaison (°)' || metric === 'Inclinaison (%)';
 }
 
 /** Format a tick label according to the metric type. */
-export function formatAxisValue(metric: AxisMetricId, value: number): string {
+export function formatAxisValue(metric: ChartMetricId, value: number): string {
   if (!Number.isFinite(value)) return '--';
   const unit = unitForMetric(metric);
   let txt: string;
@@ -136,7 +137,7 @@ export function formatAxisValue(metric: AxisMetricId, value: number): string {
  * timeline. Weather/surface metrics are not yet wired and return false so
  * the chart can show an empty plot rather than a flat zero line.
  */
-export function metricIsAvailable(metric: AxisMetricId): boolean {
+export function metricIsAvailable(metric: ChartMetricId): boolean {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
@@ -152,7 +153,7 @@ export function metricIsAvailable(metric: AxisMetricId): boolean {
 }
 
 /** Read the raw value for a metric off a single prediction point. */
-function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): number {
+function metricValueAtPoint(metric: ChartMetricId, point: PredictionPoint): number {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
@@ -171,7 +172,7 @@ function metricValueAtPoint(metric: AxisMetricId, point: PredictionPoint): numbe
   }
 }
 
-function isRouteBackedMetric(metric: AxisMetricId): boolean {
+function isRouteBackedMetric(metric: ChartMetricId): boolean {
   return metric === 'Altitude' || isInclinationMetric(metric);
 }
 
@@ -229,10 +230,13 @@ function normalizeRouteProfile(
 
   if (samples.length < 2) return null;
 
-  const smoothedElevations = smoothValues(
-    samples.map((sample) => sample.elevationM),
-    5,
-  );
+  const hasPersistedGradient = samples.some((sample) => Number.isFinite(sample.gradientPct));
+  const smoothedElevations = hasPersistedGradient
+    ? samples.map((sample) => sample.elevationM)
+    : smoothValues(
+        samples.map((sample) => sample.elevationM),
+        3,
+      );
 
   return samples.map((sample, index) => {
     const prevIndex = index > 0 ? index - 1 : index;
@@ -286,7 +290,7 @@ function interpolateElapsedHours(
 function buildSeriesFromRouteProfile(
   routePoints: RouteChartPoint[] | null | undefined,
   prediction: PredictionResult | null | undefined,
-  metric: AxisMetricId,
+  metric: ChartMetricId,
   xMode: AxisMode,
 ): ChartPoint[] | null {
   const profile = normalizeRouteProfile(routePoints);
@@ -325,7 +329,7 @@ function buildSeriesFromRouteProfile(
  */
 export function buildSeriesFromPrediction(
   prediction: PredictionResult | null | undefined,
-  metric: AxisMetricId,
+  metric: ChartMetricId,
   xMode: AxisMode,
   routePoints?: RouteChartPoint[] | null,
 ): ChartPoint[] | null {

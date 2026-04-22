@@ -12,6 +12,7 @@ export type {
   AxisDomain,
   ChartBackdropProfile,
   AxisMetricId,
+  ChartMetricId,
   AxisMode,
   ChartPoint,
   ChartSeries,

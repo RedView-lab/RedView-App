@@ -12,6 +12,7 @@ import {
   unitForMetric,
   type AxisDomain,
   type AxisMetricId,
+  type ChartMetricId,
   type AxisMode,
   type ChartBackdropProfile,
   type ChartSeries,
@@ -77,13 +78,7 @@ export function AnalysisChart({
     return buildNiceTicks(xDomain.min, xDomain.max, target || DEFAULT_TICK_COUNT);
   }, [plotSize.width, xDomain.max, xDomain.min]);
 
-  const plotXDomain = useMemo<AxisDomain>(() => {
-    if (xTicks.length === 0) return xDomain;
-    return {
-      min: xTicks[0] ?? xDomain.min,
-      max: xTicks[xTicks.length - 1] ?? xDomain.max,
-    };
-  }, [xDomain, xTicks]);
+  const plotXDomain = xDomain;
 
   const displaySeries = useMemo(
     () => series.map((entry) => materializeSeriesForPlot(entry, xTicks)),
@@ -294,7 +289,10 @@ export function AnalysisChart({
             <div
               key={`xa-${value}-${ratio.toFixed(4)}`}
               className="rvchart__xaxis-cell"
-              style={{ left: `${ratio * 100}%` }}
+              style={{
+                left: `${ratio * 100}%`,
+                transform: xAnchorTransformFor(ratio),
+              }}
             >
               {formatXTick(value, xMode)}
             </div>
@@ -357,7 +355,10 @@ function SeriesRow({ seriesEntry, xPositions }: SeriesRowProps) {
           <div
             key={`${seriesEntry.id}-${value}`}
             className="rvchart__series-cell"
-            style={{ left: `${ratio * 100}%` }}
+            style={{
+              left: `${ratio * 100}%`,
+              transform: xAnchorTransformFor(ratio),
+            }}
           >
             {Number.isFinite(y) ? formatCellValue(y, seriesEntry.metricId) : '--'}
           </div>
@@ -402,7 +403,7 @@ interface HoverCardGroupProps {
     itineraryName: string;
     color: string;
     axis: 1 | 2;
-    metric: AxisMetricId;
+    metric: ChartMetricId;
     value: number;
   }[];
 }
@@ -435,7 +436,7 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
   );
 }
 
-function defaultDomainFor(metric: AxisMetricId): AxisDomain {
+function defaultDomainFor(metric: ChartMetricId): AxisDomain {
   switch (metric) {
     case 'Vitesse':
     case 'Vitesse moyenne':
@@ -454,7 +455,7 @@ function defaultDomainFor(metric: AxisMetricId): AxisDomain {
   }
 }
 
-function normalizeMetricDomain(metric: AxisMetricId, domain: AxisDomain): AxisDomain {
+function normalizeMetricDomain(metric: ChartMetricId, domain: AxisDomain): AxisDomain {
   if (!isInclinationMetric(metric)) return domain;
   const min = Math.min(domain.min, 0);
   const max = Math.max(domain.max, 0);
@@ -635,7 +636,7 @@ function buildNiceTicks(min: number, max: number, targetCount: number): number[]
   });
 }
 
-function formatAxisLabel(value: number, metric: AxisMetricId): string {
+function formatAxisLabel(value: number, metric: ChartMetricId): string {
   if (!Number.isFinite(value)) return '--';
   let txt: string;
   if (Number.isInteger(value)) txt = String(value);
@@ -654,6 +655,12 @@ function formatXTick(value: number, xMode: AxisMode): string {
   return formatHours(value);
 }
 
+function xAnchorTransformFor(ratio: number): string {
+  if (ratio <= 0.02) return 'translateX(0%)';
+  if (ratio >= 0.98) return 'translateX(-100%)';
+  return 'translateX(-50%)';
+}
+
 function formatHours(hours: number): string {
   if (!Number.isFinite(hours)) return '--';
   const totalMin = Math.round(hours * 60);
@@ -662,7 +669,7 @@ function formatHours(hours: number): string {
   return `${h}h${m.toString().padStart(2, '0')}`;
 }
 
-function formatCellValue(value: number, metric: AxisMetricId): string {
+function formatCellValue(value: number, metric: ChartMetricId): string {
   if (!Number.isFinite(value)) return '--';
   const unit = unitForMetric(metric);
   let txt: string;

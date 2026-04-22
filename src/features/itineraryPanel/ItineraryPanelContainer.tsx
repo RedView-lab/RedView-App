@@ -781,6 +781,7 @@ export function ItineraryPanelContainer({
               lon: point.lon,
               distanceM: point.distanceM,
               elevationM: point.elevationM,
+              gradientPct: point.gradientPct,
             }))
           : route.coordinates.map((c: [number, number]) => ({
               lat: c[1],
@@ -868,6 +869,7 @@ export function ItineraryPanelContainer({
                 lon: point.lon,
                 distanceM: point.distanceM,
                 elevationM: point.elevationM,
+                gradientPct: point.gradientPct,
               }));
               if (
                 it.metrics?.ascentM === rAscent &&
