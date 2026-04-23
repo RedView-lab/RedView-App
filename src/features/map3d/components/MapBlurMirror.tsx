@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface MapBlurMirrorProps {
@@ -53,7 +53,7 @@ export default function MapBlurMirror({
 }: MapBlurMirrorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const movingRef = useRef(false);
-  const lastDrawTsRef = useRef(0);
+  const requestRedrawRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -66,9 +66,6 @@ export default function MapBlurMirror({
     if (!ctx) return;
 
     let raf = 0;
-    const ACTIVE_MAX_FPS = 12;
-    const ACTIVE_DRAW_INTERVAL_MS = 1000 / ACTIVE_MAX_FPS;
-    const ACTIVE_RESOLUTION_SCALE = 0.62;
     const ACTIVE_BLUR = Math.max(10, Math.round(blur * 0.55));
     const ACTIVE_SATURATE = Math.max(1, Number((saturate * 0.72).toFixed(2)));
 
@@ -81,23 +78,12 @@ export default function MapBlurMirror({
 
     applyPresentation();
 
-    const draw = (force = false) => {
+    const draw = () => {
       raf = 0;
       const src = map.getCanvas() as HTMLCanvasElement;
       if (!src || src.width === 0 || src.height === 0) return;
 
-      const now = performance.now();
-      if (
-        !force
-        && movingRef.current
-        && now - lastDrawTsRef.current < ACTIVE_DRAW_INTERVAL_MS
-      ) {
-        return;
-      }
-      lastDrawTsRef.current = now;
-
       const dpr = window.devicePixelRatio || 1;
-      const resolutionScale = movingRef.current ? ACTIVE_RESOLUTION_SCALE : 1;
       // Source-canvas pixels per CSS pixel (Mapbox internally uses DPR too).
       const srcCanvasRect = src.getBoundingClientRect();
       const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
@@ -122,8 +108,8 @@ export default function MapBlurMirror({
       );
 
       // Match the mirror canvas's backing-store size to its CSS rect × DPR.
-      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr * resolutionScale));
-      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr * resolutionScale));
+      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr));
+      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr));
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
@@ -141,8 +127,15 @@ export default function MapBlurMirror({
     };
 
     const schedule = (force = false) => {
-      if (raf !== 0) return;
-      raf = requestAnimationFrame(() => draw(force));
+      if (raf !== 0) {
+        if (!force) return;
+        cancelAnimationFrame(raf);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+
+    requestRedrawRef.current = () => {
+      schedule(true);
     };
 
     const onMapRender = () => {
@@ -174,6 +167,7 @@ export default function MapBlurMirror({
     window.addEventListener('resize', onResize);
 
     return () => {
+      requestRedrawRef.current = null;
       map.off('render', onMapRender);
       map.off('movestart', onMoveStart);
       map.off('moveend', onMoveEnd);
@@ -181,6 +175,10 @@ export default function MapBlurMirror({
       if (raf !== 0) cancelAnimationFrame(raf);
     };
   }, [blur, map, saturate]);
+
+  useLayoutEffect(() => {
+    requestRedrawRef.current?.();
+  }, [height, left, top, width]);
 
   return (
     <canvas
