@@ -5,7 +5,11 @@ import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
 import { loadViewport, saveViewport, type MapViewport } from '../lib/viewport-persist';
-import { createOverlayStatus, type OverlayStatusReporter } from '../overlayStatus';
+import {
+  createOverlayStatus,
+  type OverlayReloadRegistrar,
+  type OverlayStatusReporter,
+} from '../overlayStatus';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -20,6 +24,43 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
 const ORTHO_BOOT_FALLBACK_MS = 1500;
+const DEM_RELOAD_COOLDOWN_MS = 15000;
+const DEM_ACTIVITY_SETTLE_MS = 220;
+
+type DemSourceDataLike = mapboxgl.MapSourceDataEvent & {
+  coord?: {
+    canonical?: { z: number; x: number; y: number };
+    overscaledZ?: number;
+    wrap?: number;
+  };
+  tile?: {
+    tileID?: {
+      canonical?: { z: number; x: number; y: number };
+      overscaledZ?: number;
+      wrap?: number;
+    };
+  };
+};
+
+function getDemTileKey(event: DemSourceDataLike): string | null {
+  const directCanonical = event.coord?.canonical;
+  if (directCanonical) {
+    return `${event.coord?.overscaledZ ?? directCanonical.z}/${directCanonical.x}/${directCanonical.y}/${event.coord?.wrap ?? 0}`;
+  }
+
+  const tileId = event.tile?.tileID;
+  const tileCanonical = tileId?.canonical;
+  if (tileCanonical) {
+    return `${tileId?.overscaledZ ?? tileCanonical.z}/${tileCanonical.x}/${tileCanonical.y}/${tileId?.wrap ?? 0}`;
+  }
+
+  return null;
+}
+
+function buildDemTilesTemplate(cacheBust: number): string[] {
+  if (cacheBust <= 0) return unifiedDEMSource.tiles;
+  return unifiedDEMSource.tiles.map((tile) => `${tile}?rv-dem=${cacheBust}`);
+}
 
 function waitForMapIdleOrTimeout(map: mapboxgl.Map, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
@@ -135,6 +176,7 @@ interface UseMapOptions {
   initialViewport?: MapViewport | null;
   onViewportChange?: (viewport: MapViewport) => void;
   onLoadStatusChange?: OverlayStatusReporter;
+  registerReload?: OverlayReloadRegistrar;
 }
 
 export function useMap(
@@ -144,9 +186,10 @@ export function useMap(
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const terrainRef = useRef<TerrainManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { initialViewport = null, onViewportChange, onLoadStatusChange } = options;
+  const { initialViewport = null, onViewportChange, onLoadStatusChange, registerReload } = options;
   const onViewportChangeRef = useRef(onViewportChange);
   const onLoadStatusChangeRef = useRef(onLoadStatusChange);
+  const registerReloadRef = useRef(registerReload);
 
   useEffect(() => {
     onViewportChangeRef.current = onViewportChange;
@@ -157,7 +200,27 @@ export function useMap(
   }, [onLoadStatusChange]);
 
   useEffect(() => {
+    registerReloadRef.current = registerReload;
+  }, [registerReload]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+
+    let demCacheBust = 0;
+    let demTrackingEnabled = false;
+    let demReloadCoolingUntil = 0;
+    let demSettleTimer: ReturnType<typeof setTimeout> | null = null;
+    const demRequestedTiles = new Set<string>();
+    const demLoadedTiles = new Set<string>();
+
+    const clearDemTracking = () => {
+      demRequestedTiles.clear();
+      demLoadedTiles.clear();
+      if (demSettleTimer) {
+        clearTimeout(demSettleTimer);
+        demSettleTimer = null;
+      }
+    };
 
     const reportMapStatus = (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => {
       onLoadStatusChangeRef.current?.(createOverlayStatus({
@@ -166,8 +229,77 @@ export function useMap(
         state,
         progress,
         detail,
+        reloadable: Boolean(registerReloadRef.current),
       }));
     };
+
+    const finishDemActivity = (detail = 'Carte prête') => {
+      clearDemTracking();
+      if (!cancelled) {
+        demTrackingEnabled = true;
+        reportMapStatus('ready', 100, detail);
+      }
+    };
+
+    const publishDemProgress = (detail = 'Relief HD') => {
+      if (!demTrackingEnabled || cancelled) return;
+      const total = Math.max(demRequestedTiles.size, demLoadedTiles.size, 1);
+      const progress = Math.min(99, Math.round((demLoadedTiles.size / total) * 100));
+      reportMapStatus('loading', progress, detail);
+    };
+
+    const scheduleDemSettle = () => {
+      if (!demTrackingEnabled) return;
+      if (demSettleTimer) clearTimeout(demSettleTimer);
+      demSettleTimer = setTimeout(() => {
+        demSettleTimer = null;
+        if (cancelled) return;
+        if (map.isSourceLoaded(unifiedDEMSource.id) && !map.isMoving()) {
+          finishDemActivity('Carte prête');
+        }
+      }, DEM_ACTIVITY_SETTLE_MS);
+    };
+
+    const refreshDemSource = () => {
+      try {
+        map.setTerrain(null);
+      } catch {
+        /* terrain may not be set yet */
+      }
+
+      if (map.getSource(unifiedDEMSource.id)) {
+        map.removeSource(unifiedDEMSource.id);
+      }
+
+      map.addSource(unifiedDEMSource.id, {
+        type: 'raster-dem',
+        tiles: buildDemTilesTemplate(demCacheBust),
+        tileSize: unifiedDEMSource.tileSize,
+        encoding: unifiedDEMSource.encoding,
+        minzoom: unifiedDEMSource.minzoom,
+        maxzoom: unifiedDEMSource.maxzoom,
+      });
+
+      terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+    };
+
+    const reloadMapElevation = () => {
+      const now = Date.now();
+      if (now < demReloadCoolingUntil) return;
+      demReloadCoolingUntil = now + DEM_RELOAD_COOLDOWN_MS;
+
+      demTrackingEnabled = false;
+      clearDemTracking();
+      reportMapStatus('loading', 0, 'Rechargement relief');
+
+      navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_DEM_CACHE' });
+      navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+
+      demCacheBust = now;
+      refreshDemSource();
+    };
+
+    registerReloadRef.current?.(reloadMapElevation);
 
     reportMapStatus('loading', 6, 'Initialisation');
 
@@ -236,7 +368,7 @@ export function useMap(
         // /ortho-tiles/ sources â€” they would 404. The Standard Satellite style
         // already ships its own terrain + satellite imagery.
         console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
-        reportMapStatus('ready', 100, 'Carte prête');
+        finishDemActivity('Carte prête');
         setIsLoaded(true);
         return;
       }
@@ -253,21 +385,13 @@ export function useMap(
 
       // DEM source
       if (!map.getSource(unifiedDEMSource.id)) {
-        map.addSource(unifiedDEMSource.id, {
-          type: 'raster-dem',
-          tiles: unifiedDEMSource.tiles,
-          tileSize: unifiedDEMSource.tileSize,
-          encoding: unifiedDEMSource.encoding,
-          minzoom: unifiedDEMSource.minzoom,
-          maxzoom: unifiedDEMSource.maxzoom,
-        });
+        refreshDemSource();
       }
       reportMapStatus('loading', 68, 'Relief');
 
       // Terrain is applied ONCE, after the first DEM tile has loaded. Prevents
       // the "flat flicker" where setTerrain() runs against an empty source and
       // the mesh renders at zero elevation for a few frames.
-      terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
       let orthoAdded = false;
       const addOrthoWhenReady = async () => {
         if (cancelled || orthoAdded) return;
@@ -276,7 +400,7 @@ export function useMap(
         if (cancelled) return;
         reportMapStatus('loading', 92, 'Textures IGN');
         addIgnOrthoOverlay(map);
-        reportMapStatus('ready', 100, 'Carte prête');
+        finishDemActivity('Carte prête');
       };
 
       orthoBootTimer = setTimeout(() => {
@@ -296,7 +420,43 @@ export function useMap(
       };
       map.on('sourcedata', onSourceData);
 
+      const onDemSourceDataLoading = (event: mapboxgl.MapSourceDataEvent) => {
+        if (!demTrackingEnabled) return;
+        if (event.sourceId !== unifiedDEMSource.id) return;
+        const tileKey = getDemTileKey(event as DemSourceDataLike);
+        if (!tileKey) return;
+        demRequestedTiles.add(tileKey);
+        publishDemProgress('Relief HD');
+      };
+
+      const onDemSourceData = (event: mapboxgl.MapSourceDataEvent) => {
+        if (!demTrackingEnabled) return;
+        if (event.sourceId !== unifiedDEMSource.id) return;
+        const tileKey = getDemTileKey(event as DemSourceDataLike);
+        if (tileKey) {
+          demRequestedTiles.add(tileKey);
+          demLoadedTiles.add(tileKey);
+          publishDemProgress('Relief HD');
+        }
+        if (event.isSourceLoaded) {
+          scheduleDemSettle();
+        }
+      };
+
+      map.on('sourcedataloading', onDemSourceDataLoading);
+      map.on('sourcedata', onDemSourceData);
+      map.on('moveend', scheduleDemSettle);
+      map.on('zoomend', scheduleDemSettle);
+
       setIsLoaded(true);
+
+      return () => {
+        map.off('sourcedata', onSourceData);
+        map.off('sourcedataloading', onDemSourceDataLoading);
+        map.off('sourcedata', onDemSourceData);
+        map.off('moveend', scheduleDemSettle);
+        map.off('zoomend', scheduleDemSettle);
+      };
     })().catch((err) => {
       console.error('[map3d] init failed', err);
       reportMapStatus('error', 0, err instanceof Error ? err.message : 'Chargement impossible');
@@ -329,6 +489,7 @@ export function useMap(
 
     return () => {
       cancelled = true;
+      clearDemTracking();
       if (orthoBootTimer) clearTimeout(orthoBootTimer);
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
@@ -344,6 +505,7 @@ export function useMap(
       terrainRef.current = null;
       map.remove();
       mapRef.current = null;
+      registerReloadRef.current?.(null);
       onLoadStatusChangeRef.current?.(null);
     };
   }, [containerRef]);

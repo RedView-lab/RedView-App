@@ -7,6 +7,7 @@ import {
   type OverlayStatusId,
   type OverlayStatusSnapshot,
 } from '@/features/map3d';
+import { createOverlayStatus } from '@/features/map3d/overlayStatus';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
@@ -156,12 +157,33 @@ export default function Dashboard({
   }, []);
 
   const handleMapLoadStatusChange = useCallback((status: OverlayStatusSnapshot | null) => {
-    if (!status || status.state === 'ready') {
-      setMapStatus(null);
-      return;
-    }
     setMapStatus(status);
   }, []);
+
+  const handleMapReloadChange = useCallback((reload: (() => void) | null) => {
+    setOverlayReloader('map', reload);
+    setMapStatus((prev) => {
+      if (!reload) {
+        if (!prev) return null;
+        if (!prev.reloadable) return prev;
+        return { ...prev, reloadable: false, updatedAt: Date.now() };
+      }
+
+      if (!prev) {
+        return createOverlayStatus({
+          id: 'map',
+          label: 'Carte',
+          state: 'ready',
+          progress: 100,
+          detail: 'Carte prête',
+          reloadable: true,
+        });
+      }
+
+      if (prev.reloadable) return prev;
+      return { ...prev, reloadable: true, updatedAt: Date.now() };
+    });
+  }, [setOverlayReloader]);
 
   const handleWeatherOverlayStatusChange = useCallback(
     (status: OverlayStatusSnapshot | null) => {
@@ -193,19 +215,16 @@ export default function Dashboard({
 
   const visibleStatuses = useMemo(() => {
     const orderedIds: OverlayStatusId[] = ['shadow', 'map', 'weather'];
-    const shadowStatus = overlayStatuses.shadow ?? {
-      id: 'shadow' as const,
-      label: OVERLAY_LABEL.shadow,
-      state: 'ready' as const,
-      progress: 0,
-      detail: 'Ensoleillement inactif',
-      reloadable: Boolean(overlayReloadersRef.current.shadow),
-      updatedAt: 0,
-    };
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
-      shadow: shadowStatus,
       ...overlayStatuses,
-      ...(mapStatus ? { map: mapStatus } : {}),
+      ...(mapStatus
+        ? {
+            map: {
+              ...mapStatus,
+              reloadable: mapStatus.reloadable ?? Boolean(overlayReloadersRef.current.map),
+            },
+          }
+        : {}),
     };
     return orderedIds
       .map((id) => snapshots[id])
@@ -330,6 +349,7 @@ export default function Dashboard({
           <MapView
             onMapReady={handleMapReady}
             onMapLoadStatusChange={handleMapLoadStatusChange}
+            onMapReloadChange={handleMapReloadChange}
             lidarSelectionEnabled={lidarModeEnabled}
             onLidarSelectionDisable={() => setLidarModeEnabled(false)}
             initialViewport={projectMapViewport}

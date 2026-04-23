@@ -124,6 +124,10 @@ self.addEventListener('message', (e) => {
     if (e.source) e.source.postMessage({ type: 'TOKEN_ACK' });
     return;
   }
+  if (e.data?.type === 'CLEAR_DEM_CACHE') {
+    caches.delete(CACHE_NAME);
+    return;
+  }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
     caches.delete(SLOPE_CACHE_NAME);
     return;

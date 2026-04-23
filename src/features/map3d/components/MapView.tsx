@@ -4,11 +4,12 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import type { MapViewport } from '../lib/viewport-persist';
-import type { OverlayStatusReporter } from '../overlayStatus';
+import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../overlayStatus';
 
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
   onMapLoadStatusChange?: OverlayStatusReporter;
+  onMapReloadChange?: OverlayReloadRegistrar;
   lidarSelectionEnabled?: boolean;
   onLidarSelectionDisable?: () => void;
   initialViewport?: MapViewport | null;
@@ -18,6 +19,7 @@ interface MapViewProps {
 export default function MapView({
   onMapReady,
   onMapLoadStatusChange,
+  onMapReloadChange,
   lidarSelectionEnabled = false,
   onLidarSelectionDisable,
   initialViewport,
@@ -28,6 +30,7 @@ export default function MapView({
     initialViewport,
     onViewportChange,
     onLoadStatusChange: onMapLoadStatusChange,
+    registerReload: onMapReloadChange,
   });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
