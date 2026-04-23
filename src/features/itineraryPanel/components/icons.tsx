@@ -169,7 +169,7 @@ export const IconCheckpointFlag = ({ size = 20, ...p }: AssetGlyphProps) => (
 );
 
 export const IconCheckpointEnd = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="flag-02.svg" size={size} {...p} />
+  <SvgV2Icon name="checkpoint-end.svg" size={size} {...p} />
 );
 
 export const IconDroplet = ({ size = 12, ...p }: AssetGlyphProps) => (
@@ -235,7 +235,7 @@ export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
  * White/black grid pattern on a flag pole in a rounded square.
  */
 export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="flag-02.svg" size={size} {...p} />
+  <SvgV2Icon name="checkpoint-end.svg" size={size} {...p} />
 );
 
 /**
