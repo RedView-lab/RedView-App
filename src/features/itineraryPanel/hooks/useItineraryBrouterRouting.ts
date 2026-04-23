@@ -106,6 +106,17 @@ export function useItineraryBrouterRouting({
       return;
     }
 
+    // When the itinerary was seeded from an imported GPX file, the GPX
+    // trace IS the route — don't trigger a BRouter point-to-point
+    // recompute. For long-distance imports (e.g. Race Across France,
+    // ~2500 km) this would exceed the 55 s Vercel timeout anyway, and
+    // silently overwriting the user's track is never desired.
+    if (active?.gpxRoute?.source === 'gpx') {
+      setRouteError(null);
+      setRouteLoading(false);
+      return;
+    }
+
     const [startLon, startLat] = startKey.split(',').map(Number);
     const [endLon, endLat] = endKey.split(',').map(Number);
     const userVia = viaKey
