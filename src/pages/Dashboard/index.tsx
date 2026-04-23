@@ -234,6 +234,9 @@ export default function Dashboard({
   const statusDockRight = isMapFocusMode
     ? PANEL_PADDING
     : panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+  const statusDockLeft = isMapFocusMode && layout.centerToolbarVisible
+    ? layout.centerToolbarLeft + layout.centerToolbarWidth / 2
+    : undefined;
   const statusDockBottom = layout.centerToolbarVisible
     ? layout.designH - layout.centerToolbarTop + CENTER_PANEL_STACK_GAP
     : 88;
@@ -359,7 +362,10 @@ export default function Dashboard({
           <MapOverlayStatusDock
             statuses={visibleStatuses}
             right={statusDockRight}
+            left={statusDockLeft}
             bottom={statusDockBottom}
+            align={statusDockLeft == null ? 'end' : 'center'}
+            transform={statusDockLeft == null ? undefined : 'translateX(-50%)'}
             hidden={projectBrowserOpen || activeProjectId == null}
             onReload={handleOverlayReload}
           />

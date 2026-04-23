@@ -5,18 +5,24 @@ import type { OverlayStatusId, OverlayStatusSnapshot } from '../overlayStatus';
 interface MapOverlayStatusDockProps {
   statuses: OverlayStatusSnapshot[];
   right: number;
+  left?: number;
   top?: number;
   bottom?: number;
   hidden?: boolean;
+  align?: 'end' | 'center';
+  transform?: string;
   onReload?: (id: OverlayStatusId) => void;
 }
 
 export default function MapOverlayStatusDock({
   statuses,
   right,
+  left,
   top,
   bottom = 88,
   hidden = false,
+  align = 'end',
+  transform,
   onReload,
 }: MapOverlayStatusDockProps) {
   if (statuses.length === 0) return null;
@@ -25,8 +31,10 @@ export default function MapOverlayStatusDock({
     <div
       style={{
         ...dockStyle,
-        right,
+        ...(left == null ? { right } : { left }),
         ...(top == null ? { bottom } : { top }),
+        alignItems: align === 'center' ? 'center' : 'flex-end',
+        transform,
         opacity: hidden ? 0 : 1,
         pointerEvents: hidden ? 'none' : 'auto',
       }}
