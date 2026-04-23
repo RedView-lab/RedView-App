@@ -143,6 +143,11 @@ export function useMap(
   const terrainRef = useRef<TerrainManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const { initialViewport = null, onViewportChange } = options;
+  const onViewportChangeRef = useRef(onViewportChange);
+
+  useEffect(() => {
+    onViewportChangeRef.current = onViewportChange;
+  }, [onViewportChange]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -268,7 +273,7 @@ export function useMap(
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     const persistViewport = (viewport: MapViewport) => {
       saveViewport(viewport);
-      onViewportChange?.(viewport);
+      onViewportChangeRef.current?.(viewport);
     };
     const onMoveEnd = () => {
       if (saveTimer) clearTimeout(saveTimer);
@@ -306,7 +311,7 @@ export function useMap(
       map.remove();
       mapRef.current = null;
     };
-  }, [containerRef, initialViewport, onViewportChange]);
+  }, [containerRef]);
 
   useEffect(() => {
     const map = mapRef.current;
