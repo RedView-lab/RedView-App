@@ -42,7 +42,7 @@
   overflow-y: scroll;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   padding: 12px;
   scrollbar-width: none;
   -ms-overflow-style: none;

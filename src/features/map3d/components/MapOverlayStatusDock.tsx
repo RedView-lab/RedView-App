@@ -40,7 +40,7 @@ export default function MapOverlayStatusDock({
       }}
     >
       {statuses.map((status) => {
-        const compact = status.state === 'ready' && status.id !== 'shadow';
+          const compact = status.state === 'ready';
         const reloadDisabled = status.state === 'loading' || !status.reloadable;
         const showReload = status.id === 'shadow' || status.reloadable;
         const tooltip = [status.label, status.detail].filter(Boolean).join(' - ');

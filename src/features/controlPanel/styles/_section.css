@@ -2,16 +2,18 @@
 
 .rvc-section {
   border-top: 1px solid var(--rvc-border);
-  border-bottom: 1px solid var(--rvc-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   width: 100%;
 }
 
+.rvc-section:last-child {
+  border-bottom: 1px solid var(--rvc-border);
+}
+
 .rvc-section--no-top {
   border-top: 0;
-  border-bottom: 0;
 }
 
 .rvc-section__header {
