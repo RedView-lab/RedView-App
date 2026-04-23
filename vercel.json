@@ -2,10 +2,12 @@
   "functions": {
     "api/brouter.ts": { "maxDuration": 60 },
     "api/overpass.ts": { "maxDuration": 90 },
-    "api/poi.ts": { "maxDuration": 30 }
+    "api/poi.ts": { "maxDuration": 30 },
+    "api/openmeteo.ts": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },
+    { "source": "/api/openmeteo/(.*)", "destination": "/api/openmeteo" },
     { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
   ],
   "headers": [

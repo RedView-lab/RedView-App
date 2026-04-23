@@ -5,9 +5,10 @@ import type {
   WeatherOverlaySample,
   WeatherSelection,
 } from './types';
+import { OPENMETEO_FORECAST_URL, OPENMETEO_CLIMATE_URL } from '../lib/openMeteoConfig';
 
-const FORECAST_API_BASE = 'https://api.open-meteo.com/v1/forecast';
-const CLIMATE_API_BASE = 'https://climate-api.open-meteo.com/v1/climate';
+const FORECAST_API_BASE = OPENMETEO_FORECAST_URL;
+const CLIMATE_API_BASE = OPENMETEO_CLIMATE_URL;
 const FORECAST_CACHE_TTL_MS = 20 * 60 * 1000;
 const TREND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const FORECAST_BATCH_SIZE = 84;
