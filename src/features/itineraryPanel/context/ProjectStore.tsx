@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -54,21 +53,43 @@ export function ProjectProvider({
   onProjectChange,
   children,
 }: ProjectProviderProps) {
-  const [project, setProject] = useState<ItineraryProject>(
+  const [project, setProjectInternal] = useState<ItineraryProject>(
     () => initialProject ?? createDefaultProject(),
   );
 
   // Notify the parent of every project mutation so it can persist to
-  // Supabase. Skip the very first render (the parent already has the
-  // initial state it just handed us).
+  // Supabase. Using a ref + synchronous notification (inside the
+  // updater) so that callers like `pagehide` listeners that mutate
+  // state right before the page unloads still propagate the latest
+  // snapshot — `useLayoutEffect` would not run in time.
+  const onProjectChangeRef = useRef(onProjectChange);
+  onProjectChangeRef.current = onProjectChange;
   const firstChangeRef = useRef(true);
-  useLayoutEffect(() => {
-    if (firstChangeRef.current) {
-      firstChangeRef.current = false;
-      return;
-    }
-    onProjectChange?.(project);
-  }, [project, onProjectChange]);
+
+  const setProject = useCallback<Dispatch<SetStateAction<ItineraryProject>>>(
+    (action) => {
+      setProjectInternal((prev) => {
+        const next =
+          typeof action === 'function'
+            ? (action as (p: ItineraryProject) => ItineraryProject)(prev)
+            : action;
+        if (next === prev) return prev;
+        if (firstChangeRef.current) {
+          firstChangeRef.current = false;
+        } else {
+          // Synchronously notify the parent so unload flushes capture
+          // the freshest snapshot.
+          try {
+            onProjectChangeRef.current?.(next);
+          } catch (err) {
+            console.error('[ProjectProvider] onProjectChange threw', err);
+          }
+        }
+        return next;
+      });
+    },
+    [],
+  );
 
   const updateItinerary = useCallback(
     (

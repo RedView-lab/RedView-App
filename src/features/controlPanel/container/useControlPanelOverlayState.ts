@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { loadLabelState, saveLabelState } from '@/features/labels/lib/label-persist';
@@ -131,8 +131,6 @@ export function useControlPanelOverlayState({
   });
 
   useWeatherOverlay(isMapLoaded ? map : null, isMapLoaded, weatherState);
-  const weatherPersistTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const weatherPersistSnapshotRef = useRef(weatherState);
 
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
   useWind(isMapLoaded ? map : null, windEnabled);
@@ -262,40 +260,8 @@ export function useControlPanelOverlayState({
   );
 
   useEffect(() => {
-    weatherPersistSnapshotRef.current = weatherState;
-    if (weatherPersistTimeoutRef.current) clearTimeout(weatherPersistTimeoutRef.current);
-    weatherPersistTimeoutRef.current = setTimeout(() => {
-      weatherPersistTimeoutRef.current = null;
-      persistWeatherToProject(weatherPersistSnapshotRef.current);
-    }, 280);
-    return () => {
-      if (weatherPersistTimeoutRef.current) clearTimeout(weatherPersistTimeoutRef.current);
-    };
+    persistWeatherToProject(weatherState);
   }, [persistWeatherToProject, weatherState]);
-
-  useEffect(() => {
-    const flushWeatherPersistence = () => {
-      if (weatherPersistTimeoutRef.current) {
-        clearTimeout(weatherPersistTimeoutRef.current);
-        weatherPersistTimeoutRef.current = null;
-      }
-      persistWeatherToProject(weatherPersistSnapshotRef.current);
-    };
-
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') flushWeatherPersistence();
-    };
-
-    window.addEventListener('pagehide', flushWeatherPersistence);
-    window.addEventListener('beforeunload', flushWeatherPersistence);
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-      window.removeEventListener('pagehide', flushWeatherPersistence);
-      window.removeEventListener('beforeunload', flushWeatherPersistence);
-      flushWeatherPersistence();
-    };
-  }, [persistWeatherToProject]);
 
   return {
     slices: {

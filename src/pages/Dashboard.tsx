@@ -219,7 +219,7 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
         void flushSave();
-      }, 1000);
+      }, 250);
     },
     [flushSave],
   );
