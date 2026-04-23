@@ -210,6 +210,7 @@ export function useMap(
     let demTrackingEnabled = false;
     let demReloadCoolingUntil = 0;
     let demSettleTimer: ReturnType<typeof setTimeout> | null = null;
+    let disposeTerrainBootstrap: (() => void) | null = null;
     const demRequestedTiles = new Set<string>();
     const demLoadedTiles = new Set<string>();
 
@@ -261,6 +262,9 @@ export function useMap(
     };
 
     const refreshDemSource = () => {
+      disposeTerrainBootstrap?.();
+      disposeTerrainBootstrap = null;
+
       try {
         map.setTerrain(null);
       } catch {
@@ -283,6 +287,33 @@ export function useMap(
       terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
     };
 
+    const armTerrainBootstrap = (onReady: () => void) => {
+      disposeTerrainBootstrap?.();
+
+      let applied = false;
+      const onSourceData = (event: mapboxgl.MapSourceDataEvent) => {
+        if (applied) return;
+        if (event.sourceId !== unifiedDEMSource.id) return;
+        if (!event.isSourceLoaded) return;
+        applied = true;
+        map.off('sourcedata', onSourceData);
+        disposeTerrainBootstrap = null;
+        terrainRef.current?.init();
+        reportMapStatus('loading', 82, 'Terrain');
+        onReady();
+      };
+
+      disposeTerrainBootstrap = () => {
+        map.off('sourcedata', onSourceData);
+      };
+
+      map.on('sourcedata', onSourceData);
+
+      if (map.isSourceLoaded(unifiedDEMSource.id)) {
+        onSourceData({ sourceId: unifiedDEMSource.id, isSourceLoaded: true } as mapboxgl.MapSourceDataEvent);
+      }
+    };
+
     const reloadMapElevation = () => {
       const now = Date.now();
       if (now < demReloadCoolingUntil) return;
@@ -297,6 +328,9 @@ export function useMap(
 
       demCacheBust = now;
       refreshDemSource();
+      armTerrainBootstrap(() => {
+        scheduleDemSettle();
+      });
     };
 
     registerReloadRef.current?.(reloadMapElevation);
@@ -407,18 +441,9 @@ export function useMap(
         void addOrthoWhenReady();
       }, ORTHO_BOOT_FALLBACK_MS);
 
-      let applied = false;
-      const onSourceData = (e: mapboxgl.MapSourceDataEvent) => {
-        if (applied) return;
-        if (e.sourceId !== unifiedDEMSource.id) return;
-        if (!e.isSourceLoaded) return;
-        applied = true;
-        map.off('sourcedata', onSourceData);
-        terrainRef.current?.init();
-        reportMapStatus('loading', 82, 'Terrain');
+      armTerrainBootstrap(() => {
         void addOrthoWhenReady();
-      };
-      map.on('sourcedata', onSourceData);
+      });
 
       const onDemSourceDataLoading = (event: mapboxgl.MapSourceDataEvent) => {
         if (!demTrackingEnabled) return;
@@ -451,7 +476,6 @@ export function useMap(
       setIsLoaded(true);
 
       return () => {
-        map.off('sourcedata', onSourceData);
         map.off('sourcedataloading', onDemSourceDataLoading);
         map.off('sourcedata', onDemSourceData);
         map.off('moveend', scheduleDemSettle);
@@ -490,6 +514,8 @@ export function useMap(
     return () => {
       cancelled = true;
       clearDemTracking();
+      disposeTerrainBootstrap?.();
+      disposeTerrainBootstrap = null;
       if (orthoBootTimer) clearTimeout(orthoBootTimer);
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
