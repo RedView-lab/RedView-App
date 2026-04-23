@@ -157,6 +157,21 @@ export const IconUploadCloud = ({ size = 24, ...p }: IconProps) => (
   </svg>
 );
 
+export const IconUploadCircle = ({ size = 20, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8.5 10.5 12 7l3.5 3.5" />
+    <path d="M12 7v7" />
+  </svg>
+);
+
+export const IconCopy04 = ({ size = 20, ...p }: IconProps) => (
+  <svg {...base(size)} {...p}>
+    <rect x="9" y="9" width="10" height="10" rx="2" />
+    <rect x="5" y="5" width="10" height="10" rx="2" />
+  </svg>
+);
+
 export const IconSparkles = ({ size = 24, ...p }: IconProps) => (
   <svg {...base(size)} {...p}>
     <path d="M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z" />

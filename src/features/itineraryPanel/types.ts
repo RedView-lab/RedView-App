@@ -359,6 +359,7 @@ export interface ItineraryPanelProps {
   // itineraries
   onSelectItinerary?: (id: string) => void;
   onAddItinerary?: () => void;
+  onAddButtonRef?: (element: HTMLButtonElement | null) => void;
   /**
    * Open the "Nouvel itinéraire" picker (from-scratch vs from-GPX).
    * If wired, replaces `onAddItinerary` UX in the tab bar.

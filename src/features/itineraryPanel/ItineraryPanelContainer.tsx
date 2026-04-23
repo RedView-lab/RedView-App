@@ -64,6 +64,7 @@ export function ItineraryPanelContainer({
   const { project, setProject, setItineraryName } = useProjectStore();
   const predictionStore = usePredictionStoreOptional();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const addButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(
     null,
@@ -199,6 +200,41 @@ export function ItineraryPanelContainer({
     [],
   );
 
+  const duplicateActiveItinerary = useCallback(() => {
+    setProject((currentProject) => {
+      const source = currentProject.itineraries.find(
+        (itinerary) => itinerary.id === currentProject.activeItineraryId,
+      );
+      if (!source) return currentProject;
+
+      const nextIndex = currentProject.itineraries.length + 1;
+      const color =
+        ITINERARY_COLORS[currentProject.itineraries.length % ITINERARY_COLORS.length] ??
+        ITINERARY_COLORS[0];
+      const duplicateNameBase = `${source.name} (copie)`;
+      let duplicateName = duplicateNameBase;
+      let suffix = 2;
+      while (
+        currentProject.itineraries.some((itinerary) => itinerary.name === duplicateName)
+      ) {
+        duplicateName = `${duplicateNameBase} ${suffix}`;
+        suffix += 1;
+      }
+
+      const duplicate = structuredClone(source);
+      duplicate.id = `it-${Date.now()}-${nextIndex}`;
+      duplicate.name = duplicateName;
+      duplicate.color = color;
+      duplicate.visible = false;
+
+      return {
+        ...currentProject,
+        itineraries: [...currentProject.itineraries, duplicate],
+        activeItineraryId: duplicate.id,
+      };
+    });
+  }, [setProject]);
+
   // After importing a GPX, automatically run a corridor search so the user
   // immediately sees POIs along the freshly-loaded track.
   useEffect(() => {
@@ -249,7 +285,10 @@ export function ItineraryPanelContainer({
         setProject((p) => ({ ...p, activeItineraryId: id }))
       }
       onAddItinerary={() => addItinerary()}
-      onOpenAddItinerary={() => setAddDialogOpen(true)}
+      onAddButtonRef={(element) => {
+        addButtonRef.current = element;
+      }}
+      onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
       onAddItineraryFromGpx={async (file) => {
         const route = await parseGpxFile(file);
         const storedPoints = normalizeImportedRoutePoints(route.points);
@@ -395,8 +434,10 @@ export function ItineraryPanelContainer({
       {panel}
       <AddItineraryDialog
         open={addDialogOpen}
+        anchorEl={addButtonRef.current}
         onClose={() => setAddDialogOpen(false)}
         onPickScratch={() => addItinerary()}
+        onPickDuplicate={duplicateActiveItinerary}
         onPickGpx={async (file) => {
           const route = await parseGpxFile(file);
           const storedPoints = normalizeImportedRoutePoints(route.points);

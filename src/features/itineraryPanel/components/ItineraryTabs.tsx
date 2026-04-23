@@ -8,6 +8,7 @@ interface ItineraryTabsProps {
   activeId: string;
   onSelect?: (id: string) => void;
   onAdd?: () => void;
+  onAddButtonRef?: (element: HTMLButtonElement | null) => void;
   /** Optional remove-itinerary handler. When provided AND there is more than
    * one itinerary, each tab shows a small trash button next to its name. */
   onRemove?: (id: string) => void;
@@ -25,6 +26,7 @@ export function ItineraryTabs({
   activeId,
   onSelect,
   onAdd,
+  onAddButtonRef,
   onRemove,
   onRename,
 }: ItineraryTabsProps) {
@@ -135,7 +137,12 @@ export function ItineraryTabs({
           </span>
         );
       })}
-      <button type="button" className="rvi-itin rvi-itin--add" onClick={onAdd}>
+      <button
+        ref={onAddButtonRef}
+        type="button"
+        className="rvi-itin rvi-itin--add"
+        onClick={onAdd}
+      >
         <IconPlusCircle size={12} />
         <span className="rvi-itin__label">Nouvel itinéraire</span>
       </button>

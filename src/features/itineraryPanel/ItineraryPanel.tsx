@@ -99,6 +99,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         activeId={project.activeItineraryId}
         onSelect={onSelectItinerary}
         onAdd={onOpenAddItinerary ?? onAddItinerary}
+        onAddButtonRef={props.onAddButtonRef}
         onRemove={onRemoveItinerary}
         onRename={onRenameItinerary}
       />
