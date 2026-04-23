@@ -12,7 +12,9 @@
 //   2. Étendre la bbox de ±0.05° pour avoir au moins 5×5 points AROME
 //   3. Construire une grille régulière à 0.025° (≈ résolution native AROME)
 //   4. Une seule requête Open-Meteo avec toutes les coords (séparées par `,`)
-//   5. Sélectionner l'heure courante (forecast `current_hour`)
+//   5. Évaluer explicitement les champs par modèle et choisir l'instant le plus
+//      proche du comportement RedView v0.1: première échéance exploitable du
+//      run, avec fallback vers le snapshot non-nul le plus crédible
 //   6. Convertir en cm, retourner `AromeSnowGrid`
 // ============================================================================
 
@@ -46,11 +48,34 @@ interface OpenMeteoForecastResponse {
   longitude: number | number[];
   hourly?: {
     time: string[];
-    snow_depth?: (number | null)[];
+    // Quand on demande plusieurs `models=...`, Open-Meteo renvoie une clé par
+    // modèle suffixée : `snow_depth_meteofrance_arome_france`, etc.
+    // Sans suffixe = best_match.
+    [key: string]: (number | null)[] | string[] | undefined;
   };
   // Format multi-location : Open-Meteo renvoie en fait un *tableau*
   // au top-level → on gère les deux dans `parseResponse`.
 }
+
+/**
+ * Modèles consultés, par ordre de préférence. AROME France est très précis
+ * mais maintient mal le manteau neigeux (forecast courte portée) → on le garde
+ * en premier mais on fallback sur ECMWF IFS (analyse globale du manteau) puis
+ * `best_match` qui utilise ARPEGE/ICON selon la zone.
+ */
+const SNOW_MODELS = [
+  'meteofrance_arome_france',
+  'ecmwf_ifs025',
+  'best_match',
+] as const;
+
+type SnowModel = (typeof SNOW_MODELS)[number];
+
+const MODEL_SOURCE: Record<SnowModel, AromeSnowGrid['source']> = {
+  meteofrance_arome_france: 'open-meteo-arome',
+  ecmwf_ifs025: 'open-meteo-ecmwf',
+  best_match: 'open-meteo-best-match',
+};
 
 function projDef(crs: SnowHeightmap['crs']): string {
   return crs === 'RGR92UTM40S' ? 'EPSG:2975' : 'EPSG:2154';
@@ -118,18 +143,82 @@ function buildSampleGrid(
   return { lats, lons, nx, ny };
 }
 
-/** Trouve l'index horaire le plus proche de "maintenant" dans la timeline. */
-function nearestHourIndex(times: string[]): number {
-  if (times.length === 0) return -1;
-  const now = Date.now();
-  let bestIdx = 0;
-  let bestDt = Infinity;
-  for (let i = 0; i < times.length; i++) {
-    const t = Date.parse(times[i] + ':00Z'); // Open-Meteo: "2026-04-23T12:00"
-    const dt = Math.abs(t - now);
-    if (dt < bestDt) { bestDt = dt; bestIdx = i; }
+function modelFieldKey(model: SnowModel): string {
+  return model === 'best_match' ? 'snow_depth' : `snow_depth_${model}`;
+}
+
+function readModelSnowDepth(
+  hourly: OpenMeteoForecastResponse['hourly'] | undefined,
+  model: SnowModel,
+): (number | null)[] | null {
+  const key = modelFieldKey(model);
+  const values = hourly?.[key];
+  return Array.isArray(values) ? (values as (number | null)[]) : null;
+}
+
+function chooseSnapshot(
+  list: OpenMeteoForecastResponse[],
+  times: string[],
+): {
+  model: SnowModel;
+  hourIdx: number;
+  source: AromeSnowGrid['source'];
+  stats: { nonZero: number; meanCm: number; maxCm: number };
+} {
+  let best: {
+    model: SnowModel;
+    hourIdx: number;
+    source: AromeSnowGrid['source'];
+    stats: { nonZero: number; meanCm: number; maxCm: number };
+    rank: number;
+  } | null = null;
+
+  for (const model of SNOW_MODELS) {
+    const firstSeries = readModelSnowDepth(list[0]?.hourly, model);
+    if (!firstSeries || firstSeries.length !== times.length) continue;
+
+    for (let hourIdx = 0; hourIdx < times.length; hourIdx++) {
+      let nonZero = 0;
+      let sumCm = 0;
+      let maxCm = 0;
+
+      for (const point of list) {
+        const series = readModelSnowDepth(point.hourly, model);
+        const meters = series?.[hourIdx];
+        if (typeof meters !== 'number' || !Number.isFinite(meters) || meters <= 0) {
+          continue;
+        }
+        const cm = meters * 100;
+        nonZero++;
+        sumCm += cm;
+        if (cm > maxCm) maxCm = cm;
+      }
+
+      const meanCm = nonZero > 0 ? sumCm / nonZero : 0;
+      const isEarliestPositive = nonZero > 0 ? 1 : 0;
+      const rank =
+        isEarliestPositive * 1_000_000 +
+        (times.length - hourIdx) * 10_000 +
+        Math.round(meanCm * 10) * 10 +
+        Math.round(maxCm);
+
+      if (!best || rank > best.rank) {
+        best = {
+          model,
+          hourIdx,
+          source: MODEL_SOURCE[model],
+          stats: { nonZero, meanCm, maxCm },
+          rank,
+        };
+      }
+    }
   }
-  return bestIdx;
+
+  if (!best) {
+    throw new Error('AROME response missing usable snow_depth series');
+  }
+
+  return best;
 }
 
 /** Récupère les données de neige AROME pour la zone LiDAR. */
@@ -151,12 +240,14 @@ export async function fetchAromeSnowGrid(
   const { lats, lons, nx, ny } = buildSampleGrid(lonMin, latMin, lonMax, latMax);
 
   // Open-Meteo accepte plusieurs lat/lon en CSV. Réponse = tableau.
+  // On demande plusieurs modèles : si AROME donne 0 (typique fin saison sur
+  // forecast court), on fallback sur ECMWF puis best_match.
   const url =
     `/api/openmeteo/v1/forecast` +
     `?latitude=${lats.join(',')}` +
     `&longitude=${lons.join(',')}` +
     `&hourly=snow_depth` +
-    `&models=meteofrance_arome_france` +
+    `&models=${SNOW_MODELS.join(',')}` +
     `&forecast_days=1` +
     `&past_days=0` +
     `&timezone=UTC`;
@@ -175,21 +266,25 @@ export async function fetchAromeSnowGrid(
     );
   }
 
-  // Sélection du créneau horaire le plus proche (commun à toutes les locations)
+  // RedView v0.1 lit la première échéance exploitable du run sur le champ
+  // `SNOW_DEPTH__GROUND_OR_WATER_SURFACE__`. Open-Meteo ne donne pas le run
+  // WCS ni le step 0 explicitement, donc on choisit le snapshot le plus proche
+  // de ce comportement: premier instant avec un manteau non nul sur la grille,
+  // modèle par modèle, avec fallback vers le snapshot le plus crédible.
   const firstHourly = list[0]?.hourly;
   if (!firstHourly?.time) {
     throw new Error('AROME response missing hourly.time');
   }
-  const hourIdx = nearestHourIndex(firstHourly.time);
-  if (hourIdx < 0) throw new Error('AROME no usable hourly data');
+  const selected = chooseSnapshot(list, firstHourly.time);
+  const { model, hourIdx } = selected;
 
-  // Extraire snow_depth (m) → cm. flip rows pour avoir row 0 = sud.
+  // Extraire snow_depth (m) → cm. row-major sud→nord, comme v0.1.
   const data = new Float32Array(nx * ny);
   for (let j = 0; j < ny; j++) {
     for (let i = 0; i < nx; i++) {
       const flatIdx = j * nx + i;
       const point = list[flatIdx];
-      const m = point?.hourly?.snow_depth?.[hourIdx];
+      const m = readModelSnowDepth(point?.hourly, model)?.[hourIdx];
       data[flatIdx] = (typeof m === 'number' && Number.isFinite(m) && m > 0) ? m * 100 : 0;
     }
   }
@@ -219,7 +314,8 @@ export async function fetchAromeSnowGrid(
   const maxCm = validVals.length > 0 ? Math.max(...validVals) : 0;
   console.log(
     `[snow/arome] grid ${nx}×${ny}, ${validVals.length}/${data.length} non-zero, ` +
-    `mean=${meanCm.toFixed(1)}cm, max=${maxCm.toFixed(1)}cm, hour=${firstHourly.time[hourIdx]}`,
+    `mean=${meanCm.toFixed(1)}cm, max=${maxCm.toFixed(1)}cm, ` +
+    `hour=${firstHourly.time[hourIdx]}, model=${model}, source=${selected.source}`,
   );
 
   return {
@@ -229,7 +325,7 @@ export async function fetchAromeSnowGrid(
     boundsMeters: [mxMin, myMin, mxMax, myMax],
     resolutionM: AROME_RES_DEG * 111_000, // ≈ 2750m
     timestamp: firstHourly.time[hourIdx] + 'Z',
-    runHour: '00',
-    source: 'open-meteo-arome',
+    runHour: firstHourly.time[hourIdx].slice(11, 13),
+    source: selected.source,
   };
 }

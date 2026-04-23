@@ -28,7 +28,11 @@ export interface AromeSnowGrid {
   /** Heure du run (ex: "00", "06"). */
   runHour: string;
   /** Source effective (debug). */
-  source: 'open-meteo-arome' | 'fallback';
+  source:
+    | 'open-meteo-arome'
+    | 'open-meteo-ecmwf'
+    | 'open-meteo-best-match'
+    | 'fallback';
 }
 
 /** Résultat de la redistribution. */
