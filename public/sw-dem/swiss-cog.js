@@ -306,8 +306,10 @@ async function parseSwissCOGHeader(url, headerBytes) {
   if (sampleFormat !== 3 || bitsPerSample !== 32) {
     throw new Error(`unsupported sample format=${sampleFormat} bits=${bitsPerSample} (expected Float32)`);
   }
-  // Compression: 1 (none), 8 (DEFLATE/zlib), 32946 (also DEFLATE alias)
-  if (compression !== 1 && compression !== 8 && compression !== 32946) {
+  // Compression: 1 (none), 5 (LZW — decodeTIFFLZW), 8/32946 (DEFLATE).
+  // swisstopo swissSURFACE3D Raster COGs use LZW; older Mapbox-tooled COGs
+  // use DEFLATE. Both decoders are wired in fetchAndDecodeTile().
+  if (compression !== 1 && compression !== 5 && compression !== 8 && compression !== 32946) {
     throw new Error(`unsupported compression=${compression}`);
   }
 

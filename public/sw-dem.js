@@ -360,9 +360,14 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // French polygon claims the centre still go to IGN.
     let swissHadSomeData = false;
     const considerSwiss = inSwitzerland && !tilePredominantlyFrench && shouldUseSwiss(z, tileCenterLat);
+    const raceIGNBorderTile = considerSwiss && tileIsInFrance;
+    let ignResultPromise = null;
+    if (raceIGNBorderTile) {
+      ignResultPromise = buildIGNTile(z, x, y, franceClass);
+    }
     if (z >= 12) {
       console.log(
-        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss}`,
+        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} raceIGN=${raceIGNBorderTile}`,
         'background:#444;color:#fff;padding:1px 4px;border-radius:2px', '',
       );
     }
@@ -388,8 +393,9 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     }
 
     if (!pngBlob && tileIsInFrance) {
-      const tileClass = franceClass;
-      const ignResult = await buildIGNTile(z, x, y, tileClass);
+      const ignResult = ignResultPromise
+        ? await ignResultPromise
+        : await buildIGNTile(z, x, y, franceClass);
       if (ignResult) {
         upgradePending = ignResult.pendingFetches;
         if (ignResult.elevations) {

@@ -84,17 +84,25 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     .map((c) => openSwissCOG(c.url).then((cog) => { c.cog = cog; }));
   await Promise.all(headerPromises);
 
+  const resolvedUrlCount = cellEntries.filter((c) => c.url).length;
   const usableCells = cellEntries.filter((c) => c.cog);
   console.log(
-    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${cellEntries.filter(c=>c.url).length} cog-open=${usableCells.length} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
+    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${resolvedUrlCount} cog-open=${usableCells.length} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
     'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
   );
   if (usableCells.length === 0) {
-    swissAreaNegSet(mercZ, mercX, mercY);
-    console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 no usable COGs, marking area-neg`);
+    if (resolvedUrlCount === 0) {
+      swissAreaNegSet(mercZ, mercX, mercY);
+      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 no COG URLs, marking area-neg`);
+      return {
+        blob: null, elevations: null, coverage: null,
+        source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
+      };
+    }
+    console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 COG headers unavailable, keeping area live for retry`);
     return {
       blob: null, elevations: null, coverage: null,
-      source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
+      source: 'swiss-unavailable', allPermanentMissing: false, pendingFetches: null,
     };
   }
 
