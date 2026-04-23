@@ -247,6 +247,20 @@
   justify-content: space-between;
 }
 
+.rvc-sunlight__shadow-opacity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rvc-sunlight__shadow-opacity-value {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  min-width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .rvc-sunlight__scale-select.rvc-select {
   width: 140px;
   min-height: 30px;

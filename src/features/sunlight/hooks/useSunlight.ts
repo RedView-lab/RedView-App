@@ -1,5 +1,5 @@
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
-import type { FogSpecification, Map as MapboxMap } from 'mapbox-gl';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { FogSpecification, LightsSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { getSunPosition, resolveSunTimesForLocalDay } from '../lib/sun-calc';
 import { getSkyAppearance } from '../lib/sky-appearance';
@@ -11,7 +11,7 @@ import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
  * We intentionally do NOT modulate the whole scene brightness anymore. The
  * previous fog/lightPreset cycle made the entire screen brighten/darken so much
  * that terrain shadows became hard to read. The sunlight system now focuses on
- * solar position, sunrise/sunset times, and a restrained
+ * solar position, sunrise/sunset times, restrained dynamic scene lights, and a
  * sky-only fog so dawn/dusk remains visible without washing the ground.
  */
 export interface UseSunlightOptions {
@@ -64,6 +64,60 @@ function buildSkyOnlyFog(altitudeDeg: number): FogSpecification {
     'star-intensity': sky.starIntensity,
     'horizon-blend': Math.min(0.018, 0.006 + sky.horizonBlend * 0.18),
   };
+}
+
+const DEFAULT_LIGHTS: LightsSpecification[] = [
+  { id: 'ambient', type: 'ambient', properties: { color: 'white', intensity: 0.34 } },
+  {
+    id: 'directional',
+    type: 'directional',
+    properties: {
+      color: '#ffffff',
+      intensity: 0.55,
+      direction: [180, 38],
+      'cast-shadows': true,
+      'shadow-intensity': 0.62,
+    },
+  },
+];
+
+function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecification[] {
+  const clampedAltitude = Math.max(-12, Math.min(85, altitudeDeg));
+  const daylight = clamp01((clampedAltitude + 6) / 30);
+  const goldenHour = clamp01(1 - Math.abs(clampedAltitude - 8) / 16);
+  const polar = Math.min(88, Math.max(4, 90 - clampedAltitude));
+
+  const ambientIntensity = 0.12 + daylight * 0.22;
+  const directionalIntensity = 0.16 + daylight * 0.5;
+  const shadowIntensity = 0.56 + (1 - daylight) * 0.18;
+
+  const directionalColor =
+    clampedAltitude > 18
+      ? '#ffffff'
+      : goldenHour > 0.2
+        ? '#ffd2a6'
+        : clampedAltitude > 0
+          ? '#fff2df'
+          : '#7080ab';
+
+  return [
+    {
+      id: 'ambient',
+      type: 'ambient',
+      properties: { color: 'white', intensity: ambientIntensity },
+    },
+    {
+      id: 'directional',
+      type: 'directional',
+      properties: {
+        color: directionalColor,
+        intensity: directionalIntensity,
+        direction: [azimuthDeg, polar],
+        'cast-shadows': true,
+        'shadow-intensity': shadowIntensity,
+      },
+    },
+  ];
 }
 
 export function useSunlight(
@@ -133,13 +187,23 @@ export function useSunlight(
       if (Number.isNaN(dt.getTime())) return;
 
       const { azimuth, altitude } = getSunPosition(dt, lat, lon);
-      startTransition(() => {
-        setSunPos((prev) => (
-          Math.abs(prev.azimuthDeg - azimuth) < 0.01 && Math.abs(prev.altitudeDeg - altitude) < 0.01
-            ? prev
-            : { azimuthDeg: azimuth, altitudeDeg: altitude }
-        ));
-      });
+      // NOTE: do NOT wrap this in startTransition. Time-slider scrubs emit a
+      // continuous stream of urgent state updates from the parent; if this is
+      // a transition, React keeps interrupting it and `sunPos` never commits.
+      // That makes downstream consumers (cast-shadow overlay, sun-disk layer)
+      // see a stale azimuth/altitude — the user-visible symptom is "shadows
+      // and sun do not move when I drag the time slider".
+      setSunPos((prev) => (
+        Math.abs(prev.azimuthDeg - azimuth) < 0.01 && Math.abs(prev.altitudeDeg - altitude) < 0.01
+          ? prev
+          : { azimuthDeg: azimuth, altitudeDeg: altitude }
+      ));
+
+      try {
+        map.setLights(buildLights(azimuth, altitude));
+      } catch (err) {
+        console.warn('[sunlight] setLights failed', err);
+      }
 
       try {
         map.setFog(buildSkyOnlyFog(altitude));
@@ -169,6 +233,11 @@ export function useSunlight(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (opts.enabled) return;
+    try {
+      map.setLights(DEFAULT_LIGHTS);
+    } catch {
+      /* no-op */
+    }
     try {
       map.setFog(FOG_CONFIG as FogSpecification);
     } catch {

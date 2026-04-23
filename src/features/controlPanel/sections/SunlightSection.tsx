@@ -234,6 +234,21 @@ export function SunlightSection({
         {state.shadowEnabled && mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
             <div className="rvc-sunlight__row rvc-sunlight__row--split">
+              <span className="rvc-sunlight__row-label">Opacité des ombres</span>
+              <div className="rvc-sunlight__shadow-opacity">
+                <Slider
+                  min={0}
+                  max={100}
+                  value={state.shadowOpacity}
+                  onChange={(val) => onChange?.({ shadowOpacity: val })}
+                  onCommit={(val) => onChange?.({ shadowOpacity: val })}
+                  width={120}
+                />
+                <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity}%</span>
+              </div>
+            </div>
+
+            <div className="rvc-sunlight__row rvc-sunlight__row--split">
               <span className="rvc-sunlight__row-label">Échelle</span>
               <Select
                 width={140}
