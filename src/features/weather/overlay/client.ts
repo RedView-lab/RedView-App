@@ -12,37 +12,39 @@ const CLIMATE_API_BASE = OPENMETEO_CLIMATE_URL;
 const FORECAST_CACHE_TTL_MS = 20 * 60 * 1000;
 const TREND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 // Self-hosted VPS → we can push much bigger batches with no throttling.
-const FORECAST_BATCH_SIZE = 240;
-const TRENDS_BATCH_SIZE = 240;
+const FORECAST_BATCH_SIZE = 400;
+const TRENDS_BATCH_SIZE = 320;
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
 const INTER_BATCH_DELAY_MS = 0;
 // Tighter spacing tables = denser grid = more detail when zoomed out.
 const FORECAST_SPACING_TABLE: [number, number][] = [
-  [4, 0.5],
-  [5, 0.25],
-  [6, 0.125],
-  [7, 0.0625],
-  [8, 0.03125],
+  [3, 0.6],
+  [4, 0.3],
+  [5, 0.16],
+  [6, 0.08],
+  [7, 0.04],
+  [8, 0.02],
+  [9, 0.01],
+  [10, 0.005],
+  [11, 0.0025],
+  [12, 0.00125],
+];
+const TRENDS_SPACING_TABLE: [number, number][] = [
+  [3, 1.0],
+  [4, 0.6],
+  [5, 0.32],
+  [6, 0.16],
+  [7, 0.08],
+  [8, 0.04],
   [9, 0.02],
   [10, 0.01],
   [11, 0.005],
   [12, 0.0025],
 ];
-const TRENDS_SPACING_TABLE: [number, number][] = [
-  [4, 0.75],
-  [5, 0.5],
-  [6, 0.25],
-  [7, 0.125],
-  [8, 0.0625],
-  [9, 0.03125],
-  [10, 0.02],
-  [11, 0.01],
-  [12, 0.005],
-];
-const FORECAST_MIN_SPACING = 0.0025;
-const TRENDS_MIN_SPACING = 0.005;
+const FORECAST_MIN_SPACING = 0.00125;
+const TRENDS_MIN_SPACING = 0.0025;
 
 interface WeatherViewport {
   north: number;
@@ -139,13 +141,15 @@ function paddingForZoom(mode: WeatherSelection['mode'], zoom: number): number {
 function maxPointsForZoom(mode: WeatherSelection['mode'], zoom: number): number {
   // Self-hosted VPS → we can afford much denser grids.
   if (mode === 'forecast') {
-    if (zoom <= 5.5) return 1200;
-    if (zoom <= 7.5) return 1000;
-    return 800;
+    if (zoom <= 4.5) return 3200;
+    if (zoom <= 6.5) return 2600;
+    if (zoom <= 8.5) return 2000;
+    return 1500;
   }
-  if (zoom <= 5.5) return 800;
-  if (zoom <= 7.5) return 640;
-  return 480;
+  if (zoom <= 4.5) return 1600;
+  if (zoom <= 6.5) return 1200;
+  if (zoom <= 8.5) return 900;
+  return 700;
 }
 
 function gridDefaultsForMode(mode: WeatherSelection['mode']): { spacingTable: [number, number][]; minSpacing: number } {
@@ -407,12 +411,15 @@ export function weatherGridSupportsViewport(
   mode: WeatherSelection['mode'],
 ): boolean {
   const desired = buildGridEnvelope(viewport, mode);
-  const containsViewport = viewport.west >= grid.bounds[0]
-    && viewport.south >= grid.bounds[1]
-    && viewport.east <= grid.bounds[2]
-    && viewport.north <= grid.bounds[3];
+  const containsDesired = desired.bounds[0] >= grid.bounds[0]
+    && desired.bounds[1] >= grid.bounds[1]
+    && desired.bounds[2] <= grid.bounds[2]
+    && desired.bounds[3] <= grid.bounds[3];
+  const spacingCloseEnough = grid.spacing <= desired.spacing * 1.05;
+  const rowsCloseEnough = grid.rows >= Math.floor(desired.rows * 0.9);
+  const colsCloseEnough = grid.cols >= Math.floor(desired.cols * 0.9);
 
-  return containsViewport && grid.spacing <= desired.spacing + 1e-6;
+  return containsDesired && spacingCloseEnough && rowsCloseEnough && colsCloseEnough;
 }
 
 export async function fetchWeatherGridData(

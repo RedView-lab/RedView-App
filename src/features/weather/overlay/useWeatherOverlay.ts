@@ -14,10 +14,10 @@ import type {
 const SOURCE_PREFIX = 'weather-overlay-source';
 const LAYER_PREFIX = 'weather-overlay-layer';
 const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
-const MOVE_DEBOUNCE_MS = 700;
-const MIN_FETCH_INTERVAL_MS = 12_000;
+const MOVE_DEBOUNCE_MS = 220;
+const MIN_FETCH_INTERVAL_MS = 800;
 const RENDER_MIN = 320;
-const RENDER_MAX = 768;
+const RENDER_MAX = 2048;
 
 interface ViewportBounds {
   north: number;
@@ -150,7 +150,9 @@ function renderSize(map: MapboxMap): { width: number; height: number } {
   const width = canvas.width || canvas.clientWidth || RENDER_MIN;
   const height = canvas.height || canvas.clientHeight || RENDER_MIN;
   const aspect = width / Math.max(1, height);
-  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * 0.55)));
+  const zoom = map.getZoom();
+  const scale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
+  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * scale)));
   const targetHeight = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(targetWidth / aspect)));
   return { width: targetWidth, height: targetHeight };
 }
@@ -334,6 +336,7 @@ export function useWeatherOverlay(
         && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS
         && currentDataset
         && containsBounds(currentDataset.grid.bounds, viewport)
+        && weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode)
       ) {
         await renderFromData(currentDataset);
         return;
@@ -372,6 +375,7 @@ export function useWeatherOverlay(
     };
 
     const onMoveEnd = () => scheduleRefresh(false);
+    const onZoomEnd = () => scheduleRefresh(false);
     const onStyleLoad = () => {
       const activeLayers = activeRenderableLayers(stateRef.current);
       if (!stateRef.current.enabled || activeLayers.length === 0) {
@@ -389,10 +393,12 @@ export function useWeatherOverlay(
     scheduleRefreshRef.current = scheduleRefresh;
 
     map.on('moveend', onMoveEnd);
+    map.on('zoomend', onZoomEnd);
     map.on('style.load', onStyleLoad);
 
     return () => {
       map.off('moveend', onMoveEnd);
+      map.off('zoomend', onZoomEnd);
       map.off('style.load', onStyleLoad);
       scheduleRefreshRef.current = null;
       hideAllRef.current = null;
