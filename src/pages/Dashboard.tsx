@@ -147,7 +147,6 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [isMapFocusMode, setIsMapFocusMode] = useState(false);
-  const dashboardViewportRef = useRef<HTMLDivElement | null>(null);
   const [projectMapViewport, setProjectMapViewport] = useState<MapViewport | null>(
     () => loadViewport(),
   );
@@ -308,16 +307,6 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
       setViewport({ w: window.innerWidth, h: window.innerHeight });
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
-    const onFullscreenChange = () => {
-      if (document.fullscreenElement) return;
-      setIsMapFocusMode((current) => (current ? false : current));
-    };
-
-    document.addEventListener('fullscreenchange', onFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
   }, []);
 
   useEffect(() => {
@@ -542,19 +531,7 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
   };
 
   const handleToggleMapFocusMode = useCallback(() => {
-    const host = dashboardViewportRef.current;
-
-    setIsMapFocusMode((current) => {
-      const next = !current;
-
-      if (next) {
-        void host?.requestFullscreen?.().catch(() => {});
-      } else if (document.fullscreenElement === host) {
-        void document.exitFullscreen?.().catch(() => {});
-      }
-
-      return next;
-    });
+    setIsMapFocusMode((current) => !current);
   }, []);
 
   const rightPanelStyle: React.CSSProperties = {
@@ -618,16 +595,21 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     filter: exporterPanelHeight > 80 ? 'saturate(1)' : 'saturate(0.96)',
   };
 
+  const centerPanelBaseRegionLeft = leftPanelWidth + PANEL_PADDING * 3;
+  const centerPanelBaseRegionRight = panelWidth + PANEL_PADDING * 3;
   const centerPanelRegionLeft =
     (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
   const centerPanelRegionRight =
     (isMapFocusMode ? 0 : panelWidth + PANEL_PADDING * 2) + PANEL_PADDING;
+  const centerToolbarWidth = Math.max(
+    0,
+    designW - centerPanelBaseRegionLeft - centerPanelBaseRegionRight,
+  );
   const centerPanelAvailableWidth = Math.max(
     0,
     designW - centerPanelRegionLeft - centerPanelRegionRight,
   );
-  const centerToolbarVisible =
-    centerPanelAvailableWidth >= CENTER_PANEL_MIN_WIDTH;
+  const centerToolbarVisible = centerToolbarWidth >= CENTER_PANEL_MIN_WIDTH;
   const centerPanelVisible = centerToolbarVisible && !isMapFocusMode;
   const centerPanelWidth = centerPanelAvailableWidth;
   const centerPanelAvailableHeight = Math.max(
@@ -669,7 +651,12 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
   );
   const centerPanelLeft = centerPanelRegionLeft;
   const centerPanelTop = designH - PANEL_PADDING - centerPanelHeight;
-  const centerToolbarTop = centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
+  const centerToolbarLeft = isMapFocusMode
+    ? Math.max(PANEL_PADDING, Math.round((designW - centerToolbarWidth) / 2))
+    : centerPanelBaseRegionLeft;
+  const centerToolbarTop = isMapFocusMode
+    ? designH - PANEL_PADDING - CENTER_TOOLBAR_HEIGHT
+    : centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
   const centerPanelResizeHitTop =
     centerToolbarTop +
     CENTER_TOOLBAR_HEIGHT -
@@ -693,7 +680,7 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
 
   return (
     <LidarProvider>
-    <div ref={dashboardViewportRef} style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100vw', height: '100dvh', overflow: 'hidden' }}>
       <div
         style={{
           position: 'absolute',
@@ -761,8 +748,8 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
         <MapBlurMirror
           map={mapInstance}
           top={centerToolbarTop}
-          left={centerPanelLeft}
-          width={centerPanelWidth}
+          left={centerToolbarLeft}
+          width={centerToolbarWidth}
           height={CENTER_TOOLBAR_HEIGHT}
           borderRadius={8}
         />
@@ -799,8 +786,8 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
           style={{
             position: 'absolute',
             top: centerToolbarTop,
-            left: centerPanelLeft,
-            width: centerPanelWidth,
+            left: centerToolbarLeft,
+            width: centerToolbarWidth,
             height: CENTER_TOOLBAR_HEIGHT,
             zIndex: 25,
             overflow: 'hidden',
