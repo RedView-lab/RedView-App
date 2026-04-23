@@ -582,7 +582,6 @@ async function resolveImportedTimelineLabel(
 ): Promise<string> {
   try {
     const settlement = await reverseGeocodeSettlement(lon, lat, {
-      countries: 'fr',
       maxDistanceMeters: 1000,
     });
     return settlement?.name?.trim() || formatGpsCoordinateLabel(lon, lat);
