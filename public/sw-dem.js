@@ -81,6 +81,7 @@ const OLD_CACHES = [
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
   'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27', 'dem-tiles-v28',
   'dem-tiles-v29',
+  'dem-tiles-v30',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -327,21 +328,41 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // is the authoritative "is this tile actually inside France" answer and
     // is what gates both branches now.
     let franceClass = 'outside';
+    let tileCenterInFrancePoly = false;
     if (inFrance && shouldUseIGN(z, tileCenterLat)) {
       if (await ensureFrancePoly()) {
         franceClass = classifyDemTile(z, x, y);
+        // classifyDemTile() promotes any z≥12 tile that overlaps the France
+        // BBOX to 'border' even when the polygon contains 0 sample points
+        // (deliberate safety net for sub-100 m summit tiles whose 6×6
+        // sampling can miss a French sliver near Mont-Blanc/Pyrénées).
+        // That promotion ALSO catches the entire Swiss plateau because
+        // FRANCE_BOUNDS extends east to lng=10.0. We therefore additionally
+        // test the tile centre against the polygon to know whether the
+        // tile is *predominantly* French (→ IGN wins) or merely brushes
+        // the bbox (→ Swiss wins when the tile is in CH).
+        const centerLng = (tileBounds.west + tileBounds.east) / 2;
+        const centerLat = (tileBounds.north + tileBounds.south) / 2;
+        tileCenterInFrancePoly = pointInFrance(centerLng, centerLat);
       }
     }
+    // tileIsInFrance: any French overlap (used for IGN gating, finalize
+    // flags). Border tiles still go through IGN even when the centre is
+    // in CH, because IGN MNS may cover the French strip.
     tileIsInFrance = franceClass !== 'outside';
+    // tilePredominantlyFrench: only true when the tile centre actually
+    // sits inside France polygon (or the polygon fully covers the tile).
+    // Used to decide who *wins* between Swiss and IGN when both could run.
+    const tilePredominantlyFrench = franceClass === 'inside' || tileCenterInFrancePoly;
 
     // ── Switzerland branch — runs when the tile is over the Swiss LV95
-    // footprint AND the France polygon does not cover it. France's IGN data
-    // is denser at the border so it wins on French-side border tiles.
+    // footprint AND not predominantly French. Border tiles where the
+    // French polygon claims the centre still go to IGN.
     let swissHadSomeData = false;
-    const considerSwiss = inSwitzerland && !tileIsInFrance && shouldUseSwiss(z, tileCenterLat);
+    const considerSwiss = inSwitzerland && !tilePredominantlyFrench && shouldUseSwiss(z, tileCenterLat);
     if (z >= 12) {
       console.log(
-        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} useIGN=${shouldUseIGN(z, tileCenterLat)} useSwiss=${shouldUseSwiss(z, tileCenterLat)}`,
+        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss}`,
         'background:#444;color:#fff;padding:1px 4px;border-radius:2px', '',
       );
     }
