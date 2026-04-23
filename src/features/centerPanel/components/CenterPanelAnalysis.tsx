@@ -253,7 +253,7 @@ export function CenterPanelAnalysis() {
     if (!projectStore) return [];
     const result: ChartSeries[] = [];
     for (const itinerary of projectStore.project.itineraries) {
-      if (itinerary.visible === false) continue;
+      if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
       const routePoints = itinerary.gpxRoute?.points ?? null;
 
@@ -316,7 +316,7 @@ export function CenterPanelAnalysis() {
 
     const result: ChartBackdropProfile[] = [];
     for (const itinerary of projectStore.project.itineraries) {
-      if (itinerary.visible === false) continue;
+      if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
       const points = buildSeriesFromPrediction(
         prediction,
@@ -338,6 +338,7 @@ export function CenterPanelAnalysis() {
 
   const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
     if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;
+    if (activeItinerary.analysisVisible === false) return null;
 
     const prediction =
       predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null;

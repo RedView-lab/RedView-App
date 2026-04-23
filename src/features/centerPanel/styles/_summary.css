@@ -52,6 +52,21 @@
   color: rgba(255, 255, 255, 0.72);
 }
 
+.rvc-center-summary__eye-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.rvc-center-summary__eye-button[data-visible='false'] {
+  color: rgba(255, 255, 255, 0.34);
+}
+
 .rvc-center-summary__color {
   width: 12px;
   height: 12px;

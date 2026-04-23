@@ -83,20 +83,29 @@ const EMPTY_VALUES: string[] = HEADER_CELLS.map(() => PLACEHOLDER);
 
 interface SummaryRowProps {
   itinerary: Itinerary;
+  onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
 }
 
-function SummaryRow({ itinerary }: SummaryRowProps) {
+function SummaryRow({ itinerary, onToggleAnalysisVisibility }: SummaryRowProps) {
   const values = buildValues(itinerary);
-  const visible = itinerary.visible !== false;
+  const analysisVisible = itinerary.analysisVisible !== false;
   return (
     <div className="rvc-center-summary__row rvc-center-summary__row--item">
       <div
         className="rvc-center-summary__route"
-        style={{ opacity: visible ? 1 : 0.45 }}
+        style={{ opacity: analysisVisible ? 1 : 0.45 }}
       >
-        <span className="rvc-center-summary__eye" aria-hidden="true">
+        <button
+          type="button"
+          className="rvc-center-summary__eye-button"
+          onClick={() => onToggleAnalysisVisibility?.(itinerary.id, !analysisVisible)}
+          aria-pressed={analysisVisible}
+          aria-label={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
+          title={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
+          data-visible={analysisVisible ? 'true' : 'false'}
+        >
           <IconEye size={14} />
-        </span>
+        </button>
         <span
           className="rvc-center-summary__color"
           aria-hidden="true"
@@ -171,6 +180,8 @@ function EmptyRow() {
 export function CenterPanelSummary() {
   const store = useProjectStoreOptional();
   const itineraries = store?.project.itineraries ?? [];
+  const handleToggleAnalysisVisibility =
+    store?.setItineraryAnalysisVisibility;
 
   return (
     <section className="rvc-center-summary" aria-label="Synthèse d'itinéraire">
@@ -200,7 +211,11 @@ export function CenterPanelSummary() {
         <EmptyRow />
       ) : (
         itineraries.map((it) => (
-          <SummaryRow key={it.id} itinerary={it} />
+          <SummaryRow
+            key={it.id}
+            itinerary={it}
+            onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
+          />
         ))
       )}
     </section>

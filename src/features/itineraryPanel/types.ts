@@ -269,6 +269,8 @@ export interface Itinerary {
   timeline: TimelineItem[];
   /** Map render visibility (right-panel "eye" toggle). Defaults to true. */
   visible?: boolean;
+  /** Bottom analysis chart visibility (center summary "eye" toggle). Defaults to true. */
+  analysisVisible?: boolean;
   /** Right-panel polyline render mode. Defaults to 'default'. */
   renderMode?: RouteRenderMode;
   /** Right-panel opacity slider (0–100). Defaults to 100. */

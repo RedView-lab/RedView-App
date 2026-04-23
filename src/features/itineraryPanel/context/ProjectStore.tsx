@@ -24,6 +24,7 @@ interface ProjectStoreValue {
   setItineraryName: (id: string, name: string) => void;
   setItineraryColor: (id: string, color: string) => void;
   setItineraryVisibility: (id: string, visible: boolean) => void;
+  setItineraryAnalysisVisibility: (id: string, visible: boolean) => void;
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
 }
@@ -138,6 +139,15 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const setItineraryAnalysisVisibility = useCallback(
+    (id: string, visible: boolean) => {
+      updateItinerary(id, (it) => {
+        it.analysisVisible = visible;
+      });
+    },
+    [updateItinerary],
+  );
+
   const setItineraryRenderMode = useCallback(
     (id: string, mode: RouteRenderMode) => {
       updateItinerary(id, (it) => {
@@ -164,6 +174,7 @@ export function ProjectProvider({
       setItineraryName,
       setItineraryColor,
       setItineraryVisibility,
+      setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
     }),
@@ -173,6 +184,7 @@ export function ProjectProvider({
       setItineraryName,
       setItineraryColor,
       setItineraryVisibility,
+      setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
     ],

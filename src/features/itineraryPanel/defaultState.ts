@@ -130,6 +130,7 @@ export function createDefaultItinerary(
     timeline: [DEFAULT_TIMELINE_START, DEFAULT_TIMELINE_END],
     expertProfile: createDefaultExpertState(),
     visible: false,
+    analysisVisible: true,
   };
 }
 
