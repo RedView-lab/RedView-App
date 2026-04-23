@@ -1,5 +1,5 @@
 import { Frame1 } from './Frame1';
-import { imgIcon2, imgIcon3 } from './assets';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 
 export function Synthesis() {
   return (
@@ -8,13 +8,7 @@ export function Synthesis() {
         <div className="bg-[rgba(0,0,0,0.6)] content-stretch flex gap-[8px] items-center px-[2px] relative rounded-[6px] shrink-0 w-full" data-node-id="1894:38822" data-name="ITINERARY">
           <div className="content-stretch flex gap-[8px] items-center px-[8px] py-[7px] relative rounded-[6px] shrink-0 w-[120px]" data-node-id="I1894:38822;217:5479">
             <div className="content-stretch flex gap-[4px] items-center relative shrink-0" data-node-id="I1894:38822;630:17475">
-              <div className="overflow-clip relative shrink-0 size-[16px]" data-node-id="I1894:38822;588:23676" data-name="eye">
-                <div className="absolute inset-[20.83%_8.98%]" data-node-id="I1894:38822;588:23676;5044:27874" data-name="Icon">
-                  <div className="absolute inset-[-7.16%_-5.09%]">
-                    <img alt="" className="block max-w-none size-full" src={imgIcon2} />
-                  </div>
-                </div>
-              </div>
+              <SvgV2Icon name="eye.svg" size={16} />
               <div className="bg-[#c50000] rounded-[2px] shrink-0 size-[12px]" data-node-id="I1894:38822;376:6343" />
             </div>
             <div className="flex flex-[1_0_0] flex-col font-['Rethink_Sans:SemiBold',sans-serif] font-semibold justify-center leading-[0] min-w-px overflow-hidden relative text-[14px] text-ellipsis text-white whitespace-nowrap" data-node-id="I1894:38822;217:5480">
@@ -54,13 +48,7 @@ export function Synthesis() {
             </div>
           </div>
           <div className="content-stretch flex items-center justify-center overflow-clip p-[var(--spacing-md,8px)] relative rounded-[var(--radius-sm,6px)] shrink-0" data-node-id="I1894:38822;740:14670" data-name="Buttons/Button utility">
-            <div className="overflow-clip relative shrink-0 size-[16px]" data-node-id="I1894:38822;740:14670;7932:552036" data-name="Size=48">
-              <div className="absolute inset-[16.67%_45.83%]" data-node-id="I1894:38822;740:14670;7932:552036;7758:11960" data-name="Icon">
-                <div className="absolute inset-[-7.03%_-56.25%]">
-                  <img alt="" className="block max-w-none size-full" src={imgIcon3} />
-                </div>
-              </div>
-            </div>
+            <SvgV2Icon name="dots-vertical.svg" size={16} />
           </div>
         </div>
       </div>

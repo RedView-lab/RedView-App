@@ -1,6 +1,6 @@
 import React from 'react';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { ChevronDown } from './Icons';
-import { imgLine113, imgLine112, imgLine93, imgIcon4 } from './assets';
 
 export function AnalysisSettings() {
   return (
@@ -45,9 +45,7 @@ export function AnalysisSettings() {
               <p className="leading-[normal]">Axe 1</p>
             </div>
             <div className="h-0 relative shrink-0 w-[12px]" data-node-id="1894:38996">
-              <div className="absolute inset-[-3px_-25%_-3px_-8.33%]">
-                <img alt="" className="block max-w-none size-full" src={imgLine113} />
-              </div>
+              <div className="absolute inset-x-0 top-[-1px] h-px bg-[rgba(255,255,255,0.32)]" />
             </div>
           </div>
           <div className="border-[#444] border-[1.5px] border-solid content-stretch flex flex-[1_0_0] items-center justify-between max-w-[116px] min-w-[80px] pl-[12px] pr-[8px] py-[6px] relative rounded-[6px]" data-node-id="1894:38997">
@@ -61,9 +59,7 @@ export function AnalysisSettings() {
               <p className="leading-[normal]">Axe 2</p>
             </div>
             <div className="h-0 relative shrink-0 w-[12px]" data-node-id="1894:39002">
-              <div className="absolute inset-[-3px_-25%_-3px_-8.33%]">
-                <img alt="" className="block max-w-none size-full" src={imgLine112} />
-              </div>
+              <div className="absolute inset-x-0 top-[-1px] h-px bg-[rgba(255,255,255,0.32)]" />
             </div>
           </div>
           <div className="border-[#444] border-[1.5px] border-solid content-stretch flex flex-[1_0_0] items-center justify-between max-w-[116px] min-w-[80px] pl-[12px] pr-[8px] py-[6px] relative rounded-[6px]" data-node-id="1894:39003">
@@ -75,11 +71,7 @@ export function AnalysisSettings() {
           <div className="flex flex-row items-center self-stretch">
             <div className="flex h-0 items-center justify-center relative self-center shrink-0 w-0" style={{ containerType: "size", "--transform-inner-width": "0", "--transform-inner-height": "0" } as React.CSSProperties}>
               <div className="-rotate-90 flex-none w-[100cqh]">
-                <div className="h-0 relative w-full" data-node-id="1894:39006">
-                  <div className="absolute inset-[-1px_0_0_0]">
-                    <img alt="" className="block max-w-none size-full" src={imgLine93} />
-                  </div>
-                </div>
+                <div className="h-px relative w-full bg-[rgba(255,255,255,0.16)]" data-node-id="1894:39006" />
               </div>
             </div>
           </div>
@@ -89,9 +81,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39008;977:25118;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39008;977:25118;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39008;977:25118;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>
@@ -105,9 +95,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39009;977:25102;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39009;977:25102;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39009;977:25102;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>
@@ -121,9 +109,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39010;977:25125;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39010;977:25125;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39010;977:25125;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>
@@ -137,9 +123,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39011;977:25125;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39011;977:25125;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39011;977:25125;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>
@@ -153,9 +137,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39012;977:25125;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39012;977:25125;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39012;977:25125;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>
@@ -169,9 +151,7 @@ export function AnalysisSettings() {
                 <div className="bg-[rgba(0,0,0,0.64)] overflow-clip relative rounded-[var(--spacing-xs,4px)] shrink-0 size-[16px]" data-node-id="I1894:39013;977:25125;1097:64015" data-name="_Checkbox base">
                   <div className="absolute inset-[12.5%] overflow-clip" data-node-id="I1894:39013;977:25125;1097:64015;1097:63897" data-name="check">
                     <div className="absolute bottom-[29.17%] left-[16.67%] right-[16.67%] top-1/4" data-node-id="I1894:39013;977:25125;1097:64015;1097:63897;3463:404965" data-name="Icon">
-                      <div className="absolute inset-[-15.15%_-10.42%]">
-                        <img alt="" className="block max-w-none size-full" src={imgIcon4} />
-                      </div>
+                      <SvgV2Icon name="check.svg" size={12} />
                     </div>
                   </div>
                 </div>

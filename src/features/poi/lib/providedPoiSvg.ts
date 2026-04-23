@@ -1,7 +1,7 @@
 export const PROVIDED_POI_SVG = {
   water: '/svgv2/eau.svg',
   bakery: '/svgv2/boulangerie.svg',
-  cafe: '/svgv2/caffe.svg',
+  cafe: '/svgv2/caffé.svg',
   fastFood: '/svgv2/fastfood.svg',
   shop: '/svgv2/magasin.svg',
   bikeShop: '/svgv2/magasindevelo.svg',

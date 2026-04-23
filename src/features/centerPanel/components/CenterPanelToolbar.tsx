@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { AssetIcon } from '@/components/AssetIcon';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { IconChevronDown } from './CenterPanelIcons';
 
 type ToolbarIconProps = {
@@ -11,17 +11,17 @@ type ToolbarIconProps = {
 };
 
 const TOOLBAR_ICON_ASSETS = {
-  cursor: '/svgv2/icone/navigation-pointer-01.svg',
-  plusCircle: '/svgv2/icone/plus-circle.svg',
-  pencil: '/svgv2/icone/edit-05.svg',
-  switchHorizontal: '/svgv2/icone/switch-horizontal-01.svg',
-  reflectVertical: '/svgv2/icone/reflect-01.svg',
-  bezier: '/svgv2/icone/pen-tool-plus.svg',
-  slashOctagon: '/svgv2/icone/slash-octagon.svg',
-  wrench: '/svgv2/icone/tool-02.svg',
-  trash: '/svgv2/icone/trash-03.svg',
-  skip: '/svgv2/icone/skip-forward.svg',
-  clockRewind: '/svgv2/icone/clock-rewind.svg',
+  cursor: 'navigation-pointer-01.svg',
+  plusCircle: 'plus-circle.svg',
+  pencil: 'edit-05.svg',
+  switchHorizontal: 'switch-horizontal-01.svg',
+  reflectVertical: 'reflect-01.svg',
+  bezier: 'pen-tool-plus.svg',
+  slashOctagon: 'slash-octagon.svg',
+  wrench: 'tool-02.svg',
+  trash: 'trash-03.svg',
+  skip: 'skip-forward.svg',
+  clockRewind: 'clock-rewind.svg',
 } as const;
 
 function assetIconStyle(direction?: 'forward' | 'backward'): CSSProperties | undefined {
@@ -29,83 +29,57 @@ function assetIconStyle(direction?: 'forward' | 'backward'): CSSProperties | und
   return { transform: 'scaleX(-1)' };
 }
 
-const baseIcon = (size = 16) => ({
-  width: size,
-  height: size,
-  viewBox: '0 0 24 24',
-  fill: 'none',
-  stroke: 'currentColor',
-  strokeWidth: 1.8,
-  strokeLinecap: 'round' as const,
-  strokeLinejoin: 'round' as const,
-  'aria-hidden': true as const,
-});
-
 const IconUndo = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <svg {...baseIcon(size)} {...rest}>
-    <path d="M9 10H5V6" />
-    <path d="M5 10l4-4" />
-    <path d="M6 10h8a5 5 0 0 1 5 5v3" />
-  </svg>
+  <SvgV2Icon name="undo.svg" size={size} {...rest} />
 );
 
 const IconRedo = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <svg {...baseIcon(size)} {...rest}>
-    <path d="M15 10h4V6" />
-    <path d="M19 10l-4-4" />
-    <path d="M18 10h-8a5 5 0 0 0-5 5v3" />
-  </svg>
+  <SvgV2Icon name="redo.svg" size={size} {...rest} />
 );
 
 const IconCursor = ({ size = 18, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.cursor} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.cursor} size={size} {...rest} />
 );
 
 const IconPlusCircle = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.plusCircle} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.plusCircle} size={size} {...rest} />
 );
 
 const IconPencilLine = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.pencil} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.pencil} size={size} {...rest} />
 );
 
 const IconSwitchHorizontal = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.switchHorizontal} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.switchHorizontal} size={size} {...rest} />
 );
 
 const IconScissors = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <svg {...baseIcon(size)} {...rest}>
-    <circle cx="6.5" cy="7" r="2.5" />
-    <circle cx="6.5" cy="17" r="2.5" />
-    <path d="M9 8.7 19 4" />
-    <path d="M9 15.3 19 20" />
-    <path d="M11.3 12 19 12" />
-  </svg>
+  <SvgV2Icon name="scissors.svg" size={size} {...rest} />
 );
 
 const IconReflectVertical = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.reflectVertical} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.reflectVertical} size={size} {...rest} />
 );
 
 const IconBezier = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.bezier} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.bezier} size={size} {...rest} />
 );
 
 const IconSlashOctagon = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.slashOctagon} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.slashOctagon} size={size} {...rest} />
 );
 
 const IconWrench = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.wrench} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.wrench} size={size} {...rest} />
 );
 
 const IconTrash = ({ size = 14, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.trash} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.trash} size={size} {...rest} />
 );
 
 const IconSkip = ({ size = 16, direction = 'forward', ...rest }: ToolbarIconProps & { direction?: 'forward' | 'backward' }) => (
-  <AssetIcon
-    src={TOOLBAR_ICON_ASSETS.skip}
+  <SvgV2Icon
+    name={TOOLBAR_ICON_ASSETS.skip}
     size={size}
     style={assetIconStyle(direction)}
     {...rest}
@@ -113,13 +87,11 @@ const IconSkip = ({ size = 16, direction = 'forward', ...rest }: ToolbarIconProp
 );
 
 const IconPlay = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <svg {...baseIcon(size)} {...rest}>
-    <path d="m9 7 7 5-7 5Z" fill="currentColor" stroke="none" />
-  </svg>
+  <SvgV2Icon name="play.svg" size={size} {...rest} />
 );
 
 const IconClockRewind = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <AssetIcon src={TOOLBAR_ICON_ASSETS.clockRewind} size={size} {...rest} />
+  <SvgV2Icon name={TOOLBAR_ICON_ASSETS.clockRewind} size={size} {...rest} />
 );
 
 function ToolbarIconButton({

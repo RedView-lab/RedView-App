@@ -1,0 +1,112 @@
+import { AssetIcon, type AssetIconProps } from './AssetIcon';
+
+const SVGV2_ICONE_ASSETS = new Set([
+  'annotation-alert.svg',
+  'annotation-check.svg',
+  'annotation-dots.svg',
+  'annotation-info.svg',
+  'annotation-question.svg',
+  'annotation-x.svg',
+  'bar-chart-10.svg',
+  'bar-chart-square-01.svg',
+  'calendar.svg',
+  'check-1.svg',
+  'check-circle.svg',
+  'check.svg',
+  'clock-rewind.svg',
+  'compass-03.svg',
+  'copy-04.svg',
+  'credit-card-02.svg',
+  'cube-outline.svg',
+  'currency-euro.svg',
+  'dots-vertical.svg',
+  'download-01.svg',
+  'download-03.svg',
+  'edit-04.svg',
+  'edit-05.svg',
+  'eye-off.svg',
+  'eye.svg',
+  'flag-02.svg',
+  'globe-04.svg',
+  'globe-05.svg',
+  'globe-06.svg',
+  'heart.svg',
+  'home-02.svg',
+  'icon_hotel.svg',
+  'icon_refuge.svg',
+  'inbox-01.svg',
+  'info-circle.svg',
+  'layers-three-02.svg',
+  'link-external-02.svg',
+  'list.svg',
+  'mail-02.svg',
+  'map-01-1.svg',
+  'map-01.svg',
+  'map-02.svg',
+  'mark.svg',
+  'marker-pin-02.svg',
+  'marker-pin-04.svg',
+  'marker-pin-06.svg',
+  'move.svg',
+  'navigation-pointer-01.svg',
+  'navigation-pointer-02.svg',
+  'navigation-pointer-off-01.svg',
+  'navigation-pointer-off-02.svg',
+  'pause-circle.svg',
+  'pen-tool-minus.svg',
+  'pen-tool-plus.svg',
+  'plus-circle.svg',
+  'plus.svg',
+  'reflect-01.svg',
+  'reflect-02.svg',
+  'refresh-cw-05.svg',
+  'route-1.svg',
+  'route.svg',
+  'ruler.svg',
+  'save-01.svg',
+  'scale-01.svg',
+  'search-sm.svg',
+  'settings-01.svg',
+  'settings-04.svg',
+  'share-07.svg',
+  'skip-forward.svg',
+  'slash-octagon.svg',
+  'sliders-02.svg',
+  'sliders-03.svg',
+  'speedometer-03.svg',
+  'star-01.svg',
+  'switch-horizontal-01.svg',
+  'switch-vertical-01.svg',
+  'tool-02-1.svg',
+  'tool-02.svg',
+  'trash-03.svg',
+  'upload-01.svg',
+  'upload-03.svg',
+  'user-circle.svg',
+  'x-circle.svg',
+  'x-close.svg',
+  'x.svg',
+  'zoom-in.svg',
+  'zoom-out.svg',
+]);
+
+export const SVGV2_FALLBACK_ICON = 'x.svg';
+
+export function isSvgV2IconAvailable(name: string) {
+  return SVGV2_ICONE_ASSETS.has(name);
+}
+
+export function resolveSvgV2IconSrc(name: string) {
+  const resolvedName = isSvgV2IconAvailable(name) ? name : SVGV2_FALLBACK_ICON;
+  return `/svgv2/icone/${resolvedName}`;
+}
+
+export function SvgV2Icon({
+  name,
+  size = 16,
+  ...rest
+}: AssetIconProps & {
+  name: string;
+}) {
+  return <AssetIcon src={resolveSvgV2IconSrc(name)} size={size} {...rest} />;
+}

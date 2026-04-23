@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { imgPlusCircle, imgIcon5, imgIcon6, imgIcon7 } from './assets';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { AnalysisResultsGrid, type GridColumn } from './AnalysisResultsGrid';
 
 export interface AnalysisChartPoint {
@@ -80,6 +80,7 @@ export function AnalysisResults({
   yDomain = DEFAULT_Y_DOMAIN,
 }: AnalysisResultsProps) {
   const plotSeries = series.filter((entry) => entry.points.length > 1);
+  const plotCanvasRef = useRef<HTMLCanvasElement>(null);
   const cursorPercent = cursor ? clamp(cursor.xPercent, 0, 100) : 50;
   // Anchor the tooltip directly to the cursor line: place its left edge a few
   // px to the right of the line; flip to the other side once we're past the
@@ -148,6 +149,14 @@ export function AnalysisResults({
     [yMajorTicks, gridSize.height],
   );
 
+  useEffect(() => {
+    drawAnalysisResultsCanvas(plotCanvasRef.current, {
+      width: usableWidth,
+      height: gridSize.height,
+      series: plotSeries,
+    });
+  }, [gridSize.height, plotSeries, usableWidth]);
+
   return (
     <div
       className="bg-[rgba(0,0,0,0.64)] content-stretch flex flex-[1_0_0] flex-col gap-[0.5px] items-start min-h-[148px] overflow-clip relative rounded-[5px] w-full"
@@ -177,50 +186,19 @@ export function AnalysisResults({
               />
             ))}
 
-            <svg className="absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              {plotSeries.map((entry) => {
-                if (!entry.fillColor) return null;
-                const areaPath = buildSeriesPath(entry.points, true);
-                if (!areaPath) return null;
-                return <path key={`${entry.id}-area`} d={areaPath} fill={entry.fillColor} opacity={entry.opacity ?? 1} />;
-              })}
+            <canvas ref={plotCanvasRef} className="absolute inset-0 size-full" aria-hidden="true" />
 
-              {plotSeries.map((entry) => {
-                const linePath = buildSeriesPath(entry.points, false);
-                if (!linePath) return null;
-                return (
-                  <path
-                    key={entry.id}
-                    d={linePath}
-                    fill="none"
-                    stroke={entry.color}
-                    strokeWidth={entry.strokeWidth ?? 0.42}
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                    vectorEffect="non-scaling-stroke"
-                    opacity={entry.opacity ?? 1}
-                  />
-                );
-              })}
-
-              {cursor ? (
-                <line
-                  x1={clamp(cursor.xPercent, 0, 100)}
-                  x2={clamp(cursor.xPercent, 0, 100)}
-                  y1="0"
-                  y2="100"
-                  stroke="rgba(255,255,255,0.96)"
-                  strokeWidth="0.22"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null}
-            </svg>
+            {cursor ? (
+              <div
+                className="absolute inset-y-0 w-px bg-[rgba(255,255,255,0.96)]"
+                style={{ left: `${clamp(cursor.xPercent, 0, 100)}%` }}
+              />
+            ) : null}
 
             {dayWindows.map((window) => (
               <PhaseIcon
                 key={`${window.id}-sun`}
-                src={imgIcon6}
-                name="sun"
+                iconName="sun.svg"
                 left={`calc(${clamp(window.startPercent, 0, 100)}% + 4px)`}
               />
             ))}
@@ -228,8 +206,7 @@ export function AnalysisResults({
             {dayWindows.map((window) => (
               <PhaseIcon
                 key={`${window.id}-moon`}
-                src={imgIcon7}
-                name="moon-01"
+                iconName="moon.svg"
                 left={`calc(${clamp(window.endPercent, 0, 100)}% - 12px)`}
               />
             ))}
@@ -325,19 +302,11 @@ function AddLineRow({ columns, rightColumnWidth }: { columns: GridColumn[]; righ
       data-name="ADDLINE"
     >
       <div className="bg-[rgba(255,255,255,0.08)] content-stretch flex gap-[4px] items-center pl-[6px] relative rounded-[4px] shrink-0 w-[91px]" data-node-id="1894:39065">
-        <div className="relative shrink-0 size-[12px]" data-node-id="1894:39066" data-name="plus-circle">
-          <img alt="" className="absolute block inset-0 max-w-none size-full" src={imgPlusCircle} />
-        </div>
+        <SvgV2Icon name="plus-circle.svg" size={12} />
         <div className="flex flex-[1_0_0] flex-col font-['Rethink_Sans:Medium',sans-serif] font-medium justify-center leading-[0] min-w-px overflow-hidden relative text-[11px] text-ellipsis text-white whitespace-nowrap" data-node-id="1894:39068">
           <p className="leading-[normal] overflow-hidden text-ellipsis">Ajouter</p>
         </div>
-        <div className="overflow-clip relative shrink-0 size-[20px]" data-node-id="1894:39069" data-name="chevron-down">
-          <div className="absolute inset-[45%_36.67%_45%_38.33%]" data-node-id="I1894:39069;183:3259" data-name="Icon">
-            <div className="absolute inset-[-41.67%_-16.67%]">
-              <img alt="" className="block max-w-none size-full" src={imgIcon5} />
-            </div>
-          </div>
-        </div>
+        <SvgV2Icon name="chevron-down.svg" size={20} />
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative" data-node-id="1894:39070">
         {innerCols.map((col, index) => (
@@ -365,8 +334,6 @@ function AddLineRow({ columns, rightColumnWidth }: { columns: GridColumn[]; righ
   );
 }
 
-import { imgIcon1 } from './assets';
-
 function SeriesRow({
   series,
   columns,
@@ -386,13 +353,7 @@ function SeriesRow({
           <div className="flex flex-[1_0_0] flex-col font-['Rethink_Sans:Medium',sans-serif] font-medium justify-center leading-[0] min-w-px overflow-hidden relative text-[11px] text-ellipsis text-white whitespace-nowrap">
             <p className="leading-[normal] overflow-hidden text-ellipsis">{series.id}</p>
           </div>
-          <div className="overflow-clip relative shrink-0 size-[20px]">
-            <div className="absolute inset-[45%_36.67%_45%_38.33%]">
-              <div className="absolute inset-[-41.67%_-16.67%]">
-                <img alt="" className="block max-w-none size-full" src={imgIcon5} />
-              </div>
-            </div>
-          </div>
+          <SvgV2Icon name="chevron-down.svg" size={20} />
         </div>
       </div>
       <div className="content-stretch flex flex-[1_0_0] h-full items-center min-w-px relative">
@@ -419,13 +380,7 @@ function SeriesRow({
           style={{ width: `${rightColumnWidth}px` }}
         >
           <button type="button" className="content-stretch flex items-center justify-center overflow-clip p-[3.75px] relative rounded-[3.75px] shrink-0 size-[20px] hover:bg-[rgba(255,255,255,0.1)] transition-colors">
-            <div className="overflow-clip relative shrink-0 size-[12.5px]">
-              <div className="absolute inset-[8.33%_12.5%]">
-                <div className="absolute inset-[-5.01%_-5.57%]">
-                  <img alt="Supprimer" className="block max-w-none size-full" src={imgIcon1} />
-                </div>
-              </div>
-            </div>
+            <SvgV2Icon name="trash-03.svg" size={12.5} aria-label="Supprimer" />
           </button>
         </div>
       </div>
@@ -433,17 +388,15 @@ function SeriesRow({
   );
 }
 
-function PhaseIcon({ src, name, left }: { src: string; name: string; left: string }) {
+function PhaseIcon({ iconName, left }: { iconName: string; left: string }) {
   return (
     <div
       className="absolute h-[17.005px] opacity-50 overflow-clip top-[4.25px] w-[16px]"
       style={{ left }}
-      data-name={name}
+      data-name={iconName}
     >
       <div className="absolute inset-[8.33%]" data-name="Icon">
-        <div className="absolute inset-[-4.7%_-5%]">
-          <img alt="" className="block max-w-none size-full" src={src} />
-        </div>
+        <SvgV2Icon name={iconName} size={16} />
       </div>
     </div>
   );
@@ -481,24 +434,111 @@ function HoverLine({ value, wide = true }: { value: string; wide?: boolean }) {
   );
 }
 
-function buildSeriesPath(points: AnalysisChartPoint[], closeToBaseline: boolean): string {
-  if (points.length < 2) return '';
+function drawAnalysisResultsCanvas(
+  canvas: HTMLCanvasElement | null,
+  input: {
+    width: number;
+    height: number;
+    series: AnalysisChartSeries[];
+  },
+) {
+  const ctx = prepareAnalysisCanvas(canvas, input.width, input.height);
+  if (!ctx) return;
 
-  const commands = points
-    .map((point, index) => {
-      const x = formatPathNumber(clamp(point.x, 0, 100));
-      const y = formatPathNumber(projectY(point.y));
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-    })
-    .join(' ');
-
-  if (!closeToBaseline) {
-    return commands;
+  for (const entry of input.series) {
+    if (entry.fillColor) {
+      drawResultsArea(ctx, entry.points, entry.fillColor, entry.opacity ?? 1);
+    }
   }
 
-  const firstX = formatPathNumber(clamp(points[0].x, 0, 100));
-  const lastX = formatPathNumber(clamp(points[points.length - 1].x, 0, 100));
-  return `${commands} L ${lastX} 100 L ${firstX} 100 Z`;
+  for (const entry of input.series) {
+    drawResultsLine(
+      ctx,
+      entry.points,
+      entry.color,
+      entry.strokeWidth ?? 0.42,
+      entry.opacity ?? 1,
+    );
+  }
+}
+
+function prepareAnalysisCanvas(canvas: HTMLCanvasElement | null, width: number, height: number) {
+  if (!canvas) return null;
+
+  const cssWidth = Math.max(0, width);
+  const cssHeight = Math.max(0, height);
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.width = Math.max(1, Math.round(cssWidth * dpr));
+  canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  return ctx;
+}
+
+function drawResultsLine(
+  ctx: CanvasRenderingContext2D,
+  points: AnalysisChartPoint[],
+  color: string,
+  lineWidth: number,
+  opacity: number,
+) {
+  if (points.length < 2) return;
+
+  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
+  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = (clamp(point.x, 0, 100) / 100) * width;
+    const y = (projectY(point.y) / 100) * height;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawResultsArea(
+  ctx: CanvasRenderingContext2D,
+  points: AnalysisChartPoint[],
+  fillColor: string,
+  opacity: number,
+) {
+  if (points.length < 2) return;
+
+  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
+  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = (clamp(point.x, 0, 100) / 100) * width;
+    const y = (projectY(point.y) / 100) * height;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  const lastX = (clamp(points[points.length - 1]?.x ?? 0, 0, 100) / 100) * width;
+  const firstX = (clamp(points[0]?.x ?? 0, 0, 100) / 100) * width;
+  ctx.lineTo(lastX, height);
+  ctx.lineTo(firstX, height);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+  ctx.restore();
 }
 
 function mapSeriesCellValues(columns: GridColumn[], cellValues?: string[]): Array<string | undefined> {
@@ -519,10 +559,6 @@ function projectY(value: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function formatPathNumber(value: number): string {
-  return value.toFixed(3).replace(/\.0+$|(?<=\.\d*[1-9])0+$/u, '');
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
 import { IconChevronDown, IconMoon, IconSun } from '../CenterPanelIcons';
 import type { ChartDayNightOverlay } from './dayNight';
@@ -49,6 +49,7 @@ export function AnalysisChart({
   showSeriesRows = true,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
+  const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
   const [plotSize, setPlotSize] = useState({ width: 0, height: 0 });
 
   useEffect(() => {
@@ -207,7 +208,7 @@ export function AnalysisChart({
     [backdropProfiles],
   );
 
-  const backdropPaths = useMemo(() => {
+  const backdropSeries = useMemo(() => {
     if (!backdropYDomain) return [];
     return backdropProfiles.map((profile) => {
       const visiblePoints = compressPointsForPlot(
@@ -217,8 +218,7 @@ export function AnalysisChart({
       );
       return {
         id: profile.id,
-        fillPath: buildAreaPath(visiblePoints, plotXDomain, backdropYDomain),
-        strokePath: buildSvgPath(visiblePoints, plotXDomain, backdropYDomain),
+        points: visiblePoints,
       };
     });
   }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
@@ -256,19 +256,28 @@ export function AnalysisChart({
     return frames.filter((frame) => frame.endRatio - frame.startRatio > 0.06);
   }, [dayNightBands]);
 
-  const seriesPaths = useMemo(
+  const seriesLayers = useMemo(
     () =>
       visibleSeries.map((entry) => ({
         id: entry.id,
         color: entry.color,
-        path: buildSvgPath(
-          compressPointsForPlot(entry.points, plotXDomain, plotSize.width),
-          plotXDomain,
-          entry.axis === 2 ? plotY2Domain : plotYDomain,
-        ),
+        lineWidth: 1.4,
+        points: compressPointsForPlot(entry.points, plotXDomain, plotSize.width),
+        yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,
       })),
     [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, visibleSeries],
   );
+
+  useEffect(() => {
+    drawAnalysisChartCanvas(seriesCanvasRef.current, {
+      width: plotSize.width,
+      height: plotSize.height,
+      xDomain: plotXDomain,
+      backdropYDomain,
+      backdropSeries,
+      seriesLayers,
+    });
+  }, [backdropSeries, backdropYDomain, plotSize.height, plotSize.width, plotXDomain, seriesLayers]);
 
   const hoverData = useMemo(() => {
     if (!hover || !visibleSeries.length) return null;
@@ -340,38 +349,11 @@ export function AnalysisChart({
             ))}
           </div>
 
-          <svg
+          <canvas
+            ref={seriesCanvasRef}
             className="rvchart__layer rvchart__layer--series"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            overflow="hidden"
             aria-hidden="true"
-          >
-            {backdropPaths.map((entry) =>
-              entry.fillPath ? (
-                <path key={`${entry.id}-fill`} d={entry.fillPath} className="rvchart__backdrop-fill" />
-              ) : null,
-            )}
-            {backdropPaths.map((entry) =>
-              entry.strokePath ? (
-                <path key={`${entry.id}-stroke`} d={entry.strokePath} className="rvchart__backdrop-stroke" />
-              ) : null,
-            )}
-            {seriesPaths.map((entry) =>
-              entry.path ? (
-                <path
-                  key={entry.id}
-                  d={entry.path}
-                  fill="none"
-                  stroke={entry.color}
-                  strokeWidth={1.4}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
-                />
-              ) : null,
-            )}
-          </svg>
+          />
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {hover ? (
@@ -460,6 +442,19 @@ export function AnalysisChart({
       </div>
     </div>
   );
+}
+
+interface CanvasBackdropLayer {
+  id: string;
+  points: { x: number; y: number }[];
+}
+
+interface CanvasSeriesLayer {
+  id: string;
+  color: string;
+  lineWidth: number;
+  points: { x: number; y: number }[];
+  yDomain: AxisDomain;
 }
 
 interface SeriesRowProps {
@@ -700,39 +695,6 @@ function ratioFor(value: number, domain: AxisDomain): number {
   return Math.max(0, Math.min(1, (value - domain.min) / span));
 }
 
-function buildSvgPath(
-  points: { x: number; y: number }[],
-  xDomain: AxisDomain,
-  yDomain: AxisDomain,
-): string {
-  if (points.length < 2) return '';
-  const xSpan = xDomain.max - xDomain.min;
-  const ySpan = yDomain.max - yDomain.min;
-  if (xSpan <= 0 || ySpan <= 0) return '';
-  let d = '';
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index];
-    const x = clamp(((point.x - xDomain.min) / xSpan) * 100, 0, 100);
-    const y = clamp(100 - ((point.y - yDomain.min) / ySpan) * 100, 0, 100);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-    d += `${index === 0 ? 'M' : 'L'} ${x.toFixed(3)} ${y.toFixed(3)} `;
-  }
-  return d.trim();
-}
-
-function buildAreaPath(
-  points: { x: number; y: number }[],
-  xDomain: AxisDomain,
-  yDomain: AxisDomain,
-): string {
-  const linePath = buildSvgPath(points, xDomain, yDomain);
-  const xSpan = xDomain.max - xDomain.min;
-  if (!linePath || points.length < 2 || xSpan <= 0) return '';
-  const firstX = clamp(((points[0].x - xDomain.min) / xSpan) * 100, 0, 100);
-  const lastX = clamp(((points[points.length - 1].x - xDomain.min) / xSpan) * 100, 0, 100);
-  return `${linePath} L ${lastX.toFixed(3)} 100 L ${firstX.toFixed(3)} 100 Z`;
-}
-
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -780,6 +742,113 @@ function interpolateY(points: { x: number; y: number }[], xValue: number): numbe
   if (span <= 0) return a.y;
   const t = (xValue - a.x) / span;
   return a.y + (b.y - a.y) * t;
+}
+
+function drawAnalysisChartCanvas(
+  canvas: HTMLCanvasElement | null,
+  input: {
+    width: number;
+    height: number;
+    xDomain: AxisDomain;
+    backdropYDomain: AxisDomain | null;
+    backdropSeries: CanvasBackdropLayer[];
+    seriesLayers: CanvasSeriesLayer[];
+  },
+) {
+  const ctx = prepareCanvas2d(canvas, input.width, input.height);
+  if (!ctx) return;
+
+  if (input.backdropYDomain) {
+    for (const layer of input.backdropSeries) {
+      drawCanvasArea(ctx, layer.points, input.xDomain, input.backdropYDomain, 'rgba(245, 248, 252, 0.08)');
+    }
+    for (const layer of input.backdropSeries) {
+      drawCanvasLine(ctx, layer.points, input.xDomain, input.backdropYDomain, 'rgba(245, 248, 252, 0.4)', 1.15);
+    }
+  }
+
+  for (const layer of input.seriesLayers) {
+    drawCanvasLine(ctx, layer.points, input.xDomain, layer.yDomain, layer.color, layer.lineWidth);
+  }
+}
+
+function prepareCanvas2d(canvas: HTMLCanvasElement | null, width: number, height: number) {
+  if (!canvas) return null;
+
+  const cssWidth = Math.max(0, width);
+  const cssHeight = Math.max(0, height);
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.style.width = `${cssWidth}px`;
+  canvas.style.height = `${cssHeight}px`;
+  canvas.width = Math.max(1, Math.round(cssWidth * dpr));
+  canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  return ctx;
+}
+
+function drawCanvasLine(
+  ctx: CanvasRenderingContext2D,
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  yDomain: AxisDomain,
+  color: string,
+  lineWidth: number,
+) {
+  if (points.length < 2) return;
+
+  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
+  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+
+  ctx.save();
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = ratioFor(point.x, xDomain) * width;
+    const y = (1 - ratioFor(point.y, yDomain)) * height;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawCanvasArea(
+  ctx: CanvasRenderingContext2D,
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  yDomain: AxisDomain,
+  fill: string,
+) {
+  if (points.length < 2) return;
+
+  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
+  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+
+  ctx.save();
+  ctx.beginPath();
+  points.forEach((point, index) => {
+    const x = ratioFor(point.x, xDomain) * width;
+    const y = (1 - ratioFor(point.y, yDomain)) * height;
+    if (index === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  const lastX = ratioFor(points[points.length - 1]?.x ?? xDomain.min, xDomain) * width;
+  const firstX = ratioFor(points[0]?.x ?? xDomain.min, xDomain) * width;
+  ctx.lineTo(lastX, height);
+  ctx.lineTo(firstX, height);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  ctx.restore();
 }
 
 function buildInterpolatedTicks(max: number, min: number, count: number): number[] {
