@@ -6,11 +6,13 @@ import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
 
 const API_BASE = OPENMETEO_FORECAST_URL;
 const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
-const BATCH_SIZE = 50; // Max coordinates per request
-const MAX_RETRIES = 4;
-const INITIAL_BACKOFF_MS = 3_000;
-const MIN_REQUEST_GAP_MS = 1_500; // minimum gap between any two API calls
-const INTER_BATCH_DELAY_MS = 1_200; // delay between consecutive batches
+// Self-hosted VPS → we can hammer it. Bigger batches, no inter-batch
+// gap, only a tiny safety retry budget for transient errors.
+const BATCH_SIZE = 200; // Max coordinates per request
+const MAX_RETRIES = 2;
+const INITIAL_BACKOFF_MS = 1_000;
+const MIN_REQUEST_GAP_MS = 0;
+const INTER_BATCH_DELAY_MS = 0;
 
 // ── Global rate-limit cooldown ────────────────────────────────────────
 

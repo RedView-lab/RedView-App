@@ -47,14 +47,21 @@ export default async function handler(
   }
 
   const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
-  const base =
-    upstream !== ''
-      ? upstream.replace(/\/+$/, '')
-      : isClimate
-      ? CLIMATE_FALLBACK
-      : FORECAST_FALLBACK;
+  const usingSelfHosted = upstream !== '';
+  const base = usingSelfHosted
+    ? upstream.replace(/\/+$/, '')
+    : isClimate
+    ? CLIMATE_FALLBACK
+    : FORECAST_FALLBACK;
 
   const target = `${base}${pathAndQuery}`;
+
+  // Visible in Vercel → Project → Logs. Lets you confirm at a glance
+  // that production is hitting your droplet and not the public API.
+  console.log(
+    `[openmeteo-proxy] ${usingSelfHosted ? 'SELF-HOSTED' : 'PUBLIC FALLBACK'} ` +
+      `→ ${target}`,
+  );
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -71,6 +78,9 @@ export default async function handler(
     res.status(upstreamRes.status);
     const contentType = upstreamRes.headers.get('content-type');
     if (contentType) res.setHeader('Content-Type', contentType);
+    // Marker header so the browser can confirm the request was served
+    // by *our* proxy (visible in DevTools → Network → Response Headers).
+    res.setHeader('X-Weather-Source', usingSelfHosted ? 'self-hosted-vps' : 'public-api');
     // Browser cache: 5 min fresh, 10 min stale-while-revalidate
     res.setHeader(
       'Cache-Control',
