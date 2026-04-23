@@ -1,4 +1,9 @@
-import type { WeatherState } from './types';
+import type { LabelCategory } from '@/features/labels/types';
+import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altitude-persist';
+import type { AltitudeState } from '@/features/altitude/types';
+import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
+import type { SlopeState } from '@/features/slope/types';
+import type { SlopeScale, SlopeScaleSetting, SunlightState, WeatherState } from './types';
 
 export type ControlPanelSectionKey =
   | 'basemaps'
@@ -13,6 +18,30 @@ export type ControlPanelSectionKey =
 
 export type ControlPanelSectionsOpenState = Record<ControlPanelSectionKey, boolean>;
 
+export interface ControlPanelLabelsPersistedState {
+  backend: Record<LabelCategory, boolean>;
+  statesUiEnabled: boolean;
+}
+
+export interface ControlPanelSlopePersistedState {
+  state: SlopeState;
+  scale: SlopeScale;
+  scaleSetting: SlopeScaleSetting;
+  bandVisibility: Record<string, boolean>;
+  customColors: Record<string, string>;
+  breakpoints: PersistedBreakpoints;
+}
+
+export interface ControlPanelAltitudePersistedState {
+  state: AltitudeState;
+  breakpoints: PersistedAltitudeBreakpoints;
+}
+
+export type ControlPanelSunlightPersistedState = Omit<
+  SunlightState,
+  'enabled' | 'sunriseTime' | 'sunsetTime'
+>;
+
 export interface ControlPanelPersistedState {
   sectionsOpen: ControlPanelSectionsOpenState;
   toggles: {
@@ -25,7 +54,12 @@ export interface ControlPanelPersistedState {
     sunlightEnabled: boolean;
   };
   sunlightMapExpanded: boolean;
+  lidarTilesHidden?: Record<string, boolean>;
+  labelsState?: ControlPanelLabelsPersistedState;
+  slopes?: ControlPanelSlopePersistedState;
+  altitude?: ControlPanelAltitudePersistedState;
   weather?: WeatherState;
+  sunlight?: ControlPanelSunlightPersistedState;
 }
 
 const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {

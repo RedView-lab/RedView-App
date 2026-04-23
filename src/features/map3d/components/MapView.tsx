@@ -3,16 +3,25 @@ import { useRef, useEffect } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
+import type { MapViewport } from '../lib/viewport-persist';
 
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
   lidarSelectionEnabled?: boolean;
   onLidarSelectionDisable?: () => void;
+  initialViewport?: MapViewport | null;
+  onViewportChange?: (viewport: MapViewport) => void;
 }
 
-export default function MapView({ onMapReady, lidarSelectionEnabled = false, onLidarSelectionDisable }: MapViewProps) {
+export default function MapView({
+  onMapReady,
+  lidarSelectionEnabled = false,
+  onLidarSelectionDisable,
+  initialViewport,
+  onViewportChange,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const { map, isLoaded } = useMap(containerRef);
+  const { map, isLoaded } = useMap(containerRef, { initialViewport, onViewportChange });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
 

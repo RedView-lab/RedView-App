@@ -4,7 +4,7 @@ import { MAPBOX_TOKEN, MAPBOX_STYLE, DEFAULT_VIEW, FOG_CONFIG } from '../lib/map
 import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
-import { loadViewport, saveViewport } from '../lib/viewport-persist';
+import { loadViewport, saveViewport, type MapViewport } from '../lib/viewport-persist';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -130,15 +130,24 @@ const swReady: Promise<boolean> = (async () => {
 // useMap hook
 // ---------------------------------------------------------------------------
 
-export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
+interface UseMapOptions {
+  initialViewport?: MapViewport | null;
+  onViewportChange?: (viewport: MapViewport) => void;
+}
+
+export function useMap(
+  containerRef: React.RefObject<HTMLDivElement | null>,
+  options: UseMapOptions = {},
+) {
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const terrainRef = useRef<TerrainManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  const { initialViewport = null, onViewportChange } = options;
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const savedVp = loadViewport();
+    const savedVp = initialViewport ?? loadViewport();
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -257,11 +266,15 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
 
     // Persist viewport (debounced)
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
+    const persistViewport = (viewport: MapViewport) => {
+      saveViewport(viewport);
+      onViewportChange?.(viewport);
+    };
     const onMoveEnd = () => {
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         const center = map.getCenter();
-        saveViewport({
+        persistViewport({
           center: [center.lng, center.lat],
           zoom: map.getZoom(),
           pitch: map.getPitch(),
@@ -281,7 +294,7 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
         const center = mapRef.current.getCenter();
-        saveViewport({
+        persistViewport({
           center: [center.lng, center.lat],
           zoom: mapRef.current.getZoom(),
           pitch: mapRef.current.getPitch(),
@@ -293,7 +306,28 @@ export function useMap(containerRef: React.RefObject<HTMLDivElement | null>) {
       map.remove();
       mapRef.current = null;
     };
-  }, [containerRef]);
+  }, [containerRef, initialViewport, onViewportChange]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !initialViewport) return;
+
+    const center = map.getCenter();
+    const sameViewport =
+      Math.abs(center.lng - initialViewport.center[0]) < 1e-7
+      && Math.abs(center.lat - initialViewport.center[1]) < 1e-7
+      && Math.abs(map.getZoom() - initialViewport.zoom) < 1e-7
+      && Math.abs(map.getPitch() - initialViewport.pitch) < 1e-7
+      && Math.abs(map.getBearing() - initialViewport.bearing) < 1e-7;
+    if (sameViewport) return;
+
+    map.jumpTo({
+      center: initialViewport.center,
+      zoom: initialViewport.zoom,
+      pitch: initialViewport.pitch,
+      bearing: initialViewport.bearing,
+    });
+  }, [initialViewport]);
 
   return { map: mapRef, isLoaded };
 }

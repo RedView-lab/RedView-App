@@ -187,7 +187,9 @@ export function ControlPanelContainer({
 
   // ── LIDAR ──────────────────────────────────────────────────────────
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
-  const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>({});
+  const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>(
+    () => initialControlPanel.lidarTilesHidden ?? {},
+  );
   const [lidarDownloadProgress, setLidarDownloadProgress] = useState<DownloadProgress | null>(null);
   const [lidarDownloadError, setLidarDownloadError] = useState<string | null>(null);
 
@@ -220,19 +222,28 @@ export function ControlPanelContainer({
 
   // ── Slope ──────────────────────────────────────────────────────────
   const [slopeState, setSlopeState] = useState(() => {
-    const loaded = loadSlopeState();
+    const loaded = initialControlPanel.slopes?.state ?? loadSlopeState();
     return {
       ...loaded,
       enabled: initialControlPanel.toggles.slopesEnabled ?? loaded.enabled,
     };
   });
-  const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>({});
-  const [slopeScale, setSlopeScale] = useState<SlopeScale>('percent');
-  const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('4 couleurs');
+  const [slopeBandVisibility, setSlopeBandVisibility] = useState<Record<string, boolean>>(
+    () => initialControlPanel.slopes?.bandVisibility ?? {},
+  );
+  const [slopeScale, setSlopeScale] = useState<SlopeScale>(
+    () => initialControlPanel.slopes?.scale ?? 'percent',
+  );
+  const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>(
+    () => initialControlPanel.slopes?.scaleSetting ?? '4 couleurs',
+  );
+  const [slopeCustomColors, setSlopeCustomColors] = useState<Record<string, string>>(
+    () => initialControlPanel.slopes?.customColors ?? {},
+  );
 
   // Custom breakpoints state — keyed by band count for independent persistence
   const [breakpointsByCount, setBreakpointsByCount] = useState<Record<number, number[]>>(() => {
-    const persisted = loadBreakpoints();
+    const persisted = initialControlPanel.slopes?.breakpoints ?? loadBreakpoints();
     return persisted.byCount;
   });
 
@@ -255,6 +266,13 @@ export function ControlPanelContainer({
     () => generateDynamicCategories(bandCount, currentBreakpoints),
     [bandCount, currentBreakpoints],
   );
+  const coloredDynamicCategories = useMemo(
+    () => dynamicCategories.map((category) => ({
+      ...category,
+      color: slopeCustomColors[category.id] ?? category.color,
+    })),
+    [dynamicCategories, slopeCustomColors],
+  );
 
   useSlope(
     isMapLoaded ? map : null,
@@ -264,12 +282,12 @@ export function ControlPanelContainer({
     slopeState.colorMode,
     useMemo(
       () =>
-        dynamicCategories.filter((cat) => slopeBandVisibility[cat.id] === false).map(
+        coloredDynamicCategories.filter((cat) => slopeBandVisibility[cat.id] === false).map(
           (cat) => [cat.minDeg, cat.maxDeg] as [number, number],
         ),
-      [slopeBandVisibility, dynamicCategories],
+      [slopeBandVisibility, coloredDynamicCategories],
     ),
-    dynamicCategories,
+    coloredDynamicCategories,
     resolutionToFactor(slopeState.resolution),
   );
 
@@ -326,11 +344,15 @@ export function ControlPanelContainer({
   }, [bandCount, currentBreakpoints]);
 
   // ── Labels ─────────────────────────────────────────────────────────
-  const [labelBackend, setLabelBackend] = useState(() => loadLabelState());
+  const [labelBackend, setLabelBackend] = useState(
+    () => initialControlPanel.labelsState?.backend ?? loadLabelState(),
+  );
   const [labelsEnabled, setLabelsEnabled] = useState(
     initialControlPanel.toggles.labelsEnabled,
   );
-  const [statesUiToggle, setStatesUiToggle] = useState(true); // ui-only, no backend
+  const [statesUiToggle, setStatesUiToggle] = useState(
+    initialControlPanel.labelsState?.statesUiEnabled ?? true,
+  );
 
   // When master toggle is off, force every backend category to false.
   const effectiveLabelState = useMemo(() => {
@@ -392,17 +414,18 @@ export function ControlPanelContainer({
   const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
   const [sunlightState, setSunlightState] = useState(() => ({
     ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
+    ...(initialControlPanel.sunlight ?? {}),
     enabled: initialControlPanel.toggles.sunlightEnabled,
   }));
   const [altitudeState, setAltitudeState] = useState(() => {
-    const loaded = loadAltitudeState();
+    const loaded = initialControlPanel.altitude?.state ?? loadAltitudeState();
     return {
       ...loaded,
       enabled: initialControlPanel.toggles.altitudeEnabled ?? loaded.enabled,
     };
   });
   const [altitudeBreakpointsByCount, setAltitudeBreakpointsByCount] = useState<Record<number, number[]>>(() => {
-    const persisted = loadAltitudeBreakpoints();
+    const persisted = initialControlPanel.altitude?.breakpoints ?? loadAltitudeBreakpoints();
     return persisted.byCount;
   });
   const persistAltitude = useCallback((next: typeof altitudeState) => {
@@ -429,6 +452,91 @@ export function ControlPanelContainer({
     () => new Set(altitudeState.hiddenBandIds),
     [altitudeState.hiddenBandIds],
   );
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.lidarTilesHidden = structuredClone(hiddenTiles);
+    });
+  }, [hiddenTiles, updateProjectControlPanel]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.slopesEnabled = slopeState.enabled;
+      draft.slopes = {
+        state: structuredClone(slopeState),
+        scale: slopeScale,
+        scaleSetting: slopeScaleSetting,
+        bandVisibility: structuredClone(slopeBandVisibility),
+        customColors: structuredClone(slopeCustomColors),
+        breakpoints: {
+          bandCount,
+          byCount: structuredClone(breakpointsByCount),
+        },
+      };
+    });
+  }, [
+    bandCount,
+    breakpointsByCount,
+    slopeBandVisibility,
+    slopeCustomColors,
+    slopeScale,
+    slopeScaleSetting,
+    slopeState,
+    updateProjectControlPanel,
+  ]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.labelsEnabled = labelsEnabled;
+      draft.labelsState = {
+        backend: structuredClone(labelBackend),
+        statesUiEnabled: statesUiToggle,
+      };
+    });
+  }, [labelBackend, labelsEnabled, statesUiToggle, updateProjectControlPanel]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.altitudeEnabled = altitudeState.enabled;
+      draft.altitude = {
+        state: structuredClone(altitudeState),
+        breakpoints: {
+          bandCount: altitudeBandCount,
+          byCount: structuredClone(altitudeBreakpointsByCount),
+        },
+      };
+    });
+  }, [
+    altitudeBandCount,
+    altitudeBreakpointsByCount,
+    altitudeState,
+    updateProjectControlPanel,
+  ]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.windEnabled = windEnabled;
+    });
+  }, [windEnabled, updateProjectControlPanel]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.snowEnabled = snowEnabled;
+    });
+  }, [snowEnabled, updateProjectControlPanel]);
+
+  useEffect(() => {
+    const {
+      enabled: _enabled,
+      sunriseTime: _sunriseTime,
+      sunsetTime: _sunsetTime,
+      ...persistedSunlight
+    } = sunlightState;
+    updateProjectControlPanel((draft) => {
+      draft.toggles.sunlightEnabled = sunlightState.enabled;
+      draft.sunlight = structuredClone(persistedSunlight);
+    });
+  }, [sunlightState, updateProjectControlPanel]);
 
   useAltitude(
     isMapLoaded ? map : null,
@@ -585,8 +693,8 @@ export function ControlPanelContainer({
     scale: slopeScale,
     scaleSetting: slopeScaleSetting,
     opacity: Math.round(slopeState.opacity * 100),
-    bands: buildSlopeBandsFromDynamic(dynamicCategories, slopeBandVisibility),
-  }), [slopeState, slopeScale, slopeScaleSetting, dynamicCategories, slopeBandVisibility]);
+    bands: buildSlopeBandsFromDynamic(coloredDynamicCategories, slopeBandVisibility),
+  }), [slopeState, slopeScale, slopeScaleSetting, coloredDynamicCategories, slopeBandVisibility]);
 
   const altitudeSlice = useMemo(() => ({
     enabled: altitudeState.enabled,
@@ -675,6 +783,12 @@ export function ControlPanelContainer({
   const handleSlopeBandToggle = useCallback((id: string) => {
     setSlopeBandVisibility((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
   }, []);
+  const handleSlopeBandColorChange = useCallback(
+    (id: string, color: string) => {
+      setSlopeCustomColors((prev) => ({ ...prev, [id]: color }));
+    },
+    [],
+  );
   const handleAltitudeEnabled = useCallback(
     (enabled: boolean) => persistAltitude({ ...altitudeState, enabled }),
     [persistAltitude, altitudeState],
@@ -912,6 +1026,7 @@ export function ControlPanelContainer({
   const persistWeatherToProject = useCallback(
     (nextWeather: WeatherState) => {
       updateProjectControlPanel((draft) => {
+        draft.toggles.weatherEnabled = nextWeather.enabled;
         draft.weather = structuredClone(nextWeather);
       });
     },
@@ -981,12 +1096,7 @@ export function ControlPanelContainer({
       className={className}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
-      onAltitudeEnabledChange={(enabled) => {
-        handleAltitudeEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.altitudeEnabled = enabled;
-        });
-      }}
+      onAltitudeEnabledChange={handleAltitudeEnabled}
       onAltitudeColorizationChange={handleAltitudeColorization}
       onAltitudeScaleSettingChange={handleAltitudeScaleSetting}
       onAltitudeOpacityChange={handleAltitudeOpacity}
@@ -1008,34 +1118,20 @@ export function ControlPanelContainer({
       onLidarTileDelete={handleLidarTileDelete}
       onLidarTileDownload={handleLidarDownload}
       /* Labels */
-      onLabelsEnabledChange={(enabled) => {
-        handleLabelsEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.labelsEnabled = enabled;
-        });
-      }}
+      onLabelsEnabledChange={handleLabelsEnabled}
       onLabelToggle={handleLabelToggle}
       /* Slopes */
-      onSlopesEnabledChange={(enabled) => {
-        handleSlopesEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.slopesEnabled = enabled;
-        });
-      }}
+      onSlopesEnabledChange={handleSlopesEnabled}
       onSlopeResolutionChange={handleSlopeResolution}
       onSlopeColorizationChange={handleSlopeColorization}
       onSlopeScaleChange={setSlopeScale}
       onSlopeScaleSettingChange={setSlopeScaleSetting}
       onSlopeOpacityChange={handleSlopeOpacity}
+      onSlopeBandColorChange={handleSlopeBandColorChange}
       onSlopeBandVisibilityToggle={handleSlopeBandToggle}
       onSlopeBandBreakpointChange={handleBreakpointChange}
       /* Weather */
-      onWeatherEnabledChange={(enabled) => {
-        handleWeatherEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.weatherEnabled = enabled;
-        });
-      }}
+      onWeatherEnabledChange={handleWeatherEnabled}
       onWeatherTabChange={handleWeatherTabChange}
       onWeatherDateChange={handleWeatherDateChange}
       onWeatherLayerToggle={handleWeatherLayerToggle}
@@ -1046,25 +1142,10 @@ export function ControlPanelContainer({
       onWeatherPaletteBandBreakpointChange={handleWeatherPaletteBandBreakpointChange}
       onWeatherAddAlert={handleWeatherAddAlert}
       /* Wind */
-      onWindEnabledChange={(enabled) => {
-        handleWindEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.windEnabled = enabled;
-        });
-      }}
+      onWindEnabledChange={handleWindEnabled}
       /* Snow & Sunlight */
-      onSnowEnabledChange={(enabled) => {
-        handleSnowEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.snowEnabled = enabled;
-        });
-      }}
-      onSunlightEnabledChange={(enabled) => {
-        handleSunlightEnabled(enabled);
-        updateProjectControlPanel((draft) => {
-          draft.toggles.sunlightEnabled = enabled;
-        });
-      }}
+      onSnowEnabledChange={handleSnowEnabled}
+      onSunlightEnabledChange={handleSunlightEnabled}
       onSunlightStateChange={handleSunlightStateChange}
       /* Routes (itineraries from active project) */
       onRoutesEnabledChange={handleRoutesEnabledChange}

@@ -1014,7 +1014,13 @@ export class LidarRenderer {
       }
 
       const localOffset = currentOffset - chunk.pointOffset;
+      if (localOffset < 0 || localOffset >= chunk.count) {
+        return;
+      }
       const drawCount = Math.min(remaining, chunk.count - localOffset);
+      if (drawCount <= 0) {
+        return;
+      }
       pass.draw(4, drawCount, 0, localOffset);
 
       currentOffset += drawCount;
@@ -1023,10 +1029,13 @@ export class LidarRenderer {
   }
 
   private findChunkIndex(chunks: PointChunkBuffers[], offset: number, hint: number): number {
-    let index = Math.max(0, hint);
+    let index = Math.max(0, Math.min(hint, chunks.length - 1));
+    if (index > 0 && offset < chunks[index].pointOffset) {
+      index = 0;
+    }
     while (index < chunks.length) {
       const chunk = chunks[index];
-      if (offset < chunk.pointOffset + chunk.count) return index;
+      if (offset >= chunk.pointOffset && offset < chunk.pointOffset + chunk.count) return index;
       index++;
     }
     return -1;

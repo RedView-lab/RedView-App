@@ -326,6 +326,19 @@ export interface ItineraryProject {
   controlPanel?: ControlPanelPersistedState;
   /** Persisted UI state for the bottom analysis chart. */
   analysis?: AnalysisPanelState;
+  /** Persisted dashboard chrome + map viewport. */
+  dashboard?: {
+    rightPanelWidth?: number;
+    leftPanelWidth?: number;
+    centerPanelHeight?: number | null;
+    lidarDownloadModeEnabled?: boolean;
+    mapViewport?: {
+      center: [number, number];
+      zoom: number;
+      pitch: number;
+      bearing: number;
+    };
+  };
 }
 
 export interface ItineraryPanelProps {

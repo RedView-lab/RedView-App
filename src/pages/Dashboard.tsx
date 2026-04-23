@@ -12,6 +12,7 @@ import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { getProject, saveProject, uploadProjectThumbnail } from '@/lib/projects';
 import { replaceProjectLocation } from '@/lib/projectLocation';
 import { captureMapThumbnail } from '@/lib/mapThumbnail';
+import { loadViewport, type MapViewport } from '@/features/map3d/lib/viewport-persist';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 interface DashboardProps {
@@ -95,6 +96,10 @@ function readStoredWidth(): number {
   }
 }
 
+function clampLeftPanelWidth(value: number) {
+  return Math.min(LEFT_PANEL_WIDTH_MAX, Math.max(LEFT_PANEL_WIDTH_MIN, value));
+}
+
 function clampPanelWidth(value: number, minWidth: number) {
   return Math.min(PANEL_WIDTH_MAX, Math.max(minWidth, value));
 }
@@ -140,6 +145,9 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
+  const [projectMapViewport, setProjectMapViewport] = useState<MapViewport | null>(
+    () => loadViewport(),
+  );
 
   // ── Active project (Supabase-backed) ────────────────────────────
   // The browser overlay is force-open until the user picks or creates
@@ -150,12 +158,14 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     useState<ItineraryProject | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
   const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
+  const activeProjectSnapshotRef = useRef<ItineraryProject | null>(null);
 
   const handleOpenProject = useCallback(async (projectId: string) => {
     setProjectLoading(true);
     try {
       const row = await getProject(projectId);
       if (!row) throw new Error('Project not found');
+      activeProjectSnapshotRef.current = row.data;
       setActiveProjectId(row.id);
       setActiveProjectInitial(row.data);
       setProjectBrowserOpen(false);
@@ -195,11 +205,13 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     }
   }, []);
 
-  const handleProjectChange = useCallback(
+  const queueProjectSave = useCallback(
     (next: ItineraryProject) => {
+      activeProjectSnapshotRef.current = next;
       pendingSaveRef.current = next;
-      if (activeProjectId) {
-        replaceProjectLocation({ id: activeProjectId, name: next.name || 'project' });
+      const id = activeProjectIdRef.current;
+      if (id) {
+        replaceProjectLocation({ id, name: next.name || 'project' });
       }
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
@@ -209,7 +221,29 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
         void flushSave();
       }, 1000);
     },
-    [activeProjectId, flushSave],
+    [flushSave],
+  );
+
+  const handleProjectChange = useCallback(
+    (next: ItineraryProject) => {
+      queueProjectSave(next);
+    },
+    [queueProjectSave],
+  );
+
+  const updatePersistedDashboard = useCallback(
+    (mut: (dashboard: NonNullable<ItineraryProject['dashboard']>) => void) => {
+      if (!activeProjectIdRef.current) return;
+      const current = activeProjectSnapshotRef.current;
+      if (!current) return;
+
+      const next = structuredClone(current);
+      const dashboard = structuredClone(next.dashboard ?? {});
+      mut(dashboard);
+      next.dashboard = dashboard;
+      queueProjectSave(next);
+    },
+    [queueProjectSave],
   );
 
   // Flush on tab close / refresh.
@@ -272,6 +306,29 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+
+  useEffect(() => {
+    const dashboard = activeProjectInitial?.dashboard;
+    setPanelWidth(
+      typeof dashboard?.rightPanelWidth === 'number'
+        ? clampPanelWidth(dashboard.rightPanelWidth, PANEL_WIDTH_MIN_FALLBACK)
+        : readStoredWidth(),
+    );
+    setLeftPanelWidth(
+      typeof dashboard?.leftPanelWidth === 'number'
+        ? clampLeftPanelWidth(dashboard.leftPanelWidth)
+        : readStoredLeftWidth(),
+    );
+    setCenterPanelHeightOverride(
+      typeof dashboard?.centerPanelHeight === 'number'
+        ? dashboard.centerPanelHeight
+        : dashboard?.centerPanelHeight === null
+          ? null
+          : readStoredCenterPanelHeight(),
+    );
+    setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
+    setProjectMapViewport(dashboard?.mapViewport ?? loadViewport());
+  }, [activeProjectId, activeProjectInitial]);
 
   useEffect(() => {
     const node = exporterPanelHostRef.current;
@@ -344,7 +401,10 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
 
   useEffect(() => {
     try { localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth)); } catch { /* ignore */ }
-  }, [panelWidth]);
+    updatePersistedDashboard((dashboard) => {
+      dashboard.rightPanelWidth = panelWidth;
+    });
+  }, [panelWidth, updatePersistedDashboard]);
 
   useEffect(() => {
     try {
@@ -352,7 +412,10 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     } catch {
       /* ignore */
     }
-  }, [leftPanelWidth]);
+    updatePersistedDashboard((dashboard) => {
+      dashboard.leftPanelWidth = leftPanelWidth;
+    });
+  }, [leftPanelWidth, updatePersistedDashboard]);
 
   useEffect(() => {
     try {
@@ -364,7 +427,39 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
     } catch {
       /* ignore */
     }
-  }, [centerPanelHeightOverride]);
+    updatePersistedDashboard((dashboard) => {
+      dashboard.centerPanelHeight = centerPanelHeightOverride;
+    });
+  }, [centerPanelHeightOverride, updatePersistedDashboard]);
+
+  useEffect(() => {
+    updatePersistedDashboard((dashboard) => {
+      dashboard.lidarDownloadModeEnabled = lidarModeEnabled;
+    });
+  }, [lidarModeEnabled, updatePersistedDashboard]);
+
+  useEffect(() => {
+    if (!projectMapViewport) return;
+    updatePersistedDashboard((dashboard) => {
+      dashboard.mapViewport = structuredClone(projectMapViewport);
+    });
+  }, [projectMapViewport, updatePersistedDashboard]);
+
+  const handleMapViewportChange = useCallback((nextViewport: MapViewport) => {
+    setProjectMapViewport((current) => {
+      if (
+        current
+        && current.center[0] === nextViewport.center[0]
+        && current.center[1] === nextViewport.center[1]
+        && current.zoom === nextViewport.zoom
+        && current.pitch === nextViewport.pitch
+        && current.bearing === nextViewport.bearing
+      ) {
+        return current;
+      }
+      return nextViewport;
+    });
+  }, []);
 
   const appScale = clampNumber(
     Math.min(
@@ -574,7 +669,13 @@ export default function Dashboard({ email, onLogout, initialProjectId }: Dashboa
           ['--app-scale' as string]: String(appScale),
         }}
       >
-      <MapView onMapReady={handleMapReady} lidarSelectionEnabled={lidarModeEnabled} onLidarSelectionDisable={() => setLidarModeEnabled(false)} />
+      <MapView
+        onMapReady={handleMapReady}
+        lidarSelectionEnabled={lidarModeEnabled}
+        onLidarSelectionDisable={() => setLidarModeEnabled(false)}
+        initialViewport={projectMapViewport}
+        onViewportChange={handleMapViewportChange}
+      />
 
       {/*
         Glass-effect blur backdrops. Each one is a 2D canvas that mirrors
