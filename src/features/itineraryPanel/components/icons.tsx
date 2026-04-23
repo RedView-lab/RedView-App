@@ -20,6 +20,30 @@ export {
 
 type AssetGlyphProps = Omit<AssetIconProps, 'src'>;
 
+function FullColorSvgIcon({
+  src,
+  size = 20,
+  className,
+  style,
+  ...rest
+}: AssetGlyphProps & { src: string }) {
+  return (
+    <span
+      className={className}
+      style={{
+        width: size,
+        height: size,
+        display: 'inline-flex',
+        flex: '0 0 auto',
+        ...style,
+      }}
+      {...rest}
+    >
+      <img src={src} alt="" aria-hidden style={{ width: '100%', height: '100%', display: 'block' }} />
+    </span>
+  );
+}
+
 const ITINERARY_ICON_ASSETS = {
   save: '/svgv2/icone/save-01.svg',
   settingsCog: '/svgv2/icone/settings-01.svg',
@@ -169,7 +193,7 @@ export const IconCheckpointFlag = ({ size = 20, ...p }: AssetGlyphProps) => (
 );
 
 export const IconCheckpointEnd = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="checkpoint-end.svg" size={size} {...p} />
+  <FullColorSvgIcon src="/svgv2/icone/checkpoint-end.svg" size={size} {...p} />
 );
 
 export const IconDroplet = ({ size = 12, ...p }: AssetGlyphProps) => (
@@ -227,7 +251,7 @@ export const IconPlusCircleFilled = ({ size = 16, ...p }: AssetGlyphProps) => (
  * with a white play-triangle inside, used as the "Départ" marker.
  */
 export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="checkpoint-start.svg" size={size} {...p} />
+  <FullColorSvgIcon src="/svgv2/icone/checkpoint-start.svg" size={size} {...p} />
 );
 
 /**
@@ -235,7 +259,7 @@ export const IconCheckpointStart = ({ size = 20, ...p }: AssetGlyphProps) => (
  * White/black grid pattern on a flag pole in a rounded square.
  */
 export const IconCheckpointEndMarker = ({ size = 20, ...p }: AssetGlyphProps) => (
-  <SvgV2Icon name="checkpoint-end.svg" size={size} {...p} />
+  <FullColorSvgIcon src="/svgv2/icone/checkpoint-end.svg" size={size} {...p} />
 );
 
 /**

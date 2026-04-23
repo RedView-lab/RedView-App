@@ -241,6 +241,10 @@ export function KindBadge({ kind, size = 20, poiCategory }: KindBadgeProps) {
     return <PoiBadge category={poiCategory} size={size} />;
   }
 
+  if (kind === 'poi') {
+    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.water} size={size} className="rvi-kind--pin rvi-kind--water" />;
+  }
+
   if (kind === 'water') {
     return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.water} size={size} className="rvi-kind--pin rvi-kind--water" />;
   }

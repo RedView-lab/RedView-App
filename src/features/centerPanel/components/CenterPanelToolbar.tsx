@@ -30,11 +30,11 @@ function assetIconStyle(direction?: 'forward' | 'backward'): CSSProperties | und
 }
 
 const IconUndo = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <SvgV2Icon name="undo.svg" size={size} {...rest} />
+  <SvgV2Icon name="corner-up-left.svg" size={size} {...rest} />
 );
 
 const IconRedo = ({ size = 16, ...rest }: ToolbarIconProps) => (
-  <SvgV2Icon name="redo.svg" size={size} {...rest} />
+  <SvgV2Icon name="corner-up-right.svg" size={size} {...rest} />
 );
 
 const IconCursor = ({ size = 18, ...rest }: ToolbarIconProps) => (
