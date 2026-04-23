@@ -18,6 +18,7 @@ const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
 const INTER_BATCH_DELAY_MS = 0;
+const KM_PER_DEGREE_LATITUDE = 110.574;
 // Tighter spacing tables = denser grid = more detail when zoomed out.
 const FORECAST_SPACING_TABLE: [number, number][] = [
   [3, 0.6],
@@ -42,6 +43,30 @@ const TRENDS_SPACING_TABLE: [number, number][] = [
   [10, 0.01],
   [11, 0.005],
   [12, 0.0025],
+];
+const FORECAST_RESOLUTION_KM_TABLE: [number, number][] = [
+  [3, 50],
+  [4, 36],
+  [5, 24],
+  [6, 16],
+  [7, 10],
+  [8, 6],
+  [9, 3],
+  [10, 1.5],
+  [11, 0.8],
+  [12, 0.4],
+];
+const TRENDS_RESOLUTION_KM_TABLE: [number, number][] = [
+  [3, 50],
+  [4, 40],
+  [5, 28],
+  [6, 18],
+  [7, 12],
+  [8, 8],
+  [9, 4],
+  [10, 2],
+  [11, 1],
+  [12, 0.5],
 ];
 const FORECAST_MIN_SPACING = 0.00125;
 const TRENDS_MIN_SPACING = 0.0025;
@@ -141,21 +166,37 @@ function paddingForZoom(mode: WeatherSelection['mode'], zoom: number): number {
 function maxPointsForZoom(mode: WeatherSelection['mode'], zoom: number): number {
   // Self-hosted VPS → we can afford much denser grids.
   if (mode === 'forecast') {
-    if (zoom <= 4.5) return 3200;
-    if (zoom <= 6.5) return 2600;
-    if (zoom <= 8.5) return 2000;
-    return 1500;
+    if (zoom <= 4.5) return 9000;
+    if (zoom <= 6.5) return 6500;
+    if (zoom <= 8.5) return 4200;
+    return 2600;
   }
-  if (zoom <= 4.5) return 1600;
-  if (zoom <= 6.5) return 1200;
-  if (zoom <= 8.5) return 900;
-  return 700;
+  if (zoom <= 4.5) return 4200;
+  if (zoom <= 6.5) return 2800;
+  if (zoom <= 8.5) return 1800;
+  return 1100;
 }
 
-function gridDefaultsForMode(mode: WeatherSelection['mode']): { spacingTable: [number, number][]; minSpacing: number } {
+function gridDefaultsForMode(mode: WeatherSelection['mode']): {
+  spacingTable: [number, number][];
+  resolutionKmTable: [number, number][];
+  minSpacing: number;
+} {
   return mode === 'forecast'
-    ? { spacingTable: FORECAST_SPACING_TABLE, minSpacing: FORECAST_MIN_SPACING }
-    : { spacingTable: TRENDS_SPACING_TABLE, minSpacing: TRENDS_MIN_SPACING };
+    ? {
+        spacingTable: FORECAST_SPACING_TABLE,
+        resolutionKmTable: FORECAST_RESOLUTION_KM_TABLE,
+        minSpacing: FORECAST_MIN_SPACING,
+      }
+    : {
+        spacingTable: TRENDS_SPACING_TABLE,
+        resolutionKmTable: TRENDS_RESOLUTION_KM_TABLE,
+        minSpacing: TRENDS_MIN_SPACING,
+      };
+}
+
+function degreeSpacingForKilometres(targetKm: number): number {
+  return targetKm / KM_PER_DEGREE_LATITUDE;
 }
 
 function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mode']): {
@@ -164,7 +205,7 @@ function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mo
   cols: number;
   spacing: number;
 } {
-  const { spacingTable, minSpacing } = gridDefaultsForMode(mode);
+  const { spacingTable, resolutionKmTable, minSpacing } = gridDefaultsForMode(mode);
   const padding = paddingForZoom(mode, viewport.zoom);
   const maxPoints = maxPointsForZoom(mode, viewport.zoom);
   const latPad = (viewport.north - viewport.south) * padding;
@@ -174,7 +215,12 @@ function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mo
   const paddedSouth = clamp(viewport.south - latPad, -85, 85);
   const paddedNorth = clamp(viewport.north + latPad, -85, 85);
 
-  let spacing = quantizeSpacing(interpolateSpacing(viewport.zoom, spacingTable), minSpacing);
+  const targetResolutionKm = interpolateSpacing(viewport.zoom, resolutionKmTable);
+  const targetSpacingDegrees = quantizeSpacing(degreeSpacingForKilometres(targetResolutionKm), minSpacing);
+  let spacing = Math.min(
+    quantizeSpacing(interpolateSpacing(viewport.zoom, spacingTable), minSpacing),
+    targetSpacingDegrees,
+  );
   let rows = 0;
   let cols = 0;
   let west = paddedWest;
