@@ -10,15 +10,44 @@ const FORECAST_API_BASE = 'https://api.open-meteo.com/v1/forecast';
 const CLIMATE_API_BASE = 'https://climate-api.open-meteo.com/v1/climate';
 const FORECAST_CACHE_TTL_MS = 20 * 60 * 1000;
 const TREND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const BATCH_SIZE = 36;
+const FORECAST_BATCH_SIZE = 84;
+const TRENDS_BATCH_SIZE = 96;
 const MAX_RETRIES = 4;
 const INITIAL_BACKOFF_MS = 3_000;
 const MIN_REQUEST_GAP_MS = 1_800;
 const INTER_BATCH_DELAY_MS = 1_300;
-const FORECAST_MAX_POINTS = 108;
-const TRENDS_MAX_POINTS = 56;
-const FORECAST_PADDING = 0.35;
-const TRENDS_PADDING = 0.14;
+const FORECAST_SPACING_TABLE: [number, number][] = [
+  [4, 1.0],
+  [5, 0.5],
+  [6, 0.25],
+  [7, 0.125],
+  [8, 0.0625],
+  [9, 0.03125],
+  [10, 0.02],
+  [11, 0.01],
+  [12, 0.005],
+];
+const TRENDS_SPACING_TABLE: [number, number][] = [
+  [4, 1.5],
+  [5, 1.0],
+  [6, 0.5],
+  [7, 0.25],
+  [8, 0.125],
+  [9, 0.0625],
+  [10, 0.03125],
+  [11, 0.02],
+  [12, 0.01],
+];
+const FORECAST_MIN_SPACING = 0.005;
+const TRENDS_MIN_SPACING = 0.01;
+
+interface WeatherViewport {
+  north: number;
+  south: number;
+  east: number;
+  west: number;
+  zoom: number;
+}
 
 interface CachedSampleEntry {
   sample: WeatherOverlaySample;
@@ -28,7 +57,7 @@ interface CachedSampleEntry {
 interface ForecastBatchItem {
   latitude: number | number[];
   longitude: number | number[];
-  minutely_15?: {
+  hourly?: {
     temperature_2m?: number[];
     relative_humidity_2m?: number[];
     apparent_temperature?: number[];
@@ -55,6 +84,117 @@ let lastRequestTime = 0;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function interpolateSpacing(zoom: number, table: [number, number][]): number {
+  if (zoom <= table[0][0]) return table[0][1];
+
+  for (let index = 1; index < table.length; index += 1) {
+    const [z0, spacing0] = table[index - 1];
+    const [z1, spacing1] = table[index];
+    if (zoom <= z1) {
+      const t = (zoom - z0) / Math.max(0.0001, z1 - z0);
+      return spacing0 + t * (spacing1 - spacing0);
+    }
+  }
+
+  return table[table.length - 1][1];
+}
+
+function quantizeSpacing(step: number, minSpacing: number): number {
+  let next = Math.max(step, minSpacing);
+  if (next >= 0.03125) {
+    const log2 = Math.round(Math.log2(1 / next));
+    next = 1 / Math.pow(2, log2);
+  } else if (next >= 0.01) {
+    next = Math.ceil(next / 0.005) * 0.005;
+  } else {
+    next = Math.ceil(next / 0.0025) * 0.0025;
+  }
+  return Math.max(next, minSpacing);
+}
+
+function snapDown(value: number, step: number): number {
+  return Math.floor(value / step) * step;
+}
+
+function snapUp(value: number, step: number): number {
+  return Math.ceil(value / step) * step;
+}
+
+function paddingForZoom(mode: WeatherSelection['mode'], zoom: number): number {
+  if (mode === 'forecast') {
+    if (zoom >= 9) return 0.24;
+    if (zoom >= 7) return 0.2;
+    return 0.15;
+  }
+  if (zoom >= 9) return 0.12;
+  if (zoom >= 7) return 0.1;
+  return 0.08;
+}
+
+function maxPointsForZoom(mode: WeatherSelection['mode'], zoom: number): number {
+  if (mode === 'forecast') {
+    if (zoom <= 5.5) return 384;
+    if (zoom <= 7.5) return 320;
+    return 256;
+  }
+  if (zoom <= 5.5) return 224;
+  if (zoom <= 7.5) return 180;
+  return 140;
+}
+
+function gridDefaultsForMode(mode: WeatherSelection['mode']): { spacingTable: [number, number][]; minSpacing: number } {
+  return mode === 'forecast'
+    ? { spacingTable: FORECAST_SPACING_TABLE, minSpacing: FORECAST_MIN_SPACING }
+    : { spacingTable: TRENDS_SPACING_TABLE, minSpacing: TRENDS_MIN_SPACING };
+}
+
+function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mode']): {
+  bounds: [west: number, south: number, east: number, north: number];
+  rows: number;
+  cols: number;
+  spacing: number;
+} {
+  const { spacingTable, minSpacing } = gridDefaultsForMode(mode);
+  const padding = paddingForZoom(mode, viewport.zoom);
+  const maxPoints = maxPointsForZoom(mode, viewport.zoom);
+  const latPad = (viewport.north - viewport.south) * padding;
+  const lngPad = (viewport.east - viewport.west) * padding;
+  const paddedWest = clamp(viewport.west - lngPad, -180, 180);
+  const paddedEast = clamp(viewport.east + lngPad, -180, 180);
+  const paddedSouth = clamp(viewport.south - latPad, -85, 85);
+  const paddedNorth = clamp(viewport.north + latPad, -85, 85);
+
+  let spacing = quantizeSpacing(interpolateSpacing(viewport.zoom, spacingTable), minSpacing);
+  let rows = 0;
+  let cols = 0;
+  let west = paddedWest;
+  let east = paddedEast;
+  let south = paddedSouth;
+  let north = paddedNorth;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    west = clamp(snapDown(paddedWest, spacing), -180, 180);
+    east = clamp(snapUp(paddedEast, spacing), -180, 180);
+    south = clamp(snapDown(paddedSouth, spacing), -85, 85);
+    north = clamp(snapUp(paddedNorth, spacing), -85, 85);
+
+    cols = Math.max(2, Math.round((east - west) / spacing) + 1);
+    rows = Math.max(2, Math.round((north - south) / spacing) + 1);
+    if (cols * rows <= maxPoints) break;
+
+    const scaledSpacing = spacing * Math.sqrt((cols * rows) / maxPoints) * 1.08;
+    const widenedSpacing = quantizeSpacing(scaledSpacing, minSpacing);
+    spacing = widenedSpacing > spacing ? widenedSpacing : quantizeSpacing(spacing * 1.5, minSpacing);
+  }
+
+  return {
+    bounds: [west, south, east, north],
+    rows,
+    cols,
+    spacing,
+  };
 }
 
 function coordCacheKey(lat: number, lng: number): string {
@@ -163,8 +303,8 @@ async function fetchForecastBatch(
   const timeParam = encodeURIComponent(forecastIso);
   const url =
     `${FORECAST_API_BASE}?latitude=${lats}&longitude=${lngs}` +
-    `&minutely_15=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover` +
-    `&start_minutely_15=${timeParam}&end_minutely_15=${timeParam}` +
+    `&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover` +
+    `&start_hour=${timeParam}&end_hour=${timeParam}` +
     `&timezone=Europe%2FParis&temperature_unit=celsius&precipitation_unit=mm&cell_selection=nearest` +
     franceModel;
 
@@ -172,15 +312,15 @@ async function fetchForecastBatch(
   const items: ForecastBatchItem[] = Array.isArray(json) ? json as ForecastBatchItem[] : [json as ForecastBatchItem];
 
   return items.map((item) => {
-    const temp = firstFinite(item.minutely_15?.temperature_2m);
+    const temp = firstFinite(item.hourly?.temperature_2m);
     return {
       lat: unwrapCoord(item.latitude),
       lng: unwrapCoord(item.longitude),
       temperature: temp,
-      feelsLike: firstFinite(item.minutely_15?.apparent_temperature, temp),
-      rain: firstFinite(item.minutely_15?.precipitation),
-      cloudCover: firstFinite(item.minutely_15?.cloud_cover),
-      humidity: firstFinite(item.minutely_15?.relative_humidity_2m),
+      feelsLike: firstFinite(item.hourly?.apparent_temperature, temp),
+      rain: firstFinite(item.hourly?.precipitation),
+      cloudCover: firstFinite(item.hourly?.cloud_cover),
+      humidity: firstFinite(item.hourly?.relative_humidity_2m),
     };
   });
 }
@@ -224,45 +364,24 @@ export function buildWeatherGrid(map: MapboxMap, mode: WeatherSelection['mode'])
       bounds: [-180, -85, 180, 85],
       rows: 0,
       cols: 0,
+      spacing: mode === 'forecast' ? FORECAST_MIN_SPACING : TRENDS_MIN_SPACING,
       points: [],
     };
   }
-  const canvas = map.getCanvas();
-  const width = canvas.width || canvas.clientWidth || 1024;
-  const height = canvas.height || canvas.clientHeight || 768;
-  const maxPoints = mode === 'forecast' ? FORECAST_MAX_POINTS : TRENDS_MAX_POINTS;
-  const padding = mode === 'forecast' ? FORECAST_PADDING : TRENDS_PADDING;
-  const aspect = width / Math.max(1, height);
-
-  let cols = clamp(Math.round(width / (mode === 'forecast' ? 88 : 130)), mode === 'forecast' ? 8 : 6, mode === 'forecast' ? 18 : 10);
-  let rows = clamp(Math.round(cols / aspect), mode === 'forecast' ? 6 : 5, mode === 'forecast' ? 12 : 8);
-
-  while (cols * rows > maxPoints) {
-    if (cols >= rows && cols > 4) cols -= 1;
-    else if (rows > 4) rows -= 1;
-    else break;
-  }
-
-  const west = bounds.getWest();
-  const east = bounds.getEast();
-  const south = bounds.getSouth();
-  const north = bounds.getNorth();
-  const lngPad = (east - west) * padding;
-  const latPad = (north - south) * padding;
-  const paddedWest = clamp(west - lngPad, -180, 180);
-  const paddedEast = clamp(east + lngPad, -180, 180);
-  const paddedSouth = clamp(south - latPad, -85, 85);
-  const paddedNorth = clamp(north + latPad, -85, 85);
-
-  const latStep = rows > 1 ? (paddedNorth - paddedSouth) / (rows - 1) : 0;
-  const lngStep = cols > 1 ? (paddedEast - paddedWest) / (cols - 1) : 0;
+  const envelope = buildGridEnvelope({
+    north: bounds.getNorth(),
+    south: bounds.getSouth(),
+    east: bounds.getEast(),
+    west: bounds.getWest(),
+    zoom: map.getZoom(),
+  }, mode);
   const points: WeatherGridPoint[] = [];
 
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
+  for (let row = 0; row < envelope.rows; row += 1) {
+    for (let col = 0; col < envelope.cols; col += 1) {
       points.push({
-        lat: Number((paddedNorth - row * latStep).toFixed(4)),
-        lng: Number((paddedWest + col * lngStep).toFixed(4)),
+        lat: Number((envelope.bounds[3] - row * envelope.spacing).toFixed(4)),
+        lng: Number((envelope.bounds[0] + col * envelope.spacing).toFixed(4)),
         row,
         col,
       });
@@ -270,11 +389,26 @@ export function buildWeatherGrid(map: MapboxMap, mode: WeatherSelection['mode'])
   }
 
   return {
-    bounds: [paddedWest, paddedSouth, paddedEast, paddedNorth],
-    rows,
-    cols,
+    bounds: envelope.bounds,
+    rows: envelope.rows,
+    cols: envelope.cols,
+    spacing: envelope.spacing,
     points,
   };
+}
+
+export function weatherGridSupportsViewport(
+  grid: WeatherGridDefinition,
+  viewport: WeatherViewport,
+  mode: WeatherSelection['mode'],
+): boolean {
+  const desired = buildGridEnvelope(viewport, mode);
+  const containsViewport = viewport.west >= grid.bounds[0]
+    && viewport.south >= grid.bounds[1]
+    && viewport.east <= grid.bounds[2]
+    && viewport.north <= grid.bounds[3];
+
+  return containsViewport && grid.spacing <= desired.spacing + 1e-6;
 }
 
 export async function fetchWeatherGridData(
@@ -283,6 +417,7 @@ export async function fetchWeatherGridData(
   signal?: AbortSignal,
 ): Promise<WeatherOverlaySample[]> {
   const ttlMs = selection.mode === 'forecast' ? FORECAST_CACHE_TTL_MS : TREND_CACHE_TTL_MS;
+  const batchSize = selection.mode === 'forecast' ? FORECAST_BATCH_SIZE : TRENDS_BATCH_SIZE;
   const samples = new Array<WeatherOverlaySample>(grid.points.length);
   const uncachedIndexes: number[] = [];
 
@@ -294,9 +429,9 @@ export async function fetchWeatherGridData(
 
   if (uncachedIndexes.length === 0) return samples;
 
-  for (let offset = 0; offset < uncachedIndexes.length; offset += BATCH_SIZE) {
+  for (let offset = 0; offset < uncachedIndexes.length; offset += batchSize) {
     if (offset > 0) await sleep(INTER_BATCH_DELAY_MS, signal);
-    const batchIndexes = uncachedIndexes.slice(offset, offset + BATCH_SIZE);
+    const batchIndexes = uncachedIndexes.slice(offset, offset + batchSize);
     const batchPoints = batchIndexes.map((index) => grid.points[index]);
     const fetched = selection.mode === 'forecast'
       ? await fetchForecastBatch(batchPoints, selection.forecastIso ?? '', signal)

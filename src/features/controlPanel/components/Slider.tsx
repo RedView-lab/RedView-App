@@ -8,9 +8,10 @@ interface SliderProps {
   width?: number | string;
   min?: number;
   max?: number;
+  step?: number;
 }
 
-export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 100 }: SliderProps) {
+export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 100, step = 1 }: SliderProps) {
   const [draftValue, setDraftValue] = useState(value);
   const [interacting, setInteracting] = useState(false);
 
@@ -48,6 +49,7 @@ export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 
         type="range"
         min={min}
         max={max}
+        step={step}
         value={clampedValue}
         onPointerDown={() => setInteracting(true)}
         onChange={(e) => {

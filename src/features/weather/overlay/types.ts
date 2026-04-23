@@ -33,6 +33,7 @@ export interface WeatherGridDefinition {
   bounds: [west: number, south: number, east: number, north: number];
   rows: number;
   cols: number;
+  spacing: number;
   points: WeatherGridPoint[];
 }
 

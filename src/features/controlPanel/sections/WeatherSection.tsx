@@ -17,6 +17,17 @@ import type {
   WeatherTab,
 } from '../types';
 import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../weatherPalette';
+import {
+  FORECAST_MAX_DAY_OFFSET,
+  FORECAST_TIME_STEP_MINUTES,
+  formatLocalDateIso,
+  getForecastDateForOffset,
+  getForecastMaxMinutesForDate,
+  getForecastMinMinutesForDate,
+  getForecastOffsetForDate,
+  minutesToTime,
+  timeToMinutes,
+} from '@/features/weather/lib/forecastTime.ts';
 
 interface Props {
   state: WeatherState;
@@ -95,12 +106,13 @@ const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRen
 const FRENCH_DAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
 
 function getForecastDayLabels(): string[] {
-  const now = new Date();
-  return [
-    "Aujourd'hui",
-    FRENCH_DAYS[(now.getDay() + 1) % 7],
-    FRENCH_DAYS[(now.getDay() + 2) % 7],
-  ];
+  const todayIso = formatLocalDateIso(new Date());
+  return Array.from({ length: FORECAST_MAX_DAY_OFFSET + 1 }, (_, offset) => {
+    const dateIso = getForecastDateForOffset(offset);
+    if (dateIso === todayIso) return "Aujourd'hui";
+    const date = new Date(`${dateIso}T00:00:00`);
+    return FRENCH_DAYS[date.getDay()] ?? FRENCH_DAYS[0];
+  });
 }
 
 function getMonthIndexFromIso(iso: string): number {
@@ -313,15 +325,8 @@ export function WeatherSection({
   onPaletteBandBreakpointChange,
   onAddAlert,
 }: Props) {
-  const getMinutes = (timeStr: string) => {
-    const [h, m] = timeStr.split(':').map(Number);
-    return (h || 0) * 60 + (m || 0);
-  };
-
   const handleTimeSliderChange = (val: number) => {
-    const h = Math.floor(val / 60).toString().padStart(2, '0');
-    const m = (val % 60).toString().padStart(2, '0');
-    onDateChange?.({ time: `${h}:${m}` });
+    onDateChange?.({ time: minutesToTime(val) });
   };
 
   const timeParts = (state.time || '00:00').split(':');
@@ -330,10 +335,15 @@ export function WeatherSection({
 
   const dayLabels = getForecastDayLabels();
   const isForecast = state.tab === 'forecast';
-  const forecastDay = state.forecastDay ?? 0;
+  const forecastDay = getForecastOffsetForDate(state.date);
   const trendMonth = getMonthIndexFromIso(state.date);
   const trendMonthLabel = getMonthLabel(state.date);
   const trendMonthValue = formatMonthInputValue(state.date);
+  const forecastMinMinutes = getForecastMinMinutesForDate(state.date);
+  const forecastMaxMinutes = getForecastMaxMinutesForDate(state.date);
+  const forecastBoundsStart = minutesToTime(forecastMinMinutes);
+  const forecastBoundsEnd = minutesToTime(forecastMaxMinutes);
+  const safeForecastMinutes = Math.max(forecastMinMinutes, Math.min(forecastMaxMinutes, timeToMinutes(state.time)));
 
   const displayedLayers = useMemo(() => {
     if (isForecast) {
@@ -373,9 +383,9 @@ export function WeatherSection({
             <div className="rvc-weather__day-slider-wrapper">
               <Slider
                 min={0}
-                max={2}
+                max={FORECAST_MAX_DAY_OFFSET}
                 value={forecastDay}
-                onChange={(v) => onDateChange?.({ forecastDay: v })}
+                onChange={(v) => onDateChange?.({ forecastDay: v, date: getForecastDateForOffset(v) })}
                 width="100%"
               />
             </div>
@@ -385,7 +395,7 @@ export function WeatherSection({
                   key={i}
                   type="button"
                   className={`rvc-weather__day-label${forecastDay === i ? ' is-active' : ''}`}
-                  onClick={() => onDateChange?.({ forecastDay: i })}
+                  onClick={() => onDateChange?.({ forecastDay: i, date: getForecastDateForOffset(i) })}
                 >
                   {label}
                 </button>
@@ -395,17 +405,18 @@ export function WeatherSection({
 
           {/* Time row for forecast */}
           <div className="rvc-weather__time-row">
-            <span className="rvc-weather__time-bound">00:00</span>
+            <span className="rvc-weather__time-bound">{forecastBoundsStart}</span>
             <div style={{ flex: 1, padding: '0 4px', display: 'flex', alignItems: 'center' }}>
               <Slider
-                min={0}
-                max={1439}
-                value={getMinutes(state.time)}
+                min={forecastMinMinutes}
+                max={forecastMaxMinutes}
+                step={FORECAST_TIME_STEP_MINUTES}
+                value={safeForecastMinutes}
                 onChange={handleTimeSliderChange}
                 width="100%"
               />
             </div>
-            <span className="rvc-weather__time-bound">23:59</span>
+            <span className="rvc-weather__time-bound">{forecastBoundsEnd}</span>
             <div className="rvc-weather__time-input">
               <IconClock size={12} />
               <div className="rvc-weather__time-display">
@@ -416,6 +427,9 @@ export function WeatherSection({
               <input
                 type="time"
                 value={state.time}
+                min={forecastBoundsStart}
+                max={forecastBoundsEnd}
+                step={FORECAST_TIME_STEP_MINUTES * 60}
                 onChange={(e) => onDateChange?.({ time: e.target.value })}
                 className="rvc-weather__native-input"
               />

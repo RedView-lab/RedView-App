@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
-import { buildWeatherGrid, clearWeatherOverlayCache, fetchWeatherGridData } from './client';
+import { buildWeatherGrid, clearWeatherOverlayCache, fetchWeatherGridData, weatherGridSupportsViewport } from './client';
+import { clampForecastSelection } from '../lib/forecastTime.ts';
 import { renderWeatherCanvas } from './render';
 import type {
   WeatherGridDataset,
@@ -15,7 +16,6 @@ const LAYER_PREFIX = 'weather-overlay-layer';
 const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 const MOVE_DEBOUNCE_MS = 700;
 const MIN_FETCH_INTERVAL_MS = 12_000;
-const ZOOM_DELTA_THRESHOLD = 1.15;
 const RENDER_MIN = 320;
 const RENDER_MAX = 768;
 
@@ -62,37 +62,21 @@ function containsBounds(container: [number, number, number, number], viewport: V
     && viewport.north <= container[3];
 }
 
-function roundToQuarterHour(time: string): string {
-  const [hoursText, minutesText] = time.split(':');
-  const hours = Number(hoursText || 0);
-  const minutes = Number(minutesText || 0);
-  const totalMinutes = hours * 60 + minutes;
-  const rounded = Math.round(totalMinutes / 15) * 15;
-  const clamped = Math.max(0, Math.min(23 * 60 + 45, rounded));
-  const nextHours = String(Math.floor(clamped / 60)).padStart(2, '0');
-  const nextMinutes = String(clamped % 60).padStart(2, '0');
-  return `${nextHours}:${nextMinutes}`;
-}
-
-function forecastDateIso(offset: number): string {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  date.setDate(date.getDate() + offset);
-  return date.toISOString().slice(0, 10);
-}
-
 function selectionFromState(state: WeatherOverlayState): WeatherSelection {
   if (state.tab === 'trends') {
     const monthIso = state.date.slice(0, 7);
     return { mode: 'trends', key: `trends:${monthIso}`, monthIso };
   }
 
-  const dateIso = forecastDateIso(state.forecastDay ?? 0);
-  const roundedTime = roundToQuarterHour(state.time || '00:00');
+  const forecast = clampForecastSelection({
+    date: state.date,
+    time: state.time,
+    forecastDay: state.forecastDay,
+  });
   return {
     mode: 'forecast',
-    key: `forecast:${dateIso}T${roundedTime}`,
-    forecastIso: `${dateIso}T${roundedTime}`,
+    key: `forecast:${forecast.date}T${forecast.time}`,
+    forecastIso: `${forecast.date}T${forecast.time}`,
   };
 }
 
@@ -334,16 +318,23 @@ export function useWeatherOverlay(
       const viewport = getViewportBounds(map);
       const currentDataset = dataRef.current;
       const sameSelection = currentDataset?.selectionKey === selection.key;
-      const sameCoverage = currentDataset ? containsBounds(currentDataset.grid.bounds, viewport) : false;
-      const zoomDelta = lastViewportRef.current ? Math.abs(lastViewportRef.current.zoom - viewport.zoom) : Number.POSITIVE_INFINITY;
+      const reusableGrid = currentDataset
+        ? weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode)
+        : false;
 
-      if (currentDataset && sameSelection && sameCoverage && (force || zoomDelta < ZOOM_DELTA_THRESHOLD)) {
+      if (currentDataset && sameSelection && reusableGrid) {
         lastViewportRef.current = viewport;
         await renderFromData(currentDataset);
         return;
       }
 
-      if (!force && sameSelection && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS && currentDataset) {
+      if (
+        !force
+        && sameSelection
+        && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS
+        && currentDataset
+        && containsBounds(currentDataset.grid.bounds, viewport)
+      ) {
         await renderFromData(currentDataset);
         return;
       }

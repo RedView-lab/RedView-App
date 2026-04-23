@@ -35,6 +35,7 @@ import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
 import { useWeatherOverlay } from '@/features/weather/overlay/useWeatherOverlay';
+import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
@@ -368,6 +369,13 @@ export function ControlPanelContainer({
 
       return {
         ...merged,
+        ...(merged.tab === 'forecast'
+          ? clampForecastSelection({
+            date: merged.date,
+            time: merged.time,
+            forecastDay: merged.forecastDay,
+          })
+          : null),
         palettes: nextPalettes,
       };
     },
@@ -758,12 +766,39 @@ export function ControlPanelContainer({
     [],
   );
   const handleWeatherTabChange = useCallback(
-    (tab: WeatherTab) => setWeatherState((prev) => ({ ...prev, tab })),
+    (tab: WeatherTab) => setWeatherState((prev) => {
+      if (tab !== 'forecast') return { ...prev, tab };
+      return {
+        ...prev,
+        tab,
+        ...clampForecastSelection({
+          date: prev.date,
+          time: prev.time,
+          forecastDay: prev.forecastDay,
+        }),
+      };
+    }),
     [],
   );
   const handleWeatherDateChange = useCallback(
     (dateState: Partial<Pick<WeatherState, 'customDateEnabled' | 'date' | 'time' | 'forecastDay' | 'trendMode'>>) =>
-      setWeatherState((prev) => ({ ...prev, ...dateState })),
+      setWeatherState((prev) => {
+        const next = { ...prev, ...dateState };
+        if (next.tab !== 'forecast') return next;
+
+        const resolvedDate = dateState.forecastDay != null
+          ? getForecastDateForOffset(dateState.forecastDay)
+          : next.date;
+
+        return {
+          ...next,
+          ...clampForecastSelection({
+            date: resolvedDate,
+            time: next.time,
+            forecastDay: next.forecastDay,
+          }),
+        };
+      }),
     [],
   );
   const handleWeatherLayerToggle = useCallback(

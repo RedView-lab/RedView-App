@@ -1,4 +1,5 @@
 import type { ControlPanelState, WeatherPaletteConfig } from './types';
+import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 
 const WEATHER_PALETTE_PRESETS: Record<string, WeatherPaletteConfig> = {
   temperature: {
@@ -121,9 +122,11 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     enabled: true,
     tab: 'forecast',
     customDateEnabled: true,
-    date: '2026-04-22',
-    time: '09:30',
-    forecastDay: 0,
+    ...clampForecastSelection({
+      date: getForecastDateForOffset(0),
+      time: '12:00',
+      forecastDay: 0,
+    }),
     trendMode: 'date',
     layers: [
       { key: 'temperature', enabled: true, mode: 'text' },
