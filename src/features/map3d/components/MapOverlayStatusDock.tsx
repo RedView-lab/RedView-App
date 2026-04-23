@@ -5,6 +5,7 @@ import type { OverlayStatusId, OverlayStatusSnapshot } from '../overlayStatus';
 interface MapOverlayStatusDockProps {
   statuses: OverlayStatusSnapshot[];
   right: number;
+  top?: number;
   bottom?: number;
   hidden?: boolean;
   onReload?: (id: OverlayStatusId) => void;
@@ -13,6 +14,7 @@ interface MapOverlayStatusDockProps {
 export default function MapOverlayStatusDock({
   statuses,
   right,
+  top,
   bottom = 88,
   hidden = false,
   onReload,
@@ -24,14 +26,15 @@ export default function MapOverlayStatusDock({
       style={{
         ...dockStyle,
         right,
-        bottom,
+        ...(top == null ? { bottom } : { top }),
         opacity: hidden ? 0 : 1,
         pointerEvents: hidden ? 'none' : 'auto',
       }}
     >
       {statuses.map((status) => {
-        const compact = status.state === 'ready';
+        const compact = status.state === 'ready' && status.id !== 'shadow';
         const reloadDisabled = status.state === 'loading' || !status.reloadable;
+        const showReload = status.id === 'shadow' || status.reloadable;
         const tooltip = [status.label, status.detail].filter(Boolean).join(' - ');
 
         if (compact) {
@@ -66,10 +69,10 @@ export default function MapOverlayStatusDock({
               <div
                 style={{
                   ...trackFillStyle,
-                  width: `${Math.max(8, status.progress)}%`,
+                  width: `${status.progress <= 0 ? 0 : Math.max(8, status.progress)}%`,
                   background: status.state === 'error'
                     ? 'linear-gradient(90deg, rgba(255,140,92,0.96), rgba(255,190,135,0.9))'
-                    : 'rgba(255,255,255,0.82)',
+                    : 'rgba(255,255,255,0.8)',
                 }}
               />
             </div>
@@ -78,7 +81,7 @@ export default function MapOverlayStatusDock({
               {status.state === 'error' ? 'Err' : `${status.progress}%`}
             </div>
 
-            {status.reloadable ? (
+            {showReload ? (
               <button
                 type="button"
                 aria-label={`Recharger ${status.label}`}
@@ -129,13 +132,11 @@ const dockStyle: CSSProperties = {
   flexDirection: 'column',
   alignItems: 'flex-end',
   gap: 8,
-  transition: 'opacity 220ms ease, right 220ms ease, bottom 220ms ease',
+  transition: 'opacity 220ms ease, right 220ms ease, top 220ms ease, bottom 220ms ease',
 };
 
 const glassBase: CSSProperties = {
   background: 'rgba(15,15,15,0.74)',
-  border: '1px solid rgba(255,255,255,0.08)',
-  boxShadow: '0 10px 24px rgba(0,0,0,0.28)',
   backdropFilter: 'blur(24px)',
   WebkitBackdropFilter: 'blur(24px)',
 };
@@ -159,7 +160,7 @@ const trackShellStyle: CSSProperties = {
   height: 18,
   borderRadius: 8,
   padding: 1,
-  background: 'rgba(255,255,255,0.18)',
+  background: 'rgba(255,255,255,0.32)',
   overflow: 'hidden',
 };
 

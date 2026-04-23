@@ -191,8 +191,18 @@ export default function Dashboard({
   );
 
   const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['map', 'shadow', 'weather'];
+    const orderedIds: OverlayStatusId[] = ['shadow', 'map', 'weather'];
+    const shadowStatus = overlayStatuses.shadow ?? {
+      id: 'shadow' as const,
+      label: OVERLAY_LABEL.shadow,
+      state: 'ready' as const,
+      progress: 0,
+      detail: 'Ensoleillement inactif',
+      reloadable: Boolean(overlayReloadersRef.current.shadow),
+      updatedAt: 0,
+    };
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
+      shadow: shadowStatus,
       ...overlayStatuses,
       ...(mapStatus ? { map: mapStatus } : {}),
     };
@@ -325,6 +335,7 @@ export default function Dashboard({
           <MapOverlayStatusDock
             statuses={visibleStatuses}
             right={statusDockRight}
+            top={PANEL_PADDING}
             hidden={projectBrowserOpen || activeProjectId == null}
             onReload={handleOverlayReload}
           />
