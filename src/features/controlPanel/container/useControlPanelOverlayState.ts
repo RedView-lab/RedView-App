@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import type {
+  OverlayReloadRegistrar,
+  OverlayStatusReporter,
+} from '@/features/map3d/overlayStatus';
 
 import { loadLabelState, saveLabelState } from '@/features/labels/lib/label-persist';
 import { useLabels } from '@/features/labels/hooks/useLabels';
@@ -45,6 +49,10 @@ interface UseControlPanelOverlayStateArgs {
   isMapLoaded: boolean;
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
+  onWeatherOverlayStatusChange?: OverlayStatusReporter;
+  onWeatherOverlayReloadChange?: OverlayReloadRegistrar;
+  onShadowOverlayStatusChange?: OverlayStatusReporter;
+  onShadowOverlayReloadChange?: OverlayReloadRegistrar;
 }
 
 export interface OverlayHandlers {
@@ -76,6 +84,10 @@ export function useControlPanelOverlayState({
   isMapLoaded,
   initialControlPanel,
   updateProjectControlPanel,
+  onWeatherOverlayStatusChange,
+  onWeatherOverlayReloadChange,
+  onShadowOverlayStatusChange,
+  onShadowOverlayReloadChange,
 }: UseControlPanelOverlayStateArgs): OverlayStateResult {
   const [labelBackend, setLabelBackend] = useState(
     () => initialControlPanel.labelsState?.backend ?? loadLabelState(),
@@ -130,7 +142,10 @@ export function useControlPanelOverlayState({
     };
   });
 
-  useWeatherOverlay(isMapLoaded ? map : null, isMapLoaded, weatherState);
+  useWeatherOverlay(isMapLoaded ? map : null, isMapLoaded, weatherState, {
+    statusReporter: onWeatherOverlayStatusChange,
+    registerReload: onWeatherOverlayReloadChange,
+  });
 
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
   useWind(isMapLoaded ? map : null, windEnabled);
@@ -216,13 +231,21 @@ export function useControlPanelOverlayState({
     time: sunlightState.time,
   });
 
-  useShadowImage(isMapLoaded ? map : null, isMapLoaded, {
-    enabled: sunlightState.enabled && sunlightState.shadowEnabled,
-    sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
-    sunAltitudeDeg: sunlightTimes.sunAltitudeDeg,
-    opacity: sunlightState.shadowOpacity / 100,
-    timeScrubbing: sunlightState.timeScrubbing,
-  });
+  useShadowImage(
+    isMapLoaded ? map : null,
+    isMapLoaded,
+    {
+      enabled: sunlightState.enabled && sunlightState.shadowEnabled,
+      sunAzimuthDeg: sunlightTimes.sunAzimuthDeg,
+      sunAltitudeDeg: sunlightTimes.sunAltitudeDeg,
+      opacity: sunlightState.shadowOpacity / 100,
+      timeScrubbing: sunlightState.timeScrubbing,
+    },
+    {
+      statusReporter: onShadowOverlayStatusChange,
+      registerReload: onShadowOverlayReloadChange,
+    },
+  );
 
   const labelsSlice = useMemo(
     () => ({

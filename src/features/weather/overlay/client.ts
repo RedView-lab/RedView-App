@@ -472,17 +472,21 @@ export async function fetchWeatherGridData(
   selection: WeatherSelection,
   grid: WeatherGridDefinition,
   signal?: AbortSignal,
+  onProgress?: (completed: number, total: number) => void,
 ): Promise<WeatherOverlaySample[]> {
   const ttlMs = selection.mode === 'forecast' ? FORECAST_CACHE_TTL_MS : TREND_CACHE_TTL_MS;
   const batchSize = selection.mode === 'forecast' ? FORECAST_BATCH_SIZE : TRENDS_BATCH_SIZE;
   const samples = new Array<WeatherOverlaySample>(grid.points.length);
   const uncachedIndexes: number[] = [];
+  const totalPoints = Math.max(1, grid.points.length);
 
   grid.points.forEach((point, index) => {
     const cached = getCached(selection.key, point, ttlMs);
     if (cached) samples[index] = cached;
     else uncachedIndexes.push(index);
   });
+
+  onProgress?.(grid.points.length - uncachedIndexes.length, totalPoints);
 
   if (uncachedIndexes.length === 0) return samples;
 
@@ -505,6 +509,10 @@ export async function fetchWeatherGridData(
       samples[pointIndex] = normalisedSample;
       setCached(selection.key, point, normalisedSample);
     });
+    onProgress?.(
+      Math.min(totalPoints, grid.points.length - uncachedIndexes.length + offset + batchIndexes.length),
+      totalPoints,
+    );
   }
 
   return samples;

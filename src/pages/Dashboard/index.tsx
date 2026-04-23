@@ -1,6 +1,12 @@
-import { useState, type CSSProperties } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { MapView, MapBlurMirror } from '@/features/map3d';
+import {
+  MapView,
+  MapBlurMirror,
+  MapOverlayStatusDock,
+  type OverlayStatusId,
+  type OverlayStatusSnapshot,
+} from '@/features/map3d';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
@@ -33,6 +39,9 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
+  const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
+  const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
 
   const {
     activeProjectId,
@@ -76,6 +85,91 @@ export default function Dashboard({
     setMapInstance(map);
     setMapLoaded(true);
   };
+
+  const setOverlayStatus = useCallback((id: OverlayStatusId, status: OverlayStatusSnapshot | null) => {
+    setOverlayStatuses((prev) => {
+      if (!status) {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      const current = prev[id];
+      if (
+        current
+        && current.state === status.state
+        && current.progress === status.progress
+        && current.detail === status.detail
+        && current.reloadable === status.reloadable
+      ) {
+        return prev;
+      }
+      return { ...prev, [id]: status };
+    });
+  }, []);
+
+  const setOverlayReloader = useCallback((id: OverlayStatusId, reload: (() => void) | null) => {
+    if (reload) {
+      overlayReloadersRef.current[id] = reload;
+      return;
+    }
+    delete overlayReloadersRef.current[id];
+  }, []);
+
+  const handleMapLoadStatusChange = useCallback((status: OverlayStatusSnapshot | null) => {
+    if (!status || status.state === 'ready') {
+      setMapStatus(null);
+      return;
+    }
+    setMapStatus(status);
+  }, []);
+
+  const handleWeatherOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => {
+      setOverlayStatus('weather', status);
+    },
+    [setOverlayStatus],
+  );
+
+  const handleShadowOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => {
+      setOverlayStatus('shadow', status);
+    },
+    [setOverlayStatus],
+  );
+
+  const handleWeatherOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => {
+      setOverlayReloader('weather', reload);
+    },
+    [setOverlayReloader],
+  );
+
+  const handleShadowOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => {
+      setOverlayReloader('shadow', reload);
+    },
+    [setOverlayReloader],
+  );
+
+  const visibleStatuses = useMemo(() => {
+    const orderedIds: OverlayStatusId[] = ['map', 'shadow', 'weather'];
+    const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
+      ...overlayStatuses,
+      ...(mapStatus ? { map: mapStatus } : {}),
+    };
+    return orderedIds
+      .map((id) => snapshots[id])
+      .filter((status): status is OverlayStatusSnapshot => Boolean(status));
+  }, [mapStatus, overlayStatuses]);
+
+  const statusDockRight = isMapFocusMode
+    ? PANEL_PADDING
+    : panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+
+  const handleOverlayReload = useCallback((id: OverlayStatusId) => {
+    overlayReloadersRef.current[id]?.();
+  }, []);
 
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',
@@ -183,10 +277,18 @@ export default function Dashboard({
         >
           <MapView
             onMapReady={handleMapReady}
+            onMapLoadStatusChange={handleMapLoadStatusChange}
             lidarSelectionEnabled={lidarModeEnabled}
             onLidarSelectionDisable={() => setLidarModeEnabled(false)}
             initialViewport={projectMapViewport}
             onViewportChange={handleMapViewportChange}
+          />
+
+          <MapOverlayStatusDock
+            statuses={visibleStatuses}
+            right={statusDockRight}
+            hidden={projectBrowserOpen || activeProjectId == null}
+            onReload={handleOverlayReload}
           />
 
           <div style={mapViewportControlsStyle}>
@@ -330,6 +432,10 @@ export default function Dashboard({
                   <ControlPanelContainer
                     map={mapInstance}
                     isMapLoaded={mapLoaded}
+                    onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
+                    onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
+                    onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
+                    onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
                     lidarDownloadModeActive={lidarModeEnabled}
                     onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
                     width={panelWidth}

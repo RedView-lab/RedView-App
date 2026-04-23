@@ -10,6 +10,11 @@ import type {
   WeatherOverlayState,
   WeatherSelection,
 } from './types';
+import {
+  createOverlayStatus,
+  type OverlayReloadRegistrar,
+  type OverlayStatusReporter,
+} from '@/features/map3d/overlayStatus';
 
 const SOURCE_PREFIX = 'weather-overlay-source';
 const LAYER_PREFIX = 'weather-overlay-layer';
@@ -18,6 +23,9 @@ const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
 const RENDER_MIN = 320;
 const RENDER_MAX = 2048;
+const STATUS_ID = 'weather';
+
+type RefreshReason = 'normal' | 'force' | 'reload';
 
 interface ViewportBounds {
   north: number;
@@ -166,7 +174,12 @@ export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
   state: WeatherOverlayState,
+  options: {
+    statusReporter?: OverlayStatusReporter;
+    registerReload?: OverlayReloadRegistrar;
+  } = {},
 ): void {
+  const { statusReporter, registerReload } = options;
   const stateRef = useRef(state);
   stateRef.current = state;
 
@@ -176,10 +189,14 @@ export function useWeatherOverlay(
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
   const generationRef = useRef(0);
-  const scheduleRefreshRef = useRef<((force: boolean) => void) | null>(null);
+  const scheduleRefreshRef = useRef<((reason: RefreshReason) => void) | null>(null);
   const hideAllRef = useRef<(() => void) | null>(null);
   const renderedRef = useRef<Partial<Record<WeatherOverlayMetric, RenderedLayerEntry>>>({});
   const activeLayers = useMemo(() => activeRenderableLayers(state), [state]);
+
+  const publishStatus = (status: ReturnType<typeof createOverlayStatus> | null) => {
+    statusReporter?.(status);
+  };
 
   const activeLayersKey = useMemo(
     () => activeLayers.map((layer) => `${layer.key}:${layer.mode}`).join('|'),
@@ -224,6 +241,7 @@ export function useWeatherOverlay(
 
     const hideAll = () => {
       for (const key of SUPPORTED_KEYS) setVisibility(key, false);
+      publishStatus(null);
     };
 
     const ensureLayer = (key: WeatherOverlayMetric, url: string, coords: ImageCoords) => {
@@ -253,7 +271,7 @@ export function useWeatherOverlay(
       setVisibility(key, true);
     };
 
-    const renderFromData = async (dataset: WeatherGridDataset | null) => {
+    const renderFromData = async (dataset: WeatherGridDataset | null, progressBase = 76) => {
       if (!dataset) {
         hideAll();
         return;
@@ -268,6 +286,8 @@ export function useWeatherOverlay(
       const coords = imageCoords(dataset.grid.bounds);
       const size = renderSize(map);
       const activeLayerMap = new Map(activeLayers.map((layer) => [layer.key, layer] as const));
+      const renderableCount = Math.max(1, activeLayers.length);
+      let renderedCount = 0;
       for (const key of SUPPORTED_KEYS) {
         const activeLayer = activeLayerMap.get(key);
         if (!activeLayer) {
@@ -285,6 +305,15 @@ export function useWeatherOverlay(
         const rendered = renderedRef.current[key];
         if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
           ensureLayer(key, rendered.url, rendered.coords);
+          renderedCount += 1;
+          publishStatus(createOverlayStatus({
+            id: STATUS_ID,
+            label: 'Météo',
+            state: 'loading',
+            progress: progressBase + (renderedCount / renderableCount) * 18,
+            detail: 'Rendu',
+            reloadable: true,
+          }));
           continue;
         }
 
@@ -305,16 +334,46 @@ export function useWeatherOverlay(
           window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
         }
         renderedRef.current[key] = { url, coords, signature };
+        renderedCount += 1;
+        publishStatus(createOverlayStatus({
+          id: STATUS_ID,
+          label: 'Météo',
+          state: 'loading',
+          progress: progressBase + (renderedCount / renderableCount) * 18,
+          detail: 'Rendu',
+          reloadable: true,
+        }));
       }
+
+      publishStatus(createOverlayStatus({
+        id: STATUS_ID,
+        label: 'Météo',
+        state: 'ready',
+        progress: 100,
+        detail: 'Overlay prêt',
+        reloadable: true,
+      }));
     };
 
-    const refresh = async (force: boolean) => {
+    const refresh = async (reason: RefreshReason) => {
       const nextState = stateRef.current;
       const activeLayers = activeRenderableLayers(nextState);
       if (!nextState.enabled || activeLayers.length === 0) {
         hideAll();
         return;
       }
+
+      const explicitReload = reason === 'reload';
+      const force = reason !== 'normal';
+
+      publishStatus(createOverlayStatus({
+        id: STATUS_ID,
+        label: 'Météo',
+        state: 'loading',
+        progress: explicitReload ? 8 : 12,
+        detail: explicitReload ? 'Actualisation' : 'Préparation',
+        reloadable: true,
+      }));
 
       const selection = selectionFromState(nextState);
       const viewport = getViewportBounds(map);
@@ -324,13 +383,15 @@ export function useWeatherOverlay(
         ? weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode)
         : false;
 
-      if (currentDataset && sameSelection && reusableGrid) {
+      if (!explicitReload && currentDataset && sameSelection && reusableGrid) {
         lastViewportRef.current = viewport;
-        await renderFromData(currentDataset);
+        await renderFromData(currentDataset, 78);
         return;
       }
 
       if (
+        !explicitReload
+        &&
         !force
         && sameSelection
         && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS
@@ -348,8 +409,42 @@ export function useWeatherOverlay(
       const generation = ++generationRef.current;
 
       try {
+        if (explicitReload) {
+          clearWeatherOverlayCache();
+          lastFetchTimeRef.current = 0;
+        }
+        publishStatus(createOverlayStatus({
+          id: STATUS_ID,
+          label: 'Météo',
+          state: 'loading',
+          progress: 24,
+          detail: 'Grille météo',
+          reloadable: true,
+        }));
         const grid = buildWeatherGrid(map, selection.mode);
-        const samples = await fetchWeatherGridData(selection, grid, controller.signal);
+        publishStatus(createOverlayStatus({
+          id: STATUS_ID,
+          label: 'Météo',
+          state: 'loading',
+          progress: 32,
+          detail: 'Téléchargement',
+          reloadable: true,
+        }));
+        const samples = await fetchWeatherGridData(
+          selection,
+          grid,
+          controller.signal,
+          (completed, total) => {
+            publishStatus(createOverlayStatus({
+              id: STATUS_ID,
+              label: 'Météo',
+              state: 'loading',
+              progress: 32 + (Math.max(0, completed) / Math.max(1, total)) * 40,
+              detail: 'Téléchargement',
+              reloadable: true,
+            }));
+          },
+        );
         if (controller.signal.aborted || generation !== generationRef.current) return;
         dataRef.current = {
           selectionKey: selection.key,
@@ -359,28 +454,36 @@ export function useWeatherOverlay(
         };
         lastViewportRef.current = viewport;
         lastFetchTimeRef.current = Date.now();
-        await renderFromData(dataRef.current);
+        await renderFromData(dataRef.current, 76);
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') return;
         console.error('[weather-overlay]', error);
+        publishStatus(createOverlayStatus({
+          id: STATUS_ID,
+          label: 'Météo',
+          state: 'error',
+          progress: 0,
+          detail: error instanceof Error ? error.message : 'Chargement impossible',
+          reloadable: true,
+        }));
       }
     };
 
-    const scheduleRefresh = (force: boolean) => {
+    const scheduleRefresh = (reason: RefreshReason) => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
-      if (force) {
+      if (reason !== 'normal') {
         debounceRef.current = null;
-        void refresh(true);
+        void refresh(reason);
         return;
       }
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
-        void refresh(false);
+        void refresh('normal');
       }, MOVE_DEBOUNCE_MS);
     };
 
-    const onMoveEnd = () => scheduleRefresh(false);
-    const onZoomEnd = () => scheduleRefresh(false);
+    const onMoveEnd = () => scheduleRefresh('normal');
+    const onZoomEnd = () => scheduleRefresh('normal');
     const onStyleLoad = () => {
       const activeLayers = activeRenderableLayers(stateRef.current);
       if (!stateRef.current.enabled || activeLayers.length === 0) {
@@ -391,7 +494,7 @@ export function useWeatherOverlay(
         const rendered = renderedRef.current[activeLayer.key];
         if (rendered) ensureLayer(activeLayer.key, rendered.url, rendered.coords);
       }
-      if (!dataRef.current) scheduleRefresh(true);
+      if (!dataRef.current) scheduleRefresh('force');
     };
 
     hideAllRef.current = hideAll;
@@ -422,8 +525,23 @@ export function useWeatherOverlay(
         }
       }
       clearWeatherOverlayCache();
+      publishStatus(null);
     };
-  }, [map, isMapLoaded]);
+  }, [isMapLoaded, map, statusReporter]);
+
+  useEffect(() => {
+    if (!registerReload) return;
+    if (!map || !isMapLoaded || !state.enabled || activeLayers.length === 0) {
+      registerReload(null);
+      return;
+    }
+    registerReload(() => {
+      scheduleRefreshRef.current?.('reload');
+    });
+    return () => {
+      registerReload(null);
+    };
+  }, [activeLayers.length, isMapLoaded, map, registerReload, state.enabled]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -431,7 +549,7 @@ export function useWeatherOverlay(
       hideAllRef.current?.();
       return;
     }
-    scheduleRefreshRef.current?.(true);
+    scheduleRefreshRef.current?.('force');
   }, [map, isMapLoaded, state.enabled, activeLayers.length, activeLayersKey, selectionKey, paletteKey]);
 
   useEffect(() => {

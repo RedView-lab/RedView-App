@@ -5,6 +5,7 @@ import { unifiedDEMSource, ignOrthoSource } from '../lib/sources';
 import { ignOrthoLayer } from '../lib/layers';
 import { TerrainManager } from '../lib/terrain';
 import { loadViewport, saveViewport, type MapViewport } from '../lib/viewport-persist';
+import { createOverlayStatus, type OverlayStatusReporter } from '../overlayStatus';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -133,6 +134,7 @@ const swReady: Promise<boolean> = (async () => {
 interface UseMapOptions {
   initialViewport?: MapViewport | null;
   onViewportChange?: (viewport: MapViewport) => void;
+  onLoadStatusChange?: OverlayStatusReporter;
 }
 
 export function useMap(
@@ -142,15 +144,32 @@ export function useMap(
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const terrainRef = useRef<TerrainManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { initialViewport = null, onViewportChange } = options;
+  const { initialViewport = null, onViewportChange, onLoadStatusChange } = options;
   const onViewportChangeRef = useRef(onViewportChange);
+  const onLoadStatusChangeRef = useRef(onLoadStatusChange);
 
   useEffect(() => {
     onViewportChangeRef.current = onViewportChange;
   }, [onViewportChange]);
 
   useEffect(() => {
+    onLoadStatusChangeRef.current = onLoadStatusChange;
+  }, [onLoadStatusChange]);
+
+  useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+
+    const reportMapStatus = (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => {
+      onLoadStatusChangeRef.current?.(createOverlayStatus({
+        id: 'map',
+        label: 'Carte',
+        state,
+        progress,
+        detail,
+      }));
+    };
+
+    reportMapStatus('loading', 6, 'Initialisation');
 
     const savedVp = initialViewport ?? loadViewport();
 
@@ -182,6 +201,7 @@ export function useMap(
     });
 
     mapRef.current = map;
+  reportMapStatus('loading', 14, 'Moteur 3D');
 
     let cancelled = false;
     let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
@@ -189,11 +209,19 @@ export function useMap(
     // Wait for BOTH style.load AND swReady before adding sources.
     (async () => {
       const styleLoaded = new Promise<void>((resolve) => {
-        if (map.isStyleLoaded()) return resolve();
-        map.once('style.load', () => resolve());
+        if (map.isStyleLoaded()) {
+          reportMapStatus('loading', 34, 'Style');
+          return resolve();
+        }
+        map.once('style.load', () => {
+          reportMapStatus('loading', 34, 'Style');
+          resolve();
+        });
       });
-      const [, swOk] = await Promise.all([styleLoaded, swReady]);
+      await styleLoaded;
+      const swOk = await swReady;
       if (cancelled) return;
+      reportMapStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
       // Atmosphere + lighting
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
@@ -208,6 +236,7 @@ export function useMap(
         // /ortho-tiles/ sources â€” they would 404. The Standard Satellite style
         // already ships its own terrain + satellite imagery.
         console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
+        reportMapStatus('ready', 100, 'Carte prête');
         setIsLoaded(true);
         return;
       }
@@ -233,6 +262,7 @@ export function useMap(
           maxzoom: unifiedDEMSource.maxzoom,
         });
       }
+      reportMapStatus('loading', 68, 'Relief');
 
       // Terrain is applied ONCE, after the first DEM tile has loaded. Prevents
       // the "flat flicker" where setTerrain() runs against an empty source and
@@ -244,7 +274,9 @@ export function useMap(
         orthoAdded = true;
         await waitForMapIdleOrTimeout(map, 500);
         if (cancelled) return;
+        reportMapStatus('loading', 92, 'Textures IGN');
         addIgnOrthoOverlay(map);
+        reportMapStatus('ready', 100, 'Carte prête');
       };
 
       orthoBootTimer = setTimeout(() => {
@@ -259,6 +291,7 @@ export function useMap(
         applied = true;
         map.off('sourcedata', onSourceData);
         terrainRef.current?.init();
+        reportMapStatus('loading', 82, 'Terrain');
         void addOrthoWhenReady();
       };
       map.on('sourcedata', onSourceData);
@@ -266,6 +299,7 @@ export function useMap(
       setIsLoaded(true);
     })().catch((err) => {
       console.error('[map3d] init failed', err);
+      reportMapStatus('error', 0, err instanceof Error ? err.message : 'Chargement impossible');
       setIsLoaded(true);
     });
 
@@ -310,6 +344,7 @@ export function useMap(
       terrainRef.current = null;
       map.remove();
       mapRef.current = null;
+      onLoadStatusChangeRef.current?.(null);
     };
   }, [containerRef]);
 

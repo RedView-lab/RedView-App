@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import type {
+  OverlayReloadRegistrar,
+  OverlayStatusReporter,
+} from '@/features/map3d/overlayStatus';
 
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
@@ -21,6 +25,10 @@ import { useControlPanelTerrainState } from './useControlPanelTerrainState';
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
   isMapLoaded: boolean;
+  onWeatherOverlayStatusChange?: OverlayStatusReporter;
+  onWeatherOverlayReloadChange?: OverlayReloadRegistrar;
+  onShadowOverlayStatusChange?: OverlayStatusReporter;
+  onShadowOverlayReloadChange?: OverlayReloadRegistrar;
   onToggleLidarDownloadMode?: () => void;
   lidarDownloadModeActive?: boolean;
   width?: number;
@@ -41,6 +49,10 @@ function tileKey(coord: TileCoord): string {
 export function ControlPanelContainer({
   map,
   isMapLoaded,
+  onWeatherOverlayStatusChange,
+  onWeatherOverlayReloadChange,
+  onShadowOverlayStatusChange,
+  onShadowOverlayReloadChange,
   onToggleLidarDownloadMode,
   lidarDownloadModeActive,
   width,
@@ -77,6 +89,10 @@ export function ControlPanelContainer({
     isMapLoaded,
     initialControlPanel,
     updateProjectControlPanel,
+    onWeatherOverlayStatusChange,
+    onWeatherOverlayReloadChange,
+    onShadowOverlayStatusChange,
+    onShadowOverlayReloadChange,
   });
 
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
