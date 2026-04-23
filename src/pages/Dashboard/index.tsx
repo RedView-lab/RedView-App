@@ -32,6 +32,11 @@ interface DashboardProps {
   initialProjectId?: string | null;
 }
 
+const OVERLAY_LABEL: Record<Exclude<OverlayStatusId, 'map'>, string> = {
+  weather: 'Météo',
+  shadow: 'Ombres',
+};
+
 export default function Dashboard({
   email,
   onLogout,
@@ -111,9 +116,42 @@ export default function Dashboard({
   const setOverlayReloader = useCallback((id: OverlayStatusId, reload: (() => void) | null) => {
     if (reload) {
       overlayReloadersRef.current[id] = reload;
+      if (id !== 'map') {
+        setOverlayStatuses((prev) => {
+          const current = prev[id];
+          if (current) {
+            if (current.reloadable) return prev;
+            return {
+              ...prev,
+              [id]: { ...current, reloadable: true },
+            };
+          }
+          return {
+            ...prev,
+            [id]: {
+              id,
+              label: OVERLAY_LABEL[id],
+              state: 'ready',
+              progress: 100,
+              detail: 'Overlay prêt',
+              reloadable: true,
+              updatedAt: Date.now(),
+            },
+          };
+        });
+      }
       return;
     }
     delete overlayReloadersRef.current[id];
+    if (id !== 'map') {
+      setOverlayStatuses((prev) => {
+        const current = prev[id];
+        if (!current || current.state !== 'ready') return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
   }, []);
 
   const handleMapLoadStatusChange = useCallback((status: OverlayStatusSnapshot | null) => {
