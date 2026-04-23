@@ -219,23 +219,35 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
       `GRIB grid mismatch: data=${data.length} vs ${width}×${height}=${width * height}`,
     );
   }
-  if (ll.latitude.length !== width * height) {
+
+  // gribberish.latlng returns 1D axis arrays for regular grids:
+  //   latitude.length  == rows   (one entry per row, north→south or south→north)
+  //   longitude.length == cols   (one entry per column, west→east normally)
+  // For non-regular grids it may return a flat per-cell array of length rows*cols.
+  const latArr = ll.latitude;
+  const lonArr = ll.longitude;
+  const latIsAxis = latArr.length === height;
+  const lonIsAxis = lonArr.length === width;
+  const latIsFlat = latArr.length === width * height;
+  const lonIsFlat = lonArr.length === width * height;
+  if (!(latIsAxis || latIsFlat) || !(lonIsAxis || lonIsFlat)) {
     throw new Error(
-      `GRIB latlng mismatch: lat=${ll.latitude.length} vs ${width * height}`,
+      `GRIB latlng unexpected shape: lat=${latArr.length} lon=${lonArr.length} ` +
+        `vs grid ${width}×${height}`,
     );
   }
 
   const factor = unitFactorToCm(msg.units, msg.varAbbrev);
 
-  // Detect scan direction from corner coordinates.
-  // gribberish always returns row-major in scan order; we want south→north.
-  const latFirst = ll.latitude[0];
-  const latLast = ll.latitude[(height - 1) * width];
-  const scanNorthSouth = latFirst > latLast;
+  // Detect scan direction (north→south is the AROME default — first row is north).
+  const latFirstRow = latIsAxis ? latArr[0] : latArr[0];
+  const latLastRow = latIsAxis ? latArr[height - 1] : latArr[(height - 1) * width];
+  const scanNorthSouth = latFirstRow > latLastRow;
 
   const valuesCm: number[] = new Array(width * height);
   for (let j = 0; j < height; j++) {
-    const srcRow = scanNorthSouth ? height - 1 - j : j; // flip if needed
+    // Output row j must correspond to south→north (j=0 = southernmost).
+    const srcRow = scanNorthSouth ? height - 1 - j : j;
     for (let i = 0; i < width; i++) {
       const v = data[srcRow * width + i];
       const cm = !Number.isFinite(v) || v < 0 ? 0 : Math.min(v * factor, 2000);
@@ -243,16 +255,17 @@ function parseGribToGrid(buf: Uint8Array, coverageId: string): SnowGridJson {
     }
   }
 
-  // Bounding box from latlng arrays
+  // Bounding box from latlng (handles both axis and flat layouts)
   let lonMin = Infinity, lonMax = -Infinity, latMin = Infinity, latMax = -Infinity;
-  for (let k = 0; k < ll.latitude.length; k++) {
-    const lat = ll.latitude[k];
-    let lon = ll.longitude[k];
-    // Normalise lon to (-180, 180]
-    while (lon > 180) lon -= 360;
-    while (lon < -180) lon += 360;
+  for (let k = 0; k < latArr.length; k++) {
+    const lat = latArr[k];
     if (lat < latMin) latMin = lat;
     if (lat > latMax) latMax = lat;
+  }
+  for (let k = 0; k < lonArr.length; k++) {
+    let lon = lonArr[k];
+    while (lon > 180) lon -= 360;
+    while (lon < -180) lon += 360;
     if (lon < lonMin) lonMin = lon;
     if (lon > lonMax) lonMax = lon;
   }
