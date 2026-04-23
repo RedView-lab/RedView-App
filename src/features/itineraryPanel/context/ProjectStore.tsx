@@ -2,7 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -62,7 +62,7 @@ export function ProjectProvider({
   // Supabase. Skip the very first render (the parent already has the
   // initial state it just handed us).
   const firstChangeRef = useRef(true);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (firstChangeRef.current) {
       firstChangeRef.current = false;
       return;
