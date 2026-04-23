@@ -26,6 +26,12 @@ importScripts(
   '/sw-dem/ortho.js',
   '/sw-dem/slope.js',
   '/sw-dem/altitude.js',
+  // Switzerland — swissSURFACE3D Raster (COG over STAC, 0.5 m LiDAR DSM)
+  '/sw-dem/swiss-config.js',
+  '/sw-dem/swiss-coords.js',
+  '/sw-dem/swiss-cog.js',
+  '/sw-dem/swiss-fetcher.js',
+  '/sw-dem/swiss-build.js',
 );
 
 // Shared mutable state (used by sub-modules via global scope)
@@ -73,7 +79,7 @@ const OLD_CACHES = [
   'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
   'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
-  'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27',
+  'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27', 'dem-tiles-v28',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -294,7 +300,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
   }
 
   const inFrance = tileOverlapsFrance(z, x, y);
-
+    const inSwitzerland = tileOverlapsSwitzerland(z, x, y);
   try {
     let pngBlob;
     let demSource = 'none';
@@ -309,7 +315,33 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     let ignHadSomeData = false; // true when MNS returned partial/full coverage
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
-    if (inFrance && shouldUseIGN(z, tileCenterLat)) {
+
+    // ── Switzerland branch — runs *before* France because the two bboxes
+    // overlap (CH bbox extends slightly into French Alpes / Italian Alpes).
+    // We only engage this branch when the tile is over the Swiss LV95
+    // footprint AND not predominantly over France (France's IGN data has
+    // higher resolution near the border and we already handle it).
+    let swissHadSomeData = false;
+    if (
+      inSwitzerland && !inFrance &&
+      z >= SWISS_DEM_MINZOOM && shouldUseSwiss(z, tileCenterLat)
+    ) {
+      const swissResult = await buildSwissTile(z, x, y);
+      if (swissResult && swissResult.elevations) {
+        swissHadSomeData = true;
+        await acquireComposite();
+        try {
+          pngBlob = await compositeIGNMapbox(
+            swissResult.elevations, swissResult.coverage, z, x, y,
+          );
+        } finally {
+          releaseComposite();
+        }
+        demSource = 'swiss-composite';
+      }
+    }
+
+    if (!pngBlob && inFrance && shouldUseIGN(z, tileCenterLat)) {
       const polyOk = await ensureFrancePoly();
       if (polyOk) {
         const tileClass = classifyDemTile(z, x, y);
@@ -405,19 +437,33 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       }
     }
 
-    // 4. Mapbox global fallback — only at low zoom or outside France.
-    // Inside France at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
-    // IGN returned some data (partial/full). When IGN had zero coverage
-    // (no MNS, no HIGHRES), Mapbox overzoomed 30 m is better than nothing.
-    const skipMapboxHighZoomInFrance = inFrance && z > MAPBOX_DEM_MAXZOOM && ignHadSomeData;
-    if (!pngBlob && mapboxToken && !skipMapboxHighZoomInFrance) {
+    // 3c. Same LiDAR-preserving path for Switzerland: at high zoom we never
+    // want to fall through to a server-overzoomed Mapbox tile when we have
+    // a parent COG-derived blob in our own cache.
+    if (!pngBlob && inSwitzerland && !inFrance && z > MAPBOX_DEM_MAXZOOM) {
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+      if (fb) {
+        pngBlob = fb.blob;
+        demSource = fb.source + '-swiss-parent';
+      }
+    }
+
+    // 4. Mapbox global fallback — only at low zoom or outside France/CH.
+    // Inside France/CH at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
+    // the LiDAR pipeline returned data. When neither LiDAR source had any
+    // coverage, Mapbox overzoomed 30 m is better than nothing.
+    const skipMapboxHighZoomLiDAR =
+      z > MAPBOX_DEM_MAXZOOM && (
+        (inFrance && ignHadSomeData) ||
+        (inSwitzerland && !inFrance && swissHadSomeData)
+      );
+    if (!pngBlob && mapboxToken && !skipMapboxHighZoomLiDAR) {
       pngBlob = await fetchMapboxTile(z, x, y);
       if (pngBlob) demSource = 'mapbox';
     }
 
-    // 5. Single-step parent overzoom (outside-France & low-zoom path).
-    //    In-France high-zoom already tried parent-overzoom at step 3b.
-    if (!pngBlob && !skipMapboxHighZoomInFrance) {
+    // 5. Single-step parent overzoom (outside-LiDAR & low-zoom path).
+    if (!pngBlob && !skipMapboxHighZoomLiDAR) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -426,13 +472,15 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     }
 
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
-    //    confirmed empty (outside France, no Mapbox token, etc.)
+    //    confirmed empty (outside coverage, no Mapbox token, etc.)
     if (!pngBlob) {
-      const isConfirmedEmpty = !inFrance || !mapboxToken;
+      const isConfirmedEmpty = (!inFrance && !inSwitzerland) || !mapboxToken;
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
       const reason = !mapboxToken
         ? 'no-token'
-        : (skipMapboxHighZoomInFrance ? 'ign-pending-highzoom' : (inFrance ? 'pipeline-error' : 'no-coverage'));
+        : (skipMapboxHighZoomLiDAR
+            ? (inFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
+            : ((inFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage'));
       negCache.put(cacheKey, new Response(null, {
         status: 204,
         headers: {
@@ -447,20 +495,20 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance);
+    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance || inSwitzerland);
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inFrance);
+    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inFrance || inSwitzerland);
     return noTileResponse('error');
   }
 }
 
-async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance) {
-  // Short cache (5 min) for Mapbox fallback tiles inside France at z≥13.
-  // These should eventually be replaced by IGN data; caching them for a week
-  // permanently masks the LiDAR upgrade path.
-  const shortCache = inFrance && z >= 13 && (demSource === 'mapbox' || demSource.startsWith('overzoom'));
+async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion) {
+  // Short cache (5 min) for Mapbox fallback tiles inside any LiDAR region
+  // (France or Switzerland) at z≥13. These should eventually be replaced by
+  // real LiDAR data; caching them for a week permanently masks the upgrade.
+  const shortCache = inLiDARRegion && z >= 13 && (demSource === 'mapbox' || demSource.startsWith('overzoom'));
   const response = buildDemResponse(pngBlob, demSource, shortCache);
   cache.put(cacheKey, response.clone());
   if (DEBUG) {
