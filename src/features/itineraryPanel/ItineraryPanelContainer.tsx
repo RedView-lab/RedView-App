@@ -21,6 +21,10 @@ import {
   computeRouteElevationMetrics,
   extractRouteProfileFromPoints,
 } from './lib/route-metrics';
+import {
+  formatGpsCoordinateLabel,
+  reverseGeocodeSettlement,
+} from './lib/geocoder';
 import type {
   Itinerary,
   ItineraryProject,
@@ -200,6 +204,85 @@ export function ItineraryPanelContainer({
     [],
   );
 
+  const hydrateImportedTimelineEndpoints = useCallback(
+    async (
+      itineraryId: string,
+      points: NonNullable<Itinerary['gpxRoute']>['points'],
+    ) => {
+      const startPoint = points[0];
+      const endPoint = points[points.length - 1] ?? startPoint;
+      if (!startPoint) return;
+
+      const [startLabel, endLabel] = await Promise.all([
+        resolveImportedTimelineLabel(startPoint.lon, startPoint.lat),
+        resolveImportedTimelineLabel(endPoint.lon, endPoint.lat),
+      ]);
+
+      setProject((project) => ({
+        ...project,
+        itineraries: project.itineraries.map((itinerary) => {
+          if (itinerary.id !== itineraryId) return itinerary;
+          return {
+            ...itinerary,
+            timeline: itinerary.timeline.map((item) => {
+              if (item.kind === 'start') {
+                return {
+                  ...item,
+                  label: startLabel,
+                  lat: startPoint.lat,
+                  lon: startPoint.lon,
+                };
+              }
+              if (item.kind === 'end') {
+                return {
+                  ...item,
+                  label: endLabel,
+                  lat: endPoint.lat,
+                  lon: endPoint.lon,
+                };
+              }
+              return item;
+            }),
+          };
+        }),
+      }));
+    },
+    [setProject],
+  );
+
+  const addItineraryFromGpxFile = useCallback(
+    async (file: File) => {
+      const route = await parseGpxFile(file);
+      const storedPoints = normalizeImportedRoutePoints(route.points);
+      const elevationMetrics = computeRouteElevationMetrics(storedPoints);
+      const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
+      const timeline = createImportedTimeline(storedPoints);
+      const id = addItinerary({
+        name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
+        gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
+        timeline,
+        metrics: {
+          distanceKm,
+          ascentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.ascentM))
+            : undefined,
+          descentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.descentM))
+            : undefined,
+          avgSlopePercent: elevationMetrics
+            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+            : undefined,
+        },
+      });
+
+      if (id) {
+        setPendingCorridorFor(id);
+        void hydrateImportedTimelineEndpoints(id, storedPoints);
+      }
+    },
+    [addItinerary, hydrateImportedTimelineEndpoints],
+  );
+
   const duplicateActiveItinerary = useCallback(() => {
     setProject((currentProject) => {
       const source = currentProject.itineraries.find(
@@ -289,28 +372,7 @@ export function ItineraryPanelContainer({
         addButtonRef.current = element;
       }}
       onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
-      onAddItineraryFromGpx={async (file) => {
-        const route = await parseGpxFile(file);
-        const storedPoints = normalizeImportedRoutePoints(route.points);
-        const elevationMetrics = computeRouteElevationMetrics(storedPoints);
-        const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
-        addItinerary({
-          name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-          gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
-          metrics: {
-            distanceKm,
-            ascentM: elevationMetrics
-              ? Math.max(0, Math.round(elevationMetrics.ascentM))
-              : undefined,
-            descentM: elevationMetrics
-              ? Math.max(0, Math.round(elevationMetrics.descentM))
-              : undefined,
-            avgSlopePercent: elevationMetrics
-              ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-              : undefined,
-          },
-        });
-      }}
+      onAddItineraryFromGpx={addItineraryFromGpxFile}
       onRemoveItinerary={(id) =>
         setProject((p) => {
           if (p.itineraries.length <= 1) return p;
@@ -438,29 +500,7 @@ export function ItineraryPanelContainer({
         onClose={() => setAddDialogOpen(false)}
         onPickScratch={() => addItinerary()}
         onPickDuplicate={duplicateActiveItinerary}
-        onPickGpx={async (file) => {
-          const route = await parseGpxFile(file);
-          const storedPoints = normalizeImportedRoutePoints(route.points);
-          const elevationMetrics = computeRouteElevationMetrics(storedPoints);
-          const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
-          const id = addItinerary({
-            name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-            gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
-            metrics: {
-              distanceKm,
-              ascentM: elevationMetrics
-                ? Math.max(0, Math.round(elevationMetrics.ascentM))
-                : undefined,
-              descentM: elevationMetrics
-                ? Math.max(0, Math.round(elevationMetrics.descentM))
-                : undefined,
-              avgSlopePercent: elevationMetrics
-                ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-                : undefined,
-            },
-          });
-          if (id) setPendingCorridorFor(id);
-        }}
+        onPickGpx={addItineraryFromGpxFile}
       />
       <input
         ref={fitInputRef}
@@ -499,4 +539,54 @@ function normalizeImportedRoutePoints(
   const profile = extractRouteProfileFromPoints(points);
   if (!profile || profile.length !== points.length) return points;
   return toStoredRoutePoints(profile);
+}
+
+function createImportedTimeline(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): Itinerary['timeline'] {
+  const startPoint = points[0];
+  const endPoint = points[points.length - 1] ?? startPoint;
+  if (!startPoint || !endPoint) {
+    return [
+      { id: 'start', kind: 'start', label: 'Rechercher un lieu', distanceKm: 0 },
+      { id: 'end', kind: 'end', label: 'Rechercher un lieu', distanceKm: null },
+    ];
+  }
+
+  return [
+    {
+      id: 'start',
+      kind: 'start',
+      label: formatGpsCoordinateLabel(startPoint.lon, startPoint.lat),
+      distanceKm: 0,
+      lat: startPoint.lat,
+      lon: startPoint.lon,
+    },
+    {
+      id: 'end',
+      kind: 'end',
+      label: formatGpsCoordinateLabel(endPoint.lon, endPoint.lat),
+      distanceKm:
+        typeof endPoint.distanceM === 'number'
+          ? Math.round((endPoint.distanceM / 1000) * 10) / 10
+          : null,
+      lat: endPoint.lat,
+      lon: endPoint.lon,
+    },
+  ];
+}
+
+async function resolveImportedTimelineLabel(
+  lon: number,
+  lat: number,
+): Promise<string> {
+  try {
+    const settlement = await reverseGeocodeSettlement(lon, lat, {
+      countries: 'fr',
+      maxDistanceMeters: 1000,
+    });
+    return settlement?.name?.trim() || formatGpsCoordinateLabel(lon, lat);
+  } catch {
+    return formatGpsCoordinateLabel(lon, lat);
+  }
 }

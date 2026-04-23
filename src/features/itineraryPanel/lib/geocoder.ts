@@ -33,11 +33,25 @@ export interface GeocodeOptions {
   signal?: AbortSignal;
 }
 
+export interface ReverseGeocodeOptions {
+  /** Max number of candidate features to inspect. */
+  limit?: number;
+  /** ISO-639 language. Defaults to fr. */
+  language?: string;
+  /** ISO-3166 country filter, comma-separated, e.g. "fr,be,ch". */
+  countries?: string;
+  /** Maximum distance from the query point to accept a settlement label. */
+  maxDistanceMeters?: number;
+  signal?: AbortSignal;
+}
+
 interface MapboxFeature {
   id: string;
   text: string;
   place_name: string;
   center: [number, number]; // [lon, lat]
+  place_type?: string[];
+  context?: Array<{ id: string; text: string }>;
 }
 
 interface MapboxResponse {
@@ -45,6 +59,10 @@ interface MapboxResponse {
 }
 
 const ENDPOINT = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
+
+export function formatGpsCoordinateLabel(lon: number, lat: number): string {
+  return `${lon.toFixed(5)}, ${lat.toFixed(5)}`;
+}
 
 /**
  * Forward-geocode a free-text query. Returns an empty array for empty
@@ -85,4 +103,78 @@ export async function geocodePlaces(
     lon: f.center[0],
     lat: f.center[1],
   }));
+}
+
+export async function reverseGeocodeSettlement(
+  lon: number,
+  lat: number,
+  opts: ReverseGeocodeOptions = {},
+): Promise<GeocodeSuggestion | null> {
+  if (!MAPBOX_TOKEN) return null;
+
+  const params = new URLSearchParams({
+    access_token: MAPBOX_TOKEN,
+    language: opts.language ?? 'fr',
+    limit: String(Math.min(Math.max(opts.limit ?? 5, 1), 10)),
+    types: 'place,locality,neighborhood,address',
+  });
+  if (opts.countries) params.set('country', opts.countries);
+
+  const url = `${ENDPOINT}/${lon.toFixed(6)},${lat.toFixed(6)}.json?${params.toString()}`;
+  const res = await fetch(url, { signal: opts.signal });
+  if (!res.ok) {
+    throw new Error(`Mapbox reverse geocoder: HTTP ${res.status}`);
+  }
+
+  const maxDistanceMeters = Math.max(0, opts.maxDistanceMeters ?? 1000);
+  const json = (await res.json()) as MapboxResponse;
+  for (const feature of json.features ?? []) {
+    const distanceMeters = haversineDistanceMeters(
+      lat,
+      lon,
+      feature.center[1],
+      feature.center[0],
+    );
+    if (distanceMeters > maxDistanceMeters) continue;
+
+    const placeType = feature.place_type ?? [];
+    const settlementContext =
+      feature.context?.find(
+        (entry) => entry.id.startsWith('place.') || entry.id.startsWith('locality.'),
+      ) ?? null;
+    const name =
+      placeType.includes('place') || placeType.includes('locality')
+        ? feature.text
+        : settlementContext?.text ?? feature.text;
+
+    return {
+      id: feature.id,
+      name,
+      fullName: feature.place_name,
+      lon: feature.center[0],
+      lat: feature.center[1],
+    };
+  }
+
+  return null;
+}
+
+function haversineDistanceMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusMeters = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusMeters * c;
 }
