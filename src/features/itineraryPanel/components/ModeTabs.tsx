@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import type { PanelMode } from '../types';
 import {
   IconRoute,
@@ -11,7 +12,7 @@ interface ModeTabsProps {
   onChange?: (mode: PanelMode) => void;
 }
 
-const TABS: { id: PanelMode; label: string; Icon: typeof IconRoute }[] = [
+const TABS: { id: PanelMode; label: string; Icon: ComponentType<{ size?: number }> }[] = [
   { id: 'tracage', label: 'Traçage', Icon: IconRoute },
   { id: 'rythme', label: 'Rythme', Icon: IconStopwatch },
   { id: 'poi', label: 'POI', Icon: IconMapPin },

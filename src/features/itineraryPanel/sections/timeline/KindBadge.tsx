@@ -37,6 +37,7 @@ import {
   IconWaypointDot,
 } from '../../components/icons';
 import type { PoiCategory, TimelineItemKind } from '../../types';
+import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
 interface KindBadgeProps {
   kind: TimelineItemKind;
@@ -96,6 +97,19 @@ export const POI_BADGE_REGISTRY: Record<PoiCategory, PoiBadgeSpec> = {
   passes:       { color: '#5a5a5a', Icon: IconMountain },
 };
 
+const PROVIDED_TIMELINE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
+  fountains: PROVIDED_POI_SVG.water,
+  toilets: PROVIDED_POI_SVG.toilet,
+  supermarkets: PROVIDED_POI_SVG.shop,
+  gasStations: PROVIDED_POI_SVG.fuel,
+  bakeries: PROVIDED_POI_SVG.bakery,
+  fastFood: PROVIDED_POI_SVG.fastFood,
+  cafes: PROVIDED_POI_SVG.cafe,
+  bars: PROVIDED_POI_SVG.bar,
+  restaurants: PROVIDED_POI_SVG.restaurant,
+  bikeShops: PROVIDED_POI_SVG.bikeShop,
+};
+
 /** POI label (FR). */
 export function poiLabel(category: PoiCategory): string {
   switch (category) {
@@ -126,6 +140,11 @@ export function PoiBadge({
   category: PoiCategory;
   size?: number;
 }) {
+  const providedUrl = PROVIDED_TIMELINE_BADGE_URLS[category];
+  if (providedUrl) {
+    return <ProvidedPoiSvgBadge url={providedUrl} size={size} className="rvi-kind--pin" />;
+  }
+
   const spec = POI_BADGE_REGISTRY[category];
   const glyph = Math.round(size * 0.5);
   return (
@@ -138,6 +157,30 @@ export function PoiBadge({
       <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
         <spec.Icon size={glyph} />
       </span>
+    </span>
+  );
+}
+
+function ProvidedPoiSvgBadge({
+  url,
+  size,
+  className,
+}: {
+  url: string;
+  size: number;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`rvi-kind ${className ?? ''}`.trim()}
+      style={{ width: size, height: size }}
+      aria-hidden
+    >
+      <img
+        src={url}
+        alt=""
+        style={{ width: '100%', height: '100%', display: 'block' }}
+      />
     </span>
   );
 }
@@ -198,20 +241,13 @@ export function KindBadge({ kind, size = 20, poiCategory }: KindBadgeProps) {
     return <PoiBadge category={poiCategory} size={size} />;
   }
 
-  // water / supermarket → teardrop pin variants
-  const color = kindColor[kind];
-  const Glyph = kind === 'water' ? IconDroplet : IconShoppingCart;
-  const glyph = Math.round(size * 0.5);
-  return (
-    <span
-      className={`rvi-kind rvi-kind--pin rvi-kind--${kind}`}
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
-      <IconTeardropPin size={size} color={color} />
-      <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
-        <Glyph size={glyph} />
-      </span>
-    </span>
-  );
+  if (kind === 'water') {
+    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.water} size={size} className="rvi-kind--pin rvi-kind--water" />;
+  }
+
+  if (kind === 'supermarket') {
+    return <ProvidedPoiSvgBadge url={PROVIDED_POI_SVG.shop} size={size} className="rvi-kind--pin rvi-kind--supermarket" />;
+  }
+
+  return null;
 }

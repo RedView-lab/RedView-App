@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { AssetIcon } from '@/components/AssetIcon';
 import type { SlopePanelProps, SlopeColorMode } from '../types';
 import { SLOPE_CATEGORIES, degToPercent } from '../lib/slope-config';
 import { loadSlopeState, saveSlopeState } from '../lib/slope-persist';
@@ -40,10 +41,7 @@ export function SlopePanel({ map, isMapLoaded }: SlopePanelProps) {
         }}
         title="Pentes"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ display: 'block' }}>
-          <path d="M1 14 L14 14 L14 3 Z" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          <path d="M5 14 L14 5" stroke="currentColor" strokeWidth="1" strokeDasharray="2,2" />
-        </svg>
+        <AssetIcon src="/svgv2/icone/scale-01.svg" size={16} />
       </button>
 
       {/* Panel */}

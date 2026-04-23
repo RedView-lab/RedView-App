@@ -3,8 +3,25 @@
  * Sizes are driven via the `size` prop and CSS (currentColor).
  */
 import type { SVGProps } from 'react';
+import { AssetIcon, type AssetIconProps } from '@/components/AssetIcon';
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+
+const CONTROL_PANEL_ICON_ASSETS = {
+  map: '/svgv2/icone/map-02.svg',
+  eye: '/svgv2/icone/eye.svg',
+  eyeOff: '/svgv2/icone/eye-off.svg',
+  cube: '/svgv2/icone/cube-outline.svg',
+  trash: '/svgv2/icone/trash-03.svg',
+  externalLink: '/svgv2/icone/link-external-02.svg',
+  share: '/svgv2/icone/share-07.svg',
+  download: '/svgv2/icone/download-01.svg',
+  expand: '/svgv2/icone/scale-01.svg',
+  check: '/svgv2/icone/check.svg',
+  plusCircle: '/svgv2/icone/plus-circle.svg',
+  calendar: '/svgv2/icone/calendar.svg',
+  info: '/svgv2/icone/info-circle.svg',
+} as const;
 
 const base = (size = 16): SVGProps<SVGSVGElement> => ({
   width: size,
@@ -17,12 +34,8 @@ const base = (size = 16): SVGProps<SVGSVGElement> => ({
   strokeLinejoin: 'round',
 });
 
-export const IconMap = ({ size = 12, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6" />
-    <line x1="8" y1="3" x2="8" y2="18" />
-    <line x1="16" y1="6" x2="16" y2="21" />
-  </svg>
+export const IconMap = ({ size = 12, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.map} size={size} {...rest} />
 );
 
 export const IconChevronDown = ({ size = 16, ...rest }: IconProps) => (
@@ -31,93 +44,48 @@ export const IconChevronDown = ({ size = 16, ...rest }: IconProps) => (
   </svg>
 );
 
-export const IconEye = ({ size = 10, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
+export const IconEye = ({ size = 10, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.eye} size={size} {...rest} />
 );
 
-export const IconEyeOff = ({ size = 10, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 4.16-5.19" />
-    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19" />
-    <path d="M9.88 9.88A3 3 0 1 0 14.12 14.12" />
-    <line x1="1" y1="1" x2="23" y2="23" />
-  </svg>
+export const IconEyeOff = ({ size = 10, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.eyeOff} size={size} {...rest} />
 );
 
-export const IconCube = ({ size = 12, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-    <line x1="12" y1="22.08" x2="12" y2="12" />
-  </svg>
+export const IconCube = ({ size = 12, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.cube} size={size} {...rest} />
 );
 
-export const IconTrash = ({ size = 10, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6" />
-    <path d="M10 11v6M14 11v6" />
-    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-  </svg>
+export const IconTrash = ({ size = 10, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.trash} size={size} {...rest} />
 );
 
-export const IconExternalLink = ({ size = 14, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-    <polyline points="15 3 21 3 21 9" />
-    <line x1="10" y1="14" x2="21" y2="3" />
-  </svg>
+export const IconExternalLink = ({ size = 14, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.externalLink} size={size} {...rest} />
 );
 
-export const IconShare01 = ({ size = 12, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-    <path d="M12 15V4" />
-    <polyline points="8 8 12 4 16 8" />
-  </svg>
+export const IconShare01 = ({ size = 12, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.share} size={size} {...rest} />
 );
 
-export const IconDownload01 = ({ size = 20, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <path d="M12 3v12" />
-    <polyline points="7 10 12 15 17 10" />
-  </svg>
+export const IconDownload01 = ({ size = 20, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.download} size={size} {...rest} />
 );
 
-export const IconExpand = ({ size = 18, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <polyline points="15 3 21 3 21 9" />
-    <polyline points="9 21 3 21 3 15" />
-    <line x1="21" y1="3" x2="14" y2="10" />
-    <line x1="3" y1="21" x2="10" y2="14" />
-  </svg>
+export const IconExpand = ({ size = 18, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.expand} size={size} {...rest} />
 );
 
-export const IconCheck = ({ size = 10, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest} strokeWidth={3}>
-    <polyline points="20 6 9 17 4 12" />
-  </svg>
+export const IconCheck = ({ size = 10, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.check} size={size} {...rest} />
 );
 
-export const IconPlusCircle = ({ size = 12, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="8" x2="12" y2="16" />
-    <line x1="8" y1="12" x2="16" y2="12" />
-  </svg>
+export const IconPlusCircle = ({ size = 12, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.plusCircle} size={size} {...rest} />
 );
 
-export const IconCalendar = ({ size = 12, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-  </svg>
+export const IconCalendar = ({ size = 12, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.calendar} size={size} {...rest} />
 );
 
 export const IconClock = ({ size = 12, ...rest }: IconProps) => (
@@ -127,12 +95,8 @@ export const IconClock = ({ size = 12, ...rest }: IconProps) => (
   </svg>
 );
 
-export const IconInfo = ({ size = 16, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
+export const IconInfo = ({ size = 16, ...rest }: AssetIconProps) => (
+  <AssetIcon src={CONTROL_PANEL_ICON_ASSETS.info} size={size} {...rest} />
 );
 export const IconSunrise = ({ size = 16, ...rest }: IconProps) => (
   <svg {...base(size)} {...rest}>

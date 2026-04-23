@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { AssetIcon } from '@/components/AssetIcon';
 import type { LabelsPanelProps, LabelCategory } from '../types';
 import { LABEL_CATEGORIES } from '../lib/label-config';
 import { loadLabelState, saveLabelState } from '../lib/label-persist';
@@ -34,12 +35,7 @@ export function LabelsPanel({ map, isMapLoaded }: LabelsPanelProps) {
         }}
         title="Étiquettes"
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ display: 'block' }}>
-          <path
-            d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8 8a2 2 0 0 0 2.828 0l7.172-7.172a2 2 0 0 0 0-2.828l-8-8zM7 9a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"
-            fill="currentColor"
-          />
-        </svg>
+        <AssetIcon src="/svgv2/icone/mark.svg" size={15} />
       </button>
 
       {/* Panel */}

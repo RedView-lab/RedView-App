@@ -1,0 +1,14 @@
+export const PROVIDED_POI_SVG = {
+  water: '/svgv2/eau.svg',
+  bakery: '/svgv2/boulangerie.svg',
+  cafe: '/svgv2/caffe.svg',
+  fastFood: '/svgv2/fastfood.svg',
+  shop: '/svgv2/magasin.svg',
+  bikeShop: '/svgv2/magasindevelo.svg',
+  restaurant: '/svgv2/restaurant.svg',
+  fuel: '/svgv2/stationservice.svg',
+  toilet: '/svgv2/toilette.svg',
+  bar: '/svgv2/bar.svg',
+  hotelGlyph: '/svgv2/icone/icon_hotel.svg',
+  refugeGlyph: '/svgv2/icone/icon_refuge.svg',
+} as const;

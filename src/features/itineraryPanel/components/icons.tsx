@@ -5,6 +5,8 @@
  * language stays consistent across panels.
  */
 import type { SVGProps } from 'react';
+import { AssetIcon, type AssetIconProps } from '@/components/AssetIcon';
+import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
 export {
   IconChevronDown,
@@ -17,6 +19,38 @@ export {
 } from '@/features/controlPanel/icons';
 
 type IconProps = SVGProps<SVGSVGElement> & { size?: number };
+type AssetGlyphProps = Omit<AssetIconProps, 'src'>;
+
+const ITINERARY_ICON_ASSETS = {
+  save: '/svgv2/icone/save-01.svg',
+  settingsCog: '/svgv2/icone/settings-01.svg',
+  settingsSliders: '/svgv2/icone/sliders-03.svg',
+  download: '/svgv2/icone/download-01.svg',
+  downloadCircle: '/svgv2/icone/download-03.svg',
+  share: '/svgv2/icone/share-07.svg',
+  upload: '/svgv2/icone/upload-01.svg',
+  uploadCloud: '/svgv2/icone/upload-03.svg',
+  route: '/svgv2/icone/route.svg',
+  stopwatch: '/svgv2/icone/speedometer-03.svg',
+  mapPin: '/svgv2/icone/marker-pin-02.svg',
+  search: '/svgv2/icone/search-sm.svg',
+  uploadCircle: '/svgv2/icone/upload-03.svg',
+  copy: '/svgv2/icone/copy-04.svg',
+  close: '/svgv2/icone/x-close.svg',
+  layoutGrid: '/svgv2/icone/layers-three-02.svg',
+  list: '/svgv2/icone/list.svg',
+  star: '/svgv2/icone/star-01.svg',
+  info: '/svgv2/icone/info-circle.svg',
+  plus: '/svgv2/icone/plus.svg',
+  repeat: '/svgv2/icone/refresh-cw-05.svg',
+  pauseCircle: '/svgv2/icone/pause-circle.svg',
+  checkpointFlag: '/svgv2/icone/flag-02.svg',
+  magnifyingGlass: '/svgv2/icone/search-sm.svg',
+  settings04: '/svgv2/icone/settings-04.svg',
+  plusCircle: '/svgv2/icone/plus-circle.svg',
+  bed: PROVIDED_POI_SVG.hotelGlyph,
+  tent: PROVIDED_POI_SVG.refugeGlyph,
+} as const;
 
 const base = (size: number): SVGProps<SVGSVGElement> => ({
   width: size,
@@ -36,88 +70,44 @@ export const IconArrowLeft = ({ size = 16, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconSave = ({ size = 14, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-    <polyline points="17 21 17 13 7 13 7 21" />
-    <polyline points="7 3 7 8 15 8" />
-  </svg>
+export const IconSave = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.save} size={size} {...p} />
 );
 
-export const IconSettingsCog = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
+export const IconSettingsCog = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.settingsCog} size={size} {...p} />
 );
 
-export const IconSettingsSliders = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <line x1="4" y1="21" x2="4" y2="14" />
-    <line x1="4" y1="10" x2="4" y2="3" />
-    <line x1="12" y1="21" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12" y2="3" />
-    <line x1="20" y1="21" x2="20" y2="16" />
-    <line x1="20" y1="12" x2="20" y2="3" />
-    <line x1="1" y1="14" x2="7" y2="14" />
-    <line x1="9" y1="8" x2="15" y2="8" />
-    <line x1="17" y1="16" x2="23" y2="16" />
-  </svg>
+export const IconSettingsSliders = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.settingsSliders} size={size} {...p} />
 );
 
-export const IconDownload = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="7 10 12 15 17 10" />
-    <line x1="12" y1="15" x2="12" y2="3" />
-  </svg>
+export const IconDownload = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.download} size={size} {...p} />
 );
 
-export const IconDownloadCircle = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="8 12 12 16 16 12" />
-    <line x1="12" y1="8" x2="12" y2="16" />
-  </svg>
+export const IconDownloadCircle = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.downloadCircle} size={size} {...p} />
 );
 
-export const IconShare = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-    <polyline points="16 6 12 2 8 6" />
-    <line x1="12" y1="2" x2="12" y2="15" />
-  </svg>
+export const IconShare = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.share} size={size} {...p} />
 );
 
-export const IconUpload = ({ size = 12, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-    <polyline points="17 8 12 3 7 8" />
-    <line x1="12" y1="3" x2="12" y2="15" />
-  </svg>
+export const IconUpload = ({ size = 12, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.upload} size={size} {...p} />
 );
 
-export const IconRoute = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="6" cy="19" r="3" />
-    <path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15" />
-    <circle cx="18" cy="5" r="3" />
-  </svg>
+export const IconRoute = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.route} size={size} {...p} />
 );
 
-export const IconStopwatch = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <line x1="10" y1="2" x2="14" y2="2" />
-    <line x1="12" y1="14" x2="15" y2="11" />
-    <circle cx="12" cy="14" r="8" />
-  </svg>
+export const IconStopwatch = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.stopwatch} size={size} {...p} />
 );
 
-export const IconMapPin = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-    <circle cx="12" cy="10" r="3" />
-  </svg>
+export const IconMapPin = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.mapPin} size={size} {...p} />
 );
 
 export const IconNutrition = ({ size = 16, ...p }: IconProps) => (
@@ -141,35 +131,20 @@ export const IconCornerUpRight = ({ size = 16, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconSearch = ({ size = 14, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="11" cy="11" r="7" />
-    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-  </svg>
+export const IconSearch = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.search} size={size} {...p} />
 );
 
-export const IconUploadCloud = ({ size = 24, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <path d="M16 16l-4-4-4 4" />
-    <path d="M12 12v9" />
-    <path d="M20.4 14.5A5 5 0 0 0 18 5h-1.3A8 8 0 1 0 4 12.7" />
-    <path d="M16 16l-4-4-4 4" />
-  </svg>
+export const IconUploadCloud = ({ size = 24, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.uploadCloud} size={size} {...p} />
 );
 
-export const IconUploadCircle = ({ size = 20, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="12" cy="12" r="9" />
-    <path d="M8.5 10.5 12 7l3.5 3.5" />
-    <path d="M12 7v7" />
-  </svg>
+export const IconUploadCircle = ({ size = 20, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.uploadCircle} size={size} {...p} />
 );
 
-export const IconCopy04 = ({ size = 20, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <rect x="9" y="9" width="10" height="10" rx="2" />
-    <rect x="5" y="5" width="10" height="10" rx="2" />
-  </svg>
+export const IconCopy04 = ({ size = 20, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.copy} size={size} {...p} />
 );
 
 export const IconSparkles = ({ size = 24, ...p }: IconProps) => (
@@ -179,31 +154,16 @@ export const IconSparkles = ({ size = 24, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconClose = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <line x1="18" y1="6" x2="6" y2="18" />
-    <line x1="6" y1="6" x2="18" y2="18" />
-  </svg>
+export const IconClose = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.close} size={size} {...p} />
 );
 
-export const IconLayoutGrid = ({ size = 12, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
-  </svg>
+export const IconLayoutGrid = ({ size = 12, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.layoutGrid} size={size} {...p} />
 );
 
-export const IconList = ({ size = 16, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <line x1="8" y1="6" x2="20" y2="6" />
-    <line x1="8" y1="12" x2="20" y2="12" />
-    <line x1="8" y1="18" x2="20" y2="18" />
-    <circle cx="4" cy="6" r="1" fill="currentColor" stroke="none" />
-    <circle cx="4" cy="12" r="1" fill="currentColor" stroke="none" />
-    <circle cx="4" cy="18" r="1" fill="currentColor" stroke="none" />
-  </svg>
+export const IconList = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.list} size={size} {...p} />
 );
 
 export const IconClockFastForward = ({ size = 12, ...p }: IconProps) => (
@@ -213,25 +173,16 @@ export const IconClockFastForward = ({ size = 12, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconStar = ({ size = 12, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-  </svg>
+export const IconStar = ({ size = 12, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.star} size={size} {...p} />
 );
 
-export const IconInfo = ({ size = 14, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" y1="16" x2="12" y2="12" />
-    <line x1="12" y1="8" x2="12.01" y2="8" />
-  </svg>
+export const IconInfo = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.info} size={size} {...p} />
 );
 
-export const IconPlus = ({ size = 14, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
+export const IconPlus = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.plus} size={size} {...p} />
 );
 
 // Matches Figma node 853:19503 (minus) — horizontal line inset 20.83% of a 20x20 square.
@@ -241,26 +192,12 @@ export const IconMinus = ({ size = 20, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconRepeat = ({ size = 14, ...p }: IconProps) => (
-  <svg {...base(size)} {...p}>
-    <polyline points="17 1 21 5 17 9" />
-    <path d="M3 11V9a4 4 0 0 1 4-4h14" />
-    <polyline points="7 23 3 19 7 15" />
-    <path d="M21 13v2a4 4 0 0 1-4 4H3" />
-  </svg>
+export const IconRepeat = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.repeat} size={size} {...p} />
 );
 
-export const IconCheckpointFlag = ({ size = 20, ...p }: IconProps) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 20 20"
-    fill="currentColor"
-    {...p}
-  >
-    <rect x="9.25" y="3" width="1.5" height="14" rx="0.3" />
-    <path d="M10.5 3.8l6 1.6-6 1.6z" />
-  </svg>
+export const IconCheckpointFlag = ({ size = 20, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.checkpointFlag} size={size} {...p} />
 );
 
 export const IconCheckpointEnd = ({ size = 20, ...p }: IconProps) => (
@@ -290,12 +227,8 @@ export const IconShoppingCart = ({ size = 12, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconPauseCircle = ({ size = 12, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" {...p}>
-    <circle cx="12" cy="12" r="10" />
-    <line x1="10" y1="8.5" x2="10" y2="15.5" />
-    <line x1="14" y1="8.5" x2="14" y2="15.5" />
-  </svg>
+export const IconPauseCircle = ({ size = 12, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.pauseCircle} size={size} {...p} />
 );
 
 /**
@@ -325,36 +258,24 @@ export const IconFlagCheckered = ({ size = 10, ...p }: IconProps) => (
  * Untitled-UI "magnifying glass" — matches Figma node 855:22699
  * (`Icon / magnifyingglass`). 14×14, 1.6 stroke.
  */
-export const IconMagnifyingGlass = ({ size = 14, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <circle cx="6.2" cy="6.2" r="4.4" />
-    <line x1="12.2" y1="12.2" x2="9.4" y2="9.4" />
-  </svg>
+export const IconMagnifyingGlass = ({ size = 14, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.magnifyingGlass} size={size} {...p} />
 );
 
 /**
  * Untitled-UI "settings-04" — matches Figma node 170:4952. Two horizontal
  * sliders with knobs (top knob right, bottom knob left).
  */
-export const IconSettings04 = ({ size = 16, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <line x1="2" y1="5" x2="14" y2="5" />
-    <line x1="2" y1="11" x2="14" y2="11" />
-    <circle cx="10.5" cy="5" r="1.6" fill="#000" />
-    <circle cx="5.5" cy="11" r="1.6" fill="#000" />
-  </svg>
+export const IconSettings04 = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.settings04} size={size} {...p} />
 );
 
 /**
  * Untitled-UI "plus-circle" filled — matches Figma node 855:22703.
  * White plus inside a transparent ring; used by the red split-button.
  */
-export const IconPlusCircleFilled = ({ size = 16, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <circle cx="8" cy="8" r="6.5" />
-    <line x1="8" y1="5" x2="8" y2="11" />
-    <line x1="5" y1="8" x2="11" y2="8" />
-  </svg>
+export const IconPlusCircleFilled = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.plusCircle} size={size} {...p} />
 );
 
 /**
@@ -518,21 +439,12 @@ export const IconBicycle = ({ size = 10, ...p }: IconProps) => (
   </svg>
 );
 
-export const IconBed = ({ size = 10, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M2 12V5" />
-    <path d="M2 9h12v3" />
-    <path d="M14 12V8a2 2 0 0 0-2-2H7v3" />
-    <circle cx="5" cy="7.5" r="1.2" />
-  </svg>
+export const IconBed = ({ size = 10, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.bed} size={size} {...p} />
 );
 
-export const IconTent = ({ size = 10, ...p }: IconProps) => (
-  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" {...p}>
-    <path d="M8 2L2 13h12z" />
-    <path d="M8 2v11" />
-    <path d="M5 13l3-4 3 4" />
-  </svg>
+export const IconTent = ({ size = 10, ...p }: AssetGlyphProps) => (
+  <AssetIcon src={ITINERARY_ICON_ASSETS.tent} size={size} {...p} />
 );
 
 export const IconMountain = ({ size = 10, ...p }: IconProps) => (

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { AssetIcon } from '@/components/AssetIcon';
 
 import type { OverlayStatusId, OverlayStatusSnapshot } from '../overlayStatus';
 
@@ -121,15 +122,7 @@ export default function MapOverlayStatusDock({
 
 function RefreshIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path
-        d="M16.57 5.1A7 7 0 0 0 4.45 7.4M3.43 14.9A7 7 0 0 0 15.55 12.6M16.57 5.1V2.85M16.57 5.1H14.22M3.43 14.9v2.25M3.43 14.9h2.35"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <AssetIcon src="/svgv2/icone/refresh-cw-05.svg" size={18} />
   );
 }
 

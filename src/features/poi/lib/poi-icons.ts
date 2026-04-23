@@ -1,10 +1,26 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { PoiCategory } from '../types';
 import { POI_COLORS } from '../types';
+import { PROVIDED_POI_SVG } from './providedPoiSvg';
 
 // ── SVG path data per category (24×24 viewBox) ───────────────────────
 
-const ICON_PATHS: Record<PoiCategory, string> = {
+const PROVIDED_ICON_URLS: Partial<Record<PoiCategory, string>> = {
+  drinking_water: PROVIDED_POI_SVG.water,
+  bakery: PROVIDED_POI_SVG.bakery,
+  convenience: PROVIDED_POI_SVG.shop,
+  supermarket: PROVIDED_POI_SVG.shop,
+  bicycle: PROVIDED_POI_SVG.bikeShop,
+  bicycle_repair: PROVIDED_POI_SVG.bikeShop,
+  toilets: PROVIDED_POI_SVG.toilet,
+  fuel: PROVIDED_POI_SVG.fuel,
+  fast_food: PROVIDED_POI_SVG.fastFood,
+  cafe: PROVIDED_POI_SVG.cafe,
+  bar: PROVIDED_POI_SVG.bar,
+  restaurant: PROVIDED_POI_SVG.restaurant,
+};
+
+const LEGACY_ICON_PATHS: Record<PoiCategory, string> = {
   drinking_water:
     'M12 2C12 2 5 10.5 5 15a7 7 0 0014 0C19 10.5 12 2 12 2z',
   bakery:
@@ -52,7 +68,33 @@ const ICON_PATHS: Record<PoiCategory, string> = {
 
 // ── Render SVG to ImageData via canvas ────────────────────────────────
 
-function svgToImageData(
+function imageUrlToImageData(
+  url: string,
+  size: number,
+): Promise<ImageData> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to create icon canvas context'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, size, size);
+      resolve(ctx.getImageData(0, 0, size, size));
+    };
+    img.onerror = () => {
+      reject(new Error(`Failed to render icon asset: ${url}`));
+    };
+    img.src = url;
+  });
+}
+
+function svgPathToImageData(
   path: string,
   color: string,
   size: number,
@@ -92,14 +134,16 @@ export async function registerPoiIcons(map: MapboxMap): Promise<void> {
   if (registered) return;
 
   const size = 48; // 48px for crisp retina rendering
-  const entries = Object.entries(ICON_PATHS) as [PoiCategory, string][];
+  const entries = Object.entries(LEGACY_ICON_PATHS) as [PoiCategory, string][];
 
   const promises = entries.map(async ([category, path]) => {
     const imageId = `poi-${category}`;
     if (map.hasImage(imageId)) return;
 
-    const color = POI_COLORS[category];
-    const imageData = await svgToImageData(path, color, size);
+    const providedUrl = PROVIDED_ICON_URLS[category];
+    const imageData = providedUrl
+      ? await imageUrlToImageData(providedUrl, size)
+      : await svgPathToImageData(path, POI_COLORS[category], size);
     if (!map.hasImage(imageId)) {
       map.addImage(imageId, imageData, { pixelRatio: 2 });
     }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { AssetIcon } from '@/components/AssetIcon';
 import type { MapToolsPanelProps } from '../types';
 import { useWind } from '../hooks/useWind';
 
@@ -30,12 +31,7 @@ export function MapToolsPanel({ map, isMapLoaded }: MapToolsPanelProps) {
         style={toggleBtnStyle}
         title="Outils carte"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ display: 'block' }}>
-          <path
-            d="M8 1 L10 6 L15 8 L10 10 L8 15 L6 10 L1 8 L6 6 Z"
-            fill="currentColor"
-          />
-        </svg>
+        <AssetIcon src="/svgv2/icone/tool-02.svg" size={16} />
       </button>
 
       {/* Panel */}

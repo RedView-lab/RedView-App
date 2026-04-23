@@ -1,4 +1,5 @@
 import type { SVGProps } from 'react';
+import { AssetIcon, type AssetIconProps } from '@/components/AssetIcon';
 import {
   IconCheck,
   IconChevronDown,
@@ -21,12 +22,8 @@ const base = (size = 16): SVGProps<SVGSVGElement> => ({
 
 export { IconCheck, IconChevronDown, IconEye, IconSettingsSliders };
 
-export const IconDotsVertical = ({ size = 16, ...rest }: IconProps) => (
-  <svg {...base(size)} {...rest}>
-    <circle cx="12" cy="5" r="1.5" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" />
-    <circle cx="12" cy="19" r="1.5" fill="currentColor" stroke="none" />
-  </svg>
+export const IconDotsVertical = ({ size = 16, ...rest }: AssetIconProps) => (
+  <AssetIcon src="/svgv2/icone/dots-vertical.svg" size={size} {...rest} />
 );
 
 export const IconSun = ({ size = 14, ...rest }: IconProps) => (
