@@ -1,5 +1,5 @@
 export { ControlPanel } from './ControlPanel';
-export { ControlPanelContainer } from './ControlPanelContainer';
+export { ControlPanelContainer } from './container/ControlPanelContainer';
 export { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 export type {
   Basemap,
