@@ -10,6 +10,40 @@
 //  - SHADER_LOAD:   uses textureLoad (Apple Metal / universal fallback)
 
 // --- Shared WGSL preamble: structs, hash, lighting, fragment shader ---
+const SNOW_HELPERS_WGSL = /* wgsl */`
+fn sampleSnowDepthCm(worldPos: vec3<f32>) -> f32 {
+  if (camera.snowMode < 0.5) { return 0.0; }
+  let u = (worldPos.x - camera.snowOriginX) / camera.snowScaleX;
+  let v = (worldPos.z - camera.snowOriginZ) / camera.snowScaleZ;
+  if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) { return 0.0; }
+  let dims = textureDimensions(snowTex, 0);
+  let dimsF = vec2<f32>(dims);
+  let px = clamp(i32(u * dimsF.x), 0, i32(dims.x) - 1);
+  let py = clamp(i32(v * dimsF.y), 0, i32(dims.y) - 1);
+  return textureLoad(snowTex, vec2<i32>(px, py), 0).r;
+}
+
+fn snowThicknessColor(depthCm: f32) -> vec3<f32> {
+  // Viridis-like ramp (0→purple, 50→blue, 100→green, 150→yellow, 200→red)
+  let t = clamp(depthCm / 200.0, 0.0, 1.0);
+  let r = clamp(1.6 * t - 0.4, 0.0, 1.0);
+  let g = clamp(1.0 - abs(t - 0.55) * 2.2, 0.0, 1.0);
+  let b = clamp(1.0 - t * 1.4 + 0.15, 0.0, 1.0);
+  return vec3<f32>(r, g, b);
+}
+
+fn applySnow(baseSrgb: vec3<f32>, worldPos: vec3<f32>) -> vec3<f32> {
+  if (camera.snowMode < 0.5) { return baseSrgb; }
+  let depth = sampleSnowDepthCm(worldPos);
+  if (camera.snowMode > 1.5) {
+    if (depth <= 0.5) { return baseSrgb * 0.35; }
+    return snowThicknessColor(depth);
+  }
+  let t = smoothstep(0.0, 30.0, depth) * 0.93;
+  return mix(baseSrgb, vec3<f32>(0.97, 0.98, 1.0), t);
+}
+`;
+
 const SHADER_PREAMBLE = /* wgsl */`
 struct Camera {
   viewProj: mat4x4<f32>,
@@ -30,11 +64,21 @@ struct Camera {
   _pad1: f32,
   _pad2: f32,
   _pad3: f32,
+  /** Snow display: 0=off, 1=cover, 2=thickness. */
+  snowMode: f32,
+  snowOriginX: f32,
+  snowOriginZ: f32,
+  snowScaleX: f32,
+  snowScaleZ: f32,
+  _snowPad0: f32,
+  _snowPad1: f32,
+  _snowPad2: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var heightTex: texture_2d<f32>;
 @group(0) @binding(2) var heightSamp: sampler;
+@group(0) @binding(3) var snowTex: texture_2d<f32>;
 
 struct VsOut {
   @builtin(position) pos: vec4<f32>,
@@ -217,6 +261,9 @@ fn fs_main(in: VsOut) -> FsOut {
   let lodNear = camera.lodThreshold * 0.6;
   let lodFar  = camera.lodThreshold * 1.4;
 
+  // Snow-tinted base color (no-op when snowMode == 0)
+  let snowedBase = applySnow(in.color.rgb, in.center);
+
   // NEAR PATH: Raytraced box imposter
   if (in.camDist < lodFar) {
     let rayDir = normalize(in.worldPos - camera.cameraPos.xyz);
@@ -244,7 +291,7 @@ fn fs_main(in: VsOut) -> FsOut {
       else if (tNear == tmin.y) { faceNormal = vec3<f32>(0.0, -sign(rayDir.y), 0.0); }
       else { faceNormal = vec3<f32>(0.0, 0.0, -sign(rayDir.z)); }
 
-      let boxColor = shade(faceNormal, in.color.rgb);
+      let boxColor = shade(faceNormal, snowedBase);
       let boxDepth = clipPos.z / clipPos.w;
 
       if (in.camDist > lodNear) {
@@ -254,7 +301,7 @@ fn fs_main(in: VsOut) -> FsOut {
         if (dist2 > 1.0) { discard; }
         let edge = 1.0 - smoothstep(0.6, 1.0, sqrt(dist2));
         let N = normalize(in.sobelNormal);
-        let discColor = shade(N, in.color.rgb);
+        let discColor = shade(N, snowedBase);
 
         out.color = vec4<f32>(mix(boxColor, discColor, t), mix(in.color.a, in.color.a * edge, t));
         out.depth = mix(boxDepth, in.pos.z, t);
@@ -272,7 +319,7 @@ fn fs_main(in: VsOut) -> FsOut {
 
   let edge = 1.0 - smoothstep(0.5, 1.0, sqrt(dist2));
   let N = normalize(in.sobelNormal);
-  let color = shade(N, in.color.rgb);
+  let color = shade(N, snowedBase);
 
   out.color = vec4<f32>(color, in.color.a * edge);
   out.depth = in.pos.z;
@@ -314,17 +361,27 @@ struct Camera {
   _pad1: f32,
   _pad2: f32,
   _pad3: f32,
+  snowMode: f32,
+  snowOriginX: f32,
+  snowOriginZ: f32,
+  snowScaleX: f32,
+  snowScaleZ: f32,
+  _snowPad0: f32,
+  _snowPad1: f32,
+  _snowPad2: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
 @group(0) @binding(1) var heightTex: texture_2d<f32>;
 @group(0) @binding(2) var heightSamp: sampler;
+@group(0) @binding(3) var snowTex: texture_2d<f32>;
 
 struct VsOutLite {
   @builtin(position) pos: vec4<f32>,
   @location(0) color: vec4<f32>,
   @location(1) localUV: vec2<f32>,
   @location(2) normal: vec3<f32>,
+  @location(3) worldCenter: vec3<f32>,
 };
 
 // Cheap 4-tap cross gradient (vs 8-tap Sobel). Visual difference is small
@@ -384,6 +441,7 @@ fn vs_main(
   out.color = col;
   out.localUV = uv;
   out.normal = computeNormalCross(pos);
+  out.worldCenter = pos;
   return out;
 }
 
@@ -395,6 +453,8 @@ fn linearToSrgbLite(c: vec3<f32>) -> vec3<f32> {
   return pow(clamp(c, vec3<f32>(0.0), vec3<f32>(1.0)), vec3<f32>(1.0 / 2.2));
 }
 
+${SNOW_HELPERS_WGSL}
+
 // NOTE: returns vec4 directly (no FsOut struct, no frag_depth) so that
 // Apple TBDR HSR remains active and overdraw is dramatically reduced.
 @fragment
@@ -403,7 +463,8 @@ fn fs_main(in: VsOutLite) -> @location(0) vec4<f32> {
   if (dist2 > 1.0) { discard; }
   let edge = 1.0 - smoothstep(0.55, 1.0, sqrt(dist2));
 
-  let baseColor = srgbToLinearLite(in.color.rgb);
+  let snowed = applySnow(in.color.rgb, in.worldCenter);
+  let baseColor = srgbToLinearLite(snowed);
   let N = normalize(in.normal);
   let L = normalize(camera.sunDir.xyz);
   let diffuse = dot(N, L) * 0.5 + 0.5;
@@ -414,8 +475,8 @@ fn fs_main(in: VsOutLite) -> @location(0) vec4<f32> {
 `;
 
 // Compose final shader variants
-const SHADER_GATHER = SHADER_PREAMBLE + SOBEL_GATHER + SHADER_BODY;
-const SHADER_LOAD   = SHADER_PREAMBLE + SOBEL_LOAD   + SHADER_BODY;
+const SHADER_GATHER = SHADER_PREAMBLE + SOBEL_GATHER + SNOW_HELPERS_WGSL + SHADER_BODY;
+const SHADER_LOAD   = SHADER_PREAMBLE + SOBEL_LOAD   + SNOW_HELPERS_WGSL + SHADER_BODY;
 
 const TERRAIN_SHADER = /* wgsl */`
 struct Camera {
@@ -436,14 +497,24 @@ struct Camera {
   _pad1: f32,
   _pad2: f32,
   _pad3: f32,
+  snowMode: f32,
+  snowOriginX: f32,
+  snowOriginZ: f32,
+  snowScaleX: f32,
+  snowScaleZ: f32,
+  _snowPad0: f32,
+  _snowPad1: f32,
+  _snowPad2: f32,
 };
 
 @group(0) @binding(0) var<uniform> camera: Camera;
+@group(0) @binding(3) var snowTex: texture_2d<f32>;
 
 struct TerrainVsOut {
   @builtin(position) pos: vec4<f32>,
   @location(0) color: vec4<f32>,
   @location(1) normal: vec3<f32>,
+  @location(2) worldPos: vec3<f32>,
 };
 
 @vertex
@@ -456,14 +527,18 @@ fn terrain_vs(
   out.pos = camera.viewProj * vec4<f32>(position, 1.0);
   out.color = col;
   out.normal = normal;
+  out.worldPos = position;
   return out;
 }
+
+${SNOW_HELPERS_WGSL}
 
 @fragment
 fn terrain_fs(in: TerrainVsOut) -> @location(0) vec4<f32> {
   let n = normalize(in.normal);
   let ndotl = max(dot(n, normalize(camera.sunDir.xyz)), 0.3);
-  return vec4<f32>(in.color.rgb * ndotl, in.color.a);
+  let snowed = applySnow(in.color.rgb, in.worldPos);
+  return vec4<f32>(snowed * ndotl, in.color.a);
 }
 `;
 
@@ -506,7 +581,13 @@ export class LidarRenderer {
   private heightSampler!: GPUSampler;
   private cameraBufferVoxel!: GPUBuffer;
   private pointBindGroupVoxel!: GPUBindGroup;
-  private uniformCache = new Float32Array(44);
+  private uniformCache = new Float32Array(52);
+  private snowTexture!: GPUTexture;
+  private snowMode: 0 | 1 | 2 = 0;
+  private snowOriginX = 0;
+  private snowOriginZ = 0;
+  private snowScaleX = 1;
+  private snowScaleZ = 1;
   private _tempFloat = new Float32Array(1);
   private _densityFloat = new Float32Array(1);
   /** Cached viewProj product to avoid re-multiplying when matrices are unchanged. */
@@ -610,12 +691,14 @@ export class LidarRenderer {
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
         { binding: 1, visibility: GPUShaderStage.VERTEX, texture: { sampleType: hasF32Filter ? 'float' : 'unfilterable-float' } },
         { binding: 2, visibility: GPUShaderStage.VERTEX, sampler: { type: hasF32Filter ? 'filtering' : 'non-filtering' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       ],
     });
 
     this.terrainBindGroupLayout = this.device.createBindGroupLayout({
       entries: [
         { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
       ],
     });
 
@@ -705,13 +788,13 @@ export class LidarRenderer {
       throw new Error(`GPU pipeline creation failed: ${pipelineError.message}`);
     }
 
-    // Camera uniform: 176 bytes (44 × f32, 16-byte aligned)
+    // Camera uniform: 208 bytes (52 × f32, 16-byte aligned) — includes snow params
     this.cameraBuffer = this.device.createBuffer({
-      size: 176,
+      size: 208,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
     this.cameraBufferVoxel = this.device.createBuffer({
-      size: 176,
+      size: 208,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -727,6 +810,19 @@ export class LidarRenderer {
       addressModeV: 'clamp-to-edge',
     });
 
+    // Snow texture (1×1 placeholder — replaced via setSnow)
+    this.snowTexture = this.device.createTexture({
+      size: [1, 1],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.device.queue.writeTexture(
+      { texture: this.snowTexture },
+      new Float32Array([0]) as Float32Array<ArrayBuffer>,
+      { bytesPerRow: 4 },
+      { width: 1, height: 1 },
+    );
+
     this.rebuildBindGroups();
     this.resize(canvas.width, canvas.height);
   }
@@ -738,6 +834,7 @@ export class LidarRenderer {
         { binding: 0, resource: { buffer: this.cameraBuffer } },
         { binding: 1, resource: this.heightTexture.createView() },
         { binding: 2, resource: this.heightSampler },
+        { binding: 3, resource: this.snowTexture.createView() },
       ],
     });
     this.pointBindGroupVoxel = this.device.createBindGroup({
@@ -746,12 +843,14 @@ export class LidarRenderer {
         { binding: 0, resource: { buffer: this.cameraBufferVoxel } },
         { binding: 1, resource: this.heightTexture.createView() },
         { binding: 2, resource: this.heightSampler },
+        { binding: 3, resource: this.snowTexture.createView() },
       ],
     });
     this.terrainBindGroup = this.device.createBindGroup({
       layout: this.terrainBindGroupLayout,
       entries: [
         { binding: 0, resource: { buffer: this.cameraBuffer } },
+        { binding: 3, resource: this.snowTexture.createView() },
       ],
     });
   }
@@ -778,6 +877,40 @@ export class LidarRenderer {
     );
 
     this.rebuildBindGroups();
+  }
+
+  /** Upload du champ de neige (cm) + paramètres de mapping monde→texture. */
+  setSnow(params: {
+    data: Float32Array;
+    width: number;
+    height: number;
+    originX: number;
+    originZ: number;
+    scaleX: number;
+    scaleZ: number;
+  }) {
+    if (this.snowTexture) this.snowTexture.destroy();
+    this.snowTexture = this.device.createTexture({
+      size: [params.width, params.height],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    this.device.queue.writeTexture(
+      { texture: this.snowTexture },
+      params.data as Float32Array<ArrayBuffer>,
+      { bytesPerRow: params.width * 4 },
+      { width: params.width, height: params.height },
+    );
+    this.snowOriginX = params.originX;
+    this.snowOriginZ = params.originZ;
+    this.snowScaleX = params.scaleX;
+    this.snowScaleZ = params.scaleZ;
+    this.rebuildBindGroups();
+  }
+
+  /** 0 = off, 1 = couverture (blanc), 2 = épaisseur (heatmap). */
+  setSnowMode(mode: 0 | 1 | 2) {
+    this.snowMode = mode;
   }
 
   resize(w: number, h: number) {
@@ -1145,6 +1278,14 @@ export class LidarRenderer {
     f[41] = 0;   // _pad1
     f[42] = 0;   // _pad2
     f[43] = 0;   // _pad3
+    f[44] = this.snowMode;
+    f[45] = this.snowOriginX;
+    f[46] = this.snowOriginZ;
+    f[47] = this.snowScaleX;
+    f[48] = this.snowScaleZ;
+    f[49] = 0;
+    f[50] = 0;
+    f[51] = 0;
 
     this.device.queue.writeBuffer(this.cameraBuffer, 0, f);
     this.device.queue.writeBuffer(this.cameraBufferVoxel, 0, f);

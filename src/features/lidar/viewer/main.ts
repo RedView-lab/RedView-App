@@ -261,7 +261,93 @@ let renderer: LidarRenderer | null = null;
         renderer.lodThreshold = renderer.lodThreshold > 0 ? 0 : Math.max(50, extent * 0.5);
       }
       if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
+      if (e.key === 'n' || e.key === 'N') void cycleSnow();
     });
+
+    // ---------------- SNOW ❄ ----------------
+    // Bouton bas de l'écran : off → cover → thickness → off
+    // Au premier passage non-off, fetch AROME via Open-Meteo + redistribution.
+    const snowBtn = document.getElementById('snow-btn') as HTMLButtonElement | null;
+    const snowModes: Array<{ key: 'off' | 'cover' | 'thickness'; gpu: 0 | 1 | 2; label: string }> = [
+      { key: 'off',       gpu: 0, label: '❄ Neige : off' },
+      { key: 'cover',     gpu: 1, label: '❄ Couverture' },
+      { key: 'thickness', gpu: 2, label: '❄ Épaisseur (cm)' },
+    ];
+    let snowIdx = 0;
+    let snowFieldLoaded = false;
+    let snowLoading = false;
+
+    async function cycleSnow() {
+      if (!renderer || !snowBtn || snowLoading) return;
+      const pc = pointCloud;
+      const tm = terrainMesh;
+      if (!pc || !tm) return;
+      const next = (snowIdx + 1) % snowModes.length;
+      const mode = snowModes[next];
+      // Premier passage en mode != off → on calcule le champ de neige
+      if (!snowFieldLoaded && mode.gpu !== 0) {
+        snowLoading = true;
+        snowBtn.classList.add('loading');
+        snowBtn.textContent = '❄ Calcul…';
+        try {
+          const { runSnowPipeline } = await import('../../snow');
+          const field = await runSnowPipeline(
+            {
+              data: tm.heightGrid,
+              width: tm.gridWidth,
+              height: tm.gridHeight,
+              bounds: pc.bounds,
+              crs,
+            },
+            {
+              progress: (pct, label) => {
+                snowBtn.textContent = `❄ ${label} ${pct.toFixed(0)}%`;
+              },
+            },
+          );
+          // Le champ de neige est row-major SUD→NORD ; le renderer attend
+          // l'orientation heightmap (NORD→SUD). On flip les lignes.
+          const flipped = new Float32Array(field.data.length);
+          for (let y = 0; y < field.height; y++) {
+            const srcRow = (field.height - 1 - y) * field.width;
+            const dstRow = y * field.width;
+            for (let x = 0; x < field.width; x++) {
+              flipped[dstRow + x] = field.data[srcRow + x];
+            }
+          }
+          renderer.setSnow({
+            data: flipped,
+            width: field.width,
+            height: field.height,
+            originX: pc.bounds.minX - cx,
+            originZ: -(pc.bounds.maxY - cy),
+            scaleX: pc.bounds.maxX - pc.bounds.minX,
+            scaleZ: pc.bounds.maxY - pc.bounds.minY,
+          });
+          snowFieldLoaded = true;
+          console.log(
+            `[Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
+            `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
+            `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
+          );
+        } catch (err) {
+          console.error('[Viewer] Snow fetch failed:', err);
+          snowBtn.textContent = '❄ Erreur';
+          setTimeout(() => { if (snowBtn) snowBtn.textContent = snowModes[0].label; }, 2500);
+          snowIdx = 0;
+          renderer.setSnowMode(0);
+          return;
+        } finally {
+          snowLoading = false;
+          snowBtn.classList.remove('loading');
+        }
+      }
+      snowIdx = next;
+      renderer.setSnowMode(mode.gpu);
+      snowBtn.textContent = mode.label;
+      snowBtn.classList.toggle('active', mode.gpu !== 0);
+    }
+    snowBtn?.addEventListener('click', () => void cycleSnow());
 
   } catch (err: any) {
     setStatus(`❌ Erreur : ${err.message}`);
