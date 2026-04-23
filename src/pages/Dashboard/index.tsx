@@ -16,6 +16,7 @@ import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import {
+  CENTER_PANEL_STACK_GAP,
   CENTER_PANEL_RESIZE_HIT_AREA,
   CENTER_TOOLBAR_HEIGHT,
   IMMERSIVE_EASING,
@@ -214,6 +215,9 @@ export default function Dashboard({
   const statusDockRight = isMapFocusMode
     ? PANEL_PADDING
     : panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+  const statusDockBottom = layout.centerToolbarVisible
+    ? layout.designH - layout.centerToolbarTop + CENTER_PANEL_STACK_GAP
+    : 88;
 
   const handleOverlayReload = useCallback((id: OverlayStatusId) => {
     overlayReloadersRef.current[id]?.();
@@ -335,7 +339,7 @@ export default function Dashboard({
           <MapOverlayStatusDock
             statuses={visibleStatuses}
             right={statusDockRight}
-            top={PANEL_PADDING}
+            bottom={statusDockBottom}
             hidden={projectBrowserOpen || activeProjectId == null}
             onReload={handleOverlayReload}
           />
