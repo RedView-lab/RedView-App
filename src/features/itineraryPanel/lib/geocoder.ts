@@ -128,7 +128,18 @@ export async function reverseGeocodeSettlement(
 
   const maxDistanceMeters = Math.max(0, opts.maxDistanceMeters ?? 1000);
   const json = (await res.json()) as MapboxResponse;
-  for (const feature of json.features ?? []) {
+  const features = json.features ?? [];
+
+  // First pass: find the closest precise feature (address / neighborhood)
+  // within the distance cap, and use its enclosing settlement context for
+  // the label. These features have a real point geometry, so the cap is
+  // meaningful.
+  for (const feature of features) {
+    const placeType = feature.place_type ?? [];
+    const isPrecise =
+      placeType.includes('address') || placeType.includes('neighborhood');
+    if (!isPrecise) continue;
+
     const distanceMeters = haversineDistanceMeters(
       lat,
       lon,
@@ -137,19 +148,31 @@ export async function reverseGeocodeSettlement(
     );
     if (distanceMeters > maxDistanceMeters) continue;
 
-    const placeType = feature.place_type ?? [];
     const settlementContext =
       feature.context?.find(
         (entry) => entry.id.startsWith('place.') || entry.id.startsWith('locality.'),
       ) ?? null;
-    const name =
-      placeType.includes('place') || placeType.includes('locality')
-        ? feature.text
-        : settlementContext?.text ?? feature.text;
 
     return {
       id: feature.id,
-      name,
+      name: settlementContext?.text ?? feature.text,
+      fullName: feature.place_name,
+      lon: feature.center[0],
+      lat: feature.center[1],
+    };
+  }
+
+  // Second pass: fall back to any enclosing settlement feature. Its center
+  // is a city centroid which can be several kilometers from the query
+  // point, so we do NOT apply the distance cap here — Mapbox only returns
+  // the `place` / `locality` whose polygon contains the query coordinates.
+  for (const feature of features) {
+    const placeType = feature.place_type ?? [];
+    if (!placeType.includes('place') && !placeType.includes('locality')) continue;
+
+    return {
+      id: feature.id,
+      name: feature.text,
       fullName: feature.place_name,
       lon: feature.center[0],
       lat: feature.center[1],
