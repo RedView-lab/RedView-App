@@ -52,23 +52,52 @@ export default function MapBlurMirror({
   borderRadius,
 }: MapBlurMirrorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const movingRef = useRef(false);
+  const lastDrawTsRef = useRef(0);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !map) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', {
+      alpha: true,
+      desynchronized: true,
+    });
     if (!ctx) return;
 
     let raf = 0;
-    let dirty = true;
+    const ACTIVE_MAX_FPS = 12;
+    const ACTIVE_DRAW_INTERVAL_MS = 1000 / ACTIVE_MAX_FPS;
+    const ACTIVE_RESOLUTION_SCALE = 0.62;
+    const ACTIVE_BLUR = Math.max(10, Math.round(blur * 0.55));
+    const ACTIVE_SATURATE = Math.max(1, Number((saturate * 0.72).toFixed(2)));
 
-    const draw = () => {
+    const applyPresentation = () => {
+      canvas.style.filter = movingRef.current
+        ? `blur(${ACTIVE_BLUR}px) saturate(${ACTIVE_SATURATE})`
+        : `blur(${blur}px) saturate(${saturate})`;
+      canvas.style.opacity = movingRef.current ? '0.94' : '1';
+    };
+
+    applyPresentation();
+
+    const draw = (force = false) => {
       raf = 0;
       const src = map.getCanvas() as HTMLCanvasElement;
       if (!src || src.width === 0 || src.height === 0) return;
 
+      const now = performance.now();
+      if (
+        !force
+        && movingRef.current
+        && now - lastDrawTsRef.current < ACTIVE_DRAW_INTERVAL_MS
+      ) {
+        return;
+      }
+      lastDrawTsRef.current = now;
+
       const dpr = window.devicePixelRatio || 1;
+      const resolutionScale = movingRef.current ? ACTIVE_RESOLUTION_SCALE : 1;
       // Source-canvas pixels per CSS pixel (Mapbox internally uses DPR too).
       const srcCanvasRect = src.getBoundingClientRect();
       const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
@@ -93,14 +122,15 @@ export default function MapBlurMirror({
       );
 
       // Match the mirror canvas's backing-store size to its CSS rect × DPR.
-      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr));
-      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr));
+      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr * resolutionScale));
+      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr * resolutionScale));
       if (canvas.width !== targetW || canvas.height !== targetH) {
         canvas.width = targetW;
         canvas.height = targetH;
       }
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.imageSmoothingEnabled = true;
       if (sw > 0 && sh > 0) {
         try {
           ctx.drawImage(src, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
@@ -110,36 +140,47 @@ export default function MapBlurMirror({
       }
     };
 
-    const schedule = () => {
+    const schedule = (force = false) => {
       if (raf !== 0) return;
-      raf = requestAnimationFrame(draw);
+      raf = requestAnimationFrame(() => draw(force));
     };
 
     const onMapRender = () => {
-      dirty = true;
       schedule();
+    };
+
+    const onMoveStart = () => {
+      movingRef.current = true;
+      applyPresentation();
+      schedule(true);
+    };
+
+    const onMoveEnd = () => {
+      movingRef.current = false;
+      applyPresentation();
+      schedule(true);
     };
 
     // Initial paint + keep redrawing while the map renders.
     map.on('render', onMapRender);
-    schedule();
+    map.on('movestart', onMoveStart);
+    map.on('moveend', onMoveEnd);
+    schedule(true);
 
     // Also redraw when the window resizes (panel rect may move).
     const onResize = () => {
-      dirty = true;
-      schedule();
+      schedule(true);
     };
     window.addEventListener('resize', onResize);
 
-    // Mute the unused-warning for `dirty` (kept for future throttling).
-    void dirty;
-
     return () => {
       map.off('render', onMapRender);
+      map.off('movestart', onMoveStart);
+      map.off('moveend', onMoveEnd);
       window.removeEventListener('resize', onResize);
       if (raf !== 0) cancelAnimationFrame(raf);
     };
-  }, [map]);
+  }, [blur, map, saturate]);
 
   return (
     <canvas
