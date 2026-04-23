@@ -156,6 +156,59 @@ function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color
   return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
 }
 
+function mixColor(left: Color, right: Color, t: number): Color {
+  return [
+    Math.round(lerp(left[0], right[0], t)),
+    Math.round(lerp(left[1], right[1], t)),
+    Math.round(lerp(left[2], right[2], t)),
+  ];
+}
+
+function gradientBandColor(paletteBands: PaletteBandLike[], value: number): Color {
+  if (paletteBands.length === 0) return [255, 255, 255];
+
+  const firstColor = hexToRgb(paletteBands[0]?.color ?? '#FFFFFF');
+  const firstMin = paletteBands[0]?.minValue;
+  if (Number.isFinite(firstMin) && value <= (firstMin as number)) return firstColor;
+
+  for (let index = 0; index < paletteBands.length; index += 1) {
+    const band = paletteBands[index];
+    const minValue = Number.isFinite(band.minValue)
+      ? band.minValue as number
+      : index > 0 && Number.isFinite(paletteBands[index - 1]?.maxValue)
+        ? paletteBands[index - 1]?.maxValue as number
+        : value;
+    const maxValue = Number.isFinite(band.maxValue)
+      ? band.maxValue as number
+      : index < paletteBands.length - 1 && Number.isFinite(paletteBands[index + 1]?.minValue)
+        ? paletteBands[index + 1]?.minValue as number
+        : minValue;
+    const bandColor = hexToRgb(band.color);
+    const isLast = index === paletteBands.length - 1;
+
+    if (value > maxValue && !isLast) continue;
+
+    const span = Math.max(1e-6, maxValue - minValue);
+    const blendWidth = Math.max(span * 0.18, 1e-6);
+
+    if (index > 0 && value < minValue + blendWidth) {
+      const previousColor = hexToRgb(paletteBands[index - 1]?.color ?? band.color);
+      const t = clamp((value - minValue) / blendWidth, 0, 1);
+      return mixColor(previousColor, bandColor, t);
+    }
+
+    if (!isLast && value > maxValue - blendWidth) {
+      const nextColor = hexToRgb(paletteBands[index + 1]?.color ?? band.color);
+      const t = clamp((value - (maxValue - blendWidth)) / blendWidth, 0, 1);
+      return mixColor(bandColor, nextColor, t);
+    }
+
+    return bandColor;
+  }
+
+  return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
+}
+
 function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Color {
   const clamped = clamp(ratio, 0, 1);
   for (let index = 1; index < stops.length; index += 1) {
@@ -237,7 +290,9 @@ export function renderWeatherCanvas(
       const xRatio = width <= 1 ? 0 : x / (width - 1);
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
-      const [r, g, b] = interpolatePaletteColor(stops, ratio);
+      const [r, g, b] = paletteBands?.length
+        ? gradientBandColor(paletteBands, raw)
+        : interpolatePaletteColor(stops, ratio);
       const index = (y * width + x) * 4;
       image.data[index] = r;
       image.data[index + 1] = g;

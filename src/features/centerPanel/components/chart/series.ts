@@ -14,8 +14,16 @@ interface NormalizedRoutePoint {
   gradientPct: number;
 }
 
+interface TimelineSample {
+  distanceM: number;
+  elapsedHours: number;
+}
+
 const EARTH_RADIUS_M = 6_371_008.8;
 const INTERVAL_AVERAGE_SPAN_M = 500;
+const MAX_CHART_POINT_COUNT = 2_048;
+const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], NormalizedRoutePoint[] | null>();
+const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 
 /**
  * Identifier of an axis option exposed by the analysis dropdowns. Keep in
@@ -296,6 +304,9 @@ function normalizeRouteProfile(
 ): NormalizedRoutePoint[] | null {
   if (!routePoints || routePoints.length < 2) return null;
 
+  const cached = normalizedRouteProfileCache.get(routePoints);
+  if (cached !== undefined) return cached;
+
   const samples: Array<{ distanceM: number; elevationM: number; gradientPct?: number | null }> = [];
   let cumulativeDistanceM = 0;
 
@@ -318,7 +329,10 @@ function normalizeRouteProfile(
     });
   }
 
-  if (samples.length < 2) return null;
+  if (samples.length < 2) {
+    normalizedRouteProfileCache.set(routePoints, null);
+    return null;
+  }
 
   const hasPersistedGradient = samples.some((sample) => Number.isFinite(sample.gradientPct));
   const smoothedElevations = hasPersistedGradient
@@ -329,7 +343,7 @@ function normalizeRouteProfile(
       );
   const distances = samples.map((sample) => sample.distanceM);
 
-  return samples.map((sample, index) => {
+  const normalized = samples.map((sample, index) => {
     const gradientPct = computeGradientPercentAtIndex(
       distances,
       smoothedElevations,
@@ -341,37 +355,109 @@ function normalizeRouteProfile(
       gradientPct,
     };
   });
+
+  normalizedRouteProfileCache.set(routePoints, normalized);
+  return normalized;
 }
 
-function interpolateElapsedHours(
+function getPredictionTimeline(
   prediction: PredictionResult | null | undefined,
-  distanceM: number,
-): number | null {
+): TimelineSample[] | null {
   if (!prediction || prediction.points.length < 2) return null;
 
-  const timeline = prediction.points.filter(
-    (point) => Number.isFinite(point.distance_m) && Number.isFinite(point.elapsed_time_s),
-  );
-  if (timeline.length < 2) return null;
+  const cached = predictionTimelineCache.get(prediction);
+  if (cached !== undefined) return cached;
 
-  if (distanceM <= timeline[0].distance_m) return timeline[0].elapsed_time_s / 3600;
+  const timeline = prediction.points
+    .map((point) => ({
+      distanceM: point.distance_m,
+      elapsedHours: point.elapsed_time_s / 3600,
+    }))
+    .filter(
+      (point) => Number.isFinite(point.distanceM) && Number.isFinite(point.elapsedHours),
+    );
+
+  const result = timeline.length >= 2 ? timeline : null;
+  predictionTimelineCache.set(prediction, result);
+  return result;
+}
+
+function interpolateElapsedHoursFromTimeline(
+  timeline: TimelineSample[] | null,
+  distanceM: number,
+): number | null {
+  if (!timeline || timeline.length < 2) return null;
+
+  if (distanceM <= timeline[0].distanceM) return timeline[0].elapsedHours;
   const last = timeline[timeline.length - 1];
-  if (distanceM >= last.distance_m) return last.elapsed_time_s / 3600;
+  if (distanceM >= last.distanceM) return last.elapsedHours;
 
   let lo = 0;
   let hi = timeline.length - 1;
   while (lo + 1 < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (timeline[mid].distance_m <= distanceM) lo = mid;
+    if (timeline[mid].distanceM <= distanceM) lo = mid;
     else hi = mid;
   }
 
   const start = timeline[lo];
   const end = timeline[hi];
-  const span = end.distance_m - start.distance_m;
-  if (span <= 0) return start.elapsed_time_s / 3600;
-  const t = (distanceM - start.distance_m) / span;
-  return (start.elapsed_time_s + (end.elapsed_time_s - start.elapsed_time_s) * t) / 3600;
+  const span = end.distanceM - start.distanceM;
+  if (span <= 0) return start.elapsedHours;
+  const t = (distanceM - start.distanceM) / span;
+  return start.elapsedHours + (end.elapsedHours - start.elapsedHours) * t;
+}
+
+function fitChartPointBudget(
+  points: ChartPoint[],
+  maxPoints = MAX_CHART_POINT_COUNT,
+): ChartPoint[] {
+  if (points.length <= maxPoints) return points;
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const span = last.x - first.x;
+  if (span <= 0) return [first, last];
+
+  const bucketCount = Math.max(8, Math.floor(maxPoints / 2));
+  const buckets: ChartPoint[][] = Array.from({ length: bucketCount }, () => []);
+  for (const point of points) {
+    const ratio = (point.x - first.x) / span;
+    const bucketIndex = Math.max(0, Math.min(bucketCount - 1, Math.floor(ratio * bucketCount)));
+    buckets[bucketIndex]?.push(point);
+  }
+
+  const reduced: ChartPoint[] = [];
+  const pushPoint = (point: ChartPoint) => {
+    const previous = reduced[reduced.length - 1];
+    if (
+      previous &&
+      Math.abs(previous.x - point.x) < 1e-6 &&
+      Math.abs(previous.y - point.y) < 1e-6
+    ) {
+      return;
+    }
+    reduced.push(point);
+  };
+
+  for (const bucket of buckets) {
+    if (bucket.length === 0) continue;
+
+    let minPoint = bucket[0];
+    let maxPoint = bucket[0];
+    for (const point of bucket) {
+      if (point.y < minPoint.y) minPoint = point;
+      if (point.y > maxPoint.y) maxPoint = point;
+    }
+
+    const ordered = [bucket[0], minPoint, maxPoint, bucket[bucket.length - 1]]
+      .filter((point, index, arr) => arr.indexOf(point) === index)
+      .sort((left, right) => left.x - right.x);
+
+    for (const point of ordered) pushPoint(point);
+  }
+
+  return reduced.length >= 2 ? reduced : [first, last];
 }
 
 function buildSeriesFromRouteProfile(
@@ -383,6 +469,7 @@ function buildSeriesFromRouteProfile(
 ): ChartPoint[] | null {
   const profile = normalizeRouteProfile(routePoints);
   if (!profile) return null;
+  const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
 
   const points: ChartPoint[] = [];
   for (const sample of profile) {
@@ -390,7 +477,7 @@ function buildSeriesFromRouteProfile(
       xMode === 'distance'
         ? sample.distanceM / 1000
         : projectElapsedHoursToX(
-            interpolateElapsedHours(prediction, sample.distanceM),
+            interpolateElapsedHoursFromTimeline(timeline, sample.distanceM),
             xMode,
             startTime,
           );
@@ -406,7 +493,7 @@ function buildSeriesFromRouteProfile(
     }
   }
 
-  return points.length > 1 ? points : null;
+  return points.length > 1 ? fitChartPointBudget(points) : null;
 }
 
 function buildDistanceMetricSamples(
@@ -580,7 +667,7 @@ function buildFixedDistanceAverageSeries(
     startDistanceM = endDistanceM;
   }
 
-  return result.length > 1 ? result : null;
+  return result.length > 1 ? fitChartPointBudget(result) : null;
 }
 
 /**
@@ -636,7 +723,7 @@ export function buildSeriesFromPrediction(
 
   points.sort((a, b) => a.x - b.x);
 
-  return points.length > 1 ? points : null;
+  return points.length > 1 ? fitChartPointBudget(points) : null;
 }
 
 function gradientPercentToDegrees(gradientPercent: number): number {
@@ -660,7 +747,7 @@ export function computeDomain(series: ChartPoint[][]): AxisDomain | null {
   }
   const pad = (max - min) * 0.05;
   let lo = min - pad;
-  let hi = max + pad;
+  const hi = max + pad;
   // Anchor to zero when values stay non-negative — feels more natural for
   // speed/power/elevation curves.
   if (min >= 0 && lo < 0) lo = 0;

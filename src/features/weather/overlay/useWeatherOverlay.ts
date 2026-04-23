@@ -368,10 +368,15 @@ export function useWeatherOverlay(
 
     const scheduleRefresh = (force: boolean) => {
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (force) {
+        debounceRef.current = null;
+        void refresh(true);
+        return;
+      }
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
-        void refresh(force);
-      }, force ? 120 : MOVE_DEBOUNCE_MS);
+        void refresh(false);
+      }, MOVE_DEBOUNCE_MS);
     };
 
     const onMoveEnd = () => scheduleRefresh(false);
