@@ -80,6 +80,7 @@ const OLD_CACHES = [
   'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
   'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
   'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27', 'dem-tiles-v28',
+  'dem-tiles-v29',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -91,6 +92,7 @@ const OLD_CACHES = [
   'dem-negative-v19',
   'dem-negative-v20',
   'dem-negative-v21',
+  'dem-negative-v22',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7',
@@ -300,7 +302,8 @@ async function handleDemRequest(_request, z, x, y, _depth) {
   }
 
   const inFrance = tileOverlapsFrance(z, x, y);
-    const inSwitzerland = tileOverlapsSwitzerland(z, x, y);
+  const inSwitzerland = tileOverlapsSwitzerland(z, x, y);
+  let tileIsInFrance = false; // hoisted so catch-handler can use it for finalize()
   try {
     let pngBlob;
     let demSource = 'none';
@@ -316,16 +319,33 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
 
-    // ── Switzerland branch — runs *before* France because the two bboxes
-    // overlap (CH bbox extends slightly into French Alpes / Italian Alpes).
-    // We only engage this branch when the tile is over the Swiss LV95
-    // footprint AND not predominantly over France (France's IGN data has
-    // higher resolution near the border and we already handle it).
+    // ── Resolve France polygon classification UP-FRONT.
+    // tileOverlapsFrance() is a generous bbox check that ALSO covers most of
+    // Switzerland (FRANCE_BOUNDS is [-5.5, 41, 10.0, 51.5]). The previous
+    // version of this dispatcher used `!inFrance` to gate the Swiss branch,
+    // which silently disabled it across ~95 % of CH. The polygon test below
+    // is the authoritative "is this tile actually inside France" answer and
+    // is what gates both branches now.
+    let franceClass = 'outside';
+    if (inFrance && shouldUseIGN(z, tileCenterLat)) {
+      if (await ensureFrancePoly()) {
+        franceClass = classifyDemTile(z, x, y);
+      }
+    }
+    tileIsInFrance = franceClass !== 'outside';
+
+    // ── Switzerland branch — runs when the tile is over the Swiss LV95
+    // footprint AND the France polygon does not cover it. France's IGN data
+    // is denser at the border so it wins on French-side border tiles.
     let swissHadSomeData = false;
-    if (
-      inSwitzerland && !inFrance &&
-      z >= SWISS_DEM_MINZOOM && shouldUseSwiss(z, tileCenterLat)
-    ) {
+    const considerSwiss = inSwitzerland && !tileIsInFrance && shouldUseSwiss(z, tileCenterLat);
+    if (z >= 12) {
+      console.log(
+        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} useIGN=${shouldUseIGN(z, tileCenterLat)} useSwiss=${shouldUseSwiss(z, tileCenterLat)}`,
+        'background:#444;color:#fff;padding:1px 4px;border-radius:2px', '',
+      );
+    }
+    if (considerSwiss) {
       const swissResult = await buildSwissTile(z, x, y);
       if (swissResult && swissResult.elevations) {
         swissHadSomeData = true;
@@ -338,44 +358,42 @@ async function handleDemRequest(_request, z, x, y, _depth) {
           releaseComposite();
         }
         demSource = 'swiss-composite';
+      } else {
+        console.log(
+          `[sw-dem][dispatch] %c ${z}/${x}/${y} %c swiss result=${swissResult?.source || 'null'} → falling through`,
+          'background:#FF9800;color:#fff;padding:1px 4px;border-radius:2px', '',
+        );
       }
     }
 
-    if (!pngBlob && inFrance && shouldUseIGN(z, tileCenterLat)) {
-      const polyOk = await ensureFrancePoly();
-      if (polyOk) {
-        const tileClass = classifyDemTile(z, x, y);
-        if (tileClass !== 'outside') {
-          const ignResult = await buildIGNTile(z, x, y, tileClass);
-          if (ignResult) {
-            upgradePending = ignResult.pendingFetches;
-            if (ignResult.elevations) {
-              // MNS returned actual elevation data (partial or full coverage)
-              ignHadSomeData = true;
-              if (ignResult.blob) {
-                pngBlob = ignResult.blob;
-                demSource = ignResult.source || 'ign';
-              } else {
-                await acquireComposite();
-                try {
-                  pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
-                } finally {
-                  releaseComposite();
-                }
-                demSource = 'ign-composite';
-              }
+    if (!pngBlob && tileIsInFrance) {
+      const tileClass = franceClass;
+      const ignResult = await buildIGNTile(z, x, y, tileClass);
+      if (ignResult) {
+        upgradePending = ignResult.pendingFetches;
+        if (ignResult.elevations) {
+          // MNS returned actual elevation data (partial or full coverage)
+          ignHadSomeData = true;
+          if (ignResult.blob) {
+            pngBlob = ignResult.blob;
+            demSource = ignResult.source || 'ign';
+          } else {
+            await acquireComposite();
+            try {
+              pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+            } finally {
+              releaseComposite();
             }
-            // else: 0-coverage result — elevations is null. MNS had no data
-            // for this tile. Record in area negative cache for fast skip on
-            // adjacent tiles. Fall through to HIGHRES fallback below.
-            if (!ignHadSomeData && ignResult.allPermanent404) {
-              mnsAreaNegSet(z, x, y);
-            }
+            demSource = 'ign-composite';
           }
         }
+        // else: 0-coverage result — elevations is null. MNS had no data
+        // for this tile. Record in area negative cache for fast skip on
+        // adjacent tiles. Fall through to HIGHRES fallback below.
+        if (!ignHadSomeData && ignResult.allPermanent404) {
+          mnsAreaNegSet(z, x, y);
+        }
       }
-      // If polyOk is false we deliberately fall through to the Mapbox branch
-      // below — running IGN without the polygon would misclassify every tile.
     }
 
     // 3a. HIGHRES (5 m DEM) fallback — broader coverage than MNS LiDAR HD.
@@ -383,7 +401,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // HIGHRES covers all of France at ~5 m resolution — 6× better than
     // Mapbox 30 m. Only fires when MNS had no data; when MNS returned
     // partial data the composite path above already handled it.
-    if (!pngBlob && inFrance && !ignHadSomeData && shouldUseIGN(z, tileCenterLat)) {
+    if (!pngBlob && tileIsInFrance && !ignHadSomeData) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
         if (highresResult.elevations) {
@@ -429,7 +447,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 204 with a very short TTL so Mapbox GL falls back to its own cached
     // parent mesh (which is again the LiDAR blob one zoom level up) and
     // retries the IGN pipeline on the next pan/zoom.
-    if (!pngBlob && inFrance && z > MAPBOX_DEM_MAXZOOM) {
+    if (!pngBlob && tileIsInFrance && z > MAPBOX_DEM_MAXZOOM) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -440,7 +458,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 3c. Same LiDAR-preserving path for Switzerland: at high zoom we never
     // want to fall through to a server-overzoomed Mapbox tile when we have
     // a parent COG-derived blob in our own cache.
-    if (!pngBlob && inSwitzerland && !inFrance && z > MAPBOX_DEM_MAXZOOM) {
+    if (!pngBlob && inSwitzerland && !tileIsInFrance && z > MAPBOX_DEM_MAXZOOM) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -454,8 +472,8 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // coverage, Mapbox overzoomed 30 m is better than nothing.
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
-        (inFrance && ignHadSomeData) ||
-        (inSwitzerland && !inFrance && swissHadSomeData)
+        (tileIsInFrance && ignHadSomeData) ||
+        (inSwitzerland && !tileIsInFrance && swissHadSomeData)
       );
     if (!pngBlob && mapboxToken && !skipMapboxHighZoomLiDAR) {
       pngBlob = await fetchMapboxTile(z, x, y);
@@ -474,13 +492,13 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
     //    confirmed empty (outside coverage, no Mapbox token, etc.)
     if (!pngBlob) {
-      const isConfirmedEmpty = (!inFrance && !inSwitzerland) || !mapboxToken;
+      const isConfirmedEmpty = (!tileIsInFrance && !inSwitzerland) || !mapboxToken;
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
       const reason = !mapboxToken
         ? 'no-token'
         : (skipMapboxHighZoomLiDAR
-            ? (inFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
-            : ((inFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage'));
+            ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
+            : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage'));
       negCache.put(cacheKey, new Response(null, {
         status: 204,
         headers: {
@@ -495,11 +513,11 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inFrance || inSwitzerland);
+    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, tileIsInFrance || inSwitzerland);
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inFrance || inSwitzerland);
+    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland);
     return noTileResponse('error');
   }
 }

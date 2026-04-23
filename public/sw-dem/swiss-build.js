@@ -85,11 +85,13 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   await Promise.all(headerPromises);
 
   const usableCells = cellEntries.filter((c) => c.cog);
+  console.log(
+    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${cellEntries.filter(c=>c.url).length} cog-open=${usableCells.length} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
+    'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
+  );
   if (usableCells.length === 0) {
     swissAreaNegSet(mercZ, mercX, mercY);
-    if (DEBUG) {
-      console.log(`[swiss][build] ${mercZ}/${mercX}/${mercY} no COGs (${cellEntries.length} cells queried)`);
-    }
+    console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 no usable COGs, marking area-neg`);
     return {
       blob: null, elevations: null, coverage: null,
       source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
@@ -204,9 +206,9 @@ async function buildSwissTile(mercZ, mercX, mercY) {
 
   if (coveredCount === 0) {
     swissAreaNegSet(mercZ, mercX, mercY);
-    if (DEBUG) {
-      console.log(`[swiss][build] ${mercZ}/${mercX}/${mercY} 0 cov, ${(performance.now() - t0).toFixed(0)}ms`);
-    }
+    console.warn(
+      `[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 0 covered px (cells=${usableCells.length} tiles=${pixelsByTile.size} dropped=${droppedOutside}) ${(performance.now() - t0).toFixed(0)}ms`,
+    );
     return {
       blob: null, elevations: null, coverage: null,
       source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
@@ -216,12 +218,12 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   // Despike LiDAR hot pixels (vegetation tops, scanner artefacts)
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
 
-  if (DEBUG) {
+  {
     const dt = (performance.now() - t0).toFixed(0);
     const covPct = (coveredCount / totalPixels * 100).toFixed(1);
     console.log(
-      `[swiss][build] %c swiss %c ${mercZ}/${mercX}/${mercY} — cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, ${dt}ms`,
-      'background:#D52B1E;color:#fff;padding:2px 4px;border-radius:2px', '',
+      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, ${dt}ms`,
+      'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
     );
   }
 

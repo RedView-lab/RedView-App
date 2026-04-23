@@ -62,12 +62,12 @@ async function swissRangeFetch(url, offset, length) {
         signal: AbortSignal.timeout(SWISS_COG_RANGE_TIMEOUT_MS),
       });
       if (!res.ok && res.status !== 206) {
-        if (DEBUG) console.warn(`[swiss][range] ${res.status} ${url} ${offset}+${length}`);
+        console.warn(`[swiss][range] HTTP ${res.status} ${url} bytes=${offset}-${offset + length - 1}`);
         return null;
       }
       return await res.arrayBuffer();
     } catch (err) {
-      if (DEBUG) console.warn(`[swiss][range] error`, err);
+      console.warn(`[swiss][range] error ${url}:`, err?.message || err);
       return null;
     }
   });
@@ -127,13 +127,24 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(SWISS_STAC_FETCH_TIMEOUT_MS),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.warn(`[swiss][stac] HTTP ${res.status} ${url}`);
+        return null;
+      }
       return await res.json();
-    } catch { return null; }
+    } catch (e) {
+      console.warn(`[swiss][stac] fetch error ${url}:`, e?.message || e);
+      return null;
+    }
   });
   if (!json || json === SWISS_PRUNED_SENTINEL || !Array.isArray(json.features)) {
+    console.warn(`[swiss][stac] no features for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
     return null;
   }
+  console.log(
+    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${json.features.length} features`,
+    'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
+  );
 
   // Group features by (Ekm, Nkm) keeping the most recent year per cell.
   const cellBest = new Map();
@@ -247,9 +258,15 @@ async function openSwissCOG(url) {
             headers: { Range: `bytes=0-${bytesNeeded - 1}` },
             signal: AbortSignal.timeout(SWISS_COG_HEADER_TIMEOUT_MS),
           });
-          if (!res.ok && res.status !== 206) return null;
+          if (!res.ok && res.status !== 206) {
+            console.warn(`[swiss][header] HTTP ${res.status} ${url}`);
+            return null;
+          }
           return await res.arrayBuffer();
-        } catch { return null; }
+        } catch (e) {
+          console.warn(`[swiss][header] fetch error ${url}:`, e?.message || e);
+          return null;
+        }
       });
       if (!buf || buf === SWISS_PRUNED_SENTINEL) {
         _headerSetNull(url, SWISS_NULL_TTL_TRANSIENT);
@@ -269,12 +286,16 @@ async function openSwissCOG(url) {
         cog = parsed;
         break;
       } catch (err) {
-        if (DEBUG) console.warn(`[swiss][header] parse failed for ${url}:`, err.message);
+        console.warn(`[swiss][header] parse failed for ${url}:`, err.message);
         _headerSetNull(url, SWISS_NULL_TTL_PERMANENT);
         return null;
       }
     }
     if (!cog) return null;
+    console.log(
+      `[swiss][header] %c OK %c ${url.split('/').pop()} \u2192 ${cog.width}\u00d7${cog.height} px, tile ${cog.tileW}\u00d7${cog.tileH}, comp=${cog.compression}, origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
+      'background:#4CAF50;color:#fff;padding:1px 4px;border-radius:2px', '',
+    );
     _cogHeaderCache.set(url, cog);
     evictMap(_cogHeaderCache, SWISS_HEADER_CACHE_MAX);
     return cog;
@@ -322,7 +343,7 @@ async function getCOGInternalTile(cog, tileIndex) {
       evictMap(_tileCache, SWISS_TILE_CACHE_MAX);
       return data;
     } catch (e) {
-      if (DEBUG) console.warn(`[swiss][tile] decode failed`, e);
+      console.warn(`[swiss][tile] decode failed`, e);
       _tileSetNull(key, SWISS_NULL_TTL_TRANSIENT);
       return null;
     }

@@ -61,10 +61,126 @@ async function inflateDeflate(buffer) {
     return new Uint8Array(out);
   };
   try { return await tryDecompress('deflate'); }
-  catch {
-    try { return await tryDecompress('deflate-raw'); }
-    catch (e2) { throw new Error(`DEFLATE decode failed: ${e2.message || e2}`); }
+  catch { return await tryDecompress('deflate-raw'); }
+}
+
+// ─── TIFF LZW decoder (Compression = 5) ─────────────────────────────────────
+// swisstopo swissSURFACE3D Raster COGs are LZW-compressed (verified by
+// header probing — Tag 259 = 5). DecompressionStream has no LZW backend,
+// so we ship a minimal pure-JS decoder.
+//
+// TIFF 6.0 §13 LZW specifics (vs. textbook LZW / GIF):
+//   * Bit packing is **MSB-first** (GIF is LSB-first).
+//   * Code width starts at 9 bits, grows when the dictionary index reaches
+//     the "early change" thresholds 510, 1022, 2046 (one less than
+//     2^width − 1, per the TIFF errata of 2002).
+//   * CLEAR = 256 resets the dictionary and code width to 9 bits.
+//   * EOI = 257 terminates the stream.
+//   * Dictionary entries 258+ are { firstCode, suffixByte } pairs; output
+//     length is unbounded so we accumulate into chunks, then concat once.
+function decodeTIFFLZW(input) {
+  const CLEAR = 256;
+  const EOI = 257;
+  const MAX_CODE = 4093; // 2^12 − 3 (entries 4094 and 4095 are reserved/forbidden)
+
+  const inLen = input.length;
+  // Pre-allocate output guess (LZW typically expands ~2-3×; we'll grow).
+  // Tile is tileW*tileH*4 bytes (e.g. 512*512*4 = 1 MiB) so start there.
+  let out = new Uint8Array(Math.max(inLen * 3, 1 << 16));
+  let outPos = 0;
+  const ensureOut = (need) => {
+    if (outPos + need <= out.length) return;
+    let cap = out.length * 2;
+    while (cap < outPos + need) cap *= 2;
+    const next = new Uint8Array(cap);
+    next.set(out);
+    out = next;
+  };
+
+  // Bit reader (MSB-first across the input byte stream).
+  let bitBuf = 0;
+  let bitCnt = 0;
+  let bytePos = 0;
+  const readCode = (width) => {
+    while (bitCnt < width && bytePos < inLen) {
+      bitBuf = (bitBuf << 8) | input[bytePos++];
+      bitCnt += 8;
+    }
+    if (bitCnt < width) return -1;
+    bitCnt -= width;
+    return (bitBuf >>> bitCnt) & ((1 << width) - 1);
+  };
+
+  // Dictionary as parallel arrays (prefixCode, suffixByte). Resolving an
+  // entry walks back through prefix chain into a small scratch buffer.
+  const prefix = new Int16Array(4096);
+  const suffix = new Uint8Array(4096);
+  const scratch = new Uint8Array(4096);
+
+  const writeEntry = (code) => {
+    let len = 0;
+    let c = code;
+    while (c >= 0) {
+      scratch[len++] = (c < 256) ? c : suffix[c];
+      if (c < 256) break;
+      c = prefix[c];
+    }
+    ensureOut(len);
+    // scratch is in reverse order — emit backwards.
+    for (let i = len - 1; i >= 0; i--) out[outPos++] = scratch[i];
+    return scratch[len - 1]; // first byte of the entry
+  };
+
+  let codeWidth = 9;
+  let nextCode = 258;
+  let prevCode = -1;
+
+  while (true) {
+    const code = readCode(codeWidth);
+    if (code < 0 || code === EOI) break;
+    if (code === CLEAR) {
+      codeWidth = 9;
+      nextCode = 258;
+      prevCode = -1;
+      continue;
+    }
+
+    let firstByte;
+    if (code < nextCode) {
+      // Known code — emit and (if we have a previous) add prev+firstByte to dict.
+      firstByte = writeEntry(code);
+      if (prevCode !== -1 && nextCode <= MAX_CODE) {
+        prefix[nextCode] = prevCode;
+        suffix[nextCode] = firstByte;
+        nextCode++;
+      }
+    } else if (code === nextCode && prevCode !== -1) {
+      // KwKwK case: new code = prev + firstByte(prev). Add to dict, then emit.
+      // First derive firstByte of prev WITHOUT emitting it (walk chain).
+      let c = prevCode;
+      while (c >= 256) c = prefix[c];
+      firstByte = c;
+      if (nextCode <= MAX_CODE) {
+        prefix[nextCode] = prevCode;
+        suffix[nextCode] = firstByte;
+        nextCode++;
+      }
+      writeEntry(code);
+    } else {
+      // Bad code — corrupt stream. Bail.
+      break;
+    }
+
+    prevCode = code;
+
+    // TIFF "early change": grow width one code BEFORE the dictionary fills,
+    // so that the encoder and decoder agree on the width of the next code.
+    if (codeWidth < 12 && nextCode === ((1 << codeWidth) - 1)) {
+      codeWidth++;
+    }
   }
+
+  return out.subarray(0, outPos);
 }
 
 function readTagValue(view, entryOffset, type, count, littleEndian, bytesView) {
@@ -265,8 +381,19 @@ async function fetchAndDecodeTile(cog, tileIndex, fetcher) {
   let raw;
   if (cog.compression === 1) {
     raw = new Uint8Array(buf);
-  } else {
+  } else if (cog.compression === 5) {
+    // TIFF LZW (swisstopo's actual choice for swissSURFACE3D Raster).
+    try {
+      raw = decodeTIFFLZW(new Uint8Array(buf));
+    } catch (e) {
+      console.warn(`[swiss-cog] LZW decode failed for tile ${tileIndex}:`, e?.message || e);
+      return null;
+    }
+  } else if (cog.compression === 8 || cog.compression === 32946) {
     raw = await inflateDeflate(new Uint8Array(buf));
+  } else {
+    console.warn(`[swiss-cog] unsupported compression=${cog.compression} for tile ${tileIndex}`);
+    return null;
   }
 
   const expectedBytes = cog.tileW * cog.tileH * 4;

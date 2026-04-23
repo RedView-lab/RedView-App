@@ -17,7 +17,7 @@
 
 const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
-const DEM_CACHE_NAME = 'dem-tiles-v29'; // must match sw-dem/config.js CACHE_NAME
+const DEM_CACHE_NAME = 'dem-tiles-v30'; // must match sw-dem/config.js CACHE_NAME
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
 type ComputeQuality = 'preview' | 'full';
