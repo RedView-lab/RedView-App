@@ -17,82 +17,70 @@ const LINE_PREFIX = 'brouter-route-line-';
 
 const START_SOURCE_ID = 'brouter-endpoints-source';
 const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
-const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
-const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
-const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
+const ANALYSIS_HOVER_MARKER_CLASS = 'brouter-analysis-hover-marker';
 
 const analysisHoverMarkers = new WeakMap<MapboxMap, Marker>();
-
-function ensureAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
-  const existing = analysisHoverMarkers.get(map);
-  if (existing) {
-    syncAnalysisHoverMarkerColor(existing.getElement(), color);
-    return existing;
-  }
-
-  const element = document.createElement('div');
-  element.setAttribute('aria-hidden', 'true');
-  element.style.width = '34px';
-  element.style.height = '34px';
-  element.style.borderRadius = '999px';
-  element.style.pointerEvents = 'none';
-  element.style.display = 'flex';
-  element.style.alignItems = 'center';
-  element.style.justifyContent = 'center';
-  element.style.boxSizing = 'border-box';
-  element.style.background = 'rgba(255, 255, 255, 0.22)';
-  element.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.6), 0 0 24px rgba(255,255,255,0.5)';
-  element.style.zIndex = '9999';
-  element.style.willChange = 'transform';
-
-  const core = document.createElement('div');
-  core.dataset.role = 'analysis-hover-core';
-  core.style.width = '14px';
-  core.style.height = '14px';
-  core.style.borderRadius = '999px';
-  core.style.boxSizing = 'border-box';
-  core.style.border = '2px solid rgba(255,255,255,1)';
-  core.style.boxShadow = '0 0 14px rgba(255,255,255,0.7)';
-  element.appendChild(core);
-
-  syncAnalysisHoverMarkerColor(element, color);
-
-  const marker = new Marker({
-    element,
-    anchor: 'center',
-    altitude: 5000,
-    occludedOpacity: 1,
-  }).addTo(map);
-  analysisHoverMarkers.set(map, marker);
-  return marker;
-}
-
-function syncAnalysisHoverMarkerColor(element: HTMLElement, color: string): void {
-  const core = element.querySelector<HTMLElement>('[data-role="analysis-hover-core"]');
-  if (!core) return;
-
-  core.style.background = color;
-  element.style.boxShadow = `0 0 0 1px rgba(255,255,255,0.35), 0 0 18px ${hexToRgba(color, 0.45)}`;
-}
-
-function hexToRgba(color: string, alpha: number): string {
-  const normalized = color.trim();
-  const match = normalized.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
-  if (!match) return `rgba(255,255,255,${alpha})`;
-
-  const hex = match[1].length === 3
-    ? match[1].split('').map((part) => `${part}${part}`).join('')
-    : match[1];
-  const value = Number.parseInt(hex, 16);
-  const red = (value >> 16) & 255;
-  const green = (value >> 8) & 255;
-  const blue = value & 255;
-  return `rgba(${red},${green},${blue},${alpha})`;
-}
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function colorWithAlpha(color: string, alpha: number): string {
+  const normalized = color.trim();
+  const shortHexMatch = /^#([0-9a-f]{3})$/i.exec(normalized);
+  if (shortHexMatch) {
+    const [r, g, b] = shortHexMatch[1].split('').map((value) => parseInt(`${value}${value}`, 16));
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  const longHexMatch = /^#([0-9a-f]{6})$/i.exec(normalized);
+  if (longHexMatch) {
+    const hex = longHexMatch[1];
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return `rgba(255, 255, 255, ${alpha})`;
+}
+
+function createAnalysisHoverElement(color: string): HTMLDivElement {
+  const element = document.createElement('div');
+  element.className = ANALYSIS_HOVER_MARKER_CLASS;
+  element.setAttribute('aria-hidden', 'true');
+  element.style.width = '14px';
+  element.style.height = '14px';
+  element.style.borderRadius = '999px';
+  element.style.border = '2px solid #ffffff';
+  element.style.boxSizing = 'border-box';
+  element.style.pointerEvents = 'none';
+  element.style.transform = 'translateZ(0)';
+  updateAnalysisHoverElement(element, color);
+  return element;
+}
+
+function updateAnalysisHoverElement(element: HTMLElement, color: string): void {
+  element.style.background = color;
+  element.style.boxShadow = `0 0 0 6px ${colorWithAlpha(color, 0.2)}, 0 0 18px ${colorWithAlpha(color, 0.45)}`;
+}
+
+function getOrCreateAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
+  const existing = analysisHoverMarkers.get(map);
+  if (existing) {
+    updateAnalysisHoverElement(existing.getElement(), color);
+    return existing;
+  }
+
+  const marker = new Marker({
+    element: createAnalysisHoverElement(color),
+    anchor: 'center',
+    pitchAlignment: 'viewport',
+    rotationAlignment: 'viewport',
+    occludedOpacity: 1,
+  }).addTo(map);
+
+  analysisHoverMarkers.set(map, marker);
+  return marker;
 }
 
 function ids(itineraryId: string) {
@@ -371,25 +359,18 @@ export function setAnalysisHoverPoint(
   map: MapboxMap,
   point: { lon: number; lat: number; color?: string },
 ): void {
-  const marker = ensureAnalysisHoverMarker(map, point.color ?? '#ffffff');
-  marker.setLngLat([point.lon, point.lat]);
+  try {
+    getOrCreateAnalysisHoverMarker(map, point.color ?? '#ffffff').setLngLat([point.lon, point.lat]);
+  } catch {
+    /* noop */
+  }
 }
 
 export function clearAnalysisHoverPoint(map: MapboxMap): void {
-  const marker = analysisHoverMarkers.get(map);
-  if (marker) {
-    marker.remove();
-    analysisHoverMarkers.delete(map);
-  }
-
   try {
-    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
-      map.removeLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
-    }
-    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
-      map.removeLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
-    }
-    if (map.getSource(ANALYSIS_HOVER_SOURCE_ID)) map.removeSource(ANALYSIS_HOVER_SOURCE_ID);
+    const marker = analysisHoverMarkers.get(map);
+    marker?.remove();
+    analysisHoverMarkers.delete(map);
   } catch {
     /* noop */
   }
