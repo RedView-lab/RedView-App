@@ -77,10 +77,14 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
     if (!match) continue;
 
     const [, territory, xStr, yStr, projection, altRef] = match;
+    // File name encodes the NW corner (y = south edge + 1 km), but TileCoord
+    // uses the south edge convention. Subtract 1 so the round-trip through
+    // buildTileFileName() reproduces the same filename (otherwise deleteTile
+    // would target a non-existent file and silently fail).
     tiles.push({
       coord: {
         xKm: parseInt(xStr, 10),
-        yKm: parseInt(yStr, 10),
+        yKm: parseInt(yStr, 10) - 1,
         territory: territory as any,
         projection: projection as any,
         altRef: altRef as any,
