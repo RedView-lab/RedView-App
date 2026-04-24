@@ -35,6 +35,10 @@ function ids(itineraryId: string) {
   };
 }
 
+export function getRouteLayerIds(itineraryId: string) {
+  return ids(itineraryId);
+}
+
 export interface RouteEndpoint {
   lon: number;
   lat: number;
