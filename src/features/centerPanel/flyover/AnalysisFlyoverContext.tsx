@@ -47,6 +47,10 @@ const FLYOVER_CENTER_SMOOTHING = 0.12;
 const FLYOVER_BEARING_SMOOTHING = 0.075;
 const FLYOVER_ZOOM_SMOOTHING = 0.14;
 const FLYOVER_PITCH_SMOOTHING = 0.09;
+const FLYOVER_RELIEF_PITCH_ATTACK_SMOOTHING = 0.032;
+const FLYOVER_RELIEF_PITCH_RELEASE_SMOOTHING = 0.11;
+const FLYOVER_RELIEF_PITCH_DEADBAND_DEG = 0.08;
+const FLYOVER_RELIEF_PITCH_MAX_STEP_DEG = 0.14;
 const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
 const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
 const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
@@ -93,6 +97,7 @@ export function AnalysisFlyoverProvider({
   const lastStableBearingRef = useRef<number | null>(null);
   const primedPlaybackSessionRef = useRef<number | null>(null);
   const reliefPitchEnabledRef = useRef(false);
+  const reliefPitchOffsetRef = useRef(0);
 
   const interactiveItinerary = useMemo(() => {
     if (!projectStore) return null;
@@ -163,6 +168,7 @@ export function AnalysisFlyoverProvider({
     lastStableBearingRef.current = null;
     primedPlaybackSessionRef.current = null;
     reliefPitchEnabledRef.current = false;
+    reliefPitchOffsetRef.current = 0;
   }, [itineraryId]);
 
   useEffect(() => {
@@ -330,7 +336,12 @@ export function AnalysisFlyoverProvider({
     const smoothedGradientPitch = reliefPitchEnabledRef.current
       ? clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11)
       : 0;
-    const targetPitch = FLYOVER_CAMERA_PITCH + pitchTurnBoost + smoothedGradientPitch;
+    const filteredReliefPitch = smoothReliefPitchOffset(
+      reliefPitchOffsetRef.current,
+      smoothedGradientPitch,
+    );
+    reliefPitchOffsetRef.current = filteredReliefPitch;
+    const targetPitch = FLYOVER_CAMERA_PITCH + pitchTurnBoost + filteredReliefPitch;
 
     lastCameraPointRef.current = playbackCameraTarget.point;
     lastStableBearingRef.current = stableBearing;
@@ -414,6 +425,7 @@ export function AnalysisFlyoverProvider({
     setPlaybackDistanceM(nextDistanceM);
     setManualHoverXValue(null);
     playbackDistanceRef.current = nextDistanceM;
+    reliefPitchOffsetRef.current = 0;
     setIsPlaying(true);
     setPlaybackSessionId((value) => value + 1);
   };
@@ -504,4 +516,24 @@ function angularDeltaDegrees(left: number, right: number): number {
 
 function clampPitchOffset(value: number): number {
   return Math.max(-2.4, Math.min(2.4, value));
+}
+
+function smoothReliefPitchOffset(current: number, target: number): number {
+  const delta = target - current;
+  if (Math.abs(delta) <= FLYOVER_RELIEF_PITCH_DEADBAND_DEG) return current;
+
+  const smoothing = Math.abs(target) > Math.abs(current)
+    ? FLYOVER_RELIEF_PITCH_ATTACK_SMOOTHING
+    : FLYOVER_RELIEF_PITCH_RELEASE_SMOOTHING;
+  const steppedDelta = clampValue(
+    delta * smoothing,
+    -FLYOVER_RELIEF_PITCH_MAX_STEP_DEG,
+    FLYOVER_RELIEF_PITCH_MAX_STEP_DEG,
+  );
+
+  return current + steppedDelta;
+}
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
