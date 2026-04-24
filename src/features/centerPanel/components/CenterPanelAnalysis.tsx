@@ -79,7 +79,6 @@ interface CenterPanelAnalysisProps {
 
 export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
-  const lastAppliedHoverMarkerKeyRef = useRef<string | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
   const [hoveredChartX, setHoveredChartX] = useState<number | null>(null);
@@ -460,14 +459,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   useEffect(() => {
     if (!map) return;
     if (!hoveredRoutePoint || !interactiveItinerary) {
-      lastAppliedHoverMarkerKeyRef.current = null;
       clearAnalysisHoverPoint(map);
       return;
     }
-
-    const markerKey = `${hoveredRoutePoint.lon.toFixed(6)}:${hoveredRoutePoint.lat.toFixed(6)}:${interactiveItinerary.color}`;
-    if (markerKey === lastAppliedHoverMarkerKeyRef.current) return;
-    lastAppliedHoverMarkerKeyRef.current = markerKey;
 
     setAnalysisHoverPoint(map, {
       lon: hoveredRoutePoint.lon,
@@ -479,7 +473,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   useEffect(() => {
     if (!map) return;
     return () => {
-      lastAppliedHoverMarkerKeyRef.current = null;
       clearAnalysisHoverPoint(map);
     };
   }, [map]);

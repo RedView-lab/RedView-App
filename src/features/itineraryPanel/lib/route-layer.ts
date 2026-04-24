@@ -9,7 +9,7 @@
  * The start / end endpoint markers stay global â€” only the active
  * itinerary's endpoints are shown to keep the editing UI focused.
  */
-import { Marker, type Map as MapboxMap, type LngLatBoundsLike, type GeoJSONSource } from 'mapbox-gl';
+import type { Map as MapboxMap, LngLatBoundsLike, GeoJSONSource } from 'mapbox-gl';
 
 const SOURCE_PREFIX = 'brouter-route-source-';
 const GLOW_PREFIX = 'brouter-route-glow-';
@@ -17,70 +17,85 @@ const LINE_PREFIX = 'brouter-route-line-';
 
 const START_SOURCE_ID = 'brouter-endpoints-source';
 const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
-const ANALYSIS_HOVER_MARKER_CLASS = 'brouter-analysis-hover-marker';
-
-const analysisHoverMarkers = new WeakMap<MapboxMap, Marker>();
+const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
+const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
+const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
 }
 
-function colorWithAlpha(color: string, alpha: number): string {
-  const normalized = color.trim();
-  const shortHexMatch = /^#([0-9a-f]{3})$/i.exec(normalized);
-  if (shortHexMatch) {
-    const [r, g, b] = shortHexMatch[1].split('').map((value) => parseInt(`${value}${value}`, 16));
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  const longHexMatch = /^#([0-9a-f]{6})$/i.exec(normalized);
-  if (longHexMatch) {
-    const hex = longHexMatch[1];
-    const r = parseInt(hex.slice(0, 2), 16);
-    const g = parseInt(hex.slice(2, 4), 16);
-    const b = parseInt(hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-  return `rgba(255, 255, 255, ${alpha})`;
+function buildAnalysisHoverGeoJson(
+  point?: { lon: number; lat: number; color?: string } | null,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: point
+      ? [
+          {
+            type: 'Feature',
+            properties: { color: point.color ?? '#ffffff' },
+            geometry: {
+              type: 'Point',
+              coordinates: [point.lon, point.lat],
+            },
+          },
+        ]
+      : [],
+  };
 }
 
-function createAnalysisHoverElement(color: string): HTMLDivElement {
-  const element = document.createElement('div');
-  element.className = ANALYSIS_HOVER_MARKER_CLASS;
-  element.setAttribute('aria-hidden', 'true');
-  element.style.width = '14px';
-  element.style.height = '14px';
-  element.style.borderRadius = '999px';
-  element.style.border = '2px solid #ffffff';
-  element.style.boxSizing = 'border-box';
-  element.style.pointerEvents = 'none';
-  element.style.transform = 'translateZ(0)';
-  updateAnalysisHoverElement(element, color);
-  return element;
-}
+function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
+  const existing = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
 
-function updateAnalysisHoverElement(element: HTMLElement, color: string): void {
-  element.style.background = color;
-  element.style.boxShadow = `0 0 0 6px ${colorWithAlpha(color, 0.2)}, 0 0 18px ${colorWithAlpha(color, 0.45)}`;
-}
+  map.addSource(ANALYSIS_HOVER_SOURCE_ID, {
+    type: 'geojson',
+    data: buildAnalysisHoverGeoJson(null),
+  });
 
-function getOrCreateAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
-  const existing = analysisHoverMarkers.get(map);
-  if (existing) {
-    updateAnalysisHoverElement(existing.getElement(), color);
-    return existing;
-  }
+  map.addLayer({
+    id: ANALYSIS_HOVER_HALO_LAYER_ID,
+    type: 'circle',
+    source: ANALYSIS_HOVER_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'circle-radius': 10,
+      'circle-color': ['coalesce', ['get', 'color'], '#ffffff'],
+      'circle-opacity': 0.24,
+      'circle-blur': 0.55,
+      'circle-pitch-alignment': 'viewport',
+      'circle-pitch-scale': 'viewport',
+      'circle-emissive-strength': 1,
+    },
+  });
 
-  const marker = new Marker({
-    element: createAnalysisHoverElement(color),
-    anchor: 'center',
-    pitchAlignment: 'viewport',
-    rotationAlignment: 'viewport',
-    occludedOpacity: 1,
-  }).addTo(map);
+  map.addLayer({
+    id: ANALYSIS_HOVER_POINT_LAYER_ID,
+    type: 'circle',
+    source: ANALYSIS_HOVER_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'circle-radius': 5.5,
+      'circle-color': ['coalesce', ['get', 'color'], '#ffffff'],
+      'circle-stroke-width': 2,
+      'circle-stroke-color': '#ffffff',
+      'circle-opacity': 1,
+      'circle-stroke-opacity': 0.96,
+      'circle-pitch-alignment': 'viewport',
+      'circle-pitch-scale': 'viewport',
+      'circle-emissive-strength': 1,
+    },
+  });
 
-  analysisHoverMarkers.set(map, marker);
-  return marker;
+  return map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | null;
 }
 
 function ids(itineraryId: string) {
@@ -360,7 +375,17 @@ export function setAnalysisHoverPoint(
   point: { lon: number; lat: number; color?: string },
 ): void {
   try {
-    getOrCreateAnalysisHoverMarker(map, point.color ?? '#ffffff').setLngLat([point.lon, point.lat]);
+    const source = ensureAnalysisHoverLayers(map);
+    if (!source) return;
+    source.setData(buildAnalysisHoverGeoJson(point));
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'visible');
+      map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'visible');
+      map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+    }
   } catch {
     /* noop */
   }
@@ -368,9 +393,14 @@ export function setAnalysisHoverPoint(
 
 export function clearAnalysisHoverPoint(map: MapboxMap): void {
   try {
-    const marker = analysisHoverMarkers.get(map);
-    marker?.remove();
-    analysisHoverMarkers.delete(map);
+    const source = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
+    source?.setData(buildAnalysisHoverGeoJson(null));
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'none');
+    }
   } catch {
     /* noop */
   }
