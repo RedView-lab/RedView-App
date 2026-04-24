@@ -229,30 +229,36 @@ export function buildCinematicCameraTarget(
   let weightedLat = 0;
   let weightedLon = 0;
   let weightedElevation = 0;
-  let weightedGradient = 0;
   let totalWeight = 0;
   let minElevationM = Number.POSITIVE_INFINITY;
   let maxElevationM = Number.NEGATIVE_INFINITY;
   let firstElevationM: number | null = null;
   let farElevationM: number | null = null;
+  let firstDistanceM: number | null = null;
+  let farDistanceM: number | null = null;
 
   for (const sample of anchorSamples) {
+    const sampleDistanceM = clampDistanceM(targetDistanceM + sample.offsetM, geometry.totalDistanceM);
     const point = interpolateRoutePointAtDistance(
       routePoints,
       geometry,
-      targetDistanceM + sample.offsetM,
+      sampleDistanceM,
     );
     if (!point) continue;
-    const elevationM = point.elevationM ?? 0;
+    const elevationM =
+      robustGroundElevationAtDistance(routePoints, geometry, sampleDistanceM) ?? point.elevationM ?? 0;
     weightedLat += point.lat * sample.weight;
     weightedLon += point.lon * sample.weight;
     weightedElevation += elevationM * sample.weight;
-    weightedGradient += (point.gradientPct ?? 0) * sample.weight;
     totalWeight += sample.weight;
     minElevationM = Math.min(minElevationM, elevationM);
     maxElevationM = Math.max(maxElevationM, elevationM);
-    if (firstElevationM == null) firstElevationM = elevationM;
+    if (firstElevationM == null) {
+      firstElevationM = elevationM;
+      firstDistanceM = sampleDistanceM;
+    }
     farElevationM = elevationM;
+    farDistanceM = sampleDistanceM;
   }
 
   if (totalWeight <= 0) return null;
@@ -269,7 +275,14 @@ export function buildCinematicCameraTarget(
     lon: weightedLon / totalWeight,
     distanceM: clampDistanceM(targetDistanceM, geometry.totalDistanceM),
     elevationM: weightedElevation / totalWeight,
-    gradientPct: weightedGradient / totalWeight,
+    gradientPct:
+      firstElevationM != null &&
+      farElevationM != null &&
+      firstDistanceM != null &&
+      farDistanceM != null &&
+      Math.abs(farDistanceM - firstDistanceM) > 1
+        ? ((farElevationM - firstElevationM) / (farDistanceM - firstDistanceM)) * 100
+        : 0,
   };
 
   const offsetPoint =
@@ -281,7 +294,7 @@ export function buildCinematicCameraTarget(
     point: offsetPoint,
     bearing,
     turnDeltaDeg: signedTurnDeltaDeg,
-    smoothedGradientPct: weightedGradient / totalWeight,
+    smoothedGradientPct: averagedPoint.gradientPct ?? 0,
     elevationDeltaM:
       firstElevationM != null && farElevationM != null ? farElevationM - firstElevationM : 0,
     elevationRangeM:
@@ -396,4 +409,32 @@ function signedAngularDeltaDegrees(left: number, right: number): number {
 
 function clampMagnitude(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+function robustGroundElevationAtDistance(
+  routePoints: RouteChartPoint[] | null | undefined,
+  geometry: RoutePlaybackGeometry | null,
+  targetDistanceM: number,
+): number | null {
+  if (!routePoints || !geometry) return null;
+
+  const neighborhoodOffsetsM = [-45, -20, 0, 20, 45] as const;
+  const elevations = neighborhoodOffsetsM
+    .map((offsetM) =>
+      interpolateRoutePointAtDistance(
+        routePoints,
+        geometry,
+        clampDistanceM(targetDistanceM + offsetM, geometry.totalDistanceM),
+      )?.elevationM,
+    )
+    .filter((value): value is number => Number.isFinite(value));
+
+  if (elevations.length === 0) return null;
+  elevations.sort((left, right) => left - right);
+
+  // Surface LiDAR includes canopy/building spikes. Bias the camera toward
+  // the lower third of the local neighborhood so it follows the ground
+  // trend instead of the tops of trees.
+  const quantileIndex = Math.max(0, Math.floor((elevations.length - 1) * 0.35));
+  return elevations[quantileIndex] ?? elevations[0] ?? null;
 }
