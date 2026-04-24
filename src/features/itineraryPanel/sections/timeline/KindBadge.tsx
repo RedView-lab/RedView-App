@@ -108,6 +108,8 @@ const PROVIDED_TIMELINE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
   bars: PROVIDED_POI_SVG.bar,
   restaurants: PROVIDED_POI_SVG.restaurant,
   bikeShops: PROVIDED_POI_SVG.bikeShop,
+  hotels: PROVIDED_POI_SVG.hotelBadge,
+  refuges: PROVIDED_POI_SVG.refugeBadge,
 };
 
 /** POI label (FR). */

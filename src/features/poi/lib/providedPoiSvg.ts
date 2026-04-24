@@ -9,6 +9,8 @@ export const PROVIDED_POI_SVG = {
   fuel: '/svgv2/stationservice.svg',
   toilet: '/svgv2/toilette.svg',
   bar: '/svgv2/bar.svg',
+  hotelBadge: '/hotel.svg',
+  refugeBadge: '/refuge.svg',
   hotelGlyph: '/svgv2/icone/icon_hotel.svg',
   refugeGlyph: '/svgv2/icone/icon_refuge.svg',
 } as const;

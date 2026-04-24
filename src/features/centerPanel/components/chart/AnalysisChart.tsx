@@ -24,7 +24,7 @@ import './chart.css';
 const Y_MAJOR_TARGET_PX = 26;
 const X_MAJOR_TARGET_PX = 80;
 const DEFAULT_TICK_COUNT = 6;
-const POI_MARKER_SIZE_PX = 44;
+const POI_MARKER_SIZE_PX = 30;
 const MULTI_POI_MARKER_WIDTH_PX = 44;
 const MULTI_POI_MARKER_HEIGHT_PX = 48;
 const POI_CLUSTER_OVERLAP_X_PX = 18;
@@ -407,7 +407,6 @@ export function AnalysisChart({
                       <PoiBadge
                         category={annotation.poiCategory}
                         size={POI_MARKER_SIZE_PX}
-                        hideGlyph={annotation.poiCategory === 'refuges'}
                       />
                     ) : (
                       <span className="rvchart__poi-marker-fallback">POI</span>
