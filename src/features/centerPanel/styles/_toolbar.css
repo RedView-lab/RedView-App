@@ -58,6 +58,7 @@
 
 .rvc-center-toolbar__button svg {
   flex: 0 0 auto;
+  display: block;
 }
 
 .rvc-center-toolbar__button:disabled {

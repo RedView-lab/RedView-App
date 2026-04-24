@@ -342,6 +342,21 @@ export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
   }
 }
 
+export function setRouteLayerVisibility(
+  map: MapboxMap,
+  itineraryId: string,
+  visible: boolean,
+): void {
+  const { glow: glowId, line: lineId } = ids(itineraryId);
+  const visibility = visible ? 'visible' : 'none';
+  try {
+    if (map.getLayer(glowId)) map.setLayoutProperty(glowId, 'visibility', visibility);
+    if (map.getLayer(lineId)) map.setLayoutProperty(lineId, 'visibility', visibility);
+  } catch {
+    /* noop */
+  }
+}
+
 /**
  * Strip every itinerary route layer from the map (used at unmount and
  * after a style.load before re-adding the surviving routes).

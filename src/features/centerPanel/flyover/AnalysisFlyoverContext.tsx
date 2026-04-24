@@ -11,10 +11,12 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { AxisDomain, AxisMode } from '../components/chart';
 import { buildSeriesFromPrediction, computeXDomain, locateRoutePointAtX } from '../components/chart';
 import {
-  bearingAtDistance,
+  buildCinematicCameraTarget,
+  cinematicBearingAtDistance,
   buildRoutePlaybackGeometry,
   buildRouteTrailCoordinates,
   clampDistanceM,
+  distanceBetweenRoutePlaybackPointsM,
   elapsedSecondsAtDistance,
   formatDistanceLabel,
   formatPlaybackClock,
@@ -28,22 +30,26 @@ import {
 import {
   clearAnalysisFlyoverProgress,
   clearAnalysisHoverPoint,
+  setRouteLayerVisibility,
   setAnalysisFlyoverProgress,
   setAnalysisHoverPoint,
 } from '@/features/itineraryPanel/lib/route-layer';
 
-const SPEED_STEPS = [0.5, 1, 1.5, 2, 3, 4] as const;
-const DEFAULT_SPEED_INDEX = 1;
+const SPEED_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const;
+const DEFAULT_SPEED_INDEX = 2;
 const FLYOVER_REFERENCE_DISTANCE_KM = 80;
-const FLYOVER_REFERENCE_DURATION_MS = 30_000;
+const FLYOVER_REFERENCE_DURATION_MS = 40_000;
 const FLYOVER_MIN_DURATION_MS = 12_000;
-const FLYOVER_MAX_DURATION_MS = 150_000;
+const FLYOVER_MAX_DURATION_MS = 180_000;
 const FLYOVER_CAMERA_ZOOM = 15.6;
 const FLYOVER_CAMERA_PITCH = 70;
-const FLYOVER_CENTER_SMOOTHING = 0.24;
-const FLYOVER_BEARING_SMOOTHING = 0.18;
+const FLYOVER_CENTER_SMOOTHING = 0.12;
+const FLYOVER_BEARING_SMOOTHING = 0.075;
 const FLYOVER_ZOOM_SMOOTHING = 0.14;
-const FLYOVER_PITCH_SMOOTHING = 0.16;
+const FLYOVER_PITCH_SMOOTHING = 0.09;
+const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
+const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
+const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
 
 interface AnalysisFlyoverContextValue {
   canPlay: boolean;
@@ -81,6 +87,9 @@ export function AnalysisFlyoverProvider({
   const [speedIndex, setSpeedIndex] = useState(DEFAULT_SPEED_INDEX);
   const [playbackSessionId, setPlaybackSessionId] = useState(0);
   const playbackDistanceRef = useRef<number | null>(null);
+  const lastCameraPointRef = useRef<ReturnType<typeof interpolateRoutePointAtDistance> | null>(null);
+  const lastStableBearingRef = useRef<number | null>(null);
+  const primedPlaybackSessionRef = useRef<number | null>(null);
 
   const interactiveItinerary = useMemo(() => {
     if (!projectStore) return null;
@@ -147,6 +156,9 @@ export function AnalysisFlyoverProvider({
     setPlaybackDistanceM(null);
     setManualHoverXValue(null);
     setSpeedIndex(DEFAULT_SPEED_INDEX);
+    lastCameraPointRef.current = null;
+    lastStableBearingRef.current = null;
+    primedPlaybackSessionRef.current = null;
   }, [itineraryId]);
 
   useEffect(() => {
@@ -195,7 +207,12 @@ export function AnalysisFlyoverProvider({
 
   const playbackBearing = useMemo(() => {
     if (playbackDistanceM == null) return null;
-    return bearingAtDistance(routePoints, routeGeometry, playbackDistanceM);
+    return cinematicBearingAtDistance(routePoints, routeGeometry, playbackDistanceM);
+  }, [playbackDistanceM, routeGeometry, routePoints]);
+
+  const playbackCameraTarget = useMemo(() => {
+    if (playbackDistanceM == null) return null;
+    return buildCinematicCameraTarget(routePoints, routeGeometry, playbackDistanceM);
   }, [playbackDistanceM, routeGeometry, routePoints]);
 
   const playbackTrail = useMemo(() => {
@@ -270,30 +287,65 @@ export function AnalysisFlyoverProvider({
   }, [interactiveItinerary, map, playbackTrail]);
 
   useEffect(() => {
-    if (!map || !isPlaying || !playbackRoutePoint) return;
+    if (!map || !interactiveItinerary) return;
+    setRouteLayerVisibility(map, interactiveItinerary.id, !playbackActive);
+    return () => {
+      setRouteLayerVisibility(map, interactiveItinerary.id, true);
+    };
+  }, [interactiveItinerary, map, playbackActive]);
+
+  useEffect(() => {
+    if (!map || !isPlaying || !playbackRoutePoint || !playbackCameraTarget) return;
+
+    const previousCameraPoint = lastCameraPointRef.current;
+    const movedDistanceM = distanceBetweenRoutePlaybackPointsM(previousCameraPoint, playbackCameraTarget.point);
+    const currentBearing = map.getBearing();
+    const previousStableBearing = lastStableBearingRef.current ?? currentBearing;
+    const desiredBearing = playbackCameraTarget.bearing ?? playbackBearing ?? previousStableBearing;
+    const bearingDelta = angularDeltaDegrees(previousStableBearing, desiredBearing);
+    const stableBearing =
+      movedDistanceM < FLYOVER_MIN_BEARING_PROGRESS_M && bearingDelta < FLYOVER_MICRO_TURN_THRESHOLD_DEG
+        ? previousStableBearing
+        : bearingDelta < FLYOVER_MICRO_TURN_THRESHOLD_DEG
+          ? previousStableBearing
+          : desiredBearing;
+
+    const turnBoostDeg = Math.abs(playbackCameraTarget.turnDeltaDeg);
+    const pitchTurnBoost = turnBoostDeg >= FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG ? 1.2 : 0;
+    const smoothedGradientPitch = clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11);
+    const targetPitch = FLYOVER_CAMERA_PITCH + pitchTurnBoost + smoothedGradientPitch;
+
+    lastCameraPointRef.current = playbackCameraTarget.point;
+    lastStableBearingRef.current = stableBearing;
 
     map.jumpTo({
       center: [
-        map.getCenter().lng + (playbackRoutePoint.lon - map.getCenter().lng) * FLYOVER_CENTER_SMOOTHING,
-        map.getCenter().lat + (playbackRoutePoint.lat - map.getCenter().lat) * FLYOVER_CENTER_SMOOTHING,
+        map.getCenter().lng + (playbackCameraTarget.point.lon - map.getCenter().lng) * FLYOVER_CENTER_SMOOTHING,
+        map.getCenter().lat + (playbackCameraTarget.point.lat - map.getCenter().lat) * FLYOVER_CENTER_SMOOTHING,
       ],
-      bearing: interpolateBearing(map.getBearing(), playbackBearing ?? map.getBearing(), FLYOVER_BEARING_SMOOTHING),
+      bearing: interpolateBearing(currentBearing, stableBearing, FLYOVER_BEARING_SMOOTHING),
       zoom: interpolateValue(map.getZoom(), FLYOVER_CAMERA_ZOOM, FLYOVER_ZOOM_SMOOTHING),
-      pitch: interpolateValue(map.getPitch(), FLYOVER_CAMERA_PITCH, FLYOVER_PITCH_SMOOTHING),
+      pitch: interpolateValue(map.getPitch(), targetPitch, FLYOVER_PITCH_SMOOTHING),
     });
-  }, [isPlaying, map, playbackBearing, playbackRoutePoint]);
+  }, [isPlaying, map, playbackBearing, playbackCameraTarget, playbackRoutePoint]);
 
   useEffect(() => {
-    if (!map || !isPlaying || !playbackRoutePoint) return;
+    if (!map || !isPlaying || !playbackRoutePoint || !playbackCameraTarget) return;
+    if (primedPlaybackSessionRef.current === playbackSessionId) return;
+    primedPlaybackSessionRef.current = playbackSessionId;
+
+    const targetPitch =
+      FLYOVER_CAMERA_PITCH + clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11);
+
     map.easeTo({
-      center: [playbackRoutePoint.lon, playbackRoutePoint.lat],
+      center: [playbackCameraTarget.point.lon, playbackCameraTarget.point.lat],
       zoom: Math.max(map.getZoom(), FLYOVER_CAMERA_ZOOM),
-      pitch: Math.max(map.getPitch(), FLYOVER_CAMERA_PITCH),
-      bearing: playbackBearing ?? map.getBearing(),
-      duration: 850,
+      pitch: Math.max(map.getPitch(), targetPitch),
+      bearing: lastStableBearingRef.current ?? playbackCameraTarget.bearing ?? playbackBearing ?? map.getBearing(),
+      duration: 1600,
       essential: true,
     });
-  }, [isPlaying, map, playbackBearing, playbackRoutePoint, playbackSessionId]);
+  }, [isPlaying, map, playbackBearing, playbackCameraTarget, playbackRoutePoint, playbackSessionId]);
 
   useEffect(() => {
     if (!map) return;
@@ -420,4 +472,12 @@ function interpolateValue(current: number, target: number, amount: number): numb
 function interpolateBearing(current: number, target: number, amount: number): number {
   const delta = ((target - current + 540) % 360) - 180;
   return current + delta * amount;
+}
+
+function angularDeltaDegrees(left: number, right: number): number {
+  return Math.abs(((right - left + 540) % 360) - 180);
+}
+
+function clampPitchOffset(value: number): number {
+  return Math.max(-2.4, Math.min(2.4, value));
 }

@@ -12,6 +12,13 @@ export interface RoutePlaybackPoint extends RouteChartPoint {
   distanceM: number;
 }
 
+export interface CinematicCameraTarget {
+  point: RoutePlaybackPoint;
+  bearing: number | null;
+  turnDeltaDeg: number;
+  smoothedGradientPct: number;
+}
+
 function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -22,6 +29,14 @@ function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
     Math.sin(dLat / 2) ** 2 +
     Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+}
+
+export function distanceBetweenRoutePlaybackPointsM(
+  left: RouteChartPoint | null | undefined,
+  right: RouteChartPoint | null | undefined,
+): number {
+  if (!left || !right) return Number.POSITIVE_INFINITY;
+  return haversineM(left, right);
 }
 
 export function buildRoutePlaybackGeometry(
@@ -114,8 +129,8 @@ export function buildRouteTrailCoordinates(
   for (let index = 0; index < routePoints.length; index += 1) {
     const point = routePoints[index];
     const pointDistanceM = geometry.distancesM[index] ?? 0;
+    if (pointDistanceM > clampedDistanceM) break;
     trail.push([point.lon, point.lat]);
-    if (pointDistanceM >= clampedDistanceM) break;
   }
 
   const interpolatedPoint = interpolateRoutePointAtDistance(routePoints, geometry, clampedDistanceM);
@@ -152,7 +167,7 @@ export function bearingAtDistance(
   routePoints: RouteChartPoint[] | null | undefined,
   geometry: RoutePlaybackGeometry | null,
   targetDistanceM: number,
-  sampleSpanM = 60,
+  sampleSpanM = 180,
 ): number | null {
   if (!routePoints || !geometry) return null;
   const start = interpolateRoutePointAtDistance(routePoints, geometry, targetDistanceM);
@@ -162,6 +177,101 @@ export function bearingAtDistance(
   const deltaLat = Math.abs(end.lat - start.lat);
   if (deltaLon < 1e-8 && deltaLat < 1e-8) return null;
   return bearingDegrees(start, end);
+}
+
+export function cinematicBearingAtDistance(
+  routePoints: RouteChartPoint[] | null | undefined,
+  geometry: RoutePlaybackGeometry | null,
+  targetDistanceM: number,
+): number | null {
+  if (!routePoints || !geometry) return null;
+
+  const samples = [
+    { lookAheadM: 120, weight: 1.6 },
+    { lookAheadM: 240, weight: 1.1 },
+    { lookAheadM: 420, weight: 0.75 },
+  ] as const;
+
+  let sumX = 0;
+  let sumY = 0;
+  let totalWeight = 0;
+
+  for (const sample of samples) {
+    const bearing = bearingAtDistance(routePoints, geometry, targetDistanceM, sample.lookAheadM);
+    if (!Number.isFinite(bearing)) continue;
+    const radians = ((bearing as number) * Math.PI) / 180;
+    sumX += Math.cos(radians) * sample.weight;
+    sumY += Math.sin(radians) * sample.weight;
+    totalWeight += sample.weight;
+  }
+
+  if (totalWeight <= 0 || (Math.abs(sumX) < 1e-6 && Math.abs(sumY) < 1e-6)) return null;
+  return ((Math.atan2(sumY, sumX) * 180) / Math.PI + 360) % 360;
+}
+
+export function buildCinematicCameraTarget(
+  routePoints: RouteChartPoint[] | null | undefined,
+  geometry: RoutePlaybackGeometry | null,
+  targetDistanceM: number,
+): CinematicCameraTarget | null {
+  if (!routePoints || !geometry) return null;
+
+  const anchorSamples = [
+    { offsetM: 0, weight: 1.0 },
+    { offsetM: 70, weight: 1.2 },
+    { offsetM: 160, weight: 1.15 },
+    { offsetM: 280, weight: 0.85 },
+    { offsetM: 430, weight: 0.55 },
+  ] as const;
+
+  let weightedLat = 0;
+  let weightedLon = 0;
+  let weightedElevation = 0;
+  let weightedGradient = 0;
+  let totalWeight = 0;
+
+  for (const sample of anchorSamples) {
+    const point = interpolateRoutePointAtDistance(
+      routePoints,
+      geometry,
+      targetDistanceM + sample.offsetM,
+    );
+    if (!point) continue;
+    weightedLat += point.lat * sample.weight;
+    weightedLon += point.lon * sample.weight;
+    weightedElevation += (point.elevationM ?? 0) * sample.weight;
+    weightedGradient += (point.gradientPct ?? 0) * sample.weight;
+    totalWeight += sample.weight;
+  }
+
+  if (totalWeight <= 0) return null;
+
+  const bearing = cinematicBearingAtDistance(routePoints, geometry, targetDistanceM);
+  const nearBearing = bearingAtDistance(routePoints, geometry, targetDistanceM, 120);
+  const farBearing = bearingAtDistance(routePoints, geometry, targetDistanceM + 120, 260);
+  const signedTurnDeltaDeg =
+    nearBearing != null && farBearing != null ? signedAngularDeltaDegrees(nearBearing, farBearing) : 0;
+  const lateralOffsetM = clampMagnitude(Math.abs(signedTurnDeltaDeg) * 0.22, 0, 12);
+
+  const averagedPoint: RoutePlaybackPoint = {
+    lat: weightedLat / totalWeight,
+    lon: weightedLon / totalWeight,
+    distanceM: clampDistanceM(targetDistanceM, geometry.totalDistanceM),
+    elevationM: weightedElevation / totalWeight,
+    gradientPct: weightedGradient / totalWeight,
+  };
+
+  const offsetPoint =
+    bearing != null && lateralOffsetM > 0.25
+      ? offsetPointByMeters(averagedPoint, bearing + (signedTurnDeltaDeg >= 0 ? 90 : -90), lateralOffsetM)
+      : averagedPoint;
+
+  return {
+    point: offsetPoint,
+    bearing,
+    turnDeltaDeg: signedTurnDeltaDeg,
+    smoothedGradientPct: weightedGradient / totalWeight,
+  };
 }
 
 export function elapsedSecondsAtDistance(
@@ -244,4 +354,31 @@ export function formatPlaybackClock(totalSeconds: number): string {
     return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
   }
   return [minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
+function offsetPointByMeters(
+  point: RoutePlaybackPoint,
+  bearingDeg: number,
+  distanceM: number,
+): RoutePlaybackPoint {
+  const radians = (bearingDeg * Math.PI) / 180;
+  const eastM = Math.sin(radians) * distanceM;
+  const northM = Math.cos(radians) * distanceM;
+  const latRadians = (point.lat * Math.PI) / 180;
+  const metersPerDegreeLat = 111_320;
+  const metersPerDegreeLon = Math.max(1, 111_320 * Math.cos(latRadians));
+
+  return {
+    ...point,
+    lat: point.lat + northM / metersPerDegreeLat,
+    lon: point.lon + eastM / metersPerDegreeLon,
+  };
+}
+
+function signedAngularDeltaDegrees(left: number, right: number): number {
+  return ((right - left + 540) % 360) - 180;
+}
+
+function clampMagnitude(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }

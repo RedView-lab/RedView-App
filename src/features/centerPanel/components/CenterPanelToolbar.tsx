@@ -100,8 +100,8 @@ const IconPause = ({ size = 16, ...rest }: ToolbarIconProps) => (
     xmlns="http://www.w3.org/2000/svg"
     {...rest}
   >
-    <rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" />
-    <rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor" />
+    <rect x="4.25" y="3" width="2.5" height="10" rx="0.9" fill="currentColor" />
+    <rect x="9.25" y="3" width="2.5" height="10" rx="0.9" fill="currentColor" />
   </svg>
 );
 
