@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import {
@@ -8,6 +9,7 @@ import {
   isInclinationMetric,
   buildPoiAnnotationsForItinerary,
   computeXDomain,
+  locateRoutePointAtX,
   type AxisMetricId,
   type AxisMode,
   type AxisDomain,
@@ -20,6 +22,10 @@ import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
+import {
+  clearAnalysisHoverPoint,
+  setAnalysisHoverPoint,
+} from '@/features/itineraryPanel/lib/route-layer';
 import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/defaultState';
 import type {
   AnalysisFiltersState,
@@ -67,10 +73,15 @@ const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
 const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
 
-export function CenterPanelAnalysis() {
+interface CenterPanelAnalysisProps {
+  map: MapboxMap | null;
+}
+
+export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
+  const [hoveredChartX, setHoveredChartX] = useState<number | null>(null);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
@@ -415,6 +426,75 @@ export function CenterPanelAnalysis() {
       ? 'Renseigne une date et une heure de départ pour activer Jour/nuit.'
       : null;
 
+  const interactiveItinerary = useMemo(() => {
+    if (!projectStore) return null;
+    const itineraries = projectStore.project.itineraries;
+    const active =
+      itineraries.find((itinerary) => itinerary.id === projectStore.project.activeItineraryId) ??
+      null;
+    if (active && active.analysisVisible !== false && (active.gpxRoute?.points.length ?? 0) > 0) {
+      return active;
+    }
+    return (
+      itineraries.find(
+        (itinerary) => itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
+      ) ?? null
+    );
+  }, [projectStore]);
+
+  const hoveredRoutePoint = useMemo(() => {
+    if (!interactiveItinerary || hoveredChartX == null) return null;
+    const prediction =
+      predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
+    return locateRoutePointAtX(
+      interactiveItinerary.gpxRoute?.points ?? null,
+      prediction,
+      xMode,
+      hoveredChartX,
+      interactiveItinerary.rhythm.startTime,
+    );
+  }, [hoveredChartX, interactiveItinerary, predictionStore, xMode]);
+
+  useEffect(() => {
+    if (!map) return;
+    if (!hoveredRoutePoint || !interactiveItinerary) {
+      clearAnalysisHoverPoint(map);
+      return;
+    }
+    setAnalysisHoverPoint(map, {
+      lon: hoveredRoutePoint.lon,
+      lat: hoveredRoutePoint.lat,
+      color: interactiveItinerary.color,
+    });
+  }, [hoveredRoutePoint, interactiveItinerary, map]);
+
+  useEffect(() => {
+    if (!map) return;
+    return () => {
+      clearAnalysisHoverPoint(map);
+    };
+  }, [map]);
+
+  const handleChartClick = (xValue: number) => {
+    if (!map || !interactiveItinerary) return;
+    const prediction =
+      predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
+    const point = locateRoutePointAtX(
+      interactiveItinerary.gpxRoute?.points ?? null,
+      prediction,
+      xMode,
+      xValue,
+      interactiveItinerary.rhythm.startTime,
+    );
+    if (!point) return;
+
+    map.easeTo({
+      center: [point.lon, point.lat],
+      duration: 700,
+      essential: true,
+    });
+  };
+
   return (
     <section
       ref={rootRef}
@@ -555,6 +635,8 @@ export function CenterPanelAnalysis() {
           xDomainClamp={routeXDomainClamp}
           onViewportChange={setViewportState}
           onDetailOffsetChange={handleDetailOffsetChange}
+          onHoverXValueChange={setHoveredChartX}
+          onPlotClick={handleChartClick}
           showSeriesRows={false}
         />
       </div>

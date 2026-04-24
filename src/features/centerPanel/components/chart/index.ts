@@ -7,6 +7,7 @@ export {
   computeXDomain,
   isInclinationMetric,
   isIntervalAverageMetric,
+  locateRoutePointAtX,
   metricIsAvailable,
   unitForMetric,
 } from './series';
@@ -18,6 +19,7 @@ export type {
   ChartMetricId,
   AxisMode,
   ChartPoint,
+  RouteChartPoint,
   ChartSeries,
 } from './series';
 export type { ChartPoiAnnotation } from './annotations/buildPoiAnnotations';

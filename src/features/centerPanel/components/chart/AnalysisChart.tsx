@@ -1,4 +1,12 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
 import { IconChevronDown, IconMoon, IconSun } from '../CenterPanelIcons';
 import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
@@ -47,6 +55,8 @@ interface AnalysisChartProps {
   xDomainClamp?: AxisDomain | null;
   onViewportChange?: (next: { detailZoom: number; detailOffset: number }) => void;
   onDetailOffsetChange?: (value: number) => void;
+  onHoverXValueChange?: (xValue: number | null) => void;
+  onPlotClick?: (xValue: number) => void;
   showSeriesRows?: boolean;
 }
 
@@ -63,6 +73,8 @@ export function AnalysisChart({
   xDomainClamp = null,
   onViewportChange,
   onDetailOffsetChange,
+  onHoverXValueChange,
+  onPlotClick,
   showSeriesRows = true,
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
@@ -331,10 +343,84 @@ export function AnalysisChart({
       itineraryName: entry.itineraryName,
       color: entry.color,
       axis: entry.axis,
+      axisLabel: `Axe ${entry.axis}`,
       metric: entry.metricId,
       value: interpolateY(entry.points, hoveredX),
     }));
   }, [hover, plotXDomain, visibleSeries]);
+
+  const hoverBackdropData = useMemo(() => {
+    if (!hover || !backdropProfiles.length) return [];
+    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+    return backdropProfiles
+      .map((profile) => {
+        const value = interpolateY(profile.points, hoveredX);
+        if (!Number.isFinite(value)) return null;
+        return {
+          id: `${profile.id}::hover-altitude`,
+          itineraryName: profile.itineraryName,
+          color: 'rgba(244, 246, 238, 0.92)',
+          axis: null,
+          axisLabel: "Profil d'altitude",
+          metric: 'Altitude' as const,
+          value,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  }, [backdropProfiles, hover, plotXDomain]);
+
+  const hoverMarkers = useMemo(() => {
+    if (!hover) return [];
+    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+
+    const seriesPoints = visibleSeries
+      .map((entry) => {
+        const yValue = interpolateY(entry.points, hoveredX);
+        if (!Number.isFinite(yValue)) return null;
+        const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
+        return {
+          id: `${entry.id}::marker`,
+          topPx: (1 - ratioFor(yValue, domain)) * plotSize.height,
+          color: entry.color,
+          backdrop: false,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+    const backdropPoints = backdropProfiles
+      .map((profile) => {
+        if (!backdropYDomain) return null;
+        const yValue = interpolateY(profile.points, hoveredX);
+        if (!Number.isFinite(yValue)) return null;
+        return {
+          id: `${profile.id}::marker`,
+          topPx: (1 - ratioFor(yValue, backdropYDomain)) * plotSize.height,
+          color: 'rgba(244, 246, 238, 0.96)',
+          backdrop: true,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+    return [...backdropPoints, ...seriesPoints];
+  }, [backdropProfiles, backdropYDomain, hover, plotSize.height, plotXDomain, plotY2Domain, plotYDomain, visibleSeries]);
+
+  useEffect(() => {
+    if (!onHoverXValueChange) return;
+    if (!hover) {
+      onHoverXValueChange(null);
+      return;
+    }
+    onHoverXValueChange(plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min));
+  }, [hover, onHoverXValueChange, plotXDomain]);
+
+  const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (!onPlotClick || event.button !== 0) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const ratioX = x / rect.width;
+    onPlotClick(plotXDomain.min + ratioX * (plotXDomain.max - plotXDomain.min));
+  };
 
   return (
     <div className="rvchart" style={style}>
@@ -345,7 +431,7 @@ export function AnalysisChart({
           ))}
         </div>
 
-        <div ref={plotAreaRef} className="rvchart__plotarea">
+        <div ref={plotAreaRef} className="rvchart__plotarea" onClick={handlePlotClick}>
           <div className="rvchart__layer rvchart__layer--bg" aria-hidden="true">
             {dayNightBands.map(({ id, startRatio, endRatio }) => (
               <div
@@ -438,7 +524,8 @@ export function AnalysisChart({
                     }}
                     title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
                     aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
-                    onClick={() => {
+                    onClick={(event) => {
+                      event.stopPropagation();
                       setExpandedPoiClusterId(group.id);
                       const nextViewport = buildViewportForPoiCluster({
                         members: group.members,
@@ -498,12 +585,27 @@ export function AnalysisChart({
             {hover ? (
               <>
                 <div className="rvchart__cursor" style={{ left: `${hover.x}px` }} />
+                {hoverMarkers.map((marker) => (
+                  <div
+                    key={marker.id}
+                    className={
+                      marker.backdrop
+                        ? 'rvchart__hover-point rvchart__hover-point--backdrop'
+                        : 'rvchart__hover-point'
+                    }
+                    style={{
+                      left: `${hover.x}px`,
+                      top: `${marker.topPx}px`,
+                      ['--rvchart-hover-point-color' as string]: marker.color,
+                    }}
+                  />
+                ))}
                 <HoverCardGroup
                   hoverX={hover.x}
                   hoverRatioX={hover.ratioX}
                   xValue={plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)}
                   xMode={xMode}
-                  rows={hoverData ?? []}
+                  rows={[...(hoverData ?? []), ...hoverBackdropData]}
                 />
               </>
             ) : null}
@@ -691,7 +793,8 @@ interface HoverCardGroupProps {
     id: string;
     itineraryName: string;
     color: string;
-    axis: 1 | 2;
+    axis: 1 | 2 | null;
+    axisLabel: string;
     metric: ChartMetricId;
     value: number;
   }[];
@@ -709,7 +812,7 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
             <span className="rvchart__card-dot" style={{ background: row.color }} />
             <div className="rvchart__card-copy">
               <div className="rvchart__card-distance">
-                {row.itineraryName} · Axe {row.axis}
+                {row.itineraryName} · {row.axisLabel}
               </div>
               <div className="rvchart__card-metrics">
                 <div>

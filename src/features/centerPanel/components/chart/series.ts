@@ -1,6 +1,6 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor';
 
-interface RouteChartPoint {
+export interface RouteChartPoint {
   lat: number;
   lon: number;
   distanceM?: number;
@@ -726,6 +726,21 @@ export function buildSeriesFromPrediction(
   return points.length > 1 ? fitChartPointBudget(points) : null;
 }
 
+export function locateRoutePointAtX(
+  routePoints: RouteChartPoint[] | null | undefined,
+  prediction: PredictionResult | null | undefined,
+  xMode: AxisMode,
+  xValue: number,
+  startTime?: string | null,
+): RouteChartPoint | null {
+  if (!routePoints || routePoints.length === 0 || !Number.isFinite(xValue)) return null;
+
+  const targetDistanceM = projectXToDistanceM(routePoints, prediction, xMode, xValue, startTime);
+  if (!Number.isFinite(targetDistanceM)) return null;
+
+  return interpolateRoutePointAtDistance(routePoints, targetDistanceM as number);
+}
+
 function gradientPercentToDegrees(gradientPercent: number): number {
   return (Math.atan(gradientPercent / 100) * 180) / Math.PI;
 }
@@ -786,4 +801,118 @@ function parseStartTimeHours(startTime?: string | null): number {
   const minutes = Number.parseInt(minutesRaw ?? '', 10);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
   return hours + minutes / 60;
+}
+
+function projectXToDistanceM(
+  routePoints: RouteChartPoint[],
+  prediction: PredictionResult | null | undefined,
+  xMode: AxisMode,
+  xValue: number,
+  startTime?: string | null,
+): number {
+  if (xMode === 'distance') return xValue * 1000;
+
+  const elapsedHours = xMode === 'heure'
+    ? xValue - parseStartTimeHours(startTime)
+    : xValue;
+  if (!Number.isFinite(elapsedHours)) return Number.NaN;
+
+  const timeline = getPredictionTimeline(prediction);
+  const distanceFromTimeline = interpolateDistanceMFromElapsedHours(timeline, elapsedHours);
+  if (Number.isFinite(distanceFromTimeline)) return distanceFromTimeline;
+
+  const routeDistances = getRoutePointDistances(routePoints);
+  const totalDistanceM = routeDistances[routeDistances.length - 1] ?? 0;
+  if (!(totalDistanceM > 0)) return Number.NaN;
+
+  const totalElapsedHours = prediction?.points.length
+    ? (prediction.points[prediction.points.length - 1]?.elapsed_time_s ?? 0) / 3600
+    : Number.NaN;
+  if (!(totalElapsedHours > 0)) return Number.NaN;
+
+  return (elapsedHours / totalElapsedHours) * totalDistanceM;
+}
+
+function interpolateDistanceMFromElapsedHours(
+  timeline: TimelineSample[] | null,
+  elapsedHours: number,
+): number {
+  if (!timeline || timeline.length < 2) return Number.NaN;
+  if (elapsedHours <= timeline[0].elapsedHours) return timeline[0].distanceM;
+
+  const last = timeline[timeline.length - 1];
+  if (elapsedHours >= last.elapsedHours) return last.distanceM;
+
+  let lo = 0;
+  let hi = timeline.length - 1;
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (timeline[mid].elapsedHours <= elapsedHours) lo = mid;
+    else hi = mid;
+  }
+
+  const start = timeline[lo];
+  const end = timeline[hi];
+  const span = end.elapsedHours - start.elapsedHours;
+  if (span <= 0) return start.distanceM;
+  const t = (elapsedHours - start.elapsedHours) / span;
+  return start.distanceM + (end.distanceM - start.distanceM) * t;
+}
+
+function getRoutePointDistances(routePoints: RouteChartPoint[]): number[] {
+  if (routePoints.length === 0) return [];
+
+  const distances: number[] = [0];
+  let cumulativeDistanceM = 0;
+  for (let index = 1; index < routePoints.length; index += 1) {
+    const point = routePoints[index];
+    const nextDistance = point.distanceM;
+    if (Number.isFinite(nextDistance) && (nextDistance as number) >= cumulativeDistanceM) {
+      cumulativeDistanceM = nextDistance as number;
+    } else {
+      cumulativeDistanceM += haversineM(routePoints[index - 1], point);
+    }
+    distances.push(cumulativeDistanceM);
+  }
+  return distances;
+}
+
+function interpolateRoutePointAtDistance(
+  routePoints: RouteChartPoint[],
+  targetDistanceM: number,
+): RouteChartPoint | null {
+  const distances = getRoutePointDistances(routePoints);
+  if (distances.length === 0) return null;
+  if (targetDistanceM <= distances[0]) return routePoints[0] ?? null;
+
+  const lastIndex = distances.length - 1;
+  if (targetDistanceM >= distances[lastIndex]) return routePoints[lastIndex] ?? null;
+
+  let lo = 0;
+  let hi = lastIndex;
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (distances[mid] <= targetDistanceM) lo = mid;
+    else hi = mid;
+  }
+
+  const startPoint = routePoints[lo];
+  const endPoint = routePoints[hi];
+  const span = distances[hi] - distances[lo];
+  if (span <= 0) return startPoint;
+
+  const t = Math.max(0, Math.min(1, (targetDistanceM - distances[lo]) / span));
+  return {
+    lat: startPoint.lat + (endPoint.lat - startPoint.lat) * t,
+    lon: startPoint.lon + (endPoint.lon - startPoint.lon) * t,
+    distanceM: targetDistanceM,
+    elevationM:
+      Number.isFinite(startPoint.elevationM) && Number.isFinite(endPoint.elevationM)
+        ? (startPoint.elevationM as number) + ((endPoint.elevationM as number) - (startPoint.elevationM as number)) * t
+        : startPoint.elevationM ?? endPoint.elevationM ?? null,
+    gradientPct:
+      Number.isFinite(startPoint.gradientPct) && Number.isFinite(endPoint.gradientPct)
+        ? (startPoint.gradientPct as number) + ((endPoint.gradientPct as number) - (startPoint.gradientPct as number)) * t
+        : startPoint.gradientPct ?? endPoint.gradientPct ?? null,
+  };
 }

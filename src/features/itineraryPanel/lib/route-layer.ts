@@ -17,6 +17,8 @@ const LINE_PREFIX = 'brouter-route-line-';
 
 const START_SOURCE_ID = 'brouter-endpoints-source';
 const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
+const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
+const ANALYSIS_HOVER_LAYER_ID = 'brouter-analysis-hover-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -290,6 +292,69 @@ export function clearRouteEndpoints(map: MapboxMap): void {
   try {
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.removeLayer(ENDPOINT_LAYER_ID);
     if (map.getSource(START_SOURCE_ID)) map.removeSource(START_SOURCE_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function setAnalysisHoverPoint(
+  map: MapboxMap,
+  point: { lon: number; lat: number; color?: string },
+): void {
+  const geojson: GeoJSON.FeatureCollection = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { color: point.color ?? '#ffffff' },
+        geometry: {
+          type: 'Point',
+          coordinates: [point.lon, point.lat],
+        },
+      },
+    ],
+  };
+
+  const existing = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) {
+    try {
+      existing.setData(geojson);
+    } catch {
+      /* noop */
+    }
+  } else {
+    map.addSource(ANALYSIS_HOVER_SOURCE_ID, {
+      type: 'geojson',
+      data: geojson,
+    });
+    map.addLayer({
+      id: ANALYSIS_HOVER_LAYER_ID,
+      type: 'circle',
+      source: ANALYSIS_HOVER_SOURCE_ID,
+      slot: 'top',
+      paint: {
+        'circle-radius': 6,
+        'circle-color': ['coalesce', ['get', 'color'], '#ffffff'],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': '#ffffff',
+        'circle-opacity': 0.96,
+        'circle-stroke-opacity': 0.92,
+        'circle-emissive-strength': 1,
+      },
+    });
+  }
+
+  try {
+    if (map.getLayer(ANALYSIS_HOVER_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_LAYER_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearAnalysisHoverPoint(map: MapboxMap): void {
+  try {
+    if (map.getLayer(ANALYSIS_HOVER_LAYER_ID)) map.removeLayer(ANALYSIS_HOVER_LAYER_ID);
+    if (map.getSource(ANALYSIS_HOVER_SOURCE_ID)) map.removeSource(ANALYSIS_HOVER_SOURCE_ID);
   } catch {
     /* noop */
   }

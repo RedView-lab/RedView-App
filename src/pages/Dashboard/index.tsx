@@ -476,7 +476,7 @@ export default function Dashboard({
                     willChange: 'transform, opacity, filter, top, left, width',
                   }}
                 >
-                  <CenterPanel />
+                  <CenterPanel map={mapInstance} />
                 </div>
               ) : null}
 
