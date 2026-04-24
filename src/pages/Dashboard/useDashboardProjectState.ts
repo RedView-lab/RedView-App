@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { getProject, saveProject, uploadProjectThumbnail } from '@/lib/projects';
+import { getProject, uploadProjectThumbnail } from '@/lib/projects';
 import { replaceProjectLocation } from '@/lib/projectLocation';
 import { captureMapThumbnail } from '@/lib/mapThumbnail';
 
@@ -12,6 +12,28 @@ export type DashboardPersistedMutator = (
 interface UseDashboardProjectStateArgs {
   initialProjectId?: string | null;
   mapInstance: MapboxMap | null;
+}
+
+/**
+ * Read the current Supabase access token from localStorage. Used by the
+ * keepalive PATCH path so we don't have to await an async getSession()
+ * during `pagehide` (where micro-tasks may not run).
+ */
+function readAccessTokenSync(anonKey: string): string {
+  try {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (!key || !key.startsWith('sb-')) continue;
+      if (!key.endsWith('-auth-token')) continue;
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      if (parsed?.access_token) return parsed.access_token as string;
+    }
+  } catch {
+    /* fall through */
+  }
+  return anonKey;
 }
 
 export function useDashboardProjectState({
@@ -25,93 +47,83 @@ export function useDashboardProjectState({
   const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
 
   const activeProjectSnapshotRef = useRef<ItineraryProject | null>(null);
+  /** Latest snapshot that has not yet been confirmed-saved. */
   const pendingSaveRef = useRef<ItineraryProject | null>(null);
+  /** Serialized JSON of the most recent successful save (deduplication). */
+  const lastSavedSerializedRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const activeProjectIdRef = useRef<string | null>(null);
   activeProjectIdRef.current = activeProjectId;
 
-  const flushSave = useCallback(async () => {
+  /**
+   * Persist the current pending snapshot to Supabase via PostgREST with
+   * `keepalive: true` so the request survives a page refresh / tab
+   * close. Used both by the debounced autosave and the unload handlers.
+   *
+   * The pending snapshot is kept until the request resolves with 2xx,
+   * so a transient network failure doesn't discard the user's work.
+   */
+  const flushSave = useCallback(async (): Promise<void> => {
     const id = activeProjectIdRef.current;
     const payload = pendingSaveRef.current;
     if (!id || !payload) return;
 
-    pendingSaveRef.current = null;
+    const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+    const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
+      | string
+      | undefined;
+    if (!url || !anonKey) {
+      console.warn('[Dashboard] missing Supabase env, autosave disabled');
+      return;
+    }
+
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedSerializedRef.current) {
+      // Snapshot is already on the server — nothing to do.
+      pendingSaveRef.current = null;
+      return;
+    }
+
+    const accessToken = readAccessTokenSync(anonKey);
+    const body = JSON.stringify({
+      name: payload.name,
+      data: payload,
+      size_bytes: new Blob([serialized]).size,
+      privacy: payload.privacy ?? 'private',
+    });
+
     try {
-      await saveProject(id, payload);
+      const res = await fetch(
+        `${url}/rest/v1/projects?id=eq.${encodeURIComponent(id)}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: anonKey,
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body,
+          // Survives `pagehide` / refresh, so an in-flight save isn't
+          // cancelled when the user navigates away.
+          keepalive: true,
+        },
+      );
+      if (!res.ok) {
+        console.error(
+          '[Dashboard] autosave HTTP error',
+          res.status,
+          await res.text().catch(() => ''),
+        );
+        return; // keep `pendingSaveRef` so we retry on the next change
+      }
+      lastSavedSerializedRef.current = serialized;
+      // Only clear if no newer snapshot has been queued in the meantime.
+      if (pendingSaveRef.current === payload) {
+        pendingSaveRef.current = null;
+      }
     } catch (error) {
       console.error('[Dashboard] autosave failed', error);
-    }
-  }, []);
-
-  /**
-   * Best-effort synchronous save during `pagehide` / `beforeunload`.
-   *
-   * Supabase JS uses regular `fetch`, which the browser cancels the
-   * moment the document starts unloading — meaning the autosave timer
-   * silently loses any in-flight changes. We bypass the client and POST
-   * directly to PostgREST with `keepalive: true`, which the browser
-   * guarantees to dispatch even if the page is closing.
-   */
-  const flushSaveOnUnload = useCallback(() => {
-    const id = activeProjectIdRef.current;
-    const payload = pendingSaveRef.current;
-    if (!id || !payload) return;
-
-    pendingSaveRef.current = null;
-    if (saveTimerRef.current != null) {
-      window.clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-
-    try {
-      const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
-        | string
-        | undefined;
-      if (!url || !anonKey) return;
-
-      // Pull the current access token synchronously from the auth
-      // session held in localStorage (Supabase persists it there).
-      let accessToken = anonKey;
-      try {
-        for (let i = 0; i < window.localStorage.length; i++) {
-          const key = window.localStorage.key(i);
-          if (!key || !key.startsWith('sb-')) continue;
-          if (!key.endsWith('-auth-token')) continue;
-          const raw = window.localStorage.getItem(key);
-          if (!raw) continue;
-          const parsed = JSON.parse(raw);
-          if (parsed?.access_token) {
-            accessToken = parsed.access_token as string;
-            break;
-          }
-        }
-      } catch {
-        /* fall back to anon key */
-      }
-
-      const body = JSON.stringify({
-        name: payload.name,
-        data: payload,
-        size_bytes: new Blob([JSON.stringify(payload)]).size,
-        privacy: payload.privacy ?? 'private',
-      });
-
-      fetch(`${url}/rest/v1/projects?id=eq.${encodeURIComponent(id)}`, {
-        method: 'PATCH',
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
-        body,
-        keepalive: true,
-      }).catch(() => {
-        /* best-effort */
-      });
-    } catch (error) {
-      console.warn('[Dashboard] keepalive autosave failed', error);
     }
   }, []);
 
@@ -172,6 +184,8 @@ export function useDashboardProjectState({
       if (!row) throw new Error('Project not found');
 
       activeProjectSnapshotRef.current = row.data;
+      pendingSaveRef.current = null;
+      lastSavedSerializedRef.current = JSON.stringify(row.data);
       setActiveProjectId(row.id);
       setActiveProjectInitial(row.data);
       setProjectBrowserOpen(false);
@@ -196,7 +210,13 @@ export function useDashboardProjectState({
 
   useEffect(() => {
     const onPageHide = () => {
-      flushSaveOnUnload();
+      // Cancel the pending debounce so we issue exactly one keepalive
+      // request (the timer's flushSave would race with this one).
+      if (saveTimerRef.current != null) {
+        window.clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = null;
+      }
+      void flushSave();
     };
     const onVisibilityChange = () => {
       // `visibilitychange → hidden` fires reliably on mobile when the
@@ -204,7 +224,11 @@ export function useDashboardProjectState({
       // delayed. Flush there too so quick app-switching never loses
       // data.
       if (document.visibilityState === 'hidden') {
-        flushSaveOnUnload();
+        if (saveTimerRef.current != null) {
+          window.clearTimeout(saveTimerRef.current);
+          saveTimerRef.current = null;
+        }
+        void flushSave();
       }
     };
 
@@ -222,7 +246,7 @@ export function useDashboardProjectState({
         void flushSave();
       }
     };
-  }, [flushSave, flushSaveOnUnload]);
+  }, [flushSave]);
 
   const handleBackToBrowser = useCallback(async () => {
     await flushSave();
