@@ -68,6 +68,7 @@ export function AnalysisChart({
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
   const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
   const [plotSize, setPlotSize] = useState({ width: 0, height: 0 });
+  const [expandedPoiClusterId, setExpandedPoiClusterId] = useState<string | null>(null);
 
   useEffect(() => {
     const node = plotAreaRef.current;
@@ -260,6 +261,12 @@ export function AnalysisChart({
     [visibleFraction, visiblePoiAnnotations],
   );
 
+  useEffect(() => {
+    if (visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION) {
+      setExpandedPoiClusterId(null);
+    }
+  }, [visibleFraction]);
+
   const dayNightBands = useMemo(
     () =>
       (dayNightOverlay?.dayWindows ?? [])
@@ -419,7 +426,7 @@ export function AnalysisChart({
                 );
               }
 
-              if (shouldRenderPoiCluster(group, visibleFraction)) {
+              if (shouldRenderPoiCluster(group, visibleFraction, expandedPoiClusterId)) {
                 return (
                   <button
                     key={group.id}
@@ -432,6 +439,7 @@ export function AnalysisChart({
                     title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
                     aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
                     onClick={() => {
+                      setExpandedPoiClusterId(group.id);
                       const nextViewport = buildViewportForPoiCluster({
                         members: group.members,
                         count: group.count,
@@ -456,13 +464,15 @@ export function AnalysisChart({
               return (
                 <Fragment key={group.id}>
                   {group.members.map((annotation, index) => {
-                    const offsetPx = buildPoiSpreadOffsetPx(index, group.count);
+                    const offsetPx = shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId)
+                      ? buildPoiSpreadOffsetPx(index, group.count)
+                      : 0;
                     return (
                       <div
                         key={annotation.id}
                         className="rvchart__poi-marker"
                         style={{
-                          left: `calc(${group.xRatio * 100}% + ${offsetPx}px)`,
+                          left: `calc(${annotation.xRatio * 100}% + ${offsetPx}px)`,
                           top: `${annotation.yRatio * 100}%`,
                         }}
                         title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
@@ -786,8 +796,21 @@ function buildPoiSpreadOffsetPx(index: number, count: number): number {
 function shouldRenderPoiCluster(
   group: PoiMarkerGroup,
   visibleFraction: number,
+  expandedPoiClusterId: string | null,
 ): boolean {
-  return group.count > 1 && visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION;
+  return group.count > 1 && !shouldExpandPoiCluster(group, visibleFraction, expandedPoiClusterId);
+}
+
+function shouldExpandPoiCluster(
+  group: PoiMarkerGroup,
+  visibleFraction: number,
+  expandedPoiClusterId: string | null,
+): boolean {
+  return isMaxPoiZoom(visibleFraction) || expandedPoiClusterId === group.id;
+}
+
+function isMaxPoiZoom(visibleFraction: number): boolean {
+  return visibleFraction <= MIN_VISIBLE_FRACTION + 1e-3;
 }
 
 function buildViewportForPoiCluster(input: {
