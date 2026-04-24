@@ -59,8 +59,8 @@ function ensureAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
   const marker = new Marker({
     element,
     anchor: 'center',
-    rotationAlignment: 'map',
-    pitchAlignment: 'map',
+    altitude: 6,
+    occludedOpacity: 1,
   }).addTo(map);
   analysisHoverMarkers.set(map, marker);
   return marker;
