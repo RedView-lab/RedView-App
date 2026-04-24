@@ -1,4 +1,4 @@
-﻿import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
@@ -82,7 +82,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
   const [hoveredChartX, setHoveredChartX] = useState<number | null>(null);
-  const deferredHoveredChartX = useDeferredValue(hoveredChartX);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
@@ -444,17 +443,17 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   }, [projectStore]);
 
   const hoveredRoutePoint = useMemo(() => {
-    if (!interactiveItinerary || deferredHoveredChartX == null) return null;
+    if (!interactiveItinerary || hoveredChartX == null) return null;
     const prediction =
       predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
     return locateRoutePointAtX(
       interactiveItinerary.gpxRoute?.points ?? null,
       prediction,
       xMode,
-      deferredHoveredChartX,
+      hoveredChartX,
       interactiveItinerary.rhythm.startTime,
     );
-  }, [deferredHoveredChartX, interactiveItinerary, predictionStore, xMode]);
+  }, [hoveredChartX, interactiveItinerary, predictionStore, xMode]);
 
   useEffect(() => {
     if (!map) return;
