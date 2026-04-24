@@ -32,26 +32,27 @@ function ensureAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
 
   const element = document.createElement('div');
   element.setAttribute('aria-hidden', 'true');
-  element.style.width = '26px';
-  element.style.height = '26px';
+  element.style.width = '34px';
+  element.style.height = '34px';
   element.style.borderRadius = '999px';
   element.style.pointerEvents = 'none';
   element.style.display = 'flex';
   element.style.alignItems = 'center';
   element.style.justifyContent = 'center';
   element.style.boxSizing = 'border-box';
-  element.style.background = 'rgba(255, 255, 255, 0.18)';
-  element.style.backdropFilter = 'blur(1px)';
-  element.style.boxShadow = '0 0 0 1px rgba(255,255,255,0.35), 0 0 18px rgba(255,255,255,0.35)';
+  element.style.background = 'rgba(255, 255, 255, 0.22)';
+  element.style.boxShadow = '0 0 0 2px rgba(255,255,255,0.6), 0 0 24px rgba(255,255,255,0.5)';
+  element.style.zIndex = '9999';
+  element.style.willChange = 'transform';
 
   const core = document.createElement('div');
   core.dataset.role = 'analysis-hover-core';
-  core.style.width = '10px';
-  core.style.height = '10px';
+  core.style.width = '14px';
+  core.style.height = '14px';
   core.style.borderRadius = '999px';
   core.style.boxSizing = 'border-box';
-  core.style.border = '2px solid rgba(255,255,255,0.98)';
-  core.style.boxShadow = '0 0 12px rgba(255,255,255,0.45)';
+  core.style.border = '2px solid rgba(255,255,255,1)';
+  core.style.boxShadow = '0 0 14px rgba(255,255,255,0.7)';
   element.appendChild(core);
 
   syncAnalysisHoverMarkerColor(element, color);
@@ -59,7 +60,7 @@ function ensureAnalysisHoverMarker(map: MapboxMap, color: string): Marker {
   const marker = new Marker({
     element,
     anchor: 'center',
-    altitude: 6,
+    altitude: 5000,
     occludedOpacity: 1,
   }).addTo(map);
   analysisHoverMarkers.set(map, marker);
