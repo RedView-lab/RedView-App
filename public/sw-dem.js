@@ -222,12 +222,18 @@ self.addEventListener('fetch', (event) => {
 // ---------------------------------------------------------------------------
 
 function buildDemResponse(pngBlob, demSource, shortCache) {
+  const cachedAt = Date.now();
+  const shortTtlMs = shortCache ? 15_000 : 0;
   return new Response(pngBlob, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': shortCache ? 'public, max-age=300' : 'public, max-age=604800',
+      'Cache-Control': shortCache
+        ? `public, max-age=${Math.max(1, Math.ceil(shortTtlMs / 1000))}`
+        : 'public, max-age=604800',
       'X-DEM-Source': demSource,
+      'x-cached-at': String(cachedAt),
+      ...(shortTtlMs > 0 ? { 'x-cache-ttl-ms': String(shortTtlMs) } : {}),
     },
   });
 }
@@ -285,7 +291,15 @@ async function handleDemRequest(_request, z, x, y, _depth) {
 
   // 1. Positive cache
   const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    const ttlMs = parseInt(cached.headers.get('x-cache-ttl-ms') || '0', 10);
+    if (!ttlMs) return cached;
+
+    const cachedAt = parseInt(cached.headers.get('x-cached-at') || '0', 10);
+    if (cachedAt > 0 && (Date.now() - cachedAt) < ttlMs) return cached;
+
+    await cache.delete(cacheKey);
+  }
 
   // 2. Negative cache (TTL-bounded)
   const negCache = await caches.open(NEGATIVE_CACHE_NAME);
@@ -587,9 +601,9 @@ async function handleDemRequest(_request, z, x, y, _depth) {
 }
 
 async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion) {
-  // Short cache (5 min) for Mapbox fallback tiles inside any LiDAR region
-  // (France or Switzerland) at z≥13. These should eventually be replaced by
-  // real LiDAR data; caching them for a week permanently masks the upgrade.
+  // Short cache (15 s) for Mapbox/overzoom fallback tiles inside any LiDAR
+  // region (France or Switzerland) at z≥13. These are transient stand-ins
+  // while the exact tile finishes building; longer caching masks the upgrade.
   const shortCache = inLiDARRegion && z >= 13 && (demSource === 'mapbox' || demSource.startsWith('overzoom'));
   const response = buildDemResponse(pngBlob, demSource, shortCache);
   cache.put(cacheKey, response.clone());
