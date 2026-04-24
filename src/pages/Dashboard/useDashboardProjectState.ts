@@ -43,6 +43,78 @@ export function useDashboardProjectState({
     }
   }, []);
 
+  /**
+   * Best-effort synchronous save during `pagehide` / `beforeunload`.
+   *
+   * Supabase JS uses regular `fetch`, which the browser cancels the
+   * moment the document starts unloading — meaning the autosave timer
+   * silently loses any in-flight changes. We bypass the client and POST
+   * directly to PostgREST with `keepalive: true`, which the browser
+   * guarantees to dispatch even if the page is closing.
+   */
+  const flushSaveOnUnload = useCallback(() => {
+    const id = activeProjectIdRef.current;
+    const payload = pendingSaveRef.current;
+    if (!id || !payload) return;
+
+    pendingSaveRef.current = null;
+    if (saveTimerRef.current != null) {
+      window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+
+    try {
+      const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as
+        | string
+        | undefined;
+      if (!url || !anonKey) return;
+
+      // Pull the current access token synchronously from the auth
+      // session held in localStorage (Supabase persists it there).
+      let accessToken = anonKey;
+      try {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i);
+          if (!key || !key.startsWith('sb-')) continue;
+          if (!key.endsWith('-auth-token')) continue;
+          const raw = window.localStorage.getItem(key);
+          if (!raw) continue;
+          const parsed = JSON.parse(raw);
+          if (parsed?.access_token) {
+            accessToken = parsed.access_token as string;
+            break;
+          }
+        }
+      } catch {
+        /* fall back to anon key */
+      }
+
+      const body = JSON.stringify({
+        name: payload.name,
+        data: payload,
+        size_bytes: new Blob([JSON.stringify(payload)]).size,
+        privacy: payload.privacy ?? 'private',
+      });
+
+      fetch(`${url}/rest/v1/projects?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body,
+        keepalive: true,
+      }).catch(() => {
+        /* best-effort */
+      });
+    } catch (error) {
+      console.warn('[Dashboard] keepalive autosave failed', error);
+    }
+  }, []);
+
   const queueProjectSave = useCallback(
     (next: ItineraryProject) => {
       activeProjectSnapshotRef.current = next;
@@ -57,10 +129,13 @@ export function useDashboardProjectState({
         window.clearTimeout(saveTimerRef.current);
       }
 
+      // Short debounce — long enough to coalesce typing / slider drags,
+      // short enough that quick "do something then refresh" sequences
+      // still flush before unload.
       saveTimerRef.current = window.setTimeout(() => {
         saveTimerRef.current = null;
         void flushSave();
-      }, 250);
+      }, 150);
     },
     [flushSave],
   );
@@ -121,22 +196,33 @@ export function useDashboardProjectState({
 
   useEffect(() => {
     const onPageHide = () => {
-      void flushSave();
+      flushSaveOnUnload();
+    };
+    const onVisibilityChange = () => {
+      // `visibilitychange → hidden` fires reliably on mobile when the
+      // user switches tabs / locks the screen, where `pagehide` may be
+      // delayed. Flush there too so quick app-switching never loses
+      // data.
+      if (document.visibilityState === 'hidden') {
+        flushSaveOnUnload();
+      }
     };
 
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('beforeunload', onPageHide);
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('beforeunload', onPageHide);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
 
       if (saveTimerRef.current != null) {
         window.clearTimeout(saveTimerRef.current);
         void flushSave();
       }
     };
-  }, [flushSave]);
+  }, [flushSave, flushSaveOnUnload]);
 
   const handleBackToBrowser = useCallback(async () => {
     await flushSave();

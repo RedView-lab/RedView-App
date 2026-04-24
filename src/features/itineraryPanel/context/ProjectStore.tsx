@@ -65,7 +65,6 @@ export function ProjectProvider({
   // snapshot — `useLayoutEffect` would not run in time.
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
-  const firstChangeRef = useRef(true);
 
   const setProject = useCallback<Dispatch<SetStateAction<ItineraryProject>>>(
     (action) => {
@@ -75,16 +74,16 @@ export function ProjectProvider({
             ? (action as (p: ItineraryProject) => ItineraryProject)(prev)
             : action;
         if (next === prev) return prev;
-        if (firstChangeRef.current) {
-          firstChangeRef.current = false;
-        } else {
-          // Synchronously notify the parent so unload flushes capture
-          // the freshest snapshot.
-          try {
-            onProjectChangeRef.current?.(next);
-          } catch (err) {
-            console.error('[ProjectProvider] onProjectChange threw', err);
-          }
+        // Synchronously notify the parent so unload flushes capture
+        // the freshest snapshot. Every real mutation must be persisted —
+        // the previous "skip first change" guard caused the very first
+        // user action after opening a project (e.g. a POI corridor
+        // search) to be silently dropped if the user refreshed before
+        // a second mutation triggered another save.
+        try {
+          onProjectChangeRef.current?.(next);
+        } catch (err) {
+          console.error('[ProjectProvider] onProjectChange threw', err);
         }
         return next;
       });
