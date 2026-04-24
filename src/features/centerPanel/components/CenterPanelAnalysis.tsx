@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+﻿import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
@@ -79,9 +79,11 @@ interface CenterPanelAnalysisProps {
 
 export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
+  const lastAppliedHoverMarkerKeyRef = useRef<string | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
   const [hoveredChartX, setHoveredChartX] = useState<number | null>(null);
+  const deferredHoveredChartX = useDeferredValue(hoveredChartX);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
@@ -443,24 +445,30 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   }, [projectStore]);
 
   const hoveredRoutePoint = useMemo(() => {
-    if (!interactiveItinerary || hoveredChartX == null) return null;
+    if (!interactiveItinerary || deferredHoveredChartX == null) return null;
     const prediction =
       predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
     return locateRoutePointAtX(
       interactiveItinerary.gpxRoute?.points ?? null,
       prediction,
       xMode,
-      hoveredChartX,
+      deferredHoveredChartX,
       interactiveItinerary.rhythm.startTime,
     );
-  }, [hoveredChartX, interactiveItinerary, predictionStore, xMode]);
+  }, [deferredHoveredChartX, interactiveItinerary, predictionStore, xMode]);
 
   useEffect(() => {
     if (!map) return;
     if (!hoveredRoutePoint || !interactiveItinerary) {
+      lastAppliedHoverMarkerKeyRef.current = null;
       clearAnalysisHoverPoint(map);
       return;
     }
+
+    const markerKey = `${hoveredRoutePoint.lon.toFixed(6)}:${hoveredRoutePoint.lat.toFixed(6)}:${interactiveItinerary.color}`;
+    if (markerKey === lastAppliedHoverMarkerKeyRef.current) return;
+    lastAppliedHoverMarkerKeyRef.current = markerKey;
+
     setAnalysisHoverPoint(map, {
       lon: hoveredRoutePoint.lon,
       lat: hoveredRoutePoint.lat,
@@ -471,6 +479,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   useEffect(() => {
     if (!map) return;
     return () => {
+      lastAppliedHoverMarkerKeyRef.current = null;
       clearAnalysisHoverPoint(map);
     };
   }, [map]);

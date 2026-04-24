@@ -41,6 +41,7 @@ const POI_CLUSTER_OVERLAP_Y_PX = 16;
 const POI_CLUSTER_OVERLAP_X_PX_COMPACT = 46;
 const POI_CLUSTER_OVERLAP_Y_PX_COMPACT = 40;
 const POI_CLUSTER_COMPACT_VISIBLE_FRACTION = 0.88;
+const HOVER_X_EMIT_EPSILON = 1e-4;
 
 interface AnalysisChartProps {
   series: ChartSeries[];
@@ -79,8 +80,19 @@ export function AnalysisChart({
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
   const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
+  const hoverCallbackFrameRef = useRef<number | null>(null);
+  const pendingHoverXValueRef = useRef<number | null>(null);
+  const lastEmittedHoverXValueRef = useRef<number | null>(null);
   const [plotSize, setPlotSize] = useState({ width: 0, height: 0 });
   const [expandedPoiClusterId, setExpandedPoiClusterId] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverCallbackFrameRef.current !== null) {
+        window.cancelAnimationFrame(hoverCallbackFrameRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const node = plotAreaRef.current;
@@ -406,11 +418,19 @@ export function AnalysisChart({
 
   useEffect(() => {
     if (!onHoverXValueChange) return;
-    if (!hover) {
-      onHoverXValueChange(null);
-      return;
-    }
-    onHoverXValueChange(plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min));
+    pendingHoverXValueRef.current = hover
+      ? plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)
+      : null;
+    if (hoverCallbackFrameRef.current !== null) return;
+
+    hoverCallbackFrameRef.current = window.requestAnimationFrame(() => {
+      hoverCallbackFrameRef.current = null;
+      const nextHoverXValue = pendingHoverXValueRef.current;
+      pendingHoverXValueRef.current = null;
+      if (sameOptionalNumber(lastEmittedHoverXValueRef.current, nextHoverXValue)) return;
+      lastEmittedHoverXValueRef.current = nextHoverXValue;
+      onHoverXValueChange(nextHoverXValue);
+    });
   }, [hover, onHoverXValueChange, plotXDomain]);
 
   const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -1105,6 +1125,11 @@ function clamp(value: number, min: number, max: number): number {
 function normalizeUnitInterval(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return clamp(value, 0, 1);
+}
+
+function sameOptionalNumber(left: number | null, right: number | null): boolean {
+  if (left == null || right == null) return left === right;
+  return Math.abs(left - right) <= HOVER_X_EMIT_EPSILON;
 }
 
 function detailZoomToVisibleFraction(detailZoom: number): number {
