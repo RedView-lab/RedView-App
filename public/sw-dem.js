@@ -408,6 +408,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // footprint AND not predominantly French. Border tiles where the
     // French polygon claims the centre still go to IGN.
     let swissHadSomeData = false;
+    let swissTransientFailure = false; // STAC/header timeout; do NOT cache Mapbox flat as the answer
     const considerSwiss = inSwitzerland && !tilePredominantlyFrench && shouldUseSwiss(z, tileCenterLat);
     // Race IGN in parallel only for tiles that genuinely straddle the
     // French border polygon — not for every CH tile that bbox-overlaps
@@ -437,6 +438,13 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         }
         demSource = 'swiss-composite';
       } else {
+        // 'swiss-unavailable' = transient (STAC timeout, header retry exhausted,
+        // range fetches died). Don't fall through to a cached Mapbox flat tile
+        // at high zoom — that visually looks like a permanent flat patch next
+        // to neighbours that worked. Treat it like an IGN transient miss:
+        // skip Mapbox so we 204 with short TTL and Mapbox GL uses its own
+        // parent mesh (a LiDAR tile from one zoom up).
+        if (swissResult?.source === 'swiss-unavailable') swissTransientFailure = true;
         console.log(
           `[sw-dem][dispatch] %c ${z}/${x}/${y} %c swiss result=${swissResult?.source || 'null'} → falling through`,
           'background:#FF9800;color:#fff;padding:1px 4px;border-radius:2px', '',
@@ -557,7 +565,11 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
         (tileTrulyTouchesFrance && ignHadSomeData) ||
-        (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData)
+        (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData) ||
+        // Swiss transient failure: do NOT cache a flat Mapbox tile in
+        // place of an unbuilt LiDAR tile — visually indistinguishable
+        // from a permanent flat patch (see screenshot Apr 24).
+        (inSwitzerland && !tileTrulyTouchesFrance && swissTransientFailure)
       );
     if (!pngBlob && mapboxToken && !skipMapboxHighZoomLiDAR) {
       pngBlob = await fetchMapboxTile(z, x, y);

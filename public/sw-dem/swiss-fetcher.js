@@ -106,6 +106,13 @@ async function swissRangeFetch(url, offset, length) {
 const _stacCellCache = new Map();
 const _stacCellInflight = new Map();
 
+// Super-window inflight: keyed by the SWISS_STAC_GRID-aligned block
+// (`${EkmGrid}/${NkmGrid}`). Every cell in the block joins the same
+// promise so we never fire two overlapping STAC queries for the same
+// neighbourhood. Apr 24 logs showed 5+ near-identical bbox queries
+// timing out concurrently because dedup was per-cell only.
+const _stacWindowInflight = new Map();
+
 function evictMap(cache, max) {
   if (cache.size <= max) return;
   const iter = cache.keys();
@@ -136,6 +143,13 @@ function _stacCellSetNull(key, ttl) {
 // we resolve many adjacent cells in one round-trip. The returned items
 // are then exploded into the per-cell cache.
 //
+// Returns:
+//   { ok: true,  cellBest }  — STAC succeeded (cellBest may be empty if
+//                              the bbox truly has no published data)
+//   { ok: false }            — transient network failure (timeout, 5xx,
+//                              prune). Caller MUST NOT mark cells as
+//                              permanent-null; the next render retries.
+//
 // Item ID grammar:  swisssurface3d-raster_{year}_{Ekm}-{Nkm}
 // Asset href is the canonical COG URL we want.
 async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
@@ -154,27 +168,39 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
         signal: AbortSignal.timeout(SWISS_STAC_FETCH_TIMEOUT_MS),
       });
       if (!res.ok) {
-        console.warn(`[swiss][stac] HTTP ${res.status} ${url}`);
+        // 4xx → permanent (treat as "ok, zero features"). 5xx → transient.
+        if (res.status >= 400 && res.status < 500) {
+          console.warn(`[swiss][stac] HTTP ${res.status} ${url} (permanent)`);
+          return { _permanent: true, value: { features: [] } };
+        }
+        console.warn(`[swiss][stac] HTTP ${res.status} ${url} (transient)`);
         return null;
       }
-      return await res.json();
+      return { _permanent: true, value: await res.json() };
     } catch (e) {
       console.warn(`[swiss][stac] fetch error ${url}:`, e?.message || e);
-      return null;
+      return null; // transient (timeout, network)
     }
   });
-  if (!json || json === SWISS_PRUNED_SENTINEL || !Array.isArray(json.features)) {
-    console.warn(`[swiss][stac] no features for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
-    return null;
+  // Pruned or transient network failure → tell caller to retry, do NOT
+  // mark cells as permanent-null.
+  if (!json || json === SWISS_PRUNED_SENTINEL) {
+    console.warn(`[swiss][stac] transient failure for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
+    return { ok: false };
+  }
+  const payload = json._permanent ? json.value : json;
+  if (!payload || !Array.isArray(payload.features)) {
+    console.warn(`[swiss][stac] malformed payload for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
+    return { ok: false };
   }
   console.log(
-    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${json.features.length} features`,
+    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${payload.features.length} features`,
     'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
   );
 
   // Group features by (Ekm, Nkm) keeping the most recent year per cell.
   const cellBest = new Map();
-  for (const feat of json.features) {
+  for (const feat of payload.features) {
     const id = feat.id || '';
     const m = id.match(/^swisssurface3d-raster_(\d{4})_(\d+)-(\d+)$/);
     if (!m) continue;
@@ -201,7 +227,9 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
   }
 
-  // Write resolved cells to cache; unresolved cells get a permanent null.
+  // STAC succeeded. Write resolved cells to cache; unresolved cells in
+  // the queried window get a PERMANENT null (the catalogue has spoken:
+  // no published data for that km cell).
   for (let Ekm = EkmMin; Ekm <= EkmMax; Ekm++) {
     for (let Nkm = NkmMin; Nkm <= NkmMax; Nkm++) {
       const key = `${Ekm}/${Nkm}`;
@@ -214,32 +242,65 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
   }
   evictMap(_stacCellCache, SWISS_STAC_CELL_CACHE_MAX);
-  return cellBest;
+  return { ok: true, cellBest };
 }
+
+// Sentinel returned by getCOGUrlForCell() when STAC failed transiently
+// (network timeout, 5xx, queue prune). Distinguishes from `null`, which
+// means "STAC succeeded and there is no published data here". Callers
+// MUST treat this as "retry next render, do NOT poison area-neg cache".
+const SWISS_STAC_TRANSIENT = Object.freeze({ _swissStacTransient: true });
 
 async function getCOGUrlForCell(Ekm, Nkm) {
   const key = `${Ekm}/${Nkm}`;
   const cached = _stacCellGet(key);
   if (cached.hit) return cached.url;
 
+  // Snap to a fixed grid so any cell in the same block deterministically
+  // resolves through the SAME STAC query (super-window dedup). Without
+  // this, sibling cells fire overlapping 5×5 queries and saturate the
+  // queue → timeouts (see Apr 24 logs).
+  const G = SWISS_STAC_GRID;
+  const EkmGrid = Math.floor(Ekm / G) * G;
+  const NkmGrid = Math.floor(Nkm / G) * G;
+  const windowKey = `${EkmGrid}/${NkmGrid}`;
+
+  const readCellOrTransient = (windowOk) => {
+    const after = _stacCellGet(key);
+    if (after.hit) return after.url; // resolved (URL or permanent null)
+    // STAC didn't reach a verdict for this cell. If the window query
+    // succeeded but the cell wasn't in its bbox somehow, treat as null.
+    // Otherwise it's transient — let caller retry.
+    return windowOk ? null : SWISS_STAC_TRANSIENT;
+  };
+
+  // Per-cell inflight (legacy path).
   if (_stacCellInflight.has(key)) return _stacCellInflight.get(key);
 
-  // Cluster nearby cells into one STAC query (5×5 window centred on cell)
-  const win = 2;
-  const EkmMin = Ekm - win, EkmMax = Ekm + win;
-  const NkmMin = Nkm - win, NkmMax = Nkm + win;
+  // Per-window inflight: another cell in the same block already kicked
+  // off the STAC query. Wait for it then read this cell from cache.
+  const existingWindow = _stacWindowInflight.get(windowKey);
+  if (existingWindow) {
+    return existingWindow.then((res) => readCellOrTransient(res?.ok === true));
+  }
 
-  const promise = (async () => {
+  const windowPromise = (async () => {
     try {
-      await _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax);
+      return await _resolveSwissCellsViaStac(
+        EkmGrid, EkmGrid + G - 1,
+        NkmGrid, NkmGrid + G - 1,
+      );
     } catch (e) {
-      // Transient — short null TTL on this cell so we retry soon.
-      _stacCellSetNull(key, SWISS_NULL_TTL_TRANSIENT);
       if (DEBUG) console.warn('[swiss][stac] failed', e);
+      return { ok: false };
     }
-    const after = _stacCellGet(key);
-    return after.hit ? after.url : null;
-  })().finally(() => _stacCellInflight.delete(key));
+  })().finally(() => _stacWindowInflight.delete(windowKey));
+
+  _stacWindowInflight.set(windowKey, windowPromise);
+
+  const promise = windowPromise
+    .then((res) => readCellOrTransient(res?.ok === true))
+    .finally(() => _stacCellInflight.delete(key));
 
   _stacCellInflight.set(key, promise);
   return promise;
@@ -427,7 +488,7 @@ async function sampleSwissElevation(E, N) {
   const Ekm = Math.floor(E / 1000);
   const Nkm = Math.floor(N / 1000);
   const url = await getCOGUrlForCell(Ekm, Nkm);
-  if (!url) return NaN;
+  if (!url || url === SWISS_STAC_TRANSIENT) return NaN;
   const cog = await openSwissCOG(url);
   if (!cog) return NaN;
   return sampleSwissCOG(cog, 0, E, N, (lvl, idx) => getCOGInternalTile(cog, lvl, idx));

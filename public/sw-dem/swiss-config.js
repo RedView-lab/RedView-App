@@ -96,14 +96,20 @@ const SWISS_STAC_CELL_CACHE_MAX = 4096; // STAC item resolutions per LV95-km cel
 
 // COG concurrency limiter — separate semaphore from IGN so France traffic
 // never starves Swiss traffic and vice versa. CDN benchmark (Apr 24) shows
-// data.geo.admin.ch handles 24 streams at p95=2.5s, but in-browser we share
-// sockets with IGN/Mapbox/ortho. 16 is a measured sweet spot: enough
-// pipeline depth to amortise TCP RTT, low enough that bursts of 16 mercator
-// tiles after a viewport-pan don't deadlock the queue. Combined with the
-// surgical bilinear-tile prefetch in swiss-build.js (was 9 tiles/bucket,
-// now 1-4) total fetches per buildSwissTile dropped from ~80 to ~15.
-const SWISS_CONCURRENCY = 16;
+// data.geo.admin.ch handles 32 streams at p95=2.5s with 0 errors. Bumped
+// 16 → 24 (Apr 24 evening) once grid-aligned STAC dedup eliminated the
+// duplicate-window thrash that previously saturated the queue.
+const SWISS_CONCURRENCY = 24;
 const SWISS_QUEUE_MAX = 400;
+
+// STAC clustering window — every cell snaps to a fixed (Ekm/STAC_GRID,
+// Nkm/STAC_GRID) block so sibling cells deterministically join the SAME
+// inflight STAC query (super-window dedup, see swiss-fetcher.js).
+//   7×7 = 49 cells/query × ~2 published years/cell ≈ 100 features (well
+//   under STAC's 200-feature limit). Larger window → fewer STAC round-trips
+//   per Mercator tile (a z=12 tile spans ~100 cells → 2-3 STAC queries vs
+//   5-7 with a 5-cell window).
+const SWISS_STAC_GRID = 7;
 
 const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
 

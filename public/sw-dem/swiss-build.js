@@ -65,41 +65,57 @@ async function buildSwissTile(mercZ, mercX, mercY) {
 
   // Resolve all overlapping cells in parallel — one STAC query covers
   // many cells thanks to the windowed bbox lookup in getCOGUrlForCell().
-  const cellEntries = []; // { Ekm, Nkm, url, cog }
-  const stacPromises = [];
+  // Pipeline: kick off the COG header fetch as soon as a URL resolves,
+  // instead of waiting for the slowest STAC query before any header
+  // request is issued. Saves ~1 RTT per Mercator tile in the cold case.
+  const cellEntries = []; // { Ekm, Nkm, url, cog, stacTransient }
+  const cellReady = []; // promises that resolve once {url, cog?} are filled
   for (let Ekm = cells.EkmMin; Ekm <= cells.EkmMax; Ekm++) {
     for (let Nkm = cells.NkmMin; Nkm <= cells.NkmMax; Nkm++) {
-      const entry = { Ekm, Nkm, url: null, cog: null };
+      const entry = { Ekm, Nkm, url: null, cog: null, stacTransient: false };
       cellEntries.push(entry);
-      stacPromises.push(
-        getCOGUrlForCell(Ekm, Nkm).then((url) => { entry.url = url; }),
+      cellReady.push(
+        getCOGUrlForCell(Ekm, Nkm).then(async (url) => {
+          if (url === SWISS_STAC_TRANSIENT) {
+            entry.stacTransient = true;
+            return;
+          }
+          entry.url = url;
+          if (url) {
+            entry.cog = await openSwissCOG(url);
+          }
+        }),
       );
     }
   }
-  await Promise.all(stacPromises);
-
-  // Open headers in parallel for cells that resolved
-  const headerPromises = cellEntries
-    .filter((c) => c.url)
-    .map((c) => openSwissCOG(c.url).then((cog) => { c.cog = cog; }));
-  await Promise.all(headerPromises);
+  await Promise.all(cellReady);
+  const stacHadTransientFailure = cellEntries.some((c) => c.stacTransient);
 
   const resolvedUrlCount = cellEntries.filter((c) => c.url).length;
   const usableCells = cellEntries.filter((c) => c.cog);
   console.log(
-    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${resolvedUrlCount} cog-open=${usableCells.length} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
+    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${resolvedUrlCount} cog-open=${usableCells.length} stac-transient=${stacHadTransientFailure} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
     'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
   );
   if (usableCells.length === 0) {
-    if (resolvedUrlCount === 0) {
+    // Critical: only mark area-neg when STAC SUCCEEDED with zero data
+    // (catalogue truly says no published COG here). When STAC failed
+    // transiently we'd otherwise blackout a 2×2 Mercator block for 30
+    // min from a single timeout → visible as flat tiles next to raised
+    // Swiss LiDAR neighbours.
+    if (resolvedUrlCount === 0 && !stacHadTransientFailure) {
       swissAreaNegSet(mercZ, mercX, mercY);
-      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 no COG URLs, marking area-neg`);
+      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 STAC OK with 0 cells, marking area-neg`);
       return {
         blob: null, elevations: null, coverage: null,
         source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
       };
     }
-    console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 COG headers unavailable, keeping area live for retry`);
+    if (stacHadTransientFailure) {
+      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 STAC transient failure, keeping area live for retry`);
+    } else {
+      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 COG headers unavailable, keeping area live for retry`);
+    }
     return {
       blob: null, elevations: null, coverage: null,
       source: 'swiss-unavailable', allPermanentMissing: false, pendingFetches: null,
@@ -184,10 +200,14 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   }
 
   if (pixelsByTile.size === 0) {
-    swissAreaNegSet(mercZ, mercX, mercY);
+    // Same logic as above: if STAC was transient we may have missed the
+    // cells covering this tile — don't poison.
+    if (!stacHadTransientFailure) swissAreaNegSet(mercZ, mercX, mercY);
     return {
       blob: null, elevations: null, coverage: null,
-      source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
+      source: stacHadTransientFailure ? 'swiss-unavailable' : 'swiss-empty',
+      allPermanentMissing: !stacHadTransientFailure,
+      pendingFetches: null,
     };
   }
 
@@ -251,13 +271,21 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   await Promise.all(samplers);
 
   if (coveredCount === 0) {
-    swissAreaNegSet(mercZ, mercX, mercY);
+    // 0 covered pixels can also be a symptom of range-fetch timeouts
+    // (no decoded internal tiles → sampleSwissCOG returns NaN). Don't
+    // permanently poison a 2×2 block from a transient AWS hiccup.
+    const rangeLikelyTransient = prefetchCount > 0; // we tried but got nothing
+    if (!stacHadTransientFailure && !rangeLikelyTransient) {
+      swissAreaNegSet(mercZ, mercX, mercY);
+    }
     console.warn(
-      `[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 0 covered px (cells=${usableCells.length} tiles=${pixelsByTile.size} dropped=${droppedOutside}) ${(performance.now() - t0).toFixed(0)}ms`,
+      `[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 0 covered px (cells=${usableCells.length} tiles=${pixelsByTile.size} dropped=${droppedOutside} stacTransient=${stacHadTransientFailure} prefetch=${prefetchCount}) ${(performance.now() - t0).toFixed(0)}ms`,
     );
     return {
       blob: null, elevations: null, coverage: null,
-      source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
+      source: (stacHadTransientFailure || rangeLikelyTransient) ? 'swiss-unavailable' : 'swiss-empty',
+      allPermanentMissing: !(stacHadTransientFailure || rangeLikelyTransient),
+      pendingFetches: null,
     };
   }
 
