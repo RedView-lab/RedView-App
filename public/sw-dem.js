@@ -82,6 +82,7 @@ const OLD_CACHES = [
   'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27', 'dem-tiles-v28',
   'dem-tiles-v29',
   'dem-tiles-v30',
+  'dem-tiles-v31',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
