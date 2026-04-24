@@ -47,23 +47,20 @@ const SWISS_NATIVE_GSD = 0.5;       // metres per pixel
 const SWISS_KM_TILE_PX = 2000;      // 1 km / 0.5 m = 2000 pixels
 const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
 
-// Mercator zoom gate — broader than France but bounded.
+// Mercator zoom gate.
 //
-// The previous "55 m/px from z11+" experiment turned out to be the cause
-// of the Apr 24 regression where high-resolution 3D in CH stopped loading
-// entirely: a z=11 Mercator tile spans ~20×20 km of LV95, so each
-// buildSwissTile had to discover and open ~400 1-km COG cells. That
-// flooded SWISS_CONCURRENCY=16 with STAC + COG-header fetches and
-// starved every parallel z=14/15/16 build (their `[swiss][build] ✓`
-// completion log never fired — they sat queued behind hundreds of z=11
-// header opens until their own ranges hit the 20 s timeout).
+// Even with the TIFF pyramid (overviews 1 m / 2 m / 4 m / 8 m / 16 m) the
+// per-cell *discovery* cost remains: each 1 km LV95 cell needs one STAC
+// resolution and one COG header open. A z=11 Mercator tile spans ~20×20 km
+// = ~400 cells → 400 STAC queries (clustered into ~16 bbox calls of 5×5
+// each, still 16 round-trips) + ~400 header fetches. That's what blew up
+// the queue on Apr 24 even before the per-pixel fetch went out. So we
+// keep z=12 as the floor (a z=12 tile is ~10×10 = ~100 cells, which is
+// roughly the throughput SWISS_CONCURRENCY=16 can sustain in a few s).
 //
-// New target behavior: swissSURFACE3D engages at z=12+ across CH.
-// At lat 46° z=12 ≈ 26.6 m/px (under 30) → engages.
-// At lat 46° z=11 ≈ 53.2 m/px (over 30) → skipped, Mapbox 30 m fills.
-// A z=12 tile maps to ~10×10 = ~100 LV95 cells which is the practical
-// upper limit one buildSwissTile can fan out without queue starvation.
-// For deeper dezoom levels Mapbox Terrain-RGB is visually equivalent.
+// Inside that range, pickSwissCOGLevel() reads the matching overview
+// instead of native 0.5 m, so a z=12 tile resolves from L4 (8 m) and only
+// needs ~1 internal tile per cell.
 const SWISS_ENGAGE_MPP = 30;
 function shouldUseSwiss(mercZ, lat) {
   if (mercZ < SWISS_DEM_MINZOOM) return false;

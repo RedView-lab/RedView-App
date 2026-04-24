@@ -112,18 +112,40 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   const cellByKey = new Map();
   for (const c of usableCells) cellByKey.set(`${c.Ekm}/${c.Nkm}`, c);
 
+  const n = 1 << mercZ;
+
+  // ── LOD pick: choose the coarsest pyramid level whose pixelScale still
+  // matches the output resolution. Mirrors what we already do in France
+  // with shouldUseIGN(): don't spend bandwidth pulling 0.5 m native data
+  // when the rendered Mercator pixel is e.g. 8 m wide. swisstopo COGs ship
+  // 4-5 overview IFDs (1 m, 2 m, 4 m, 8 m, 16 m) so most dezooms can be
+  // served by a single overview tile per cell instead of dozens of native
+  // tiles. The chosen level is consistent across all cells of a Mercator
+  // tile (they share latitude → same mpp).
+  const tileCenterLat = mercatorYToLat((mercY + 0.5) / n);
+  const mppOut = (40075016.686 * Math.cos((tileCenterLat * Math.PI) / 180)) / (256 * n);
+  // Aim for a source pixel ~half the output pixel so bilinear keeps detail.
+  // Clamp to native (0.5 m) on the low end.
+  const mppTarget = Math.max(0.5, mppOut * 0.6);
+  // pickSwissCOGLevel is defined in swiss-cog.js; all cells share the same
+  // pyramid layout (swisstopo COGs are uniform).
+  const pickedLevels = new Map(); // cellKey → level descriptor
+  for (const c of usableCells) {
+    const lvlIdx = pickSwissCOGLevel(c.cog, mppTarget);
+    pickedLevels.set(`${c.Ekm}/${c.Nkm}`, { idx: lvlIdx, level: c.cog.levels[lvlIdx] });
+  }
+
   // Step 2 — resample
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
   const elevations = new Float32Array(totalPixels);
   const coverage = new Uint8Array(totalPixels);
-  const n = 1 << mercZ;
 
   // Pre-pass: compute LV95 (E, N) for every output pixel. Convert in row-major
   // order; per-pixel reprojection is ~50 ns (closed-form polynomial).
   // We then group pixel sample requests by *internal COG tile* so we batch
   // tile-decompression rather than re-decompressing the same tile per pixel.
   //
-  // pixelsByTile: Map<`${cellKey}#${tileIndex}`, Array<{ outIdx, E, N }>>
+  // pixelsByTile: Map<`${cellKey}#L${levelIdx}#${tileIndex}`, { cell, levelIdx, level, tileIndex, pts }>
   const pixelsByTile = new Map();
   let droppedOutside = 0;
 
@@ -136,22 +158,25 @@ async function buildSwissTile(mercZ, mercX, mercY) {
       const { E, N } = wgs84ToLV95(lng, lat);
       const Ekm = Math.floor(E / 1000);
       const Nkm = Math.floor(N / 1000);
-      const cell = cellByKey.get(`${Ekm}/${Nkm}`);
+      const cellKey = `${Ekm}/${Nkm}`;
+      const cell = cellByKey.get(cellKey);
       if (!cell) { droppedOutside++; continue; }
 
-      // Map pixel to internal COG tile of the chosen COG
+      // Map pixel to internal COG tile of the chosen pyramid LEVEL
       const cog = cell.cog;
-      const ipx = (E - cog.originE) / cog.pixelScaleX;
-      const ipy = (cog.originN - N) / cog.pixelScaleY;
-      const x0 = Math.max(0, Math.min(Math.floor(ipx), cog.width - 1));
-      const y0 = Math.max(0, Math.min(Math.floor(ipy), cog.height - 1));
-      const tx = (x0 / cog.tileW) | 0;
-      const ty = (y0 / cog.tileH) | 0;
-      const tileIndex = ty * cog.tilesAcross + tx;
-      const groupKey = `${cell.Ekm}/${cell.Nkm}#${tileIndex}`;
+      const picked = pickedLevels.get(cellKey);
+      const level = picked.level;
+      const ipx = (E - cog.originE) / level.pixelScaleX;
+      const ipy = (cog.originN - N) / level.pixelScaleY;
+      const x0 = Math.max(0, Math.min(Math.floor(ipx), level.width - 1));
+      const y0 = Math.max(0, Math.min(Math.floor(ipy), level.height - 1));
+      const tx = (x0 / level.tileW) | 0;
+      const ty = (y0 / level.tileH) | 0;
+      const tileIndex = ty * level.tilesAcross + tx;
+      const groupKey = `${cellKey}#L${picked.idx}#${tileIndex}`;
       let bucket = pixelsByTile.get(groupKey);
       if (!bucket) {
-        bucket = { cell, tileIndex, pts: [] };
+        bucket = { cell, levelIdx: picked.idx, level, tileIndex, pts: [] };
         pixelsByTile.set(groupKey, bucket);
       }
       bucket.pts.push({ outIdx: py * DEM_TILE_SIZE + px, E, N });
@@ -166,33 +191,20 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Compute the EXACT set of internal tiles needed for bilinear sampling.
-  //
-  // Previous implementation prefetched 3×3 = 9 tiles around every bucket's
-  // primary tile, which inflated fetch volume by ~6-8× (1000 buckets × 9
-  // tiles → 8000 entries before dedup). Even after dedup that put 200-300
-  // unique range fetches in flight per buildSwissTile call, and with 16
-  // mercator tiles requested simultaneously after a viewport pan that
-  // saturated the SWISS_CONCURRENCY=12 queue for 60+ seconds → individual
-  // ranges hit the 20 s timeout under sustained load (Apr 24 2026).
-  //
-  // The bilinear sampler in sampleSwissCOG() only ever reads pixels (x0,y0)
-  // (x0+1,y0) (x0,y0+1) (x0+1,y0+1). Walk every sampled pixel and add the
-  // (cog, tileIndex) of each of its 4 bilinear corners. Cache dedup at the
-  // _tileInflight layer collapses duplicates → the resulting set is the
-  // minimum sufficient for correct edge sampling.
+  // Compute the EXACT set of internal tiles needed for bilinear sampling at
+  // the chosen pyramid level. The bilinear sampler in sampleSwissCOG() only
+  // ever reads pixels (x0,y0) (x0+1,y0) (x0,y1) (x0+1,y1).
   const tilePrefetchSet = new Set();
-  for (const { cell, pts } of pixelsByTile.values()) {
+  for (const { cell, levelIdx, level, pts } of pixelsByTile.values()) {
     const cog = cell.cog;
-    const tilesAcross = cog.tilesAcross;
-    const tilesDown = cog.tilesDown;
-    const tileW = cog.tileW;
-    const tileH = cog.tileH;
-    const widthM1 = cog.width - 1;
-    const heightM1 = cog.height - 1;
+    const tilesAcross = level.tilesAcross;
+    const tileW = level.tileW;
+    const tileH = level.tileH;
+    const widthM1 = level.width - 1;
+    const heightM1 = level.height - 1;
     for (const { E, N } of pts) {
-      const ipxF = (E - cog.originE) / cog.pixelScaleX;
-      const ipyF = (cog.originN - N) / cog.pixelScaleY;
+      const ipxF = (E - cog.originE) / level.pixelScaleX;
+      const ipyF = (cog.originN - N) / level.pixelScaleY;
       const x0 = Math.max(0, Math.min(Math.floor(ipxF), widthM1));
       const y0 = Math.max(0, Math.min(Math.floor(ipyF), heightM1));
       const x1 = Math.min(x0 + 1, widthM1);
@@ -201,38 +213,33 @@ async function buildSwissTile(mercZ, mercX, mercY) {
       const tx1 = (x1 / tileW) | 0;
       const ty0 = (y0 / tileH) | 0;
       const ty1 = (y1 / tileH) | 0;
-      // Add the (up to 4) tile indices touched by the bilinear stencil.
-      // Most pixels are interior → tx0===tx1 && ty0===ty1 → just 1 tile.
-      tilePrefetchSet.add(`${cog.url}|${ty0 * tilesAcross + tx0}`);
-      if (tx1 !== tx0) tilePrefetchSet.add(`${cog.url}|${ty0 * tilesAcross + tx1}`);
-      if (ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${ty1 * tilesAcross + tx0}`);
-      if (tx1 !== tx0 && ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${ty1 * tilesAcross + tx1}`);
-      // Bounds-safety: tilesAcross/tilesDown clamp via Math.min on x1/y1 above.
-      // Defensive guard if tilesAcross math is off:
-      void tilesDown;
+      tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty0 * tilesAcross + tx0}`);
+      if (tx1 !== tx0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty0 * tilesAcross + tx1}`);
+      if (ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty1 * tilesAcross + tx0}`);
+      if (tx1 !== tx0 && ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty1 * tilesAcross + tx1}`);
     }
   }
   // Fan out tile fetches with Promise.all — they share swiss-fetcher's
   // concurrency limiter so this never exceeds SWISS_CONCURRENCY in flight.
   const prefetchCount = tilePrefetchSet.size;
   await Promise.all(Array.from(tilePrefetchSet).map((k) => {
-    const sep = k.indexOf('|');
-    const url = k.substring(0, sep);
-    const tileIndex = parseInt(k.substring(sep + 1), 10);
-    // Find a COG with this URL in usableCells
+    const parts = k.split('|');
+    const url = parts[0];
+    const levelIdx = parseInt(parts[1], 10);
+    const tileIndex = parseInt(parts[2], 10);
     const cog = usableCells.find((c) => c.cog.url === url)?.cog;
     if (!cog) return null;
-    return getCOGInternalTile(cog, tileIndex);
+    return getCOGInternalTile(cog, levelIdx, tileIndex);
   }));
 
   // Step 3 — sample every pixel (now using cached internal tiles)
   let coveredCount = 0;
   const samplers = [];
-  for (const { cell, pts } of pixelsByTile.values()) {
+  for (const { cell, levelIdx, pts } of pixelsByTile.values()) {
     const cog = cell.cog;
     samplers.push((async () => {
       for (const { outIdx, E, N } of pts) {
-        const v = await sampleSwissCOG(cog, E, N, (idx) => getCOGInternalTile(cog, idx));
+        const v = await sampleSwissCOG(cog, levelIdx, E, N, (lvl, idx) => getCOGInternalTile(cog, lvl, idx));
         if (Number.isFinite(v)) {
           elevations[outIdx] = v;
           coverage[outIdx] = 1;
@@ -260,8 +267,12 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   {
     const dt = (performance.now() - t0).toFixed(0);
     const covPct = (coveredCount / totalPixels * 100).toFixed(1);
+    // Summarise picked levels for diagnostics
+    const lvlSet = new Set();
+    for (const v of pickedLevels.values()) lvlSet.add(v.idx);
+    const lvlSummary = Array.from(lvlSet).sort().map((i) => `L${i}@${usableCells[0].cog.levels[i].pixelScaleX.toFixed(1)}m`).join(',');
     console.log(
-      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, prefetched=${prefetchCount}, ${dt}ms`,
+      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, prefetched=${prefetchCount}, levels=${lvlSummary} (out=${mppOut.toFixed(1)}m), ${dt}ms`,
       'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
     );
   }

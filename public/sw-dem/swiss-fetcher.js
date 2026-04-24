@@ -250,7 +250,7 @@ async function getCOGUrlForCell(Ekm, Nkm) {
 const _cogHeaderCache = new Map();
 const _cogHeaderInflight = new Map();
 
-const SWISS_HEADER_INITIAL_BYTES = 32_768;
+const SWISS_HEADER_INITIAL_BYTES = 131_072; // 128 KB — fits IFD0 + 4-5 overview IFDs in one round-trip
 const SWISS_HEADER_MAX_BYTES = 524_288;
 
 function _headerGet(url) {
@@ -356,7 +356,7 @@ async function openSwissCOG(url) {
       return null;
     }
     console.log(
-      `[swiss][header] %c OK %c ${url.split('/').pop()} \u2192 ${cog.width}\u00d7${cog.height} px, tile ${cog.tileW}\u00d7${cog.tileH}, comp=${cog.compression}, origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
+      `[swiss][header] %c OK %c ${url.split('/').pop()} \u2192 ${cog.levels.length} levels (${cog.levels.map((l) => `${l.width}\u00d7${l.height}@${l.pixelScaleX.toFixed(2)}m`).join(', ')}), origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
       'background:#4CAF50;color:#fff;padding:1px 4px;border-radius:2px', '',
     );
     _cogHeaderCache.set(url, cog);
@@ -389,15 +389,15 @@ function _tileSetNull(key, ttl) {
   evictMap(_tileCache, SWISS_TILE_CACHE_MAX);
 }
 
-async function getCOGInternalTile(cog, tileIndex) {
-  const key = `${cog.url}#${tileIndex}`;
+async function getCOGInternalTile(cog, levelIdx, tileIndex) {
+  const key = `${cog.url}#L${levelIdx}#${tileIndex}`;
   const cached = _tileGet(key);
   if (cached.hit) return cached.data;
   if (_tileInflight.has(key)) return _tileInflight.get(key);
 
   const promise = (async () => {
     try {
-      const data = await fetchAndDecodeTile(cog, tileIndex, swissRangeFetch);
+      const data = await fetchAndDecodeTile(cog, levelIdx, tileIndex, swissRangeFetch);
       if (!data) {
         _tileSetNull(key, SWISS_NULL_TTL_TRANSIENT);
         return null;
@@ -416,8 +416,8 @@ async function getCOGInternalTile(cog, tileIndex) {
   return promise;
 }
 
-// High-level helper: given an LV95 point, sample elevation. Returns NaN if
-// no data (cell unsurveyed, COG unreachable, etc.).
+// High-level helper: given an LV95 point, sample elevation at native
+// resolution (level 0). Returns NaN if no data.
 async function sampleSwissElevation(E, N) {
   if (
     E < SWISS_LV95_BOUNDS.Emin || E > SWISS_LV95_BOUNDS.Emax ||
@@ -430,5 +430,5 @@ async function sampleSwissElevation(E, N) {
   if (!url) return NaN;
   const cog = await openSwissCOG(url);
   if (!cog) return NaN;
-  return sampleSwissCOG(cog, E, N, (idx) => getCOGInternalTile(cog, idx));
+  return sampleSwissCOG(cog, 0, E, N, (lvl, idx) => getCOGInternalTile(cog, lvl, idx));
 }
