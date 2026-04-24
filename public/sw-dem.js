@@ -355,19 +355,51 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // Used to decide who *wins* between Swiss and IGN when both could run.
     const tilePredominantlyFrench = franceClass === 'inside' || tileCenterInFrancePoly;
 
+    // ── Stricter "tile actually overlaps France polygon" test.
+    //
+    // classifyDemTile() promotes any z≥12 tile inside the FRANCE_BOUNDS
+    // bbox (-5.5..10.0 lng) to 'border' as a safety-net for Mont-Blanc /
+    // Pyrenees summit tiles where 6×6 polygon sampling can miss a French
+    // sliver. Side-effect: tiles deep inside Switzerland (Sion at lng 7.3
+    // is ~50 km east of France) ALSO get franceClass='border', so
+    // tileIsInFrance flips true, raceIGNBorderTile fires, IGN burns the
+    // request slot pool serially while Swiss STAC times out at 8 s.
+    //
+    // tileTrulyTouchesFrance: explicit polygon test on the tile centre
+    // and 4 mid-edge points. If all 5 are outside France polygon AND
+    // we're firmly inside CH, IGN has zero plausible data for the tile
+    // — skip the race AND skip the post-Swiss IGN fallback entirely so
+    // Swiss gets all the bandwidth.
+    let tileTrulyTouchesFrance = tileIsInFrance;
+    if (tileIsInFrance && franceClass === 'border' && inSwitzerland) {
+      // franceClass=='border' implies ensureFrancePoly() succeeded above,
+      // so pointInFrance() is safe to call here.
+      const cLng = (tileBounds.west + tileBounds.east) / 2;
+      const cLat = (tileBounds.north + tileBounds.south) / 2;
+      tileTrulyTouchesFrance =
+        tileCenterInFrancePoly ||
+        pointInFrance(tileBounds.west, cLat) ||
+        pointInFrance(tileBounds.east, cLat) ||
+        pointInFrance(cLng, tileBounds.north) ||
+        pointInFrance(cLng, tileBounds.south);
+    }
+
     // ── Switzerland branch — runs when the tile is over the Swiss LV95
     // footprint AND not predominantly French. Border tiles where the
     // French polygon claims the centre still go to IGN.
     let swissHadSomeData = false;
     const considerSwiss = inSwitzerland && !tilePredominantlyFrench && shouldUseSwiss(z, tileCenterLat);
-    const raceIGNBorderTile = considerSwiss && tileIsInFrance;
+    // Race IGN in parallel only for tiles that genuinely straddle the
+    // French border polygon — not for every CH tile that bbox-overlaps
+    // FRANCE_BOUNDS. This frees the IGN/network queue for Swiss STAC.
+    const raceIGNBorderTile = considerSwiss && tileTrulyTouchesFrance;
     let ignResultPromise = null;
     if (raceIGNBorderTile) {
       ignResultPromise = buildIGNTile(z, x, y, franceClass);
     }
     if (z >= 12) {
       console.log(
-        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} raceIGN=${raceIGNBorderTile}`,
+        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} trulyFR=${tileTrulyTouchesFrance} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} raceIGN=${raceIGNBorderTile}`,
         'background:#444;color:#fff;padding:1px 4px;border-radius:2px', '',
       );
     }
@@ -392,7 +424,11 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       }
     }
 
-    if (!pngBlob && tileIsInFrance) {
+    // Use tileTrulyTouchesFrance (real polygon overlap) — not the bbox-promoted
+    // tileIsInFrance — to gate IGN. Tiles deep inside CH (e.g. Sion) bbox-overlap
+    // FRANCE_BOUNDS but have zero IGN data; running IGN there only burns the
+    // request slot pool serially while Swiss STAC starves and times out.
+    if (!pngBlob && tileTrulyTouchesFrance) {
       const ignResult = ignResultPromise
         ? await ignResultPromise
         : await buildIGNTile(z, x, y, franceClass);
@@ -428,7 +464,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // HIGHRES covers all of France at ~5 m resolution — 6× better than
     // Mapbox 30 m. Only fires when MNS had no data; when MNS returned
     // partial data the composite path above already handled it.
-    if (!pngBlob && tileIsInFrance && !ignHadSomeData) {
+    if (!pngBlob && tileTrulyTouchesFrance && !ignHadSomeData) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
         if (highresResult.elevations) {
@@ -484,8 +520,9 @@ async function handleDemRequest(_request, z, x, y, _depth) {
 
     // 3c. Same LiDAR-preserving path for Switzerland: at high zoom we never
     // want to fall through to a server-overzoomed Mapbox tile when we have
-    // a parent COG-derived blob in our own cache.
-    if (!pngBlob && inSwitzerland && !tileIsInFrance && z > MAPBOX_DEM_MAXZOOM) {
+    // a parent COG-derived blob in our own cache. Use tileTrulyTouchesFrance
+    // (not bbox-promoted tileIsInFrance) so deep-CH tiles still hit this path.
+    if (!pngBlob && inSwitzerland && !tileTrulyTouchesFrance && z > MAPBOX_DEM_MAXZOOM) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -499,8 +536,8 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // coverage, Mapbox overzoomed 30 m is better than nothing.
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
-        (tileIsInFrance && ignHadSomeData) ||
-        (inSwitzerland && !tileIsInFrance && swissHadSomeData)
+        (tileTrulyTouchesFrance && ignHadSomeData) ||
+        (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData)
       );
     if (!pngBlob && mapboxToken && !skipMapboxHighZoomLiDAR) {
       pngBlob = await fetchMapboxTile(z, x, y);

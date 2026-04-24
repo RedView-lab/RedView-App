@@ -61,8 +61,9 @@ function shouldUseSwiss(mercZ, lat) {
 }
 
 // HTTP timeouts — tuned for AWS-hosted COG range requests (typically <300 ms
-// per request once the COG header is cached).
-const SWISS_STAC_FETCH_TIMEOUT_MS = 8_000;
+// per request once the COG header is cached). STAC bumped to 15 s because
+// data.geo.admin.ch occasionally takes 8-12 s under load (observed Apr 24).
+const SWISS_STAC_FETCH_TIMEOUT_MS = 15_000;
 const SWISS_COG_HEADER_TIMEOUT_MS = 6_000;
 const SWISS_COG_RANGE_TIMEOUT_MS  = 8_000;
 
