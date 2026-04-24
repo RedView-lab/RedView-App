@@ -58,8 +58,17 @@ export class LidarManager {
   }
 
   async removeTile(coord: TileCoord): Promise<void> {
-    await deleteTile(coord);
-    this.emit({ type: 'tileRemoved', tileCoord: coord });
+    try {
+      await deleteTile(coord);
+      this.emit({ type: 'tileRemoved', tileCoord: coord });
+    } catch (err: any) {
+      console.error(`[LiDAR] Failed to delete tile (${coord.xKm}, ${coord.yKm}):`, err);
+      const hint =
+        err && err.name === 'NoModificationAllowedError'
+          ? 'Fichier en cours d’utilisation (ferme le viewer 3D et réessaie).'
+          : err?.message ?? 'Suppression impossible';
+      this.emit({ type: 'error', tileCoord: coord, error: hint });
+    }
   }
 
   isTileLoading(coord: TileCoord): boolean {

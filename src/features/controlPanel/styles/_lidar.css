@@ -34,6 +34,42 @@
   text-overflow: ellipsis;
 }
 
+.rvc-lidar__label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+}
+
+.rvc-lidar__label-text.is-editable {
+  cursor: text;
+}
+
+.rvc-lidar__label-text.is-editable:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rvc-lidar__label-input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--rvc-text);
+  font: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin: -1px -4px;
+  outline: none;
+}
+
+.rvc-lidar__label-input:focus {
+  border-color: rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .rvc-lidar__actions {
   display: flex;
   align-items: center;

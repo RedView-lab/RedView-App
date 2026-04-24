@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { IconCube, IconExpand, IconExternalLink, IconTrash } from '../icons';
 import type { DownloadProgress } from '@/features/lidar/types';
@@ -13,6 +14,7 @@ interface Props {
   onTileToggle: ControlPanelHandlers['onLidarTileToggle'];
   onTileOpen: ControlPanelHandlers['onLidarTileOpen'];
   onTileDelete: ControlPanelHandlers['onLidarTileDelete'];
+  onTileRename?: ControlPanelHandlers['onLidarTileRename'];
   onDownload: ControlPanelHandlers['onLidarTileDownload'];
 }
 
@@ -25,8 +27,35 @@ export function LidarTilesSection({
   onOpenChange,
   onTileOpen,
   onTileDelete,
+  onTileRename,
   onDownload,
 }: Props) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, [editingId]);
+
+  const startEdit = (id: string, currentLabel: string) => {
+    if (!onTileRename) return;
+    setEditingId(id);
+    setDraft(currentLabel);
+  };
+
+  const commit = (id: string) => {
+    const trimmed = draft.trim();
+    if (trimmed && onTileRename) onTileRename(id, trimmed);
+    setEditingId(null);
+  };
+
+  const cancel = () => setEditingId(null);
   const progressPercent = progress?.totalBytes
     ? Math.min(100, (progress.bytesDownloaded / progress.totalBytes) * 100)
     : 0;
@@ -58,34 +87,67 @@ export function LidarTilesSection({
       onOpenChange={onOpenChange}
     >
       <div className="rvc-lidar__list">
-        {tiles.map((tile) => (
-          <div key={tile.id} className="rvc-lidar__row">
-            <div className="rvc-lidar__label" title={tile.label}>
-              <IconCube size={12} />
-              <span>{tile.label}</span>
+        {tiles.map((tile) => {
+          const isEditing = editingId === tile.id;
+          return (
+            <div key={tile.id} className="rvc-lidar__row">
+              <div className="rvc-lidar__label" title={tile.label}>
+                <IconCube size={12} />
+                {isEditing ? (
+                  <input
+                    ref={inputRef}
+                    className="rvc-lidar__label-input"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => commit(tile.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commit(tile.id);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancel();
+                      }
+                    }}
+                  />
+                ) : (
+                  <span
+                    className={
+                      onTileRename
+                        ? 'rvc-lidar__label-text is-editable'
+                        : 'rvc-lidar__label-text'
+                    }
+                    onClick={() => startEdit(tile.id, tile.label)}
+                    title={onTileRename ? 'Cliquer pour renommer' : tile.label}
+                  >
+                    {tile.label}
+                  </span>
+                )}
+              </div>
+              <div className="rvc-lidar__actions">
+                <button
+                  type="button"
+                  className="rvc-lidar__action-btn"
+                  onClick={() => onTileOpen?.(tile.id)}
+                  aria-label="Ouvrir dans le viewer 3D"
+                  title="Ouvrir dans le viewer 3D LIDAR"
+                >
+                  <IconExternalLink size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="rvc-lidar__action-btn"
+                  onClick={() => onTileDelete?.(tile.id)}
+                  aria-label="Supprimer la tuile"
+                  title="Supprimer la tuile"
+                >
+                  <IconTrash size={15} />
+                </button>
+              </div>
             </div>
-            <div className="rvc-lidar__actions">
-              <button
-                type="button"
-                className="rvc-lidar__action-btn"
-                onClick={() => onTileOpen?.(tile.id)}
-                aria-label="Ouvrir dans le viewer 3D"
-                title="Ouvrir dans le viewer 3D LIDAR"
-              >
-                <IconExternalLink size={14} />
-              </button>
-              <button
-                type="button"
-                className="rvc-lidar__action-btn"
-                onClick={() => onTileDelete?.(tile.id)}
-                aria-label="Supprimer la tuile"
-                title="Supprimer la tuile"
-              >
-                <IconTrash size={15} />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <button
         type="button"

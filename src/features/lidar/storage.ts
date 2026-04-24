@@ -45,12 +45,21 @@ export async function hasTile(coord: TileCoord): Promise<boolean> {
 }
 
 export async function deleteTile(coord: TileCoord): Promise<void> {
+  const dir = await getLidarDir();
+  const fileName = tileKey(coord);
+  // Best-effort delete of the colorized companion cache (no error if absent).
+  const companion = colorizedKey(fileName);
   try {
-    const dir = await getLidarDir();
-    const fileName = tileKey(coord);
-    await dir.removeEntry(fileName);
+    await dir.removeEntry(companion);
   } catch {
-    // File already deleted or doesn't exist
+    /* no companion cached, ignore */
+  }
+  try {
+    await dir.removeEntry(fileName);
+  } catch (err: any) {
+    // NotFoundError = already gone, treat as success.
+    if (err && err.name === 'NotFoundError') return;
+    throw err;
   }
 }
 

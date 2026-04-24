@@ -57,11 +57,6 @@ function App() {
       })
   }, [session?.user?.id])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    window.location.href = landingUrl
-  }
-
   if (loading || isSubscribed === null) {
     return (
       <div className="loading">
@@ -86,7 +81,6 @@ function App() {
   return (
     <Dashboard
       email={session.user.email || 'unknown'}
-      onLogout={handleLogout}
       initialProjectId={initialProjectId}
     />
   )

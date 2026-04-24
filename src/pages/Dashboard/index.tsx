@@ -30,7 +30,6 @@ import { formatDisplayName } from './utils';
 
 interface DashboardProps {
   email: string;
-  onLogout: () => void;
   initialProjectId?: string | null;
 }
 
@@ -41,7 +40,6 @@ const OVERLAY_LABEL: Record<Exclude<OverlayStatusId, 'map'>, string> = {
 
 export default function Dashboard({
   email,
-  onLogout,
   initialProjectId,
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
@@ -311,26 +309,6 @@ export default function Dashboard({
     filter: layout.rightPrimaryPanelHeight > 80 ? 'saturate(1)' : 'saturate(0.96)',
   };
 
-  const logoutStyle: CSSProperties = {
-    position: 'absolute',
-    top: 12,
-    right: panelWidth + PANEL_PADDING * 2 + 12,
-    zIndex: 20,
-    background: 'rgba(17,17,17,0.7)',
-    color: 'rgba(255,255,255,0.8)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: 6,
-    padding: '6px 14px',
-    fontSize: 12,
-    cursor: 'pointer',
-    backdropFilter: 'blur(8px)',
-    opacity: isMapFocusMode ? 0 : 1,
-    transform: isMapFocusMode ? 'translate3d(0, -14px, 0)' : 'translate3d(0, 0, 0)',
-    pointerEvents: isMapFocusMode ? 'none' : 'auto',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity',
-  };
-
   const displayName = formatDisplayName(email);
 
   return (
@@ -501,10 +479,6 @@ export default function Dashboard({
                   <CenterPanel />
                 </div>
               ) : null}
-
-              <button onClick={onLogout} style={logoutStyle}>
-                Logout
-              </button>
 
               <div style={rightPanelStyle}>
                 <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>

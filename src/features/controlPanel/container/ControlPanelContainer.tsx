@@ -8,6 +8,7 @@ import type {
 
 import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
+import { loadLidarTileLabels, setLidarTileLabel } from '@/features/lidar/tileLabels';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
 
@@ -99,6 +100,9 @@ export function ControlPanelContainer({
   const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>(
     () => initialControlPanel.lidarTilesHidden ?? {},
   );
+  const [customLabels, setCustomLabels] = useState<Record<string, string>>(
+    () => loadLidarTileLabels(),
+  );
   const [lidarDownloadProgress, setLidarDownloadProgress] = useState<DownloadProgress | null>(null);
   const [lidarDownloadError, setLidarDownloadError] = useState<string | null>(null);
 
@@ -136,15 +140,18 @@ export function ControlPanelContainer({
   }, [hiddenTiles, updateProjectControlPanel]);
 
   const lidarTiles = useMemo(
-    () => cachedTiles.map((info) => ({
-      id: tileKey(info.coord),
-      label: formatLidarTileLabel(info),
-      sizeMb: Math.round(info.sizeBytes / (1024 * 1024)),
-      year: new Date(info.cachedAt).getFullYear(),
-      source: 'LIDAR' as const,
-      visible: !hiddenTiles[tileKey(info.coord)],
-    })),
-    [cachedTiles, hiddenTiles],
+    () => cachedTiles.map((info) => {
+      const id = tileKey(info.coord);
+      return {
+        id,
+        label: customLabels[id] ?? formatLidarTileLabel(info),
+        sizeMb: Math.round(info.sizeBytes / (1024 * 1024)),
+        year: new Date(info.cachedAt).getFullYear(),
+        source: 'LIDAR' as const,
+        visible: !hiddenTiles[id],
+      };
+    }),
+    [cachedTiles, customLabels, hiddenTiles],
   );
 
   const projectItineraries = projectStore?.project.itineraries ?? [];
@@ -243,6 +250,10 @@ export function ControlPanelContainer({
       onLidarTileDelete={(id) => {
         const info = cachedTiles.find((tile) => tileKey(tile.coord) === id);
         if (info) void lidarManager.removeTile(info.coord);
+      }}
+      onLidarTileRename={(id, name) => {
+        const next = setLidarTileLabel(id, name);
+        setCustomLabels(next);
       }}
       onLidarTileDownload={() => {
         onToggleLidarDownloadMode?.();

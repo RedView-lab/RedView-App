@@ -30,6 +30,7 @@ export function ControlPanel({
   onBasemapAdd,
   onLidarTileToggle,
   onLidarTileDelete,
+  onLidarTileRename,
   onLidarTileDownload,
   onLidarTileOpen,
   onLabelsEnabledChange,
@@ -112,6 +113,7 @@ export function ControlPanel({
         onTileToggle={onLidarTileToggle}
         onTileOpen={onLidarTileOpen}
         onTileDelete={onLidarTileDelete}
+        onTileRename={onLidarTileRename}
         onDownload={onLidarTileDownload}
       />
 
