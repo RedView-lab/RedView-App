@@ -32,6 +32,10 @@ export interface TerrainMeshWebGL {
   extent: number;
   gridWidth: number;
   gridHeight: number;
+  /** Per-cell ground height in metres, row-major SOUTH→NORTH. Same data the
+   *  snow pipeline (runSnowPipeline) needs as input — we transfer it back
+   *  so the WebGL viewer can light up snow without re-parsing the LAZ. */
+  heightGrid: Float32Array;
 }
 
 type WorkerInput = {
@@ -79,7 +83,7 @@ scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
 
     post(
       { type: 'done', mesh },
-      [mesh.vertices.buffer, mesh.indices.buffer],
+      [mesh.vertices.buffer, mesh.indices.buffer, mesh.heightGrid.buffer],
     );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -236,6 +240,7 @@ function buildTerrain(
     extent,
     gridWidth: gridW,
     gridHeight: gridH,
+    heightGrid: heights,
   };
 }
 

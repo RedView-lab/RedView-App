@@ -17,38 +17,76 @@ uniform mat4 u_viewProj;
 
 out vec3 v_normal;
 out vec2 v_uv;
+out vec3 v_worldPos;
 
 void main() {
   v_normal = a_normal;
   v_uv = a_uv;
+  v_worldPos = a_pos;
   gl_Position = u_viewProj * vec4(a_pos, 1.0);
 }
 `;
 
 const FRAGMENT_SHADER = /* glsl */ `#version 300 es
 precision highp float;
+precision highp sampler2D;
 
 in vec3 v_normal;
 in vec2 v_uv;
+in vec3 v_worldPos;
 
 uniform sampler2D u_ortho;
-uniform vec3 u_sunDir;       // already normalised, points FROM surface TO sun
-uniform vec3 u_skyColor;     // ambient tint
+uniform sampler2D u_snow;          // R32F snow depth in cm (NEAREST sampling)
+uniform vec3 u_sunDir;             // already normalised, points FROM surface TO sun
+uniform vec3 u_skyColor;           // ambient tint
 uniform float u_exposure;
+uniform int u_snowMode;            // 0=off, 1=cover, 2=thickness
+uniform vec2 u_snowOrigin;         // (originX, originZ) in renderer space
+uniform vec2 u_snowScale;          // (scaleX,  scaleZ)  in renderer space
 
 out vec4 fragColor;
 
 vec3 srgbToLinear(vec3 c) {
   return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
 }
-
 vec3 linearToSrgb(vec3 c) {
   return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
 }
 
+float sampleSnowDepthCm() {
+  if (u_snowMode == 0) return 0.0;
+  vec2 uv = (v_worldPos.xz - u_snowOrigin) / u_snowScale;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return 0.0;
+  ivec2 dims = textureSize(u_snow, 0);
+  ivec2 px = clamp(ivec2(uv * vec2(dims)), ivec2(0), dims - ivec2(1));
+  return texelFetch(u_snow, px, 0).r;
+}
+
+vec3 snowThicknessColor(float depthCm) {
+  // Same viridis-ish ramp as the WebGPU pipeline
+  float t = clamp(depthCm / 200.0, 0.0, 1.0);
+  float r = clamp(1.6 * t - 0.4, 0.0, 1.0);
+  float g = clamp(1.0 - abs(t - 0.55) * 2.2, 0.0, 1.0);
+  float b = clamp(1.0 - t * 1.4 + 0.15, 0.0, 1.0);
+  return vec3(r, g, b);
+}
+
+vec3 applySnow(vec3 baseSrgb) {
+  if (u_snowMode == 0) return baseSrgb;
+  float depth = sampleSnowDepthCm();
+  if (u_snowMode == 2) {
+    if (depth <= 0.5) return baseSrgb * 0.35;
+    return snowThicknessColor(depth);
+  }
+  // cover
+  float t = smoothstep(0.0, 30.0, depth) * 0.93;
+  return mix(baseSrgb, vec3(0.97, 0.98, 1.0), t);
+}
+
 void main() {
   vec3 base = texture(u_ortho, v_uv).rgb;
-  vec3 baseLin = srgbToLinear(base);
+  vec3 tinted = applySnow(base);
+  vec3 baseLin = srgbToLinear(tinted);
 
   vec3 N = normalize(v_normal);
   float ndotl = clamp(dot(N, u_sunDir), 0.0, 1.0);
@@ -83,12 +121,22 @@ export class WebGLTerrainRenderer {
   private vbo!: WebGLBuffer;
   private ibo!: WebGLBuffer;
   private texture: WebGLTexture | null = null;
+  private snowTexture: WebGLTexture | null = null;
+  private snowOriginX = 0;
+  private snowOriginZ = 0;
+  private snowScaleX = 1;
+  private snowScaleZ = 1;
+  private snowMode: 0 | 1 | 2 = 0;
 
   private uViewProj!: WebGLUniformLocation;
   private uOrtho!: WebGLUniformLocation;
+  private uSnow!: WebGLUniformLocation;
   private uSunDir!: WebGLUniformLocation;
   private uSkyColor!: WebGLUniformLocation;
   private uExposure!: WebGLUniformLocation;
+  private uSnowMode!: WebGLUniformLocation;
+  private uSnowOrigin!: WebGLUniformLocation;
+  private uSnowScale!: WebGLUniformLocation;
 
   private indexCount = 0;
   private uses32BitIndex = true;
@@ -156,11 +204,27 @@ export class WebGLTerrainRenderer {
     gl.deleteShader(fs);
     this.program = prog;
 
-    this.uViewProj = mustLoc(gl, prog, 'u_viewProj');
-    this.uOrtho    = mustLoc(gl, prog, 'u_ortho');
-    this.uSunDir   = mustLoc(gl, prog, 'u_sunDir');
-    this.uSkyColor = mustLoc(gl, prog, 'u_skyColor');
-    this.uExposure = mustLoc(gl, prog, 'u_exposure');
+    this.uViewProj   = mustLoc(gl, prog, 'u_viewProj');
+    this.uOrtho      = mustLoc(gl, prog, 'u_ortho');
+    this.uSnow       = mustLoc(gl, prog, 'u_snow');
+    this.uSunDir     = mustLoc(gl, prog, 'u_sunDir');
+    this.uSkyColor   = mustLoc(gl, prog, 'u_skyColor');
+    this.uExposure   = mustLoc(gl, prog, 'u_exposure');
+    this.uSnowMode   = mustLoc(gl, prog, 'u_snowMode');
+    this.uSnowOrigin = mustLoc(gl, prog, 'u_snowOrigin');
+    this.uSnowScale  = mustLoc(gl, prog, 'u_snowScale');
+
+    // 1×1 placeholder snow texture so the sampler is always bound; replaced
+    // by setSnow(). Keeps the program valid even when the user never
+    // toggles the snow button.
+    this.snowTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.snowTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R32F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([0]));
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
   }
 
   private createBuffers() {
@@ -278,6 +342,14 @@ export class WebGLTerrainRenderer {
       gl.bindTexture(gl.TEXTURE_2D, this.texture);
       gl.uniform1i(this.uOrtho, 0);
     }
+    if (this.snowTexture) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, this.snowTexture);
+      gl.uniform1i(this.uSnow, 1);
+    }
+    gl.uniform1i(this.uSnowMode, this.snowMode);
+    gl.uniform2f(this.uSnowOrigin, this.snowOriginX, this.snowOriginZ);
+    gl.uniform2f(this.uSnowScale, this.snowScaleX, this.snowScaleZ);
 
     gl.bindVertexArray(this.vao);
     gl.drawElements(
@@ -295,7 +367,46 @@ export class WebGLTerrainRenderer {
     gl.deleteBuffer(this.ibo);
     gl.deleteVertexArray(this.vao);
     if (this.texture) gl.deleteTexture(this.texture);
+    if (this.snowTexture) gl.deleteTexture(this.snowTexture);
     gl.deleteProgram(this.program);
+  }
+
+  /**
+   * Upload a snow-depth field (cm, row-major north→south already flipped by
+   * the caller to match the V axis). Origin/scale are in renderer space
+   * (centred X-east / Z-south, matches v_worldPos.xz).
+   */
+  setSnow(params: {
+    data: Float32Array;
+    width: number;
+    height: number;
+    originX: number;
+    originZ: number;
+    scaleX: number;
+    scaleZ: number;
+  }): void {
+    const gl = this.gl;
+    if (!this.snowTexture) this.snowTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.snowTexture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.R32F,
+      params.width, params.height, 0,
+      gl.RED, gl.FLOAT, params.data,
+    );
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    this.snowOriginX = params.originX;
+    this.snowOriginZ = params.originZ;
+    this.snowScaleX = params.scaleX;
+    this.snowScaleZ = params.scaleZ;
+  }
+
+  setSnowMode(mode: 0 | 1 | 2): void {
+    this.snowMode = mode;
   }
 }
 

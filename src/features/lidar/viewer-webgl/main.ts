@@ -234,6 +234,98 @@ export async function runWebGLFallback(
   setStatus('Prêt — mode WebGL HD', 100);
   setTimeout(() => overlay.classList.add('hidden'), 250);
 
+  // ---------------- SNOW ❄ ----------------
+  // Same UX as the WebGPU viewer: bottom-of-screen button cycles
+  // off → cover → thickness. First non-off click triggers a one-shot
+  // AROME fetch + redistribution worker. Result is uploaded as an R32F
+  // texture sampled in the fragment shader.
+  const snowBtn = document.getElementById('snow-btn') as HTMLButtonElement | null;
+  type SnowMode = { key: 'off' | 'cover' | 'thickness'; gpu: 0 | 1 | 2; label: string };
+  const snowModes: SnowMode[] = [
+    { key: 'off',       gpu: 0, label: '❄ Neige : off' },
+    { key: 'cover',     gpu: 1, label: '❄ Couverture' },
+    { key: 'thickness', gpu: 2, label: '❄ Épaisseur (cm)' },
+  ];
+  let snowIdx = 0;
+  let snowFieldLoaded = false;
+  let snowLoading = false;
+
+  const cx = (mesh.bounds.minX + mesh.bounds.maxX) / 2;
+  const cy = (mesh.bounds.minY + mesh.bounds.maxY) / 2;
+
+  async function cycleSnow() {
+    if (!snowBtn || snowLoading) return;
+    const next = (snowIdx + 1) % snowModes.length;
+    const mode = snowModes[next];
+    if (!snowFieldLoaded && mode.gpu !== 0) {
+      snowLoading = true;
+      snowBtn.classList.add('loading');
+      snowBtn.textContent = '❄ Calcul…';
+      try {
+        const { runSnowPipeline } = await import('../../snow');
+        const field = await runSnowPipeline(
+          {
+            data: mesh.heightGrid,
+            width: mesh.gridWidth,
+            height: mesh.gridHeight,
+            bounds: mesh.bounds,
+            crs: header!.crs,
+          },
+          {
+            progress: (pct, label) => {
+              snowBtn.textContent = `❄ ${label} ${pct.toFixed(0)}%`;
+            },
+          },
+        );
+        // Snow field is row-major SOUTH→NORTH; the renderer's V axis goes
+        // NORTH→SOUTH (snow originZ anchors the top edge at -maxY). Flip rows.
+        const flipped = new Float32Array(field.data.length);
+        for (let y = 0; y < field.height; y++) {
+          const srcRow = (field.height - 1 - y) * field.width;
+          const dstRow = y * field.width;
+          for (let x = 0; x < field.width; x++) {
+            flipped[dstRow + x] = field.data[srcRow + x];
+          }
+        }
+        renderer.setSnow({
+          data: flipped,
+          width: field.width,
+          height: field.height,
+          originX: mesh.bounds.minX - cx,
+          originZ: -(mesh.bounds.maxY - cy),
+          scaleX: mesh.bounds.maxX - mesh.bounds.minX,
+          scaleZ: mesh.bounds.maxY - mesh.bounds.minY,
+        });
+        snowFieldLoaded = true;
+        console.log(
+          `[WebGL Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
+          `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
+          `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
+        );
+      } catch (err) {
+        console.error('[WebGL Viewer] Snow fetch failed:', err);
+        snowBtn.textContent = '❄ Erreur';
+        setTimeout(() => { if (snowBtn) snowBtn.textContent = snowModes[0].label; }, 2500);
+        snowIdx = 0;
+        renderer.setSnowMode(0);
+        snowLoading = false;
+        snowBtn.classList.remove('loading');
+        return;
+      } finally {
+        snowLoading = false;
+        snowBtn.classList.remove('loading');
+      }
+    }
+    snowIdx = next;
+    renderer.setSnowMode(mode.gpu);
+    snowBtn.textContent = mode.label;
+    snowBtn.classList.toggle('active', mode.gpu !== 0);
+  }
+  snowBtn?.addEventListener('click', () => void cycleSnow());
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'n' || e.key === 'N') void cycleSnow();
+  });
+
   let lastFpsT = performance.now();
   let frames = 0;
   let fps = 0;
