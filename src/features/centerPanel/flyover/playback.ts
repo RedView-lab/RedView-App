@@ -236,6 +236,8 @@ export function buildCinematicCameraTarget(
   let farElevationM: number | null = null;
   let firstDistanceM: number | null = null;
   let farDistanceM: number | null = null;
+  let previousFilteredElevationM: number | null = null;
+  let previousSampleDistanceM: number | null = null;
 
   for (const sample of anchorSamples) {
     const sampleDistanceM = clampDistanceM(targetDistanceM + sample.offsetM, geometry.totalDistanceM);
@@ -245,8 +247,14 @@ export function buildCinematicCameraTarget(
       sampleDistanceM,
     );
     if (!point) continue;
-    const elevationM =
+    const groundElevationM =
       robustGroundElevationAtDistance(routePoints, geometry, sampleDistanceM) ?? point.elevationM ?? 0;
+    const elevationM = filterCanopyElevationSample(
+      groundElevationM,
+      previousFilteredElevationM,
+      previousSampleDistanceM,
+      sampleDistanceM,
+    );
     weightedLat += point.lat * sample.weight;
     weightedLon += point.lon * sample.weight;
     weightedElevation += elevationM * sample.weight;
@@ -259,6 +267,8 @@ export function buildCinematicCameraTarget(
     }
     farElevationM = elevationM;
     farDistanceM = sampleDistanceM;
+    previousFilteredElevationM = elevationM;
+    previousSampleDistanceM = sampleDistanceM;
   }
 
   if (totalWeight <= 0) return null;
@@ -418,7 +428,7 @@ function robustGroundElevationAtDistance(
 ): number | null {
   if (!routePoints || !geometry) return null;
 
-  const neighborhoodOffsetsM = [-45, -20, 0, 20, 45] as const;
+  const neighborhoodOffsetsM = [-220, -150, -90, -45, 0, 45, 90, 150, 220] as const;
   const elevations = neighborhoodOffsetsM
     .map((offsetM) =>
       interpolateRoutePointAtDistance(
@@ -432,9 +442,32 @@ function robustGroundElevationAtDistance(
   if (elevations.length === 0) return null;
   elevations.sort((left, right) => left - right);
 
-  // Surface LiDAR includes canopy/building spikes. Bias the camera toward
-  // the lower third of the local neighborhood so it follows the ground
-  // trend instead of the tops of trees.
-  const quantileIndex = Math.max(0, Math.floor((elevations.length - 1) * 0.35));
-  return elevations[quantileIndex] ?? elevations[0] ?? null;
+  // Surface LiDAR includes canopy/building spikes. Use a low-biased local
+  // envelope, then allow only a small lift above it so the camera tracks the
+  // terrain trend rather than the top of trees.
+  const lowQuantileIndex = Math.max(0, Math.floor((elevations.length - 1) * 0.2));
+  const medianIndex = Math.floor((elevations.length - 1) * 0.5);
+  const lowEnvelopeM = elevations[lowQuantileIndex] ?? elevations[0] ?? null;
+  const medianElevationM = elevations[medianIndex] ?? elevations[elevations.length - 1] ?? null;
+  if (lowEnvelopeM == null || medianElevationM == null) return lowEnvelopeM;
+
+  return Math.min(lowEnvelopeM + 6, medianElevationM);
+}
+
+function filterCanopyElevationSample(
+  candidateElevationM: number,
+  previousElevationM: number | null,
+  previousDistanceM: number | null,
+  currentDistanceM: number,
+): number {
+  if (previousElevationM == null || previousDistanceM == null) return candidateElevationM;
+
+  const deltaDistanceM = Math.max(1, currentDistanceM - previousDistanceM);
+  const maxRiseM = Math.max(3, deltaDistanceM * 0.1);
+  const maxDropM = Math.max(8, deltaDistanceM * 0.24);
+
+  return Math.min(
+    previousElevationM + maxRiseM,
+    Math.max(previousElevationM - maxDropM, candidateElevationM),
+  );
 }
