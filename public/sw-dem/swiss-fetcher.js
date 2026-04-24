@@ -54,25 +54,46 @@ function drainSwissQueue() {
 }
 
 // Range-fetch helper used by the COG reader. Always returns ArrayBuffer | null.
+// Retries up to SWISS_COG_RANGE_RETRIES times on timeout / network error
+// (NOT on HTTP 4xx, which are permanent). Each retry takes a fresh slot so
+// it doesn't block the head of the queue.
 async function swissRangeFetch(url, offset, length) {
-  const result = await swissScheduleFetch(async () => {
-    try {
-      const res = await fetch(url, {
-        headers: { Range: `bytes=${offset}-${offset + length - 1}` },
-        signal: AbortSignal.timeout(SWISS_COG_RANGE_TIMEOUT_MS),
-      });
-      if (!res.ok && res.status !== 206) {
-        console.warn(`[swiss][range] HTTP ${res.status} ${url} bytes=${offset}-${offset + length - 1}`);
+  for (let attempt = 1; attempt <= SWISS_COG_RANGE_RETRIES; attempt++) {
+    const result = await swissScheduleFetch(async () => {
+      try {
+        const res = await fetch(url, {
+          headers: { Range: `bytes=${offset}-${offset + length - 1}` },
+          signal: AbortSignal.timeout(SWISS_COG_RANGE_TIMEOUT_MS),
+        });
+        if (!res.ok && res.status !== 206) {
+          // Permanent: 4xx → don't retry. 5xx → retry.
+          if (res.status >= 400 && res.status < 500) {
+            console.warn(`[swiss][range] HTTP ${res.status} ${url} bytes=${offset}-${offset + length - 1} (no retry)`);
+            return { _permanent: true, value: null };
+          }
+          console.warn(`[swiss][range] HTTP ${res.status} ${url} bytes=${offset}-${offset + length - 1} (attempt ${attempt}/${SWISS_COG_RANGE_RETRIES})`);
+          return null;
+        }
+        return { _permanent: true, value: await res.arrayBuffer() };
+      } catch (err) {
+        const msg = err?.message || String(err);
+        const isTimeout = err?.name === 'TimeoutError' || msg.includes('timed out') || msg.includes('aborted');
+        if (!isTimeout) {
+          console.warn(`[swiss][range] error ${url} (no retry):`, msg);
+          return { _permanent: true, value: null };
+        }
+        console.warn(`[swiss][range] timeout ${url} (attempt ${attempt}/${SWISS_COG_RANGE_RETRIES})`);
         return null;
       }
-      return await res.arrayBuffer();
-    } catch (err) {
-      console.warn(`[swiss][range] error ${url}:`, err?.message || err);
-      return null;
+    });
+    if (result === SWISS_PRUNED_SENTINEL) return null;
+    if (result && typeof result === 'object' && result._permanent) return result.value;
+    if (attempt < SWISS_COG_RANGE_RETRIES) {
+      // Brief jittered back-off so we don't all retry in lockstep.
+      await new Promise((r) => setTimeout(r, 200 + Math.random() * 400));
     }
-  });
-  if (result === SWISS_PRUNED_SENTINEL) return null;
-  return result;
+  }
+  return null;
 }
 
 // ─── STAC cell-resolution cache ─────────────────────────────────────────────

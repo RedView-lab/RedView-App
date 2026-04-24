@@ -60,12 +60,14 @@ function shouldUseSwiss(mercZ, lat) {
   return mppAtZ < SWISS_ENGAGE_MPP;
 }
 
-// HTTP timeouts — tuned for AWS-hosted COG range requests (typically <300 ms
-// per request once the COG header is cached). STAC bumped to 15 s because
-// data.geo.admin.ch occasionally takes 8-12 s under load (observed Apr 24).
+// HTTP timeouts — tuned for AWS-hosted COG range requests. Under burst
+// load (16 mercator tiles × 4-9 sub-cells = 100+ concurrent range fetches)
+// data.geo.admin.ch can take 10-20 s per response. STAC bumped to 15 s,
+// COG range bumped to 20 s with one auto-retry on timeout (Apr 24 obs).
 const SWISS_STAC_FETCH_TIMEOUT_MS = 15_000;
-const SWISS_COG_HEADER_TIMEOUT_MS = 6_000;
-const SWISS_COG_RANGE_TIMEOUT_MS  = 8_000;
+const SWISS_COG_HEADER_TIMEOUT_MS = 12_000;
+const SWISS_COG_RANGE_TIMEOUT_MS  = 20_000;
+const SWISS_COG_RANGE_RETRIES     = 2;   // total attempts incl. first try
 
 // Negative-cache TTLs (ms) — STAC misses are usually permanent (tile not
 // surveyed) so we cache them for an hour. Range-fetch failures are usually
@@ -81,9 +83,11 @@ const SWISS_TILE_CACHE_MAX = 256;     // ≈64 MB upper bound
 const SWISS_STAC_CELL_CACHE_MAX = 4096; // STAC item resolutions per LV95-km cell
 
 // COG concurrency limiter — separate semaphore from IGN so France traffic
-// never starves Swiss traffic and vice versa. Range requests against the
-// AWS endpoint comfortably pipeline 30+ streams over HTTP/2.
-const SWISS_CONCURRENCY = 24;
+// never starves Swiss traffic and vice versa. data.geo.admin.ch starts
+// returning timeouts past ~16 concurrent range streams under burst load.
+// Reduced from 24 → 12 (Apr 24): trades a small amount of pipeline depth
+// for far fewer transient timeouts on the AWS-fronted CDN.
+const SWISS_CONCURRENCY = 12;
 const SWISS_QUEUE_MAX = 400;
 
 const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
