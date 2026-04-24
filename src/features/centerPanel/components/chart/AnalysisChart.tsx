@@ -24,11 +24,13 @@ import './chart.css';
 const Y_MAJOR_TARGET_PX = 26;
 const X_MAJOR_TARGET_PX = 80;
 const DEFAULT_TICK_COUNT = 6;
-const POI_MARKER_SIZE_PX = 30;
+const POI_MARKER_SIZE_PX = 44;
+const POI_MARKER_SPREAD_STEP_PX = 36;
 const MULTI_POI_MARKER_WIDTH_PX = 44;
 const MULTI_POI_MARKER_HEIGHT_PX = 48;
-const POI_CLUSTER_OVERLAP_X_PX = 18;
-const POI_CLUSTER_OVERLAP_Y_PX = 20;
+const POI_CLUSTER_OVERLAP_X_PX = 38;
+const POI_CLUSTER_OVERLAP_Y_PX = 16;
+const POI_CLUSTER_COMPACT_VISIBLE_FRACTION = 0.88;
 
 interface AnalysisChartProps {
   series: ChartSeries[];
@@ -415,35 +417,67 @@ export function AnalysisChart({
                 );
               }
 
+              if (shouldRenderPoiCluster(group, visibleFraction)) {
+                return (
+                  <button
+                    key={group.id}
+                    type="button"
+                    className="rvchart__poi-cluster"
+                    style={{
+                      left: `${group.xRatio * 100}%`,
+                      top: `${group.yRatio * 100}%`,
+                    }}
+                    title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
+                    aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
+                    onClick={() => {
+                      const nextViewport = buildViewportForPoiCluster({
+                        members: group.members,
+                        count: group.count,
+                        xDomain,
+                        plotXDomain,
+                        plotWidth: plotSize.width,
+                      });
+                      if (nextViewport) onViewportChange?.(nextViewport);
+                    }}
+                  >
+                    <img
+                      src="/multiPOI.svg"
+                      alt=""
+                      className="rvchart__poi-cluster-icon"
+                      width={MULTI_POI_MARKER_WIDTH_PX}
+                      height={MULTI_POI_MARKER_HEIGHT_PX}
+                    />
+                  </button>
+                );
+              }
+
               return (
-                <button
-                  key={group.id}
-                  type="button"
-                  className="rvchart__poi-cluster"
-                  style={{
-                    left: `${group.xRatio * 100}%`,
-                    top: `${group.yRatio * 100}%`,
-                  }}
-                  title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
-                  aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
-                  onClick={() => {
-                    const nextViewport = buildViewportForPoiCluster({
-                      members: group.members,
-                      xDomain,
-                      plotXDomain,
-                      plotWidth: plotSize.width,
-                    });
-                    if (nextViewport) onViewportChange?.(nextViewport);
-                  }}
-                >
-                  <img
-                    src="/multiPOI.svg"
-                    alt=""
-                    className="rvchart__poi-cluster-icon"
-                    width={MULTI_POI_MARKER_WIDTH_PX}
-                    height={MULTI_POI_MARKER_HEIGHT_PX}
-                  />
-                </button>
+                <Fragment key={group.id}>
+                  {group.members.map((annotation, index) => {
+                    const offsetPx = buildPoiSpreadOffsetPx(index, group.count);
+                    return (
+                      <div
+                        key={annotation.id}
+                        className="rvchart__poi-marker"
+                        style={{
+                          left: `calc(${group.xRatio * 100}% + ${offsetPx}px)`,
+                          top: `${annotation.yRatio * 100}%`,
+                        }}
+                        title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
+                        aria-hidden="true"
+                      >
+                        {annotation.poiCategory ? (
+                          <PoiBadge
+                            category={annotation.poiCategory}
+                            size={POI_MARKER_SIZE_PX}
+                          />
+                        ) : (
+                          <span className="rvchart__poi-marker-fallback">POI</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </Fragment>
               );
             })}
           </div>
@@ -727,13 +761,27 @@ function annotationFitsCluster(
   return annotationsOverlap(anchor, annotation) && annotationsOverlap(previous, annotation);
 }
 
+function buildPoiSpreadOffsetPx(index: number, count: number): number {
+  if (count <= 1) return 0;
+  const centeredIndex = index - (count - 1) / 2;
+  return centeredIndex * POI_MARKER_SPREAD_STEP_PX;
+}
+
+function shouldRenderPoiCluster(
+  group: PoiMarkerGroup,
+  visibleFraction: number,
+): boolean {
+  return group.count > 1 && visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION;
+}
+
 function buildViewportForPoiCluster(input: {
   members: VisiblePoiAnnotation[];
+  count: number;
   xDomain: AxisDomain;
   plotXDomain: AxisDomain;
   plotWidth: number;
 }): { detailZoom: number; detailOffset: number } | null {
-  const { members, xDomain, plotXDomain, plotWidth } = input;
+  const { members, count, xDomain, plotXDomain, plotWidth } = input;
   if (members.length <= 1) return null;
 
   const fullSpan = xDomain.max - xDomain.min;
@@ -742,9 +790,17 @@ function buildViewportForPoiCluster(input: {
 
   const minX = Math.min(...members.map((member) => member.x));
   const maxX = Math.max(...members.map((member) => member.x));
-  const pixelPadding = plotWidth > 0 ? (POI_MARKER_SIZE_PX * 2.2) / plotWidth : 0;
-  const domainPadding = currentSpan * pixelPadding;
-  const targetSpan = clamp(maxX - minX + domainPadding * 2, fullSpan * MIN_VISIBLE_FRACTION, fullSpan);
+  const desiredPixelSpan = Math.max(
+    POI_MARKER_SIZE_PX * 1.25 + (count - 1) * POI_MARKER_SPREAD_STEP_PX,
+    plotWidth * 0.16,
+  );
+  const pixelPaddingRatio = plotWidth > 0 ? desiredPixelSpan / plotWidth : 0.16;
+  const domainPadding = currentSpan * pixelPaddingRatio * 0.75;
+  const targetSpan = clamp(
+    maxX - minX + domainPadding * 2,
+    fullSpan * MIN_VISIBLE_FRACTION,
+    fullSpan,
+  );
   const center = (minX + maxX) / 2;
   const minStart = xDomain.min;
   const maxStart = xDomain.max - targetSpan;
