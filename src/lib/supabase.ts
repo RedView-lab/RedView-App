@@ -30,6 +30,11 @@ export const supabase = createClient(
 	supabaseUrl,
 	supabaseAnonKey,
 	SUPABASE_AUTH_STORAGE_KEY
-		? { auth: { storageKey: SUPABASE_AUTH_STORAGE_KEY } }
+		? {
+				auth: {
+					storageKey: SUPABASE_AUTH_STORAGE_KEY,
+					detectSessionInUrl: false,
+				},
+		  }
 		: undefined,
 );

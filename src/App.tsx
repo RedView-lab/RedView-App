@@ -7,6 +7,28 @@ import './index.css'
 
 type BootstrapStatus = 'loading' | 'ready'
 
+const AUTH_BOOT_TIMEOUT_MS = 4000
+const SUBSCRIPTION_BOOT_TIMEOUT_MS = 4000
+
+function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        window.clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 function App() {
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(null)
   const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
@@ -30,10 +52,14 @@ function App() {
         if (accessToken && refreshToken) {
           // Clear hash from the URL immediately so refresh spam cannot re-process stale tokens.
           window.history.replaceState(null, '', window.location.pathname)
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          })
+          const { data, error } = await withTimeout(
+            supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            }),
+            AUTH_BOOT_TIMEOUT_MS,
+            'supabase.auth.setSession',
+          )
           if (error) throw error
           if (!cancelled) setSession(data.session)
           return
@@ -47,7 +73,11 @@ function App() {
         const {
           data: { session },
           error,
-        } = await supabase.auth.getSession()
+        } = await withTimeout(
+          supabase.auth.getSession(),
+          AUTH_BOOT_TIMEOUT_MS,
+          'supabase.auth.getSession',
+        )
         if (error) throw error
         if (!cancelled) setSession(session)
       } catch (error) {
@@ -85,12 +115,19 @@ function App() {
     setSubscriptionStatus('loading')
 
     const resolveSubscription = async () => {
+      const abortController = new AbortController()
+
       try {
-        const { data, error } = await supabase
-          .from('user_subscription_status')
-          .select('is_subscribed')
-          .eq('user_id', session.user.id)
-          .maybeSingle()
+        const { data, error } = await withTimeout(
+          supabase
+            .from('user_subscription_status')
+            .select('is_subscribed')
+            .eq('user_id', session.user.id)
+            .abortSignal(abortController.signal)
+            .maybeSingle(),
+          SUBSCRIPTION_BOOT_TIMEOUT_MS,
+          'user_subscription_status bootstrap',
+        )
 
         if (cancelled) return
 
@@ -101,10 +138,12 @@ function App() {
           setIsSubscribed(data?.is_subscribed ?? false)
         }
       } catch (error) {
+        abortController.abort()
         if (cancelled) return
         console.error('[app] Subscription bootstrap crashed', error)
         setIsSubscribed(false)
       } finally {
+        abortController.abort()
         if (!cancelled) setSubscriptionStatus('ready')
       }
     }
