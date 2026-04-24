@@ -8,6 +8,7 @@
 import type { ExpertProfileState } from './expert/types';
 import type { ControlPanelPersistedState } from '../controlPanel/persistedState';
 import type { PredictionResult } from '../fitPredictor/types';
+import type { PoiFeature } from '../poi/types';
 
 /**
  * Persisted state of the bottom analysis chart (centerPanel). Stored on
@@ -311,6 +312,13 @@ export interface Itinerary {
    * no prediction has been computed yet.
    */
   prediction?: PredictionResult | null;
+  /**
+   * POI features rendered on the map for this itinerary, persisted so
+   * that closing/reopening the project restores the icons without the
+   * user having to click "Charger" again. Populated by the corridor
+   * search; empty/undefined means no search has been run yet.
+   */
+  poiFeatures?: PoiFeature[];
 }
 
 export interface ItineraryProject {

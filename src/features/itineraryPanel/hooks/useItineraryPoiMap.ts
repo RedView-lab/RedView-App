@@ -103,6 +103,7 @@ export function useItineraryPoiMap(
   }, [active]);
 
   const gpxRoute = active?.gpxRoute ?? null;
+  const persistedPoiFeatures = active?.poiFeatures ?? null;
 
   const { loading, error, poiCount, corridorProgress, searchCorridor } = usePoi(
     map,
@@ -111,6 +112,7 @@ export function useItineraryPoiMap(
     gpxRoute,
     radiusM,
     onCorridorComplete,
+    persistedPoiFeatures,
   );
 
   // ── Render the active itinerary's GPX track ───────────────────────

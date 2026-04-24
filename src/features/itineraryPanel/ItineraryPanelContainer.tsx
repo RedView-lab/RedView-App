@@ -151,7 +151,9 @@ export function ItineraryPanelContainer({
       return {
         ...p,
         itineraries: p.itineraries.map((it) =>
-          it.id === targetId ? { ...it, timeline: merged } : it,
+          it.id === targetId
+            ? { ...it, timeline: merged, poiFeatures: features }
+            : it,
         ),
       };
     });

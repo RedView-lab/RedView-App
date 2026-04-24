@@ -21,6 +21,13 @@ export function usePoi(
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
   onCorridorComplete?: (features: PoiFeature[]) => void,
+  /**
+   * Pre-loaded POI features to render immediately (e.g. rehydrated from
+   * a saved project). Seeds `lastCorridorFeatures` so map/style reloads
+   * and itinerary switches restore the markers without re-running the
+   * corridor search.
+   */
+  initialFeatures: PoiFeature[] | null = null,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +50,16 @@ export function usePoi(
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
   const onCorridorCompleteRef = useRef(onCorridorComplete);
   onCorridorCompleteRef.current = onCorridorComplete;
+
+  // Track the active itinerary's pre-loaded features (from Supabase). A
+  // change in identity/length/first/last id indicates an itinerary switch
+  // or a freshly-rehydrated project, prompting a rehydration of the
+  // shared POI source.
+  const initialFeaturesRef = useRef<PoiFeature[] | null>(initialFeatures);
+  initialFeaturesRef.current = initialFeatures;
+  const initialFeaturesKey = initialFeatures && initialFeatures.length > 0
+    ? `${initialFeatures.length}:${initialFeatures[0].id}:${initialFeatures[initialFeatures.length - 1].id}`
+    : 'empty';
 
   // ── Setup source + layers ─────────────────────────────────────────
 
@@ -282,11 +299,17 @@ export function usePoi(
 
       ensureSourceAndLayers(map);
 
-      // POIs are now corridor-only: nothing renders until the user
-      // loads a GPX and explicitly triggers `searchCorridor`. Viewport
-      // auto-fetch was removed to avoid flooding the map with thousands
-      // of POIs before any itinerary is selected.
-      updateSourceData(map, []);
+      // Seed the POI source from a previously-saved corridor result
+      // (rehydrated from Supabase) so the user doesn't have to re-click
+      // "Charger" after reopening a project. Falls back to empty when
+      // the active itinerary has never been searched.
+      const seed = initialFeaturesRef.current ?? [];
+      if (seed.length > 0) {
+        lastCorridorFeatures.current = seed;
+        updateSourceData(map, seed);
+      } else {
+        updateSourceData(map, []);
+      }
 
       map.on('click', LAYER_ID, handleClick);
       map.on('mouseenter', LAYER_ID, handleMouseEnter);
@@ -370,6 +393,17 @@ export function usePoi(
       fetchCorridorPois(map);
     }
   }, [map, isMapLoaded, enabledCategoriesKey, fetchCorridorPois]);
+
+  // ── Rehydrate from saved features when active itinerary changes ───
+  // Switching itineraries (or initially loading a project from Supabase)
+  // updates `initialFeatures` — we mirror it onto the shared POI source
+  // so each itinerary's persisted markers reappear without a re-search.
+  useEffect(() => {
+    if (!map || !isMapLoaded || !iconsReady.current) return;
+    const seed = initialFeaturesRef.current ?? [];
+    lastCorridorFeatures.current = seed;
+    updateSourceData(map, seed);
+  }, [map, isMapLoaded, initialFeaturesKey, updateSourceData]);
 
   return { loading, error, poiCount, corridorProgress, searchCorridor };
 }
