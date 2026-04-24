@@ -24,6 +24,11 @@ import './chart.css';
 const Y_MAJOR_TARGET_PX = 26;
 const X_MAJOR_TARGET_PX = 80;
 const DEFAULT_TICK_COUNT = 6;
+const POI_MARKER_SIZE_PX = 44;
+const MULTI_POI_MARKER_WIDTH_PX = 44;
+const MULTI_POI_MARKER_HEIGHT_PX = 48;
+const POI_CLUSTER_OVERLAP_X_PX = 38;
+const POI_CLUSTER_OVERLAP_Y_PX = 34;
 
 interface AnalysisChartProps {
   series: ChartSeries[];
@@ -35,6 +40,7 @@ interface AnalysisChartProps {
   xMode: AxisMode;
   detailZoom: number;
   detailOffset: number;
+  onViewportChange?: (next: { detailZoom: number; detailOffset: number }) => void;
   onDetailOffsetChange?: (value: number) => void;
   showSeriesRows?: boolean;
 }
@@ -49,6 +55,7 @@ export function AnalysisChart({
   xMode,
   detailZoom,
   detailOffset,
+  onViewportChange,
   onDetailOffsetChange,
   showSeriesRows = true,
 }: AnalysisChartProps) {
@@ -236,8 +243,15 @@ export function AnalysisChart({
         ...annotation,
         xRatio: ratioFor(annotation.x, plotXDomain),
         yRatio: 1 - ratioFor(annotation.y, backdropYDomain),
+        xPx: ratioFor(annotation.x, plotXDomain) * plotSize.width,
+        yPx: (1 - ratioFor(annotation.y, backdropYDomain)) * plotSize.height,
       }));
-  }, [backdropYDomain, plotXDomain, poiAnnotations]);
+  }, [backdropYDomain, plotSize.height, plotSize.width, plotXDomain, poiAnnotations]);
+
+  const poiMarkerGroups = useMemo(
+    () => buildPoiMarkerGroups(visiblePoiAnnotations),
+    [visiblePoiAnnotations],
+  );
 
   const dayNightBands = useMemo(
     () =>
@@ -371,24 +385,62 @@ export function AnalysisChart({
             aria-hidden="true"
           />
 
-          <div className="rvchart__layer rvchart__layer--markers" aria-hidden="true">
-            {visiblePoiAnnotations.map((annotation) => (
-              <div
-                key={annotation.id}
-                className="rvchart__poi-marker"
-                style={{
-                  left: `${annotation.xRatio * 100}%`,
-                  top: `${annotation.yRatio * 100}%`,
-                }}
-                title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
-              >
-                {annotation.poiCategory ? (
-                  <PoiBadge category={annotation.poiCategory} size={22} />
-                ) : (
-                  <span className="rvchart__poi-marker-fallback">POI</span>
-                )}
-              </div>
-            ))}
+          <div className="rvchart__layer rvchart__layer--markers">
+            {poiMarkerGroups.map((group) => {
+              if (group.kind === 'single') {
+                const annotation = group.members[0];
+                return (
+                  <div
+                    key={group.id}
+                    className="rvchart__poi-marker"
+                    style={{
+                      left: `${group.xRatio * 100}%`,
+                      top: `${group.yRatio * 100}%`,
+                    }}
+                    title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
+                    aria-hidden="true"
+                  >
+                    {annotation.poiCategory ? (
+                      <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
+                    ) : (
+                      <span className="rvchart__poi-marker-fallback">POI</span>
+                    )}
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  className="rvchart__poi-cluster"
+                  style={{
+                    left: `${group.xRatio * 100}%`,
+                    top: `${group.yRatio * 100}%`,
+                  }}
+                  title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
+                  aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
+                  onClick={() => {
+                    const nextViewport = buildViewportForPoiCluster({
+                      members: group.members,
+                      xDomain,
+                      plotXDomain,
+                      plotWidth: plotSize.width,
+                    });
+                    if (nextViewport) onViewportChange?.(nextViewport);
+                  }}
+                >
+                  <img
+                    src="/multiPOI.svg"
+                    alt=""
+                    className="rvchart__poi-cluster-icon"
+                    width={MULTI_POI_MARKER_WIDTH_PX}
+                    height={MULTI_POI_MARKER_HEIGHT_PX}
+                  />
+                  <span className="rvchart__poi-cluster-count">{group.count}</span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
@@ -483,6 +535,22 @@ export function AnalysisChart({
 interface CanvasBackdropLayer {
   id: string;
   points: { x: number; y: number }[];
+}
+
+interface VisiblePoiAnnotation extends ChartPoiAnnotation {
+  xRatio: number;
+  yRatio: number;
+  xPx: number;
+  yPx: number;
+}
+
+interface PoiMarkerGroup {
+  id: string;
+  kind: 'single' | 'cluster';
+  count: number;
+  xRatio: number;
+  yRatio: number;
+  members: VisiblePoiAnnotation[];
 }
 
 interface CanvasSeriesLayer {
@@ -604,6 +672,83 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
       ))}
     </div>
   );
+}
+
+function buildPoiMarkerGroups(annotations: VisiblePoiAnnotation[]): PoiMarkerGroup[] {
+  if (annotations.length === 0) return [];
+
+  const sorted = [...annotations].sort((left, right) => left.xPx - right.xPx);
+  const groups: VisiblePoiAnnotation[][] = [];
+
+  for (const annotation of sorted) {
+    let targetGroup: VisiblePoiAnnotation[] | null = null;
+    for (let index = groups.length - 1; index >= 0; index -= 1) {
+      const candidate = groups[index];
+      if (candidate.some((member) => annotationsOverlap(member, annotation))) {
+        targetGroup = candidate;
+        break;
+      }
+    }
+
+    if (targetGroup) targetGroup.push(annotation);
+    else groups.push([annotation]);
+  }
+
+  return groups.map((members) => {
+    const count = members.length;
+    const avgX = members.reduce((sum, member) => sum + member.xRatio, 0) / count;
+    const topY = members.reduce((min, member) => Math.min(min, member.yRatio), members[0].yRatio);
+    return {
+      id: count === 1 ? members[0].id : `cluster:${members.map((member) => member.id).join('|')}`,
+      kind: count === 1 ? 'single' : 'cluster',
+      count,
+      xRatio: avgX,
+      yRatio: topY,
+      members,
+    };
+  });
+}
+
+function annotationsOverlap(left: VisiblePoiAnnotation, right: VisiblePoiAnnotation): boolean {
+  return (
+    Math.abs(left.xPx - right.xPx) <= POI_CLUSTER_OVERLAP_X_PX &&
+    Math.abs(left.yPx - right.yPx) <= POI_CLUSTER_OVERLAP_Y_PX
+  );
+}
+
+function buildViewportForPoiCluster(input: {
+  members: VisiblePoiAnnotation[];
+  xDomain: AxisDomain;
+  plotXDomain: AxisDomain;
+  plotWidth: number;
+}): { detailZoom: number; detailOffset: number } | null {
+  const { members, xDomain, plotXDomain, plotWidth } = input;
+  if (members.length <= 1) return null;
+
+  const fullSpan = xDomain.max - xDomain.min;
+  const currentSpan = plotXDomain.max - plotXDomain.min;
+  if (!(fullSpan > 0) || !(currentSpan > 0)) return null;
+
+  const minX = Math.min(...members.map((member) => member.x));
+  const maxX = Math.max(...members.map((member) => member.x));
+  const pixelPadding = plotWidth > 0 ? (POI_MARKER_SIZE_PX * 2.2) / plotWidth : 0;
+  const domainPadding = currentSpan * pixelPadding;
+  const targetSpan = clamp(maxX - minX + domainPadding * 2, fullSpan * MIN_VISIBLE_FRACTION, fullSpan);
+  const center = (minX + maxX) / 2;
+  const minStart = xDomain.min;
+  const maxStart = xDomain.max - targetSpan;
+  const start = clamp(center - targetSpan / 2, minStart, maxStart);
+  const visibleFraction = clamp(targetSpan / fullSpan, MIN_VISIBLE_FRACTION, 1);
+  const remainingSpan = fullSpan - targetSpan;
+  const detailOffset = remainingSpan <= 1e-6 ? 0 : (start - xDomain.min) / remainingSpan;
+  const detailZoom = visibleFraction >= 0.999
+    ? 0
+    : clamp((1 - visibleFraction) / (1 - MIN_VISIBLE_FRACTION), 0, 1);
+
+  return {
+    detailZoom,
+    detailOffset: normalizeUnitInterval(detailOffset),
+  };
 }
 
 function defaultDomainFor(metric: ChartMetricId): AxisDomain {
@@ -1090,4 +1235,4 @@ function formatCellValue(value: number, metric: ChartMetricId): string {
   return unit ? `${txt}${unit}` : txt;
 }
 
-const MIN_VISIBLE_FRACTION = 0.12;
+const MIN_VISIBLE_FRACTION = 0.04;

@@ -62,7 +62,7 @@ const axisOptions: AxisOption[] = [
 ];
 
 const DETAIL_ZOOM_STEP = 0.1;
-const DETAIL_MIN_VISIBLE_FRACTION = 0.12;
+const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
 const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
 
 export function CenterPanelAnalysis() {
@@ -530,6 +530,7 @@ export function CenterPanelAnalysis() {
           xMode={xMode}
           detailZoom={detailZoom}
           detailOffset={detailOffset}
+          onViewportChange={setViewportState}
           onDetailOffsetChange={handleDetailOffsetChange}
           showSeriesRows={false}
         />
