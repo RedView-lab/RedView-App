@@ -6,10 +6,12 @@ import {
   buildChartDayNightOverlay,
   buildSeriesFromPrediction,
   isInclinationMetric,
+  buildPoiAnnotationsForItinerary,
   type AxisMetricId,
   type AxisMode,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
+  type ChartPoiAnnotation,
   type ChartSeries,
 } from './chart';
 import {
@@ -189,6 +191,19 @@ export function CenterPanelAnalysis() {
     }
 
     updateAnalysis((draft) => {
+      if (key === 'poi') {
+        const wantsPoi = !draft.filters.poi;
+        draft.filters.poi = wantsPoi;
+        if (wantsPoi) draft.filters.pente = true;
+        return;
+      }
+
+      if (key === 'pente' && draft.filters.pente && draft.filters.poi) {
+        draft.filters.pente = false;
+        draft.filters.poi = false;
+        return;
+      }
+
       draft.filters[key] = !draft.filters[key];
     });
   };
@@ -335,6 +350,19 @@ export function CenterPanelAnalysis() {
     }
     return result;
   }, [showAltitudeBackdrop, projectStore, predictionStore, xMode]);
+
+  const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
+    if (!filters.poi) return [];
+    if (!projectStore) return [];
+
+    const result: ChartPoiAnnotation[] = [];
+    for (const itinerary of projectStore.project.itineraries) {
+      if (itinerary.analysisVisible === false) continue;
+      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      result.push(...buildPoiAnnotationsForItinerary(itinerary, prediction, xMode));
+    }
+    return result;
+  }, [filters.poi, projectStore, predictionStore, xMode]);
 
   const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
     if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;
@@ -495,6 +523,7 @@ export function CenterPanelAnalysis() {
         <AnalysisChart
           series={series}
           backdropProfiles={altitudeBackdropProfiles}
+          poiAnnotations={poiAnnotations}
           dayNightOverlay={dayNightOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}
@@ -539,14 +568,16 @@ function migrateAxisMetric(value: string): AxisMetricId {
 
 function normalizeAnalysisState(state?: Partial<AnalysisPanelState> | null): AnalysisPanelState {
   const fallback = createDefaultAnalysisPanelState();
+  const filters = {
+    ...fallback.filters,
+    ...(state?.filters ?? {}),
+  };
+  if (filters.poi) filters.pente = true;
   return {
     xMode: state?.xMode ?? fallback.xMode,
     axis1: migrateAxisMetric(state?.axis1 ?? fallback.axis1),
     axis2: migrateAxisMetric(state?.axis2 ?? fallback.axis2),
-    filters: {
-      ...fallback.filters,
-      ...(state?.filters ?? {}),
-    },
+    filters,
     detailZoom: normalizeUnitInterval(state?.detailZoom, fallback.detailZoom),
     detailOffset: normalizeUnitInterval(state?.detailOffset, fallback.detailOffset),
   };

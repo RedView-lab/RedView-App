@@ -1,6 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { IconPlusCircle, IconTrash } from '@/features/controlPanel/icons';
 import { IconChevronDown, IconMoon, IconSun } from '../CenterPanelIcons';
+import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
+import type { ChartPoiAnnotation } from './annotations/buildPoiAnnotations';
 import type { ChartDayNightOverlay } from './dayNight';
 import { useChartHover } from './useChartHover';
 import {
@@ -26,6 +28,7 @@ const DEFAULT_TICK_COUNT = 6;
 interface AnalysisChartProps {
   series: ChartSeries[];
   backdropProfiles?: ChartBackdropProfile[];
+  poiAnnotations?: ChartPoiAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId;
@@ -39,6 +42,7 @@ interface AnalysisChartProps {
 export function AnalysisChart({
   series,
   backdropProfiles = [],
+  poiAnnotations = [],
   dayNightOverlay = null,
   axis1Metric,
   axis2Metric,
@@ -223,6 +227,18 @@ export function AnalysisChart({
     });
   }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
 
+  const visiblePoiAnnotations = useMemo(() => {
+    if (!backdropYDomain || poiAnnotations.length === 0) return [];
+
+    return poiAnnotations
+      .filter((annotation) => annotation.x >= plotXDomain.min && annotation.x <= plotXDomain.max)
+      .map((annotation) => ({
+        ...annotation,
+        xRatio: ratioFor(annotation.x, plotXDomain),
+        yRatio: 1 - ratioFor(annotation.y, backdropYDomain),
+      }));
+  }, [backdropYDomain, plotXDomain, poiAnnotations]);
+
   const dayNightBands = useMemo(
     () =>
       (dayNightOverlay?.dayWindows ?? [])
@@ -354,6 +370,26 @@ export function AnalysisChart({
             className="rvchart__layer rvchart__layer--series"
             aria-hidden="true"
           />
+
+          <div className="rvchart__layer rvchart__layer--markers" aria-hidden="true">
+            {visiblePoiAnnotations.map((annotation) => (
+              <div
+                key={annotation.id}
+                className="rvchart__poi-marker"
+                style={{
+                  left: `${annotation.xRatio * 100}%`,
+                  top: `${annotation.yRatio * 100}%`,
+                }}
+                title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
+              >
+                {annotation.poiCategory ? (
+                  <PoiBadge category={annotation.poiCategory} size={22} />
+                ) : (
+                  <span className="rvchart__poi-marker-fallback">POI</span>
+                )}
+              </div>
+            ))}
+          </div>
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {hover ? (

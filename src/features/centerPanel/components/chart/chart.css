@@ -68,7 +68,8 @@
   height: 100%;
   overflow: hidden;
 }
-.rvchart__layer--overlay{ z-index: 3; }
+.rvchart__layer--markers { z-index: 3; }
+.rvchart__layer--overlay{ z-index: 4; }
 
 .rvchart__backdrop-fill {
   fill: rgba(245, 248, 252, 0.08);
@@ -122,6 +123,29 @@
   bottom: 0;
   width: 1px;
   background: rgba(255, 255, 255, 0.85);
+}
+
+.rvchart__poi-marker {
+  position: absolute;
+  transform: translate(-50%, calc(-100% + 7px));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+}
+
+.rvchart__poi-marker-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(25, 25, 25, 0.88);
+  color: #fff;
+  font: 700 10px/1 'DM Sans', system-ui, sans-serif;
 }
 
 /* ---- Hover info cards ---- */
