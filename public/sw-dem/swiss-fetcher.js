@@ -77,12 +77,17 @@ async function swissRangeFetch(url, offset, length) {
         return { _permanent: true, value: await res.arrayBuffer() };
       } catch (err) {
         const msg = err?.message || String(err);
-        const isTimeout = err?.name === 'TimeoutError' || msg.includes('timed out') || msg.includes('aborted');
-        if (!isTimeout) {
+        const isTransientNetworkError =
+          err?.name === 'TimeoutError' ||
+          err?.name === 'TypeError' ||
+          msg.includes('timed out') ||
+          msg.includes('aborted') ||
+          msg.includes('Failed to fetch');
+        if (!isTransientNetworkError) {
           console.warn(`[swiss][range] error ${url} (no retry):`, msg);
           return { _permanent: true, value: null };
         }
-        console.warn(`[swiss][range] timeout ${url} (attempt ${attempt}/${SWISS_COG_RANGE_RETRIES})`);
+        console.warn(`[swiss][range] retryable ${url} (attempt ${attempt}/${SWISS_COG_RANGE_RETRIES}):`, msg);
         return null;
       }
     });

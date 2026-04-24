@@ -53,11 +53,10 @@ const IGN_DEM_MAXZOOM = 17;
 // only invest the IGN fetch + composite cost when the rendered pixel is
 // meaningfully smaller than what Mapbox Terrain-RGB already delivers.
 //
-// Threshold = 32 m/px. This intentionally keeps LiDAR engaged one more zoom
-// step during slight dezoom (z12 across France/Alps) so the high-detail
-// terrain does not disappear the moment the camera backs off a little.
-// Still low enough to avoid waking the heavy pipeline at z11.
-const IGN_ENGAGE_MPP = 32;
+// Threshold = 28 m/px. This keeps LiDAR alive one slight dezoom longer
+// (z12 around the Alps / much of France) without reopening the more
+// aggressive z12 coverage we saw with the broader experiment.
+const IGN_ENGAGE_MPP = 28;
 function shouldUseIGN(mercZ, lat) {
   if (mercZ < IGN_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -78,7 +77,7 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v32';
+const CACHE_NAME = 'dem-tiles-v34';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v23';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';

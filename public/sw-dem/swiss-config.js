@@ -47,11 +47,10 @@ const SWISS_NATIVE_GSD = 0.5;       // metres per pixel
 const SWISS_KM_TILE_PX = 2000;      // 1 km / 0.5 m = 2000 pixels
 const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
 
-// Mercator zoom gate — keep swissSURFACE3D engaged one extra zoom step on
-// slight dezoom so the fine DSM relief (rocks, trees, buildings) does not
-// drop out immediately when the camera backs off from the close-up view.
-// 32 m/px still stays above z11, so this only extends the pipeline to z12.
-const SWISS_ENGAGE_MPP = 32;
+// Mercator zoom gate — slightly broader than the strict stable cutoff so
+// swissSURFACE3D stays visible one small dezoom longer, while still keeping
+// z11 safely off and avoiding the heavier broad-z12 experiment.
+const SWISS_ENGAGE_MPP = 28;
 function shouldUseSwiss(mercZ, lat) {
   if (mercZ < 4) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
