@@ -166,24 +166,55 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Bilinear sampling can require neighbours from adjacent internal tiles —
-  // we always prefetch the 3×3 cluster around the bucket's tile to cover the
-  // edge case. Adjacent buckets re-request the same tiles → cache dedup.
+  // Compute the EXACT set of internal tiles needed for bilinear sampling.
+  //
+  // Previous implementation prefetched 3×3 = 9 tiles around every bucket's
+  // primary tile, which inflated fetch volume by ~6-8× (1000 buckets × 9
+  // tiles → 8000 entries before dedup). Even after dedup that put 200-300
+  // unique range fetches in flight per buildSwissTile call, and with 16
+  // mercator tiles requested simultaneously after a viewport pan that
+  // saturated the SWISS_CONCURRENCY=12 queue for 60+ seconds → individual
+  // ranges hit the 20 s timeout under sustained load (Apr 24 2026).
+  //
+  // The bilinear sampler in sampleSwissCOG() only ever reads pixels (x0,y0)
+  // (x0+1,y0) (x0,y0+1) (x0+1,y0+1). Walk every sampled pixel and add the
+  // (cog, tileIndex) of each of its 4 bilinear corners. Cache dedup at the
+  // _tileInflight layer collapses duplicates → the resulting set is the
+  // minimum sufficient for correct edge sampling.
   const tilePrefetchSet = new Set();
-  for (const { cell, tileIndex } of pixelsByTile.values()) {
+  for (const { cell, pts } of pixelsByTile.values()) {
     const cog = cell.cog;
-    const tx = tileIndex % cog.tilesAcross;
-    const ty = (tileIndex / cog.tilesAcross) | 0;
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const ntx = tx + dx, nty = ty + dy;
-        if (ntx < 0 || nty < 0 || ntx >= cog.tilesAcross || nty >= cog.tilesDown) continue;
-        tilePrefetchSet.add(`${cog.url}|${nty * cog.tilesAcross + ntx}`);
-      }
+    const tilesAcross = cog.tilesAcross;
+    const tilesDown = cog.tilesDown;
+    const tileW = cog.tileW;
+    const tileH = cog.tileH;
+    const widthM1 = cog.width - 1;
+    const heightM1 = cog.height - 1;
+    for (const { E, N } of pts) {
+      const ipxF = (E - cog.originE) / cog.pixelScaleX;
+      const ipyF = (cog.originN - N) / cog.pixelScaleY;
+      const x0 = Math.max(0, Math.min(Math.floor(ipxF), widthM1));
+      const y0 = Math.max(0, Math.min(Math.floor(ipyF), heightM1));
+      const x1 = Math.min(x0 + 1, widthM1);
+      const y1 = Math.min(y0 + 1, heightM1);
+      const tx0 = (x0 / tileW) | 0;
+      const tx1 = (x1 / tileW) | 0;
+      const ty0 = (y0 / tileH) | 0;
+      const ty1 = (y1 / tileH) | 0;
+      // Add the (up to 4) tile indices touched by the bilinear stencil.
+      // Most pixels are interior → tx0===tx1 && ty0===ty1 → just 1 tile.
+      tilePrefetchSet.add(`${cog.url}|${ty0 * tilesAcross + tx0}`);
+      if (tx1 !== tx0) tilePrefetchSet.add(`${cog.url}|${ty0 * tilesAcross + tx1}`);
+      if (ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${ty1 * tilesAcross + tx0}`);
+      if (tx1 !== tx0 && ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${ty1 * tilesAcross + tx1}`);
+      // Bounds-safety: tilesAcross/tilesDown clamp via Math.min on x1/y1 above.
+      // Defensive guard if tilesAcross math is off:
+      void tilesDown;
     }
   }
   // Fan out tile fetches with Promise.all — they share swiss-fetcher's
   // concurrency limiter so this never exceeds SWISS_CONCURRENCY in flight.
+  const prefetchCount = tilePrefetchSet.size;
   await Promise.all(Array.from(tilePrefetchSet).map((k) => {
     const sep = k.indexOf('|');
     const url = k.substring(0, sep);
@@ -230,7 +261,7 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     const dt = (performance.now() - t0).toFixed(0);
     const covPct = (coveredCount / totalPixels * 100).toFixed(1);
     console.log(
-      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, ${dt}ms`,
+      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, prefetched=${prefetchCount}, ${dt}ms`,
       'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
     );
   }

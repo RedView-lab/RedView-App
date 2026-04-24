@@ -83,11 +83,14 @@ const SWISS_TILE_CACHE_MAX = 256;     // ≈64 MB upper bound
 const SWISS_STAC_CELL_CACHE_MAX = 4096; // STAC item resolutions per LV95-km cell
 
 // COG concurrency limiter — separate semaphore from IGN so France traffic
-// never starves Swiss traffic and vice versa. data.geo.admin.ch starts
-// returning timeouts past ~16 concurrent range streams under burst load.
-// Reduced from 24 → 12 (Apr 24): trades a small amount of pipeline depth
-// for far fewer transient timeouts on the AWS-fronted CDN.
-const SWISS_CONCURRENCY = 12;
+// never starves Swiss traffic and vice versa. CDN benchmark (Apr 24) shows
+// data.geo.admin.ch handles 24 streams at p95=2.5s, but in-browser we share
+// sockets with IGN/Mapbox/ortho. 16 is a measured sweet spot: enough
+// pipeline depth to amortise TCP RTT, low enough that bursts of 16 mercator
+// tiles after a viewport-pan don't deadlock the queue. Combined with the
+// surgical bilinear-tile prefetch in swiss-build.js (was 9 tiles/bucket,
+// now 1-4) total fetches per buildSwissTile dropped from ~80 to ~15.
+const SWISS_CONCURRENCY = 16;
 const SWISS_QUEUE_MAX = 400;
 
 const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
