@@ -68,12 +68,15 @@ const SWISS_STAC_FETCH_TIMEOUT_MS = 15_000;
 const SWISS_COG_HEADER_TIMEOUT_MS = 12_000;
 const SWISS_COG_RANGE_TIMEOUT_MS  = 20_000;
 const SWISS_COG_RANGE_RETRIES     = 2;   // total attempts incl. first try
+const SWISS_COG_HEADER_RETRIES    = 3;   // headers are tiny → cheap to retry
 
 // Negative-cache TTLs (ms) — STAC misses are usually permanent (tile not
-// surveyed) so we cache them for an hour. Range-fetch failures are usually
-// transient AWS hiccups, retry within a minute.
+// surveyed) so we cache them for an hour. Range/header transient failures
+// must NOT poison cache for long: the user is actively panning and a 60 s
+// blackout after one timeout looks like a hard outage. Keep transient
+// nulls very short so the next pan retries.
 const SWISS_NULL_TTL_PERMANENT = 3600_000; // 1 h
-const SWISS_NULL_TTL_TRANSIENT = 60_000;   // 60 s
+const SWISS_NULL_TTL_TRANSIENT = 5_000;    // 5 s
 
 // LRU caps. Each COG header descriptor is small (~4 KB); each decoded
 // internal tile is up to 256×256 Float32 = 256 KB but we keep them around

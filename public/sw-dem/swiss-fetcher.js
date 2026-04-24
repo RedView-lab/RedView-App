@@ -272,7 +272,15 @@ async function openSwissCOG(url) {
   const promise = (async () => {
     let bytesNeeded = SWISS_HEADER_INITIAL_BYTES;
     let cog = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    // Two-axis attempt loop:
+    //   networkAttempt: 1..SWISS_COG_HEADER_RETRIES (retry on timeout/5xx)
+    //   sizeAttempt:    0..1 (re-fetch with larger range if header doesn't fit)
+    // We don't poison the negative cache on a single timeout — short TTL +
+    // retry keeps the user able to keep panning without a 60 s blackout.
+    let networkAttempt = 0;
+    let sizeAttempt = 0;
+    let permanentParseFail = false;
+    while (sizeAttempt < 2 && networkAttempt < SWISS_COG_HEADER_RETRIES) {
       const buf = await swissScheduleFetch(async () => {
         try {
           const res = await fetch(url, {
@@ -280,39 +288,68 @@ async function openSwissCOG(url) {
             signal: AbortSignal.timeout(SWISS_COG_HEADER_TIMEOUT_MS),
           });
           if (!res.ok && res.status !== 206) {
-            console.warn(`[swiss][header] HTTP ${res.status} ${url}`);
+            // 4xx → permanent (file deleted / wrong URL)
+            if (res.status >= 400 && res.status < 500) {
+              console.warn(`[swiss][header] HTTP ${res.status} ${url} (permanent)`);
+              return { _permanent: true, value: null };
+            }
+            console.warn(`[swiss][header] HTTP ${res.status} ${url} (attempt ${networkAttempt + 1}/${SWISS_COG_HEADER_RETRIES})`);
             return null;
           }
-          return await res.arrayBuffer();
+          return { _permanent: true, value: await res.arrayBuffer() };
         } catch (e) {
-          console.warn(`[swiss][header] fetch error ${url}:`, e?.message || e);
+          const msg = e?.message || String(e);
+          const isTimeout = e?.name === 'TimeoutError' || msg.includes('timed out') || msg.includes('aborted');
+          if (!isTimeout) {
+            console.warn(`[swiss][header] fetch error ${url} (no retry):`, msg);
+            return { _permanent: true, value: null };
+          }
+          console.warn(`[swiss][header] timeout ${url} (attempt ${networkAttempt + 1}/${SWISS_COG_HEADER_RETRIES})`);
           return null;
         }
       });
-      if (!buf || buf === SWISS_PRUNED_SENTINEL) {
-        _headerSetNull(url, SWISS_NULL_TTL_TRANSIENT);
+      if (buf === SWISS_PRUNED_SENTINEL) {
+        // Queue pruned mid-flight. Don't poison cache, let next pan retry.
         return null;
       }
-      try {
-        const parsed = await parseSwissCOGHeader(url, new Uint8Array(buf));
-        if (parsed && parsed._needMoreBytes) {
-          bytesNeeded = Math.min(parsed._needMoreBytes + 1024, SWISS_HEADER_MAX_BYTES);
-          if (attempt === 1) {
-            // Header genuinely doesn't fit → mark permanent null.
-            _headerSetNull(url, SWISS_NULL_TTL_PERMANENT);
-            return null;
-          }
-          continue;
+      // Permanent network outcome (4xx, error, or success)
+      if (buf && typeof buf === 'object' && buf._permanent) {
+        if (!buf.value) {
+          _headerSetNull(url, SWISS_NULL_TTL_PERMANENT);
+          return null;
         }
-        cog = parsed;
-        break;
-      } catch (err) {
-        console.warn(`[swiss][header] parse failed for ${url}:`, err.message);
-        _headerSetNull(url, SWISS_NULL_TTL_PERMANENT);
-        return null;
+        try {
+          const parsed = await parseSwissCOGHeader(url, new Uint8Array(buf.value));
+          if (parsed && parsed._needMoreBytes) {
+            bytesNeeded = Math.min(parsed._needMoreBytes + 1024, SWISS_HEADER_MAX_BYTES);
+            if (sizeAttempt === 1) {
+              permanentParseFail = true;
+              break;
+            }
+            sizeAttempt++;
+            networkAttempt = 0; // reset network retries for the bigger fetch
+            continue;
+          }
+          cog = parsed;
+          break;
+        } catch (err) {
+          console.warn(`[swiss][header] parse failed for ${url}:`, err.message);
+          permanentParseFail = true;
+          break;
+        }
+      }
+      // Transient (timeout / 5xx) — retry
+      networkAttempt++;
+      if (networkAttempt < SWISS_COG_HEADER_RETRIES) {
+        await new Promise((r) => setTimeout(r, 250 + Math.random() * 500));
       }
     }
-    if (!cog) return null;
+    if (!cog) {
+      // Permanent parse failure → long TTL. Transient (all retries timed out)
+      // → very short TTL so the next pan can retry instead of blacking out.
+      _headerSetNull(url, permanentParseFail ? SWISS_NULL_TTL_PERMANENT : SWISS_NULL_TTL_TRANSIENT);
+      return null;
+    }
     console.log(
       `[swiss][header] %c OK %c ${url.split('/').pop()} \u2192 ${cog.width}\u00d7${cog.height} px, tile ${cog.tileW}\u00d7${cog.tileH}, comp=${cog.compression}, origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
       'background:#4CAF50;color:#fff;padding:1px 4px;border-radius:2px', '',
