@@ -30,6 +30,94 @@ export interface WebGLViewerOptions {
 
 interface ParsedHeader { bounds: PointCloudBounds; crs: DetectedCrs; }
 
+// ---------------------------------------------------------------------------
+// Device tier detection
+// ---------------------------------------------------------------------------
+// We support EVERY machine that can run WebGL2: from tiny Macs / Windows iGPU
+// to high-end desktops. To do that we pick a quality tier per-device based on
+// the cheapest signals available, then drive grid resolution, ortho texture
+// cap and DPR from a single source of truth.
+type DeviceTier = 'masterpiece' | 'high' | 'medium' | 'low' | 'minimal';
+
+interface QualityProfile {
+  tier: DeviceTier;
+  maxGrid: number;       // worker grid cap
+  minResM: number;       // worker cell-size floor
+  textureCap: number;    // ortho texture max dimension
+  dprCap: number;        // canvas DPR cap
+  lowPower: boolean;     // GL context power preference
+  reason: string;        // why we landed here (logged)
+}
+
+function detectDeviceTier(): QualityProfile {
+  // Soft probe — none of these are mandatory; absent values fall back to
+  // conservative defaults so we never crash a low-end machine.
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    userAgentData?: { mobile?: boolean; platform?: string };
+  };
+  const ua = (nav.userAgent || '').toLowerCase();
+  const mem = typeof nav.deviceMemory === 'number' ? nav.deviceMemory : 0;
+  const cores = nav.hardwareConcurrency || 0;
+  const isMobile = !!nav.userAgentData?.mobile
+    || /android|iphone|ipad|ipod|mobile/.test(ua);
+  const isMacIntel = /macintosh|mac os x/.test(ua) && /intel/.test(ua);
+
+  // Probe a throwaway WebGL2 context just to read the renderer string.
+  let rendererStr = '';
+  let maxTexProbe = 0;
+  try {
+    const probe = document.createElement('canvas').getContext('webgl2', {
+      failIfMajorPerformanceCaveat: false,
+    }) as WebGL2RenderingContext | null;
+    if (probe) {
+      maxTexProbe = (probe.getParameter(probe.MAX_TEXTURE_SIZE) as number) || 0;
+      const dbg = probe.getExtension('WEBGL_debug_renderer_info');
+      if (dbg) {
+        rendererStr = String(probe.getParameter(dbg.UNMASKED_RENDERER_WEBGL) || '').toLowerCase();
+      }
+      // Drop the context immediately
+      const lose = probe.getExtension('WEBGL_lose_context');
+      lose?.loseContext();
+    }
+  } catch { /* noop */ }
+
+  const isSoftware = /(swiftshader|llvmpipe|lavapipe|microsoft basic|warp|software)/.test(rendererStr);
+  const isAppleSilicon = /apple m\d/.test(rendererStr) || (/apple gpu/.test(rendererStr) && !isMacIntel);
+  const isMobileGPU = /(adreno|mali|powervr|videocore)/.test(rendererStr);
+  const isOldIntel = /(hd graphics (3000|4000|4400|4600)|intel\(r\) hd)/.test(rendererStr);
+
+  // -- Decision tree (most restrictive first) --
+  if (isSoftware) return profile('minimal', 'software renderer', { lowPower: true });
+  if (isMobile || isMobileGPU) return profile('low', 'mobile GPU', { lowPower: true });
+  if (isOldIntel || (isMacIntel && (mem && mem < 4))) return profile('low', 'old Intel iGPU / small Mac', { lowPower: true });
+  if (isMacIntel) return profile('medium', 'Intel Mac', { lowPower: false });
+  if (mem && mem < 4) return profile('low', `low RAM (${mem} GB)`, { lowPower: true });
+  if (mem && mem < 8) return profile('medium', `medium RAM (${mem} GB)`, { lowPower: false });
+  if (cores && cores < 4) return profile('medium', `${cores} cores`, { lowPower: false });
+
+  // High-end paths
+  if (isAppleSilicon) return profile('masterpiece', 'Apple Silicon', { lowPower: false });
+  if (mem >= 16 || (mem >= 8 && cores >= 8)) return profile('masterpiece', `${mem || '?'} GB RAM, ${cores} cores`, { lowPower: false });
+  return profile('high', 'default high tier', { lowPower: false });
+
+  function profile(tier: DeviceTier, reason: string, extra: { lowPower: boolean }): QualityProfile {
+    // Tier matrix tuned so that even MASTERPIECE fits in <300 MB GPU memory:
+    //   2048² verts × 32 B (VBO) + 2047²×6 idx × 4 B (IBO) ≈ 230 MB.
+    const matrix: Record<DeviceTier, { maxGrid: number; minResM: number; textureCap: number; dprCap: number }> = {
+      masterpiece: { maxGrid: 2048, minResM: 0.25, textureCap: 8192, dprCap: 2.0 },
+      high:        { maxGrid: 1536, minResM: 0.30, textureCap: 8192, dprCap: 2.0 },
+      medium:      { maxGrid: 1024, minResM: 0.50, textureCap: 4096, dprCap: 1.5 },
+      low:         { maxGrid: 640,  minResM: 0.80, textureCap: 4096, dprCap: 1.25 },
+      minimal:     { maxGrid: 384,  minResM: 1.20, textureCap: 2048, dprCap: 1.0 },
+    };
+    const m = matrix[tier];
+    // Honour real GPU texture limit if the probe gave us one
+    const textureCap = maxTexProbe ? Math.min(m.textureCap, maxTexProbe) : m.textureCap;
+    return { tier, ...m, textureCap, lowPower: extra.lowPower, reason };
+  }
+}
+
 /**
  * Reads just enough of the LAZ header (LAS 1.x is fixed-layout, the bbox
  * lives at byte 179..226) to know the CRS + corner UVs *before* spinning
@@ -80,9 +168,22 @@ export async function runWebGLFallback(
 
   setStatus('Mode WebGL HD : initialisation…', 1);
 
-  // 1. WebGL2 init (cheap — fails fast on truly headless setups)
-  resizeCanvas(canvas);
-  const renderer = new WebGLTerrainRenderer(canvas);
+  // 0. Pick a quality tier for THIS device. Drives every memory-heavy knob
+  // below so that the fallback runs on EVERY machine, from tiny Mac /
+  // iGPU laptop up to high-end desktop ("masterpiece" tier = 4× the
+  // WebGPU pipeline density).
+  const profile = detectDeviceTier();
+  console.log(
+    `[WebGL Viewer] Quality tier = ${profile.tier} (${profile.reason}) ` +
+    `→ grid ≤ ${profile.maxGrid}, res ≥ ${profile.minResM}m, ` +
+    `tex ≤ ${profile.textureCap}, dpr ≤ ${profile.dprCap}, lowPower=${profile.lowPower}`,
+  );
+
+  // 1. WebGL2 init (cheap — fails fast on truly headless setups). Pass the
+  // tier-aware power preference: "low-power" on tiny Macs to keep the
+  // discrete GPU asleep and avoid spurious context-creation failures.
+  resizeCanvas(canvas, profile.dprCap);
+  const renderer = new WebGLTerrainRenderer(canvas, { lowPower: profile.lowPower });
   console.log(`[WebGL Viewer] ${renderer.rendererInfo} · maxTex=${renderer.maxTextureSize}`);
 
   // 2. Read LAS header inline so we know bounds + CRS without spinning a
@@ -96,8 +197,12 @@ export async function runWebGLFallback(
   // request because they depend on bounds + CRS only. So we compute UVs
   // synchronously and start everything together.
   setStatus('Téléchargement orthophotos HD…', 5);
+  // Pick the lowest of: hardware texture limit, tier cap. The stitcher
+  // does its own clamping anyway, but passing a tier-aware value avoids
+  // ever asking for an 8K canvas on a 2K-texture-limited iGPU.
+  const orthoCap = Math.min(renderer.maxTextureSize, profile.textureCap);
   const stitchPromise = stitchOrtho(
-    header.bounds, header.crs, renderer.maxTextureSize,
+    header.bounds, header.crs, orthoCap,
     (pct, label) => setStatus(`Mode WebGL HD : ${label}`, 5 + pct * 30),
   );
 
@@ -111,6 +216,8 @@ export async function runWebGLFallback(
   const mesh = await runTerrainWorker(
     opts.buffer,
     ortho.cornerUV,
+    profile.maxGrid,
+    profile.minResM,
     (phase, pct) => setStatus(`Mode WebGL HD : ${phase}`, 40 + pct * 0.45),
   );
 
@@ -146,14 +253,14 @@ export async function runWebGLFallback(
       stats.textContent =
         `${(mesh.indexCount / 3).toLocaleString()} tri · ${fps} fps · ` +
         `terrain HD ${mesh.gridWidth}×${mesh.gridHeight} · ` +
-        `${canvas.width}×${canvas.height} · WebGL2 · ${opts.tileLabel}`;
+        `${canvas.width}×${canvas.height} · WebGL2 [${profile.tier}] · ${opts.tileLabel}`;
     }
     requestAnimationFrame(renderFrame);
   };
   requestAnimationFrame(renderFrame);
 
   window.addEventListener('resize', () => {
-    resizeCanvas(canvas);
+    resizeCanvas(canvas, profile.dprCap);
     renderer.resize(canvas.width, canvas.height);
   });
 }
@@ -161,6 +268,8 @@ export async function runWebGLFallback(
 function runTerrainWorker(
   buffer: ArrayBuffer,
   cornerUV: import('./terrainWorker').CornerUV,
+  maxGrid: number,
+  minResM: number,
   onProgress: (phase: string, pct: number) => void,
 ): Promise<TerrainMeshWebGL> {
   return new Promise((resolve, reject) => {
@@ -191,7 +300,7 @@ function runTerrainWorker(
       reject(new Error(err.message || 'terrain worker error'));
     };
 
-    const msg: TerrainWorkerInput = { type: 'build', buffer, cornerUV };
+    const msg: TerrainWorkerInput = { type: 'build', buffer, cornerUV, maxGrid, minResM };
     w.postMessage(msg, [buffer]);
   });
 }
@@ -205,8 +314,8 @@ function meshToGPUData(mesh: TerrainMeshWebGL): TerrainGPUData {
   };
 }
 
-function resizeCanvas(canvas: HTMLCanvasElement) {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+function resizeCanvas(canvas: HTMLCanvasElement, dprCap = 2) {
+  const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
   const w = Math.max(1, Math.floor(window.innerWidth * dpr));
   const h = Math.max(1, Math.floor(window.innerHeight * dpr));
   if (canvas.width !== w) canvas.width = w;

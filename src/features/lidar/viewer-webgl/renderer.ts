@@ -97,13 +97,30 @@ export class WebGLTerrainRenderer {
   sunDir: [number, number, number] = normalize3(0.42, 0.78, 0.55);
   skyColor: [number, number, number] = [0.55, 0.65, 0.85];
 
-  constructor(canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext('webgl2', {
-      antialias: true,
-      premultipliedAlpha: true,
-      alpha: false,
-      powerPreference: 'high-performance',
-    });
+  constructor(canvas: HTMLCanvasElement, opts: { lowPower?: boolean } = {}) {
+    // Try the most demanding config first, then fall back step-by-step.
+    // Some integrated GPUs / older Macs refuse 'high-performance' or
+    // antialias=true; we keep retrying with softer flags so the engine
+    // really does start on every machine that has WebGL2 at all.
+    const attempts: WebGLContextAttributes[] = opts.lowPower
+      ? [
+          // Low-power path: tiny Macs, mobile, software fallback.
+          { antialias: false, alpha: false, premultipliedAlpha: true, powerPreference: 'low-power', failIfMajorPerformanceCaveat: false, depth: true, stencil: false },
+          { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false },
+          {},
+        ]
+      : [
+          { antialias: true,  alpha: false, premultipliedAlpha: true, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false, depth: true, stencil: false },
+          { antialias: true,  alpha: false, failIfMajorPerformanceCaveat: false },
+          { antialias: false, alpha: false, failIfMajorPerformanceCaveat: false },
+          {},
+        ];
+
+    let gl: WebGL2RenderingContext | null = null;
+    for (const attr of attempts) {
+      gl = canvas.getContext('webgl2', attr) as WebGL2RenderingContext | null;
+      if (gl) break;
+    }
     if (!gl) throw new Error('WebGL2 indisponible');
     this.gl = gl;
 
@@ -113,8 +130,7 @@ export class WebGLTerrainRenderer {
       ? `${gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL)} | ${gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)}`
       : 'WebGL2';
 
-    // Required for 32-bit indices on WebGL2; this is core GL ES 3.0 so always
-    // available, but we still feature-detect to be safe.
+    // 32-bit indices are core in WebGL2 (GL ES 3.0). Always available.
     this.uses32BitIndex = true;
 
     this.compileProgram();

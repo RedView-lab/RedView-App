@@ -38,6 +38,10 @@ type WorkerInput = {
   type: 'build';
   buffer: ArrayBuffer;
   cornerUV: CornerUV;
+  /** Hard cap on grid side (vertices). Caller picks per device tier. */
+  maxGrid?: number;
+  /** Floor on cell size in metres. Caller picks per device tier. */
+  minResM?: number;
 };
 
 type WorkerOutput =
@@ -46,14 +50,19 @@ type WorkerOutput =
   | { type: 'error'; message: string };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
-const MAX_GRID = 1024;     // 2× the WebGPU pipeline (512)
-const MIN_RES_M = 0.5;     // Floor at 0.5 m / cell
-const MAX_HOLE_DIST = 14;  // Slightly larger than the WebGPU pipeline (10)
+// Defaults if the caller does not specify a tier. 2048 = 4× the WebGPU
+// pipeline (which is 512). The caller should normally pass an explicit
+// maxGrid based on detected device capability.
+const DEFAULT_MAX_GRID = 2048;
+const DEFAULT_MIN_RES_M = 0.25;
+const MAX_HOLE_DIST = 14;
 
 scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
   if (e.data.type !== 'build') return;
   try {
-    const { buffer, cornerUV } = e.data;
+    const { buffer, cornerUV, maxGrid, minResM } = e.data;
+    const gridCap = clampInt(maxGrid ?? DEFAULT_MAX_GRID, 64, 4096);
+    const resFloor = Math.max(0.05, minResM ?? DEFAULT_MIN_RES_M);
 
     // Parse LAZ — same path as WebGPU pipeline. Colours unused.
     const pc = await parseLazBuffer(buffer, (phase, pct) => {
@@ -64,6 +73,7 @@ scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
 
     const mesh = buildTerrain(
       pc.positions, pc.classifications, pc.count, pc.bounds, cornerUV,
+      gridCap, resFloor,
       (pct) => post({ type: 'progress', phase: 'Maillage HD…', percent: 60 + pct * 0.4 }),
     );
 
@@ -88,15 +98,17 @@ function buildTerrain(
   count: number,
   bounds: PointCloudBounds,
   cornerUV: CornerUV,
+  maxGrid: number,
+  minResM: number,
   onProgress: (pct: number) => void,
 ): TerrainMeshWebGL {
   const rangeX = bounds.maxX - bounds.minX;
   const rangeY = bounds.maxY - bounds.minY;
 
-  // Cell size: max( min res, range / MAX_GRID )
-  const res = Math.max(MIN_RES_M, rangeX / MAX_GRID, rangeY / MAX_GRID);
-  const gridW = Math.max(2, Math.min(MAX_GRID + 1, Math.ceil(rangeX / res) + 1));
-  const gridH = Math.max(2, Math.min(MAX_GRID + 1, Math.ceil(rangeY / res) + 1));
+  // Cell size: max( min res, range / maxGrid )
+  const res = Math.max(minResM, rangeX / maxGrid, rangeY / maxGrid);
+  const gridW = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeX / res) + 1));
+  const gridH = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeY / res) + 1));
   const N = gridW * gridH;
 
   const heights = new Float32Array(N).fill(Infinity);
