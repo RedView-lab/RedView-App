@@ -23,6 +23,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 
 const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
+const SW_CONTROLLER_TIMEOUT = 2500;
 const ORTHO_BOOT_FALLBACK_MS = 1500;
 const DEM_RELOAD_COOLDOWN_MS = 15000;
 // How long the map must remain idle (no pending tiles, no movement) before we
@@ -134,6 +135,27 @@ async function sendTokenWithAck(controller: ServiceWorker): Promise<boolean> {
   return false;
 }
 
+async function waitForServiceWorkerController(timeoutMs: number): Promise<ServiceWorker | null> {
+  if (!('serviceWorker' in navigator)) return null;
+  if (navigator.serviceWorker.controller) return navigator.serviceWorker.controller;
+
+  return await new Promise<ServiceWorker | null>((resolve) => {
+    let settled = false;
+    const finish = (controller: ServiceWorker | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+      resolve(controller);
+    };
+
+    const onControllerChange = () => finish(navigator.serviceWorker.controller);
+    const timer = setTimeout(() => finish(navigator.serviceWorker.controller), timeoutMs);
+
+    navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+  });
+}
+
 // Resolves to true when the SW is controlling this page AND has acknowledged
 // the Mapbox token. Resolves to false on any failure â€” the caller should
 // proceed without SW interception (graceful degradation to plain Mapbox).
@@ -143,14 +165,9 @@ const swReady: Promise<boolean> = (async () => {
     await navigator.serviceWorker.register('/sw-dem.js', { scope: '/' });
 
     // Wait until an SW is active AND controlling this page
-    if (!navigator.serviceWorker.controller) {
-      await new Promise<void>((resolve) => {
-        navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
-      });
-    }
-    const controller = navigator.serviceWorker.controller;
+    const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
     if (!controller) {
-      console.error('[sw-dem] No controller after registration');
+      console.warn('[sw-dem] No controller after registration timeout - proceeding without IGN enhancement');
       return false;
     }
 
