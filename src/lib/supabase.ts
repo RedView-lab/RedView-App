@@ -15,6 +15,13 @@ function buildSupabaseAuthStorageKey(url: string | undefined): string {
 
 export const SUPABASE_AUTH_STORAGE_KEY = buildSupabaseAuthStorageKey(supabaseUrl);
 
+export interface StoredSupabaseSessionSnapshot {
+	user: {
+		id: string;
+		email?: string;
+	};
+}
+
 export function hasStoredSupabaseSession(): boolean {
 	if (typeof window === "undefined") return false;
 	if (!SUPABASE_AUTH_STORAGE_KEY) return false;
@@ -23,6 +30,32 @@ export function hasStoredSupabaseSession(): boolean {
 		return Boolean(window.localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY));
 	} catch {
 		return false;
+	}
+}
+
+export function readStoredSupabaseSession(): StoredSupabaseSessionSnapshot | null {
+	if (typeof window === "undefined") return null;
+	if (!SUPABASE_AUTH_STORAGE_KEY) return null;
+
+	try {
+		const raw = window.localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY);
+		if (!raw) return null;
+		const parsed = JSON.parse(raw) as {
+			user?: {
+				id?: unknown;
+				email?: unknown;
+			};
+		};
+		if (!parsed?.user || typeof parsed.user.id !== "string") return null;
+
+		return {
+			user: {
+				id: parsed.user.id,
+				...(typeof parsed.user.email === "string" ? { email: parsed.user.email } : {}),
+			},
+		};
+	} catch {
+		return null;
 	}
 }
 

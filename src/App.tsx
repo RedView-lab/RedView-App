@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { hasStoredSupabaseSession, supabase } from './lib/supabase'
+import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './lib/supabase'
 import { readProjectIdFromPath } from './lib/projectLocation'
 import Dashboard from './pages/Dashboard'
 import PayWall from './components/PayWall'
@@ -9,6 +9,8 @@ type BootstrapStatus = 'loading' | 'ready'
 
 const AUTH_BOOT_TIMEOUT_MS = 4000
 const SUBSCRIPTION_BOOT_TIMEOUT_MS = 4000
+const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:'
+const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
 function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -29,11 +31,62 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: strin
   })
 }
 
+type CachedSubscriptionSnapshot = {
+  isSubscribed: boolean
+  cachedAt: number
+}
+
+function getSubscriptionCacheKey(userId: string): string {
+  return `${SUBSCRIPTION_CACHE_KEY_PREFIX}${userId}`
+}
+
+function readCachedSubscription(userId: string | null | undefined): boolean | null {
+  if (!userId) return null
+
+  try {
+    const raw = window.localStorage.getItem(getSubscriptionCacheKey(userId))
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as Partial<CachedSubscriptionSnapshot>
+    if (typeof parsed.cachedAt !== 'number' || typeof parsed.isSubscribed !== 'boolean') {
+      window.localStorage.removeItem(getSubscriptionCacheKey(userId))
+      return null
+    }
+
+    if (Date.now() - parsed.cachedAt > SUBSCRIPTION_CACHE_TTL_MS) {
+      window.localStorage.removeItem(getSubscriptionCacheKey(userId))
+      return null
+    }
+
+    return parsed.isSubscribed
+  } catch {
+    return null
+  }
+}
+
+function writeCachedSubscription(userId: string, isSubscribed: boolean): void {
+  try {
+    const payload: CachedSubscriptionSnapshot = {
+      isSubscribed,
+      cachedAt: Date.now(),
+    }
+    window.localStorage.setItem(getSubscriptionCacheKey(userId), JSON.stringify(payload))
+  } catch {
+    // Ignore storage write failures; runtime state already has the resolved value.
+  }
+}
+
 function App() {
-  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(null)
-  const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
-  const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>('loading')
-  const [isSubscribed, setIsSubscribed] = useState(false)
+  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredSupabaseSession())
+  const [authStatus, setAuthStatus] = useState<BootstrapStatus>(() => (readStoredSupabaseSession() ? 'ready' : 'loading'))
+  const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
+    const storedSession = readStoredSupabaseSession()
+    return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
+  })
+  const [isSubscribed, setIsSubscribed] = useState(() => {
+    const storedSession = readStoredSupabaseSession()
+    return readCachedSubscription(storedSession?.user.id) ?? false
+  })
   const [initialProjectId] = useState(() => readProjectIdFromPath(window.location.pathname))
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
@@ -82,7 +135,7 @@ function App() {
         if (!cancelled) setSession(session)
       } catch (error) {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
-        if (!cancelled) setSession(null)
+        if (!cancelled && !readStoredSupabaseSession()) setSession(null)
       } finally {
         if (!cancelled) setAuthStatus('ready')
       }
@@ -112,7 +165,13 @@ function App() {
       return
     }
 
-    setSubscriptionStatus('loading')
+    const cachedSubscription = readCachedSubscription(session.user.id)
+    if (cachedSubscription != null) {
+      setIsSubscribed(cachedSubscription)
+      setSubscriptionStatus('ready')
+    } else {
+      setSubscriptionStatus('loading')
+    }
 
     const resolveSubscription = async () => {
       const abortController = new AbortController()
@@ -134,14 +193,18 @@ function App() {
         if (error) {
           console.error('[app] Failed to resolve subscription status', error)
           setIsSubscribed(false)
+          writeCachedSubscription(session.user.id, false)
         } else {
-          setIsSubscribed(data?.is_subscribed ?? false)
+          const nextIsSubscribed = data?.is_subscribed ?? false
+          setIsSubscribed(nextIsSubscribed)
+          writeCachedSubscription(session.user.id, nextIsSubscribed)
         }
       } catch (error) {
         abortController.abort()
         if (cancelled) return
         console.error('[app] Subscription bootstrap crashed', error)
-        setIsSubscribed(false)
+        const fallbackIsSubscribed = readCachedSubscription(session.user.id) ?? false
+        setIsSubscribed(fallbackIsSubscribed)
       } finally {
         abortController.abort()
         if (!cancelled) setSubscriptionStatus('ready')
