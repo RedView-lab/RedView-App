@@ -4,6 +4,7 @@ export { buildChartDayNightOverlay } from './dayNight';
 export type { ChartHoverState } from './useChartHover';
 export {
   buildSeriesFromPrediction,
+  computeXDomain,
   isInclinationMetric,
   isIntervalAverageMetric,
   metricIsAvailable,

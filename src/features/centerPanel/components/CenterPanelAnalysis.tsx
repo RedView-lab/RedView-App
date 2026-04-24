@@ -7,8 +7,10 @@ import {
   buildSeriesFromPrediction,
   isInclinationMetric,
   buildPoiAnnotationsForItinerary,
+  computeXDomain,
   type AxisMetricId,
   type AxisMode,
+  type AxisDomain,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
   type ChartPoiAnnotation,
@@ -351,6 +353,26 @@ export function CenterPanelAnalysis() {
     return result;
   }, [showAltitudeBackdrop, projectStore, predictionStore, xMode]);
 
+  const routeXDomainClamp = useMemo<AxisDomain | null>(() => {
+    if (!projectStore) return null;
+
+    const routeProfiles = projectStore.project.itineraries
+      .filter((itinerary) => itinerary.analysisVisible !== false)
+      .map((itinerary) => {
+        const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+        return buildSeriesFromPrediction(
+          prediction,
+          'Altitude',
+          xMode,
+          itinerary.gpxRoute?.points ?? null,
+          itinerary.rhythm.startTime,
+        );
+      })
+      .filter((points): points is NonNullable<typeof points> => Boolean(points));
+
+    return computeXDomain(routeProfiles, xMode);
+  }, [projectStore, predictionStore, xMode]);
+
   const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
     if (!filters.poi) return [];
     if (!projectStore) return [];
@@ -530,6 +552,7 @@ export function CenterPanelAnalysis() {
           xMode={xMode}
           detailZoom={detailZoom}
           detailOffset={detailOffset}
+          xDomainClamp={routeXDomainClamp}
           onViewportChange={setViewportState}
           onDetailOffsetChange={handleDetailOffsetChange}
           showSeriesRows={false}

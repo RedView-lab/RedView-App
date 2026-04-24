@@ -40,6 +40,7 @@ interface AnalysisChartProps {
   xMode: AxisMode;
   detailZoom: number;
   detailOffset: number;
+  xDomainClamp?: AxisDomain | null;
   onViewportChange?: (next: { detailZoom: number; detailOffset: number }) => void;
   onDetailOffsetChange?: (value: number) => void;
   showSeriesRows?: boolean;
@@ -55,6 +56,7 @@ export function AnalysisChart({
   xMode,
   detailZoom,
   detailOffset,
+  xDomainClamp = null,
   onViewportChange,
   onDetailOffsetChange,
   showSeriesRows = true,
@@ -105,11 +107,12 @@ export function AnalysisChart({
 
   const xDomain = useMemo<AxisDomain>(() => {
     const dom = computeXDomain(series.map((entry) => entry.points), xMode);
-    if (dom) return dom;
+    const clamped = clampXDomainToRoute(dom, xDomainClamp);
+    if (clamped) return clamped;
     if (xMode === 'distance') return { min: 0, max: 90 };
     if (xMode === 'heure') return { min: 0, max: 24 };
     return { min: 0, max: 6 };
-  }, [series, xMode]);
+  }, [series, xDomainClamp, xMode]);
 
   const visibleFraction = useMemo(
     () => detailZoomToVisibleFraction(normalizeUnitInterval(detailZoom)),
@@ -401,7 +404,11 @@ export function AnalysisChart({
                     aria-hidden="true"
                   >
                     {annotation.poiCategory ? (
-                      <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
+                      <PoiBadge
+                        category={annotation.poiCategory}
+                        size={POI_MARKER_SIZE_PX}
+                        hideGlyph={annotation.poiCategory === 'refuges'}
+                      />
                     ) : (
                       <span className="rvchart__poi-marker-fallback">POI</span>
                     )}
@@ -785,6 +792,19 @@ function normalizeMetricDomain(metric: ChartMetricId, domain: AxisDomain): AxisD
       max: clamp(max, -90, 90),
     };
   }
+  return { min, max };
+}
+
+function clampXDomainToRoute(
+  domain: AxisDomain | null,
+  routeClamp: AxisDomain | null,
+): AxisDomain | null {
+  if (!domain) return routeClamp;
+  if (!routeClamp) return domain;
+
+  const max = Math.min(domain.max, routeClamp.max);
+  const min = Math.max(domain.min, routeClamp.min);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return routeClamp;
   return { min, max };
 }
 

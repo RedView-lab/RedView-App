@@ -136,9 +136,11 @@ export function poiLabel(category: PoiCategory): string {
 export function PoiBadge({
   category,
   size = 20,
+  hideGlyph = false,
 }: {
   category: PoiCategory;
   size?: number;
+  hideGlyph?: boolean;
 }) {
   const providedUrl = PROVIDED_TIMELINE_BADGE_URLS[category];
   if (providedUrl) {
@@ -154,9 +156,11 @@ export function PoiBadge({
       aria-hidden
     >
       <IconTeardropPin size={size} color={spec.color} />
-      <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
-        <spec.Icon size={glyph} />
-      </span>
+      {!hideGlyph ? (
+        <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
+          <spec.Icon size={glyph} />
+        </span>
+      ) : null}
     </span>
   );
 }
