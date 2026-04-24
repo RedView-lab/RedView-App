@@ -20,6 +20,7 @@ export function usePoi(
   enabledCategories: Set<PoiCategory>,
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
+  onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
   /**
    * Pre-loaded POI features to render immediately (e.g. rehydrated from
@@ -48,6 +49,8 @@ export function usePoi(
   const radiusRef = useRef(radiusM);
   radiusRef.current = radiusM;
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
+  const onCorridorUpdateRef = useRef(onCorridorUpdate);
+  onCorridorUpdateRef.current = onCorridorUpdate;
   const onCorridorCompleteRef = useRef(onCorridorComplete);
   onCorridorCompleteRef.current = onCorridorComplete;
 
@@ -213,6 +216,7 @@ export function usePoi(
           if (controller.signal.aborted) return;
           lastCorridorFeatures.current = deduped;
           updateSourceData(m, deduped);
+          onCorridorUpdateRef.current?.(deduped);
           setCorridorProgress(total > 0 ? done / total : 0);
         },
       });

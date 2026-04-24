@@ -72,6 +72,7 @@ export function useItineraryPoiMap(
   map: MapboxMap | null,
   isMapLoaded: boolean,
   active: Itinerary | null,
+  onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
 ): UseItineraryPoiMapResult {
   // ── Derive enabled OSM categories from the panel POI rows ─────────
@@ -111,6 +112,7 @@ export function useItineraryPoiMap(
     enabledCategories,
     gpxRoute,
     radiusM,
+    onCorridorUpdate,
     onCorridorComplete,
     persistedPoiFeatures,
   );

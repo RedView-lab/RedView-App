@@ -126,6 +126,34 @@ export function ItineraryPanelContainer({
   const activeIdRef = useRef(project.activeItineraryId);
   activeIdRef.current = project.activeItineraryId;
 
+  const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
+    const targetId = activeIdRef.current;
+    setProject((p) => {
+      const target = p.itineraries.find((i) => i.id === targetId);
+      if (!target) return p;
+      const current = target.poiFeatures ?? [];
+      const unchanged =
+        current.length === features.length
+        && current.every((feature, index) => {
+          const next = features[index];
+          return (
+            feature.id === next?.id
+            && feature.lat === next.lat
+            && feature.lon === next.lon
+            && feature.category === next.category
+            && feature.name === next.name
+          );
+        });
+      if (unchanged) return p;
+      return {
+        ...p,
+        itineraries: p.itineraries.map((it) =>
+          it.id === targetId ? { ...it, poiFeatures: features } : it,
+        ),
+      };
+    });
+  }, []);
+
   const handleCorridorComplete = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
     setProject((p) => {
@@ -167,7 +195,13 @@ export function ItineraryPanelContainer({
     searchCorridor,
     hasGpxRoute,
     hasEnabledCategories,
-  } = useItineraryPoiMap(map, isMapLoaded, active, handleCorridorComplete);
+  } = useItineraryPoiMap(
+    map,
+    isMapLoaded,
+    active,
+    handleCorridorUpdate,
+    handleCorridorComplete,
+  );
 
   const updateActive = useCallback(
     (mut: (it: ItineraryProject['itineraries'][number]) => void) => {
