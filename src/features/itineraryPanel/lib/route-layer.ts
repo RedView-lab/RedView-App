@@ -18,7 +18,8 @@ const LINE_PREFIX = 'brouter-route-line-';
 const START_SOURCE_ID = 'brouter-endpoints-source';
 const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
 const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
-const ANALYSIS_HOVER_LAYER_ID = 'brouter-analysis-hover-layer';
+const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
+const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -328,24 +329,42 @@ export function setAnalysisHoverPoint(
       data: geojson,
     });
     map.addLayer({
-      id: ANALYSIS_HOVER_LAYER_ID,
+      id: ANALYSIS_HOVER_HALO_LAYER_ID,
       type: 'circle',
       source: ANALYSIS_HOVER_SOURCE_ID,
       slot: 'top',
       paint: {
-        'circle-radius': 6,
+        'circle-radius': 11,
         'circle-color': ['coalesce', ['get', 'color'], '#ffffff'],
-        'circle-stroke-width': 2,
+        'circle-opacity': 0.2,
+        'circle-blur': 0.35,
+        'circle-emissive-strength': 1,
+      },
+    });
+    map.addLayer({
+      id: ANALYSIS_HOVER_POINT_LAYER_ID,
+      type: 'circle',
+      source: ANALYSIS_HOVER_SOURCE_ID,
+      slot: 'top',
+      paint: {
+        'circle-radius': 5,
+        'circle-color': ['coalesce', ['get', 'color'], '#ffffff'],
+        'circle-stroke-width': 1.75,
         'circle-stroke-color': '#ffffff',
-        'circle-opacity': 0.96,
-        'circle-stroke-opacity': 0.92,
+        'circle-opacity': 1,
+        'circle-stroke-opacity': 0.95,
         'circle-emissive-strength': 1,
       },
     });
   }
 
   try {
-    if (map.getLayer(ANALYSIS_HOVER_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_LAYER_ID);
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
+      map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
+      map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+    }
   } catch {
     /* noop */
   }
@@ -353,7 +372,12 @@ export function setAnalysisHoverPoint(
 
 export function clearAnalysisHoverPoint(map: MapboxMap): void {
   try {
-    if (map.getLayer(ANALYSIS_HOVER_LAYER_ID)) map.removeLayer(ANALYSIS_HOVER_LAYER_ID);
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
+      map.removeLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
+      map.removeLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+    }
     if (map.getSource(ANALYSIS_HOVER_SOURCE_ID)) map.removeSource(ANALYSIS_HOVER_SOURCE_ID);
   } catch {
     /* noop */
