@@ -47,11 +47,24 @@ const SWISS_NATIVE_GSD = 0.5;       // metres per pixel
 const SWISS_KM_TILE_PX = 2000;      // 1 km / 0.5 m = 2000 pixels
 const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
 
-// Mercator zoom gate — deliberately broader than France so Swiss LiDAR stays
-// visible while the user dezooms. Target behavior: swissSURFACE3D remains
-// active from z11 upward across Switzerland instead of only appearing when
-// zoomed very far in.
-const SWISS_ENGAGE_MPP = 55;
+// Mercator zoom gate — broader than France but bounded.
+//
+// The previous "55 m/px from z11+" experiment turned out to be the cause
+// of the Apr 24 regression where high-resolution 3D in CH stopped loading
+// entirely: a z=11 Mercator tile spans ~20×20 km of LV95, so each
+// buildSwissTile had to discover and open ~400 1-km COG cells. That
+// flooded SWISS_CONCURRENCY=16 with STAC + COG-header fetches and
+// starved every parallel z=14/15/16 build (their `[swiss][build] ✓`
+// completion log never fired — they sat queued behind hundreds of z=11
+// header opens until their own ranges hit the 20 s timeout).
+//
+// New target behavior: swissSURFACE3D engages at z=12+ across CH.
+// At lat 46° z=12 ≈ 26.6 m/px (under 30) → engages.
+// At lat 46° z=11 ≈ 53.2 m/px (over 30) → skipped, Mapbox 30 m fills.
+// A z=12 tile maps to ~10×10 = ~100 LV95 cells which is the practical
+// upper limit one buildSwissTile can fan out without queue starvation.
+// For deeper dezoom levels Mapbox Terrain-RGB is visually equivalent.
+const SWISS_ENGAGE_MPP = 30;
 function shouldUseSwiss(mercZ, lat) {
   if (mercZ < SWISS_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -101,4 +114,4 @@ const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
 // have to consult STAC for many cells just to discover the Mercator pixel
 // is already coarser than the COG. shouldUseSwiss() handles this but we
 // also clamp here defensively.
-const SWISS_DEM_MINZOOM = 11;
+const SWISS_DEM_MINZOOM = 12;
