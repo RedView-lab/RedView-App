@@ -50,6 +50,8 @@ const FLYOVER_PITCH_SMOOTHING = 0.09;
 const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
 const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
 const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
+const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 20;
+const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 10;
 
 interface AnalysisFlyoverContextValue {
   canPlay: boolean;
@@ -90,6 +92,7 @@ export function AnalysisFlyoverProvider({
   const lastCameraPointRef = useRef<ReturnType<typeof interpolateRoutePointAtDistance> | null>(null);
   const lastStableBearingRef = useRef<number | null>(null);
   const primedPlaybackSessionRef = useRef<number | null>(null);
+  const reliefPitchEnabledRef = useRef(false);
 
   const interactiveItinerary = useMemo(() => {
     if (!projectStore) return null;
@@ -159,6 +162,7 @@ export function AnalysisFlyoverProvider({
     lastCameraPointRef.current = null;
     lastStableBearingRef.current = null;
     primedPlaybackSessionRef.current = null;
+    reliefPitchEnabledRef.current = false;
   }, [itineraryId]);
 
   useEffect(() => {
@@ -312,7 +316,20 @@ export function AnalysisFlyoverProvider({
 
     const turnBoostDeg = Math.abs(playbackCameraTarget.turnDeltaDeg);
     const pitchTurnBoost = turnBoostDeg >= FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG ? 1.2 : 0;
-    const smoothedGradientPitch = clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11);
+    const reliefStrengthM = Math.max(
+      Math.abs(playbackCameraTarget.elevationDeltaM ?? 0),
+      Math.abs(playbackCameraTarget.elevationRangeM ?? 0),
+    );
+    if (reliefPitchEnabledRef.current) {
+      if (reliefStrengthM <= FLYOVER_RELIEF_RELEASE_THRESHOLD_M) {
+        reliefPitchEnabledRef.current = false;
+      }
+    } else if (reliefStrengthM >= FLYOVER_RELIEF_ENGAGE_THRESHOLD_M) {
+      reliefPitchEnabledRef.current = true;
+    }
+    const smoothedGradientPitch = reliefPitchEnabledRef.current
+      ? clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11)
+      : 0;
     const targetPitch = FLYOVER_CAMERA_PITCH + pitchTurnBoost + smoothedGradientPitch;
 
     lastCameraPointRef.current = playbackCameraTarget.point;
@@ -334,8 +351,15 @@ export function AnalysisFlyoverProvider({
     if (primedPlaybackSessionRef.current === playbackSessionId) return;
     primedPlaybackSessionRef.current = playbackSessionId;
 
+    const reliefStrengthM = Math.max(
+      Math.abs(playbackCameraTarget.elevationDeltaM ?? 0),
+      Math.abs(playbackCameraTarget.elevationRangeM ?? 0),
+    );
     const targetPitch =
-      FLYOVER_CAMERA_PITCH + clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11);
+      FLYOVER_CAMERA_PITCH +
+      (reliefStrengthM >= FLYOVER_RELIEF_ENGAGE_THRESHOLD_M
+        ? clampPitchOffset(-(playbackCameraTarget.smoothedGradientPct ?? 0) * 0.11)
+        : 0);
 
     map.easeTo({
       center: [playbackCameraTarget.point.lon, playbackCameraTarget.point.lat],

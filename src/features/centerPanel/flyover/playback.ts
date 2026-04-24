@@ -17,6 +17,8 @@ export interface CinematicCameraTarget {
   bearing: number | null;
   turnDeltaDeg: number;
   smoothedGradientPct: number;
+  elevationDeltaM: number;
+  elevationRangeM: number;
 }
 
 function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
@@ -229,6 +231,10 @@ export function buildCinematicCameraTarget(
   let weightedElevation = 0;
   let weightedGradient = 0;
   let totalWeight = 0;
+  let minElevationM = Number.POSITIVE_INFINITY;
+  let maxElevationM = Number.NEGATIVE_INFINITY;
+  let firstElevationM: number | null = null;
+  let farElevationM: number | null = null;
 
   for (const sample of anchorSamples) {
     const point = interpolateRoutePointAtDistance(
@@ -237,11 +243,16 @@ export function buildCinematicCameraTarget(
       targetDistanceM + sample.offsetM,
     );
     if (!point) continue;
+    const elevationM = point.elevationM ?? 0;
     weightedLat += point.lat * sample.weight;
     weightedLon += point.lon * sample.weight;
-    weightedElevation += (point.elevationM ?? 0) * sample.weight;
+    weightedElevation += elevationM * sample.weight;
     weightedGradient += (point.gradientPct ?? 0) * sample.weight;
     totalWeight += sample.weight;
+    minElevationM = Math.min(minElevationM, elevationM);
+    maxElevationM = Math.max(maxElevationM, elevationM);
+    if (firstElevationM == null) firstElevationM = elevationM;
+    farElevationM = elevationM;
   }
 
   if (totalWeight <= 0) return null;
@@ -271,6 +282,10 @@ export function buildCinematicCameraTarget(
     bearing,
     turnDeltaDeg: signedTurnDeltaDeg,
     smoothedGradientPct: weightedGradient / totalWeight,
+    elevationDeltaM:
+      firstElevationM != null && farElevationM != null ? farElevationM - firstElevationM : 0,
+    elevationRangeM:
+      Number.isFinite(minElevationM) && Number.isFinite(maxElevationM) ? maxElevationM - minElevationM : 0,
   };
 }
 
