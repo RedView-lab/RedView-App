@@ -27,8 +27,8 @@ const DEFAULT_TICK_COUNT = 6;
 const POI_MARKER_SIZE_PX = 44;
 const MULTI_POI_MARKER_WIDTH_PX = 44;
 const MULTI_POI_MARKER_HEIGHT_PX = 48;
-const POI_CLUSTER_OVERLAP_X_PX = 38;
-const POI_CLUSTER_OVERLAP_Y_PX = 34;
+const POI_CLUSTER_OVERLAP_X_PX = 18;
+const POI_CLUSTER_OVERLAP_Y_PX = 20;
 
 interface AnalysisChartProps {
   series: ChartSeries[];
@@ -437,7 +437,6 @@ export function AnalysisChart({
                     width={MULTI_POI_MARKER_WIDTH_PX}
                     height={MULTI_POI_MARKER_HEIGHT_PX}
                   />
-                  <span className="rvchart__poi-cluster-count">{group.count}</span>
                 </button>
               );
             })}
@@ -681,17 +680,13 @@ function buildPoiMarkerGroups(annotations: VisiblePoiAnnotation[]): PoiMarkerGro
   const groups: VisiblePoiAnnotation[][] = [];
 
   for (const annotation of sorted) {
-    let targetGroup: VisiblePoiAnnotation[] | null = null;
-    for (let index = groups.length - 1; index >= 0; index -= 1) {
-      const candidate = groups[index];
-      if (candidate.some((member) => annotationsOverlap(member, annotation))) {
-        targetGroup = candidate;
-        break;
-      }
-    }
+    const targetGroup = groups[groups.length - 1] ?? null;
 
-    if (targetGroup) targetGroup.push(annotation);
-    else groups.push([annotation]);
+    if (targetGroup && annotationFitsCluster(targetGroup, annotation)) {
+      targetGroup.push(annotation);
+    } else {
+      groups.push([annotation]);
+    }
   }
 
   return groups.map((members) => {
@@ -714,6 +709,16 @@ function annotationsOverlap(left: VisiblePoiAnnotation, right: VisiblePoiAnnotat
     Math.abs(left.xPx - right.xPx) <= POI_CLUSTER_OVERLAP_X_PX &&
     Math.abs(left.yPx - right.yPx) <= POI_CLUSTER_OVERLAP_Y_PX
   );
+}
+
+function annotationFitsCluster(
+  cluster: VisiblePoiAnnotation[],
+  annotation: VisiblePoiAnnotation,
+): boolean {
+  if (cluster.length === 0) return false;
+  const anchor = cluster[0];
+  const previous = cluster[cluster.length - 1];
+  return annotationsOverlap(anchor, annotation) && annotationsOverlap(previous, annotation);
 }
 
 function buildViewportForPoiCluster(input: {

@@ -68,7 +68,7 @@
   height: 100%;
   overflow: hidden;
 }
-.rvchart__layer--markers { z-index: 3; }
+.rvchart__layer--markers { z-index: 3; pointer-events: none; }
 .rvchart__layer--overlay{ z-index: 4; }
 
 .rvchart__backdrop-fill {
@@ -160,6 +160,7 @@
   border: 0;
   background: transparent;
   cursor: zoom-in;
+  pointer-events: auto;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
@@ -167,17 +168,6 @@
   display: block;
   width: 100%;
   height: 100%;
-}
-
-.rvchart__poi-cluster-count {
-  position: absolute;
-  top: 18px;
-  left: 26px;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  font: 700 13px/1 'DM Sans', system-ui, sans-serif;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-  pointer-events: none;
 }
 
 /* ---- Hover info cards ---- */
