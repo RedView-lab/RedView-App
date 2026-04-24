@@ -1,0 +1,85 @@
+.rvd-place-search {
+  width: min(240px, calc(100vw - 24px));
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.rvd-place-search__shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 28px rgba(0, 0, 0, 0.3);
+}
+
+.rvd-place-search__shell:focus-within {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.rvd-place-search__icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  color: rgba(255, 255, 255, 0.82);
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rvd-place-search__icon-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.rvd-place-search__field {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.rvd-place-search__field .rvi-place-search__input {
+  min-height: 24px;
+  padding: 0 0 0 28px;
+  color: #fff;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.rvd-place-search__field .rvi-place-search__input:hover,
+.rvd-place-search__field .rvi-place-search__input:focus-visible {
+  background: transparent;
+  border-color: transparent;
+}
+
+.rvd-place-search__field .rvi-place-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.9);
+  font-style: normal;
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .rvd-place-search {
+    width: min(240px, calc(100vw - 32px));
+  }
+}
+
+@media (max-width: 640px) {
+  .rvd-place-search {
+    width: min(240px, calc(100vw - 24px));
+  }
+}

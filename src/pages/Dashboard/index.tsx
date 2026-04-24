@@ -17,6 +17,7 @@ import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/
 import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
+import { DashboardPlaceSearch } from './DashboardPlaceSearch';
 import {
   CENTER_PANEL_STACK_GAP,
   CENTER_PANEL_RESIZE_HIT_AREA,
@@ -299,6 +300,11 @@ export default function Dashboard({
     transition: `right ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
 
+  const dashboardSearchLeft = isMapFocusMode || !leftPanelOpen
+    ? PANEL_PADDING
+    : leftPanelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+  const dashboardSearchVisible = !projectBrowserOpen && activeProjectId != null;
+
   const rightPrimaryPanelStyle: CSSProperties = {
     height: `${layout.rightPrimaryPanelHeight}px`,
     minHeight: 0,
@@ -357,6 +363,13 @@ export default function Dashboard({
               onToggleImmersiveMode={handleToggleMapFocusMode}
             />
           </div>
+
+          <DashboardPlaceSearch
+            map={mapInstance}
+            visible={dashboardSearchVisible}
+            left={dashboardSearchLeft}
+            top={PANEL_PADDING}
+          />
 
           {mapLoaded && leftPanelOpen && (
             <MapBlurMirror
