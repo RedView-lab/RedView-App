@@ -95,11 +95,205 @@ function processInWorker(buffer: ArrayBuffer): Promise<PointCloudData> {
   });
 }
 
+// --- WebGPU preflight ---
+// Runs BEFORE any heavy work (OPFS, WASM laz-perf, Worker). On machines
+// without a real GPU (Windows iGPU / driverless / fallback adapter), the
+// viewer is unusable — bail with a clear French error UI instead of
+// letting laz-perf throw an opaque WASM "Exception catching is disabled".
+type PreflightResult =
+  | { ok: true; vendor: string; arch: string; desc: string }
+  | { ok: false; code: 'no-webgpu' | 'no-adapter' | 'fallback-adapter' | 'software-adapter'; detail: string };
+
+async function preflightWebGPU(): Promise<PreflightResult> {
+  if (!('gpu' in navigator) || !navigator.gpu) {
+    return { ok: false, code: 'no-webgpu', detail: 'navigator.gpu indisponible' };
+  }
+  let adapter: GPUAdapter | null = null;
+  try {
+    adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
+  } catch (e: any) {
+    return { ok: false, code: 'no-adapter', detail: e?.message || 'requestAdapter a échoué' };
+  }
+  if (!adapter) {
+    return { ok: false, code: 'no-adapter', detail: 'Aucun GPUAdapter retourné' };
+  }
+  // Chromium exposes isFallbackAdapter when the only available backend is a
+  // software rasterizer (SwiftShader / WARP).
+  if ((adapter as any).isFallbackAdapter === true) {
+    return { ok: false, code: 'fallback-adapter', detail: 'Adapter logiciel (fallback) détecté' };
+  }
+  const info = (adapter as any).info ?? {};
+  const vendor = String(info.vendor ?? '').toLowerCase();
+  const arch = String(info.architecture ?? '').toLowerCase();
+  const desc = String(info.description ?? info.device ?? '').toLowerCase();
+  // Heuristic detection of software / Windows non-GPU configurations.
+  const softwareSignatures = [
+    'swiftshader',     // Chrome software backend
+    'llvmpipe',        // Mesa software
+    'lavapipe',        // Mesa Vulkan software
+    'microsoft basic', // Microsoft Basic Render Driver
+    'basic render',
+    'warp',            // Windows Advanced Rasterization Platform
+  ];
+  const haystack = `${vendor} ${arch} ${desc}`;
+  if (softwareSignatures.some((s) => haystack.includes(s))) {
+    return { ok: false, code: 'software-adapter', detail: `Adapter logiciel: ${desc || vendor || 'inconnu'}` };
+  }
+  return { ok: true, vendor, arch, desc };
+}
+
+function showFatalError(opts: { title: string; message: string; hint?: string; technical?: string }) {
+  // Replace the loading UI with a styled error card.
+  overlay.classList.remove('hidden');
+  overlay.innerHTML = `
+    <div style="
+      max-width: 560px;
+      padding: 28px 32px;
+      background: rgba(20, 24, 40, 0.85);
+      border: 1px solid rgba(255, 80, 80, 0.35);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      color: #fff;
+      font-family: system-ui, sans-serif;
+      text-align: center;
+    ">
+      <div style="font-size: 40px; margin-bottom: 8px;">⚠️</div>
+      <h1 style="font-size: 1.35rem; margin: 0 0 12px; color:#ffb4b4;">${opts.title}</h1>
+      <p style="font-size: 0.95rem; line-height: 1.55; color:#e6e8f0; margin: 0 0 14px;">${opts.message}</p>
+      ${opts.hint ? `<p style="font-size:0.85rem; color:#9aa3bd; margin:0 0 14px;">${opts.hint}</p>` : ''}
+      ${opts.technical ? `<details style="margin-top:10px; text-align:left;">
+          <summary style="cursor:pointer; color:#7ea1ff; font-size:0.8rem;">Détails techniques</summary>
+          <pre style="
+            margin-top: 8px; padding: 10px; font-size: 11px;
+            background: rgba(0,0,0,0.45); border-radius: 6px;
+            color:#cfd6e8; white-space: pre-wrap; word-break: break-word;
+          ">${opts.technical}</pre>
+        </details>` : ''}
+      <button id="err-close" style="
+        margin-top: 18px; padding: 8px 18px;
+        background: rgba(80,120,255,0.25); color:#fff;
+        border: 1px solid rgba(120,160,255,0.55);
+        border-radius: 999px; cursor: pointer; font-size: 0.9rem;
+      ">Fermer l'onglet</button>
+    </div>
+  `;
+  document.getElementById('err-close')?.addEventListener('click', () => window.close());
+}
+
+function explainWorkerError(raw: string): { title: string; message: string; hint?: string } {
+  // laz-perf WASM throws unrecoverable C++ exceptions as "<addr> - Exception
+  // catching is disabled". The address is just a heap pointer; the real
+  // cause is almost always (a) corrupt LAZ payload, (b) WASM heap OOM on
+  // memory-constrained devices, or (c) integrated-GPU machines where shared
+  // RAM is already saturated.
+  if (/Exception catching is disabled/i.test(raw) || /^\d{6,}\s*-\s*Exception/.test(raw)) {
+    return {
+      title: 'Décodage LAZ impossible',
+      message:
+        "Le décodeur LiDAR (laz-perf, WebAssembly) a levé une exception interne qu'il ne peut pas décrire. " +
+        "C'est en général dû à une mémoire insuffisante pendant la décompression (les machines sans GPU dédié partagent leur RAM avec le processeur graphique) " +
+        'ou à une tuile partiellement téléchargée.',
+      hint:
+        "Essayez de supprimer puis re-télécharger la tuile, fermez les autres onglets gourmands, " +
+        "ou ouvrez le visualiseur sur une machine équipée d'une carte graphique dédiée.",
+    };
+  }
+  return {
+    title: 'Erreur de chargement',
+    message: raw,
+  };
+}
+
 // --- Main ---
 let renderer: LidarRenderer | null = null;
 
+// Engine switch button (bottom-right). One-way: WebGPU → WebGL.
+// In WebGL mode it stays visible but disabled as an indicator.
+const engineBtn = document.getElementById('engine-btn') as HTMLButtonElement | null;
+const forceWebGL = params.get('engine') === 'webgl';
+if (engineBtn) {
+  if (forceWebGL) {
+    engineBtn.textContent = '⚙ Moteur : WebGL HD';
+    engineBtn.disabled = true;
+    engineBtn.title = 'Moteur WebGL HD actif. Rechargez sans le paramètre ?engine=webgl pour revenir à WebGPU.';
+  } else {
+    engineBtn.addEventListener('click', () => {
+      if (!confirm(
+        'Basculer vers le moteur WebGL HD ?\n\n' +
+        '• Terrain texturé orthophoto en haute résolution\n' +
+        '• Pas de nuage de points LiDAR (compatible toutes machines)\n' +
+        '• Action irréversible : il faudra recharger pour revenir à WebGPU.'
+      )) return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('engine', 'webgl');
+      window.location.href = url.toString();
+    });
+  }
+}
+
+async function startWebGLFallback(reasonForLog: string): Promise<void> {
+  console.warn(`[Viewer] Starting WebGL HD fallback — ${reasonForLog}`);
+  setStatus('Bascule vers le moteur WebGL HD…', 4);
+  const buffer = await loadFromOPFS();
+  const { runWebGLFallback } = await import('../../lidar/viewer-webgl/main');
+  await runWebGLFallback(
+    { canvas, overlay, status: statusEl, bar: barFill, stats: statsEl },
+    {
+      buffer,
+      altRefLabel: altRef,
+      tileLabel: `${xKm},${yKm} ${crs}/${altRef}`,
+    },
+  );
+}
+
 (async () => {
   try {
+    // User explicitly requested WebGL via the engine switch button → skip
+    // the entire WebGPU pipeline and run the fallback directly.
+    if (forceWebGL) {
+      try {
+        await startWebGLFallback('user requested ?engine=webgl');
+        return;
+      } catch (err: any) {
+        console.error('[Viewer] Forced WebGL fallback failed:', err);
+        showFatalError({
+          title: 'Moteur WebGL HD indisponible',
+          message: "Impossible de démarrer le moteur WebGL HD demandé.",
+          hint: "Vérifiez que la tuile est bien téléchargée, mettez à jour vos pilotes graphiques, ou réessayez sans le paramètre ?engine=webgl.",
+          technical: err?.message || String(err),
+        });
+        return;
+      }
+    }
+
+    // 0. WebGPU preflight — bail early on machines without a usable GPU
+    setStatus('Vérification du support WebGPU...', 2);
+    const pre = await preflightWebGPU();
+    if (!pre.ok) {
+      // No usable WebGPU adapter → spin up the WebGL2 fallback engine
+      // (textured terrain only, no point cloud). Works on iGPU / older
+      // browsers / headless setups.
+      try {
+        await startWebGLFallback(`preflight=${pre.code}`);
+        return;
+      } catch (fallbackErr: any) {
+        console.error('[Viewer] WebGL fallback failed:', fallbackErr);
+        const detail = fallbackErr?.message || String(fallbackErr);
+        showFatalError({
+          title: 'Aucun moteur compatible',
+          message:
+            "Ni WebGPU ni le moteur WebGL HD de secours n'ont pu démarrer sur cette machine. " +
+            "Le visualiseur LiDAR HD ne peut pas s'afficher.",
+          hint:
+            "Mettez à jour vos pilotes graphiques, utilisez un navigateur récent (Chrome / Edge / Firefox), " +
+            "ou ouvrez le visualiseur sur une machine équipée d'un GPU dédié.",
+          technical: `WebGPU: ${pre.code} — ${pre.detail}\nWebGL fallback: ${detail}`,
+        });
+        return;
+      }
+    }
+    console.log(`[Viewer] Preflight OK — vendor=${pre.vendor} arch=${pre.arch} desc=${pre.desc}`);
+
     // 1. Try loading colorized cache first
     setStatus('Chargement du cache colorisé...', 5);
     let pointCloud = await loadColorizedData(tileFileName);
@@ -350,8 +544,10 @@ let renderer: LidarRenderer | null = null;
     snowBtn?.addEventListener('click', () => void cycleSnow());
 
   } catch (err: any) {
-    setStatus(`❌ Erreur : ${err.message}`);
-    console.error(err);
+    const raw = err?.message || String(err);
+    console.error('[Viewer] Fatal:', err);
+    const explained = explainWorkerError(raw);
+    showFatalError({ ...explained, technical: raw });
   }
 })();
 
