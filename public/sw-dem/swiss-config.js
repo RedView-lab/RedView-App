@@ -47,12 +47,13 @@ const SWISS_NATIVE_GSD = 0.5;       // metres per pixel
 const SWISS_KM_TILE_PX = 2000;      // 1 km / 0.5 m = 2000 pixels
 const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
 
-// Mercator zoom gate — slightly broader than the strict stable cutoff so
-// swissSURFACE3D stays visible one small dezoom longer, while still keeping
-// z11 safely off and avoiding the heavier broad-z12 experiment.
-const SWISS_ENGAGE_MPP = 28;
+// Mercator zoom gate — deliberately broader than France so Swiss LiDAR stays
+// visible while the user dezooms. Target behavior: swissSURFACE3D remains
+// active from z11 upward across Switzerland instead of only appearing when
+// zoomed very far in.
+const SWISS_ENGAGE_MPP = 55;
 function shouldUseSwiss(mercZ, lat) {
-  if (mercZ < 4) return false;
+  if (mercZ < SWISS_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);
   const mppAtZ = (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
   return mppAtZ < SWISS_ENGAGE_MPP;
@@ -100,4 +101,4 @@ const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
 // have to consult STAC for many cells just to discover the Mercator pixel
 // is already coarser than the COG. shouldUseSwiss() handles this but we
 // also clamp here defensively.
-const SWISS_DEM_MINZOOM = 8;
+const SWISS_DEM_MINZOOM = 11;
