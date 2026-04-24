@@ -25,7 +25,20 @@ const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
 const ORTHO_BOOT_FALLBACK_MS = 1500;
 const DEM_RELOAD_COOLDOWN_MS = 15000;
-const DEM_ACTIVITY_SETTLE_MS = 220;
+// How long the map must remain idle (no pending tiles, no movement) before we
+// declare loading complete. Short enough to feel snappy, long enough to absorb
+// the gap between two camera-driven tile bursts (zoom cascade, inertia).
+const DEM_ACTIVITY_SETTLE_MS = 380;
+// Stale-loading watchdog: if the dock has been > 99% for this long while the
+// map keeps reporting unfinished tiles, force a re-evaluation so we don't
+// freeze on "99 %". Must be larger than the network timeout for a single tile.
+const LOADING_WATCHDOG_MS = 12_000;
+// Sources whose tile activity should feed the global "Carte" progress bar.
+// `background` and vector glyph/sprite sources never fire tile events; the
+// IGN ortho is a `raster` source, the unified DEM is `raster-dem`, and Mapbox
+// satellite/streets baseline tiles are also `raster`. Tracking all of them
+// gives a faithful end-to-end picture of "is the camera fully painted yet".
+const TRACKED_SOURCE_TYPES = new Set(['raster', 'raster-dem']);
 
 type DemSourceDataLike = mapboxgl.MapSourceDataEvent & {
   coord?: {
@@ -210,20 +223,62 @@ export function useMap(
     let demTrackingEnabled = false;
     let demReloadCoolingUntil = 0;
     let demSettleTimer: ReturnType<typeof setTimeout> | null = null;
+    let loadingWatchdog: ReturnType<typeof setTimeout> | null = null;
+    let lastReportedState: 'loading' | 'ready' | 'error' = 'loading';
     let disposeTerrainBootstrap: (() => void) | null = null;
-    const demRequestedTiles = new Set<string>();
-    const demLoadedTiles = new Set<string>();
+    // Multi-source tile tracking: every raster / raster-dem source that emits
+    // tile activity feeds these counters. Keys are `${sourceId}:${tileId}` to
+    // avoid collisions between sources sharing the same z/x/y.
+    const requestedTiles = new Set<string>();
+    const loadedTiles = new Set<string>();
+
+    const isTrackedSource = (sourceId: string | undefined | null): boolean => {
+      if (!sourceId) return false;
+      try {
+        const src = map.getSource(sourceId);
+        if (!src) return false;
+        return TRACKED_SOURCE_TYPES.has((src as { type?: string }).type ?? '');
+      } catch {
+        return false;
+      }
+    };
+
+    const buildTileKey = (event: mapboxgl.MapSourceDataEvent): string | null => {
+      const tileKey = getDemTileKey(event as DemSourceDataLike);
+      if (!tileKey) return null;
+      return `${event.sourceId}:${tileKey}`;
+    };
+
+    const allTilesLoaded = (): boolean => {
+      try {
+        if (!map.loaded()) return false;
+        const fn = (map as unknown as { areTilesLoaded?: () => boolean }).areTilesLoaded;
+        if (typeof fn === 'function') return fn.call(map);
+        return true;
+      } catch {
+        return false;
+      }
+    };
 
     const clearDemTracking = () => {
-      demRequestedTiles.clear();
-      demLoadedTiles.clear();
+      requestedTiles.clear();
+      loadedTiles.clear();
       if (demSettleTimer) {
         clearTimeout(demSettleTimer);
         demSettleTimer = null;
       }
+      if (loadingWatchdog) {
+        clearTimeout(loadingWatchdog);
+        loadingWatchdog = null;
+      }
     };
 
     const reportMapStatus = (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => {
+      lastReportedState = state;
+      if (state !== 'loading' && loadingWatchdog) {
+        clearTimeout(loadingWatchdog);
+        loadingWatchdog = null;
+      }
       onLoadStatusChangeRef.current?.(createOverlayStatus({
         id: 'map',
         label: 'Carte',
@@ -232,6 +287,31 @@ export function useMap(
         detail,
         reloadable: Boolean(registerReloadRef.current),
       }));
+    };
+
+    const armLoadingWatchdog = () => {
+      if (loadingWatchdog) clearTimeout(loadingWatchdog);
+      loadingWatchdog = setTimeout(() => {
+        loadingWatchdog = null;
+        if (cancelled || !demTrackingEnabled) return;
+        // Forced re-evaluation: if Mapbox reports everything as loaded, finish;
+        // otherwise reset the request counter to the currently-pending set so
+        // the bar stops being stuck at 99 % from stale entries.
+        if (allTilesLoaded() && !map.isMoving()) {
+          finishDemActivity('Carte prête');
+        } else {
+          // Drop completed tiles from the requested set so the next progress
+          // tick re-bases on the live pending count.
+          for (const key of Array.from(requestedTiles)) {
+            if (loadedTiles.has(key)) {
+              requestedTiles.delete(key);
+              loadedTiles.delete(key);
+            }
+          }
+          publishDemProgress('Tuiles en attente');
+          armLoadingWatchdog();
+        }
+      }, LOADING_WATCHDOG_MS);
     };
 
     const finishDemActivity = (detail = 'Carte prête') => {
@@ -244,9 +324,23 @@ export function useMap(
 
     const publishDemProgress = (detail = 'Relief HD') => {
       if (!demTrackingEnabled || cancelled) return;
-      const total = Math.max(demRequestedTiles.size, demLoadedTiles.size, 1);
-      const progress = Math.min(99, Math.round((demLoadedTiles.size / total) * 100));
-      reportMapStatus('loading', progress, detail);
+      const requested = requestedTiles.size;
+      const loaded = loadedTiles.size;
+      // No pending tile activity at all: defer the verdict to `idle` /
+      // `allTilesLoaded()` so we don't flip to 0 % between bursts.
+      if (requested === 0) return;
+      const ratio = loaded / Math.max(requested, 1);
+      // Cap at 99 while at least one tile is still in-flight; only the idle /
+      // settle path is allowed to publish 100 (and switch to "ready").
+      const pct = loaded >= requested
+        ? (allTilesLoaded() && !map.isMoving() ? 100 : 99)
+        : Math.max(1, Math.min(99, Math.round(ratio * 100)));
+      if (pct >= 100) {
+        finishDemActivity(detail);
+        return;
+      }
+      reportMapStatus('loading', pct, detail);
+      armLoadingWatchdog();
     };
 
     const scheduleDemSettle = () => {
@@ -255,8 +349,13 @@ export function useMap(
       demSettleTimer = setTimeout(() => {
         demSettleTimer = null;
         if (cancelled) return;
-        if (map.isSourceLoaded(unifiedDEMSource.id) && !map.isMoving()) {
+        if (allTilesLoaded() && !map.isMoving()) {
           finishDemActivity('Carte prête');
+        } else if (lastReportedState !== 'loading') {
+          // New tile activity sneaked in after a "ready" tick: fall back into
+          // loading mode and let the standard tracker drive the bar.
+          reportMapStatus('loading', 99, 'Tuiles');
+          armLoadingWatchdog();
         }
       }, DEM_ACTIVITY_SETTLE_MS);
     };
@@ -329,6 +428,10 @@ export function useMap(
       demCacheBust = now;
       refreshDemSource();
       armTerrainBootstrap(() => {
+        // Re-arm live tracking after the new DEM source has emitted its first
+        // tile; the global `idle` watcher will close the session once Mapbox
+        // confirms every tracked source is fully painted.
+        demTrackingEnabled = true;
         scheduleDemSettle();
       });
     };
@@ -402,7 +505,24 @@ export function useMap(
         // /ortho-tiles/ sources â€” they would 404. The Standard Satellite style
         // already ships its own terrain + satellite imagery.
         console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
-        finishDemActivity('Carte prête');
+        // Hand readiness over to the `idle` watcher set up below so we don't
+        // flash 100 % while the native satellite tiles are still painting.
+        demTrackingEnabled = true;
+        reportMapStatus('loading', 80, 'Tuiles satellites');
+        const finishOnIdle = () => {
+          if (cancelled) return;
+          if (!allTilesLoaded() || map.isMoving()) return;
+          map.off('idle', finishOnIdle);
+          finishDemActivity('Carte prête');
+        };
+        map.on('idle', finishOnIdle);
+        // Safety net: if `idle` never fires (extreme network), unblock after
+        // 8 s so the UI is never permanently stuck mid-bar.
+        setTimeout(() => {
+          if (cancelled) return;
+          if (lastReportedState === 'ready') return;
+          finishDemActivity('Carte prête');
+        }, 8000);
         setIsLoaded(true);
         return;
       }
@@ -434,7 +554,12 @@ export function useMap(
         if (cancelled) return;
         reportMapStatus('loading', 92, 'Textures IGN');
         addIgnOrthoOverlay(map);
-        finishDemActivity('Carte prête');
+        // Enable live tile tracking now that all tracked sources exist; do NOT
+        // call finishDemActivity() here. The `idle` event below is the only
+        // authority allowed to flip the dock to "ready", so we wait until
+        // every raster + raster-dem tile has actually painted.
+        demTrackingEnabled = true;
+        scheduleDemSettle();
       };
 
       orthoBootTimer = setTimeout(() => {
@@ -445,41 +570,66 @@ export function useMap(
         void addOrthoWhenReady();
       });
 
-      const onDemSourceDataLoading = (event: mapboxgl.MapSourceDataEvent) => {
+      const onTrackedSourceDataLoading = (event: mapboxgl.MapSourceDataEvent) => {
         if (!demTrackingEnabled) return;
-        if (event.sourceId !== unifiedDEMSource.id) return;
-        const tileKey = getDemTileKey(event as DemSourceDataLike);
+        if (!isTrackedSource(event.sourceId)) return;
+        const tileKey = buildTileKey(event);
         if (!tileKey) return;
-        demRequestedTiles.add(tileKey);
-        publishDemProgress('Relief HD');
+        requestedTiles.add(tileKey);
+        publishDemProgress('Tuiles');
       };
 
-      const onDemSourceData = (event: mapboxgl.MapSourceDataEvent) => {
+      const onTrackedSourceData = (event: mapboxgl.MapSourceDataEvent) => {
         if (!demTrackingEnabled) return;
-        if (event.sourceId !== unifiedDEMSource.id) return;
-        const tileKey = getDemTileKey(event as DemSourceDataLike);
+        if (!isTrackedSource(event.sourceId)) return;
+        const tileKey = buildTileKey(event);
         if (tileKey) {
-          demRequestedTiles.add(tileKey);
-          demLoadedTiles.add(tileKey);
-          publishDemProgress('Relief HD');
+          requestedTiles.add(tileKey);
+          loadedTiles.add(tileKey);
+          publishDemProgress('Tuiles');
         }
         if (event.isSourceLoaded) {
           scheduleDemSettle();
         }
       };
 
-      map.on('sourcedataloading', onDemSourceDataLoading);
-      map.on('sourcedata', onDemSourceData);
+      // The `idle` event is Mapbox's authoritative "all tiles painted, no
+      // animation pending" signal. It is the ONLY place we are allowed to
+      // declare the map fully ready.
+      const onMapIdle = () => {
+        if (!demTrackingEnabled || cancelled) return;
+        if (!allTilesLoaded()) return;
+        if (map.isMoving()) return;
+        finishDemActivity('Carte prête');
+      };
+
+      // While the camera is moving Mapbox will queue a fresh tile burst as
+      // soon as it stops; immediately revert the bar to "loading" so the user
+      // sees the upcoming work instead of a misleading "ready" flash.
+      const onMovestart = () => {
+        if (!demTrackingEnabled || cancelled) return;
+        if (allTilesLoaded()) return;
+        if (lastReportedState === 'ready') {
+          reportMapStatus('loading', 5, 'Déplacement');
+        }
+      };
+
+      map.on('sourcedataloading', onTrackedSourceDataLoading);
+      map.on('sourcedata', onTrackedSourceData);
       map.on('moveend', scheduleDemSettle);
       map.on('zoomend', scheduleDemSettle);
+      map.on('movestart', onMovestart);
+      map.on('idle', onMapIdle);
 
       setIsLoaded(true);
 
       return () => {
-        map.off('sourcedataloading', onDemSourceDataLoading);
-        map.off('sourcedata', onDemSourceData);
+        map.off('sourcedataloading', onTrackedSourceDataLoading);
+        map.off('sourcedata', onTrackedSourceData);
         map.off('moveend', scheduleDemSettle);
         map.off('zoomend', scheduleDemSettle);
+        map.off('movestart', onMovestart);
+        map.off('idle', onMapIdle);
       };
     })().catch((err) => {
       console.error('[map3d] init failed', err);
