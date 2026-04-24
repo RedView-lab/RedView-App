@@ -14,6 +14,14 @@ interface UseDashboardProjectStateArgs {
   mapInstance: MapboxMap | null;
 }
 
+interface LocalProjectCacheEntry {
+  cachedAt: string;
+  project: ItineraryProject;
+}
+
+const PROJECT_CACHE_KEY_PREFIX = 'redview:project-cache:';
+const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
+
 /**
  * Read the current Supabase access token from localStorage. Used by the
  * keepalive PATCH path so we don't have to await an async getSession()
@@ -34,6 +42,43 @@ function readAccessTokenSync(anonKey: string): string {
     /* fall through */
   }
   return anonKey;
+}
+
+function getProjectCacheKey(projectId: string): string {
+  return `${PROJECT_CACHE_KEY_PREFIX}${projectId}`;
+}
+
+function readProjectCache(projectId: string): LocalProjectCacheEntry | null {
+  try {
+    const raw = window.localStorage.getItem(getProjectCacheKey(projectId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<LocalProjectCacheEntry>;
+    if (!parsed || typeof parsed.cachedAt !== 'string' || !parsed.project) {
+      window.localStorage.removeItem(getProjectCacheKey(projectId));
+      return null;
+    }
+    return {
+      cachedAt: parsed.cachedAt,
+      project: parsed.project as ItineraryProject,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeProjectCache(projectId: string, project: ItineraryProject): void {
+  try {
+    const payload: LocalProjectCacheEntry = {
+      cachedAt: new Date().toISOString(),
+      project,
+    };
+    window.localStorage.setItem(
+      getProjectCacheKey(projectId),
+      JSON.stringify(payload),
+    );
+  } catch (error) {
+    console.warn('[Dashboard] local project cache write failed', error);
+  }
 }
 
 export function useDashboardProjectState({
@@ -63,7 +108,8 @@ export function useDashboardProjectState({
    * The pending snapshot is kept until the request resolves with 2xx,
    * so a transient network failure doesn't discard the user's work.
    */
-  const flushSave = useCallback(async (): Promise<void> => {
+  const flushSave = useCallback(
+    async ({ keepalive = false }: { keepalive?: boolean } = {}): Promise<void> => {
     const id = activeProjectIdRef.current;
     const payload = pendingSaveRef.current;
     if (!id || !payload) return;
@@ -92,6 +138,9 @@ export function useDashboardProjectState({
       privacy: payload.privacy ?? 'private',
     });
 
+    const canUseKeepalive =
+      keepalive && new Blob([body]).size <= KEEPALIVE_BODY_LIMIT_BYTES;
+
     try {
       const res = await fetch(
         `${url}/rest/v1/projects?id=eq.${encodeURIComponent(id)}`,
@@ -104,9 +153,9 @@ export function useDashboardProjectState({
             Prefer: 'return=minimal',
           },
           body,
-          // Survives `pagehide` / refresh, so an in-flight save isn't
-          // cancelled when the user navigates away.
-          keepalive: true,
+          // Regular autosaves use a normal request because keepalive has a
+          // small browser-imposed payload cap. We only enable it during unload.
+          keepalive: canUseKeepalive,
         },
       );
       if (!res.ok) {
@@ -125,7 +174,9 @@ export function useDashboardProjectState({
     } catch (error) {
       console.error('[Dashboard] autosave failed', error);
     }
-  }, []);
+    },
+    [],
+  );
 
   const queueProjectSave = useCallback(
     (next: ItineraryProject) => {
@@ -135,6 +186,9 @@ export function useDashboardProjectState({
       const id = activeProjectIdRef.current;
       if (id) {
         replaceProjectLocation({ id, name: next.name || 'project' });
+        // Synchronous write-through cache: even if the network request is
+        // cancelled or delayed, a same-browser refresh rehydrates this snapshot.
+        writeProjectCache(id, next);
       }
 
       if (saveTimerRef.current != null) {
@@ -183,25 +237,57 @@ export function useDashboardProjectState({
       const row = await getProject(projectId);
       if (!row) throw new Error('Project not found');
 
-      activeProjectSnapshotRef.current = row.data;
+      const serverProject = row.data;
+      const localCache = readProjectCache(projectId);
+      const serverUpdatedAtMs = Date.parse(row.updated_at);
+      const localUpdatedAtMs = localCache ? Date.parse(localCache.cachedAt) : Number.NaN;
+      const localIsNewer =
+        !!localCache
+        && Number.isFinite(localUpdatedAtMs)
+        && (!Number.isFinite(serverUpdatedAtMs) || localUpdatedAtMs > serverUpdatedAtMs);
+      const hydratedProject = localIsNewer ? localCache.project : serverProject;
+
+      activeProjectIdRef.current = row.id;
+      activeProjectSnapshotRef.current = hydratedProject;
+      lastSavedSerializedRef.current = JSON.stringify(serverProject);
       pendingSaveRef.current = null;
-      lastSavedSerializedRef.current = JSON.stringify(row.data);
+      setActiveProjectInitial(hydratedProject);
       setActiveProjectId(row.id);
-      setActiveProjectInitial(row.data);
       setProjectBrowserOpen(false);
       replaceProjectLocation({
         id: row.id,
-        name: row.name || row.data.name || 'project',
+        name: row.name || hydratedProject.name || 'project',
       });
+
+      // If the local browser copy is fresher than the server snapshot,
+      // immediately schedule a normal save to push it back upstream.
+      if (localIsNewer) {
+        queueProjectSave(hydratedProject);
+      }
     } catch (error) {
-      console.error('[Dashboard] failed to open project', error);
-      if (activeProjectIdRef.current == null) {
-        replaceProjectLocation(null);
+      const localCache = readProjectCache(projectId);
+      if (localCache) {
+        activeProjectIdRef.current = projectId;
+        activeProjectSnapshotRef.current = localCache.project;
+        pendingSaveRef.current = localCache.project;
+        setActiveProjectInitial(localCache.project);
+        setActiveProjectId(projectId);
+        setProjectBrowserOpen(false);
+        replaceProjectLocation({
+          id: projectId,
+          name: localCache.project.name || 'project',
+        });
+        queueProjectSave(localCache.project);
+      } else {
+        console.error('[Dashboard] failed to open project', error);
+        if (activeProjectIdRef.current == null) {
+          replaceProjectLocation(null);
+        }
       }
     } finally {
       setProjectLoading(false);
     }
-  }, []);
+  }, [queueProjectSave]);
 
   useEffect(() => {
     if (!initialProjectId || activeProjectId != null || projectLoading) return;
@@ -216,7 +302,7 @@ export function useDashboardProjectState({
         window.clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
       }
-      void flushSave();
+      void flushSave({ keepalive: true });
     };
     const onVisibilityChange = () => {
       // `visibilitychange → hidden` fires reliably on mobile when the
@@ -228,7 +314,7 @@ export function useDashboardProjectState({
           window.clearTimeout(saveTimerRef.current);
           saveTimerRef.current = null;
         }
-        void flushSave();
+        void flushSave({ keepalive: true });
       }
     };
 
