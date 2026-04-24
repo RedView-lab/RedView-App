@@ -30,6 +30,8 @@ const MULTI_POI_MARKER_WIDTH_PX = 44;
 const MULTI_POI_MARKER_HEIGHT_PX = 48;
 const POI_CLUSTER_OVERLAP_X_PX = 38;
 const POI_CLUSTER_OVERLAP_Y_PX = 16;
+const POI_CLUSTER_OVERLAP_X_PX_COMPACT = 46;
+const POI_CLUSTER_OVERLAP_Y_PX_COMPACT = 40;
 const POI_CLUSTER_COMPACT_VISIBLE_FRACTION = 0.88;
 
 interface AnalysisChartProps {
@@ -254,8 +256,8 @@ export function AnalysisChart({
   }, [backdropYDomain, plotSize.height, plotSize.width, plotXDomain, poiAnnotations]);
 
   const poiMarkerGroups = useMemo(
-    () => buildPoiMarkerGroups(visiblePoiAnnotations),
-    [visiblePoiAnnotations],
+    () => buildPoiMarkerGroups(visiblePoiAnnotations, visibleFraction),
+    [visibleFraction, visiblePoiAnnotations],
   );
 
   const dayNightBands = useMemo(
@@ -713,7 +715,10 @@ function HoverCardGroup({ hoverX, hoverRatioX, xValue, xMode, rows }: HoverCardG
   );
 }
 
-function buildPoiMarkerGroups(annotations: VisiblePoiAnnotation[]): PoiMarkerGroup[] {
+function buildPoiMarkerGroups(
+  annotations: VisiblePoiAnnotation[],
+  visibleFraction: number,
+): PoiMarkerGroup[] {
   if (annotations.length === 0) return [];
 
   const sorted = [...annotations].sort((left, right) => left.xPx - right.xPx);
@@ -722,7 +727,7 @@ function buildPoiMarkerGroups(annotations: VisiblePoiAnnotation[]): PoiMarkerGro
   for (const annotation of sorted) {
     const targetGroup = groups[groups.length - 1] ?? null;
 
-    if (targetGroup && annotationFitsCluster(targetGroup, annotation)) {
+    if (targetGroup && annotationFitsCluster(targetGroup, annotation, visibleFraction)) {
       targetGroup.push(annotation);
     } else {
       groups.push([annotation]);
@@ -744,21 +749,32 @@ function buildPoiMarkerGroups(annotations: VisiblePoiAnnotation[]): PoiMarkerGro
   });
 }
 
-function annotationsOverlap(left: VisiblePoiAnnotation, right: VisiblePoiAnnotation): boolean {
+function annotationsOverlap(
+  left: VisiblePoiAnnotation,
+  right: VisiblePoiAnnotation,
+  visibleFraction: number,
+): boolean {
+  const compactMode = visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION;
+  const maxDeltaX = compactMode ? POI_CLUSTER_OVERLAP_X_PX_COMPACT : POI_CLUSTER_OVERLAP_X_PX;
+  const maxDeltaY = compactMode ? POI_CLUSTER_OVERLAP_Y_PX_COMPACT : POI_CLUSTER_OVERLAP_Y_PX;
   return (
-    Math.abs(left.xPx - right.xPx) <= POI_CLUSTER_OVERLAP_X_PX &&
-    Math.abs(left.yPx - right.yPx) <= POI_CLUSTER_OVERLAP_Y_PX
+    Math.abs(left.xPx - right.xPx) <= maxDeltaX &&
+    Math.abs(left.yPx - right.yPx) <= maxDeltaY
   );
 }
 
 function annotationFitsCluster(
   cluster: VisiblePoiAnnotation[],
   annotation: VisiblePoiAnnotation,
+  visibleFraction: number,
 ): boolean {
   if (cluster.length === 0) return false;
   const anchor = cluster[0];
   const previous = cluster[cluster.length - 1];
-  return annotationsOverlap(anchor, annotation) && annotationsOverlap(previous, annotation);
+  return (
+    annotationsOverlap(anchor, annotation, visibleFraction) &&
+    annotationsOverlap(previous, annotation, visibleFraction)
+  );
 }
 
 function buildPoiSpreadOffsetPx(index: number, count: number): number {
