@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { IconChevronDown } from './CenterPanelIcons';
+import { useAnalysisFlyover } from '../flyover';
 
 type ToolbarIconProps = {
   size?: number;
@@ -90,6 +91,20 @@ const IconPlay = ({ size = 16, ...rest }: ToolbarIconProps) => (
   <SvgV2Icon name="play.svg" size={size} {...rest} />
 );
 
+const IconPause = ({ size = 16, ...rest }: ToolbarIconProps) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 16 16"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    {...rest}
+  >
+    <rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor" />
+    <rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor" />
+  </svg>
+);
+
 const IconClockRewind = ({ size = 16, ...rest }: ToolbarIconProps) => (
   <SvgV2Icon name={TOOLBAR_ICON_ASSETS.clockRewind} size={size} {...rest} />
 );
@@ -109,6 +124,19 @@ function ToolbarIconButton({
 }
 
 export function CenterPanelToolbar() {
+  const {
+    canPlay,
+    canSlowDown,
+    canSpeedUp,
+    distanceLabel,
+    isPlaying,
+    resetPlayback,
+    slowDown,
+    speedUp,
+    timeLabel,
+    togglePlayback,
+  } = useAnalysisFlyover();
+
   return (
     <section className="rvc-center-toolbar" aria-label="Barre d'outils centrale">
       <div className="rvc-center-toolbar__viewport">
@@ -171,25 +199,58 @@ export function CenterPanelToolbar() {
           <div className="rvc-center-toolbar__spacer" aria-hidden="true" />
 
           <div className="rvc-center-toolbar__playback" aria-label="Lecture du parcours">
-            <ToolbarIconButton label="Précédent">
+            <button
+              className="rvc-center-toolbar__button"
+              type="button"
+              aria-label="Ralentir le flyover"
+              title="Ralentir le flyover"
+              onClick={slowDown}
+              disabled={!canPlay || !canSlowDown}
+            >
               <IconSkip direction="backward" />
-            </ToolbarIconButton>
-
-            <button className="rvc-center-toolbar__button rvc-center-toolbar__button--play" type="button" aria-label="Lecture" title="Lecture">
-              <IconPlay />
             </button>
 
-            <ToolbarIconButton label="Suivant">
-              <IconSkip direction="forward" />
-            </ToolbarIconButton>
+            <button
+              className={
+                isPlaying
+                  ? 'rvc-center-toolbar__button rvc-center-toolbar__button--play rvc-center-toolbar__button--play-active'
+                  : 'rvc-center-toolbar__button rvc-center-toolbar__button--play'
+              }
+              type="button"
+              aria-label={isPlaying ? 'Mettre en pause le flyover' : 'Lancer le flyover'}
+              title={isPlaying ? 'Mettre en pause le flyover' : 'Lancer le flyover'}
+              aria-pressed={isPlaying}
+              onClick={togglePlayback}
+              disabled={!canPlay}
+            >
+              {isPlaying ? <IconPause /> : <IconPlay />}
+            </button>
 
-            <ToolbarIconButton label="Revenir au début">
+            <button
+              className="rvc-center-toolbar__button"
+              type="button"
+              aria-label="Accélérer le flyover"
+              title="Accélérer le flyover"
+              onClick={speedUp}
+              disabled={!canPlay || !canSpeedUp}
+            >
+              <IconSkip direction="forward" />
+            </button>
+
+            <button
+              className="rvc-center-toolbar__button"
+              type="button"
+              aria-label="Revenir au début du flyover"
+              title="Revenir au début du flyover"
+              onClick={resetPlayback}
+              disabled={!canPlay}
+            >
               <IconClockRewind />
-            </ToolbarIconButton>
+            </button>
 
             <div className="rvc-center-toolbar__metrics" aria-label="Résumé de lecture">
-              <span>127.23 km</span>
-              <span>02 : 48 : 59</span>
+              <span>{distanceLabel}</span>
+              <span>{timeLabel}</span>
             </div>
           </div>
         </div>

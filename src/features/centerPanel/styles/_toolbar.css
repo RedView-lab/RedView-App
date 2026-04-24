@@ -48,10 +48,21 @@
   font-size: 12px;
   font-weight: 400;
   line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    opacity 140ms ease,
+    color 140ms ease,
+    box-shadow 180ms ease;
 }
 
 .rvc-center-toolbar__button svg {
   flex: 0 0 auto;
+}
+
+.rvc-center-toolbar__button:disabled {
+  opacity: 0.38;
+  cursor: default;
 }
 
 .rvc-center-toolbar__button--accent {
@@ -79,6 +90,11 @@
   background: rgba(255, 255, 255, 0.16);
 }
 
+.rvc-center-toolbar__button--play-active {
+  background: rgba(137, 0, 0, 0.92);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
 .rvc-center-toolbar__button-text {
   white-space: nowrap;
 }
@@ -103,7 +119,7 @@
 }
 
 .rvc-center-toolbar__metrics {
-  width: 74px;
+  width: 120px;
   color: #fff;
   display: flex;
   flex-direction: column;
@@ -143,7 +159,7 @@
 
 @container center-panel-toolbar (max-width: 640px) {
   .rvc-center-toolbar__metrics {
-    width: 68px;
+    width: 108px;
     font-size: 9px;
   }
 }

@@ -2,6 +2,7 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
+import { useAnalysisFlyover } from '../flyover';
 import {
   AnalysisChart,
   buildChartDayNightOverlay,
@@ -22,10 +23,6 @@ import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
-import {
-  clearAnalysisHoverPoint,
-  setAnalysisHoverPoint,
-} from '@/features/itineraryPanel/lib/route-layer';
 import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/defaultState';
 import type {
   AnalysisFiltersState,
@@ -72,6 +69,9 @@ const axisOptions: AxisOption[] = [
 const DETAIL_ZOOM_STEP = 0.1;
 const DETAIL_MIN_VISIBLE_FRACTION = 0.04;
 const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
+const CHART_CLICK_CAMERA_DURATION_MS = 950;
+const CHART_CLICK_FOCUS_ZOOM = 15.5;
+const CHART_CLICK_FOCUS_PITCH = 68;
 
 interface CenterPanelAnalysisProps {
   map: MapboxMap | null;
@@ -81,10 +81,10 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
-  const [hoveredChartX, setHoveredChartX] = useState<number | null>(null);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
+  const { controlledHoverXValue, setManualHoverXValue } = useAnalysisFlyover();
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
   // chips). Read from the project so reopening it restores the chart.
@@ -442,40 +442,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     );
   }, [projectStore]);
 
-  const hoveredRoutePoint = useMemo(() => {
-    if (!interactiveItinerary || hoveredChartX == null) return null;
-    const prediction =
-      predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
-    return locateRoutePointAtX(
-      interactiveItinerary.gpxRoute?.points ?? null,
-      prediction,
-      xMode,
-      hoveredChartX,
-      interactiveItinerary.rhythm.startTime,
-    );
-  }, [hoveredChartX, interactiveItinerary, predictionStore, xMode]);
-
-  useEffect(() => {
-    if (!map) return;
-    if (!hoveredRoutePoint || !interactiveItinerary) {
-      clearAnalysisHoverPoint(map);
-      return;
-    }
-
-    setAnalysisHoverPoint(map, {
-      lon: hoveredRoutePoint.lon,
-      lat: hoveredRoutePoint.lat,
-      color: interactiveItinerary.color,
-    });
-  }, [hoveredRoutePoint, interactiveItinerary, map]);
-
-  useEffect(() => {
-    if (!map) return;
-    return () => {
-      clearAnalysisHoverPoint(map);
-    };
-  }, [map]);
-
   const handleChartClick = (xValue: number) => {
     if (!map || !interactiveItinerary) return;
     const prediction =
@@ -491,7 +457,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
     map.easeTo({
       center: [point.lon, point.lat],
-      duration: 700,
+      zoom: Math.max(map.getZoom(), CHART_CLICK_FOCUS_ZOOM),
+      pitch: Math.max(map.getPitch(), CHART_CLICK_FOCUS_PITCH),
+      duration: CHART_CLICK_CAMERA_DURATION_MS,
       essential: true,
     });
   };
@@ -636,7 +604,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           xDomainClamp={routeXDomainClamp}
           onViewportChange={setViewportState}
           onDetailOffsetChange={handleDetailOffsetChange}
-          onHoverXValueChange={setHoveredChartX}
+          onHoverXValueChange={setManualHoverXValue}
+          controlledHoverXValue={controlledHoverXValue}
           onPlotClick={handleChartClick}
           showSeriesRows={false}
         />

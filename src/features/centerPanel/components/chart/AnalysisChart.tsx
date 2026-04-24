@@ -57,6 +57,7 @@ interface AnalysisChartProps {
   onViewportChange?: (next: { detailZoom: number; detailOffset: number }) => void;
   onDetailOffsetChange?: (value: number) => void;
   onHoverXValueChange?: (xValue: number | null) => void;
+  controlledHoverXValue?: number | null;
   onPlotClick?: (xValue: number) => void;
   showSeriesRows?: boolean;
 }
@@ -75,6 +76,7 @@ export function AnalysisChart({
   onViewportChange,
   onDetailOffsetChange,
   onHoverXValueChange,
+  controlledHoverXValue = null,
   onPlotClick,
   showSeriesRows = true,
 }: AnalysisChartProps) {
@@ -157,6 +159,24 @@ export function AnalysisChart({
     () => buildVisibleXDomain(xDomain, visibleFraction, normalizedDetailOffset),
     [normalizedDetailOffset, visibleFraction, xDomain],
   );
+
+  const activeHover = useMemo(() => {
+    if (Number.isFinite(controlledHoverXValue) && plotSize.width > 0) {
+      const span = plotXDomain.max - plotXDomain.min;
+      if (span > 0) {
+        const clampedXValue = Math.max(
+          plotXDomain.min,
+          Math.min(plotXDomain.max, controlledHoverXValue as number),
+        );
+        const ratioX = (clampedXValue - plotXDomain.min) / span;
+        return {
+          x: ratioX * plotSize.width,
+          ratioX,
+        };
+      }
+    }
+    return hover;
+  }, [controlledHoverXValue, hover, plotSize.width, plotXDomain]);
 
   const xTicks = useMemo(() => {
     const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
@@ -348,8 +368,8 @@ export function AnalysisChart({
   }, [backdropSeries, backdropYDomain, plotSize.height, plotSize.width, plotXDomain, seriesLayers]);
 
   const hoverData = useMemo(() => {
-    if (!hover || !visibleSeries.length) return null;
-    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+    if (!activeHover || !visibleSeries.length) return null;
+    const hoveredX = plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min);
     return visibleSeries.map((entry) => ({
       id: entry.id,
       itineraryName: entry.itineraryName,
@@ -359,11 +379,11 @@ export function AnalysisChart({
       metric: entry.metricId,
       value: interpolateY(entry.points, hoveredX),
     }));
-  }, [hover, plotXDomain, visibleSeries]);
+  }, [activeHover, plotXDomain, visibleSeries]);
 
   const hoverBackdropData = useMemo(() => {
-    if (!hover || !backdropProfiles.length) return [];
-    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+    if (!activeHover || !backdropProfiles.length) return [];
+    const hoveredX = plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min);
     return backdropProfiles
       .map((profile) => {
         const value = interpolateY(profile.points, hoveredX);
@@ -379,11 +399,11 @@ export function AnalysisChart({
         };
       })
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
-  }, [backdropProfiles, hover, plotXDomain]);
+  }, [activeHover, backdropProfiles, plotXDomain]);
 
   const hoverMarkers = useMemo(() => {
-    if (!hover) return [];
-    const hoveredX = plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min);
+    if (!activeHover) return [];
+    const hoveredX = plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min);
 
     const seriesPoints = visibleSeries
       .map((entry) => {
@@ -414,12 +434,13 @@ export function AnalysisChart({
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
     return [...backdropPoints, ...seriesPoints];
-  }, [backdropProfiles, backdropYDomain, hover, plotSize.height, plotXDomain, plotY2Domain, plotYDomain, visibleSeries]);
+  }, [activeHover, backdropProfiles, backdropYDomain, plotSize.height, plotXDomain, plotY2Domain, plotYDomain, visibleSeries]);
 
   useEffect(() => {
     if (!onHoverXValueChange) return;
-    pendingHoverXValueRef.current = hover
-      ? plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)
+    if (Number.isFinite(controlledHoverXValue)) return;
+    pendingHoverXValueRef.current = activeHover
+      ? plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min)
       : null;
     if (hoverCallbackFrameRef.current !== null) return;
 
@@ -431,7 +452,7 @@ export function AnalysisChart({
       lastEmittedHoverXValueRef.current = nextHoverXValue;
       onHoverXValueChange(nextHoverXValue);
     });
-  }, [hover, onHoverXValueChange, plotXDomain]);
+  }, [activeHover, controlledHoverXValue, onHoverXValueChange, plotXDomain]);
 
   const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!onPlotClick || event.button !== 0) return;
@@ -602,9 +623,9 @@ export function AnalysisChart({
           </div>
 
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
-            {hover ? (
+            {activeHover ? (
               <>
-                <div className="rvchart__cursor" style={{ left: `${hover.x}px` }} />
+                <div className="rvchart__cursor" style={{ left: `${activeHover.x}px` }} />
                 {hoverMarkers.map((marker) => (
                   <div
                     key={marker.id}
@@ -614,16 +635,16 @@ export function AnalysisChart({
                         : 'rvchart__hover-point'
                     }
                     style={{
-                      left: `${hover.x}px`,
+                      left: `${activeHover.x}px`,
                       top: `${marker.topPx}px`,
                       ['--rvchart-hover-point-color' as string]: marker.color,
                     }}
                   />
                 ))}
                 <HoverCardGroup
-                  hoverX={hover.x}
-                  hoverRatioX={hover.ratioX}
-                  xValue={plotXDomain.min + hover.ratioX * (plotXDomain.max - plotXDomain.min)}
+                  hoverX={activeHover.x}
+                  hoverRatioX={activeHover.ratioX}
+                  xValue={plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min)}
                   xMode={xMode}
                   rows={[...(hoverData ?? []), ...hoverBackdropData]}
                 />

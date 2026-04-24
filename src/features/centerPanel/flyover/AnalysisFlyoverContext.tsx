@@ -1,0 +1,423 @@
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
+import type { AxisDomain, AxisMode } from '../components/chart';
+import { buildSeriesFromPrediction, computeXDomain, locateRoutePointAtX } from '../components/chart';
+import {
+  bearingAtDistance,
+  buildRoutePlaybackGeometry,
+  buildRouteTrailCoordinates,
+  clampDistanceM,
+  elapsedSecondsAtDistance,
+  formatDistanceLabel,
+  formatPlaybackClock,
+  interpolateRoutePointAtDistance,
+  xValueFromDistance,
+} from './playback';
+import {
+  usePredictionStoreOptional,
+  useProjectStoreOptional,
+} from '@/features/itineraryPanel';
+import {
+  clearAnalysisFlyoverProgress,
+  clearAnalysisHoverPoint,
+  setAnalysisFlyoverProgress,
+  setAnalysisHoverPoint,
+} from '@/features/itineraryPanel/lib/route-layer';
+
+const SPEED_STEPS = [0.5, 1, 1.5, 2, 3, 4] as const;
+const DEFAULT_SPEED_INDEX = 1;
+const FLYOVER_REFERENCE_DISTANCE_KM = 80;
+const FLYOVER_REFERENCE_DURATION_MS = 30_000;
+const FLYOVER_MIN_DURATION_MS = 12_000;
+const FLYOVER_MAX_DURATION_MS = 150_000;
+const FLYOVER_CAMERA_ZOOM = 15.6;
+const FLYOVER_CAMERA_PITCH = 70;
+const FLYOVER_CENTER_SMOOTHING = 0.24;
+const FLYOVER_BEARING_SMOOTHING = 0.18;
+const FLYOVER_ZOOM_SMOOTHING = 0.14;
+const FLYOVER_PITCH_SMOOTHING = 0.16;
+
+interface AnalysisFlyoverContextValue {
+  canPlay: boolean;
+  isPlaying: boolean;
+  playbackActive: boolean;
+  controlledHoverXValue: number | null;
+  setManualHoverXValue: (xValue: number | null) => void;
+  togglePlayback: () => void;
+  slowDown: () => void;
+  speedUp: () => void;
+  resetPlayback: () => void;
+  canSlowDown: boolean;
+  canSpeedUp: boolean;
+  distanceLabel: string;
+  timeLabel: string;
+  speedLabel: string;
+}
+
+const AnalysisFlyoverContext = createContext<AnalysisFlyoverContextValue | null>(null);
+
+interface AnalysisFlyoverProviderProps {
+  children: ReactNode;
+  map: MapboxMap | null;
+}
+
+export function AnalysisFlyoverProvider({
+  children,
+  map,
+}: AnalysisFlyoverProviderProps) {
+  const projectStore = useProjectStoreOptional();
+  const predictionStore = usePredictionStoreOptional();
+  const [manualHoverXValue, setManualHoverXValue] = useState<number | null>(null);
+  const [playbackDistanceM, setPlaybackDistanceM] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speedIndex, setSpeedIndex] = useState(DEFAULT_SPEED_INDEX);
+  const [playbackSessionId, setPlaybackSessionId] = useState(0);
+  const playbackDistanceRef = useRef<number | null>(null);
+
+  const interactiveItinerary = useMemo(() => {
+    if (!projectStore) return null;
+    const itineraries = projectStore.project.itineraries;
+    const active =
+      itineraries.find((itinerary) => itinerary.id === projectStore.project.activeItineraryId) ??
+      null;
+    if (active && active.analysisVisible !== false && (active.gpxRoute?.points.length ?? 0) > 0) {
+      return active;
+    }
+    return (
+      itineraries.find(
+        (itinerary) =>
+          itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
+      ) ?? null
+    );
+  }, [projectStore]);
+
+  const xMode = ((projectStore?.project.analysis?.xMode as AxisMode | undefined) ??
+    'distance') as AxisMode;
+  const routePoints = interactiveItinerary?.gpxRoute?.points ?? null;
+  const prediction =
+    interactiveItinerary != null
+      ? predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null
+      : null;
+  const routeGeometry = useMemo(() => buildRoutePlaybackGeometry(routePoints), [routePoints]);
+  const totalDistanceM = useMemo(() => {
+    const predictedDistanceM = prediction?.total_distance_m;
+    if (Number.isFinite(predictedDistanceM) && (predictedDistanceM as number) > 0) {
+      return predictedDistanceM as number;
+    }
+    return routeGeometry?.totalDistanceM ?? 0;
+  }, [prediction, routeGeometry]);
+  const startTime = interactiveItinerary?.rhythm.startTime ?? null;
+
+  const routeXDomain = useMemo<AxisDomain | null>(() => {
+    const altitudeSeries = buildSeriesFromPrediction(
+      prediction,
+      'Altitude',
+      xMode,
+      routePoints,
+      startTime,
+    );
+    if (altitudeSeries && altitudeSeries.length >= 2) {
+      return computeXDomain([altitudeSeries], xMode);
+    }
+    if (xMode === 'distance' && totalDistanceM > 0) {
+      return { min: 0, max: totalDistanceM / 1000 };
+    }
+    const totalElapsedHours = Number.isFinite(prediction?.total_time_s)
+      ? (prediction?.total_time_s as number) / 3600
+      : Number.NaN;
+    if (!(totalElapsedHours > 0)) return null;
+    if (xMode === 'heure') {
+      const startHours = startTime ? xValueFromDistance(0, { prediction, totalDistanceM, xMode, startTime }) : 0;
+      return { min: startHours, max: startHours + totalElapsedHours };
+    }
+    return { min: 0, max: totalElapsedHours };
+  }, [prediction, routePoints, startTime, totalDistanceM, xMode]);
+
+  const itineraryId = interactiveItinerary?.id ?? null;
+  useEffect(() => {
+    setIsPlaying(false);
+    setPlaybackDistanceM(null);
+    setManualHoverXValue(null);
+    setSpeedIndex(DEFAULT_SPEED_INDEX);
+  }, [itineraryId]);
+
+  useEffect(() => {
+    playbackDistanceRef.current = playbackDistanceM;
+  }, [playbackDistanceM]);
+
+  const speedMultiplier = SPEED_STEPS[speedIndex] ?? 1;
+  const playbackActive = playbackDistanceM != null && totalDistanceM > 0;
+  const canPlay = Boolean(
+    routePoints &&
+      routePoints.length >= 2 &&
+      totalDistanceM > 1 &&
+      routeXDomain &&
+      Number.isFinite(
+        xValueFromDistance(totalDistanceM, {
+          prediction,
+          totalDistanceM,
+          xMode,
+          startTime,
+        }),
+      ),
+  );
+
+  const controlledHoverXValue = useMemo(() => {
+    if (playbackDistanceM == null || totalDistanceM <= 0) return null;
+    return xValueFromDistance(playbackDistanceM, {
+      prediction,
+      totalDistanceM,
+      xMode,
+      startTime,
+    });
+  }, [playbackDistanceM, prediction, startTime, totalDistanceM, xMode]);
+
+  const effectiveRoutePoint = useMemo(() => {
+    if (playbackDistanceM != null) {
+      return interpolateRoutePointAtDistance(routePoints, routeGeometry, playbackDistanceM);
+    }
+    if (!Number.isFinite(manualHoverXValue)) return null;
+    return locateRoutePointAtX(routePoints, prediction, xMode, manualHoverXValue as number, startTime);
+  }, [manualHoverXValue, playbackDistanceM, prediction, routeGeometry, routePoints, startTime, xMode]);
+
+  const playbackRoutePoint = useMemo(() => {
+    if (playbackDistanceM == null) return null;
+    return interpolateRoutePointAtDistance(routePoints, routeGeometry, playbackDistanceM);
+  }, [playbackDistanceM, routeGeometry, routePoints]);
+
+  const playbackBearing = useMemo(() => {
+    if (playbackDistanceM == null) return null;
+    return bearingAtDistance(routePoints, routeGeometry, playbackDistanceM);
+  }, [playbackDistanceM, routeGeometry, routePoints]);
+
+  const playbackTrail = useMemo(() => {
+    if (playbackDistanceM == null) return [];
+    return buildRouteTrailCoordinates(routePoints, routeGeometry, playbackDistanceM);
+  }, [playbackDistanceM, routeGeometry, routePoints]);
+
+  const baseDurationMs = useMemo(() => {
+    if (!(totalDistanceM > 0)) return FLYOVER_REFERENCE_DURATION_MS;
+    const scaled =
+      ((totalDistanceM / 1000) / FLYOVER_REFERENCE_DISTANCE_KM) * FLYOVER_REFERENCE_DURATION_MS;
+    return Math.max(FLYOVER_MIN_DURATION_MS, Math.min(FLYOVER_MAX_DURATION_MS, scaled));
+  }, [totalDistanceM]);
+
+  useEffect(() => {
+    if (!isPlaying || !canPlay || totalDistanceM <= 0) return;
+
+    const startDistanceM = clampDistanceM(playbackDistanceRef.current ?? 0, totalDistanceM);
+    const remainingDistanceM = totalDistanceM - startDistanceM;
+    if (remainingDistanceM <= 0.25) {
+      setPlaybackDistanceM(totalDistanceM);
+      setIsPlaying(false);
+      return;
+    }
+
+    const remainingDurationMs =
+      (remainingDistanceM / totalDistanceM) * (baseDurationMs / speedMultiplier);
+    let rafId = 0;
+    let frameStartMs = 0;
+
+    const step = (now: number) => {
+      if (frameStartMs === 0) frameStartMs = now;
+      const elapsedMs = now - frameStartMs;
+      const progress = remainingDurationMs <= 0 ? 1 : Math.min(1, elapsedMs / remainingDurationMs);
+      const nextDistanceM = startDistanceM + remainingDistanceM * progress;
+      setPlaybackDistanceM(nextDistanceM);
+
+      if (progress >= 1) {
+        setPlaybackDistanceM(totalDistanceM);
+        setIsPlaying(false);
+        return;
+      }
+
+      rafId = window.requestAnimationFrame(step);
+    };
+
+    rafId = window.requestAnimationFrame(step);
+    return () => window.cancelAnimationFrame(rafId);
+  }, [baseDurationMs, canPlay, isPlaying, playbackSessionId, speedMultiplier, totalDistanceM]);
+
+  useEffect(() => {
+    if (!map) return;
+    if (!effectiveRoutePoint || !interactiveItinerary) {
+      clearAnalysisHoverPoint(map);
+      return;
+    }
+
+    setAnalysisHoverPoint(map, {
+      lon: effectiveRoutePoint.lon,
+      lat: effectiveRoutePoint.lat,
+      color: interactiveItinerary.color,
+    });
+  }, [effectiveRoutePoint, interactiveItinerary, map]);
+
+  useEffect(() => {
+    if (!map) return;
+    if (playbackTrail.length >= 2 && interactiveItinerary) {
+      setAnalysisFlyoverProgress(map, playbackTrail, interactiveItinerary.color);
+      return;
+    }
+    clearAnalysisFlyoverProgress(map);
+  }, [interactiveItinerary, map, playbackTrail]);
+
+  useEffect(() => {
+    if (!map || !isPlaying || !playbackRoutePoint) return;
+
+    map.jumpTo({
+      center: [
+        map.getCenter().lng + (playbackRoutePoint.lon - map.getCenter().lng) * FLYOVER_CENTER_SMOOTHING,
+        map.getCenter().lat + (playbackRoutePoint.lat - map.getCenter().lat) * FLYOVER_CENTER_SMOOTHING,
+      ],
+      bearing: interpolateBearing(map.getBearing(), playbackBearing ?? map.getBearing(), FLYOVER_BEARING_SMOOTHING),
+      zoom: interpolateValue(map.getZoom(), FLYOVER_CAMERA_ZOOM, FLYOVER_ZOOM_SMOOTHING),
+      pitch: interpolateValue(map.getPitch(), FLYOVER_CAMERA_PITCH, FLYOVER_PITCH_SMOOTHING),
+    });
+  }, [isPlaying, map, playbackBearing, playbackRoutePoint]);
+
+  useEffect(() => {
+    if (!map || !isPlaying || !playbackRoutePoint) return;
+    map.easeTo({
+      center: [playbackRoutePoint.lon, playbackRoutePoint.lat],
+      zoom: Math.max(map.getZoom(), FLYOVER_CAMERA_ZOOM),
+      pitch: Math.max(map.getPitch(), FLYOVER_CAMERA_PITCH),
+      bearing: playbackBearing ?? map.getBearing(),
+      duration: 850,
+      essential: true,
+    });
+  }, [isPlaying, map, playbackBearing, playbackRoutePoint, playbackSessionId]);
+
+  useEffect(() => {
+    if (!map) return;
+    return () => {
+      clearAnalysisHoverPoint(map);
+      clearAnalysisFlyoverProgress(map);
+    };
+  }, [map]);
+
+  const totalPlaybackDurationSeconds = baseDurationMs / 1000 / speedMultiplier;
+  const playbackProgress01 =
+    playbackDistanceM != null && totalDistanceM > 0 ? clampDistanceM(playbackDistanceM, totalDistanceM) / totalDistanceM : 0;
+  const currentPlaybackSeconds = playbackProgress01 * totalPlaybackDurationSeconds;
+
+  const distanceLabel = playbackDistanceM != null
+    ? `${(playbackDistanceM / 1000).toFixed(1)} / ${(totalDistanceM / 1000).toFixed(1)} km`
+    : totalDistanceM > 0
+      ? formatDistanceLabel(totalDistanceM)
+      : 'Aucun trace';
+
+  const predictedElapsedSeconds =
+    playbackDistanceM != null
+      ? elapsedSecondsAtDistance(prediction, playbackDistanceM, totalDistanceM)
+      : null;
+
+  const timeLabel = playbackDistanceM != null
+    ? `${speedMultiplier}x · ${formatPlaybackClock(currentPlaybackSeconds)} / ${formatPlaybackClock(totalPlaybackDurationSeconds)}`
+    : predictedElapsedSeconds != null
+      ? `${speedMultiplier}x · ${formatPlaybackClock(predictedElapsedSeconds)}`
+      : `${speedMultiplier}x · ${formatPlaybackClock(totalPlaybackDurationSeconds)}`;
+
+  const togglePlayback = () => {
+    if (!canPlay || totalDistanceM <= 0) return;
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const currentDistanceM = playbackDistanceRef.current;
+    const shouldRestart = currentDistanceM == null || currentDistanceM >= totalDistanceM - 0.25;
+    const nextDistanceM = shouldRestart ? 0 : currentDistanceM;
+    setPlaybackDistanceM(nextDistanceM);
+    setManualHoverXValue(null);
+    playbackDistanceRef.current = nextDistanceM;
+    setIsPlaying(true);
+    setPlaybackSessionId((value) => value + 1);
+  };
+
+  const slowDown = () => {
+    setSpeedIndex((currentIndex) => {
+      const nextIndex = Math.max(0, currentIndex - 1);
+      if (nextIndex !== currentIndex && isPlaying) {
+        setPlaybackSessionId((value) => value + 1);
+      }
+      return nextIndex;
+    });
+  };
+
+  const speedUp = () => {
+    setSpeedIndex((currentIndex) => {
+      const nextIndex = Math.min(SPEED_STEPS.length - 1, currentIndex + 1);
+      if (nextIndex !== currentIndex && isPlaying) {
+        setPlaybackSessionId((value) => value + 1);
+      }
+      return nextIndex;
+    });
+  };
+
+  const resetPlayback = () => {
+    setIsPlaying(false);
+    setManualHoverXValue(null);
+    setPlaybackDistanceM(canPlay ? 0 : null);
+    playbackDistanceRef.current = canPlay ? 0 : null;
+  };
+
+  const value = useMemo<AnalysisFlyoverContextValue>(
+    () => ({
+      canPlay,
+      isPlaying,
+      playbackActive,
+      controlledHoverXValue,
+      setManualHoverXValue,
+      togglePlayback,
+      slowDown,
+      speedUp,
+      resetPlayback,
+      canSlowDown: speedIndex > 0,
+      canSpeedUp: speedIndex < SPEED_STEPS.length - 1,
+      distanceLabel,
+      timeLabel,
+      speedLabel: `${speedMultiplier}x`,
+    }),
+    [
+      canPlay,
+      controlledHoverXValue,
+      distanceLabel,
+      isPlaying,
+      playbackActive,
+      speedIndex,
+      speedMultiplier,
+      timeLabel,
+    ],
+  );
+
+  return (
+    <AnalysisFlyoverContext.Provider value={value}>
+      {children}
+    </AnalysisFlyoverContext.Provider>
+  );
+}
+
+export function useAnalysisFlyover(): AnalysisFlyoverContextValue {
+  const context = useContext(AnalysisFlyoverContext);
+  if (!context) {
+    throw new Error('useAnalysisFlyover must be used within <AnalysisFlyoverProvider>');
+  }
+  return context;
+}
+
+function interpolateValue(current: number, target: number, amount: number): number {
+  return current + (target - current) * amount;
+}
+
+function interpolateBearing(current: number, target: number, amount: number): number {
+  const delta = ((target - current + 540) % 360) - 180;
+  return current + delta * amount;
+}

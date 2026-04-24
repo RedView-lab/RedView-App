@@ -20,6 +20,9 @@ const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
 const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
 const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
 const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
+const ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID = 'brouter-analysis-flyover-progress-source';
+const ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID = 'brouter-analysis-flyover-progress-glow-layer';
+const ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID = 'brouter-analysis-flyover-progress-line-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -43,6 +46,28 @@ function buildAnalysisHoverGeoJson(
           },
         ]
       : [],
+  };
+}
+
+function buildAnalysisFlyoverProgressGeoJson(
+  coordinates?: [number, number][] | null,
+  color?: string,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features:
+      coordinates && coordinates.length >= 2
+        ? [
+            {
+              type: 'Feature',
+              properties: { color: color ?? '#ff4d4f' },
+              geometry: {
+                type: 'LineString',
+                coordinates,
+              },
+            },
+          ]
+        : [],
   };
 }
 
@@ -96,6 +121,63 @@ function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
   });
 
   return map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | null;
+}
+
+function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | null {
+  const existing = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID, {
+    type: 'geojson',
+    data: buildAnalysisFlyoverProgressGeoJson(null),
+  });
+
+  map.addLayer({
+    id: ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID,
+    type: 'line',
+    source: ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 4 as unknown as undefined,
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
+      'line-width': 14,
+      'line-opacity': 0.34,
+      'line-blur': 3.2,
+      'line-emissive-strength': 1.1,
+      'line-occlusion-opacity': 0.88,
+    },
+  });
+
+  map.addLayer({
+    id: ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID,
+    type: 'line',
+    source: ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 4 as unknown as undefined,
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
+      'line-width': 6,
+      'line-opacity': 0.96,
+      'line-emissive-strength': 1.18,
+      'line-border-width': 1.6,
+      'line-border-color': 'rgba(255,255,255,0.54)',
+      'line-occlusion-opacity': 0.92,
+    },
+  });
+
+  return map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | null;
 }
 
 function ids(itineraryId: string) {
@@ -400,6 +482,45 @@ export function clearAnalysisHoverPoint(map: MapboxMap): void {
     }
     if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
       map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'none');
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function setAnalysisFlyoverProgress(
+  map: MapboxMap,
+  coordinates: [number, number][],
+  color?: string,
+): void {
+  try {
+    const source = ensureAnalysisFlyoverProgressLayers(map);
+    if (!source) return;
+    source.setData(buildAnalysisFlyoverProgressGeoJson(coordinates, color));
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'visible');
+      map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'visible');
+      map.moveLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID);
+    }
+    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
+  try {
+    const source = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
+    source?.setData(buildAnalysisFlyoverProgressGeoJson(null));
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */
