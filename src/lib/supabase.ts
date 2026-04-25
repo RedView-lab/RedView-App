@@ -22,41 +22,45 @@ export interface StoredSupabaseSessionSnapshot {
 	};
 }
 
-export function hasStoredSupabaseSession(): boolean {
-	if (typeof window === "undefined") return false;
-	if (!SUPABASE_AUTH_STORAGE_KEY) return false;
+type StoredSupabaseSessionPayload = {
+	access_token?: unknown;
+	refresh_token?: unknown;
+	user?: {
+		id?: unknown;
+		email?: unknown;
+	};
+};
 
-	try {
-		return Boolean(window.localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY));
-	} catch {
-		return false;
-	}
-}
-
-export function readStoredSupabaseSession(): StoredSupabaseSessionSnapshot | null {
+function readStoredSupabaseSessionPayload(): StoredSupabaseSessionPayload | null {
 	if (typeof window === "undefined") return null;
 	if (!SUPABASE_AUTH_STORAGE_KEY) return null;
 
 	try {
 		const raw = window.localStorage.getItem(SUPABASE_AUTH_STORAGE_KEY);
 		if (!raw) return null;
-		const parsed = JSON.parse(raw) as {
-			user?: {
-				id?: unknown;
-				email?: unknown;
-			};
-		};
-		if (!parsed?.user || typeof parsed.user.id !== "string") return null;
-
-		return {
-			user: {
-				id: parsed.user.id,
-				...(typeof parsed.user.email === "string" ? { email: parsed.user.email } : {}),
-			},
-		};
+		return JSON.parse(raw) as StoredSupabaseSessionPayload;
 	} catch {
 		return null;
 	}
+}
+
+export function hasStoredSupabaseSession(): boolean {
+	return readStoredSupabaseSession() !== null;
+}
+
+export function readStoredSupabaseSession(): StoredSupabaseSessionSnapshot | null {
+	const parsed = readStoredSupabaseSessionPayload();
+	if (!parsed?.user || typeof parsed.user.id !== "string") return null;
+	if (typeof parsed.access_token !== "string" || typeof parsed.refresh_token !== "string") {
+		return null;
+	}
+
+	return {
+		user: {
+			id: parsed.user.id,
+			...(typeof parsed.user.email === "string" ? { email: parsed.user.email } : {}),
+		},
+	};
 }
 
 export const supabase = createClient(

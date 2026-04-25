@@ -87,7 +87,7 @@ function writeCachedSubscription(userId: string, isSubscribed: boolean): void {
 
 function App() {
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredSupabaseSession())
-  const [authStatus, setAuthStatus] = useState<BootstrapStatus>(() => (readStoredSupabaseSession() ? 'ready' : 'loading'))
+  const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
   const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
     const storedSession = readStoredSupabaseSession()
     return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
@@ -108,7 +108,7 @@ function App() {
       const params = new URLSearchParams(hash)
       const accessToken = params.get('access_token')
       const refreshToken = params.get('refresh_token')
-      const hasStoredSession = hasStoredSupabaseSession()
+      const storedSession = readStoredSupabaseSession()
 
       try {
         if (accessToken && refreshToken) {
@@ -127,24 +127,15 @@ function App() {
           return
         }
 
-        if (!hasStoredSession) {
+        if (!storedSession) {
           if (!cancelled) setSession(null)
           return
         }
 
-        const {
-          data: { session },
-          error,
-        } = await withTimeout(
-          supabase.auth.getSession(),
-          AUTH_BOOT_TIMEOUT_MS,
-          'supabase.auth.getSession',
-        )
-        if (error) throw error
-        if (!cancelled) setSession(session)
+        if (!cancelled) setSession(storedSession)
       } catch (error) {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
-        if (!cancelled && !readStoredSupabaseSession()) setSession(null)
+        if (!cancelled && !hasStoredSupabaseSession()) setSession(null)
       } finally {
         if (!cancelled) setAuthStatus('ready')
       }
@@ -167,6 +158,10 @@ function App() {
   // Check subscription status after session is available
   useEffect(() => {
     let cancelled = false
+
+    if (authStatus !== 'ready') {
+      return
+    }
 
     if (!session?.user?.id) {
       setIsSubscribed(false)
@@ -225,7 +220,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [session?.user?.id])
+  }, [authStatus, session?.user?.id])
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
     return <BootstrapScreen label="Loading..." />
