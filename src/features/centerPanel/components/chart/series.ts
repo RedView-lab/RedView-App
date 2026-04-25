@@ -348,7 +348,7 @@ function normalizeRouteProfile(
     );
     return {
       distanceM: sample.distanceM,
-      elevationM: smoothedElevations[index],
+      elevationM: sample.elevationM,
       gradientPct,
     };
   });
