@@ -334,13 +334,10 @@ function normalizeRouteProfile(
     return null;
   }
 
-  const hasPersistedGradient = samples.some((sample) => Number.isFinite(sample.gradientPct));
-  const smoothedElevations = hasPersistedGradient
-    ? samples.map((sample) => sample.elevationM)
-    : smoothValues(
-        samples.map((sample) => sample.elevationM),
-        3,
-      );
+  const smoothedElevations = smoothValues(
+    samples.map((sample) => sample.elevationM),
+    3,
+  );
   const distances = samples.map((sample) => sample.distanceM);
 
   const normalized = samples.map((sample, index) => {
