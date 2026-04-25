@@ -506,10 +506,16 @@ export function useItineraryBrouterRouting({
           'm | pts=',
           route.coordinates.length,
         );
-        try {
-          fitToRoute(map, route.coordinates);
-        } catch (error) {
-          console.warn('[BRouter] fitToRoute failed', error);
+        const shouldAutoFit = !(
+          active?.gpxRoute?.source === 'brouter' &&
+          (active.gpxRoute.points.length ?? 0) >= 2
+        );
+        if (shouldAutoFit) {
+          try {
+            fitToRoute(map, route.coordinates);
+          } catch (error) {
+            console.warn('[BRouter] fitToRoute failed', error);
+          }
         }
 
         const geometryPoints = toGeometryRoutePoints(route.coordinates);
