@@ -23,7 +23,6 @@ import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
-  sampleRouteProfileWithTerrain,
 } from '../lib/route-metrics';
 import { analyzeBrouterRoute } from '../lib/routeAudit/analyzeBrouterRoute';
 import type { Itinerary, ItineraryProject, ItineraryRouteAuditFinding } from '../types';
@@ -213,15 +212,7 @@ export function useItineraryBrouterRouting({
         }
 
         const geometryPoints = toGeometryRoutePoints(route.coordinates);
-        const queryEle = (lng: number, lat: number) => {
-          try {
-            return map.queryTerrainElevation?.([lng, lat]) ?? null;
-          } catch {
-            return null;
-          }
-        };
-        const brouterProfile = extractRouteProfileFromBrouter(route);
-        const routeProfile = sampleRouteProfileWithTerrain(geometryPoints, queryEle) ?? brouterProfile;
+        const routeProfile = extractRouteProfileFromBrouter(route);
         const elevationMetrics = routeProfile
           ? computeRouteElevationMetrics(routeProfile)
           : null;
@@ -303,66 +294,6 @@ export function useItineraryBrouterRouting({
           };
         });
 
-        const refreshTerrainProfile = () => {
-          const refreshedProfile = sampleRouteProfileWithTerrain(geometryPoints, queryEle);
-          if (!refreshedProfile) return;
-          const refreshedMetrics = computeRouteElevationMetrics(refreshedProfile);
-          if (!refreshedMetrics) return;
-
-          const refinedPoints = toStoredRoutePoints(refreshedProfile);
-          const refinedAscent = Math.max(0, Math.round(refreshedMetrics.ascentM));
-          const refinedDescent = Math.max(0, Math.round(refreshedMetrics.descentM));
-          const refinedAvg = Math.round(refreshedMetrics.avgSlopePercent * 10) / 10;
-          const refinedAuditFindings = analyzeBrouterRoute(route, refinedPoints);
-
-          setProject((project) => {
-            const itinerary = project.itineraries.find(
-              (item) => item.id === project.activeItineraryId,
-            );
-            if (!itinerary) return project;
-            if (
-              itinerary.metrics?.ascentM === refinedAscent &&
-              itinerary.metrics?.descentM === refinedDescent &&
-              itinerary.metrics?.avgSlopePercent === refinedAvg &&
-              routePointsEqual(itinerary.gpxRoute?.points, refinedPoints) &&
-              routeAuditEqual(itinerary.routeAudit?.findings, refinedAuditFindings)
-            ) {
-              return project;
-            }
-            return {
-              ...project,
-              itineraries: project.itineraries.map((current) =>
-                current.id === project.activeItineraryId
-                  ? {
-                      ...current,
-                      gpxRoute: {
-                        name: current.gpxRoute?.name ?? null,
-                        points: refinedPoints,
-                        source: 'brouter',
-                      },
-                      metrics: {
-                        ...current.metrics,
-                        ascentM: refinedAscent,
-                        descentM: refinedDescent,
-                        avgSlopePercent: refinedAvg,
-                      },
-                      routeAudit: {
-                        visible: current.routeAudit?.visible ?? false,
-                        findings: refinedAuditFindings,
-                      },
-                    }
-                  : current,
-              ),
-            };
-          });
-        };
-
-        const refineTimers = [400, 1500, 4000].map((delayMs) =>
-          window.setTimeout(refreshTerrainProfile, delayMs),
-        );
-        ctrl.signal.addEventListener('abort', () => {
-          for (const timer of refineTimers) window.clearTimeout(timer);
-        });
       })
       .catch((error: unknown) => {
         if ((error as { name?: string }).name === 'AbortError') return;
