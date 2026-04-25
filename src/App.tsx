@@ -8,9 +8,12 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 type BootstrapStatus = 'loading' | 'ready'
 
-const AUTH_BOOT_TIMEOUT_MS = 4000
-const SUBSCRIPTION_BOOT_TIMEOUT_MS = 4000
-const SUBSCRIPTION_RETRY_TIMEOUT_MS = 8000
+const AUTH_BOOT_TIMEOUT_MS = 8000
+// Cold-start of supabase-js + a possible token refresh + the first PostgREST round trip
+// can comfortably exceed 4s on a fresh tab. Give it a generous budget; the cached
+// subscription state means the user never sees this latency anyway.
+const SUBSCRIPTION_BOOT_TIMEOUT_MS = 12000
+const SUBSCRIPTION_RETRY_TIMEOUT_MS = 15000
 const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:'
 const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
@@ -133,7 +136,28 @@ function App() {
           return
         }
 
+        // Optimistic UI: surface the stored session immediately so the dashboard can mount.
         if (!cancelled) setSession(storedSession)
+
+        // IMPORTANT: pre-warm the supabase-js auth client. Without this the very first
+        // authenticated query (e.g. `from('user_subscription_status')`) is the one that
+        // triggers `_initialize()` + a possible refresh token roundtrip, which on a cold
+        // tab routinely blows past the subscription bootstrap timeout. `getSession()` waits
+        // on the LockManager for any in-flight refresh and returns a usable token, so all
+        // subsequent PostgREST calls run against an already-initialised client.
+        try {
+          const { data, error } = await withTimeout(
+            supabase.auth.getSession(),
+            AUTH_BOOT_TIMEOUT_MS,
+            'supabase.auth.getSession',
+          )
+          if (error) throw error
+          if (!cancelled && data.session) setSession(data.session)
+        } catch (warmupError) {
+          // Non-fatal: the subscription bootstrap below will retry via refreshSession() if
+          // it fails. We just log and let the rest of the bootstrap proceed.
+          console.warn('[app] supabase.auth.getSession() warmup failed', warmupError)
+        }
       } catch (error) {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
         if (!cancelled && !hasStoredSupabaseSession()) setSession(null)
