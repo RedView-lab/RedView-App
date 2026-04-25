@@ -4,14 +4,14 @@ import {
   useRef,
   useState,
   useMemo,
-  type ChangeEvent,
   type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { Collapse } from '@/features/itineraryPanel/components/Collapse';
 import {
-  IconCheck,
+  IconChevronDown,
   IconDotsVertical,
   IconEye,
   IconSettingsSliders,
@@ -30,7 +30,6 @@ const PLACEHOLDER = '--';
 const MENU_WIDTH = 270;
 const MENU_ROW_HEIGHT = 32;
 const MENU_GAP = 6;
-const RENAME_MENU_HEIGHT = 112;
 
 const HEADER_CELLS = [
   'Distance',
@@ -105,14 +104,37 @@ const EMPTY_VALUES: string[] = HEADER_CELLS.map(() => PLACEHOLDER);
 
 interface SummaryRowProps {
   node: ItineraryVisualNode;
+  childCount: number;
+  expanded: boolean;
+  isEditing: boolean;
+  renameDraft: string;
   onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
+  onToggleExpanded?: (id: string) => void;
+  onStartRename?: (itinerary: Itinerary) => void;
+  onRenameDraftChange?: (value: string) => void;
+  onCommitRename?: () => void;
+  onCancelRename?: () => void;
   onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
 }
 
-function SummaryRow({ node, onToggleAnalysisVisibility, onOpenMenu }: SummaryRowProps) {
+function SummaryRow({
+  node,
+  childCount,
+  expanded,
+  isEditing,
+  renameDraft,
+  onToggleAnalysisVisibility,
+  onToggleExpanded,
+  onStartRename,
+  onRenameDraftChange,
+  onCommitRename,
+  onCancelRename,
+  onOpenMenu,
+}: SummaryRowProps) {
   const { itinerary, depth, startDistanceKm } = node;
   const values = buildValues(itinerary);
   const analysisVisible = itinerary.analysisVisible !== false;
+  const hasChildren = childCount > 0;
   const rowStyle =
     depth > 0
       ? ({
@@ -133,6 +155,20 @@ function SummaryRow({ node, onToggleAnalysisVisibility, onOpenMenu }: SummaryRow
         className="rvc-center-summary__route"
         style={{ opacity: analysisVisible ? 1 : 0.45 }}
       >
+        {hasChildren ? (
+          <button
+            type="button"
+            className="rvc-center-summary__tree-toggle"
+            aria-label={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
+            aria-expanded={expanded}
+            title={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
+            onClick={() => onToggleExpanded?.(itinerary.id)}
+          >
+            <IconChevronDown size={12} />
+          </button>
+        ) : (
+          <span className="rvc-center-summary__tree-toggle-spacer" aria-hidden="true" />
+        )}
         <button
           type="button"
           className="rvc-center-summary__eye-button"
@@ -149,12 +185,33 @@ function SummaryRow({ node, onToggleAnalysisVisibility, onOpenMenu }: SummaryRow
           aria-hidden="true"
           style={{ background: itinerary.color }}
         />
-        <span
-          className="rvc-center-summary__name"
-          title={itinerary.name}
-        >
-          {itinerary.name}
-        </span>
+        {isEditing ? (
+          <input
+            className="rvc-center-summary__inline-input"
+            value={renameDraft}
+            onChange={(event) => onRenameDraftChange?.(event.target.value)}
+            onBlur={() => onCommitRename?.()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                onCommitRename?.();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                onCancelRename?.();
+              }
+            }}
+            aria-label={`Nouveau nom pour ${itinerary.name}`}
+            autoFocus
+          />
+        ) : (
+          <span
+            className="rvc-center-summary__name"
+            title={`${itinerary.name} · Double-cliquez pour renommer`}
+            onDoubleClick={() => onStartRename?.(itinerary)}
+          >
+            {itinerary.name}
+          </span>
+        )}
       </div>
       <div className="rvc-center-summary__metrics">
         {values.map((cell, index) => (
@@ -216,18 +273,90 @@ function EmptyRow() {
   );
 }
 
-type SummaryMenuMode = 'actions' | 'rename';
+interface SummaryTreeNode {
+  node: ItineraryVisualNode;
+  children: SummaryTreeNode[];
+}
+
+interface InlineRenameState {
+  itineraryId: string;
+  draft: string;
+}
+
+interface SummaryTreeBranchProps {
+  branch: SummaryTreeNode;
+  collapsedIds: Set<string>;
+  editingState: InlineRenameState | null;
+  onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
+  onToggleExpanded: (id: string) => void;
+  onStartRename: (itinerary: Itinerary) => void;
+  onRenameDraftChange: (value: string) => void;
+  onCommitRename: () => void;
+  onCancelRename: () => void;
+  onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
+}
+
+function SummaryTreeBranch({
+  branch,
+  collapsedIds,
+  editingState,
+  onToggleAnalysisVisibility,
+  onToggleExpanded,
+  onStartRename,
+  onRenameDraftChange,
+  onCommitRename,
+  onCancelRename,
+  onOpenMenu,
+}: SummaryTreeBranchProps) {
+  const isEditing = editingState?.itineraryId === branch.node.itinerary.id;
+  const expanded = !collapsedIds.has(branch.node.itinerary.id);
+
+  return (
+    <div className="rvc-center-summary__branch">
+      <SummaryRow
+        node={branch.node}
+        childCount={branch.children.length}
+        expanded={expanded}
+        isEditing={isEditing}
+        renameDraft={isEditing ? editingState?.draft ?? '' : ''}
+        onToggleAnalysisVisibility={onToggleAnalysisVisibility}
+        onToggleExpanded={onToggleExpanded}
+        onStartRename={onStartRename}
+        onRenameDraftChange={onRenameDraftChange}
+        onCommitRename={onCommitRename}
+        onCancelRename={onCancelRename}
+        onOpenMenu={onOpenMenu}
+      />
+
+      {branch.children.length > 0 ? (
+        <Collapse open={expanded} className="rvc-center-summary__children">
+          {branch.children.map((child) => (
+            <SummaryTreeBranch
+              key={child.node.itinerary.id}
+              branch={child}
+              collapsedIds={collapsedIds}
+              editingState={editingState}
+              onToggleAnalysisVisibility={onToggleAnalysisVisibility}
+              onToggleExpanded={onToggleExpanded}
+              onStartRename={onStartRename}
+              onRenameDraftChange={onRenameDraftChange}
+              onCommitRename={onCommitRename}
+              onCancelRename={onCancelRename}
+              onOpenMenu={onOpenMenu}
+            />
+          ))}
+        </Collapse>
+      ) : null}
+    </div>
+  );
+}
 
 interface SummaryActionMenuProps {
   itinerary: Itinerary;
   anchorEl: HTMLButtonElement;
-  mode: SummaryMenuMode;
-  draft: string;
   canDelete: boolean;
-  onDraftChange: (value: string) => void;
   onClose: () => void;
   onStartRename: () => void;
-  onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }
@@ -235,19 +364,14 @@ interface SummaryActionMenuProps {
 function SummaryActionMenu({
   itinerary,
   anchorEl,
-  mode,
-  draft,
   canDelete,
-  onDraftChange,
   onClose,
   onStartRename,
-  onRename,
   onDuplicate,
   onDelete,
 }: SummaryActionMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null);
   const firstActionRef = useRef<HTMLButtonElement | null>(null);
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
   const [menuStyle, setMenuStyle] = useState<{
     top: number;
     left: number;
@@ -276,15 +400,10 @@ function SummaryActionMenu({
 
   useEffect(() => {
     const handle = window.requestAnimationFrame(() => {
-      if (mode === 'rename') {
-        renameInputRef.current?.focus();
-        renameInputRef.current?.select();
-        return;
-      }
       firstActionRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(handle);
-  }, [mode]);
+  }, []);
 
   useLayoutEffect(() => {
     const updatePosition = () => {
@@ -292,7 +411,7 @@ function SummaryActionMenu({
       const computed = window.getComputedStyle(anchorEl);
       const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
       const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-      const menuHeight = (mode === 'rename' ? RENAME_MENU_HEIGHT : MENU_ROW_HEIGHT * 3) * scale;
+      const menuHeight = MENU_ROW_HEIGHT * 3 * scale;
       const gap = MENU_GAP * scale;
       const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH * scale - 8);
       const spaceBelow = window.innerHeight - rect.bottom - 8;
@@ -317,7 +436,7 @@ function SummaryActionMenu({
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [anchorEl, mode]);
+  }, [anchorEl]);
 
   if (!menuStyle) return null;
 
@@ -339,110 +458,85 @@ function SummaryActionMenu({
     >
       <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
 
-      {mode === 'rename' ? (
-        <>
-          <div className="rvc-center-summary__rename-panel">
-            <div className="rvc-center-summary__rename-title">Renommer la trace</div>
-            <input
-              ref={renameInputRef}
-              className="rvc-center-summary__rename-input"
-              value={draft}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => onDraftChange(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  onRename();
-                } else if (event.key === 'Escape') {
-                  event.preventDefault();
-                  onClose();
-                }
-              }}
-              aria-label={`Nouveau nom pour ${itinerary.name}`}
-            />
-          </div>
-          <div className="rvc-center-summary__rename-actions">
-            <button
-              type="button"
-              className="rvc-center-summary__menu-item"
-              onClick={onClose}
-            >
-              <span className="rvc-center-summary__menu-label">Annuler</span>
-              <span className="rvc-center-summary__menu-icon" aria-hidden>
-                <SvgV2Icon name="x-close.svg" size={16} />
-              </span>
-            </button>
-            <button
-              type="button"
-              className="rvc-center-summary__menu-item"
-              onClick={onRename}
-              disabled={!draft.trim()}
-            >
-              <span className="rvc-center-summary__menu-label">Valider</span>
-              <span className="rvc-center-summary__menu-icon" aria-hidden>
-                <IconCheck size={14} />
-              </span>
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <button
-            ref={firstActionRef}
-            type="button"
-            className="rvc-center-summary__menu-item"
-            role="menuitem"
-            onClick={onStartRename}
-          >
-            <span className="rvc-center-summary__menu-label">Renommer la trace</span>
-            <span className="rvc-center-summary__menu-icon" aria-hidden>
-              <SvgV2Icon name="edit-05.svg" size={16} />
-            </span>
-          </button>
-          <button
-            type="button"
-            className="rvc-center-summary__menu-item"
-            role="menuitem"
-            onClick={onDuplicate}
-          >
-            <span className="rvc-center-summary__menu-label">Dupliquer la trace</span>
-            <span className="rvc-center-summary__menu-icon" aria-hidden>
-              <IconCopy04 size={16} />
-            </span>
-          </button>
-          <button
-            type="button"
-            className="rvc-center-summary__menu-item rvc-center-summary__menu-item--danger"
-            role="menuitem"
-            onClick={onDelete}
-            disabled={!canDelete}
-          >
-            <span className="rvc-center-summary__menu-label">Supprimer la trace</span>
-            <span className="rvc-center-summary__menu-icon" aria-hidden>
-              <IconTrash size={14} />
-            </span>
-          </button>
-        </>
-      )}
+      <button
+        ref={firstActionRef}
+        type="button"
+        className="rvc-center-summary__menu-item"
+        role="menuitem"
+        onClick={onStartRename}
+      >
+        <span className="rvc-center-summary__menu-label">Renommer la trace</span>
+        <span className="rvc-center-summary__menu-icon" aria-hidden>
+          <SvgV2Icon name="edit-05.svg" size={16} />
+        </span>
+      </button>
+      <button
+        type="button"
+        className="rvc-center-summary__menu-item"
+        role="menuitem"
+        onClick={onDuplicate}
+      >
+        <span className="rvc-center-summary__menu-label">Dupliquer la trace</span>
+        <span className="rvc-center-summary__menu-icon" aria-hidden>
+          <IconCopy04 size={16} />
+        </span>
+      </button>
+      <button
+        type="button"
+        className="rvc-center-summary__menu-item rvc-center-summary__menu-item--danger"
+        role="menuitem"
+        onClick={onDelete}
+        disabled={!canDelete}
+      >
+        <span className="rvc-center-summary__menu-label">Supprimer la trace</span>
+        <span className="rvc-center-summary__menu-icon" aria-hidden>
+          <IconTrash size={14} />
+        </span>
+      </button>
     </div>,
     document.body,
   );
+}
+
+function buildSummaryTree(visualNodes: ItineraryVisualNode[]): SummaryTreeNode[] {
+  if (visualNodes.length === 0) return [];
+
+  const branchById = new Map<string, SummaryTreeNode>();
+  visualNodes.forEach((node) => {
+    branchById.set(node.itinerary.id, { node, children: [] });
+  });
+
+  const roots: SummaryTreeNode[] = [];
+  visualNodes.forEach((node) => {
+    const branch = branchById.get(node.itinerary.id);
+    if (!branch) return;
+    const parentBranch = node.parentItineraryId ? branchById.get(node.parentItineraryId) : null;
+    if (parentBranch) parentBranch.children.push(branch);
+    else roots.push(branch);
+  });
+
+  return roots;
 }
 
 export function CenterPanelSummary() {
   const store = useProjectStoreOptional();
   const itineraries = store?.project.itineraries ?? [];
   const visualNodes = useMemo(() => buildItineraryVisualNodes(itineraries), [itineraries]);
+  const summaryTree = useMemo(() => buildSummaryTree(visualNodes), [visualNodes]);
   const handleToggleAnalysisVisibility =
     store?.setItineraryAnalysisVisibility;
+  const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
+  const [editingState, setEditingState] = useState<InlineRenameState | null>(null);
   const [menuState, setMenuState] = useState<{
     itineraryId: string;
     anchorEl: HTMLButtonElement;
-    mode: SummaryMenuMode;
-    draft: string;
   } | null>(null);
 
   const selectedItinerary = menuState
     ? itineraries.find((itinerary) => itinerary.id === menuState.itineraryId) ?? null
+    : null;
+  const editingItinerary = editingState
+    ? itineraries.find((itinerary) => itinerary.id === editingState.itineraryId) ?? null
     : null;
 
   useEffect(() => {
@@ -450,6 +544,25 @@ export function CenterPanelSummary() {
       setMenuState(null);
     }
   }, [menuState, selectedItinerary]);
+
+  useEffect(() => {
+    if (editingState && !editingItinerary) {
+      setEditingState(null);
+    }
+  }, [editingItinerary, editingState]);
+
+  useEffect(() => {
+    const validIds = new Set(itineraries.map((itinerary) => itinerary.id));
+    setCollapsedIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      current.forEach((id) => {
+        if (validIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : current;
+    });
+  }, [itineraries]);
 
   const handleOpenMenu = (itinerary: Itinerary, anchorEl: HTMLButtonElement) => {
     setMenuState((current) => {
@@ -459,21 +572,36 @@ export function CenterPanelSummary() {
       return {
         itineraryId: itinerary.id,
         anchorEl,
-        mode: 'actions',
-        draft: itinerary.name,
       };
     });
   };
 
   const handleCloseMenu = () => setMenuState(null);
 
-  const handleRename = () => {
-    if (!selectedItinerary || !menuState) return;
-    const trimmed = menuState.draft.trim();
-    if (!trimmed) return;
-    store?.setItineraryName(selectedItinerary.id, trimmed);
-    setMenuState(null);
+  const handleToggleExpanded = (id: string) => {
+    setCollapsedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   };
+
+  const handleStartRename = (itinerary: Itinerary) => {
+    setMenuState(null);
+    setEditingState({ itineraryId: itinerary.id, draft: itinerary.name });
+  };
+
+  const handleCommitRename = () => {
+    if (!editingState) return;
+    const trimmed = editingState.draft.trim();
+    if (trimmed) {
+      store?.setItineraryName(editingState.itineraryId, trimmed);
+    }
+    setEditingState(null);
+  };
+
+  const handleCancelRename = () => setEditingState(null);
 
   const handleDuplicate = () => {
     if (!selectedItinerary) return;
@@ -514,11 +642,20 @@ export function CenterPanelSummary() {
       {itineraries.length === 0 ? (
         <EmptyRow />
       ) : (
-        visualNodes.map((node) => (
-          <SummaryRow
-            key={node.itinerary.id}
-            node={node}
+        summaryTree.map((branch) => (
+          <SummaryTreeBranch
+            key={branch.node.itinerary.id}
+            branch={branch}
+            collapsedIds={collapsedIds}
+            editingState={editingState}
             onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
+            onToggleExpanded={handleToggleExpanded}
+            onStartRename={handleStartRename}
+            onRenameDraftChange={(draft) =>
+              setEditingState((current) => (current ? { ...current, draft } : current))
+            }
+            onCommitRename={handleCommitRename}
+            onCancelRename={handleCancelRename}
             onOpenMenu={handleOpenMenu}
           />
         ))
@@ -528,21 +665,9 @@ export function CenterPanelSummary() {
         <SummaryActionMenu
           itinerary={selectedItinerary}
           anchorEl={menuState.anchorEl}
-          mode={menuState.mode}
-          draft={menuState.draft}
           canDelete={itineraries.length > 1}
-          onDraftChange={(draft) =>
-            setMenuState((current) => (current ? { ...current, draft } : current))
-          }
           onClose={handleCloseMenu}
-          onStartRename={() =>
-            setMenuState((current) =>
-              current
-                ? { ...current, mode: 'rename', draft: selectedItinerary.name }
-                : current,
-            )
-          }
-          onRename={handleRename}
+          onStartRename={() => handleStartRename(selectedItinerary)}
           onDuplicate={handleDuplicate}
           onDelete={handleDelete}
         />
