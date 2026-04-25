@@ -1,8 +1,11 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { IconChevronDown } from './CenterPanelIcons';
 import { useAnalysisFlyover } from '../flyover';
+
+const DEFAULT_SIMPLIFY_TARGET_POINTS = 2_000;
 
 type ToolbarIconProps = {
   size?: number;
@@ -115,15 +118,17 @@ function ToolbarIconButton({
   children,
   onClick,
   disabled,
+  active,
 }: {
   label: string;
   children: React.ReactNode;
   onClick?: () => void;
   disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
-      className="rvc-center-toolbar__button"
+      className={active ? 'rvc-center-toolbar__button rvc-center-toolbar__button--active' : 'rvc-center-toolbar__button'}
       type="button"
       aria-label={label}
       title={label}
@@ -135,8 +140,24 @@ function ToolbarIconButton({
   );
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeDefaultRetainPercent(pointCount: number): number {
+  if (pointCount <= DEFAULT_SIMPLIFY_TARGET_POINTS) return 100;
+  return clamp(
+    Math.round((DEFAULT_SIMPLIFY_TARGET_POINTS / pointCount) * 100),
+    5,
+    100,
+  );
+}
+
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
+  const [toolsExpanded, setToolsExpanded] = useState(false);
+  const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
+  const [simplifyRetainPercent, setSimplifyRetainPercent] = useState(100);
   const {
     canPlay,
     canSlowDown,
@@ -172,6 +193,51 @@ export function CenterPanelToolbar() {
   const handleDeleteActiveRoute = () => {
     if (!store || !activeItinerary) return;
     store.clearItineraryRoute(activeItinerary.id);
+  };
+  const simplifiableRoute =
+    activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
+      ? activeItinerary.gpxRoute
+      : null;
+  const activeTracePointCount = simplifiableRoute?.points.length ?? 0;
+  const canSimplifyTrace = activeTracePointCount > 2;
+  const simplifyTargetPoints = useMemo(
+    () =>
+      clamp(
+        Math.round(activeTracePointCount * (simplifyRetainPercent / 100)),
+        2,
+        Math.max(2, activeTracePointCount),
+      ),
+    [activeTracePointCount, simplifyRetainPercent],
+  );
+  const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
+
+  useEffect(() => {
+    setSimplifyRetainPercent(computeDefaultRetainPercent(activeTracePointCount));
+  }, [activeItinerary?.id, activeTracePointCount]);
+
+  useEffect(() => {
+    if (!toolsExpanded) {
+      setActiveSubtool(null);
+    }
+  }, [toolsExpanded]);
+
+  const handleToggleTools = () => {
+    setToolsExpanded((open) => !open);
+  };
+
+  const handleToggleSimplifyTool = () => {
+    if (!canSimplifyTrace) return;
+    if (!toolsExpanded) {
+      setToolsExpanded(true);
+      setActiveSubtool('simplify');
+      return;
+    }
+    setActiveSubtool((current) => (current === 'simplify' ? null : 'simplify'));
+  };
+
+  const handleApplySimplification = () => {
+    if (!store || !activeItinerary || !canApplySimplification) return;
+    store.simplifyItineraryGpx(activeItinerary.id, simplifyTargetPoints);
   };
 
   return (
@@ -225,7 +291,7 @@ export function CenterPanelToolbar() {
             <IconSlashOctagon />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Outils">
+          <ToolbarIconButton label="Outils" onClick={handleToggleTools} active={toolsExpanded}>
             <IconWrench />
           </ToolbarIconButton>
 
@@ -236,6 +302,17 @@ export function CenterPanelToolbar() {
           >
             <IconTrash />
           </ToolbarIconButton>
+
+          {toolsExpanded ? (
+            <ToolbarIconButton
+              label="Simplification intelligente de la trace"
+              onClick={handleToggleSimplifyTool}
+              disabled={!canSimplifyTrace}
+              active={activeSubtool === 'simplify'}
+            >
+              <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
+            </ToolbarIconButton>
+          ) : null}
 
           <div className="rvc-center-toolbar__spacer" aria-hidden="true" />
 
@@ -296,6 +373,47 @@ export function CenterPanelToolbar() {
           </div>
         </div>
       </div>
+
+      {toolsExpanded && activeSubtool === 'simplify' ? (
+        <div className="rvc-center-toolbar__tool-panel" role="group" aria-label="Réduction de points GPX">
+          <div className="rvc-center-toolbar__tool-panel-head">
+            <span className="rvc-center-toolbar__tool-title">Simplification intelligente</span>
+            <span className="rvc-center-toolbar__tool-stats">
+              {simplifyTargetPoints.toLocaleString('fr-FR')} / {activeTracePointCount.toLocaleString('fr-FR')} pts
+            </span>
+          </div>
+
+          <div className="rvc-center-toolbar__tool-panel-row">
+            <span className="rvc-center-toolbar__tool-caption">Conserver</span>
+            <div className="rvc-center-toolbar__tool-slider-shell">
+              <Slider
+                value={simplifyRetainPercent}
+                min={5}
+                max={100}
+                step={1}
+                width="100%"
+                onChange={setSimplifyRetainPercent}
+                onCommit={setSimplifyRetainPercent}
+              />
+            </div>
+            <span className="rvc-center-toolbar__tool-value">{simplifyRetainPercent}%</span>
+          </div>
+
+          <div className="rvc-center-toolbar__tool-panel-actions">
+            <span className="rvc-center-toolbar__tool-caption">
+              Réduction: {Math.max(0, 100 - Math.round((simplifyTargetPoints / Math.max(activeTracePointCount, 1)) * 100))}%
+            </span>
+            <button
+              className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"
+              type="button"
+              onClick={handleApplySimplification}
+              disabled={!canApplySimplification}
+            >
+              Réduire
+            </button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -66,6 +66,11 @@
   cursor: default;
 }
 
+.rvc-center-toolbar__button--active {
+  background: rgba(137, 0, 0, 0.72);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
 .rvc-center-toolbar__button--accent {
   padding-left: 12px;
   padding-right: 8px;
@@ -100,6 +105,16 @@
   white-space: nowrap;
 }
 
+.rvc-center-toolbar__tool-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .rvc-center-toolbar__separator {
   width: 1px;
   height: 32px;
@@ -130,6 +145,55 @@
   line-height: 1.2;
 }
 
+.rvc-center-toolbar__tool-panel {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.74);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rvc-center-toolbar__tool-panel-head,
+.rvc-center-toolbar__tool-panel-row,
+.rvc-center-toolbar__tool-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rvc-center-toolbar__tool-panel-head {
+  justify-content: space-between;
+}
+
+.rvc-center-toolbar__tool-panel-actions {
+  justify-content: space-between;
+}
+
+.rvc-center-toolbar__tool-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rvc-center-toolbar__tool-stats,
+.rvc-center-toolbar__tool-caption,
+.rvc-center-toolbar__tool-value {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.rvc-center-toolbar__tool-slider-shell {
+  flex: 1 1 220px;
+  min-width: 140px;
+}
+
+.rvc-center-toolbar__tool-slider-shell .rvc-slider {
+  width: 100%;
+}
+
 @container center-panel-toolbar (max-width: 1120px) {
   .rvc-center-toolbar__track {
     gap: 6px;
@@ -138,6 +202,11 @@
 
   .rvc-center-toolbar__button {
     padding-inline: 10px;
+  }
+
+  .rvc-center-toolbar__tool-panel-row,
+  .rvc-center-toolbar__tool-panel-actions {
+    flex-wrap: wrap;
   }
 }
 
@@ -155,6 +224,10 @@
 
   .rvc-center-toolbar__separator {
     height: 28px;
+  }
+
+  .rvc-center-toolbar__tool-panel {
+    padding: 9px 10px;
   }
 }
 

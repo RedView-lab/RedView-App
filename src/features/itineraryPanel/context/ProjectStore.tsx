@@ -10,7 +10,11 @@ import {
   type SetStateAction,
 } from 'react';
 
+import { routeLengthM } from '@/features/poi/lib/gpx-loader';
+
 import { createDefaultItinerary, createDefaultProject } from '../defaultState';
+import { computeRouteElevationMetrics } from '../lib/route-metrics';
+import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
 import type { ItineraryProject, RouteRenderMode } from '../types';
 
 interface ProjectStoreValue {
@@ -28,6 +32,7 @@ interface ProjectStoreValue {
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
   clearItineraryRoute: (id: string) => void;
+  simplifyItineraryGpx: (id: string, maxPoints: number) => void;
 }
 
 const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
@@ -180,6 +185,51 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const simplifyItineraryGpx = useCallback(
+    (id: string, maxPoints: number) => {
+      updateItinerary(id, (it) => {
+        const route = it.gpxRoute;
+        if (!route || route.source === 'brouter') return;
+
+        const nextMaxPoints = Math.max(2, Math.round(maxPoints));
+        if (route.points.length <= nextMaxPoints) return;
+
+        const simplifiedPoints = simplifyRouteToMaxPoints(route.points, nextMaxPoints);
+        if (simplifiedPoints.length >= route.points.length) return;
+
+        const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
+        const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
+        const distanceKm = Math.round(distanceM / 100) / 10;
+
+        it.gpxRoute = {
+          ...route,
+          points: simplifiedPoints,
+        };
+        it.metrics = {
+          ...it.metrics,
+          distanceKm,
+          ascentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.ascentM))
+            : it.metrics?.ascentM,
+          descentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.descentM))
+            : it.metrics?.descentM,
+          avgSlopePercent: elevationMetrics
+            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+            : it.metrics?.avgSlopePercent,
+        };
+        it.timeline = it.timeline
+          .filter((row) => row.kind !== 'poi')
+          .map((row) =>
+            row.kind === 'end' ? { ...row, distanceKm } : row,
+          );
+        delete it.poiFeatures;
+        it.prediction = null;
+      });
+    },
+    [updateItinerary],
+  );
+
   const value = useMemo<ProjectStoreValue>(
     () => ({
       project,
@@ -192,6 +242,7 @@ export function ProjectProvider({
       setItineraryRenderMode,
       setItineraryOpacity,
       clearItineraryRoute,
+      simplifyItineraryGpx,
     }),
     [
       project,
@@ -203,6 +254,7 @@ export function ProjectProvider({
       setItineraryRenderMode,
       setItineraryOpacity,
       clearItineraryRoute,
+      simplifyItineraryGpx,
     ],
   );
 
