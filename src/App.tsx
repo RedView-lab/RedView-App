@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './lib/supabase'
 import { readProjectIdFromPath } from './lib/projectLocation'
-import Dashboard from './pages/Dashboard'
 import PayWall from './components/PayWall'
 import './index.css'
+
+const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 type BootstrapStatus = 'loading' | 'ready'
 
@@ -38,6 +39,14 @@ type CachedSubscriptionSnapshot = {
 
 function getSubscriptionCacheKey(userId: string): string {
   return `${SUBSCRIPTION_CACHE_KEY_PREFIX}${userId}`
+}
+
+function BootstrapScreen({ label }: { label: string }) {
+  return (
+    <div className="loading">
+      <p>{label}</p>
+    </div>
+  )
 }
 
 function readCachedSubscription(userId: string | null | undefined): boolean | null {
@@ -219,20 +228,12 @@ function App() {
   }, [session?.user?.id])
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
-    return (
-      <div className="loading">
-        <p>Loading...</p>
-      </div>
-    )
+    return <BootstrapScreen label="Loading..." />
   }
 
   if (!session) {
     window.location.href = `${landingUrl}/auth/login`
-    return (
-      <div className="loading">
-        <p>Redirecting...</p>
-      </div>
-    )
+    return <BootstrapScreen label="Redirecting..." />
   }
 
   if (!isSubscribed) {
@@ -240,10 +241,12 @@ function App() {
   }
 
   return (
-    <Dashboard
-      email={session.user.email || 'unknown'}
-      initialProjectId={initialProjectId}
-    />
+    <Suspense fallback={<BootstrapScreen label="Loading dashboard..." />}>
+      <Dashboard
+        email={session.user.email || 'unknown'}
+        initialProjectId={initialProjectId}
+      />
+    </Suspense>
   )
 }
 

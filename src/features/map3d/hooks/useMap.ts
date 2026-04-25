@@ -24,7 +24,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
 const SW_CONTROLLER_TIMEOUT = 2500;
-const ORTHO_BOOT_FALLBACK_MS = 1500;
+const DEFAULT_ORTHO_BOOT_FALLBACK_MS = 1500;
 // User-initiated reload should feel reactive; 5 s is enough to absorb a
 // double-click without throttling a legitimate retry after a failed first
 // attempt (which is exactly when users want to reload).
@@ -83,6 +83,67 @@ function getDemTileKey(event: DemSourceDataLike): string | null {
 function buildDemTilesTemplate(cacheBust: number): string[] {
   if (cacheBust <= 0) return unifiedDEMSource.tiles;
   return unifiedDEMSource.tiles.map((tile) => `${tile}?rv-dem=${cacheBust}`);
+}
+
+interface MapRuntimeProfile {
+  antialias: boolean;
+  minTileCacheSize: number;
+  maxTileCacheSize: number;
+  orthoBootFallbackMs: number;
+}
+
+function getMapRuntimeProfile(): MapRuntimeProfile {
+  const nav = navigator as Navigator & {
+    connection?: {
+      effectiveType?: string;
+      saveData?: boolean;
+    };
+    deviceMemory?: number;
+    userAgentData?: {
+      mobile?: boolean;
+    };
+  };
+
+  const ua = (nav.userAgent || '').toLowerCase();
+  const mem = typeof nav.deviceMemory === 'number' ? nav.deviceMemory : 0;
+  const cores = nav.hardwareConcurrency || 0;
+  const effectiveType = nav.connection?.effectiveType ?? '';
+  const saveData = !!nav.connection?.saveData;
+  const isMobile = !!nav.userAgentData?.mobile || /android|iphone|ipad|ipod|mobile/.test(ua);
+
+  const constrainedDevice = saveData
+    || effectiveType === 'slow-2g'
+    || effectiveType === '2g'
+    || isMobile
+    || (mem > 0 && mem <= 4)
+    || (cores > 0 && cores <= 4);
+  if (constrainedDevice) {
+    return {
+      antialias: false,
+      minTileCacheSize: 240,
+      maxTileCacheSize: 800,
+      orthoBootFallbackMs: 2400,
+    };
+  }
+
+  const balancedDevice = effectiveType === '3g'
+    || (mem > 0 && mem <= 8)
+    || (cores > 0 && cores <= 6);
+  if (balancedDevice) {
+    return {
+      antialias: true,
+      minTileCacheSize: 320,
+      maxTileCacheSize: 1000,
+      orthoBootFallbackMs: 1800,
+    };
+  }
+
+  return {
+    antialias: true,
+    minTileCacheSize: 400,
+    maxTileCacheSize: 1200,
+    orthoBootFallbackMs: DEFAULT_ORTHO_BOOT_FALLBACK_MS,
+  };
 }
 
 function waitForMapIdleOrTimeout(map: mapboxgl.Map, timeoutMs: number): Promise<void> {
@@ -257,6 +318,7 @@ export function useMap(
     // avoid collisions between sources sharing the same z/x/y.
     const requestedTiles = new Set<string>();
     const loadedTiles = new Set<string>();
+    const trackedSourceIds = new Set<string>();
     // Wall-clock when each pending tile was first requested. Used to evict
     // orphans that Mapbox aborted without firing `dataabort` (happens when
     // the camera is panned faster than the SW can drain its queue).
@@ -281,15 +343,19 @@ export function useMap(
       return pruned;
     };
 
+    const refreshTrackedSourceIds = () => {
+      trackedSourceIds.clear();
+      const styleSources = map.getStyle()?.sources ?? {};
+      for (const [sourceId, source] of Object.entries(styleSources)) {
+        if (TRACKED_SOURCE_TYPES.has((source as { type?: string }).type ?? '')) {
+          trackedSourceIds.add(sourceId);
+        }
+      }
+    };
+
     const isTrackedSource = (sourceId: string | undefined | null): boolean => {
       if (!sourceId) return false;
-      try {
-        const src = map.getSource(sourceId);
-        if (!src) return false;
-        return TRACKED_SOURCE_TYPES.has((src as { type?: string }).type ?? '');
-      } catch {
-        return false;
-      }
+      return trackedSourceIds.has(sourceId);
     };
 
     const buildTileKey = (event: mapboxgl.MapSourceDataEvent): string | null => {
@@ -430,6 +496,7 @@ export function useMap(
         minzoom: unifiedDEMSource.minzoom,
         maxzoom: unifiedDEMSource.maxzoom,
       });
+      refreshTrackedSourceIds();
 
       terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
     };
@@ -489,6 +556,7 @@ export function useMap(
     reportMapStatus('loading', 6, 'Initialisation');
 
     const savedVp = initialViewport ?? loadViewport();
+    const runtimeProfile = getMapRuntimeProfile();
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
@@ -498,7 +566,7 @@ export function useMap(
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
-      antialias: true,
+      antialias: runtimeProfile.antialias,
       // CRITICAL FOR GLASSMORPHISM (CSS `backdrop-filter` over the map):
       // With the default (false), Chromium is allowed to discard the WebGL
       // back-buffer immediately after compositing each frame. When the
@@ -513,8 +581,8 @@ export function useMap(
       // and roughly matching the tile count needed to cover a full-France
       // dezoom at z9 + zoom-in to z14 without re-fetch churn. Low minimum keeps
       // mobile devices happy: the cache only grows when actually needed.
-      maxTileCacheSize: 1200,
-      minTileCacheSize: 400,
+      maxTileCacheSize: runtimeProfile.maxTileCacheSize,
+      minTileCacheSize: runtimeProfile.minTileCacheSize,
     });
 
     mapRef.current = map;
@@ -536,6 +604,7 @@ export function useMap(
         });
       });
       await styleLoaded;
+      refreshTrackedSourceIds();
       const swOk = await swReady;
       if (cancelled) return;
       reportMapStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
@@ -602,6 +671,7 @@ export function useMap(
         if (cancelled) return;
         reportMapStatus('loading', 92, 'Textures IGN');
         addIgnOrthoOverlay(map);
+        refreshTrackedSourceIds();
         // Enable live tile tracking now that all tracked sources exist; do NOT
         // call finishDemActivity() here. The `idle` event below is the only
         // authority allowed to flip the dock to "ready", so we wait until
@@ -612,7 +682,7 @@ export function useMap(
 
       orthoBootTimer = setTimeout(() => {
         void addOrthoWhenReady();
-      }, ORTHO_BOOT_FALLBACK_MS);
+      }, runtimeProfile.orthoBootFallbackMs);
 
       armTerrainBootstrap(() => {
         void addOrthoWhenReady();
