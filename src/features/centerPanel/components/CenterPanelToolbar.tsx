@@ -217,6 +217,7 @@ export function CenterPanelToolbar() {
   const handleDeleteActiveRoute = () => {
     if (!store || !activeItinerary) return;
     store.clearItineraryRoute(activeItinerary.id);
+    setToolbarStatus('Trace supprimée');
   };
   const simplifiableRoute =
     activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
@@ -246,6 +247,35 @@ export function CenterPanelToolbar() {
     [activeTraceDistanceKm, activeTracePointCount, simplifyPointsPerKm],
   );
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
+  const inlineToolbarStatus = useMemo(() => {
+    if (toolbarStatus) return toolbarStatus;
+    if (!toolsExpanded) return null;
+    if (activeSubtool === 'simplify' && canSimplifyTrace) {
+      const reduciblePoints = Math.max(0, activeTracePointCount - simplifyTargetPoints);
+      return reduciblePoints > 0
+        ? `Réduction possible: ${reduciblePoints.toLocaleString('fr-FR')} point${reduciblePoints > 1 ? 's' : ''} en moins`
+        : 'Trace déjà assez légère';
+    }
+    if (canAuditTrace) {
+      return auditFindings.length > 0
+        ? `${auditFindings.length} passage${auditFindings.length > 1 ? 's' : ''} trop raide${auditFindings.length > 1 ? 's' : ''} détecté${auditFindings.length > 1 ? 's' : ''}`
+        : 'Aucun passage trop raide détecté';
+    }
+    if (canCleanTrace) {
+      return 'Nettoyage de trace disponible';
+    }
+    return null;
+  }, [
+    activeSubtool,
+    activeTracePointCount,
+    auditFindings.length,
+    canAuditTrace,
+    canCleanTrace,
+    canSimplifyTrace,
+    simplifyTargetPoints,
+    toolbarStatus,
+    toolsExpanded,
+  ]);
 
   useEffect(() => {
     setSimplifyPointsPerKm(computeDefaultPointsPerKm(currentPointsPerKm));
@@ -257,13 +287,6 @@ export function CenterPanelToolbar() {
     }
   }, [toolsExpanded]);
 
-  useEffect(() => {
-    if (!toolbarStatus) return undefined;
-    const timeoutId = window.setTimeout(() => {
-      setToolbarStatus(null);
-    }, 2400);
-    return () => window.clearTimeout(timeoutId);
-  }, [toolbarStatus]);
 
   useEffect(() => {
     setToolbarStatus(null);
@@ -286,6 +309,7 @@ export function CenterPanelToolbar() {
   const handleApplySimplification = () => {
     if (!store || !activeItinerary || !canApplySimplification) return;
     store.simplifyItineraryGpx(activeItinerary.id, simplifyPointsPerKm);
+    setToolbarStatus(`Trace réduite à ${simplifyPointsPerKm.toLocaleString('fr-FR')} pts/km`);
   };
 
   const handleCleanTrace = () => {
@@ -420,6 +444,12 @@ export function CenterPanelToolbar() {
             </>
           ) : null}
 
+          {inlineToolbarStatus ? (
+            <div className="rvc-center-toolbar__status-inline" role="status" aria-live="polite">
+              {inlineToolbarStatus}
+            </div>
+          ) : null}
+
           <div className="rvc-center-toolbar__spacer" aria-hidden="true" />
 
           <div className="rvc-center-toolbar__playback" aria-label="Lecture du parcours">
@@ -479,12 +509,6 @@ export function CenterPanelToolbar() {
           </div>
         </div>
       </div>
-
-      {toolbarStatus ? (
-        <div className="rvc-center-toolbar__status" role="status" aria-live="polite">
-          {toolbarStatus}
-        </div>
-      ) : null}
 
       {toolsExpanded && activeSubtool === 'simplify' ? (
         <div className="rvc-center-toolbar__tool-panel" role="group" aria-label="Réduction de points GPX">
