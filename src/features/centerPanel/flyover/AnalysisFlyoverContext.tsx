@@ -54,8 +54,8 @@ const FLYOVER_RELIEF_PITCH_MAX_STEP_DEG = 0.14;
 const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
 const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
 const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
-const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 30;
-const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 24;
+const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
+const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
 
 interface AnalysisFlyoverContextValue {
   canPlay: boolean;
@@ -139,6 +139,7 @@ export function AnalysisFlyoverProvider({
       'Altitude',
       xMode,
       routePoints,
+      interactiveItinerary?.gpxRoute?.source,
       startTime,
     );
     if (altitudeSeries && altitudeSeries.length >= 2) {

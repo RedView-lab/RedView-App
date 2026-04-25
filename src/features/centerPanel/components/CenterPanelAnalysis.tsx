@@ -318,6 +318,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         axis1Value,
         xMode,
         routePoints,
+        itinerary.gpxRoute?.source,
         itinerary.rhythm.startTime,
       );
       if (axis1Points) {
@@ -338,6 +339,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         axis2Value,
         xMode,
         routePoints,
+        itinerary.gpxRoute?.source,
         itinerary.rhythm.startTime,
       );
       if (axis2Points) {
@@ -380,6 +382,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         'Altitude',
         xMode,
         itinerary.gpxRoute?.points ?? null,
+        itinerary.gpxRoute?.source,
         itinerary.rhythm.startTime,
       );
       if (!points) continue;
@@ -407,6 +410,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           'Altitude',
           xMode,
           itinerary.gpxRoute?.points ?? null,
+          itinerary.gpxRoute?.source,
           itinerary.rhythm.startTime,
         );
         return points

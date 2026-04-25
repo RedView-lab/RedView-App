@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { usePoi } from '@/features/poi/hooks/usePoi';
@@ -43,6 +43,26 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
 };
 
 const DEFAULT_RADIUS_M = 1000;
+
+function buildRenderedRouteKey(
+  itineraryId: string | null,
+  points: { lat: number; lon: number }[] | null | undefined,
+): string {
+  if (!points || points.length === 0) return itineraryId ? `${itineraryId}:empty` : 'empty';
+
+  const indices = Array.from(
+    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
+  );
+
+  return [
+    itineraryId ?? 'no-itinerary',
+    String(points.length),
+    ...indices.map((index) => {
+      const point = points[index]!;
+      return `${index}:${point.lon.toFixed(6)}:${point.lat.toFixed(6)}`;
+    }),
+  ].join('|');
+}
 
 export interface UseItineraryPoiMapResult {
   loading: boolean;
@@ -105,6 +125,12 @@ export function useItineraryPoiMap(
 
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
+  const renderedRouteKeyRef = useRef<string | null>(null);
+  const fittedRouteKeyRef = useRef<string | null>(null);
+  const gpxRouteKey = useMemo(
+    () => buildRenderedRouteKey(active?.id ?? null, gpxRoute?.points),
+    [active?.id, gpxRoute?.points],
+  );
 
   const { loading, error, poiCount, corridorProgress, searchCorridor } = usePoi(
     map,
@@ -125,19 +151,27 @@ export function useItineraryPoiMap(
     if (!map || !isMapLoaded) return;
     if (gpxNeedsRender && gpxRoute) {
       try {
-        addGpxRoute(map, gpxRoute.points);
-        fitMapToRoute(map, gpxRoute.points);
+        if (!isGpxRouteOnMap(map) || renderedRouteKeyRef.current !== gpxRouteKey) {
+          addGpxRoute(map, gpxRoute.points);
+          renderedRouteKeyRef.current = gpxRouteKey;
+        }
+        if (fittedRouteKeyRef.current !== gpxRouteKey) {
+          fitMapToRoute(map, gpxRoute.points);
+          fittedRouteKeyRef.current = gpxRouteKey;
+        }
       } catch {
         /* map may be tearing down */
       }
     } else if (isGpxRouteOnMap(map)) {
       try {
         removeGpxRoute(map);
+        renderedRouteKeyRef.current = null;
+        fittedRouteKeyRef.current = null;
       } catch {
         /* noop */
       }
     }
-  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender]);
+  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender, gpxRouteKey]);
 
   // Re-add the GPX after a Mapbox style.load (Standard Satellite fires
   // style.load multiple times as imports/terrain settle, wiping custom
@@ -150,6 +184,7 @@ export function useItineraryPoiMap(
         if (gpxRoute && !isGpxRouteOnMap(map)) {
           try {
             addGpxRoute(map, gpxRoute.points);
+            renderedRouteKeyRef.current = gpxRouteKey;
           } catch {
             /* noop */
           }
@@ -160,7 +195,7 @@ export function useItineraryPoiMap(
     return () => {
       map.off('style.load', onStyleLoad);
     };
-  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender]);
+  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender, gpxRouteKey]);
 
   return {
     loading,

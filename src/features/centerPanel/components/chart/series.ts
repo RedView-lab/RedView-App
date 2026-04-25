@@ -22,6 +22,7 @@ interface TimelineSample {
 const EARTH_RADIUS_M = 6_371_008.8;
 const INTERVAL_AVERAGE_SPAN_M = 500;
 const MAX_CHART_POINT_COUNT = 2_048;
+const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
 const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], NormalizedRoutePoint[] | null>();
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 
@@ -463,6 +464,7 @@ function buildSeriesFromRouteProfile(
   prediction: PredictionResult | null | undefined,
   metric: ChartMetricId,
   xMode: AxisMode,
+  routeSource?: 'gpx' | 'brouter',
   startTime?: string | null,
 ): ChartPoint[] | null {
   const profile = normalizeRouteProfile(routePoints);
@@ -491,7 +493,14 @@ function buildSeriesFromRouteProfile(
     }
   }
 
-  return points.length > 1 ? fitChartPointBudget(points) : null;
+  return points.length > 1
+    ? fitChartPointBudget(
+        points,
+        metric === 'Altitude' && routeSource === 'gpx'
+          ? MAX_ROUTE_ALTITUDE_POINT_COUNT
+          : MAX_CHART_POINT_COUNT,
+      )
+    : null;
 }
 
 function buildDistanceMetricSamples(
@@ -682,6 +691,7 @@ export function buildSeriesFromPrediction(
   metric: ChartMetricId,
   xMode: AxisMode,
   routePoints?: RouteChartPoint[] | null,
+  routeSource?: 'gpx' | 'brouter',
   startTime?: string | null,
 ): ChartPoint[] | null {
   if (isRouteBackedMetric(metric)) {
@@ -690,6 +700,7 @@ export function buildSeriesFromPrediction(
       prediction,
       metric,
       xMode,
+      routeSource,
       startTime,
     );
     if (routeSeries) return routeSeries;
