@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { IconChevronDown } from './CenterPanelIcons';
 import { useAnalysisFlyover } from '../flyover';
 
@@ -112,18 +113,30 @@ const IconClockRewind = ({ size = 16, ...rest }: ToolbarIconProps) => (
 function ToolbarIconButton({
   label,
   children,
+  onClick,
+  disabled,
 }: {
   label: string;
   children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <button className="rvc-center-toolbar__button" type="button" aria-label={label} title={label}>
+    <button
+      className="rvc-center-toolbar__button"
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      disabled={disabled}
+    >
       {children}
     </button>
   );
 }
 
 export function CenterPanelToolbar() {
+  const store = useProjectStoreOptional();
   const {
     canPlay,
     canSlowDown,
@@ -136,6 +149,30 @@ export function CenterPanelToolbar() {
     timeLabel,
     togglePlayback,
   } = useAnalysisFlyover();
+  const activeItinerary = store?.project.itineraries.find(
+    (itinerary) => itinerary.id === store.project.activeItineraryId,
+  );
+  const canDeleteActiveRoute = Boolean(
+    activeItinerary && (
+      (activeItinerary.gpxRoute?.points.length ?? 0) > 0 ||
+      activeItinerary.timeline.some((item) =>
+        item.kind === 'waypoint' ||
+        item.kind === 'pause' ||
+        item.kind === 'poi' ||
+        item.lat != null ||
+        item.lon != null ||
+        (item.kind === 'start' && item.label !== 'Rechercher un lieu') ||
+        (item.kind === 'end' && item.label !== 'Rechercher un lieu'),
+      ) ||
+      activeItinerary.metrics ||
+      activeItinerary.poiFeatures?.length ||
+      activeItinerary.prediction
+    ),
+  );
+  const handleDeleteActiveRoute = () => {
+    if (!store || !activeItinerary) return;
+    store.clearItineraryRoute(activeItinerary.id);
+  };
 
   return (
     <section className="rvc-center-toolbar" aria-label="Barre d'outils centrale">
@@ -192,7 +229,11 @@ export function CenterPanelToolbar() {
             <IconWrench />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Supprimer">
+          <ToolbarIconButton
+            label="Supprimer"
+            onClick={handleDeleteActiveRoute}
+            disabled={!canDeleteActiveRoute}
+          >
             <IconTrash />
           </ToolbarIconButton>
 

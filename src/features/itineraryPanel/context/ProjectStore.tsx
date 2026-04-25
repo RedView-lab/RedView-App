@@ -10,7 +10,7 @@ import {
   type SetStateAction,
 } from 'react';
 
-import { createDefaultProject } from '../defaultState';
+import { createDefaultItinerary, createDefaultProject } from '../defaultState';
 import type { ItineraryProject, RouteRenderMode } from '../types';
 
 interface ProjectStoreValue {
@@ -27,6 +27,7 @@ interface ProjectStoreValue {
   setItineraryAnalysisVisibility: (id: string, visible: boolean) => void;
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
+  clearItineraryRoute: (id: string) => void;
 }
 
 const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
@@ -165,6 +166,20 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const clearItineraryRoute = useCallback(
+    (id: string) => {
+      updateItinerary(id, (it) => {
+        const emptyTimeline = createDefaultItinerary(1, it.color).timeline;
+        it.timeline = structuredClone(emptyTimeline);
+        delete it.gpxRoute;
+        delete it.metrics;
+        delete it.poiFeatures;
+        it.prediction = null;
+      });
+    },
+    [updateItinerary],
+  );
+
   const value = useMemo<ProjectStoreValue>(
     () => ({
       project,
@@ -176,6 +191,7 @@ export function ProjectProvider({
       setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
+      clearItineraryRoute,
     }),
     [
       project,
@@ -186,6 +202,7 @@ export function ProjectProvider({
       setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
+      clearItineraryRoute,
     ],
   );
 
