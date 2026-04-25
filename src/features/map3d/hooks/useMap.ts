@@ -25,7 +25,14 @@ const TOKEN_ACK_TIMEOUT = 1500; // ms per attempt
 const TOKEN_ACK_MAX_ATTEMPTS = 3;
 const SW_CONTROLLER_TIMEOUT = 2500;
 const ORTHO_BOOT_FALLBACK_MS = 1500;
-const DEM_RELOAD_COOLDOWN_MS = 15000;
+// User-initiated reload should feel reactive; 5 s is enough to absorb a
+// double-click without throttling a legitimate retry after a failed first
+// attempt (which is exactly when users want to reload).
+const DEM_RELOAD_COOLDOWN_MS = 5000;
+// Maximum age (ms) before a still-pending tile request is considered orphan
+// and pruned from the tracking set. Aborted tiles on a fast fly never emit
+// a matching `sourcedata` so without this the bar can latch at 60-99 %.
+const PENDING_TILE_MAX_AGE_MS = 6000;
 // How long the map must remain idle (no pending tiles, no movement) before we
 // declare loading complete. Short enough to feel snappy, long enough to absorb
 // the gap between two camera-driven tile bursts (zoom cascade, inertia).
@@ -33,7 +40,9 @@ const DEM_ACTIVITY_SETTLE_MS = 380;
 // Stale-loading watchdog: if the dock has been > 99% for this long while the
 // map keeps reporting unfinished tiles, force a re-evaluation so we don't
 // freeze on "99 %". Must be larger than the network timeout for a single tile.
-const LOADING_WATCHDOG_MS = 12_000;
+// 8 s aligns with the plain-Mapbox safety net below and keeps perceived
+// stalls under the 10 s "abandon" threshold for users on slow networks.
+const LOADING_WATCHDOG_MS = 8_000;
 // Sources whose tile activity should feed the global "Carte" progress bar.
 // `background` and vector glyph/sprite sources never fire tile events; the
 // IGN ortho is a `raster` source, the unified DEM is `raster-dem`, and Mapbox
@@ -248,6 +257,29 @@ export function useMap(
     // avoid collisions between sources sharing the same z/x/y.
     const requestedTiles = new Set<string>();
     const loadedTiles = new Set<string>();
+    // Wall-clock when each pending tile was first requested. Used to evict
+    // orphans that Mapbox aborted without firing `dataabort` (happens when
+    // the camera is panned faster than the SW can drain its queue).
+    const requestedAt = new Map<string, number>();
+
+    const dropTrackedTile = (tileKey: string) => {
+      requestedTiles.delete(tileKey);
+      loadedTiles.delete(tileKey);
+      requestedAt.delete(tileKey);
+    };
+
+    const pruneStalePendingTiles = () => {
+      if (requestedAt.size === 0) return false;
+      const now = Date.now();
+      let pruned = false;
+      for (const [key, ts] of requestedAt) {
+        if (loadedTiles.has(key)) continue;
+        if (now - ts < PENDING_TILE_MAX_AGE_MS) continue;
+        dropTrackedTile(key);
+        pruned = true;
+      }
+      return pruned;
+    };
 
     const isTrackedSource = (sourceId: string | undefined | null): boolean => {
       if (!sourceId) return false;
@@ -280,6 +312,7 @@ export function useMap(
     const clearDemTracking = () => {
       requestedTiles.clear();
       loadedTiles.clear();
+      requestedAt.clear();
       if (demSettleTimer) {
         clearTimeout(demSettleTimer);
         demSettleTimer = null;
@@ -317,14 +350,12 @@ export function useMap(
         if (allTilesLoaded() && !map.isMoving()) {
           finishDemActivity('Carte prête');
         } else {
-          // Drop completed tiles from the requested set so the next progress
+          // Drop completed tiles AND stale-pending tiles so the next progress
           // tick re-bases on the live pending count.
           for (const key of Array.from(requestedTiles)) {
-            if (loadedTiles.has(key)) {
-              requestedTiles.delete(key);
-              loadedTiles.delete(key);
-            }
+            if (loadedTiles.has(key)) dropTrackedTile(key);
           }
+          pruneStalePendingTiles();
           publishDemProgress('Tuiles en attente');
           armLoadingWatchdog();
         }
@@ -592,6 +623,7 @@ export function useMap(
         if (!isTrackedSource(event.sourceId)) return;
         const tileKey = buildTileKey(event);
         if (!tileKey) return;
+        if (!requestedTiles.has(tileKey)) requestedAt.set(tileKey, Date.now());
         requestedTiles.add(tileKey);
         publishDemProgress('Tuiles');
       };
@@ -603,11 +635,35 @@ export function useMap(
         if (tileKey) {
           requestedTiles.add(tileKey);
           loadedTiles.add(tileKey);
+          requestedAt.delete(tileKey);
           publishDemProgress('Tuiles');
         }
         if (event.isSourceLoaded) {
           scheduleDemSettle();
         }
+      };
+
+      // Mapbox 3.x fires `dataabort` for tiles cancelled before they finish
+      // (typical on rapid fly-to: previous viewport's tiles get aborted). If
+      // we don't drop them from `requestedTiles`, the progress denominator
+      // stays inflated and the bar appears stuck mid-load.
+      const onTrackedSourceAbort = (event: mapboxgl.MapSourceDataEvent) => {
+        if (!demTrackingEnabled) return;
+        if (!isTrackedSource(event.sourceId)) return;
+        const tileKey = buildTileKey(event);
+        if (!tileKey) return;
+        dropTrackedTile(tileKey);
+        publishDemProgress('Tuiles');
+      };
+
+      // Tile-level errors (404 from IGN edge, network failures) are also
+      // terminal: the request will never produce a matching `sourcedata`. Drop
+      // the tile so it does not clog the progress denominator.
+      const onTrackedTileError = (event: mapboxgl.ErrorEvent & { sourceId?: string }) => {
+        const sourceId = (event as unknown as { sourceId?: string }).sourceId;
+        if (!sourceId || !isTrackedSource(sourceId)) return;
+        const tileKey = buildTileKey(event as unknown as mapboxgl.MapSourceDataEvent);
+        if (tileKey) dropTrackedTile(tileKey);
       };
 
       // The `idle` event is Mapbox's authoritative "all tiles painted, no
@@ -622,9 +678,12 @@ export function useMap(
 
       // While the camera is moving Mapbox will queue a fresh tile burst as
       // soon as it stops; immediately revert the bar to "loading" so the user
-      // sees the upcoming work instead of a misleading "ready" flash.
+      // sees the upcoming work instead of a misleading "ready" flash. Also
+      // prune stale-pending tiles aggressively at this point so a fly-to to a
+      // brand-new region doesn't drag the previous viewport's orphans along.
       const onMovestart = () => {
         if (!demTrackingEnabled || cancelled) return;
+        if (pruneStalePendingTiles()) publishDemProgress('Tuiles');
         if (allTilesLoaded()) return;
         if (lastReportedState === 'ready') {
           reportMapStatus('loading', 5, 'Déplacement');
@@ -633,6 +692,8 @@ export function useMap(
 
       map.on('sourcedataloading', onTrackedSourceDataLoading);
       map.on('sourcedata', onTrackedSourceData);
+      map.on('dataabort', onTrackedSourceAbort);
+      map.on('error', onTrackedTileError);
       map.on('moveend', scheduleDemSettle);
       map.on('zoomend', scheduleDemSettle);
       map.on('movestart', onMovestart);
@@ -643,6 +704,8 @@ export function useMap(
       return () => {
         map.off('sourcedataloading', onTrackedSourceDataLoading);
         map.off('sourcedata', onTrackedSourceData);
+        map.off('dataabort', onTrackedSourceAbort);
+        map.off('error', onTrackedTileError);
         map.off('moveend', scheduleDemSettle);
         map.off('zoomend', scheduleDemSettle);
         map.off('movestart', onMovestart);
