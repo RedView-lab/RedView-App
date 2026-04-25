@@ -212,7 +212,7 @@ export function AltitudeSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Type de colorisation</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.colorization}
           options={COLORIZATION_OPTIONS}
           onChange={(value) => onColorizationChange?.(value as AltitudeColorization)}
@@ -232,7 +232,7 @@ export function AltitudeSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Échelle</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.scaleSetting}
           options={SCALE_OPTIONS}
           onChange={(value) => onScaleSettingChange?.(value as AltitudeScaleSetting)}

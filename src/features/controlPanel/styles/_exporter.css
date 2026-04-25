@@ -11,14 +11,14 @@
 .rvc-exporter-panel__content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .rvc-exporter-panel__header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   width: 100%;
   min-height: 16px;
 }
@@ -137,8 +137,8 @@
 }
 
 .rvc-exporter-panel__select.rvc-select {
-  flex: 0 0 108px;
-  min-width: 108px;
+  flex: 0 0 var(--rvc-panel-select-xs);
+  min-width: var(--rvc-panel-select-xs);
   padding: 5px 6px 5px 10px;
   border: 1px solid var(--rvc-border);
   border-radius: 5px;

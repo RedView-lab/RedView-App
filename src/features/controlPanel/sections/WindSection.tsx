@@ -230,7 +230,7 @@ export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Pr
           <span className="rvc-wind__field-label">Mode d’affichage</span>
           <Select
             className="rvc-wind__select rvc-wind__select--outlined"
-            width={108}
+            width="var(--rvc-panel-select-sm)"
             value={displayMode}
             options={DISPLAY_MODE_OPTIONS}
             onChange={setDisplayMode}
@@ -241,7 +241,7 @@ export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Pr
           <span className="rvc-wind__field-label rvc-wind__field-label--semibold">Échelle</span>
           <Select
             className="rvc-wind__select rvc-wind__select--solid"
-            width={140}
+            width="var(--rvc-panel-select-md)"
             value={scaleMode}
             options={SCALE_OPTIONS}
             onChange={setScaleMode}

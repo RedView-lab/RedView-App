@@ -251,7 +251,7 @@ export function SunlightSection({
             <div className="rvc-sunlight__row rvc-sunlight__row--split">
               <span className="rvc-sunlight__row-label">Échelle</span>
               <Select
-                width={140}
+                width="var(--rvc-panel-select-md)"
                 value={scaleSetting}
                 options={SUNLIGHT_SCALE_OPTIONS}
                 onChange={(value) => setScaleSetting(value as SunlightScaleSetting)}

@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -13,7 +12,6 @@ import {
   LEFT_PANEL_WIDTH_KEY,
   PANEL_WIDTH_KEY,
   PANEL_PADDING,
-  PANEL_WIDTH_DEFAULT,
   PANEL_WIDTH_MIN_FALLBACK,
 } from './constants';
 import { getDashboardLayout } from './layout';
@@ -21,7 +19,6 @@ import type { DashboardPersistedMutator } from './useDashboardProjectState';
 import {
   clampLeftPanelWidth,
   clampPanelWidth,
-  measurePanelMinWidth,
   readStoredCenterPanelHeight,
   readStoredLeftWidth,
   readStoredWidth,
@@ -52,7 +49,6 @@ export function useDashboardChrome({
     () => readStoredCenterPanelHeight(),
   );
   const [exporterPanelHeight, setExporterPanelHeight] = useState(0);
-  const [panelMinWidth, setPanelMinWidth] = useState(PANEL_WIDTH_DEFAULT);
   const [viewport, setViewport] = useState(() => ({
     w: window.innerWidth,
     h: window.innerHeight,
@@ -60,6 +56,7 @@ export function useDashboardChrome({
 
   const rightPrimaryPanelHostRef = useRef<HTMLDivElement | null>(null);
   const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
+  const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
 
   useEffect(() => {
     const onResize = () => {
@@ -109,57 +106,6 @@ export function useDashboardChrome({
 
     return () => observer.disconnect();
   }, []);
-
-  const measureRightDockMinWidth = useCallback(() => {
-    const measuredWidths = [
-      measurePanelMinWidth(rightPrimaryPanelHostRef.current),
-      measurePanelMinWidth(exporterPanelHostRef.current),
-    ].filter((value): value is number => value != null);
-
-    if (measuredWidths.length === 0) return PANEL_WIDTH_DEFAULT;
-
-    return clampPanelWidth(
-      Math.max(PANEL_WIDTH_MIN_FALLBACK, ...measuredWidths),
-      PANEL_WIDTH_MIN_FALLBACK,
-    );
-  }, []);
-
-  useLayoutEffect(() => {
-    const primaryHost = rightPrimaryPanelHostRef.current;
-    const exporterHost = exporterPanelHostRef.current;
-    if (!primaryHost && !exporterHost) return;
-
-    let rafId = 0;
-    let pending = false;
-
-    const syncRightPanelWidth = () => {
-      const nextWidth = measureRightDockMinWidth();
-      setPanelMinWidth((current) => (current === nextWidth ? current : nextWidth));
-      setPanelWidth((current) => clampPanelWidth(current, nextWidth));
-    };
-
-    const scheduleSync = () => {
-      if (pending) return;
-      pending = true;
-      rafId = window.requestAnimationFrame(() => {
-        pending = false;
-        rafId = 0;
-        syncRightPanelWidth();
-      });
-    };
-
-    syncRightPanelWidth();
-
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleSync) : null;
-    if (resizeObserver && primaryHost) resizeObserver.observe(primaryHost);
-    if (resizeObserver && exporterHost) resizeObserver.observe(exporterHost);
-
-    return () => {
-      resizeObserver?.disconnect();
-      if (rafId !== 0) window.cancelAnimationFrame(rafId);
-    };
-  }, [measureRightDockMinWidth]);
 
   useEffect(() => {
     try {

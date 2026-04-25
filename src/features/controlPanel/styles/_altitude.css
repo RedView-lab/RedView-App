@@ -8,13 +8,13 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 140px;
+  width: var(--rvc-panel-opacity-control-width);
   flex-shrink: 0;
 }
 
 .rvc-altitude__opacity-slider-wrap {
-  width: 112px;
-  flex: 0 0 112px;
+  width: var(--rvc-panel-altitude-slider-width);
+  flex: 0 0 var(--rvc-panel-altitude-slider-width);
 }
 
 .rvc-altitude__opacity-slider-wrap .rvc-slider {
@@ -115,7 +115,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 140px;
+  width: var(--rvc-panel-select-md);
   min-height: 28px;
   flex-shrink: 0;
   padding: 5px 6px 5px 10px;

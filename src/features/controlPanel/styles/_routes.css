@@ -8,10 +8,12 @@
 }
 
 .rvc-routes__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) var(--rvc-panel-route-mode-width) 26px var(--rvc-panel-route-opacity-width);
   align-items: center;
-  gap: 7px;
+  gap: var(--rvc-panel-gap-compact);
   width: 100%;
+  min-width: 0;
 }
 
 .rvc-routes__color-picker {
@@ -29,17 +31,20 @@
 }
 
 .rvc-routes__label {
-  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
   min-width: 0;
   color: var(--rvc-text);
   font-size: 13px;
   font-weight: 600;
   opacity: 0.64;
-  text-align: center;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 0 2px;
+  padding: 0;
+  line-height: 1.2;
 }
 
 .rvc-routes__opacity {
@@ -47,8 +52,10 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
-  padding: 5px 8px 5px 5px; /* adjusted slightly to account for the border to keep exact sizes if needed, or just keep same padding */
+  width: var(--rvc-panel-route-opacity-width);
+  padding: 5px 7px 5px 5px;
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -75,7 +82,7 @@
 
 .rvc-routes__opacity-input {
   all: unset;
-  width: 28px;
+  width: max(18px, calc(var(--rvc-panel-route-opacity-width) - 28px));
   text-align: right;
   color: var(--rvc-text);
   font-size: 14px;

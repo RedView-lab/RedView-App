@@ -309,7 +309,7 @@ export function SlopesSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Résolution</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.resolution}
           options={RESOLUTION_OPTIONS}
           onChange={(v) => onResolutionChange?.(v as SlopeResolution)}
@@ -319,7 +319,7 @@ export function SlopesSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Type de colorisation</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.colorization}
           options={COLORIZATION_OPTIONS}
           onChange={(v) => onColorizationChange?.(v as SlopeColorization)}
@@ -329,7 +329,7 @@ export function SlopesSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Échelle</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.scale}
           options={SCALE_OPTIONS}
           onChange={(v) => onScaleChange?.(v as SlopeScale)}
@@ -339,7 +339,7 @@ export function SlopesSection({
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">Réglage échelle</span>
         <Select
-          width={140}
+          width="var(--rvc-panel-select-md)"
           value={state.scaleSetting}
           options={SCALE_SETTING_OPTIONS}
           onChange={(v) => onScaleSettingChange?.(v as SlopeScaleSetting)}

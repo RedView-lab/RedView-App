@@ -130,7 +130,7 @@ export function RoutesSection({
             </ColorPalettePicker>
             <div className="rvc-routes__label">{route.label}</div>
             <Select
-              width={80}
+              width="var(--rvc-panel-route-mode-width)"
               value={route.mode}
               options={MODE_OPTIONS}
               onChange={(v) => onModeChange?.(route.id, v)}

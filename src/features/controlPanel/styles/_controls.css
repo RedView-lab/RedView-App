@@ -83,11 +83,11 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 5px 5px 8px;
+  padding: 5px 4px 5px 8px;
   background: var(--rvc-bg-chip);
   border-radius: 5px;
   color: var(--rvc-text);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   cursor: pointer;
   user-select: none;
@@ -277,7 +277,7 @@
 .rvc-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
 }

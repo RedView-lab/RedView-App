@@ -99,7 +99,7 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
                     className="rvc-exporter-panel__select"
                     value={row.format}
                     options={FORMAT_OPTIONS[row.format]}
-                    width={108}
+                    width="var(--rvc-panel-select-xs)"
                   />
                 </div>
               ))}
