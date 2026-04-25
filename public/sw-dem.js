@@ -88,6 +88,7 @@ const OLD_CACHES = [
   'dem-tiles-v34',
   'dem-tiles-v35',
   'dem-tiles-v36',
+  'dem-tiles-v37',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -100,6 +101,7 @@ const OLD_CACHES = [
   'dem-negative-v20',
   'dem-negative-v21',
   'dem-negative-v22',
+  'dem-negative-v23',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7',
@@ -254,6 +256,24 @@ function noTileResponse(reason) {
   });
 }
 
+function isExpertFallbackRiskTile(z, x, y) {
+  return z >= 12 && (tileOverlapsFrance(z, x, y) || tileOverlapsSwitzerland(z, x, y));
+}
+
+function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
+  if (!isExpertFallbackRiskTile(z, x, y)) return false;
+
+  const parentShortTtlMs = parseInt(parentResp.headers.get('x-cache-ttl-ms') || '0', 10);
+  if (parentShortTtlMs > 0) return true;
+
+  const parentSource = (parentResp.headers.get('X-DEM-Source') || '').toLowerCase();
+  if (!parentSource) return true;
+
+  return parentSource.startsWith('mapbox')
+    || parentSource.startsWith('overzoom')
+    || parentSource.includes('fastpath');
+}
+
 async function tryParentOverzoom(cache, z, x, y, depth) {
   if (depth > 0) return null;
   const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
@@ -268,11 +288,21 @@ async function tryParentOverzoom(cache, z, x, y, depth) {
     }
     if (!parentResp || parentResp.status !== 200) continue;
 
+    const parentSource = parentResp.headers.get('X-DEM-Source') || 'unknown';
+    if (shouldSkipUnsafeOverzoomParent(parentResp, z, x, y)) {
+      if (DEBUG) {
+        console.warn(
+          `[sw-dem][expert-fallback] skip parent ${pZ}/${pX}/${pY} for ${z}/${x}/${y} src=${parentSource}`,
+        );
+      }
+      continue;
+    }
+
     try {
       const parentBlob = await parentResp.clone().blob();
       const overzoomed = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
       if (overzoomed) {
-        return { blob: overzoomed, source: `overzoom-z${pZ}` };
+        return { blob: overzoomed, source: `overzoom-z${pZ}:${parentSource}` };
       }
     } catch (err) {
       if (DEBUG) console.warn(`[sw-dem] overzoom failed ${pZ}/${pX}/${pY}`, err);
@@ -292,6 +322,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
   if (z < 4) return noTileResponse('world-zoom');
 
   const t0 = performance.now();
+  const inLiDARRiskRegion = isExpertFallbackRiskTile(z, x, y);
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
 
@@ -316,7 +347,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     if (age && (Date.now() - age) < ttl * 1000) {
       // Try overzoom once, else honour the negative cache
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-      if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source);
+      if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inLiDARRiskRegion);
       return noTileResponse('neg-cache');
     }
     negCache.delete(cacheKey);

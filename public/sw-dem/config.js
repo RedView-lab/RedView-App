@@ -77,8 +77,12 @@ const ORTHO_TILE_SIZE = 256;
 //   (b) v22 tiles cached during the brief window where HIGHRES was queried
 //       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
 //       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-const CACHE_NAME = 'dem-tiles-v37';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v23';
+// v38 / v24 — evicts long-lived fallback children created before the expert
+// overzoom guard. Those tiles were temporary stand-ins but could be cached for
+// a week when they came from the negative-cache path, making seam/wall
+// artefacts persist even after the parent LiDAR tile was healthy again.
+const CACHE_NAME = 'dem-tiles-v38';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';
 const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';
