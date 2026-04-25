@@ -67,7 +67,18 @@ export function ItineraryPanelContainer({
   isResizing,
   onBackToHome,
 }: ItineraryPanelContainerProps) {
-  const { project, setProject, setItineraryName, duplicateItinerary, removeItinerary } = useProjectStore();
+  const {
+    project,
+    setProject,
+    setItineraryName,
+    duplicateItinerary,
+    removeItinerary,
+    undoTraceEdit,
+    redoTraceEdit,
+    canUndoTraceEdit,
+    canRedoTraceEdit,
+    rollbackPendingTraceAppend,
+  } = useProjectStore();
   const predictionStore = usePredictionStoreOptional();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -113,6 +124,7 @@ export function ItineraryPanelContainer({
     active,
     isMapLoaded,
     map,
+    rollbackPendingTraceAppend,
     setProject,
   });
 
@@ -377,10 +389,10 @@ export function ItineraryPanelContainer({
           it.profileId = id;
         })
       }
-      onUndo={() => {}}
-      onRedo={() => {}}
-      canUndo={false}
-      canRedo={false}
+      onUndo={undoTraceEdit}
+      onRedo={redoTraceEdit}
+      canUndo={canUndoTraceEdit}
+      canRedo={canRedoTraceEdit}
       onSaveProfile={() => {}}
 
       onChangePriority={(key: keyof PrioritiesState, value) =>

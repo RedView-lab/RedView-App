@@ -19,9 +19,20 @@ import { computeRouteElevationMetrics } from '../lib/route-metrics';
 import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
 import type { ItineraryProject, RouteRenderMode } from '../types';
 
+interface TraceHistoryEntry {
+  itineraryId: string;
+  before: ItineraryProject;
+  after: ItineraryProject;
+}
+
 interface ProjectStoreValue {
   project: ItineraryProject;
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
+  undoTraceEdit: () => void;
+  redoTraceEdit: () => void;
+  canUndoTraceEdit: boolean;
+  canRedoTraceEdit: boolean;
+  rollbackPendingTraceAppend: (itineraryId: string) => boolean;
   /** Mutate a single itinerary by id (Immer-style draft mutation). */
   updateItinerary: (
     id: string,
@@ -84,6 +95,9 @@ export function ProjectProvider({
   // snapshot — `useLayoutEffect` would not run in time.
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
+  const [traceHistoryPast, setTraceHistoryPast] = useState<TraceHistoryEntry[]>([]);
+  const [traceHistoryFuture, setTraceHistoryFuture] = useState<TraceHistoryEntry[]>([]);
+  const pendingTraceAppendRef = useRef<TraceHistoryEntry | null>(null);
 
   const setProject = useCallback<Dispatch<SetStateAction<ItineraryProject>>>(
     (action) => {
@@ -126,6 +140,46 @@ export function ProjectProvider({
       }));
     },
     [],
+  );
+
+  const undoTraceEdit = useCallback(() => {
+    setTraceHistoryPast((past) => {
+      const entry = past[past.length - 1];
+      if (!entry) return past;
+      pendingTraceAppendRef.current = null;
+      setProject(entry.before);
+      setTraceHistoryFuture((future) => [entry, ...future]);
+      return past.slice(0, -1);
+    });
+  }, [setProject]);
+
+  const redoTraceEdit = useCallback(() => {
+    setTraceHistoryFuture((future) => {
+      const [entry, ...rest] = future;
+      if (!entry) return future;
+      pendingTraceAppendRef.current = null;
+      setProject(entry.after);
+      setTraceHistoryPast((past) => [...past, entry]);
+      return rest;
+    });
+  }, [setProject]);
+
+  const rollbackPendingTraceAppend = useCallback(
+    (itineraryId: string) => {
+      const pending = pendingTraceAppendRef.current;
+      if (!pending || pending.itineraryId !== itineraryId) return false;
+
+      pendingTraceAppendRef.current = null;
+      setProject(pending.before);
+      setTraceHistoryPast((past) => {
+        const last = past[past.length - 1];
+        if (!last || last !== pending) return past;
+        return past.slice(0, -1);
+      });
+      setTraceHistoryFuture([]);
+      return true;
+    },
+    [setProject],
   );
 
   const setItineraryName = useCallback(
@@ -279,10 +333,16 @@ export function ProjectProvider({
     ) => {
       let appended = false;
 
-      updateItinerary(id, (it) => {
-        const startRow = it.timeline.find((row) => row.kind === 'start');
-        const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-        const endRow = endIndex >= 0 ? it.timeline[endIndex] : null;
+      let beforeSnapshot: ItineraryProject | null = null;
+      let afterSnapshot: ItineraryProject | null = null;
+
+      setProject((currentProject) => {
+        const itinerary = currentProject.itineraries.find((it) => it.id === id);
+        if (!itinerary) return currentProject;
+
+        const startRow = itinerary.timeline.find((row) => row.kind === 'start');
+        const endIndex = itinerary.timeline.findIndex((row) => row.kind === 'end');
+        const endRow = endIndex >= 0 ? itinerary.timeline[endIndex] : null;
         if (
           !startRow ||
           startRow.lat == null ||
@@ -291,65 +351,91 @@ export function ProjectProvider({
           endRow.lat == null ||
           endRow.lon == null
         ) {
-          return;
+          return currentProject;
         }
 
-        const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
-        const previousEndWaypoint = {
-          ...endRow,
-          id: waypointId,
-          kind: 'waypoint' as const,
-          distanceKm: endRow.distanceKm,
+        const previousEndLat = endRow.lat;
+        const previousEndLon = endRow.lon;
+
+        beforeSnapshot = structuredClone(currentProject);
+        const nextProject = {
+          ...currentProject,
+          itineraries: currentProject.itineraries.map((it) => {
+            if (it.id !== id) return it;
+            const copy = structuredClone(it);
+
+            const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
+            const previousEndWaypoint = {
+              ...endRow,
+              id: waypointId,
+              kind: 'waypoint' as const,
+              distanceKm: endRow.distanceKm,
+            };
+            const nextEndRow = {
+              ...endRow,
+              label: point.label,
+              lat: point.lat,
+              lon: point.lon,
+              distanceKm: null,
+            };
+
+            copy.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
+            copy.timeline = copy.timeline.map((row) => {
+              if (row.kind === 'start') {
+                return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
+              }
+              if (row.kind === 'end') {
+                return row.distanceKm == null ? row : { ...row, distanceKm: null };
+              }
+              return row;
+            });
+
+            if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
+              copy.pendingTraceExtension = {
+                from: { lat: previousEndLat, lon: previousEndLon },
+                to: { lat: point.lat, lon: point.lon },
+              };
+              delete copy.pendingRoutePatch;
+            } else {
+              delete copy.pendingTraceExtension;
+              delete copy.pendingRoutePatch;
+            }
+
+            if (copy.metrics) {
+              copy.metrics = {
+                ...copy.metrics,
+                distanceKm: undefined,
+                ascentM: undefined,
+                descentM: undefined,
+                avgSlopePercent: undefined,
+                tarmacPercent: undefined,
+                offroadPercent: undefined,
+              };
+            }
+            delete copy.routeAudit;
+            copy.prediction = null;
+            appended = true;
+            return copy;
+          }),
         };
-        const nextEndRow = {
-          ...endRow,
-          label: point.label,
-          lat: point.lat,
-          lon: point.lon,
-          distanceKm: null,
-        };
-
-        it.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
-        it.timeline = it.timeline.map((row) => {
-          if (row.kind === 'start') {
-            return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
-          }
-          if (row.kind === 'end') {
-            return row.distanceKm == null ? row : { ...row, distanceKm: null };
-          }
-          return row;
-        });
-
-        if (it.gpxRoute?.source === 'brouter' && (it.gpxRoute.points.length ?? 0) >= 2) {
-          it.pendingTraceExtension = {
-            from: { lat: endRow.lat, lon: endRow.lon },
-            to: { lat: point.lat, lon: point.lon },
-          };
-          delete it.pendingRoutePatch;
-        } else {
-          delete it.pendingTraceExtension;
-          delete it.pendingRoutePatch;
-        }
-
-        if (it.metrics) {
-          it.metrics = {
-            ...it.metrics,
-            distanceKm: undefined,
-            ascentM: undefined,
-            descentM: undefined,
-            avgSlopePercent: undefined,
-            tarmacPercent: undefined,
-            offroadPercent: undefined,
-          };
-        }
-        delete it.routeAudit;
-        it.prediction = null;
-        appended = true;
+        afterSnapshot = structuredClone(nextProject);
+        return nextProject;
       });
+
+      if (appended && beforeSnapshot && afterSnapshot) {
+        const entry: TraceHistoryEntry = {
+          itineraryId: id,
+          before: beforeSnapshot,
+          after: afterSnapshot,
+        };
+        pendingTraceAppendRef.current = entry;
+        setTraceHistoryPast((past) => [...past, entry]);
+        setTraceHistoryFuture([]);
+      }
 
       return appended;
     },
-    [updateItinerary],
+    [setProject],
   );
 
   const simplifyItineraryGpx = useCallback(
@@ -471,6 +557,11 @@ export function ProjectProvider({
     () => ({
       project,
       setProject,
+      undoTraceEdit,
+      redoTraceEdit,
+      canUndoTraceEdit: traceHistoryPast.length > 0,
+      canRedoTraceEdit: traceHistoryFuture.length > 0,
+      rollbackPendingTraceAppend,
       updateItinerary,
       setItineraryName,
       setItineraryColor,
@@ -488,6 +579,12 @@ export function ProjectProvider({
     }),
     [
       project,
+      setProject,
+      undoTraceEdit,
+      redoTraceEdit,
+      rollbackPendingTraceAppend,
+      traceHistoryPast.length,
+      traceHistoryFuture.length,
       updateItinerary,
       setItineraryName,
       setItineraryColor,

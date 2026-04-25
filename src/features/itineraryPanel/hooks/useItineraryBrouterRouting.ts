@@ -37,6 +37,7 @@ interface UseItineraryBrouterRoutingArgs {
   active: ItineraryProject['itineraries'][number] | null;
   isMapLoaded: boolean;
   map: MapboxMap | null;
+  rollbackPendingTraceAppend: (itineraryId: string) => boolean;
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
 }
 
@@ -44,6 +45,7 @@ export function useItineraryBrouterRouting({
   active,
   isMapLoaded,
   map,
+  rollbackPendingTraceAppend,
   setProject,
 }: UseItineraryBrouterRoutingArgs) {
   const [routeLoading, setRouteLoading] = useState(false);
@@ -386,6 +388,9 @@ export function useItineraryBrouterRouting({
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
+          if (active && isBrouterUnmappedPointError(error)) {
+            rollbackPendingTraceAppend(active.id);
+          }
           console.error('[BRouter append fail]', error);
           setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
         })
@@ -616,7 +621,7 @@ export function useItineraryBrouterRouting({
       });
 
     return () => ctrl.abort();
-  }, [active, brfHash, climbing, endKey, hasWaypointOverride, isMapLoaded, map, profileId, setProject, startKey, viaKey]);
+  }, [active, brfHash, climbing, endKey, hasWaypointOverride, isMapLoaded, map, profileId, rollbackPendingTraceAppend, setProject, startKey, viaKey]);
 
   return {
     routeError,
@@ -1037,6 +1042,12 @@ function mergeSurfaceMetrics(
     tarmacPercent: Math.round(((baseTarmacDistanceM + segmentTarmacDistanceM) / totalClassifiedDistanceM) * 100),
     offroadPercent: Math.round(((baseOffroadDistanceM + segmentOffroadDistanceM) / totalClassifiedDistanceM) * 100),
   };
+}
+
+function isBrouterUnmappedPointError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('brouter http 422') && message.includes('from-position not mapped in existing datafile');
 }
 
 function routeAuditEqual(
