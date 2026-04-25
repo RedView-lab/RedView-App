@@ -185,6 +185,14 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
+.rvc-center-toolbar__tool-hint {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.68);
+}
+
 .rvc-center-toolbar__tool-slider-shell {
   flex: 1 1 220px;
   min-width: 140px;

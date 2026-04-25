@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from './CenterPanelIcons';
 import { useAnalysisFlyover } from '../flyover';
 
-const DEFAULT_SIMPLIFY_TARGET_POINTS = 2_000;
+const DETAILED_POINTS_PER_KM = 60;
+const BALANCED_POINTS_PER_KM = 30;
+const LIGHT_POINTS_PER_KM = 15;
 
 type ToolbarIconProps = {
   size?: number;
@@ -144,20 +147,21 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function computeDefaultRetainPercent(pointCount: number): number {
-  if (pointCount <= DEFAULT_SIMPLIFY_TARGET_POINTS) return 100;
-  return clamp(
-    Math.round((DEFAULT_SIMPLIFY_TARGET_POINTS / pointCount) * 100),
-    5,
-    100,
-  );
+function computeDefaultPointsPerKm(currentPointsPerKm: number): number {
+  if (currentPointsPerKm <= BALANCED_POINTS_PER_KM) {
+    return Math.max(LIGHT_POINTS_PER_KM, Math.round(currentPointsPerKm));
+  }
+  if (currentPointsPerKm <= DETAILED_POINTS_PER_KM) {
+    return BALANCED_POINTS_PER_KM;
+  }
+  return DETAILED_POINTS_PER_KM;
 }
 
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
-  const [simplifyRetainPercent, setSimplifyRetainPercent] = useState(100);
+  const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
   const {
     canPlay,
     canSlowDown,
@@ -199,21 +203,30 @@ export function CenterPanelToolbar() {
       ? activeItinerary.gpxRoute
       : null;
   const activeTracePointCount = simplifiableRoute?.points.length ?? 0;
+  const activeTraceDistanceKm = useMemo(() => {
+    if (!simplifiableRoute) return 0;
+    return routeLengthM(simplifiableRoute.points) / 1000;
+  }, [simplifiableRoute]);
+  const currentPointsPerKm = useMemo(() => {
+    if (activeTracePointCount <= 0 || activeTraceDistanceKm <= 0) return 0;
+    return activeTracePointCount / activeTraceDistanceKm;
+  }, [activeTraceDistanceKm, activeTracePointCount]);
   const canSimplifyTrace = activeTracePointCount > 2;
+  const canCleanTrace = activeTracePointCount > 2;
   const simplifyTargetPoints = useMemo(
     () =>
       clamp(
-        Math.round(activeTracePointCount * (simplifyRetainPercent / 100)),
+        Math.round(Math.max(activeTraceDistanceKm, 0.25) * simplifyPointsPerKm),
         2,
         Math.max(2, activeTracePointCount),
       ),
-    [activeTracePointCount, simplifyRetainPercent],
+    [activeTraceDistanceKm, activeTracePointCount, simplifyPointsPerKm],
   );
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
 
   useEffect(() => {
-    setSimplifyRetainPercent(computeDefaultRetainPercent(activeTracePointCount));
-  }, [activeItinerary?.id, activeTracePointCount]);
+    setSimplifyPointsPerKm(computeDefaultPointsPerKm(currentPointsPerKm));
+  }, [activeItinerary?.id, currentPointsPerKm]);
 
   useEffect(() => {
     if (!toolsExpanded) {
@@ -237,7 +250,12 @@ export function CenterPanelToolbar() {
 
   const handleApplySimplification = () => {
     if (!store || !activeItinerary || !canApplySimplification) return;
-    store.simplifyItineraryGpx(activeItinerary.id, simplifyTargetPoints);
+    store.simplifyItineraryGpx(activeItinerary.id, simplifyPointsPerKm);
+  };
+
+  const handleCleanTrace = () => {
+    if (!store || !activeItinerary || !canCleanTrace) return;
+    store.cleanItineraryGpxGlitches(activeItinerary.id);
   };
 
   return (
@@ -304,14 +322,24 @@ export function CenterPanelToolbar() {
           </ToolbarIconButton>
 
           {toolsExpanded ? (
-            <ToolbarIconButton
-              label="Simplification intelligente de la trace"
-              onClick={handleToggleSimplifyTool}
-              disabled={!canSimplifyTrace}
-              active={activeSubtool === 'simplify'}
-            >
-              <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
-            </ToolbarIconButton>
+            <>
+              <ToolbarIconButton
+                label="Simplification intelligente de la trace"
+                onClick={handleToggleSimplifyTool}
+                disabled={!canSimplifyTrace}
+                active={activeSubtool === 'simplify'}
+              >
+                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
+              </ToolbarIconButton>
+
+              <ToolbarIconButton
+                label="Nettoyer la trace"
+                onClick={handleCleanTrace}
+                disabled={!canCleanTrace}
+              >
+                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
+              </ToolbarIconButton>
+            </>
           ) : null}
 
           <div className="rvc-center-toolbar__spacer" aria-hidden="true" />
@@ -383,25 +411,32 @@ export function CenterPanelToolbar() {
             </span>
           </div>
 
+          <div className="rvc-center-toolbar__tool-hint">
+            <span>Detaillé courant: {Math.round(currentPointsPerKm).toLocaleString('fr-FR')} pts/km</span>
+            <span>Repères utiles: détaillé 40-80 pts/km, léger 15-30 pts/km</span>
+          </div>
+
           <div className="rvc-center-toolbar__tool-panel-row">
-            <span className="rvc-center-toolbar__tool-caption">Conserver</span>
+            <span className="rvc-center-toolbar__tool-caption">Densité cible</span>
             <div className="rvc-center-toolbar__tool-slider-shell">
               <Slider
-                value={simplifyRetainPercent}
+                value={simplifyPointsPerKm}
                 min={5}
-                max={100}
+                max={120}
                 step={1}
                 width="100%"
-                onChange={setSimplifyRetainPercent}
-                onCommit={setSimplifyRetainPercent}
+                onChange={setSimplifyPointsPerKm}
+                onCommit={setSimplifyPointsPerKm}
               />
             </div>
-            <span className="rvc-center-toolbar__tool-value">{simplifyRetainPercent}%</span>
+            <span className="rvc-center-toolbar__tool-value">{simplifyPointsPerKm} pts/km</span>
           </div>
 
           <div className="rvc-center-toolbar__tool-panel-actions">
             <span className="rvc-center-toolbar__tool-caption">
-              Réduction: {Math.max(0, 100 - Math.round((simplifyTargetPoints / Math.max(activeTracePointCount, 1)) * 100))}%
+              {activeTraceDistanceKm > 0
+                ? `${activeTraceDistanceKm.toFixed(1).replace('.', ',')} km -> ${simplifyTargetPoints.toLocaleString('fr-FR')} pts`
+                : 'Distance indisponible'}
             </span>
             <button
               className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"

@@ -13,6 +13,7 @@ import {
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
 import { createDefaultItinerary, createDefaultProject } from '../defaultState';
+import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
 import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
 import type { ItineraryProject, RouteRenderMode } from '../types';
@@ -32,7 +33,8 @@ interface ProjectStoreValue {
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
   clearItineraryRoute: (id: string) => void;
-  simplifyItineraryGpx: (id: string, maxPoints: number) => void;
+  simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
+  cleanItineraryGpxGlitches: (id: string) => void;
 }
 
 const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
@@ -186,12 +188,17 @@ export function ProjectProvider({
   );
 
   const simplifyItineraryGpx = useCallback(
-    (id: string, maxPoints: number) => {
+    (id: string, targetPointsPerKm: number) => {
       updateItinerary(id, (it) => {
         const route = it.gpxRoute;
         if (!route || route.source === 'brouter') return;
 
-        const nextMaxPoints = Math.max(2, Math.round(maxPoints));
+        const routeDistanceKm = routeLengthM(route.points) / 1000;
+        const density = Math.max(1, targetPointsPerKm);
+        const nextMaxPoints = Math.max(
+          2,
+          Math.round(Math.max(routeDistanceKm, 0.25) * density),
+        );
         if (route.points.length <= nextMaxPoints) return;
 
         const simplifiedPoints = simplifyRouteToMaxPoints(route.points, nextMaxPoints);
@@ -218,12 +225,59 @@ export function ProjectProvider({
             ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
             : it.metrics?.avgSlopePercent,
         };
-        it.timeline = it.timeline
-          .filter((row) => row.kind !== 'poi')
-          .map((row) =>
-            row.kind === 'end' ? { ...row, distanceKm } : row,
-          );
-        delete it.poiFeatures;
+        it.timeline = it.timeline.map((row) =>
+          row.kind === 'end' ? { ...row, distanceKm } : row,
+        );
+        it.prediction = null;
+      });
+    },
+    [updateItinerary],
+  );
+
+  const cleanItineraryGpxGlitches = useCallback(
+    (id: string) => {
+      updateItinerary(id, (it) => {
+        const route = it.gpxRoute;
+        if (!route || route.source === 'brouter') return;
+
+        const cleanedPoints = cleanGpxGlitches(route.points);
+        const geometryUnchanged =
+          cleanedPoints.length === route.points.length &&
+          cleanedPoints.every((point, index) => {
+            const current = route.points[index];
+            return (
+              point.lat === current?.lat &&
+              point.lon === current.lon &&
+              point.distanceM === current.distanceM &&
+              point.elevationM === current.elevationM
+            );
+          });
+        if (geometryUnchanged) return;
+
+        const elevationMetrics = computeRouteElevationMetrics(cleanedPoints);
+        const distanceM = elevationMetrics?.distanceM ?? routeLengthM(cleanedPoints);
+        const distanceKm = Math.round(distanceM / 100) / 10;
+
+        it.gpxRoute = {
+          ...route,
+          points: cleanedPoints,
+        };
+        it.metrics = {
+          ...it.metrics,
+          distanceKm,
+          ascentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.ascentM))
+            : it.metrics?.ascentM,
+          descentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.descentM))
+            : it.metrics?.descentM,
+          avgSlopePercent: elevationMetrics
+            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+            : it.metrics?.avgSlopePercent,
+        };
+        it.timeline = it.timeline.map((row) =>
+          row.kind === 'end' ? { ...row, distanceKm } : row,
+        );
         it.prediction = null;
       });
     },
@@ -243,6 +297,7 @@ export function ProjectProvider({
       setItineraryOpacity,
       clearItineraryRoute,
       simplifyItineraryGpx,
+      cleanItineraryGpxGlitches,
     }),
     [
       project,
@@ -255,6 +310,7 @@ export function ProjectProvider({
       setItineraryOpacity,
       clearItineraryRoute,
       simplifyItineraryGpx,
+      cleanItineraryGpxGlitches,
     ],
   );
 
