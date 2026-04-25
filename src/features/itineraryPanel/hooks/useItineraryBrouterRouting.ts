@@ -217,8 +217,11 @@ export function useItineraryBrouterRouting({
           ? computeRouteElevationMetrics(routeProfile)
           : null;
         const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
-        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+        const auditRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
           ? toStoredRoutePoints(routeProfile)
+          : geometryPoints;
+        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+          ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
           : geometryPoints;
         const distanceM = route.distanceM > 0 ? route.distanceM : routeLengthM(routePoints);
         const distanceKm = Math.round(distanceM / 100) / 10;
@@ -237,7 +240,7 @@ export function useItineraryBrouterRouting({
         const offroadPercent = surfaceMetrics
           ? Math.round(surfaceMetrics.offroadPercent)
           : undefined;
-        const auditFindings = analyzeBrouterRoute(route, routePoints);
+        const auditFindings = analyzeBrouterRoute(route, auditRoutePoints);
 
         setProject((project) => {
           const itinerary = project.itineraries.find(
@@ -339,6 +342,107 @@ function toGeometryRoutePoints(
     lat: coordinate[1],
     lon: coordinate[0],
   }));
+}
+
+function enrichGeometryRoutePoints(
+  geometryPoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  profile: Array<{
+    lat: number;
+    lon: number;
+    distanceM: number;
+    elevationM: number;
+    gradientPct: number;
+  }>,
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (geometryPoints.length === 0 || profile.length < 2) return geometryPoints;
+
+  const geometryDistancesM = new Array<number>(geometryPoints.length).fill(0);
+  for (let index = 1; index < geometryPoints.length; index++) {
+    geometryDistancesM[index] =
+      geometryDistancesM[index - 1] + haversineMeters(geometryPoints[index - 1], geometryPoints[index]);
+  }
+
+  const geometryTotalDistanceM = geometryDistancesM[geometryDistancesM.length - 1] ?? 0;
+  const profileTotalDistanceM = profile[profile.length - 1]?.distanceM ?? 0;
+  const distanceScale =
+    geometryTotalDistanceM > 0 && profileTotalDistanceM > 0
+      ? profileTotalDistanceM / geometryTotalDistanceM
+      : 1;
+
+  return geometryPoints.map((point, index) => {
+    const distanceM = geometryDistancesM[index] * distanceScale;
+    const sample = interpolateProfileSample(profile, distanceM);
+    return {
+      lat: point.lat,
+      lon: point.lon,
+      distanceM,
+      elevationM: sample.elevationM,
+      gradientPct: sample.gradientPct,
+    };
+  });
+}
+
+function interpolateProfileSample(
+  profile: Array<{
+    distanceM: number;
+    elevationM: number;
+    gradientPct: number;
+  }>,
+  distanceM: number,
+): { elevationM: number; gradientPct: number } {
+  if (distanceM <= profile[0].distanceM) {
+    return {
+      elevationM: profile[0].elevationM,
+      gradientPct: profile[0].gradientPct,
+    };
+  }
+
+  const last = profile[profile.length - 1];
+  if (distanceM >= last.distanceM) {
+    return {
+      elevationM: last.elevationM,
+      gradientPct: last.gradientPct,
+    };
+  }
+
+  let low = 0;
+  let high = profile.length - 1;
+  while (low + 1 < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (profile[mid].distanceM <= distanceM) low = mid;
+    else high = mid;
+  }
+
+  const start = profile[low];
+  const end = profile[high];
+  const spanM = end.distanceM - start.distanceM;
+  if (spanM <= 0) {
+    return {
+      elevationM: start.elevationM,
+      gradientPct: start.gradientPct,
+    };
+  }
+
+  const t = (distanceM - start.distanceM) / spanM;
+  return {
+    elevationM: start.elevationM + (end.elevationM - start.elevationM) * t,
+    gradientPct: start.gradientPct + (end.gradientPct - start.gradientPct) * t,
+  };
+}
+
+function haversineMeters(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const deltaLat = toRad(b.lat - a.lat);
+  const deltaLon = toRad(b.lon - a.lon);
+  const latA = toRad(a.lat);
+  const latB = toRad(b.lat);
+  const h =
+    Math.sin(deltaLat / 2) ** 2 +
+    Math.cos(latA) * Math.cos(latB) * Math.sin(deltaLon / 2) ** 2;
+  return 2 * 6_371_008.8 * Math.asin(Math.sqrt(h));
 }
 
 function routePointsEqual(

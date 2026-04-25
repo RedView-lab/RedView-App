@@ -208,7 +208,7 @@ export function useItineraryFitRuntime({
         status: 'error',
         error:
           itinerary.gpxRoute?.source === 'brouter'
-            ? 'Le profil altimetrique du trace BRouter n\'est pas encore pret. Attendez le chargement du terrain puis relancez le calcul.'
+            ? 'Le profil altimetrique du trace BRouter n\'est pas encore pret. Relancez le calcul quand le trace est charge.'
             : 'Le GPX actif ne contient pas assez d\'altitudes exploitables pour la prediction.',
         updatedAt: new Date().toISOString(),
       }));
