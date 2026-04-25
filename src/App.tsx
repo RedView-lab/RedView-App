@@ -10,6 +10,7 @@ type BootstrapStatus = 'loading' | 'ready'
 
 const AUTH_BOOT_TIMEOUT_MS = 4000
 const SUBSCRIPTION_BOOT_TIMEOUT_MS = 4000
+const SUBSCRIPTION_RETRY_TIMEOUT_MS = 8000
 const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:'
 const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
 
@@ -158,6 +159,7 @@ function App() {
   // Check subscription status after session is available
   useEffect(() => {
     let cancelled = false
+    let activeSubscriptionAbortController: AbortController | null = null
 
     if (authStatus !== 'ready') {
       return
@@ -177,40 +179,99 @@ function App() {
       setSubscriptionStatus('loading')
     }
 
-    const resolveSubscription = async () => {
+    const fetchSubscriptionStatus = async (userId: string, timeoutMs: number): Promise<boolean> => {
+      activeSubscriptionAbortController?.abort()
       const abortController = new AbortController()
+      activeSubscriptionAbortController = abortController
 
       try {
         const { data, error } = await withTimeout(
           supabase
             .from('user_subscription_status')
             .select('is_subscribed')
-            .eq('user_id', session.user.id)
+            .eq('user_id', userId)
             .abortSignal(abortController.signal)
             .maybeSingle(),
-          SUBSCRIPTION_BOOT_TIMEOUT_MS,
+          timeoutMs,
           'user_subscription_status bootstrap',
         )
 
+        if (error) throw error
+
+        return data?.is_subscribed ?? false
+      } finally {
+        if (activeSubscriptionAbortController === abortController) {
+          activeSubscriptionAbortController = null
+        }
+        abortController.abort()
+      }
+    }
+
+    const resetSessionToLogin = async () => {
+      try {
+        await supabase.auth.signOut()
+      } catch (signOutError) {
+        console.warn('[app] Failed to clear Supabase session after subscription bootstrap failure', signOutError)
+      } finally {
+        if (!cancelled) {
+          setIsSubscribed(false)
+          setSession(null)
+        }
+      }
+    }
+
+    const resolveSubscription = async () => {
+      try {
+        const nextIsSubscribed = await fetchSubscriptionStatus(session.user.id, SUBSCRIPTION_BOOT_TIMEOUT_MS)
         if (cancelled) return
 
-        if (error) {
-          console.error('[app] Failed to resolve subscription status', error)
-          setIsSubscribed(false)
-          writeCachedSubscription(session.user.id, false)
-        } else {
-          const nextIsSubscribed = data?.is_subscribed ?? false
-          setIsSubscribed(nextIsSubscribed)
-          writeCachedSubscription(session.user.id, nextIsSubscribed)
-        }
+        setIsSubscribed(nextIsSubscribed)
+        writeCachedSubscription(session.user.id, nextIsSubscribed)
       } catch (error) {
-        abortController.abort()
         if (cancelled) return
-        console.error('[app] Subscription bootstrap crashed', error)
-        const fallbackIsSubscribed = readCachedSubscription(session.user.id) ?? false
-        setIsSubscribed(fallbackIsSubscribed)
+
+        const fallbackIsSubscribed = readCachedSubscription(session.user.id)
+        if (fallbackIsSubscribed != null) {
+          console.warn('[app] Subscription bootstrap timed out, using cached subscription state', error)
+          setIsSubscribed(fallbackIsSubscribed)
+          return
+        }
+
+        console.warn('[app] Subscription bootstrap failed, refreshing auth before redirecting', error)
+
+        try {
+          const { data, error: refreshError } = await withTimeout(
+            supabase.auth.refreshSession(),
+            AUTH_BOOT_TIMEOUT_MS,
+            'supabase.auth.refreshSession',
+          )
+
+          if (refreshError) throw refreshError
+          if (cancelled) return
+
+          const refreshedSession = data.session
+          if (!refreshedSession?.user?.id) {
+            await resetSessionToLogin()
+            return
+          }
+
+          setSession(refreshedSession)
+
+          const nextIsSubscribed = await fetchSubscriptionStatus(
+            refreshedSession.user.id,
+            SUBSCRIPTION_RETRY_TIMEOUT_MS,
+          )
+          if (cancelled) return
+
+          setIsSubscribed(nextIsSubscribed)
+          writeCachedSubscription(refreshedSession.user.id, nextIsSubscribed)
+        } catch (recoveryError) {
+          if (cancelled) return
+          console.error('[app] Subscription bootstrap failed after refresh, redirecting to login', recoveryError)
+          await resetSessionToLogin()
+        }
       } finally {
-        abortController.abort()
+        activeSubscriptionAbortController?.abort()
         if (!cancelled) setSubscriptionStatus('ready')
       }
     }
@@ -219,6 +280,7 @@ function App() {
 
     return () => {
       cancelled = true
+      activeSubscriptionAbortController?.abort()
     }
   }, [authStatus, session?.user?.id])
 
