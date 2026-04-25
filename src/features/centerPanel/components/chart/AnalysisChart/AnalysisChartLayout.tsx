@@ -2,7 +2,7 @@ import { Fragment, type CSSProperties, type MouseEvent as ReactMouseEvent, type 
 import { IconPlusCircle } from '@/features/controlPanel/icons';
 import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
-import type { AxisDomain, AxisMetricId, AxisMode, ChartSeries } from '../series';
+import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
 import { formatAxisLabel, xAnchorTransformFor } from './format';
 import { buildPoiSpreadOffsetPx, shouldExpandPoiCluster, shouldRenderPoiCluster } from './poi';
 import { EmptySeriesRow, HoverCardGroup, SeriesRow } from './rows';
