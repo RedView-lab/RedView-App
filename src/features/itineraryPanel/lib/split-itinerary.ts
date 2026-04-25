@@ -12,6 +12,21 @@ export interface SplitItineraryProjectResult {
   createdItineraryName: string;
 }
 
+function pickSplitChildColor(project: ItineraryProject, sourceColor: string): string {
+  const normalizedSourceColor = sourceColor.trim().toLowerCase();
+  const normalizedPalette = ITINERARY_COLORS.map((color) => color.toLowerCase());
+  const preferredStartIndex = project.itineraries.length % ITINERARY_COLORS.length;
+  const sourcePaletteIndex = normalizedPalette.indexOf(normalizedSourceColor);
+  const startIndex = sourcePaletteIndex >= 0 ? sourcePaletteIndex + 1 : preferredStartIndex;
+
+  for (let offset = 0; offset < ITINERARY_COLORS.length; offset += 1) {
+    const candidate = ITINERARY_COLORS[(startIndex + offset) % ITINERARY_COLORS.length] ?? sourceColor;
+    if (candidate.toLowerCase() !== normalizedSourceColor) return candidate;
+  }
+
+  return sourceColor;
+}
+
 function buildUniqueSplitName(project: ItineraryProject, sourceName: string): string {
   const baseName = `Découpage de ${sourceName}`;
   let nextName = baseName;
@@ -39,8 +54,7 @@ export function splitItineraryProject(
 
   const createdItineraryId = `it-${Date.now()}-${project.itineraries.length + 1}`;
   const createdItineraryName = buildUniqueSplitName(project, source.name);
-  const nextColor =
-    ITINERARY_COLORS[project.itineraries.length % ITINERARY_COLORS.length] ?? source.color;
+  const nextColor = pickSplitChildColor(project, source.color);
   const sourceStartDistanceKm = source.splitRelation?.startDistanceKm ?? 0;
   const localSplitDistanceKm = (leftPoints[leftPoints.length - 1]?.distanceM ?? 0) / 1000;
   const createdStartDistanceKm = Math.round((sourceStartDistanceKm + localSplitDistanceKm) * 1000) / 1000;
