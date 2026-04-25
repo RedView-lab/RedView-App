@@ -181,6 +181,7 @@ export function ProjectProvider({
         delete it.gpxRoute;
         delete it.metrics;
         delete it.poiFeatures;
+        delete it.routeAudit;
         it.prediction = null;
       });
     },

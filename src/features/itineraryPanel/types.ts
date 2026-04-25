@@ -258,6 +258,19 @@ export interface ItineraryMetrics {
   offroadPercent?: number;
 }
 
+export interface ItineraryRouteAuditFinding {
+  id: string;
+  kind: 'hikeabike' | 'restricted';
+  title: string;
+  detail: string;
+  coordinates: [number, number][];
+}
+
+export interface ItineraryRouteAuditState {
+  visible?: boolean;
+  findings: ItineraryRouteAuditFinding[];
+}
+
 export interface Itinerary {
   id: string;
   name: string;
@@ -319,6 +332,8 @@ export interface Itinerary {
    * search; empty/undefined means no search has been run yet.
    */
   poiFeatures?: PoiFeature[];
+  /** BRouter-backed rideability audit findings for this itinerary. */
+  routeAudit?: ItineraryRouteAuditState;
 }
 
 export interface ItineraryProject {

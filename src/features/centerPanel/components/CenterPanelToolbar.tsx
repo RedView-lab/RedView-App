@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/clean-gpx-glitches';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from './CenterPanelIcons';
 import { useAnalysisFlyover } from '../flyover';
@@ -157,11 +158,30 @@ function computeDefaultPointsPerKm(currentPointsPerKm: number): number {
   return DETAILED_POINTS_PER_KM;
 }
 
+function routePointsEqual(
+  left: Array<{ lat: number; lon: number; distanceM?: number; elevationM?: number | null }>,
+  right: Array<{ lat: number; lon: number; distanceM?: number; elevationM?: number | null }>,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((point, index) => {
+      const other = right[index];
+      return (
+        point.lat === other?.lat &&
+        point.lon === other.lon &&
+        point.distanceM === other.distanceM &&
+        point.elevationM === other.elevationM
+      );
+    })
+  );
+}
+
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
   const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
+  const [toolbarStatus, setToolbarStatus] = useState<string | null>(null);
   const {
     canPlay,
     canSlowDown,
@@ -213,6 +233,9 @@ export function CenterPanelToolbar() {
   }, [activeTraceDistanceKm, activeTracePointCount]);
   const canSimplifyTrace = activeTracePointCount > 2;
   const canCleanTrace = activeTracePointCount > 2;
+  const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
+  const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
+  const auditVisible = activeItinerary?.routeAudit?.visible === true;
   const simplifyTargetPoints = useMemo(
     () =>
       clamp(
@@ -234,6 +257,18 @@ export function CenterPanelToolbar() {
     }
   }, [toolsExpanded]);
 
+  useEffect(() => {
+    if (!toolbarStatus) return undefined;
+    const timeoutId = window.setTimeout(() => {
+      setToolbarStatus(null);
+    }, 2400);
+    return () => window.clearTimeout(timeoutId);
+  }, [toolbarStatus]);
+
+  useEffect(() => {
+    setToolbarStatus(null);
+  }, [activeItinerary?.id]);
+
   const handleToggleTools = () => {
     setToolsExpanded((open) => !open);
   };
@@ -254,8 +289,42 @@ export function CenterPanelToolbar() {
   };
 
   const handleCleanTrace = () => {
-    if (!store || !activeItinerary || !canCleanTrace) return;
+    if (!store || !activeItinerary || !canCleanTrace || !simplifiableRoute) return;
+    const cleanedPoints = cleanGpxGlitches(simplifiableRoute.points);
+    if (routePointsEqual(cleanedPoints, simplifiableRoute.points)) {
+      setToolbarStatus('Aucune aberration détectée');
+      return;
+    }
     store.cleanItineraryGpxGlitches(activeItinerary.id);
+    setToolbarStatus('Trace nettoyée');
+  };
+
+  const handleToggleRouteAudit = () => {
+    if (!store || !activeItinerary || !canAuditTrace) return;
+    if (!activeItinerary.routeAudit) {
+      setToolbarStatus('Audit indisponible pour cette trace');
+      return;
+    }
+    if (auditFindings.length === 0) {
+      store.updateItinerary(activeItinerary.id, (it) => {
+        if (it.routeAudit) it.routeAudit.visible = false;
+      });
+      setToolbarStatus('Aucune galère détectée');
+      return;
+    }
+    const nextVisible = !auditVisible;
+    store.updateItinerary(activeItinerary.id, (it) => {
+      if (!it.routeAudit) {
+        it.routeAudit = { visible: nextVisible, findings: [] };
+        return;
+      }
+      it.routeAudit.visible = nextVisible;
+    });
+    setToolbarStatus(
+      nextVisible
+        ? `${auditFindings.length} portion${auditFindings.length > 1 ? 's' : ''} à vérifier`
+        : 'Audit masqué',
+    );
   };
 
   return (
@@ -339,6 +408,15 @@ export function CenterPanelToolbar() {
               >
                 <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
               </ToolbarIconButton>
+
+              <ToolbarIconButton
+                label="Audit de roulabilité"
+                onClick={handleToggleRouteAudit}
+                disabled={!canAuditTrace}
+                active={auditVisible}
+              >
+                <span className="rvc-center-toolbar__tool-glyph" aria-hidden="true">X</span>
+              </ToolbarIconButton>
             </>
           ) : null}
 
@@ -401,6 +479,12 @@ export function CenterPanelToolbar() {
           </div>
         </div>
       </div>
+
+      {toolbarStatus ? (
+        <div className="rvc-center-toolbar__status" role="status" aria-live="polite">
+          {toolbarStatus}
+        </div>
+      ) : null}
 
       {toolsExpanded && activeSubtool === 'simplify' ? (
         <div className="rvc-center-toolbar__tool-panel" role="group" aria-label="Réduction de points GPX">

@@ -2,10 +2,12 @@ import { useEffect, useMemo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
+  clearRouteAuditFindings,
   clearRouteEndpoints,
   listMountedRouteIds,
   removeAllRouteLayers,
   removeRouteLayer,
+  setRouteAuditFindings,
   setRouteEndpoints,
   upsertRouteLayer,
 } from '../lib/route-layer';
@@ -40,6 +42,8 @@ export function useItineraryRouteLayerSync({
           it.color,
           it.opacity ?? 100,
           it.visible !== false ? 1 : 0,
+          it.routeAudit?.visible ? 1 : 0,
+          it.routeAudit?.findings.length ?? 0,
         ].join(':');
       })
       .join('|');
@@ -75,6 +79,11 @@ export function useItineraryRouteLayerSync({
     }
 
     if (active) {
+      setRouteAuditFindings(
+        map,
+        active.routeAudit?.findings ?? [],
+        active.routeAudit?.visible === true,
+      );
       const start = active.timeline.find((row) => row.kind === 'start');
       const end = active.timeline.find((row) => row.kind === 'end');
       const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];
@@ -87,6 +96,7 @@ export function useItineraryRouteLayerSync({
       if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
       else clearRouteEndpoints(map);
     } else {
+      clearRouteAuditFindings(map);
       clearRouteEndpoints(map);
     }
   }, [active, isMapLoaded, layerSignature, map, itineraries]);
@@ -97,6 +107,7 @@ export function useItineraryRouteLayerSync({
       setTimeout(() => {
         try {
           removeAllRouteLayers(map);
+          clearRouteAuditFindings(map);
           clearRouteEndpoints(map);
           for (const it of itineraries) {
             const pts = it.gpxRoute?.points;
@@ -109,6 +120,11 @@ export function useItineraryRouteLayerSync({
             });
           }
           if (active) {
+            setRouteAuditFindings(
+              map,
+              active.routeAudit?.findings ?? [],
+              active.routeAudit?.visible === true,
+            );
             const start = active.timeline.find((row) => row.kind === 'start');
             const end = active.timeline.find((row) => row.kind === 'end');
             const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];

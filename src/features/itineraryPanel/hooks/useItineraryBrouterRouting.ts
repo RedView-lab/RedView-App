@@ -24,7 +24,8 @@ import {
   computeRouteSurfaceMetricsFromBrouter,
   sampleRouteProfileWithTerrain,
 } from '../lib/route-metrics';
-import type { Itinerary, ItineraryProject } from '../types';
+import { analyzeBrouterRoute } from '../lib/routeAudit/analyzeBrouterRoute';
+import type { Itinerary, ItineraryProject, ItineraryRouteAuditFinding } from '../types';
 
 interface UseItineraryBrouterRoutingArgs {
   active: ItineraryProject['itineraries'][number] | null;
@@ -243,6 +244,7 @@ export function useItineraryBrouterRouting({
         const offroadPercent = surfaceMetrics
           ? Math.round(surfaceMetrics.offroadPercent)
           : undefined;
+        const auditFindings = analyzeBrouterRoute(route, routePoints);
 
         setProject((project) => {
           const itinerary = project.itineraries.find(
@@ -259,7 +261,13 @@ export function useItineraryBrouterRouting({
             itinerary.metrics?.avgSlopePercent === avgSlopePercent &&
             itinerary.metrics?.tarmacPercent === tarmacPercent &&
             itinerary.metrics?.offroadPercent === offroadPercent;
-          if (endAlreadyOk && gpxAlreadyOk && metricsAlreadyOk) return project;
+          const auditAlreadyOk = routeAuditEqual(
+            itinerary.routeAudit?.findings,
+            auditFindings,
+          );
+          if (endAlreadyOk && gpxAlreadyOk && metricsAlreadyOk && auditAlreadyOk) {
+            return project;
+          }
           return {
             ...project,
             itineraries: project.itineraries.map((current) =>
@@ -283,6 +291,10 @@ export function useItineraryBrouterRouting({
                     timeline: current.timeline.map((row) =>
                       row.kind === 'end' ? { ...row, distanceKm } : row,
                     ),
+                    routeAudit: {
+                      visible: current.routeAudit?.visible ?? false,
+                      findings: auditFindings,
+                    },
                   }
                 : current,
             ),
@@ -299,6 +311,7 @@ export function useItineraryBrouterRouting({
           const refinedAscent = Math.max(0, Math.round(refreshedMetrics.ascentM));
           const refinedDescent = Math.max(0, Math.round(refreshedMetrics.descentM));
           const refinedAvg = Math.round(refreshedMetrics.avgSlopePercent * 10) / 10;
+          const refinedAuditFindings = analyzeBrouterRoute(route, refinedPoints);
 
           setProject((project) => {
             const itinerary = project.itineraries.find(
@@ -309,7 +322,8 @@ export function useItineraryBrouterRouting({
               itinerary.metrics?.ascentM === refinedAscent &&
               itinerary.metrics?.descentM === refinedDescent &&
               itinerary.metrics?.avgSlopePercent === refinedAvg &&
-              routePointsEqual(itinerary.gpxRoute?.points, refinedPoints)
+              routePointsEqual(itinerary.gpxRoute?.points, refinedPoints) &&
+              routeAuditEqual(itinerary.routeAudit?.findings, refinedAuditFindings)
             ) {
               return project;
             }
@@ -329,6 +343,10 @@ export function useItineraryBrouterRouting({
                         ascentM: refinedAscent,
                         descentM: refinedDescent,
                         avgSlopePercent: refinedAvg,
+                      },
+                      routeAudit: {
+                        visible: current.routeAudit?.visible ?? false,
+                        findings: refinedAuditFindings,
                       },
                     }
                   : current,
@@ -422,4 +440,29 @@ function routePointsSignature(
       ].join(':');
     }),
   ].join('|');
+}
+
+function routeAuditEqual(
+  left: ItineraryRouteAuditFinding[] | undefined,
+  right: ItineraryRouteAuditFinding[] | undefined,
+): boolean {
+  const leftFindings = left ?? [];
+  const rightFindings = right ?? [];
+  return (
+    leftFindings.length === rightFindings.length &&
+    leftFindings.every((finding, index) => {
+      const other = rightFindings[index];
+      return (
+        finding.id === other?.id &&
+        finding.kind === other.kind &&
+        finding.title === other.title &&
+        finding.detail === other.detail &&
+        finding.coordinates.length === other.coordinates.length &&
+        finding.coordinates.every((coord, coordIndex) => {
+          const next = other.coordinates[coordIndex];
+          return coord[0] === next?.[0] && coord[1] === next?.[1];
+        })
+      );
+    })
+  );
 }

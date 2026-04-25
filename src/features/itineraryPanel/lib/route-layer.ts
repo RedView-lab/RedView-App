@@ -23,6 +23,9 @@ const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
 const ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID = 'brouter-analysis-flyover-progress-source';
 const ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID = 'brouter-analysis-flyover-progress-glow-layer';
 const ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID = 'brouter-analysis-flyover-progress-line-layer';
+const ROUTE_AUDIT_SOURCE_ID = 'brouter-route-audit-source';
+const ROUTE_AUDIT_GLOW_LAYER_ID = 'brouter-route-audit-glow-layer';
+const ROUTE_AUDIT_LINE_LAYER_ID = 'brouter-route-audit-line-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -68,6 +71,34 @@ function buildAnalysisFlyoverProgressGeoJson(
             },
           ]
         : [],
+  };
+}
+
+function buildRouteAuditGeoJson(
+  findings?: Array<{ id: string; coordinates: [number, number][]; title: string; detail: string }> | null,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features:
+      findings?.flatMap((finding) =>
+        finding.coordinates.length >= 2
+          ? [
+              {
+                type: 'Feature' as const,
+                properties: {
+                  id: finding.id,
+                  color: '#ff3b30',
+                  title: finding.title,
+                  detail: finding.detail,
+                },
+                geometry: {
+                  type: 'LineString' as const,
+                  coordinates: finding.coordinates,
+                },
+              },
+            ]
+          : [],
+      ) ?? [],
   };
 }
 
@@ -178,6 +209,63 @@ function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | nu
   });
 
   return map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | null;
+}
+
+function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
+  const existing = map.getSource(ROUTE_AUDIT_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(ROUTE_AUDIT_SOURCE_ID, {
+    type: 'geojson',
+    data: buildRouteAuditGeoJson(null),
+  });
+
+  map.addLayer({
+    id: ROUTE_AUDIT_GLOW_LAYER_ID,
+    type: 'line',
+    source: ROUTE_AUDIT_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 5 as unknown as undefined,
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff3b30'],
+      'line-width': 18,
+      'line-opacity': 0.34,
+      'line-blur': 4,
+      'line-emissive-strength': 1.12,
+      'line-occlusion-opacity': 0.9,
+    },
+  });
+
+  map.addLayer({
+    id: ROUTE_AUDIT_LINE_LAYER_ID,
+    type: 'line',
+    source: ROUTE_AUDIT_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      'line-elevation-reference': 'ground' as unknown as undefined,
+      'line-z-offset': 5 as unknown as undefined,
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff3b30'],
+      'line-width': 7,
+      'line-opacity': 0.96,
+      'line-emissive-strength': 1.18,
+      'line-border-width': 1.6,
+      'line-border-color': 'rgba(255,255,255,0.56)',
+      'line-occlusion-opacity': 0.92,
+    },
+  });
+
+  return map.getSource(ROUTE_AUDIT_SOURCE_ID) as GeoJSONSource | null;
 }
 
 function ids(itineraryId: string) {
@@ -453,6 +541,43 @@ export function setRouteEndpoints(
 
   try {
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
+  } catch {
+    /* noop */
+  }
+}
+
+export function setRouteAuditFindings(
+  map: MapboxMap,
+  findings: Array<{ id: string; coordinates: [number, number][]; title: string; detail: string }>,
+  visible: boolean,
+): void {
+  const source = ensureRouteAuditLayers(map);
+  if (!source) return;
+
+  try {
+    source.setData(buildRouteAuditGeoJson(findings));
+    const visibility = visible && findings.length > 0 ? 'visible' : 'none';
+    if (map.getLayer(ROUTE_AUDIT_GLOW_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_AUDIT_GLOW_LAYER_ID, 'visibility', visibility);
+    }
+    if (map.getLayer(ROUTE_AUDIT_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_AUDIT_LINE_LAYER_ID, 'visibility', visibility);
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearRouteAuditFindings(map: MapboxMap): void {
+  try {
+    const source = ensureRouteAuditLayers(map);
+    source?.setData(buildRouteAuditGeoJson(null));
+    if (map.getLayer(ROUTE_AUDIT_GLOW_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_AUDIT_GLOW_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(ROUTE_AUDIT_LINE_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_AUDIT_LINE_LAYER_ID, 'visibility', 'none');
+    }
   } catch {
     /* noop */
   }

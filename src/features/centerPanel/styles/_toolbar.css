@@ -145,6 +145,16 @@
   line-height: 1.2;
 }
 
+.rvc-center-toolbar__status {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(18, 18, 18, 0.72);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 .rvc-center-toolbar__tool-panel {
   margin-top: 8px;
   padding: 10px 12px;
