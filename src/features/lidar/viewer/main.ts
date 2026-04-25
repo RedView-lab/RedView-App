@@ -242,6 +242,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       buffer,
       altRefLabel: altRef,
       tileLabel: `${xKm},${yKm} ${crs}/${altRef}`,
+      reloadBuffer: () => loadFromOPFS(),
     },
   );
 }

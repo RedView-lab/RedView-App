@@ -7,6 +7,7 @@
 // rendering; the orthophoto is sampled at full resolution.
 
 import { CameraController } from '../viewer/camera';
+import { downloadTerrainExport, type TerrainExportFormat } from './export';
 import { WebGLTerrainRenderer } from './renderer';
 import type { TerrainGPUData } from './renderer';
 import type { TerrainMeshWebGL, TerrainWorkerInput, TerrainWorkerOutput } from './terrainWorker';
@@ -26,9 +27,16 @@ export interface WebGLViewerOptions {
   buffer: ArrayBuffer;          // raw LAZ bytes
   altRefLabel: string;          // for the title / stats
   tileLabel: string;            // human label e.g. "1003,6547 LAMB93/IGN69"
+  reloadBuffer?: () => Promise<ArrayBuffer>;
 }
 
 interface ParsedHeader { bounds: PointCloudBounds; crs: DetectedCrs; }
+
+const EXPORT_GLB_MAX_GRID = 2048;
+const EXPORT_GLB_MIN_RES_M = 0.25;
+const EXPORT_FBX_MAX_GRID = 1024;
+const EXPORT_FBX_MIN_RES_M = 0.5;
+const EXPORT_TEXTURE_CAP = 8192;
 
 // ---------------------------------------------------------------------------
 // Device tier detection
@@ -190,6 +198,7 @@ export async function runWebGLFallback(
   // worker. LAS 1.x is fixed-layout — bbox is at byte 179..226.
   const header = readBoundsFromLasHeader(opts.buffer);
   if (!header) throw new Error("En-tête LAS illisible — fichier corrompu ?");
+  const parsedHeader = header;
 
   // 3. Kick off ortho stitch + terrain build IN PARALLEL. Stitch needs only
   // the header; terrain worker needs a stitched UV anchor — but in stitched
@@ -202,7 +211,7 @@ export async function runWebGLFallback(
   // ever asking for an 8K canvas on a 2K-texture-limited iGPU.
   const orthoCap = Math.min(renderer.maxTextureSize, profile.textureCap);
   const stitchPromise = stitchOrtho(
-    header.bounds, header.crs, orthoCap,
+    parsedHeader.bounds, parsedHeader.crs, orthoCap,
     (pct, label) => setStatus(`Mode WebGL HD : ${label}`, 5 + pct * 30),
   );
 
@@ -269,7 +278,7 @@ export async function runWebGLFallback(
             width: mesh.gridWidth,
             height: mesh.gridHeight,
             bounds: mesh.bounds,
-            crs: header!.crs,
+            crs: parsedHeader.crs,
           },
           {
             progress: (pct, label) => {
@@ -324,6 +333,131 @@ export async function runWebGLFallback(
   snowBtn?.addEventListener('click', () => void cycleSnow());
   window.addEventListener('keydown', (e) => {
     if (e.key === 'n' || e.key === 'N') void cycleSnow();
+  });
+
+  const exportWrap = document.getElementById('export-wrap') as HTMLDivElement | null;
+  const exportBtn = document.getElementById('export-btn') as HTMLButtonElement | null;
+  const exportMenu = document.getElementById('export-menu') as HTMLDivElement | null;
+  const exportFormatBtns = Array.from(
+    document.querySelectorAll<HTMLButtonElement>('.export-format-btn'),
+  );
+  let exportBusy = false;
+  let exportResetTimer = 0;
+
+  exportWrap?.classList.add('visible');
+
+  const resetExportLabel = (delayMs = 0) => {
+    if (exportResetTimer) window.clearTimeout(exportResetTimer);
+    exportResetTimer = window.setTimeout(() => {
+      if (exportBtn && !exportBusy) exportBtn.textContent = '⤓ Exporter';
+    }, delayMs);
+  };
+
+  const setExportBusy = (busy: boolean) => {
+    exportBusy = busy;
+    exportBtn?.classList.toggle('loading', busy);
+    if (exportBtn) exportBtn.disabled = busy;
+    for (const btn of exportFormatBtns) btn.disabled = busy;
+  };
+
+  const closeExportMenu = () => {
+    exportMenu?.setAttribute('hidden', '');
+    exportBtn?.classList.remove('active');
+  };
+
+  const openExportMenu = () => {
+    if (!exportMenu) return;
+    exportMenu.removeAttribute('hidden');
+    exportBtn?.classList.add('active');
+  };
+
+  const setExportLabel = (label: string) => {
+    if (exportBtn) exportBtn.textContent = label;
+  };
+
+  const updateExportProgress = (prefix: string, pct?: number) => {
+    if (pct == null) {
+      setExportLabel(`⤓ ${prefix}`);
+      return;
+    }
+    setExportLabel(`⤓ ${prefix} ${Math.round(pct)}%`);
+  };
+
+  async function runExport(format: TerrainExportFormat) {
+    if (exportBusy) return;
+    if (!opts.reloadBuffer) {
+      console.error('[WebGL Viewer] Export unavailable: reloadBuffer missing');
+      setExportLabel('⤓ Indispo');
+      resetExportLabel(1800);
+      return;
+    }
+
+    const exportGrid = format === 'gltf' ? EXPORT_GLB_MAX_GRID : EXPORT_FBX_MAX_GRID;
+    const exportMinRes = format === 'gltf' ? EXPORT_GLB_MIN_RES_M : EXPORT_FBX_MIN_RES_M;
+    const baseName = buildExportBaseName(opts.tileLabel);
+    let exportOrtho: Awaited<ReturnType<typeof stitchOrtho>> | null = null;
+
+    closeExportMenu();
+    setExportBusy(true);
+    updateExportProgress(format.toUpperCase(), 0);
+
+    try {
+      const exportBuffer = await opts.reloadBuffer();
+      exportOrtho = await stitchOrtho(
+        parsedHeader.bounds,
+        parsedHeader.crs,
+        Math.min(renderer.maxTextureSize, EXPORT_TEXTURE_CAP),
+        (pct, label) => updateExportProgress(label, pct),
+      );
+
+      const exportMesh = await runTerrainWorker(
+        exportBuffer,
+        exportOrtho.cornerUV,
+        exportGrid,
+        exportMinRes,
+        (phase, pct) => updateExportProgress(phase, pct * 100),
+      );
+
+      updateExportProgress(`Encodage ${format.toUpperCase()}`);
+      await downloadTerrainExport({
+        format,
+        mesh: exportMesh,
+        orthoBitmap: exportOrtho.bitmap,
+        baseName,
+      });
+
+      setExportLabel('✓ Exporté');
+      resetExportLabel(2200);
+    } catch (err) {
+      console.error(`[WebGL Viewer] ${format.toUpperCase()} export failed:`, err);
+      setExportLabel('⤓ Erreur');
+      resetExportLabel(2600);
+    } finally {
+      exportOrtho?.bitmap.close();
+      setExportBusy(false);
+    }
+  }
+
+  exportBtn?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    if (exportBusy || !exportMenu) return;
+    if (exportMenu.hasAttribute('hidden')) openExportMenu();
+    else closeExportMenu();
+  });
+
+  for (const btn of exportFormatBtns) {
+    btn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const format = btn.dataset.format;
+      if (format === 'gltf' || format === 'fbx') void runExport(format);
+    });
+  }
+
+  document.addEventListener('click', (event) => {
+    if (!exportWrap || !exportMenu || exportMenu.hasAttribute('hidden')) return;
+    const target = event.target;
+    if (target instanceof Node && exportWrap.contains(target)) return;
+    closeExportMenu();
   });
 
   let lastFpsT = performance.now();
@@ -412,4 +546,13 @@ function resizeCanvas(canvas: HTMLCanvasElement, dprCap = 2) {
   const h = Math.max(1, Math.floor(window.innerHeight * dpr));
   if (canvas.width !== w) canvas.width = w;
   if (canvas.height !== h) canvas.height = h;
+}
+
+function buildExportBaseName(tileLabel: string): string {
+  const sanitized = tileLabel
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return sanitized ? `redview-${sanitized}` : 'redview-export';
 }
