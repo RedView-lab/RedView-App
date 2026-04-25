@@ -14,6 +14,7 @@ import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
 import { createDefaultItinerary, createDefaultProject } from '../defaultState';
 import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
+import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/split-itinerary';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
 import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
 import type { ItineraryProject, RouteRenderMode } from '../types';
@@ -35,6 +36,10 @@ interface ProjectStoreValue {
   clearItineraryRoute: (id: string) => void;
   simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
   cleanItineraryGpxGlitches: (id: string) => void;
+  splitItineraryAtPointIndex: (
+    id: string,
+    splitIndex: number,
+  ) => Omit<SplitItineraryProjectResult, 'project'> | null;
 }
 
 const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
@@ -285,6 +290,24 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const splitItineraryAtPointIndex = useCallback(
+    (id: string, splitIndex: number) => {
+      let resultBox: Omit<SplitItineraryProjectResult, 'project'> | null = null;
+      setProject((prev) => {
+        const result = splitItineraryProject(prev, id, splitIndex);
+        resultBox = result
+          ? {
+              createdItineraryId: result.createdItineraryId,
+              createdItineraryName: result.createdItineraryName,
+            }
+          : null;
+        return result?.project ?? prev;
+      });
+      return resultBox;
+    },
+    [setProject],
+  );
+
   const value = useMemo<ProjectStoreValue>(
     () => ({
       project,
@@ -299,6 +322,7 @@ export function ProjectProvider({
       clearItineraryRoute,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
+      splitItineraryAtPointIndex,
     }),
     [
       project,
@@ -312,6 +336,7 @@ export function ProjectProvider({
       clearItineraryRoute,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
+      splitItineraryAtPointIndex,
     ],
   );
 

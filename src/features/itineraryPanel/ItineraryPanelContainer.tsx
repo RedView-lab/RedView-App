@@ -15,16 +15,17 @@ import {
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
 } from './defaultState';
-import { parseGpxFile, routeLengthM } from '@/features/poi/lib/gpx-loader';
+import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import type { PoiFeature } from '@/features/poi/types';
-import {
-  computeRouteElevationMetrics,
-  extractRouteProfileFromPoints,
-} from './lib/route-metrics';
 import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
 } from './lib/geocoder';
+import {
+  buildImportedRouteMetrics,
+  createImportedTimeline,
+  normalizeImportedRoutePoints,
+} from './lib/imported-route';
 import type {
   Itinerary,
   ItineraryProject,
@@ -290,25 +291,12 @@ export function ItineraryPanelContainer({
     async (file: File) => {
       const route = await parseGpxFile(file);
       const storedPoints = normalizeImportedRoutePoints(route.points);
-      const elevationMetrics = computeRouteElevationMetrics(storedPoints);
-      const distanceKm = Math.round(routeLengthM(route.points) / 100) / 10;
       const timeline = createImportedTimeline(storedPoints);
       const id = addItinerary({
         name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
         gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
         timeline,
-        metrics: {
-          distanceKm,
-          ascentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.ascentM))
-            : undefined,
-          descentM: elevationMetrics
-            ? Math.max(0, Math.round(elevationMetrics.descentM))
-            : undefined,
-          avgSlopePercent: elevationMetrics
-            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
-            : undefined,
-        },
+        metrics: buildImportedRouteMetrics(storedPoints),
       });
 
       if (id) {
@@ -549,67 +537,6 @@ export function ItineraryPanelContainer({
 
     </>
   );
-}
-
-function toStoredRoutePoints(
-  profile: Array<{
-    lat: number;
-    lon: number;
-    distanceM: number;
-    elevationM: number;
-    gradientPct: number;
-  }>,
-): NonNullable<Itinerary['gpxRoute']>['points'] {
-  return profile.map((point) => ({
-    lat: point.lat,
-    lon: point.lon,
-    distanceM: point.distanceM,
-    elevationM: point.elevationM,
-    gradientPct: point.gradientPct,
-  }));
-}
-
-function normalizeImportedRoutePoints(
-  points: NonNullable<Itinerary['gpxRoute']>['points'],
-): NonNullable<Itinerary['gpxRoute']>['points'] {
-  const profile = extractRouteProfileFromPoints(points);
-  if (!profile || profile.length !== points.length) return points;
-  return toStoredRoutePoints(profile);
-}
-
-function createImportedTimeline(
-  points: NonNullable<Itinerary['gpxRoute']>['points'],
-): Itinerary['timeline'] {
-  const startPoint = points[0];
-  const endPoint = points[points.length - 1] ?? startPoint;
-  if (!startPoint || !endPoint) {
-    return [
-      { id: 'start', kind: 'start', label: 'Rechercher un lieu', distanceKm: 0 },
-      { id: 'end', kind: 'end', label: 'Rechercher un lieu', distanceKm: null },
-    ];
-  }
-
-  return [
-    {
-      id: 'start',
-      kind: 'start',
-      label: formatGpsCoordinateLabel(startPoint.lon, startPoint.lat),
-      distanceKm: 0,
-      lat: startPoint.lat,
-      lon: startPoint.lon,
-    },
-    {
-      id: 'end',
-      kind: 'end',
-      label: formatGpsCoordinateLabel(endPoint.lon, endPoint.lat),
-      distanceKm:
-        typeof endPoint.distanceM === 'number'
-          ? Math.round((endPoint.distanceM / 1000) * 10) / 10
-          : null,
-      lat: endPoint.lat,
-      lon: endPoint.lon,
-    },
-  ];
 }
 
 async function resolveImportedTimelineLabel(

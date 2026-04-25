@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useRouteSplitToolOptional } from '../routeSplit';
 import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/clean-gpx-glitches';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from './CenterPanelIcons';
@@ -178,6 +179,7 @@ function routePointsEqual(
 
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
+  const routeSplitTool = useRouteSplitToolOptional();
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
   const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
@@ -235,6 +237,9 @@ export function CenterPanelToolbar() {
   const canSimplifyTrace = activeTracePointCount > 2;
   const canCleanTrace = activeTracePointCount > 2;
   const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
+  const canSplitTrace = routeSplitTool?.canSplit ?? false;
+  const splitStatusMessage = routeSplitTool?.statusMessage ?? null;
+  const splitArmed = routeSplitTool?.armed ?? false;
   const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
   const auditVisible = activeItinerary?.routeAudit?.visible === true;
   const simplifyTargetPoints = useMemo(
@@ -248,6 +253,7 @@ export function CenterPanelToolbar() {
   );
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
+    if (splitStatusMessage) return splitStatusMessage;
     if (toolbarStatus) return toolbarStatus;
     if (!toolsExpanded) return null;
     if (activeSubtool === 'simplify' && canSimplifyTrace) {
@@ -273,6 +279,7 @@ export function CenterPanelToolbar() {
     canCleanTrace,
     canSimplifyTrace,
     simplifyTargetPoints,
+    splitStatusMessage,
     toolbarStatus,
     toolsExpanded,
   ]);
@@ -351,6 +358,11 @@ export function CenterPanelToolbar() {
     );
   };
 
+  const handleToggleRouteSplit = () => {
+    routeSplitTool?.toggle();
+    setToolbarStatus(null);
+  };
+
   return (
     <section className="rvc-center-toolbar" aria-label="Barre d'outils centrale">
       <div className="rvc-center-toolbar__viewport">
@@ -386,7 +398,12 @@ export function CenterPanelToolbar() {
             <IconSwitchHorizontal />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Découper">
+          <ToolbarIconButton
+            label="Découper"
+            onClick={handleToggleRouteSplit}
+            disabled={!canSplitTrace}
+            active={splitArmed}
+          >
             <IconScissors />
           </ToolbarIconButton>
 
