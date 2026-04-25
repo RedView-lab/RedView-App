@@ -21,6 +21,47 @@ interface LocalProjectCacheEntry {
 
 const PROJECT_CACHE_KEY_PREFIX = 'redview:project-cache:';
 const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
+const cacheWritesDisabledForProject = new Set<string>();
+
+function isQuotaExceededError(error: unknown): boolean {
+  return error instanceof DOMException
+    && (
+      error.name === 'QuotaExceededError'
+      || error.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    );
+}
+
+function pruneOldProjectCaches(projectIdToKeep: string): void {
+  const entries: { key: string; cachedAtMs: number }[] = [];
+
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const key = window.localStorage.key(i);
+    if (!key || !key.startsWith(PROJECT_CACHE_KEY_PREFIX)) continue;
+    if (key === getProjectCacheKey(projectIdToKeep)) continue;
+
+    let cachedAtMs = Number.NEGATIVE_INFINITY;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<LocalProjectCacheEntry>;
+        if (typeof parsed.cachedAt === 'string') {
+          const parsedMs = Date.parse(parsed.cachedAt);
+          if (Number.isFinite(parsedMs)) cachedAtMs = parsedMs;
+        }
+      }
+    } catch {
+      // Treat unreadable entries as the best first eviction candidates.
+    }
+
+    entries.push({ key, cachedAtMs });
+  }
+
+  entries.sort((left, right) => left.cachedAtMs - right.cachedAtMs);
+
+  for (const entry of entries) {
+    window.localStorage.removeItem(entry.key);
+  }
+}
 
 /**
  * Read the current Supabase access token from localStorage. Used by the
@@ -67,16 +108,33 @@ function readProjectCache(projectId: string): LocalProjectCacheEntry | null {
 }
 
 function writeProjectCache(projectId: string, project: ItineraryProject): void {
+  if (cacheWritesDisabledForProject.has(projectId)) return;
+
+  const key = getProjectCacheKey(projectId);
+  const payload: LocalProjectCacheEntry = {
+    cachedAt: new Date().toISOString(),
+    project,
+  };
+
   try {
-    const payload: LocalProjectCacheEntry = {
-      cachedAt: new Date().toISOString(),
-      project,
-    };
-    window.localStorage.setItem(
-      getProjectCacheKey(projectId),
-      JSON.stringify(payload),
-    );
+    window.localStorage.setItem(key, JSON.stringify(payload));
   } catch (error) {
+    if (isQuotaExceededError(error)) {
+      try {
+        pruneOldProjectCaches(projectId);
+        window.localStorage.setItem(key, JSON.stringify(payload));
+        return;
+      } catch (retryError) {
+        cacheWritesDisabledForProject.add(projectId);
+        console.warn(
+          '[Dashboard] local project cache disabled after quota exhaustion',
+          retryError,
+        );
+        return;
+      }
+    }
+
+    cacheWritesDisabledForProject.add(projectId);
     console.warn('[Dashboard] local project cache write failed', error);
   }
 }
