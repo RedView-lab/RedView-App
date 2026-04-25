@@ -32,6 +32,14 @@ import {
 } from './types';
 import { usePlotAreaSize } from './usePlotAreaSize';
 
+function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: number): boolean {
+  if (!Number.isFinite(xValue) || points.length === 0) return false;
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  if (!firstPoint || !lastPoint) return false;
+  return xValue >= firstPoint.x && xValue <= lastPoint.x;
+}
+
 export function AnalysisChart({
   series,
   backdropProfiles = [],
@@ -282,20 +290,26 @@ export function AnalysisChart({
     : null;
   const hoverData = useMemo<HoverCardRow[] | null>(() => {
     if (hoverXValue == null || !visibleSeries.length) return null;
-    return visibleSeries.map((entry) => ({
-      id: entry.id,
-      itineraryName: entry.itineraryName,
-      color: entry.color,
-      axis: entry.axis,
-      axisLabel: `Axe ${entry.axis}`,
-      metric: entry.metricId,
-      value: interpolateY(entry.points, hoverXValue),
-    }));
+    return visibleSeries
+      .map<HoverCardRow | null>((entry) => {
+        if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
+        return {
+          id: entry.id,
+          itineraryName: entry.itineraryName,
+          color: entry.color,
+          axis: entry.axis,
+          axisLabel: `Axe ${entry.axis}`,
+          metric: entry.metricId,
+          value: interpolateY(entry.points, hoverXValue),
+        };
+      })
+      .filter((entry): entry is HoverCardRow => entry !== null);
   }, [hoverXValue, visibleSeries]);
   const hoverBackdropData = useMemo<HoverCardRow[]>(() => {
     if (hoverXValue == null || !backdropProfiles.length) return [];
     return backdropProfiles
       .map<HoverCardRow | null>((profile) => {
+        if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
         const value = interpolateY(profile.points, hoverXValue);
         if (!Number.isFinite(value)) return null;
         return {
@@ -320,6 +334,7 @@ export function AnalysisChart({
 
     const seriesPoints = visibleSeries
       .map((entry) => {
+        if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
         const yValue = interpolateY(entry.points, hoverXValue);
         if (!Number.isFinite(yValue)) return null;
         const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
@@ -335,6 +350,7 @@ export function AnalysisChart({
     const backdropPoints = backdropProfiles
       .map((profile) => {
         if (!backdropYDomain) return null;
+        if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
         const yValue = interpolateY(profile.points, hoverXValue);
         if (!Number.isFinite(yValue)) return null;
         return {
