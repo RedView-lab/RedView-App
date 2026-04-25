@@ -12,7 +12,7 @@ import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 
 const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
-const MAX_ROUTE_CLICK_DISTANCE_PX = 12;
+const MAX_ROUTE_CLICK_DISTANCE_PX = 20;
 
 interface RouteSplitToolContextValue {
   armed: boolean;
@@ -20,6 +20,7 @@ interface RouteSplitToolContextValue {
   statusMessage: string | null;
   toggle: () => void;
   deactivate: () => void;
+  splitAtPointIndex: (splitIndex: number) => boolean;
 }
 
 const RouteSplitToolContext = createContext<RouteSplitToolContextValue | null>(null);
@@ -43,6 +44,20 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     setArmed(false);
     setStatusMessage(null);
   }, []);
+
+  const splitAtPointIndex = useCallback(
+    (splitIndex: number) => {
+      if (!store || !activeItinerary || !routePoints || routePoints.length < 4) return false;
+
+      const result = store.splitItineraryAtPointIndex(activeItinerary.id, splitIndex);
+      if (!result) return false;
+
+      setArmed(false);
+      setStatusMessage(`Trace découpée: ${result.createdItineraryName}`);
+      return true;
+    },
+    [activeItinerary, routePoints, store],
+  );
 
   const toggle = useCallback(() => {
     if (!canSplit) return;
@@ -72,12 +87,9 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       const splitIndex = findSplitIndexForMapClick(map, routePoints, event.point.x, event.point.y);
       if (splitIndex == null) return;
 
-      const result = store.splitItineraryAtPointIndex(activeItinerary.id, splitIndex);
-      if (!result) return;
+      if (!splitAtPointIndex(splitIndex)) return;
 
-      setArmed(false);
       canvas.style.cursor = '';
-      setStatusMessage(`Trace découpée: ${result.createdItineraryName}`);
     };
 
     applyCursor();
@@ -89,7 +101,7 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       map.off('click', handleClick);
       canvas.style.cursor = '';
     };
-  }, [activeItinerary, armed, map, routePoints, store]);
+  }, [armed, map, routePoints, splitAtPointIndex, store, activeItinerary]);
 
   const value = useMemo<RouteSplitToolContextValue>(
     () => ({
@@ -98,8 +110,9 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       statusMessage,
       toggle,
       deactivate,
+      splitAtPointIndex,
     }),
-    [armed, canSplit, deactivate, statusMessage, toggle],
+    [armed, canSplit, deactivate, splitAtPointIndex, statusMessage, toggle],
   );
 
   return (

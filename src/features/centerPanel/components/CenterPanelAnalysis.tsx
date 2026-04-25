@@ -3,6 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { IconCheck } from './CenterPanelIcons';
 import { AxisDropdown, type AxisOption } from './AxisDropdown';
 import { useAnalysisFlyover } from '../flyover';
+import { useRouteSplitToolOptional } from '../routeSplit';
 import {
   AnalysisChart,
   buildChartDayNightOverlay,
@@ -86,6 +87,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
+  const routeSplitTool = useRouteSplitToolOptional();
   const { controlledHoverXValue, setManualHoverXValue } = useAnalysisFlyover();
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
@@ -459,7 +461,29 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   }, [projectStore]);
 
   const handleChartClick = (xValue: number) => {
-    if (!map || !interactiveItinerary) return;
+    if (!interactiveItinerary) return;
+
+    if (
+      routeSplitTool?.armed
+      && activeItinerary
+      && activeItinerary.id === interactiveItinerary.id
+      && (activeItinerary.gpxRoute?.points.length ?? 0) >= 4
+    ) {
+      const activePrediction =
+        predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+      const splitIndex = findSplitIndexForChartX(
+        activeItinerary.gpxRoute?.points ?? null,
+        activePrediction,
+        xMode,
+        xValue,
+        activeItinerary.rhythm.startTime,
+      );
+      if (splitIndex != null && routeSplitTool.splitAtPointIndex(splitIndex)) {
+        return;
+      }
+    }
+
+    if (!map) return;
     const prediction =
       predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
     const point = locateRoutePointAtX(
@@ -657,6 +681,68 @@ function lightenColor(hex: string, amount: number): string {
 function migrateAxisMetric(value: string): AxisMetricId {
   if (value === 'Dénivelé' || value === 'Altitude') return 'Inclinaison (%)';
   return value as AxisMetricId;
+}
+
+function findSplitIndexForChartX(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number }> | null | undefined,
+  prediction: Parameters<typeof locateRoutePointAtX>[1],
+  xMode: AxisMode,
+  xValue: number,
+  startTime?: string | null,
+): number | null {
+  if (!routePoints || routePoints.length < 4) return null;
+
+  const targetPoint = locateRoutePointAtX(routePoints, prediction, xMode, xValue, startTime);
+  const targetDistanceM = targetPoint?.distanceM;
+  if (!Number.isFinite(targetDistanceM)) return null;
+
+  const distances = getRoutePointDistances(routePoints);
+  let lo = 0;
+  let hi = distances.length - 1;
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (distances[mid] <= (targetDistanceM as number)) lo = mid;
+    else hi = mid;
+  }
+
+  const loDistance = Math.abs(distances[lo] - (targetDistanceM as number));
+  const hiDistance = Math.abs(distances[hi] - (targetDistanceM as number));
+  const bestIndex = hiDistance < loDistance ? hi : lo;
+  return Math.max(1, Math.min(bestIndex, routePoints.length - 2));
+}
+
+function getRoutePointDistances(
+  routePoints: Array<{ lat: number; lon: number; distanceM?: number }>,
+): number[] {
+  if (routePoints.length === 0) return [];
+
+  const distances: number[] = [0];
+  let cumulativeDistanceM = 0;
+  for (let index = 1; index < routePoints.length; index += 1) {
+    const point = routePoints[index];
+    const nextDistance = point.distanceM;
+    if (Number.isFinite(nextDistance) && (nextDistance as number) >= cumulativeDistanceM) {
+      cumulativeDistanceM = nextDistance as number;
+    } else {
+      cumulativeDistanceM += haversineM(routePoints[index - 1]!, point);
+    }
+    distances.push(cumulativeDistanceM);
+  }
+  return distances;
+}
+
+function haversineM(
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number },
+): number {
+  const lat1 = (start.lat * Math.PI) / 180;
+  const lat2 = (end.lat * Math.PI) / 180;
+  const dLat = lat2 - lat1;
+  const dLon = ((end.lon - start.lon) * Math.PI) / 180;
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  return 12_742_017.6 * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 function normalizeAnalysisState(state?: Partial<AnalysisPanelState> | null): AnalysisPanelState {
