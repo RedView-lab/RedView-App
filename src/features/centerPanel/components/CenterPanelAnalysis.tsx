@@ -9,11 +9,13 @@ import {
   buildSeriesFromPrediction,
   isInclinationMetric,
   buildPoiAnnotationsForItinerary,
+  buildRouteAuditAnnotationsForItinerary,
   computeXDomain,
   locateRoutePointAtX,
   type AxisMetricId,
   type AxisMode,
   type AxisDomain,
+  type ChartAlertAnnotation,
   type ChartBackdropProfile,
   type ChartDayNightOverlay,
   type ChartPoiAnnotation,
@@ -397,6 +399,19 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     return result;
   }, [filters.poi, projectStore, predictionStore, xMode]);
 
+  const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
+    if (!filters.alertes) return [];
+    if (!projectStore) return [];
+
+    const result: ChartAlertAnnotation[] = [];
+    for (const itinerary of projectStore.project.itineraries) {
+      if (itinerary.analysisVisible === false) continue;
+      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      result.push(...buildRouteAuditAnnotationsForItinerary(itinerary, prediction, xMode));
+    }
+    return result;
+  }, [filters.alertes, projectStore, predictionStore, xMode]);
+
   const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
     if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;
     if (activeItinerary.analysisVisible === false) return null;
@@ -595,6 +610,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           series={series}
           backdropProfiles={altitudeBackdropProfiles}
           poiAnnotations={poiAnnotations}
+          alertAnnotations={alertAnnotations}
           dayNightOverlay={dayNightOverlay}
           axis1Metric={axis1Value}
           axis2Metric={axis2Value}

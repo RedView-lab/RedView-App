@@ -167,6 +167,29 @@
   font: 700 10px/1 'DM Sans', system-ui, sans-serif;
 }
 
+.rvchart__alert-marker {
+  position: absolute;
+  transform: translate(-50%, calc(-100% + 10px));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.56));
+}
+
+.rvchart__alert-marker-cross {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(137, 0, 0, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  color: #fff;
+  font: 800 11px/1 'DM Sans', system-ui, sans-serif;
+}
+
 .rvchart__poi-cluster {
   position: absolute;
   transform: translate(-50%, calc(-100% + 7px));

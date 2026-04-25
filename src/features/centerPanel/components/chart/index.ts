@@ -12,6 +12,7 @@ export {
   unitForMetric,
 } from './series';
 export { buildPoiAnnotationsForItinerary } from './annotations/buildPoiAnnotations';
+export { buildRouteAuditAnnotationsForItinerary } from './annotations/buildRouteAuditAnnotations';
 export type {
   AxisDomain,
   ChartBackdropProfile,
@@ -23,6 +24,7 @@ export type {
   ChartSeries,
 } from './series';
 export type { ChartPoiAnnotation } from './annotations/buildPoiAnnotations';
+export type { ChartAlertAnnotation } from './annotations/buildRouteAuditAnnotations';
 
 export type {
   ChartDayNightMoonMarker,
