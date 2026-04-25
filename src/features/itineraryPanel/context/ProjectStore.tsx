@@ -12,7 +12,7 @@ import {
 
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
-import { createDefaultItinerary, createDefaultProject } from '../defaultState';
+import { createDefaultItinerary, createDefaultProject, ITINERARY_COLORS } from '../defaultState';
 import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
 import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/split-itinerary';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
@@ -33,6 +33,8 @@ interface ProjectStoreValue {
   setItineraryAnalysisVisibility: (id: string, visible: boolean) => void;
   setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
   setItineraryOpacity: (id: string, opacity: number) => void;
+  duplicateItinerary: (id: string) => { createdItineraryId: string; createdItineraryName: string } | null;
+  removeItinerary: (id: string) => boolean;
   clearItineraryRoute: (id: string) => void;
   simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
   cleanItineraryGpxGlitches: (id: string) => void;
@@ -178,6 +180,77 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const duplicateItinerary = useCallback(
+    (id: string) => {
+      let resultBox: { createdItineraryId: string; createdItineraryName: string } | null = null;
+
+      setProject((currentProject) => {
+        const source = currentProject.itineraries.find((itinerary) => itinerary.id === id);
+        if (!source) return currentProject;
+
+        const nextIndex = currentProject.itineraries.length + 1;
+        const color =
+          ITINERARY_COLORS[currentProject.itineraries.length % ITINERARY_COLORS.length] ??
+          ITINERARY_COLORS[0];
+        const duplicateNameBase = `${source.name} (copie)`;
+        let duplicateName = duplicateNameBase;
+        let suffix = 2;
+        while (currentProject.itineraries.some((itinerary) => itinerary.name === duplicateName)) {
+          duplicateName = `${duplicateNameBase} ${suffix}`;
+          suffix += 1;
+        }
+
+        const duplicate = structuredClone(source);
+        duplicate.id = `it-${Date.now()}-${nextIndex}`;
+        duplicate.name = duplicateName;
+        duplicate.color = color;
+        duplicate.visible = false;
+
+        resultBox = {
+          createdItineraryId: duplicate.id,
+          createdItineraryName: duplicate.name,
+        };
+
+        return {
+          ...currentProject,
+          itineraries: [...currentProject.itineraries, duplicate],
+          activeItineraryId: duplicate.id,
+        };
+      });
+
+      return resultBox;
+    },
+    [setProject],
+  );
+
+  const removeItinerary = useCallback(
+    (id: string) => {
+      let removed = false;
+
+      setProject((currentProject) => {
+        if (currentProject.itineraries.length <= 1) return currentProject;
+
+        const remaining = currentProject.itineraries.filter((itinerary) => itinerary.id !== id);
+        if (remaining.length === currentProject.itineraries.length) return currentProject;
+
+        removed = true;
+        const nextActive =
+          currentProject.activeItineraryId === id
+            ? (remaining[0]?.id ?? currentProject.activeItineraryId)
+            : currentProject.activeItineraryId;
+
+        return {
+          ...currentProject,
+          itineraries: remaining,
+          activeItineraryId: nextActive,
+        };
+      });
+
+      return removed;
+    },
+    [setProject],
+  );
+
   const clearItineraryRoute = useCallback(
     (id: string) => {
       updateItinerary(id, (it) => {
@@ -319,6 +392,8 @@ export function ProjectProvider({
       setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
+      duplicateItinerary,
+      removeItinerary,
       clearItineraryRoute,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
@@ -333,6 +408,8 @@ export function ProjectProvider({
       setItineraryAnalysisVisibility,
       setItineraryRenderMode,
       setItineraryOpacity,
+      duplicateItinerary,
+      removeItinerary,
       clearItineraryRoute,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,

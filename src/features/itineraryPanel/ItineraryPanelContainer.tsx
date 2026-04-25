@@ -66,7 +66,7 @@ export function ItineraryPanelContainer({
   isResizing,
   onBackToHome,
 }: ItineraryPanelContainerProps) {
-  const { project, setProject, setItineraryName } = useProjectStore();
+  const { project, setProject, setItineraryName, duplicateItinerary, removeItinerary } = useProjectStore();
   const predictionStore = usePredictionStoreOptional();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -308,39 +308,8 @@ export function ItineraryPanelContainer({
   );
 
   const duplicateActiveItinerary = useCallback(() => {
-    setProject((currentProject) => {
-      const source = currentProject.itineraries.find(
-        (itinerary) => itinerary.id === currentProject.activeItineraryId,
-      );
-      if (!source) return currentProject;
-
-      const nextIndex = currentProject.itineraries.length + 1;
-      const color =
-        ITINERARY_COLORS[currentProject.itineraries.length % ITINERARY_COLORS.length] ??
-        ITINERARY_COLORS[0];
-      const duplicateNameBase = `${source.name} (copie)`;
-      let duplicateName = duplicateNameBase;
-      let suffix = 2;
-      while (
-        currentProject.itineraries.some((itinerary) => itinerary.name === duplicateName)
-      ) {
-        duplicateName = `${duplicateNameBase} ${suffix}`;
-        suffix += 1;
-      }
-
-      const duplicate = structuredClone(source);
-      duplicate.id = `it-${Date.now()}-${nextIndex}`;
-      duplicate.name = duplicateName;
-      duplicate.color = color;
-      duplicate.visible = false;
-
-      return {
-        ...currentProject,
-        itineraries: [...currentProject.itineraries, duplicate],
-        activeItineraryId: duplicate.id,
-      };
-    });
-  }, [setProject]);
+    duplicateItinerary(project.activeItineraryId);
+  }, [duplicateItinerary, project.activeItineraryId]);
 
   // After importing a GPX, automatically run a corridor search so the user
   // immediately sees POIs along the freshly-loaded track.
@@ -397,15 +366,7 @@ export function ItineraryPanelContainer({
       }}
       onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
       onAddItineraryFromGpx={addItineraryFromGpxFile}
-      onRemoveItinerary={(id) =>
-        setProject((p) => {
-          if (p.itineraries.length <= 1) return p;
-          const remaining = p.itineraries.filter((i) => i.id !== id);
-          const nextActive =
-            p.activeItineraryId === id ? remaining[0].id : p.activeItineraryId;
-          return { ...p, itineraries: remaining, activeItineraryId: nextActive };
-        })
-      }
+      onRemoveItinerary={removeItinerary}
       onRenameItinerary={setItineraryName}
       onChangeMode={(mode: PanelMode) =>
         setProject((p) => ({ ...p, activeMode: mode }))

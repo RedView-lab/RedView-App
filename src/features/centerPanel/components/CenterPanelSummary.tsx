@@ -1,4 +1,15 @@
 import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
+import {
+  IconCheck,
   IconDotsVertical,
   IconEye,
   IconSettingsSliders,
@@ -7,8 +18,13 @@ import {
   useProjectStoreOptional,
   type Itinerary,
 } from '@/features/itineraryPanel';
+import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
 const PLACEHOLDER = '--';
+const MENU_WIDTH = 270;
+const MENU_ROW_HEIGHT = 32;
+const MENU_GAP = 6;
+const RENAME_MENU_HEIGHT = 112;
 
 const HEADER_CELLS = [
   'Distance',
@@ -84,9 +100,10 @@ const EMPTY_VALUES: string[] = HEADER_CELLS.map(() => PLACEHOLDER);
 interface SummaryRowProps {
   itinerary: Itinerary;
   onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
+  onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
 }
 
-function SummaryRow({ itinerary, onToggleAnalysisVisibility }: SummaryRowProps) {
+function SummaryRow({ itinerary, onToggleAnalysisVisibility, onOpenMenu }: SummaryRowProps) {
   const values = buildValues(itinerary);
   const analysisVisible = itinerary.analysisVisible !== false;
   return (
@@ -132,7 +149,8 @@ function SummaryRow({ itinerary, onToggleAnalysisVisibility }: SummaryRowProps) 
       <button
         className="rvc-center-summary__ghost-button"
         type="button"
-        aria-label="Plus d'options"
+        aria-label={`Plus d'options pour ${itinerary.name}`}
+        onClick={(event) => onOpenMenu?.(itinerary, event.currentTarget)}
       >
         <IconDotsVertical size={16} />
       </button>
@@ -177,11 +195,275 @@ function EmptyRow() {
   );
 }
 
+type SummaryMenuMode = 'actions' | 'rename';
+
+interface SummaryActionMenuProps {
+  itinerary: Itinerary;
+  anchorEl: HTMLButtonElement;
+  mode: SummaryMenuMode;
+  draft: string;
+  canDelete: boolean;
+  onDraftChange: (value: string) => void;
+  onClose: () => void;
+  onStartRename: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}
+
+function SummaryActionMenu({
+  itinerary,
+  anchorEl,
+  mode,
+  draft,
+  canDelete,
+  onDraftChange,
+  onClose,
+  onStartRename,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: SummaryActionMenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const firstActionRef = useRef<HTMLButtonElement | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  const [menuStyle, setMenuStyle] = useState<{
+    top: number;
+    left: number;
+    scale: number;
+    fontFamily: string;
+    transformOrigin: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const onDocPointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (menuRef.current?.contains(target)) return;
+      if (anchorEl.contains(target)) return;
+      onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('mousedown', onDocPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [anchorEl, onClose]);
+
+  useEffect(() => {
+    const handle = window.requestAnimationFrame(() => {
+      if (mode === 'rename') {
+        renameInputRef.current?.focus();
+        renameInputRef.current?.select();
+        return;
+      }
+      firstActionRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(handle);
+  }, [mode]);
+
+  useLayoutEffect(() => {
+    const updatePosition = () => {
+      const rect = anchorEl.getBoundingClientRect();
+      const computed = window.getComputedStyle(anchorEl);
+      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
+      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+      const menuHeight = (mode === 'rename' ? RENAME_MENU_HEIGHT : MENU_ROW_HEIGHT * 3) * scale;
+      const gap = MENU_GAP * scale;
+      const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH * scale - 8);
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const placeAbove = spaceBelow < menuHeight && rect.top > spaceBelow;
+
+      setMenuStyle({
+        top: placeAbove ? rect.top - menuHeight - gap : rect.bottom + gap,
+        left: Math.min(rect.left, maxLeft),
+        scale,
+        fontFamily: computed.fontFamily,
+        transformOrigin: placeAbove ? 'bottom left' : 'top left',
+      });
+    };
+
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    const resizeObserver = new ResizeObserver(updatePosition);
+    resizeObserver.observe(anchorEl);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [anchorEl, mode]);
+
+  if (!menuStyle) return null;
+
+  return createPortal(
+    <div
+      ref={menuRef}
+      className="rvc-center-summary__menu"
+      role="menu"
+      aria-label={`Actions pour ${itinerary.name}`}
+      style={{
+        top: menuStyle.top,
+        left: menuStyle.left,
+        width: MENU_WIDTH,
+        transform: `scale(${menuStyle.scale})`,
+        transformOrigin: menuStyle.transformOrigin,
+        fontFamily: menuStyle.fontFamily,
+      }}
+      onMouseDown={(event) => event.stopPropagation()}
+    >
+      <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
+
+      {mode === 'rename' ? (
+        <>
+          <div className="rvc-center-summary__rename-panel">
+            <div className="rvc-center-summary__rename-title">Renommer la trace</div>
+            <input
+              ref={renameInputRef}
+              className="rvc-center-summary__rename-input"
+              value={draft}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => onDraftChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  onRename();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  onClose();
+                }
+              }}
+              aria-label={`Nouveau nom pour ${itinerary.name}`}
+            />
+          </div>
+          <div className="rvc-center-summary__rename-actions">
+            <button
+              type="button"
+              className="rvc-center-summary__menu-item"
+              onClick={onClose}
+            >
+              <span className="rvc-center-summary__menu-label">Annuler</span>
+              <span className="rvc-center-summary__menu-icon" aria-hidden>
+                <SvgV2Icon name="x-close.svg" size={16} />
+              </span>
+            </button>
+            <button
+              type="button"
+              className="rvc-center-summary__menu-item"
+              onClick={onRename}
+              disabled={!draft.trim()}
+            >
+              <span className="rvc-center-summary__menu-label">Valider</span>
+              <span className="rvc-center-summary__menu-icon" aria-hidden>
+                <IconCheck size={14} />
+              </span>
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <button
+            ref={firstActionRef}
+            type="button"
+            className="rvc-center-summary__menu-item"
+            role="menuitem"
+            onClick={onStartRename}
+          >
+            <span className="rvc-center-summary__menu-label">Renommer la trace</span>
+            <span className="rvc-center-summary__menu-icon" aria-hidden>
+              <SvgV2Icon name="edit-05.svg" size={16} />
+            </span>
+          </button>
+          <button
+            type="button"
+            className="rvc-center-summary__menu-item"
+            role="menuitem"
+            onClick={onDuplicate}
+          >
+            <span className="rvc-center-summary__menu-label">Dupliquer la trace</span>
+            <span className="rvc-center-summary__menu-icon" aria-hidden>
+              <IconCopy04 size={16} />
+            </span>
+          </button>
+          <button
+            type="button"
+            className="rvc-center-summary__menu-item rvc-center-summary__menu-item--danger"
+            role="menuitem"
+            onClick={onDelete}
+            disabled={!canDelete}
+          >
+            <span className="rvc-center-summary__menu-label">Supprimer la trace</span>
+            <span className="rvc-center-summary__menu-icon" aria-hidden>
+              <IconTrash size={14} />
+            </span>
+          </button>
+        </>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
 export function CenterPanelSummary() {
   const store = useProjectStoreOptional();
   const itineraries = store?.project.itineraries ?? [];
   const handleToggleAnalysisVisibility =
     store?.setItineraryAnalysisVisibility;
+  const [menuState, setMenuState] = useState<{
+    itineraryId: string;
+    anchorEl: HTMLButtonElement;
+    mode: SummaryMenuMode;
+    draft: string;
+  } | null>(null);
+
+  const selectedItinerary = menuState
+    ? itineraries.find((itinerary) => itinerary.id === menuState.itineraryId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (menuState && !selectedItinerary) {
+      setMenuState(null);
+    }
+  }, [menuState, selectedItinerary]);
+
+  const handleOpenMenu = (itinerary: Itinerary, anchorEl: HTMLButtonElement) => {
+    setMenuState((current) => {
+      if (current && current.itineraryId === itinerary.id && current.anchorEl === anchorEl) {
+        return null;
+      }
+      return {
+        itineraryId: itinerary.id,
+        anchorEl,
+        mode: 'actions',
+        draft: itinerary.name,
+      };
+    });
+  };
+
+  const handleCloseMenu = () => setMenuState(null);
+
+  const handleRename = () => {
+    if (!selectedItinerary || !menuState) return;
+    const trimmed = menuState.draft.trim();
+    if (!trimmed) return;
+    store?.setItineraryName(selectedItinerary.id, trimmed);
+    setMenuState(null);
+  };
+
+  const handleDuplicate = () => {
+    if (!selectedItinerary) return;
+    store?.duplicateItinerary(selectedItinerary.id);
+    setMenuState(null);
+  };
+
+  const handleDelete = () => {
+    if (!selectedItinerary) return;
+    store?.removeItinerary(selectedItinerary.id);
+    setMenuState(null);
+  };
 
   return (
     <section className="rvc-center-summary" aria-label="Synthèse d'itinéraire">
@@ -215,9 +497,34 @@ export function CenterPanelSummary() {
             key={it.id}
             itinerary={it}
             onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
+            onOpenMenu={handleOpenMenu}
           />
         ))
       )}
+
+      {menuState && selectedItinerary ? (
+        <SummaryActionMenu
+          itinerary={selectedItinerary}
+          anchorEl={menuState.anchorEl}
+          mode={menuState.mode}
+          draft={menuState.draft}
+          canDelete={itineraries.length > 1}
+          onDraftChange={(draft) =>
+            setMenuState((current) => (current ? { ...current, draft } : current))
+          }
+          onClose={handleCloseMenu}
+          onStartRename={() =>
+            setMenuState((current) =>
+              current
+                ? { ...current, mode: 'rename', draft: selectedItinerary.name }
+                : current,
+            )
+          }
+          onRename={handleRename}
+          onDuplicate={handleDuplicate}
+          onDelete={handleDelete}
+        />
+      ) : null}
     </section>
   );
 }
