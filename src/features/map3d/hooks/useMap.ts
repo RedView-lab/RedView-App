@@ -29,6 +29,10 @@ const DEFAULT_ORTHO_BOOT_FALLBACK_MS = 1500;
 // double-click without throttling a legitimate retry after a failed first
 // attempt (which is exactly when users want to reload).
 const DEM_RELOAD_COOLDOWN_MS = 5000;
+// Background SW upgrades can finish tile-by-tile while the camera is already
+// idle. Coalesce those completions so we rebind the DEM source sparingly but
+// still pick up repaired tiles without requiring another camera move.
+const DEM_PASSIVE_REFRESH_COOLDOWN_MS = 3000;
 // Maximum age (ms) before a still-pending tile request is considered orphan
 // and pruned from the tracking set. Aborted tiles on a fast fly never emit
 // a matching `sourcedata` so without this the bar can latch at 60-99 %.
@@ -309,6 +313,8 @@ export function useMap(
     let demCacheBust = 0;
     let demTrackingEnabled = false;
     let demReloadCoolingUntil = 0;
+    let demPassiveRefreshCoolingUntil = 0;
+    let demPassiveRefreshPending = false;
     let demSettleTimer: ReturnType<typeof setTimeout> | null = null;
     let loadingWatchdog: ReturnType<typeof setTimeout> | null = null;
     let lastReportedState: 'loading' | 'ready' | 'error' = 'loading';
@@ -464,6 +470,7 @@ export function useMap(
         demSettleTimer = null;
         if (cancelled) return;
         if (allTilesLoaded() && !map.isMoving()) {
+          if (applyPendingDemPassiveRefresh()) return;
           finishDemActivity('Carte prête');
         } else if (lastReportedState !== 'loading') {
           // New tile activity sneaked in after a "ready" tick: fall back into
@@ -533,6 +540,7 @@ export function useMap(
       if (now < demReloadCoolingUntil) return;
       demReloadCoolingUntil = now + DEM_RELOAD_COOLDOWN_MS;
 
+      demPassiveRefreshPending = false;
       demTrackingEnabled = false;
       clearDemTracking();
       reportMapStatus('loading', 0, 'Rechargement relief');
@@ -550,6 +558,25 @@ export function useMap(
         scheduleDemSettle();
       });
     };
+
+    function applyPendingDemPassiveRefresh(): boolean {
+      if (!demPassiveRefreshPending || cancelled || map.isMoving()) return false;
+      const now = Date.now();
+      if (now < demPassiveRefreshCoolingUntil) return false;
+
+      demPassiveRefreshPending = false;
+      demPassiveRefreshCoolingUntil = now + DEM_PASSIVE_REFRESH_COOLDOWN_MS;
+      demTrackingEnabled = false;
+      clearDemTracking();
+      reportMapStatus('loading', 0, 'Affinage relief');
+
+      refreshDemSource();
+      armTerrainBootstrap(() => {
+        demTrackingEnabled = true;
+        scheduleDemSettle();
+      });
+      return true;
+    }
 
     registerReloadRef.current?.(reloadMapElevation);
 
@@ -743,7 +770,14 @@ export function useMap(
         if (!demTrackingEnabled || cancelled) return;
         if (!allTilesLoaded()) return;
         if (map.isMoving()) return;
+        if (applyPendingDemPassiveRefresh()) return;
         finishDemActivity('Carte prête');
+      };
+
+      const onServiceWorkerMessage = (event: MessageEvent) => {
+        if (event.data?.type !== 'DEM_TILE_CACHE_UPDATED') return;
+        demPassiveRefreshPending = true;
+        scheduleDemSettle();
       };
 
       // While the camera is moving Mapbox will queue a fresh tile burst as
@@ -768,6 +802,7 @@ export function useMap(
       map.on('zoomend', scheduleDemSettle);
       map.on('movestart', onMovestart);
       map.on('idle', onMapIdle);
+      navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
 
       setIsLoaded(true);
 
@@ -780,6 +815,7 @@ export function useMap(
         map.off('zoomend', scheduleDemSettle);
         map.off('movestart', onMovestart);
         map.off('idle', onMapIdle);
+        navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
       };
     })().catch((err) => {
       console.error('[map3d] init failed', err);

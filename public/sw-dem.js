@@ -595,6 +595,9 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         : (skipMapboxHighZoomLiDAR
             ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
             : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage'));
+      if (upgradePending && upgradePending.length) {
+        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
+      }
       negCache.put(cacheKey, new Response(null, {
         status: 204,
         headers: {
@@ -637,6 +640,22 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
     scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
   }
   return response;
+}
+
+function notifyDemTileCacheUpdated(z, x, y, source) {
+  self.clients.matchAll({ type: 'window' })
+    .then((clients) => {
+      clients.forEach((client) => client.postMessage({
+        type: 'DEM_TILE_CACHE_UPDATED',
+        z,
+        x,
+        y,
+        source,
+      }));
+    })
+    .catch(() => {
+      /* best-effort notification */
+    });
 }
 
 // Coalesce concurrent upgrade jobs for the same tile.
@@ -682,6 +701,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
       if (!upgradedBlob) return;
 
       await cache.put(cacheKey, buildDemResponse(upgradedBlob, upgradedSource + '+upgrade'));
+      notifyDemTileCacheUpdated(z, x, y, upgradedSource);
       if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgradedSource}`);
     } catch (e) {
       if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);
