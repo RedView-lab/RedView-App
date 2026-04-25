@@ -66,6 +66,7 @@ export function useItineraryBrouterRouting({
         .map((item) => `${item.lon},${item.lat}`)
         .join('|')
     : '';
+  const hasWaypointOverride = viaKey.length > 0;
   const profileId = active?.profileId ?? 'gravel-default';
   const climbing = active ? isClimbingMode(active.priorities) : false;
   const prioritiesJson = active ? JSON.stringify(active.priorities) : '';
@@ -117,7 +118,7 @@ export function useItineraryBrouterRouting({
     // recompute. For long-distance imports (e.g. Race Across France,
     // ~2500 km) this would exceed the 55 s Vercel timeout anyway, and
     // silently overwriting the user's track is never desired.
-    if (active?.gpxRoute?.source === 'gpx') {
+    if (active?.gpxRoute?.source === 'gpx' && !hasWaypointOverride) {
       setRouteError(null);
       setRouteLoading(false);
       return;
@@ -314,7 +315,7 @@ export function useItineraryBrouterRouting({
       });
 
     return () => ctrl.abort();
-  }, [active, brfHash, climbing, endKey, isMapLoaded, map, profileId, setProject, startKey, viaKey]);
+  }, [active, brfHash, climbing, endKey, hasWaypointOverride, isMapLoaded, map, profileId, setProject, startKey, viaKey]);
 
   return {
     routeError,

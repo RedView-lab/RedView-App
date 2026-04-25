@@ -22,6 +22,7 @@ export function addGpxRoute(
 
   map.addSource(GPX_SOURCE_ID, {
     type: 'geojson',
+    lineMetrics: true,
     data: {
       type: 'Feature',
       properties: {},

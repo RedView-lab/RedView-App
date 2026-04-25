@@ -349,6 +349,7 @@ export function upsertRouteLayer(
   } else {
     map.addSource(srcId, {
       type: 'geojson',
+      lineMetrics: true,
       data: {
         type: 'Feature',
         properties: {},
