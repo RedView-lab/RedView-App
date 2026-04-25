@@ -260,7 +260,7 @@ export interface ItineraryMetrics {
 
 export interface ItineraryRouteAuditFinding {
   id: string;
-  kind: 'hikeabike' | 'restricted';
+  kind: 'hikeabike' | 'restricted' | 'steep';
   title: string;
   detail: string;
   coordinates: [number, number][];

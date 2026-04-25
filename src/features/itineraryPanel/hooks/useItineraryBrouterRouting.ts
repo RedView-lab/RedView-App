@@ -22,6 +22,7 @@ import {
 import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
+  extractRouteProfileFromBrouter,
   sampleRouteProfileWithTerrain,
 } from '../lib/route-metrics';
 import { analyzeBrouterRoute } from '../lib/routeAudit/analyzeBrouterRoute';
@@ -219,24 +220,25 @@ export function useItineraryBrouterRouting({
             return null;
           }
         };
-        const terrainProfile = sampleRouteProfileWithTerrain(geometryPoints, queryEle);
-        const terrainMetrics = terrainProfile
-          ? computeRouteElevationMetrics(terrainProfile)
+        const brouterProfile = extractRouteProfileFromBrouter(route);
+        const routeProfile = sampleRouteProfileWithTerrain(geometryPoints, queryEle) ?? brouterProfile;
+        const elevationMetrics = routeProfile
+          ? computeRouteElevationMetrics(routeProfile)
           : null;
         const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
-        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = terrainProfile
-          ? toStoredRoutePoints(terrainProfile)
+        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+          ? toStoredRoutePoints(routeProfile)
           : geometryPoints;
         const distanceM = route.distanceM > 0 ? route.distanceM : routeLengthM(routePoints);
         const distanceKm = Math.round(distanceM / 100) / 10;
-        const ascentM = terrainMetrics
-          ? Math.max(0, Math.round(terrainMetrics.ascentM))
+        const ascentM = elevationMetrics
+          ? Math.max(0, Math.round(elevationMetrics.ascentM))
           : undefined;
-        const descentM = terrainMetrics
-          ? Math.max(0, Math.round(terrainMetrics.descentM))
+        const descentM = elevationMetrics
+          ? Math.max(0, Math.round(elevationMetrics.descentM))
           : undefined;
-        const avgSlopePercent = terrainMetrics
-          ? Math.round(terrainMetrics.avgSlopePercent * 10) / 10
+        const avgSlopePercent = elevationMetrics
+          ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
           : undefined;
         const tarmacPercent = surfaceMetrics
           ? Math.round(surfaceMetrics.tarmacPercent)
