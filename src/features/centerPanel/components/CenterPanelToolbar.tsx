@@ -3,6 +3,7 @@ import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useRouteSplitToolOptional } from '../routeSplit';
+import { useTraceToolOptional } from '../tracer';
 import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/clean-gpx-glitches';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from './CenterPanelIcons';
@@ -180,6 +181,7 @@ function routePointsEqual(
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
+  const traceTool = useTraceToolOptional();
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
   const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
@@ -240,6 +242,9 @@ export function CenterPanelToolbar() {
   const canSplitTrace = routeSplitTool?.canSplit ?? false;
   const splitStatusMessage = routeSplitTool?.statusMessage ?? null;
   const splitArmed = routeSplitTool?.armed ?? false;
+  const canTrace = traceTool?.canTrace ?? false;
+  const traceStatusMessage = traceTool?.statusMessage ?? null;
+  const traceArmed = traceTool?.armed ?? false;
   const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
   const auditVisible = activeItinerary?.routeAudit?.visible === true;
   const simplifyTargetPoints = useMemo(
@@ -254,6 +259,7 @@ export function CenterPanelToolbar() {
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
     if (splitStatusMessage) return splitStatusMessage;
+    if (traceStatusMessage) return traceStatusMessage;
     if (toolbarStatus) return toolbarStatus;
     if (!toolsExpanded) return null;
     if (activeSubtool === 'simplify' && canSimplifyTrace) {
@@ -280,6 +286,7 @@ export function CenterPanelToolbar() {
     canSimplifyTrace,
     simplifyTargetPoints,
     splitStatusMessage,
+    traceStatusMessage,
     toolbarStatus,
     toolsExpanded,
   ]);
@@ -359,7 +366,14 @@ export function CenterPanelToolbar() {
   };
 
   const handleToggleRouteSplit = () => {
+    if (!splitArmed) traceTool?.deactivate();
     routeSplitTool?.toggle();
+    setToolbarStatus(null);
+  };
+
+  const handleToggleTrace = () => {
+    if (!traceArmed) routeSplitTool?.deactivate();
+    traceTool?.toggle();
     setToolbarStatus(null);
   };
 
@@ -387,7 +401,17 @@ export function CenterPanelToolbar() {
             <IconChevronDown size={16} />
           </button>
 
-          <button className="rvc-center-toolbar__button rvc-center-toolbar__button--label" type="button" aria-label="Tracer" title="Tracer">
+          <button
+            className={traceArmed
+              ? 'rvc-center-toolbar__button rvc-center-toolbar__button--label rvc-center-toolbar__button--active'
+              : 'rvc-center-toolbar__button rvc-center-toolbar__button--label'}
+            type="button"
+            aria-label="Tracer"
+            title="Tracer"
+            onClick={handleToggleTrace}
+            disabled={!canTrace}
+            aria-pressed={traceArmed}
+          >
             <IconPencilLine />
             <span className="rvc-center-toolbar__button-text">Tracer</span>
           </button>

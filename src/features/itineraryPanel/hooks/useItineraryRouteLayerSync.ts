@@ -7,6 +7,7 @@ import {
   listMountedRouteIds,
   removeAllRouteLayers,
   removeRouteLayer,
+  type RouteEndpoint,
   setRouteAuditFindings,
   setRouteEndpoints,
   upsertRouteLayer,
@@ -84,15 +85,7 @@ export function useItineraryRouteLayerSync({
         active.routeAudit?.findings ?? [],
         active.routeAudit?.visible === true,
       );
-      const start = active.timeline.find((row) => row.kind === 'start');
-      const end = active.timeline.find((row) => row.kind === 'end');
-      const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];
-      if (start && start.lat != null && start.lon != null) {
-        endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start' });
-      }
-      if (end && end.lat != null && end.lon != null) {
-        endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end' });
-      }
+      const endpoints = collectActiveRouteEndpoints(active.timeline);
       if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
       else clearRouteEndpoints(map);
     } else {
@@ -125,15 +118,7 @@ export function useItineraryRouteLayerSync({
               active.routeAudit?.findings ?? [],
               active.routeAudit?.visible === true,
             );
-            const start = active.timeline.find((row) => row.kind === 'start');
-            const end = active.timeline.find((row) => row.kind === 'end');
-            const endpoints: { lon: number; lat: number; kind: 'start' | 'end' }[] = [];
-            if (start && start.lat != null && start.lon != null) {
-              endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start' });
-            }
-            if (end && end.lat != null && end.lon != null) {
-              endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end' });
-            }
+            const endpoints = collectActiveRouteEndpoints(active.timeline);
             if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
           }
         } catch {
@@ -147,4 +132,31 @@ export function useItineraryRouteLayerSync({
       map.off('style.load', onStyleLoad);
     };
   }, [active, isMapLoaded, itineraries, layerSignature, map]);
+}
+
+function collectActiveRouteEndpoints(
+  timeline: ItineraryProject['itineraries'][number]['timeline'],
+): RouteEndpoint[] {
+  const endpoints: RouteEndpoint[] = [];
+  const start = timeline.find((row) => row.kind === 'start');
+  if (start && start.lat != null && start.lon != null) {
+    endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start', label: start.label });
+  }
+
+  for (const waypoint of timeline) {
+    if (waypoint.kind !== 'waypoint' || waypoint.lat == null || waypoint.lon == null) continue;
+    endpoints.push({
+      lon: waypoint.lon,
+      lat: waypoint.lat,
+      kind: 'waypoint',
+      label: waypoint.label,
+    });
+  }
+
+  const end = timeline.find((row) => row.kind === 'end');
+  if (end && end.lat != null && end.lon != null) {
+    endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end', label: end.label });
+  }
+
+  return endpoints;
 }

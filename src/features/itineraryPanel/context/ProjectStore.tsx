@@ -36,6 +36,10 @@ interface ProjectStoreValue {
   duplicateItinerary: (id: string) => { createdItineraryId: string; createdItineraryName: string } | null;
   removeItinerary: (id: string) => boolean;
   clearItineraryRoute: (id: string) => void;
+  appendTracePoint: (
+    id: string,
+    point: { lat: number; lon: number; label: string },
+  ) => boolean;
   simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
   cleanItineraryGpxGlitches: (id: string) => void;
   splitItineraryAtPointIndex: (
@@ -266,6 +270,75 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const appendTracePoint = useCallback(
+    (
+      id: string,
+      point: { lat: number; lon: number; label: string },
+    ) => {
+      let appended = false;
+
+      updateItinerary(id, (it) => {
+        const startRow = it.timeline.find((row) => row.kind === 'start');
+        const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
+        const endRow = endIndex >= 0 ? it.timeline[endIndex] : null;
+        if (
+          !startRow ||
+          startRow.lat == null ||
+          startRow.lon == null ||
+          !endRow ||
+          endRow.lat == null ||
+          endRow.lon == null
+        ) {
+          return;
+        }
+
+        const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
+        const previousEndWaypoint = {
+          ...endRow,
+          id: waypointId,
+          kind: 'waypoint' as const,
+          distanceKm: null,
+        };
+        const nextEndRow = {
+          ...endRow,
+          label: point.label,
+          lat: point.lat,
+          lon: point.lon,
+          distanceKm: null,
+        };
+
+        it.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
+        it.timeline = it.timeline.map((row) => {
+          if (row.kind === 'start') {
+            return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
+          }
+          if (row.kind === 'waypoint' || row.kind === 'end') {
+            return row.distanceKm == null ? row : { ...row, distanceKm: null };
+          }
+          return row;
+        });
+
+        if (it.metrics) {
+          it.metrics = {
+            ...it.metrics,
+            distanceKm: undefined,
+            ascentM: undefined,
+            descentM: undefined,
+            avgSlopePercent: undefined,
+            tarmacPercent: undefined,
+            offroadPercent: undefined,
+          };
+        }
+        delete it.routeAudit;
+        it.prediction = null;
+        appended = true;
+      });
+
+      return appended;
+    },
+    [updateItinerary],
+  );
+
   const simplifyItineraryGpx = useCallback(
     (id: string, targetPointsPerKm: number) => {
       updateItinerary(id, (it) => {
@@ -395,6 +468,7 @@ export function ProjectProvider({
       duplicateItinerary,
       removeItinerary,
       clearItineraryRoute,
+      appendTracePoint,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
       splitItineraryAtPointIndex,
@@ -411,6 +485,7 @@ export function ProjectProvider({
       duplicateItinerary,
       removeItinerary,
       clearItineraryRoute,
+      appendTracePoint,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
       splitItineraryAtPointIndex,

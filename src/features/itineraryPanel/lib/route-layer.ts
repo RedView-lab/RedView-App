@@ -280,8 +280,8 @@ function ids(itineraryId: string) {
 export interface RouteEndpoint {
   lon: number;
   lat: number;
-  /** "start" | "end" â€” used to pick a colour. */
-  kind: 'start' | 'end';
+  /** Used to pick the marker colour. */
+  kind: 'start' | 'end' | 'waypoint';
   label?: string;
 }
 
@@ -522,12 +522,20 @@ export function setRouteEndpoints(
       source: START_SOURCE_ID,
       slot: 'top',
       paint: {
-        'circle-radius': 7,
+        'circle-radius': [
+          'match',
+          ['get', 'kind'],
+          'waypoint',
+          6,
+          7,
+        ],
         'circle-color': [
           'match',
           ['get', 'kind'],
           'start',
           '#34a853',
+          'waypoint',
+          '#ff8a3d',
           'end',
           '#c50000',
           '#ffffff',

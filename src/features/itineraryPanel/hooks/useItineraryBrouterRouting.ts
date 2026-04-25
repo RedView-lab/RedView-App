@@ -20,6 +20,11 @@ import {
   removeRouteLayer,
 } from '../lib/route-layer';
 import {
+  cumulativeRouteLengthsM,
+  projectPointAlongRoute,
+  roundDistanceKm,
+} from '../lib/route-distance';
+import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
@@ -224,7 +229,7 @@ export function useItineraryBrouterRouting({
           ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
           : geometryPoints;
         const distanceM = route.distanceM > 0 ? route.distanceM : routeLengthM(routePoints);
-        const distanceKm = Math.round(distanceM / 100) / 10;
+        const distanceKm = roundDistanceKm(distanceM);
         const ascentM = elevationMetrics
           ? Math.max(0, Math.round(elevationMetrics.ascentM))
           : undefined;
@@ -247,8 +252,11 @@ export function useItineraryBrouterRouting({
             (item) => item.id === project.activeItineraryId,
           );
           if (!itinerary) return project;
-          const endRow = itinerary.timeline.find((row) => row.kind === 'end');
-          const endAlreadyOk = endRow?.distanceKm === distanceKm;
+          const nextTimeline = projectTimelineLocationDistances(
+            itinerary.timeline,
+            routePoints,
+            distanceKm,
+          );
           const gpxAlreadyOk = routePointsEqual(itinerary.gpxRoute?.points, routePoints);
           const metricsAlreadyOk =
             itinerary.metrics?.distanceKm === distanceKm &&
@@ -261,7 +269,7 @@ export function useItineraryBrouterRouting({
             itinerary.routeAudit?.findings,
             auditFindings,
           );
-          if (endAlreadyOk && gpxAlreadyOk && metricsAlreadyOk && auditAlreadyOk) {
+          if (nextTimeline === itinerary.timeline && gpxAlreadyOk && metricsAlreadyOk && auditAlreadyOk) {
             return project;
           }
           return {
@@ -284,9 +292,7 @@ export function useItineraryBrouterRouting({
                       tarmacPercent,
                       offroadPercent,
                     },
-                    timeline: current.timeline.map((row) =>
-                      row.kind === 'end' ? { ...row, distanceKm } : row,
-                    ),
+                    timeline: nextTimeline,
                     routeAudit: {
                       visible: current.routeAudit?.visible ?? false,
                       findings: auditFindings,
@@ -502,4 +508,80 @@ function routeAuditEqual(
       );
     })
   );
+}
+
+function projectTimelineLocationDistances(
+  timeline: Itinerary['timeline'],
+  routePoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  totalDistanceKm: number,
+): Itinerary['timeline'] {
+  const cumulativeLengths = cumulativeRouteLengthsM(routePoints);
+  const snappedStart = routePoints[0] ?? null;
+  const snappedEnd = routePoints[routePoints.length - 1] ?? null;
+  let changed = false;
+
+  const nextTimeline = timeline.map((row) => {
+    if (row.kind === 'start') {
+      if (
+        row.distanceKm === 0 &&
+        row.lat === snappedStart?.lat &&
+        row.lon === snappedStart?.lon
+      ) {
+        return row;
+      }
+      changed = true;
+      return {
+        ...row,
+        distanceKm: 0,
+        lat: snappedStart?.lat ?? row.lat,
+        lon: snappedStart?.lon ?? row.lon,
+      };
+    }
+
+    if (row.kind === 'end') {
+      if (
+        row.distanceKm === totalDistanceKm &&
+        row.lat === snappedEnd?.lat &&
+        row.lon === snappedEnd?.lon
+      ) {
+        return row;
+      }
+      changed = true;
+      return {
+        ...row,
+        distanceKm: totalDistanceKm,
+        lat: snappedEnd?.lat ?? row.lat,
+        lon: snappedEnd?.lon ?? row.lon,
+      };
+    }
+
+    if (row.kind !== 'waypoint') return row;
+
+    const snappedWaypoint =
+      row.lat != null && row.lon != null
+        ? projectPointAlongRoute(
+            { lat: row.lat, lon: row.lon },
+            routePoints,
+            cumulativeLengths,
+          )
+        : null;
+    const projectedDistanceKm =
+      snappedWaypoint == null ? null : roundDistanceKm(snappedWaypoint.distanceM);
+    if (
+      row.distanceKm === projectedDistanceKm &&
+      row.lat === snappedWaypoint?.lat &&
+      row.lon === snappedWaypoint?.lon
+    ) {
+      return row;
+    }
+    changed = true;
+    return {
+      ...row,
+      distanceKm: projectedDistanceKm,
+      lat: snappedWaypoint?.lat ?? row.lat,
+      lon: snappedWaypoint?.lon ?? row.lon,
+    };
+  });
+
+  return changed ? nextTimeline : timeline;
 }

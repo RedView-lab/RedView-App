@@ -14,6 +14,7 @@ import { CenterPanel } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
+import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
@@ -419,7 +420,8 @@ export default function Dashboard({
             onProjectChange={handleProjectChange}
           >
             <RouteSplitToolProvider map={mapInstance}>
-              <PredictionProvider>
+              <TraceToolProvider map={mapInstance}>
+                <PredictionProvider>
                 <div style={leftPanelStyle}>
                   <ItineraryPanel
                     map={mapInstance}
@@ -518,7 +520,8 @@ export default function Dashboard({
                     <ExporterPanel width={panelWidth} />
                   </div>
                 </div>
-              </PredictionProvider>
+                </PredictionProvider>
+              </TraceToolProvider>
             </RouteSplitToolProvider>
           </ProjectProvider>
 
