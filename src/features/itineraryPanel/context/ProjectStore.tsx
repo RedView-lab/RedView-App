@@ -264,6 +264,8 @@ export function ProjectProvider({
         delete it.metrics;
         delete it.poiFeatures;
         delete it.routeAudit;
+        delete it.pendingTraceExtension;
+        delete it.pendingRoutePatch;
         it.prediction = null;
       });
     },
@@ -297,7 +299,7 @@ export function ProjectProvider({
           ...endRow,
           id: waypointId,
           kind: 'waypoint' as const,
-          distanceKm: null,
+          distanceKm: endRow.distanceKm,
         };
         const nextEndRow = {
           ...endRow,
@@ -312,11 +314,22 @@ export function ProjectProvider({
           if (row.kind === 'start') {
             return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
           }
-          if (row.kind === 'waypoint' || row.kind === 'end') {
+          if (row.kind === 'end') {
             return row.distanceKm == null ? row : { ...row, distanceKm: null };
           }
           return row;
         });
+
+        if (it.gpxRoute?.source === 'brouter' && (it.gpxRoute.points.length ?? 0) >= 2) {
+          it.pendingTraceExtension = {
+            from: { lat: endRow.lat, lon: endRow.lon },
+            to: { lat: point.lat, lon: point.lon },
+          };
+          delete it.pendingRoutePatch;
+        } else {
+          delete it.pendingTraceExtension;
+          delete it.pendingRoutePatch;
+        }
 
         if (it.metrics) {
           it.metrics = {

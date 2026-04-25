@@ -21,6 +21,7 @@ import {
 } from '../lib/route-layer';
 import {
   cumulativeRouteLengthsM,
+  haversineRouteDistanceM,
   projectPointAlongRoute,
   roundDistanceKm,
 } from '../lib/route-distance';
@@ -101,6 +102,300 @@ export function useItineraryBrouterRouting({
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
+    const pendingRoutePatch = active?.pendingRoutePatch;
+    const pendingTraceExtension = active?.pendingTraceExtension;
+    const existingBrouterPoints = active?.gpxRoute?.source === 'brouter'
+      ? active.gpxRoute.points
+      : null;
+
+    if (
+      active &&
+      pendingRoutePatch &&
+      existingBrouterPoints &&
+      existingBrouterPoints.length >= 2
+    ) {
+      const patchPoints = [
+        pendingRoutePatch.start,
+        ...pendingRoutePatch.via,
+        pendingRoutePatch.end,
+      ];
+      const bounds = checkRouteWithinFrance(patchPoints);
+      if (!bounds.ok) {
+        setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
+        setRouteLoading(false);
+        return;
+      }
+
+      routeAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      routeAbortRef.current = ctrl;
+      setRouteLoading(true);
+      setRouteError(null);
+
+      const itineraryForRouting = active;
+      const t0 = performance.now();
+      console.log(
+        '[BRouter] local patch START hash=',
+        brfHash,
+        'climbing=',
+        climbing,
+        'start=',
+        `${pendingRoutePatch.start.lon},${pendingRoutePatch.start.lat}`,
+        'end=',
+        `${pendingRoutePatch.end.lon},${pendingRoutePatch.end.lat}`,
+        'via=',
+        pendingRoutePatch.via.length,
+      );
+
+      resolveItineraryRouting(itineraryForRouting, ctrl.signal)
+        .then((resolved: ResolvedRouting) => {
+          if (ctrl.signal.aborted) throw new DOMException('aborted', 'AbortError');
+          setRouteWarnings(resolved.roadTypes.warnings);
+          const reqBase = {
+            start: pendingRoutePatch.start,
+            end: pendingRoutePatch.end,
+            via: pendingRoutePatch.via,
+            profile: resolved.profileId,
+            signal: ctrl.signal,
+          };
+          return climbing
+            ? fetchBrouterRouteBestOfN(reqBase, 4)
+            : fetchBrouterRoute(reqBase);
+        })
+        .then((route: BrouterRoute) => {
+          if (ctrl.signal.aborted) return;
+          console.log(
+            '[BRouter] local patch OK in',
+            Math.round(performance.now() - t0),
+            'ms | dist=',
+            (route.distanceM / 1000).toFixed(2),
+            'km | pts=',
+            route.coordinates.length,
+          );
+
+          const geometryPoints = toGeometryRoutePoints(route.coordinates);
+          const routeProfile = extractRouteProfileFromBrouter(route);
+          const patchRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+            ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
+            : geometryPoints;
+          const patchSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
+
+          setProject((project) => {
+            const itinerary = project.itineraries.find(
+              (item) => item.id === project.activeItineraryId,
+            );
+            if (!itinerary || !itinerary.pendingRoutePatch) return project;
+
+            const basePoints = itinerary.gpxRoute?.points ?? [];
+            if (basePoints.length < 2) return project;
+
+            const mergedRoutePoints = replaceRouteSegment(
+              basePoints,
+              itinerary.pendingRoutePatch,
+              patchRoutePoints,
+            );
+            const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
+            const distanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
+            const distanceKm = roundDistanceKm(distanceM);
+            const nextTimeline = projectTimelineLocationDistances(
+              itinerary.timeline,
+              mergedRoutePoints,
+              distanceKm,
+            );
+            const surfaceMetrics = recomputeApproxSurfaceMetrics(
+              itinerary.metrics,
+              basePoints,
+              itinerary.pendingRoutePatch,
+              patchSurfaceMetrics,
+              route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(patchRoutePoints),
+            );
+
+            return {
+              ...project,
+              itineraries: project.itineraries.map((current) =>
+                current.id === project.activeItineraryId
+                  ? {
+                      ...current,
+                      gpxRoute: {
+                        name: current.gpxRoute?.name ?? null,
+                        points: mergedRoutePoints,
+                        source: 'brouter',
+                      },
+                      metrics: {
+                        ...current.metrics,
+                        distanceKm,
+                        ascentM: elevationMetrics
+                          ? Math.max(0, Math.round(elevationMetrics.ascentM))
+                          : undefined,
+                        descentM: elevationMetrics
+                          ? Math.max(0, Math.round(elevationMetrics.descentM))
+                          : undefined,
+                        avgSlopePercent: elevationMetrics
+                          ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+                          : undefined,
+                        tarmacPercent: surfaceMetrics?.tarmacPercent,
+                        offroadPercent: surfaceMetrics?.offroadPercent,
+                      },
+                      timeline: nextTimeline,
+                      routeAudit: undefined,
+                      pendingTraceExtension: undefined,
+                      pendingRoutePatch: undefined,
+                    }
+                  : current,
+              ),
+            };
+          });
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string }).name === 'AbortError') return;
+          console.error('[BRouter local patch fail]', error);
+          setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted) setRouteLoading(false);
+        });
+
+      return () => ctrl.abort();
+    }
+
+    if (
+      active &&
+      pendingTraceExtension &&
+      existingBrouterPoints &&
+      existingBrouterPoints.length >= 2
+    ) {
+      const appendStart = pendingTraceExtension.from;
+      const appendEnd = pendingTraceExtension.to;
+      const bounds = checkRouteWithinFrance([appendStart, appendEnd]);
+      if (!bounds.ok) {
+        setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
+        setRouteLoading(false);
+        return;
+      }
+
+      routeAbortRef.current?.abort();
+      const ctrl = new AbortController();
+      routeAbortRef.current = ctrl;
+      setRouteLoading(true);
+      setRouteError(null);
+
+      const itineraryForRouting = active;
+      const t0 = performance.now();
+      console.log(
+        '[BRouter] append segment START hash=',
+        brfHash,
+        'climbing=',
+        climbing,
+        'from=',
+        `${appendStart.lon},${appendStart.lat}`,
+        'to=',
+        `${appendEnd.lon},${appendEnd.lat}`,
+      );
+
+      resolveItineraryRouting(itineraryForRouting, ctrl.signal)
+        .then((resolved: ResolvedRouting) => {
+          if (ctrl.signal.aborted) throw new DOMException('aborted', 'AbortError');
+          setRouteWarnings(resolved.roadTypes.warnings);
+          const reqBase = {
+            start: appendStart,
+            end: appendEnd,
+            via: [] as Array<{ lat: number; lon: number }>,
+            profile: resolved.profileId,
+            signal: ctrl.signal,
+          };
+          return climbing
+            ? fetchBrouterRouteBestOfN(reqBase, 4)
+            : fetchBrouterRoute(reqBase);
+        })
+        .then((route: BrouterRoute) => {
+          if (ctrl.signal.aborted) return;
+          console.log(
+            '[BRouter] append segment OK in',
+            Math.round(performance.now() - t0),
+            'ms | dist=',
+            (route.distanceM / 1000).toFixed(2),
+            'km | pts=',
+            route.coordinates.length,
+          );
+
+          const geometryPoints = toGeometryRoutePoints(route.coordinates);
+          const routeProfile = extractRouteProfileFromBrouter(route);
+          const segmentRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
+            ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
+            : geometryPoints;
+          const segmentSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
+
+          setProject((project) => {
+            const itinerary = project.itineraries.find(
+              (item) => item.id === project.activeItineraryId,
+            );
+            if (!itinerary || !itinerary.pendingTraceExtension) return project;
+
+            const basePoints = itinerary.gpxRoute?.points ?? [];
+            if (basePoints.length < 2) return project;
+
+            const mergedRoutePoints = appendRoutePoints(basePoints, segmentRoutePoints);
+            const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
+            const totalDistanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
+            const distanceKm = roundDistanceKm(totalDistanceM);
+            const surfaceMetrics = mergeSurfaceMetrics(
+              itinerary.metrics,
+              getRoutePointTotalDistanceM(basePoints),
+              segmentSurfaceMetrics,
+              route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(segmentRoutePoints),
+            );
+            const nextTimeline = projectTimelineLocationDistances(
+              itinerary.timeline,
+              mergedRoutePoints,
+              distanceKm,
+            );
+
+            return {
+              ...project,
+              itineraries: project.itineraries.map((current) =>
+                current.id === project.activeItineraryId
+                  ? {
+                      ...current,
+                      gpxRoute: {
+                        name: current.gpxRoute?.name ?? null,
+                        points: mergedRoutePoints,
+                        source: 'brouter',
+                      },
+                      metrics: {
+                        ...current.metrics,
+                        distanceKm,
+                        ascentM: elevationMetrics
+                          ? Math.max(0, Math.round(elevationMetrics.ascentM))
+                          : undefined,
+                        descentM: elevationMetrics
+                          ? Math.max(0, Math.round(elevationMetrics.descentM))
+                          : undefined,
+                        avgSlopePercent: elevationMetrics
+                          ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+                          : undefined,
+                        tarmacPercent: surfaceMetrics?.tarmacPercent,
+                        offroadPercent: surfaceMetrics?.offroadPercent,
+                      },
+                      timeline: nextTimeline,
+                      pendingTraceExtension: undefined,
+                    }
+                  : current,
+              ),
+            };
+          });
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string }).name === 'AbortError') return;
+          console.error('[BRouter append fail]', error);
+          setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
+        })
+        .finally(() => {
+          if (!ctrl.signal.aborted) setRouteLoading(false);
+        });
+
+      return () => ctrl.abort();
+    }
+
     if (!startKey || !endKey) {
       if (active && hasRouteLayer(map, active.id)) {
         try {
@@ -484,6 +779,258 @@ function routePointsSignature(
       ].join(':');
     }),
   ].join('|');
+}
+
+function sameRoutePoint(
+  left: NonNullable<Itinerary['gpxRoute']>['points'][number] | undefined,
+  right: NonNullable<Itinerary['gpxRoute']>['points'][number] | undefined,
+): boolean {
+  if (!left || !right) return false;
+  return Math.abs(left.lat - right.lat) < 1e-6 && Math.abs(left.lon - right.lon) < 1e-6;
+}
+
+function getRoutePointTotalDistanceM(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): number {
+  const last = points[points.length - 1];
+  if (last && Number.isFinite(last.distanceM)) return last.distanceM as number;
+  return routeLengthM(points);
+}
+
+function getRoutePointDistances(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): number[] {
+  if (points.length === 0) return [];
+
+  const distances = new Array<number>(points.length);
+  distances[0] = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const point = points[index];
+    const nextDistance = point.distanceM;
+    if (Number.isFinite(nextDistance) && (nextDistance as number) >= distances[index - 1]) {
+      distances[index] = nextDistance as number;
+      continue;
+    }
+    distances[index] = distances[index - 1] + haversineRouteDistanceM(points[index - 1], point);
+  }
+  return distances;
+}
+
+function interpolateRoutePointAtDistance(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+  distances: number[],
+  targetDistanceM: number,
+): NonNullable<Itinerary['gpxRoute']>['points'][number] | null {
+  if (points.length === 0 || distances.length !== points.length) return null;
+  if (targetDistanceM <= distances[0]) return { ...points[0], distanceM: 0 };
+  const lastIndex = points.length - 1;
+  if (targetDistanceM >= distances[lastIndex]) {
+    return { ...points[lastIndex], distanceM: distances[lastIndex] };
+  }
+
+  let low = 0;
+  let high = lastIndex;
+  while (low + 1 < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (distances[mid] <= targetDistanceM) low = mid;
+    else high = mid;
+  }
+
+  const startPoint = points[low];
+  const endPoint = points[high];
+  const spanM = distances[high] - distances[low];
+  if (spanM <= 0) return { ...startPoint, distanceM: targetDistanceM };
+  const t = Math.max(0, Math.min(1, (targetDistanceM - distances[low]) / spanM));
+
+  return {
+    lat: startPoint.lat + ((endPoint.lat - startPoint.lat) * t),
+    lon: startPoint.lon + ((endPoint.lon - startPoint.lon) * t),
+    distanceM: targetDistanceM,
+    elevationM:
+      Number.isFinite(startPoint.elevationM) && Number.isFinite(endPoint.elevationM)
+        ? (startPoint.elevationM as number) + (((endPoint.elevationM as number) - (startPoint.elevationM as number)) * t)
+        : startPoint.elevationM ?? endPoint.elevationM ?? null,
+    gradientPct:
+      Number.isFinite(startPoint.gradientPct) && Number.isFinite(endPoint.gradientPct)
+        ? (startPoint.gradientPct as number) + (((endPoint.gradientPct as number) - (startPoint.gradientPct as number)) * t)
+        : startPoint.gradientPct ?? endPoint.gradientPct ?? null,
+  };
+}
+
+function dedupeRoutePoints(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  const deduped: NonNullable<Itinerary['gpxRoute']>['points'] = [];
+  for (const point of points) {
+    const previous = deduped[deduped.length - 1];
+    if (previous && sameRoutePoint(previous, point)) continue;
+    deduped.push(point);
+  }
+  return deduped;
+}
+
+function normalizeRoutePointDistances(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (points.length === 0) return [];
+  let cumulativeDistanceM = 0;
+  return points.map((point, index) => {
+    if (index > 0) {
+      cumulativeDistanceM += haversineRouteDistanceM(points[index - 1], point);
+    }
+    return {
+      ...point,
+      distanceM: cumulativeDistanceM,
+    };
+  });
+}
+
+function routePatchBoundaryDistanceM(
+  patchPoint: { lat: number; lon: number; kind: 'start' | 'waypoint' | 'end' },
+  routePoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  routeDistances: number[],
+): number | null {
+  if (patchPoint.kind === 'start') return 0;
+  if (patchPoint.kind === 'end') return routeDistances[routeDistances.length - 1] ?? 0;
+  return projectPointAlongRoute(patchPoint, routePoints, routeDistances)?.distanceM ?? null;
+}
+
+function replaceRouteSegment(
+  basePoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  patch: NonNullable<Itinerary['pendingRoutePatch']>,
+  replacementPoints: NonNullable<Itinerary['gpxRoute']>['points'],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (basePoints.length === 0) return replacementPoints;
+
+  const baseDistances = getRoutePointDistances(basePoints);
+  const startDistanceM = routePatchBoundaryDistanceM(patch.start, basePoints, baseDistances);
+  const endDistanceM = routePatchBoundaryDistanceM(patch.end, basePoints, baseDistances);
+  if (startDistanceM == null || endDistanceM == null || endDistanceM < startDistanceM) {
+    return replacementPoints;
+  }
+
+  const prefix = basePoints
+    .filter((_, index) => baseDistances[index] < startDistanceM - 1e-6)
+    .map((point) => ({ ...point }));
+  const startBoundaryPoint = interpolateRoutePointAtDistance(basePoints, baseDistances, startDistanceM);
+  if (startBoundaryPoint) prefix.push(startBoundaryPoint);
+
+  const endBoundaryPoint = interpolateRoutePointAtDistance(basePoints, baseDistances, endDistanceM);
+  const suffix = basePoints
+    .filter((_, index) => baseDistances[index] > endDistanceM + 1e-6)
+    .map((point) => ({ ...point }));
+  if (endBoundaryPoint) suffix.unshift(endBoundaryPoint);
+
+  return normalizeRoutePointDistances(
+    dedupeRoutePoints([
+      ...prefix,
+      ...replacementPoints.map((point) => ({ ...point })),
+      ...suffix,
+    ]),
+  );
+}
+
+function recomputeApproxSurfaceMetrics(
+  existingMetrics: Itinerary['metrics'] | undefined,
+  basePoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  patch: NonNullable<Itinerary['pendingRoutePatch']>,
+  replacementSurfaceMetrics: ReturnType<typeof computeRouteSurfaceMetricsFromBrouter>,
+  replacementDistanceM: number,
+): { tarmacPercent?: number; offroadPercent?: number } | undefined {
+  if (!replacementSurfaceMetrics) {
+    return existingMetrics
+      ? {
+          tarmacPercent: existingMetrics.tarmacPercent,
+          offroadPercent: existingMetrics.offroadPercent,
+        }
+      : undefined;
+  }
+
+  const baseDistances = getRoutePointDistances(basePoints);
+  const startDistanceM = routePatchBoundaryDistanceM(patch.start, basePoints, baseDistances);
+  const endDistanceM = routePatchBoundaryDistanceM(patch.end, basePoints, baseDistances);
+  if (startDistanceM == null || endDistanceM == null || endDistanceM < startDistanceM) {
+    return {
+      tarmacPercent: Math.round(replacementSurfaceMetrics.tarmacPercent),
+      offroadPercent: Math.round(replacementSurfaceMetrics.offroadPercent),
+    };
+  }
+
+  const remainingBaseDistanceM = Math.max(0, (baseDistances[baseDistances.length - 1] ?? 0) - (endDistanceM - startDistanceM));
+  return mergeSurfaceMetrics(
+    existingMetrics,
+    remainingBaseDistanceM,
+    replacementSurfaceMetrics,
+    replacementDistanceM,
+  );
+}
+
+function appendRoutePoints(
+  basePoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  extensionPoints: NonNullable<Itinerary['gpxRoute']>['points'],
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (basePoints.length === 0) return extensionPoints;
+  if (extensionPoints.length === 0) return basePoints;
+
+  const baseDistanceM = getRoutePointTotalDistanceM(basePoints);
+  const shouldDropFirstExtensionPoint = sameRoutePoint(
+    basePoints[basePoints.length - 1],
+    extensionPoints[0],
+  );
+  const segmentTail = shouldDropFirstExtensionPoint ? extensionPoints.slice(1) : extensionPoints;
+  if (segmentTail.length === 0) return basePoints;
+
+  return [
+    ...basePoints,
+    ...segmentTail.map((point) => ({
+      ...point,
+      distanceM: baseDistanceM + (Number.isFinite(point.distanceM) ? (point.distanceM as number) : 0),
+    })),
+  ];
+}
+
+function mergeSurfaceMetrics(
+  existingMetrics: Itinerary['metrics'] | undefined,
+  baseDistanceM: number,
+  segmentSurfaceMetrics: ReturnType<typeof computeRouteSurfaceMetricsFromBrouter>,
+  segmentDistanceM: number,
+): { tarmacPercent?: number; offroadPercent?: number } | undefined {
+  if (!segmentSurfaceMetrics) {
+    return existingMetrics
+      ? {
+          tarmacPercent: existingMetrics.tarmacPercent,
+          offroadPercent: existingMetrics.offroadPercent,
+        }
+      : undefined;
+  }
+
+  const baseTarmacDistanceM =
+    existingMetrics?.tarmacPercent != null ? (existingMetrics.tarmacPercent / 100) * baseDistanceM : Number.NaN;
+  const baseOffroadDistanceM =
+    existingMetrics?.offroadPercent != null ? (existingMetrics.offroadPercent / 100) * baseDistanceM : Number.NaN;
+  const segmentTarmacDistanceM =
+    (segmentSurfaceMetrics.tarmacPercent / 100) * Math.max(segmentDistanceM, 0);
+  const segmentOffroadDistanceM =
+    (segmentSurfaceMetrics.offroadPercent / 100) * Math.max(segmentDistanceM, 0);
+
+  if (!Number.isFinite(baseTarmacDistanceM) || !Number.isFinite(baseOffroadDistanceM)) {
+    return {
+      tarmacPercent: Math.round(segmentSurfaceMetrics.tarmacPercent),
+      offroadPercent: Math.round(segmentSurfaceMetrics.offroadPercent),
+    };
+  }
+
+  const totalClassifiedDistanceM =
+    baseTarmacDistanceM +
+    baseOffroadDistanceM +
+    segmentTarmacDistanceM +
+    segmentOffroadDistanceM;
+  if (!(totalClassifiedDistanceM > 0)) return undefined;
+
+  return {
+    tarmacPercent: Math.round(((baseTarmacDistanceM + segmentTarmacDistanceM) / totalClassifiedDistanceM) * 100),
+    offroadPercent: Math.round(((baseOffroadDistanceM + segmentOffroadDistanceM) / totalClassifiedDistanceM) * 100),
+  };
 }
 
 function routeAuditEqual(

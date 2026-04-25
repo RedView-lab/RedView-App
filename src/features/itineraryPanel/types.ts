@@ -271,6 +271,34 @@ export interface ItineraryRouteAuditState {
   findings: ItineraryRouteAuditFinding[];
 }
 
+export interface ItineraryPendingTraceExtension {
+  from: {
+    lat: number;
+    lon: number;
+  };
+  to: {
+    lat: number;
+    lon: number;
+  };
+}
+
+export interface ItineraryPendingRoutePatch {
+  start: {
+    lat: number;
+    lon: number;
+    kind: 'start' | 'waypoint';
+  };
+  end: {
+    lat: number;
+    lon: number;
+    kind: 'waypoint' | 'end';
+  };
+  via: Array<{
+    lat: number;
+    lon: number;
+  }>;
+}
+
 export interface ItinerarySplitRelation {
   parentItineraryId: string;
   rootItineraryId: string;
@@ -346,6 +374,10 @@ export interface Itinerary {
   poiFeatures?: PoiFeature[];
   /** BRouter-backed rideability audit findings for this itinerary. */
   routeAudit?: ItineraryRouteAuditState;
+  /** Pending tail-segment append produced by the tracer subtool. */
+  pendingTraceExtension?: ItineraryPendingTraceExtension;
+  /** Pending local reroute patch for waypoint edits/removals. */
+  pendingRoutePatch?: ItineraryPendingRoutePatch;
 }
 
 export interface ItineraryProject {

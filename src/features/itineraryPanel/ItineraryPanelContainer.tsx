@@ -33,6 +33,7 @@ import type {
   PrioritiesState,
   RhythmState,
   RoadTypesState,
+  TimelineItem,
   TimelineView,
 } from './types';
 
@@ -448,9 +449,21 @@ export function ItineraryPanelContainer({
       }
       onRemoveTimelineItem={(id) =>
         updateActive((it) => {
+          const removedIndex = it.timeline.findIndex((item) => item.id === id);
+          const removedRow = removedIndex >= 0 ? it.timeline[removedIndex] : null;
           it.timeline = it.timeline.filter(
             (i) => i.id !== id || i.kind === 'start' || i.kind === 'end',
           );
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchAfterRemoval(
+              it.timeline,
+              removedIndex,
+              removedRow,
+            );
+            delete it.pendingTraceExtension;
+            delete it.routeAudit;
+            it.prediction = null;
+          }
         })
       }
       onFavoriteTimelineItem={(id, favorite) =>
@@ -468,6 +481,12 @@ export function ItineraryPanelContainer({
           row.label = place.name;
           row.lat = place.lat;
           row.lon = place.lon;
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
+            delete it.pendingTraceExtension;
+            delete it.routeAudit;
+            it.prediction = null;
+          }
         })
       }
       routeLoading={routeLoading}
@@ -512,4 +531,79 @@ async function resolveImportedTimelineLabel(
   } catch {
     return formatGpsCoordinateLabel(lon, lat);
   }
+}
+
+function isRoutableTimelineRow(
+  row: TimelineItem | null | undefined,
+): row is TimelineItem & { lat: number; lon: number } {
+  return Boolean(
+    row &&
+    (row.kind === 'start' || row.kind === 'waypoint' || row.kind === 'end') &&
+    row.lat != null &&
+    row.lon != null,
+  );
+}
+
+function buildPendingRoutePatchForEditedRow(
+  timeline: TimelineItem[],
+  rowId: string,
+): Itinerary['pendingRoutePatch'] {
+  const routableRows = timeline.filter(isRoutableTimelineRow);
+  const focusIndex = routableRows.findIndex((row) => row.id === rowId);
+  if (focusIndex < 0) return undefined;
+
+  const focus = routableRows[focusIndex];
+  if (focus.kind === 'start') {
+    const next = routableRows[focusIndex + 1];
+    if (!next) return undefined;
+    return {
+      start: { lat: focus.lat, lon: focus.lon, kind: 'start' },
+      end: { lat: next.lat, lon: next.lon, kind: next.kind === 'end' ? 'end' : 'waypoint' },
+      via: [],
+    };
+  }
+
+  if (focus.kind === 'end') {
+    const previous = routableRows[focusIndex - 1];
+    if (!previous) return undefined;
+    return {
+      start: { lat: previous.lat, lon: previous.lon, kind: previous.kind === 'start' ? 'start' : 'waypoint' },
+      end: { lat: focus.lat, lon: focus.lon, kind: 'end' },
+      via: [],
+    };
+  }
+
+  const previous = routableRows[focusIndex - 1];
+  const next = routableRows[focusIndex + 1];
+  if (!previous || !next) return undefined;
+  return {
+    start: { lat: previous.lat, lon: previous.lon, kind: previous.kind === 'start' ? 'start' : 'waypoint' },
+    end: { lat: next.lat, lon: next.lon, kind: next.kind === 'end' ? 'end' : 'waypoint' },
+    via: [{ lat: focus.lat, lon: focus.lon }],
+  };
+}
+
+function buildPendingRoutePatchAfterRemoval(
+  timeline: TimelineItem[],
+  removedIndex: number,
+  removedRow: TimelineItem | null,
+): Itinerary['pendingRoutePatch'] {
+  if (!isRoutableTimelineRow(removedRow) || removedRow.kind === 'start' || removedRow.kind === 'end') {
+    return undefined;
+  }
+
+  const before = [...timeline]
+    .slice(0, Math.max(0, removedIndex))
+    .reverse()
+    .find(isRoutableTimelineRow);
+  const after = timeline
+    .slice(Math.max(0, removedIndex))
+    .find(isRoutableTimelineRow);
+  if (!before || !after) return undefined;
+
+  return {
+    start: { lat: before.lat, lon: before.lon, kind: before.kind === 'start' ? 'start' : 'waypoint' },
+    end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
+    via: [],
+  };
 }
