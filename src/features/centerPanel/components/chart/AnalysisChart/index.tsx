@@ -179,6 +179,8 @@ export function AnalysisChart({
     if (!backdropYDomain) return [];
     return backdropProfiles.map((profile) => ({
       id: profile.id,
+      fillColor: withAlpha(profile.color, 0.12),
+      lineColor: withAlpha(profile.color, 0.46),
       points: compressPointsForPlot(
         clipPointsToXDomain(profile.points, plotXDomain),
         plotXDomain,
@@ -299,7 +301,7 @@ export function AnalysisChart({
         return {
           id: `${profile.id}::hover-altitude`,
           itineraryName: profile.itineraryName,
-          color: 'rgba(244, 246, 238, 0.92)',
+          color: withAlpha(profile.color, 0.92),
           axis: null,
           axisLabel: "Profil d'altitude",
           metric: 'Altitude' as ChartMetricId,
@@ -338,7 +340,7 @@ export function AnalysisChart({
         return {
           id: `${profile.id}::marker`,
           topPx: (1 - ratioFor(yValue, backdropYDomain)) * plotSize.height,
-          color: 'rgba(244, 246, 238, 0.96)',
+          color: withAlpha(profile.color, 0.96),
           backdrop: true,
         };
       })
@@ -415,4 +417,20 @@ export function AnalysisChart({
       visibleSeries={visibleSeries}
     />
   );
+}
+
+function withAlpha(color: string, alpha: number): string {
+  const normalizedAlpha = Math.max(0, Math.min(1, alpha));
+  const hex = color.trim();
+  const match = /^#([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(hex);
+  if (!match) return color;
+
+  const raw = match[1];
+  const expanded = raw.length === 3
+    ? raw.split('').map((channel) => channel + channel).join('')
+    : raw;
+  const red = Number.parseInt(expanded.slice(0, 2), 16);
+  const green = Number.parseInt(expanded.slice(2, 4), 16);
+  const blue = Number.parseInt(expanded.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${normalizedAlpha})`;
 }

@@ -4,6 +4,23 @@ import { formatGpsCoordinateLabel } from './geocoder';
 import { computeRouteElevationMetrics, extractRouteProfileFromPoints } from './route-metrics';
 import type { Itinerary, ItineraryMetrics } from '../types';
 
+const EARTH_RADIUS_M = 6_371_008.8;
+
+function haversineM(
+  a: { lat: number; lon: number },
+  b: { lat: number; lon: number },
+): number {
+  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+}
+
 function toStoredRoutePoints(
   profile: Array<{
     lat: number;
@@ -25,8 +42,26 @@ function toStoredRoutePoints(
 export function normalizeImportedRoutePoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
 ): NonNullable<Itinerary['gpxRoute']>['points'] {
-  const profile = extractRouteProfileFromPoints(points);
-  if (!profile || profile.length !== points.length) return points;
+  const geometryOnlyPoints = points.map((point) => ({
+    lat: point.lat,
+    lon: point.lon,
+    elevationM: point.elevationM ?? null,
+  }));
+  const profile = extractRouteProfileFromPoints(geometryOnlyPoints);
+  if (!profile || profile.length !== points.length) {
+    let cumulativeDistanceM = 0;
+    return points.map((point, index) => ({
+      ...point,
+      ...(index > 0
+        ? {
+            distanceM: (() => {
+              cumulativeDistanceM += haversineM(points[index - 1]!, point);
+              return cumulativeDistanceM;
+            })(),
+          }
+        : { distanceM: 0 }),
+    }));
+  }
   return toStoredRoutePoints(profile);
 }
 

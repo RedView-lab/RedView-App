@@ -76,6 +76,7 @@ export interface ChartBackdropProfile {
   id: string;
   itineraryId: string;
   itineraryName: string;
+  color: string;
   points: ChartPoint[];
 }
 

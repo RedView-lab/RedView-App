@@ -360,6 +360,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         id: `${itinerary.id}::altitude-backdrop`,
         itineraryId: itinerary.id,
         itineraryName: itinerary.name,
+        color: itinerary.color,
         points,
       });
     }

@@ -76,6 +76,7 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       if (!result) return;
 
       setArmed(false);
+      canvas.style.cursor = '';
       setStatusMessage(`Trace découpée: ${result.createdItineraryName}`);
     };
 
@@ -86,9 +87,7 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     return () => {
       map.off('mousemove', applyCursor);
       map.off('click', handleClick);
-      if (canvas.style.cursor === SPLIT_CURSOR) {
-        canvas.style.cursor = '';
-      }
+      canvas.style.cursor = '';
     };
   }, [activeItinerary, armed, map, routePoints, store]);
 

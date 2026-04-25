@@ -23,7 +23,7 @@ export function drawAnalysisChartCanvas(
         layer.points,
         input.xDomain,
         input.backdropYDomain,
-        'rgba(245, 248, 252, 0.08)',
+        layer.fillColor,
       );
     }
     for (const layer of input.backdropSeries) {
@@ -32,7 +32,7 @@ export function drawAnalysisChartCanvas(
         layer.points,
         input.xDomain,
         input.backdropYDomain,
-        'rgba(245, 248, 252, 0.4)',
+        layer.lineColor,
         1.15,
       );
     }

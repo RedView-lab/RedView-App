@@ -45,6 +45,8 @@ export interface AnalysisChartProps {
 
 export interface CanvasBackdropLayer {
   id: string;
+  fillColor: string;
+  lineColor: string;
   points: { x: number; y: number }[];
 }
 
