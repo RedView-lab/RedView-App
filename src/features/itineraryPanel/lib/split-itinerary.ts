@@ -41,6 +41,9 @@ export function splitItineraryProject(
   const createdItineraryName = buildUniqueSplitName(project, source.name);
   const nextColor =
     ITINERARY_COLORS[project.itineraries.length % ITINERARY_COLORS.length] ?? source.color;
+  const sourceStartDistanceKm = source.splitRelation?.startDistanceKm ?? 0;
+  const localSplitDistanceKm = (leftPoints[leftPoints.length - 1]?.distanceM ?? 0) / 1000;
+  const createdStartDistanceKm = Math.round((sourceStartDistanceKm + localSplitDistanceKm) * 1000) / 1000;
 
   const nextItineraries = project.itineraries.map((itinerary) => {
     if (itinerary.id !== itineraryId) return itinerary;
@@ -63,6 +66,12 @@ export function splitItineraryProject(
   createdItinerary.name = createdItineraryName;
   createdItinerary.color = nextColor;
   createdItinerary.visible = false;
+  createdItinerary.splitRelation = {
+    parentItineraryId: source.id,
+    rootItineraryId: source.splitRelation?.rootItineraryId ?? source.id,
+    startDistanceKm: createdStartDistanceKm,
+    depth: (source.splitRelation?.depth ?? 0) + 1,
+  };
   createdItinerary.gpxRoute = {
     ...route,
     points: rightPoints,

@@ -26,10 +26,18 @@ import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
+import {
+  buildItineraryVisualNodes,
+  getItineraryEndDistanceKm,
+  getItineraryStartDistanceKm,
+  shiftChartPoints,
+  shiftChartX,
+} from '@/features/itineraryPanel/lineage/itineraryLineage';
 import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/defaultState';
 import type {
   AnalysisFiltersState,
   AnalysisPanelState,
+  Itinerary,
 } from '@/features/itineraryPanel/types';
 
 type FilterKey = keyof AnalysisFiltersState;
@@ -161,6 +169,20 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     );
   }, [projectStore]);
 
+  const visualNodes = useMemo(
+    () => (projectStore ? buildItineraryVisualNodes(projectStore.project.itineraries) : []),
+    [projectStore],
+  );
+
+  const visibleChartNodes = useMemo(
+    () =>
+      visualNodes.filter(
+        ({ itinerary }) =>
+          itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
+      ),
+    [visualNodes],
+  );
+
   const dayNightStartReady = Boolean(
     activeItinerary?.rhythm.startDate && activeItinerary?.rhythm.startTime,
   );
@@ -284,10 +306,12 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const series = useMemo<ChartSeries[]>(() => {
     if (!projectStore) return [];
     const result: ChartSeries[] = [];
-    for (const itinerary of projectStore.project.itineraries) {
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
       if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
       const routePoints = itinerary.gpxRoute?.points ?? null;
+      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
 
       const axis1Points = buildSeriesFromPrediction(
         prediction,
@@ -305,7 +329,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           color: itinerary.color,
           axis: 1,
           unit: '',
-          points: axis1Points,
+          points: shiftChartPoints(axis1Points, xOffset),
         });
       }
 
@@ -325,12 +349,12 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           color: lightenColor(itinerary.color, 0.4),
           axis: 2,
           unit: '',
-          points: axis2Points,
+          points: shiftChartPoints(axis2Points, xOffset),
         });
       }
     }
     return result;
-  }, [projectStore, predictionStore, axis1Value, axis2Value, xMode]);
+  }, [projectStore, predictionStore, axis1Value, axis2Value, visualNodes, xMode]);
 
   // Show the altitude backdrop whenever the user enables the
   // "Profil d'altitude"
@@ -347,7 +371,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     if (!projectStore) return [];
 
     const result: ChartBackdropProfile[] = [];
-    for (const itinerary of projectStore.project.itineraries) {
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
       if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
       const points = buildSeriesFromPrediction(
@@ -363,57 +388,73 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         itineraryId: itinerary.id,
         itineraryName: itinerary.name,
         color: itinerary.color,
-        points,
+        points: shiftChartPoints(points, xMode === 'distance' ? node.startDistanceKm : 0),
       });
     }
     return result;
-  }, [showAltitudeBackdrop, projectStore, predictionStore, xMode]);
+  }, [showAltitudeBackdrop, projectStore, predictionStore, visualNodes, xMode]);
 
   const routeXDomainClamp = useMemo<AxisDomain | null>(() => {
     if (!projectStore) return null;
 
-    const routeProfiles = projectStore.project.itineraries
-      .filter((itinerary) => itinerary.analysisVisible !== false)
-      .map((itinerary) => {
+    const routeProfiles = visualNodes
+      .filter(({ itinerary }) => itinerary.analysisVisible !== false)
+      .map((node) => {
+        const itinerary = node.itinerary;
         const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-        return buildSeriesFromPrediction(
+        const points = buildSeriesFromPrediction(
           prediction,
           'Altitude',
           xMode,
           itinerary.gpxRoute?.points ?? null,
           itinerary.rhythm.startTime,
         );
+        return points
+          ? shiftChartPoints(points, xMode === 'distance' ? node.startDistanceKm : 0)
+          : null;
       })
       .filter((points): points is NonNullable<typeof points> => Boolean(points));
 
     return computeXDomain(routeProfiles, xMode);
-  }, [projectStore, predictionStore, xMode]);
+  }, [projectStore, predictionStore, visualNodes, xMode]);
 
   const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
     if (!filters.poi) return [];
     if (!projectStore) return [];
 
     const result: ChartPoiAnnotation[] = [];
-    for (const itinerary of projectStore.project.itineraries) {
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
       if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      result.push(...buildPoiAnnotationsForItinerary(itinerary, prediction, xMode));
+      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+      result.push(
+        ...buildPoiAnnotationsForItinerary(itinerary, prediction, xMode).map((annotation) =>
+          shiftChartX(annotation, xOffset),
+        ),
+      );
     }
     return result;
-  }, [filters.poi, projectStore, predictionStore, xMode]);
+  }, [filters.poi, projectStore, predictionStore, visualNodes, xMode]);
 
   const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
     if (!filters.alertes) return [];
     if (!projectStore) return [];
 
     const result: ChartAlertAnnotation[] = [];
-    for (const itinerary of projectStore.project.itineraries) {
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
       if (itinerary.analysisVisible === false) continue;
       const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      result.push(...buildRouteAuditAnnotationsForItinerary(itinerary, prediction, xMode));
+      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+      result.push(
+        ...buildRouteAuditAnnotationsForItinerary(itinerary, prediction, xMode).map((annotation) =>
+          shiftChartX(annotation, xOffset),
+        ),
+      );
     }
     return result;
-  }, [filters.alertes, projectStore, predictionStore, xMode]);
+  }, [filters.alertes, projectStore, predictionStore, visualNodes, xMode]);
 
   const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
     if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;
@@ -444,29 +485,22 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       ? 'Renseigne une date et une heure de départ pour activer Jour/nuit.'
       : null;
 
-  const interactiveItinerary = useMemo(() => {
-    if (!projectStore) return null;
-    const itineraries = projectStore.project.itineraries;
-    const active =
-      itineraries.find((itinerary) => itinerary.id === projectStore.project.activeItineraryId) ??
-      null;
-    if (active && active.analysisVisible !== false && (active.gpxRoute?.points.length ?? 0) > 0) {
-      return active;
-    }
-    return (
-      itineraries.find(
-        (itinerary) => itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
-      ) ?? null
-    );
-  }, [projectStore]);
-
   const handleChartClick = (xValue: number) => {
-    if (!interactiveItinerary) return;
+    const targetItinerary = selectInteractiveItineraryForChartX(
+      visibleChartNodes,
+      activeItinerary?.id ?? null,
+      xMode,
+      xValue,
+    );
+    if (!targetItinerary) return;
+
+    const xOffset = xMode === 'distance' ? getItineraryStartDistanceKm(targetItinerary) : 0;
+    const localXValue = xMode === 'distance' ? xValue - xOffset : xValue;
 
     if (
       routeSplitTool?.armed
       && activeItinerary
-      && activeItinerary.id === interactiveItinerary.id
+      && activeItinerary.id === targetItinerary.id
       && (activeItinerary.gpxRoute?.points.length ?? 0) >= 4
     ) {
       const activePrediction =
@@ -475,7 +509,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         activeItinerary.gpxRoute?.points ?? null,
         activePrediction,
         xMode,
-        xValue,
+        localXValue,
         activeItinerary.rhythm.startTime,
       );
       if (splitIndex != null && routeSplitTool.splitAtPointIndex(splitIndex)) {
@@ -485,13 +519,13 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
     if (!map) return;
     const prediction =
-      predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null;
+      predictionStore?.predictions[targetItinerary.id] ?? targetItinerary.prediction ?? null;
     const point = locateRoutePointAtX(
-      interactiveItinerary.gpxRoute?.points ?? null,
+      targetItinerary.gpxRoute?.points ?? null,
       prediction,
       xMode,
-      xValue,
-      interactiveItinerary.rhythm.startTime,
+      localXValue,
+      targetItinerary.rhythm.startTime,
     );
     if (!point) return;
 
@@ -775,6 +809,31 @@ function detailOffsetForCenter(center: number, visibleFraction: number): number 
   const remainingSpan = 1 - visibleFraction;
   if (remainingSpan <= 1e-6) return 0;
   return normalizeUnitInterval((center - visibleFraction / 2) / remainingSpan);
+}
+
+function selectInteractiveItineraryForChartX(
+  visibleChartNodes: Array<{ itinerary: Itinerary; startDistanceKm: number }>,
+  activeItineraryId: string | null,
+  xMode: AxisMode,
+  xValue: number,
+): Itinerary | null {
+  if (visibleChartNodes.length === 0) return null;
+
+  const activeNode = activeItineraryId
+    ? visibleChartNodes.find(({ itinerary }) => itinerary.id === activeItineraryId) ?? null
+    : null;
+  if (xMode !== 'distance') return activeNode?.itinerary ?? visibleChartNodes[0]?.itinerary ?? null;
+
+  const inRangeNodes = visibleChartNodes.filter(({ itinerary, startDistanceKm }) => {
+    const endDistanceKm = getItineraryEndDistanceKm(itinerary);
+    return xValue >= startDistanceKm - 1e-6 && xValue <= endDistanceKm + 1e-6;
+  });
+
+  if (activeNode && inRangeNodes.some(({ itinerary }) => itinerary.id === activeNode.itinerary.id)) {
+    return activeNode.itinerary;
+  }
+
+  return inRangeNodes[0]?.itinerary ?? activeNode?.itinerary ?? visibleChartNodes[0]?.itinerary ?? null;
 }
 
 function sameViewportValue(left: number, right: number): boolean {

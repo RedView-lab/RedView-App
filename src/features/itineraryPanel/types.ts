@@ -271,6 +271,13 @@ export interface ItineraryRouteAuditState {
   findings: ItineraryRouteAuditFinding[];
 }
 
+export interface ItinerarySplitRelation {
+  parentItineraryId: string;
+  rootItineraryId: string;
+  startDistanceKm: number;
+  depth: number;
+}
+
 export interface Itinerary {
   id: string;
   name: string;
@@ -289,6 +296,11 @@ export interface Itinerary {
   renderMode?: RouteRenderMode;
   /** Right-panel opacity slider (0–100). Defaults to 100. */
   opacity?: number;
+  /**
+   * Hierarchical split metadata used to render child traces as a continuation
+   * of their parent on the center summary and analysis chart.
+   */
+  splitRelation?: ItinerarySplitRelation;
   /** Computed metrics shown in the center synth table. */
   metrics?: ItineraryMetrics;
   /**

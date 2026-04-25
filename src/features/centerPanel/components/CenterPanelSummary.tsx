@@ -3,7 +3,9 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useMemo,
   type ChangeEvent,
+  type CSSProperties,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
@@ -18,6 +20,10 @@ import {
   useProjectStoreOptional,
   type Itinerary,
 } from '@/features/itineraryPanel';
+import {
+  buildItineraryVisualNodes,
+  type ItineraryVisualNode,
+} from '@/features/itineraryPanel/lineage/itineraryLineage';
 import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
 const PLACEHOLDER = '--';
@@ -98,16 +104,31 @@ function buildValues(it: Itinerary): string[] {
 const EMPTY_VALUES: string[] = HEADER_CELLS.map(() => PLACEHOLDER);
 
 interface SummaryRowProps {
-  itinerary: Itinerary;
+  node: ItineraryVisualNode;
   onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
   onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
 }
 
-function SummaryRow({ itinerary, onToggleAnalysisVisibility, onOpenMenu }: SummaryRowProps) {
+function SummaryRow({ node, onToggleAnalysisVisibility, onOpenMenu }: SummaryRowProps) {
+  const { itinerary, depth, startDistanceKm } = node;
   const values = buildValues(itinerary);
   const analysisVisible = itinerary.analysisVisible !== false;
+  const rowStyle =
+    depth > 0
+      ? ({
+          '--rvc-center-summary-lineage-indent': `${Math.min(depth, 4) * 18}px`,
+        } as CSSProperties)
+      : undefined;
   return (
-    <div className="rvc-center-summary__row rvc-center-summary__row--item">
+    <div
+      className={
+        depth > 0
+          ? 'rvc-center-summary__row rvc-center-summary__row--item rvc-center-summary__row--child'
+          : 'rvc-center-summary__row rvc-center-summary__row--item'
+      }
+      style={rowStyle}
+      title={depth > 0 ? `${itinerary.name} commence à ${startDistanceKm.toFixed(1)} km` : itinerary.name}
+    >
       <div
         className="rvc-center-summary__route"
         style={{ opacity: analysisVisible ? 1 : 0.45 }}
@@ -410,6 +431,7 @@ function SummaryActionMenu({
 export function CenterPanelSummary() {
   const store = useProjectStoreOptional();
   const itineraries = store?.project.itineraries ?? [];
+  const visualNodes = useMemo(() => buildItineraryVisualNodes(itineraries), [itineraries]);
   const handleToggleAnalysisVisibility =
     store?.setItineraryAnalysisVisibility;
   const [menuState, setMenuState] = useState<{
@@ -492,10 +514,10 @@ export function CenterPanelSummary() {
       {itineraries.length === 0 ? (
         <EmptyRow />
       ) : (
-        itineraries.map((it) => (
+        visualNodes.map((node) => (
           <SummaryRow
-            key={it.id}
-            itinerary={it}
+            key={node.itinerary.id}
+            node={node}
             onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
             onOpenMenu={handleOpenMenu}
           />
