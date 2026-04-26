@@ -201,7 +201,22 @@ export function ItineraryPanelContainer({
       const route = target.gpxRoute?.points;
       if (!route || route.length < 2) return p;
 
-      const newPoiRows = poiFeaturesToTimelineItems(features, route);
+      const existingPoiRows = new Map(
+        target.timeline
+          .filter((row) => row.kind === 'poi' && row.osmId != null)
+          .map((row) => [row.osmId as number, row]),
+      );
+
+      const newPoiRows = poiFeaturesToTimelineItems(features, route).map((row) => {
+        const previous = row.osmId != null ? existingPoiRows.get(row.osmId) : undefined;
+        return previous
+          ? {
+              ...row,
+              favorite: previous.favorite,
+              visible: previous.visible ?? row.visible,
+            }
+          : row;
+      });
 
       // Strip previously-injected POI rows and merge fresh ones in
       // distance order between Départ and Fin (waypoints/pauses keep
@@ -458,6 +473,11 @@ export function ItineraryPanelContainer({
       onChangePoiRefine={(value) =>
         updateActive((it) => {
           it.poi.refineResults = value;
+        })
+      }
+      onChangePoiRefineLimit={(value) =>
+        updateActive((it) => {
+          it.poi.refineLimitPerKm = value;
         })
       }
       onOpenPoiCategories={() => {}}

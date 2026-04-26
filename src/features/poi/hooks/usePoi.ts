@@ -5,6 +5,7 @@ import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
 import { registerPoiIcons, resetIconRegistration } from '../lib/poi-icons';
+import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -20,6 +21,7 @@ export function usePoi(
   enabledCategories: Set<PoiCategory>,
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
+  refineMaxPerCategoryPerKm: number | null = null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
   /**
@@ -44,10 +46,15 @@ export function usePoi(
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
+  const refineKey = refineMaxPerCategoryPerKm
+    ? String(refineMaxPerCategoryPerKm)
+    : 'off';
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
   radiusRef.current = radiusM;
+  const refineMaxRef = useRef(refineMaxPerCategoryPerKm);
+  refineMaxRef.current = refineMaxPerCategoryPerKm;
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
   const onCorridorUpdateRef = useRef(onCorridorUpdate);
   onCorridorUpdateRef.current = onCorridorUpdate;
@@ -63,6 +70,16 @@ export function usePoi(
   const initialFeaturesKey = initialFeatures && initialFeatures.length > 0
     ? `${initialFeatures.length}:${initialFeatures[0].id}:${initialFeatures[initialFeatures.length - 1].id}`
     : 'empty';
+
+  const applyRefinement = useCallback((features: PoiFeature[]) => {
+    const route = gpxRef.current;
+    const maxPerCategoryPerKm = refineMaxRef.current;
+    if (!route || !maxPerCategoryPerKm) return features;
+    return refinePoiFeaturesAlongRoute(features, route.points, {
+      maxPerCategoryPerKm,
+      windowM: 1_000,
+    });
+  }, []);
 
   // ── Setup source + layers ─────────────────────────────────────────
 
@@ -214,16 +231,18 @@ export function usePoi(
         signal: controller.signal,
         onProgress: (deduped, { done, total }) => {
           if (controller.signal.aborted) return;
-          lastCorridorFeatures.current = deduped;
-          updateSourceData(m, deduped);
-          onCorridorUpdateRef.current?.(deduped);
+          const refined = applyRefinement(deduped);
+          lastCorridorFeatures.current = refined;
+          updateSourceData(m, refined);
+          onCorridorUpdateRef.current?.(refined);
           setCorridorProgress(total > 0 ? done / total : 0);
         },
       });
       if (!controller.signal.aborted) {
-        lastCorridorFeatures.current = features;
-        updateSourceData(m, features);
-        onCorridorCompleteRef.current?.(features);
+        const refined = applyRefinement(features);
+        lastCorridorFeatures.current = refined;
+        updateSourceData(m, refined);
+        onCorridorCompleteRef.current?.(refined);
       }
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -309,8 +328,9 @@ export function usePoi(
       // the active itinerary has never been searched.
       const seed = initialFeaturesRef.current ?? [];
       if (seed.length > 0) {
-        lastCorridorFeatures.current = seed;
-        updateSourceData(map, seed);
+        const refinedSeed = applyRefinement(seed);
+        lastCorridorFeatures.current = refinedSeed;
+        updateSourceData(map, refinedSeed);
       } else {
         updateSourceData(map, []);
       }
@@ -348,7 +368,7 @@ export function usePoi(
       resetIconRegistration();
       iconsReady.current = false;
     };
-  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, handleClick, handleMouseEnter, handleMouseLeave]);
+  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, handleClick, handleMouseEnter, handleMouseLeave, applyRefinement]);
 
   // ── Recover POI layers after style reloads ─────────────────────────
   // Standard Satellite fires style.load multiple times (imports/terrain),
@@ -370,7 +390,7 @@ export function usePoi(
 
           if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
             // Corridor mode: re-render last corridor results
-            updateSourceData(map, lastCorridorFeatures.current);
+            updateSourceData(map, applyRefinement(lastCorridorFeatures.current));
           } else {
             // No GPX or no prior corridor search → keep map empty
             updateSourceData(map, []);
@@ -383,7 +403,7 @@ export function usePoi(
 
     map.on('style.load', onStyleLoad);
     return () => { map.off('style.load', onStyleLoad); };
-  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData]);
+  }, [map, isMapLoaded, ensureSourceAndLayers, updateSourceData, applyRefinement]);
 
   // ── Re-fetch when enabled categories change (corridor mode only) ──
 
@@ -396,7 +416,7 @@ export function usePoi(
       // categories updates the visible POIs along the route.
       fetchCorridorPois(map);
     }
-  }, [map, isMapLoaded, enabledCategoriesKey, fetchCorridorPois]);
+  }, [map, isMapLoaded, enabledCategoriesKey, refineKey, fetchCorridorPois]);
 
   // ── Rehydrate from saved features when active itinerary changes ───
   // Switching itineraries (or initially loading a project from Supabase)
@@ -405,9 +425,10 @@ export function usePoi(
   useEffect(() => {
     if (!map || !isMapLoaded || !iconsReady.current) return;
     const seed = initialFeaturesRef.current ?? [];
-    lastCorridorFeatures.current = seed;
-    updateSourceData(map, seed);
-  }, [map, isMapLoaded, initialFeaturesKey, updateSourceData]);
+    const refinedSeed = applyRefinement(seed);
+    lastCorridorFeatures.current = refinedSeed;
+    updateSourceData(map, refinedSeed);
+  }, [map, isMapLoaded, initialFeaturesKey, updateSourceData, applyRefinement]);
 
   return { loading, error, poiCount, corridorProgress, searchCorridor };
 }

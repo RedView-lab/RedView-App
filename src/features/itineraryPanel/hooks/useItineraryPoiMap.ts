@@ -43,6 +43,8 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
 };
 
 const DEFAULT_RADIUS_M = 1000;
+const DEFAULT_REFINE_LIMIT_PER_KM = 4;
+const POI_NON_ENTRY_KEYS = new Set(['refineResults', 'refineLimitPerKm']);
 
 function buildRenderedRouteKey(
   itineraryId: string | null,
@@ -100,7 +102,7 @@ export function useItineraryPoiMap(
     const set = new Set<FeaturePoiCategory>();
     if (!active) return set;
     for (const [panelKey, raw] of Object.entries(active.poi)) {
-      if (panelKey === 'refineResults') continue;
+      if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
       const entry = raw as PoiEntry;
       if (!entry.enabled) continue;
       const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
@@ -114,13 +116,18 @@ export function useItineraryPoiMap(
     if (!active) return DEFAULT_RADIUS_M;
     let max = 0;
     for (const [k, raw] of Object.entries(active.poi)) {
-      if (k === 'refineResults') continue;
+      if (POI_NON_ENTRY_KEYS.has(k)) continue;
       const entry = raw as PoiEntry;
       if (entry.enabled && entry.distanceM && entry.distanceM > max) {
         max = entry.distanceM;
       }
     }
     return max > 0 ? max : DEFAULT_RADIUS_M;
+  }, [active]);
+
+  const refineMaxPerCategoryPerKm = useMemo(() => {
+    if (!active?.poi.refineResults) return null;
+    return active.poi.refineLimitPerKm ?? DEFAULT_REFINE_LIMIT_PER_KM;
   }, [active]);
 
   const gpxRoute = active?.gpxRoute ?? null;
@@ -138,6 +145,7 @@ export function useItineraryPoiMap(
     enabledCategories,
     gpxRoute,
     radiusM,
+    refineMaxPerCategoryPerKm,
     onCorridorUpdate,
     onCorridorComplete,
     persistedPoiFeatures,

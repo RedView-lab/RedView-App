@@ -49,6 +49,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     calculateDisabled,
     onChangePoiEntry,
     onChangePoiRefine,
+    onChangePoiRefineLimit,
     onOpenPoiCategories,
     onLoadPois,
     poiLoading,
@@ -164,6 +165,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
               poi={active.poi}
               onChangeEntry={onChangePoiEntry}
               onChangeRefine={onChangePoiRefine}
+              onChangeRefineLimit={onChangePoiRefineLimit}
               onOpenCategories={onOpenPoiCategories}
               onLoad={onLoadPois}
               loading={poiLoading}

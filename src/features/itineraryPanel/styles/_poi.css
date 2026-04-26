@@ -47,6 +47,162 @@
   color: var(--rvi-text);
 }
 
+.rvi-poi-refine__config-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.rvi-poi-refine__config-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: var(--rvi-text);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rvi-poi-refine__config-btn:hover,
+.rvi-poi-refine__config-btn.is-open {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.rvi-poi-refine__config-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.rvi-poi-refine__config-label {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.rvi-poi-refine__config-value {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--rvi-text);
+}
+
+.rvi-poi-refine__config-chevron {
+  flex-shrink: 0;
+}
+
+.rvi-poi-refine-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 248px;
+  padding: 12px;
+  overflow: clip;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: #ffffff;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+}
+
+.rvi-poi-refine-menu > * {
+  position: relative;
+  z-index: 1;
+}
+
+.rvi-poi-refine-menu__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvi-poi-refine-menu__title {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.rvi-poi-refine-menu__sub {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.rvi-poi-refine-menu__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rvi-poi-refine-menu__option {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rvi-poi-refine-menu__option:hover,
+.rvi-poi-refine-menu__option.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.rvi-poi-refine-menu__option-copy {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rvi-poi-refine-menu__option-label {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #ffffff;
+}
+
+.rvi-poi-refine-menu__option-sub {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.rvi-poi-refine-menu__option-check {
+  flex-shrink: 0;
+}
+
 /* Figma 1716:52615 — Catégories button.
    Spec: h-32, gap-8, px-8 py-7, rounded-6. The Figma border spec is
    0.5px but on standard DPI that snaps up to a visual 1px; per design

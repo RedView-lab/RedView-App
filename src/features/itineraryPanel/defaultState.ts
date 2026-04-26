@@ -126,6 +126,7 @@ export function createDefaultItinerary(
       refuges: { enabled: true, distanceM: 40 },
       passes: { enabled: false, distanceM: 40 },
       refineResults: true,
+      refineLimitPerKm: 4,
     },
     timeline: [DEFAULT_TIMELINE_START, DEFAULT_TIMELINE_END],
     expertProfile: createDefaultExpertState(),

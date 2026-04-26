@@ -128,6 +128,8 @@ export interface PoiState {
   passes: PoiEntry;
   /** "Affiner les résultats (beta)" toggle. */
   refineResults: boolean;
+  /** Max POI kept per category over a 1 km sliding window. */
+  refineLimitPerKm?: 2 | 4 | 6;
 }
 
 /** A single user-defined pause inserted at a recurring interval. */
@@ -512,6 +514,7 @@ export interface ItineraryPanelProps {
   // poi
   onChangePoiEntry?: (category: PoiCategory, next: PoiEntry) => void;
   onChangePoiRefine?: (value: boolean) => void;
+  onChangePoiRefineLimit?: (value: 2 | 4 | 6) => void;
   onOpenPoiCategories?: () => void;
   onLoadPois?: () => void;
   /** Map-level POI loading state (corridor / viewport fetch). */
