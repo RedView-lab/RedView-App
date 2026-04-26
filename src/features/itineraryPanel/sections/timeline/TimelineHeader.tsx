@@ -2,8 +2,9 @@
  * Sticky header of the Feuille-de-route / Timeline panel.
  *
  * Left:  view switcher (Feuille de route / Timeline) — segmented control.
- * Right: search, settings, split "add" button (plus + chevron).
+ * Right: search, settings, split "add" button opening the kind picker.
  */
+import type { MouseEventHandler } from 'react';
 import {
   IconChevronDown,
   IconClockFastForward,
@@ -19,8 +20,8 @@ interface TimelineHeaderProps {
   onChangeView?: (v: TimelineView) => void;
   onSearch?: () => void;
   onOpenSettings?: () => void;
-  onAdd?: () => void;
-  onOpenKindMenu?: () => void;
+  onAdd?: MouseEventHandler<HTMLButtonElement>;
+  onOpenKindMenu?: MouseEventHandler<HTMLButtonElement>;
 }
 
 export function TimelineHeader({
@@ -31,6 +32,8 @@ export function TimelineHeader({
   onAdd,
   onOpenKindMenu,
 }: TimelineHeaderProps) {
+  const openKindMenu = onOpenKindMenu ?? onAdd;
+
   return (
     <div className="rvi-tl-head">
       <div className="rvi-tl-tabs" role="tablist" aria-label="Vue de la feuille de route">
@@ -77,7 +80,7 @@ export function TimelineHeader({
         <button
           type="button"
           className="rvi-tl-add-split__main"
-          onClick={onAdd}
+          onClick={openKindMenu}
           aria-label="Ajouter un élément"
         >
           <IconPlusCircleFilled size={16} />
@@ -85,7 +88,7 @@ export function TimelineHeader({
         <button
           type="button"
           className="rvi-tl-add-split__chevron"
-          onClick={onOpenKindMenu}
+          onClick={openKindMenu}
           aria-label="Choisir le type d'élément à ajouter"
         >
           <IconChevronDown size={14} />

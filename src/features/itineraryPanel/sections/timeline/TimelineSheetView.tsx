@@ -7,6 +7,7 @@
  * The component is fully stateless: all selection / visibility / favorite
  * state flows through parent-provided callbacks.
  */
+import type { MouseEventHandler } from 'react';
 import type { TimelineItem } from '../../types';
 import { TimelineAddRow } from './TimelineAddRow';
 import { TimelineRow } from './TimelineRow';
@@ -18,8 +19,8 @@ interface TimelineSheetViewProps {
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
-  onAdd?: () => void;
-  onOpenKindMenu?: () => void;
+  onAdd?: MouseEventHandler<HTMLButtonElement>;
+  onOpenKindMenu?: MouseEventHandler<HTMLButtonElement>;
   onSelectPlace?: (
     id: string,
     place: { name: string; fullName: string; lat: number; lon: number },

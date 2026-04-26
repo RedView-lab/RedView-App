@@ -432,6 +432,80 @@
 }
 .rvi-tl-add__chevron:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
 
+/* ---------- Add-item dropdown (Figma 1749:57201) ---------- */
+
+.rvi-tl-kind-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 139px;
+  overflow: clip;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: #fff;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+}
+.rvi-tl-kind-menu__option {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  width: 100%;
+  padding: 6px 6px 6px 10px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.16s ease, opacity 0.16s ease;
+}
+.rvi-tl-kind-menu__option:hover,
+.rvi-tl-kind-menu__option:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+}
+.rvi-tl-kind-menu__option.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.rvi-tl-kind-menu__option.is-disabled:hover,
+.rvi-tl-kind-menu__option.is-disabled:focus-visible {
+  background: transparent;
+}
+.rvi-tl-kind-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+.rvi-tl-kind-menu__icon .rvi-kind {
+  filter: none;
+}
+.rvi-tl-kind-menu__label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+.rvi-tl-kind-menu__step-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.88);
+}
+
 /* ---------- Timeline (proportional rail) view ---------- */
 
 .rvi-tl-list--timeline .rvi-tl-list__col-type { padding-left: 32px; }

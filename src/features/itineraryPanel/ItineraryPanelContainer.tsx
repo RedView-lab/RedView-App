@@ -33,6 +33,7 @@ import type {
   PrioritiesState,
   RhythmState,
   RoadTypesState,
+  TimelineAddItemKind,
   TimelineItem,
   TimelineView,
 } from './types';
@@ -447,17 +448,9 @@ export function ItineraryPanelContainer({
       onChangeTimelineView={(view: TimelineView) =>
         setProject((p) => ({ ...p, timelineView: view }))
       }
-      onAddTimelineItem={() =>
+      onAddTimelineItem={(kind) =>
         updateActive((it) => {
-          const newId = `wp-${Date.now()}`;
-          const endIdx = it.timeline.findIndex((i) => i.kind === 'end');
-          const insertAt = endIdx >= 0 ? endIdx : it.timeline.length;
-          it.timeline.splice(insertAt, 0, {
-            id: newId,
-            kind: 'waypoint',
-            label: 'Nouveau point',
-            distanceKm: null,
-          });
+          insertTimelineItem(it.timeline, kind);
         })
       }
       onToggleTimelineItem={(id, visible) =>
@@ -677,6 +670,87 @@ function buildTimelineAfterRemoval(
   }
 
   return timeline.filter((row) => row.id !== rowId);
+}
+
+function insertTimelineItem(
+  timeline: TimelineItem[],
+  kind: TimelineAddItemKind,
+): void {
+  const nextItem = createTimelineItem(kind, timeline);
+  if (!nextItem) return;
+
+  if (nextItem.kind === 'start') {
+    timeline.unshift(nextItem);
+    return;
+  }
+
+  if (nextItem.kind === 'end') {
+    timeline.push(nextItem);
+    return;
+  }
+
+  const endIndex = timeline.findIndex((item) => item.kind === 'end');
+  const insertAt = endIndex >= 0 ? endIndex : timeline.length;
+  timeline.splice(insertAt, 0, nextItem);
+}
+
+function createTimelineItem(
+  kind: TimelineAddItemKind,
+  timeline: TimelineItem[],
+): TimelineItem | null {
+  const now = Date.now();
+
+  switch (kind) {
+    case 'step':
+      return {
+        id: `step-${now}`,
+        kind: 'waypoint',
+        label: 'Rechercher un lieu',
+        distanceKm: null,
+      };
+    case 'waypoint':
+      return {
+        id: `wp-${now}`,
+        kind: 'waypoint',
+        label: 'Nouveau point',
+        distanceKm: null,
+      };
+    case 'poi':
+      return {
+        id: `poi-${now}`,
+        kind: 'poi',
+        label: 'POI',
+        distanceKm: null,
+      };
+    case 'pause':
+      return {
+        id: `pause-${now}`,
+        kind: 'pause',
+        label: 'Pause',
+        distanceKm: null,
+        durationMin: 15,
+      };
+    case 'start':
+      return timeline.some((item) => item.kind === 'start')
+        ? null
+        : {
+            id: `start-${now}`,
+            kind: 'start',
+            label: 'Rechercher un lieu',
+            distanceKm: 0,
+          };
+    case 'end':
+      return timeline.some((item) => item.kind === 'end')
+        ? null
+        : {
+            id: `end-${now}`,
+            kind: 'end',
+            label: 'Rechercher un lieu',
+            distanceKm: null,
+          };
+    default:
+      return null;
+  }
 }
 
 function isPromotableEndpointRow(

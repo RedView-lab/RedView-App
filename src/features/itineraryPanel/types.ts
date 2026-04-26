@@ -192,6 +192,14 @@ export type TimelineItemKind =
   | 'poi'
   | 'pause';
 
+export type TimelineAddItemKind =
+  | 'step'
+  | 'waypoint'
+  | 'poi'
+  | 'pause'
+  | 'start'
+  | 'end';
+
 export interface TimelineItem {
   id: string;
   kind: TimelineItemKind;
@@ -494,7 +502,7 @@ export interface ItineraryPanelProps {
 
   // timeline
   onChangeTimelineView?: (view: TimelineView) => void;
-  onAddTimelineItem?: () => void;
+  onAddTimelineItem?: (kind: TimelineAddItemKind) => void;
   onToggleTimelineItem?: (id: string, visible: boolean) => void;
   onRemoveTimelineItem?: (id: string) => void;
   onFavoriteTimelineItem?: (id: string, favorite: boolean) => void;

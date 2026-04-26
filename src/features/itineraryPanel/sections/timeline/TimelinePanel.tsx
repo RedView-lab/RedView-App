@@ -5,11 +5,21 @@
  * callback props so the parent container can wire them to a backend,
  * optimistic updates, undo/redo etc.
  */
-import { useState } from 'react';
-import type { TimelineItem, TimelineRailConfig, TimelineView } from '../../types';
+import { useState, type MouseEvent } from 'react';
+import type {
+  TimelineAddItemKind,
+  TimelineItem,
+  TimelineRailConfig,
+  TimelineView,
+} from '../../types';
+import { KindBadge } from './KindBadge';
 import { TimelineHeader } from './TimelineHeader';
 import { TimelineSheetView } from './TimelineSheetView';
 import { TimelineTimelineView } from './TimelineTimelineView';
+import {
+  TimelineKindMenu,
+  type TimelineKindMenuOption,
+} from './TimelineKindMenu.tsx';
 import {
   TimelineFilters,
   type TimelineFilterState,
@@ -29,8 +39,7 @@ interface TimelinePanelProps {
   onChangeView?: (v: TimelineView) => void;
   onSearch?: () => void;
   onOpenSettings?: () => void;
-  onAdd?: () => void;
-  onOpenKindMenu?: () => void;
+  onAdd?: (kind: TimelineAddItemKind) => void;
 
   onToggleItem?: (id: string, visible: boolean) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
@@ -52,7 +61,6 @@ export function TimelinePanel({
   onSearch,
   onOpenSettings,
   onAdd,
-  onOpenKindMenu,
   onToggleItem,
   onFavoriteItem,
   onRemoveItem,
@@ -61,6 +69,7 @@ export function TimelinePanel({
 }: TimelinePanelProps) {
   // Selection is local UI state; parent is notified via onSelectionChange.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
 
   // Filter + table-settings state — local for now; the wiring to backend
   // will move these into the project state once persistence lands.
@@ -81,6 +90,21 @@ export function TimelinePanel({
     });
   };
 
+  const handleOpenKindMenu = (event: MouseEvent<HTMLButtonElement>) => {
+    const nextAnchor = event.currentTarget.closest('.rvi-tl-add, .rvi-tl-add-split');
+    const resolvedAnchor =
+      nextAnchor instanceof HTMLElement ? nextAnchor : event.currentTarget;
+    setAddMenuAnchor((current) => (current === resolvedAnchor ? null : resolvedAnchor));
+  };
+
+  const handleCloseKindMenu = () => {
+    setAddMenuAnchor(null);
+  };
+
+  const handleSelectAddKind = (kind: TimelineAddItemKind) => {
+    onAdd?.(kind);
+  };
+
   // Apply filter chips to the items list before rendering.
   const visibleItems = items.filter((it) => {
     if (it.kind === 'start' || it.kind === 'end') return filters.etape;
@@ -89,6 +113,41 @@ export function TimelinePanel({
     // water + supermarket + poi (corridor-injected) → all under the POI filter
     return filters.poi;
   });
+
+  const addMenuOptions: TimelineKindMenuOption[] = [
+    {
+      value: 'step',
+      label: 'Étape',
+      icon: <span className="rvi-tl-kind-menu__step-dot" />,
+    },
+    {
+      value: 'waypoint',
+      label: 'Waypoint',
+      icon: <KindBadge kind="waypoint" />,
+    },
+    {
+      value: 'poi',
+      label: 'POI',
+      icon: <KindBadge kind="poi" />,
+    },
+    {
+      value: 'pause',
+      label: 'Pause',
+      icon: <KindBadge kind="pause" />,
+    },
+    {
+      value: 'start',
+      label: 'Départ',
+      icon: <KindBadge kind="start" />,
+      disabled: items.some((item) => item.kind === 'start'),
+    },
+    {
+      value: 'end',
+      label: 'Destination',
+      icon: <KindBadge kind="end" />,
+      disabled: items.some((item) => item.kind === 'end'),
+    },
+  ];
 
   return (
     <section
@@ -100,8 +159,8 @@ export function TimelinePanel({
         onChangeView={onChangeView}
         onSearch={onSearch}
         onOpenSettings={onOpenSettings}
-        onAdd={onAdd}
-        onOpenKindMenu={onOpenKindMenu}
+        onAdd={handleOpenKindMenu}
+        onOpenKindMenu={handleOpenKindMenu}
       />
 
       <div className="rvi-timeline__body">
@@ -120,8 +179,8 @@ export function TimelinePanel({
               onToggleVisibility={onToggleItem}
               onToggleFavorite={onFavoriteItem}
               onRemove={onRemoveItem}
-              onAdd={onAdd}
-              onOpenKindMenu={onOpenKindMenu}
+              onAdd={handleOpenKindMenu}
+              onOpenKindMenu={handleOpenKindMenu}
               onSelectPlace={onSelectPlace}
             />
           </>
@@ -137,6 +196,14 @@ export function TimelinePanel({
           />
         )}
       </div>
+
+      <TimelineKindMenu
+        anchorEl={addMenuAnchor}
+        open={!!addMenuAnchor}
+        options={addMenuOptions}
+        onClose={handleCloseKindMenu}
+        onSelect={handleSelectAddKind}
+      />
     </section>
   );
 }
