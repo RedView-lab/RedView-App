@@ -125,6 +125,12 @@ function shadowVisibility(altitudeDeg: number): number {
   return Number.isFinite(altitudeDeg) ? 1 : 0;
 }
 
+function effectiveOverlayOpacity(enabled: boolean, opacity: number, altitudeDeg: number): number {
+  if (!enabled) return 0;
+  if (altitudeDeg < 0) return 1;
+  return Math.max(0, Math.min(1, opacity));
+}
+
 /**
  * Pick a DEM zoom that keeps the sample density close to one DEM pixel per
  * grid cell. Bounded so we never explode the tile count or under-resolve.
@@ -309,7 +315,7 @@ export function useShadowImage(
 
     const applyVisibleOpacity = () => {
       const o = optsRef.current;
-      setLayerOpacity(o.enabled ? o.opacity : 0);
+      setLayerOpacity(effectiveOverlayOpacity(o.enabled, o.opacity, o.sunAltitudeDeg));
     };
 
     const ensureSourceAndLayer = (initialBlobUrl: string, coords: [[number, number], [number, number], [number, number], [number, number]]) => {
@@ -335,7 +341,11 @@ export function useShadowImage(
             // lands under the satellite imagery and stays invisible.
             slot: 'top',
             paint: {
-              'raster-opacity': optsRef.current.enabled ? optsRef.current.opacity : 0,
+              'raster-opacity': effectiveOverlayOpacity(
+                optsRef.current.enabled,
+                optsRef.current.opacity,
+                optsRef.current.sunAltitudeDeg,
+              ),
               'raster-fade-duration': 0,
               'raster-resampling': 'linear',
             },
@@ -386,7 +396,7 @@ export function useShadowImage(
 
       const o = optsRef.current;
       const shadowStrength = shadowVisibility(o.sunAltitudeDeg);
-      if (!o.enabled || o.opacity <= 0 || shadowStrength <= 0) {
+      if (!o.enabled || (o.sunAltitudeDeg >= 0 && o.opacity <= 0) || shadowStrength <= 0) {
         setLayerOpacity(0);
         return;
       }
@@ -715,7 +725,7 @@ export function useShadowImage(
     if (!map || !isMapLoaded) return;
     const setLayerOpacity = setLayerOpacityRef.current;
     if (setLayerOpacity) {
-      setLayerOpacity(opts.enabled ? opts.opacity : 0);
+      setLayerOpacity(effectiveOverlayOpacity(opts.enabled, opts.opacity, opts.sunAltitudeDeg));
     }
     if (!opts.enabled) {
       publishStatus(null);
@@ -733,8 +743,8 @@ export function useShadowImage(
     if (!map || !isMapLoaded) return;
     const setLayerOpacity = setLayerOpacityRef.current;
     if (!setLayerOpacity) return;
-    setLayerOpacity(opts.enabled ? opts.opacity : 0);
-  }, [map, isMapLoaded, opts.enabled, opts.opacity]);
+    setLayerOpacity(effectiveOverlayOpacity(opts.enabled, opts.opacity, opts.sunAltitudeDeg));
+  }, [map, isMapLoaded, opts.enabled, opts.opacity, opts.sunAltitudeDeg]);
 
   // Sun/time changes reuse the sampled grid and coalesce to the latest state.
   useEffect(() => {
