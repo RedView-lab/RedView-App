@@ -171,7 +171,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   useEffect(() => {
     if (!armed || !map || !store || !activeItinerary) return;
 
-    const canvas = map.getCanvas();
+    const canvas = map.getCanvasContainer();
     const wasDoubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
     const wasDragPanEnabled = map.dragPan.isEnabled();
     const wasDragRotateEnabled = map.dragRotate.isEnabled();
@@ -236,6 +236,23 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       pendingPointerTarget = { kind: 'none' };
     };
 
+    const setHoverState = (nextHoverState: ForbiddenHoverState) => {
+      if (hoverState === nextHoverState) return;
+      hoverState = nextHoverState;
+      refreshCursor();
+    };
+
+    const readHoverStateAtClientPosition = (
+      clientX: number,
+      clientY: number,
+    ): ForbiddenHoverState => {
+      const rect = canvas.getBoundingClientRect();
+      return readHoverStateAtPoint({
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      } as MapMouseEvent['point']);
+    };
+
     const moveDraggedVertexAtClientPosition = (clientX: number, clientY: number) => {
       if (dragState.kind !== 'vertex') return;
       const pointIndex = dragState.pointIndex;
@@ -269,45 +286,77 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       refreshCursor();
     };
 
-    const handleMapMouseMove = (event: MapMouseEvent) => {
+    const handleVertexLayerMouseMove = () => {
+      if (dragState.kind === 'vertex') {
+        refreshCursor();
+        return;
+      }
+      setHoverState('vertex');
+    };
+
+    const handleSegmentLayerMouseMove = (event: MapMouseEvent) => {
       if (dragState.kind === 'vertex') {
         refreshCursor();
         return;
       }
       const nextHoverState = readHoverStateAtPoint(event.point);
-      if (hoverState === nextHoverState) return;
-      hoverState = nextHoverState;
-      refreshCursor();
+      setHoverState(nextHoverState === 'none' ? 'segment' : nextHoverState);
     };
 
-    const handleMapMouseDown = (event: MapMouseEvent) => {
-      const original = event.originalEvent;
-      if (original instanceof MouseEvent && original.button !== 0) return;
-      const target = readDraftHitTarget(map, event.point);
-      if (!target) {
-        clearPendingPointerTarget();
-        return;
-      }
-
-      pendingPointerTarget =
-        target.kind === 'vertex'
-          ? {
-              kind: 'vertex',
-              pointIndex: target.pointIndex,
-              startClientX: original.clientX,
-              startClientY: original.clientY,
-              startPoint: event.point,
-            }
-          : {
-              kind: 'segment',
-              edgeIndex: target.edgeIndex,
-              startClientX: original.clientX,
-              startClientY: original.clientY,
-              startPoint: event.point,
-            };
-
+    const beginPendingPointerTarget = (nextTarget: PendingPointerTarget) => {
+      pendingPointerTarget = nextTarget;
       window.addEventListener('mousemove', handleWindowMouseMove);
       window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    };
+
+    const handleVertexMouseDown = (event: MapMouseEvent) => {
+      const original = event.originalEvent;
+      if (original instanceof MouseEvent && original.button !== 0) return;
+
+      const pointIndex = readIndexFromRenderedLayer(
+        map,
+        event.point,
+        FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
+        'index',
+        HIT_QUERY_RADIUS_PX,
+      );
+      if (pointIndex == null) return;
+
+      event.preventDefault();
+      original?.preventDefault?.();
+      original?.stopPropagation?.();
+      beginPendingPointerTarget({
+        kind: 'vertex',
+        pointIndex,
+        startClientX: original.clientX,
+        startClientY: original.clientY,
+        startPoint: event.point,
+      });
+    };
+
+    const handleSegmentMouseDown = (event: MapMouseEvent) => {
+      const original = event.originalEvent;
+      if (original instanceof MouseEvent && original.button !== 0) return;
+
+      const edgeIndex = readIndexFromRenderedLayer(
+        map,
+        event.point,
+        FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
+        'edgeIndex',
+        HIT_QUERY_RADIUS_PX,
+      );
+      if (edgeIndex == null) return;
+
+      event.preventDefault();
+      original?.preventDefault?.();
+      original?.stopPropagation?.();
+      beginPendingPointerTarget({
+        kind: 'segment',
+        edgeIndex,
+        startClientX: original.clientX,
+        startClientY: original.clientY,
+        startPoint: event.point,
+      });
     };
 
     const handleWindowMouseMove = (event: MouseEvent) => {
@@ -340,12 +389,12 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       moveDraggedVertexAtClientPosition(event.clientX, event.clientY);
     };
 
-    const handleWindowMouseUp = () => {
+    const handleWindowMouseUp = (event: MouseEvent) => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       clearPendingPointerTarget();
       if (dragState.kind === 'vertex') {
         dragState = { kind: 'idle' };
-        hoverState = 'none';
+        hoverState = readHoverStateAtClientPosition(event.clientX, event.clientY);
         updateDraftStatus(draftPointsRef.current);
         refreshCursor();
       }
@@ -390,24 +439,29 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       commitDraftPoints(nextPoints);
     };
 
-    const handleMapMouseOut = () => {
+    const handleHoverLayerLeave = (event: MapMouseEvent) => {
       if (dragState.kind === 'vertex' || hoverState === 'none') return;
-      hoverState = 'none';
-      refreshCursor();
+      setHoverState(readHoverStateAtPoint(event.point));
     };
 
-    map.on('mousemove', handleMapMouseMove);
-    map.on('mousedown', handleMapMouseDown);
+    map.on('mousemove', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexLayerMouseMove);
+    map.on('mousemove', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentLayerMouseMove);
+    map.on('mouseleave', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleHoverLayerLeave);
+    map.on('mouseleave', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleHoverLayerLeave);
+    map.on('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
+    map.on('mousedown', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentMouseDown);
     map.on('click', handleMapClick);
-    map.on('mouseout', handleMapMouseOut);
 
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
-      map.off('mousemove', handleMapMouseMove);
-      map.off('mousedown', handleMapMouseDown);
+      map.off('mousemove', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexLayerMouseMove);
+      map.off('mousemove', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentLayerMouseMove);
+      map.off('mouseleave', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleHoverLayerLeave);
+      map.off('mouseleave', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleHoverLayerLeave);
+      map.off('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
+      map.off('mousedown', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentMouseDown);
       map.off('click', handleMapClick);
-      map.off('mouseout', handleMapMouseOut);
       if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
       if (wasDragPanEnabled) map.dragPan.enable();
       if (wasDragRotateEnabled) map.dragRotate.enable();
