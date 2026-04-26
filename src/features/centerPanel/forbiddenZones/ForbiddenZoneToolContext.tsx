@@ -18,7 +18,7 @@ import {
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
 
-const FORBIDDEN_CURSOR = 'url("/svgv2/icone/slash-octagon.svg") 8 8, not-allowed';
+const FORBIDDEN_CURSOR = 'crosshair';
 const FORBIDDEN_SEGMENT_CURSOR = 'pointer';
 const FORBIDDEN_VERTEX_CURSOR = 'grab';
 const FORBIDDEN_VERTEX_DRAG_CURSOR = 'grabbing';
