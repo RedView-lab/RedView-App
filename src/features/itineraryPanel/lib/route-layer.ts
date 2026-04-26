@@ -521,7 +521,7 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       visibility: 'none',
     },
     paint: {
-      'circle-radius': 24,
+      'circle-radius': 34,
       'circle-color': '#000000',
       'circle-opacity': 0.001,
       'circle-stroke-width': 0,
@@ -540,7 +540,7 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       visibility: 'none',
     },
     paint: {
-      'line-width': 28,
+      'line-width': 44,
       'line-color': '#000000',
       'line-opacity': 0.001,
     },
