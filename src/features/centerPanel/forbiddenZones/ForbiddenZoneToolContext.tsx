@@ -17,6 +17,7 @@ import {
 
 const FORBIDDEN_CURSOR = 'url("/svgv2/icone/slash-octagon.svg") 8 8, not-allowed';
 const POINT_EPSILON = 1e-6;
+const MAX_SEGMENT_INSERT_DISTANCE_PX = 18;
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -141,8 +142,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const handleClick = (event: MapMouseEvent) => {
-      const point = { lat: event.lngLat.lat, lon: event.lngLat.lng };
-      const nextPoints = appendDraftPoint(draftPoints, point);
+      const nextPoints = insertDraftPointAtNearestSegment(map, draftPoints, event)
+        ?? appendDraftPoint(draftPoints, { lat: event.lngLat.lat, lon: event.lngLat.lng });
       const clickCount =
         event.originalEvent instanceof MouseEvent ? event.originalEvent.detail : 1;
 
@@ -214,4 +215,103 @@ function appendDraftPoint(
     return points;
   }
   return [...points, point];
+}
+
+function insertDraftPointAtNearestSegment(
+  map: MapboxMap,
+  points: Array<{ lat: number; lon: number }>,
+  event: MapMouseEvent,
+): Array<{ lat: number; lon: number }> | null {
+  if (points.length < 2) return null;
+
+  let bestDistanceSq = Number.POSITIVE_INFINITY;
+  let bestInsertIndex: number | null = null;
+  let bestProjectedScreenPoint: { x: number; y: number } | null = null;
+  const segmentCount = points.length >= 3 ? points.length : points.length - 1;
+
+  for (let index = 0; index < segmentCount; index += 1) {
+    const start = points[index];
+    const end = points[(index + 1) % points.length];
+    if (!end) continue;
+
+    const startScreen = map.project([start.lon, start.lat]);
+    const endScreen = map.project([end.lon, end.lat]);
+    const projection = projectPointToSegment(
+      event.point.x,
+      event.point.y,
+      startScreen.x,
+      startScreen.y,
+      endScreen.x,
+      endScreen.y,
+    );
+    if (projection.distanceSq >= bestDistanceSq) continue;
+    bestDistanceSq = projection.distanceSq;
+    bestInsertIndex = index === points.length - 1 ? points.length : index + 1;
+    bestProjectedScreenPoint = { x: projection.x, y: projection.y };
+  }
+
+  if (
+    bestInsertIndex == null ||
+    !bestProjectedScreenPoint ||
+    bestDistanceSq > MAX_SEGMENT_INSERT_DISTANCE_PX * MAX_SEGMENT_INSERT_DISTANCE_PX
+  ) {
+    return null;
+  }
+
+  const projected = map.unproject([bestProjectedScreenPoint.x, bestProjectedScreenPoint.y]);
+  const insertedPoint = { lat: projected.lat, lon: projected.lng };
+  const previousPoint = points[(bestInsertIndex - 1 + points.length) % points.length];
+  const nextPoint = points[bestInsertIndex % points.length];
+  if (
+    (previousPoint && sameDraftPoint(previousPoint, insertedPoint)) ||
+    (nextPoint && sameDraftPoint(nextPoint, insertedPoint))
+  ) {
+    return null;
+  }
+
+  return [
+    ...points.slice(0, bestInsertIndex),
+    insertedPoint,
+    ...points.slice(bestInsertIndex),
+  ];
+}
+
+function sameDraftPoint(
+  left: { lat: number; lon: number },
+  right: { lat: number; lon: number },
+): boolean {
+  return (
+    Math.abs(left.lat - right.lat) <= POINT_EPSILON &&
+    Math.abs(left.lon - right.lon) <= POINT_EPSILON
+  );
+}
+
+function projectPointToSegment(
+  px: number,
+  py: number,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+): { distanceSq: number; x: number; y: number } {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const segmentLengthSq = dx * dx + dy * dy;
+  if (segmentLengthSq <= 1e-6) {
+    return {
+      distanceSq: (px - ax) * (px - ax) + (py - ay) * (py - ay),
+      x: ax,
+      y: ay,
+    };
+  }
+
+  const rawT = ((px - ax) * dx + (py - ay) * dy) / segmentLengthSq;
+  const t = Math.max(0, Math.min(1, rawT));
+  const x = ax + dx * t;
+  const y = ay + dy * t;
+  return {
+    distanceSq: (px - x) * (px - x) + (py - y) * (py - y),
+    x,
+    y,
+  };
 }
