@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
@@ -52,6 +52,11 @@ export function useItineraryBrouterRouting({
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
   const routeAbortRef = useRef<AbortController | null>(null);
+  const cancelRouteRequest = useCallback(() => {
+    routeAbortRef.current?.abort();
+    routeAbortRef.current = null;
+    setRouteLoading(false);
+  }, []);
 
   const startKey = (() => {
     const row = active?.timeline.find((item) => item.kind === 'start');
@@ -624,6 +629,7 @@ export function useItineraryBrouterRouting({
   }, [active, brfHash, climbing, endKey, hasWaypointOverride, isMapLoaded, map, profileId, rollbackPendingTraceAppend, setProject, startKey, viaKey]);
 
   return {
+    cancelRouteRequest,
     routeError,
     routeLoading,
     routeWarnings,

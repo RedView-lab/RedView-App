@@ -97,6 +97,8 @@ export function ProjectProvider({
   onProjectChangeRef.current = onProjectChange;
   const [traceHistoryPast, setTraceHistoryPast] = useState<TraceHistoryEntry[]>([]);
   const [traceHistoryFuture, setTraceHistoryFuture] = useState<TraceHistoryEntry[]>([]);
+  const traceHistoryPastRef = useRef<TraceHistoryEntry[]>([]);
+  const traceHistoryFutureRef = useRef<TraceHistoryEntry[]>([]);
   const pendingTraceAppendRef = useRef<TraceHistoryEntry | null>(null);
 
   const setProject = useCallback<Dispatch<SetStateAction<ItineraryProject>>>(
@@ -142,27 +144,32 @@ export function ProjectProvider({
     [],
   );
 
+  const syncTraceHistory = useCallback((past: TraceHistoryEntry[], future: TraceHistoryEntry[]) => {
+    traceHistoryPastRef.current = past;
+    traceHistoryFutureRef.current = future;
+    setTraceHistoryPast(past);
+    setTraceHistoryFuture(future);
+  }, []);
+
   const undoTraceEdit = useCallback(() => {
-    setTraceHistoryPast((past) => {
-      const entry = past[past.length - 1];
-      if (!entry) return past;
-      pendingTraceAppendRef.current = null;
-      setProject(entry.before);
-      setTraceHistoryFuture((future) => [entry, ...future]);
-      return past.slice(0, -1);
-    });
-  }, [setProject]);
+    const past = traceHistoryPastRef.current;
+    const entry = past[past.length - 1];
+    if (!entry) return;
+
+    pendingTraceAppendRef.current = null;
+    syncTraceHistory(past.slice(0, -1), [entry, ...traceHistoryFutureRef.current]);
+    setProject(entry.before);
+  }, [setProject, syncTraceHistory]);
 
   const redoTraceEdit = useCallback(() => {
-    setTraceHistoryFuture((future) => {
-      const [entry, ...rest] = future;
-      if (!entry) return future;
-      pendingTraceAppendRef.current = null;
-      setProject(entry.after);
-      setTraceHistoryPast((past) => [...past, entry]);
-      return rest;
-    });
-  }, [setProject]);
+    const future = traceHistoryFutureRef.current;
+    const [entry, ...rest] = future;
+    if (!entry) return;
+
+    pendingTraceAppendRef.current = null;
+    syncTraceHistory([...traceHistoryPastRef.current, entry], rest);
+    setProject(entry.after);
+  }, [setProject, syncTraceHistory]);
 
   const rollbackPendingTraceAppend = useCallback(
     (itineraryId: string) => {
@@ -170,16 +177,14 @@ export function ProjectProvider({
       if (!pending || pending.itineraryId !== itineraryId) return false;
 
       pendingTraceAppendRef.current = null;
+      const past = traceHistoryPastRef.current;
+      const last = past[past.length - 1];
+      const nextPast = last === pending ? past.slice(0, -1) : past;
+      syncTraceHistory(nextPast, []);
       setProject(pending.before);
-      setTraceHistoryPast((past) => {
-        const last = past[past.length - 1];
-        if (!last || last !== pending) return past;
-        return past.slice(0, -1);
-      });
-      setTraceHistoryFuture([]);
       return true;
     },
-    [setProject],
+    [setProject, syncTraceHistory],
   );
 
   const setItineraryName = useCallback(
@@ -429,13 +434,12 @@ export function ProjectProvider({
           after: afterSnapshot,
         };
         pendingTraceAppendRef.current = entry;
-        setTraceHistoryPast((past) => [...past, entry]);
-        setTraceHistoryFuture([]);
+        syncTraceHistory([...traceHistoryPastRef.current, entry], []);
       }
 
       return appended;
     },
-    [setProject],
+    [setProject, syncTraceHistory],
   );
 
   const simplifyItineraryGpx = useCallback(

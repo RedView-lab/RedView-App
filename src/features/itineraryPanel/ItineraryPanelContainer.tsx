@@ -117,6 +117,7 @@ export function ItineraryPanelContainer({
   });
 
   const {
+    cancelRouteRequest,
     routeError,
     routeLoading,
     routeWarnings,
@@ -389,8 +390,14 @@ export function ItineraryPanelContainer({
           it.profileId = id;
         })
       }
-      onUndo={undoTraceEdit}
-      onRedo={redoTraceEdit}
+      onUndo={() => {
+        cancelRouteRequest();
+        undoTraceEdit();
+      }}
+      onRedo={() => {
+        cancelRouteRequest();
+        redoTraceEdit();
+      }}
       canUndo={canUndoTraceEdit}
       canRedo={canRedoTraceEdit}
       onSaveProfile={() => {}}
