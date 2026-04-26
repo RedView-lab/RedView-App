@@ -9,6 +9,7 @@ import {
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
 import { Collapse } from '@/features/itineraryPanel/components/Collapse';
 import {
   IconChevronDown,
@@ -108,12 +109,16 @@ interface SummaryRowProps {
   expanded: boolean;
   isEditing: boolean;
   renameDraft: string;
+  mergeArmed?: boolean;
+  mergeSelectable?: boolean;
+  mergeSelectionOrder?: number | null;
   onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
   onToggleExpanded?: (id: string) => void;
   onStartRename?: (itinerary: Itinerary) => void;
   onRenameDraftChange?: (value: string) => void;
   onCommitRename?: () => void;
   onCancelRename?: () => void;
+  onSelectForMerge?: (itineraryId: string) => void;
   onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
 }
 
@@ -123,33 +128,57 @@ function SummaryRow({
   expanded,
   isEditing,
   renameDraft,
+  mergeArmed,
+  mergeSelectable,
+  mergeSelectionOrder,
   onToggleAnalysisVisibility,
   onToggleExpanded,
   onStartRename,
   onRenameDraftChange,
   onCommitRename,
   onCancelRename,
+  onSelectForMerge,
   onOpenMenu,
 }: SummaryRowProps) {
   const { itinerary, depth, startDistanceKm } = node;
   const values = buildValues(itinerary);
   const analysisVisible = itinerary.analysisVisible !== false;
   const hasChildren = childCount > 0;
+  const isMergeSelected = mergeSelectionOrder != null;
   const rowStyle =
     depth > 0
       ? ({
           '--rvc-center-summary-lineage-indent': `${Math.min(depth, 4) * 18}px`,
         } as CSSProperties)
       : undefined;
+  const rowClassName = [
+    depth > 0
+      ? 'rvc-center-summary__row rvc-center-summary__row--item rvc-center-summary__row--child'
+      : 'rvc-center-summary__row rvc-center-summary__row--item',
+    mergeArmed ? 'rvc-center-summary__row--merge-armed' : '',
+    isMergeSelected ? 'rvc-center-summary__row--merge-selected' : '',
+    mergeArmed && !mergeSelectable ? 'rvc-center-summary__row--merge-disabled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div
-      className={
-        depth > 0
-          ? 'rvc-center-summary__row rvc-center-summary__row--item rvc-center-summary__row--child'
-          : 'rvc-center-summary__row rvc-center-summary__row--item'
-      }
+      className={rowClassName}
       style={rowStyle}
       title={depth > 0 ? `${itinerary.name} commence à ${startDistanceKm.toFixed(1)} km` : itinerary.name}
+      onClick={mergeArmed && mergeSelectable ? () => onSelectForMerge?.(itinerary.id) : undefined}
+      onKeyDown={
+        mergeArmed && mergeSelectable
+          ? (event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              onSelectForMerge?.(itinerary.id);
+            }
+          : undefined
+      }
+      role={mergeArmed && mergeSelectable ? 'button' : undefined}
+      tabIndex={mergeArmed && mergeSelectable ? 0 : undefined}
+      aria-pressed={mergeArmed && mergeSelectable ? isMergeSelected : undefined}
     >
       <div
         className="rvc-center-summary__route"
@@ -162,7 +191,10 @@ function SummaryRow({
             aria-label={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
             aria-expanded={expanded}
             title={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
-            onClick={() => onToggleExpanded?.(itinerary.id)}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleExpanded?.(itinerary.id);
+            }}
           >
             <IconChevronDown size={12} />
           </button>
@@ -172,7 +204,10 @@ function SummaryRow({
         <button
           type="button"
           className="rvc-center-summary__eye-button"
-          onClick={() => onToggleAnalysisVisibility?.(itinerary.id, !analysisVisible)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleAnalysisVisibility?.(itinerary.id, !analysisVisible);
+          }}
           aria-pressed={analysisVisible}
           aria-label={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
           title={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
@@ -185,11 +220,15 @@ function SummaryRow({
           aria-hidden="true"
           style={{ background: itinerary.color }}
         />
+        {mergeSelectionOrder != null ? (
+          <span className="rvc-center-summary__merge-pill">{mergeSelectionOrder}</span>
+        ) : null}
         {isEditing ? (
           <input
             className="rvc-center-summary__inline-input"
             value={renameDraft}
             onChange={(event) => onRenameDraftChange?.(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
             onBlur={() => onCommitRename?.()}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -207,7 +246,10 @@ function SummaryRow({
           <span
             className="rvc-center-summary__name"
             title={`${itinerary.name} · Double-cliquez pour renommer`}
-            onDoubleClick={() => onStartRename?.(itinerary)}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              onStartRename?.(itinerary);
+            }}
           >
             {itinerary.name}
           </span>
@@ -228,7 +270,10 @@ function SummaryRow({
         className="rvc-center-summary__ghost-button"
         type="button"
         aria-label={`Plus d'options pour ${itinerary.name}`}
-        onClick={(event) => onOpenMenu?.(itinerary, event.currentTarget)}
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenMenu?.(itinerary, event.currentTarget);
+        }}
       >
         <IconDotsVertical size={16} />
       </button>
@@ -287,12 +332,16 @@ interface SummaryTreeBranchProps {
   branch: SummaryTreeNode;
   collapsedIds: Set<string>;
   editingState: InlineRenameState | null;
+  mergeArmed?: boolean;
+  mergeSelectable?: (id: string) => boolean;
+  mergeSelectionOrder?: (id: string) => number | null;
   onToggleAnalysisVisibility?: (id: string, visible: boolean) => void;
   onToggleExpanded: (id: string) => void;
   onStartRename: (itinerary: Itinerary) => void;
   onRenameDraftChange: (value: string) => void;
   onCommitRename: () => void;
   onCancelRename: () => void;
+  onSelectForMerge?: (itineraryId: string) => void;
   onOpenMenu?: (itinerary: Itinerary, anchorEl: HTMLButtonElement) => void;
 }
 
@@ -300,12 +349,16 @@ function SummaryTreeBranch({
   branch,
   collapsedIds,
   editingState,
+  mergeArmed,
+  mergeSelectable,
+  mergeSelectionOrder,
   onToggleAnalysisVisibility,
   onToggleExpanded,
   onStartRename,
   onRenameDraftChange,
   onCommitRename,
   onCancelRename,
+  onSelectForMerge,
   onOpenMenu,
 }: SummaryTreeBranchProps) {
   const isEditing = editingState?.itineraryId === branch.node.itinerary.id;
@@ -319,12 +372,16 @@ function SummaryTreeBranch({
         expanded={expanded}
         isEditing={isEditing}
         renameDraft={isEditing ? editingState?.draft ?? '' : ''}
+        mergeArmed={mergeArmed}
+        mergeSelectable={mergeSelectable?.(branch.node.itinerary.id) ?? false}
+        mergeSelectionOrder={mergeSelectionOrder?.(branch.node.itinerary.id) ?? null}
         onToggleAnalysisVisibility={onToggleAnalysisVisibility}
         onToggleExpanded={onToggleExpanded}
         onStartRename={onStartRename}
         onRenameDraftChange={onRenameDraftChange}
         onCommitRename={onCommitRename}
         onCancelRename={onCancelRename}
+        onSelectForMerge={onSelectForMerge}
         onOpenMenu={onOpenMenu}
       />
 
@@ -336,12 +393,16 @@ function SummaryTreeBranch({
               branch={child}
               collapsedIds={collapsedIds}
               editingState={editingState}
+              mergeArmed={mergeArmed}
+              mergeSelectable={mergeSelectable}
+              mergeSelectionOrder={mergeSelectionOrder}
               onToggleAnalysisVisibility={onToggleAnalysisVisibility}
               onToggleExpanded={onToggleExpanded}
               onStartRename={onStartRename}
               onRenameDraftChange={onRenameDraftChange}
               onCommitRename={onCommitRename}
               onCancelRename={onCancelRename}
+              onSelectForMerge={onSelectForMerge}
               onOpenMenu={onOpenMenu}
             />
           ))}
@@ -520,6 +581,7 @@ function buildSummaryTree(visualNodes: ItineraryVisualNode[]): SummaryTreeNode[]
 
 export function CenterPanelSummary() {
   const store = useProjectStoreOptional();
+  const routeMergeTool = useRouteMergeToolOptional();
   const itineraries = store?.project.itineraries ?? [];
   const visualNodes = useMemo(() => buildItineraryVisualNodes(itineraries), [itineraries]);
   const summaryTree = useMemo(() => buildSummaryTree(visualNodes), [visualNodes]);
@@ -615,6 +677,10 @@ export function CenterPanelSummary() {
     setMenuState(null);
   };
 
+  const handleSelectForMerge = (itineraryId: string) => {
+    routeMergeTool?.selectItinerary(itineraryId);
+  };
+
   return (
     <section className="rvc-center-summary" aria-label="Synthèse d'itinéraire">
       <div className="rvc-center-summary__row rvc-center-summary__row--header">
@@ -648,6 +714,9 @@ export function CenterPanelSummary() {
             branch={branch}
             collapsedIds={collapsedIds}
             editingState={editingState}
+            mergeArmed={routeMergeTool?.armed ?? false}
+            mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
+            mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
             onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
             onToggleExpanded={handleToggleExpanded}
             onStartRename={handleStartRename}
@@ -656,6 +725,7 @@ export function CenterPanelSummary() {
             }
             onCommitRename={handleCommitRename}
             onCancelRename={handleCancelRename}
+            onSelectForMerge={handleSelectForMerge}
             onOpenMenu={handleOpenMenu}
           />
         ))

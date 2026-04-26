@@ -13,6 +13,7 @@ import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
+import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
@@ -421,110 +422,112 @@ export default function Dashboard({
             onProjectChange={handleProjectChange}
           >
             <RouteSplitToolProvider map={mapInstance}>
-              <TraceToolProvider map={mapInstance}>
-                <ForbiddenZoneToolProvider map={mapInstance}>
-                <PredictionProvider>
-                <div style={leftPanelStyle}>
-                  <ItineraryPanel
-                    map={mapInstance}
-                    isMapLoaded={mapLoaded}
-                    width={leftPanelWidth}
-                    onResizeStart={handleLeftResizeStart}
-                    isResizing={isLeftResizing}
-                    onBackToHome={handleBackToBrowser}
-                  />
-                </div>
-
-                <AnalysisFlyoverProvider map={mapInstance}>
-                  {layout.centerToolbarVisible ? (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: layout.centerToolbarTop,
-                        left: layout.centerToolbarLeft,
-                        width: layout.centerToolbarWidth,
-                        height: CENTER_TOOLBAR_HEIGHT,
-                        zIndex: 25,
-                        overflow: 'hidden',
-                        transition: `top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-                        willChange: 'top, left, width',
-                      }}
-                    >
-                      <CenterPanelToolbar />
-                    </div>
-                  ) : null}
-
-                  {layout.centerToolbarVisible ? (
-                    <div
-                      aria-hidden="true"
-                      onMouseDown={handleCenterPanelResizeStart}
-                      style={{
-                        position: 'absolute',
-                        top: layout.centerPanelResizeHitTop,
-                        left: layout.centerPanelLeft,
-                        width: layout.centerPanelWidth,
-                        height: CENTER_PANEL_RESIZE_HIT_AREA,
-                        zIndex: 26,
-                        cursor: isMapFocusMode ? 'default' : 'row-resize',
-                        userSelect: 'none',
-                        touchAction: 'none',
-                        opacity: isMapFocusMode ? 0 : 1,
-                        pointerEvents: isMapFocusMode ? 'none' : 'auto',
-                        transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-                      }}
-                    />
-                  ) : null}
-
-                  {layout.centerToolbarVisible ? (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: layout.centerPanelTop,
-                        left: layout.centerPanelLeft,
-                        width: layout.centerPanelWidth,
-                        height: layout.centerPanelHeight,
-                        zIndex: 25,
-                        overflow: 'hidden',
-                        opacity: layout.centerPanelVisible ? 1 : 0,
-                        transform: layout.centerPanelVisible
-                          ? 'translate3d(0, 0, 0) scale(1)'
-                          : 'translate3d(0, 24px, 0) scale(0.985)',
-                        filter: layout.centerPanelVisible
-                          ? 'blur(0px) saturate(1)'
-                          : 'blur(10px) saturate(0.88)',
-                        pointerEvents: layout.centerPanelVisible ? 'auto' : 'none',
-                        transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-                        willChange: 'transform, opacity, filter, top, left, width',
-                      }}
-                    >
-                      <CenterPanel map={mapInstance} />
-                    </div>
-                  ) : null}
-                </AnalysisFlyoverProvider>
-
-                <div style={rightPanelStyle}>
-                  <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>
-                    <ControlPanelContainer
+              <RouteMergeToolProvider>
+                <TraceToolProvider map={mapInstance}>
+                  <ForbiddenZoneToolProvider map={mapInstance}>
+                  <PredictionProvider>
+                  <div style={leftPanelStyle}>
+                    <ItineraryPanel
                       map={mapInstance}
                       isMapLoaded={mapLoaded}
-                      onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
-                      onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
-                      onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
-                      onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
-                      lidarDownloadModeActive={lidarModeEnabled}
-                      onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
-                      width={panelWidth}
-                      onResizeStart={handleResizeStart}
-                      isResizing={isResizing}
+                      width={leftPanelWidth}
+                      onResizeStart={handleLeftResizeStart}
+                      isResizing={isLeftResizing}
+                      onBackToHome={handleBackToBrowser}
                     />
                   </div>
-                  <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
-                    <ExporterPanel width={panelWidth} />
+
+                  <AnalysisFlyoverProvider map={mapInstance}>
+                    {layout.centerToolbarVisible ? (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: layout.centerToolbarTop,
+                          left: layout.centerToolbarLeft,
+                          width: layout.centerToolbarWidth,
+                          height: CENTER_TOOLBAR_HEIGHT,
+                          zIndex: 25,
+                          overflow: 'hidden',
+                          transition: `top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+                          willChange: 'top, left, width',
+                        }}
+                      >
+                        <CenterPanelToolbar />
+                      </div>
+                    ) : null}
+
+                    {layout.centerToolbarVisible ? (
+                      <div
+                        aria-hidden="true"
+                        onMouseDown={handleCenterPanelResizeStart}
+                        style={{
+                          position: 'absolute',
+                          top: layout.centerPanelResizeHitTop,
+                          left: layout.centerPanelLeft,
+                          width: layout.centerPanelWidth,
+                          height: CENTER_PANEL_RESIZE_HIT_AREA,
+                          zIndex: 26,
+                          cursor: isMapFocusMode ? 'default' : 'row-resize',
+                          userSelect: 'none',
+                          touchAction: 'none',
+                          opacity: isMapFocusMode ? 0 : 1,
+                          pointerEvents: isMapFocusMode ? 'none' : 'auto',
+                          transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+                        }}
+                      />
+                    ) : null}
+
+                    {layout.centerToolbarVisible ? (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: layout.centerPanelTop,
+                          left: layout.centerPanelLeft,
+                          width: layout.centerPanelWidth,
+                          height: layout.centerPanelHeight,
+                          zIndex: 25,
+                          overflow: 'hidden',
+                          opacity: layout.centerPanelVisible ? 1 : 0,
+                          transform: layout.centerPanelVisible
+                            ? 'translate3d(0, 0, 0) scale(1)'
+                            : 'translate3d(0, 24px, 0) scale(0.985)',
+                          filter: layout.centerPanelVisible
+                            ? 'blur(0px) saturate(1)'
+                            : 'blur(10px) saturate(0.88)',
+                          pointerEvents: layout.centerPanelVisible ? 'auto' : 'none',
+                          transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+                          willChange: 'transform, opacity, filter, top, left, width',
+                        }}
+                      >
+                        <CenterPanel map={mapInstance} />
+                      </div>
+                    ) : null}
+                  </AnalysisFlyoverProvider>
+
+                  <div style={rightPanelStyle}>
+                    <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>
+                      <ControlPanelContainer
+                        map={mapInstance}
+                        isMapLoaded={mapLoaded}
+                        onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
+                        onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
+                        onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
+                        onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
+                        lidarDownloadModeActive={lidarModeEnabled}
+                        onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
+                        width={panelWidth}
+                        onResizeStart={handleResizeStart}
+                        isResizing={isResizing}
+                      />
+                    </div>
+                    <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
+                      <ExporterPanel width={panelWidth} />
+                    </div>
                   </div>
-                </div>
-                </PredictionProvider>
-                </ForbiddenZoneToolProvider>
-              </TraceToolProvider>
+                  </PredictionProvider>
+                  </ForbiddenZoneToolProvider>
+                </TraceToolProvider>
+              </RouteMergeToolProvider>
             </RouteSplitToolProvider>
           </ProjectProvider>
 

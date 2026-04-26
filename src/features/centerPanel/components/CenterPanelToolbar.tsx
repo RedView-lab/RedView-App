@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useRouteMergeToolOptional } from '../routeMerge';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useTraceToolOptional } from '../tracer';
 import { useForbiddenZoneToolOptional } from '../forbiddenZones';
@@ -181,6 +182,7 @@ function routePointsEqual(
 
 export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
+  const routeMergeTool = useRouteMergeToolOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
@@ -241,6 +243,10 @@ export function CenterPanelToolbar() {
   const canSimplifyTrace = activeTracePointCount > 2;
   const canCleanTrace = activeTracePointCount > 2;
   const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
+  const canMergeTrace = routeMergeTool?.canMerge ?? false;
+  const mergeStatusMessage = routeMergeTool?.statusMessage ?? null;
+  const mergeArmed = routeMergeTool?.armed ?? false;
+  const mergeLoading = routeMergeTool?.isMerging ?? false;
   const canSplitTrace = routeSplitTool?.canSplit ?? false;
   const splitStatusMessage = routeSplitTool?.statusMessage ?? null;
   const splitArmed = routeSplitTool?.armed ?? false;
@@ -271,6 +277,7 @@ export function CenterPanelToolbar() {
   );
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
+    if (mergeStatusMessage) return mergeStatusMessage;
     if (splitStatusMessage) return splitStatusMessage;
     if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
     if (traceStatusMessage) return traceStatusMessage;
@@ -299,6 +306,7 @@ export function CenterPanelToolbar() {
     canCleanTrace,
     forbiddenZoneStatusMessage,
     canSimplifyTrace,
+    mergeStatusMessage,
     simplifyTargetPoints,
     splitStatusMessage,
     traceStatusMessage,
@@ -382,6 +390,7 @@ export function CenterPanelToolbar() {
 
   const handleToggleRouteSplit = () => {
     if (!splitArmed) {
+      routeMergeTool?.deactivate();
       traceTool?.deactivate();
       forbiddenZoneTool?.deactivate();
     }
@@ -391,6 +400,7 @@ export function CenterPanelToolbar() {
 
   const handleToggleTrace = () => {
     if (!traceArmed) {
+      routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       forbiddenZoneTool?.deactivate();
     }
@@ -400,10 +410,21 @@ export function CenterPanelToolbar() {
 
   const handleToggleForbiddenZone = () => {
     if (!forbiddenZoneArmed) {
+      routeMergeTool?.deactivate();
       routeSplitTool?.deactivate();
       traceTool?.deactivate();
     }
     forbiddenZoneTool?.toggle();
+    setToolbarStatus(null);
+  };
+
+  const handleToggleRouteMerge = () => {
+    if (!mergeArmed) {
+      routeSplitTool?.deactivate();
+      traceTool?.deactivate();
+      forbiddenZoneTool?.deactivate();
+    }
+    routeMergeTool?.toggle();
     setToolbarStatus(null);
   };
 
@@ -485,7 +506,12 @@ export function CenterPanelToolbar() {
             <IconScissors />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Symétrie">
+          <ToolbarIconButton
+            label="Fusion"
+            onClick={handleToggleRouteMerge}
+            disabled={!canMergeTrace || mergeLoading}
+            active={mergeArmed}
+          >
             <IconReflectVertical />
           </ToolbarIconButton>
 

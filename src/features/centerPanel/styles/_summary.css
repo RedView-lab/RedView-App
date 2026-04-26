@@ -27,6 +27,27 @@
   background: rgba(0, 0, 0, 0.6);
 }
 
+.rvc-center-summary__row--merge-armed {
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rvc-center-summary__row--merge-armed:hover {
+  background: rgba(197, 0, 0, 0.12);
+}
+
+.rvc-center-summary__row--merge-selected {
+  background:
+    linear-gradient(90deg, rgba(197, 0, 0, 0.24), rgba(197, 0, 0, 0.08)),
+    rgba(0, 0, 0, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(255, 190, 190, 0.22);
+}
+
+.rvc-center-summary__row--merge-disabled {
+  cursor: default;
+  opacity: 0.68;
+}
+
 .rvc-center-summary__branch {
   display: flex;
   flex-direction: column;
@@ -138,6 +159,22 @@
   border-radius: 2px;
   background: var(--rvc-center-red-accent);
   flex-shrink: 0;
+}
+
+.rvc-center-summary__merge-pill {
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 4px;
+  background: rgba(197, 0, 0, 0.9);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .rvc-center-summary__name {
