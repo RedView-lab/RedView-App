@@ -6,7 +6,7 @@
  * still drive placement fallback and km markers, but the user now navigates a
  * date strip and reads the route as scheduled checkpoints.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
@@ -63,14 +63,11 @@ interface TimelineEvent extends TimedTimelineItem {
 
 const RAIL_HEADER_HEIGHT_PX = 30;
 const RAIL_ITEM_HEIGHT_PX = 32;
-const PAUSE_ITEM_HEIGHT_PX = 28;
 const BASE_HOUR_ROW_HEIGHT_PX = 96;
-const CARD_VERTICAL_GAP_PX = 4;
 const DEFAULT_START_MINUTES = 8 * 60;
 const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
-const MIN_TIME_DELTA_MINUTES = 1 / 60;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -248,45 +245,6 @@ function resolveMarkerKmStep(
   return Math.ceil(rawStep / 5) * 5;
 }
 
-function resolveRequiredPixelsPerMinute(
-  primaryItems: TimedTimelineItem[],
-  standalonePauseItems: TimedTimelineItem[],
-  baseHourRowHeightPx: number,
-): number {
-  const basePixelsPerMinute = baseHourRowHeightPx / 60;
-  const blocks = [
-    ...primaryItems.map((entry) => ({
-      elapsedSeconds: entry.elapsedSeconds,
-      sortIndex: entry.sortIndex,
-      heightPx: RAIL_ITEM_HEIGHT_PX,
-    })),
-    ...standalonePauseItems.map((entry) => ({
-      elapsedSeconds: entry.elapsedSeconds,
-      sortIndex: entry.sortIndex,
-      heightPx: PAUSE_ITEM_HEIGHT_PX,
-    })),
-  ].sort(
-    (left, right) =>
-      left.elapsedSeconds - right.elapsedSeconds || left.sortIndex - right.sortIndex,
-  );
-
-  let requiredPixelsPerMinute = basePixelsPerMinute;
-  for (let index = 1; index < blocks.length; index += 1) {
-    const previous = blocks[index - 1];
-    const current = blocks[index];
-    const deltaMinutes = Math.max(
-      (current.elapsedSeconds - previous.elapsedSeconds) / 60,
-      MIN_TIME_DELTA_MINUTES,
-    );
-    requiredPixelsPerMinute = Math.max(
-      requiredPixelsPerMinute,
-      (previous.heightPx + CARD_VERTICAL_GAP_PX) / deltaMinutes,
-    );
-  }
-
-  return requiredPixelsPerMinute;
-}
-
 function buildDayWindow(anchor: Date): Date[] {
   const start = addDays(anchor, -3);
   return Array.from({ length: DAY_WINDOW_DAYS }, (_, index) => addDays(start, index));
@@ -310,6 +268,7 @@ export function TimelineTimelineView({
   onRemove,
 }: TimelineTimelineViewProps) {
   const normalizedHourZoom = Math.min(1.5, Math.max(0.75, hourZoom));
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
   const timedItems = useMemo(
     () => buildTimedItems(items, prediction, reference),
@@ -425,16 +384,8 @@ export function TimelineTimelineView({
     };
   }, [filteredPauseItems, filteredPrimaryItems]);
 
-  const pixelsPerMinute = useMemo(
-    () =>
-      resolveRequiredPixelsPerMinute(
-        filteredPrimaryItems,
-        pauseAttachment.unattachedPauses,
-        BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom,
-      ),
-    [filteredPrimaryItems, normalizedHourZoom, pauseAttachment.unattachedPauses],
-  );
-  const hourRowHeightPx = pixelsPerMinute * 60;
+  const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
+  const pixelsPerMinute = hourRowHeightPx / 60;
   const canvasHeight = Math.max(totalHours * hourRowHeightPx, 0);
 
   const events = useMemo(() => {
@@ -508,6 +459,37 @@ export function TimelineTimelineView({
     return (minuteOfDay - startMinutes) * pixelsPerMinute;
   }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
 
+  const firstVisibleTopPx = useMemo(() => {
+    const eventTopPx = events[0]?.topPx;
+    const pauseTopPx = standalonePauses[0]?.topPx;
+    if (Number.isFinite(eventTopPx) && Number.isFinite(pauseTopPx)) {
+      return Math.min(eventTopPx as number, pauseTopPx as number);
+    }
+    if (Number.isFinite(eventTopPx)) return eventTopPx as number;
+    if (Number.isFinite(pauseTopPx)) return pauseTopPx as number;
+    return null;
+  }, [events, standalonePauses]);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx;
+    if (preferredTopPx === null) {
+      viewport.scrollTop = 0;
+      return;
+    }
+
+    const targetScrollTop = Math.max(
+      0,
+      Math.min(
+        preferredTopPx - hourRowHeightPx * 0.5,
+        Math.max(0, viewport.scrollHeight - viewport.clientHeight),
+      ),
+    );
+    viewport.scrollTop = targetScrollTop;
+  }, [currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx, selectedDayKey]);
+
   const selectedDayHasEvents = events.length > 0 || standalonePauses.length > 0;
 
   return (
@@ -539,7 +521,7 @@ export function TimelineTimelineView({
         <span className="rvi-tl-schedule__legend-next">To next</span>
       </div>
 
-      <div className="rvi-tl-schedule__viewport">
+      <div ref={viewportRef} className="rvi-tl-schedule__viewport">
         <div className="rvi-tl-schedule__times" aria-hidden>
           {hourMarks.map((hour, index) => {
             const topPx = index * hourRowHeightPx;
