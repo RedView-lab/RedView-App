@@ -13,7 +13,7 @@
   }
 
   .rvi-tl-schedule__event {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
   .rvi-tl-schedule__event-main {
@@ -64,7 +64,7 @@
   }
 
   .rvi-tl-schedule__event {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 4px;
   }
 
@@ -91,9 +91,7 @@
     text-align: right;
   }
   .rvi-tl-schedule__event-favorite {
-    width: 14px;
-    min-width: 14px;
-    justify-self: end;
+    display: none;
   }
   .rvi-tl-schedule__event-metric--next {
     width: auto;
@@ -113,11 +111,13 @@
 
   .rvi-tl-schedule__actions {
     display: inline-flex;
-    position: static;
-    transform: none;
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
     opacity: 1;
     pointer-events: auto;
-    padding-left: 0;
+    padding: 0;
   }
 
   .rvi-tl-schedule__action--visibility,
@@ -192,9 +192,7 @@
     text-align: right;
   }
   .rvi-tl-schedule__event-favorite {
-    width: 14px;
-    min-width: 14px;
-    justify-self: end;
+    display: none;
   }
   .rvi-tl-schedule__event-metric--next {
     width: auto;
@@ -214,8 +212,10 @@
 
   .rvi-tl-schedule__actions {
     display: inline-flex;
-    position: static;
-    transform: none;
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
     opacity: 1;
     pointer-events: auto;
   }

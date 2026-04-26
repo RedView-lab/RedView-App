@@ -6,7 +6,7 @@
  * still drive placement fallback and km markers, but the user now navigates a
  * date strip and reads the route as scheduled checkpoints.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
@@ -53,12 +53,26 @@ interface AttachedPause {
   id: string;
   durationMin: number;
   visible: boolean;
+  heightPx: number;
 }
 
 interface TimelineEvent extends TimedTimelineItem {
+  scheduledTopPx: number;
   topPx: number;
   attachedPauses: AttachedPause[];
   toNextSeconds: number | null;
+  cardHeightPx: number;
+  heightPx: number;
+}
+
+interface TimelineStandalonePause {
+  id: string;
+  scheduledTopPx: number;
+  topPx: number;
+  durationMin: number;
+  visible: boolean;
+  heightPx: number;
+  sortIndex: number;
 }
 
 const RAIL_HEADER_HEIGHT_PX = 30;
@@ -68,6 +82,8 @@ const DEFAULT_START_MINUTES = 8 * 60;
 const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
+const PAUSE_CHIP_MIN_HEIGHT_PX = 28;
+const TIMELINE_BLOCK_GAP_PX = 4;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -180,6 +196,26 @@ function formatHourLabel(hour: number, isBoundary: boolean): string {
       .replace('\u202f', ' ');
   }
   return `${hour}:00`;
+}
+
+function resolvePauseHeightPx(durationMin: number, pixelsPerMinute: number): number {
+  if (!Number.isFinite(durationMin) || durationMin <= 0) return PAUSE_CHIP_MIN_HEIGHT_PX;
+  return Math.max(PAUSE_CHIP_MIN_HEIGHT_PX, durationMin * pixelsPerMinute);
+}
+
+function buildFavoritePoiPause(
+  item: TimelineItem,
+  rhythm?: RhythmState,
+): Omit<AttachedPause, 'heightPx'> | null {
+  if (!rhythm?.pauseAtFavoritePois) return null;
+  if (item.kind !== 'poi' || !item.favorite || !item.poiCategory) return null;
+  const durationMin = rhythm.poiPauseDurations[item.poiCategory];
+  if (!Number.isFinite(durationMin) || (durationMin as number) <= 0) return null;
+  return {
+    id: `poi-pause-${item.id}`,
+    durationMin: durationMin as number,
+    visible: item.visible !== false,
+  };
 }
 
 function resolveTotalDistanceM(items: TimelineItem[], prediction?: PredictionResult | null): number {
@@ -358,22 +394,27 @@ export function TimelineTimelineView({
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
   const pauseAttachment = useMemo(() => {
     const usedPauseIds = new Set<string>();
-    const attachedByEventId = new Map<string, AttachedPause[]>();
+    const attachedByEventId = new Map<string, Array<Omit<AttachedPause, 'heightPx'>>>();
 
     filteredPrimaryItems.forEach((entry) => {
-      const attachedPauses = filteredPauseItems
-        .filter((pause) => {
-          if (usedPauseIds.has(pause.item.id)) return false;
-          return Math.abs(pause.distanceKm - entry.distanceKm) <= 0.15;
-        })
-        .map((pause) => {
+      const attachedPauses: Array<Omit<AttachedPause, 'heightPx'>> = [];
+      const favoritePoiPause = buildFavoritePoiPause(entry.item, rhythm);
+      if (favoritePoiPause) {
+        attachedPauses.push(favoritePoiPause);
+      }
+
+      if (entry.item.kind !== 'start' && entry.item.kind !== 'end') {
+        filteredPauseItems.forEach((pause) => {
+          if (usedPauseIds.has(pause.item.id)) return;
+          if (Math.abs(pause.distanceKm - entry.distanceKm) > 0.15) return;
           usedPauseIds.add(pause.item.id);
-          return {
+          attachedPauses.push({
             id: pause.item.id,
             durationMin: pause.item.durationMin ?? 0,
             visible: pause.item.visible !== false,
-          };
+          });
         });
+      }
 
       attachedByEventId.set(entry.item.id, attachedPauses);
     });
@@ -382,39 +423,113 @@ export function TimelineTimelineView({
       attachedByEventId,
       unattachedPauses: filteredPauseItems.filter((pause) => !usedPauseIds.has(pause.item.id)),
     };
-  }, [filteredPauseItems, filteredPrimaryItems]);
+  }, [filteredPauseItems, filteredPrimaryItems, rhythm]);
 
   const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
   const pixelsPerMinute = hourRowHeightPx / 60;
-  const canvasHeight = Math.max(totalHours * hourRowHeightPx, 0);
+  const canvasBaseHeight = Math.max(totalHours * hourRowHeightPx, 0);
 
-  const events = useMemo(() => {
+  const scheduledEvents = useMemo(() => {
     return filteredPrimaryItems.map((entry, index): TimelineEvent => {
       const nextEntry = filteredPrimaryItems[index + 1] ?? null;
-      const attachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
+      const attachedPauses = (pauseAttachment.attachedByEventId.get(entry.item.id) ?? []).map(
+        (pause) => ({
+          ...pause,
+          heightPx: resolvePauseHeightPx(pause.durationMin, pixelsPerMinute),
+        }),
+      );
 
-      const topPx = (entry.minuteOfDay - startMinutes) * pixelsPerMinute;
+      const scheduledTopPx = (entry.minuteOfDay - startMinutes) * pixelsPerMinute;
+      const pauseColumnHeightPx = attachedPauses.reduce(
+        (totalHeight, pause, pauseIndex) =>
+          totalHeight + pause.heightPx + (pauseIndex > 0 ? TIMELINE_BLOCK_GAP_PX : 0),
+        0,
+      );
+      const cardHeightPx = Math.max(RAIL_ITEM_HEIGHT_PX, pauseColumnHeightPx);
+      const heightPx = Math.max(cardHeightPx, pauseColumnHeightPx, RAIL_ITEM_HEIGHT_PX);
 
       return {
         ...entry,
-        topPx,
+        scheduledTopPx,
+        topPx: scheduledTopPx,
         attachedPauses,
         toNextSeconds:
           nextEntry && Number.isFinite(nextEntry.elapsedSeconds)
             ? Math.max(0, nextEntry.elapsedSeconds - entry.elapsedSeconds)
             : null,
+        cardHeightPx,
+        heightPx,
       };
     });
   }, [filteredPrimaryItems, pauseAttachment.attachedByEventId, pixelsPerMinute, startMinutes]);
 
-  const standalonePauses = useMemo(() => {
+  const scheduledStandalonePauses = useMemo((): TimelineStandalonePause[] => {
     return pauseAttachment.unattachedPauses.map((pause) => ({
       id: pause.item.id,
+      scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
       topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
       durationMin: pause.item.durationMin ?? 0,
       visible: pause.item.visible !== false,
+      heightPx: resolvePauseHeightPx(pause.item.durationMin ?? 0, pixelsPerMinute),
+      sortIndex: pause.sortIndex,
     }));
   }, [pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes]);
+
+  const { events, standalonePauses, canvasHeight, firstVisibleTopPx } = useMemo(() => {
+    const blocks: Array<{
+      id: string;
+      kind: 'event' | 'pause';
+      scheduledTopPx: number;
+      heightPx: number;
+      sortIndex: number;
+    }> = [
+      ...scheduledEvents.map((event) => ({
+        id: event.item.id,
+        kind: 'event' as const,
+        scheduledTopPx: event.scheduledTopPx,
+        heightPx: event.heightPx,
+        sortIndex: event.sortIndex,
+      })),
+      ...scheduledStandalonePauses.map((pause) => ({
+        id: pause.id,
+        kind: 'pause' as const,
+        scheduledTopPx: pause.scheduledTopPx,
+        heightPx: pause.heightPx,
+        sortIndex: pause.sortIndex,
+      })),
+    ].sort(
+      (left, right) =>
+        left.scheduledTopPx - right.scheduledTopPx ||
+        left.sortIndex - right.sortIndex ||
+        (left.kind === right.kind ? 0 : left.kind === 'event' ? -1 : 1),
+    );
+
+    const positionedTopById = new Map<string, number>();
+    let nextAvailableTopPx = 0;
+    let maxBottomPx = canvasBaseHeight;
+    let firstTopPx: number | null = null;
+
+    blocks.forEach((block) => {
+      const topPx = Math.max(block.scheduledTopPx, nextAvailableTopPx);
+      positionedTopById.set(block.id, topPx);
+      nextAvailableTopPx = topPx + block.heightPx + TIMELINE_BLOCK_GAP_PX;
+      maxBottomPx = Math.max(maxBottomPx, topPx + block.heightPx);
+      if (firstTopPx === null) firstTopPx = topPx;
+    });
+
+    return {
+      events: scheduledEvents.map((event) => ({
+        ...event,
+        topPx: positionedTopById.get(event.item.id) ?? event.scheduledTopPx,
+      })),
+      standalonePauses: scheduledStandalonePauses.map((pause) => ({
+        ...pause,
+        topPx: positionedTopById.get(pause.id) ?? pause.scheduledTopPx,
+      })),
+      canvasHeight: maxBottomPx,
+      firstVisibleTopPx: firstTopPx,
+    };
+  }, [canvasBaseHeight, scheduledEvents, scheduledStandalonePauses]);
 
   const kmMarkerStep = useMemo(
     () => resolveMarkerKmStep(config, markerStepKm),
@@ -458,17 +573,6 @@ export function TimelineTimelineView({
     if (minuteOfDay < startMinutes || minuteOfDay > endMinutes) return null;
     return (minuteOfDay - startMinutes) * pixelsPerMinute;
   }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
-
-  const firstVisibleTopPx = useMemo(() => {
-    const eventTopPx = events[0]?.topPx;
-    const pauseTopPx = standalonePauses[0]?.topPx;
-    if (Number.isFinite(eventTopPx) && Number.isFinite(pauseTopPx)) {
-      return Math.min(eventTopPx as number, pauseTopPx as number);
-    }
-    if (Number.isFinite(eventTopPx)) return eventTopPx as number;
-    if (Number.isFinite(pauseTopPx)) return pauseTopPx as number;
-    return null;
-  }, [events, standalonePauses]);
 
   useEffect(() => {
     const viewport = viewportRef.current;
@@ -578,15 +682,18 @@ export function TimelineTimelineView({
               event.item.kind === 'pause' && event.item.durationMin
                 ? formatPauseDuration(event.item.durationMin)
                 : event.item.label || 'Point sans nom';
+            const eventStyle = {
+              top: event.topPx,
+              minHeight: event.heightPx,
+              '--rvi-tl-card-height': `${event.cardHeightPx}px`,
+              animationDelay: `${Math.min(index * 18, 240)}ms`,
+            } as CSSProperties;
 
             return (
               <article
                 key={event.item.id}
                 className={`rvi-tl-schedule__event${selected ? ' is-selected' : ''}`}
-                style={{
-                  top: event.topPx,
-                  animationDelay: `${Math.min(index * 18, 240)}ms`,
-                }}
+                style={eventStyle}
                 data-kind={event.item.kind}
               >
                 <button
@@ -622,6 +729,9 @@ export function TimelineTimelineView({
                     <span
                       key={pause.id}
                       className={`rvi-tl-schedule__pause${pause.visible ? ' is-visible' : ''}`}
+                      style={{
+                        '--rvi-tl-pause-height': `${pause.heightPx}px`,
+                      } as CSSProperties}
                     >
                       <IconPauseCircle size={14} />
                       <span>{formatPauseDuration(pause.durationMin)}</span>
@@ -676,8 +786,9 @@ export function TimelineTimelineView({
               className="rvi-tl-schedule__pause rvi-tl-schedule__pause--standalone"
               style={{
                 top: pause.topPx,
+                '--rvi-tl-pause-height': `${pause.heightPx}px`,
                 animationDelay: `${Math.min((events.length + index) * 18, 240)}ms`,
-              }}
+              } as CSSProperties}
             >
               <IconPauseCircle size={14} />
               <span>{formatPauseDuration(pause.durationMin)}</span>
