@@ -30,6 +30,7 @@ import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
+  extractRouteProfileFromPoints,
 } from '../lib/route-metrics';
 import { analyzeBrouterRoute } from '../lib/routeAudit/analyzeBrouterRoute';
 import type { Itinerary, ItineraryProject, ItineraryRouteAuditFinding } from '../types';
@@ -185,9 +186,11 @@ export function useItineraryBrouterRouting({
 
           const geometryPoints = toGeometryRoutePoints(route.coordinates);
           const routeProfile = extractRouteProfileFromBrouter(route);
-          const patchRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
-            ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
-            : geometryPoints;
+          const patchRoutePoints = buildStoredRoutePointsFromBrouter(
+            geometryPoints,
+            routeProfile,
+            route.distanceM,
+          );
           const patchSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
 
           setProject((project) => {
@@ -331,9 +334,11 @@ export function useItineraryBrouterRouting({
 
           const geometryPoints = toGeometryRoutePoints(route.coordinates);
           const routeProfile = extractRouteProfileFromBrouter(route);
-          const segmentRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
-            ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
-            : geometryPoints;
+          const segmentRoutePoints = buildStoredRoutePointsFromBrouter(
+            geometryPoints,
+            routeProfile,
+            route.distanceM,
+          );
           const segmentSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
 
           setProject((project) => {
@@ -529,16 +534,16 @@ export function useItineraryBrouterRouting({
 
         const geometryPoints = toGeometryRoutePoints(route.coordinates);
         const routeProfile = extractRouteProfileFromBrouter(route);
-        const elevationMetrics = routeProfile
-          ? computeRouteElevationMetrics(routeProfile)
-          : null;
+        const routePoints = buildStoredRoutePointsFromBrouter(
+          geometryPoints,
+          routeProfile,
+          route.distanceM,
+        );
+        const elevationMetrics = computeRouteElevationMetrics(routePoints);
         const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
         const auditRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
           ? toStoredRoutePoints(routeProfile)
-          : geometryPoints;
-        const routePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
-          ? enrichGeometryRoutePoints(geometryPoints, routeProfile)
-          : geometryPoints;
+          : routePoints;
         const distanceM = route.distanceM > 0 ? route.distanceM : routeLengthM(routePoints);
         const distanceKm = roundDistanceKm(distanceM);
         const ascentM = elevationMetrics
@@ -659,6 +664,56 @@ function toGeometryRoutePoints(
   return coordinates.map((coordinate) => ({
     lat: coordinate[1],
     lon: coordinate[0],
+    elevationM: Number.isFinite((coordinate as [number, number, number?])[2])
+      ? ((coordinate as [number, number, number?])[2] as number)
+      : null,
+  }));
+}
+
+function buildStoredRoutePointsFromBrouter(
+  geometryPoints: NonNullable<Itinerary['gpxRoute']>['points'],
+  messageProfile:
+    | Array<{
+        lat: number;
+        lon: number;
+        distanceM: number;
+        elevationM: number;
+        gradientPct: number;
+      }>
+    | null,
+  targetDistanceM: number,
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  const geometryProfile = extractRouteProfileFromPoints(geometryPoints);
+  const denseGeometryPoints = geometryProfile
+    ? scaleRouteProfileDistances(toStoredRoutePoints(geometryProfile), targetDistanceM)
+    : null;
+
+  if (denseGeometryPoints) {
+    return denseGeometryPoints;
+  }
+
+  return messageProfile
+    ? enrichGeometryRoutePoints(geometryPoints, messageProfile)
+    : geometryPoints;
+}
+
+function scaleRouteProfileDistances(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+  targetDistanceM: number,
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (points.length === 0 || !(targetDistanceM > 0)) return points;
+
+  const totalDistanceM = points[points.length - 1]?.distanceM;
+  if (!Number.isFinite(totalDistanceM) || (totalDistanceM as number) <= 0) {
+    return points;
+  }
+
+  const scale = targetDistanceM / (totalDistanceM as number);
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 1e-6) return points;
+
+  return points.map((point) => ({
+    ...point,
+    distanceM: Number.isFinite(point.distanceM) ? (point.distanceM as number) * scale : point.distanceM,
   }));
 }
 
