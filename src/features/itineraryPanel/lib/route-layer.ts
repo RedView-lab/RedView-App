@@ -32,6 +32,8 @@ const FORBIDDEN_ZONE_LINE_LAYER_ID = 'brouter-forbidden-zone-line-layer';
 const FORBIDDEN_ZONE_DRAFT_SOURCE_ID = 'brouter-forbidden-zone-draft-source';
 const FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID = 'brouter-forbidden-zone-draft-fill-layer';
 const FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID = 'brouter-forbidden-zone-draft-line-layer';
+const FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-halo-layer';
+const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -145,25 +147,55 @@ function buildForbiddenZoneGeoJson(
 function buildForbiddenZoneDraftGeoJson(
   points?: Array<{ lon: number; lat: number }> | null,
 ): GeoJSON.FeatureCollection {
-  if (!points || points.length < 3) {
+  if (!points || points.length === 0) {
     return { type: 'FeatureCollection', features: [] };
+  }
+
+  const features: GeoJSON.Feature[] = points.map((point, index) => ({
+    type: 'Feature',
+    properties: {
+      role: 'vertex',
+      index,
+      color: '#ff3b30',
+      fillColor: '#ffffff',
+    },
+    geometry: {
+      type: 'Point',
+      coordinates: [point.lon, point.lat],
+    },
+  }));
+
+  if (points.length >= 3) {
+    features.unshift({
+      type: 'Feature',
+      properties: {
+        role: 'shape',
+        color: '#ff3b30',
+        fillColor: '#ff3b30',
+      },
+      geometry: {
+        type: 'Polygon',
+        coordinates: [closePolygonRing(points.map((point) => [point.lon, point.lat]))],
+      },
+    });
+  } else if (points.length >= 2) {
+    features.unshift({
+      type: 'Feature',
+      properties: {
+        role: 'shape',
+        color: '#ff3b30',
+        fillColor: '#ff3b30',
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates: points.map((point) => [point.lon, point.lat]),
+      },
+    });
   }
 
   return {
     type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        properties: {
-          color: '#ff3b30',
-          fillColor: '#ff3b30',
-        },
-        geometry: {
-          type: 'Polygon',
-          coordinates: [closePolygonRing(points.map((point) => [point.lon, point.lat]))],
-        },
-      },
-    ],
+    features,
   };
 }
 
@@ -390,6 +422,7 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
     type: 'fill',
     source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
     slot: 'top',
+    filter: ['==', ['get', 'role'], 'shape'],
     layout: {
       visibility: 'none',
     },
@@ -405,6 +438,7 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
     type: 'line',
     source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
     slot: 'top',
+    filter: ['==', ['get', 'role'], 'shape'],
     layout: {
       visibility: 'none',
     },
@@ -414,6 +448,44 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       'line-opacity': 0.88,
       'line-dasharray': [1, 1],
       'line-emissive-strength': 1,
+    },
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
+    type: 'circle',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'vertex'],
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'circle-radius': 11,
+      'circle-color': '#ffffff',
+      'circle-opacity': 0.42,
+      'circle-stroke-width': 0,
+      'circle-emissive-strength': 1,
+    },
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
+    type: 'circle',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'vertex'],
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'circle-radius': 6,
+      'circle-color': ['coalesce', ['get', 'fillColor'], '#ffffff'],
+      'circle-stroke-width': 3,
+      'circle-stroke-color': ['coalesce', ['get', 'color'], '#ff3b30'],
+      'circle-opacity': 1,
+      'circle-stroke-opacity': 0.98,
+      'circle-emissive-strength': 1.12,
     },
   });
 
@@ -789,14 +861,24 @@ export function setForbiddenZoneDraft(
     const source = ensureForbiddenZoneDraftLayers(map);
     if (!source) return;
     source.setData(buildForbiddenZoneDraftGeoJson(points));
-    const visibility = points.length >= 3 ? 'visible' : 'none';
+    const fillVisibility = points.length >= 3 ? 'visible' : 'none';
+    const lineVisibility = points.length >= 2 ? 'visible' : 'none';
+    const vertexVisibility = points.length >= 1 ? 'visible' : 'none';
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID)) {
-      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID, 'visibility', visibility);
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID, 'visibility', fillVisibility);
       map.moveLayer(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID);
     }
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID)) {
-      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, 'visibility', visibility);
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, 'visibility', lineVisibility);
       map.moveLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID);
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID, 'visibility', vertexVisibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID);
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, 'visibility', vertexVisibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID);
     }
   } catch {
     /* noop */
@@ -812,6 +894,12 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
     }
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID)) {
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */
