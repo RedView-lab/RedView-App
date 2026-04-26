@@ -1,0 +1,204 @@
+/* Timeline edit controls */
+
+.rvi-tl-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+  min-width: 0;
+}
+
+.rvi-tl-edit__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.rvi-tl-edit__field,
+.rvi-tl-edit__zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 74px;
+}
+
+.rvi-tl-edit__zoom {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.rvi-tl-edit__field-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.64);
+  white-space: nowrap;
+  flex: 0 0 30px;
+  max-width: 44px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rvi-tl-edit__select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  background: transparent;
+  color: #fff;
+}
+
+.rvi-tl-edit__select-wrap > svg,
+.rvi-tl-edit__select-wrap > span {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  opacity: 0.88;
+}
+
+.rvi-tl-edit__select {
+  appearance: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  padding: 6px 28px 6px 10px;
+  cursor: pointer;
+}
+
+.rvi-tl-edit__zoom-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.rvi-tl-edit__zoom-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.18s ease, opacity 0.18s ease;
+}
+
+.rvi-tl-edit__zoom-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvi-tl-edit__zoom-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.rvi-tl-edit__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.rvi-tl-edit__chip {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 32px;
+  padding: 5px 4px 5px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+.rvi-tl-edit__chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvi-tl-edit__chip-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.64);
+  flex-shrink: 0;
+  color: #fff;
+}
+
+.rvi-tl-edit__chip-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.64);
+  white-space: nowrap;
+}
+
+.rvi-tl-edit__chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.rvi-tl-edit__favorite-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(58, 58, 58, 0.92);
+  color: #ffbe2e;
+}
+
+.rvi-tl-edit__divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* Split add button */
+.rvi-tl-add-split {
+  display: inline-flex;
+  background: #890000;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: background 0.18s ease;
+}
+.rvi-tl-add-split:hover { background: #9d0606; }
+.rvi-tl-add-split__main,
+.rvi-tl-add-split__chevron {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 8px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.rvi-tl-add-split__main { padding-right: 4px; }
+.rvi-tl-add-split__chevron { padding-left: 4px; }
+.rvi-tl-add-split__main:hover,
+.rvi-tl-add-split__chevron:hover {
+  background: rgba(255, 255, 255, 0.08);
+}

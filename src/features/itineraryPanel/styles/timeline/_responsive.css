@@ -1,0 +1,211 @@
+/* Timeline responsive rules */
+
+@container (max-width: 340px) {
+  .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
+  .rvi-tl-tabs__label { font-size: 11px; }
+  .rvi-tl-row__kind-text { width: 44px; }
+  .rvi-tl-row__distance { min-width: 36px; }
+
+  .rvi-tl-schedule__legend {
+    grid-template-columns: 48px minmax(0, 1fr) 72px 56px;
+    padding-left: 12px;
+    padding-right: 8px;
+  }
+
+  .rvi-tl-schedule__event {
+    grid-template-columns: 1fr;
+  }
+
+  .rvi-tl-schedule__event-main {
+    grid-template-columns: 20px minmax(0, 1fr) 56px 56px 20px;
+  }
+
+  .rvi-tl-schedule__event-side {
+    justify-content: flex-start;
+    padding-left: 28px;
+  }
+
+  .rvi-tl-schedule__actions {
+    opacity: 1;
+    pointer-events: auto;
+    position: static;
+    transform: none;
+    padding-left: 28px;
+  }
+}
+
+@container (max-width: 460px) {
+  .rvi-tl-schedule__days {
+    min-height: 46px;
+  }
+
+  .rvi-tl-schedule__day {
+    padding: 7px 2px 9px;
+  }
+
+  .rvi-tl-schedule__viewport {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .rvi-tl-schedule__time-label {
+    right: 4px;
+    font-size: 11px;
+  }
+
+  .rvi-tl-schedule__km-marker {
+    width: 40px;
+    font-size: 10px;
+  }
+
+  .rvi-tl-schedule__event,
+  .rvi-tl-schedule__pause--standalone {
+    left: 6px;
+    right: 6px;
+  }
+
+  .rvi-tl-schedule__event {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .rvi-tl-schedule__event-main {
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
+    grid-template-areas:
+      'icon name favorite'
+      'icon from next';
+    row-gap: 2px;
+  }
+
+  .rvi-tl-schedule__event-icon { grid-area: icon; }
+  .rvi-tl-schedule__event-name { grid-area: name; }
+  .rvi-tl-schedule__event-metric { grid-area: from; min-width: 0; text-align: left; }
+  .rvi-tl-schedule__event-favorite { grid-area: favorite; justify-self: end; }
+  .rvi-tl-schedule__event-metric--next {
+    grid-area: next;
+    width: auto;
+    min-width: 0;
+    text-align: right;
+    align-self: center;
+  }
+
+  .rvi-tl-schedule__event-card {
+    min-height: 52px;
+    padding: 8px 10px;
+  }
+
+  .rvi-tl-schedule__event-side {
+    padding-left: 0;
+  }
+
+  .rvi-tl-schedule__actions {
+    display: inline-flex;
+    position: static;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+    padding-left: 0;
+  }
+
+  .rvi-tl-schedule__action--visibility,
+  .rvi-tl-schedule__action--remove {
+    display: none;
+  }
+}
+
+@media (max-width: 400px) {
+  .rvi-tl-edit__zoom {
+    margin-left: 0;
+  }
+
+  .rvi-tl-edit__controls {
+    gap: 8px;
+  }
+
+  .rvi-tl-row__kind-text { width: 44px; }
+  .rvi-tl-list__col-type { padding-left: 40px; }
+
+  .rvi-tl-schedule__day {
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+
+  .rvi-tl-schedule__legend {
+    display: none;
+  }
+
+  .rvi-tl-schedule__viewport {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .rvi-tl-schedule__time-label {
+    right: 4px;
+    font-size: 11px;
+  }
+
+  .rvi-tl-schedule__km-marker {
+    left: 0;
+    width: 40px;
+    padding: 0 4px;
+    font-size: 10px;
+  }
+
+  .rvi-tl-schedule__event,
+  .rvi-tl-schedule__pause--standalone {
+    left: 6px;
+    right: 6px;
+  }
+
+  .rvi-tl-schedule__event-main {
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
+    grid-template-areas:
+      'icon name favorite'
+      'icon from next';
+    row-gap: 2px;
+  }
+
+  .rvi-tl-schedule__event-icon { grid-area: icon; }
+  .rvi-tl-schedule__event-name { grid-area: name; }
+  .rvi-tl-schedule__event-metric { grid-area: from; text-align: left; }
+  .rvi-tl-schedule__event-favorite { grid-area: favorite; justify-self: end; }
+  .rvi-tl-schedule__event-metric--next {
+    grid-area: next;
+    width: auto;
+    text-align: right;
+    align-self: center;
+  }
+
+  .rvi-tl-schedule__event-card {
+    min-height: 52px;
+    padding: 8px 10px;
+  }
+
+  .rvi-tl-schedule__event-side {
+    padding-left: 0;
+  }
+
+  .rvi-tl-schedule__actions {
+    display: inline-flex;
+    position: static;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .rvi-tl-schedule__action--visibility,
+  .rvi-tl-schedule__action--remove {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rvi-tl-list__item,
+  .rvi-tl-schedule__event,
+  .rvi-tl-schedule__pause--standalone { animation: none; }
+  .rvi-tl-row,
+  .rvi-tl-tool,
+  .rvi-tl-tabs__btn,
+  .rvi-tl-row__action,
+  .rvi-tl-schedule__event-card,
+  .rvi-tl-schedule__day,
+  .rvi-tl-schedule__action { transition: none; }
+}

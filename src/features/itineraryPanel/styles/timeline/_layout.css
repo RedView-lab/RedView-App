@@ -1,0 +1,111 @@
+/* Timeline container and header */
+
+.rvi-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-radius: var(--rvi-radius);
+  flex: 1 1 auto;
+  min-height: 260px;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.rvi-timeline__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+.rvi-timeline__body::-webkit-scrollbar { width: 6px; height: 6px; }
+.rvi-timeline__body::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.rvi-timeline--timeline .rvi-timeline__body {
+  overflow: hidden;
+}
+
+.rvi-tl-head {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+/* Segmented view switcher */
+.rvi-tl-tabs {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+.rvi-tl-tabs__btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+}
+.rvi-tl-tabs__btn:hover { background: rgba(255, 255, 255, 0.04); }
+.rvi-tl-tabs__btn:active { transform: scale(0.98); }
+.rvi-tl-tabs__btn.is-active {
+  background: rgba(0, 0, 0, 0.4);
+  box-shadow: none;
+}
+.rvi-tl-tabs__btn.is-active .rvi-tl-tabs__label { color: #fff; }
+.rvi-tl-tabs__label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Header tool buttons */
+.rvi-tl-tool {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  transition: background 0.18s ease, transform 0.18s ease;
+  flex-shrink: 0;
+}
+.rvi-tl-tool:hover { background: rgba(255, 255, 255, 0.12); }
+.rvi-tl-tool:active { transform: scale(0.95); }
+.rvi-tl-tool.is-active {
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: none;
+  color: #fff;
+}
