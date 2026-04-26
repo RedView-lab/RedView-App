@@ -35,6 +35,7 @@ export interface ProjectStoreValue {
   duplicateItinerary: (id: string) => { createdItineraryId: string; createdItineraryName: string } | null;
   removeItinerary: (id: string) => boolean;
   clearItineraryRoute: (id: string) => void;
+  reverseItineraryGpx: (id: string) => boolean;
   appendTracePoint: (
     id: string,
     point: { lat: number; lon: number; label: string },

@@ -242,6 +242,7 @@ export function CenterPanelToolbar() {
   }, [activeTraceDistanceKm, activeTracePointCount]);
   const canSimplifyTrace = activeTracePointCount > 2;
   const canCleanTrace = activeTracePointCount > 2;
+  const canReverseTrace = activeTracePointCount > 1;
   const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
   const canMergeTrace = routeMergeTool?.canMerge ?? false;
   const mergeStatusMessage = routeMergeTool?.statusMessage ?? null;
@@ -358,6 +359,12 @@ export function CenterPanelToolbar() {
     }
     store.cleanItineraryGpxGlitches(activeItinerary.id);
     setToolbarStatus('Trace nettoyée');
+  };
+
+  const handleReverseTrace = () => {
+    if (!store || !activeItinerary || !canReverseTrace) return;
+    const reversed = store.reverseItineraryGpx(activeItinerary.id);
+    setToolbarStatus(reversed ? 'Sens du GPX inversé' : 'Inversion indisponible pour cette trace');
   };
 
   const handleToggleRouteAudit = () => {
@@ -493,7 +500,7 @@ export function CenterPanelToolbar() {
 
           <div className="rvc-center-toolbar__separator" aria-hidden="true" />
 
-          <ToolbarIconButton label="Inverser">
+          <ToolbarIconButton label="Inverser" onClick={handleReverseTrace} disabled={!canReverseTrace}>
             <IconSwitchHorizontal />
           </ToolbarIconButton>
 

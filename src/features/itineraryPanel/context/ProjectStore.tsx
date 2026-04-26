@@ -15,6 +15,7 @@ import {
   mergeItineraryProject,
   type MergeItineraryConnectorSegment,
 } from '../lib/merge-itinerary';
+import { reverseItineraryGpxProject } from '../lib/reverse-itinerary-gpx';
 import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/split-itinerary';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
 import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
@@ -258,6 +259,23 @@ export function ProjectProvider({
       });
     },
     [updateItinerary],
+  );
+
+  const reverseItineraryGpx = useCallback(
+    (id: string) => {
+      const currentProject = projectRef.current;
+      const nextProject = reverseItineraryGpxProject(currentProject, id);
+      if (!nextProject) return false;
+
+      const entry: TraceHistoryEntry = {
+        itineraryId: id,
+        before: structuredClone(currentProject),
+        after: structuredClone(nextProject),
+      };
+      pushTraceHistoryEntry(entry);
+      return true;
+    },
+    [pushTraceHistoryEntry],
   );
 
   const appendTracePoint = useCallback(
@@ -575,6 +593,7 @@ export function ProjectProvider({
       duplicateItinerary,
       removeItinerary,
       clearItineraryRoute,
+      reverseItineraryGpx,
       appendTracePoint,
       addForbiddenZone,
       simplifyItineraryGpx,
@@ -600,6 +619,7 @@ export function ProjectProvider({
       duplicateItinerary,
       removeItinerary,
       clearItineraryRoute,
+      reverseItineraryGpx,
       appendTracePoint,
       addForbiddenZone,
       simplifyItineraryGpx,

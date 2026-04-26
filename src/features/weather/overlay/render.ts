@@ -82,6 +82,12 @@ function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySam
   return { min, max };
 }
 
+function visiblePaletteBands(paletteBands: PaletteBandLike[] | undefined): PaletteBandLike[] | undefined {
+  if (!paletteBands?.length) return paletteBands;
+  const visibleBands = paletteBands.filter((band) => band.visible !== false);
+  return visibleBands.length > 0 ? visibleBands : paletteBands;
+}
+
 function paletteStops(
   metric: WeatherOverlayMetric,
   paletteBands: PaletteBandLike[] | undefined,
@@ -90,22 +96,35 @@ function paletteStops(
 ): readonly ColorStop[] {
   if (!paletteBands?.length) return getWeatherOverlayColorStops(metric);
 
+  const bandsForStops = visiblePaletteBands(paletteBands) ?? paletteBands;
   const span = Math.max(1e-6, maxValue - minValue);
-  const stops = paletteBands.map((band, index) => {
-    const fallbackRatio = paletteBands.length === 1 ? 1 : index / (paletteBands.length - 1);
+  const stops: ColorStop[] = [];
+
+  const firstBand = bandsForStops[0];
+  stops.push([0, hexToRgb(firstBand?.color ?? '#FFFFFF')]);
+
+  bandsForStops.forEach((band, index) => {
+    const fallbackRatio = bandsForStops.length === 1 ? 1 : index / (bandsForStops.length - 1);
     const startValue = Number.isFinite(band.minValue) ? band.minValue ?? minValue : minValue + span * fallbackRatio;
     const ratio = clamp((startValue - minValue) / span, 0, 1);
-    return [ratio, hexToRgb(band.color)] as const;
+    const color = hexToRgb(band.color);
+    const lastRatio = stops[stops.length - 1]?.[0] ?? -1;
+    if (ratio <= lastRatio) {
+      stops[stops.length - 1] = [lastRatio, color];
+      return;
+    }
+    stops.push([ratio, color]);
   });
 
-  const lastBand = paletteBands[paletteBands.length - 1];
+  const lastBand = bandsForStops[bandsForStops.length - 1];
   const lastRatio = clamp(
     ((Number.isFinite(lastBand?.maxValue) ? lastBand.maxValue ?? maxValue : maxValue) - minValue) / span,
     0,
     1,
   );
-  const lastColor = hexToRgb(lastBand?.color ?? paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
+  const lastColor = hexToRgb(lastBand?.color ?? bandsForStops[bandsForStops.length - 1]?.color ?? '#FFFFFF');
   if (lastRatio > (stops[stops.length - 1]?.[0] ?? 0)) stops.push([lastRatio, lastColor] as const);
+  if ((stops[stops.length - 1]?.[0] ?? 0) < 1) stops.push([1, lastColor] as const);
   return stops;
 }
 
@@ -132,8 +151,9 @@ function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color
   return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
 }
 
-function bandAlpha(paletteBands: PaletteBandLike[] | undefined, value: number): number {
+function bandAlpha(mode: WeatherOverlayMode, paletteBands: PaletteBandLike[] | undefined, value: number): number {
   if (!paletteBands?.length) return 255;
+  if (mode === 'gradient') return paletteBands.some((band) => band.visible !== false) ? 255 : 0;
   for (const band of paletteBands) {
     if (Number.isFinite(band.maxValue) && value < (band.maxValue as number)) {
       return band.visible === false ? 0 : 255;
@@ -179,7 +199,7 @@ function colorForValue(
   colorLookup: Uint8ClampedArray,
 ): ColorWithAlpha {
   if (!isFiniteValue(raw) || !isFiniteValue(ratio)) return [0, 0, 0, 0];
-  const alpha = bandAlpha(paletteBands, raw);
+  const alpha = bandAlpha(mode, paletteBands, raw);
   if (alpha === 0) return [0, 0, 0, 0];
   if (mode === 'fill' && paletteBands?.length) {
     const [r, g, b] = steppedBandColor(paletteBands, raw);
