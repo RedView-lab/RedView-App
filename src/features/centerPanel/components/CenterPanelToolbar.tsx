@@ -245,6 +245,8 @@ export function CenterPanelToolbar() {
   const canTrace = traceTool?.canTrace ?? false;
   const traceStatusMessage = traceTool?.statusMessage ?? null;
   const traceArmed = traceTool?.armed ?? false;
+  const canUndoTraceEdit = store?.canUndoTraceEdit ?? false;
+  const canRedoTraceEdit = store?.canRedoTraceEdit ?? false;
   const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
   const auditVisible = activeItinerary?.routeAudit?.visible === true;
   const simplifyTargetPoints = useMemo(
@@ -377,15 +379,27 @@ export function CenterPanelToolbar() {
     setToolbarStatus(null);
   };
 
+  const handleUndoTraceEdit = () => {
+    if (!store?.canUndoTraceEdit) return;
+    store.undoTraceEdit();
+    setToolbarStatus(null);
+  };
+
+  const handleRedoTraceEdit = () => {
+    if (!store?.canRedoTraceEdit) return;
+    store.redoTraceEdit();
+    setToolbarStatus(null);
+  };
+
   return (
     <section className="rvc-center-toolbar" aria-label="Barre d'outils centrale">
       <div className="rvc-center-toolbar__viewport">
         <div className="rvc-center-toolbar__track" role="toolbar" aria-label="Outils d'édition du parcours">
-          <ToolbarIconButton label="Annuler">
+          <ToolbarIconButton label="Annuler" onClick={handleUndoTraceEdit} disabled={!canUndoTraceEdit}>
             <IconUndo />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Rétablir">
+          <ToolbarIconButton label="Rétablir" onClick={handleRedoTraceEdit} disabled={!canRedoTraceEdit}>
             <IconRedo />
           </ToolbarIconButton>
 
