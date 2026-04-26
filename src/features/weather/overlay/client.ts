@@ -284,6 +284,19 @@ function buildGridEnvelope(
   };
 }
 
+function expandBoundsToCellEdges(
+  bounds: [west: number, south: number, east: number, north: number],
+  spacing: number,
+): [west: number, south: number, east: number, north: number] {
+  const halfSpacing = Math.max(0, spacing) * 0.5;
+  return [
+    clamp(bounds[0] - halfSpacing, -180, 180),
+    clamp(bounds[1] - halfSpacing, -85, 85),
+    clamp(bounds[2] + halfSpacing, -180, 180),
+    clamp(bounds[3] + halfSpacing, -85, 85),
+  ];
+}
+
 function coordCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(4)},${lng.toFixed(4)}`;
 }
@@ -484,8 +497,10 @@ export function buildWeatherGrid(
     }
   }
 
+  const imageBounds = expandBoundsToCellEdges(envelope.bounds, envelope.spacing);
+
   return {
-    bounds: envelope.bounds,
+    bounds: imageBounds,
     rows: envelope.rows,
     cols: envelope.cols,
     spacing: envelope.spacing,

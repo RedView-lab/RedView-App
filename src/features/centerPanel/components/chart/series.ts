@@ -42,6 +42,7 @@ export type AxisMetricId =
   | 'Vitesse moyenne'
   | 'Puissance'
   | 'Puissance moyenne'
+  | 'Altitude'
   | 'Inclinaison (°)'
   | 'Inclinaison (%)'
   | 'Surface'
@@ -53,7 +54,7 @@ export type AxisMetricId =
   | 'Humidité (%)'
   | 'Ensoleillement (min)';
 
-export type ChartMetricId = AxisMetricId | 'Altitude';
+export type ChartMetricId = AxisMetricId;
 
 export type AxisMode = 'distance' | 'temps' | 'heure';
 

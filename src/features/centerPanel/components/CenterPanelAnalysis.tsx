@@ -56,6 +56,7 @@ const axisOptions: AxisOption[] = [
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
   { value: 'Puissance moyenne', label: 'Puissance moyenne', tone: 'primary' },
+  { value: 'Altitude', label: 'Altitude', tone: 'primary' },
   { value: 'Inclinaison (°)', label: 'Inclinaison (°)', tone: 'primary' },
   { value: 'Inclinaison (%)', label: 'Inclinaison (%)', tone: 'primary' },
   { value: 'Surface', label: 'Surface', tone: 'primary' },
@@ -110,8 +111,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
   // chips). Read from the project so reopening it restores the chart.
-  // Migrate legacy axis labels so projects saved before the rename keep
-  // rendering without exposing the removed "Altitude" metric anymore.
+  // Migrate legacy axis labels so projects saved before label renames keep
+  // rendering on the intended route-backed metric.
   const rawAnalysis = projectStore?.project.analysis;
   const analysisState: AnalysisPanelState = rawAnalysis
     ? normalizeAnalysisState(rawAnalysis)
@@ -715,7 +716,7 @@ function lightenColor(hex: string, amount: number): string {
  * before a renaming round-trip cleanly through the dropdown selectors.
  */
 function migrateAxisMetric(value: string): AxisMetricId {
-  if (value === 'Dénivelé' || value === 'Altitude') return 'Inclinaison (%)';
+  if (value === 'Dénivelé') return 'Altitude';
   return value as AxisMetricId;
 }
 
