@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Map as MapboxMap, MapLayerMouseEvent, MapMouseEvent } from 'mapbox-gl';
+import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
@@ -173,21 +173,23 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
     refreshCursor();
 
-    const handleVertexEnter = () => {
-      hoverState = 'vertex';
-      refreshCursor();
-    };
-    const handleVertexLeave = () => {
-      if (hoverState === 'vertex') hoverState = 'none';
-      refreshCursor();
-    };
-    const handleSegmentEnter = () => {
-      if (hoverState !== 'vertex') hoverState = 'segment';
-      refreshCursor();
-    };
-    const handleSegmentLeave = () => {
-      if (hoverState === 'segment') hoverState = 'none';
-      refreshCursor();
+    const readHoverStateAtPoint = (point: MapMouseEvent['point']): 'none' | 'vertex' | 'segment' => {
+      if (
+        readIndexFromRenderedLayer(map, point, FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, 'index') != null
+      ) {
+        return 'vertex';
+      }
+      if (
+        readIndexFromRenderedLayer(
+          map,
+          point,
+          FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
+          'edgeIndex',
+        ) != null
+      ) {
+        return 'segment';
+      }
+      return 'none';
     };
 
     const finalizeIfDoubleClick = (
@@ -213,8 +215,24 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       updateDraftStatus(nextPoints);
     };
 
-    const handleVertexMouseDown = (event: MapLayerMouseEvent) => {
-      const pointIndex = readIndexFromLayerEvent(event, 'index');
+    const handleMapMouseMove = (event: MapMouseEvent) => {
+      if (dragState.kind === 'vertex') {
+        refreshCursor();
+        return;
+      }
+      const nextHoverState = readHoverStateAtPoint(event.point);
+      if (hoverState === nextHoverState) return;
+      hoverState = nextHoverState;
+      refreshCursor();
+    };
+
+    const handleMapMouseDown = (event: MapMouseEvent) => {
+      const pointIndex = readIndexFromRenderedLayer(
+        map,
+        event.point,
+        FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
+        'index',
+      );
       if (pointIndex == null) return;
       const original = event.originalEvent;
       if (original instanceof MouseEvent && original.button !== 0) return;
@@ -265,17 +283,18 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       }
     };
 
-    const handleSegmentClick = (event: MapLayerMouseEvent) => {
-      if (suppressNextClick) {
-        suppressNextClick = false;
-        return;
-      }
-      const edgeIndex = readIndexFromLayerEvent(event, 'edgeIndex');
-      if (edgeIndex == null) return;
+    const tryInsertPointOnHoveredSegment = (event: MapMouseEvent): Array<{ lat: number; lon: number }> | null => {
+      const edgeIndex = readIndexFromRenderedLayer(
+        map,
+        event.point,
+        FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
+        'edgeIndex',
+      );
+      if (edgeIndex == null) return null;
       const currentPoints = draftPointsRef.current;
       const start = currentPoints[edgeIndex];
       const end = currentPoints[(edgeIndex + 1) % currentPoints.length];
-      if (!start || !end) return;
+      if (!start || !end) return null;
 
       const startScreen = map.project([start.lon, start.lat]);
       const endScreen = map.project([end.lon, end.lat]);
@@ -289,20 +308,14 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       );
       const projectedLngLat = map.unproject([projection.x, projection.y]);
       const insertedPoint = { lat: projectedLngLat.lat, lon: projectedLngLat.lng };
-      if (sameDraftPoint(start, insertedPoint) || sameDraftPoint(end, insertedPoint)) return;
+      if (sameDraftPoint(start, insertedPoint) || sameDraftPoint(end, insertedPoint)) return null;
 
       const insertAt = edgeIndex + 1;
-      const nextPoints = [
+      return [
         ...currentPoints.slice(0, insertAt),
         insertedPoint,
         ...currentPoints.slice(insertAt),
       ];
-
-      const clickCount = event.originalEvent instanceof MouseEvent ? event.originalEvent.detail : 1;
-      if (finalizeIfDoubleClick(nextPoints, clickCount)) return;
-
-      suppressNextClick = true;
-      commitDraftPoints(nextPoints);
     };
 
     const handleMapClick = (event: MapMouseEvent) => {
@@ -310,13 +323,19 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         suppressNextClick = false;
         return;
       }
+      const segmentInsert = tryInsertPointOnHoveredSegment(event);
+      if (segmentInsert) {
+        const clickCount = event.originalEvent instanceof MouseEvent ? event.originalEvent.detail : 1;
+        if (finalizeIfDoubleClick(segmentInsert, clickCount)) return;
+        commitDraftPoints(segmentInsert);
+        return;
+      }
       const currentPoints = draftPointsRef.current;
-      const interiorInsert = currentPoints.length >= 3 && pointInDraftPolygon(
-        { lat: event.lngLat.lat, lon: event.lngLat.lng },
-        currentPoints,
-      )
-        ? insertDraftPointAtNearestSegment(map, currentPoints, event)
-        : null;
+      const interiorInsert =
+        currentPoints.length >= 3 &&
+        pointInDraftPolygon({ lat: event.lngLat.lat, lon: event.lngLat.lng }, currentPoints)
+          ? insertDraftPointAtNearestSegment(map, currentPoints, event)
+          : null;
 
       const nextPoints =
         interiorInsert ?? appendDraftPoint(currentPoints, { lat: event.lngLat.lat, lon: event.lngLat.lng });
@@ -327,23 +346,15 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       commitDraftPoints(nextPoints);
     };
 
-    map.on('mouseenter', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexEnter);
-    map.on('mouseleave', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexLeave);
-    map.on('mouseenter', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentEnter);
-    map.on('mouseleave', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentLeave);
-    map.on('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
-    map.on('click', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentClick);
+    map.on('mousemove', handleMapMouseMove);
+    map.on('mousedown', handleMapMouseDown);
     map.on('click', handleMapClick);
 
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
-      map.off('mouseenter', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexEnter);
-      map.off('mouseleave', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexLeave);
-      map.off('mouseenter', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentEnter);
-      map.off('mouseleave', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentLeave);
-      map.off('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
-      map.off('click', FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, handleSegmentClick);
+      map.off('mousemove', handleMapMouseMove);
+      map.off('mousedown', handleMapMouseDown);
       map.off('click', handleMapClick);
       if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
       if (wasDragPanEnabled) map.dragPan.enable();
@@ -466,8 +477,19 @@ function sameDraftPoint(
   );
 }
 
-function readIndexFromLayerEvent(event: MapLayerMouseEvent, propertyName: string): number | null {
-  for (const feature of event.features ?? []) {
+function readIndexFromRenderedLayer(
+  map: MapboxMap,
+  point: MapMouseEvent['point'],
+  layerId: string,
+  propertyName: string,
+): number | null {
+  if (!map.getLayer(layerId)) return null;
+
+  const features = map.queryRenderedFeatures(point, {
+    layers: [layerId],
+  });
+
+  for (const feature of features) {
     const indexValue = feature.properties?.[propertyName];
     const index = typeof indexValue === 'number' ? indexValue : Number(indexValue);
     if (!Number.isInteger(index) || index < 0) continue;
