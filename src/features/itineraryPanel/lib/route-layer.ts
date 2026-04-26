@@ -32,8 +32,8 @@ const FORBIDDEN_ZONE_LINE_LAYER_ID = 'brouter-forbidden-zone-line-layer';
 const FORBIDDEN_ZONE_DRAFT_SOURCE_ID = 'brouter-forbidden-zone-draft-source';
 const FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID = 'brouter-forbidden-zone-draft-fill-layer';
 const FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID = 'brouter-forbidden-zone-draft-line-layer';
-const FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-halo-layer';
-const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-layer';
+export const FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-halo-layer';
+export const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -461,9 +461,9 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       visibility: 'none',
     },
     paint: {
-      'circle-radius': 11,
+      'circle-radius': 15,
       'circle-color': '#ffffff',
-      'circle-opacity': 0.42,
+      'circle-opacity': 0.28,
       'circle-stroke-width': 0,
       'circle-emissive-strength': 1,
     },
@@ -479,7 +479,7 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       visibility: 'none',
     },
     paint: {
-      'circle-radius': 6,
+      'circle-radius': 7,
       'circle-color': ['coalesce', ['get', 'fillColor'], '#ffffff'],
       'circle-stroke-width': 3,
       'circle-stroke-color': ['coalesce', ['get', 'color'], '#ff3b30'],

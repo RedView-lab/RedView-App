@@ -13,6 +13,8 @@ import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
   clearForbiddenZoneDraft,
+  FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
+  FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
 
@@ -21,7 +23,7 @@ const FORBIDDEN_VERTEX_CURSOR = 'grab';
 const FORBIDDEN_VERTEX_DRAG_CURSOR = 'grabbing';
 const POINT_EPSILON = 1e-6;
 const MAX_SEGMENT_INSERT_DISTANCE_PX = 42;
-const MAX_VERTEX_DRAG_DISTANCE_PX = 22;
+const VERTEX_HITBOX_PADDING_PX = 18;
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -155,7 +157,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         canvas.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
         return;
       }
-      if (event && findNearestDraftPointIndex(map, draftPointsRef.current, event) != null) {
+      if (event && findDraftVertexIndexAtEvent(map, event) != null) {
         canvas.style.cursor = FORBIDDEN_VERTEX_CURSOR;
         return;
       }
@@ -163,7 +165,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const handleMouseDown = (event: MapMouseEvent) => {
-      const nearestPointIndex = findNearestDraftPointIndex(map, draftPointsRef.current, event);
+      const nearestPointIndex = findDraftVertexIndexAtEvent(map, event);
       if (nearestPointIndex == null) return;
       draggedPointIndex = nearestPointIndex;
       suppressNextClick = true;
@@ -366,28 +368,28 @@ function sameDraftPoint(
   );
 }
 
-function findNearestDraftPointIndex(
+function findDraftVertexIndexAtEvent(
   map: MapboxMap,
-  points: Array<{ lat: number; lon: number }>,
   event: MapMouseEvent,
 ): number | null {
-  if (points.length === 0) return null;
+  const features = map.queryRenderedFeatures(
+    [
+      [event.point.x - VERTEX_HITBOX_PADDING_PX, event.point.y - VERTEX_HITBOX_PADDING_PX],
+      [event.point.x + VERTEX_HITBOX_PADDING_PX, event.point.y + VERTEX_HITBOX_PADDING_PX],
+    ],
+    {
+      layers: [FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID],
+    },
+  );
 
-  let bestDistanceSq = Number.POSITIVE_INFINITY;
-  let bestIndex: number | null = null;
-  for (let index = 0; index < points.length; index += 1) {
-    const screenPoint = map.project([points[index].lon, points[index].lat]);
-    const dx = event.point.x - screenPoint.x;
-    const dy = event.point.y - screenPoint.y;
-    const distanceSq = dx * dx + dy * dy;
-    if (distanceSq >= bestDistanceSq) continue;
-    bestDistanceSq = distanceSq;
-    bestIndex = index;
+  for (const feature of features) {
+    const indexValue = feature.properties?.index;
+    const index = typeof indexValue === 'number' ? indexValue : Number(indexValue);
+    if (!Number.isInteger(index) || index < 0) continue;
+    return index;
   }
 
-  if (bestIndex == null) return null;
-  if (bestDistanceSq > MAX_VERTEX_DRAG_DISTANCE_PX * MAX_VERTEX_DRAG_DISTANCE_PX) return null;
-  return bestIndex;
+  return null;
 }
 
 function pointInDraftPolygon(
