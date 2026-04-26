@@ -174,6 +174,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     let hoverState: ForbiddenHoverState = 'none';
     let suppressNextClick = false;
     let lastHoverLogSignature = '';
+    let lastDragLogAt = 0;
+    let previousBodyCursor = '';
+    let previousBodyUserSelect = '';
 
     const refreshCursor = () => {
       if (dragState.kind === 'vertex') {
@@ -218,6 +221,15 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         segmentHitCount: diagnostics.segmentHitCount,
         vertexIndex: diagnostics.pointIndex,
         edgeIndex: diagnostics.edgeIndex,
+      });
+    };
+
+    const logDragDiagnostics = (reason: string, pointIndex: number, detail?: Record<string, unknown>) => {
+      console.info('[forbidden-zone-drag]', {
+        reason,
+        pointIndex,
+        cursor: canvas.style.cursor || FORBIDDEN_CURSOR,
+        ...detail,
       });
     };
 
@@ -291,34 +303,57 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       dragState = { kind: 'vertex', pointIndex };
       hoverState = 'vertex';
       suppressNextClick = true;
+      previousBodyCursor = document.body.style.cursor;
+      previousBodyUserSelect = document.body.style.userSelect;
+      document.body.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
+      document.body.style.userSelect = 'none';
       setStatusMessage('Glissez le sommet pour le déplacer');
       refreshCursor();
+      logDragDiagnostics('start', pointIndex);
 
-      window.addEventListener('mousemove', handleWindowDragMove);
-      window.addEventListener('mouseup', handleWindowDragEnd);
+      window.addEventListener('mousemove', handleWindowDragMove, true);
+      window.addEventListener('mouseup', handleWindowDragEnd, true);
     };
 
     const stopVertexDrag = (point?: MapMouseEvent['point']) => {
-      window.removeEventListener('mousemove', handleWindowDragMove);
-      window.removeEventListener('mouseup', handleWindowDragEnd);
+      window.removeEventListener('mousemove', handleWindowDragMove, true);
+      window.removeEventListener('mouseup', handleWindowDragEnd, true);
 
       if (dragState.kind !== 'vertex') return;
+      const pointIndex = dragState.pointIndex;
       dragState = { kind: 'idle' };
+      document.body.style.cursor = previousBodyCursor;
+      document.body.style.userSelect = previousBodyUserSelect;
       hoverState = point ? readHoverStateAtPoint(point) : 'none';
       updateDraftStatus(draftPointsRef.current);
       refreshCursor();
+      logDragDiagnostics('end', pointIndex, { hoverState });
     };
 
     const handleWindowDragMove = (event: MouseEvent) => {
       const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
       if (!resolved) return;
       event.preventDefault();
+      event.stopPropagation();
+      const now = performance.now();
+      if (dragState.kind === 'vertex' && now - lastDragLogAt > 250) {
+        lastDragLogAt = now;
+        logDragDiagnostics('move', dragState.pointIndex, {
+          point: {
+            x: Math.round(resolved.point.x),
+            y: Math.round(resolved.point.y),
+          },
+          lng: Number(resolved.lngLat.lng.toFixed(6)),
+          lat: Number(resolved.lngLat.lat.toFixed(6)),
+        });
+      }
       moveDraggedVertex(resolved.lngLat);
     };
 
     const handleWindowDragEnd = (event: MouseEvent) => {
       const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
       event.preventDefault();
+      event.stopPropagation();
       if (resolved) {
         moveDraggedVertex(resolved.lngLat);
         stopVertexDrag(resolved.point as MapMouseEvent['point']);
