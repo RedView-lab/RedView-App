@@ -33,6 +33,8 @@ interface ViewportBounds {
   east: number;
   west: number;
   zoom: number;
+  pixelWidth: number;
+  pixelHeight: number;
 }
 
 type ImageCoords = [[number, number], [number, number], [number, number], [number, number]];
@@ -45,6 +47,9 @@ interface RenderedLayerEntry {
 
 function getViewportBounds(map: MapboxMap): ViewportBounds {
   const bounds = map.getBounds();
+  const canvas = map.getCanvas();
+  const pixelWidth = Math.max(320, canvas.clientWidth || canvas.width || 320);
+  const pixelHeight = Math.max(240, canvas.clientHeight || canvas.height || 240);
   if (!bounds) {
     return {
       north: 0,
@@ -52,6 +57,8 @@ function getViewportBounds(map: MapboxMap): ViewportBounds {
       east: 0,
       west: 0,
       zoom: map.getZoom(),
+      pixelWidth,
+      pixelHeight,
     };
   }
   return {
@@ -60,6 +67,8 @@ function getViewportBounds(map: MapboxMap): ViewportBounds {
     east: bounds.getEast(),
     west: bounds.getWest(),
     zoom: map.getZoom(),
+    pixelWidth,
+    pixelHeight,
   };
 }
 
@@ -378,10 +387,11 @@ export function useWeatherOverlay(
 
       const selection = selectionFromState(nextState);
       const viewport = getViewportBounds(map);
+      const activeMetrics = activeLayers.map((layer) => layer.key);
       const currentDataset = dataRef.current;
       const sameSelection = currentDataset?.selectionKey === selection.key;
       const reusableGrid = currentDataset
-        ? weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode)
+        ? weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode, activeMetrics)
         : false;
 
       if (!explicitReload && currentDataset && sameSelection && reusableGrid) {
@@ -398,7 +408,7 @@ export function useWeatherOverlay(
         && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS
         && currentDataset
         && containsBounds(currentDataset.grid.bounds, viewport)
-        && weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode)
+        && weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode, activeMetrics)
       ) {
         await renderFromData(currentDataset);
         return;
@@ -422,7 +432,7 @@ export function useWeatherOverlay(
           detail: 'Grille météo',
           reloadable: true,
         }));
-        const grid = buildWeatherGrid(map, selection.mode);
+        const grid = buildWeatherGrid(map, selection.mode, activeMetrics);
         publishStatus(createOverlayStatus({
           id: STATUS_ID,
           label: 'Météo',

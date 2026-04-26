@@ -2,6 +2,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
   WeatherGridDefinition,
   WeatherGridPoint,
+  WeatherOverlayMetric,
   WeatherOverlaySample,
   WeatherSelection,
 } from './types';
@@ -77,6 +78,8 @@ interface WeatherViewport {
   east: number;
   west: number;
   zoom: number;
+  pixelWidth: number;
+  pixelHeight: number;
 }
 
 interface CachedSampleEntry {
@@ -163,18 +166,85 @@ function paddingForZoom(mode: WeatherSelection['mode'], zoom: number): number {
   return 0.08;
 }
 
-function maxPointsForZoom(mode: WeatherSelection['mode'], zoom: number): number {
-  // Self-hosted VPS → we can afford much denser grids.
+function activeMetricSet(metrics: readonly WeatherOverlayMetric[]): Set<WeatherOverlayMetric> {
+  return new Set(metrics);
+}
+
+function targetCellPixels(
+  mode: WeatherSelection['mode'],
+  zoom: number,
+  metrics: readonly WeatherOverlayMetric[],
+): number {
+  const activeMetrics = activeMetricSet(metrics);
+  const rainPriority = activeMetrics.has('rain');
+
   if (mode === 'forecast') {
-    if (zoom <= 4.5) return 9000;
-    if (zoom <= 6.5) return 6500;
-    if (zoom <= 8.5) return 4200;
-    return 2600;
+    if (rainPriority) {
+      if (zoom <= 4.5) return 12;
+      if (zoom <= 6.5) return 14;
+      if (zoom <= 8.5) return 16;
+      return 20;
+    }
+    if (zoom <= 4.5) return 18;
+    if (zoom <= 6.5) return 20;
+    if (zoom <= 8.5) return 22;
+    return 26;
   }
-  if (zoom <= 4.5) return 4200;
-  if (zoom <= 6.5) return 2800;
-  if (zoom <= 8.5) return 1800;
-  return 1100;
+
+  if (rainPriority) {
+    if (zoom <= 4.5) return 14;
+    if (zoom <= 6.5) return 16;
+    if (zoom <= 8.5) return 18;
+    return 22;
+  }
+  if (zoom <= 4.5) return 20;
+  if (zoom <= 6.5) return 22;
+  if (zoom <= 8.5) return 24;
+  return 28;
+}
+
+function resolutionDetailBoost(
+  mode: WeatherSelection['mode'],
+  zoom: number,
+  metrics: readonly WeatherOverlayMetric[],
+): number {
+  const activeMetrics = activeMetricSet(metrics);
+  if (!activeMetrics.has('rain')) {
+    return mode === 'forecast' && zoom <= 5 ? 0.85 : 1;
+  }
+  if (mode === 'forecast') {
+    if (zoom <= 4.5) return 0.35;
+    if (zoom <= 6.5) return 0.45;
+    if (zoom <= 8.5) return 0.6;
+    return 0.8;
+  }
+  if (zoom <= 4.5) return 0.45;
+  if (zoom <= 6.5) return 0.55;
+  if (zoom <= 8.5) return 0.7;
+  return 0.85;
+}
+
+function maxPointsForZoom(
+  mode: WeatherSelection['mode'],
+  zoom: number,
+  metrics: readonly WeatherOverlayMetric[],
+  pixelWidth: number,
+  pixelHeight: number,
+): number {
+  // Self-hosted VPS → we can afford much denser grids.
+  const targetPx = targetCellPixels(mode, zoom, metrics);
+  const targetCols = Math.max(2, Math.ceil(pixelWidth / Math.max(8, targetPx)) + 1);
+  const targetRows = Math.max(2, Math.ceil(pixelHeight / Math.max(8, targetPx)) + 1);
+  const screenBudget = Math.ceil(targetCols * targetRows * 1.5);
+  const metricBoost = activeMetricSet(metrics).has('rain') ? 2.25 : 1.4;
+  const hardCap = mode === 'forecast' ? 28000 : 18000;
+
+  if (mode === 'forecast') {
+    const base = zoom <= 4.5 ? 9000 : zoom <= 6.5 ? 6500 : zoom <= 8.5 ? 4200 : 2600;
+    return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
+  }
+  const base = zoom <= 4.5 ? 4200 : zoom <= 6.5 ? 2800 : zoom <= 8.5 ? 1800 : 1100;
+  return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
 }
 
 function gridDefaultsForMode(mode: WeatherSelection['mode']): {
@@ -199,7 +269,11 @@ function degreeSpacingForKilometres(targetKm: number): number {
   return targetKm / KM_PER_DEGREE_LATITUDE;
 }
 
-function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mode']): {
+function buildGridEnvelope(
+  viewport: WeatherViewport,
+  mode: WeatherSelection['mode'],
+  metrics: readonly WeatherOverlayMetric[],
+): {
   bounds: [west: number, south: number, east: number, north: number];
   rows: number;
   cols: number;
@@ -207,7 +281,7 @@ function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mo
 } {
   const { spacingTable, resolutionKmTable, minSpacing } = gridDefaultsForMode(mode);
   const padding = paddingForZoom(mode, viewport.zoom);
-  const maxPoints = maxPointsForZoom(mode, viewport.zoom);
+  const maxPoints = maxPointsForZoom(mode, viewport.zoom, metrics, viewport.pixelWidth, viewport.pixelHeight);
   const latPad = (viewport.north - viewport.south) * padding;
   const lngPad = (viewport.east - viewport.west) * padding;
   const paddedWest = clamp(viewport.west - lngPad, -180, 180);
@@ -215,11 +289,23 @@ function buildGridEnvelope(viewport: WeatherViewport, mode: WeatherSelection['mo
   const paddedSouth = clamp(viewport.south - latPad, -85, 85);
   const paddedNorth = clamp(viewport.north + latPad, -85, 85);
 
-  const targetResolutionKm = interpolateSpacing(viewport.zoom, resolutionKmTable);
+  const targetResolutionKm = interpolateSpacing(viewport.zoom, resolutionKmTable)
+    * resolutionDetailBoost(mode, viewport.zoom, metrics);
   const targetSpacingDegrees = quantizeSpacing(degreeSpacingForKilometres(targetResolutionKm), minSpacing);
+  const targetPx = targetCellPixels(mode, viewport.zoom, metrics);
+  const targetCols = Math.max(2, Math.ceil(viewport.pixelWidth / Math.max(8, targetPx)) + 1);
+  const targetRows = Math.max(2, Math.ceil(viewport.pixelHeight / Math.max(8, targetPx)) + 1);
+  const screenSpacingDegrees = quantizeSpacing(
+    Math.min(
+      Math.abs(paddedEast - paddedWest) / Math.max(1, targetCols - 1),
+      Math.abs(paddedNorth - paddedSouth) / Math.max(1, targetRows - 1),
+    ),
+    minSpacing,
+  );
   let spacing = Math.min(
     quantizeSpacing(interpolateSpacing(viewport.zoom, spacingTable), minSpacing),
     targetSpacingDegrees,
+    screenSpacingDegrees,
   );
   let rows = 0;
   let cols = 0;
@@ -411,8 +497,15 @@ async function fetchTrendBatch(
   });
 }
 
-export function buildWeatherGrid(map: MapboxMap, mode: WeatherSelection['mode']): WeatherGridDefinition {
+export function buildWeatherGrid(
+  map: MapboxMap,
+  mode: WeatherSelection['mode'],
+  metrics: readonly WeatherOverlayMetric[] = [],
+): WeatherGridDefinition {
   const bounds = map.getBounds();
+  const canvas = map.getCanvas();
+  const pixelWidth = Math.max(320, canvas.clientWidth || canvas.width || 320);
+  const pixelHeight = Math.max(240, canvas.clientHeight || canvas.height || 240);
   if (!bounds) {
     return {
       bounds: [-180, -85, 180, 85],
@@ -428,7 +521,9 @@ export function buildWeatherGrid(map: MapboxMap, mode: WeatherSelection['mode'])
     east: bounds.getEast(),
     west: bounds.getWest(),
     zoom: map.getZoom(),
-  }, mode);
+    pixelWidth,
+    pixelHeight,
+  }, mode, metrics);
   const points: WeatherGridPoint[] = [];
 
   for (let row = 0; row < envelope.rows; row += 1) {
@@ -455,8 +550,9 @@ export function weatherGridSupportsViewport(
   grid: WeatherGridDefinition,
   viewport: WeatherViewport,
   mode: WeatherSelection['mode'],
+  metrics: readonly WeatherOverlayMetric[] = [],
 ): boolean {
-  const desired = buildGridEnvelope(viewport, mode);
+  const desired = buildGridEnvelope(viewport, mode, metrics);
   const containsDesired = desired.bounds[0] >= grid.bounds[0]
     && desired.bounds[1] >= grid.bounds[1]
     && desired.bounds[2] <= grid.bounds[2]
