@@ -21,9 +21,13 @@ const POINT_EPSILON = 1e-6;
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
   canEdit: boolean;
+  canUndoDraft: boolean;
+  canRedoDraft: boolean;
   statusMessage: string | null;
   toggle: () => void;
   deactivate: () => void;
+  undoDraft: () => void;
+  redoDraft: () => void;
 }
 
 const ForbiddenZoneToolContext = createContext<ForbiddenZoneToolContextValue | null>(null);
@@ -38,15 +42,31 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const [armed, setArmed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [draftPoints, setDraftPoints] = useState<Array<{ lat: number; lon: number }>>([]);
+  const [draftFuture, setDraftFuture] = useState<Array<Array<{ lat: number; lon: number }>>>([]);
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
   const canEdit = Boolean(store && activeItinerary);
+  const canUndoDraft = draftPoints.length > 0;
+  const canRedoDraft = draftFuture.length > 0;
 
   const resetDraft = useCallback(() => {
     setDraftPoints([]);
+    setDraftFuture([]);
     if (map) clearForbiddenZoneDraft(map);
   }, [map]);
+
+  const updateDraftStatus = useCallback((points: Array<{ lat: number; lon: number }>) => {
+    if (points.length <= 0) {
+      setStatusMessage('Cliquez pour poser la zone, double-cliquez pour fermer (3 points minimum)');
+      return;
+    }
+    setStatusMessage(
+      points.length >= 3
+        ? 'Double-cliquez pour fermer la zone interdite'
+        : `Zone interdite: ${points.length}/3 points minimum`,
+    );
+  }, []);
 
   const deactivate = useCallback(() => {
     setArmed(false);
@@ -61,6 +81,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       if (!next) {
         setStatusMessage(null);
         setDraftPoints([]);
+        setDraftFuture([]);
         if (map) clearForbiddenZoneDraft(map);
         return next;
       }
@@ -68,6 +89,26 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       return next;
     });
   }, [canEdit, map]);
+
+  const undoDraft = useCallback(() => {
+    setDraftPoints((current) => {
+      if (current.length === 0) return current;
+      const next = current.slice(0, -1);
+      setDraftFuture((future) => [current, ...future]);
+      updateDraftStatus(next);
+      return next;
+    });
+  }, [updateDraftStatus]);
+
+  const redoDraft = useCallback(() => {
+    setDraftFuture((future) => {
+      const [nextPoints, ...rest] = future;
+      if (!nextPoints) return future;
+      setDraftPoints(nextPoints);
+      updateDraftStatus(nextPoints);
+      return rest;
+    });
+  }, [updateDraftStatus]);
 
   useEffect(() => {
     if (canEdit) return;
@@ -117,11 +158,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       }
 
       setDraftPoints(nextPoints);
-      setStatusMessage(
-        nextPoints.length >= 3
-          ? 'Double-cliquez pour fermer la zone interdite'
-          : `Zone interdite: ${nextPoints.length}/3 points minimum`,
-      );
+      setDraftFuture([]);
+      updateDraftStatus(nextPoints);
     };
 
     if (wasDoubleClickZoomEnabled) map.doubleClickZoom.disable();
@@ -135,17 +173,21 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
       canvas.style.cursor = '';
     };
-  }, [activeItinerary, armed, draftPoints, map, store]);
+  }, [activeItinerary, armed, draftPoints, map, store, updateDraftStatus]);
 
   const value = useMemo<ForbiddenZoneToolContextValue>(
     () => ({
       armed,
       canEdit,
+      canUndoDraft,
+      canRedoDraft,
       statusMessage,
       toggle,
       deactivate,
+      undoDraft,
+      redoDraft,
     }),
-    [armed, canEdit, deactivate, statusMessage, toggle],
+    [armed, canEdit, canRedoDraft, canUndoDraft, deactivate, redoDraft, statusMessage, toggle, undoDraft],
   );
 
   return (

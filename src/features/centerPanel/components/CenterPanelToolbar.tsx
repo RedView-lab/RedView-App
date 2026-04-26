@@ -248,10 +248,16 @@ export function CenterPanelToolbar() {
   const traceStatusMessage = traceTool?.statusMessage ?? null;
   const traceArmed = traceTool?.armed ?? false;
   const canEditForbiddenZone = forbiddenZoneTool?.canEdit ?? false;
+  const canUndoForbiddenZoneDraft = forbiddenZoneTool?.canUndoDraft ?? false;
+  const canRedoForbiddenZoneDraft = forbiddenZoneTool?.canRedoDraft ?? false;
   const forbiddenZoneStatusMessage = forbiddenZoneTool?.statusMessage ?? null;
   const forbiddenZoneArmed = forbiddenZoneTool?.armed ?? false;
-  const canUndoTraceEdit = store?.canUndoTraceEdit ?? false;
-  const canRedoTraceEdit = store?.canRedoTraceEdit ?? false;
+  const canUndoTraceEdit = forbiddenZoneArmed
+    ? canUndoForbiddenZoneDraft
+    : (store?.canUndoTraceEdit ?? false);
+  const canRedoTraceEdit = forbiddenZoneArmed
+    ? canRedoForbiddenZoneDraft
+    : (store?.canRedoTraceEdit ?? false);
   const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
   const auditVisible = activeItinerary?.routeAudit?.visible === true;
   const simplifyTargetPoints = useMemo(
@@ -402,12 +408,24 @@ export function CenterPanelToolbar() {
   };
 
   const handleUndoTraceEdit = () => {
+    if (forbiddenZoneArmed) {
+      if (!canUndoForbiddenZoneDraft) return;
+      forbiddenZoneTool?.undoDraft();
+      setToolbarStatus(null);
+      return;
+    }
     if (!store?.canUndoTraceEdit) return;
     store.undoTraceEdit();
     setToolbarStatus(null);
   };
 
   const handleRedoTraceEdit = () => {
+    if (forbiddenZoneArmed) {
+      if (!canRedoForbiddenZoneDraft) return;
+      forbiddenZoneTool?.redoDraft();
+      setToolbarStatus(null);
+      return;
+    }
     if (!store?.canRedoTraceEdit) return;
     store.redoTraceEdit();
     setToolbarStatus(null);
