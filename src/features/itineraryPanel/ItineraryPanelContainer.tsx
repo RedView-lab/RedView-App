@@ -676,27 +676,67 @@ function insertTimelineItem(
   timeline: TimelineItem[],
   kind: TimelineAddItemKind,
 ): void {
+  if (kind === 'start') {
+    insertEndpointBeforeCurrent(timeline, 'start');
+    return;
+  }
+
+  if (kind === 'end') {
+    insertEndpointBeforeCurrent(timeline, 'end');
+    return;
+  }
+
   const nextItem = createTimelineItem(kind, timeline);
   if (!nextItem) return;
-
-  if (nextItem.kind === 'start') {
-    timeline.unshift(nextItem);
-    return;
-  }
-
-  if (nextItem.kind === 'end') {
-    timeline.push(nextItem);
-    return;
-  }
 
   const endIndex = timeline.findIndex((item) => item.kind === 'end');
   const insertAt = endIndex >= 0 ? endIndex : timeline.length;
   timeline.splice(insertAt, 0, nextItem);
 }
 
+function insertEndpointBeforeCurrent(
+  timeline: TimelineItem[],
+  endpointKind: 'start' | 'end',
+): void {
+  const currentIndex = timeline.findIndex((item) => item.kind === endpointKind);
+  const nextEndpoint = createBlankEndpoint(endpointKind, currentIndex >= 0 ? timeline[currentIndex].id : undefined);
+
+  if (currentIndex < 0) {
+    if (endpointKind === 'start') timeline.unshift(nextEndpoint);
+    else timeline.push(nextEndpoint);
+    return;
+  }
+
+  const currentEndpoint = timeline[currentIndex];
+  const promotedWaypoint = {
+    ...currentEndpoint,
+    id: `wp-${Date.now()}`,
+    kind: 'waypoint' as const,
+  };
+
+  if (endpointKind === 'start') {
+    timeline.splice(currentIndex, 1, nextEndpoint, promotedWaypoint);
+    return;
+  }
+
+  timeline.splice(currentIndex, 1, promotedWaypoint, nextEndpoint);
+}
+
+function createBlankEndpoint(
+  kind: 'start' | 'end',
+  id?: string,
+): TimelineItem {
+  return {
+    id: id ?? `${kind}-${Date.now()}`,
+    kind,
+    label: 'Rechercher un lieu',
+    distanceKm: kind === 'start' ? 0 : null,
+  };
+}
+
 function createTimelineItem(
   kind: TimelineAddItemKind,
-  timeline: TimelineItem[],
+  _timeline: TimelineItem[],
 ): TimelineItem | null {
   const now = Date.now();
 
@@ -731,23 +771,9 @@ function createTimelineItem(
         durationMin: 15,
       };
     case 'start':
-      return timeline.some((item) => item.kind === 'start')
-        ? null
-        : {
-            id: `start-${now}`,
-            kind: 'start',
-            label: 'Rechercher un lieu',
-            distanceKm: 0,
-          };
+      return createBlankEndpoint('start');
     case 'end':
-      return timeline.some((item) => item.kind === 'end')
-        ? null
-        : {
-            id: `end-${now}`,
-            kind: 'end',
-            label: 'Rechercher un lieu',
-            distanceKm: null,
-          };
+      return createBlankEndpoint('end');
     default:
       return null;
   }
