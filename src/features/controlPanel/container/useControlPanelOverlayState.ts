@@ -15,6 +15,7 @@ import { clampForecastSelection, getForecastDateForOffset } from '@/features/wea
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
 import { DEFAULT_CONTROL_PANEL_STATE } from '../defaultState';
+import { hasLegacyFeelsLikeBreakpoints, isLegacyFeelsLikePalette } from '../weather/defaultPalettes';
 import {
   buildWeatherPaletteBands,
   clampWeatherPaletteBreakpoints,
@@ -43,6 +44,16 @@ const PANEL_TO_BACKEND_LABEL: Record<LabelKey, LabelCategory | null> = {
   countries: 'countries',
   waterBody: 'waterBody',
 };
+
+function normalizeWeatherLayerMode(layer: WeatherState['layers'][number]): WeatherState['layers'][number] {
+  if ((layer.key === 'temperature' || layer.key === 'feelsLike') && layer.mode === 'text') {
+    return { ...layer, mode: 'gradient' };
+  }
+  if (layer.key === 'humidity' && layer.mode === '-') {
+    return { ...layer, mode: 'gradient' };
+  }
+  return layer;
+}
 
 interface UseControlPanelOverlayStateArgs {
   map: MapboxMap | null;
@@ -113,12 +124,29 @@ export function useControlPanelOverlayState({
       ...(initialControlPanel.weather ?? {}),
       enabled: initialControlPanel.toggles.weatherEnabled,
     };
+    merged.layers = merged.layers.map(normalizeWeatherLayerMode);
 
     const nextPalettes: WeatherState['palettes'] = {};
     for (const layer of merged.layers) {
       const fallback = DEFAULT_CONTROL_PANEL_STATE.weather.palettes[layer.key];
-      const palette = merged.palettes[layer.key] ?? fallback;
+      const rawPalette = merged.palettes[layer.key] ?? fallback;
+      let palette = layer.key === 'feelsLike' && isLegacyFeelsLikePalette(rawPalette)
+        ? fallback
+        : rawPalette;
       if (!palette || !fallback) continue;
+
+      if (layer.key === 'feelsLike' && hasLegacyFeelsLikeBreakpoints(palette) && fallback.bands.length === palette.bands.length) {
+        palette = {
+          ...palette,
+          bands: buildWeatherPaletteBands(
+            layer.key,
+            palette.bands.map((band) => band.color),
+            fallback.bands.slice(0, -1).map((band) => band.maxValue),
+            palette.bands.map((band) => band.visible),
+          ),
+        };
+      }
+
       const sourceBands = (palette.bands?.length ? palette.bands : fallback.bands).map((band, index) => ({
         ...(fallback.bands[index] ?? fallback.bands[fallback.bands.length - 1]),
         ...band,

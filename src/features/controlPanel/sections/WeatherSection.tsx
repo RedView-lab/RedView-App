@@ -74,12 +74,6 @@ const LAYER_LABEL: Record<WeatherLayerKey, string> = {
   sunshine: 'Ensoleillement (min)',
 };
 
-const TEXT_GRADIENT_FILL_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
-  { value: 'text', label: 'Texte' },
-  { value: 'gradient', label: 'Dégradé' },
-  { value: 'fill', label: 'Remplissage' },
-];
-
 const GRADIENT_FILL_OPTIONS: { value: WeatherRenderMode; label: string }[] = [
   { value: 'gradient', label: 'Dégradé' },
   { value: 'fill', label: 'Remplissage' },
@@ -97,11 +91,11 @@ const PALETTE_SCALE_OPTIONS: { value: WeatherPaletteScaleSetting; label: string 
 ];
 
 const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRenderMode; label: string }[]>> = {
-  temperature: TEXT_GRADIENT_FILL_OPTIONS,
-  feelsLike: TEXT_GRADIENT_FILL_OPTIONS,
+  temperature: GRADIENT_FILL_OPTIONS,
+  feelsLike: GRADIENT_FILL_OPTIONS,
   rain: GRADIENT_FILL_OPTIONS,
   cloudCover: GRADIENT_FILL_OPTIONS,
-  humidity: DISABLED_ONLY_OPTION,
+  humidity: GRADIENT_FILL_OPTIONS,
 };
 
 const FRENCH_DAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
