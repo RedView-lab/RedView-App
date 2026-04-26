@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FogSpecification, LightsSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { getSunPosition, resolveSunTimesForLocalDay } from '../lib/sun-calc';
-import { getSkyAppearance } from '../lib/sky-appearance';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
 
 /**
@@ -10,9 +9,9 @@ import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
  *
  * We intentionally do NOT modulate the whole scene brightness anymore. The
  * previous fog/lightPreset cycle made the entire screen brighten/darken so much
- * that terrain shadows became hard to read. The sunlight system now focuses on
- * solar position, sunrise/sunset times, restrained dynamic scene lights, and a
- * sky-only fog so dawn/dusk remains visible without washing the ground.
+ * that terrain shadows became hard to read. The sunlight system now keeps the
+ * scene lighting visually neutral and only uses the sun position for shadow
+ * direction and informational sunrise/sunset times.
  */
 export interface UseSunlightOptions {
   enabled: boolean;
@@ -29,41 +28,6 @@ export interface UseSunlightResult {
   sunAzimuthDeg: number;
   /** Current sun altitude in degrees (-90..+90). Updated on each apply. */
   sunAltitudeDeg: number;
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function parseRgb(rgb: string): [number, number, number] {
-  const match = rgb.match(/\d+/g);
-  if (!match || match.length < 3) return [0, 0, 0];
-  return [Number(match[0]), Number(match[1]), Number(match[2])];
-}
-
-function mixColor(a: string, b: string, t: number): string {
-  const mix = clamp01(t);
-  const [ar, ag, ab] = parseRgb(a);
-  const [br, bg, bb] = parseRgb(b);
-  const r = Math.round(ar + (br - ar) * mix);
-  const g = Math.round(ag + (bg - ag) * mix);
-  const bCh = Math.round(ab + (bb - ab) * mix);
-  return `rgb(${r}, ${g}, ${bCh})`;
-}
-
-function buildSkyOnlyFog(altitudeDeg: number): FogSpecification {
-  const sky = getSkyAppearance(altitudeDeg);
-  const twilightFactor = clamp01((12 - Math.max(altitudeDeg, -18)) / 30);
-
-  return {
-    ...FOG_CONFIG,
-    range: [12, 20],
-    color: mixColor(FOG_CONFIG.color, sky.color, 0.18 + twilightFactor * 0.12),
-    'high-color': mixColor(FOG_CONFIG['high-color'], sky.highColor, 0.72),
-    'space-color': sky.spaceColor,
-    'star-intensity': sky.starIntensity,
-    'horizon-blend': Math.min(0.018, 0.006 + sky.horizonBlend * 0.18),
-  };
 }
 
 const DEFAULT_LIGHTS: LightsSpecification[] = [
@@ -83,38 +47,23 @@ const DEFAULT_LIGHTS: LightsSpecification[] = [
 
 function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecification[] {
   const clampedAltitude = Math.max(-12, Math.min(85, altitudeDeg));
-  const daylight = clamp01((clampedAltitude + 6) / 30);
-  const goldenHour = clamp01(1 - Math.abs(clampedAltitude - 8) / 16);
   const polar = Math.min(88, Math.max(4, 90 - clampedAltitude));
-
-  const ambientIntensity = 0.12 + daylight * 0.22;
-  const directionalIntensity = 0.16 + daylight * 0.5;
-  const shadowIntensity = 0.56 + (1 - daylight) * 0.18;
-
-  const directionalColor =
-    clampedAltitude > 18
-      ? '#ffffff'
-      : goldenHour > 0.2
-        ? '#ffd2a6'
-        : clampedAltitude > 0
-          ? '#fff2df'
-          : '#7080ab';
 
   return [
     {
       id: 'ambient',
       type: 'ambient',
-      properties: { color: 'white', intensity: ambientIntensity },
+      properties: { color: 'white', intensity: 0.34 },
     },
     {
       id: 'directional',
       type: 'directional',
       properties: {
-        color: directionalColor,
-        intensity: directionalIntensity,
+        color: '#ffffff',
+        intensity: 0.55,
         direction: [azimuthDeg, polar],
         'cast-shadows': true,
-        'shadow-intensity': shadowIntensity,
+        'shadow-intensity': 0.62,
       },
     },
   ];
@@ -206,7 +155,7 @@ export function useSunlight(
       }
 
       try {
-        map.setFog(buildSkyOnlyFog(altitude));
+        map.setFog(FOG_CONFIG as FogSpecification);
       } catch (err) {
         console.warn('[sunlight] setFog failed', err);
       }

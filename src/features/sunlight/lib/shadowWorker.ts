@@ -18,6 +18,8 @@
 const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
 const DEM_CACHE_NAME = 'dem-tiles-v31'; // must match sw-dem/config.js CACHE_NAME
+const MAX_SAMPLE_TILE_COUNT = 256;
+const MIN_SAMPLE_DEM_ZOOM = 10;
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
 type ComputeQuality = 'preview' | 'full';
@@ -53,6 +55,13 @@ interface ResetRequest {
 
 type Request = SampleRequest | ComputeRequest | ResetRequest;
 
+interface GridScratch {
+  shadow: Uint8Array;
+  shadowElev: Float32Array;
+  blurTemp: Uint16Array;
+  blurOut: Uint8Array;
+}
+
 interface GridState {
   bounds: [number, number, number, number];
   gridW: number;
@@ -62,6 +71,8 @@ interface GridState {
   /** Pre-computed cell metric size (m) at the grid's mid-latitude. */
   cellSizeX: number;
   cellSizeY: number;
+  scratch: GridScratch;
+  previewGrid: ComputeGrid | null;
 }
 
 interface ComputeGrid {
@@ -70,6 +81,7 @@ interface ComputeGrid {
   gridH: number;
   cellSizeX: number;
   cellSizeY: number;
+  scratch: GridScratch;
 }
 
 let state: GridState | null = null;
@@ -101,23 +113,21 @@ async function handleSample(msg: SampleRequest) {
   const elev = new Float32Array(gridW * gridH);
   elev.fill(NaN);
 
-  // Determine which DEM tiles cover the bounds at demZoom.
-  const tlTile = lngLatToMercTile(w, n, demZoom);
-  const brTile = lngLatToMercTile(e, s, demZoom);
-  const xMin = Math.floor(tlTile.x);
-  const xMax = Math.floor(brTile.x);
-  const yMin = Math.floor(tlTile.y);
-  const yMax = Math.floor(brTile.y);
+  let effectiveZoom = demZoom;
+  let coverage = getTileCoverage(bounds, effectiveZoom);
+  while (coverage.tileCount > MAX_SAMPLE_TILE_COUNT && effectiveZoom > MIN_SAMPLE_DEM_ZOOM) {
+    effectiveZoom--;
+    coverage = getTileCoverage(bounds, effectiveZoom);
+  }
 
-  // Fetch + decode all needed DEM tiles in parallel from the SW cache.
-  const tileCount = (xMax - xMin + 1) * (yMax - yMin + 1);
-  // Sanity bound: refuse silly requests.
-  if (tileCount > 256) {
+  // Sanity bound: refuse requests that are still too wide even at the minimum
+  // production DEM zoom.
+  if (coverage.tileCount > MAX_SAMPLE_TILE_COUNT) {
     (self as unknown as Worker).postMessage({
       id: msg.id,
       type: 'sample-ok',
       filled: 0,
-      total: tileCount,
+      total: coverage.tileCount,
       tooMany: true,
     });
     state = null;
@@ -127,9 +137,9 @@ async function handleSample(msg: SampleRequest) {
   const cache = await caches.open(DEM_CACHE_NAME);
   type DecodedTile = { x: number; y: number; elev: Float32Array | null };
   const tiles: Promise<DecodedTile>[] = [];
-  for (let ty = yMin; ty <= yMax; ty++) {
-    for (let tx = xMin; tx <= xMax; tx++) {
-      tiles.push(loadTile(cache, demZoom, tx, ty));
+  for (let ty = coverage.yMin; ty <= coverage.yMax; ty++) {
+    for (let tx = coverage.xMin; tx <= coverage.xMax; tx++) {
+      tiles.push(loadTile(cache, effectiveZoom, tx, ty));
     }
   }
   const decoded = await Promise.all(tiles);
@@ -151,7 +161,7 @@ async function handleSample(msg: SampleRequest) {
   const dMercY = (sMercY - nMercY) / gridH;
   const dLng = (e - w) / gridW;
 
-  const nTiles = 1 << demZoom;
+  const nTiles = 1 << effectiveZoom;
   for (let r = 0; r < gridH; r++) {
     const my = nMercY + (r + 0.5) * dMercY;
     // (lat derivation skipped — we work in mercator-Y for tile indexing)
@@ -162,7 +172,7 @@ async function handleSample(msg: SampleRequest) {
     for (let c = 0; c < gridW; c++) {
       const lng = w + (c + 0.5) * dLng;
       // Continuous tile X.
-      const tileXf = ((lng + 180) / 360) * (1 << demZoom);
+      const tileXf = ((lng + 180) / 360) * nTiles;
       const tx = Math.floor(tileXf);
       const ty = Math.floor(tileYf);
       const tile = tileMap.get(`${tx}/${ty}`);
@@ -191,14 +201,78 @@ async function handleSample(msg: SampleRequest) {
     elev,
     cellSizeX: lonExtentM / gridW,
     cellSizeY: latExtentM / gridH,
+    scratch: createScratchBuffers(gridW, gridH),
+    previewGrid: null,
   };
+  state.previewGrid = buildPreviewGrid(state);
 
   (self as unknown as Worker).postMessage({
     id: msg.id,
     type: 'sample-ok',
     filled,
     total: gridW * gridH,
+    effectiveZoom,
+    downgraded: effectiveZoom !== demZoom,
   });
+}
+
+function getTileCoverage(
+  bounds: [number, number, number, number],
+  zoom: number,
+): { xMin: number; xMax: number; yMin: number; yMax: number; tileCount: number } {
+  const [w, s, e, n] = bounds;
+  const tlTile = lngLatToMercTile(w, n, zoom);
+  const brTile = lngLatToMercTile(e, s, zoom);
+  const xMin = Math.floor(tlTile.x);
+  const xMax = Math.floor(brTile.x);
+  const yMin = Math.floor(tlTile.y);
+  const yMax = Math.floor(brTile.y);
+  return {
+    xMin,
+    xMax,
+    yMin,
+    yMax,
+    tileCount: (xMax - xMin + 1) * (yMax - yMin + 1),
+  };
+}
+
+function createScratchBuffers(gridW: number, gridH: number): GridScratch {
+  const size = gridW * gridH;
+  return {
+    shadow: new Uint8Array(size),
+    shadowElev: new Float32Array(size),
+    blurTemp: new Uint16Array(size),
+    blurOut: new Uint8Array(size),
+  };
+}
+
+function buildPreviewGrid(state: GridState): ComputeGrid | null {
+  const stepX = Math.max(1, Math.ceil(state.gridW / PREVIEW_MAX_W));
+  const stepY = Math.max(1, Math.ceil(state.gridH / PREVIEW_MAX_H));
+  if (stepX === 1 && stepY === 1) {
+    return null;
+  }
+
+  const gridW = Math.max(1, Math.ceil(state.gridW / stepX));
+  const gridH = Math.max(1, Math.ceil(state.gridH / stepY));
+  const elev = new Float32Array(gridW * gridH);
+
+  for (let r = 0; r < gridH; r++) {
+    const srcR = Math.min(state.gridH - 1, r * stepY + ((stepY - 1) >> 1));
+    for (let c = 0; c < gridW; c++) {
+      const srcC = Math.min(state.gridW - 1, c * stepX + ((stepX - 1) >> 1));
+      elev[r * gridW + c] = state.elev[srcR * state.gridW + srcC];
+    }
+  }
+
+  return {
+    elev,
+    gridW,
+    gridH,
+    cellSizeX: state.cellSizeX * stepX,
+    cellSizeY: state.cellSizeY * stepY,
+    scratch: createScratchBuffers(gridW, gridH),
+  };
 }
 
 async function loadTile(
@@ -303,18 +377,27 @@ function handleCompute(msg: ComputeRequest) {
   }
   const { sunAzDeg, sunAltDeg, shadowStrength, nightFloor, quality = 'full' } = msg;
   const computeGrid = selectComputeGrid(state, quality);
-  const { gridW, gridH, elev, cellSizeX, cellSizeY } = computeGrid;
+  const { gridW, gridH, elev, cellSizeX, cellSizeY, scratch } = computeGrid;
 
-  // Sun above horizon → cast terrain shadows. Below horizon → keep the shadow
-  // system active by filling the whole raster, so the terrain stays fully in
-  // shadow instead of switching to a separate dark overlay.
   let raster: Uint8Array;
-  if (sunAltDeg > 0) {
-    const shadow = computeSweepShadow(elev, gridW, gridH, sunAzDeg, sunAltDeg, cellSizeX, cellSizeY);
-    raster = quality === 'preview' ? shadow : boxBlur3(shadow, gridW, gridH);
+  if (sunAltDeg > 0 && shadowStrength > 0) {
+    const shadow = computeSweepShadow(
+      elev,
+      gridW,
+      gridH,
+      sunAzDeg,
+      sunAltDeg,
+      cellSizeX,
+      cellSizeY,
+      scratch.shadow,
+      scratch.shadowElev,
+    );
+    raster = quality === 'preview'
+      ? shadow
+      : boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
   } else {
-    raster = new Uint8Array(gridW * gridH);
-    raster.fill(255);
+    scratch.shadow.fill(0);
+    raster = scratch.shadow;
   }
 
   const rgba = encodeShadowRgba(raster, gridW, gridH, shadowStrength, nightFloor);
@@ -335,31 +418,7 @@ function selectComputeGrid(state: GridState, quality: ComputeQuality): ComputeGr
     return state;
   }
 
-  const stepX = Math.max(1, Math.ceil(state.gridW / PREVIEW_MAX_W));
-  const stepY = Math.max(1, Math.ceil(state.gridH / PREVIEW_MAX_H));
-  if (stepX === 1 && stepY === 1) {
-    return state;
-  }
-
-  const gridW = Math.max(1, Math.ceil(state.gridW / stepX));
-  const gridH = Math.max(1, Math.ceil(state.gridH / stepY));
-  const elev = new Float32Array(gridW * gridH);
-
-  for (let r = 0; r < gridH; r++) {
-    const srcR = Math.min(state.gridH - 1, r * stepY + ((stepY - 1) >> 1));
-    for (let c = 0; c < gridW; c++) {
-      const srcC = Math.min(state.gridW - 1, c * stepX + ((stepX - 1) >> 1));
-      elev[r * gridW + c] = state.elev[srcR * state.gridW + srcC];
-    }
-  }
-
-  return {
-    elev,
-    gridW,
-    gridH,
-    cellSizeX: state.cellSizeX * stepX,
-    cellSizeY: state.cellSizeY * stepY,
-  };
+  return state.previewGrid ?? state;
 }
 
 /**
@@ -376,10 +435,11 @@ function computeSweepShadow(
   sunAltDeg: number,
   cellSizeX: number,
   cellSizeY: number,
+  out: Uint8Array,
+  shadowElev: Float32Array,
 ): Uint8Array {
-  const out = new Uint8Array(W * H);
+  out.fill(0);
   if (sunAltDeg <= 0) {
-    out.fill(255);
     return out;
   }
   if (sunAltDeg >= 85) {
@@ -393,9 +453,6 @@ function computeSweepShadow(
   const shadowDR = Math.cos(azRad);
   const absDC = Math.abs(shadowDC);
   const absDR = Math.abs(shadowDR);
-
-  const shadowElev = new Float32Array(W * H);
-  shadowElev.fill(-Infinity);
 
   if (absDC >= absDR) {
     const colStep = shadowDC > 0 ? 1 : -1;
@@ -465,23 +522,42 @@ function computeSweepShadow(
   return out;
 }
 
-function boxBlur3(src: Uint8Array, W: number, H: number): Uint8Array {
-  const out = new Uint8Array(W * H);
+function boxBlur3(
+  src: Uint8Array,
+  W: number,
+  H: number,
+  temp: Uint16Array,
+  out: Uint8Array,
+): Uint8Array {
+  if (W === 0 || H === 0) return out;
   for (let r = 0; r < H; r++) {
-    const rMin = r > 0 ? r - 1 : 0;
-    const rMax = r < H - 1 ? r + 1 : H - 1;
+    const rowOffset = r * W;
+    if (W === 1) {
+      temp[rowOffset] = src[rowOffset];
+      continue;
+    }
+    temp[rowOffset] = src[rowOffset] + src[rowOffset + 1];
+    for (let c = 1; c < W - 1; c++) {
+      const idx = rowOffset + c;
+      temp[idx] = src[idx - 1] + src[idx] + src[idx + 1];
+    }
+    temp[rowOffset + W - 1] = src[rowOffset + W - 2] + src[rowOffset + W - 1];
+  }
+
+  for (let r = 0; r < H; r++) {
     for (let c = 0; c < W; c++) {
-      const cMin = c > 0 ? c - 1 : 0;
-      const cMax = c < W - 1 ? c + 1 : W - 1;
-      let sum = 0;
-      let cnt = 0;
-      for (let rr = rMin; rr <= rMax; rr++) {
-        for (let cc = cMin; cc <= cMax; cc++) {
-          sum += src[rr * W + cc];
-          cnt++;
-        }
+      let sum = temp[r * W + c];
+      let vertCount = 1;
+      if (r > 0) {
+        sum += temp[(r - 1) * W + c];
+        vertCount++;
       }
-      out[r * W + c] = ((sum / cnt) + 0.5) | 0;
+      if (r < H - 1) {
+        sum += temp[(r + 1) * W + c];
+        vertCount++;
+      }
+      const horizCount = W === 1 ? 1 : (c === 0 || c === W - 1 ? 2 : 3);
+      out[r * W + c] = ((sum / (horizCount * vertCount)) + 0.5) | 0;
     }
   }
   return out;

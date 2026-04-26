@@ -92,7 +92,15 @@ interface UseShadowImageRuntimeOptions {
   registerReload?: OverlayReloadRegistrar;
 }
 
-interface SampleAck { id: number; type: 'sample-ok'; filled: number; total: number; tooMany?: boolean }
+interface SampleAck {
+  id: number;
+  type: 'sample-ok';
+  filled: number;
+  total: number;
+  tooMany?: boolean;
+  effectiveZoom?: number;
+  downgraded?: boolean;
+}
 interface ComputeAck { id: number; type: 'compute-ok'; blob: Blob; bounds: [number, number, number, number] }
 interface ComputeEmpty { id: number; type: 'compute-empty' }
 interface ResetAck { id: number; type: 'reset-ok' }
@@ -112,7 +120,8 @@ interface ComputeJob {
  *   alt ≥  0°  : full strength (1.0) — shadows are at their longest and most
  *                dramatic right at sunrise/sunset; that's exactly when the
  *                user expects to see them.
- *   alt <  0°  : the worker switches to a full-shadow terrain raster.
+ *   alt <  0°  : hide the overlay entirely so time changes do not dim the
+ *                whole viewport.
  */
 function shadowVisibility(altitudeDeg: number): number {
   return altitudeDeg >= 0 ? 1 : 0;
@@ -378,7 +387,7 @@ export function useShadowImage(
       }));
 
       const o = optsRef.current;
-      const shadowStrength = o.sunAltitudeDeg >= 0 ? shadowVisibility(o.sunAltitudeDeg) : 1;
+      const shadowStrength = shadowVisibility(o.sunAltitudeDeg);
       if (!o.enabled || o.opacity <= 0 || shadowStrength <= 0) {
         setLayerOpacity(0);
         return;
@@ -560,17 +569,10 @@ export function useShadowImage(
         return;
       }
       if (sampleAck.tooMany) {
-        console.warn('[shadow] sample skipped: viewport spans too many DEM tiles');
+        console.info('[shadow] sample skipped: viewport spans too many DEM tiles');
         removeSourceAndLayer(true);
         setLayerOpacity(0);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: 'Zone trop large pour recalculer',
-          reloadable: true,
-        }));
+        publishStatus(null);
         return;
       }
       if (sampleAck.filled === 0) {
@@ -594,7 +596,9 @@ export function useShadowImage(
         label: 'Ombres',
         state: 'loading',
         progress: 58,
-        detail: 'Relief capturé',
+        detail: sampleAck.downgraded
+          ? `Relief capturé (DEM z${sampleAck.effectiveZoom ?? demZoom})`
+          : 'Relief capturé',
         reloadable: true,
       }));
       requestCompute(sampledBounds, myGen);
