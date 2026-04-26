@@ -926,9 +926,7 @@
 .rvi-tl-schedule__event-card {
   all: unset;
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 4px;
+  align-items: center;
   min-width: 0;
   min-height: 32px;
   padding: 4px 6px 4px 8px;
@@ -956,7 +954,7 @@
 
 .rvi-tl-schedule__event-main {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 20px 20px;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 20px;
   align-items: center;
   gap: 4px;
   width: 100%;
@@ -1008,126 +1006,10 @@
   color: #fdb022;
 }
 
-.rvi-tl-schedule__event-expand-gutter {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.54);
-  transition: transform 0.18s ease, color 0.18s ease;
-}
-
-.rvi-tl-schedule__event-expand-gutter.is-expanded {
-  transform: rotate(180deg);
-  color: rgba(255, 255, 255, 0.82);
-}
-
-.rvi-tl-schedule__poi-summary {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  padding-left: 28px;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.rvi-tl-schedule__poi-summary-rail {
-  width: 8px;
-  height: 1px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.26);
-}
-
-.rvi-tl-schedule__poi-summary-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-}
-
-.rvi-tl-schedule__poi-children {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-left: 28px;
-}
-
-.rvi-tl-schedule__poi-child {
-  display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  min-height: 22px;
-  color: rgba(255, 255, 255, 0.86);
-}
-
-.rvi-tl-schedule__poi-child--more {
-  color: rgba(255, 255, 255, 0.64);
-}
-
-.rvi-tl-schedule__poi-child-rail {
-  width: 8px;
-  height: 1px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.rvi-tl-schedule__poi-child-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-}
-
-.rvi-tl-schedule__poi-child-distance {
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 16px;
-  color: rgba(255, 255, 255, 0.7);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .rvi-tl-schedule__event-side {
   display: flex;
   align-items: center;
   gap: 4px;
-}
-
-.rvi-tl-schedule__expand-btn {
-  all: unset;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 4px;
-  color: rgba(255, 255, 255, 0.64);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.18s ease;
-}
-
-.rvi-tl-schedule__expand-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-}
-
-.rvi-tl-schedule__expand-btn.is-expanded {
-  transform: rotate(180deg);
-  color: #ffffff;
-}
-
-.rvi-tl-schedule__expand-btn:focus-visible {
-  outline: 2px solid var(--rvi-red-accent);
-  outline-offset: 1px;
 }
 
 .rvi-tl-schedule__pause {
@@ -1224,7 +1106,7 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 56px 56px 20px 20px;
+    grid-template-columns: 20px minmax(0, 1fr) 56px 56px 20px;
   }
 
   .rvi-tl-schedule__event-side {
@@ -1285,10 +1167,10 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 20px 20px;
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
     grid-template-areas:
-      'icon name favorite toggle'
-      'icon from next toggle';
+      'icon name favorite'
+      'icon from next';
     row-gap: 2px;
   }
 
@@ -1296,7 +1178,6 @@
   .rvi-tl-schedule__event-name { grid-area: name; }
   .rvi-tl-schedule__event-metric { grid-area: from; text-align: left; }
   .rvi-tl-schedule__event-favorite { grid-area: favorite; justify-self: end; }
-  .rvi-tl-schedule__event-expand-gutter { grid-area: toggle; justify-self: end; }
   .rvi-tl-schedule__event-metric--next {
     grid-area: next;
     width: auto;
