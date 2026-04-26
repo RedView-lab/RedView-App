@@ -22,7 +22,7 @@ const FORBIDDEN_CURSOR = 'crosshair';
 const FORBIDDEN_SEGMENT_CURSOR = 'pointer';
 const FORBIDDEN_VERTEX_CURSOR = 'grab';
 const FORBIDDEN_VERTEX_DRAG_CURSOR = 'grabbing';
-const HIT_QUERY_RADIUS_PX = 14;
+const HIT_QUERY_RADIUS_PX = 32;
 const POINT_EPSILON = 1e-6;
 const MAX_SEGMENT_INSERT_DISTANCE_PX = 42;
 
@@ -32,6 +32,13 @@ type ForbiddenDragState = { kind: 'idle' } | { kind: 'vertex'; pointIndex: numbe
 type ForbiddenHitTarget =
   | { kind: 'vertex'; pointIndex: number }
   | { kind: 'segment'; edgeIndex: number };
+type ForbiddenHitDiagnostics = {
+  target: ForbiddenHitTarget | null;
+  pointIndex: number | null;
+  edgeIndex: number | null;
+  vertexHitCount: number;
+  segmentHitCount: number;
+};
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -166,6 +173,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     let dragState: ForbiddenDragState = { kind: 'idle' };
     let hoverState: ForbiddenHoverState = 'none';
     let suppressNextClick = false;
+    let lastHoverLogSignature = '';
 
     const refreshCursor = () => {
       if (dragState.kind === 'vertex') {
@@ -192,9 +200,25 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const readHoverStateAtPoint = (point: MapMouseEvent['point']): ForbiddenHoverState => {
-      const target = readDraftHitTarget(map, point);
-      if (!target) return 'none';
-      return target.kind === 'vertex' ? 'vertex' : 'segment';
+      const diagnostics = readDraftHitDiagnostics(map, point);
+      if (!diagnostics.target) return 'none';
+      return diagnostics.target.kind === 'vertex' ? 'vertex' : 'segment';
+    };
+
+    const logHitDiagnostics = (reason: string, point: MapMouseEvent['point'], diagnostics: ForbiddenHitDiagnostics) => {
+      console.info('[forbidden-zone-hit]', {
+        reason,
+        cursor: canvas.style.cursor || FORBIDDEN_CURSOR,
+        point: {
+          x: Math.round(point.x),
+          y: Math.round(point.y),
+        },
+        target: diagnostics.target,
+        vertexHitCount: diagnostics.vertexHitCount,
+        segmentHitCount: diagnostics.segmentHitCount,
+        vertexIndex: diagnostics.pointIndex,
+        edgeIndex: diagnostics.edgeIndex,
+      });
     };
 
     const finalizeDraft = (points: DraftPoint[]): boolean => {
@@ -274,7 +298,24 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
     const handleMapMouseMove = (event: MapMouseEvent) => {
       if (dragState.kind === 'vertex') return;
-      setHoverState(readHoverStateAtPoint(event.point));
+      const diagnostics = readDraftHitDiagnostics(map, event.point);
+      const nextHoverState = diagnostics.target?.kind === 'vertex'
+        ? 'vertex'
+        : diagnostics.target?.kind === 'segment'
+          ? 'segment'
+          : 'none';
+      const nextLogSignature = [
+        nextHoverState,
+        diagnostics.pointIndex ?? -1,
+        diagnostics.edgeIndex ?? -1,
+        diagnostics.vertexHitCount,
+        diagnostics.segmentHitCount,
+      ].join(':');
+      if (nextLogSignature !== lastHoverLogSignature) {
+        lastHoverLogSignature = nextLogSignature;
+        logHitDiagnostics('hover', event.point, diagnostics);
+      }
+      setHoverState(nextHoverState);
     };
 
     const handleCanvasLeave = () => {
@@ -288,7 +329,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       const original = event.originalEvent;
       if (original instanceof MouseEvent && original.button !== 0) return;
 
-      const target = readDraftHitTarget(map, event.point);
+      const diagnostics = readDraftHitDiagnostics(map, event.point);
+      logHitDiagnostics('mousedown', event.point, diagnostics);
+      const target = diagnostics.target;
       if (!target) return;
 
       event.preventDefault();
@@ -472,14 +515,53 @@ function sameDraftPoint(
   );
 }
 
-function readIndexFromRenderedLayer(
+function readDraftHitDiagnostics(
+  map: MapboxMap,
+  point: MapMouseEvent['point'],
+): ForbiddenHitDiagnostics {
+  const vertexFeatures = readRenderedFeaturesAroundPoint(
+    map,
+    point,
+    FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
+    HIT_QUERY_RADIUS_PX,
+  );
+  const segmentFeatures = readRenderedFeaturesAroundPoint(
+    map,
+    point,
+    FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
+    HIT_QUERY_RADIUS_PX,
+  );
+  const pointIndex = readIntegerPropertyFromFeatures(vertexFeatures, 'index');
+  const edgeIndex = readIntegerPropertyFromFeatures(segmentFeatures, 'edgeIndex');
+  const target: ForbiddenHitTarget | null = pointIndex != null
+    ? { kind: 'vertex', pointIndex }
+    : edgeIndex != null
+      ? { kind: 'segment', edgeIndex }
+      : null;
+
+  return {
+    target,
+    pointIndex,
+    edgeIndex,
+    vertexHitCount: vertexFeatures.length,
+    segmentHitCount: segmentFeatures.length,
+  };
+}
+
+function readDraftHitTarget(
+  map: MapboxMap,
+  point: MapMouseEvent['point'],
+): ForbiddenHitTarget | null {
+  return readDraftHitDiagnostics(map, point).target;
+}
+
+function readRenderedFeaturesAroundPoint(
   map: MapboxMap,
   point: MapMouseEvent['point'],
   layerId: string,
-  propertyName: string,
   queryRadius = 0,
-): number | null {
-  if (!map.getLayer(layerId)) return null;
+) {
+  if (!map.getLayer(layerId)) return [];
 
   const geometry: MapMouseEvent['point'] | [[number, number], [number, number]] =
     queryRadius > 0
@@ -489,44 +571,20 @@ function readIndexFromRenderedLayer(
         ]
       : point;
 
-  const features = map.queryRenderedFeatures(geometry, {
+  return map.queryRenderedFeatures(geometry, {
     layers: [layerId],
   });
-
-  for (const feature of features) {
-    const indexValue = feature.properties?.[propertyName];
-    const index = typeof indexValue === 'number' ? indexValue : Number(indexValue);
-    if (!Number.isInteger(index) || index < 0) continue;
-    return index;
-  }
-
-  return null;
 }
 
-function readDraftHitTarget(
-  map: MapboxMap,
-  point: MapMouseEvent['point'],
-): ForbiddenHitTarget | null {
-  const pointIndex = readIndexFromRenderedLayer(
-    map,
-    point,
-    FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
-    'index',
-    HIT_QUERY_RADIUS_PX,
-  );
-  if (pointIndex != null) {
-    return { kind: 'vertex', pointIndex };
-  }
-
-  const edgeIndex = readIndexFromRenderedLayer(
-    map,
-    point,
-    FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
-    'edgeIndex',
-    HIT_QUERY_RADIUS_PX,
-  );
-  if (edgeIndex != null) {
-    return { kind: 'segment', edgeIndex };
+function readIntegerPropertyFromFeatures(
+  features: ReturnType<typeof readRenderedFeaturesAroundPoint>,
+  propertyName: string,
+): number | null {
+  for (const feature of features) {
+    const propertyValue = feature.properties?.[propertyName];
+    const index = typeof propertyValue === 'number' ? propertyValue : Number(propertyValue);
+    if (!Number.isInteger(index) || index < 0) continue;
+    return index;
   }
 
   return null;
