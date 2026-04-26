@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react';
 
-import { exportItineraryFile, type ItineraryExportFormat } from '@/features/exporter';
+import { exportItineraryFile, exportRoadbookExcel, type ItineraryExportFormat } from '@/features/exporter';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 
 import { Checkbox } from './components/Checkbox';
@@ -73,24 +73,42 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
 
   const handleExport = async () => {
     const itineraryRow = rows.find((row) => row.id === 'itineraries' && row.checked && !row.disabled);
-    if (!itineraryRow) {
-      setStatus({ tone: 'error', message: 'Activez un export d\'itineraire avant de lancer le telechargement.' });
+    const roadbookRow = rows.find((row) => row.id === 'sheet' && row.checked && !row.disabled);
+    if (!itineraryRow && !roadbookRow) {
+      setStatus({ tone: 'error', message: 'Activez au moins un export avant de lancer le telechargement.' });
       return;
     }
     if (!activeItinerary) {
       setStatus({ tone: 'error', message: 'Aucun itineraire actif a exporter.' });
       return;
     }
-    if (itineraryRow.format !== 'gpx' && itineraryRow.format !== 'fit') {
+    if (itineraryRow && itineraryRow.format !== 'gpx' && itineraryRow.format !== 'fit') {
       setStatus({ tone: 'error', message: 'Le format selectionne n\'est pas encore pris en charge pour l\'itineraire.' });
+      return;
+    }
+    if (roadbookRow && roadbookRow.format !== 'excel') {
+      setStatus({ tone: 'error', message: 'La feuille de route est uniquement disponible en export Excel.' });
       return;
     }
 
     try {
       setIsExporting(true);
       setStatus(null);
-      const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
-      setStatus({ tone: 'success', message: `${fileName} exporte depuis l\'itineraire actif.` });
+      const exportedFiles: string[] = [];
+
+      if (itineraryRow && (itineraryRow.format === 'gpx' || itineraryRow.format === 'fit')) {
+        const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
+        exportedFiles.push(fileName);
+      }
+      if (roadbookRow) {
+        const { fileName } = await exportRoadbookExcel(activeItinerary);
+        exportedFiles.push(fileName);
+      }
+
+      setStatus({
+        tone: 'success',
+        message: `${exportedFiles.join(' + ')} exporte depuis l\'itineraire actif.`,
+      });
     } catch (error) {
       console.error('[exporter] failed to export itinerary', error);
       setStatus({
