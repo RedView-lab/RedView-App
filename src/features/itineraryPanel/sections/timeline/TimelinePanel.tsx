@@ -6,7 +6,9 @@
  * optimistic updates, undo/redo etc.
  */
 import { useState, type MouseEvent } from 'react';
+import type { PredictionResult } from '@/features/fitPredictor';
 import type {
+  RhythmState,
   TimelineAddItemKind,
   TimelineItem,
   TimelineRailConfig,
@@ -33,6 +35,8 @@ import {
 
 interface TimelinePanelProps {
   items: TimelineItem[];
+  rhythm?: RhythmState;
+  prediction?: PredictionResult | null;
   view: TimelineView;
   railConfig?: Partial<TimelineRailConfig>;
 
@@ -55,6 +59,8 @@ interface TimelinePanelProps {
 
 export function TimelinePanel({
   items,
+  rhythm,
+  prediction,
   view,
   railConfig,
   onChangeView,
@@ -185,6 +191,8 @@ export function TimelinePanel({
         ) : (
           <TimelineTimelineView
             items={visibleItems}
+            rhythm={rhythm}
+            prediction={prediction}
             config={railConfig}
             selectedIds={selectedIds}
             onToggleSelect={handleToggleSelect}

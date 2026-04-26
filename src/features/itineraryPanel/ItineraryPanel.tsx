@@ -184,6 +184,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         {active ? (
           <TimelinePanel
             items={active.timeline}
+            rhythm={active.rhythm}
+            prediction={active.prediction ?? null}
             view={project.timelineView}
             onChangeView={onChangeTimelineView}
             onSearch={onSearchTimeline}
