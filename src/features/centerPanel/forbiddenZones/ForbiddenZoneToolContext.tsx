@@ -8,13 +8,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import type { Map as MapboxMap, MapLayerMouseEvent, MapMouseEvent } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
   clearForbiddenZoneDraft,
-  FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
-  FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
+  FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
 
@@ -23,7 +22,6 @@ const FORBIDDEN_VERTEX_CURSOR = 'grab';
 const FORBIDDEN_VERTEX_DRAG_CURSOR = 'grabbing';
 const POINT_EPSILON = 1e-6;
 const MAX_SEGMENT_INSERT_DISTANCE_PX = 42;
-const VERTEX_HITBOX_PADDING_PX = 18;
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -146,6 +144,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   useEffect(() => {
     if (!armed || !map || !store || !activeItinerary) return;
 
+    setForbiddenZoneDraft(map, draftPointsRef.current);
+
     const canvas = map.getCanvas();
     const wasDoubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
     const wasDragPanEnabled = map.dragPan.isEnabled();
@@ -164,15 +164,25 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       canvas.style.cursor = FORBIDDEN_CURSOR;
     };
 
+    const startVertexDrag = (pointIndex: number, originalEvent?: MouseEvent) => {
+      draggedPointIndex = pointIndex;
+      suppressNextClick = true;
+      originalEvent?.preventDefault();
+      originalEvent?.stopPropagation();
+      canvas.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
+      setStatusMessage('Glissez un sommet pour déplacer la zone');
+    };
+
+    const handleVertexMouseDown = (event: MapLayerMouseEvent) => {
+      const pointIndex = readVertexIndexFromLayerEvent(event);
+      if (pointIndex == null) return;
+      startVertexDrag(pointIndex, event.originalEvent as MouseEvent | undefined);
+    };
+
     const handleMouseDown = (event: MapMouseEvent) => {
       const nearestPointIndex = findDraftVertexIndexAtEvent(map, event);
       if (nearestPointIndex == null) return;
-      draggedPointIndex = nearestPointIndex;
-      suppressNextClick = true;
-      if (wasDragPanEnabled) map.dragPan.disable();
-      event.preventDefault();
-      canvas.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
-      setStatusMessage('Glissez un sommet pour déplacer la zone');
+      startVertexDrag(nearestPointIndex, event.originalEvent as MouseEvent | undefined);
     };
 
     const handleMouseMove = (event: MapMouseEvent) => {
@@ -201,7 +211,6 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         return;
       }
       draggedPointIndex = null;
-      if (wasDragPanEnabled) map.dragPan.enable();
       updateDraftStatus(draftPointsRef.current);
       if (event) applyCursor(event);
       else canvas.style.cursor = FORBIDDEN_CURSOR;
@@ -237,13 +246,16 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     if (wasDoubleClickZoomEnabled) map.doubleClickZoom.disable();
+    if (wasDragPanEnabled) map.dragPan.disable();
     applyCursor();
+    map.on('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
     map.on('mousedown', handleMouseDown);
     map.on('mousemove', handleMouseMove);
     map.on('mouseup', handleMouseUp);
     map.on('click', handleClick);
 
     return () => {
+      map.off('mousedown', FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, handleVertexMouseDown);
       map.off('mousedown', handleMouseDown);
       map.off('mousemove', handleMouseMove);
       map.off('mouseup', handleMouseUp);
@@ -372,17 +384,24 @@ function findDraftVertexIndexAtEvent(
   map: MapboxMap,
   event: MapMouseEvent,
 ): number | null {
-  const features = map.queryRenderedFeatures(
-    [
-      [event.point.x - VERTEX_HITBOX_PADDING_PX, event.point.y - VERTEX_HITBOX_PADDING_PX],
-      [event.point.x + VERTEX_HITBOX_PADDING_PX, event.point.y + VERTEX_HITBOX_PADDING_PX],
-    ],
-    {
-      layers: [FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID],
-    },
-  );
+  if (!map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID)) return null;
+
+  const features = map.queryRenderedFeatures(event.point, {
+    layers: [FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID],
+  });
 
   for (const feature of features) {
+    const indexValue = feature.properties?.index;
+    const index = typeof indexValue === 'number' ? indexValue : Number(indexValue);
+    if (!Number.isInteger(index) || index < 0) continue;
+    return index;
+  }
+
+  return null;
+}
+
+function readVertexIndexFromLayerEvent(event: MapLayerMouseEvent): number | null {
+  for (const feature of event.features ?? []) {
     const indexValue = feature.properties?.index;
     const index = typeof indexValue === 'number' ? indexValue : Number(indexValue);
     if (!Number.isInteger(index) || index < 0) continue;

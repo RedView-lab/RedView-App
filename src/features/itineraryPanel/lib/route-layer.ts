@@ -34,6 +34,7 @@ const FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID = 'brouter-forbidden-zone-draft-fill-la
 const FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID = 'brouter-forbidden-zone-draft-line-layer';
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-halo-layer';
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-layer';
+export const FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-hit-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -489,6 +490,23 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
     },
   });
 
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
+    type: 'circle',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'vertex'],
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'circle-radius': 24,
+      'circle-color': '#000000',
+      'circle-opacity': 0.001,
+      'circle-stroke-width': 0,
+    },
+  });
+
   return map.getSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID) as GeoJSONSource | null;
 }
 
@@ -880,6 +898,10 @@ export function setForbiddenZoneDraft(
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, 'visibility', vertexVisibility);
       map.moveLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID);
     }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, 'visibility', vertexVisibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID);
+    }
   } catch {
     /* noop */
   }
@@ -900,6 +922,9 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
     }
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID)) {
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */
