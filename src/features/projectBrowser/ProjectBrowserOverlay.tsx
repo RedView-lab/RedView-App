@@ -19,6 +19,7 @@ import {
 import {
   createProject,
   deleteProject,
+  deleteProjectFitFiles,
   deleteProjectThumbnail,
   getProjectThumbnailUrls,
   listProjects,
@@ -310,6 +311,7 @@ export function ProjectBrowserOverlay({
       try {
         await deleteProject(id);
         // Best-effort thumbnail cleanup so storage doesn't fill with orphans.
+        void deleteProjectFitFiles(id);
         void deleteProjectThumbnail(id);
         setProjects((prev) => prev.filter((p) => p.id !== id));
         setThumbnails((prev) => {

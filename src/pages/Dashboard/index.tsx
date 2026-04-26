@@ -428,6 +428,7 @@ export default function Dashboard({
                   <PredictionProvider>
                   <div style={leftPanelStyle}>
                     <ItineraryPanel
+                      projectId={activeProjectId}
                       map={mapInstance}
                       isMapLoaded={mapLoaded}
                       width={leftPanelWidth}

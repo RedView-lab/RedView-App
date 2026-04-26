@@ -93,6 +93,8 @@ export function splitItineraryProject(
   createdItinerary.timeline = createImportedTimeline(rightPoints);
   createdItinerary.metrics = buildImportedRouteMetrics(rightPoints);
   createdItinerary.prediction = null;
+  delete createdItinerary.fitUploads;
+  delete createdItinerary.pendingFitRecompute;
   delete createdItinerary.poiFeatures;
   delete createdItinerary.routeAudit;
 

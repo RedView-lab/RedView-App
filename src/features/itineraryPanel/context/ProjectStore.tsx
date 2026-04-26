@@ -198,6 +198,10 @@ export function ProjectProvider({
         duplicate.name = duplicateName;
         duplicate.color = color;
         duplicate.visible = false;
+        duplicate.prediction = null;
+        delete duplicate.fitUploads;
+        delete duplicate.pendingFitRecompute;
+        if (duplicate.metrics) delete duplicate.metrics.durationSec;
 
         resultBox = {
           createdItineraryId: duplicate.id,

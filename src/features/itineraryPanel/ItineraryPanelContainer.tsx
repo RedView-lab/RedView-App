@@ -17,6 +17,7 @@ import {
 } from './defaultState';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import type { PoiFeature } from '@/features/poi/types';
+import { deleteProjectItineraryFitFiles } from '@/lib/projects';
 import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
@@ -39,6 +40,7 @@ import type {
 } from './types';
 
 interface ItineraryPanelContainerProps {
+  projectId?: string | null;
   /** Mapbox map instance (provided by the Dashboard). */
   map: MapboxMap | null;
   /** True once the map's initial style has finished loading. */
@@ -61,6 +63,7 @@ interface ItineraryPanelContainerProps {
  * Persistence (Supabase, undo stack, routing engine) will be wired later.
  */
 export function ItineraryPanelContainer({
+  projectId,
   map,
   isMapLoaded,
   width,
@@ -95,6 +98,11 @@ export function ItineraryPanelContainer({
     [project],
   );
   const itineraries = project.itineraries;
+  const itineraryIdsSignature = useMemo(
+    () => itineraries.map((itinerary) => itinerary.id).join('|'),
+    [itineraries],
+  );
+  const previousItineraryIdsRef = useRef<string[]>(itineraries.map((itinerary) => itinerary.id));
 
   const {
     calculateDisabled,
@@ -106,6 +114,7 @@ export function ItineraryPanelContainer({
     uploadFitLabel,
   } = useItineraryFitRuntime({
     active,
+    projectId: projectId ?? null,
     predictionStore,
     setProject,
   });
@@ -116,6 +125,20 @@ export function ItineraryPanelContainer({
     itineraries,
     map,
   });
+
+  useEffect(() => {
+    const previousIds = previousItineraryIdsRef.current;
+    const currentIds = itineraries.map((itinerary) => itinerary.id);
+    previousItineraryIdsRef.current = currentIds;
+    if (!projectId) return;
+
+    const removedIds = previousIds.filter((id) => !currentIds.includes(id));
+    for (const removedId of removedIds) {
+      void deleteProjectItineraryFitFiles(projectId, removedId).catch((error) => {
+        console.warn('[fit-predictor] failed to delete itinerary FIT files', error);
+      });
+    }
+  }, [itineraries, itineraryIdsSignature, projectId]);
 
   const {
     cancelRouteRequest,

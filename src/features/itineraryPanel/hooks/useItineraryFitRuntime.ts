@@ -17,6 +17,14 @@ import {
   buildRouteGpxFile,
   hasUsableRouteElevation,
 } from '../lib/container-prediction';
+import {
+  buildFitUploadsSignature,
+  deserializeLegacyFitUploads,
+} from '../lib/persisted-fit-files';
+import {
+  downloadProjectItineraryFitFiles,
+  uploadProjectItineraryFitFiles,
+} from '@/lib/projects';
 import type { ItineraryProject } from '../types';
 
 type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
@@ -29,6 +37,7 @@ interface ItineraryFitRuntime {
   status: FitRuntimeStatus;
   error: string | null;
   updatedAt: string | null;
+  persistedUploadSignature: string;
 }
 
 interface PredictionStoreBridge {
@@ -37,6 +46,7 @@ interface PredictionStoreBridge {
 
 interface UseItineraryFitRuntimeArgs {
   active: ItineraryProject['itineraries'][number] | null;
+  projectId: string | null;
   predictionStore: PredictionStoreBridge | null;
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
 }
@@ -50,11 +60,13 @@ function createEmptyFitRuntime(): ItineraryFitRuntime {
     status: 'idle',
     error: null,
     updatedAt: null,
+    persistedUploadSignature: '',
   };
 }
 
 export function useItineraryFitRuntime({
   active,
+  projectId,
   predictionStore,
   setProject,
 }: UseItineraryFitRuntimeArgs) {
@@ -83,6 +95,18 @@ export function useItineraryFitRuntime({
       active ? fitRuntimeByItineraryId[active.id] ?? createEmptyFitRuntime() : null,
     [active, fitRuntimeByItineraryId],
   );
+  const activeRouteSignature = useMemo(() => {
+    const points = active?.gpxRoute?.points;
+    if (!points || points.length < 2) return '';
+    const first = points[0];
+    const last = points[points.length - 1];
+    return [
+      points.length,
+      first ? `${first.lon.toFixed(5)},${first.lat.toFixed(5)}` : '',
+      last ? `${last.lon.toFixed(5)},${last.lat.toFixed(5)}` : '',
+      last?.distanceM ?? '',
+    ].join('|');
+  }, [active?.gpxRoute?.points]);
 
   const uploadFitLabel = useMemo(() => {
     const count = activeFitRuntime?.fitFiles.length ?? 0;
@@ -135,6 +159,95 @@ export function useItineraryFitRuntime({
     [],
   );
 
+  useEffect(() => {
+    if (!active) return;
+
+    const persistedUploads = active.fitUploads ?? [];
+    const persistedUploadSignature = buildFitUploadsSignature(persistedUploads);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const legacyFiles = deserializeLegacyFitUploads(
+          persistedUploads.filter((upload) => !upload.path && upload.base64),
+        );
+        const storageUploads = persistedUploads.filter(
+          (upload) => typeof upload.path === 'string' && upload.path.length > 0,
+        );
+        const downloadedFiles = storageUploads.length > 0
+          ? await downloadProjectItineraryFitFiles(storageUploads)
+          : [];
+        if (cancelled) return;
+
+        const downloadedByPath = new Map<string, File>();
+        for (let index = 0; index < storageUploads.length; index += 1) {
+          const path = storageUploads[index]?.path;
+          const file = downloadedFiles[index];
+          if (path && file) downloadedByPath.set(path, file);
+        }
+
+        const legacyQueue = legacyFiles.slice();
+        const fitFiles = persistedUploads.flatMap((upload) => {
+          if (upload.path) {
+            const file = downloadedByPath.get(upload.path);
+            return file ? [file] : [];
+          }
+          const legacy = legacyQueue.shift();
+          return legacy ? [legacy] : [];
+        });
+
+        updateFitRuntime(active.id, (current) => {
+          if (
+            current.persistedUploadSignature === persistedUploadSignature
+            && current.predictionResult === (active.prediction ?? null)
+            && current.fitFiles.length === fitFiles.length
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            fitFiles,
+            fitFileNames: fitFiles.map((file) => file.name),
+            predictionResult: active.prediction ?? null,
+            progress: current.status === 'running' ? current.progress : [],
+            status:
+              current.status === 'running'
+                ? current.status
+                : active.prediction
+                  ? 'success'
+                  : fitFiles.length > 0
+                    ? 'ready'
+                    : 'idle',
+            error: current.status === 'running' ? current.error : null,
+            persistedUploadSignature,
+          };
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error('[fit-predictor] failed to hydrate persisted FIT uploads', error);
+        updateFitRuntime(active.id, (current) => ({
+          ...current,
+          fitFiles: [],
+          fitFileNames: [],
+          predictionResult: active.prediction ?? null,
+          progress: [],
+          status: 'error',
+          error:
+            error instanceof Error
+              ? error.message
+              : 'Impossible de recharger les fichiers FIT du projet.',
+          updatedAt: new Date().toISOString(),
+          persistedUploadSignature,
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [active, projectId, updateFitRuntime]);
+
   const handleUploadFitRequest = useCallback(() => {
     if (!active) return;
     fitUploadTargetIdRef.current = active.id;
@@ -152,10 +265,6 @@ export function useItineraryFitRuntime({
       if (fitFiles.length === 0) {
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
-          fitFiles: [],
-          fitFileNames: [],
-          predictionResult: null,
-          progress: [],
           status: 'error',
           error: 'Aucun fichier FIT valide sélectionné.',
           updatedAt: new Date().toISOString(),
@@ -163,6 +272,13 @@ export function useItineraryFitRuntime({
         return;
       }
 
+      const persistedUploadSignature = buildFitUploadsSignature(
+        fitFiles.map((file) => ({
+          name: file.name,
+          lastModified: file.lastModified,
+          size: file.size,
+        })),
+      );
       updateFitRuntime(itineraryId, (current) => ({
         ...current,
         fitFiles,
@@ -172,9 +288,60 @@ export function useItineraryFitRuntime({
         status: 'ready',
         error: null,
         updatedAt: new Date().toISOString(),
+        persistedUploadSignature,
       }));
+
+      predictionStore?.setPrediction(itineraryId, null);
+      if (!projectId) {
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          status: 'error',
+          error: 'Projet Supabase introuvable pour sauvegarder les FIT.',
+          updatedAt: new Date().toISOString(),
+        }));
+        return;
+      }
+
+      void uploadProjectItineraryFitFiles(projectId, itineraryId, fitFiles)
+        .then((fitUploads) => {
+          updateFitRuntime(itineraryId, (current) => ({
+            ...current,
+            persistedUploadSignature: buildFitUploadsSignature(fitUploads),
+          }));
+          setProject((prev) => ({
+            ...prev,
+            itineraries: prev.itineraries.map((current) =>
+              current.id === itineraryId
+                ? {
+                    ...current,
+                    fitUploads,
+                    prediction: null,
+                    pendingFitRecompute: undefined,
+                    metrics: current.metrics
+                      ? {
+                          ...current.metrics,
+                          durationSec: undefined,
+                        }
+                      : current.metrics,
+                  }
+                : current,
+            ),
+          }));
+        })
+        .catch((error: unknown) => {
+          console.error('[fit-predictor] failed to persist FIT uploads', error);
+          updateFitRuntime(itineraryId, (current) => ({
+            ...current,
+            status: 'error',
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Impossible de sauvegarder les fichiers FIT dans le bucket du projet.',
+            updatedAt: new Date().toISOString(),
+          }));
+        });
     },
-    [updateFitRuntime],
+    [predictionStore, projectId, setProject, updateFitRuntime],
   );
 
   const handleCalculatePrediction = useCallback(() => {
@@ -255,6 +422,7 @@ export function useItineraryFitRuntime({
             curr.id === itineraryId
               ? {
                   ...curr,
+                  pendingFitRecompute: undefined,
                   metrics: {
                     ...curr.metrics,
                     durationSec: result.total_time_s,
@@ -274,6 +442,17 @@ export function useItineraryFitRuntime({
       })
       .catch((error: unknown) => {
         console.error('[fit-predictor] prediction failed', error);
+        setProject((prev) => ({
+          ...prev,
+          itineraries: prev.itineraries.map((curr) =>
+            curr.id === itineraryId
+              ? {
+                  ...curr,
+                  pendingFitRecompute: undefined,
+                }
+              : curr,
+          ),
+        }));
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
           predictionResult: null,
@@ -287,6 +466,34 @@ export function useItineraryFitRuntime({
         predictionStore?.setPrediction(itineraryId, null);
       });
   }, [active, predictionStore, setProject, updateFitRuntime]);
+
+  useEffect(() => {
+    if (!active || active.pendingFitRecompute !== true) return;
+
+    const runtime = fitRuntimeRef.current[active.id] ?? createEmptyFitRuntime();
+    if (runtime.status === 'running') return;
+
+    if (runtime.fitFiles.length === 0) {
+      setProject((prev) => ({
+        ...prev,
+        itineraries: prev.itineraries.map((curr) =>
+          curr.id === active.id
+            ? {
+                ...curr,
+                pendingFitRecompute: undefined,
+              }
+            : curr,
+        ),
+      }));
+      return;
+    }
+
+    if (!active.gpxRoute || active.gpxRoute.points.length < 2) return;
+    if (active.gpxRoute.source === 'brouter' && !active.routeAudit) return;
+    if (!hasUsableRouteElevation(active.gpxRoute.points)) return;
+
+    handleCalculatePrediction();
+  }, [active, activeRouteSignature, handleCalculatePrediction, setProject]);
 
   return {
     calculateDisabled,

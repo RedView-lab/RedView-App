@@ -231,7 +231,9 @@ export function CenterPanelToolbar() {
     activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
       ? activeItinerary.gpxRoute
       : null;
+  const reversibleRoute = activeItinerary?.gpxRoute ?? null;
   const activeTracePointCount = simplifiableRoute?.points.length ?? 0;
+  const reversibleTracePointCount = reversibleRoute?.points.length ?? 0;
   const activeTraceDistanceKm = useMemo(() => {
     if (!simplifiableRoute) return 0;
     return routeLengthM(simplifiableRoute.points) / 1000;
@@ -242,7 +244,7 @@ export function CenterPanelToolbar() {
   }, [activeTraceDistanceKm, activeTracePointCount]);
   const canSimplifyTrace = activeTracePointCount > 2;
   const canCleanTrace = activeTracePointCount > 2;
-  const canReverseTrace = activeTracePointCount > 1;
+  const canReverseTrace = reversibleTracePointCount > 1;
   const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
   const canMergeTrace = routeMergeTool?.canMerge ?? false;
   const mergeStatusMessage = routeMergeTool?.statusMessage ?? null;

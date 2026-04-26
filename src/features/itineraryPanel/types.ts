@@ -318,6 +318,16 @@ export interface ItineraryForbiddenZone {
   createdAt: string;
 }
 
+export interface ItineraryFitUpload {
+  name: string;
+  type: string;
+  lastModified: number;
+  size: number;
+  path?: string;
+  /** Legacy inline payload kept only so older saved projects still hydrate. */
+  base64?: string;
+}
+
 export interface ItinerarySplitRelation {
   parentItineraryId: string;
   rootItineraryId: string;
@@ -395,10 +405,14 @@ export interface Itinerary {
   routeAudit?: ItineraryRouteAuditState;
   /** Persisted no-go polygons sent to BRouter as absolute forbidden areas. */
   forbiddenZones?: ItineraryForbiddenZone[];
+  /** Persisted FIT uploads used as prediction history for this itinerary. */
+  fitUploads?: ItineraryFitUpload[];
   /** Pending tail-segment append produced by the tracer subtool. */
   pendingTraceExtension?: ItineraryPendingTraceExtension;
   /** Pending local reroute patch for waypoint edits/removals. */
   pendingRoutePatch?: ItineraryPendingRoutePatch;
+  /** Internal flag to auto-run FIT timing again once the route is ready. */
+  pendingFitRecompute?: boolean;
 }
 
 export interface ItineraryProject {
