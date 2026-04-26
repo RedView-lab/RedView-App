@@ -46,9 +46,8 @@ export interface BrouterRequest {
   /** Free-form `profile:xxx` overrides applied on top of the base profile. */
   overrides?: BrouterParamOverrides;
   /**
-   * Optional `polygons` parameter — list of inclusion polygons
-   * ("must stay inside"). Format already encoded for the URL.
-   * @see formatPolygonsParam in ./geo
+    * Optional `polygons` parameter — list of closed polygons encoded for
+    * the URL. In practice RedView uses it for absolute no-go areas.
    */
   polygons?: string;
   /**

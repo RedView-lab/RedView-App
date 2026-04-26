@@ -26,6 +26,12 @@ const ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID = 'brouter-analysis-flyover-progre
 const ROUTE_AUDIT_SOURCE_ID = 'brouter-route-audit-source';
 const ROUTE_AUDIT_GLOW_LAYER_ID = 'brouter-route-audit-glow-layer';
 const ROUTE_AUDIT_LINE_LAYER_ID = 'brouter-route-audit-line-layer';
+const FORBIDDEN_ZONE_SOURCE_ID = 'brouter-forbidden-zone-source';
+const FORBIDDEN_ZONE_FILL_LAYER_ID = 'brouter-forbidden-zone-fill-layer';
+const FORBIDDEN_ZONE_LINE_LAYER_ID = 'brouter-forbidden-zone-line-layer';
+const FORBIDDEN_ZONE_DRAFT_SOURCE_ID = 'brouter-forbidden-zone-draft-source';
+const FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID = 'brouter-forbidden-zone-draft-fill-layer';
+const FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID = 'brouter-forbidden-zone-draft-line-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -99,6 +105,65 @@ function buildRouteAuditGeoJson(
             ]
           : [],
       ) ?? [],
+  };
+}
+
+function closePolygonRing(coordinates: [number, number][]): [number, number][] {
+  if (coordinates.length === 0) return coordinates;
+  const first = coordinates[0];
+  const last = coordinates[coordinates.length - 1];
+  if (first[0] === last[0] && first[1] === last[1]) return coordinates;
+  return [...coordinates, first];
+}
+
+function buildForbiddenZoneGeoJson(
+  zones?: Array<{ id: string; points: Array<{ lon: number; lat: number }> }> | null,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features:
+      zones?.flatMap((zone) => {
+        if (zone.points.length < 3) return [];
+        return [
+          {
+            type: 'Feature' as const,
+            properties: {
+              id: zone.id,
+              color: '#ff3b30',
+              fillColor: '#ff3b30',
+            },
+            geometry: {
+              type: 'Polygon' as const,
+              coordinates: [closePolygonRing(zone.points.map((point) => [point.lon, point.lat]))],
+            },
+          },
+        ];
+      }) ?? [],
+  };
+}
+
+function buildForbiddenZoneDraftGeoJson(
+  points?: Array<{ lon: number; lat: number }> | null,
+): GeoJSON.FeatureCollection {
+  if (!points || points.length < 3) {
+    return { type: 'FeatureCollection', features: [] };
+  }
+
+  return {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: {
+          color: '#ff3b30',
+          fillColor: '#ff3b30',
+        },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [closePolygonRing(points.map((point) => [point.lon, point.lat]))],
+        },
+      },
+    ],
   };
 }
 
@@ -266,6 +331,93 @@ function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
   });
 
   return map.getSource(ROUTE_AUDIT_SOURCE_ID) as GeoJSONSource | null;
+}
+
+function ensureForbiddenZoneLayers(map: MapboxMap): GeoJSONSource | null {
+  const existing = map.getSource(FORBIDDEN_ZONE_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(FORBIDDEN_ZONE_SOURCE_ID, {
+    type: 'geojson',
+    data: buildForbiddenZoneGeoJson(null),
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_FILL_LAYER_ID,
+    type: 'fill',
+    source: FORBIDDEN_ZONE_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'fill-color': ['coalesce', ['get', 'fillColor'], '#ff3b30'],
+      'fill-opacity': 0.2,
+      'fill-emissive-strength': 0.8,
+    },
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_LINE_LAYER_ID,
+    type: 'line',
+    source: FORBIDDEN_ZONE_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff3b30'],
+      'line-width': 3,
+      'line-opacity': 0.96,
+      'line-emissive-strength': 1.1,
+    },
+  });
+
+  return map.getSource(FORBIDDEN_ZONE_SOURCE_ID) as GeoJSONSource | null;
+}
+
+function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
+  const existing = map.getSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID, {
+    type: 'geojson',
+    data: buildForbiddenZoneDraftGeoJson(null),
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
+    type: 'fill',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'fill-color': ['coalesce', ['get', 'fillColor'], '#ff3b30'],
+      'fill-opacity': 0.12,
+      'fill-emissive-strength': 0.9,
+    },
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID,
+    type: 'line',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    layout: {
+      visibility: 'none',
+    },
+    paint: {
+      'line-color': ['coalesce', ['get', 'color'], '#ff3b30'],
+      'line-width': 3,
+      'line-opacity': 0.88,
+      'line-dasharray': [1, 1],
+      'line-emissive-strength': 1,
+    },
+  });
+
+  return map.getSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID) as GeoJSONSource | null;
 }
 
 function ids(itineraryId: string) {
@@ -586,6 +738,80 @@ export function clearRouteAuditFindings(map: MapboxMap): void {
     }
     if (map.getLayer(ROUTE_AUDIT_LINE_LAYER_ID)) {
       map.setLayoutProperty(ROUTE_AUDIT_LINE_LAYER_ID, 'visibility', 'none');
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function setForbiddenZones(
+  map: MapboxMap,
+  zones: Array<{ id: string; points: Array<{ lon: number; lat: number }> }>,
+): void {
+  try {
+    const source = ensureForbiddenZoneLayers(map);
+    if (!source) return;
+    source.setData(buildForbiddenZoneGeoJson(zones));
+    const visibility = zones.length > 0 ? 'visible' : 'none';
+    if (map.getLayer(FORBIDDEN_ZONE_FILL_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_FILL_LAYER_ID, 'visibility', visibility);
+      map.moveLayer(FORBIDDEN_ZONE_FILL_LAYER_ID);
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_LINE_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_LINE_LAYER_ID, 'visibility', visibility);
+      map.moveLayer(FORBIDDEN_ZONE_LINE_LAYER_ID);
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearForbiddenZones(map: MapboxMap): void {
+  try {
+    const source = ensureForbiddenZoneLayers(map);
+    source?.setData(buildForbiddenZoneGeoJson(null));
+    if (map.getLayer(FORBIDDEN_ZONE_FILL_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_FILL_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_LINE_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_LINE_LAYER_ID, 'visibility', 'none');
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function setForbiddenZoneDraft(
+  map: MapboxMap,
+  points: Array<{ lon: number; lat: number }>,
+): void {
+  try {
+    const source = ensureForbiddenZoneDraftLayers(map);
+    if (!source) return;
+    source.setData(buildForbiddenZoneDraftGeoJson(points));
+    const visibility = points.length >= 3 ? 'visible' : 'none';
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID, 'visibility', visibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID);
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, 'visibility', visibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID);
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearForbiddenZoneDraft(map: MapboxMap): void {
+  try {
+    const source = ensureForbiddenZoneDraftLayers(map);
+    source?.setData(buildForbiddenZoneDraftGeoJson(null));
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */

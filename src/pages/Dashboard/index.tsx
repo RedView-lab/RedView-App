@@ -15,6 +15,7 @@ import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
 import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
+import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
 import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
@@ -421,6 +422,7 @@ export default function Dashboard({
           >
             <RouteSplitToolProvider map={mapInstance}>
               <TraceToolProvider map={mapInstance}>
+                <ForbiddenZoneToolProvider map={mapInstance}>
                 <PredictionProvider>
                 <div style={leftPanelStyle}>
                   <ItineraryPanel
@@ -521,6 +523,7 @@ export default function Dashboard({
                   </div>
                 </div>
                 </PredictionProvider>
+                </ForbiddenZoneToolProvider>
               </TraceToolProvider>
             </RouteSplitToolProvider>
           </ProjectProvider>

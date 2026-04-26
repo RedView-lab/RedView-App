@@ -2,6 +2,8 @@ import { useEffect, useMemo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
+  clearForbiddenZoneDraft,
+  clearForbiddenZones,
   clearRouteAuditFindings,
   clearRouteEndpoints,
   listMountedRouteIds,
@@ -9,6 +11,7 @@ import {
   removeRouteLayer,
   type RouteEndpoint,
   setRouteAuditFindings,
+  setForbiddenZones,
   setRouteEndpoints,
   upsertRouteLayer,
 } from '../lib/route-layer';
@@ -45,6 +48,10 @@ export function useItineraryRouteLayerSync({
           it.visible !== false ? 1 : 0,
           it.routeAudit?.visible ? 1 : 0,
           it.routeAudit?.findings.length ?? 0,
+          (it.forbiddenZones ?? []).map((zone) => {
+            const first = zone.points[0];
+            return `${zone.id}:${zone.points.length}:${first?.lon ?? ''}:${first?.lat ?? ''}`;
+          }).join(','),
         ].join(':');
       })
       .join('|');
@@ -85,11 +92,14 @@ export function useItineraryRouteLayerSync({
         active.routeAudit?.findings ?? [],
         active.routeAudit?.visible === true,
       );
+      setForbiddenZones(map, active.forbiddenZones ?? []);
       const endpoints = collectActiveRouteEndpoints(active.timeline);
       if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
       else clearRouteEndpoints(map);
     } else {
       clearRouteAuditFindings(map);
+      clearForbiddenZones(map);
+      clearForbiddenZoneDraft(map);
       clearRouteEndpoints(map);
     }
   }, [active, isMapLoaded, layerSignature, map, itineraries]);
@@ -101,6 +111,8 @@ export function useItineraryRouteLayerSync({
         try {
           removeAllRouteLayers(map);
           clearRouteAuditFindings(map);
+          clearForbiddenZones(map);
+          clearForbiddenZoneDraft(map);
           clearRouteEndpoints(map);
           for (const it of itineraries) {
             const pts = it.gpxRoute?.points;
@@ -118,6 +130,7 @@ export function useItineraryRouteLayerSync({
               active.routeAudit?.findings ?? [],
               active.routeAudit?.visible === true,
             );
+            setForbiddenZones(map, active.forbiddenZones ?? []);
             const endpoints = collectActiveRouteEndpoints(active.timeline);
             if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
           }

@@ -4,6 +4,7 @@ import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useRouteSplitToolOptional } from '../routeSplit';
 import { useTraceToolOptional } from '../tracer';
+import { useForbiddenZoneToolOptional } from '../forbiddenZones';
 import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/clean-gpx-glitches';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from './CenterPanelIcons';
@@ -182,6 +183,7 @@ export function CenterPanelToolbar() {
   const store = useProjectStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const traceTool = useTraceToolOptional();
+  const forbiddenZoneTool = useForbiddenZoneToolOptional();
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [activeSubtool, setActiveSubtool] = useState<'simplify' | null>(null);
   const [simplifyPointsPerKm, setSimplifyPointsPerKm] = useState(BALANCED_POINTS_PER_KM);
@@ -245,6 +247,9 @@ export function CenterPanelToolbar() {
   const canTrace = traceTool?.canTrace ?? false;
   const traceStatusMessage = traceTool?.statusMessage ?? null;
   const traceArmed = traceTool?.armed ?? false;
+  const canEditForbiddenZone = forbiddenZoneTool?.canEdit ?? false;
+  const forbiddenZoneStatusMessage = forbiddenZoneTool?.statusMessage ?? null;
+  const forbiddenZoneArmed = forbiddenZoneTool?.armed ?? false;
   const canUndoTraceEdit = store?.canUndoTraceEdit ?? false;
   const canRedoTraceEdit = store?.canRedoTraceEdit ?? false;
   const auditFindings = activeItinerary?.routeAudit?.findings ?? [];
@@ -261,6 +266,7 @@ export function CenterPanelToolbar() {
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
     if (splitStatusMessage) return splitStatusMessage;
+    if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
     if (traceStatusMessage) return traceStatusMessage;
     if (toolbarStatus) return toolbarStatus;
     if (!toolsExpanded) return null;
@@ -285,6 +291,7 @@ export function CenterPanelToolbar() {
     auditFindings.length,
     canAuditTrace,
     canCleanTrace,
+    forbiddenZoneStatusMessage,
     canSimplifyTrace,
     simplifyTargetPoints,
     splitStatusMessage,
@@ -368,14 +375,29 @@ export function CenterPanelToolbar() {
   };
 
   const handleToggleRouteSplit = () => {
-    if (!splitArmed) traceTool?.deactivate();
+    if (!splitArmed) {
+      traceTool?.deactivate();
+      forbiddenZoneTool?.deactivate();
+    }
     routeSplitTool?.toggle();
     setToolbarStatus(null);
   };
 
   const handleToggleTrace = () => {
-    if (!traceArmed) routeSplitTool?.deactivate();
+    if (!traceArmed) {
+      routeSplitTool?.deactivate();
+      forbiddenZoneTool?.deactivate();
+    }
     traceTool?.toggle();
+    setToolbarStatus(null);
+  };
+
+  const handleToggleForbiddenZone = () => {
+    if (!forbiddenZoneArmed) {
+      routeSplitTool?.deactivate();
+      traceTool?.deactivate();
+    }
+    forbiddenZoneTool?.toggle();
     setToolbarStatus(null);
   };
 
@@ -453,7 +475,12 @@ export function CenterPanelToolbar() {
             <IconBezier />
           </ToolbarIconButton>
 
-          <ToolbarIconButton label="Interdire">
+          <ToolbarIconButton
+            label="Interdire"
+            onClick={handleToggleForbiddenZone}
+            disabled={!canEditForbiddenZone}
+            active={forbiddenZoneArmed}
+          >
             <IconSlashOctagon />
           </ToolbarIconButton>
 

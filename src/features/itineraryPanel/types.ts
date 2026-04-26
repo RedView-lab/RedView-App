@@ -307,6 +307,17 @@ export interface ItineraryPendingRoutePatch {
   }>;
 }
 
+export interface ItineraryForbiddenZonePoint {
+  lat: number;
+  lon: number;
+}
+
+export interface ItineraryForbiddenZone {
+  id: string;
+  points: ItineraryForbiddenZonePoint[];
+  createdAt: string;
+}
+
 export interface ItinerarySplitRelation {
   parentItineraryId: string;
   rootItineraryId: string;
@@ -382,6 +393,8 @@ export interface Itinerary {
   poiFeatures?: PoiFeature[];
   /** BRouter-backed rideability audit findings for this itinerary. */
   routeAudit?: ItineraryRouteAuditState;
+  /** Persisted no-go polygons sent to BRouter as absolute forbidden areas. */
+  forbiddenZones?: ItineraryForbiddenZone[];
   /** Pending tail-segment append produced by the tracer subtool. */
   pendingTraceExtension?: ItineraryPendingTraceExtension;
   /** Pending local reroute patch for waypoint edits/removals. */

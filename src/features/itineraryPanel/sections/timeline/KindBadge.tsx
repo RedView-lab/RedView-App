@@ -47,11 +47,11 @@ interface KindBadgeProps {
   poiCategory?: PoiCategory;
 }
 
-/** French labels (Figma copy — Étape / Waypoint / POI / Pause). */
+/** French labels for the timeline type column. */
 export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): string {
   switch (kind) {
-    case 'start':       return 'Étape';
-    case 'end':         return 'Étape';
+    case 'start':       return 'Départ';
+    case 'end':         return 'Arrivée';
     case 'waypoint':    return 'Waypoint';
     case 'water':       return 'POI';
     case 'supermarket': return 'POI';

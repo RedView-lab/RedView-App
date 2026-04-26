@@ -7,6 +7,7 @@
 export * from './types';
 export { fetchBrouterRoute, uploadCustomProfile, fetchBrouterRouteBestOfN } from './client';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './url';
+export { formatForbiddenZonePolygons } from './forbidden-zones';
 export {
   panelProfileToBrouter,
   basicStateToOverrides,

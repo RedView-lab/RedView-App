@@ -8,6 +8,7 @@ import {
   checkRouteWithinFrance,
   fetchBrouterRoute,
   fetchBrouterRouteBestOfN,
+  formatForbiddenZonePolygons,
   hashBrf,
   isClimbingMode,
   resolveItineraryRouting,
@@ -80,6 +81,7 @@ export function useItineraryBrouterRouting({
   const prioritiesJson = active ? JSON.stringify(active.priorities) : '';
   const roadTypesJson = active ? JSON.stringify(active.roadTypes) : '';
   const expertJson = active ? JSON.stringify(active.expertProfile) : '';
+  const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
 
   const brfHash = useMemo(() => {
     if (!active) return '';
@@ -162,6 +164,7 @@ export function useItineraryBrouterRouting({
             start: pendingRoutePatch.start,
             end: pendingRoutePatch.end,
             via: pendingRoutePatch.via,
+            polygons: forbiddenPolygons,
             profile: resolved.profileId,
             signal: ctrl.signal,
           };
@@ -307,6 +310,7 @@ export function useItineraryBrouterRouting({
             start: appendStart,
             end: appendEnd,
             via: [] as Array<{ lat: number; lon: number }>,
+            polygons: forbiddenPolygons,
             profile: resolved.profileId,
             signal: ctrl.signal,
           };
@@ -491,6 +495,7 @@ export function useItineraryBrouterRouting({
           start: { lat: startLat, lon: startLon },
           end: { lat: endLat, lon: endLon },
           via,
+          polygons: forbiddenPolygons,
           profile: resolved.profileId,
           signal: ctrl.signal,
         };
@@ -620,7 +625,7 @@ export function useItineraryBrouterRouting({
       });
 
     return () => ctrl.abort();
-  }, [active, brfHash, climbing, endKey, hasWaypointOverride, isMapLoaded, map, profileId, rollbackPendingTraceAppend, setProject, startKey, viaKey]);
+  }, [active, brfHash, climbing, endKey, forbiddenPolygons, hasWaypointOverride, isMapLoaded, map, profileId, rollbackPendingTraceAppend, setProject, startKey, viaKey]);
 
   return {
     cancelRouteRequest,
