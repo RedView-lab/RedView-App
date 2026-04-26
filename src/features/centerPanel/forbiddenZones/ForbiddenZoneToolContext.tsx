@@ -24,21 +24,16 @@ const FORBIDDEN_VERTEX_CURSOR = 'grab';
 const FORBIDDEN_VERTEX_DRAG_CURSOR = 'grabbing';
 const HIT_QUERY_RADIUS_PX = 32;
 const POINT_EPSILON = 1e-6;
-const MAX_SEGMENT_INSERT_DISTANCE_PX = 42;
 
 type DraftPoint = { lat: number; lon: number };
+type DraftStatusMode = 'drawing' | 'moving';
 type ForbiddenHoverState = 'none' | 'vertex' | 'segment';
-type ForbiddenDragState = { kind: 'idle' } | { kind: 'vertex'; pointIndex: number };
+type ForbiddenInteractionState =
+  | { kind: 'drawing' }
+  | { kind: 'moving'; pointIndex: number };
 type ForbiddenHitTarget =
   | { kind: 'vertex'; pointIndex: number }
   | { kind: 'segment'; edgeIndex: number };
-type ForbiddenHitDiagnostics = {
-  target: ForbiddenHitTarget | null;
-  pointIndex: number | null;
-  edgeIndex: number | null;
-  vertexHitCount: number;
-  segmentHitCount: number;
-};
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -66,6 +61,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const [draftPoints, setDraftPoints] = useState<DraftPoint[]>([]);
   const [draftFuture, setDraftFuture] = useState<DraftPoint[][]>([]);
   const draftPointsRef = useRef(draftPoints);
+  const interactionRef = useRef<ForbiddenInteractionState>({ kind: 'drawing' });
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
@@ -74,24 +70,32 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const canRedoDraft = draftFuture.length > 0;
 
   const resetDraft = useCallback(() => {
+    interactionRef.current = { kind: 'drawing' };
     setDraftPoints([]);
     setDraftFuture([]);
     if (map) clearForbiddenZoneDraft(map);
   }, [map]);
 
-  const updateDraftStatus = useCallback((points: DraftPoint[]) => {
-    if (points.length <= 0) {
-      setStatusMessage('Cliquez pour poser la zone, clic droit pour fermer (3 points minimum)');
+  const updateDraftStatus = useCallback((points: DraftPoint[], mode: DraftStatusMode = 'drawing') => {
+    if (mode === 'moving') {
+      setStatusMessage('Deplacez le sommet puis cliquez pour confirmer');
       return;
     }
+
+    if (points.length <= 0) {
+      setStatusMessage('Cliquez pour poser le premier point, clic droit pour fermer');
+      return;
+    }
+
     setStatusMessage(
       points.length >= 3
-        ? 'Clic droit pour fermer la zone interdite'
+        ? 'Cliquez un sommet pour le deplacer, clic droit pour fermer et enregistrer'
         : `Zone interdite: ${points.length}/3 points minimum`,
     );
   }, []);
 
   const deactivate = useCallback(() => {
+    interactionRef.current = { kind: 'drawing' };
     setArmed(false);
     setStatusMessage(null);
     resetDraft();
@@ -101,6 +105,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     if (!canEdit) return;
     setArmed((current) => {
       const next = !current;
+      interactionRef.current = { kind: 'drawing' };
       if (!next) {
         setStatusMessage(null);
         setDraftPoints([]);
@@ -108,15 +113,20 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         if (map) clearForbiddenZoneDraft(map);
         return next;
       }
-      setStatusMessage('Cliquez pour poser la zone, clic droit pour fermer (3 points minimum)');
+      setDraftPoints([]);
+      setDraftFuture([]);
+      if (map) clearForbiddenZoneDraft(map);
+      updateDraftStatus([]);
       return next;
     });
-  }, [canEdit, map]);
+  }, [canEdit, map, updateDraftStatus]);
 
   const undoDraft = useCallback(() => {
+    interactionRef.current = { kind: 'drawing' };
     setDraftPoints((current) => {
       if (current.length === 0) return current;
       const next = current.slice(0, -1);
+      draftPointsRef.current = next;
       setDraftFuture((future) => [current, ...future]);
       updateDraftStatus(next);
       return next;
@@ -124,9 +134,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   }, [updateDraftStatus]);
 
   const redoDraft = useCallback(() => {
+    interactionRef.current = { kind: 'drawing' };
     setDraftFuture((future) => {
       const [nextPoints, ...rest] = future;
       if (!nextPoints) return future;
+      draftPointsRef.current = nextPoints;
       setDraftPoints(nextPoints);
       updateDraftStatus(nextPoints);
       return rest;
@@ -170,16 +182,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     if (wasDragPanEnabled) map.dragPan.disable();
     if (wasDragRotateEnabled) map.dragRotate.disable();
 
-    let dragState: ForbiddenDragState = { kind: 'idle' };
+    interactionRef.current = { kind: 'drawing' };
     let hoverState: ForbiddenHoverState = 'none';
-    let suppressNextClick = false;
-    let lastHoverLogSignature = '';
-    let lastDragLogAt = 0;
-    let previousBodyCursor = '';
-    let previousBodyUserSelect = '';
 
     const refreshCursor = () => {
-      if (dragState.kind === 'vertex') {
+      if (interactionRef.current.kind === 'moving') {
         canvas.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
         return;
       }
@@ -203,44 +210,20 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const readHoverStateAtPoint = (point: MapMouseEvent['point']): ForbiddenHoverState => {
-      const diagnostics = readDraftHitDiagnostics(map, point);
-      if (!diagnostics.target) return 'none';
-      return diagnostics.target.kind === 'vertex' ? 'vertex' : 'segment';
-    };
-
-    const logHitDiagnostics = (reason: string, point: MapMouseEvent['point'], diagnostics: ForbiddenHitDiagnostics) => {
-      console.info('[forbidden-zone-hit]', {
-        reason,
-        cursor: canvas.style.cursor || FORBIDDEN_CURSOR,
-        point: {
-          x: Math.round(point.x),
-          y: Math.round(point.y),
-        },
-        target: diagnostics.target,
-        vertexHitCount: diagnostics.vertexHitCount,
-        segmentHitCount: diagnostics.segmentHitCount,
-        vertexIndex: diagnostics.pointIndex,
-        edgeIndex: diagnostics.edgeIndex,
-      });
-    };
-
-    const logDragDiagnostics = (reason: string, pointIndex: number, detail?: Record<string, unknown>) => {
-      console.info('[forbidden-zone-drag]', {
-        reason,
-        pointIndex,
-        cursor: canvas.style.cursor || FORBIDDEN_CURSOR,
-        ...detail,
-      });
+      const target = readDraftHitTarget(map, point);
+      if (!target) return 'none';
+      return target.kind === 'vertex' ? 'vertex' : 'segment';
     };
 
     const finalizeDraft = (points: DraftPoint[]): boolean => {
       if (points.length < 3) {
-        setStatusMessage(`Zone interdite: ${points.length}/3 points minimum`);
+        deactivate();
         return false;
       }
 
       const created = store.addForbiddenZone(activeItinerary.id, points);
       if (!created) return false;
+      interactionRef.current = { kind: 'drawing' };
       setArmed(false);
       setDraftPoints([]);
       setDraftFuture([]);
@@ -252,15 +235,37 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const commitDraftPoints = (nextPoints: DraftPoint[]) => {
+      interactionRef.current = { kind: 'drawing' };
       draftPointsRef.current = nextPoints;
       setDraftPoints(nextPoints);
       setDraftFuture([]);
       updateDraftStatus(nextPoints);
     };
 
-    const moveDraggedVertex = (lngLat: { lat: number; lng: number }) => {
-      if (dragState.kind !== 'vertex') return;
-      const pointIndex = dragState.pointIndex;
+    const replaceDraftPoints = (nextPoints: DraftPoint[]) => {
+      draftPointsRef.current = nextPoints;
+      setDraftPoints(nextPoints);
+    };
+
+    const beginVertexMove = (pointIndex: number) => {
+      interactionRef.current = { kind: 'moving', pointIndex };
+      hoverState = 'vertex';
+      setDraftFuture([]);
+      updateDraftStatus(draftPointsRef.current, 'moving');
+      refreshCursor();
+    };
+
+    const confirmVertexMove = (point?: MapMouseEvent['point']) => {
+      if (interactionRef.current.kind !== 'moving') return;
+      interactionRef.current = { kind: 'drawing' };
+      hoverState = point ? readHoverStateAtPoint(point) : 'none';
+      updateDraftStatus(draftPointsRef.current);
+      refreshCursor();
+    };
+
+    const moveActiveVertex = (lngLat: { lat: number; lng: number }) => {
+      if (interactionRef.current.kind !== 'moving') return;
+      const pointIndex = interactionRef.current.pointIndex;
       const currentPoints = draftPointsRef.current;
       const target = currentPoints[pointIndex];
       if (!target) return;
@@ -273,148 +278,49 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       const next = currentPoints.map((point, index) =>
         index === pointIndex ? { lat: lngLat.lat, lon: lngLat.lng } : point,
       );
-      draftPointsRef.current = next;
-      setDraftPoints(next);
-      setDraftFuture([]);
-    };
-
-    const readPointFromClientPosition = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
-      const x = clientX - rect.left;
-      const y = clientY - rect.top;
-
-      if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
-        return null;
-      }
-
-      return { x, y };
-    };
-
-    const startVertexDrag = (pointIndex: number) => {
-      dragState = { kind: 'vertex', pointIndex };
-      hoverState = 'vertex';
-      suppressNextClick = true;
-      previousBodyCursor = document.body.style.cursor;
-      previousBodyUserSelect = document.body.style.userSelect;
-      document.body.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
-      document.body.style.userSelect = 'none';
-      setStatusMessage('Déplacez le sommet, puis cliquez pour le poser');
-      refreshCursor();
-      logDragDiagnostics('start', pointIndex);
-    };
-
-    const stopVertexDrag = (point?: MapMouseEvent['point']) => {
-      if (dragState.kind !== 'vertex') return;
-      const pointIndex = dragState.pointIndex;
-      dragState = { kind: 'idle' };
-      document.body.style.cursor = previousBodyCursor;
-      document.body.style.userSelect = previousBodyUserSelect;
-      hoverState = point ? readHoverStateAtPoint(point) : 'none';
-      updateDraftStatus(draftPointsRef.current);
-      refreshCursor();
-      logDragDiagnostics('end', pointIndex, { hoverState });
-    };
-
-    const logActiveDragMove = (pointIndex: number, point: MapMouseEvent['point'], lngLat: { lng: number; lat: number }) => {
-      const now = performance.now();
-      if (now - lastDragLogAt > 250) {
-        lastDragLogAt = now;
-        logDragDiagnostics('move', pointIndex, {
-          point: {
-            x: Math.round(point.x),
-            y: Math.round(point.y),
-          },
-          lng: Number(lngLat.lng.toFixed(6)),
-          lat: Number(lngLat.lat.toFixed(6)),
-        });
-      }
+      replaceDraftPoints(next);
     };
 
     const handleMapMouseMove = (event: MapMouseEvent) => {
-      if (dragState.kind === 'vertex') {
-        logActiveDragMove(dragState.pointIndex, event.point, event.lngLat);
-        moveDraggedVertex(event.lngLat);
+      if (interactionRef.current.kind === 'moving') {
+        moveActiveVertex(event.lngLat);
         return;
       }
-      const diagnostics = readDraftHitDiagnostics(map, event.point);
-      const nextHoverState = diagnostics.target?.kind === 'vertex'
-        ? 'vertex'
-        : diagnostics.target?.kind === 'segment'
-          ? 'segment'
-          : 'none';
-      const nextLogSignature = [
-        nextHoverState,
-        diagnostics.pointIndex ?? -1,
-        diagnostics.edgeIndex ?? -1,
-        diagnostics.vertexHitCount,
-        diagnostics.segmentHitCount,
-      ].join(':');
-      if (nextLogSignature !== lastHoverLogSignature) {
-        lastHoverLogSignature = nextLogSignature;
-        logHitDiagnostics('hover', event.point, diagnostics);
-      }
-      setHoverState(nextHoverState);
+      setHoverState(readHoverStateAtPoint(event.point));
     };
 
     const handleCanvasLeave = () => {
-      if (dragState.kind === 'vertex') return;
+      if (interactionRef.current.kind === 'moving') return;
       setHoverState('none');
     };
 
-    const handleCanvasPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
-
-      const point = readPointFromClientPosition(event.clientX, event.clientY) as MapMouseEvent['point'] | null;
-      if (!point) return;
-
-      if (dragState.kind === 'vertex') {
-        event.preventDefault();
-        event.stopPropagation();
-        event.stopImmediatePropagation();
-        stopVertexDrag(point);
-        return;
-      }
-
-      const diagnostics = readDraftHitDiagnostics(map, point);
-      logHitDiagnostics('pointerdown', point, diagnostics);
-      const target = diagnostics.target;
-      if (!target) return;
-
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-
-      if (target.kind === 'vertex') {
-        startVertexDrag(target.pointIndex);
-        return;
-      }
-
-      const insertion = insertDraftPointOnSegment(map, draftPointsRef.current, point, target.edgeIndex);
-      if (!insertion) return;
-
-      commitDraftPoints(insertion.nextPoints);
-      startVertexDrag(insertion.pointIndex);
-    };
-
     const handleMapClick = (event: MapMouseEvent) => {
-      if (suppressNextClick) {
-        suppressNextClick = false;
+      if (interactionRef.current.kind === 'moving') {
+        confirmVertexMove(event.point);
         return;
       }
+
       const target = readDraftHitTarget(map, event.point);
-      if (target) {
+
+      if (target?.kind === 'vertex') {
+        beginVertexMove(target.pointIndex);
         return;
       }
 
-      const currentPoints = draftPointsRef.current;
-      const interiorInsert =
-        currentPoints.length >= 3 &&
-        pointInDraftPolygon({ lat: event.lngLat.lat, lon: event.lngLat.lng }, currentPoints)
-          ? insertDraftPointAtNearestSegment(map, currentPoints, event)
-          : null;
+      if (target?.kind === 'segment') {
+        const insertion = insertDraftPointOnSegment(map, draftPointsRef.current, event.point, target.edgeIndex);
+        if (!insertion) return;
+        replaceDraftPoints(insertion.nextPoints);
+        setDraftFuture([]);
+        beginVertexMove(insertion.pointIndex);
+        return;
+      }
 
-      const nextPoints =
-        interiorInsert ?? appendDraftPoint(currentPoints, { lat: event.lngLat.lat, lon: event.lngLat.lng });
+      const nextPoints = appendDraftPoint(draftPointsRef.current, {
+        lat: event.lngLat.lat,
+        lon: event.lngLat.lng,
+      });
+      if (nextPoints === draftPointsRef.current) return;
 
       commitDraftPoints(nextPoints);
     };
@@ -423,22 +329,30 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       event.preventDefault();
       event.originalEvent.preventDefault();
       event.originalEvent.stopPropagation();
-      stopVertexDrag();
-      finalizeDraft(draftPointsRef.current);
+
+      if (interactionRef.current.kind === 'moving') {
+        confirmVertexMove(event.point);
+      }
+
+      const currentPoints = draftPointsRef.current;
+      if (currentPoints.length >= 3) {
+        finalizeDraft(currentPoints);
+        return;
+      }
+
+      deactivate();
     };
 
     map.on('mousemove', handleMapMouseMove);
     map.on('click', handleMapClick);
     map.on('contextmenu', handleMapContextMenu);
-    canvas.addEventListener('pointerdown', handleCanvasPointerDown, true);
     canvas.addEventListener('mouseleave', handleCanvasLeave);
 
     return () => {
-      stopVertexDrag();
+      interactionRef.current = { kind: 'drawing' };
       map.off('mousemove', handleMapMouseMove);
       map.off('click', handleMapClick);
       map.off('contextmenu', handleMapContextMenu);
-      canvas.removeEventListener('pointerdown', handleCanvasPointerDown, true);
       canvas.removeEventListener('mouseleave', handleCanvasLeave);
       if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
       if (wasDragPanEnabled) map.dragPan.enable();
@@ -488,69 +402,6 @@ function appendDraftPoint(
   return [...points, point];
 }
 
-function insertDraftPointAtNearestSegment(
-  map: MapboxMap,
-  points: DraftPoint[],
-  event: MapMouseEvent,
-): DraftPoint[] | null {
-  if (points.length < 2) return null;
-
-  const clickPoint = { lat: event.lngLat.lat, lon: event.lngLat.lng };
-  const treatAsEdgeEdit =
-    points.length >= 3 && pointInDraftPolygon(clickPoint, points);
-
-  let bestDistanceSq = Number.POSITIVE_INFINITY;
-  let bestInsertIndex: number | null = null;
-  let bestProjectedScreenPoint: { x: number; y: number } | null = null;
-  const segmentCount = points.length >= 3 ? points.length : points.length - 1;
-
-  for (let index = 0; index < segmentCount; index += 1) {
-    const start = points[index];
-    const end = points[(index + 1) % points.length];
-    if (!end) continue;
-
-    const startScreen = map.project([start.lon, start.lat]);
-    const endScreen = map.project([end.lon, end.lat]);
-    const projection = projectPointToSegment(
-      event.point.x,
-      event.point.y,
-      startScreen.x,
-      startScreen.y,
-      endScreen.x,
-      endScreen.y,
-    );
-    if (projection.distanceSq >= bestDistanceSq) continue;
-    bestDistanceSq = projection.distanceSq;
-    bestInsertIndex = index === points.length - 1 ? points.length : index + 1;
-    bestProjectedScreenPoint = { x: projection.x, y: projection.y };
-  }
-
-  if (
-    bestInsertIndex == null ||
-    !bestProjectedScreenPoint ||
-    (!treatAsEdgeEdit && bestDistanceSq > MAX_SEGMENT_INSERT_DISTANCE_PX * MAX_SEGMENT_INSERT_DISTANCE_PX)
-  ) {
-    return null;
-  }
-
-  const projected = map.unproject([bestProjectedScreenPoint.x, bestProjectedScreenPoint.y]);
-  const insertedPoint = { lat: projected.lat, lon: projected.lng };
-  const previousPoint = points[(bestInsertIndex - 1 + points.length) % points.length];
-  const nextPoint = points[bestInsertIndex % points.length];
-  if (
-    (previousPoint && sameDraftPoint(previousPoint, insertedPoint)) ||
-    (nextPoint && sameDraftPoint(nextPoint, insertedPoint))
-  ) {
-    return null;
-  }
-
-  return [
-    ...points.slice(0, bestInsertIndex),
-    insertedPoint,
-    ...points.slice(bestInsertIndex),
-  ];
-}
-
 function sameDraftPoint(
   left: DraftPoint,
   right: DraftPoint,
@@ -564,7 +415,7 @@ function sameDraftPoint(
 function readDraftHitDiagnostics(
   map: MapboxMap,
   point: MapMouseEvent['point'],
-): ForbiddenHitDiagnostics {
+): ForbiddenHitTarget | null {
   const vertexFeatures = readRenderedFeaturesAroundPoint(
     map,
     point,
@@ -578,27 +429,23 @@ function readDraftHitDiagnostics(
     HIT_QUERY_RADIUS_PX,
   );
   const pointIndex = readIntegerPropertyFromFeatures(vertexFeatures, 'index');
-  const edgeIndex = readIntegerPropertyFromFeatures(segmentFeatures, 'edgeIndex');
-  const target: ForbiddenHitTarget | null = pointIndex != null
-    ? { kind: 'vertex', pointIndex }
-    : edgeIndex != null
-      ? { kind: 'segment', edgeIndex }
-      : null;
+  if (pointIndex != null) {
+    return { kind: 'vertex', pointIndex };
+  }
 
-  return {
-    target,
-    pointIndex,
-    edgeIndex,
-    vertexHitCount: vertexFeatures.length,
-    segmentHitCount: segmentFeatures.length,
-  };
+  const edgeIndex = readIntegerPropertyFromFeatures(segmentFeatures, 'edgeIndex');
+  if (edgeIndex != null) {
+    return { kind: 'segment', edgeIndex };
+  }
+
+  return null;
 }
 
 function readDraftHitTarget(
   map: MapboxMap,
   point: MapMouseEvent['point'],
 ): ForbiddenHitTarget | null {
-  return readDraftHitDiagnostics(map, point).target;
+  return readDraftHitDiagnostics(map, point);
 }
 
 function readRenderedFeaturesAroundPoint(
@@ -669,22 +516,6 @@ function insertDraftPointOnSegment(
     ],
     pointIndex,
   };
-}
-
-function pointInDraftPolygon(
-  point: DraftPoint,
-  polygon: DraftPoint[],
-): boolean {
-  let inside = false;
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
-    const a = polygon[index];
-    const b = polygon[previous];
-    const intersects =
-      (a.lat > point.lat) !== (b.lat > point.lat) &&
-      point.lon < ((b.lon - a.lon) * (point.lat - a.lat)) / ((b.lat - a.lat) || Number.EPSILON) + a.lon;
-    if (intersects) inside = !inside;
-  }
-  return inside;
 }
 
 function projectPointToSegment(
