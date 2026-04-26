@@ -1,58 +1,8 @@
-import type { ControlPanelState, WeatherPaletteConfig } from './types';
+import type { ControlPanelState } from './types';
+import { buildDefaultWeatherPalettePresets } from './weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 
-const WEATHER_PALETTE_PRESETS: Record<string, WeatherPaletteConfig> = {
-  temperature: {
-    opacity: 37,
-    scaleSetting: '4 couleurs',
-    bands: [
-      { id: 'temperature-0', label: '< 0°C', color: '#2DBF8C', minValue: -40, maxValue: 0 },
-      { id: 'temperature-1', label: '0°C - 10°C', color: '#D3D820', minValue: 0, maxValue: 10 },
-      { id: 'temperature-2', label: '10°C - 20°C', color: '#FF9B00', minValue: 10, maxValue: 20 },
-      { id: 'temperature-3', label: '> 20°C', color: '#FF0000', minValue: 20, maxValue: 50 },
-    ],
-  },
-  feelsLike: {
-    opacity: 37,
-    scaleSetting: '4 couleurs',
-    bands: [
-      { id: 'feelsLike-0', label: '< 0°C', color: '#2DBF8C', minValue: -40, maxValue: 0 },
-      { id: 'feelsLike-1', label: '0°C - 10°C', color: '#D3D820', minValue: 0, maxValue: 10 },
-      { id: 'feelsLike-2', label: '10°C - 20°C', color: '#FF9B00', minValue: 10, maxValue: 20 },
-      { id: 'feelsLike-3', label: '> 20°C', color: '#FF0000', minValue: 20, maxValue: 50 },
-    ],
-  },
-  rain: {
-    opacity: 42,
-    scaleSetting: '4 couleurs',
-    bands: [
-      { id: 'rain-0', label: '< 0.5 mm', color: '#DFF6FF', minValue: 0, maxValue: 0.5 },
-      { id: 'rain-1', label: '0.5 mm - 2 mm', color: '#66C7F4', minValue: 0.5, maxValue: 2 },
-      { id: 'rain-2', label: '2 mm - 6 mm', color: '#2F80ED', minValue: 2, maxValue: 6 },
-      { id: 'rain-3', label: '> 6 mm', color: '#1247B9', minValue: 6, maxValue: 20 },
-    ],
-  },
-  cloudCover: {
-    opacity: 34,
-    scaleSetting: '4 couleurs',
-    bands: [
-      { id: 'cloudCover-0', label: '< 25%', color: '#FFFFFF', minValue: 0, maxValue: 25 },
-      { id: 'cloudCover-1', label: '25% - 50%', color: '#D2D9E2', minValue: 25, maxValue: 50 },
-      { id: 'cloudCover-2', label: '50% - 75%', color: '#8E99AA', minValue: 50, maxValue: 75 },
-      { id: 'cloudCover-3', label: '> 75%', color: '#566173', minValue: 75, maxValue: 100 },
-    ],
-  },
-  humidity: {
-    opacity: 35,
-    scaleSetting: '4 couleurs',
-    bands: [
-      { id: 'humidity-0', label: '< 25%', color: '#F6B74A', minValue: 0, maxValue: 25 },
-      { id: 'humidity-1', label: '25% - 50%', color: '#B4D66B', minValue: 25, maxValue: 50 },
-      { id: 'humidity-2', label: '50% - 75%', color: '#4AB5A8', minValue: 50, maxValue: 75 },
-      { id: 'humidity-3', label: '> 75%', color: '#2B73E0', minValue: 75, maxValue: 100 },
-    ],
-  },
-};
+const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
 
 /**
  * Default state that mirrors the Figma mock data (see node 1407:17211).
@@ -130,7 +80,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     trendMode: 'date',
     layers: [
       { key: 'temperature', enabled: true, mode: 'text' },
-      { key: 'feelsLike', enabled: false, mode: 'text' },
+      { key: 'feelsLike', enabled: false, mode: 'gradient' },
       { key: 'rain', enabled: true, mode: 'gradient' },
       { key: 'wind', enabled: true, mode: 'arrows' },
       { key: 'cloudCover', enabled: false, mode: 'gradient' },

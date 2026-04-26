@@ -1,4 +1,5 @@
 import type { WeatherLayerKey, WeatherPaletteBand, WeatherPaletteScaleSetting } from './types';
+import { getWeatherPaletteMetricDefinition } from '@/features/weather/config/paletteMetrics';
 
 interface WeatherPaletteMetricSpec {
   minLimit: number;
@@ -8,49 +9,6 @@ interface WeatherPaletteMetricSpec {
   unit: string;
   defaultBreakpoints: number[];
 }
-
-const WEATHER_PALETTE_SPECS: Partial<Record<WeatherLayerKey, WeatherPaletteMetricSpec>> = {
-  temperature: {
-    minLimit: -40,
-    maxLimit: 50,
-    step: 1,
-    decimals: 0,
-    unit: '°C',
-    defaultBreakpoints: [0, 10, 20],
-  },
-  feelsLike: {
-    minLimit: -40,
-    maxLimit: 50,
-    step: 1,
-    decimals: 0,
-    unit: '°C',
-    defaultBreakpoints: [0, 10, 20],
-  },
-  rain: {
-    minLimit: 0,
-    maxLimit: 20,
-    step: 0.1,
-    decimals: 1,
-    unit: 'mm',
-    defaultBreakpoints: [0.5, 2, 6],
-  },
-  cloudCover: {
-    minLimit: 0,
-    maxLimit: 100,
-    step: 1,
-    decimals: 0,
-    unit: '%',
-    defaultBreakpoints: [25, 50, 75],
-  },
-  humidity: {
-    minLimit: 0,
-    maxLimit: 100,
-    step: 1,
-    decimals: 0,
-    unit: '%',
-    defaultBreakpoints: [25, 50, 75],
-  },
-};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -107,7 +65,7 @@ function extractBreakpoints(bands: WeatherPaletteBand[]): number[] | null {
 }
 
 export function weatherPaletteMetricSpec(key: WeatherLayerKey): WeatherPaletteMetricSpec | null {
-  return WEATHER_PALETTE_SPECS[key] ?? null;
+  return getWeatherPaletteMetricDefinition(key);
 }
 
 export function weatherPaletteScaleCount(setting: WeatherPaletteScaleSetting): number {

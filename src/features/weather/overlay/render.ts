@@ -4,6 +4,7 @@ import type {
   WeatherOverlayMode,
   WeatherOverlaySample,
 } from './types';
+import { getWeatherOverlayColorStops } from '../config/paletteMetrics';
 
 interface PaletteBandLike {
   color: string;
@@ -20,39 +21,6 @@ interface NumericRange {
 }
 
 const COLOR_LOOKUP_SIZE = 2048;
-
-const COLOR_STOPS: Record<WeatherOverlayMetric, readonly ColorStop[]> = {
-  temperature: [
-    [0, [44, 108, 255]],
-    [0.25, [62, 186, 255]],
-    [0.5, [55, 211, 134]],
-    [0.75, [255, 192, 56]],
-    [1, [228, 71, 44]],
-  ],
-  feelsLike: [
-    [0, [79, 103, 255]],
-    [0.25, [71, 184, 255]],
-    [0.5, [242, 199, 82]],
-    [0.75, [245, 138, 53]],
-    [1, [207, 54, 60]],
-  ],
-  rain: [
-    [0, [74, 122, 255]],
-    [0.4, [71, 201, 255]],
-    [0.7, [52, 232, 171]],
-    [1, [18, 145, 255]],
-  ],
-  cloudCover: [
-    [0, [255, 255, 255]],
-    [0.45, [207, 216, 226]],
-    [1, [103, 114, 128]],
-  ],
-  humidity: [
-    [0, [246, 183, 74]],
-    [0.4, [135, 212, 132]],
-    [1, [53, 150, 255]],
-  ],
-};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -114,7 +82,7 @@ function paletteStops(
   minValue: number,
   maxValue: number,
 ): readonly ColorStop[] {
-  if (!paletteBands?.length) return COLOR_STOPS[metric];
+  if (!paletteBands?.length) return getWeatherOverlayColorStops(metric);
 
   const span = Math.max(1e-6, maxValue - minValue);
   const stops = paletteBands.map((band, index) => {
