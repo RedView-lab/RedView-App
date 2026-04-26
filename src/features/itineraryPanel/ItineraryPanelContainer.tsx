@@ -604,8 +604,18 @@ function buildPendingRoutePatchAfterRemoval(
   removedIndex: number,
   removedRow: TimelineItem | null,
 ): Itinerary['pendingRoutePatch'] {
-  if (!isRoutableTimelineRow(removedRow) || removedRow.kind === 'start' || removedRow.kind === 'end') {
+  if (!isRoutableTimelineRow(removedRow)) {
     return undefined;
+  }
+
+  if (removedRow.kind === 'start') {
+    const promotedStart = timeline.find((row) => row.kind === 'start');
+    return promotedStart ? buildPendingRoutePatchForEditedRow(timeline, promotedStart.id) : undefined;
+  }
+
+  if (removedRow.kind === 'end') {
+    const promotedEnd = timeline.find((row) => row.kind === 'end');
+    return promotedEnd ? buildPendingRoutePatchForEditedRow(timeline, promotedEnd.id) : undefined;
   }
 
   const before = [...timeline]
