@@ -150,7 +150,7 @@ function paletteSignature(state: WeatherOverlayState, key: WeatherOverlayMetric)
   if (bands) {
     for (let i = 0; i < bands.length; i++) {
       const band = bands[i];
-      h = hashStr(`|${band.color}|${band.minValue}|${band.maxValue}`, h);
+      h = hashStr(`|${band.color}|${band.visible !== false ? 1 : 0}|${band.minValue}|${band.maxValue}`, h);
     }
   }
   return h.toString(36);
