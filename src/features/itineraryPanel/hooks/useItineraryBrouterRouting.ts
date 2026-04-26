@@ -407,14 +407,8 @@ export function useItineraryBrouterRouting({
     }
 
     if (!startKey || !endKey) {
-      if (active && hasRouteLayer(map, active.id)) {
-        try {
-          removeRouteLayer(map, active.id);
-        } catch {
-          // noop
-        }
-      }
       setRouteError(null);
+      setRouteLoading(false);
       return;
     }
 
