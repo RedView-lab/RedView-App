@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
 import type { PredictionResult } from '@/features/fitPredictor';
 import {
+  IconChevronDown,
   IconEye,
   IconPauseCircle,
   IconStar,
@@ -55,9 +56,21 @@ interface AttachedPause {
   visible: boolean;
 }
 
+interface TimelinePrimaryGroup {
+  id: string;
+  items: TimedTimelineItem[];
+  startElapsedSeconds: number;
+  endElapsedSeconds: number;
+}
+
 interface TimelineEvent extends TimedTimelineItem {
   topPx: number;
   attachedPauses: AttachedPause[];
+  isExpandable: boolean;
+  isExpanded: boolean;
+  collapsedChildPoiCount: number;
+  childPois: TimedTimelineItem[];
+  hiddenChildPoiCount: number;
   toNextSeconds: number | null;
 }
 
@@ -71,6 +84,10 @@ const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
 const MIN_TIME_DELTA_MINUTES = 1 / 60;
+const POI_CLUSTER_DISTANCE_KM = 0.35;
+const POI_CLUSTER_CHILD_HEIGHT_PX = 22;
+const POI_CLUSTER_CHILD_GAP_PX = 2;
+const POI_CLUSTER_MAX_VISIBLE_CHILDREN = 3;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -249,16 +266,17 @@ function resolveMarkerKmStep(
 }
 
 function resolveRequiredPixelsPerMinute(
-  primaryItems: TimedTimelineItem[],
+  primaryGroups: TimelinePrimaryGroup[],
   standalonePauseItems: TimedTimelineItem[],
   baseHourRowHeightPx: number,
+  expandedGroupIds: ReadonlySet<string>,
 ): number {
   const basePixelsPerMinute = baseHourRowHeightPx / 60;
   const blocks = [
-    ...primaryItems.map((entry) => ({
-      elapsedSeconds: entry.elapsedSeconds,
-      sortIndex: entry.sortIndex,
-      heightPx: RAIL_ITEM_HEIGHT_PX,
+    ...primaryGroups.map((group) => ({
+      elapsedSeconds: group.startElapsedSeconds,
+      sortIndex: group.items[0]?.sortIndex ?? 0,
+      heightPx: getPrimaryGroupHeightPx(group, expandedGroupIds.has(group.id)),
     })),
     ...standalonePauseItems.map((entry) => ({
       elapsedSeconds: entry.elapsedSeconds,
@@ -285,6 +303,68 @@ function resolveRequiredPixelsPerMinute(
   }
 
   return requiredPixelsPerMinute;
+}
+
+function shouldClusterPoiEntries(
+  previous: TimedTimelineItem,
+  current: TimedTimelineItem,
+  basePixelsPerMinute: number,
+): boolean {
+  if (previous.item.kind !== 'poi' || current.item.kind !== 'poi') return false;
+  const deltaSeconds = current.elapsedSeconds - previous.elapsedSeconds;
+  if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) return false;
+  const deltaMinutes = deltaSeconds / 60;
+  const deltaDistanceKm = Math.abs(current.distanceKm - previous.distanceKm);
+  return (
+    deltaDistanceKm <= POI_CLUSTER_DISTANCE_KM
+    && deltaMinutes * basePixelsPerMinute < RAIL_ITEM_HEIGHT_PX + CARD_VERTICAL_GAP_PX
+  );
+}
+
+function buildPrimaryGroups(
+  primaryItems: TimedTimelineItem[],
+  basePixelsPerMinute: number,
+): TimelinePrimaryGroup[] {
+  const groups: TimelinePrimaryGroup[] = [];
+
+  for (const entry of primaryItems) {
+    const lastGroup = groups[groups.length - 1];
+    const lastEntry = lastGroup?.items[lastGroup.items.length - 1];
+    if (lastGroup && lastEntry && shouldClusterPoiEntries(lastEntry, entry, basePixelsPerMinute)) {
+      lastGroup.items.push(entry);
+      lastGroup.endElapsedSeconds = entry.elapsedSeconds;
+      continue;
+    }
+
+    groups.push({
+      id: entry.item.id,
+      items: [entry],
+      startElapsedSeconds: entry.elapsedSeconds,
+      endElapsedSeconds: entry.elapsedSeconds,
+    });
+  }
+
+  return groups;
+}
+
+function getPrimaryGroupHeightPx(
+  group: TimelinePrimaryGroup,
+  expanded: boolean,
+): number {
+  const childCount = Math.max(0, group.items.length - 1);
+  if (childCount === 0) return RAIL_ITEM_HEIGHT_PX;
+  if (!expanded) {
+    return RAIL_ITEM_HEIGHT_PX + POI_CLUSTER_CHILD_HEIGHT_PX + POI_CLUSTER_CHILD_GAP_PX;
+  }
+  const visibleChildCount = Math.min(childCount, POI_CLUSTER_MAX_VISIBLE_CHILDREN);
+  const hiddenChildCount = Math.max(0, childCount - visibleChildCount);
+  const extraRows = visibleChildCount + (hiddenChildCount > 0 ? 1 : 0);
+  if (extraRows === 0) return RAIL_ITEM_HEIGHT_PX;
+  return (
+    RAIL_ITEM_HEIGHT_PX
+    + extraRows * POI_CLUSTER_CHILD_HEIGHT_PX
+    + extraRows * POI_CLUSTER_CHILD_GAP_PX
+  );
 }
 
 function buildDayWindow(anchor: Date): Date[] {
@@ -326,6 +406,7 @@ export function TimelineTimelineView({
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [now, setNow] = useState(() => new Date());
+  const [expandedGroupIds, setExpandedGroupIds] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     setSelectedDayKey(defaultAnchorDayKey);
@@ -361,6 +442,31 @@ export function TimelineTimelineView({
     if (!reference.hasRealDate) return pauseItems;
     return pauseItems.filter((entry) => entry.dayKey === selectedDayKey);
   }, [pauseItems, reference.hasRealDate, selectedDayKey]);
+
+  const basePixelsPerMinute = useMemo(
+    () => (BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom) / 60,
+    [normalizedHourZoom],
+  );
+
+  const primaryGroups = useMemo(
+    () => buildPrimaryGroups(filteredPrimaryItems, basePixelsPerMinute),
+    [basePixelsPerMinute, filteredPrimaryItems],
+  );
+
+  useEffect(() => {
+    const validGroupIds = new Set(
+      primaryGroups.filter((group) => group.items.length > 1).map((group) => group.id),
+    );
+    setExpandedGroupIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      current.forEach((id) => {
+        if (validGroupIds.has(id)) next.add(id);
+        else changed = true;
+      });
+      return changed ? next : current;
+    });
+  }, [primaryGroups]);
 
   const maxDistanceKm = useMemo(
     () => items.reduce((maxDistance, item) => Math.max(maxDistance, item.distanceKm ?? 0), 0),
@@ -428,19 +534,32 @@ export function TimelineTimelineView({
   const pixelsPerMinute = useMemo(
     () =>
       resolveRequiredPixelsPerMinute(
-        filteredPrimaryItems,
+        primaryGroups,
         pauseAttachment.unattachedPauses,
         BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom,
+        expandedGroupIds,
       ),
-    [filteredPrimaryItems, normalizedHourZoom, pauseAttachment.unattachedPauses],
+    [expandedGroupIds, normalizedHourZoom, pauseAttachment.unattachedPauses, primaryGroups],
   );
   const hourRowHeightPx = pixelsPerMinute * 60;
   const canvasHeight = Math.max(totalHours * hourRowHeightPx, 0);
 
   const events = useMemo(() => {
-    return filteredPrimaryItems.map((entry, index): TimelineEvent => {
-      const nextEntry = filteredPrimaryItems[index + 1] ?? null;
-      const attachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
+    return primaryGroups.map((group, index): TimelineEvent => {
+      const entry = group.items[0]!;
+      const nextGroup = primaryGroups[index + 1] ?? null;
+      const isExpandable = group.items.length > 1;
+      const isExpanded = isExpandable && expandedGroupIds.has(group.id);
+      const collapsedChildPoiCount = Math.max(0, group.items.length - 1);
+      const childPois = isExpanded
+        ? group.items.slice(1, 1 + POI_CLUSTER_MAX_VISIBLE_CHILDREN)
+        : [];
+      const hiddenChildPoiCount = isExpanded
+        ? Math.max(0, group.items.length - 1 - childPois.length)
+        : 0;
+      const attachedPauses = group.items.flatMap(
+        (member) => pauseAttachment.attachedByEventId.get(member.item.id) ?? [],
+      ).filter((pause, pauseIndex, list) => list.findIndex((it) => it.id === pause.id) === pauseIndex);
 
       const topPx = (entry.minuteOfDay - startMinutes) * pixelsPerMinute;
 
@@ -448,13 +567,18 @@ export function TimelineTimelineView({
         ...entry,
         topPx,
         attachedPauses,
+        isExpandable,
+        isExpanded,
+        collapsedChildPoiCount,
+        childPois,
+        hiddenChildPoiCount,
         toNextSeconds:
-          nextEntry && Number.isFinite(nextEntry.elapsedSeconds)
-            ? Math.max(0, nextEntry.elapsedSeconds - entry.elapsedSeconds)
+          nextGroup && Number.isFinite(nextGroup.startElapsedSeconds)
+            ? Math.max(0, nextGroup.startElapsedSeconds - group.endElapsedSeconds)
             : null,
       };
     });
-  }, [filteredPrimaryItems, pauseAttachment.attachedByEventId, pixelsPerMinute, startMinutes]);
+  }, [expandedGroupIds, pauseAttachment.attachedByEventId, pixelsPerMinute, primaryGroups, startMinutes]);
 
   const standalonePauses = useMemo(() => {
     return pauseAttachment.unattachedPauses.map((pause) => ({
@@ -509,6 +633,15 @@ export function TimelineTimelineView({
   }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
 
   const selectedDayHasEvents = events.length > 0 || standalonePauses.length > 0;
+
+  const toggleGroupExpanded = (groupId: string) => {
+    setExpandedGroupIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  };
 
   return (
     <div className="rvi-tl-schedule" aria-label="Timeline journalière">
@@ -632,10 +765,65 @@ export function TimelineTimelineView({
                     >
                       <IconStar size={12} />
                     </span>
+                    {event.isExpandable ? (
+                      <span
+                        className={`rvi-tl-schedule__event-expand-gutter${event.isExpanded ? ' is-expanded' : ''}`}
+                        aria-hidden
+                      >
+                        <IconChevronDown size={12} />
+                      </span>
+                    ) : null}
                   </span>
+
+                  {event.isExpandable && !event.isExpanded ? (
+                    <span className="rvi-tl-schedule__poi-summary" aria-hidden>
+                      <span className="rvi-tl-schedule__poi-summary-rail" />
+                      <span className="rvi-tl-schedule__poi-summary-text">
+                        {event.collapsedChildPoiCount} POI proche{event.collapsedChildPoiCount > 1 ? 's' : ''}
+                      </span>
+                    </span>
+                  ) : null}
+
+                  {event.isExpanded && (event.childPois.length > 0 || event.hiddenChildPoiCount > 0) ? (
+                    <span className="rvi-tl-schedule__poi-children" aria-hidden>
+                      {event.childPois.map((child) => (
+                        <span key={child.item.id} className="rvi-tl-schedule__poi-child">
+                          <span className="rvi-tl-schedule__poi-child-rail" />
+                          <span className="rvi-tl-schedule__poi-child-name" title={child.item.label || 'POI'}>
+                            {child.item.label || 'POI'}
+                          </span>
+                          <span className="rvi-tl-schedule__poi-child-distance">
+                            {formatDistanceLabel(child.distanceKm)}
+                          </span>
+                        </span>
+                      ))}
+                      {event.hiddenChildPoiCount > 0 ? (
+                        <span className="rvi-tl-schedule__poi-child rvi-tl-schedule__poi-child--more">
+                          <span className="rvi-tl-schedule__poi-child-rail" />
+                          <span className="rvi-tl-schedule__poi-child-name">
+                            +{event.hiddenChildPoiCount} autre{event.hiddenChildPoiCount > 1 ? 's' : ''} POI
+                          </span>
+                        </span>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </button>
 
                 <div className="rvi-tl-schedule__event-side">
+                  {event.isExpandable ? (
+                    <button
+                      type="button"
+                      className={`rvi-tl-schedule__expand-btn${event.isExpanded ? ' is-expanded' : ''}`}
+                      onClick={(actionEvent) => {
+                        stopEventPropagation(actionEvent);
+                        toggleGroupExpanded(event.item.id);
+                      }}
+                      aria-label={event.isExpanded ? 'Replier les sous-POI' : 'Déplier les sous-POI'}
+                      aria-expanded={event.isExpanded}
+                    >
+                      <IconChevronDown size={12} />
+                    </button>
+                  ) : null}
                   {event.attachedPauses.map((pause) => (
                     <span
                       key={pause.id}
