@@ -6,6 +6,11 @@ import type {
   WeatherOverlaySample,
   WeatherSelection,
 } from './types';
+import {
+  weatherMetricPointBudgetBoost,
+  weatherResolutionDetailBoost,
+  weatherTargetCellPixels,
+} from './detailProfile';
 import { OPENMETEO_FORECAST_URL, OPENMETEO_CLIMATE_URL } from '../lib/openMeteoConfig';
 
 const FORECAST_API_BASE = OPENMETEO_FORECAST_URL;
@@ -166,64 +171,6 @@ function paddingForZoom(mode: WeatherSelection['mode'], zoom: number): number {
   return 0.08;
 }
 
-function activeMetricSet(metrics: readonly WeatherOverlayMetric[]): Set<WeatherOverlayMetric> {
-  return new Set(metrics);
-}
-
-function targetCellPixels(
-  mode: WeatherSelection['mode'],
-  zoom: number,
-  metrics: readonly WeatherOverlayMetric[],
-): number {
-  const activeMetrics = activeMetricSet(metrics);
-  const rainPriority = activeMetrics.has('rain');
-
-  if (mode === 'forecast') {
-    if (rainPriority) {
-      if (zoom <= 4.5) return 12;
-      if (zoom <= 6.5) return 14;
-      if (zoom <= 8.5) return 16;
-      return 20;
-    }
-    if (zoom <= 4.5) return 18;
-    if (zoom <= 6.5) return 20;
-    if (zoom <= 8.5) return 22;
-    return 26;
-  }
-
-  if (rainPriority) {
-    if (zoom <= 4.5) return 14;
-    if (zoom <= 6.5) return 16;
-    if (zoom <= 8.5) return 18;
-    return 22;
-  }
-  if (zoom <= 4.5) return 20;
-  if (zoom <= 6.5) return 22;
-  if (zoom <= 8.5) return 24;
-  return 28;
-}
-
-function resolutionDetailBoost(
-  mode: WeatherSelection['mode'],
-  zoom: number,
-  metrics: readonly WeatherOverlayMetric[],
-): number {
-  const activeMetrics = activeMetricSet(metrics);
-  if (!activeMetrics.has('rain')) {
-    return mode === 'forecast' && zoom <= 5 ? 0.85 : 1;
-  }
-  if (mode === 'forecast') {
-    if (zoom <= 4.5) return 0.35;
-    if (zoom <= 6.5) return 0.45;
-    if (zoom <= 8.5) return 0.6;
-    return 0.8;
-  }
-  if (zoom <= 4.5) return 0.45;
-  if (zoom <= 6.5) return 0.55;
-  if (zoom <= 8.5) return 0.7;
-  return 0.85;
-}
-
 function maxPointsForZoom(
   mode: WeatherSelection['mode'],
   zoom: number,
@@ -232,11 +179,11 @@ function maxPointsForZoom(
   pixelHeight: number,
 ): number {
   // Self-hosted VPS → we can afford much denser grids.
-  const targetPx = targetCellPixels(mode, zoom, metrics);
+  const targetPx = weatherTargetCellPixels(mode, zoom, metrics);
   const targetCols = Math.max(2, Math.ceil(pixelWidth / Math.max(8, targetPx)) + 1);
   const targetRows = Math.max(2, Math.ceil(pixelHeight / Math.max(8, targetPx)) + 1);
   const screenBudget = Math.ceil(targetCols * targetRows * 1.5);
-  const metricBoost = activeMetricSet(metrics).has('rain') ? 2.25 : 1.4;
+  const metricBoost = weatherMetricPointBudgetBoost(metrics);
   const hardCap = mode === 'forecast' ? 28000 : 18000;
 
   if (mode === 'forecast') {
@@ -290,9 +237,9 @@ function buildGridEnvelope(
   const paddedNorth = clamp(viewport.north + latPad, -85, 85);
 
   const targetResolutionKm = interpolateSpacing(viewport.zoom, resolutionKmTable)
-    * resolutionDetailBoost(mode, viewport.zoom, metrics);
+    * weatherResolutionDetailBoost(mode, viewport.zoom, metrics);
   const targetSpacingDegrees = quantizeSpacing(degreeSpacingForKilometres(targetResolutionKm), minSpacing);
-  const targetPx = targetCellPixels(mode, viewport.zoom, metrics);
+  const targetPx = weatherTargetCellPixels(mode, viewport.zoom, metrics);
   const targetCols = Math.max(2, Math.ceil(viewport.pixelWidth / Math.max(8, targetPx)) + 1);
   const targetRows = Math.max(2, Math.ceil(viewport.pixelHeight / Math.max(8, targetPx)) + 1);
   const screenSpacingDegrees = quantizeSpacing(
