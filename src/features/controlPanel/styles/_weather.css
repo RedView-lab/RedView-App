@@ -255,23 +255,38 @@
 }
 
 .rvc-weather__band-label-editable {
-  gap: 4px;
+  gap: 2px;
+}
+
+.rvc-weather__band-label-editable[data-metric='temperature'],
+.rvc-weather__band-label-editable[data-metric='feelsLike'] {
+  --rvc-weather-threshold-width: 54px;
+}
+
+.rvc-weather__band-label-editable[data-metric='rain'] {
+  --rvc-weather-threshold-width: 64px;
+}
+
+.rvc-weather__band-label-editable[data-metric='cloudCover'],
+.rvc-weather__band-label-editable[data-metric='humidity'] {
+  --rvc-weather-threshold-width: 58px;
 }
 
 .rvc-weather__threshold-number {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  min-width: 62px;
+  justify-content: center;
+  width: var(--rvc-weather-threshold-width, 58px);
+  min-width: var(--rvc-weather-threshold-width, 58px);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  text-align: right;
+  text-align: center;
 }
 
 .rvc-weather__threshold-input {
-  width: 62px;
-  min-width: 62px;
-  text-align: right;
+  width: var(--rvc-weather-threshold-width, 58px);
+  min-width: var(--rvc-weather-threshold-width, 58px);
+  text-align: center;
 }
 
 .rvc-weather__add-alert {

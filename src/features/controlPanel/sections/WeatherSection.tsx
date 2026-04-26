@@ -290,7 +290,7 @@ function WeatherPaletteRow({
         {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
       </button>
 
-      <div className="rvc-altitude__band-label-editable rvc-weather__band-label-editable">
+      <div className="rvc-altitude__band-label-editable rvc-weather__band-label-editable" data-metric={layerKey}>
         <InlineWeatherNumericInput
           layerKey={layerKey}
           value={minValue}
