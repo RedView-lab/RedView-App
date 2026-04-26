@@ -87,6 +87,8 @@ export function ProjectProvider({
   const [project, setProjectInternal] = useState<ItineraryProject>(
     () => initialProject ?? createDefaultProject(),
   );
+  const projectRef = useRef(project);
+  projectRef.current = project;
 
   // Notify the parent of every project mutation so it can persist to
   // Supabase. Using a ref + synchronous notification (inside the
@@ -336,108 +338,95 @@ export function ProjectProvider({
       id: string,
       point: { lat: number; lon: number; label: string },
     ) => {
-      let appended = false;
+      const currentProject = projectRef.current;
+      const itinerary = currentProject.itineraries.find((it) => it.id === id);
+      if (!itinerary) return false;
 
-      let beforeSnapshot: ItineraryProject | null = null;
-      let afterSnapshot: ItineraryProject | null = null;
-
-      setProject((currentProject) => {
-        const itinerary = currentProject.itineraries.find((it) => it.id === id);
-        if (!itinerary) return currentProject;
-
-        const startRow = itinerary.timeline.find((row) => row.kind === 'start');
-        const endIndex = itinerary.timeline.findIndex((row) => row.kind === 'end');
-        const endRow = endIndex >= 0 ? itinerary.timeline[endIndex] : null;
-        if (
-          !startRow ||
-          startRow.lat == null ||
-          startRow.lon == null ||
-          !endRow ||
-          endRow.lat == null ||
-          endRow.lon == null
-        ) {
-          return currentProject;
-        }
-
-        const previousEndLat = endRow.lat;
-        const previousEndLon = endRow.lon;
-
-        beforeSnapshot = structuredClone(currentProject);
-        const nextProject = {
-          ...currentProject,
-          itineraries: currentProject.itineraries.map((it) => {
-            if (it.id !== id) return it;
-            const copy = structuredClone(it);
-
-            const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
-            const previousEndWaypoint = {
-              ...endRow,
-              id: waypointId,
-              kind: 'waypoint' as const,
-              distanceKm: endRow.distanceKm,
-            };
-            const nextEndRow = {
-              ...endRow,
-              label: point.label,
-              lat: point.lat,
-              lon: point.lon,
-              distanceKm: null,
-            };
-
-            copy.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
-            copy.timeline = copy.timeline.map((row) => {
-              if (row.kind === 'start') {
-                return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
-              }
-              if (row.kind === 'end') {
-                return row.distanceKm == null ? row : { ...row, distanceKm: null };
-              }
-              return row;
-            });
-
-            if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
-              copy.pendingTraceExtension = {
-                from: { lat: previousEndLat, lon: previousEndLon },
-                to: { lat: point.lat, lon: point.lon },
-              };
-              delete copy.pendingRoutePatch;
-            } else {
-              delete copy.pendingTraceExtension;
-              delete copy.pendingRoutePatch;
-            }
-
-            if (copy.metrics) {
-              copy.metrics = {
-                ...copy.metrics,
-                distanceKm: undefined,
-                ascentM: undefined,
-                descentM: undefined,
-                avgSlopePercent: undefined,
-                tarmacPercent: undefined,
-                offroadPercent: undefined,
-              };
-            }
-            delete copy.routeAudit;
-            copy.prediction = null;
-            appended = true;
-            return copy;
-          }),
-        };
-        afterSnapshot = structuredClone(nextProject);
-        return nextProject;
-      });
-
-      if (appended && beforeSnapshot && afterSnapshot) {
-        const entry: TraceHistoryEntry = {
-          itineraryId: id,
-          before: beforeSnapshot,
-          after: afterSnapshot,
-        };
-        pendingTraceAppendRef.current = entry;
-        syncTraceHistory([...traceHistoryPastRef.current, entry], []);
+      const startRow = itinerary.timeline.find((row) => row.kind === 'start');
+      const endIndex = itinerary.timeline.findIndex((row) => row.kind === 'end');
+      const endRow = endIndex >= 0 ? itinerary.timeline[endIndex] : null;
+      if (
+        !startRow ||
+        startRow.lat == null ||
+        startRow.lon == null ||
+        !endRow ||
+        endRow.lat == null ||
+        endRow.lon == null
+      ) {
+        return false;
       }
 
-      return appended;
+      const previousEndLat = endRow.lat;
+      const previousEndLon = endRow.lon;
+      const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
+
+      const nextProject = {
+        ...currentProject,
+        itineraries: currentProject.itineraries.map((it) => {
+          if (it.id !== id) return it;
+          const copy = structuredClone(it);
+          const previousEndWaypoint = {
+            ...endRow,
+            id: waypointId,
+            kind: 'waypoint' as const,
+            distanceKm: endRow.distanceKm,
+          };
+          const nextEndRow = {
+            ...endRow,
+            label: point.label,
+            lat: point.lat,
+            lon: point.lon,
+            distanceKm: null,
+          };
+
+          copy.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
+          copy.timeline = copy.timeline.map((row) => {
+            if (row.kind === 'start') {
+              return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
+            }
+            if (row.kind === 'end') {
+              return row.distanceKm == null ? row : { ...row, distanceKm: null };
+            }
+            return row;
+          });
+
+          if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
+            copy.pendingTraceExtension = {
+              from: { lat: previousEndLat, lon: previousEndLon },
+              to: { lat: point.lat, lon: point.lon },
+            };
+            delete copy.pendingRoutePatch;
+          } else {
+            delete copy.pendingTraceExtension;
+            delete copy.pendingRoutePatch;
+          }
+
+          if (copy.metrics) {
+            copy.metrics = {
+              ...copy.metrics,
+              distanceKm: undefined,
+              ascentM: undefined,
+              descentM: undefined,
+              avgSlopePercent: undefined,
+              tarmacPercent: undefined,
+              offroadPercent: undefined,
+            };
+          }
+          delete copy.routeAudit;
+          copy.prediction = null;
+          return copy;
+        }),
+      };
+
+      const entry: TraceHistoryEntry = {
+        itineraryId: id,
+        before: structuredClone(currentProject),
+        after: structuredClone(nextProject),
+      };
+      pendingTraceAppendRef.current = entry;
+      syncTraceHistory([...traceHistoryPastRef.current, entry], []);
+      setProject(nextProject);
+      return true;
     },
     [setProject, syncTraceHistory],
   );
