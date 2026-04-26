@@ -246,24 +246,45 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       updateDraftStatus(nextPoints);
     };
 
-    const moveDraggedVertex = (event: MapMouseEvent) => {
+    const moveDraggedVertex = (lngLat: { lat: number; lng: number }) => {
       if (dragState.kind !== 'vertex') return;
       const pointIndex = dragState.pointIndex;
       const currentPoints = draftPointsRef.current;
       const target = currentPoints[pointIndex];
       if (!target) return;
       if (
-        Math.abs(target.lat - event.lngLat.lat) < POINT_EPSILON &&
-        Math.abs(target.lon - event.lngLat.lng) < POINT_EPSILON
+        Math.abs(target.lat - lngLat.lat) < POINT_EPSILON &&
+        Math.abs(target.lon - lngLat.lng) < POINT_EPSILON
       ) {
         return;
       }
       const next = currentPoints.map((point, index) =>
-        index === pointIndex ? { lat: event.lngLat.lat, lon: event.lngLat.lng } : point,
+        index === pointIndex ? { lat: lngLat.lat, lon: lngLat.lng } : point,
       );
       draftPointsRef.current = next;
       setDraftPoints(next);
       setDraftFuture([]);
+    };
+
+    const readPointFromClientPosition = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      if (x < 0 || y < 0 || x > rect.width || y > rect.height) {
+        return null;
+      }
+
+      return { x, y };
+    };
+
+    const readLngLatFromClientPosition = (clientX: number, clientY: number) => {
+      const point = readPointFromClientPosition(clientX, clientY);
+      if (!point) return null;
+      return {
+        point,
+        lngLat: map.unproject([point.x, point.y]),
+      };
     };
 
     const startVertexDrag = (pointIndex: number) => {
@@ -273,27 +294,37 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       setStatusMessage('Glissez le sommet pour le déplacer');
       refreshCursor();
 
-      map.on('mousemove', handleDragMove);
-      map.once('mouseup', handleDragEnd);
+      window.addEventListener('mousemove', handleWindowDragMove);
+      window.addEventListener('mouseup', handleWindowDragEnd);
     };
 
-    const stopVertexDrag = (event?: MapMouseEvent) => {
-      map.off('mousemove', handleDragMove);
-      map.off('mouseup', handleDragEnd);
+    const stopVertexDrag = (point?: MapMouseEvent['point']) => {
+      window.removeEventListener('mousemove', handleWindowDragMove);
+      window.removeEventListener('mouseup', handleWindowDragEnd);
 
       if (dragState.kind !== 'vertex') return;
       dragState = { kind: 'idle' };
-      hoverState = event ? readHoverStateAtPoint(event.point) : 'none';
+      hoverState = point ? readHoverStateAtPoint(point) : 'none';
       updateDraftStatus(draftPointsRef.current);
       refreshCursor();
     };
 
-    const handleDragMove = (event: MapMouseEvent) => {
-      moveDraggedVertex(event);
+    const handleWindowDragMove = (event: MouseEvent) => {
+      const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
+      if (!resolved) return;
+      event.preventDefault();
+      moveDraggedVertex(resolved.lngLat);
     };
 
-    const handleDragEnd = (event: MapMouseEvent) => {
-      stopVertexDrag(event);
+    const handleWindowDragEnd = (event: MouseEvent) => {
+      const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
+      event.preventDefault();
+      if (resolved) {
+        moveDraggedVertex(resolved.lngLat);
+        stopVertexDrag(resolved.point as MapMouseEvent['point']);
+        return;
+      }
+      stopVertexDrag();
     };
 
     const handleMapMouseMove = (event: MapMouseEvent) => {
