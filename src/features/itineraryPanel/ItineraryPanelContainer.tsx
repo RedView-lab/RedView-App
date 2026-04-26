@@ -470,15 +470,12 @@ export function ItineraryPanelContainer({
         updateActive((it) => {
           const removedIndex = it.timeline.findIndex((item) => item.id === id);
           const removedRow = removedIndex >= 0 ? it.timeline[removedIndex] : null;
-          it.timeline = it.timeline.filter(
-            (i) => i.id !== id || i.kind === 'start' || i.kind === 'end',
-          );
+          const nextTimeline = buildTimelineAfterRemoval(it.timeline, id);
+          if (!nextTimeline) return;
+
+          it.timeline = nextTimeline;
           if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchAfterRemoval(
-              it.timeline,
-              removedIndex,
-              removedRow,
-            );
+            it.pendingRoutePatch = buildPendingRoutePatchAfterRemoval(nextTimeline, removedIndex, removedRow);
             delete it.pendingTraceExtension;
             delete it.routeAudit;
             it.prediction = null;
@@ -625,4 +622,62 @@ function buildPendingRoutePatchAfterRemoval(
     end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
     via: [],
   };
+}
+
+function buildTimelineAfterRemoval(
+  timeline: TimelineItem[],
+  rowId: string,
+): TimelineItem[] | null {
+  const removedIndex = timeline.findIndex((row) => row.id === rowId);
+  const removedRow = removedIndex >= 0 ? timeline[removedIndex] : null;
+  if (!removedRow) return null;
+
+  if (removedRow.kind === 'start') {
+    const remaining = timeline.filter((row) => row.id !== rowId);
+    const promotedIndex = remaining.findIndex(isPromotableEndpointRow);
+    if (promotedIndex < 0) return null;
+
+    const promotedRow = remaining[promotedIndex];
+    remaining.splice(promotedIndex, 1);
+    return [
+      {
+        ...promotedRow,
+        kind: 'start',
+        distanceKm: 0,
+      },
+      ...remaining,
+    ];
+  }
+
+  if (removedRow.kind === 'end') {
+    const remaining = timeline.filter((row) => row.id !== rowId);
+    const promotedIndex = findLastPromotableEndpointIndex(remaining);
+    if (promotedIndex < 0) return null;
+
+    const promotedRow = remaining[promotedIndex];
+    remaining.splice(promotedIndex, 1);
+    return [
+      ...remaining,
+      {
+        ...promotedRow,
+        kind: 'end',
+        distanceKm: null,
+      },
+    ];
+  }
+
+  return timeline.filter((row) => row.id !== rowId);
+}
+
+function isPromotableEndpointRow(
+  row: TimelineItem,
+): row is TimelineItem & { kind: 'waypoint'; lat: number; lon: number } {
+  return row.kind === 'waypoint' && row.lat != null && row.lon != null;
+}
+
+function findLastPromotableEndpointIndex(timeline: TimelineItem[]): number {
+  for (let index = timeline.length - 1; index >= 0; index -= 1) {
+    if (isPromotableEndpointRow(timeline[index])) return index;
+  }
+  return -1;
 }
