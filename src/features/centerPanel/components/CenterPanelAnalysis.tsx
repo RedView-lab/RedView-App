@@ -88,6 +88,16 @@ interface CenterPanelAnalysisProps {
   map: MapboxMap | null;
 }
 
+interface PreparedChartNode {
+  itinerary: Itinerary;
+  startDistanceKm: number;
+  prediction: Itinerary['prediction'] | null;
+  xOffset: number;
+  axis1Points: ReturnType<typeof buildSeriesFromPrediction>;
+  axis2Points: ReturnType<typeof buildSeriesFromPrediction>;
+  altitudePoints: ReturnType<typeof buildSeriesFromPrediction>;
+}
+
 export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
@@ -174,13 +184,56 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     [projectStore],
   );
 
+  const preparedChartNodes = useMemo<PreparedChartNode[]>(() => {
+    const result: PreparedChartNode[] = [];
+    for (const node of visualNodes) {
+      const itinerary = node.itinerary;
+      if (itinerary.analysisVisible === false) continue;
+      if ((itinerary.gpxRoute?.points.length ?? 0) === 0) continue;
+
+      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      const routePoints = itinerary.gpxRoute?.points ?? null;
+      const routeSource = itinerary.gpxRoute?.source;
+      const startTime = itinerary.rhythm.startTime;
+      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+
+      result.push({
+        itinerary,
+        startDistanceKm: node.startDistanceKm,
+        prediction,
+        xOffset,
+        axis1Points: buildSeriesFromPrediction(
+          prediction,
+          axis1Value,
+          xMode,
+          routePoints,
+          routeSource,
+          startTime,
+        ),
+        axis2Points: buildSeriesFromPrediction(
+          prediction,
+          axis2Value,
+          xMode,
+          routePoints,
+          routeSource,
+          startTime,
+        ),
+        altitudePoints: buildSeriesFromPrediction(
+          prediction,
+          'Altitude',
+          xMode,
+          routePoints,
+          routeSource,
+          startTime,
+        ),
+      });
+    }
+    return result;
+  }, [axis1Value, axis2Value, predictionStore, visualNodes, xMode]);
+
   const visibleChartNodes = useMemo(
-    () =>
-      visualNodes.filter(
-        ({ itinerary }) =>
-          itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
-      ),
-    [visualNodes],
+    () => preparedChartNodes.map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm })),
+    [preparedChartNodes],
   );
 
   const dayNightStartReady = Boolean(
@@ -304,23 +357,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   // Build the dynamic chart series from every visible itinerary that has a
   // computed prediction. One curve per (itinerary × axis) combination.
   const series = useMemo<ChartSeries[]>(() => {
-    if (!projectStore) return [];
     const result: ChartSeries[] = [];
-    for (const node of visualNodes) {
-      const itinerary = node.itinerary;
-      if (itinerary.analysisVisible === false) continue;
-      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      const routePoints = itinerary.gpxRoute?.points ?? null;
-      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
-
-      const axis1Points = buildSeriesFromPrediction(
-        prediction,
-        axis1Value,
-        xMode,
-        routePoints,
-        itinerary.gpxRoute?.source,
-        itinerary.rhythm.startTime,
-      );
+    for (const node of preparedChartNodes) {
+      const { itinerary, xOffset, axis1Points, axis2Points } = node;
       if (axis1Points) {
         result.push({
           id: `${itinerary.id}::axis1`,
@@ -334,14 +373,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         });
       }
 
-      const axis2Points = buildSeriesFromPrediction(
-        prediction,
-        axis2Value,
-        xMode,
-        routePoints,
-        itinerary.gpxRoute?.source,
-        itinerary.rhythm.startTime,
-      );
       if (axis2Points) {
         result.push({
           id: `${itinerary.id}::axis2`,
@@ -356,7 +387,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       }
     }
     return result;
-  }, [projectStore, predictionStore, axis1Value, axis2Value, visualNodes, xMode]);
+  }, [axis1Value, axis2Value, preparedChartNodes]);
 
   // Show the altitude backdrop whenever the user enables the
   // "Profil d'altitude"
@@ -370,68 +401,39 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
     if (!showAltitudeBackdrop) return [];
-    if (!projectStore) return [];
 
     const result: ChartBackdropProfile[] = [];
-    for (const node of visualNodes) {
-      const itinerary = node.itinerary;
-      if (itinerary.analysisVisible === false) continue;
-      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      const points = buildSeriesFromPrediction(
-        prediction,
-        'Altitude',
-        xMode,
-        itinerary.gpxRoute?.points ?? null,
-        itinerary.gpxRoute?.source,
-        itinerary.rhythm.startTime,
-      );
+    for (const node of preparedChartNodes) {
+      const { itinerary, altitudePoints, xOffset } = node;
+      const points = altitudePoints;
       if (!points) continue;
       result.push({
         id: `${itinerary.id}::altitude-backdrop`,
         itineraryId: itinerary.id,
         itineraryName: itinerary.name,
         color: itinerary.color,
-        points: shiftChartPoints(points, xMode === 'distance' ? node.startDistanceKm : 0),
+        points: shiftChartPoints(points, xOffset),
       });
     }
     return result;
-  }, [showAltitudeBackdrop, projectStore, predictionStore, visualNodes, xMode]);
+  }, [preparedChartNodes, showAltitudeBackdrop]);
 
   const routeXDomainClamp = useMemo<AxisDomain | null>(() => {
-    if (!projectStore) return null;
-
-    const routeProfiles = visualNodes
-      .filter(({ itinerary }) => itinerary.analysisVisible !== false)
-      .map((node) => {
-        const itinerary = node.itinerary;
-        const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-        const points = buildSeriesFromPrediction(
-          prediction,
-          'Altitude',
-          xMode,
-          itinerary.gpxRoute?.points ?? null,
-          itinerary.gpxRoute?.source,
-          itinerary.rhythm.startTime,
-        );
-        return points
-          ? shiftChartPoints(points, xMode === 'distance' ? node.startDistanceKm : 0)
-          : null;
-      })
+    const routeProfiles = preparedChartNodes
+      .map(({ altitudePoints, xOffset }) =>
+        altitudePoints ? shiftChartPoints(altitudePoints, xOffset) : null,
+      )
       .filter((points): points is NonNullable<typeof points> => Boolean(points));
 
     return computeXDomain(routeProfiles, xMode);
-  }, [projectStore, predictionStore, visualNodes, xMode]);
+  }, [preparedChartNodes, xMode]);
 
   const poiAnnotations = useMemo<ChartPoiAnnotation[]>(() => {
     if (!filters.poi) return [];
-    if (!projectStore) return [];
 
     const result: ChartPoiAnnotation[] = [];
-    for (const node of visualNodes) {
-      const itinerary = node.itinerary;
-      if (itinerary.analysisVisible === false) continue;
-      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+    for (const node of preparedChartNodes) {
+      const { itinerary, prediction, xOffset } = node;
       result.push(
         ...buildPoiAnnotationsForItinerary(itinerary, prediction, xMode).map((annotation) =>
           shiftChartX(annotation, xOffset),
@@ -439,18 +441,14 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       );
     }
     return result;
-  }, [filters.poi, projectStore, predictionStore, visualNodes, xMode]);
+  }, [filters.poi, preparedChartNodes, xMode]);
 
   const alertAnnotations = useMemo<ChartAlertAnnotation[]>(() => {
     if (!filters.alertes) return [];
-    if (!projectStore) return [];
 
     const result: ChartAlertAnnotation[] = [];
-    for (const node of visualNodes) {
-      const itinerary = node.itinerary;
-      if (itinerary.analysisVisible === false) continue;
-      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
-      const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+    for (const node of preparedChartNodes) {
+      const { itinerary, prediction, xOffset } = node;
       result.push(
         ...buildRouteAuditAnnotationsForItinerary(itinerary, prediction, xMode).map((annotation) =>
           shiftChartX(annotation, xOffset),
@@ -458,7 +456,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       );
     }
     return result;
-  }, [filters.alertes, projectStore, predictionStore, visualNodes, xMode]);
+  }, [filters.alertes, preparedChartNodes, xMode]);
 
   const dayNightOverlay = useMemo<ChartDayNightOverlay | null>(() => {
     if (!filters.jourNuit || !dayNightStartReady || !activeItinerary) return null;

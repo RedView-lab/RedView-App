@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { AxisDomain, AxisMode } from '../components/chart';
-import { buildSeriesFromPrediction, computeXDomain, locateRoutePointAtX } from '../components/chart';
+import { locateRoutePointAtX } from '../components/chart';
 import {
   buildCinematicCameraTarget,
   cinematicBearingAtDistance,
@@ -134,30 +134,31 @@ export function AnalysisFlyoverProvider({
   const startTime = interactiveItinerary?.rhythm.startTime ?? null;
 
   const routeXDomain = useMemo<AxisDomain | null>(() => {
-    const altitudeSeries = buildSeriesFromPrediction(
+    if (!(totalDistanceM > 0)) return null;
+
+    const maxXValue = xValueFromDistance(totalDistanceM, {
       prediction,
-      'Altitude',
+      totalDistanceM,
       xMode,
-      routePoints,
-      interactiveItinerary?.gpxRoute?.source,
       startTime,
-    );
-    if (altitudeSeries && altitudeSeries.length >= 2) {
-      return computeXDomain([altitudeSeries], xMode);
+    });
+    if (!Number.isFinite(maxXValue)) return null;
+
+    if (xMode === 'distance') {
+      return { min: 0, max: maxXValue as number };
     }
-    if (xMode === 'distance' && totalDistanceM > 0) {
-      return { min: 0, max: totalDistanceM / 1000 };
-    }
-    const totalElapsedHours = Number.isFinite(prediction?.total_time_s)
-      ? (prediction?.total_time_s as number) / 3600
-      : Number.NaN;
-    if (!(totalElapsedHours > 0)) return null;
     if (xMode === 'heure') {
-      const startHours = startTime ? xValueFromDistance(0, { prediction, totalDistanceM, xMode, startTime }) : 0;
-      return { min: startHours, max: startHours + totalElapsedHours };
+      const minXValue = xValueFromDistance(0, {
+        prediction,
+        totalDistanceM,
+        xMode,
+        startTime,
+      });
+      if (!Number.isFinite(minXValue)) return null;
+      return { min: minXValue as number, max: maxXValue as number };
     }
-    return { min: 0, max: totalElapsedHours };
-  }, [prediction, routePoints, startTime, totalDistanceM, xMode]);
+    return { min: 0, max: maxXValue as number };
+  }, [prediction, startTime, totalDistanceM, xMode]);
 
   const itineraryId = interactiveItinerary?.id ?? null;
   useEffect(() => {

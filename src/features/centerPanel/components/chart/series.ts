@@ -25,6 +25,13 @@ const MAX_CHART_POINT_COUNT = 2_048;
 const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
 const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], NormalizedRoutePoint[] | null>();
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
+const predictionSeriesCache = new WeakMap<PredictionResult, Map<string, ChartPoint[] | null>>();
+const routeBackedSeriesCache = new WeakMap<RouteChartPoint[], RouteBackedSeriesCacheBucket>();
+
+interface RouteBackedSeriesCacheBucket {
+  withoutPrediction: Map<string, ChartPoint[] | null>;
+  withPrediction: WeakMap<PredictionResult, Map<string, ChartPoint[] | null>>;
+}
 
 /**
  * Identifier of an axis option exposed by the analysis dropdowns. Keep in
@@ -459,6 +466,57 @@ function fitChartPointBudget(
   return reduced.length >= 2 ? reduced : [first, last];
 }
 
+function getPredictionSeriesCacheMap(
+  prediction: PredictionResult,
+): Map<string, ChartPoint[] | null> {
+  let cache = predictionSeriesCache.get(prediction);
+  if (!cache) {
+    cache = new Map<string, ChartPoint[] | null>();
+    predictionSeriesCache.set(prediction, cache);
+  }
+  return cache;
+}
+
+function getRouteBackedSeriesCacheMap(
+  routePoints: RouteChartPoint[],
+  prediction: PredictionResult | null | undefined,
+): Map<string, ChartPoint[] | null> {
+  let bucket = routeBackedSeriesCache.get(routePoints);
+  if (!bucket) {
+    bucket = {
+      withoutPrediction: new Map<string, ChartPoint[] | null>(),
+      withPrediction: new WeakMap<PredictionResult, Map<string, ChartPoint[] | null>>(),
+    };
+    routeBackedSeriesCache.set(routePoints, bucket);
+  }
+
+  if (!prediction) return bucket.withoutPrediction;
+
+  let cache = bucket.withPrediction.get(prediction);
+  if (!cache) {
+    cache = new Map<string, ChartPoint[] | null>();
+    bucket.withPrediction.set(prediction, cache);
+  }
+  return cache;
+}
+
+function getRouteBackedSeriesCacheKey(
+  metric: ChartMetricId,
+  xMode: AxisMode,
+  routeSource?: 'gpx' | 'brouter',
+  startTime?: string | null,
+): string {
+  return [metric, xMode, routeSource ?? '', xMode === 'heure' ? startTime ?? '' : ''].join('|');
+}
+
+function getPredictionSeriesCacheKey(
+  metric: ChartMetricId,
+  xMode: AxisMode,
+  startTime?: string | null,
+): string {
+  return [metric, xMode, xMode === 'heure' ? startTime ?? '' : ''].join('|');
+}
+
 function buildSeriesFromRouteProfile(
   routePoints: RouteChartPoint[] | null | undefined,
   prediction: PredictionResult | null | undefined,
@@ -469,6 +527,18 @@ function buildSeriesFromRouteProfile(
 ): ChartPoint[] | null {
   const profile = normalizeRouteProfile(routePoints);
   if (!profile) return null;
+
+  const routeCache = routePoints
+    ? getRouteBackedSeriesCacheMap(routePoints, xMode === 'distance' ? null : prediction)
+    : null;
+  const routeCacheKey = routePoints
+    ? getRouteBackedSeriesCacheKey(metric, xMode, routeSource, startTime)
+    : null;
+  if (routeCache && routeCacheKey) {
+    const cached = routeCache.get(routeCacheKey);
+    if (cached !== undefined) return cached;
+  }
+
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
 
   const points: ChartPoint[] = [];
@@ -493,7 +563,7 @@ function buildSeriesFromRouteProfile(
     }
   }
 
-  return points.length > 1
+  const result = points.length > 1
     ? fitChartPointBudget(
         points,
         metric === 'Altitude' && routeSource === 'gpx'
@@ -501,6 +571,11 @@ function buildSeriesFromRouteProfile(
           : MAX_CHART_POINT_COUNT,
       )
     : null;
+
+  if (routeCache && routeCacheKey) {
+    routeCache.set(routeCacheKey, result);
+  }
+  return result;
 }
 
 function buildDistanceMetricSamples(
@@ -710,9 +785,20 @@ export function buildSeriesFromPrediction(
   if (!prediction.points.length) return null;
   if (!metricIsAvailable(metric)) return null;
 
+  const predictionCache = getPredictionSeriesCacheMap(prediction);
+  const predictionCacheKey = getPredictionSeriesCacheKey(metric, xMode, startTime);
+  const cached = predictionCache.get(predictionCacheKey);
+  if (cached !== undefined) return cached;
+
+  let result: ChartPoint[] | null = null;
+
   if (isIntervalAverageMetric(metric)) {
     const averageSeries = buildFixedDistanceAverageSeries(prediction, metric, xMode, startTime);
-    if (averageSeries) return averageSeries;
+    if (averageSeries) {
+      result = averageSeries;
+      predictionCache.set(predictionCacheKey, result);
+      return result;
+    }
   }
 
   const points: ChartPoint[] = [];
@@ -732,7 +818,9 @@ export function buildSeriesFromPrediction(
 
   points.sort((a, b) => a.x - b.x);
 
-  return points.length > 1 ? fitChartPointBudget(points) : null;
+  result = points.length > 1 ? fitChartPointBudget(points) : null;
+  predictionCache.set(predictionCacheKey, result);
+  return result;
 }
 
 export function locateRoutePointAtX(

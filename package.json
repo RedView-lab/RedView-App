@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build:fit-engine": "powershell -ExecutionPolicy Bypass -File ./vendor/redviewalgo/build.ps1",
+    "bench:analysis-chart": "node --experimental-strip-types ./scripts/benchmark-analysis-chart-cache.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
