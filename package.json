@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@garmin/fitsdk": "^21.201.0",
     "@mattnucc/gribberish": "^0.30.2",
     "@supabase/supabase-js": "^2.101.1",
     "@types/proj4": "^2.5.6",
