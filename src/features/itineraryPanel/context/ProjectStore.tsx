@@ -1,256 +1,37 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useRef,
   useState,
   type Dispatch,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
-import {
-  cumulativeRouteLengthsM,
-  projectPointAlongRoute,
-} from '../lib/route-distance';
 
 import { createDefaultItinerary, createDefaultProject, ITINERARY_COLORS } from '../defaultState';
 import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
+import {
+  mergeItineraryProject,
+  type MergeItineraryConnectorSegment,
+} from '../lib/merge-itinerary';
 import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/split-itinerary';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
 import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
+import { ProjectStoreContext } from './ProjectStore/context';
+import { buildPendingRoutePatchForForbiddenZone } from './ProjectStore/forbiddenZonePatch';
+import { useTraceHistory } from './ProjectStore/useTraceHistory';
 import type {
-  Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
   RouteRenderMode,
-  TimelineItem,
 } from '../types';
-
-interface TraceHistoryEntry {
-  itineraryId: string;
-  before: ItineraryProject;
-  after: ItineraryProject;
-}
-
-function isRoutableTimelineRow(
-  row: TimelineItem | null | undefined,
-): row is TimelineItem & { lat: number; lon: number } {
-  return Boolean(
-    row &&
-    (row.kind === 'start' || row.kind === 'waypoint' || row.kind === 'end') &&
-    row.lat != null &&
-    row.lon != null,
-  );
-}
-
-function buildPendingRoutePatchForForbiddenZone(
-  timeline: TimelineItem[],
-  routePoints: NonNullable<Itinerary['gpxRoute']>['points'],
-  zone: ItineraryForbiddenZone,
-): Itinerary['pendingRoutePatch'] {
-  if (routePoints.length < 2 || zone.points.length < 3) return undefined;
-
-  const routeDistances = cumulativeRouteLengthsM(routePoints);
-  let minAffectedDistanceM = Number.POSITIVE_INFINITY;
-  let maxAffectedDistanceM = Number.NEGATIVE_INFINITY;
-
-  for (let index = 1; index < routePoints.length; index += 1) {
-    const start = routePoints[index - 1];
-    const end = routePoints[index];
-    if (!segmentIntersectsPolygon(start, end, zone.points)) continue;
-
-    minAffectedDistanceM = Math.min(minAffectedDistanceM, routeDistances[index - 1] ?? 0);
-    maxAffectedDistanceM = Math.max(maxAffectedDistanceM, routeDistances[index] ?? 0);
-  }
-
-  if (!Number.isFinite(minAffectedDistanceM) || !Number.isFinite(maxAffectedDistanceM)) {
-    return undefined;
-  }
-
-  const routableRows = timeline.filter(isRoutableTimelineRow);
-  const rowsWithDistances = routableRows
-    .map((row, index) => {
-      const distanceM = resolveTimelineRowDistanceM(row, index, routableRows.length, routePoints, routeDistances);
-      return distanceM == null ? null : { row, distanceM };
-    })
-    .filter((entry): entry is { row: typeof routableRows[number]; distanceM: number } => Boolean(entry));
-  if (rowsWithDistances.length < 2) return undefined;
-
-  let startIndex = 0;
-  for (let index = 0; index < rowsWithDistances.length; index += 1) {
-    if (rowsWithDistances[index].distanceM <= minAffectedDistanceM + 1e-6) {
-      startIndex = index;
-    }
-  }
-
-  let endIndex = rowsWithDistances.length - 1;
-  for (let index = startIndex + 1; index < rowsWithDistances.length; index += 1) {
-    if (rowsWithDistances[index].distanceM >= maxAffectedDistanceM - 1e-6) {
-      endIndex = index;
-      break;
-    }
-  }
-
-  if (endIndex <= startIndex) {
-    endIndex = Math.min(rowsWithDistances.length - 1, startIndex + 1);
-    startIndex = Math.max(0, endIndex - 1);
-  }
-
-  const startRow = rowsWithDistances[startIndex]?.row;
-  const endRow = rowsWithDistances[endIndex]?.row;
-  if (!startRow || !endRow) return undefined;
-
-  return {
-    start: { lat: startRow.lat, lon: startRow.lon, kind: startRow.kind === 'start' ? 'start' : 'waypoint' },
-    end: { lat: endRow.lat, lon: endRow.lon, kind: endRow.kind === 'end' ? 'end' : 'waypoint' },
-    via: rowsWithDistances
-      .slice(startIndex + 1, endIndex)
-      .filter((entry) => entry.row.kind === 'waypoint')
-      .map((entry) => ({ lat: entry.row.lat, lon: entry.row.lon })),
-  };
-}
-
-function resolveTimelineRowDistanceM(
-  row: TimelineItem & { lat: number; lon: number },
-  index: number,
-  rowCount: number,
-  routePoints: NonNullable<Itinerary['gpxRoute']>['points'],
-  routeDistances: number[],
-): number | null {
-  if (index === 0 || row.kind === 'start') return 0;
-  if (index === rowCount - 1 || row.kind === 'end') {
-    return routeDistances[routeDistances.length - 1] ?? 0;
-  }
-  const projected = projectPointAlongRoute(row, routePoints, routeDistances);
-  return projected?.distanceM ?? null;
-}
-
-function segmentIntersectsPolygon(
-  start: { lat: number; lon: number },
-  end: { lat: number; lon: number },
-  polygon: Array<{ lat: number; lon: number }>,
-): boolean {
-  if (polygon.length < 3) return false;
-  if (pointInPolygon(start, polygon) || pointInPolygon(end, polygon)) return true;
-
-  for (let index = 0; index < polygon.length; index += 1) {
-    const edgeStart = polygon[index];
-    const edgeEnd = polygon[(index + 1) % polygon.length];
-    if (segmentsIntersect(start, end, edgeStart, edgeEnd)) return true;
-  }
-  return false;
-}
-
-function pointInPolygon(
-  point: { lat: number; lon: number },
-  polygon: Array<{ lat: number; lon: number }>,
-): boolean {
-  let inside = false;
-  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index, index += 1) {
-    const a = polygon[index];
-    const b = polygon[previous];
-    const intersects =
-      (a.lat > point.lat) !== (b.lat > point.lat) &&
-      point.lon < ((b.lon - a.lon) * (point.lat - a.lat)) / ((b.lat - a.lat) || Number.EPSILON) + a.lon;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function segmentsIntersect(
-  a1: { lat: number; lon: number },
-  a2: { lat: number; lon: number },
-  b1: { lat: number; lon: number },
-  b2: { lat: number; lon: number },
-): boolean {
-  const o1 = orientation(a1, a2, b1);
-  const o2 = orientation(a1, a2, b2);
-  const o3 = orientation(b1, b2, a1);
-  const o4 = orientation(b1, b2, a2);
-
-  if (o1 !== o2 && o3 !== o4) return true;
-  if (o1 === 0 && onSegment(a1, b1, a2)) return true;
-  if (o2 === 0 && onSegment(a1, b2, a2)) return true;
-  if (o3 === 0 && onSegment(b1, a1, b2)) return true;
-  if (o4 === 0 && onSegment(b1, a2, b2)) return true;
-  return false;
-}
-
-function orientation(
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number },
-  c: { lat: number; lon: number },
-): number {
-  const value = ((b.lat - a.lat) * (c.lon - b.lon)) - ((b.lon - a.lon) * (c.lat - b.lat));
-  if (Math.abs(value) <= 1e-12) return 0;
-  return value > 0 ? 1 : 2;
-}
-
-function onSegment(
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number },
-  c: { lat: number; lon: number },
-): boolean {
-  return (
-    b.lon <= Math.max(a.lon, c.lon) + 1e-12 &&
-    b.lon >= Math.min(a.lon, c.lon) - 1e-12 &&
-    b.lat <= Math.max(a.lat, c.lat) + 1e-12 &&
-    b.lat >= Math.min(a.lat, c.lat) - 1e-12
-  );
-}
-
-interface ProjectStoreValue {
-  project: ItineraryProject;
-  setProject: Dispatch<SetStateAction<ItineraryProject>>;
-  undoTraceEdit: () => void;
-  redoTraceEdit: () => void;
-  canUndoTraceEdit: boolean;
-  canRedoTraceEdit: boolean;
-  rollbackPendingTraceAppend: (itineraryId: string) => boolean;
-  /** Mutate a single itinerary by id (Immer-style draft mutation). */
-  updateItinerary: (
-    id: string,
-    mut: (draft: ItineraryProject['itineraries'][number]) => void,
-  ) => void;
-  setItineraryName: (id: string, name: string) => void;
-  setItineraryColor: (id: string, color: string) => void;
-  setItineraryVisibility: (id: string, visible: boolean) => void;
-  setItineraryAnalysisVisibility: (id: string, visible: boolean) => void;
-  setItineraryRenderMode: (id: string, mode: RouteRenderMode) => void;
-  setItineraryOpacity: (id: string, opacity: number) => void;
-  duplicateItinerary: (id: string) => { createdItineraryId: string; createdItineraryName: string } | null;
-  removeItinerary: (id: string) => boolean;
-  clearItineraryRoute: (id: string) => void;
-  appendTracePoint: (
-    id: string,
-    point: { lat: number; lon: number; label: string },
-  ) => boolean;
-  addForbiddenZone: (
-    id: string,
-    points: Array<{ lat: number; lon: number }>,
-  ) => ItineraryForbiddenZone | null;
-  simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
-  cleanItineraryGpxGlitches: (id: string) => void;
-  splitItineraryAtPointIndex: (
-    id: string,
-    splitIndex: number,
-  ) => Omit<SplitItineraryProjectResult, 'project'> | null;
-}
-
-const ProjectStoreContext = createContext<ProjectStoreValue | null>(null);
-
-interface ProjectProviderProps {
-  initialProject?: ItineraryProject;
-  /**
-   * Notified after every project mutation. Used by the Dashboard to
-   * persist changes to Supabase (debounced).
-   */
-  onProjectChange?: (project: ItineraryProject) => void;
-  children: ReactNode;
-}
+import type {
+  ProjectProviderProps,
+  ProjectStoreValue,
+  TraceHistoryEntry,
+} from './ProjectStore/types';
+export { useProjectStore, useProjectStoreOptional } from './ProjectStore/hooks';
 
 /**
  * Single source of truth for the active project. Wraps the editor area
@@ -278,11 +59,6 @@ export function ProjectProvider({
   // snapshot — `useLayoutEffect` would not run in time.
   const onProjectChangeRef = useRef(onProjectChange);
   onProjectChangeRef.current = onProjectChange;
-  const [traceHistoryPast, setTraceHistoryPast] = useState<TraceHistoryEntry[]>([]);
-  const [traceHistoryFuture, setTraceHistoryFuture] = useState<TraceHistoryEntry[]>([]);
-  const traceHistoryPastRef = useRef<TraceHistoryEntry[]>([]);
-  const traceHistoryFutureRef = useRef<TraceHistoryEntry[]>([]);
-  const pendingTraceAppendRef = useRef<TraceHistoryEntry | null>(null);
 
   const setProject = useCallback<Dispatch<SetStateAction<ItineraryProject>>>(
     (action) => {
@@ -309,6 +85,19 @@ export function ProjectProvider({
     [],
   );
 
+  const {
+    canUndoTraceEdit,
+    canRedoTraceEdit,
+    traceHistoryPastCount,
+    traceHistoryFutureCount,
+    pushTraceHistoryEntry,
+    pushTraceHistoryEntries,
+    undoTraceEdit,
+    redoTraceEdit,
+    rollbackPendingTraceAppend,
+    setPendingTraceAppend,
+  } = useTraceHistory({ setProject });
+
   const updateItinerary = useCallback(
     (
       id: string,
@@ -325,78 +114,6 @@ export function ProjectProvider({
       }));
     },
     [],
-  );
-
-  const syncTraceHistory = useCallback((past: TraceHistoryEntry[], future: TraceHistoryEntry[]) => {
-    traceHistoryPastRef.current = past;
-    traceHistoryFutureRef.current = future;
-    setTraceHistoryPast(past);
-    setTraceHistoryFuture(future);
-  }, []);
-
-  const pushTraceHistoryEntry = useCallback(
-    (
-      entry: TraceHistoryEntry,
-      options?: { preservePendingTraceAppend?: boolean },
-    ) => {
-      if (!options?.preservePendingTraceAppend) {
-        pendingTraceAppendRef.current = null;
-      }
-      syncTraceHistory([...traceHistoryPastRef.current, entry], []);
-      setProject(entry.after);
-    },
-    [setProject, syncTraceHistory],
-  );
-
-  const pushTraceHistoryEntries = useCallback(
-    (
-      entries: TraceHistoryEntry[],
-      options?: { preservePendingTraceAppend?: boolean },
-    ) => {
-      if (entries.length === 0) return;
-      if (!options?.preservePendingTraceAppend) {
-        pendingTraceAppendRef.current = null;
-      }
-      syncTraceHistory([...traceHistoryPastRef.current, ...entries], []);
-      setProject(entries[entries.length - 1].after);
-    },
-    [setProject, syncTraceHistory],
-  );
-
-  const undoTraceEdit = useCallback(() => {
-    const past = traceHistoryPastRef.current;
-    const entry = past[past.length - 1];
-    if (!entry) return;
-
-    pendingTraceAppendRef.current = null;
-    syncTraceHistory(past.slice(0, -1), [entry, ...traceHistoryFutureRef.current]);
-    setProject(entry.before);
-  }, [setProject, syncTraceHistory]);
-
-  const redoTraceEdit = useCallback(() => {
-    const future = traceHistoryFutureRef.current;
-    const [entry, ...rest] = future;
-    if (!entry) return;
-
-    pendingTraceAppendRef.current = null;
-    syncTraceHistory([...traceHistoryPastRef.current, entry], rest);
-    setProject(entry.after);
-  }, [setProject, syncTraceHistory]);
-
-  const rollbackPendingTraceAppend = useCallback(
-    (itineraryId: string) => {
-      const pending = pendingTraceAppendRef.current;
-      if (!pending || pending.itineraryId !== itineraryId) return false;
-
-      pendingTraceAppendRef.current = null;
-      const past = traceHistoryPastRef.current;
-      const last = past[past.length - 1];
-      const nextPast = last === pending ? past.slice(0, -1) : past;
-      syncTraceHistory(nextPast, []);
-      setProject(pending.before);
-      return true;
-    },
-    [setProject, syncTraceHistory],
   );
 
   const setItineraryName = useCallback(
@@ -633,11 +350,11 @@ export function ProjectProvider({
         before: structuredClone(currentProject),
         after: structuredClone(nextProject),
       };
-      pendingTraceAppendRef.current = entry;
+      setPendingTraceAppend(entry);
       pushTraceHistoryEntry(entry, { preservePendingTraceAppend: true });
       return true;
     },
-    [pushTraceHistoryEntry],
+    [pushTraceHistoryEntry, setPendingTraceAppend],
   );
 
   const addForbiddenZone = useCallback(
@@ -794,6 +511,33 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const mergeItineraries = useCallback(
+    (
+      sourceId: string,
+      targetId: string,
+      options?: { connector?: MergeItineraryConnectorSegment },
+    ) => {
+      const currentProject = projectRef.current;
+      const result = mergeItineraryProject(currentProject, sourceId, targetId, options);
+      if (!result) return null;
+
+      const entry: TraceHistoryEntry = {
+        itineraryId: sourceId,
+        before: structuredClone(currentProject),
+        after: structuredClone(result.project),
+      };
+      pushTraceHistoryEntry(entry);
+
+      return {
+        mergedItineraryId: result.mergedItineraryId,
+        removedItineraryId: result.removedItineraryId,
+        mergedItineraryName: result.mergedItineraryName,
+        connectorUsed: result.connectorUsed,
+      };
+    },
+    [pushTraceHistoryEntry],
+  );
+
   const splitItineraryAtPointIndex = useCallback(
     (id: string, splitIndex: number) => {
       let resultBox: Omit<SplitItineraryProjectResult, 'project'> | null = null;
@@ -818,8 +562,8 @@ export function ProjectProvider({
       setProject,
       undoTraceEdit,
       redoTraceEdit,
-      canUndoTraceEdit: traceHistoryPast.length > 0,
-      canRedoTraceEdit: traceHistoryFuture.length > 0,
+      canUndoTraceEdit,
+      canRedoTraceEdit,
       rollbackPendingTraceAppend,
       updateItinerary,
       setItineraryName,
@@ -835,6 +579,7 @@ export function ProjectProvider({
       addForbiddenZone,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
+      mergeItineraries,
       splitItineraryAtPointIndex,
     }),
     [
@@ -843,8 +588,8 @@ export function ProjectProvider({
       undoTraceEdit,
       redoTraceEdit,
       rollbackPendingTraceAppend,
-      traceHistoryPast.length,
-      traceHistoryFuture.length,
+      traceHistoryPastCount,
+      traceHistoryFutureCount,
       updateItinerary,
       setItineraryName,
       setItineraryColor,
@@ -859,6 +604,7 @@ export function ProjectProvider({
       addForbiddenZone,
       simplifyItineraryGpx,
       cleanItineraryGpxGlitches,
+      mergeItineraries,
       splitItineraryAtPointIndex,
     ],
   );
@@ -870,24 +616,3 @@ export function ProjectProvider({
   );
 }
 
-/**
- * Read the active project + mutators from the surrounding
- * `<ProjectProvider>`. Throws when used outside the provider so
- * misuse is caught early in development.
- */
-export function useProjectStore(): ProjectStoreValue {
-  const ctx = useContext(ProjectStoreContext);
-  if (!ctx) {
-    throw new Error('useProjectStore must be used within <ProjectProvider>');
-  }
-  return ctx;
-}
-
-/**
- * Optional variant — returns null instead of throwing when no provider
- * is mounted. Useful for components rendered outside the editor (e.g.
- * the project browser overlay) that should silently no-op.
- */
-export function useProjectStoreOptional(): ProjectStoreValue | null {
-  return useContext(ProjectStoreContext);
-}

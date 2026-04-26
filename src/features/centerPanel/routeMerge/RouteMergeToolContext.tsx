@@ -10,11 +10,9 @@ import {
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
-  mergeItineraryProject,
   MERGE_CONNECT_THRESHOLD_M,
   shouldRouteMergedGap,
   type MergeItineraryConnectorSegment,
-  type MergeItineraryProjectResult,
 } from '@/features/itineraryPanel/lib/merge-itinerary';
 import {
   checkRouteWithinFrance,
@@ -248,21 +246,8 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
           connectorDroppedPolygons = connectorResult.droppedPolygons;
         }
 
-        let resultBox: Omit<MergeItineraryProjectResult, 'project'> | null = null;
-        let usedConnector = false;
-        store.setProject((currentProject) => {
-          const result = mergeItineraryProject(currentProject, sourceId, targetId, { connector });
-          usedConnector = result?.connectorUsed === true;
-          resultBox = result
-            ? {
-                mergedItineraryId: result.mergedItineraryId,
-                removedItineraryId: result.removedItineraryId,
-                mergedItineraryName: result.mergedItineraryName,
-                connectorUsed: result.connectorUsed,
-              }
-            : null;
-          return result?.project ?? currentProject;
-        });
+        const resultBox = store.mergeItineraries(sourceId, targetId, { connector });
+        const usedConnector = resultBox?.connectorUsed === true;
 
         if (!resultBox) {
           throw new Error('Fusion impossible avec les traces sélectionnées.');
