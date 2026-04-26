@@ -15,6 +15,7 @@ export interface TimelineFilterState {
   waypoint: boolean;
   poi: boolean;
   pause: boolean;
+  favorite: boolean;
 }
 
 export const DEFAULT_TIMELINE_FILTER: TimelineFilterState = {
@@ -22,6 +23,7 @@ export const DEFAULT_TIMELINE_FILTER: TimelineFilterState = {
   waypoint: true,
   poi: true,
   pause: true,
+  favorite: true,
 };
 
 interface TimelineFiltersProps {

@@ -20,6 +20,7 @@ interface TimelineHeaderProps {
   onChangeView?: (v: TimelineView) => void;
   onSearch?: () => void;
   onOpenSettings?: () => void;
+  settingsActive?: boolean;
   onAdd?: MouseEventHandler<HTMLButtonElement>;
   onOpenKindMenu?: MouseEventHandler<HTMLButtonElement>;
 }
@@ -29,6 +30,7 @@ export function TimelineHeader({
   onChangeView,
   onSearch,
   onOpenSettings,
+  settingsActive,
   onAdd,
   onOpenKindMenu,
 }: TimelineHeaderProps) {
@@ -69,9 +71,10 @@ export function TimelineHeader({
       </button>
       <button
         type="button"
-        className="rvi-tl-tool"
+        className={`rvi-tl-tool${settingsActive ? ' is-active' : ''}`}
         onClick={onOpenSettings}
         aria-label="Paramètres de la feuille de route"
+        aria-pressed={settingsActive}
       >
         <IconSettings04 size={16} />
       </button>

@@ -24,6 +24,8 @@ interface TimelineTimelineViewProps {
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
   config?: Partial<TimelineRailConfig>;
+  markerStepKm?: number;
+  hourZoom?: number;
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
@@ -62,12 +64,13 @@ interface TimelineEvent extends TimedTimelineItem {
 const RAIL_HEADER_HEIGHT_PX = 30;
 const RAIL_ITEM_HEIGHT_PX = 32;
 const PAUSE_ITEM_HEIGHT_PX = 28;
-const HOUR_ROW_HEIGHT_PX = 96;
+const BASE_HOUR_ROW_HEIGHT_PX = 96;
 const CARD_VERTICAL_GAP_PX = 4;
 const DEFAULT_START_MINUTES = 8 * 60;
 const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
+const MIN_TIME_DELTA_MINUTES = 1 / 60;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -233,10 +236,55 @@ function buildTimedItems(
     );
 }
 
-function resolveMarkerKmStep(config?: Partial<TimelineRailConfig>): number {
+function resolveMarkerKmStep(
+  config?: Partial<TimelineRailConfig>,
+  markerStepKm?: number,
+): number {
+  if (Number.isFinite(markerStepKm) && (markerStepKm as number) > 0) {
+    return Math.max(5, Math.round((markerStepKm as number) / 5) * 5);
+  }
   const kmPerRow = config?.kmPerRow ?? DEFAULT_TIMELINE_RAIL.kmPerRow;
   const rawStep = Math.max(KM_MARKER_MIN_STEP, kmPerRow * 5);
   return Math.ceil(rawStep / 5) * 5;
+}
+
+function resolveRequiredPixelsPerMinute(
+  primaryItems: TimedTimelineItem[],
+  standalonePauseItems: TimedTimelineItem[],
+  baseHourRowHeightPx: number,
+): number {
+  const basePixelsPerMinute = baseHourRowHeightPx / 60;
+  const blocks = [
+    ...primaryItems.map((entry) => ({
+      elapsedSeconds: entry.elapsedSeconds,
+      sortIndex: entry.sortIndex,
+      heightPx: RAIL_ITEM_HEIGHT_PX,
+    })),
+    ...standalonePauseItems.map((entry) => ({
+      elapsedSeconds: entry.elapsedSeconds,
+      sortIndex: entry.sortIndex,
+      heightPx: PAUSE_ITEM_HEIGHT_PX,
+    })),
+  ].sort(
+    (left, right) =>
+      left.elapsedSeconds - right.elapsedSeconds || left.sortIndex - right.sortIndex,
+  );
+
+  let requiredPixelsPerMinute = basePixelsPerMinute;
+  for (let index = 1; index < blocks.length; index += 1) {
+    const previous = blocks[index - 1];
+    const current = blocks[index];
+    const deltaMinutes = Math.max(
+      (current.elapsedSeconds - previous.elapsedSeconds) / 60,
+      MIN_TIME_DELTA_MINUTES,
+    );
+    requiredPixelsPerMinute = Math.max(
+      requiredPixelsPerMinute,
+      (previous.heightPx + CARD_VERTICAL_GAP_PX) / deltaMinutes,
+    );
+  }
+
+  return requiredPixelsPerMinute;
 }
 
 function buildDayWindow(anchor: Date): Date[] {
@@ -253,12 +301,15 @@ export function TimelineTimelineView({
   rhythm,
   prediction,
   config,
+  markerStepKm,
+  hourZoom = 1,
   selectedIds,
   onToggleSelect,
   onToggleVisibility,
   onToggleFavorite,
   onRemove,
 }: TimelineTimelineViewProps) {
+  const normalizedHourZoom = Math.min(1.5, Math.max(0.75, hourZoom));
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
   const timedItems = useMemo(
     () => buildTimedItems(items, prediction, reference),
@@ -346,14 +397,11 @@ export function TimelineTimelineView({
   }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes, startMinutes]);
 
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
-  const canvasHeight = totalHours * HOUR_ROW_HEIGHT_PX;
-
-  const events = useMemo(() => {
+  const pauseAttachment = useMemo(() => {
     const usedPauseIds = new Set<string>();
-    let previousBottom = -Infinity;
+    const attachedByEventId = new Map<string, AttachedPause[]>();
 
-    return filteredPrimaryItems.map((entry, index): TimelineEvent => {
-      const nextEntry = filteredPrimaryItems[index + 1] ?? null;
+    filteredPrimaryItems.forEach((entry) => {
       const attachedPauses = filteredPauseItems
         .filter((pause) => {
           if (usedPauseIds.has(pause.item.id)) return false;
@@ -368,9 +416,33 @@ export function TimelineTimelineView({
           };
         });
 
-      const naturalTopPx = ((entry.minuteOfDay - startMinutes) / 60) * HOUR_ROW_HEIGHT_PX;
-      const topPx = Math.max(naturalTopPx, previousBottom + CARD_VERTICAL_GAP_PX);
-      previousBottom = topPx + RAIL_ITEM_HEIGHT_PX;
+      attachedByEventId.set(entry.item.id, attachedPauses);
+    });
+
+    return {
+      attachedByEventId,
+      unattachedPauses: filteredPauseItems.filter((pause) => !usedPauseIds.has(pause.item.id)),
+    };
+  }, [filteredPauseItems, filteredPrimaryItems]);
+
+  const pixelsPerMinute = useMemo(
+    () =>
+      resolveRequiredPixelsPerMinute(
+        filteredPrimaryItems,
+        pauseAttachment.unattachedPauses,
+        BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom,
+      ),
+    [filteredPrimaryItems, normalizedHourZoom, pauseAttachment.unattachedPauses],
+  );
+  const hourRowHeightPx = pixelsPerMinute * 60;
+  const canvasHeight = Math.max(totalHours * hourRowHeightPx, 0);
+
+  const events = useMemo(() => {
+    return filteredPrimaryItems.map((entry, index): TimelineEvent => {
+      const nextEntry = filteredPrimaryItems[index + 1] ?? null;
+      const attachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
+
+      const topPx = (entry.minuteOfDay - startMinutes) * pixelsPerMinute;
 
       return {
         ...entry,
@@ -382,31 +454,21 @@ export function TimelineTimelineView({
             : null,
       };
     });
-  }, [filteredPauseItems, filteredPrimaryItems, startMinutes]);
+  }, [filteredPrimaryItems, pauseAttachment.attachedByEventId, pixelsPerMinute, startMinutes]);
 
   const standalonePauses = useMemo(() => {
-    const attachedIds = new Set(events.flatMap((event) => event.attachedPauses.map((pause) => pause.id)));
-    let previousBottom = events.reduce(
-      (maxBottom, event) => Math.max(maxBottom, event.topPx + RAIL_ITEM_HEIGHT_PX),
-      -Infinity,
-    );
+    return pauseAttachment.unattachedPauses.map((pause) => ({
+      id: pause.item.id,
+      topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
+      durationMin: pause.item.durationMin ?? 0,
+      visible: pause.item.visible !== false,
+    }));
+  }, [pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes]);
 
-    return filteredPauseItems
-      .filter((pause) => !attachedIds.has(pause.item.id))
-      .map((pause) => {
-        const naturalTopPx = ((pause.minuteOfDay - startMinutes) / 60) * HOUR_ROW_HEIGHT_PX;
-        const topPx = Math.max(naturalTopPx, previousBottom + CARD_VERTICAL_GAP_PX);
-        previousBottom = topPx + PAUSE_ITEM_HEIGHT_PX;
-        return {
-          id: pause.item.id,
-          topPx,
-          durationMin: pause.item.durationMin ?? 0,
-          visible: pause.item.visible !== false,
-        };
-      });
-  }, [events, filteredPauseItems, startMinutes]);
-
-  const kmMarkerStep = useMemo(() => resolveMarkerKmStep(config), [config]);
+  const kmMarkerStep = useMemo(
+    () => resolveMarkerKmStep(config, markerStepKm),
+    [config, markerStepKm],
+  );
   const kmMarkers = useMemo(() => {
     const totalDistanceM = resolveTotalDistanceM(items, prediction);
     if (totalDistanceM <= 0) return [];
@@ -422,7 +484,7 @@ export function TimelineTimelineView({
       const minuteOfDay = markerDate
         ? markerDate.getHours() * 60 + markerDate.getMinutes() + markerDate.getSeconds() / 60
         : reference.startMinutes + elapsedSeconds / 60;
-      const topPx = ((minuteOfDay - startMinutes) / 60) * HOUR_ROW_HEIGHT_PX;
+      const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute;
       if (topPx < -20 || topPx > canvasHeight + 20) continue;
       markers.push({
         id: `km-${km}`,
@@ -431,7 +493,7 @@ export function TimelineTimelineView({
       });
     }
     return markers;
-  }, [canvasHeight, items, kmMarkerStep, maxDistanceKm, prediction, reference, selectedDayKey, startMinutes]);
+  }, [canvasHeight, items, kmMarkerStep, maxDistanceKm, pixelsPerMinute, prediction, reference, selectedDayKey, startMinutes]);
 
   const hourMarks = useMemo(
     () => Array.from({ length: totalHours + 1 }, (_, index) => startMinutes / 60 + index),
@@ -443,8 +505,8 @@ export function TimelineTimelineView({
     if (selectedDayKey !== toDayKey(now)) return null;
     const minuteOfDay = now.getHours() * 60 + now.getMinutes();
     if (minuteOfDay < startMinutes || minuteOfDay > endMinutes) return null;
-    return ((minuteOfDay - startMinutes) / 60) * HOUR_ROW_HEIGHT_PX;
-  }, [endMinutes, now, reference.hasRealDate, selectedDayKey, startMinutes]);
+    return (minuteOfDay - startMinutes) * pixelsPerMinute;
+  }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
 
   const selectedDayHasEvents = events.length > 0 || standalonePauses.length > 0;
 
@@ -480,7 +542,7 @@ export function TimelineTimelineView({
       <div className="rvi-tl-schedule__viewport">
         <div className="rvi-tl-schedule__times" aria-hidden>
           {hourMarks.map((hour, index) => {
-            const topPx = index * HOUR_ROW_HEIGHT_PX;
+            const topPx = index * hourRowHeightPx;
             return (
               <div
                 key={hour}

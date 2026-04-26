@@ -5,7 +5,7 @@
  * callback props so the parent container can wire them to a backend,
  * optimistic updates, undo/redo etc.
  */
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type {
   RhythmState,
@@ -15,6 +15,7 @@ import type {
   TimelineView,
 } from '../../types';
 import { KindBadge } from './KindBadge';
+import { TimelineEditPanel } from './TimelineEditPanel';
 import { TimelineHeader } from './TimelineHeader';
 import { TimelineSheetView } from './TimelineSheetView';
 import { TimelineTimelineView } from './TimelineTimelineView';
@@ -76,6 +77,9 @@ export function TimelinePanel({
   // Selection is local UI state; parent is notified via onSelectionChange.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
+  const [timelineEditOpen, setTimelineEditOpen] = useState(false);
+  const [timelineMarkerStepKm, setTimelineMarkerStepKm] = useState(50);
+  const [timelineZoomLevel, setTimelineZoomLevel] = useState(1);
 
   // Filter + table-settings state — local for now; the wiring to backend
   // will move these into the project state once persistence lands.
@@ -107,12 +111,27 @@ export function TimelinePanel({
     setAddMenuAnchor(null);
   };
 
+  useEffect(() => {
+    if (view !== 'timeline') {
+      setTimelineEditOpen(false);
+    }
+  }, [view]);
+
+  const handleOpenSettings = () => {
+    if (view === 'timeline') {
+      setTimelineEditOpen((current) => !current);
+      return;
+    }
+    onOpenSettings?.();
+  };
+
   const handleSelectAddKind = (kind: TimelineAddItemKind) => {
     onAdd?.(kind);
   };
 
   // Apply filter chips to the items list before rendering.
   const visibleItems = items.filter((it) => {
+    if (it.favorite && !filters.favorite) return false;
     if (it.kind === 'start' || it.kind === 'end') return filters.etape;
     if (it.kind === 'waypoint') return filters.waypoint;
     if (it.kind === 'pause') return filters.pause;
@@ -162,7 +181,8 @@ export function TimelinePanel({
         view={view}
         onChangeView={onChangeView}
         onSearch={onSearch}
-        onOpenSettings={onOpenSettings}
+        onOpenSettings={handleOpenSettings}
+        settingsActive={view === 'timeline' && timelineEditOpen}
         onAdd={handleOpenKindMenu}
         onOpenKindMenu={handleOpenKindMenu}
       />
@@ -189,17 +209,32 @@ export function TimelinePanel({
             />
           </>
         ) : (
-          <TimelineTimelineView
-            items={visibleItems}
-            rhythm={rhythm}
-            prediction={prediction}
-            config={railConfig}
-            selectedIds={selectedIds}
-            onToggleSelect={handleToggleSelect}
-            onToggleVisibility={onToggleItem}
-            onToggleFavorite={onFavoriteItem}
-            onRemove={onRemoveItem}
-          />
+          <>
+            {timelineEditOpen ? (
+              <TimelineEditPanel
+                filters={filters}
+                markerStepKm={timelineMarkerStepKm}
+                zoomLevel={timelineZoomLevel}
+                onChangeFilters={setFilters}
+                onChangeMarkerStepKm={setTimelineMarkerStepKm}
+                onChangeZoomLevel={setTimelineZoomLevel}
+              />
+            ) : null}
+
+            <TimelineTimelineView
+              items={visibleItems}
+              rhythm={rhythm}
+              prediction={prediction}
+              config={railConfig}
+              markerStepKm={timelineMarkerStepKm}
+              hourZoom={timelineZoomLevel}
+              selectedIds={selectedIds}
+              onToggleSelect={handleToggleSelect}
+              onToggleVisibility={onToggleItem}
+              onToggleFavorite={onFavoriteItem}
+              onRemove={onRemoveItem}
+            />
+          </>
         )}
       </div>
 
