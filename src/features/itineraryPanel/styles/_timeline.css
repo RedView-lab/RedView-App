@@ -592,6 +592,10 @@
   color: var(--rvi-text-faint);
 }
 
+.rvi-timeline--timeline .rvi-tl-schedule__legend {
+  display: none;
+}
+
 .rvi-tl-schedule__legend-spacer { display: block; }
 .rvi-tl-schedule__legend-name { min-width: 0; }
 .rvi-tl-schedule__legend-metric,
@@ -609,6 +613,7 @@
   max-height: min(72vh, 900px);
   overflow: auto;
   border-radius: var(--rvi-radius);
+  background: rgba(255, 255, 255, 0.02);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
@@ -627,7 +632,7 @@
 
 .rvi-tl-schedule__times {
   border-right: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .rvi-tl-schedule__time {
@@ -650,17 +655,20 @@
 
 .rvi-tl-schedule__km-marker {
   position: absolute;
-  left: 8px;
+  left: 0;
   display: inline-flex;
   align-items: center;
   height: 20px;
-  padding: 0 8px;
+  width: 52px;
+  padding: 0 4px;
   border-radius: 6px;
   transform: translateY(-50%);
   background: rgba(255, 255, 255, 0.04);
   color: var(--rvi-text-dim);
   font-size: 11px;
   line-height: 16px;
+  justify-content: flex-end;
+  box-sizing: border-box;
 }
 
 .rvi-tl-schedule__canvas {
@@ -730,16 +738,17 @@
 .rvi-tl-schedule__event,
 .rvi-tl-schedule__pause--standalone {
   position: absolute;
-  left: 8px;
-  right: 8px;
+  left: 6px;
+  right: 6px;
   animation: rvi-tl-fade 260ms ease-out both;
 }
 
 .rvi-tl-schedule__event {
+  position: absolute;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
-  align-items: start;
+  gap: 4px;
+  align-items: center;
   z-index: 2;
 }
 
@@ -748,10 +757,10 @@
   display: flex;
   align-items: center;
   min-width: 0;
-  min-height: 42px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: rgba(56, 56, 56, 0.82);
+  min-height: 32px;
+  padding: 4px 6px 4px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
   color: var(--rvi-text);
   cursor: pointer;
   box-sizing: border-box;
@@ -759,7 +768,7 @@
 }
 
 .rvi-tl-schedule__event-card:hover {
-  background: rgba(72, 72, 72, 0.92);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvi-tl-schedule__event.is-selected .rvi-tl-schedule__event-card {
@@ -769,14 +778,14 @@
 
 .rvi-tl-schedule__event[data-kind='start'] .rvi-tl-schedule__event-card,
 .rvi-tl-schedule__event[data-kind='end'] .rvi-tl-schedule__event-card {
-  background: rgba(44, 44, 44, 0.92);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .rvi-tl-schedule__event-main {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) 88px 64px;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 20px;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
 }
@@ -799,38 +808,55 @@
 
 .rvi-tl-schedule__event-metric {
   text-align: right;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 18px;
-  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  color: #fff;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rvi-tl-schedule__event-metric--next {
   width: 64px;
 }
 
+.rvi-tl-schedule__event-favorite {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.rvi-tl-schedule__event-favorite.is-active {
+  color: #fdb022;
+}
+
 .rvi-tl-schedule__event-side {
   display: flex;
-  align-items: stretch;
-  gap: 6px;
+  align-items: center;
+  gap: 4px;
 }
 
 .rvi-tl-schedule__pause {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: rgba(56, 56, 56, 0.9);
+  min-height: 28px;
+  min-width: 79px;
+  padding: 0 6px 0 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  line-height: 18px;
+  line-height: 20px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
 }
 
 .rvi-tl-schedule__pause.is-visible {
@@ -844,11 +870,23 @@
 }
 
 .rvi-tl-schedule__actions {
+  position: absolute;
+  top: 50%;
+  right: 0;
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  align-self: center;
   padding: 0 2px;
+  transform: translate(100%, -50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+
+.rvi-tl-schedule__event:hover .rvi-tl-schedule__actions,
+.rvi-tl-schedule__event:focus-within .rvi-tl-schedule__actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .rvi-tl-schedule__action {
@@ -897,16 +935,20 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 72px 56px;
+    grid-template-columns: 20px minmax(0, 1fr) 56px 56px 20px;
   }
 
   .rvi-tl-schedule__event-side {
-    justify-content: space-between;
+    justify-content: flex-start;
     padding-left: 28px;
   }
 
   .rvi-tl-schedule__actions {
     opacity: 1;
+    pointer-events: auto;
+    position: static;
+    transform: none;
+    padding-left: 28px;
   }
 }
 
@@ -933,8 +975,9 @@
   }
 
   .rvi-tl-schedule__km-marker {
-    left: 4px;
-    padding: 0 6px;
+    left: 0;
+    width: 40px;
+    padding: 0 4px;
     font-size: 10px;
   }
 
@@ -945,9 +988,9 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 1fr;
+    grid-template-columns: 20px minmax(0, 1fr) 20px;
     grid-template-areas:
-      'icon name next'
+      'icon name favorite'
       'icon from next';
     row-gap: 2px;
   }
@@ -955,6 +998,7 @@
   .rvi-tl-schedule__event-icon { grid-area: icon; }
   .rvi-tl-schedule__event-name { grid-area: name; }
   .rvi-tl-schedule__event-metric { grid-area: from; text-align: left; }
+  .rvi-tl-schedule__event-favorite { grid-area: favorite; justify-self: end; }
   .rvi-tl-schedule__event-metric--next {
     grid-area: next;
     width: auto;
@@ -973,6 +1017,10 @@
 
   .rvi-tl-schedule__actions {
     display: inline-flex;
+    position: static;
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .rvi-tl-schedule__action--visibility,

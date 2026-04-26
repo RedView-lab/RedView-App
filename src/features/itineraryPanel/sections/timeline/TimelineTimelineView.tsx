@@ -39,6 +39,7 @@ interface StartReference {
 
 interface TimedTimelineItem {
   item: TimelineItem;
+  sortIndex: number;
   distanceKm: number;
   elapsedSeconds: number;
   minuteOfDay: number;
@@ -59,11 +60,12 @@ interface TimelineEvent extends TimedTimelineItem {
 }
 
 const RAIL_HEADER_HEIGHT_PX = 30;
-const RAIL_ITEM_HEIGHT_PX = 42;
+const RAIL_ITEM_HEIGHT_PX = 32;
+const PAUSE_ITEM_HEIGHT_PX = 28;
 const HOUR_ROW_HEIGHT_PX = 96;
-const CARD_VERTICAL_GAP_PX = 12;
+const CARD_VERTICAL_GAP_PX = 4;
 const DEFAULT_START_MINUTES = 8 * 60;
-const MIN_TIMELINE_HOURS = 8;
+const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
 
@@ -201,7 +203,7 @@ function buildTimedItems(
   const totalDistanceM = resolveTotalDistanceM(items, prediction);
   return items
     .filter((item) => item.distanceKm !== null)
-    .map((item) => {
+    .map((item, sortIndex) => {
       const distanceKm = item.distanceKm ?? 0;
       const distanceM = distanceKm * 1000;
       const elapsedSeconds =
@@ -215,6 +217,7 @@ function buildTimedItems(
         : reference.startMinutes + elapsedSeconds / 60;
       return {
         item,
+        sortIndex,
         distanceKm,
         elapsedSeconds,
         minuteOfDay,
@@ -224,7 +227,9 @@ function buildTimedItems(
     })
     .sort(
       (left, right) =>
-        left.elapsedSeconds - right.elapsedSeconds || left.distanceKm - right.distanceKm,
+        left.elapsedSeconds - right.elapsedSeconds ||
+        left.distanceKm - right.distanceKm ||
+        left.sortIndex - right.sortIndex,
     );
 }
 
@@ -312,18 +317,33 @@ export function TimelineTimelineView({
   );
 
   const startMinutes = useMemo(() => {
-    const firstMinute = filteredPrimaryItems[0]?.minuteOfDay ?? reference.startMinutes;
-    return Math.max(0, Math.floor(firstMinute / 60) - 1) * 60;
-  }, [filteredPrimaryItems, reference.startMinutes]);
+    const visibleMinutes = [
+      reference.startMinutes,
+      ...filteredPrimaryItems.map((entry) => entry.minuteOfDay),
+      ...filteredPauseItems.map((entry) => entry.minuteOfDay),
+    ];
+    const firstMinute = visibleMinutes.reduce(
+      (minMinute, minute) => Math.min(minMinute, minute),
+      Number.POSITIVE_INFINITY,
+    );
+    if (!Number.isFinite(firstMinute)) return reference.startMinutes;
+    return Math.max(0, Math.floor(firstMinute / 60) * 60);
+  }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes]);
 
   const endMinutes = useMemo(() => {
-    const lastVisibleMinute = filteredPrimaryItems.reduce(
-      (maxMinute, entry) => Math.max(maxMinute, entry.minuteOfDay),
-      reference.startMinutes + MIN_TIMELINE_HOURS * 60,
+    const visibleMinutes = [
+      reference.startMinutes,
+      ...filteredPrimaryItems.map((entry) => entry.minuteOfDay),
+      ...filteredPauseItems.map((entry) => entry.minuteOfDay),
+    ];
+    const lastVisibleMinute = visibleMinutes.reduce(
+      (maxMinute, minute) => Math.max(maxMinute, minute),
+      Number.NEGATIVE_INFINITY,
     );
-    const paddedEnd = Math.ceil(lastVisibleMinute / 60) * 60 + 120;
-    return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, paddedEnd);
-  }, [filteredPrimaryItems, reference.startMinutes, startMinutes]);
+    if (!Number.isFinite(lastVisibleMinute)) return startMinutes + 60;
+    const roundedEnd = Math.ceil(lastVisibleMinute / 60) * 60;
+    return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, roundedEnd);
+  }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes, startMinutes]);
 
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
   const canvasHeight = totalHours * HOUR_ROW_HEIGHT_PX;
@@ -376,7 +396,7 @@ export function TimelineTimelineView({
       .map((pause) => {
         const naturalTopPx = ((pause.minuteOfDay - startMinutes) / 60) * HOUR_ROW_HEIGHT_PX;
         const topPx = Math.max(naturalTopPx, previousBottom + CARD_VERTICAL_GAP_PX);
-        previousBottom = topPx + 34;
+        previousBottom = topPx + PAUSE_ITEM_HEIGHT_PX;
         return {
           id: pause.item.id,
           topPx,
@@ -544,6 +564,12 @@ export function TimelineTimelineView({
                     <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">
                       {formatLegDuration(event.toNextSeconds)}
                     </span>
+                    <span
+                      className={`rvi-tl-schedule__event-favorite${event.item.favorite ? ' is-active' : ''}`}
+                      aria-hidden
+                    >
+                      <IconStar size={12} />
+                    </span>
                   </span>
                 </button>
 
@@ -557,45 +583,45 @@ export function TimelineTimelineView({
                       <span>{formatPauseDuration(pause.durationMin)}</span>
                     </span>
                   ))}
-
-                  <span className="rvi-tl-schedule__actions">
-                    <button
-                      type="button"
-                      className={`rvi-tl-schedule__action rvi-tl-schedule__action--visibility${visible ? ' is-on' : ''}`}
-                      onClick={(actionEvent) => {
-                        stopEventPropagation(actionEvent);
-                        onToggleVisibility?.(event.item.id, !visible);
-                      }}
-                      aria-label={visible ? 'Masquer' : 'Afficher'}
-                      aria-pressed={visible}
-                    >
-                      <IconEye size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className={`rvi-tl-schedule__action rvi-tl-schedule__action--favorite${event.item.favorite ? ' is-on is-fav' : ''}`}
-                      onClick={(actionEvent) => {
-                        stopEventPropagation(actionEvent);
-                        onToggleFavorite?.(event.item.id, !event.item.favorite);
-                      }}
-                      aria-label="Favori"
-                      aria-pressed={!!event.item.favorite}
-                    >
-                      <IconStar size={12} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rvi-tl-schedule__action rvi-tl-schedule__action--danger rvi-tl-schedule__action--remove"
-                      onClick={(actionEvent) => {
-                        stopEventPropagation(actionEvent);
-                        onRemove?.(event.item.id);
-                      }}
-                      aria-label="Supprimer"
-                    >
-                      <IconTrash size={12} />
-                    </button>
-                  </span>
                 </div>
+
+                <span className="rvi-tl-schedule__actions">
+                  <button
+                    type="button"
+                    className={`rvi-tl-schedule__action rvi-tl-schedule__action--visibility${visible ? ' is-on' : ''}`}
+                    onClick={(actionEvent) => {
+                      stopEventPropagation(actionEvent);
+                      onToggleVisibility?.(event.item.id, !visible);
+                    }}
+                    aria-label={visible ? 'Masquer' : 'Afficher'}
+                    aria-pressed={visible}
+                  >
+                    <IconEye size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className={`rvi-tl-schedule__action rvi-tl-schedule__action--favorite${event.item.favorite ? ' is-on is-fav' : ''}`}
+                    onClick={(actionEvent) => {
+                      stopEventPropagation(actionEvent);
+                      onToggleFavorite?.(event.item.id, !event.item.favorite);
+                    }}
+                    aria-label="Favori"
+                    aria-pressed={!!event.item.favorite}
+                  >
+                    <IconStar size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="rvi-tl-schedule__action rvi-tl-schedule__action--danger rvi-tl-schedule__action--remove"
+                    onClick={(actionEvent) => {
+                      stopEventPropagation(actionEvent);
+                      onRemove?.(event.item.id);
+                    }}
+                    aria-label="Supprimer"
+                  >
+                    <IconTrash size={12} />
+                  </button>
+                </span>
               </article>
             );
           })}
