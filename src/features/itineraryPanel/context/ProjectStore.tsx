@@ -348,6 +348,21 @@ export function ProjectProvider({
     [setProject, syncTraceHistory],
   );
 
+  const pushTraceHistoryEntries = useCallback(
+    (
+      entries: TraceHistoryEntry[],
+      options?: { preservePendingTraceAppend?: boolean },
+    ) => {
+      if (entries.length === 0) return;
+      if (!options?.preservePendingTraceAppend) {
+        pendingTraceAppendRef.current = null;
+      }
+      syncTraceHistory([...traceHistoryPastRef.current, ...entries], []);
+      setProject(entries[entries.length - 1].after);
+    },
+    [setProject, syncTraceHistory],
+  );
+
   const undoTraceEdit = useCallback(() => {
     const past = traceHistoryPastRef.current;
     const entry = past[past.length - 1];
@@ -639,34 +654,47 @@ export function ProjectProvider({
         createdAt: new Date().toISOString(),
       };
 
-      const nextProject: ItineraryProject = {
-        ...currentProject,
-        itineraries: currentProject.itineraries.map((it) => {
-          if (it.id !== id) return it;
-          const copy = structuredClone(it);
-          copy.forbiddenZones = [...(copy.forbiddenZones ?? []), zone];
-          if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
-            copy.pendingRoutePatch = buildPendingRoutePatchForForbiddenZone(
-              copy.timeline,
-              copy.gpxRoute.points,
-              zone,
-            );
-          }
-          delete copy.routeAudit;
-          copy.prediction = null;
-          return copy;
-        }),
-      };
+      const entries: TraceHistoryEntry[] = [];
+      let workingProject = currentProject;
 
-      const entry: TraceHistoryEntry = {
-        itineraryId: id,
-        before: structuredClone(currentProject),
-        after: structuredClone(nextProject),
-      };
-      pushTraceHistoryEntry(entry);
+      for (let pointCount = 3; pointCount <= zone.points.length; pointCount += 1) {
+        const partialZone: ItineraryForbiddenZone = {
+          ...zone,
+          points: zone.points.slice(0, pointCount),
+        };
+        const nextProject: ItineraryProject = {
+          ...workingProject,
+          itineraries: workingProject.itineraries.map((it) => {
+            if (it.id !== id) return it;
+            const copy = structuredClone(it);
+            const existingZones = copy.forbiddenZones ?? [];
+            const withoutCurrentZone = existingZones.filter((existing) => existing.id !== zone.id);
+            copy.forbiddenZones = [...withoutCurrentZone, partialZone];
+            if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
+              copy.pendingRoutePatch = buildPendingRoutePatchForForbiddenZone(
+                copy.timeline,
+                copy.gpxRoute.points,
+                partialZone,
+              );
+            }
+            delete copy.routeAudit;
+            copy.prediction = null;
+            return copy;
+          }),
+        };
+
+        entries.push({
+          itineraryId: id,
+          before: structuredClone(workingProject),
+          after: structuredClone(nextProject),
+        });
+        workingProject = nextProject;
+      }
+
+      pushTraceHistoryEntries(entries);
       return zone;
     },
-    [pushTraceHistoryEntry],
+    [pushTraceHistoryEntries],
   );
 
   const simplifyItineraryGpx = useCallback(
