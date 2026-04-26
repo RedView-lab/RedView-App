@@ -22,6 +22,7 @@ import {
   fetchBrouterRouteBestOfN,
   formatForbiddenZonePolygons,
   isClimbingMode,
+  panelProfileToBrouter,
   resolveItineraryRouting,
 } from '@/features/itineraryPanel/lib/brouter';
 import {
@@ -47,6 +48,12 @@ interface RouteMergeToolProviderProps {
   children: ReactNode;
 }
 
+interface MergeConnectorFetchResult {
+  connector: MergeItineraryConnectorSegment;
+  usedFallbackProfile: boolean;
+  droppedPolygons: boolean;
+}
+
 function toConnectorSegment(route: Awaited<ReturnType<typeof fetchBrouterRoute>>): MergeItineraryConnectorSegment {
   const profile = extractRouteProfileFromBrouter(route);
   const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
@@ -68,6 +75,83 @@ function toConnectorSegment(route: Awaited<ReturnType<typeof fetchBrouterRoute>>
     tarmacPercent: surfaceMetrics ? Math.round(surfaceMetrics.tarmacPercent) : undefined,
     offroadPercent: surfaceMetrics ? Math.round(surfaceMetrics.offroadPercent) : undefined,
   };
+}
+
+function isBrouterWatchdogError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('brouter http 422') && message.includes('thread-priority-watchdog');
+}
+
+async function fetchMergeConnectorWithFallbacks(
+  source: NonNullable<ReturnType<typeof useProjectStoreOptional>>['project']['itineraries'][number],
+  start: { lat: number; lon: number },
+  end: { lat: number; lon: number },
+  polygons: string | undefined,
+): Promise<MergeConnectorFetchResult> {
+  const resolved = await resolveItineraryRouting(source);
+  const stockProfile = panelProfileToBrouter(source.profileId);
+  const climbing = isClimbingMode(source.priorities);
+  const attempts = [
+    {
+      profile: resolved.profileId,
+      polygons,
+      useBestOfN: climbing,
+      usedFallbackProfile: false,
+      droppedPolygons: false,
+    },
+    {
+      profile: stockProfile,
+      polygons,
+      useBestOfN: false,
+      usedFallbackProfile: stockProfile !== resolved.profileId,
+      droppedPolygons: false,
+    },
+    {
+      profile: stockProfile,
+      polygons: undefined,
+      useBestOfN: false,
+      usedFallbackProfile: stockProfile !== resolved.profileId,
+      droppedPolygons: Boolean(polygons),
+    },
+  ].filter((attempt, index, all) =>
+    all.findIndex(
+      (candidate) =>
+        candidate.profile === attempt.profile &&
+        candidate.polygons === attempt.polygons &&
+        candidate.useBestOfN === attempt.useBestOfN,
+    ) === index,
+  );
+
+  let lastError: unknown = null;
+
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
+    try {
+      const request = {
+        start,
+        end,
+        via: [] as Array<{ lat: number; lon: number }>,
+        polygons: attempt.polygons,
+        profile: attempt.profile,
+      };
+      const route = attempt.useBestOfN
+        ? await fetchBrouterRouteBestOfN(request, 4)
+        : await fetchBrouterRoute(request);
+      return {
+        connector: toConnectorSegment(route),
+        usedFallbackProfile: attempt.usedFallbackProfile,
+        droppedPolygons: attempt.droppedPolygons,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isBrouterWatchdogError(error) || index === attempts.length - 1) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps) {
@@ -135,6 +219,8 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
 
       try {
         let connector: MergeItineraryConnectorSegment | undefined;
+        let connectorUsedFallbackProfile = false;
+        let connectorDroppedPolygons = false;
         if (shouldRouteMergedGap(source, target, MERGE_CONNECT_THRESHOLD_M)) {
           const sourceEnd = sourceRoute.points[sourceRoute.points.length - 1];
           const targetStart = targetRoute.points[0];
@@ -147,22 +233,19 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
             throw new Error(bounds.reason ?? 'Le raccord de fusion sort de la zone autorisée.');
           }
 
-          const resolved = await resolveItineraryRouting(source);
           const polygons = formatForbiddenZonePolygons([
             ...(source.forbiddenZones ?? []),
             ...(target.forbiddenZones ?? []),
           ]);
-          const request = {
-            start: { lat: sourceEnd.lat, lon: sourceEnd.lon },
-            end: { lat: targetStart.lat, lon: targetStart.lon },
-            via: [] as Array<{ lat: number; lon: number }>,
+          const connectorResult = await fetchMergeConnectorWithFallbacks(
+            source,
+            { lat: sourceEnd.lat, lon: sourceEnd.lon },
+            { lat: targetStart.lat, lon: targetStart.lon },
             polygons,
-            profile: resolved.profileId,
-          };
-          const route = isClimbingMode(source.priorities)
-            ? await fetchBrouterRouteBestOfN(request, 4)
-            : await fetchBrouterRoute(request);
-          connector = toConnectorSegment(route);
+          );
+          connector = connectorResult.connector;
+          connectorUsedFallbackProfile = connectorResult.usedFallbackProfile;
+          connectorDroppedPolygons = connectorResult.droppedPolygons;
         }
 
         let resultBox: Omit<MergeItineraryProjectResult, 'project'> | null = null;
@@ -189,7 +272,11 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
         setSelectedIds([]);
         setStatusMessage(
           usedConnector
-            ? 'Fusion créée avec raccord BRouter entre les deux traces.'
+            ? connectorDroppedPolygons
+              ? 'Fusion créée avec raccord BRouter simplifié entre les deux traces.'
+              : connectorUsedFallbackProfile
+                ? 'Fusion créée avec raccord BRouter allégé entre les deux traces.'
+                : 'Fusion créée avec raccord BRouter entre les deux traces.'
             : 'Fusion créée.',
         );
         return true;
