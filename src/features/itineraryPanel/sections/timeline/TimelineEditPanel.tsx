@@ -1,4 +1,5 @@
 import {
+  IconCheck,
   IconChevronDown,
   IconMinus,
   IconPlus,
@@ -30,22 +31,22 @@ const FILTER_CHIPS: Array<{
   {
     key: 'etape',
     label: 'Étape',
-    renderIcon: () => <KindBadge kind="start" size={20} />,
+    renderIcon: () => <KindBadge kind="start" size={24} />,
   },
   {
     key: 'waypoint',
     label: 'Waypoint',
-    renderIcon: () => <KindBadge kind="waypoint" size={20} />,
+    renderIcon: () => <KindBadge kind="waypoint" size={24} />,
   },
   {
     key: 'poi',
     label: 'POI',
-    renderIcon: () => <KindBadge kind="water" size={20} />,
+    renderIcon: () => <KindBadge kind="water" size={24} />,
   },
   {
     key: 'pause',
     label: 'Pause',
-    renderIcon: () => <KindBadge kind="pause" size={20} />,
+    renderIcon: () => <KindBadge kind="pause" size={24} />,
   },
   {
     key: 'favorite',
@@ -151,14 +152,18 @@ export function TimelineEditPanel({
               onClick={() => toggleFilter(chip.key)}
             >
               <span className="rvi-tl-edit__chip-check" aria-hidden>
-                <span className="rvi-tl-edit__chip-check-icon" />
+                {active ? <IconCheck size={10} /> : null}
               </span>
-              {chip.renderIcon()}
               <span className="rvi-tl-edit__chip-label">{chip.label}</span>
+              <span className="rvi-tl-edit__chip-icon" aria-hidden>
+                {chip.renderIcon()}
+              </span>
             </button>
           );
         })}
       </div>
+
+      <div className="rvi-tl-edit__divider" aria-hidden />
     </section>
   );
 }
