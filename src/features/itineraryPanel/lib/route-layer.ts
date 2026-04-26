@@ -35,6 +35,7 @@ const FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID = 'brouter-forbidden-zone-draft-line-la
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-halo-layer';
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-layer';
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-hit-layer';
+export const FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID = 'brouter-forbidden-zone-draft-segment-hit-layer';
 
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
@@ -165,6 +166,26 @@ function buildForbiddenZoneDraftGeoJson(
       coordinates: [point.lon, point.lat],
     },
   }));
+
+  if (points.length >= 2) {
+    const edgeCount = points.length >= 3 ? points.length : points.length - 1;
+    for (let edgeIndex = 0; edgeIndex < edgeCount; edgeIndex += 1) {
+      const start = points[edgeIndex];
+      const end = points[(edgeIndex + 1) % points.length];
+      if (!start || !end) continue;
+      features.push({
+        type: 'Feature',
+        properties: { role: 'edge', edgeIndex },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [start.lon, start.lat],
+            [end.lon, end.lat],
+          ],
+        },
+      });
+    }
+  }
 
   if (points.length >= 3) {
     features.unshift({
@@ -504,6 +525,24 @@ function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
       'circle-color': '#000000',
       'circle-opacity': 0.001,
       'circle-stroke-width': 0,
+    },
+  });
+
+  map.addLayer({
+    id: FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
+    type: 'line',
+    source: FORBIDDEN_ZONE_DRAFT_SOURCE_ID,
+    slot: 'top',
+    filter: ['==', ['get', 'role'], 'edge'],
+    layout: {
+      'line-cap': 'round',
+      'line-join': 'round',
+      visibility: 'none',
+    },
+    paint: {
+      'line-width': 28,
+      'line-color': '#000000',
+      'line-opacity': 0.001,
     },
   });
 
@@ -902,6 +941,10 @@ export function setForbiddenZoneDraft(
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, 'visibility', vertexVisibility);
       map.moveLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID);
     }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, 'visibility', lineVisibility);
+      map.moveLayer(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID);
+    }
   } catch {
     /* noop */
   }
@@ -925,6 +968,9 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
     }
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID)) {
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID)) {
+      map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, 'visibility', 'none');
     }
   } catch {
     /* noop */
