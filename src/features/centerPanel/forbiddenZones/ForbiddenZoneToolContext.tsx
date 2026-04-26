@@ -177,7 +177,6 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     let lastDragLogAt = 0;
     let previousBodyCursor = '';
     let previousBodyUserSelect = '';
-    let activePointerId: number | null = null;
 
     const refreshCursor = () => {
       if (dragState.kind === 'vertex') {
@@ -291,55 +290,23 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       return { x, y };
     };
 
-    const readLngLatFromClientPosition = (clientX: number, clientY: number) => {
-      const point = readPointFromClientPosition(clientX, clientY);
-      if (!point) return null;
-      return {
-        point,
-        lngLat: map.unproject([point.x, point.y]),
-      };
-    };
-
-    const startVertexDrag = (pointIndex: number, pointerId: number) => {
+    const startVertexDrag = (pointIndex: number) => {
       dragState = { kind: 'vertex', pointIndex };
       hoverState = 'vertex';
       suppressNextClick = true;
-      activePointerId = pointerId;
       previousBodyCursor = document.body.style.cursor;
       previousBodyUserSelect = document.body.style.userSelect;
       document.body.style.cursor = FORBIDDEN_VERTEX_DRAG_CURSOR;
       document.body.style.userSelect = 'none';
-      setStatusMessage('Glissez le sommet pour le déplacer');
+      setStatusMessage('Déplacez le sommet, puis cliquez pour le poser');
       refreshCursor();
       logDragDiagnostics('start', pointIndex);
-
-      try {
-        canvas.setPointerCapture(pointerId);
-      } catch {
-        /* Pointer capture can fail if the browser already released this pointer. */
-      }
-
-      window.addEventListener('pointermove', handleWindowDragMove, true);
-      window.addEventListener('pointerup', handleWindowDragEnd, true);
-      window.addEventListener('pointercancel', handleWindowDragEnd, true);
     };
 
     const stopVertexDrag = (point?: MapMouseEvent['point']) => {
-      window.removeEventListener('pointermove', handleWindowDragMove, true);
-      window.removeEventListener('pointerup', handleWindowDragEnd, true);
-      window.removeEventListener('pointercancel', handleWindowDragEnd, true);
-
       if (dragState.kind !== 'vertex') return;
       const pointIndex = dragState.pointIndex;
       dragState = { kind: 'idle' };
-      if (activePointerId != null) {
-        try {
-          if (canvas.hasPointerCapture(activePointerId)) canvas.releasePointerCapture(activePointerId);
-        } catch {
-          /* noop */
-        }
-      }
-      activePointerId = null;
       document.body.style.cursor = previousBodyCursor;
       document.body.style.userSelect = previousBodyUserSelect;
       hoverState = point ? readHoverStateAtPoint(point) : 'none';
@@ -348,44 +315,27 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       logDragDiagnostics('end', pointIndex, { hoverState });
     };
 
-    const handleWindowDragMove = (event: PointerEvent) => {
-      if (activePointerId != null && event.pointerId !== activePointerId) return;
-      const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
-      if (!resolved) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
+    const logActiveDragMove = (pointIndex: number, point: MapMouseEvent['point'], lngLat: { lng: number; lat: number }) => {
       const now = performance.now();
-      if (dragState.kind === 'vertex' && now - lastDragLogAt > 250) {
+      if (now - lastDragLogAt > 250) {
         lastDragLogAt = now;
-        logDragDiagnostics('move', dragState.pointIndex, {
+        logDragDiagnostics('move', pointIndex, {
           point: {
-            x: Math.round(resolved.point.x),
-            y: Math.round(resolved.point.y),
+            x: Math.round(point.x),
+            y: Math.round(point.y),
           },
-          lng: Number(resolved.lngLat.lng.toFixed(6)),
-          lat: Number(resolved.lngLat.lat.toFixed(6)),
+          lng: Number(lngLat.lng.toFixed(6)),
+          lat: Number(lngLat.lat.toFixed(6)),
         });
       }
-      moveDraggedVertex(resolved.lngLat);
-    };
-
-    const handleWindowDragEnd = (event: PointerEvent) => {
-      if (activePointerId != null && event.pointerId !== activePointerId) return;
-      const resolved = readLngLatFromClientPosition(event.clientX, event.clientY);
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      if (resolved) {
-        moveDraggedVertex(resolved.lngLat);
-        stopVertexDrag(resolved.point as MapMouseEvent['point']);
-        return;
-      }
-      stopVertexDrag();
     };
 
     const handleMapMouseMove = (event: MapMouseEvent) => {
-      if (dragState.kind === 'vertex') return;
+      if (dragState.kind === 'vertex') {
+        logActiveDragMove(dragState.pointIndex, event.point, event.lngLat);
+        moveDraggedVertex(event.lngLat);
+        return;
+      }
       const diagnostics = readDraftHitDiagnostics(map, event.point);
       const nextHoverState = diagnostics.target?.kind === 'vertex'
         ? 'vertex'
@@ -412,11 +362,18 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     };
 
     const handleCanvasPointerDown = (event: PointerEvent) => {
-      if (dragState.kind === 'vertex') return;
       if (event.button !== 0) return;
 
       const point = readPointFromClientPosition(event.clientX, event.clientY) as MapMouseEvent['point'] | null;
       if (!point) return;
+
+      if (dragState.kind === 'vertex') {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        stopVertexDrag(point);
+        return;
+      }
 
       const diagnostics = readDraftHitDiagnostics(map, point);
       logHitDiagnostics('pointerdown', point, diagnostics);
@@ -428,7 +385,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       event.stopImmediatePropagation();
 
       if (target.kind === 'vertex') {
-        startVertexDrag(target.pointIndex, event.pointerId);
+        startVertexDrag(target.pointIndex);
         return;
       }
 
@@ -436,7 +393,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       if (!insertion) return;
 
       commitDraftPoints(insertion.nextPoints);
-      startVertexDrag(insertion.pointIndex, event.pointerId);
+      startVertexDrag(insertion.pointIndex);
     };
 
     const handleMapClick = (event: MapMouseEvent) => {
