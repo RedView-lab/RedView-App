@@ -18,7 +18,7 @@ export interface WeatherOverlayState {
   palettes?: Partial<Record<string, {
     opacity: number;
     scaleSetting: string;
-    bands: Array<{ id: string; label: string; color: string; minValue: number; maxValue: number }>;
+    bands: Array<{ id: string; label: string; color: string; visible: boolean; minValue: number; maxValue: number }>;
   }>>;
 }
 

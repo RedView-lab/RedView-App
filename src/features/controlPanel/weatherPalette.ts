@@ -58,6 +58,17 @@ function paletteColorsForCount(bands: WeatherPaletteBand[], count: number): stri
   });
 }
 
+function paletteVisibilityForCount(bands: WeatherPaletteBand[], count: number): boolean[] {
+  if (!bands.length) return Array.from({ length: count }, () => true);
+  return Array.from({ length: count }, (_, index) => {
+    const sourceIndex = Math.min(
+      bands.length - 1,
+      Math.round((index / Math.max(1, count - 1)) * Math.max(0, bands.length - 1)),
+    );
+    return bands[sourceIndex]?.visible ?? true;
+  });
+}
+
 function extractBreakpoints(bands: WeatherPaletteBand[]): number[] | null {
   if (!bands.length) return null;
   const breakpoints = bands.slice(0, -1).map((band) => band.maxValue);
@@ -141,6 +152,7 @@ export function buildWeatherPaletteBands(
   key: WeatherLayerKey,
   colors: string[],
   breakpoints: number[],
+  visibleFlags?: boolean[],
 ): WeatherPaletteBand[] {
   const spec = weatherPaletteMetricSpec(key);
   if (!spec) return [];
@@ -153,6 +165,7 @@ export function buildWeatherPaletteBands(
       id: `${key}-${index}`,
       label: '',
       color,
+      visible: visibleFlags?.[index] ?? true,
       minValue,
       maxValue,
     };
@@ -172,6 +185,7 @@ export function resampleWeatherPaletteBands(
   if (!spec) return bands;
   const count = weatherPaletteScaleCount(scaleSetting);
   const colors = paletteColorsForCount(bands, count);
+  const visibleFlags = paletteVisibilityForCount(bands, count);
   const sourceBreakpoints = extractBreakpoints(bands)
     ?? defaultBreakpointsForCount(spec, Math.max(2, bands.length || count));
   const sourcePoints = [spec.minLimit, ...sourceBreakpoints, spec.maxLimit];
@@ -179,5 +193,5 @@ export function resampleWeatherPaletteBands(
     interpolatePoints(sourcePoints, (index + 1) / count),
     spec.step,
   ));
-  return buildWeatherPaletteBands(key, colors, nextBreakpoints);
+  return buildWeatherPaletteBands(key, colors, nextBreakpoints, visibleFlags);
 }

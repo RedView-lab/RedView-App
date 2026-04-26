@@ -243,10 +243,15 @@
   min-width: 0;
 }
 
-.rvc-weather__band-spacer {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 20px;
+.rvc-weather__band-eye {
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.rvc-weather__band-row.is-hidden .rvc-weather__band-eye,
+.rvc-weather__band-row.is-hidden .rvc-weather__band-label-editable,
+.rvc-weather__band-row.is-hidden .rvc-weather__threshold-number,
+.rvc-weather__band-row.is-hidden .rvc-altitude__color-chip {
+  opacity: 0.38;
 }
 
 .rvc-weather__band-label-editable {

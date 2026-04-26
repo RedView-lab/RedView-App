@@ -2,10 +2,15 @@ import type { WeatherOverlayMetric } from './types';
 
 type WeatherMode = 'forecast' | 'trends';
 
-const HIGH_DETAIL_METRICS = new Set<WeatherOverlayMetric>(['rain', 'feelsLike', 'cloudCover', 'humidity']);
+const HIGH_DETAIL_METRICS = new Set<WeatherOverlayMetric>(['rain', 'feelsLike', 'humidity']);
+const MEDIUM_DETAIL_METRICS = new Set<WeatherOverlayMetric>(['cloudCover']);
 
 function hasHighDetailMetric(metrics: readonly WeatherOverlayMetric[]): boolean {
   return metrics.some((metric) => HIGH_DETAIL_METRICS.has(metric));
+}
+
+function hasMediumDetailMetric(metrics: readonly WeatherOverlayMetric[]): boolean {
+  return metrics.some((metric) => MEDIUM_DETAIL_METRICS.has(metric));
 }
 
 export function weatherTargetCellPixels(
@@ -14,6 +19,7 @@ export function weatherTargetCellPixels(
   metrics: readonly WeatherOverlayMetric[],
 ): number {
   const highDetail = hasHighDetailMetric(metrics);
+  const mediumDetail = hasMediumDetailMetric(metrics);
 
   if (mode === 'forecast') {
     if (highDetail) {
@@ -21,6 +27,12 @@ export function weatherTargetCellPixels(
       if (zoom <= 6.5) return 14;
       if (zoom <= 8.5) return 16;
       return 20;
+    }
+    if (mediumDetail) {
+      if (zoom <= 4.5) return 15;
+      if (zoom <= 6.5) return 17;
+      if (zoom <= 8.5) return 19;
+      return 23;
     }
     if (zoom <= 4.5) return 18;
     if (zoom <= 6.5) return 20;
@@ -34,6 +46,12 @@ export function weatherTargetCellPixels(
     if (zoom <= 8.5) return 18;
     return 22;
   }
+  if (mediumDetail) {
+    if (zoom <= 4.5) return 16;
+    if (zoom <= 6.5) return 18;
+    if (zoom <= 8.5) return 20;
+    return 24;
+  }
   if (zoom <= 4.5) return 20;
   if (zoom <= 6.5) return 22;
   if (zoom <= 8.5) return 24;
@@ -46,7 +64,20 @@ export function weatherResolutionDetailBoost(
   metrics: readonly WeatherOverlayMetric[],
 ): number {
   const highDetail = hasHighDetailMetric(metrics);
+  const mediumDetail = hasMediumDetailMetric(metrics);
   if (!highDetail) {
+    if (mediumDetail) {
+      if (mode === 'forecast') {
+        if (zoom <= 4.5) return 0.6;
+        if (zoom <= 6.5) return 0.7;
+        if (zoom <= 8.5) return 0.82;
+        return 0.9;
+      }
+      if (zoom <= 4.5) return 0.7;
+      if (zoom <= 6.5) return 0.78;
+      if (zoom <= 8.5) return 0.88;
+      return 0.94;
+    }
     return mode === 'forecast' && zoom <= 5 ? 0.85 : 1;
   }
   if (mode === 'forecast') {
@@ -62,5 +93,7 @@ export function weatherResolutionDetailBoost(
 }
 
 export function weatherMetricPointBudgetBoost(metrics: readonly WeatherOverlayMetric[]): number {
-  return hasHighDetailMetric(metrics) ? 2.25 : 1.4;
+  if (hasHighDetailMetric(metrics)) return 2.25;
+  if (hasMediumDetailMetric(metrics)) return 1.7;
+  return 1.4;
 }

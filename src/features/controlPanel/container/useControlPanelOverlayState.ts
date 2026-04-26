@@ -66,6 +66,7 @@ export interface OverlayHandlers {
   onWeatherPaletteOpacityChange: (key: WeatherLayerKey, opacity: number) => void;
   onWeatherPaletteScaleSettingChange: (key: WeatherLayerKey, value: WeatherPaletteScaleSetting) => void;
   onWeatherPaletteBandColorChange: (key: WeatherLayerKey, bandId: string, color: string) => void;
+  onWeatherPaletteBandVisibilityToggle: (key: WeatherLayerKey, bandId: string) => void;
   onWeatherPaletteBandBreakpointChange: (key: WeatherLayerKey, bandIndex: number, field: 'min' | 'max', value: number) => void;
   onWeatherAddAlert: () => void;
   onWindEnabledChange: (enabled: boolean) => void;
@@ -423,6 +424,26 @@ export function useControlPanelOverlayState({
           }),
         [],
       ),
+      onWeatherPaletteBandVisibilityToggle: useCallback(
+        (key: WeatherLayerKey, bandId: string) =>
+          setWeatherState((prev) => {
+            const palette = prev.palettes[key];
+            if (!palette) return prev;
+            return {
+              ...prev,
+              palettes: {
+                ...prev.palettes,
+                [key]: {
+                  ...palette,
+                  bands: palette.bands.map((band) => (
+                    band.id === bandId ? { ...band, visible: !band.visible } : band
+                  )),
+                },
+              },
+            };
+          }),
+        [],
+      ),
       onWeatherPaletteBandBreakpointChange: useCallback(
         (key: WeatherLayerKey, bandIndex: number, field: 'min' | 'max', value: number) =>
           setWeatherState((prev) => {
@@ -453,6 +474,7 @@ export function useControlPanelOverlayState({
                     key,
                     palette.bands.map((band) => band.color),
                     clamped,
+                    palette.bands.map((band) => band.visible),
                   ),
                 },
               },

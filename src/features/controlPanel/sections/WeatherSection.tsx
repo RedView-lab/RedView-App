@@ -6,7 +6,7 @@ import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
-import { IconCalendar, IconChevronDown, IconClock, IconInfo } from '../icons';
+import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo } from '../icons';
 import type {
   ControlPanelHandlers,
   WeatherPaletteBand,
@@ -41,6 +41,7 @@ interface Props {
   onPaletteOpacityChange: ControlPanelHandlers['onWeatherPaletteOpacityChange'];
   onPaletteScaleSettingChange: ControlPanelHandlers['onWeatherPaletteScaleSettingChange'];
   onPaletteBandColorChange: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
+  onPaletteBandVisibilityToggle: ControlPanelHandlers['onWeatherPaletteBandVisibilityToggle'];
   onPaletteBandBreakpointChange: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
   onAddAlert: ControlPanelHandlers['onWeatherAddAlert'];
 }
@@ -259,6 +260,7 @@ function WeatherPaletteRow({
   bandIndex,
   totalBands,
   onColorChange,
+  onVisibilityToggle,
   onBreakpointChange,
 }: {
   layerKey: WeatherLayerKey;
@@ -266,6 +268,7 @@ function WeatherPaletteRow({
   bandIndex: number;
   totalBands: number;
   onColorChange?: ControlPanelHandlers['onWeatherPaletteBandColorChange'];
+  onVisibilityToggle?: ControlPanelHandlers['onWeatherPaletteBandVisibilityToggle'];
   onBreakpointChange?: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
 }) {
   const spec = weatherPaletteMetricSpec(layerKey);
@@ -277,8 +280,15 @@ function WeatherPaletteRow({
   const maxValue = isLast ? spec.maxLimit : band.maxValue;
 
   return (
-    <div className="rvc-altitude__band-row rvc-weather__band-row">
-      <div className="rvc-weather__band-spacer" aria-hidden="true" />
+    <div className={`rvc-altitude__band-row rvc-weather__band-row${band.visible ? '' : ' is-hidden'}`}>
+      <button
+        type="button"
+        className="rvc-icon-btn rvc-icon-btn--ghost rvc-altitude__band-eye rvc-weather__band-eye"
+        onClick={() => onVisibilityToggle?.(layerKey, band.id)}
+        aria-label={band.visible ? 'Masquer la bande météo' : 'Afficher la bande météo'}
+      >
+        {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
+      </button>
 
       <div className="rvc-altitude__band-label-editable rvc-weather__band-label-editable">
         <InlineWeatherNumericInput
@@ -322,6 +332,7 @@ export function WeatherSection({
   onPaletteOpacityChange,
   onPaletteScaleSettingChange,
   onPaletteBandColorChange,
+  onPaletteBandVisibilityToggle,
   onPaletteBandBreakpointChange,
   onAddAlert,
 }: Props) {
@@ -529,6 +540,7 @@ export function WeatherSection({
                         bandIndex={bandIndex}
                         totalBands={palette.bands.length}
                         onColorChange={onPaletteBandColorChange}
+                        onVisibilityToggle={onPaletteBandVisibilityToggle}
                         onBreakpointChange={onPaletteBandBreakpointChange}
                       />
                     ))}

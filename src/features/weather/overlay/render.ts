@@ -8,12 +8,14 @@ import { getWeatherOverlayColorStops } from '../config/paletteMetrics';
 
 interface PaletteBandLike {
   color: string;
+  visible?: boolean;
   minValue?: number;
   maxValue?: number;
 }
 
 type Color = readonly [number, number, number];
 type ColorStop = readonly [number, Color];
+type ColorWithAlpha = readonly [number, number, number, number];
 
 interface NumericRange {
   min: number;
@@ -126,6 +128,16 @@ function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color
   return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
 }
 
+function bandAlpha(paletteBands: PaletteBandLike[] | undefined, value: number): number {
+  if (!paletteBands?.length) return 255;
+  for (const band of paletteBands) {
+    if (Number.isFinite(band.maxValue) && value < (band.maxValue as number)) {
+      return band.visible === false ? 0 : 255;
+    }
+  }
+  return paletteBands[paletteBands.length - 1]?.visible === false ? 0 : 255;
+}
+
 function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Color {
   const clamped = clamp(ratio, 0, 1);
   for (let index = 1; index < stops.length; index += 1) {
@@ -153,6 +165,27 @@ function buildColorLookup(stops: readonly ColorStop[]): Uint8ClampedArray {
     lookup[offset + 2] = b;
   }
   return lookup;
+}
+
+function colorForValue(
+  raw: number,
+  ratio: number,
+  paletteBands: PaletteBandLike[] | undefined,
+  colorLookup: Uint8ClampedArray,
+): ColorWithAlpha {
+  const alpha = bandAlpha(paletteBands, raw);
+  if (alpha === 0) return [0, 0, 0, 0];
+  if (paletteBands?.length) {
+    const [r, g, b] = steppedBandColor(paletteBands, raw);
+    return [r, g, b, alpha];
+  }
+  const lookupOffset = Math.round(ratio * (COLOR_LOOKUP_SIZE - 1)) * 3;
+  return [
+    colorLookup[lookupOffset],
+    colorLookup[lookupOffset + 1],
+    colorLookup[lookupOffset + 2],
+    alpha,
+  ];
 }
 
 function sampleValue(values: number[], cols: number, row: number, col: number): number {
@@ -204,10 +237,8 @@ export function renderWeatherCanvas(
       for (let col = 0; col < grid.cols; col += 1) {
         const raw = sampleValue(values, grid.cols, row, col);
         const ratio = normalise(raw);
-        const [r, g, b] = paletteBands?.length
-          ? steppedBandColor(paletteBands, raw)
-          : interpolatePaletteColor(stops, ratio);
-        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        const [r, g, b, alpha] = colorForValue(raw, ratio, paletteBands, colorLookup);
+        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha / 255})`;
         ctx.fillRect(col * cellW, row * cellH, cellW + 1, cellH + 1);
       }
     }
@@ -221,12 +252,12 @@ export function renderWeatherCanvas(
       const xRatio = width <= 1 ? 0 : x / (width - 1);
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
-      const lookupOffset = Math.round(ratio * (COLOR_LOOKUP_SIZE - 1)) * 3;
+      const [r, g, b, alpha] = colorForValue(raw, ratio, paletteBands, colorLookup);
       const index = (y * width + x) * 4;
-      image.data[index] = colorLookup[lookupOffset];
-      image.data[index + 1] = colorLookup[lookupOffset + 1];
-      image.data[index + 2] = colorLookup[lookupOffset + 2];
-      image.data[index + 3] = 255;
+      image.data[index] = r;
+      image.data[index + 1] = g;
+      image.data[index + 2] = b;
+      image.data[index + 3] = alpha;
     }
   }
   ctx.putImageData(image, 0, 0);
