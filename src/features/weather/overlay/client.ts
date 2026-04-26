@@ -325,7 +325,7 @@ function unwrapCoord(value: number | number[]): number {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function firstFinite(values: number[] | undefined, fallback: number = 0): number {
+function firstFinite(values: number[] | undefined, fallback: number = Number.NaN): number {
   if (!values?.length) return fallback;
   for (const value of values) {
     if (Number.isFinite(value)) return value;
@@ -333,7 +333,7 @@ function firstFinite(values: number[] | undefined, fallback: number = 0): number
   return fallback;
 }
 
-function meanFinite(values: number[] | undefined, fallback: number = 0): number {
+function meanFinite(values: number[] | undefined, fallback: number = Number.NaN): number {
   if (!values?.length) return fallback;
   let sum = 0;
   let count = 0;

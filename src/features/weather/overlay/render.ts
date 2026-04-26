@@ -32,6 +32,10 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+function isFiniteValue(value: number): boolean {
+  return Number.isFinite(value);
+}
+
 function hexToRgb(hex: string): Color {
   const safe = hex.replace('#', '').trim();
   const expanded = safe.length === 3
@@ -170,12 +174,14 @@ function buildColorLookup(stops: readonly ColorStop[]): Uint8ClampedArray {
 function colorForValue(
   raw: number,
   ratio: number,
+  mode: WeatherOverlayMode,
   paletteBands: PaletteBandLike[] | undefined,
   colorLookup: Uint8ClampedArray,
 ): ColorWithAlpha {
+  if (!isFiniteValue(raw) || !isFiniteValue(ratio)) return [0, 0, 0, 0];
   const alpha = bandAlpha(paletteBands, raw);
   if (alpha === 0) return [0, 0, 0, 0];
-  if (paletteBands?.length) {
+  if (mode === 'fill' && paletteBands?.length) {
     const [r, g, b] = steppedBandColor(paletteBands, raw);
     return [r, g, b, alpha];
   }
@@ -191,7 +197,7 @@ function colorForValue(
 function sampleValue(values: number[], cols: number, row: number, col: number): number {
   const clampedRow = clamp(row, 0, Math.max(0, Math.floor(values.length / cols) - 1));
   const clampedCol = clamp(col, 0, cols - 1);
-  return values[clampedRow * cols + clampedCol] ?? 0;
+  return values[clampedRow * cols + clampedCol] ?? Number.NaN;
 }
 
 function bilinear(values: number[], grid: WeatherGridDefinition, xRatio: number, yRatio: number): number {
@@ -204,8 +210,14 @@ function bilinear(values: number[], grid: WeatherGridDefinition, xRatio: number,
   const tx = fx - c0;
   const ty = fy - r0;
 
-  const top = lerp(sampleValue(values, grid.cols, r0, c0), sampleValue(values, grid.cols, r0, c1), tx);
-  const bottom = lerp(sampleValue(values, grid.cols, r1, c0), sampleValue(values, grid.cols, r1, c1), tx);
+  const topLeft = sampleValue(values, grid.cols, r0, c0);
+  const topRight = sampleValue(values, grid.cols, r0, c1);
+  const bottomLeft = sampleValue(values, grid.cols, r1, c0);
+  const bottomRight = sampleValue(values, grid.cols, r1, c1);
+  if (![topLeft, topRight, bottomLeft, bottomRight].every(isFiniteValue)) return Number.NaN;
+
+  const top = lerp(topLeft, topRight, tx);
+  const bottom = lerp(bottomLeft, bottomRight, tx);
   return lerp(top, bottom, ty);
 }
 
@@ -237,7 +249,7 @@ export function renderWeatherCanvas(
       for (let col = 0; col < grid.cols; col += 1) {
         const raw = sampleValue(values, grid.cols, row, col);
         const ratio = normalise(raw);
-        const [r, g, b, alpha] = colorForValue(raw, ratio, paletteBands, colorLookup);
+        const [r, g, b, alpha] = colorForValue(raw, ratio, mode, paletteBands, colorLookup);
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha / 255})`;
         ctx.fillRect(col * cellW, row * cellH, cellW + 1, cellH + 1);
       }
@@ -252,7 +264,7 @@ export function renderWeatherCanvas(
       const xRatio = width <= 1 ? 0 : x / (width - 1);
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
-      const [r, g, b, alpha] = colorForValue(raw, ratio, paletteBands, colorLookup);
+      const [r, g, b, alpha] = colorForValue(raw, ratio, mode, paletteBands, colorLookup);
       const index = (y * width + x) * 4;
       image.data[index] = r;
       image.data[index + 1] = g;
