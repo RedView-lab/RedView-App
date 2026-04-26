@@ -266,14 +266,14 @@ export function TimelineTimelineView({
     if (reference.reference && reference.hasRealDate) return new Date(reference.reference);
     return new Date();
   }, [reference, timedItems]);
+  const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
-  const [selectedDayKey, setSelectedDayKey] = useState(() => toDayKey(defaultAnchorDay));
+  const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
-    const nextKey = toDayKey(defaultAnchorDay);
-    setSelectedDayKey((current) => current || nextKey);
-  }, [defaultAnchorDay]);
+    setSelectedDayKey(defaultAnchorDayKey);
+  }, [defaultAnchorDayKey]);
 
   useEffect(() => {
     const handle = window.setInterval(() => setNow(new Date()), 60_000);

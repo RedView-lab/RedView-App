@@ -37,6 +37,10 @@
   border-radius: 3px;
 }
 
+.rvi-timeline--timeline .rvi-timeline__body {
+  overflow: hidden;
+}
+
 .rvi-tl-head {
   display: flex;
   gap: 4px;
@@ -520,6 +524,8 @@
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   overflow: hidden;
+  flex-shrink: 0;
+  min-height: 50px;
   border-radius: var(--rvi-radius);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.04);
@@ -576,6 +582,8 @@
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr) 88px 64px;
   gap: 4px;
+  flex-shrink: 0;
+  min-height: 18px;
   padding-left: 18px;
   padding-right: 34px;
   font-size: 12px;
