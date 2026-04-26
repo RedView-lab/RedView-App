@@ -22,7 +22,7 @@ const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rai
 const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
 const RENDER_MIN = 320;
-const RENDER_MAX = 2048;
+const RENDER_MAX = 3072;
 const STATUS_ID = 'weather';
 
 type RefreshReason = 'normal' | 'force' | 'reload';
@@ -159,8 +159,9 @@ function renderSize(map: MapboxMap): { width: number; height: number } {
   const height = canvas.height || canvas.clientHeight || RENDER_MIN;
   const aspect = width / Math.max(1, height);
   const zoom = map.getZoom();
-  const scale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
-  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * scale)));
+  const baseScale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
+  const dezoomSuperSample = zoom < 8 ? 2 : 1;
+  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * baseScale * dezoomSuperSample)));
   const targetHeight = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(targetWidth / aspect)));
   return { width: targetWidth, height: targetHeight };
 }

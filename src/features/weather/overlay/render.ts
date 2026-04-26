@@ -19,6 +19,8 @@ interface NumericRange {
   max: number;
 }
 
+const COLOR_LOOKUP_SIZE = 2048;
+
 const COLOR_STOPS: Record<WeatherOverlayMetric, readonly ColorStop[]> = {
   temperature: [
     [0, [44, 108, 255]],
@@ -156,59 +158,6 @@ function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color
   return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
 }
 
-function mixColor(left: Color, right: Color, t: number): Color {
-  return [
-    Math.round(lerp(left[0], right[0], t)),
-    Math.round(lerp(left[1], right[1], t)),
-    Math.round(lerp(left[2], right[2], t)),
-  ];
-}
-
-function gradientBandColor(paletteBands: PaletteBandLike[], value: number): Color {
-  if (paletteBands.length === 0) return [255, 255, 255];
-
-  const firstColor = hexToRgb(paletteBands[0]?.color ?? '#FFFFFF');
-  const firstMin = paletteBands[0]?.minValue;
-  if (Number.isFinite(firstMin) && value <= (firstMin as number)) return firstColor;
-
-  for (let index = 0; index < paletteBands.length; index += 1) {
-    const band = paletteBands[index];
-    const minValue = Number.isFinite(band.minValue)
-      ? band.minValue as number
-      : index > 0 && Number.isFinite(paletteBands[index - 1]?.maxValue)
-        ? paletteBands[index - 1]?.maxValue as number
-        : value;
-    const maxValue = Number.isFinite(band.maxValue)
-      ? band.maxValue as number
-      : index < paletteBands.length - 1 && Number.isFinite(paletteBands[index + 1]?.minValue)
-        ? paletteBands[index + 1]?.minValue as number
-        : minValue;
-    const bandColor = hexToRgb(band.color);
-    const isLast = index === paletteBands.length - 1;
-
-    if (value > maxValue && !isLast) continue;
-
-    const span = Math.max(1e-6, maxValue - minValue);
-    const blendWidth = Math.max(span * 0.18, 1e-6);
-
-    if (index > 0 && value < minValue + blendWidth) {
-      const previousColor = hexToRgb(paletteBands[index - 1]?.color ?? band.color);
-      const t = clamp((value - minValue) / blendWidth, 0, 1);
-      return mixColor(previousColor, bandColor, t);
-    }
-
-    if (!isLast && value > maxValue - blendWidth) {
-      const nextColor = hexToRgb(paletteBands[index + 1]?.color ?? band.color);
-      const t = clamp((value - (maxValue - blendWidth)) / blendWidth, 0, 1);
-      return mixColor(bandColor, nextColor, t);
-    }
-
-    return bandColor;
-  }
-
-  return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
-}
-
 function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Color {
   const clamped = clamp(ratio, 0, 1);
   for (let index = 1; index < stops.length; index += 1) {
@@ -223,6 +172,19 @@ function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Co
     ];
   }
   return stops[stops.length - 1][1];
+}
+
+function buildColorLookup(stops: readonly ColorStop[]): Uint8ClampedArray {
+  const lookup = new Uint8ClampedArray(COLOR_LOOKUP_SIZE * 3);
+  for (let index = 0; index < COLOR_LOOKUP_SIZE; index += 1) {
+    const ratio = COLOR_LOOKUP_SIZE <= 1 ? 0 : index / (COLOR_LOOKUP_SIZE - 1);
+    const [r, g, b] = interpolatePaletteColor(stops, ratio);
+    const offset = index * 3;
+    lookup[offset] = r;
+    lookup[offset + 1] = g;
+    lookup[offset + 2] = b;
+  }
+  return lookup;
 }
 
 function sampleValue(values: number[], cols: number, row: number, col: number): number {
@@ -265,6 +227,7 @@ export function renderWeatherCanvas(
   const range = paletteRange(metric, samples, paletteBands);
   const normalise = (value: number) => clamp((value - range.min) / Math.max(1e-6, range.max - range.min), 0, 1);
   const stops = paletteStops(metric, paletteBands, range.min, range.max);
+  const colorLookup = buildColorLookup(stops);
 
   if (mode === 'fill') {
     const cellW = width / Math.max(1, grid.cols);
@@ -290,13 +253,11 @@ export function renderWeatherCanvas(
       const xRatio = width <= 1 ? 0 : x / (width - 1);
       const raw = bilinear(values, grid, xRatio, yRatio);
       const ratio = normalise(raw);
-      const [r, g, b] = paletteBands?.length
-        ? gradientBandColor(paletteBands, raw)
-        : interpolatePaletteColor(stops, ratio);
+      const lookupOffset = Math.round(ratio * (COLOR_LOOKUP_SIZE - 1)) * 3;
       const index = (y * width + x) * 4;
-      image.data[index] = r;
-      image.data[index + 1] = g;
-      image.data[index + 2] = b;
+      image.data[index] = colorLookup[lookupOffset];
+      image.data[index + 1] = colorLookup[lookupOffset + 1];
+      image.data[index + 2] = colorLookup[lookupOffset + 2];
       image.data[index + 3] = 255;
     }
   }
