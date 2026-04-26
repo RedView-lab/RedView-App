@@ -69,32 +69,33 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 18px minmax(0, 1fr) 14px;
-    grid-template-areas:
-      'icon name favorite'
-      'icon from next';
+    grid-template-columns: 18px minmax(0, 1fr) minmax(40px, 52px) minmax(36px, 48px) 14px;
     column-gap: 3px;
-    row-gap: 1px;
+    row-gap: 0;
+    align-items: center;
   }
 
-  .rvi-tl-schedule__event-icon { grid-area: icon; }
+  .rvi-tl-schedule__event-icon { min-width: 18px; }
   .rvi-tl-schedule__event-name {
-    grid-area: name;
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 13px;
   }
-  .rvi-tl-schedule__event-metric { grid-area: from; min-width: 0; text-align: left; }
+  .rvi-tl-schedule__event-metric {
+    min-width: 0;
+    font-size: 12px;
+    line-height: 18px;
+    text-align: right;
+  }
   .rvi-tl-schedule__event-favorite {
-    grid-area: favorite;
     width: 14px;
     min-width: 14px;
     justify-self: end;
   }
   .rvi-tl-schedule__event-metric--next {
-    grid-area: next;
     width: auto;
     min-width: 0;
     text-align: right;
@@ -102,8 +103,8 @@
   }
 
   .rvi-tl-schedule__event-card {
-    min-height: 52px;
-    padding: 8px 10px;
+    min-height: 34px;
+    padding: 6px 8px;
   }
 
   .rvi-tl-schedule__event-side {
@@ -169,40 +170,42 @@
   }
 
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 18px minmax(0, 1fr) 14px;
-    grid-template-areas:
-      'icon name favorite'
-      'icon from next';
+    grid-template-columns: 18px minmax(0, 1fr) minmax(36px, 46px) minmax(34px, 42px) 14px;
     column-gap: 3px;
-    row-gap: 1px;
+    row-gap: 0;
+    align-items: center;
   }
 
-  .rvi-tl-schedule__event-icon { grid-area: icon; }
+  .rvi-tl-schedule__event-icon { min-width: 18px; }
   .rvi-tl-schedule__event-name {
-    grid-area: name;
     min-width: 0;
     max-width: 100%;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 12px;
   }
-  .rvi-tl-schedule__event-metric { grid-area: from; text-align: left; }
+  .rvi-tl-schedule__event-metric {
+    min-width: 0;
+    font-size: 11px;
+    line-height: 16px;
+    text-align: right;
+  }
   .rvi-tl-schedule__event-favorite {
-    grid-area: favorite;
     width: 14px;
     min-width: 14px;
     justify-self: end;
   }
   .rvi-tl-schedule__event-metric--next {
-    grid-area: next;
     width: auto;
+    min-width: 0;
     text-align: right;
     align-self: center;
   }
 
   .rvi-tl-schedule__event-card {
-    min-height: 52px;
-    padding: 8px 10px;
+    min-height: 32px;
+    padding: 5px 8px;
   }
 
   .rvi-tl-schedule__event-side {
