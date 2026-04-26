@@ -139,13 +139,11 @@ export function TimelinePanel({
       value: 'start',
       label: 'Départ',
       icon: <KindBadge kind="start" />,
-      disabled: items.some((item) => item.kind === 'start'),
     },
     {
       value: 'end',
       label: 'Destination',
       icon: <KindBadge kind="end" />,
-      disabled: items.some((item) => item.kind === 'end'),
     },
   ];
 
