@@ -395,6 +395,9 @@ function handleCompute(msg: ComputeRequest) {
     raster = quality === 'preview'
       ? shadow
       : boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
+  } else if (shadowStrength > 0) {
+    scratch.shadow.fill(255);
+    raster = scratch.shadow;
   } else {
     scratch.shadow.fill(0);
     raster = scratch.shadow;

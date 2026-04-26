@@ -116,15 +116,13 @@ interface ComputeJob {
 }
 
 /**
- * Cast-shadow visibility curve.
- *   alt ≥  0°  : full strength (1.0) — shadows are at their longest and most
- *                dramatic right at sunrise/sunset; that's exactly when the
- *                user expects to see them.
- *   alt <  0°  : hide the overlay entirely so time changes do not dim the
- *                whole viewport.
+ * Shadow overlay visibility.
+ *   alt ≥  0°  : render terrain-cast shadows.
+ *   alt <  0°  : keep the overlay enabled so the worker can turn the full
+ *                viewport into shadow once the sun is below the horizon.
  */
 function shadowVisibility(altitudeDeg: number): number {
-  return altitudeDeg >= 0 ? 1 : 0;
+  return Number.isFinite(altitudeDeg) ? 1 : 0;
 }
 
 /**
