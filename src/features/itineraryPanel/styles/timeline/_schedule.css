@@ -236,9 +236,6 @@
 
 .rvi-tl-schedule__event {
   position: absolute;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 4px;
   align-items: stretch;
   min-width: 0;
   z-index: 2;
@@ -247,12 +244,12 @@
 .rvi-tl-schedule__event-card {
   all: unset;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   align-self: stretch;
   min-width: 0;
   min-height: 32px;
   height: var(--rvi-tl-card-height, auto);
-  padding: 4px 6px 4px 8px;
+  padding: 4px 6px 4px 4px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--rvi-text);
@@ -277,18 +274,24 @@
 
 .rvi-tl-schedule__event-main {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 20px;
-  align-items: start;
-  align-content: start;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 24px;
+  align-items: center;
+  align-content: center;
   gap: 4px;
   width: 100%;
   min-width: 0;
 }
 
+.rvi-tl-schedule__event-main.has-pause {
+  grid-template-columns: 24px minmax(0, 1fr) auto minmax(32px, 64px) minmax(32px, 64px) 24px;
+}
+
 .rvi-tl-schedule__event-icon {
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
 }
 
 .rvi-tl-schedule__event-name {
@@ -298,14 +301,55 @@
   white-space: nowrap;
   font-size: 14px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 24px;
+}
+
+.rvi-tl-schedule__event-pauses {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  min-width: 74px;
+}
+
+.rvi-tl-schedule__pause-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 74px;
+  min-height: 24px;
+  height: 24px;
+  padding: 0 4px 0 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+.rvi-tl-schedule__pause-chip.is-visible {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.rvi-tl-schedule__pause-chip-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
 }
 
 .rvi-tl-schedule__event-metric {
   text-align: right;
   font-size: 13px;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 24px;
   color: #fff;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -319,25 +363,15 @@
 
 .rvi-tl-schedule__event-favorite {
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   color: rgba(255, 255, 255, 0.32);
 }
 
 .rvi-tl-schedule__event-favorite.is-active {
   color: #fdb022;
-}
-
-.rvi-tl-schedule__event-side {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  align-self: stretch;
-  justify-content: flex-start;
-  gap: 4px;
-  min-width: 0;
 }
 
 .rvi-tl-schedule__pause {

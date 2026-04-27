@@ -82,6 +82,7 @@ const DEFAULT_START_MINUTES = 8 * 60;
 const MIN_TIMELINE_HOURS = 1;
 const DAY_WINDOW_DAYS = 6;
 const KM_MARKER_MIN_STEP = 25;
+const ATTACHED_PAUSE_HEIGHT_PX = 24;
 const PAUSE_CHIP_MIN_HEIGHT_PX = 28;
 const TIMELINE_BLOCK_GAP_PX = 4;
 
@@ -198,9 +199,8 @@ function formatHourLabel(hour: number, isBoundary: boolean): string {
   return `${hour}:00`;
 }
 
-function resolvePauseHeightPx(durationMin: number, pixelsPerMinute: number): number {
-  if (!Number.isFinite(durationMin) || durationMin <= 0) return PAUSE_CHIP_MIN_HEIGHT_PX;
-  return Math.max(PAUSE_CHIP_MIN_HEIGHT_PX, durationMin * pixelsPerMinute);
+function resolveStandalonePauseHeightPx(): number {
+  return PAUSE_CHIP_MIN_HEIGHT_PX;
 }
 
 function buildFavoritePoiPause(
@@ -267,6 +267,23 @@ function buildTimedItems(
         left.distanceKm - right.distanceKm ||
         left.sortIndex - right.sortIndex,
     );
+}
+
+function resolveSecondsToNextPoi(
+  entries: TimedTimelineItem[],
+  currentIndex: number,
+): number | null {
+  const currentEntry = entries[currentIndex];
+  if (!currentEntry) return null;
+
+  for (let index = currentIndex + 1; index < entries.length; index += 1) {
+    const candidate = entries[index];
+    if (!candidate || candidate.item.kind !== 'poi') continue;
+    if (candidate.elapsedSeconds <= currentEntry.elapsedSeconds) continue;
+    return Math.max(0, candidate.elapsedSeconds - currentEntry.elapsedSeconds);
+  }
+
+  return null;
 }
 
 function resolveMarkerKmStep(
@@ -431,11 +448,10 @@ export function TimelineTimelineView({
 
   const scheduledEvents = useMemo(() => {
     return filteredPrimaryItems.map((entry, index): TimelineEvent => {
-      const nextEntry = filteredPrimaryItems[index + 1] ?? null;
       const attachedPauses = (pauseAttachment.attachedByEventId.get(entry.item.id) ?? []).map(
         (pause) => ({
           ...pause,
-          heightPx: resolvePauseHeightPx(pause.durationMin, pixelsPerMinute),
+          heightPx: ATTACHED_PAUSE_HEIGHT_PX,
         }),
       );
 
@@ -453,10 +469,7 @@ export function TimelineTimelineView({
         scheduledTopPx,
         topPx: scheduledTopPx,
         attachedPauses,
-        toNextSeconds:
-          nextEntry && Number.isFinite(nextEntry.elapsedSeconds)
-            ? Math.max(0, nextEntry.elapsedSeconds - entry.elapsedSeconds)
-            : null,
+        toNextSeconds: resolveSecondsToNextPoi(filteredPrimaryItems, index),
         cardHeightPx,
         heightPx,
       };
@@ -470,7 +483,7 @@ export function TimelineTimelineView({
       topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
       durationMin: pause.item.durationMin ?? 0,
       visible: pause.item.visible !== false,
-      heightPx: resolvePauseHeightPx(pause.item.durationMin ?? 0, pixelsPerMinute),
+      heightPx: resolveStandalonePauseHeightPx(),
       sortIndex: pause.sortIndex,
     }));
   }, [pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes]);
@@ -678,6 +691,7 @@ export function TimelineTimelineView({
           {events.map((event, index) => {
             const visible = event.item.visible !== false;
             const selected = selectedIds?.has(event.item.id) ?? false;
+            const hasAttachedPauses = event.attachedPauses.length > 0;
             const title =
               event.item.kind === 'pause' && event.item.durationMin
                 ? formatPauseDuration(event.item.durationMin)
@@ -702,13 +716,30 @@ export function TimelineTimelineView({
                   aria-pressed={selected}
                   onClick={() => onToggleSelect?.(event.item.id, !selected)}
                 >
-                  <span className="rvi-tl-schedule__event-main">
+                  <span
+                    className={`rvi-tl-schedule__event-main${hasAttachedPauses ? ' has-pause' : ''}`}
+                  >
                     <span className="rvi-tl-schedule__event-icon" aria-hidden>
                       <KindBadge kind={event.item.kind} poiCategory={event.item.poiCategory} />
                     </span>
                     <span className="rvi-tl-schedule__event-name" title={title}>
                       {title}
                     </span>
+                    {hasAttachedPauses ? (
+                      <span className="rvi-tl-schedule__event-pauses">
+                        {event.attachedPauses.map((pause) => (
+                          <span
+                            key={pause.id}
+                            className={`rvi-tl-schedule__pause-chip${pause.visible ? ' is-visible' : ''}`}
+                          >
+                            <span className="rvi-tl-schedule__pause-chip-icon" aria-hidden>
+                              <IconPauseCircle size={14} />
+                            </span>
+                            <span>{formatPauseDuration(pause.durationMin)}</span>
+                          </span>
+                        ))}
+                      </span>
+                    ) : null}
                     <span className="rvi-tl-schedule__event-metric">
                       {formatDistanceLabel(event.distanceKm)}
                     </span>
@@ -723,21 +754,6 @@ export function TimelineTimelineView({
                     </span>
                   </span>
                 </button>
-
-                <div className="rvi-tl-schedule__event-side">
-                  {event.attachedPauses.map((pause) => (
-                    <span
-                      key={pause.id}
-                      className={`rvi-tl-schedule__pause${pause.visible ? ' is-visible' : ''}`}
-                      style={{
-                        '--rvi-tl-pause-height': `${pause.heightPx}px`,
-                      } as CSSProperties}
-                    >
-                      <IconPauseCircle size={14} />
-                      <span>{formatPauseDuration(pause.durationMin)}</span>
-                    </span>
-                  ))}
-                </div>
 
                 <span className="rvi-tl-schedule__actions">
                   <button

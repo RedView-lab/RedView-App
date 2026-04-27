@@ -12,17 +12,21 @@
     padding-right: 8px;
   }
 
-  .rvi-tl-schedule__event {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 56px 56px 20px;
+    grid-template-columns: 20px minmax(0, 1fr) 52px 52px 20px;
   }
 
-  .rvi-tl-schedule__event-side {
-    justify-content: flex-start;
-    padding-left: 28px;
+  .rvi-tl-schedule__event-main.has-pause {
+    grid-template-columns: 20px minmax(0, 1fr) minmax(62px, 68px) 50px 50px 20px;
+  }
+
+  .rvi-tl-schedule__event-pauses {
+    min-width: 62px;
+  }
+
+  .rvi-tl-schedule__pause-chip {
+    min-width: 62px;
+    font-size: 12px;
   }
 
   .rvi-tl-schedule__actions {
@@ -30,7 +34,7 @@
     pointer-events: auto;
     position: static;
     transform: none;
-    padding-left: 28px;
+    padding-left: 24px;
   }
 }
 
@@ -63,13 +67,15 @@
     right: 6px;
   }
 
-  .rvi-tl-schedule__event {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px;
-  }
-
   .rvi-tl-schedule__event-main {
     grid-template-columns: 18px minmax(0, 1fr) minmax(40px, 52px) minmax(36px, 48px) 14px;
+    column-gap: 3px;
+    row-gap: 0;
+    align-items: center;
+  }
+
+  .rvi-tl-schedule__event-main.has-pause {
+    grid-template-columns: 18px minmax(0, 1fr) minmax(62px, 72px) minmax(40px, 52px) minmax(36px, 48px) 14px;
     column-gap: 3px;
     row-gap: 0;
     align-items: center;
@@ -93,6 +99,13 @@
   .rvi-tl-schedule__event-favorite {
     display: none;
   }
+  .rvi-tl-schedule__event-pauses {
+    min-width: 62px;
+  }
+  .rvi-tl-schedule__pause-chip {
+    min-width: 62px;
+    font-size: 12px;
+  }
   .rvi-tl-schedule__event-metric--next {
     width: auto;
     min-width: 0;
@@ -103,10 +116,6 @@
   .rvi-tl-schedule__event-card {
     min-height: 34px;
     padding: 6px 8px;
-  }
-
-  .rvi-tl-schedule__event-side {
-    padding-left: 0;
   }
 
   .rvi-tl-schedule__actions {
@@ -176,6 +185,13 @@
     align-items: center;
   }
 
+  .rvi-tl-schedule__event-main.has-pause {
+    grid-template-columns: 18px minmax(0, 1fr) minmax(58px, 64px) minmax(36px, 46px) minmax(34px, 42px) 14px;
+    column-gap: 3px;
+    row-gap: 0;
+    align-items: center;
+  }
+
   .rvi-tl-schedule__event-icon { min-width: 18px; }
   .rvi-tl-schedule__event-name {
     min-width: 0;
@@ -194,6 +210,19 @@
   .rvi-tl-schedule__event-favorite {
     display: none;
   }
+  .rvi-tl-schedule__event-pauses {
+    min-width: 58px;
+  }
+  .rvi-tl-schedule__pause-chip {
+    min-width: 58px;
+    min-height: 22px;
+    height: 22px;
+    font-size: 11px;
+  }
+  .rvi-tl-schedule__pause-chip-icon {
+    width: 22px;
+    height: 22px;
+  }
   .rvi-tl-schedule__event-metric--next {
     width: auto;
     min-width: 0;
@@ -204,10 +233,6 @@
   .rvi-tl-schedule__event-card {
     min-height: 32px;
     padding: 5px 8px;
-  }
-
-  .rvi-tl-schedule__event-side {
-    padding-left: 0;
   }
 
   .rvi-tl-schedule__actions {

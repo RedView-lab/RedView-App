@@ -23,6 +23,19 @@ function applyCategory(
     }
   };
 
+  const matchesLayerPattern = (layer: ReturnType<MapboxMap['getStyle']>['layers'][number], pattern: RegExp) => {
+    const layerRecord = layer as Record<string, unknown>;
+    const searchable = [
+      layer.id,
+      typeof layerRecord.source === 'string' ? layerRecord.source : '',
+      typeof layerRecord['source-layer'] === 'string' ? layerRecord['source-layer'] : '',
+      typeof layerRecord.slot === 'string' ? layerRecord.slot : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    return pattern.test(searchable);
+  };
+
   const applyMatchingLayers = (pattern: RegExp) => {
     try {
       const style = map.getStyle();
@@ -30,7 +43,7 @@ function applyCategory(
 
       const value = visible ? 'visible' : 'none';
       for (const layer of style.layers) {
-        if (pattern.test(layer.id)) {
+        if (matchesLayerPattern(layer, pattern)) {
           map.setLayoutProperty(layer.id, 'visibility', value);
         }
       }
