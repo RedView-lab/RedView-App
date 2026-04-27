@@ -17,7 +17,12 @@ export type LabelCategory = (typeof LABEL_CATEGORIES)[number];
 
 export type LabelCategoryKind =
   | { type: 'config'; configKey: string | string[] }
-  | { type: 'layers'; pattern: RegExp };
+  | { type: 'layers'; pattern: RegExp }
+  | {
+      type: 'mixed';
+      configKey: string | string[];
+      pattern: RegExp;
+    };
 
 export interface LabelCategoryDef {
   id: LabelCategory;

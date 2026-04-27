@@ -12,8 +12,8 @@ function applyCategory(
 ) {
   const { mapping } = cat;
 
-  if (mapping.type === 'config') {
-    const keys = Array.isArray(mapping.configKey) ? mapping.configKey : [mapping.configKey];
+  const applyConfigKeys = (configKey: string | string[]) => {
+    const keys = Array.isArray(configKey) ? configKey : [configKey];
     for (const key of keys) {
       try {
         map.setConfigProperty('basemap', key, visible);
@@ -21,23 +21,37 @@ function applyCategory(
         // Config property may not exist on current style variant
       }
     }
+  };
+
+  const applyMatchingLayers = (pattern: RegExp) => {
+    try {
+      const style = map.getStyle();
+      if (!style?.layers) return;
+
+      const value = visible ? 'visible' : 'none';
+      for (const layer of style.layers) {
+        if (pattern.test(layer.id)) {
+          map.setLayoutProperty(layer.id, 'visibility', value);
+        }
+      }
+    } catch {
+      // Style may be loading
+    }
+  };
+
+  if (mapping.type === 'config') {
+    applyConfigKeys(mapping.configKey);
+    return;
+  }
+
+  if (mapping.type === 'mixed') {
+    applyConfigKeys(mapping.configKey);
+    applyMatchingLayers(mapping.pattern);
     return;
   }
 
   // Layer-based: enumerate all style layers matching the pattern
-  try {
-    const style = map.getStyle();
-    if (!style?.layers) return;
-
-    const value = visible ? 'visible' : 'none';
-    for (const layer of style.layers) {
-      if (mapping.pattern.test(layer.id)) {
-        map.setLayoutProperty(layer.id, 'visibility', value);
-      }
-    }
-  } catch {
-    // Style may be loading
-  }
+  applyMatchingLayers(mapping.pattern);
 }
 
 // ── Apply all categories at once ──────────────────────────────────────

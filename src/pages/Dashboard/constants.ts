@@ -1,12 +1,12 @@
 export const PANEL_WIDTH_KEY = 'rvc-panel-width';
-export const PANEL_WIDTH_MIN_FALLBACK = 228;
+export const LEFT_PANEL_WIDTH_MIN = 320;
+export const PANEL_WIDTH_MIN_FALLBACK = LEFT_PANEL_WIDTH_MIN;
 export const PANEL_WIDTH_MAX = 560;
 export const PANEL_WIDTH_DEFAULT = 300;
 export const PANEL_PADDING = 12;
 export const CENTER_PANEL_HEIGHT_KEY = 'rvc-center-panel-height';
 
 export const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
-export const LEFT_PANEL_WIDTH_MIN = 320;
 export const LEFT_PANEL_WIDTH_MAX = 520;
 export const LEFT_PANEL_WIDTH_DEFAULT = 360;
 

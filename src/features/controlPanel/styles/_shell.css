@@ -1,7 +1,7 @@
 /* Panel shell: CSS variables, box, scrollbar */
 
 .rvc-panel {
-  --rvc-panel-padding: 10px;
+  --rvc-panel-padding: 12px;
   --rvc-panel-gap-compact: 6px;
   --rvc-panel-select-xs: 92px;
   --rvc-panel-select-sm: 96px;
@@ -53,7 +53,7 @@
   overflow-y: scroll;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 12px;
   padding: var(--rvc-panel-padding);
   scrollbar-width: none;
   -ms-overflow-style: none;

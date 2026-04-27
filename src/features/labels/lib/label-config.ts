@@ -13,7 +13,13 @@ export const LABEL_CATEGORIES: LabelCategoryDef[] = [
     id: 'poi',
     label: 'POI Labels',
     defaultEnabled: true,
-    mapping: { type: 'config', configKey: 'showPointOfInterestLabels' },
+    mapping: {
+      type: 'mixed',
+      configKey: 'showPointOfInterestLabels',
+      // Some basemap variants keep airport / station symbol-label layers
+      // outside the generic POI config toggle.
+      pattern: /(airport|aerodrome|station|transit|rail).*(label|symbol)|(label|symbol).*(airport|aerodrome|station|transit|rail)/i,
+    },
   },
   {
     id: 'roads',

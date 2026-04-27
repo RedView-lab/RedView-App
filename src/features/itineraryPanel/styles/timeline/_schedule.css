@@ -247,7 +247,7 @@
 .rvi-tl-schedule__event-card {
   all: unset;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   align-self: stretch;
   min-width: 0;
   min-height: 32px;
@@ -278,7 +278,8 @@
 .rvi-tl-schedule__event-main {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) minmax(32px, 64px) minmax(32px, 64px) 20px;
-  align-items: center;
+  align-items: start;
+  align-content: start;
   gap: 4px;
   width: 100%;
   min-width: 0;
@@ -286,7 +287,7 @@
 
 .rvi-tl-schedule__event-icon {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
 }
 
@@ -318,7 +319,7 @@
 
 .rvi-tl-schedule__event-favorite {
   display: inline-flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   width: 20px;
   height: 20px;

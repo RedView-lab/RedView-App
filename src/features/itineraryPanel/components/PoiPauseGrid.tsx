@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { PanelCheckbox } from './PanelCheckbox';
 import type { PoiCategory } from '../types';
 
@@ -23,18 +24,18 @@ export interface PoiPauseGridProps {
 
 /** Display order + French labels, mirroring the POI section grid. */
 const ROWS: ReadonlyArray<[PoiCategory, string, number]> = [
-  ['fountains', 'Fontaines', 5],
-  ['toilets', 'Toilettes', 5],
+  ['fountains', 'Fontaines', 15],
+  ['toilets', 'Toilettes', 15],
   ['supermarkets', 'Supermarchés', 15],
-  ['gasStations', 'Station Service', 10],
+  ['gasStations', 'Station Service', 15],
   ['bakeries', 'Boulangerie', 15],
-  ['fastFood', 'Fast-food', 20],
+  ['fastFood', 'Fast-food', 15],
   ['cafes', 'Café', 15],
-  ['bars', 'Bar', 30],
-  ['restaurants', 'Restaurant', 40],
+  ['bars', 'Bar', 15],
+  ['restaurants', 'Restaurant', 15],
   ['bikeShops', 'Magasin de vélo', 15],
-  ['hotels', 'Hôtels', 240],
-  ['refuges', 'Refuges', 40],
+  ['hotels', 'Hôtels', 15],
+  ['refuges', 'Refuges', 15],
 ];
 
 export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {
@@ -82,6 +83,22 @@ function PoiPauseCell({
   onValueChange,
 }: CellProps) {
   const displayed = checked && value !== null ? formatDuration(value) : '-';
+  const [draft, setDraft] = useState(displayed);
+
+  useEffect(() => {
+    setDraft(displayed);
+  }, [displayed]);
+
+  const commitDraft = () => {
+    if (!checked) {
+      setDraft('-');
+      return;
+    }
+    const nextMinutes = parseDurationToMinutes(draft, value ?? 15);
+    onValueChange(nextMinutes);
+    setDraft(formatDuration(nextMinutes));
+  };
+
   return (
     <div className={`rvi-poipause-cell${checked ? '' : ' is-off'}`}>
       <PanelCheckbox checked={checked} onChange={onToggle} ariaLabel={label} />
@@ -94,10 +111,23 @@ function PoiPauseCell({
           type="text"
           inputMode="numeric"
           disabled={!checked}
-          value={displayed}
+          value={draft}
           onChange={(e) => {
-            const n = parseDurationToMinutes(e.target.value, value ?? 0);
-            onValueChange(n);
+            setDraft(e.target.value);
+          }}
+          onBlur={commitDraft}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commitDraft();
+              e.currentTarget.blur();
+            }
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              setDraft(displayed);
+              e.currentTarget.blur();
+            }
           }}
           aria-label={`Durée de pause — ${label}`}
         />
