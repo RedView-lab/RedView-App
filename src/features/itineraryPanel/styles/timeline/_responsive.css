@@ -8,9 +8,10 @@
     --rvi-tl-start-col: 54px;
     --rvi-tl-next-col: 50px;
     --rvi-tl-fav-col: 0px;
+    --rvi-tl-actions-gutter: 28px;
     --rvi-tl-card-gap: 3px;
     --rvi-tl-card-pad-left: 8px;
-    --rvi-tl-card-pad-right: 34px;
+    --rvi-tl-card-pad-right: 8px;
   }
 
   .rvi-tl-schedule__legend {
@@ -70,6 +71,7 @@
     --rvi-tl-start-col: 52px;
     --rvi-tl-next-col: 52px;
     --rvi-tl-fav-col: 20px;
+    --rvi-tl-actions-gutter: 0px;
     --rvi-tl-card-gap: 3px;
     --rvi-tl-card-pad-left: 6px;
     --rvi-tl-card-pad-right: 8px;
@@ -100,6 +102,7 @@
     --rvi-tl-start-col: 52px;
     --rvi-tl-next-col: 48px;
     --rvi-tl-fav-col: 0px;
+    --rvi-tl-actions-gutter: 28px;
     --rvi-tl-card-gap: 3px;
     --rvi-tl-card-pad-left: 8px;
     --rvi-tl-card-pad-right: 8px;
@@ -184,6 +187,7 @@
     --rvi-tl-start-col: 46px;
     --rvi-tl-next-col: 42px;
     --rvi-tl-fav-col: 0px;
+    --rvi-tl-actions-gutter: 28px;
     --rvi-tl-card-gap: 3px;
     --rvi-tl-card-pad-left: 8px;
     --rvi-tl-card-pad-right: 8px;

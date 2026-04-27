@@ -7,6 +7,7 @@
   --rvi-tl-start-col: 64px;
   --rvi-tl-next-col: 64px;
   --rvi-tl-fav-col: 24px;
+  --rvi-tl-actions-gutter: 0px;
   --rvi-tl-card-gap: 4px;
   --rvi-tl-card-pad-left: 4px;
   --rvi-tl-card-pad-right: 6px;
@@ -287,7 +288,7 @@
   min-width: 0;
   min-height: 32px;
   height: var(--rvi-tl-card-height, auto);
-  padding: 4px var(--rvi-tl-card-pad-right) 4px var(--rvi-tl-card-pad-left);
+  padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--rvi-text);
