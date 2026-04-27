@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindState } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
-import { fetchWindData, clearWindCache } from '../lib/open-meteo';
+import { fetchWindGridData, clearWindCache } from '../lib/open-meteo';
 import {
   initWindParticles,
   updateWindParticles,
@@ -76,7 +76,7 @@ export function useWind(
 
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Fetch sparse API data → build wind texture → feed particles ──
+  // ── Fetch regular VPS wind grid → feed particles directly ──
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
@@ -153,13 +153,13 @@ export function useWind(
         };
 
         const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
-        if (grid.length === 0) {
+        if (grid.points.length === 0) {
           setState((s) => ({
             ...s,
             loading: false,
             pointCount: 0,
             progress: 0,
-            detail: 'Aucun point d’échantillonnage disponible',
+            detail: 'Aucune grille vent disponible',
           }));
           return;
         }
@@ -168,10 +168,10 @@ export function useWind(
           ...s,
           loading: true,
           progress: 22,
-          detail: `Échantillonnage de ${grid.length} points`,
+          detail: `Téléchargement grille ${grid.cols}×${grid.rows} (${grid.points.length} points)`,
         }));
 
-        const sparsePoints = await fetchWindData(grid, controller.signal, ({
+        const windPoints = await fetchWindGridData(grid, controller.signal, ({
           completedBatches,
           totalBatches,
           source,
@@ -189,17 +189,17 @@ export function useWind(
         });
         if (controller.signal.aborted) return;
 
-        updateWindParticles(m, sparsePoints, fetchBounds);
+        updateWindParticles(m, grid, windPoints);
         lastBoundsRef.current = bounds;
-        lastFetchBoundsRef.current = fetchBounds;
+        lastFetchBoundsRef.current = grid.bounds;
         lastFetchTimeRef.current = Date.now();
 
-        console.info(`[wind] ready with ${sparsePoints.length} sampled points`);
+        console.info(`[wind] ready with direct grid ${grid.cols}x${grid.rows} (${windPoints.length} points)`);
 
         setState({
           loading: false,
           error: null,
-          pointCount: sparsePoints.length,
+          pointCount: windPoints.length,
           lastUpdate: Date.now(),
           progress: 100,
           detail: 'Champ de vent chargé',

@@ -1,5 +1,5 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { WindPoint } from '../types';
+import type { WindGridDefinition, WindPoint } from '../types';
 import { WindCustomLayer, WIND_LAYER_ID } from './wind';
 import { buildWindTexture } from './wind-texture';
 
@@ -23,17 +23,17 @@ export function initWindParticles(map: MapboxMap): void {
 }
 
 /**
- * Build a wind texture from sparse API points and feed it to the
- * particle engine. Call this after each API fetch.
+ * Build a wind texture from a regular grid and feed it to the
+ * particle engine. Call this after each VPS fetch.
  */
 export function updateWindParticles(
   _map: MapboxMap,
-  sparsePoints: WindPoint[],
-  bounds: { north: number; south: number; east: number; west: number },
+  grid: WindGridDefinition,
+  points: WindPoint[],
 ): void {
   if (!windLayer) return;
-  const windData = buildWindTexture(sparsePoints, bounds);
-  windLayer.setWind(windData, bounds);
+  const windData = buildWindTexture(grid, points);
+  windLayer.setWind(windData, grid.bounds);
 }
 
 /** Remove the custom layer and release all GPU resources */

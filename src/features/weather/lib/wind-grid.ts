@@ -1,28 +1,25 @@
+import type { WindGridDefinition } from '../types';
+
 // ── Zoom → grid spacing mapping ───────────────────────────────────────
-// Uses power-of-2 aligned spacings so that higher-zoom grids are exact
-// subdivisions of lower-zoom grids. This ensures that when zooming in,
-// the grid refines rather than shifting entirely — preventing abrupt
-// changes in IDW interpolation that cause wind direction artifacts.
+// Uses a viewport-aligned regular grid so the wind field can be fetched
+// directly from the VPS and uploaded to the GPU without any IDW rebuild.
 
 const SPACING_TABLE: [number, number][] = [
-  [4, 4.0],
-  [5, 2.0],
-  [6, 1.0],
-  [7, 0.5],
-  [8, 0.25],
-  [9, 0.125],
-  [10, 0.0625],
-  [11, 0.05],
-  [12, 0.025],
-  [13, 0.0125],
-  [14, 0.01],
+  [3, 0.6],
+  [4, 0.3],
+  [5, 0.16],
+  [6, 0.08],
+  [7, 0.04],
+  [8, 0.02],
+  [9, 0.01],
+  [10, 0.005],
+  [11, 0.0025],
+  [12, 0.00125],
 ];
 
-const MIN_SPACING = 0.0025;
-const MIN_POINTS = 96;
-const MAX_POINTS = 320;
-const RESERVOIR_SHARE = 0.3;
-const VIEWPORT_SHARE = 0.45;
+const MIN_SPACING = 0.00125;
+const MIN_POINTS = 576;
+const MAX_POINTS = 3_072;
 
 /**
  * Get grid spacing (degrees) for a given zoom level.
@@ -55,10 +52,17 @@ function spacingForZoom(zoom: number): number {
 
 /**
  * Round a coordinate to the nearest grid step.
- * This ensures cache consistency when viewport shifts slightly.
  */
 function snapToGrid(value: number, step: number): number {
   return Math.round(value / step) * step;
+}
+
+function snapDown(value: number, step: number): number {
+  return Math.floor(value / step) * step;
+}
+
+function snapUp(value: number, step: number): number {
+  return Math.ceil(value / step) * step;
 }
 
 function estimatedPointCount(
@@ -87,98 +91,57 @@ function spacingForBudget(
 }
 
 function maxPointsForZoom(zoom: number): number {
-  const boostedBudget = MIN_POINTS + Math.max(0, Math.round((zoom - 4) * 32));
+  const boostedBudget = MIN_POINTS + Math.max(0, Math.round((zoom - 4) * 320));
   return Math.max(MIN_POINTS, Math.min(MAX_POINTS, boostedBudget));
 }
 
-function pushGridPoints(
-  target: { lat: number; lng: number }[],
-  seen: Set<string>,
-  bounds: { north: number; south: number; east: number; west: number },
-  spacing: number,
-  maxPoints: number,
-): void {
-  if (maxPoints <= 0) return;
-
-  const snappedSouth = snapToGrid(bounds.south, spacing);
-  const snappedNorth = snapToGrid(bounds.north, spacing);
-  const snappedWest = snapToGrid(bounds.west, spacing);
-  const snappedEast = snapToGrid(bounds.east, spacing);
-
-  for (let lat = snappedSouth; lat <= snappedNorth; lat += spacing) {
-    for (let lng = snappedWest; lng <= snappedEast; lng += spacing) {
-      if (target.length >= maxPoints) return;
-      const clampedLat = Math.max(-90, Math.min(90, Math.round(lat * 1e6) / 1e6));
-      const clampedLng = Math.max(-180, Math.min(180, Math.round(lng * 1e6) / 1e6));
-      const key = coordCacheKey(clampedLat, clampedLng);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      target.push({ lat: clampedLat, lng: clampedLng });
-    }
-  }
-}
-
-function centerFocusBounds(bounds: { north: number; south: number; east: number; west: number }) {
-  const centerLat = (bounds.north + bounds.south) / 2;
-  const centerLng = (bounds.east + bounds.west) / 2;
-  const halfLat = (bounds.north - bounds.south) * 0.22;
-  const halfLng = (bounds.east - bounds.west) * 0.22;
-
-  return {
-    north: Math.min(90, centerLat + halfLat),
-    south: Math.max(-90, centerLat - halfLat),
-    east: Math.min(180, centerLng + halfLng),
-    west: Math.max(-180, centerLng - halfLng),
-  };
-}
-
 /**
- * Compute a grid of lat/lng sample points covering the given map bounds.
- * Returns coordinates snapped to a regular grid for cache-friendly lookups.
- * The budget stays capped, but it is distributed across three tiers:
- * 1) a coarse reservoir around the viewport,
- * 2) a denser live viewport,
- * 3) an extra-dense center focus.
+ * Compute a regular wind grid covering the fetched bounds.
+ * The returned points are row-major (top=north, left=west) so they can be
+ * uploaded directly as a wind texture without a reconstruction pass.
  */
 export function computeWindGrid(
   bounds: { north: number; south: number; east: number; west: number },
-  viewportBounds: { north: number; south: number; east: number; west: number },
+  _viewportBounds: { north: number; south: number; east: number; west: number },
   zoom: number,
-): { lat: number; lng: number }[] {
-  const points: { lat: number; lng: number }[] = [];
-  const seen = new Set<string>();
-  const spacing = spacingForZoom(zoom);
+): WindGridDefinition {
   const maxPoints = maxPointsForZoom(zoom);
-  const viewportBudget = Math.max(24, Math.round(maxPoints * VIEWPORT_SHARE));
-  const reservoirBudget = Math.max(24, Math.round(maxPoints * RESERVOIR_SHARE));
-  const focusBudget = Math.max(0, maxPoints - reservoirBudget - viewportBudget);
-  const focusBounds = centerFocusBounds(viewportBounds);
+  let spacing = spacingForBudget(bounds, spacingForZoom(zoom), maxPoints);
 
-  pushGridPoints(
+  let north = snapToGrid(bounds.north, spacing);
+  let south = snapToGrid(bounds.south, spacing);
+  let east = snapToGrid(bounds.east, spacing);
+  let west = snapToGrid(bounds.west, spacing);
+  let rows = 0;
+  let cols = 0;
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    north = Math.min(90, snapUp(bounds.north, spacing));
+    south = Math.max(-90, snapDown(bounds.south, spacing));
+    east = Math.min(180, snapUp(bounds.east, spacing));
+    west = Math.max(-180, snapDown(bounds.west, spacing));
+    rows = Math.max(2, Math.round((north - south) / spacing) + 1);
+    cols = Math.max(2, Math.round((east - west) / spacing) + 1);
+    if (rows * cols <= maxPoints) break;
+    spacing = spacingForBudget({ north, south, east, west }, spacing * 1.12, maxPoints);
+  }
+
+  const points = [] as WindGridDefinition['points'];
+  for (let row = 0; row < rows; row += 1) {
+    const lat = Math.max(-90, Math.min(90, Math.round((north - row * spacing) * 1e6) / 1e6));
+    for (let col = 0; col < cols; col += 1) {
+      const lng = Math.max(-180, Math.min(180, Math.round((west + col * spacing) * 1e6) / 1e6));
+      points.push({ lat, lng, row, col });
+    }
+  }
+
+  return {
+    bounds: { north, south, east, west, spacing },
+    rows,
+    cols,
+    spacing,
     points,
-    seen,
-    bounds,
-    spacingForBudget(bounds, spacing, reservoirBudget),
-    maxPoints,
-  );
-
-  pushGridPoints(
-    points,
-    seen,
-    viewportBounds,
-    spacingForBudget(viewportBounds, Math.max(MIN_SPACING, spacing * 0.65), points.length + viewportBudget),
-    maxPoints,
-  );
-
-  pushGridPoints(
-    points,
-    seen,
-    focusBounds,
-    spacingForBudget(focusBounds, Math.max(MIN_SPACING, spacing * 0.4), points.length + focusBudget),
-    maxPoints,
-  );
-
-  return points;
+  };
 }
 
 /**

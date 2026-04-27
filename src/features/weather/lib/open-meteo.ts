@@ -1,4 +1,4 @@
-import type { WindPoint, WindCacheEntry, WindDataSource } from '../types';
+import type { WindPoint, WindCacheEntry, WindDataSource, WindGridDefinition } from '../types';
 import { coordCacheKey } from './wind-grid';
 import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
 
@@ -8,7 +8,7 @@ const API_BASE = OPENMETEO_FORECAST_URL;
 const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
 // Self-hosted VPS → we can hammer it. Bigger batches, no inter-batch
 // gap, only a tiny safety retry budget for transient errors.
-const BATCH_SIZE = 200; // Max coordinates per request
+const BATCH_SIZE = 400; // Max coordinates per request
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
@@ -153,41 +153,47 @@ async function fetchBatch(
 }
 
 /**
- * Fetch wind data for a list of coordinates.
- * Uses in-memory cache with 15-min TTL and batches API calls.
+ * Fetch a full regular wind grid from the self-hosted VPS.
+ * Results preserve the grid's row-major ordering for direct GPU upload.
  * Supports cancellation via AbortSignal.
  */
-export async function fetchWindData(
-  coords: { lat: number; lng: number }[],
+export async function fetchWindGridData(
+  grid: WindGridDefinition,
   signal?: AbortSignal,
   onProgress?: (progress: WindFetchProgress) => void,
 ): Promise<WindPoint[]> {
-  const results: WindPoint[] = [];
-  const uncached: { lat: number; lng: number }[] = [];
+  const results = new Array<WindPoint>(grid.points.length);
+  const uncachedIndexes: number[] = [];
 
   // 1. Check cache first
-  for (const c of coords) {
-    const cached = getCached(c.lat, c.lng);
+  for (let index = 0; index < grid.points.length; index += 1) {
+    const point = grid.points[index];
+    const cached = getCached(point.lat, point.lng);
     if (cached) {
-      results.push(cached);
+      results[index] = {
+        ...cached,
+        lat: point.lat,
+        lng: point.lng,
+      };
     } else {
-      uncached.push(c);
+      uncachedIndexes.push(index);
     }
   }
 
-  if (uncached.length === 0) return results;
+  if (uncachedIndexes.length === 0) return results;
 
-  const totalBatches = Math.max(1, Math.ceil(uncached.length / BATCH_SIZE));
+  const totalPoints = Math.max(1, grid.points.length);
+  const totalBatches = Math.max(1, Math.ceil(uncachedIndexes.length / BATCH_SIZE));
   let lastSource: WindDataSource | null = null;
   onProgress?.({
     completedBatches: 0,
     totalBatches,
     source: null,
-    detail: `Préparation de ${uncached.length} points sur ${totalBatches} requête${totalBatches > 1 ? 's' : ''}`,
+    detail: `Préparation grille ${grid.cols}×${grid.rows} (${grid.points.length} points)` ,
   });
 
   // 2. Batch fetch uncached coordinates (with inter-batch delay)
-  for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+  for (let i = 0; i < uncachedIndexes.length; i += BATCH_SIZE) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
 
     // Inter-batch delay to avoid 429 on consecutive batches
@@ -198,26 +204,34 @@ export async function fetchWindData(
       });
     }
 
-    const batch = uncached.slice(i, i + BATCH_SIZE);
+    const batchIndexes = uncachedIndexes.slice(i, i + BATCH_SIZE);
+    const batch = batchIndexes.map((index) => grid.points[index]);
     const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
     const { points, source } = await fetchBatch(batch, signal);
     lastSource = source;
 
-    for (const p of points) {
-      setCache(p);
-      results.push(p);
-    }
+    points.forEach((point, batchIndex) => {
+      const pointIndex = batchIndexes[batchIndex];
+      const gridPoint = grid.points[pointIndex];
+      const normalisedPoint: WindPoint = {
+        ...point,
+        lat: gridPoint.lat,
+        lng: gridPoint.lng,
+      };
+      setCache(normalisedPoint);
+      results[pointIndex] = normalisedPoint;
+    });
 
     onProgress?.({
       completedBatches: batchNumber,
       totalBatches,
       source,
-      detail: `Requête ${batchNumber}/${totalBatches} terminée via ${source}`,
+      detail: `Grille vent ${batchNumber}/${totalBatches} via ${source} (${Math.min(totalPoints, i + batchIndexes.length)}/${totalPoints})`,
     });
   }
 
   if (lastSource) {
-    console.info(`[wind] fetched ${results.length} points via ${lastSource}`);
+    console.info(`[wind] fetched grid ${grid.cols}x${grid.rows} (${results.length} points) via ${lastSource}`);
   }
 
   return results;

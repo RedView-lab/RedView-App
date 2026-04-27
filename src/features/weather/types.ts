@@ -28,6 +28,21 @@ export interface WindGridConfig {
   spacing: number;
 }
 
+export interface WindGridPoint {
+  lat: number;
+  lng: number;
+  row: number;
+  col: number;
+}
+
+export interface WindGridDefinition {
+  bounds: WindGridConfig;
+  rows: number;
+  cols: number;
+  spacing: number;
+  points: WindGridPoint[];
+}
+
 // ── Cache entry for wind data ─────────────────────────────────────────
 
 export interface WindCacheEntry {
