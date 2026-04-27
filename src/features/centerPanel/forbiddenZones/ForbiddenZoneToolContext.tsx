@@ -18,7 +18,6 @@ type DraftPoint = { lat: number; lon: number };
 type DraftSnapshot = DraftPoint[];
 
 const DRAW_CONTROL_GROUP_SELECTOR = '.mapbox-gl-draw_polygon';
-const DRAW_ACTIVE_CLASS = 'active';
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -47,7 +46,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const [draftHistoryIndex, setDraftHistoryIndex] = useState(-1);
   const drawRef = useRef<MapboxDraw | null>(null);
   const drawControlElementRef = useRef<HTMLElement | null>(null);
-  const drawPolygonButtonRef = useRef<HTMLButtonElement | null>(null);
+
   const draftFeatureIdRef = useRef<string | null>(null);
   const suppressDrawSyncRef = useRef(false);
   const draftHistoryRef = useRef<DraftSnapshot[]>([]);
@@ -85,12 +84,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const draw = drawRef.current;
     if (!draw) return;
 
-    const polygonButton = drawPolygonButtonRef.current;
-    if (polygonButton && !polygonButton.classList.contains(DRAW_ACTIVE_CLASS)) {
-      polygonButton.click();
-      return;
-    }
-
+    // Use the Draw API directly instead of clicking the hidden polygon button.
+    // MapboxDraw internally updates both the cursor CSS classes (mouse-add) and
+    // the button active state when changeMode is called programmatically.
     if (draw.getMode() !== 'draw_polygon') {
       draw.changeMode('draw_polygon');
     }
@@ -248,11 +244,10 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const frame = window.requestAnimationFrame(() => {
       const polygonButton = map
         .getContainer()
-        .querySelector(DRAW_CONTROL_GROUP_SELECTOR) as HTMLButtonElement | null;
-      const controlGroup = polygonButton?.closest('.mapboxgl-ctrl-group') as HTMLElement | null;
-      drawPolygonButtonRef.current = polygonButton;
-      drawControlElementRef.current = controlGroup;
-      // Visibility is managed by the dedicated armed-visibility effect below;
+        .querySelector(DRAW_CONTROL_GROUP_SELECTOR);
+      drawControlElementRef.current =
+        (polygonButton?.closest('.mapboxgl-ctrl-group') as HTMLElement | null);
+      // Visibility is managed by the dedicated armed-visibility effect;
       // hide by default so the native Draw UI never flashes on screen.
       setDrawControlVisible(false);
     });
@@ -260,7 +255,6 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     return () => {
       window.cancelAnimationFrame(frame);
       drawControlElementRef.current = null;
-      drawPolygonButtonRef.current = null;
       drawRef.current = null;
       map.removeControl(draw);
     };
