@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
 import { useMiddleClickAutoscroll } from '../../lib/useMiddleClickAutoscroll';
 import { PanelHeader } from './components/PanelHeader';
 import { ItineraryTabs } from './components/ItineraryTabs';
@@ -145,6 +146,11 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           aria-modal
           aria-label="Timeline en plein écran"
         >
+          <MapCanvasGlassBackdrop
+            blur={38}
+            saturate={1.9}
+            tint="rgba(5, 8, 8, 0.58)"
+          />
           <div className="rvi-panel__fullscreen-body">{fullscreenTimelinePanel}</div>
         </aside>
       </div>,
