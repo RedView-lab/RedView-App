@@ -159,7 +159,7 @@
 
   .rvi-tl-schedule__event-card {
     min-height: 34px;
-    padding: 6px 8px;
+    padding: 6px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 6px var(--rvi-tl-card-pad-left);
   }
 
   .rvi-tl-schedule__actions {
@@ -266,7 +266,7 @@
 
   .rvi-tl-schedule__event-card {
     min-height: 32px;
-    padding: 5px 8px;
+    padding: 5px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 5px var(--rvi-tl-card-pad-left);
   }
 
   .rvi-tl-schedule__actions {
