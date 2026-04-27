@@ -252,7 +252,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       const controlGroup = polygonButton?.closest('.mapboxgl-ctrl-group') as HTMLElement | null;
       drawPolygonButtonRef.current = polygonButton;
       drawControlElementRef.current = controlGroup;
-      setDrawControlVisible(armed);
+      // Visibility is managed by the dedicated armed-visibility effect below;
+      // hide by default so the native Draw UI never flashes on screen.
+      setDrawControlVisible(false);
     });
 
     return () => {
@@ -262,7 +264,12 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       drawRef.current = null;
       map.removeControl(draw);
     };
-  }, [armed, map, setDrawControlVisible]);
+    // `armed` intentionally excluded: toggling the tool must NOT destroy /
+    // recreate the Draw control — that would reset its mode to simple_select
+    // and discard any in-progress polygon draft. Control visibility is driven
+    // by the separate `setDrawControlVisible(armed)` effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, setDrawControlVisible]);
 
   useEffect(() => {
     if (!map) return;
