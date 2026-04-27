@@ -45,6 +45,8 @@ export class WindCustomLayer implements CustomLayerInterface {
   prerender(_gl: WebGL2RenderingContext, _matrix: number[]): void {
     if (!this.map || !this.gl || !this.program || !this.vertexBuffer || !this.sampler.hasData) return;
 
+    this.map.triggerRepaint();
+
     // Hide wind when zoomed out past the globe projection threshold
     if (this.map.getZoom() < MIN_WIND_ZOOM) {
       this.vertexCount = 0;
@@ -114,7 +116,6 @@ export class WindCustomLayer implements CustomLayerInterface {
     gl.drawArrays(gl.TRIANGLES, 0, this.vertexCount);
 
     restoreGLState(gl, saved, attribs);
-    this.map?.triggerRepaint();
   }
 
   onRemove(_map: MapboxMap, gl: WebGL2RenderingContext): void {

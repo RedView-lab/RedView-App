@@ -132,7 +132,7 @@ export function useWind(
           west: Math.max(-180, bounds.west - lngPad),
         };
 
-        const grid = computeWindGrid(fetchBounds, bounds.zoom);
+        const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
         if (grid.length === 0) {
           setState((s) => ({ ...s, loading: false, pointCount: 0 }));
           return;

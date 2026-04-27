@@ -1,37 +1,11 @@
-﻿import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-
-import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
-
-import { CheckboxField } from '../components/PanelCheckbox';
+﻿import { CheckboxField } from '../components/PanelCheckbox';
 import { ToggleRow } from '../components/PanelToggle';
 import {
-  IconCheck,
   IconChevronDown,
   IconDownloadCircle,
   IconPlusCircle,
 } from '../components/icons';
 import type { PoiCategory, PoiEntry, PoiState } from '../types';
-
-const DEFAULT_REFINE_LIMIT_PER_KM = 4;
-
-const REFINE_LIMIT_OPTIONS = [
-  {
-    value: 2 as const,
-    label: '2 POI / type / km',
-    description: 'Filtrage fort pour les centres-villes très denses.',
-  },
-  {
-    value: 4 as const,
-    label: '4 POI / type / km',
-    description: 'Réglage conseillé pour éviter les grappes sans perdre les arrêts utiles.',
-  },
-  {
-    value: 6 as const,
-    label: '6 POI / type / km',
-    description: 'Filtrage léger, utile quand tu veux garder plus d’options.',
-  },
-] as const;
 
 interface PoiSectionProps {
   poi: PoiState;
@@ -55,14 +29,6 @@ interface PoiSectionProps {
   disabled?: boolean;
   /** Optional helper text shown when the button is disabled. */
   disabledReason?: string | null;
-}
-
-interface PoiRefineMenuProps {
-  anchorEl: HTMLElement | null;
-  open: boolean;
-  value: 2 | 4 | 6;
-  onSelect?: (value: 2 | 4 | 6) => void;
-  onClose?: () => void;
 }
 
 const POI_ROWS: { key: PoiCategory; label: string }[][] = [
@@ -121,156 +87,10 @@ function DistanceInput({
   );
 }
 
-function PoiRefineMenu({
-  anchorEl,
-  open,
-  value,
-  onSelect,
-  onClose,
-}: PoiRefineMenuProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const [menuStyle, setMenuStyle] = useState<{
-    top: number;
-    left: number;
-    width: number;
-    scale: number;
-    fontFamily: string;
-    fontSize: string;
-    fontWeight: string;
-    lineHeight: string;
-  } | null>(null);
-
-  useLayoutEffect(() => {
-    if (!open || !anchorEl) {
-      setMenuStyle(null);
-      return;
-    }
-
-    const update = () => {
-      const rect = anchorEl.getBoundingClientRect();
-      const computed = window.getComputedStyle(anchorEl);
-      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
-      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-      const menuWidth = 248 * scale;
-      const menuHeight = 188 * scale;
-      const offset = 6 * scale;
-      const maxLeft = Math.max(8, window.innerWidth - menuWidth - 8);
-      const left = Math.min(Math.max(8, rect.left), maxLeft);
-      const topBelow = rect.bottom + offset;
-      const topAbove = rect.top - menuHeight - offset;
-      const top =
-        topBelow + menuHeight > window.innerHeight - 8 && topAbove >= 8
-          ? topAbove
-          : topBelow;
-
-      setMenuStyle({
-        top,
-        left,
-        width: 248,
-        scale,
-        fontFamily: computed.fontFamily,
-        fontSize: computed.fontSize,
-        fontWeight: computed.fontWeight,
-        lineHeight: computed.lineHeight,
-      });
-    };
-
-    update();
-    window.addEventListener('resize', update);
-    window.addEventListener('scroll', update, true);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.removeEventListener('scroll', update, true);
-    };
-  }, [anchorEl, open]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (menuRef.current?.contains(target)) return;
-      if (anchorEl?.contains(target)) return;
-      onClose?.();
-    };
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose?.();
-    };
-
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [anchorEl, onClose, open]);
-
-  if (!open || !anchorEl || !menuStyle) {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      ref={menuRef}
-      className="rvi-poi-refine-menu"
-      role="dialog"
-      aria-label="Réglage de l’affinage POI"
-      style={{
-        top: menuStyle.top,
-        left: menuStyle.left,
-        width: menuStyle.width,
-        transform: `scale(${menuStyle.scale})`,
-        transformOrigin: 'top left',
-        fontFamily: menuStyle.fontFamily,
-        fontSize: menuStyle.fontSize,
-        fontWeight: menuStyle.fontWeight,
-        lineHeight: menuStyle.lineHeight,
-      }}
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <MapCanvasGlassBackdrop blur={60} saturate={1.8} />
-      <div className="rvi-poi-refine-menu__head">
-        <div className="rvi-poi-refine-menu__title">Limiter les doublons urbains</div>
-        <div className="rvi-poi-refine-menu__sub">
-          Garde seulement un nombre max de POI d’un même type sur une fenêtre glissante de 1 km.
-        </div>
-      </div>
-      <div className="rvi-poi-refine-menu__options" role="radiogroup" aria-label="Limite POI par kilomètre">
-        {REFINE_LIMIT_OPTIONS.map((option) => {
-          const selected = option.value === value;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              className={`rvi-poi-refine-menu__option${selected ? ' is-selected' : ''}`}
-              onClick={() => {
-                onSelect?.(option.value);
-                onClose?.();
-              }}
-            >
-              <span className="rvi-poi-refine-menu__option-copy">
-                <span className="rvi-poi-refine-menu__option-label">{option.label}</span>
-                <span className="rvi-poi-refine-menu__option-sub">{option.description}</span>
-              </span>
-              {selected ? <IconCheck size={16} className="rvi-poi-refine-menu__option-check" /> : null}
-            </button>
-          );
-        })}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 export function PoiSection({
   poi,
   onChangeEntry,
   onChangeRefine,
-  onChangeRefineLimit,
   onOpenCategories,
   onLoad,
   loading = false,
@@ -279,9 +99,6 @@ export function PoiSection({
   error = null,
   disabled = false,
 }: PoiSectionProps) {
-  const [refineMenuOpen, setRefineMenuOpen] = useState(false);
-  const refineButtonRef = useRef<HTMLButtonElement | null>(null);
-  const refineLimit = poi.refineLimitPerKm ?? DEFAULT_REFINE_LIMIT_PER_KM;
   const buttonDisabled = disabled || loading;
   const pct =
     progress !== null && Number.isFinite(progress)
@@ -294,17 +111,6 @@ export function PoiSection({
     : poiCount > 0
       ? `Recharger (${poiCount})`
       : 'Rechercher';
-
-  useEffect(() => {
-    if (!poi.refineResults) {
-      setRefineMenuOpen(false);
-    }
-  }, [poi.refineResults]);
-
-  const handleRefineToggle = (next: boolean) => {
-    onChangeRefine?.(next);
-    setRefineMenuOpen(next);
-  };
 
   return (
     <div className="rvi-params">
@@ -345,7 +151,7 @@ export function PoiSection({
         <div className="rvi-poi-refine__toggle">
           <ToggleRow
             checked={poi.refineResults}
-            onChange={handleRefineToggle}
+            onChange={onChangeRefine}
             label="Affiner les résultats (beta)"
           />
         </div>
@@ -359,23 +165,6 @@ export function PoiSection({
           <IconChevronDown size={14} className="rvi-categories-btn__chevron" />
         </button>
       </div>
-
-      {poi.refineResults ? (
-        <div className="rvi-poi-refine__config-row">
-          <button
-            ref={refineButtonRef}
-            type="button"
-            className={`rvi-poi-refine__config-btn${refineMenuOpen ? ' is-open' : ''}`}
-            onClick={() => setRefineMenuOpen((open) => !open)}
-          >
-            <span className="rvi-poi-refine__config-copy">
-              <span className="rvi-poi-refine__config-label">Filtre ville</span>
-              <span className="rvi-poi-refine__config-value">{refineLimit} POI / type / km</span>
-            </span>
-            <IconChevronDown size={14} className="rvi-poi-refine__config-chevron" />
-          </button>
-        </div>
-      ) : null}
 
       <button
         type="button"
@@ -393,14 +182,6 @@ export function PoiSection({
           {error}
         </div>
       ) : null}
-
-      <PoiRefineMenu
-        anchorEl={refineButtonRef.current}
-        open={refineMenuOpen}
-        value={refineLimit}
-        onSelect={(value) => onChangeRefineLimit?.(value)}
-        onClose={() => setRefineMenuOpen(false)}
-      />
     </div>
   );
 }
