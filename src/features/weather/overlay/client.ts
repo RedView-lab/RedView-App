@@ -365,6 +365,49 @@ function monthRange(monthIso: string): { start: string; end: string } {
   return { start: format(start), end: format(end) };
 }
 
+function previewResponseText(text: string, maxLength = 180): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
+}
+
+function describeErrorPayload(text: string, contentType: string): string {
+  if (!text.trim()) return '';
+  if (contentType.includes('json')) {
+    try {
+      const parsed = JSON.parse(text) as {
+        error?: unknown;
+        detail?: unknown;
+        reason?: unknown;
+        message?: unknown;
+      };
+      const detail = [parsed.error, parsed.detail, parsed.reason, parsed.message]
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .join(' — ');
+      if (detail) return detail;
+    } catch {
+      // Fall back to a compact text preview below.
+    }
+  }
+  return previewResponseText(text);
+}
+
+function parseJsonPayload(text: string, contentType: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    throw new Error('Open-Meteo returned an empty response');
+  }
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch (error) {
+    const preview = previewResponseText(trimmed);
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Open-Meteo returned invalid JSON${contentType ? ` (${contentType})` : ''}: ${reason}${preview ? ` — ${preview}` : ''}`,
+    );
+  }
+}
+
 async function fetchJsonWithBackoff(url: string, signal?: AbortSignal): Promise<unknown> {
   let lastError: Error | null = null;
 
@@ -375,7 +418,10 @@ async function fetchJsonWithBackoff(url: string, signal?: AbortSignal): Promise<
     await sleep(waitMs, signal);
     lastRequestTime = Date.now();
 
-    const response = await fetch(url, { signal });
+    const response = await fetch(url, {
+      signal,
+      headers: { Accept: 'application/json, text/plain;q=0.8' },
+    });
     if (response.status === 429) {
       const backoff = INITIAL_BACKOFF_MS * Math.pow(2, attempt);
       rateLimitedUntil = Date.now() + backoff;
@@ -383,10 +429,15 @@ async function fetchJsonWithBackoff(url: string, signal?: AbortSignal): Promise<
       if (attempt < MAX_RETRIES) continue;
       throw lastError;
     }
+    const contentType = response.headers.get('content-type') ?? '';
+    const text = await response.text();
     if (!response.ok) {
-      throw new Error(`Open-Meteo ${response.status}: ${response.statusText}`);
+      const detail = describeErrorPayload(text, contentType);
+      throw new Error(
+        `Open-Meteo ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${detail ? ` — ${detail}` : ''}`,
+      );
     }
-    return response.json();
+    return parseJsonPayload(text, contentType);
   }
 
   throw lastError ?? new Error('Open-Meteo fetch failed');

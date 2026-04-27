@@ -24,6 +24,45 @@ const CLIMATE_FALLBACK = 'https://climate-api.open-meteo.com';
 
 type WeatherSource = 'self-hosted-vps' | 'public-api';
 
+interface UpstreamPayload {
+  response: Response;
+  body: Buffer;
+  contentType: string;
+  preview: string;
+  isJson: boolean;
+}
+
+function previewText(text: string, maxLength = 180): string {
+  const compact = text.replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+  return compact.length > maxLength ? `${compact.slice(0, maxLength)}...` : compact;
+}
+
+async function readUpstreamPayload(response: Response): Promise<UpstreamPayload> {
+  const body = Buffer.from(await response.arrayBuffer());
+  const contentType = response.headers.get('content-type') ?? '';
+  const text = body.toString('utf-8');
+  const preview = previewText(text);
+  let isJson = false;
+
+  if (text.trim()) {
+    try {
+      JSON.parse(text);
+      isJson = true;
+    } catch {
+      isJson = false;
+    }
+  }
+
+  return {
+    response,
+    body,
+    contentType,
+    preview,
+    isJson,
+  };
+}
+
 async function fetchWithTimeout(target: string): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -72,7 +111,7 @@ export default async function handler(
     : null;
 
   try {
-    let upstreamRes: Response | null = null;
+    let upstreamPayload: UpstreamPayload | null = null;
     let source: WeatherSource = 'public-api';
     let target = publicTarget;
     let fallbackReason: string | null = null;
@@ -80,12 +119,16 @@ export default async function handler(
     if (selfHostedTarget) {
       try {
         const candidate = await fetchWithTimeout(selfHostedTarget);
-        if (candidate.ok) {
-          upstreamRes = candidate;
+        const payload = await readUpstreamPayload(candidate);
+        if (candidate.ok && payload.isJson) {
+          upstreamPayload = payload;
           source = 'self-hosted-vps';
           target = selfHostedTarget;
+        } else if (candidate.ok) {
+          fallbackReason = `self-hosted returned non-JSON payload${payload.preview ? ` — ${payload.preview}` : ''}`;
+          console.warn(`[openmeteo-proxy] ${fallbackReason}; retrying public Open-Meteo`);
         } else {
-          fallbackReason = `self-hosted returned ${candidate.status}`;
+          fallbackReason = `self-hosted returned ${candidate.status}${candidate.statusText ? ` ${candidate.statusText}` : ''}${payload.preview ? ` — ${payload.preview}` : ''}`;
           console.warn(`[openmeteo-proxy] ${fallbackReason}; retrying public Open-Meteo`);
         }
       } catch (err) {
@@ -94,8 +137,13 @@ export default async function handler(
       }
     }
 
-    if (!upstreamRes) {
-      upstreamRes = await fetchWithTimeout(publicTarget);
+    if (!upstreamPayload) {
+      const publicResponse = await fetchWithTimeout(publicTarget);
+      const publicPayload = await readUpstreamPayload(publicResponse);
+      if (publicResponse.ok && !publicPayload.isJson) {
+        throw new Error(`Public Open-Meteo returned non-JSON payload${publicPayload.preview ? ` — ${publicPayload.preview}` : ''}`);
+      }
+      upstreamPayload = publicPayload;
       source = 'public-api';
       target = publicTarget;
     }
@@ -105,11 +153,9 @@ export default async function handler(
         `→ ${target}${fallbackReason ? ` (${fallbackReason})` : ''}`,
     );
 
-    const body = await upstreamRes.arrayBuffer();
-
-    res.status(upstreamRes.status);
-    const contentType = upstreamRes.headers.get('content-type');
-    if (contentType) res.setHeader('Content-Type', contentType);
+    res.status(upstreamPayload.response.status);
+    const contentType = upstreamPayload.contentType || 'application/json; charset=utf-8';
+    res.setHeader('Content-Type', contentType);
     // Marker header so the browser can confirm the request was served
     // by *our* proxy (visible in DevTools → Network → Response Headers).
     res.setHeader('X-Weather-Source', source);
@@ -119,7 +165,7 @@ export default async function handler(
       'Cache-Control',
       'public, max-age=300, stale-while-revalidate=600',
     );
-    return res.send(Buffer.from(body));
+    return res.send(upstreamPayload.body);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return res.status(502).json({ error: 'Upstream fetch failed', detail: msg });
