@@ -18,6 +18,7 @@ type DraftPoint = { lat: number; lon: number };
 type DraftSnapshot = DraftPoint[];
 
 const DRAW_CONTROL_GROUP_SELECTOR = '.mapbox-gl-draw_polygon';
+const DRAW_ACTIVE_CLASS = 'active';
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -46,6 +47,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const [draftHistoryIndex, setDraftHistoryIndex] = useState(-1);
   const drawRef = useRef<MapboxDraw | null>(null);
   const drawControlElementRef = useRef<HTMLElement | null>(null);
+  const drawPolygonButtonRef = useRef<HTMLButtonElement | null>(null);
   const draftFeatureIdRef = useRef<string | null>(null);
   const suppressDrawSyncRef = useRef(false);
   const draftHistoryRef = useRef<DraftSnapshot[]>([]);
@@ -79,6 +81,21 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     }
   }, []);
 
+  const activatePolygonMode = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    const polygonButton = drawPolygonButtonRef.current;
+    if (polygonButton && !polygonButton.classList.contains(DRAW_ACTIVE_CLASS)) {
+      polygonButton.click();
+      return;
+    }
+
+    if (draw.getMode() !== 'draw_polygon') {
+      draw.changeMode('draw_polygon');
+    }
+  }, []);
+
   const clearDrawDraft = useCallback(() => {
     const draw = drawRef.current;
     if (!draw) return;
@@ -109,14 +126,14 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
           draw.changeMode('direct_select', { featureId: nextFeatureId });
         }
       } else if (armed) {
-        draw.changeMode('draw_polygon');
+        activatePolygonMode();
       }
     } finally {
       suppressDrawSyncRef.current = false;
     }
 
     updateDraftStatus(points);
-  }, [armed, updateDraftStatus]);
+  }, [activatePolygonMode, armed, updateDraftStatus]);
 
   const pushDraftSnapshot = useCallback((points: DraftSnapshot) => {
     const currentIndex = draftHistoryIndexRef.current;
@@ -148,11 +165,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     updateDraftStatus([]);
     suppressDrawSyncRef.current = true;
     try {
-      draw.changeMode('draw_polygon');
+      activatePolygonMode();
     } finally {
       suppressDrawSyncRef.current = false;
     }
-  }, [clearDrawDraft, syncHistoryState, updateDraftStatus]);
+  }, [activatePolygonMode, clearDrawDraft, syncHistoryState, updateDraftStatus]);
 
   const deactivate = useCallback(() => {
     setArmed(false);
@@ -231,8 +248,9 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const frame = window.requestAnimationFrame(() => {
       const polygonButton = map
         .getContainer()
-        .querySelector(DRAW_CONTROL_GROUP_SELECTOR);
+        .querySelector(DRAW_CONTROL_GROUP_SELECTOR) as HTMLButtonElement | null;
       const controlGroup = polygonButton?.closest('.mapboxgl-ctrl-group') as HTMLElement | null;
+      drawPolygonButtonRef.current = polygonButton;
       drawControlElementRef.current = controlGroup;
       setDrawControlVisible(armed);
     });
@@ -240,6 +258,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     return () => {
       window.cancelAnimationFrame(frame);
       drawControlElementRef.current = null;
+      drawPolygonButtonRef.current = null;
       drawRef.current = null;
       map.removeControl(draw);
     };
@@ -285,7 +304,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       if (!featureId && draw.getMode() !== 'draw_polygon') {
         suppressDrawSyncRef.current = true;
         try {
-          draw.changeMode('draw_polygon');
+          activatePolygonMode();
         } finally {
           suppressDrawSyncRef.current = false;
         }
@@ -305,7 +324,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       map.off('draw.update', handleDrawUpdate);
       map.off('draw.delete', handleDrawDelete);
     };
-  }, [armed, map, pushDraftSnapshot]);
+  }, [activatePolygonMode, armed, map, pushDraftSnapshot]);
 
   useEffect(() => {
     if (!armed) return;
