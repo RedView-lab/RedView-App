@@ -1,5 +1,62 @@
 /* Timeline responsive rules */
 
+@container (max-width: 560px) {
+  .rvi-tl-schedule {
+    --rvi-tl-times-col: 46px;
+    --rvi-tl-icon-col: 18px;
+    --rvi-tl-pause-col: 62px;
+    --rvi-tl-start-col: 54px;
+    --rvi-tl-next-col: 50px;
+    --rvi-tl-fav-col: 0px;
+    --rvi-tl-card-gap: 3px;
+    --rvi-tl-card-pad-left: 8px;
+    --rvi-tl-card-pad-right: 34px;
+  }
+
+  .rvi-tl-schedule__legend {
+    font-size: 11px;
+  }
+
+  .rvi-tl-schedule__time-label {
+    right: 4px;
+    font-size: 11px;
+  }
+
+  .rvi-tl-schedule__km-marker {
+    font-size: 10px;
+  }
+
+  .rvi-tl-schedule__event-favorite {
+    display: none;
+  }
+
+  .rvi-tl-schedule__event-metric {
+    min-width: 0;
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .rvi-tl-schedule__event-card {
+    min-height: 34px;
+  }
+
+  .rvi-tl-schedule__actions {
+    display: inline-flex;
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    opacity: 1;
+    pointer-events: auto;
+    padding: 0;
+  }
+
+  .rvi-tl-schedule__action--visibility,
+  .rvi-tl-schedule__action--remove {
+    display: none;
+  }
+}
+
 @container (max-width: 340px) {
   .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
   .rvi-tl-tabs__label { font-size: 11px; }

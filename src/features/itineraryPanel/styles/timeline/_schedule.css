@@ -158,6 +158,7 @@
 .rvi-tl-schedule__times {
   border-right: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(255, 255, 255, 0.03);
+  z-index: 3;
 }
 
 .rvi-tl-schedule__time {
@@ -199,6 +200,7 @@
 .rvi-tl-schedule__canvas {
   background: rgba(255, 255, 255, 0.04);
   overflow-x: clip;
+  z-index: 1;
 }
 
 .rvi-tl-schedule__grid {
