@@ -8,6 +8,7 @@
     "bench:analysis-chart": "node --experimental-strip-types ./scripts/benchmark-analysis-chart-cache.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "test:openmeteo:vps": "node ./scripts/test-openmeteo-vps.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },
