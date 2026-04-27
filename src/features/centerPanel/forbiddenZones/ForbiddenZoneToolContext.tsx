@@ -8,18 +8,16 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import MapboxDraw from '@mapbox/mapbox-gl-draw';
+import type { Feature, Polygon } from 'geojson';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import {
-  clearForbiddenZoneDraft,
-  setForbiddenZoneDraft,
-} from '@/features/itineraryPanel/lib/route-layer';
-
-const FORBIDDEN_CURSOR = 'crosshair';
-const POINT_EPSILON = 1e-6;
 
 type DraftPoint = { lat: number; lon: number };
+type DraftSnapshot = DraftPoint[];
+
+const DRAW_CONTROL_GROUP_SELECTOR = '.mapbox-gl-draw_polygon';
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -44,85 +42,167 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const store = useProjectStoreOptional();
   const [armed, setArmed] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [draftPoints, setDraftPoints] = useState<DraftPoint[]>([]);
-  const [draftFuture, setDraftFuture] = useState<DraftPoint[][]>([]);
-  const draftPointsRef = useRef(draftPoints);
+  const [draftHistory, setDraftHistory] = useState<DraftSnapshot[]>([]);
+  const [draftHistoryIndex, setDraftHistoryIndex] = useState(-1);
+  const drawRef = useRef<MapboxDraw | null>(null);
+  const drawControlElementRef = useRef<HTMLElement | null>(null);
+  const draftFeatureIdRef = useRef<string | null>(null);
+  const suppressDrawSyncRef = useRef(false);
+  const draftHistoryRef = useRef<DraftSnapshot[]>([]);
+  const draftHistoryIndexRef = useRef(-1);
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
   const canEdit = Boolean(store && activeItinerary);
-  const canUndoDraft = draftPoints.length > 0;
-  const canRedoDraft = draftFuture.length > 0;
+  const canUndoDraft = armed && draftHistoryIndex > 0;
+  const canRedoDraft = armed && draftHistoryIndex >= 0 && draftHistoryIndex < draftHistory.length - 1;
 
-  const resetDraft = useCallback(() => {
-    setDraftPoints([]);
-    setDraftFuture([]);
-    if (map) clearForbiddenZoneDraft(map);
-  }, [map]);
+  const syncHistoryState = useCallback((history: DraftSnapshot[], nextIndex: number) => {
+    draftHistoryRef.current = history;
+    draftHistoryIndexRef.current = nextIndex;
+    setDraftHistory(history);
+    setDraftHistoryIndex(nextIndex);
+  }, []);
 
   const updateDraftStatus = useCallback((points: DraftPoint[]) => {
     if (points.length <= 0) {
-      setStatusMessage('Cliquez pour poser le premier point, clic droit pour fermer');
+      setStatusMessage('Mapbox Draw actif: utilisez l’outil polygone, double-cliquez pour fermer');
       return;
     }
 
-    setStatusMessage(
-      points.length >= 3
-        ? 'Cliquez pour ajouter des points, clic droit pour fermer et enregistrer'
-        : `Zone interdite: ${points.length}/3 points minimum`,
-    );
+    setStatusMessage('Polygone prêt: éditez sommets et segments, recliquez sur Interdire pour enregistrer');
   }, []);
+
+  const setDrawControlVisible = useCallback((visible: boolean) => {
+    if (drawControlElementRef.current) {
+      drawControlElementRef.current.style.display = visible ? '' : 'none';
+    }
+  }, []);
+
+  const clearDrawDraft = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    suppressDrawSyncRef.current = true;
+    try {
+      draw.deleteAll();
+      draftFeatureIdRef.current = null;
+    } finally {
+      suppressDrawSyncRef.current = false;
+    }
+  }, []);
+
+  const applyDraftSnapshot = useCallback((points: DraftSnapshot) => {
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    suppressDrawSyncRef.current = true;
+    try {
+      draw.deleteAll();
+      draftFeatureIdRef.current = null;
+
+      if (points.length >= 3) {
+        const nextFeatureId = coerceFeatureId(
+          draw.add(buildDraftFeature(points)),
+        );
+        draftFeatureIdRef.current = nextFeatureId;
+        if (nextFeatureId) {
+          draw.changeMode('direct_select', { featureId: nextFeatureId });
+        }
+      } else if (armed) {
+        draw.changeMode('draw_polygon');
+      }
+    } finally {
+      suppressDrawSyncRef.current = false;
+    }
+
+    updateDraftStatus(points);
+  }, [armed, updateDraftStatus]);
+
+  const pushDraftSnapshot = useCallback((points: DraftSnapshot) => {
+    const currentIndex = draftHistoryIndexRef.current;
+    const currentHistory = draftHistoryRef.current;
+    const currentSnapshot = currentIndex >= 0 ? currentHistory[currentIndex] : null;
+    if (currentSnapshot && draftSnapshotsEqual(currentSnapshot, points)) {
+      updateDraftStatus(points);
+      return;
+    }
+
+    const nextHistory = currentHistory.slice(0, currentIndex + 1);
+    nextHistory.push(cloneDraftSnapshot(points));
+    const nextIndex = nextHistory.length - 1;
+    syncHistoryState(nextHistory, nextIndex);
+    updateDraftStatus(points);
+  }, [syncHistoryState, updateDraftStatus]);
+
+  const resetDraftSession = useCallback((keepStatusMessage: boolean) => {
+    clearDrawDraft();
+    syncHistoryState([], -1);
+    if (!keepStatusMessage) setStatusMessage(null);
+  }, [clearDrawDraft, syncHistoryState]);
+
+  const startDraftSession = useCallback(() => {
+    const draw = drawRef.current;
+    if (!draw) return;
+    syncHistoryState([[]], 0);
+    clearDrawDraft();
+    updateDraftStatus([]);
+    suppressDrawSyncRef.current = true;
+    try {
+      draw.changeMode('draw_polygon');
+    } finally {
+      suppressDrawSyncRef.current = false;
+    }
+  }, [clearDrawDraft, syncHistoryState, updateDraftStatus]);
 
   const deactivate = useCallback(() => {
     setArmed(false);
     setStatusMessage(null);
-    resetDraft();
-  }, [resetDraft]);
+    resetDraftSession(true);
+  }, [resetDraftSession]);
 
   const toggle = useCallback(() => {
     if (!canEdit) return;
-    setArmed((current) => {
-      const next = !current;
-      if (!next) {
+
+    if (armed) {
+      const draw = drawRef.current;
+      const points = draw ? getDraftPointsFromDraw(draw, draftFeatureIdRef.current).points : [];
+
+      if (points.length >= 3 && store && activeItinerary) {
+        const created = store.addForbiddenZone(activeItinerary.id, points);
+        if (!created) {
+          setStatusMessage('Impossible d’enregistrer la zone interdite');
+          return;
+        }
+        setStatusMessage('Zone interdite enregistrée');
+      } else {
         setStatusMessage(null);
-        setDraftPoints([]);
-        setDraftFuture([]);
-        if (map) clearForbiddenZoneDraft(map);
-        return next;
       }
-      setDraftPoints([]);
-      setDraftFuture([]);
-      if (map) clearForbiddenZoneDraft(map);
-      updateDraftStatus([]);
-      return next;
-    });
-  }, [canEdit, map, updateDraftStatus]);
+
+      setArmed(false);
+      resetDraftSession(true);
+      return;
+    }
+
+    setArmed(true);
+    startDraftSession();
+  }, [activeItinerary, armed, canEdit, resetDraftSession, startDraftSession, store]);
 
   const undoDraft = useCallback(() => {
-    setDraftPoints((current) => {
-      if (current.length === 0) return current;
-      const next = current.slice(0, -1);
-      draftPointsRef.current = next;
-      setDraftFuture((future) => [current, ...future]);
-      updateDraftStatus(next);
-      return next;
-    });
-  }, [updateDraftStatus]);
+    const nextIndex = draftHistoryIndexRef.current - 1;
+    if (nextIndex < 0) return;
+    const nextSnapshot = draftHistoryRef.current[nextIndex];
+    if (!nextSnapshot) return;
+    syncHistoryState(draftHistoryRef.current, nextIndex);
+    applyDraftSnapshot(nextSnapshot);
+  }, [applyDraftSnapshot, syncHistoryState]);
 
   const redoDraft = useCallback(() => {
-    setDraftFuture((future) => {
-      const [nextPoints, ...rest] = future;
-      if (!nextPoints) return future;
-      draftPointsRef.current = nextPoints;
-      setDraftPoints(nextPoints);
-      updateDraftStatus(nextPoints);
-      return rest;
-    });
-  }, [updateDraftStatus]);
-
-  useEffect(() => {
-    draftPointsRef.current = draftPoints;
-  }, [draftPoints]);
+    const nextIndex = draftHistoryIndexRef.current + 1;
+    const nextSnapshot = draftHistoryRef.current[nextIndex];
+    if (!nextSnapshot) return;
+    syncHistoryState(draftHistoryRef.current, nextIndex);
+    applyDraftSnapshot(nextSnapshot);
+  }, [applyDraftSnapshot, syncHistoryState]);
 
   useEffect(() => {
     if (canEdit) return;
@@ -130,96 +210,108 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   }, [canEdit, deactivate]);
 
   useEffect(() => {
-    if (!map || !armed) return;
-    if (draftPoints.length > 0) setForbiddenZoneDraft(map, draftPoints);
-    else clearForbiddenZoneDraft(map);
-
-    const restoreDraft = () => {
-      if (draftPoints.length > 0) setForbiddenZoneDraft(map, draftPoints);
-      else clearForbiddenZoneDraft(map);
-    };
-
-    map.on('style.load', restoreDraft);
-    return () => {
-      map.off('style.load', restoreDraft);
-    };
-  }, [armed, draftPoints, map]);
+    setDrawControlVisible(armed);
+  }, [armed, setDrawControlVisible]);
 
   useEffect(() => {
-    if (!armed || !map || !store || !activeItinerary) return;
+    if (!map || drawRef.current) return;
 
-    const canvas = map.getCanvas();
-    const wasDoubleClickZoomEnabled = map.doubleClickZoom.isEnabled();
-    const wasDragPanEnabled = map.dragPan.isEnabled();
-    const wasDragRotateEnabled = map.dragRotate.isEnabled();
+    const draw = new MapboxDraw({
+      displayControlsDefault: false,
+      controls: {
+        polygon: true,
+        trash: true,
+      },
+      defaultMode: 'simple_select',
+    });
 
-    if (wasDoubleClickZoomEnabled) map.doubleClickZoom.disable();
-    if (wasDragPanEnabled) map.dragPan.disable();
-    if (wasDragRotateEnabled) map.dragRotate.disable();
+    drawRef.current = draw;
+    map.addControl(draw, 'top-right');
 
-    canvas.style.cursor = FORBIDDEN_CURSOR;
+    const frame = window.requestAnimationFrame(() => {
+      const polygonButton = map
+        .getContainer()
+        .querySelector(DRAW_CONTROL_GROUP_SELECTOR);
+      const controlGroup = polygonButton?.closest('.mapboxgl-ctrl-group') as HTMLElement | null;
+      drawControlElementRef.current = controlGroup;
+      setDrawControlVisible(armed);
+    });
 
-    const finalizeDraft = (points: DraftPoint[]): boolean => {
-      if (points.length < 3) {
-        deactivate();
-        return false;
+    return () => {
+      window.cancelAnimationFrame(frame);
+      drawControlElementRef.current = null;
+      drawRef.current = null;
+      map.removeControl(draw);
+    };
+  }, [armed, map, setDrawControlVisible]);
+
+  useEffect(() => {
+    if (!map) return;
+    const draw = drawRef.current;
+    if (!draw) return;
+
+    const syncDraftFromDraw = (enterDirectSelect: boolean) => {
+      if (suppressDrawSyncRef.current) return;
+
+      const { featureId, points, redundantFeatureIds } = getDraftPointsFromDraw(
+        draw,
+        draftFeatureIdRef.current,
+      );
+
+      if (redundantFeatureIds.length > 0) {
+        suppressDrawSyncRef.current = true;
+        try {
+          draw.delete(redundantFeatureIds);
+        } finally {
+          suppressDrawSyncRef.current = false;
+        }
       }
 
-      const created = store.addForbiddenZone(activeItinerary.id, points);
-      if (!created) return false;
-      setArmed(false);
-      setDraftPoints([]);
-      setDraftFuture([]);
-      draftPointsRef.current = [];
-      setStatusMessage('Zone interdite enregistrée');
-      clearForbiddenZoneDraft(map);
-      canvas.style.cursor = '';
-      return true;
-    };
+      draftFeatureIdRef.current = featureId;
+      pushDraftSnapshot(points);
 
-    const commitDraftPoints = (nextPoints: DraftPoint[]) => {
-      draftPointsRef.current = nextPoints;
-      setDraftPoints(nextPoints);
-      setDraftFuture([]);
-      updateDraftStatus(nextPoints);
-    };
+      if (!armed) return;
 
-    const handleMapClick = (event: MapMouseEvent) => {
-      const nextPoints = appendDraftPoint(draftPointsRef.current, {
-        lat: event.lngLat.lat,
-        lon: event.lngLat.lng,
-      });
-      if (nextPoints === draftPointsRef.current) return;
-
-      commitDraftPoints(nextPoints);
-    };
-
-    const handleMapContextMenu = (event: MapMouseEvent) => {
-      event.preventDefault();
-      event.originalEvent.preventDefault();
-      event.originalEvent.stopPropagation();
-
-      const currentPoints = draftPointsRef.current;
-      if (currentPoints.length >= 3) {
-        finalizeDraft(currentPoints);
+      if (featureId && enterDirectSelect) {
+        suppressDrawSyncRef.current = true;
+        try {
+          draw.changeMode('direct_select', { featureId });
+        } finally {
+          suppressDrawSyncRef.current = false;
+        }
         return;
       }
 
-      deactivate();
+      if (!featureId && draw.getMode() !== 'draw_polygon') {
+        suppressDrawSyncRef.current = true;
+        try {
+          draw.changeMode('draw_polygon');
+        } finally {
+          suppressDrawSyncRef.current = false;
+        }
+      }
     };
 
-    map.on('click', handleMapClick);
-    map.on('contextmenu', handleMapContextMenu);
+    const handleDrawCreate = () => syncDraftFromDraw(true);
+    const handleDrawUpdate = () => syncDraftFromDraw(false);
+    const handleDrawDelete = () => syncDraftFromDraw(false);
+
+    map.on('draw.create', handleDrawCreate);
+    map.on('draw.update', handleDrawUpdate);
+    map.on('draw.delete', handleDrawDelete);
 
     return () => {
-      map.off('click', handleMapClick);
-      map.off('contextmenu', handleMapContextMenu);
-      if (wasDoubleClickZoomEnabled) map.doubleClickZoom.enable();
-      if (wasDragPanEnabled) map.dragPan.enable();
-      if (wasDragRotateEnabled) map.dragRotate.enable();
-      canvas.style.cursor = '';
+      map.off('draw.create', handleDrawCreate);
+      map.off('draw.update', handleDrawUpdate);
+      map.off('draw.delete', handleDrawDelete);
     };
-  }, [activeItinerary, armed, map, store, updateDraftStatus]);
+  }, [armed, map, pushDraftSnapshot]);
+
+  useEffect(() => {
+    if (!armed) return;
+    if (draftHistoryIndexRef.current >= 0) return;
+    startDraftSession();
+  }, [armed, startDraftSession]);
 
   const value = useMemo<ForbiddenZoneToolContextValue>(
     () => ({
@@ -243,21 +335,83 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useForbiddenZoneToolOptional(): ForbiddenZoneToolContextValue | null {
   return useContext(ForbiddenZoneToolContext);
 }
 
-function appendDraftPoint(
-  points: DraftPoint[],
-  point: DraftPoint,
-): DraftPoint[] {
-  const last = points[points.length - 1];
-  if (
-    last &&
-    Math.abs(last.lat - point.lat) <= POINT_EPSILON &&
-    Math.abs(last.lon - point.lon) <= POINT_EPSILON
-  ) {
-    return points;
+function buildDraftFeature(points: DraftSnapshot): Feature<Polygon> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'Polygon',
+      coordinates: [closeRing(points.map((point) => [point.lon, point.lat]))],
+    },
+  };
+}
+
+function getDraftPointsFromDraw(
+  draw: MapboxDraw,
+  preferredFeatureId: string | null,
+): { featureId: string | null; points: DraftSnapshot; redundantFeatureIds: string[] } {
+  const polygonFeatures = draw.getAll().features.filter(isPolygonFeature);
+  if (polygonFeatures.length === 0) {
+    return { featureId: null, points: [], redundantFeatureIds: [] };
   }
-  return [...points, point];
+
+  const activeFeature =
+    (preferredFeatureId
+      ? polygonFeatures.find((feature) => coerceFeatureId(feature.id) === preferredFeatureId)
+      : null) ?? polygonFeatures[polygonFeatures.length - 1];
+
+  if (!activeFeature) {
+    return { featureId: null, points: [], redundantFeatureIds: [] };
+  }
+
+  const activeId = coerceFeatureId(activeFeature.id);
+  return {
+    featureId: activeId,
+    points: polygonFeatureToDraftSnapshot(activeFeature),
+    redundantFeatureIds: polygonFeatures
+      .map((feature) => coerceFeatureId(feature.id))
+      .filter((featureId): featureId is string => Boolean(featureId) && featureId !== activeId),
+  };
+}
+
+function polygonFeatureToDraftSnapshot(feature: Feature<Polygon>): DraftSnapshot {
+  const ring = feature.geometry.coordinates[0] ?? [];
+  if (ring.length <= 1) return [];
+
+  const points = ring.slice(0, -1);
+  return points.map(([lon, lat]) => ({ lon, lat }));
+}
+
+function isPolygonFeature(feature: GeoJSON.Feature): feature is Feature<Polygon> {
+  return feature.geometry.type === 'Polygon';
+}
+
+function closeRing(coordinates: number[][]): number[][] {
+  const first = coordinates[0];
+  if (!first) return coordinates;
+  return [...coordinates, first];
+}
+
+function draftSnapshotsEqual(left: DraftSnapshot, right: DraftSnapshot): boolean {
+  if (left.length !== right.length) return false;
+  return left.every(
+    (point, index) => point.lat === right[index]?.lat && point.lon === right[index]?.lon,
+  );
+}
+
+function cloneDraftSnapshot(points: DraftSnapshot): DraftSnapshot {
+  return points.map((point) => ({ ...point }));
+}
+
+function coerceFeatureId(value: unknown): string | null {
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return first == null ? null : String(first);
+  }
+  return value == null ? null : String(value);
 }

@@ -1,4 +1,5 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
+import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { useRef, useEffect } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
