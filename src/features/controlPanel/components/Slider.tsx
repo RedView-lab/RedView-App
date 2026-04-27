@@ -9,9 +9,21 @@ interface SliderProps {
   min?: number;
   max?: number;
   step?: number;
+  handleSize?: number;
+  trackHeight?: number;
 }
 
-export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 100, step = 1 }: SliderProps) {
+export function Slider({
+  value,
+  onChange,
+  onCommit,
+  width = 100,
+  min = 0,
+  max = 100,
+  step = 1,
+  handleSize = 16,
+  trackHeight = 8,
+}: SliderProps) {
   const [draftValue, setDraftValue] = useState(value);
   const [interacting, setInteracting] = useState(false);
 
@@ -22,11 +34,11 @@ export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 
   }, [interacting, value]);
 
   const clampedValue = Math.max(min, Math.min(max, draftValue));
-  const pct = Math.max(0, Math.min(100, ((clampedValue - min) / (max - min)) * 100));
-  // Handle is 16px wide. Compensate so it stays fully inside the container at
-  // both extremes: at pct=0 → left:0, at pct=100 → left:calc(100% - 16px).
-  // Fill ends at the handle center so visual feedback stays aligned.
-  const handleShift = (pct / 100) * 16;
+  const range = Math.max(1, max - min);
+  const pct = Math.max(0, Math.min(100, ((clampedValue - min) / range) * 100));
+  const handleShift = (pct / 100) * handleSize;
+  const trackTop = (24 - trackHeight) / 2;
+  const handleTop = (24 - handleSize) / 2;
 
   const commit = (nextValue: number) => {
     setInteracting(false);
@@ -35,14 +47,14 @@ export function Slider({ value, onChange, onCommit, width = 100, min = 0, max = 
 
   return (
     <div className="rvc-slider" style={{ width }}>
-      <div className="rvc-slider__track" />
+      <div className="rvc-slider__track" style={{ top: trackTop, height: trackHeight }} />
       <div
         className="rvc-slider__fill"
-        style={{ width: `calc(${pct}% - ${handleShift - 8}px)` }}
+        style={{ top: trackTop, height: trackHeight, width: `calc(${pct}% - ${handleShift - handleSize / 2}px)` }}
       />
       <div
         className="rvc-slider__handle"
-        style={{ left: `calc(${pct}% - ${handleShift}px)` }}
+        style={{ left: `calc(${pct}% - ${handleShift}px)`, top: handleTop, width: handleSize, height: handleSize }}
       />
       <input
         className="rvc-slider__input"
