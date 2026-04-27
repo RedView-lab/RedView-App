@@ -322,6 +322,7 @@ export function TimelineTimelineView({
 }: TimelineTimelineViewProps) {
   const normalizedHourZoom = Math.min(1.5, Math.max(0.75, hourZoom));
   const viewportRef = useRef<HTMLDivElement | null>(null);
+  const lastAutoScrollKeyRef = useRef<string | null>(null);
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
   const timedItems = useMemo(
     () => buildTimedItems(items, prediction, reference),
@@ -587,9 +588,22 @@ export function TimelineTimelineView({
     return (minuteOfDay - startMinutes) * pixelsPerMinute;
   }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
 
+  const autoScrollKey = useMemo(
+    () =>
+      [
+        selectedDayKey,
+        Math.round(hourRowHeightPx),
+        Math.round(firstVisibleTopPx ?? -1),
+        Math.round(canvasHeight),
+      ].join(':'),
+    [canvasHeight, firstVisibleTopPx, hourRowHeightPx, selectedDayKey],
+  );
+
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    if (lastAutoScrollKeyRef.current === autoScrollKey) return;
+    lastAutoScrollKeyRef.current = autoScrollKey;
 
     const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx;
     if (preferredTopPx === null) {
@@ -605,7 +619,7 @@ export function TimelineTimelineView({
       ),
     );
     viewport.scrollTop = targetScrollTop;
-  }, [currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx, selectedDayKey]);
+  }, [autoScrollKey, currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx]);
 
   const selectedDayHasEvents = events.length > 0 || standalonePauses.length > 0;
 

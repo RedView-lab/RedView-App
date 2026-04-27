@@ -153,7 +153,11 @@
   }
 
   .rvi-tl-schedule__legend {
-    display: none;
+    grid-template-columns: 44px minmax(0, 1fr) 56px 50px;
+    gap: 3px;
+    padding-left: 10px;
+    padding-right: 8px;
+    font-size: 11px;
   }
 
   .rvi-tl-schedule__viewport {

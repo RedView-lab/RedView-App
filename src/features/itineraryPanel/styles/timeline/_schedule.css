@@ -80,10 +80,6 @@
   color: var(--rvi-text-faint);
 }
 
-.rvi-timeline--timeline .rvi-tl-schedule__legend {
-  display: none;
-}
-
 .rvi-tl-schedule__legend-spacer { display: block; }
 .rvi-tl-schedule__legend-name { min-width: 0; }
 .rvi-tl-schedule__legend-metric,
@@ -97,10 +93,12 @@
   display: grid;
   grid-template-columns: 56px minmax(0, 1fr);
   gap: 0;
+  flex: 1 1 auto;
   min-height: 0;
   max-height: min(72vh, 900px);
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: var(--rvi-radius);
   background: rgba(255, 255, 255, 0.02);
   scrollbar-width: thin;
