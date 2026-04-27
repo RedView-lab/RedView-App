@@ -200,8 +200,6 @@ export function ControlPanel({
 
       <WindSection
         enabled={state.wind.enabled}
-        loading={state.wind.loading}
-        error={state.wind.error}
         open={sectionsOpen?.wind}
         onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
         onEnabledChange={onWindEnabledChange}

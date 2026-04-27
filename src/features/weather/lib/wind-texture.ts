@@ -3,8 +3,10 @@ import type { WindData } from './wind-gl';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
-/** Resolution of the wind texture (width × height pixels) */
-const TEX_SIZE = 256;
+/** Base and high-detail wind texture resolutions (width × height pixels) */
+const BASE_TEX_SIZE = 256;
+const HIGH_DETAIL_TEX_SIZE = 384;
+const HIGH_DETAIL_SAMPLE_COUNT = 160;
 
 /** IDW (Inverse Distance Weighting) power parameter */
 const IDW_POWER = 2;
@@ -12,10 +14,14 @@ const IDW_MIN_DIST = 0.001; // degrees — avoids division by zero
 
 // ── Wind texture generation ───────────────────────────────────────────
 
+function textureSizeForPointCount(pointCount: number): number {
+  return pointCount >= HIGH_DETAIL_SAMPLE_COUNT ? HIGH_DETAIL_TEX_SIZE : BASE_TEX_SIZE;
+}
+
 /**
  * Build a wind field grid from sparse API points using IDW interpolation.
  *
- * The result is a TEX_SIZE × TEX_SIZE Float32Array with 3 floats per texel:
+ * The result is a square Float32Array texture with 3 floats per texel:
  *   [u, v, speed] stored directly as physical m/s values.
  *
  * This avoids the previous Uint8 encode/decode cycle which caused
@@ -25,14 +31,15 @@ export function buildWindTexture(
   sparsePoints: WindPoint[],
   bounds: { north: number; south: number; east: number; west: number },
 ): WindData {
+  const texSize = textureSizeForPointCount(sparsePoints.length);
   const latRange = bounds.north - bounds.south;
   const lngRange = bounds.east - bounds.west;
 
   if (sparsePoints.length === 0 || latRange <= 0 || lngRange <= 0) {
     return {
-      image: new Float32Array(TEX_SIZE * TEX_SIZE * 3),
-      width: TEX_SIZE,
-      height: TEX_SIZE,
+      image: new Float32Array(texSize * texSize * 3),
+      width: texSize,
+      height: texSize,
       uMin: 0,
       uMax: 0,
       vMin: 0,
@@ -42,7 +49,7 @@ export function buildWindTexture(
     };
   }
 
-  const image = new Float32Array(TEX_SIZE * TEX_SIZE * 3);
+  const image = new Float32Array(texSize * texSize * 3);
   let uMin = Infinity,
     uMax = -Infinity,
     vMin = Infinity,
@@ -50,14 +57,14 @@ export function buildWindTexture(
     speedMin = Infinity,
     speedMax = -Infinity;
 
-  for (let y = 0; y < TEX_SIZE; y++) {
+  for (let y = 0; y < texSize; y++) {
     // Map texel y to latitude (top = north, bottom = south)
-    const lat = bounds.north - (y / (TEX_SIZE - 1)) * latRange;
+    const lat = bounds.north - (y / (texSize - 1)) * latRange;
     const cosLat = Math.cos((lat * Math.PI) / 180);
 
-    for (let x = 0; x < TEX_SIZE; x++) {
+    for (let x = 0; x < texSize; x++) {
       // Map texel x to longitude (left = west, right = east)
-      const lng = bounds.west + (x / (TEX_SIZE - 1)) * lngRange;
+      const lng = bounds.west + (x / (texSize - 1)) * lngRange;
 
       // IDW interpolation
       let wSum = 0;
@@ -95,7 +102,7 @@ export function buildWindTexture(
       const v = wSum > 0 ? vSum / wSum : 0;
       const speed = wSum > 0 ? speedSum / wSum : 0;
 
-      const idx = (y * TEX_SIZE + x) * 3;
+      const idx = (y * texSize + x) * 3;
       image[idx] = u;
       image[idx + 1] = v;
       image[idx + 2] = speed;
@@ -114,5 +121,5 @@ export function buildWindTexture(
   if (vMin === vMax) { vMin -= 0.1; vMax += 0.1; }
   if (speedMin === speedMax) { speedMin = Math.max(0, speedMin - 0.1); speedMax += 0.1; }
 
-  return { image, width: TEX_SIZE, height: TEX_SIZE, uMin, uMax, vMin, vMax, speedMin, speedMax };
+  return { image, width: texSize, height: texSize, uMin, uMax, vMin, vMax, speedMin, speedMax };
 }

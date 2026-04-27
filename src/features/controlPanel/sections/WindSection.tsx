@@ -13,8 +13,6 @@ import {
 
 interface Props {
   enabled: boolean;
-  loading: boolean;
-  error: string | null;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   onEnabledChange?: (v: boolean) => void;
@@ -283,8 +281,6 @@ function WindBandRow({
 
 export function WindSection({
   enabled,
-  loading,
-  error,
   open,
   onOpenChange,
   onEnabledChange,
@@ -312,11 +308,6 @@ export function WindSection({
   const maxSelectableMinutes = selectedDate === endDateKey ? endMinutes : 1439;
   const timeLabel = formatTimeValue(selectedMinutes);
   const [timeHours, timeMinutes] = timeLabel.split(':');
-  const statusText = error
-    ? error
-    : loading
-    ? 'Chargement du champ de vent'
-    : null;
 
   const updateDateFromOffset = (offset: number) => {
     const nextOffset = clamp(offset, 0, maxDateOffset);
@@ -430,14 +421,6 @@ export function WindSection({
       onOpenChange={onOpenChange}
     >
       <div className="rvc-wind" aria-hidden={!enabled} data-disabled={!enabled}>
-        {enabled && statusText ? (
-          <div className={`rvc-wind__status${error ? ' is-error' : ''}`}>
-            <div className="rvc-wind__status-head">
-              <span className="rvc-wind__status-text">{statusText}</span>
-            </div>
-          </div>
-        ) : null}
-
         <div className="rvc-wind__slider-row">
           <span className="rvc-wind__bound">{formatDateShort(startDateKey)}</span>
           <Slider

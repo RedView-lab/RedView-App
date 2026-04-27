@@ -18,10 +18,11 @@ const SPACING_TABLE: [number, number][] = [
   [14, 0.01],
 ];
 
-const MIN_SPACING = 0.005;
-const MAX_POINTS = 50; // single API batch — avoids 429 rate limits
-const RESERVOIR_SHARE = 0.5;
-const VIEWPORT_SHARE = 0.3;
+const MIN_SPACING = 0.0025;
+const MIN_POINTS = 96;
+const MAX_POINTS = 320;
+const RESERVOIR_SHARE = 0.3;
+const VIEWPORT_SHARE = 0.45;
 
 /**
  * Get grid spacing (degrees) for a given zoom level.
@@ -85,6 +86,11 @@ function spacingForBudget(
   return currentSpacing;
 }
 
+function maxPointsForZoom(zoom: number): number {
+  const boostedBudget = MIN_POINTS + Math.max(0, Math.round((zoom - 4) * 32));
+  return Math.max(MIN_POINTS, Math.min(MAX_POINTS, boostedBudget));
+}
+
 function pushGridPoints(
   target: { lat: number; lng: number }[],
   seen: Set<string>,
@@ -142,9 +148,10 @@ export function computeWindGrid(
   const points: { lat: number; lng: number }[] = [];
   const seen = new Set<string>();
   const spacing = spacingForZoom(zoom);
-  const viewportBudget = Math.max(8, Math.round(MAX_POINTS * VIEWPORT_SHARE));
-  const reservoirBudget = Math.max(10, Math.round(MAX_POINTS * RESERVOIR_SHARE));
-  const focusBudget = Math.max(0, MAX_POINTS - reservoirBudget - viewportBudget);
+  const maxPoints = maxPointsForZoom(zoom);
+  const viewportBudget = Math.max(24, Math.round(maxPoints * VIEWPORT_SHARE));
+  const reservoirBudget = Math.max(24, Math.round(maxPoints * RESERVOIR_SHARE));
+  const focusBudget = Math.max(0, maxPoints - reservoirBudget - viewportBudget);
   const focusBounds = centerFocusBounds(viewportBounds);
 
   pushGridPoints(
@@ -152,7 +159,7 @@ export function computeWindGrid(
     seen,
     bounds,
     spacingForBudget(bounds, spacing, reservoirBudget),
-    MAX_POINTS,
+    maxPoints,
   );
 
   pushGridPoints(
@@ -160,7 +167,7 @@ export function computeWindGrid(
     seen,
     viewportBounds,
     spacingForBudget(viewportBounds, Math.max(MIN_SPACING, spacing * 0.65), points.length + viewportBudget),
-    MAX_POINTS,
+    maxPoints,
   );
 
   pushGridPoints(
@@ -168,7 +175,7 @@ export function computeWindGrid(
     seen,
     focusBounds,
     spacingForBudget(focusBounds, Math.max(MIN_SPACING, spacing * 0.4), points.length + focusBudget),
-    MAX_POINTS,
+    maxPoints,
   );
 
   return points;
