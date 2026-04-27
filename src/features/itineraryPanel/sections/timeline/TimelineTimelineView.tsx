@@ -758,7 +758,7 @@ export function TimelineTimelineView({
                         ))}
                       </span>
                     ) : null}
-                    <span className="rvi-tl-schedule__event-metric">
+                    <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--from-start">
                       {formatDistanceLabel(event.distanceKm)}
                     </span>
                     <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">

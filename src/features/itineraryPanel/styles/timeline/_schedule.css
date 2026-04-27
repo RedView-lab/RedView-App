@@ -281,6 +281,7 @@
   display: flex;
   align-items: stretch;
   align-self: stretch;
+  width: 100%;
   min-width: 0;
   min-height: 32px;
   height: var(--rvi-tl-card-height, auto);
@@ -325,6 +326,7 @@
 }
 
 .rvi-tl-schedule__event-icon {
+  grid-column: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -333,6 +335,7 @@
 }
 
 .rvi-tl-schedule__event-name {
+  grid-column: 2;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -343,6 +346,7 @@
 }
 
 .rvi-tl-schedule__event-pauses {
+  grid-column: 3;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -385,6 +389,10 @@
   flex: 0 0 auto;
 }
 
+.rvi-tl-schedule__event-metric--from-start {
+  grid-column: 4;
+}
+
 .rvi-tl-schedule__event-metric {
   text-align: right;
   font-size: 13px;
@@ -398,10 +406,12 @@
 }
 
 .rvi-tl-schedule__event-metric--next {
+  grid-column: 5;
   width: auto;
 }
 
 .rvi-tl-schedule__event-favorite {
+  grid-column: 6;
   display: inline-flex;
   align-items: center;
   justify-content: center;
