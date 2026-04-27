@@ -58,15 +58,6 @@ export function MapToolsPanel({ map, isMapLoaded }: MapToolsPanelProps) {
                 <div style={errorStyle}>{wind.error}</div>
               )}
 
-              {wind.pointCount > 0 && (
-                <div style={metaStyle}>
-                  {wind.pointCount} pts
-                  {wind.lastUpdate && (
-                    <span> · {new Date(wind.lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  )}
-                </div>
-              )}
-
               {/* Legend */}
               <div style={legendContainerStyle}>
                 <div style={legendLabelStyle}>m/s</div>
@@ -170,12 +161,6 @@ const errorStyle: React.CSSProperties = {
   color: '#ee6655',
   fontSize: 11,
   marginBottom: 4,
-};
-
-const metaStyle: React.CSSProperties = {
-  color: 'rgba(255,255,255,0.4)',
-  fontSize: 10,
-  marginBottom: 6,
 };
 
 const legendContainerStyle: React.CSSProperties = {
