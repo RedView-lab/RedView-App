@@ -86,6 +86,7 @@ const ATTACHED_PAUSE_HEIGHT_PX = 24;
 const PAUSE_CHIP_MIN_HEIGHT_PX = 28;
 const TIMELINE_BLOCK_GAP_PX = 4;
 const TIMELINE_VIEWPORT_TOP_INSET_PX = 10;
+const TIMELINE_VIEWPORT_BOTTOM_INSET_PX = 10;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -521,14 +522,14 @@ export function TimelineTimelineView({
 
     const positionedTopById = new Map<string, number>();
     let nextAvailableTopPx = TIMELINE_VIEWPORT_TOP_INSET_PX;
-    let maxBottomPx = canvasBaseHeight + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    let maxContentBottomPx = canvasBaseHeight + TIMELINE_VIEWPORT_TOP_INSET_PX;
     let firstTopPx: number | null = null;
 
     blocks.forEach((block) => {
       const topPx = Math.max(block.scheduledTopPx, nextAvailableTopPx);
       positionedTopById.set(block.id, topPx);
       nextAvailableTopPx = topPx + block.heightPx + TIMELINE_BLOCK_GAP_PX;
-      maxBottomPx = Math.max(maxBottomPx, topPx + block.heightPx);
+      maxContentBottomPx = Math.max(maxContentBottomPx, topPx + block.heightPx);
       if (firstTopPx === null) firstTopPx = topPx;
     });
 
@@ -541,7 +542,7 @@ export function TimelineTimelineView({
         ...pause,
         topPx: positionedTopById.get(pause.id) ?? pause.scheduledTopPx,
       })),
-      canvasHeight: maxBottomPx,
+      canvasHeight: maxContentBottomPx + TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
       firstVisibleTopPx: firstTopPx,
     };
   }, [canvasBaseHeight, scheduledEvents, scheduledStandalonePauses]);
@@ -659,7 +660,7 @@ export function TimelineTimelineView({
       <div ref={viewportRef} className="rvi-tl-schedule__viewport">
         <div className="rvi-tl-schedule__times" aria-hidden>
           {hourMarks.map((hour, index) => {
-            const topPx = index * hourRowHeightPx;
+            const topPx = index * hourRowHeightPx + TIMELINE_VIEWPORT_TOP_INSET_PX;
             return (
               <div
                 key={hour}
