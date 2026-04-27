@@ -2,14 +2,15 @@
  * Sticky header of the Feuille-de-route / Timeline panel.
  *
  * Left:  view switcher (Feuille de route / Timeline) — segmented control.
- * Right: search, settings, split "add" button opening the kind picker.
+ * Right: settings, split "add" button, fullscreen toggle.
  */
 import type { MouseEventHandler } from 'react';
 import {
   IconChevronDown,
   IconClockFastForward,
+  IconExpand04,
   IconLayoutGrid,
-  IconMagnifyingGlass,
+  IconMinimize04,
   IconPlusCircleFilled,
   IconSettings04,
 } from '../../components/icons';
@@ -18,9 +19,10 @@ import type { TimelineView } from '../../types';
 interface TimelineHeaderProps {
   view: TimelineView;
   onChangeView?: (v: TimelineView) => void;
-  onSearch?: () => void;
   onOpenSettings?: () => void;
   settingsActive?: boolean;
+  fullscreenActive?: boolean;
+  onToggleFullscreen?: () => void;
   onAdd?: MouseEventHandler<HTMLButtonElement>;
   onOpenKindMenu?: MouseEventHandler<HTMLButtonElement>;
 }
@@ -28,9 +30,10 @@ interface TimelineHeaderProps {
 export function TimelineHeader({
   view,
   onChangeView,
-  onSearch,
   onOpenSettings,
   settingsActive,
+  fullscreenActive,
+  onToggleFullscreen,
   onAdd,
   onOpenKindMenu,
 }: TimelineHeaderProps) {
@@ -63,14 +66,6 @@ export function TimelineHeader({
 
       <button
         type="button"
-        className="rvi-tl-tool"
-        onClick={onSearch}
-        aria-label="Rechercher"
-      >
-        <IconMagnifyingGlass size={14} />
-      </button>
-      <button
-        type="button"
         className={`rvi-tl-tool${settingsActive ? ' is-active' : ''}`}
         onClick={onOpenSettings}
         aria-label="Paramètres de la feuille de route"
@@ -97,6 +92,16 @@ export function TimelineHeader({
           <IconChevronDown size={14} />
         </button>
       </span>
+
+      <button
+        type="button"
+        className={`rvi-tl-tool${fullscreenActive ? ' is-active' : ''}`}
+        onClick={onToggleFullscreen}
+        aria-label={fullscreenActive ? 'Quitter le plein écran' : 'Ouvrir en plein écran'}
+        aria-pressed={fullscreenActive}
+      >
+        {fullscreenActive ? <IconMinimize04 size={16} /> : <IconExpand04 size={16} />}
+      </button>
     </div>
   );
 }

@@ -40,10 +40,11 @@ interface TimelinePanelProps {
   prediction?: PredictionResult | null;
   view: TimelineView;
   railConfig?: Partial<TimelineRailConfig>;
+  isFullscreen?: boolean;
 
   onChangeView?: (v: TimelineView) => void;
-  onSearch?: () => void;
   onOpenSettings?: () => void;
+  onToggleFullscreen?: () => void;
   onAdd?: (kind: TimelineAddItemKind) => void;
 
   onToggleItem?: (id: string, visible: boolean) => void;
@@ -64,9 +65,10 @@ export function TimelinePanel({
   prediction,
   view,
   railConfig,
+  isFullscreen,
   onChangeView,
-  onSearch,
   onOpenSettings,
+  onToggleFullscreen,
   onAdd,
   onToggleItem,
   onFavoriteItem,
@@ -175,15 +177,16 @@ export function TimelinePanel({
 
   return (
     <section
-      className={`rvi-timeline rvi-timeline--${view}`}
+      className={`rvi-timeline rvi-timeline--${view}${isFullscreen ? ' rvi-timeline--fullscreen' : ''}`}
       aria-label="Feuille de route"
     >
       <TimelineHeader
         view={view}
         onChangeView={onChangeView}
-        onSearch={onSearch}
         onOpenSettings={handleOpenSettings}
         settingsActive={view === 'timeline' && timelineEditOpen}
+        fullscreenActive={isFullscreen}
+        onToggleFullscreen={onToggleFullscreen}
         onAdd={handleOpenKindMenu}
         onOpenKindMenu={handleOpenKindMenu}
       />

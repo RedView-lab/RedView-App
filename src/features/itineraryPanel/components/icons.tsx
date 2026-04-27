@@ -339,3 +339,53 @@ export const IconTent = ({ size = 10, ...p }: AssetGlyphProps) => (
 export const IconMountain = ({ size = 10, ...p }: AssetGlyphProps) => (
   <SvgV2Icon name="mountain.svg" size={size} {...p} />
 );
+
+export const IconExpand04 = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <span
+    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto' }}
+    {...p}
+  >
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      focusable="false"
+    >
+      <path
+        d="M9 3H3V9M15 3H21V9M21 15V21H15M9 21H3V15"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </span>
+);
+
+export const IconMinimize04 = ({ size = 16, ...p }: AssetGlyphProps) => (
+  <span
+    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto' }}
+    {...p}
+  >
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+      focusable="false"
+    >
+      <path
+        d="M9 9H3V3M15 9H21V3M21 15V21H15M9 15H3V21"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </span>
+);
