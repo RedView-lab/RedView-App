@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AssetIcon } from '@/components/AssetIcon';
+import { clampForecastSelection, getForecastDateForOffset, minutesToTime } from '../lib/forecastTime.ts';
 import type { MapToolsPanelProps } from '../types';
 import { useWind } from '../hooks/useWind';
 
@@ -20,8 +21,13 @@ const LEGEND: { label: string; color: string; min: number }[] = [
 export function MapToolsPanel({ map, isMapLoaded }: MapToolsPanelProps) {
   const [expanded, setExpanded] = useState(false);
   const [windEnabled, setWindEnabled] = useState(false);
+  const defaultSelection = clampForecastSelection({
+    date: getForecastDateForOffset(0),
+    time: minutesToTime(new Date().getHours() * 60),
+    forecastDay: 0,
+  });
 
-  const wind = useWind(isMapLoaded ? map : null, windEnabled);
+  const wind = useWind(isMapLoaded ? map : null, windEnabled, defaultSelection);
 
   return (
     <div style={wrapperStyle}>

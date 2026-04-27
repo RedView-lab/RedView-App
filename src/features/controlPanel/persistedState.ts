@@ -3,7 +3,7 @@ import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altit
 import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
 import type { SlopeState } from '@/features/slope/types';
-import type { SlopeScale, SlopeScaleSetting, SunlightState, WeatherState } from './types';
+import type { SlopeScale, SlopeScaleSetting, SunlightState, WeatherState, WindPanelState } from './types';
 
 export type ControlPanelSectionKey =
   | 'basemaps'
@@ -42,6 +42,11 @@ export type ControlPanelSunlightPersistedState = Omit<
   'enabled' | 'sunriseTime' | 'sunsetTime'
 >;
 
+export type ControlPanelWindPersistedState = Pick<
+  WindPanelState,
+  'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'
+>;
+
 export interface ControlPanelPersistedState {
   sectionsOpen: ControlPanelSectionsOpenState;
   toggles: {
@@ -59,6 +64,7 @@ export interface ControlPanelPersistedState {
   slopes?: ControlPanelSlopePersistedState;
   altitude?: ControlPanelAltitudePersistedState;
   weather?: WeatherState;
+  wind?: ControlPanelWindPersistedState;
   sunlight?: ControlPanelSunlightPersistedState;
 }
 

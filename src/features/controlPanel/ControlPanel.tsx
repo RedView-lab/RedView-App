@@ -61,6 +61,7 @@ export function ControlPanel({
   onWeatherPaletteBandBreakpointChange,
   onWeatherAddAlert,
   onWindEnabledChange,
+  onWindDateChange,
   onAltitudeEnabledChange,
   onAltitudeColorizationChange,
   onAltitudeScaleSettingChange,
@@ -199,10 +200,11 @@ export function ControlPanel({
       />
 
       <WindSection
-        enabled={state.wind.enabled}
+        state={state.wind}
         open={sectionsOpen?.wind}
         onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
         onEnabledChange={onWindEnabledChange}
+        onDateChange={onWindDateChange}
       />
       <SunlightSection
         state={state.sunlight}

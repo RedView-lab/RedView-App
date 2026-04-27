@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { FORECAST_MAX_DAY_OFFSET, getForecastDateForOffset, getForecastMaxMinutesForDate, getForecastMinMinutesForDate, getForecastOffsetForDate, getForecastBaseDate, minutesToTime, timeToMinutes } from '@/features/weather/lib/forecastTime';
+import type { WindPanelState } from '../types';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
 import { Slider } from '../components/Slider';
@@ -6,10 +8,11 @@ import { Toggle } from '../components/Toggle';
 import { IconCalendar, IconClock } from '../icons';
 
 interface Props {
-  enabled: boolean;
+  state: WindPanelState;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   onEnabledChange?: (v: boolean) => void;
+  onDateChange?: (changes: Partial<Pick<WindPanelState, 'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'>>) => void;
 }
 
 interface WindBand {
@@ -50,12 +53,6 @@ function formatDateShort(value: string): string {
   return `${pad2(day)}.${pad2(month)}`;
 }
 
-function formatTimeValue(totalMinutes: number): string {
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${pad2(hours)}:${pad2(minutes)}`;
-}
-
 function minutesFromTimeString(value: string): number {
   const [hours, minutes] = value.split(':').map(Number);
   return (hours || 0) * 60 + (minutes || 0);
@@ -63,29 +60,6 @@ function minutesFromTimeString(value: string): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function startOfDay(date: Date): Date {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function diffDays(start: Date, end: Date): number {
-  return Math.round((end.getTime() - start.getTime()) / 86400000);
-}
-
-function clampMinutesForDate(
-  dateKey: string,
-  minutes: number,
-  minDateKey: string,
-  maxDateKey: string,
-  minMinutes: number,
-  maxMinutes: number,
-): number {
-  const lowerBound = dateKey === minDateKey ? minMinutes : 0;
-  const upperBound = dateKey === maxDateKey ? maxMinutes : 1439;
-  return clamp(minutes, lowerBound, upperBound);
 }
 
 function createWindBands(): WindBand[] {
@@ -151,107 +125,53 @@ function WindToggleRow({
 }
 
 export function WindSection({
-  enabled,
+  state,
   open,
   onOpenChange,
   onEnabledChange,
+  onDateChange,
 }: Props) {
   const now = new Date();
-  const startDate = startOfDay(now);
-  const endDateTime = new Date(now.getTime() + 72 * 60 * 60 * 1000);
-  const endDate = startOfDay(endDateTime);
-  const startDateKey = formatDateKey(startDate);
-  const endDateKey = formatDateKey(endDate);
-  const maxDateOffset = diffDays(startDate, endDate);
-  const nowMinutes = now.getHours() * 60 + now.getMinutes();
-  const endMinutes = endDateTime.getHours() * 60 + endDateTime.getMinutes();
+  const startDateKey = formatDateKey(getForecastBaseDate(now));
+  const endDateKey = getForecastDateForOffset(FORECAST_MAX_DAY_OFFSET, now);
+  const maxDateOffset = FORECAST_MAX_DAY_OFFSET;
 
-  const [dateOffset, setDateOffset] = useState(0);
-  const [selectedDate, setSelectedDate] = useState(startDateKey);
-  const [selectedMinutes, setSelectedMinutes] = useState(nowMinutes);
-  const [particlesEnabled, setParticlesEnabled] = useState(true);
-  const [terrainOverlayEnabled, setTerrainOverlayEnabled] = useState(true);
   const [bands, setBands] = useState<WindBand[]>(() => createWindBands());
 
+  const enabled = state.enabled;
+  const particlesEnabled = state.particlesEnabled;
+  const terrainOverlayEnabled = state.terrainOverlayEnabled;
+  const dateOffset = getForecastOffsetForDate(state.date, now);
+  const selectedDate = state.date;
+  const selectedMinutes = timeToMinutes(state.time);
   const isToday = selectedDate === startDateKey;
   const dateLabel = isToday ? 'Aujourd’hui' : formatDateShort(selectedDate);
-  const minSelectableMinutes = selectedDate === startDateKey ? nowMinutes : 0;
-  const maxSelectableMinutes = selectedDate === endDateKey ? endMinutes : 1439;
-  const timeLabel = formatTimeValue(selectedMinutes);
+  const minSelectableMinutes = getForecastMinMinutesForDate(selectedDate, now);
+  const maxSelectableMinutes = getForecastMaxMinutesForDate(selectedDate);
+  const timeLabel = minutesToTime(selectedMinutes);
   const [timeHours, timeMinutes] = timeLabel.split(':');
 
   const updateDateFromOffset = (offset: number) => {
     const nextOffset = clamp(offset, 0, maxDateOffset);
-    const nextDate = new Date(startDate);
-    nextDate.setDate(startDate.getDate() + nextOffset);
-    const nextDateKey = formatDateKey(nextDate);
-    setDateOffset(nextOffset);
-    setSelectedDate(nextDateKey);
-    setSelectedMinutes((current) => clampMinutesForDate(
-      nextDateKey,
-      current,
-      startDateKey,
-      endDateKey,
-      nowMinutes,
-      endMinutes,
-    ));
+    onDateChange?.({
+      date: getForecastDateForOffset(nextOffset, now),
+      forecastDay: nextOffset,
+    });
   };
 
   const updateDateFromInput = (value: string) => {
-    const parsed = new Date(`${value}T00:00:00`);
-    if (Number.isNaN(parsed.getTime())) return;
-    const startAtMidnight = new Date(startDate);
-    startAtMidnight.setHours(0, 0, 0, 0);
-    const diffMs = parsed.getTime() - startAtMidnight.getTime();
-    const offset = Math.round(diffMs / 86400000);
-    const clampedOffset = clamp(offset, 0, maxDateOffset);
-    const nextDate = new Date(startDate);
-    nextDate.setDate(startDate.getDate() + clampedOffset);
-    const nextDateKey = formatDateKey(nextDate);
-    setSelectedDate(nextDateKey);
-    setDateOffset(clampedOffset);
-    setSelectedMinutes((current) => clampMinutesForDate(
-      nextDateKey,
-      current,
-      startDateKey,
-      endDateKey,
-      nowMinutes,
-      endMinutes,
-    ));
+    if (!value) return;
+    onDateChange?.({
+      date: value,
+      forecastDay: getForecastOffsetForDate(value, now),
+    });
   };
 
   const updateTimeFromMinutes = (minutes: number) => {
-    setSelectedMinutes(clampMinutesForDate(
-      selectedDate,
-      minutes,
-      startDateKey,
-      endDateKey,
-      nowMinutes,
-      endMinutes,
-    ));
+    onDateChange?.({
+      time: minutesToTime(clamp(minutes, minSelectableMinutes, maxSelectableMinutes)),
+    });
   };
-
-  useEffect(() => {
-    const resolvedDateKey = selectedDate < startDateKey
-      ? startDateKey
-      : selectedDate > endDateKey
-      ? endDateKey
-      : selectedDate;
-    const resolvedOffset = diffDays(startDate, new Date(`${resolvedDateKey}T00:00:00`));
-
-    if (resolvedDateKey !== selectedDate) {
-      setSelectedDate(resolvedDateKey);
-    }
-    setDateOffset(resolvedOffset);
-    setSelectedMinutes((current) => clampMinutesForDate(
-      resolvedDateKey,
-      current,
-      startDateKey,
-      endDateKey,
-      nowMinutes,
-      endMinutes,
-    ));
-  }, [selectedDate, startDateKey, endDateKey, maxDateOffset, nowMinutes, endMinutes]);
 
   return (
     <Section
@@ -290,7 +210,7 @@ export function WindSection({
         </div>
 
         <div className="rvc-wind__slider-row">
-          <span className="rvc-wind__bound">{formatTimeValue(minSelectableMinutes)}</span>
+          <span className="rvc-wind__bound">{minutesToTime(minSelectableMinutes)}</span>
           <Slider
             width="100%"
             min={minSelectableMinutes}
@@ -301,7 +221,7 @@ export function WindSection({
             handleSize={22}
             trackHeight={10}
           />
-          <span className="rvc-wind__bound">{formatTimeValue(maxSelectableMinutes)}</span>
+          <span className="rvc-wind__bound">{minutesToTime(maxSelectableMinutes)}</span>
           <label className="rvc-wind__picker-chip rvc-wind__picker-chip--time">
             <IconClock size={12} className="rvc-wind__picker-icon" aria-hidden />
             <span className="rvc-wind__time-display" aria-hidden>
@@ -313,9 +233,9 @@ export function WindSection({
               className="rvc-wind__picker-input"
               type="time"
               value={timeLabel}
-              step={900}
-              min={formatTimeValue(minSelectableMinutes)}
-              max={formatTimeValue(maxSelectableMinutes)}
+              step={3600}
+              min={minutesToTime(minSelectableMinutes)}
+              max={minutesToTime(maxSelectableMinutes)}
               onChange={(event) => updateTimeFromMinutes(minutesFromTimeString(event.target.value))}
               aria-label="Sélectionner l'heure du vent"
             />
@@ -326,12 +246,12 @@ export function WindSection({
           <WindToggleRow
             label="Particules"
             checked={particlesEnabled}
-            onChange={setParticlesEnabled}
+            onChange={(checked) => onDateChange?.({ particlesEnabled: checked })}
           />
           <WindToggleRow
             label="Overlay terrain"
             checked={terrainOverlayEnabled}
-            onChange={setTerrainOverlayEnabled}
+            onChange={(checked) => onDateChange?.({ terrainOverlayEnabled: checked })}
           />
         </div>
 

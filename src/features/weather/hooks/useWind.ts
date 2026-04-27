@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { WindState } from '../types';
+import type { WindState, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
-import { fetchWindGridData, clearWindCache } from '../lib/open-meteo';
+import { fetchWindGridData, prefetchWindGridData, clearWindCache, hasWindGridSelectionCached } from '../lib/open-meteo';
 import {
   initWindParticles,
   updateWindParticles,
@@ -64,12 +64,14 @@ function viewportShiftRatio(prev: ViewportBounds, next: ViewportBounds): number 
 export function useWind(
   map: MapboxMap | null,
   enabled: boolean,
+  selection: WindTimeSelection,
 ): WindState {
   const [state, setState] = useState<WindState>(EMPTY_WIND_STATE);
 
   const abortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const lastFetchBoundsRef = useRef<{ north: number; south: number; east: number; west: number } | null>(null);
+  const lastSelectionRef = useRef<WindTimeSelection | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
@@ -81,10 +83,26 @@ export function useWind(
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
       const bounds = getViewportBounds(m);
+      const selectionChanged =
+        lastSelectionRef.current?.date !== selection.date
+        || lastSelectionRef.current?.time !== selection.time;
+
+      // Expand bounds by 50% margin to create a data reservoir
+      const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
+      const lngPad = (bounds.east - bounds.west) * BOUNDS_PADDING;
+      const fetchBounds = {
+        north: Math.min(90, bounds.north + latPad),
+        south: Math.max(-90, bounds.south - latPad),
+        east: Math.min(180, bounds.east + lngPad),
+        west: Math.max(-180, bounds.west - lngPad),
+      };
+
+      const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
+      const selectionCached = grid.points.length > 0 && hasWindGridSelectionCached(grid, selection);
 
       // Rate-limit guard: if too soon, schedule a deferred retry
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
-      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS) {
+      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS && !selectionCached) {
         // Schedule retry after cooldown expires (only if not already scheduled)
         if (!retryTimerRef.current) {
           const delay = MIN_FETCH_INTERVAL_MS - timeSinceLastFetch + 100;
@@ -112,7 +130,7 @@ export function useWind(
         if (viewportCovered) {
           // Data covers viewport — only refetch on significant zoom change
           const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
-          if (zoomDelta < ZOOM_DELTA_THRESHOLD * 2) {
+          if (!selectionChanged && zoomDelta < ZOOM_DELTA_THRESHOLD * 2) {
             lastBoundsRef.current = bounds;
             return;
           }
@@ -123,7 +141,7 @@ export function useWind(
       if (lastBoundsRef.current) {
         const shift = viewportShiftRatio(lastBoundsRef.current, bounds);
         const zoomDelta = Math.abs(lastBoundsRef.current.zoom - bounds.zoom);
-        if (shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < ZOOM_DELTA_THRESHOLD) return;
+        if (!selectionChanged && shift < VIEWPORT_SHIFT_THRESHOLD && zoomDelta < ZOOM_DELTA_THRESHOLD) return;
       }
 
       abortRef.current?.abort();
@@ -141,18 +159,6 @@ export function useWind(
 
       try {
         let resolvedSource: WindState['source'] = null;
-
-        // Expand bounds by 50% margin to create a data reservoir
-        const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
-        const lngPad = (bounds.east - bounds.west) * BOUNDS_PADDING;
-        const fetchBounds = {
-          north: Math.min(90, bounds.north + latPad),
-          south: Math.max(-90, bounds.south - latPad),
-          east: Math.min(180, bounds.east + lngPad),
-          west: Math.max(-180, bounds.west - lngPad),
-        };
-
-        const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
         if (grid.points.length === 0) {
           setState((s) => ({
             ...s,
@@ -168,10 +174,10 @@ export function useWind(
           ...s,
           loading: true,
           progress: 22,
-          detail: `Téléchargement grille ${grid.cols}×${grid.rows} (${grid.points.length} points)`,
+          detail: `Vent ${selection.date} ${selection.time} ${grid.cols}×${grid.rows}`,
         }));
 
-        const windPoints = await fetchWindGridData(grid, controller.signal, ({
+        const windPoints = await fetchWindGridData(grid, selection, controller.signal, ({
           completedBatches,
           totalBatches,
           source,
@@ -192,7 +198,10 @@ export function useWind(
         updateWindParticles(m, grid, windPoints);
         lastBoundsRef.current = bounds;
         lastFetchBoundsRef.current = grid.bounds;
+        lastSelectionRef.current = selection;
         lastFetchTimeRef.current = Date.now();
+
+        void prefetchWindGridData(grid, selection, controller.signal);
 
         console.info(`[wind] ready with direct grid ${grid.cols}x${grid.rows} (${windPoints.length} points)`);
 
@@ -218,7 +227,7 @@ export function useWind(
         }));
       }
     },
-    [],
+    [selection],
   );
 
   // ── Init / destroy on enable toggle ─────────────────────────────
@@ -264,6 +273,7 @@ export function useWind(
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         lastFetchBoundsRef.current = null;
+        lastSelectionRef.current = null;
         setState(EMPTY_WIND_STATE);
       };
     } else {
@@ -275,6 +285,7 @@ export function useWind(
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         lastFetchBoundsRef.current = null;
+        lastSelectionRef.current = null;
         clearWindCache();
         setState(EMPTY_WIND_STATE);
       }

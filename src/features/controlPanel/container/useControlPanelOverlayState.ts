@@ -11,6 +11,7 @@ import type { LabelCategory } from '@/features/labels/types';
 
 import { useWind } from '@/features/weather/hooks/useWind';
 import { useWeatherOverlay } from '@/features/weather/overlay/useWeatherOverlay';
+import { useWindTerrainOverlay } from '@/features/weather/overlay/useWindTerrainOverlay.ts';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
@@ -81,6 +82,7 @@ export interface OverlayHandlers {
   onWeatherPaletteBandBreakpointChange: (key: WeatherLayerKey, bandIndex: number, field: 'min' | 'max', value: number) => void;
   onWeatherAddAlert: () => void;
   onWindEnabledChange: (enabled: boolean) => void;
+  onWindDateChange: (changes: Partial<Pick<ControlPanelState['wind'], 'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'>>) => void;
   onSnowEnabledChange: (enabled: boolean) => void;
   onSunlightEnabledChange: (enabled: boolean) => void;
   onSunlightStateChange: (changes: Partial<SunlightState>) => void;
@@ -177,7 +179,27 @@ export function useControlPanelOverlayState({
   });
 
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
-  const windState = useWind(isMapLoaded ? map : null, windEnabled);
+  const [windSelection, setWindSelection] = useState(() => {
+    const fallback = DEFAULT_CONTROL_PANEL_STATE.wind;
+    const initial = initialControlPanel.wind ?? fallback;
+    const selection = clampForecastSelection({
+      date: initial.date,
+      time: initial.time,
+      forecastDay: initial.forecastDay,
+    });
+    return {
+      ...selection,
+      particlesEnabled: initial.particlesEnabled ?? fallback.particlesEnabled,
+      terrainOverlayEnabled: initial.terrainOverlayEnabled ?? fallback.terrainOverlayEnabled,
+    };
+  });
+  const windState = useWind(isMapLoaded ? map : null, windEnabled && windSelection.particlesEnabled, windSelection);
+  useWindTerrainOverlay(
+    isMapLoaded ? map : null,
+    isMapLoaded,
+    windEnabled && windSelection.terrainOverlayEnabled,
+    windSelection,
+  );
 
   const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
   const [sunlightState, setSunlightState] = useState(() => ({
@@ -234,6 +256,12 @@ export function useControlPanelOverlayState({
       draft.toggles.windEnabled = windEnabled;
     });
   }, [updateProjectControlPanel, windEnabled]);
+
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.wind = structuredClone(windSelection);
+    });
+  }, [updateProjectControlPanel, windSelection]);
 
   useEffect(() => {
     updateProjectControlPanel((draft) => {
@@ -319,7 +347,7 @@ export function useControlPanelOverlayState({
     slices: {
       labels: labelsSlice,
       weather: weatherState,
-      wind: { enabled: windEnabled, ...windState },
+      wind: { enabled: windEnabled, ...windSelection, ...windState },
       snow: { enabled: snowEnabled },
       sunlight: sunlightSlice,
     },
@@ -521,6 +549,26 @@ export function useControlPanelOverlayState({
           });
         },
         [updateProjectControlPanel],
+      ),
+      onWindDateChange: useCallback(
+        (changes) => {
+          setWindSelection((prev) => {
+            const next = { ...prev, ...changes };
+            const resolvedDate = changes.forecastDay != null
+              ? getForecastDateForOffset(changes.forecastDay)
+              : next.date;
+            const resolvedSelection = clampForecastSelection({
+              date: resolvedDate,
+              time: next.time,
+              forecastDay: next.forecastDay,
+            });
+            return {
+              ...next,
+              ...resolvedSelection,
+            };
+          });
+        },
+        [],
       ),
       onSnowEnabledChange: useCallback(
         (enabled: boolean) => {

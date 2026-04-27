@@ -160,6 +160,11 @@ export interface ToggleOnlySection {
 }
 
 export interface WindPanelState extends ToggleOnlySection {
+  date: string;
+  time: string;
+  forecastDay: number;
+  particlesEnabled: boolean;
+  terrainOverlayEnabled: boolean;
   loading: boolean;
   progress: number;
   detail: string | null;
@@ -255,6 +260,7 @@ export interface ControlPanelHandlers {
   onWeatherAddAlert?: () => void;
 
   onWindEnabledChange?: (enabled: boolean) => void;
+  onWindDateChange?: (changes: Partial<Pick<WindPanelState, 'date' | 'time' | 'forecastDay' | 'particlesEnabled' | 'terrainOverlayEnabled'>>) => void;
   onSnowEnabledChange?: (enabled: boolean) => void;
   onSunlightEnabledChange?: (enabled: boolean) => void;
   onSunlightStateChange?: (changes: Partial<SunlightState>) => void;

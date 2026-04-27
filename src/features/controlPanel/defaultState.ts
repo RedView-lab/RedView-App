@@ -97,6 +97,13 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   wind: {
     enabled: true,
+    ...clampForecastSelection({
+      date: getForecastDateForOffset(0),
+      time: '12:00',
+      forecastDay: 0,
+    }),
+    particlesEnabled: true,
+    terrainOverlayEnabled: true,
     loading: false,
     progress: 0,
     detail: null,

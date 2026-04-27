@@ -281,6 +281,7 @@ export function ControlPanelContainer({
       onWeatherPaletteBandBreakpointChange={overlayState.handlers.onWeatherPaletteBandBreakpointChange}
       onWeatherAddAlert={overlayState.handlers.onWeatherAddAlert}
       onWindEnabledChange={overlayState.handlers.onWindEnabledChange}
+      onWindDateChange={overlayState.handlers.onWindDateChange}
       onSnowEnabledChange={overlayState.handlers.onSnowEnabledChange}
       onSunlightEnabledChange={overlayState.handlers.onSunlightEnabledChange}
       onSunlightStateChange={overlayState.handlers.onSunlightStateChange}

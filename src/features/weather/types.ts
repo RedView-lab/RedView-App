@@ -55,6 +55,12 @@ export type WindDataSource = 'self-hosted-vps' | 'public-api' | 'direct' | 'unkn
 
 // ── Hook state returned by useWind ────────────────────────────────────
 
+export interface WindTimeSelection {
+  date: string;
+  time: string;
+  forecastDay?: number;
+}
+
 export interface WindState {
   loading: boolean;
   error: string | null;
