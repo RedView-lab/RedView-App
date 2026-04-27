@@ -1,23 +1,26 @@
 /**
- * Vercel serverless proxy → Open-Meteo self-hosted (DigitalOcean droplet).
+ * Vercel serverless proxy → Open-Meteo upstreams.
  *
  * Why a proxy?
- *   Same reason as api/brouter.ts: the droplet serves HTTP only
- *   (no domain, no TLS), and Vercel apps run over HTTPS → mixed
- *   content would be blocked. The proxy also hides the VPS IP.
+ *   Forecast requests still go through the self-hosted droplet because
+ *   it serves HTTP only (no domain, no TLS), and Vercel apps run over
+ *   HTTPS. Climate requests are forwarded to the public Open-Meteo
+ *   climate API because the self-hosted VPS only mirrors short-range
+ *   forecast datasets and does not have CMIP6 archives.
  *
  * Endpoints:
  *   GET /api/openmeteo/v1/forecast?latitude=...&longitude=...&...
  *   GET /api/openmeteo/v1/climate?...
  *
- * Required env var on Vercel:
+ * Required env var on Vercel for forecast requests:
  *   OPENMETEO_UPSTREAM=http://<DROPLET_IP>:8080
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const TIMEOUT_MS = 25_000;
+const PUBLIC_CLIMATE_UPSTREAM = 'https://climate-api.open-meteo.com';
 
-type WeatherSource = 'self-hosted-vps';
+type WeatherSource = 'self-hosted-vps' | 'public-api';
 
 interface UpstreamPayload {
   response: Response;
@@ -97,32 +100,39 @@ export default async function handler(
     return res.status(404).json({ error: 'Unknown Open-Meteo path' });
   }
 
-  const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
-  if (!upstream) {
-    return res.status(503).json({
-      error: 'Open-Meteo VPS unavailable',
-      detail: 'OPENMETEO_UPSTREAM is not configured',
-    });
+  let target: string;
+  let source: WeatherSource;
+
+  if (isClimate) {
+    target = `${PUBLIC_CLIMATE_UPSTREAM}${pathAndQuery}`;
+    source = 'public-api';
+  } else {
+    const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
+    if (!upstream) {
+      return res.status(503).json({
+        error: 'Open-Meteo VPS unavailable',
+        detail: 'OPENMETEO_UPSTREAM is not configured',
+      });
+    }
+
+    target = `${upstream.replace(/\/+$/, '')}${pathAndQuery}`;
+    source = 'self-hosted-vps';
   }
 
-  const selfHostedTarget = `${upstream.replace(/\/+$/, '')}${pathAndQuery}`;
-
   try {
-    const response = await fetchWithTimeout(selfHostedTarget);
+    const response = await fetchWithTimeout(target);
     const upstreamPayload = await readUpstreamPayload(response);
     if (response.ok && !upstreamPayload.isJson) {
-      throw new Error(`self-hosted returned non-JSON payload${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`);
+      throw new Error(`${source} returned non-JSON payload${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`);
     }
     if (!response.ok) {
       throw new Error(
-        `self-hosted returned ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`,
+        `${source} returned ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`,
       );
     }
 
-    const source: WeatherSource = 'self-hosted-vps';
-
     console.log(
-      `[openmeteo-proxy] SELF-HOSTED → ${selfHostedTarget}`,
+      `[openmeteo-proxy] ${source === 'public-api' ? 'PUBLIC' : 'SELF-HOSTED'} → ${target}`,
     );
 
     res.status(upstreamPayload.response.status);

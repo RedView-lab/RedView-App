@@ -20,7 +20,6 @@ function resolveWeatherEndpoint(override: string | undefined, fallback: string):
   if (!trimmed) return fallback;
   if (isForbiddenPublicEndpoint(trimmed)) {
     if (typeof window !== 'undefined') {
-      // eslint-disable-next-line no-console
       console.warn(`[weather] refused public Open-Meteo override: ${trimmed}. Falling back to ${fallback}.`);
     }
     return fallback;
@@ -42,10 +41,8 @@ if (typeof window !== 'undefined') {
   const tag = isProxy
     ? '\u2705 self-hosted VPS (via /api/openmeteo proxy)'
     : '\uD83D\uDD17 custom override';
-  // eslint-disable-next-line no-console
   console.log(
     `[weather] forecast endpoint: ${OPENMETEO_FORECAST_URL} — ${tag}`,
   );
-  // eslint-disable-next-line no-console
   console.log(`[weather] climate  endpoint: ${OPENMETEO_CLIMATE_URL}`);
 }
