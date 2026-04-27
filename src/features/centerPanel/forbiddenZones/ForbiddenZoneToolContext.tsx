@@ -100,9 +100,6 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         try {
           if (drawRef.current && drawRef.current.getMode() !== 'draw_polygon') {
             drawRef.current.changeMode('draw_polygon');
-            // Force cursor to crosshair because Mapbox GL JS v3 often sets inline
-            // 'cursor: grab' on the canvas which overrides Draw's CSS classes.
-            if (map) map.getCanvas().style.cursor = 'crosshair';
           }
         } catch (err) {
           console.error('[ForbiddenZone] Failed to activate draw_polygon mode:', err);
@@ -190,8 +187,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     setArmed(false);
     setStatusMessage(null);
     resetDraftSession(true);
-    if (map) map.getCanvas().style.cursor = '';
-  }, [map, resetDraftSession]);
+  }, [resetDraftSession]);
 
   const toggle = useCallback(() => {
     if (!canEdit) return;
@@ -317,7 +313,6 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         suppressDrawSyncRef.current = true;
         try {
           draw.changeMode('direct_select', { featureId });
-          if (map) map.getCanvas().style.cursor = '';
         } finally {
           suppressDrawSyncRef.current = false;
         }

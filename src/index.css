@@ -1,4 +1,4 @@
-﻿* {
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -83,3 +83,8 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* Fix Mapbox GL Draw cursors being overridden by Mapbox GL JS v3 inline styles */
+.mapboxgl-canvas-container.mouse-add .mapboxgl-canvas { cursor: crosshair !important; }
+.mapboxgl-canvas-container.mouse-pointer .mapboxgl-canvas { cursor: pointer !important; }
+.mapboxgl-canvas-container.mouse-move .mapboxgl-canvas { cursor: move !important; }
