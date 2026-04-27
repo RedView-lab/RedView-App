@@ -102,7 +102,7 @@
   align-items: center;
   min-width: 0;
   padding-left: calc(6px + var(--rvi-tl-card-pad-left));
-  padding-right: calc(6px + var(--rvi-tl-card-pad-right));
+  padding-right: calc(12px + var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter));
 }
 
 .rvi-tl-schedule__legend-name {
@@ -136,7 +136,7 @@
   min-height: 0;
   max-height: min(72vh, 900px);
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: scroll;
   overscroll-behavior: contain;
   border-radius: var(--rvi-radius);
   scrollbar-width: thin;
