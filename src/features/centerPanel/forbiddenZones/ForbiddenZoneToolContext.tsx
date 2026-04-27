@@ -76,7 +76,15 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
   const setDrawControlVisible = useCallback((visible: boolean) => {
     if (drawControlElementRef.current) {
-      drawControlElementRef.current.style.display = visible ? '' : 'none';
+      drawControlElementRef.current.style.visibility = visible ? 'visible' : 'hidden';
+      drawControlElementRef.current.style.pointerEvents = visible ? 'auto' : 'none';
+      if (!visible) {
+        drawControlElementRef.current.style.position = 'absolute';
+        drawControlElementRef.current.style.opacity = '0';
+      } else {
+        drawControlElementRef.current.style.position = '';
+        drawControlElementRef.current.style.opacity = '1';
+      }
     }
   }, []);
 
@@ -84,13 +92,24 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const draw = drawRef.current;
     if (!draw) return;
 
-    // Use the Draw API directly instead of clicking the hidden polygon button.
-    // MapboxDraw internally updates both the cursor CSS classes (mouse-add) and
-    // the button active state when changeMode is called programmatically.
+    // Use the Draw API directly. We defer this slightly so that any prior
+    // operations (like draw.deleteAll) and React renders (like setting
+    // display: block on the control) have time to settle.
     if (draw.getMode() !== 'draw_polygon') {
-      draw.changeMode('draw_polygon');
+      setTimeout(() => {
+        try {
+          if (drawRef.current && drawRef.current.getMode() !== 'draw_polygon') {
+            drawRef.current.changeMode('draw_polygon');
+            // Force cursor to crosshair because Mapbox GL JS v3 often sets inline
+            // 'cursor: grab' on the canvas which overrides Draw's CSS classes.
+            if (map) map.getCanvas().style.cursor = 'crosshair';
+          }
+        } catch (err) {
+          console.error('[ForbiddenZone] Failed to activate draw_polygon mode:', err);
+        }
+      }, 50);
     }
-  }, []);
+  }, [map]);
 
   const clearDrawDraft = useCallback(() => {
     const draw = drawRef.current;
@@ -171,7 +190,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     setArmed(false);
     setStatusMessage(null);
     resetDraftSession(true);
-  }, [resetDraftSession]);
+    if (map) map.getCanvas().style.cursor = '';
+  }, [map, resetDraftSession]);
 
   const toggle = useCallback(() => {
     if (!canEdit) return;
@@ -197,7 +217,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     }
 
     setArmed(true);
-    startDraftSession();
+    // startDraftSession will be called automatically by the useEffect that listens to armed
+
   }, [activeItinerary, armed, canEdit, resetDraftSession, startDraftSession, store]);
 
   const undoDraft = useCallback(() => {
@@ -296,6 +317,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
         suppressDrawSyncRef.current = true;
         try {
           draw.changeMode('direct_select', { featureId });
+          if (map) map.getCanvas().style.cursor = '';
         } finally {
           suppressDrawSyncRef.current = false;
         }
