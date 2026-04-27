@@ -261,6 +261,24 @@
   white-space: nowrap;
 }
 
+.rvc-wind__band-threshold-editable {
+  min-width: 0;
+}
+
+.rvc-wind__band-threshold-tail {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rvc-wind__threshold-number {
+  min-width: 0;
+}
+
+.rvc-wind__threshold-input {
+  width: 72px;
+}
+
 .rvc-wind__color-chip {
   position: relative;
   display: inline-flex;

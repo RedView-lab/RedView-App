@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
@@ -30,7 +30,8 @@ type WindScaleMode = '4 couleurs' | '6 couleurs' | '8 couleurs';
 
 interface WindBand {
   id: string;
-  threshold: string;
+  minKmh: number;
+  maxKmh: number | null;
   color: string;
   visible: boolean;
 }
@@ -47,12 +48,22 @@ const SCALE_OPTIONS: { value: WindScaleMode; label: string }[] = [
   { value: '8 couleurs', label: '8 couleurs' },
 ];
 
-const DEFAULT_BANDS: WindBand[] = [
-  { id: 'band-1', threshold: '0 km/h', color: '#2DBF8C', visible: true },
-  { id: 'band-2', threshold: '0 km/h', color: '#FFD800', visible: true },
-  { id: 'band-3', threshold: '0 km/h', color: '#FF8D00', visible: true },
-  { id: 'band-4', threshold: '0 km/h', color: '#FF0D0D', visible: true },
-];
+const WIND_SCALE_PRESETS: Record<WindScaleMode, { colors: string[]; breakpoints: number[] }> = {
+  '4 couleurs': {
+    colors: ['#2DBF8C', '#FFD800', '#FF8D00', '#FF0D0D'],
+    breakpoints: [15, 30, 50],
+  },
+  '6 couleurs': {
+    colors: ['#2DBF8C', '#8AD64A', '#FFD800', '#FFB000', '#FF7A00', '#FF0D0D'],
+    breakpoints: [10, 20, 30, 45, 60],
+  },
+  '8 couleurs': {
+    colors: ['#2DBF8C', '#5BCF68', '#9EDD43', '#FFD800', '#FFB000', '#FF8D00', '#FF5A00', '#FF0D0D'],
+    breakpoints: [5, 10, 20, 30, 40, 55, 70],
+  },
+};
+
+const MAX_WIND_KMH = 160;
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
@@ -94,17 +105,113 @@ function formatSourceLabel(source: string | null): string | null {
   return null;
 }
 
+function createWindBands(scaleMode: WindScaleMode): WindBand[] {
+  const preset = WIND_SCALE_PRESETS[scaleMode];
+  const stops = [0, ...preset.breakpoints];
+
+  return preset.colors.map((color, index) => ({
+    id: `${scaleMode}-band-${index}`,
+    minKmh: stops[index] ?? 0,
+    maxKmh: preset.breakpoints[index] ?? null,
+    color,
+    visible: true,
+  }));
+}
+
+function formatWindBandLabel(minKmh: number, maxKmh: number | null): string {
+  if (maxKmh == null) return `> ${minKmh} km/h`;
+  return `${minKmh} - ${maxKmh} km/h`;
+}
+
+function clampWindBoundary(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function InlineWindValue({
+  value,
+  editable,
+  onCommit,
+  ariaLabel,
+}: {
+  value: number;
+  editable: boolean;
+  onCommit: (value: number) => void;
+  ariaLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [editing, value]);
+
+  const commit = () => {
+    setEditing(false);
+    const parsed = Number.parseInt(draft, 10);
+    if (!Number.isFinite(parsed)) return;
+    onCommit(parsed);
+  };
+
+  if (!editable) {
+    return <span className="rvc-altitude__meter-value rvc-wind__threshold-number">{value} km/h</span>;
+  }
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="rvc-altitude__meter-btn rvc-wind__threshold-number"
+        onClick={() => setEditing(true)}
+        title="Cliquer pour modifier le seuil"
+      >
+        {value} km/h
+      </button>
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      className="rvc-altitude__meter-input rvc-wind__threshold-input"
+      value={draft}
+      onChange={(event) => setDraft(event.target.value.replace(/[^\d]/g, ''))}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commit();
+        }
+        if (event.key === 'Escape') {
+          setDraft(String(value));
+          setEditing(false);
+        }
+      }}
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 function WindBandRow({
   band,
+  index,
+  totalBands,
   enabled,
+  onThresholdChange,
   onToggleVisibility,
   onColorChange,
 }: {
   band: WindBand;
+  index: number;
+  totalBands: number;
   enabled: boolean;
+  onThresholdChange: (index: number, field: 'min' | 'max', value: number) => void;
   onToggleVisibility: () => void;
   onColorChange: (color: string) => void;
 }) {
+  const isFirst = index === 0;
+  const isLast = index === totalBands - 1;
+
   return (
     <div className="rvc-wind__band-row" data-disabled={!enabled}>
       <button
@@ -116,13 +223,41 @@ function WindBandRow({
         {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
       </button>
 
-      <span className="rvc-wind__band-threshold">{band.threshold}</span>
+      <div className="rvc-altitude__band-label-editable rvc-wind__band-threshold-editable">
+        {!isLast ? (
+          <>
+            <InlineWindValue
+              value={band.minKmh}
+              editable={!isFirst}
+              onCommit={(value) => onThresholdChange(index, 'min', value)}
+              ariaLabel="Seuil minimal du vent"
+            />
+            <span className="rvc-altitude__meter-sep">–</span>
+            <InlineWindValue
+              value={band.maxKmh ?? MAX_WIND_KMH}
+              editable={true}
+              onCommit={(value) => onThresholdChange(index, 'max', value)}
+              ariaLabel="Seuil maximal du vent"
+            />
+          </>
+        ) : (
+          <div className="rvc-wind__band-threshold rvc-wind__band-threshold-tail">
+            <span>&gt;</span>
+            <InlineWindValue
+              value={band.minKmh}
+              editable={true}
+              onCommit={(value) => onThresholdChange(index, 'min', value)}
+              ariaLabel="Seuil minimal du dernier palier de vent"
+            />
+          </div>
+        )}
+      </div>
 
       <ColorPalettePicker
         color={band.color}
         onChange={onColorChange}
         className="rvc-wind__color-chip"
-        ariaLabel={`Choisir la couleur du seuil ${band.threshold}`}
+        ariaLabel={`Choisir la couleur du seuil ${formatWindBandLabel(band.minKmh, band.maxKmh)}`}
       >
         <span
           className="rvc-wind__color-swatch"
@@ -160,7 +295,7 @@ export function WindSection({
   const [selectedMinutes, setSelectedMinutes] = useState(9 * 60 + 30);
   const [displayMode, setDisplayMode] = useState<WindDisplayMode>('arrows');
   const [scaleMode, setScaleMode] = useState<WindScaleMode>('4 couleurs');
-  const [bands, setBands] = useState<WindBand[]>(DEFAULT_BANDS);
+  const [bands, setBands] = useState<WindBand[]>(() => createWindBands('4 couleurs'));
 
   const isToday = selectedDate === formatDateKey(today);
   const dateLabel = isToday ? 'Aujourd’hui' : formatDateShort(selectedDate);
@@ -195,6 +330,37 @@ export function WindSection({
 
   const updateTimeFromMinutes = (minutes: number) => {
     setSelectedMinutes(clamp(minutes, 0, 1439));
+  };
+
+  useEffect(() => {
+    setBands(createWindBands(scaleMode));
+  }, [scaleMode]);
+
+  const updateBandThreshold = (index: number, field: 'min' | 'max', value: number) => {
+    setBands((current) => {
+      const next = current.map((band) => ({ ...band }));
+      const band = next[index];
+      if (!band) return current;
+
+      if (field === 'max') {
+        const upperBound = index >= next.length - 2
+          ? MAX_WIND_KMH
+          : (next[index + 1].maxKmh ?? MAX_WIND_KMH) - 1;
+        const nextValue = clampWindBoundary(value, band.minKmh + 1, upperBound);
+        band.maxKmh = nextValue;
+        if (next[index + 1]) next[index + 1].minKmh = nextValue;
+        return next;
+      }
+
+      if (index === 0) return current;
+      const previousBand = next[index - 1];
+      const upperBound = (band.maxKmh ?? MAX_WIND_KMH) - 1;
+      const lowerBound = (previousBand.minKmh ?? 0) + 1;
+      const nextValue = clampWindBoundary(value, lowerBound, upperBound);
+      band.minKmh = nextValue;
+      previousBand.maxKmh = nextValue;
+      return next;
+    });
   };
 
   return (
@@ -307,11 +473,14 @@ export function WindSection({
         </div>
 
         <div className="rvc-wind__bands">
-          {bands.map((band) => (
+          {bands.map((band, index) => (
             <WindBandRow
               key={band.id}
               band={band}
+              index={index}
+              totalBands={bands.length}
               enabled={enabled}
+              onThresholdChange={updateBandThreshold}
               onToggleVisibility={() => {
                 setBands((current) => current.map((entry) => (
                   entry.id === band.id ? { ...entry, visible: !entry.visible } : entry
