@@ -114,6 +114,7 @@
 }
 .rvi-tl-schedule__legend-metric,
 .rvi-tl-schedule__legend-next {
+  justify-self: end;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
@@ -280,7 +281,7 @@
 .rvi-tl-schedule__event-card {
   all: unset;
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   align-self: stretch;
   width: 100%;
   min-width: 0;
@@ -318,8 +319,8 @@
     minmax(0, var(--rvi-tl-start-col))
     minmax(0, var(--rvi-tl-next-col))
     var(--rvi-tl-fav-col);
-  align-items: center;
-  align-content: center;
+  align-items: start;
+  align-content: start;
   column-gap: var(--rvi-tl-card-gap);
   row-gap: 0;
   width: 100%;
@@ -351,7 +352,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 4px;
   min-width: 0;
   width: 100%;
@@ -410,6 +411,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  justify-self: end;
 }
 
 .rvi-tl-schedule__event-metric--next {

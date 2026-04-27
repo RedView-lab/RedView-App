@@ -201,8 +201,14 @@ function formatHourLabel(hour: number, isBoundary: boolean): string {
   return `${hour}:00`;
 }
 
-function resolveStandalonePauseHeightPx(): number {
-  return PAUSE_CHIP_MIN_HEIGHT_PX;
+function resolveAttachedPauseHeightPx(durationMin: number, pixelsPerMinute: number): number {
+  if (!Number.isFinite(durationMin) || durationMin <= 0) return ATTACHED_PAUSE_HEIGHT_PX;
+  return Math.max(ATTACHED_PAUSE_HEIGHT_PX, durationMin * pixelsPerMinute);
+}
+
+function resolveStandalonePauseHeightPx(durationMin: number, pixelsPerMinute: number): number {
+  if (!Number.isFinite(durationMin) || durationMin <= 0) return PAUSE_CHIP_MIN_HEIGHT_PX;
+  return Math.max(PAUSE_CHIP_MIN_HEIGHT_PX, durationMin * pixelsPerMinute);
 }
 
 function buildFavoritePoiPause(
@@ -397,19 +403,39 @@ export function TimelineTimelineView({
   }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes]);
 
   const endMinutes = useMemo(() => {
-    const visibleMinutes = [
-      reference.startMinutes,
-      ...filteredPrimaryItems.map((entry) => entry.minuteOfDay),
-      ...filteredPauseItems.map((entry) => entry.minuteOfDay),
-    ];
-    const lastVisibleMinute = visibleMinutes.reduce(
-      (maxMinute, minute) => Math.max(maxMinute, minute),
-      Number.NEGATIVE_INFINITY,
-    );
+    const usedPauseIds = new Set<string>();
+    let lastVisibleMinute = reference.startMinutes;
+
+    filteredPrimaryItems.forEach((entry) => {
+      let attachedDurationMin = 0;
+      const favoritePoiPause = buildFavoritePoiPause(entry.item, rhythm);
+      if (favoritePoiPause) {
+        attachedDurationMin += Math.max(0, favoritePoiPause.durationMin);
+      }
+
+      if (entry.item.kind !== 'start' && entry.item.kind !== 'end') {
+        filteredPauseItems.forEach((pause) => {
+          if (usedPauseIds.has(pause.item.id)) return;
+          if (Math.abs(pause.distanceKm - entry.distanceKm) > 0.15) return;
+          usedPauseIds.add(pause.item.id);
+          attachedDurationMin += Math.max(0, pause.item.durationMin ?? 0);
+        });
+      }
+
+      lastVisibleMinute = Math.max(lastVisibleMinute, entry.minuteOfDay + attachedDurationMin);
+    });
+
+    filteredPauseItems.forEach((entry) => {
+      lastVisibleMinute = Math.max(
+        lastVisibleMinute,
+        entry.minuteOfDay + Math.max(0, entry.item.durationMin ?? 0),
+      );
+    });
+
     if (!Number.isFinite(lastVisibleMinute)) return startMinutes + 60;
     const roundedEnd = Math.ceil(lastVisibleMinute / 60) * 60;
     return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, roundedEnd);
-  }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes, startMinutes]);
+  }, [filteredPauseItems, filteredPrimaryItems, reference.startMinutes, rhythm, startMinutes]);
 
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
   const pauseAttachment = useMemo(() => {
@@ -454,7 +480,7 @@ export function TimelineTimelineView({
       const attachedPauses = (pauseAttachment.attachedByEventId.get(entry.item.id) ?? []).map(
         (pause) => ({
           ...pause,
-          heightPx: ATTACHED_PAUSE_HEIGHT_PX,
+          heightPx: resolveAttachedPauseHeightPx(pause.durationMin, pixelsPerMinute),
         }),
       );
 
@@ -486,7 +512,7 @@ export function TimelineTimelineView({
       topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
       durationMin: pause.item.durationMin ?? 0,
       visible: pause.item.visible !== false,
-      heightPx: resolveStandalonePauseHeightPx(),
+      heightPx: resolveStandalonePauseHeightPx(pause.item.durationMin ?? 0, pixelsPerMinute),
       sortIndex: pause.sortIndex,
     }));
   }, [pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes]);
