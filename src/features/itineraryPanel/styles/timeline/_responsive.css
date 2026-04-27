@@ -6,26 +6,23 @@
   .rvi-tl-row__kind-text { width: 44px; }
   .rvi-tl-row__distance { min-width: 36px; }
 
+  .rvi-tl-schedule {
+    --rvi-tl-times-col: 48px;
+    --rvi-tl-icon-col: 20px;
+    --rvi-tl-pause-col: 62px;
+    --rvi-tl-start-col: 52px;
+    --rvi-tl-next-col: 52px;
+    --rvi-tl-fav-col: 20px;
+    --rvi-tl-card-gap: 3px;
+    --rvi-tl-card-pad-left: 6px;
+    --rvi-tl-card-pad-right: 8px;
+  }
+
   .rvi-tl-schedule__legend {
-    grid-template-columns: 48px minmax(0, 1fr) 72px 56px;
-    padding-left: 12px;
-    padding-right: 8px;
-  }
-
-  .rvi-tl-schedule__event-main {
-    grid-template-columns: 20px minmax(0, 1fr) 52px 52px 20px;
-  }
-
-  .rvi-tl-schedule__event-main.has-pause {
-    grid-template-columns: 20px minmax(0, 1fr) minmax(62px, 68px) 50px 50px 20px;
-  }
-
-  .rvi-tl-schedule__event-pauses {
-    min-width: 62px;
+    font-size: 11px;
   }
 
   .rvi-tl-schedule__pause-chip {
-    min-width: 62px;
     font-size: 12px;
   }
 
@@ -39,6 +36,18 @@
 }
 
 @container (max-width: 460px) {
+  .rvi-tl-schedule {
+    --rvi-tl-times-col: 44px;
+    --rvi-tl-icon-col: 18px;
+    --rvi-tl-pause-col: 62px;
+    --rvi-tl-start-col: 52px;
+    --rvi-tl-next-col: 48px;
+    --rvi-tl-fav-col: 0px;
+    --rvi-tl-card-gap: 3px;
+    --rvi-tl-card-pad-left: 8px;
+    --rvi-tl-card-pad-right: 8px;
+  }
+
   .rvi-tl-schedule__days {
     min-height: 46px;
   }
@@ -47,38 +56,17 @@
     padding: 7px 2px 9px;
   }
 
-  .rvi-tl-schedule__viewport {
-    grid-template-columns: 44px minmax(0, 1fr);
-  }
-
   .rvi-tl-schedule__time-label {
     right: 4px;
     font-size: 11px;
   }
 
-  .rvi-tl-schedule__km-marker {
-    width: 40px;
-    font-size: 10px;
-  }
+  .rvi-tl-schedule__km-marker { font-size: 10px; }
 
   .rvi-tl-schedule__event,
   .rvi-tl-schedule__pause--standalone {
     left: 6px;
     right: 6px;
-  }
-
-  .rvi-tl-schedule__event-main {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(40px, 52px) minmax(36px, 48px) 14px;
-    column-gap: 3px;
-    row-gap: 0;
-    align-items: center;
-  }
-
-  .rvi-tl-schedule__event-main.has-pause {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(62px, 72px) minmax(40px, 52px) minmax(36px, 48px) 14px;
-    column-gap: 3px;
-    row-gap: 0;
-    align-items: center;
   }
 
   .rvi-tl-schedule__event-icon { min-width: 18px; }
@@ -99,11 +87,7 @@
   .rvi-tl-schedule__event-favorite {
     display: none;
   }
-  .rvi-tl-schedule__event-pauses {
-    min-width: 62px;
-  }
   .rvi-tl-schedule__pause-chip {
-    min-width: 62px;
     font-size: 12px;
   }
   .rvi-tl-schedule__event-metric--next {
@@ -136,6 +120,18 @@
 }
 
 @media (max-width: 400px) {
+  .rvi-tl-schedule {
+    --rvi-tl-times-col: 44px;
+    --rvi-tl-icon-col: 18px;
+    --rvi-tl-pause-col: 58px;
+    --rvi-tl-start-col: 46px;
+    --rvi-tl-next-col: 42px;
+    --rvi-tl-fav-col: 0px;
+    --rvi-tl-card-gap: 3px;
+    --rvi-tl-card-pad-left: 8px;
+    --rvi-tl-card-pad-right: 8px;
+  }
+
   .rvi-tl-edit__zoom {
     margin-left: 0;
   }
@@ -153,15 +149,7 @@
   }
 
   .rvi-tl-schedule__legend {
-    grid-template-columns: 44px minmax(0, 1fr) 56px 50px;
-    gap: 3px;
-    padding-left: 10px;
-    padding-right: 8px;
     font-size: 11px;
-  }
-
-  .rvi-tl-schedule__viewport {
-    grid-template-columns: 44px minmax(0, 1fr);
   }
 
   .rvi-tl-schedule__time-label {
@@ -171,7 +159,6 @@
 
   .rvi-tl-schedule__km-marker {
     left: 0;
-    width: 40px;
     padding: 0 4px;
     font-size: 10px;
   }
@@ -180,20 +167,6 @@
   .rvi-tl-schedule__pause--standalone {
     left: 6px;
     right: 6px;
-  }
-
-  .rvi-tl-schedule__event-main {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(36px, 46px) minmax(34px, 42px) 14px;
-    column-gap: 3px;
-    row-gap: 0;
-    align-items: center;
-  }
-
-  .rvi-tl-schedule__event-main.has-pause {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(58px, 64px) minmax(36px, 46px) minmax(34px, 42px) 14px;
-    column-gap: 3px;
-    row-gap: 0;
-    align-items: center;
   }
 
   .rvi-tl-schedule__event-icon { min-width: 18px; }
@@ -214,11 +187,7 @@
   .rvi-tl-schedule__event-favorite {
     display: none;
   }
-  .rvi-tl-schedule__event-pauses {
-    min-width: 58px;
-  }
   .rvi-tl-schedule__pause-chip {
-    min-width: 58px;
     min-height: 22px;
     height: 22px;
     font-size: 11px;

@@ -85,6 +85,7 @@ const KM_MARKER_MIN_STEP = 25;
 const ATTACHED_PAUSE_HEIGHT_PX = 24;
 const PAUSE_CHIP_MIN_HEIGHT_PX = 28;
 const TIMELINE_BLOCK_GAP_PX = 4;
+const TIMELINE_VIEWPORT_TOP_INSET_PX = 10;
 
 const WEEKDAY_SHORT = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'] as const;
 
@@ -519,8 +520,8 @@ export function TimelineTimelineView({
     );
 
     const positionedTopById = new Map<string, number>();
-    let nextAvailableTopPx = 0;
-    let maxBottomPx = canvasBaseHeight;
+    let nextAvailableTopPx = TIMELINE_VIEWPORT_TOP_INSET_PX;
+    let maxBottomPx = canvasBaseHeight + TIMELINE_VIEWPORT_TOP_INSET_PX;
     let firstTopPx: number | null = null;
 
     blocks.forEach((block) => {
@@ -564,7 +565,7 @@ export function TimelineTimelineView({
       const minuteOfDay = markerDate
         ? markerDate.getHours() * 60 + markerDate.getMinutes() + markerDate.getSeconds() / 60
         : reference.startMinutes + elapsedSeconds / 60;
-      const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute;
+      const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
       if (topPx < -20 || topPx > canvasHeight + 20) continue;
       markers.push({
         id: `km-${km}`,
@@ -585,7 +586,7 @@ export function TimelineTimelineView({
     if (selectedDayKey !== toDayKey(now)) return null;
     const minuteOfDay = now.getHours() * 60 + now.getMinutes();
     if (minuteOfDay < startMinutes || minuteOfDay > endMinutes) return null;
-    return (minuteOfDay - startMinutes) * pixelsPerMinute;
+    return (minuteOfDay - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
   }, [endMinutes, now, pixelsPerMinute, reference.hasRealDate, selectedDayKey, startMinutes]);
 
   const autoScrollKey = useMemo(
@@ -647,9 +648,12 @@ export function TimelineTimelineView({
 
       <div className="rvi-tl-schedule__legend" aria-hidden>
         <span className="rvi-tl-schedule__legend-spacer" />
-        <span className="rvi-tl-schedule__legend-name">Name</span>
-        <span className="rvi-tl-schedule__legend-metric">From Start</span>
-        <span className="rvi-tl-schedule__legend-next">To next</span>
+        <span className="rvi-tl-schedule__legend-grid">
+          <span className="rvi-tl-schedule__legend-name">Name</span>
+          <span className="rvi-tl-schedule__legend-pause" />
+          <span className="rvi-tl-schedule__legend-metric">From Start</span>
+          <span className="rvi-tl-schedule__legend-next">To next</span>
+        </span>
       </div>
 
       <div ref={viewportRef} className="rvi-tl-schedule__viewport">
