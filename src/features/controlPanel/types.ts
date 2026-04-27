@@ -159,6 +159,16 @@ export interface ToggleOnlySection {
   enabled: boolean;
 }
 
+export interface WindPanelState extends ToggleOnlySection {
+  loading: boolean;
+  progress: number;
+  detail: string | null;
+  error: string | null;
+  pointCount: number;
+  lastUpdate: number | null;
+  source: string | null;
+}
+
 export interface SunlightState {
   enabled: boolean;
   customDateEnabled: boolean;
@@ -182,7 +192,7 @@ export interface ControlPanelState {
   slopes: { enabled: boolean } & SlopesState;
   altitude: { enabled: boolean } & AltitudeState;
   weather: WeatherState;
-  wind: ToggleOnlySection;
+  wind: WindPanelState;
   snow: ToggleOnlySection;
   sunlight: SunlightState;
 }

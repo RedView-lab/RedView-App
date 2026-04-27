@@ -17,6 +17,16 @@ const VIEWPORT_SHIFT_THRESHOLD = 0.25;
 const ZOOM_DELTA_THRESHOLD = 1.2;
 const BOUNDS_PADDING = 0.8;
 
+const EMPTY_WIND_STATE: WindState = {
+  loading: false,
+  error: null,
+  pointCount: 0,
+  lastUpdate: null,
+  progress: 0,
+  detail: null,
+  source: null,
+};
+
 // ── Viewport helpers ──────────────────────────────────────────────────
 
 interface ViewportBounds {
@@ -55,12 +65,7 @@ export function useWind(
   map: MapboxMap | null,
   enabled: boolean,
 ): WindState {
-  const [state, setState] = useState<WindState>({
-    loading: false,
-    error: null,
-    pointCount: 0,
-    lastUpdate: null,
-  });
+  const [state, setState] = useState<WindState>(EMPTY_WIND_STATE);
 
   const abortRef = useRef<AbortController | null>(null);
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
@@ -83,6 +88,12 @@ export function useWind(
         // Schedule retry after cooldown expires (only if not already scheduled)
         if (!retryTimerRef.current) {
           const delay = MIN_FETCH_INTERVAL_MS - timeSinceLastFetch + 100;
+          setState((s) => ({
+            ...s,
+            loading: true,
+            progress: Math.max(s.progress, 12),
+            detail: `Pause API ${Math.ceil(delay / 1000)}s avant nouvelle requête`,
+          }));
           retryTimerRef.current = setTimeout(() => {
             retryTimerRef.current = null;
             fetchForViewport(m);
@@ -119,9 +130,18 @@ export function useWind(
       const controller = new AbortController();
       abortRef.current = controller;
 
-      setState((s) => ({ ...s, loading: true, error: null }));
+      console.info('[wind] fetch start');
+      setState((s) => ({
+        ...s,
+        loading: true,
+        error: null,
+        progress: 8,
+        detail: 'Préparation de la grille vent',
+      }));
 
       try {
+        let resolvedSource: WindState['source'] = null;
+
         // Expand bounds by 50% margin to create a data reservoir
         const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
         const lngPad = (bounds.east - bounds.west) * BOUNDS_PADDING;
@@ -134,11 +154,39 @@ export function useWind(
 
         const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
         if (grid.length === 0) {
-          setState((s) => ({ ...s, loading: false, pointCount: 0 }));
+          setState((s) => ({
+            ...s,
+            loading: false,
+            pointCount: 0,
+            progress: 0,
+            detail: 'Aucun point d’échantillonnage disponible',
+          }));
           return;
         }
 
-        const sparsePoints = await fetchWindData(grid, controller.signal);
+        setState((s) => ({
+          ...s,
+          loading: true,
+          progress: 22,
+          detail: `Échantillonnage de ${grid.length} points`,
+        }));
+
+        const sparsePoints = await fetchWindData(grid, controller.signal, ({
+          completedBatches,
+          totalBatches,
+          source,
+          detail,
+        }) => {
+          if (source) resolvedSource = source;
+          const batchRatio = totalBatches > 0 ? completedBatches / totalBatches : 0;
+          setState((s) => ({
+            ...s,
+            loading: true,
+            progress: Math.min(96, 28 + Math.round(batchRatio * 58)),
+            detail,
+            source: source ?? s.source,
+          }));
+        });
         if (controller.signal.aborted) return;
 
         updateWindParticles(m, sparsePoints, fetchBounds);
@@ -146,17 +194,28 @@ export function useWind(
         lastFetchBoundsRef.current = fetchBounds;
         lastFetchTimeRef.current = Date.now();
 
+        console.info(`[wind] ready with ${sparsePoints.length} sampled points`);
+
         setState({
           loading: false,
           error: null,
           pointCount: sparsePoints.length,
           lastUpdate: Date.now(),
+          progress: 100,
+          detail: 'Champ de vent chargé',
+          source: resolvedSource,
         });
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         const message = err instanceof Error ? err.message : 'Wind fetch failed';
         console.error('[wind]', message);
-        setState((s) => ({ ...s, loading: false, error: message }));
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: message,
+          progress: 0,
+          detail: 'Impossible de charger le vent',
+        }));
       }
     },
     [],
@@ -165,7 +224,18 @@ export function useWind(
   // ── Init / destroy on enable toggle ─────────────────────────────
 
   useEffect(() => {
-    if (!map) return;
+    if (!map) {
+      if (enabled) {
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: null,
+          detail: 'Carte non prête, attente du chargement Mapbox',
+          progress: 0,
+        }));
+      }
+      return;
+    }
 
     if (enabled) {
       try {
@@ -194,7 +264,7 @@ export function useWind(
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         lastFetchBoundsRef.current = null;
-        setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
+        setState(EMPTY_WIND_STATE);
       };
     } else {
       if (layerInitRef.current) {
@@ -206,7 +276,7 @@ export function useWind(
         lastBoundsRef.current = null;
         lastFetchBoundsRef.current = null;
         clearWindCache();
-        setState({ loading: false, error: null, pointCount: 0, lastUpdate: null });
+        setState(EMPTY_WIND_STATE);
       }
     }
   }, [map, enabled, fetchForViewport]);

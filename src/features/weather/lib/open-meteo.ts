@@ -1,4 +1,4 @@
-import type { WindPoint, WindCacheEntry } from '../types';
+import type { WindPoint, WindCacheEntry, WindDataSource } from '../types';
 import { coordCacheKey } from './wind-grid';
 import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
 
@@ -51,13 +51,33 @@ interface OpenMeteoResponse {
   };
 }
 
+interface FetchBatchResult {
+  points: WindPoint[];
+  source: WindDataSource;
+}
+
+export interface WindFetchProgress {
+  completedBatches: number;
+  totalBatches: number;
+  source: WindDataSource | null;
+  detail: string;
+}
+
+function resolveWindSource(url: string, response: Response): WindDataSource {
+  const header = response.headers.get('X-Weather-Source');
+  if (header === 'self-hosted-vps' || header === 'public-api') return header;
+  if (url.startsWith('/api/openmeteo')) return 'unknown';
+  if (url.includes('api.open-meteo.com') || url.includes('climate-api.open-meteo.com')) return 'public-api';
+  return 'direct';
+}
+
 /**
  * Fetch a single batch of wind data (up to BATCH_SIZE coordinates).
  */
 async function fetchBatch(
   coords: { lat: number; lng: number }[],
   signal?: AbortSignal,
-): Promise<WindPoint[]> {
+): Promise<FetchBatchResult> {
   const lats = coords.map((c) => c.lat.toFixed(4)).join(',');
   const lngs = coords.map((c) => c.lng.toFixed(4)).join(',');
 
@@ -105,22 +125,28 @@ async function fetchBatch(
 
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
 
+    const source = resolveWindSource(url, res);
+    console.info(`[wind] Open-Meteo batch ${coords.length} coords via ${source}`);
+
     const json = await res.json();
 
     // Single coordinate → response is an object; multiple → array
     const items: OpenMeteoResponse[] = Array.isArray(json) ? json : [json];
 
-    return items.map((item) => {
-      const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
-      const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
-      return {
-        lat,
-        lng,
-        speed: item.current.wind_speed_10m,
-        direction: item.current.wind_direction_10m,
-        gusts: item.current.wind_gusts_10m,
-      };
-    });
+    return {
+      source,
+      points: items.map((item) => {
+        const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
+        const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
+        return {
+          lat,
+          lng,
+          speed: item.current.wind_speed_10m,
+          direction: item.current.wind_direction_10m,
+          gusts: item.current.wind_gusts_10m,
+        };
+      }),
+    };
   }
 
   throw lastError ?? new Error('Open-Meteo fetch failed');
@@ -134,6 +160,7 @@ async function fetchBatch(
 export async function fetchWindData(
   coords: { lat: number; lng: number }[],
   signal?: AbortSignal,
+  onProgress?: (progress: WindFetchProgress) => void,
 ): Promise<WindPoint[]> {
   const results: WindPoint[] = [];
   const uncached: { lat: number; lng: number }[] = [];
@@ -150,6 +177,15 @@ export async function fetchWindData(
 
   if (uncached.length === 0) return results;
 
+  const totalBatches = Math.max(1, Math.ceil(uncached.length / BATCH_SIZE));
+  let lastSource: WindDataSource | null = null;
+  onProgress?.({
+    completedBatches: 0,
+    totalBatches,
+    source: null,
+    detail: `Préparation de ${uncached.length} points sur ${totalBatches} requête${totalBatches > 1 ? 's' : ''}`,
+  });
+
   // 2. Batch fetch uncached coordinates (with inter-batch delay)
   for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -163,12 +199,25 @@ export async function fetchWindData(
     }
 
     const batch = uncached.slice(i, i + BATCH_SIZE);
-    const points = await fetchBatch(batch, signal);
+    const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+    const { points, source } = await fetchBatch(batch, signal);
+    lastSource = source;
 
     for (const p of points) {
       setCache(p);
       results.push(p);
     }
+
+    onProgress?.({
+      completedBatches: batchNumber,
+      totalBatches,
+      source,
+      detail: `Requête ${batchNumber}/${totalBatches} terminée via ${source}`,
+    });
+  }
+
+  if (lastSource) {
+    console.info(`[wind] fetched ${results.length} points via ${lastSource}`);
   }
 
   return results;

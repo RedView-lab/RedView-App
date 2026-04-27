@@ -200,6 +200,13 @@ export function ControlPanel({
 
       <WindSection
         enabled={state.wind.enabled}
+        loading={state.wind.loading}
+        progress={state.wind.progress}
+        detail={state.wind.detail}
+        error={state.wind.error}
+        pointCount={state.wind.pointCount}
+        lastUpdate={state.wind.lastUpdate}
+        source={state.wind.source}
         open={sectionsOpen?.wind}
         onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
         onEnabledChange={onWindEnabledChange}

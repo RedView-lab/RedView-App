@@ -13,6 +13,13 @@ import {
 
 interface Props {
   enabled: boolean;
+  loading: boolean;
+  progress: number;
+  detail: string | null;
+  error: string | null;
+  pointCount: number;
+  lastUpdate: number | null;
+  source: string | null;
   open?: boolean;
   onOpenChange?: (v: boolean) => void;
   onEnabledChange?: (v: boolean) => void;
@@ -79,6 +86,14 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function formatSourceLabel(source: string | null): string | null {
+  if (source === 'self-hosted-vps') return 'VPS';
+  if (source === 'public-api') return 'Open-Meteo public';
+  if (source === 'direct') return 'Endpoint direct';
+  if (source === 'unknown') return 'Proxy';
+  return null;
+}
+
 function WindBandRow({
   band,
   enabled,
@@ -121,7 +136,19 @@ function WindBandRow({
   );
 }
 
-export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Props) {
+export function WindSection({
+  enabled,
+  loading,
+  progress,
+  detail,
+  error,
+  pointCount,
+  lastUpdate,
+  source,
+  open,
+  onOpenChange,
+  onEnabledChange,
+}: Props) {
   const today = new Date();
   const startDate = new Date(today);
   startDate.setDate(today.getDate() - 2);
@@ -139,6 +166,13 @@ export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Pr
   const dateLabel = isToday ? 'Aujourd’hui' : formatDateShort(selectedDate);
   const timeLabel = formatTimeValue(selectedMinutes);
   const [timeHours, timeMinutes] = timeLabel.split(':');
+  const sourceLabel = formatSourceLabel(source);
+  const updatedLabel = lastUpdate
+    ? new Date(lastUpdate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+  const statusText = error
+    ? error
+    : detail ?? (enabled && pointCount > 0 ? 'Champ de vent prêt' : null);
 
   const updateDateFromOffset = (offset: number) => {
     const nextOffset = clamp(offset, 0, 4);
@@ -171,6 +205,30 @@ export function WindSection({ enabled, open, onOpenChange, onEnabledChange }: Pr
       onOpenChange={onOpenChange}
     >
       <div className="rvc-wind" aria-hidden={!enabled} data-disabled={!enabled}>
+        {enabled && (statusText || loading || pointCount > 0 || sourceLabel || updatedLabel) ? (
+          <div className={`rvc-wind__status${error ? ' is-error' : ''}`}>
+            <div className="rvc-wind__status-head">
+              <span className="rvc-wind__status-text">{statusText ?? 'Vent activé'}</span>
+              {loading ? (
+                <span className="rvc-wind__status-value">{Math.round(progress)}%</span>
+              ) : pointCount > 0 ? (
+                <span className="rvc-wind__status-value">{pointCount} pts</span>
+              ) : null}
+            </div>
+            {loading ? (
+              <div className="rvc-wind__status-bar" aria-hidden="true">
+                <span className="rvc-wind__status-bar-fill" style={{ width: `${Math.max(6, progress)}%` }} />
+              </div>
+            ) : null}
+            {sourceLabel || updatedLabel ? (
+              <div className="rvc-wind__status-meta">
+                {sourceLabel ? `Source ${sourceLabel}` : 'Source inconnue'}
+                {updatedLabel ? ` · MAJ ${updatedLabel}` : ''}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="rvc-wind__slider-row">
           <span className="rvc-wind__bound">{formatDateShort(formatDateKey(startDate))}</span>
           <Slider

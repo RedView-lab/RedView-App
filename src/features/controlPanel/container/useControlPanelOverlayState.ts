@@ -177,7 +177,7 @@ export function useControlPanelOverlayState({
   });
 
   const [windEnabled, setWindEnabled] = useState(initialControlPanel.toggles.windEnabled);
-  useWind(isMapLoaded ? map : null, windEnabled);
+  const windState = useWind(isMapLoaded ? map : null, windEnabled);
 
   const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
   const [sunlightState, setSunlightState] = useState(() => ({
@@ -319,7 +319,7 @@ export function useControlPanelOverlayState({
     slices: {
       labels: labelsSlice,
       weather: weatherState,
-      wind: { enabled: windEnabled },
+      wind: { enabled: windEnabled, ...windState },
       snow: { enabled: snowEnabled },
       sunlight: sunlightSlice,
     },

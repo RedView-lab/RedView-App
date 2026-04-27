@@ -36,6 +36,8 @@ export interface WindCacheEntry {
   fetchedAt: number;
 }
 
+export type WindDataSource = 'self-hosted-vps' | 'public-api' | 'direct' | 'unknown';
+
 // ── Hook state returned by useWind ────────────────────────────────────
 
 export interface WindState {
@@ -43,6 +45,9 @@ export interface WindState {
   error: string | null;
   pointCount: number;
   lastUpdate: number | null;
+  progress: number;
+  detail: string | null;
+  source: WindDataSource | null;
 }
 
 

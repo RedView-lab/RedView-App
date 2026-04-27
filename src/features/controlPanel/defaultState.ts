@@ -95,7 +95,16 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
       humidity: structuredClone(WEATHER_PALETTE_PRESETS.humidity),
     },
   },
-  wind: { enabled: true },
+  wind: {
+    enabled: true,
+    loading: false,
+    progress: 0,
+    detail: null,
+    error: null,
+    pointCount: 0,
+    lastUpdate: null,
+    source: null,
+  },
   snow: { enabled: true },
   sunlight: {
     enabled: true,

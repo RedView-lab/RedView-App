@@ -22,6 +22,23 @@ const TIMEOUT_MS = 25_000;
 const FORECAST_FALLBACK = 'https://api.open-meteo.com';
 const CLIMATE_FALLBACK = 'https://climate-api.open-meteo.com';
 
+type WeatherSource = 'self-hosted-vps' | 'public-api';
+
+async function fetchWithTimeout(target: string): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    return await fetch(target, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -48,30 +65,45 @@ export default async function handler(
 
   const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
   const usingSelfHosted = upstream !== '';
-  const base = usingSelfHosted
-    ? upstream.replace(/\/+$/, '')
-    : isClimate
-    ? CLIMATE_FALLBACK
-    : FORECAST_FALLBACK;
-
-  const target = `${base}${pathAndQuery}`;
-
-  // Visible in Vercel → Project → Logs. Lets you confirm at a glance
-  // that production is hitting your droplet and not the public API.
-  console.log(
-    `[openmeteo-proxy] ${usingSelfHosted ? 'SELF-HOSTED' : 'PUBLIC FALLBACK'} ` +
-      `→ ${target}`,
-  );
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const publicBase = isClimate ? CLIMATE_FALLBACK : FORECAST_FALLBACK;
+  const publicTarget = `${publicBase}${pathAndQuery}`;
+  const selfHostedTarget = usingSelfHosted
+    ? `${upstream.replace(/\/+$/, '')}${pathAndQuery}`
+    : null;
 
   try {
-    const upstreamRes = await fetch(target, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
+    let upstreamRes: Response | null = null;
+    let source: WeatherSource = 'public-api';
+    let target = publicTarget;
+    let fallbackReason: string | null = null;
+
+    if (selfHostedTarget) {
+      try {
+        const candidate = await fetchWithTimeout(selfHostedTarget);
+        if (candidate.ok) {
+          upstreamRes = candidate;
+          source = 'self-hosted-vps';
+          target = selfHostedTarget;
+        } else {
+          fallbackReason = `self-hosted returned ${candidate.status}`;
+          console.warn(`[openmeteo-proxy] ${fallbackReason}; retrying public Open-Meteo`);
+        }
+      } catch (err) {
+        fallbackReason = err instanceof Error ? err.message : String(err);
+        console.warn(`[openmeteo-proxy] self-hosted fetch failed (${fallbackReason}); retrying public Open-Meteo`);
+      }
+    }
+
+    if (!upstreamRes) {
+      upstreamRes = await fetchWithTimeout(publicTarget);
+      source = 'public-api';
+      target = publicTarget;
+    }
+
+    console.log(
+      `[openmeteo-proxy] ${source === 'self-hosted-vps' ? 'SELF-HOSTED' : 'PUBLIC FALLBACK'} ` +
+        `→ ${target}${fallbackReason ? ` (${fallbackReason})` : ''}`,
+    );
 
     const body = await upstreamRes.arrayBuffer();
 
@@ -80,7 +112,8 @@ export default async function handler(
     if (contentType) res.setHeader('Content-Type', contentType);
     // Marker header so the browser can confirm the request was served
     // by *our* proxy (visible in DevTools → Network → Response Headers).
-    res.setHeader('X-Weather-Source', usingSelfHosted ? 'self-hosted-vps' : 'public-api');
+    res.setHeader('X-Weather-Source', source);
+    if (fallbackReason) res.setHeader('X-Weather-Fallback-Reason', fallbackReason);
     // Browser cache: 5 min fresh, 10 min stale-while-revalidate
     res.setHeader(
       'Cache-Control',
@@ -90,7 +123,5 @@ export default async function handler(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return res.status(502).json({ error: 'Upstream fetch failed', detail: msg });
-  } finally {
-    clearTimeout(timer);
   }
 }
