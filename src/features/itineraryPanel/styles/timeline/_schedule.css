@@ -356,7 +356,7 @@
   justify-content: center;
   gap: 4px;
   min-width: 0;
-  width: var(--rvi-tl-pause-col);
+  width: 100%;
 }
 
 .rvi-tl-schedule__pause-chip {
@@ -377,6 +377,12 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
+  overflow: hidden;
+}
+.rvi-tl-schedule__pause-chip > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .rvi-tl-schedule__pause-chip.is-visible {
