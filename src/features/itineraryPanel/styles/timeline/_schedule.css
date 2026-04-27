@@ -94,9 +94,9 @@
   grid-template-columns:
     var(--rvi-tl-icon-col)
     minmax(0, 1fr)
-    var(--rvi-tl-pause-col)
-    var(--rvi-tl-start-col)
-    var(--rvi-tl-next-col)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col))
     var(--rvi-tl-fav-col);
   column-gap: var(--rvi-tl-card-gap);
   align-items: center;
@@ -316,9 +316,9 @@
   grid-template-columns:
     var(--rvi-tl-icon-col)
     minmax(0, 1fr)
-    var(--rvi-tl-pause-col)
-    var(--rvi-tl-start-col)
-    var(--rvi-tl-next-col)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col))
     var(--rvi-tl-fav-col);
   align-items: center;
   align-content: center;
