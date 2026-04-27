@@ -5,12 +5,11 @@
  * Right: settings, split "add" button, fullscreen toggle.
  */
 import type { MouseEventHandler } from 'react';
+import { IconMaximize } from '@/features/mapViewportControls/components/MapViewportControlIcons';
 import {
   IconChevronDown,
   IconClockFastForward,
-  IconExpand04,
   IconLayoutGrid,
-  IconMinimize04,
   IconPlusCircleFilled,
   IconSettings04,
 } from '../../components/icons';
@@ -100,7 +99,7 @@ export function TimelineHeader({
         aria-label={fullscreenActive ? 'Quitter le plein écran' : 'Ouvrir en plein écran'}
         aria-pressed={fullscreenActive}
       >
-        {fullscreenActive ? <IconMinimize04 size={16} /> : <IconExpand04 size={16} />}
+        <IconMaximize size={16} />
       </button>
     </div>
   );

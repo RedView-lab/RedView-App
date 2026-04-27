@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 import { useMiddleClickAutoscroll } from '../../lib/useMiddleClickAutoscroll';
 import { PanelHeader } from './components/PanelHeader';
 import { ItineraryTabs } from './components/ItineraryTabs';
@@ -73,7 +74,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
 
   const style: CSSProperties | undefined =
-    !timelineFullscreen && width !== undefined ? { width: `${width}px` } : undefined;
+    width !== undefined ? { width: `${width}px` } : undefined;
 
   useEffect(() => {
     if (!timelineFullscreen) return;
@@ -100,158 +101,168 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     }
   }, [active, timelineFullscreen]);
 
+  const dockTimelinePanel = active ? (
+    <TimelinePanel
+      items={active.timeline}
+      rhythm={active.rhythm}
+      prediction={active.prediction ?? null}
+      view={project.timelineView}
+      onChangeView={onChangeTimelineView}
+      onOpenSettings={onOpenTimelineSettings}
+      onToggleFullscreen={() => setTimelineFullscreen(true)}
+      onAdd={onAddTimelineItem}
+      onToggleItem={onToggleTimelineItem}
+      onFavoriteItem={onFavoriteTimelineItem}
+      onRemoveItem={onRemoveTimelineItem}
+      onSelectPlace={onSelectTimelinePlace}
+    />
+  ) : null;
+
+  const fullscreenTimelinePanel = active ? (
+    <TimelinePanel
+      items={active.timeline}
+      rhythm={active.rhythm}
+      prediction={active.prediction ?? null}
+      view={project.timelineView}
+      isFullscreen
+      onChangeView={onChangeTimelineView}
+      onOpenSettings={onOpenTimelineSettings}
+      onToggleFullscreen={() => setTimelineFullscreen(false)}
+      onAdd={onAddTimelineItem}
+      onToggleItem={onToggleTimelineItem}
+      onFavoriteItem={onFavoriteTimelineItem}
+      onRemoveItem={onRemoveTimelineItem}
+      onSelectPlace={onSelectTimelinePlace}
+    />
+  ) : null;
+
+  if (timelineFullscreen && fullscreenTimelinePanel && typeof document !== 'undefined') {
+    return createPortal(
+      <div className="rvi-panel-fullscreen-root">
+        <aside
+          className="rvi-panel rvi-panel--timeline-fullscreen"
+          role="dialog"
+          aria-modal
+          aria-label="Timeline en plein écran"
+        >
+          <div className="rvi-panel__fullscreen-body">{fullscreenTimelinePanel}</div>
+        </aside>
+      </div>,
+      document.body,
+    );
+  }
+
   return (
     <aside
-      className={`rvi-panel${isResizing ? ' is-resizing' : ''}${timelineFullscreen ? ' is-timeline-fullscreen' : ''}`}
+      className={`rvi-panel${isResizing ? ' is-resizing' : ''}`}
       style={style}
-      role={timelineFullscreen ? 'dialog' : undefined}
-      aria-modal={timelineFullscreen || undefined}
       aria-label="Panneau d'itinéraire"
     >
-      {timelineFullscreen ? (
-        <div className="rvi-panel__fullscreen-body">
-          {active ? (
-            <TimelinePanel
-              items={active.timeline}
-              rhythm={active.rhythm}
-              prediction={active.prediction ?? null}
-              view={project.timelineView}
-              isFullscreen
-              onChangeView={onChangeTimelineView}
-              onOpenSettings={onOpenTimelineSettings}
-              onToggleFullscreen={() => setTimelineFullscreen(false)}
-              onAdd={onAddTimelineItem}
-              onToggleItem={onToggleTimelineItem}
-              onFavoriteItem={onFavoriteTimelineItem}
-              onRemoveItem={onRemoveTimelineItem}
-              onSelectPlace={onSelectTimelinePlace}
-            />
-          ) : null}
-        </div>
-      ) : (
-        <>
-          <PanelHeader
-            title={project.name}
-            savedAt={project.savedAt}
-            sizeBytes={project.sizeBytes}
-            privacy={project.privacy}
-            onBack={onBackToHome}
-            onRename={onRenameProject}
-            onSettings={onSaveProject}
-            onDownload={onDownloadProject}
-            onShare={onShareProject}
-          />
+      <PanelHeader
+        title={project.name}
+        savedAt={project.savedAt}
+        sizeBytes={project.sizeBytes}
+        privacy={project.privacy}
+        onBack={onBackToHome}
+        onRename={onRenameProject}
+        onSettings={onSaveProject}
+        onDownload={onDownloadProject}
+        onShare={onShareProject}
+      />
 
-          <div className="rvi-divider" />
+      <div className="rvi-divider" />
 
-          <ItineraryTabs
-            itineraries={project.itineraries}
-            activeId={project.activeItineraryId}
-            onSelect={onSelectItinerary}
-            onAdd={onOpenAddItinerary ?? onAddItinerary}
-            onAddButtonRef={props.onAddButtonRef}
-            onRemove={onRemoveItinerary}
-            onRename={onRenameItinerary}
-          />
+      <ItineraryTabs
+        itineraries={project.itineraries}
+        activeId={project.activeItineraryId}
+        onSelect={onSelectItinerary}
+        onAdd={onOpenAddItinerary ?? onAddItinerary}
+        onAddButtonRef={props.onAddButtonRef}
+        onRemove={onRemoveItinerary}
+        onRename={onRenameItinerary}
+      />
 
-          <div className="rvi-divider" />
+      <div className="rvi-divider" />
 
-          <ModeTabs active={project.activeMode} onChange={onChangeMode} />
+      <ModeTabs active={project.activeMode} onChange={onChangeMode} />
 
-          <div className="rvi-divider" />
+      <div className="rvi-divider" />
 
-          <div
-            ref={scrollRef}
-            className={`rvi-panel__scroll${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
-          >
-            {routeError ? (
-              <div className="rvi-route-banner rvi-route-banner--error" role="alert">
-                {routeError}
-              </div>
-            ) : null}
-            {routeWarnings && routeWarnings.length > 0 ? (
-              <div className="rvi-route-banner rvi-route-banner--warn" role="status">
-                {routeWarnings.map((w, i) => (
-                  <div key={i}>{w}</div>
-                ))}
-              </div>
-            ) : null}
-            {active && project.activeMode === 'tracage' ? (
-              <>
-                <ProfileBar
-                  profiles={profiles}
-                  activeProfileId={active.profileId}
-                  onChange={onChangeProfile}
-                  onUndo={onUndo}
-                  onRedo={onRedo}
-                  canUndo={canUndo}
-                  canRedo={canRedo}
-                  onSave={onSaveProfile}
-                />
-                <TracageSection
-                  priorities={active.priorities}
-                  roadTypes={active.roadTypes}
-                  onChangePriority={onChangePriority}
-                  onChangeRoadType={onChangeRoadType}
-                />
-              </>
-            ) : null}
-            {active && project.activeMode === 'rythme' ? (
-              <RythmeSection
-                rhythm={active.rhythm}
-                onChange={onChangeRhythm}
-                onUploadFit={onUploadFit}
-                uploadFitLabel={uploadFitLabel}
-                onCalculate={onCalculate}
-                calculateLabel={calculateLabel}
-                calculateDisabled={calculateDisabled}
-              />
-            ) : null}
-            {project.activeMode === 'poi' ? (
-              active ? (
-                <PoiSection
-                  poi={active.poi}
-                  onChangeEntry={onChangePoiEntry}
-                  onChangeRefine={onChangePoiRefine}
-                  onChangeRefineLimit={onChangePoiRefineLimit}
-                  onOpenCategories={onOpenPoiCategories}
-                  onLoad={onLoadPois}
-                  loading={poiLoading}
-                  progress={poiProgress}
-                  poiCount={poiCount}
-                  error={poiError}
-                  disabled={poiLoadDisabled}
-                  disabledReason={poiLoadDisabledReason}
-                />
-              ) : (
-                <ComingSoonSection title="Points d'intérêt" />
-              )
-            ) : null}
-            {project.activeMode === 'nutrition' ? (
-              <ComingSoonSection title="Nutrition" />
-            ) : null}
-
-            {active ? (
-              <TimelinePanel
-                items={active.timeline}
-                rhythm={active.rhythm}
-                prediction={active.prediction ?? null}
-                view={project.timelineView}
-                onChangeView={onChangeTimelineView}
-                onOpenSettings={onOpenTimelineSettings}
-                onToggleFullscreen={() => setTimelineFullscreen(true)}
-                onAdd={onAddTimelineItem}
-                onToggleItem={onToggleTimelineItem}
-                onFavoriteItem={onFavoriteTimelineItem}
-                onRemoveItem={onRemoveTimelineItem}
-                onSelectPlace={onSelectTimelinePlace}
-              />
-            ) : null}
+      <div
+        ref={scrollRef}
+        className={`rvi-panel__scroll${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
+      >
+        {routeError ? (
+          <div className="rvi-route-banner rvi-route-banner--error" role="alert">
+            {routeError}
           </div>
-        </>
-      )}
+        ) : null}
+        {routeWarnings && routeWarnings.length > 0 ? (
+          <div className="rvi-route-banner rvi-route-banner--warn" role="status">
+            {routeWarnings.map((w, i) => (
+              <div key={i}>{w}</div>
+            ))}
+          </div>
+        ) : null}
+        {active && project.activeMode === 'tracage' ? (
+          <>
+            <ProfileBar
+              profiles={profiles}
+              activeProfileId={active.profileId}
+              onChange={onChangeProfile}
+              onUndo={onUndo}
+              onRedo={onRedo}
+              canUndo={canUndo}
+              canRedo={canRedo}
+              onSave={onSaveProfile}
+            />
+            <TracageSection
+              priorities={active.priorities}
+              roadTypes={active.roadTypes}
+              onChangePriority={onChangePriority}
+              onChangeRoadType={onChangeRoadType}
+            />
+          </>
+        ) : null}
+        {active && project.activeMode === 'rythme' ? (
+          <RythmeSection
+            rhythm={active.rhythm}
+            onChange={onChangeRhythm}
+            onUploadFit={onUploadFit}
+            uploadFitLabel={uploadFitLabel}
+            onCalculate={onCalculate}
+            calculateLabel={calculateLabel}
+            calculateDisabled={calculateDisabled}
+          />
+        ) : null}
+        {project.activeMode === 'poi' ? (
+          active ? (
+            <PoiSection
+              poi={active.poi}
+              onChangeEntry={onChangePoiEntry}
+              onChangeRefine={onChangePoiRefine}
+              onChangeRefineLimit={onChangePoiRefineLimit}
+              onOpenCategories={onOpenPoiCategories}
+              onLoad={onLoadPois}
+              loading={poiLoading}
+              progress={poiProgress}
+              poiCount={poiCount}
+              error={poiError}
+              disabled={poiLoadDisabled}
+              disabledReason={poiLoadDisabledReason}
+            />
+          ) : (
+            <ComingSoonSection title="Points d'intérêt" />
+          )
+        ) : null}
+        {project.activeMode === 'nutrition' ? (
+          <ComingSoonSection title="Nutrition" />
+        ) : null}
 
-      {onResizeStart && !timelineFullscreen ? (
+        {dockTimelinePanel}
+      </div>
+
+      {onResizeStart ? (
         <div
           role="separator"
           aria-orientation="vertical"
