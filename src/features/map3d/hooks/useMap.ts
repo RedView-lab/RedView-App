@@ -653,6 +653,7 @@ export function useMap(
       demTrackingEnabled = false;
       clearDemTracking();
       clearStyleBootstrapArtifacts();
+      setIsLoaded(false);
       reportMapStatus('loading', 18, detail);
     };
 
@@ -899,7 +900,7 @@ export function useMap(
       registerReloadRef.current?.(null);
       onLoadStatusChangeRef.current?.(null);
     };
-  }, [basemapStyleUrl, containerRef, initialViewport]);
+  }, [containerRef]);
 
   useEffect(() => {
     const map = mapRef.current;
