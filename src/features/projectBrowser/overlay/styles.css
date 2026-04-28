@@ -3,15 +3,12 @@
   inset: 0;
   z-index: 60;
   display: flex;
-  /*
-   * Match Figma: ample but not excessive side margin so 4 cards fit at
-   * 1920px (1920 - 2*160 = 1600 → 4×360 + 3×24 = 1512).
-   */
   padding: 64px 160px;
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.12) 100%),
     linear-gradient(90deg, #000 0%, #000 100%);
 }
+
 .rvpb-shell {
   flex: 1 1 auto;
   min-width: 0;
@@ -206,13 +203,6 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  /*
-   * Figma layout: a fluid track of fixed-width cards (~310–360px wide)
-   * that NEVER stretches. `auto-fill` (vs `auto-fit`) keeps empty tracks
-   * reserved so two cards remain card-sized instead of ballooning to
-   * fill the row. The right-hand area collapses into trailing empty
-   * tracks, matching the Figma mock with 4 columns at 1920px.
-   */
   grid-template-columns: repeat(auto-fill, minmax(310px, 360px));
   justify-content: start;
   align-content: start;
@@ -364,7 +354,6 @@
   .rvpb-grid-shell {
     padding: 16px;
     gap: 16px;
-    /* On narrow screens, let cards fill the available width. */
     grid-template-columns: 1fr;
   }
 
@@ -377,8 +366,6 @@
     margin-left: 0;
   }
 }
-
-/* ── Backend additions ───────────────────────────────────────────── */
 
 .rvpb-empty {
   grid-column: 1 / -1;
@@ -875,5 +862,3 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-
-

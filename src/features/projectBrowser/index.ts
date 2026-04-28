@@ -1,1 +1,1 @@
-export { ProjectBrowserOverlay } from './ProjectBrowserOverlay';
+export { ProjectBrowserOverlay } from './overlay';
