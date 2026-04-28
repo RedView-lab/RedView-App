@@ -62,6 +62,60 @@ const MANAGED_SUBSCRIPTION_STATUSES = new Set([
   'incomplete',
 ]);
 
+function isMissingStripeCustomerError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    param?: string;
+    message?: string;
+  };
+
+  return (
+    candidate.code === 'resource_missing' &&
+    (candidate.param === 'customer' ||
+      candidate.message?.toLowerCase().includes('no such customer') === true)
+  );
+}
+
+async function createAndStoreStripeCustomer(userId: string, email: string | null): Promise<string> {
+  const customer = await getStripeServer().customers.create({
+    ...(email ? { email } : {}),
+    metadata: { supabase_user_id: userId },
+  });
+
+  const { error: upsertError } = await getSupabaseAdmin().from('customers').upsert(
+    {
+      id: userId,
+      stripe_customer_id: customer.id,
+    },
+    {
+      onConflict: 'id',
+    },
+  );
+
+  if (upsertError) {
+    throw upsertError;
+  }
+
+  return customer.id;
+}
+
+async function getValidatedStripeCustomerId(stripeCustomerId: string): Promise<string | null> {
+  try {
+    const customer = await getStripeServer().customers.retrieve(stripeCustomerId);
+    return customer.deleted ? null : customer.id;
+  } catch (error) {
+    if (isMissingStripeCustomerError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
 export async function getOrCreateStripeCustomer(
   userId: string,
   email: string | null,
@@ -79,29 +133,13 @@ export async function getOrCreateStripeCustomer(
   }
 
   if (existing?.stripe_customer_id) {
-    return existing.stripe_customer_id;
+    const validatedCustomerId = await getValidatedStripeCustomerId(existing.stripe_customer_id);
+    if (validatedCustomerId) {
+      return validatedCustomerId;
+    }
   }
 
-  const customer = await getStripeServer().customers.create({
-    ...(email ? { email } : {}),
-    metadata: { supabase_user_id: userId },
-  });
-
-  const { error: upsertError } = await admin.from('customers').upsert(
-    {
-      id: userId,
-      stripe_customer_id: customer.id,
-    },
-    {
-      onConflict: 'id',
-    },
-  );
-
-  if (upsertError) {
-    throw upsertError;
-  }
-
-  return customer.id;
+  return createAndStoreStripeCustomer(userId, email);
 }
 
 export async function getSubscriptionSnapshot(userId: string): Promise<SubscriptionSnapshot> {
@@ -246,9 +284,18 @@ async function getPaymentMethodSummary(
     return { customerEmail: null, paymentMethod: null };
   }
 
-  const customer = await getStripeServer().customers.retrieve(stripeCustomerId, {
-    expand: ['invoice_settings.default_payment_method'],
-  });
+  let customer: Stripe.Customer | Stripe.DeletedCustomer;
+  try {
+    customer = await getStripeServer().customers.retrieve(stripeCustomerId, {
+      expand: ['invoice_settings.default_payment_method'],
+    });
+  } catch (error) {
+    if (isMissingStripeCustomerError(error)) {
+      return { customerEmail: null, paymentMethod: null };
+    }
+
+    throw error;
+  }
 
   if (customer.deleted) {
     return { customerEmail: null, paymentMethod: null };
@@ -366,7 +413,11 @@ export async function createPortalSession(
 
 export async function getStripeCustomerId(userId: string): Promise<string | null> {
   const row = await getCustomerRow(userId);
-  return row?.stripe_customer_id ?? null;
+  if (!row?.stripe_customer_id) {
+    return null;
+  }
+
+  return getValidatedStripeCustomerId(row.stripe_customer_id);
 }
 
 export async function getCurrentManagedSubscriptionRow(
