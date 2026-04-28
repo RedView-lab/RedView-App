@@ -14,7 +14,6 @@ import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itinerar
 
 import { ControlPanel } from '../ControlPanel';
 import { buildBasemapList, normalizeBasemapId } from '../basemaps';
-import { DEMO_BASEMAP_ID, isDemoMode } from '@/features/demo';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../defaultState';
 import {
   createDefaultControlPanelPersistedState,
@@ -100,9 +99,7 @@ export function ControlPanelContainer({
     onShadowOverlayReloadChange,
   });
   const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>(
-    () => isDemoMode()
-      ? DEMO_BASEMAP_ID
-      : normalizeBasemapId(initialControlPanel.basemapId),
+    () => normalizeBasemapId(initialControlPanel.basemapId),
   );
 
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
@@ -201,9 +198,6 @@ export function ControlPanelContainer({
 
   const handleBasemapToggle = useCallback(
     (id: BasemapId) => {
-      // Demo mode locks the basemap to topographic to keep Mapbox raster
-      // tile billing at zero — swallow any toggle attempt.
-      if (isDemoMode()) return;
       const nextBasemapId = normalizeBasemapId(id);
       if (nextBasemapId === activeBasemapId) return;
 
@@ -219,11 +213,7 @@ export function ControlPanelContainer({
   const state: ControlPanelState = useMemo(
     () => ({
       ...DEFAULT_CONTROL_PANEL_STATE,
-      // In demo mode only expose the locked topographic basemap so the UI
-      // shows no other choice.
-      basemaps: isDemoMode()
-        ? buildBasemapList(DEMO_BASEMAP_ID).filter((b) => b.id === DEMO_BASEMAP_ID)
-        : buildBasemapList(activeBasemapId),
+      basemaps: buildBasemapList(activeBasemapId),
       lidarTiles,
       routes: { enabled: routesEnabled, items: routeItems },
       labels: overlayState.slices.labels,

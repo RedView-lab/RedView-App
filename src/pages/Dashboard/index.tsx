@@ -10,7 +10,6 @@ import {
 import { createOverlayStatus } from '@/features/map3d/overlayStatus';
 import { ControlPanelContainer } from '@/features/controlPanel';
 import { DEFAULT_BASEMAP_ID, getBasemapStyleUrl, normalizeBasemapId } from '@/features/controlPanel/basemaps';
-import { getDemoEnforcedBasemapId } from '@/features/demo';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
@@ -52,14 +51,8 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  // Demo mode (public showcase) overrides the user's basemap choice and locks
-  // the app to the vector `topographic` style so the Mapbox Raster Tiles SKU
-  // is never billed during demos.
-  const demoBasemapId = getDemoEnforcedBasemapId();
-  const [selectedBasemapId, setSelectedBasemapId] = useState(
-    demoBasemapId ?? DEFAULT_BASEMAP_ID,
-  );
-  const effectiveBasemapId = demoBasemapId ?? selectedBasemapId;
+  const [selectedBasemapId, setSelectedBasemapId] = useState(DEFAULT_BASEMAP_ID);
+  const effectiveBasemapId = selectedBasemapId;
   const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
   const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
@@ -84,11 +77,8 @@ export default function Dashboard({
   );
 
   useEffect(() => {
-    // In demo mode the persisted project basemap is ignored — the lock takes
-    // priority over user/project state for the entire session.
-    if (demoBasemapId) return;
     setSelectedBasemapId(initialBasemapId);
-  }, [activeProjectId, initialBasemapId, demoBasemapId]);
+  }, [activeProjectId, initialBasemapId]);
 
   const {
     lidarModeEnabled,
