@@ -379,7 +379,7 @@ export function ProjectBrowserOverlay({
           ? await changeSubscriptionPlan(requestedPlanId)
           : await createSubscriptionIntent(requestedPlanId);
 
-        if (result.requiresPaymentConfirmation && result.clientSecret) {
+        if (result.clientSecret) {
           setBillingModal({
             mode: 'subscription',
             clientSecret: result.clientSecret,
