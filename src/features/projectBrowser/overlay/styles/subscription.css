@@ -53,6 +53,19 @@
     transform 160ms ease;
 }
 
+.rvpb-subscription-card__select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
 .rvpb-subscription-card:hover {
   border-color: rgba(255, 255, 255, 0.28);
   transform: translateY(-1px);
