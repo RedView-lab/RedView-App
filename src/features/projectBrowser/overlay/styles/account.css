@@ -62,6 +62,21 @@
   box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
 }
 
+.rvpb-account-select {
+  position: relative;
+}
+
+.rvpb-account-select-trigger {
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+}
+
+.rvpb-account-select.is-open .rvpb-account-select-trigger {
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .rvpb-account-input-shell--with-icon {
   padding-left: 10px;
 }
@@ -79,7 +94,13 @@
 }
 
 .rvpb-account-select-icon {
+  margin-left: auto;
   pointer-events: none;
+  transition: transform 160ms ease;
+}
+
+.rvpb-account-select.is-open .rvpb-account-select-icon {
+  transform: rotate(180deg);
 }
 
 .rvpb-account-flag {
@@ -88,6 +109,15 @@
   height: 20px;
   border-radius: 999px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.rvpb-account-select-value,
+.rvpb-account-select-option-label {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .rvpb-account-input-shell input,
@@ -107,6 +137,47 @@
 .rvpb-account-select-shell select {
   appearance: none;
   padding-right: 8px;
+}
+
+.rvpb-account-select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 12;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(23, 23, 23, 0.96);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(24px);
+}
+
+.rvpb-account-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 9px 12px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.rvpb-account-select-option + .rvpb-account-select-option {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rvpb-account-select-option:hover,
+.rvpb-account-select-option.is-selected {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvpb-account-input-shell input::placeholder {

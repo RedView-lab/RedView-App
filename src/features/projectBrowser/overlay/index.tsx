@@ -284,6 +284,22 @@ export function ProjectBrowserOverlay({
     [setBusy],
   );
 
+  const handleSignOut = useCallback(async () => {
+    if (isSigningOut) return;
+
+    setIsSigningOut(true);
+    try {
+      await signOutAccount();
+      window.location.reload();
+    } catch (nextError) {
+      console.warn('[ProjectBrowserOverlay] Failed to sign out', nextError);
+      setAccountError(
+        nextError instanceof Error ? nextError.message : 'Impossible de se déconnecter.',
+      );
+      setIsSigningOut(false);
+    }
+  }, [isSigningOut]);
+
   if (!open) return null;
 
   const q = search.trim().toLowerCase();
@@ -306,22 +322,6 @@ export function ProjectBrowserOverlay({
       : lastEdited
         ? `Dernière modification ${formatSavedAt(lastEdited.updatedAt)}`
         : 'Aucun projet enregistré';
-
-  const handleSignOut = useCallback(async () => {
-    if (isSigningOut) return;
-
-    setIsSigningOut(true);
-    try {
-      await signOutAccount();
-      window.location.reload();
-    } catch (nextError) {
-      console.warn('[ProjectBrowserOverlay] Failed to sign out', nextError);
-      setAccountError(
-        nextError instanceof Error ? nextError.message : 'Impossible de se déconnecter.',
-      );
-      setIsSigningOut(false);
-    }
-  }, [isSigningOut]);
 
   return (
     <div
