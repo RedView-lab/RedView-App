@@ -10,12 +10,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendMethodNotAllowed(res, ['POST']);
   }
 
-  const user = await requireAuthenticatedUser(req, res);
-  if (!user) {
-    return;
-  }
-
   try {
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) {
+      return;
+    }
+
     const stripeCustomerId = await getStripeCustomerId(user.id);
     if (!stripeCustomerId) {
       return res.status(404).json({ error: 'No Stripe customer found for this account' });

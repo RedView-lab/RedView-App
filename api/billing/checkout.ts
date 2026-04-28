@@ -24,12 +24,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendMethodNotAllowed(res, ['POST']);
   }
 
-  const user = await requireAuthenticatedUser(req, res);
-  if (!user) {
-    return;
-  }
-
   try {
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) {
+      return;
+    }
+
     const body = await readJsonBody<CheckoutRequestBody>(req);
     if (!body.planId || !isBillingPlanId(body.planId)) {
       return res.status(400).json({ error: 'Invalid plan selection' });

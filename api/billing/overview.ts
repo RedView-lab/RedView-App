@@ -9,12 +9,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return sendMethodNotAllowed(res, ['GET']);
   }
 
-  const user = await requireAuthenticatedUser(req, res);
-  if (!user) {
-    return;
-  }
-
   try {
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) {
+      return;
+    }
+
     const overview = await buildBillingOverview(user.id);
     return res.status(200).json(overview);
   } catch (error) {
