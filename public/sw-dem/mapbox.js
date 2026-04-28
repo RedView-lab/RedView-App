@@ -1,12 +1,27 @@
 // ---------------------------------------------------------------------------
-// Mapbox DEM tile fetching (passthrough for non-France areas)
+// DEM passthrough fetcher (non-France/CH areas, plus border prefill).
+//
+// As of 2026-04-28 this delegates to AWS Open Data Terrarium (free, ~30 m
+// global) instead of Mapbox terrain-DEM v1 to eliminate the Raster Tiles
+// API SKU billing for global DEM. The Mapbox path is preserved as
+// `fetchMapboxNativeTile` for emergency rollback only — DO NOT call it
+// from new code; every caller (build-tile.js, composite.js, sw-dem.js)
+// goes through `fetchMapboxTile` which now points to AWS.
 // ---------------------------------------------------------------------------
 
-// Mapbox Terrain DEM v1 native max zoom — beyond this, Mapbox returns
-// overzoomed (interpolated) tiles that are progressively flatter.
+// Native max zoom for *both* Mapbox terrain-DEM v1 and AWS Terrarium. Beyond
+// this, requests return overzoomed/404 — caller logic upstream already
+// handles the clamp + LiDAR-parent overzoom path correctly.
 const MAPBOX_DEM_MAXZOOM = 14;
 
+// Drop-in replacement: same signature, same Terrain-RGB Blob output.
 async function fetchMapboxTile(z, x, y) {
+  return fetchAWSTerrainTile(z, x, y);
+}
+
+// Legacy native Mapbox terrain-DEM fetcher — kept for rollback / debugging.
+// Not wired into the live pipeline.
+async function fetchMapboxNativeTile(z, x, y) {
   if (!mapboxToken) return null;
 
   // Clamp to Mapbox native maxzoom — requesting z15+ returns

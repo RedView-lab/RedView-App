@@ -11,7 +11,11 @@ export const unifiedDEMSource = {
   // 256px to match the SW output (DEM_TILE_SIZE in config.js)
   tileSize: 256,
   encoding: 'mapbox' as const,
-  minzoom: 0,
+  // Below z6 the DEM contributes no visible relief at world view but Mapbox
+  // GL would still request ~50 tiles per session for the globe mesh — wasted
+  // bandwidth and (when SW falls through to Mapbox) wasted Raster billing.
+  // Terrain stays disabled at world zoom; the SW also short-circuits z<4.
+  minzoom: 6,
   maxzoom: DEM_SOURCE_MAXZOOM,
 };
 

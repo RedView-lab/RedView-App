@@ -41,7 +41,7 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   },
 ] as const;
 
-export const DEFAULT_BASEMAP_ID: BasemapId = 'satellite';
+export const DEFAULT_BASEMAP_ID: BasemapId = 'topographic';
 
 const LEGACY_BASEMAP_ALIASES: Record<string, BasemapId> = {
   osm: 'streets',

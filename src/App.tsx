@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './lib/supabase'
 import { readProjectIdFromPath } from './lib/projectLocation'
 import PayWall from './components/PayWall'
+import { buildDemoSession, isDemoMode } from './features/demo'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -310,6 +311,23 @@ function App() {
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
     return <BootstrapScreen label="Loading..." />
+  }
+
+  // Demo-mode short-circuit: never hit the auth redirect nor the paywall.
+  // The synthetic session below is purely cosmetic for the dashboard chrome.
+  // Every Supabase write is independently guarded by `assertNotDemo` /
+  // `isDemoMode()` checks in `src/lib/projects.ts` so even an attacker who
+  // forges a session in DevTools cannot mutate user data.
+  if (isDemoMode()) {
+    const demoSession = buildDemoSession()
+    return (
+      <Suspense fallback={<BootstrapScreen label="Loading dashboard..." />}>
+        <Dashboard
+          email={demoSession.user.email}
+          initialProjectId={null}
+        />
+      </Suspense>
+    )
   }
 
   if (!session) {

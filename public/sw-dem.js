@@ -21,6 +21,7 @@ importScripts(
   '/sw-dem/terrain-rgb.js',
   '/sw-dem/ign-fetcher.js',
   '/sw-dem/mapbox.js',
+  '/sw-dem/aws-terrain.js',
   '/sw-dem/build-tile.js',
   '/sw-dem/composite.js',
   '/sw-dem/ortho.js',
@@ -236,9 +237,13 @@ function buildDemResponse(pngBlob, demSource, shortCache) {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
+      // 30-day TTL on positive DEM tiles. Both AWS Terrarium and IGN/swiss
+      // LiDAR DEM datasets are static reference data \u2014 keeping the SW cache
+      // warm across sessions eliminates re-billing for previously visited
+      // areas and is the single biggest lever on the Raster Tiles SKU.
       'Cache-Control': shortCache
         ? `public, max-age=${Math.max(1, Math.ceil(shortTtlMs / 1000))}`
-        : 'public, max-age=604800',
+        : 'public, max-age=2592000',
       'X-DEM-Source': demSource,
       'x-cached-at': String(cachedAt),
       ...(shortTtlMs > 0 ? { 'x-cache-ttl-ms': String(shortTtlMs) } : {}),
@@ -602,9 +607,12 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         // from a permanent flat patch (see screenshot Apr 24).
         (inSwitzerland && !tileTrulyTouchesFrance && swissTransientFailure)
       );
-    if (!pngBlob && mapboxToken && !skipMapboxHighZoomLiDAR) {
-      pngBlob = await fetchMapboxTile(z, x, y);
-      if (pngBlob) demSource = 'mapbox';
+    // AWS Terrarium replaces Mapbox terrain-DEM globally. No token needed,
+    // free public dataset, ~30 m worldwide. Mapbox SKU savings: ~−40 % of
+    // Raster Tiles API. France/CH still use IGN/swissALTI for high zoom.
+    if (!pngBlob && !skipMapboxHighZoomLiDAR) {
+      pngBlob = await fetchAWSTerrainTile(z, x, y);
+      if (pngBlob) demSource = 'aws-terrarium';
     }
 
     // 5. Single-step parent overzoom (outside-LiDAR & low-zoom path).

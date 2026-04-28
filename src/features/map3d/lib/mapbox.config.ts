@@ -1,6 +1,10 @@
 export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
 
-export const MAPBOX_STYLE = 'mapbox://styles/mapbox/standard-satellite';
+// Default style aligns with DEFAULT_BASEMAP_ID in features/controlPanel/basemaps.
+// Outdoors (vector) is billed under Vector Tiles, NOT Raster Tiles, so the
+// default-app load no longer charges the Raster Tiles SKU. Satellite remains
+// available as a premium-tier basemap option.
+export const MAPBOX_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 
 export const DEFAULT_VIEW = {
   center: [2.3522, 46.6034] as [number, number],

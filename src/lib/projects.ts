@@ -15,6 +15,7 @@ import { supabase } from './supabase';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { createDefaultProject } from '@/features/itineraryPanel/defaultState';
 import type { ItineraryFitUpload } from '@/features/itineraryPanel/types';
+import { assertNotDemo, isDemoMode } from '@/features/demo';
 
 export interface ProjectRow {
   id: string;
@@ -62,6 +63,10 @@ function computeSizeBytes(data: ItineraryProject): number {
 
 /** List the current user's projects, most-recently-edited first. */
 export async function listProjects(): Promise<ProjectSummary[]> {
+  // Demo mode: visitor has no real account — show an empty browser so they
+  // cannot accidentally see another user's data nor try to load a project
+  // that would trigger writes downstream.
+  if (isDemoMode()) return [];
   const { data, error } = await supabase
     .from('projects')
     .select('id, name, privacy, size_bytes, created_at, updated_at')
@@ -72,6 +77,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
 /** Fetch a single project (including its `data` payload). */
 export async function getProject(id: string): Promise<ProjectRow | null> {
+  if (isDemoMode()) return null;
   const { data, error } = await supabase
     .from('projects')
     .select('*')
@@ -92,6 +98,7 @@ export async function createProject(
   name?: string,
   initialData?: ItineraryProject,
 ): Promise<ProjectRow> {
+  assertNotDemo('createProject');
   const { data: sessionData, error: sessionErr } =
     await supabase.auth.getUser();
   if (sessionErr) throw sessionErr;
@@ -129,6 +136,9 @@ export async function saveProject(
   id: string,
   project: ItineraryProject,
 ): Promise<void> {
+  // Silently no-op autosaves in demo mode so the editor still works locally
+  // (in-memory project state) without ever issuing a write.
+  if (isDemoMode()) return;
   const { error } = await supabase
     .from('projects')
     .update({
@@ -143,6 +153,7 @@ export async function saveProject(
 
 /** Rename a project (updates both the column and the embedded JSONB name). */
 export async function renameProject(id: string, name: string): Promise<void> {
+  assertNotDemo('renameProject');
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Project name cannot be empty');
 
@@ -165,6 +176,7 @@ export async function renameProject(id: string, name: string): Promise<void> {
 
 /** Delete a project. RLS guarantees only the owner can call this. */
 export async function deleteProject(id: string): Promise<void> {
+  assertNotDemo('deleteProject');
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) throw error;
 }
@@ -247,6 +259,7 @@ export async function uploadProjectItineraryFitFiles(
   itineraryId: string,
   files: File[],
 ): Promise<ItineraryFitUpload[]> {
+  assertNotDemo('uploadProjectItineraryFitFiles');
   const userId = await getCurrentUserId();
   await deleteProjectItineraryFitFiles(projectId, itineraryId, userId);
 
@@ -278,6 +291,7 @@ export async function deleteProjectItineraryFitFiles(
   itineraryId: string,
   knownUserId?: string,
 ): Promise<void> {
+  if (isDemoMode()) return;
   const userId = knownUserId ?? await getCurrentUserId();
   const existingPaths = await listProjectFitObjectPaths(userId, projectId);
   const itineraryPrefix = `${fitProjectFolderPath(userId, projectId)}/${itineraryId.replace(/[^a-zA-Z0-9_-]+/g, '_')}--`;
@@ -309,6 +323,7 @@ export async function downloadProjectItineraryFitFiles(
 }
 
 export async function deleteProjectFitFiles(projectId: string): Promise<void> {
+  if (isDemoMode()) return;
   try {
     const userId = await getCurrentUserId();
     const paths = await listProjectFitObjectPaths(userId, projectId);
@@ -327,6 +342,7 @@ export async function uploadProjectThumbnail(
   projectId: string,
   blob: Blob,
 ): Promise<void> {
+  if (isDemoMode()) return;
   const { data: sessionData, error: sessionErr } =
     await supabase.auth.getUser();
   if (sessionErr) throw sessionErr;
@@ -357,6 +373,10 @@ export async function getProjectThumbnailUrls(
 ): Promise<Record<string, string | null>> {
   const out: Record<string, string | null> = {};
   if (projectIds.length === 0) return out;
+  if (isDemoMode()) {
+    for (const id of projectIds) out[id] = null;
+    return out;
+  }
 
   const { data: sessionData, error: sessionErr } =
     await supabase.auth.getUser();
@@ -394,6 +414,7 @@ export async function getProjectThumbnailUrls(
 
 /** Remove a project's thumbnail from storage (best-effort, never throws). */
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
+  if (isDemoMode()) return;
   try {
     const { data: sessionData } = await supabase.auth.getUser();
     const user = sessionData.user;
