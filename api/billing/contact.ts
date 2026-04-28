@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import type { BillingContactPreference } from '../_lib/billing';
-import { saveBillingContactPreference } from '../_lib/billing';
-import { sendMethodNotAllowed, readJsonBody } from '../_lib/http';
-import { requireAuthenticatedUser } from '../_lib/supabase';
+import type { BillingContactPreference } from '../_lib/billing.js';
+import { saveBillingContactPreference } from '../_lib/billing.js';
+import { sendMethodNotAllowed, readJsonBody } from '../_lib/http.js';
+import { requireAuthenticatedUser } from '../_lib/supabase.js';
 
 function isValidPreference(value: BillingContactPreference): boolean {
   if (value.mode !== 'account' && value.mode !== 'alternative') {

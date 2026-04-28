@@ -1,8 +1,8 @@
 import type Stripe from 'stripe';
 
-import { requireConfiguredPriceId, type BillingPlanId } from './config';
-import { getSupabaseAdmin } from './supabase';
-import { getStripeServer } from './stripe';
+import { requireConfiguredPriceId, type BillingPlanId } from './config.js';
+import { getSupabaseAdmin } from './supabase.js';
+import { getStripeServer } from './stripe.js';
 
 export type BillingContactPreference = {
   mode: 'account' | 'alternative';

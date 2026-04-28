@@ -5,15 +5,15 @@ import {
   getSubscriptionSnapshot,
   hasPaidSubscription,
   normalizeRequestedPlanId,
-} from '../_lib/billing';
+} from '../_lib/billing.js';
 import {
   getAppBaseUrl,
   isBillingPlanId,
   requireConfiguredPriceId,
-} from '../_lib/config';
-import { readJsonBody, sendMethodNotAllowed } from '../_lib/http';
-import { requireAuthenticatedUser } from '../_lib/supabase';
-import { getStripeServer } from '../_lib/stripe';
+} from '../_lib/config.js';
+import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
+import { requireAuthenticatedUser } from '../_lib/supabase.js';
+import { getStripeServer } from '../_lib/stripe.js';
 
 type CheckoutRequestBody = {
   planId?: string;

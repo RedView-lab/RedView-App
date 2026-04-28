@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 
-import { requireEnv } from './config';
+import { requireEnv } from './config.js';
 
 let stripe: Stripe | null = null;
 

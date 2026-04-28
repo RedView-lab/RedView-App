@@ -5,11 +5,11 @@ import {
   getSubscriptionIdFromInvoice,
   getUserIdFromCustomer,
   upsertSubscription,
-} from '../_lib/billing';
-import { readRawBody, sendMethodNotAllowed } from '../_lib/http';
-import { getSupabaseAdmin } from '../_lib/supabase';
-import { getStripeServer } from '../_lib/stripe';
-import { requireEnv } from '../_lib/config';
+} from '../_lib/billing.js';
+import { readRawBody, sendMethodNotAllowed } from '../_lib/http.js';
+import { getSupabaseAdmin } from '../_lib/supabase.js';
+import { getStripeServer } from '../_lib/stripe.js';
+import { requireEnv } from '../_lib/config.js';
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.user_id;

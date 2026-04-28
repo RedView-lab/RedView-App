@@ -3,9 +3,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   applySetupIntentPaymentMethod,
   createPaymentMethodSetupIntent,
-} from '../_lib/billing';
-import { readJsonBody, sendMethodNotAllowed } from '../_lib/http';
-import { requireAuthenticatedUser } from '../_lib/supabase';
+} from '../_lib/billing.js';
+import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
+import { requireAuthenticatedUser } from '../_lib/supabase.js';
 
 type PaymentMethodRequestBody = {
   setupIntentId?: string;

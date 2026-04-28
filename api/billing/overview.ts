@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import { buildBillingOverview } from '../_lib/billing';
-import { sendMethodNotAllowed } from '../_lib/http';
-import { requireAuthenticatedUser } from '../_lib/supabase';
+import { buildBillingOverview } from '../_lib/billing.js';
+import { sendMethodNotAllowed } from '../_lib/http.js';
+import { requireAuthenticatedUser } from '../_lib/supabase.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

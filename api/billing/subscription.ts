@@ -8,10 +8,10 @@ import {
   normalizeRequestedPlanId,
   setManagedSubscriptionCancellation,
   syncManagedSubscription,
-} from '../_lib/billing';
-import { isBillingPlanId } from '../_lib/config';
-import { readJsonBody, sendMethodNotAllowed } from '../_lib/http';
-import { requireAuthenticatedUser } from '../_lib/supabase';
+} from '../_lib/billing.js';
+import { isBillingPlanId } from '../_lib/config.js';
+import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
+import { requireAuthenticatedUser } from '../_lib/supabase.js';
 
 type SubscriptionActionRequestBody = {
   action?: 'subscribe' | 'change' | 'cancel' | 'resume' | 'sync';

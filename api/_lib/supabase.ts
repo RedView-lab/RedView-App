@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-import { requireEnv } from './config';
+import { requireEnv } from './config.js';
 
 let adminClient: SupabaseClient | null = null;
 let authClient: SupabaseClient | null = null;
