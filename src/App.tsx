@@ -15,8 +15,14 @@ const AUTH_BOOT_TIMEOUT_MS = 8000
 // subscription state means the user never sees this latency anyway.
 const SUBSCRIPTION_BOOT_TIMEOUT_MS = 12000
 const SUBSCRIPTION_RETRY_TIMEOUT_MS = 15000
-const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:'
+const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:v2:'
 const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
+
+function hasAppAccess(subscription: { is_subscribed?: boolean | null; status?: string | null } | null): boolean {
+  if (!subscription) return true
+  if (subscription.status == null || subscription.status === 'demo') return true
+  return subscription.is_subscribed === true
+}
 
 function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -213,7 +219,7 @@ function App() {
         const { data, error } = await withTimeout(
           supabase
             .from('user_subscription_status')
-            .select('is_subscribed')
+            .select('is_subscribed, status')
             .eq('user_id', userId)
             .abortSignal(abortController.signal)
             .maybeSingle(),
@@ -223,7 +229,7 @@ function App() {
 
         if (error) throw error
 
-        return data?.is_subscribed ?? false
+        return hasAppAccess(data)
       } finally {
         if (activeSubscriptionAbortController === abortController) {
           activeSubscriptionAbortController = null

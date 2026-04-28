@@ -195,19 +195,38 @@ function writeBillingContactPreference(
   }
 }
 
+function isDemoPlan(snapshot: SubscriptionSnapshot | null): boolean {
+  if (!snapshot) return true;
+  return snapshot.status === 'demo' || (!snapshot.isSubscribed && snapshot.status == null);
+}
+
+function hasPaidSubscription(snapshot: SubscriptionSnapshot | null): boolean {
+  if (!snapshot) return false;
+  return snapshot.isSubscribed && !isDemoPlan(snapshot);
+}
+
+function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoading: boolean): string {
+  if (isLoading) return 'Compte';
+  return hasPaidSubscription(snapshot) ? 'Premium' : 'Demo';
+}
+
 function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
-  if (!snapshot?.isSubscribed) return 'proMonthly';
+  if (!snapshot || !hasPaidSubscription(snapshot)) return 'explorer';
 
   const matchedPlan = (Object.entries(PLAN_PRICE_IDS) as Array<[SubscriptionPlanId, string | undefined]>).find(
     ([, priceId]) => priceId && snapshot.priceId === priceId,
   );
 
-  return matchedPlan?.[0] ?? 'proMonthly';
+  return matchedPlan?.[0] ?? 'explorer';
 }
 
 function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {
-  if (!snapshot?.isSubscribed) {
-    return 'Aucun abonnement actif sur ce compte. Ouvrez RedView Web pour souscrire ou réactiver votre plan.';
+  if (!snapshot) {
+    return 'Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.';
+  }
+
+  if (isDemoPlan(snapshot)) {
+    return 'Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.';
   }
 
   if (snapshot.cancelAtPeriodEnd) {
@@ -223,6 +242,7 @@ function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): strin
 
 function statusLabel(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot?.status) return 'Statut indisponible';
+  if (snapshot.status === 'demo') return 'Demo';
   if (snapshot.status === 'active') return 'Actif';
   if (snapshot.status === 'trialing') return 'Essai';
   return snapshot.status;
@@ -534,7 +554,7 @@ export function ProjectBrowserOverlay({
   }, [open, refresh]);
 
   useEffect(() => {
-    if (!open || activeTab !== 'subscription' || !userId) return;
+    if (!open || !userId) return;
 
     let cancelled = false;
     setSubscriptionState((prev) => ({
@@ -556,7 +576,7 @@ export function ProjectBrowserOverlay({
 
         const snapshot: SubscriptionSnapshot = {
           isSubscribed: data?.is_subscribed ?? false,
-          status: data?.status ?? null,
+          status: data?.status ?? 'demo',
           priceId: data?.price_id ?? null,
           currentPeriodEnd: data?.current_period_end ?? null,
           cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
@@ -584,7 +604,7 @@ export function ProjectBrowserOverlay({
     return () => {
       cancelled = true;
     };
-  }, [activeTab, open, userId]);
+  }, [open, userId]);
 
   // Escape closes — but only when allowed.
   useEffect(() => {
@@ -693,7 +713,7 @@ export function ProjectBrowserOverlay({
           <div className="rvpb-user">
             <div className="rvpb-user__name">{displayName || 'Utilisateur'}</div>
             <div className="rvpb-user__meta">
-              <span className="rvpb-user__badge">Premium</span>
+              <span className="rvpb-user__badge">{accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}</span>
               <span>
                 {lastEdited
                   ? `Dernière modification ${formatSavedAt(lastEdited.updatedAt)}`
@@ -870,7 +890,7 @@ export function ProjectBrowserOverlay({
 
               <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
                 {SUBSCRIPTION_PLANS.map((plan) => {
-                  const isActivePlan = subscriptionState.snapshot?.isSubscribed && activePlanId === plan.id;
+                  const isActivePlan = hasPaidSubscription(subscriptionState.snapshot) && activePlanId === plan.id;
                   const isSelectedPlan = selectedPlan.id === plan.id;
 
                   return (
@@ -919,13 +939,17 @@ export function ProjectBrowserOverlay({
                     <SvgV2Icon name="credit-card-02.svg" size={18} />
                   </div>
                   <div className="rvpb-payment-card__copy">
-                    <strong>Facturation gérée dans Stripe</strong>
+                    <strong>{isDemoPlan(subscriptionState.snapshot) ? 'Plan Demo sans paiement' : 'Facturation gérée dans Stripe'}</strong>
                     <span>
-                      Ouvrez le portail sécurisé pour ajouter ou modifier votre moyen de paiement.
+                      {isDemoPlan(subscriptionState.snapshot)
+                        ? 'Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.'
+                        : 'Ouvrez le portail sécurisé pour ajouter ou modifier votre moyen de paiement.'}
                     </span>
                     <div className="rvpb-link-row">
                       <button type="button" className="rvpb-text-link" onClick={openSubscriptionPage}>
-                        Ouvrir la page d’abonnement
+                        {isDemoPlan(subscriptionState.snapshot)
+                          ? 'Choisir une offre payante'
+                          : 'Ouvrir la page d’abonnement'}
                       </button>
                     </div>
                   </div>
@@ -933,7 +957,11 @@ export function ProjectBrowserOverlay({
 
                 <button type="button" className="rvpb-add-row" onClick={openSubscriptionPage}>
                   <SvgV2Icon name="plus.svg" size={16} />
-                  <span>Ajouter ou modifier un moyen de paiement</span>
+                  <span>
+                    {isDemoPlan(subscriptionState.snapshot)
+                      ? 'Passer à une offre payante'
+                      : 'Ajouter ou modifier un moyen de paiement'}
+                  </span>
                 </button>
               </div>
             </div>
