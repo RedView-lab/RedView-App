@@ -16,6 +16,14 @@ const PLAN_PRICE_IDS: Partial<Record<SubscriptionPlanId, string>> = {
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
+    id: 'demo',
+    name: 'Demo',
+    priceLabel: 'Gratuit',
+    tags: ['Compte par défaut'],
+    iconBadges: [{ icon: 'layers-three-02.svg', tone: 'blue' }],
+    description: 'Point d’entrée gratuit pour consulter vos projets et préparer la suite avant un upgrade.',
+  },
+  {
     id: 'explorer',
     name: 'Abonnement Explorer',
     priceLabel: '9.99€/mois',
@@ -113,13 +121,13 @@ export function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoadin
 }
 
 export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
-  if (!snapshot || !hasPaidSubscription(snapshot)) return 'explorer';
+  if (!snapshot || !hasPaidSubscription(snapshot)) return 'demo';
 
   const matchedPlan = (
     Object.entries(PLAN_PRICE_IDS) as Array<[SubscriptionPlanId, string | undefined]>
   ).find(([, priceId]) => priceId && snapshot.priceId === priceId);
 
-  return matchedPlan?.[0] ?? 'explorer';
+  return matchedPlan?.[0] ?? 'demo';
 }
 
 export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {

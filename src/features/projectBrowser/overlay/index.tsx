@@ -17,7 +17,6 @@ import {
 } from '@/lib/projects';
 import { readStoredSupabaseSession, supabase } from '@/lib/supabase';
 
-import { DemoPanel } from './DemoPanel';
 import { PlaceholderPanel } from './PlaceholderPanel';
 import { ProjectsPanel } from './ProjectsPanel';
 import { SubscriptionPanel } from './SubscriptionPanel';
@@ -300,13 +299,6 @@ export function ProjectBrowserOverlay({
         <TopTabs activeTab={activeTab} onChange={setActiveTab} />
 
         <div className="rvpb-divider" />
-
-        {activeTab === 'demo' ? (
-          <DemoPanel
-            subscriptionState={subscriptionState}
-            openSubscriptionPage={openSubscriptionPage}
-          />
-        ) : null}
 
         {activeTab === 'projects' ? (
           <ProjectsPanel

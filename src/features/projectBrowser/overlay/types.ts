@@ -6,8 +6,8 @@ export interface ProjectBrowserOverlayProps {
   canClose?: boolean;
 }
 
-export type OverlayTab = 'demo' | 'projects' | 'account' | 'subscription' | 'settings';
-export type SubscriptionPlanId = 'explorer' | 'proCommit' | 'proMonthly';
+export type OverlayTab = 'projects' | 'account' | 'subscription' | 'settings';
+export type SubscriptionPlanId = 'demo' | 'explorer' | 'proCommit' | 'proMonthly';
 
 export type SubscriptionSnapshot = {
   isSubscribed: boolean;

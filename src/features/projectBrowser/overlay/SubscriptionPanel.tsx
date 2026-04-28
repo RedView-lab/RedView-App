@@ -59,9 +59,9 @@ export function SubscriptionPanel({
 
         <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
           {SUBSCRIPTION_PLANS.map((plan) => {
-            const isActivePlan =
-              hasPaidSubscription(subscriptionState.snapshot) && activePlanId === plan.id;
+            const isActivePlan = activePlanId === plan.id;
             const isSelectedPlan = selectedPlan.id === plan.id;
+            const isDemoSelection = plan.id === 'demo';
 
             return (
               <SubscriptionPlanCard
@@ -71,22 +71,22 @@ export function SubscriptionPanel({
                 active={Boolean(isActivePlan)}
                 onSelect={setSelectedPlanId}
                 ctaLabel={
-                  isActivePlan
+                  isActivePlan && !isDemoSelection
                     ? subscriptionState.snapshot?.cancelAtPeriodEnd
                       ? 'Gérer'
                       : 'Interrompre'
-                    : isSelectedPlan
+                    : isSelectedPlan && !isDemoSelection
                       ? 'Choisir sur RedView Web'
                       : undefined
                 }
-                ctaTone={isActivePlan ? 'danger' : 'neutral'}
-                onCtaClick={openSubscriptionPage}
+                ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
+                onCtaClick={isDemoSelection ? undefined : openSubscriptionPage}
                 ctaHelper={
-                  isActivePlan
+                  isActivePlan && !isDemoSelection
                     ? subscriptionState.snapshot?.cancelAtPeriodEnd
                       ? `Fin prévue le ${formatShortDate(subscriptionState.snapshot.currentPeriodEnd)}.`
                       : `Statut ${statusLabel(subscriptionState.snapshot).toLowerCase()}.`
-                    : isSelectedPlan
+                    : isSelectedPlan && !isDemoSelection
                       ? 'Le changement de plan se fait depuis la page d’abonnement RedView Web.'
                       : undefined
                 }

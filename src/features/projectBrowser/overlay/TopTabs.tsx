@@ -20,11 +20,6 @@ const TABS: Array<{
   icon: ReactNode;
 }> = [
   {
-    id: 'demo',
-    label: 'Demo',
-    icon: <SvgV2Icon name="layers-three-02.svg" size={16} />,
-  },
-  {
     id: 'projects',
     label: 'Projets',
     icon: <IconRoute size={13.333} />,
