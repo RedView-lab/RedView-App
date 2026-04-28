@@ -256,15 +256,19 @@ function buildSubscriptionActionResult(
 ): SubscriptionActionResult {
   const paymentIntent = getLatestInvoicePaymentIntent(subscription);
   const paymentIntentStatus = paymentIntent?.status ?? null;
+  const hasClientSecret = Boolean(paymentIntent?.client_secret);
+  const requiresPaymentConfirmation =
+    hasClientSecret &&
+    (subscription.status === 'incomplete' ||
+      paymentIntentStatus === 'requires_action' ||
+      paymentIntentStatus === 'requires_confirmation' ||
+      paymentIntentStatus === 'requires_payment_method');
 
   return {
     subscriptionId: subscription.id,
     subscription: toSnapshotFromStripeSubscription(subscription),
     clientSecret: paymentIntent?.client_secret ?? null,
-    requiresPaymentConfirmation:
-      paymentIntentStatus === 'requires_action' ||
-      paymentIntentStatus === 'requires_confirmation' ||
-      paymentIntentStatus === 'requires_payment_method',
+    requiresPaymentConfirmation,
   };
 }
 
