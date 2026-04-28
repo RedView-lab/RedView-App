@@ -2,7 +2,6 @@ import { SvgV2Icon } from '@/components/SvgV2Icon';
 
 import {
   buildSubscriptionHeadline,
-  hasPaidSubscription,
   isDemoPlan,
   resolveActivePlanId,
   statusLabel,
