@@ -9,7 +9,15 @@ import type {
 } from './persistedState';
 import type { DownloadProgress } from '@/features/lidar/types';
 
-export type BasemapId = 'satellite' | 'osm' | 'topographic' | string;
+export type BasemapId =
+  | 'satellite'
+  | 'streets'
+  | 'osm'
+  | 'topographic'
+  | 'standard'
+  | 'light'
+  | 'dark'
+  | string;
 
 export interface Basemap {
   id: BasemapId;

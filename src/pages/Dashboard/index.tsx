@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import {
   MapView,
@@ -9,6 +9,7 @@ import {
 } from '@/features/map3d';
 import { createOverlayStatus } from '@/features/map3d/overlayStatus';
 import { ControlPanelContainer } from '@/features/controlPanel';
+import { DEFAULT_BASEMAP_ID, getBasemapStyleUrl, normalizeBasemapId } from '@/features/controlPanel/basemaps';
 import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
 import { CenterPanel } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
@@ -50,6 +51,7 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+  const [selectedBasemapId, setSelectedBasemapId] = useState(DEFAULT_BASEMAP_ID);
   const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
   const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
@@ -68,6 +70,14 @@ export default function Dashboard({
     initialProjectId,
     mapInstance,
   });
+
+  const initialBasemapId = normalizeBasemapId(
+    activeProjectInitial?.controlPanel?.basemapId ?? DEFAULT_BASEMAP_ID,
+  );
+
+  useEffect(() => {
+    setSelectedBasemapId(initialBasemapId);
+  }, [activeProjectId, initialBasemapId]);
 
   const {
     lidarModeEnabled,
@@ -346,6 +356,7 @@ export default function Dashboard({
             onLidarSelectionDisable={() => setLidarModeEnabled(false)}
             initialViewport={projectMapViewport}
             onViewportChange={handleMapViewportChange}
+            basemapStyleUrl={getBasemapStyleUrl(selectedBasemapId)}
           />
 
           <MapOverlayStatusDock
@@ -510,6 +521,7 @@ export default function Dashboard({
                       <ControlPanelContainer
                         map={mapInstance}
                         isMapLoaded={mapLoaded}
+                        onBasemapChange={setSelectedBasemapId}
                         onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
                         onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
                         onShadowOverlayStatusChange={handleShadowOverlayStatusChange}

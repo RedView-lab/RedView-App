@@ -11,6 +11,7 @@ interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
   onMapLoadStatusChange?: OverlayStatusReporter;
   onMapReloadChange?: OverlayReloadRegistrar;
+  basemapStyleUrl?: string;
   lidarSelectionEnabled?: boolean;
   onLidarSelectionDisable?: () => void;
   initialViewport?: MapViewport | null;
@@ -21,6 +22,7 @@ export default function MapView({
   onMapReady,
   onMapLoadStatusChange,
   onMapReloadChange,
+  basemapStyleUrl,
   lidarSelectionEnabled = false,
   onLidarSelectionDisable,
   initialViewport,
@@ -32,6 +34,7 @@ export default function MapView({
     onViewportChange,
     onLoadStatusChange: onMapLoadStatusChange,
     registerReload: onMapReloadChange,
+    basemapStyleUrl,
   });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);

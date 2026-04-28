@@ -13,19 +13,21 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
 
 import { ControlPanel } from '../ControlPanel';
+import { buildBasemapList, normalizeBasemapId } from '../basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../defaultState';
 import {
   createDefaultControlPanelPersistedState,
   type ControlPanelPersistedState,
   type ControlPanelSectionKey,
 } from '../persistedState';
-import type { ControlPanelState } from '../types';
+import type { BasemapId, ControlPanelState } from '../types';
 import { useControlPanelOverlayState } from './useControlPanelOverlayState';
 import { useControlPanelTerrainState } from './useControlPanelTerrainState';
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
   isMapLoaded: boolean;
+  onBasemapChange?: (id: BasemapId) => void;
   onWeatherOverlayStatusChange?: OverlayStatusReporter;
   onWeatherOverlayReloadChange?: OverlayReloadRegistrar;
   onShadowOverlayStatusChange?: OverlayStatusReporter;
@@ -50,6 +52,7 @@ function tileKey(coord: TileCoord): string {
 export function ControlPanelContainer({
   map,
   isMapLoaded,
+  onBasemapChange,
   onWeatherOverlayStatusChange,
   onWeatherOverlayReloadChange,
   onShadowOverlayStatusChange,
@@ -95,6 +98,9 @@ export function ControlPanelContainer({
     onShadowOverlayStatusChange,
     onShadowOverlayReloadChange,
   });
+  const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>(
+    () => normalizeBasemapId(initialControlPanel.basemapId),
+  );
 
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
   const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>(
@@ -190,9 +196,24 @@ export function ControlPanelContainer({
     [updateProjectControlPanel],
   );
 
+  const handleBasemapToggle = useCallback(
+    (id: BasemapId) => {
+      const nextBasemapId = normalizeBasemapId(id);
+      if (nextBasemapId === activeBasemapId) return;
+
+      setActiveBasemapId(nextBasemapId);
+      updateProjectControlPanel((draft) => {
+        draft.basemapId = nextBasemapId;
+      });
+      onBasemapChange?.(nextBasemapId);
+    },
+    [activeBasemapId, onBasemapChange, updateProjectControlPanel],
+  );
+
   const state: ControlPanelState = useMemo(
     () => ({
       ...DEFAULT_CONTROL_PANEL_STATE,
+      basemaps: buildBasemapList(activeBasemapId),
       lidarTiles,
       routes: { enabled: routesEnabled, items: routeItems },
       labels: overlayState.slices.labels,
@@ -204,6 +225,7 @@ export function ControlPanelContainer({
       sunlight: overlayState.slices.sunlight,
     }),
     [
+      activeBasemapId,
       lidarTiles,
       overlayState.slices.labels,
       overlayState.slices.snow,
@@ -242,6 +264,7 @@ export function ControlPanelContainer({
       width={width}
       onResizeStart={onResizeStart}
       isResizing={isResizing}
+      onBasemapToggle={handleBasemapToggle}
       onLidarTileToggle={(id) => setHiddenTiles((prev) => ({ ...prev, [id]: !prev[id] }))}
       onLidarTileOpen={(id) => {
         const info = cachedTiles.find((tile) => tileKey(tile.coord) === id);

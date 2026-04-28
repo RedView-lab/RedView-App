@@ -281,6 +281,7 @@ interface UseMapOptions {
   onViewportChange?: (viewport: MapViewport) => void;
   onLoadStatusChange?: OverlayStatusReporter;
   registerReload?: OverlayReloadRegistrar;
+  basemapStyleUrl?: string;
 }
 
 export function useMap(
@@ -290,10 +291,19 @@ export function useMap(
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const terrainRef = useRef<TerrainManager | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const { initialViewport = null, onViewportChange, onLoadStatusChange, registerReload } = options;
+  const {
+    initialViewport = null,
+    onViewportChange,
+    onLoadStatusChange,
+    registerReload,
+    basemapStyleUrl = MAPBOX_STYLE,
+  } = options;
   const onViewportChangeRef = useRef(onViewportChange);
   const onLoadStatusChangeRef = useRef(onLoadStatusChange);
   const registerReloadRef = useRef(registerReload);
+  const activeStyleUrlRef = useRef(basemapStyleUrl);
+  const prepareStyleChangeRef = useRef<((detail?: string) => void) | null>(null);
+  const bootstrapStyleRef = useRef<(() => Promise<boolean>) | null>(null);
 
   useEffect(() => {
     onViewportChangeRef.current = onViewportChange;
@@ -587,7 +597,7 @@ export function useMap(
 
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: MAPBOX_STYLE,
+      style: basemapStyleUrl,
       center: savedVp?.center ?? DEFAULT_VIEW.center,
       zoom: savedVp?.zoom ?? DEFAULT_VIEW.zoom,
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
@@ -617,9 +627,37 @@ export function useMap(
 
     let cancelled = false;
     let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
+    let finishOnIdle: (() => void) | null = null;
+    let readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    let styleBootstrapRunId = 0;
 
-    // Wait for BOTH style.load AND swReady before adding sources.
-    (async () => {
+    const clearStyleBootstrapArtifacts = () => {
+      disposeTerrainBootstrap?.();
+      disposeTerrainBootstrap = null;
+      if (orthoBootTimer) {
+        clearTimeout(orthoBootTimer);
+        orthoBootTimer = null;
+      }
+      if (readyFallbackTimer) {
+        clearTimeout(readyFallbackTimer);
+        readyFallbackTimer = null;
+      }
+      if (finishOnIdle) {
+        map.off('idle', finishOnIdle);
+        finishOnIdle = null;
+      }
+    };
+
+    const prepareStyleChange = (detail = 'Fond de carte') => {
+      demPassiveRefreshPending = false;
+      demTrackingEnabled = false;
+      clearDemTracking();
+      clearStyleBootstrapArtifacts();
+      reportMapStatus('loading', 18, detail);
+    };
+
+    const bootstrapCurrentStyle = async (): Promise<boolean> => {
+      const runId = ++styleBootstrapRunId;
       const styleLoaded = new Promise<void>((resolve) => {
         if (map.isStyleLoaded()) {
           reportMapStatus('loading', 34, 'Style');
@@ -630,79 +668,67 @@ export function useMap(
           resolve();
         });
       });
+
       await styleLoaded;
+      if (cancelled || runId !== styleBootstrapRunId) return false;
+
       refreshTrackedSourceIds();
       const swOk = await swReady;
-      if (cancelled) return;
+      if (cancelled || runId !== styleBootstrapRunId) return false;
+
       reportMapStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
-      // Atmosphere + lighting
       map.setFog(FOG_CONFIG as mapboxgl.FogSpecification);
-      try {
-        map.setConfigProperty('basemap', 'lightPreset', 'day');
-      } catch {
-        /* style may not support config properties */
+      if (activeStyleUrlRef.current !== 'mapbox://styles/mapbox/standard') {
+        try {
+          map.setConfigProperty('basemap', 'lightPreset', 'day');
+        } catch {
+          /* style may not support config properties */
+        }
       }
 
       if (!swOk) {
-        // Plain Mapbox mode: SW is unavailable. Don't add /dem-tiles/ or
-        // /ortho-tiles/ sources â€” they would 404. The Standard Satellite style
-        // already ships its own terrain + satellite imagery.
         console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
-        // Hand readiness over to the `idle` watcher set up below so we don't
-        // flash 100 % while the native satellite tiles are still painting.
         demTrackingEnabled = true;
         reportMapStatus('loading', 80, 'Tuiles satellites');
-        const finishOnIdle = () => {
-          if (cancelled) return;
+        finishOnIdle = () => {
+          if (cancelled || runId !== styleBootstrapRunId) return;
           if (!allTilesLoaded() || map.isMoving()) return;
-          map.off('idle', finishOnIdle);
+          map.off('idle', finishOnIdle!);
+          finishOnIdle = null;
           finishDemActivity('Carte prête');
         };
         map.on('idle', finishOnIdle);
-        // Safety net: if `idle` never fires (extreme network), unblock after
-        // 8 s so the UI is never permanently stuck mid-bar.
-        setTimeout(() => {
-          if (cancelled) return;
+        readyFallbackTimer = setTimeout(() => {
+          readyFallbackTimer = null;
+          if (cancelled || runId !== styleBootstrapRunId) return;
           if (lastReportedState === 'ready') return;
           finishDemActivity('Carte prête');
         }, 8000);
         setIsLoaded(true);
-        return;
+        return false;
       }
 
-      // The Standard Satellite style already starts its own terrain requests.
-      // Once the SW path is ready we switch to our unified DEM source and stop
-      // the native terrain churn, otherwise cold loads compete for the same
-      // Mapbox origin and the basemap can sit white until retries land.
       try {
         map.setTerrain(null);
       } catch {
         /* terrain may not be set yet on the initial style */
       }
 
-      // DEM source
       if (!map.getSource(unifiedDEMSource.id)) {
         refreshDemSource();
       }
       reportMapStatus('loading', 68, 'Relief');
 
-      // Terrain is applied ONCE, after the first DEM tile has loaded. Prevents
-      // the "flat flicker" where setTerrain() runs against an empty source and
-      // the mesh renders at zero elevation for a few frames.
       let orthoAdded = false;
       const addOrthoWhenReady = async () => {
-        if (cancelled || orthoAdded) return;
+        if (cancelled || runId !== styleBootstrapRunId || orthoAdded) return;
         orthoAdded = true;
         await waitForMapIdleOrTimeout(map, 500);
-        if (cancelled) return;
+        if (cancelled || runId !== styleBootstrapRunId) return;
         reportMapStatus('loading', 92, 'Textures IGN');
         addIgnOrthoOverlay(map);
         refreshTrackedSourceIds();
-        // Enable live tile tracking now that all tracked sources exist; do NOT
-        // call finishDemActivity() here. The `idle` event below is the only
-        // authority allowed to flip the dock to "ready", so we wait until
-        // every raster + raster-dem tile has actually painted.
         demTrackingEnabled = true;
         scheduleDemSettle();
       };
@@ -714,6 +740,16 @@ export function useMap(
       armTerrainBootstrap(() => {
         void addOrthoWhenReady();
       });
+
+      return true;
+    };
+
+    prepareStyleChangeRef.current = prepareStyleChange;
+    bootstrapStyleRef.current = bootstrapCurrentStyle;
+
+    (async () => {
+      const trackedMode = await bootstrapCurrentStyle();
+      if (!trackedMode) return;
 
       const onTrackedSourceDataLoading = (event: mapboxgl.MapSourceDataEvent) => {
         if (!demTrackingEnabled) return;
@@ -806,17 +842,7 @@ export function useMap(
 
       setIsLoaded(true);
 
-      return () => {
-        map.off('sourcedataloading', onTrackedSourceDataLoading);
-        map.off('sourcedata', onTrackedSourceData);
-        map.off('dataabort', onTrackedSourceAbort);
-        map.off('error', onTrackedTileError);
-        map.off('moveend', scheduleDemSettle);
-        map.off('zoomend', scheduleDemSettle);
-        map.off('movestart', onMovestart);
-        map.off('idle', onMapIdle);
-        navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
-      };
+      return () => undefined;
     })().catch((err) => {
       console.error('[map3d] init failed', err);
       reportMapStatus('error', 0, err instanceof Error ? err.message : 'Chargement impossible');
@@ -850,6 +876,7 @@ export function useMap(
     return () => {
       cancelled = true;
       clearDemTracking();
+      clearStyleBootstrapArtifacts();
       disposeTerrainBootstrap?.();
       disposeTerrainBootstrap = null;
       if (orthoBootTimer) clearTimeout(orthoBootTimer);
@@ -867,10 +894,35 @@ export function useMap(
       terrainRef.current = null;
       map.remove();
       mapRef.current = null;
+      prepareStyleChangeRef.current = null;
+      bootstrapStyleRef.current = null;
       registerReloadRef.current?.(null);
       onLoadStatusChangeRef.current?.(null);
     };
-  }, [containerRef]);
+  }, [basemapStyleUrl, containerRef, initialViewport]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    const prepareStyleChange = prepareStyleChangeRef.current;
+    const bootstrapCurrentStyle = bootstrapStyleRef.current;
+    if (!map || !prepareStyleChange || !bootstrapCurrentStyle) return;
+    if (basemapStyleUrl === activeStyleUrlRef.current) return;
+
+    activeStyleUrlRef.current = basemapStyleUrl;
+    prepareStyleChange('Fond de carte');
+    map.setStyle(basemapStyleUrl);
+    void bootstrapCurrentStyle().catch((err) => {
+      console.error('[map3d] style switch failed', err);
+      onLoadStatusChangeRef.current?.(createOverlayStatus({
+        id: 'map',
+        label: 'Carte',
+        state: 'error',
+        progress: 0,
+        detail: err instanceof Error ? err.message : 'Changement de fond de carte impossible',
+        reloadable: Boolean(registerReloadRef.current),
+      }));
+    });
+  }, [basemapStyleUrl]);
 
   useEffect(() => {
     const map = mapRef.current;

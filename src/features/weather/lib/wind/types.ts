@@ -28,6 +28,7 @@ export const DROP_RATE_BUMP = 0.001;     // additional respawn rate × speed_t
 // ── Max allocation (avoids re-allocation on zoom) ──────────────────────
 
 export const MAX_PARTICLE_ALLOC = 2000;
+const PARTICLE_COUNT_REDUCTION_FACTOR = 3;
 
 // ── Interfaces ─────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ export function lerp(a: number, b: number, t: number): number {
 /** Particle count — screen-density based so coverage stays uniform at all zoom levels. */
 export function adaptiveParticleCount(zoom: number, _viewportWidthDeg: number, _viewportHeightDeg: number): number {
   const zoomT = clamp((zoom - 4) / 12, 0, 1);
-  return Math.round(lerp(1000, MAX_PARTICLE_ALLOC, zoomT * zoomT));
+  return Math.max(1, Math.round(lerp(1000, MAX_PARTICLE_ALLOC, zoomT * zoomT) / PARTICLE_COUNT_REDUCTION_FACTOR));
 }
 
 /** Trail half-width in screen pixels. Visible streamlines across all zooms. */

@@ -3,7 +3,8 @@ import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altit
 import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
 import type { SlopeState } from '@/features/slope/types';
-import type { SlopeScale, SlopeScaleSetting, SunlightState, WeatherState, WindPanelState } from './types';
+import { DEFAULT_BASEMAP_ID } from './basemaps';
+import type { BasemapId, SlopeScale, SlopeScaleSetting, SunlightState, WeatherState, WindPanelState } from './types';
 
 export type ControlPanelSectionKey =
   | 'basemaps'
@@ -49,6 +50,7 @@ export type ControlPanelWindPersistedState = Pick<
 
 export interface ControlPanelPersistedState {
   sectionsOpen: ControlPanelSectionsOpenState;
+  basemapId: BasemapId;
   toggles: {
     labelsEnabled: boolean;
     slopesEnabled: boolean;
@@ -83,6 +85,7 @@ const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
 export function createDefaultControlPanelPersistedState(): ControlPanelPersistedState {
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
+    basemapId: DEFAULT_BASEMAP_ID,
     toggles: {
       labelsEnabled: false,
       slopesEnabled: false,

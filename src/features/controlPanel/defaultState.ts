@@ -1,4 +1,5 @@
 import type { ControlPanelState } from './types';
+import { buildBasemapList, DEFAULT_BASEMAP_ID } from './basemaps';
 import { buildDefaultWeatherPalettePresets } from './weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 
@@ -9,11 +10,7 @@ const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
  * Useful as a starting point before wiring to real backend state.
  */
 export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
-  basemaps: [
-    { id: 'satellite', label: 'Satellite', visible: true, active: true },
-    { id: 'osm', label: 'Openstreetmap', visible: false },
-    { id: 'topographic', label: 'Topographique', visible: false },
-  ],
+  basemaps: buildBasemapList(DEFAULT_BASEMAP_ID),
   lidarTiles: [
     { id: 'tile-1', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
     { id: 'tile-2', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
