@@ -8,7 +8,7 @@ const API_BASE = OPENMETEO_FORECAST_URL;
 const CACHE_TTL_MS = 45 * 60 * 1000; // 45 minutes
 // Self-hosted VPS → we can hammer it. Bigger batches, no inter-batch
 // gap, only a tiny safety retry budget for transient errors.
-const BATCH_SIZE = 400; // Max coordinates per request
+const BATCH_SIZE = 200; // Keep URLs below proxy/browser limits for multi-point requests
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
@@ -27,6 +27,7 @@ interface WindHourlyCacheEntry {
 }
 
 const cache = new Map<string, WindHourlyCacheEntry>();
+const inFlightGridFetches = new Map<string, Promise<{ points: WindPoint[]; source: WindDataSource | null }>>();
 
 function toDailyCacheKey(lat: number, lng: number, dateIso: string): string {
   return `${coordCacheKey(lat, lng)}|${dateIso}`;
@@ -74,6 +75,21 @@ function setCache(lat: number, lng: number, dateIso: string, hours: Map<string, 
   cache.set(toDailyCacheKey(lat, lng, dateIso), { hours, fetchedAt: Date.now() });
 }
 
+function gridSelectionCacheKey(grid: WindGridDefinition, selection: WindTimeSelection): string {
+  const { north, south, east, west, spacing } = grid.bounds;
+  return [
+    selection.date,
+    selection.time,
+    grid.rows,
+    grid.cols,
+    north.toFixed(6),
+    south.toFixed(6),
+    east.toFixed(6),
+    west.toFixed(6),
+    spacing.toFixed(6),
+  ].join('|');
+}
+
 // ── API fetch ─────────────────────────────────────────────────────────
 
 interface OpenMeteoResponse {
@@ -97,6 +113,46 @@ export interface WindFetchProgress {
   totalBatches: number;
   source: WindDataSource | null;
   detail: string;
+}
+
+function normaliseBatchPoint(
+  item: OpenMeteoResponse | undefined,
+  fallbackCoord: { lat: number; lng: number },
+  selection: WindTimeSelection,
+): WindPoint {
+  if (!item?.hourly?.time?.length) {
+    throw new Error(`Wind batch returned no hourly data for ${fallbackCoord.lat.toFixed(4)},${fallbackCoord.lng.toFixed(4)}`);
+  }
+
+  const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
+  const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
+  const resolvedLat = Number.isFinite(lat) ? lat : fallbackCoord.lat;
+  const resolvedLng = Number.isFinite(lng) ? lng : fallbackCoord.lng;
+  const hours = new Map<string, WindPoint>();
+
+  item.hourly.time.forEach((timeValue, hourlyIndex) => {
+    const hourKey = normaliseApiHourKey(timeValue);
+    if (!hourKey) return;
+    hours.set(hourKey, {
+      lat: resolvedLat,
+      lng: resolvedLng,
+      speed: item.hourly.wind_speed_10m[hourlyIndex] ?? 0,
+      direction: item.hourly.wind_direction_10m[hourlyIndex] ?? 0,
+      gusts: item.hourly.wind_gusts_10m[hourlyIndex] ?? 0,
+    });
+  });
+
+  if (hours.size === 0) {
+    throw new Error(`Wind batch returned no usable hours for ${fallbackCoord.lat.toFixed(4)},${fallbackCoord.lng.toFixed(4)}`);
+  }
+
+  setCache(resolvedLat, resolvedLng, selection.date, hours);
+  const selectedPoint = getCached(resolvedLat, resolvedLng, selection);
+  if (!selectedPoint) {
+    throw new Error(`Wind batch missing selected hour for ${fallbackCoord.lat.toFixed(4)},${fallbackCoord.lng.toFixed(4)}`);
+  }
+
+  return selectedPoint;
 }
 
 function resolveWindSource(url: string, response: Response): WindDataSource {
@@ -171,39 +227,13 @@ async function fetchBatch(
     // Single coordinate → response is an object; multiple → array
     const items: OpenMeteoResponse[] = Array.isArray(json) ? json : [json];
 
+    if (items.length !== coords.length) {
+      throw new Error(`Wind batch cardinality mismatch: requested ${coords.length}, received ${items.length}`);
+    }
+
     return {
       source,
-      points: items.map((item, index) => {
-        const fallbackCoord = coords[index];
-        const lat = Array.isArray(item.latitude) ? item.latitude[0] : item.latitude;
-        const lng = Array.isArray(item.longitude) ? item.longitude[0] : item.longitude;
-        const resolvedLat = Number.isFinite(lat) ? lat : fallbackCoord.lat;
-        const resolvedLng = Number.isFinite(lng) ? lng : fallbackCoord.lng;
-        const hours = new Map<string, WindPoint>();
-
-        item.hourly.time.forEach((timeValue, hourlyIndex) => {
-          const hourKey = normaliseApiHourKey(timeValue);
-          if (!hourKey) return;
-          hours.set(hourKey, {
-            lat: resolvedLat,
-            lng: resolvedLng,
-            speed: item.hourly.wind_speed_10m[hourlyIndex] ?? 0,
-            direction: item.hourly.wind_direction_10m[hourlyIndex] ?? 0,
-            gusts: item.hourly.wind_gusts_10m[hourlyIndex] ?? 0,
-          });
-        });
-
-        setCache(resolvedLat, resolvedLng, selection.date, hours);
-        const selectedPoint = getCached(resolvedLat, resolvedLng, selection);
-        if (selectedPoint) return selectedPoint;
-        return {
-          lat: resolvedLat,
-          lng: resolvedLng,
-          speed: 0,
-          direction: 0,
-          gusts: 0,
-        };
-      }),
+      points: coords.map((fallbackCoord, index) => normaliseBatchPoint(items[index], fallbackCoord, selection)),
     };
   }
 
@@ -215,7 +245,7 @@ async function fetchBatch(
  * Results preserve the grid's row-major ordering for direct GPU upload.
  * Supports cancellation via AbortSignal.
  */
-async function fetchWindGridForSelection(
+async function fetchWindGridForSelectionInternal(
   grid: WindGridDefinition,
   selection: WindTimeSelection,
   signal?: AbortSignal,
@@ -293,7 +323,41 @@ async function fetchWindGridForSelection(
     console.info(`[wind] fetched grid ${grid.cols}x${grid.rows} (${results.length} points) via ${lastSource}`);
   }
 
+  const missingPoints = results.reduce((count, point) => count + (point ? 0 : 1), 0);
+  if (missingPoints > 0) {
+    throw new Error(`Wind grid incomplete after fetch: ${missingPoints} missing points out of ${results.length}`);
+  }
+
   return { points: results, source: lastSource };
+}
+
+async function fetchWindGridForSelection(
+  grid: WindGridDefinition,
+  selection: WindTimeSelection,
+  signal?: AbortSignal,
+  onProgress?: (progress: WindFetchProgress) => void,
+): Promise<{ points: WindPoint[]; source: WindDataSource | null }> {
+  const key = gridSelectionCacheKey(grid, selection);
+  const existing = inFlightGridFetches.get(key);
+  if (existing) {
+    onProgress?.({
+      completedBatches: 0,
+      totalBatches: 1,
+      source: null,
+      detail: `Réutilisation du chargement vent en cours (${grid.cols}×${grid.rows})`,
+    });
+    return existing;
+  }
+
+  const request = fetchWindGridForSelectionInternal(grid, selection, signal, onProgress)
+    .finally(() => {
+      if (inFlightGridFetches.get(key) === request) {
+        inFlightGridFetches.delete(key);
+      }
+    });
+
+  inFlightGridFetches.set(key, request);
+  return request;
 }
 
 export function hasWindGridSelectionCached(

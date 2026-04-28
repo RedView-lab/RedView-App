@@ -37,11 +37,12 @@ interface RenderedLayerEntry {
   signature: string;
 }
 
-const WIND_BANDS = [
-  { maxKmh: 15, color: '#2DBF8C' },
-  { maxKmh: 30, color: '#FFD800' },
-  { maxKmh: 50, color: '#FF8D00' },
-  { maxKmh: Number.POSITIVE_INFINITY, color: '#FF0D0D' },
+const WIND_COLOR_STOPS = [
+  { speedKmh: 0, color: '#2DBF8C' },
+  { speedKmh: 15, color: '#2DBF8C' },
+  { speedKmh: 30, color: '#FFD800' },
+  { speedKmh: 50, color: '#FF8D00' },
+  { speedKmh: 70, color: '#FF0D0D' },
 ] as const;
 
 function clamp(value: number, min: number, max: number): number {
@@ -117,10 +118,32 @@ function hexToRgb(hex: string): [number, number, number] {
   ];
 }
 
+function interpolateChannel(a: number, b: number, t: number): number {
+  return Math.round(a + (b - a) * clamp(t, 0, 1));
+}
+
+function interpolateRgb(
+  start: [number, number, number],
+  end: [number, number, number],
+  t: number,
+): [number, number, number] {
+  return [
+    interpolateChannel(start[0], end[0], t),
+    interpolateChannel(start[1], end[1], t),
+    interpolateChannel(start[2], end[2], t),
+  ];
+}
+
 function colorForSpeed(speedMs: number): [number, number, number, number] {
-  const speedKmh = speedMs * 3.6;
-  const band = WIND_BANDS.find((entry) => speedKmh < entry.maxKmh) ?? WIND_BANDS[WIND_BANDS.length - 1];
-  const [r, g, b] = hexToRgb(band.color);
+  const speedKmh = Math.max(0, speedMs * 3.6);
+  const lowerIndex = WIND_COLOR_STOPS.findLastIndex((entry) => speedKmh >= entry.speedKmh);
+  const lower = WIND_COLOR_STOPS[Math.max(0, lowerIndex)];
+  const upper = WIND_COLOR_STOPS[Math.min(WIND_COLOR_STOPS.length - 1, Math.max(0, lowerIndex) + 1)];
+  const lowerColor = hexToRgb(lower.color);
+  const upperColor = hexToRgb(upper.color);
+  const span = Math.max(1, upper.speedKmh - lower.speedKmh);
+  const ratio = lower === upper ? 0 : (speedKmh - lower.speedKmh) / span;
+  const [r, g, b] = interpolateRgb(lowerColor, upperColor, ratio);
   return [r, g, b, 255];
 }
 
