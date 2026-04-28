@@ -19,6 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(overview);
   } catch (error) {
     console.error('[billing/overview] Error:', error);
-    return res.status(500).json({ error: 'Unable to load billing overview' });
+    const message = error instanceof Error ? error.message : 'Unable to load billing overview';
+    const status = message.includes('Missing required environment variable') ? 503 : 500;
+    return res.status(status).json({ error: message });
   }
 }

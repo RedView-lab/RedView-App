@@ -1,25 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 import { requireEnv } from './config';
 
-const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = requireEnv('VITE_SUPABASE_ANON_KEY');
-const supabaseServiceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
-
-const adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
-
-const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: false,
-    persistSession: false,
-  },
-});
+let adminClient: SupabaseClient | null = null;
+let authClient: SupabaseClient | null = null;
 
 export type AuthenticatedUser = {
   id: string;
@@ -27,7 +12,35 @@ export type AuthenticatedUser = {
 };
 
 export function getSupabaseAdmin() {
+  if (!adminClient) {
+    const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
+    const supabaseServiceRoleKey = requireEnv('SUPABASE_SERVICE_ROLE_KEY');
+
+    adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
   return adminClient;
+}
+
+function getSupabaseAuthClient() {
+  if (!authClient) {
+    const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
+    const supabaseAnonKey = requireEnv('VITE_SUPABASE_ANON_KEY');
+
+    authClient = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+  }
+
+  return authClient;
 }
 
 function getBearerToken(req: VercelRequest): string | null {
@@ -52,7 +65,7 @@ export async function requireAuthenticatedUser(
     return null;
   }
 
-  const { data, error } = await authClient.auth.getUser(token);
+  const { data, error } = await getSupabaseAuthClient().auth.getUser(token);
   if (error || !data.user) {
     res.status(401).json({ error: 'Invalid or expired session' });
     return null;
