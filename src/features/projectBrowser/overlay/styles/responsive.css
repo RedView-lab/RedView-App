@@ -1,0 +1,67 @@
+@media (max-width: 1400px) {
+  .rvpb-overlay {
+    padding: 48px 120px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .rvpb-overlay {
+    padding: 32px;
+  }
+
+  .rvpb-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rvpb-grid-shell {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 360px));
+  }
+
+  .rvpb-subscription-section,
+  .rvpb-account-fields--three-up,
+  .rvpb-account-password-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .rvpb-header,
+  .rvpb-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rvpb-header__actions,
+  .rvpb-toolbar__actions,
+  .rvpb-top-tabs,
+  .rvpb-account-actions {
+    flex-wrap: wrap;
+  }
+
+  .rvpb-grid-shell {
+    padding: 16px;
+    gap: 16px;
+    grid-template-columns: 1fr;
+  }
+
+  .rvpb-subscription-section,
+  .rvpb-account-fields--two-up,
+  .rvpb-account-fields--three-up,
+  .rvpb-account-password-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .rvpb-input-wrap {
+    margin-left: 0;
+  }
+
+  .rvpb-account-actions {
+    justify-content: flex-start;
+  }
+
+  .rvpb-logout-button {
+    width: 100%;
+  }
+}

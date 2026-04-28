@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 import {
   IconDownload,
   IconSettingsCog,
@@ -17,6 +18,14 @@ import {
 } from '@/lib/projects';
 import { readStoredSupabaseSession, supabase } from '@/lib/supabase';
 
+import { AccountPanel } from './account/AccountPanel';
+import {
+  formatAccountDisplayName,
+  formatLastConnection,
+  loadAccountProfile,
+  signOutAccount,
+} from './account/profile';
+import type { AccountProfile } from './account/types';
 import { PlaceholderPanel } from './PlaceholderPanel';
 import { ProjectsPanel } from './ProjectsPanel';
 import { SubscriptionPanel } from './SubscriptionPanel';
@@ -65,6 +74,10 @@ export function ProjectBrowserOverlay({
     error: null,
     snapshot: null,
   });
+  const [accountProfile, setAccountProfile] = useState<AccountProfile | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('proMonthly');
   const [contactPreference, setContactPreference] = useState<BillingContactPreference>(() =>
     readBillingContactPreference(userId),
@@ -166,6 +179,35 @@ export function ProjectBrowserOverlay({
 
   useEffect(() => {
     if (!open) return;
+
+    let cancelled = false;
+    setAccountLoading(true);
+    setAccountError(null);
+
+    void (async () => {
+      try {
+        const nextProfile = await loadAccountProfile(accountEmail, displayName);
+        if (cancelled) return;
+        setAccountProfile(nextProfile);
+        setAccountLoading(false);
+      } catch (nextError) {
+        if (cancelled) return;
+        setAccountLoading(false);
+        setAccountError(
+          nextError instanceof Error
+            ? nextError.message
+            : 'Impossible de charger les informations du compte.',
+        );
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, accountEmail, displayName]);
+
+  useEffect(() => {
+    if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && canClose) onRequestClose();
     };
@@ -253,6 +295,33 @@ export function ProjectBrowserOverlay({
   const openSubscriptionPage = () => {
     window.open(`${LANDING_URL}/pricing`, '_blank', 'noopener,noreferrer');
   };
+  const accountDisplayName = accountProfile
+    ? formatAccountDisplayName(accountProfile, displayName)
+    : displayName || 'Utilisateur';
+  const headerMetaLabel =
+    activeTab === 'account'
+      ? accountLoading
+        ? 'Chargement du compte...'
+        : formatLastConnection(accountProfile?.lastSignInAt ?? null)
+      : lastEdited
+        ? `Dernière modification ${formatSavedAt(lastEdited.updatedAt)}`
+        : 'Aucun projet enregistré';
+
+  const handleSignOut = useCallback(async () => {
+    if (isSigningOut) return;
+
+    setIsSigningOut(true);
+    try {
+      await signOutAccount();
+      window.location.reload();
+    } catch (nextError) {
+      console.warn('[ProjectBrowserOverlay] Failed to sign out', nextError);
+      setAccountError(
+        nextError instanceof Error ? nextError.message : 'Impossible de se déconnecter.',
+      );
+      setIsSigningOut(false);
+    }
+  }, [isSigningOut]);
 
   return (
     <div
@@ -261,37 +330,40 @@ export function ProjectBrowserOverlay({
       aria-modal="true"
       aria-label="Sélecteur de projet principal"
     >
-      <div className="rvpb-shell">
+      <div className={`rvpb-shell${activeTab === 'account' ? ' is-account-tab' : ''}`}>
         <header className="rvpb-header">
           <div className="rvpb-user">
-            <div className="rvpb-user__name">{displayName || 'Utilisateur'}</div>
+            <div className="rvpb-user__name">{accountDisplayName}</div>
             <div className="rvpb-user__meta">
               <span className="rvpb-user__badge">
                 {accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}
               </span>
-              <span>
-                {lastEdited
-                  ? `Dernière modification ${formatSavedAt(lastEdited.updatedAt)}`
-                  : 'Aucun projet enregistré'}
-              </span>
+              <span>{headerMetaLabel}</span>
             </div>
           </div>
 
-          <div className="rvpb-header__actions">
-            <button type="button" className="rvpb-icon-button" aria-label="Paramètres du compte">
-              <IconSettingsCog size={16} />
+          {activeTab === 'account' ? (
+            <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
+              <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
+              <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
             </button>
-            <button
-              type="button"
-              className="rvpb-icon-button"
-              aria-label="Télécharger vos projets"
-            >
-              <IconDownload size={16} />
-            </button>
-            <button type="button" className="rvpb-icon-button" aria-label="Partager">
-              <IconShare size={16} />
-            </button>
-          </div>
+          ) : (
+            <div className="rvpb-header__actions">
+              <button type="button" className="rvpb-icon-button" aria-label="Paramètres du compte">
+                <IconSettingsCog size={16} />
+              </button>
+              <button
+                type="button"
+                className="rvpb-icon-button"
+                aria-label="Télécharger vos projets"
+              >
+                <IconDownload size={16} />
+              </button>
+              <button type="button" className="rvpb-icon-button" aria-label="Partager">
+                <IconShare size={16} />
+              </button>
+            </div>
+          )}
         </header>
 
         <div className="rvpb-divider" />
@@ -335,9 +407,15 @@ export function ProjectBrowserOverlay({
         ) : null}
 
         {activeTab === 'account' ? (
-          <PlaceholderPanel
-            title="Compte"
-            description="La vue compte n’est pas encore branchée dans cette overlay. La section Abonnement est désormais disponible et la gestion Stripe reste centralisée sur RedView Web."
+          <AccountPanel
+            profile={accountProfile}
+            isLoading={accountLoading}
+            error={accountError}
+            fallbackDisplayName={displayName}
+            onProfileUpdated={(nextProfile) => {
+              setAccountProfile(nextProfile);
+              setAccountError(null);
+            }}
           />
         ) : null}
 

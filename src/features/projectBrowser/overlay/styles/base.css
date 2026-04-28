@@ -1,0 +1,447 @@
+.rvpb-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  padding: 64px 160px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.12) 100%),
+    linear-gradient(90deg, #000 0%, #000 100%);
+}
+
+.rvpb-shell {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #fff;
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.rvpb-shell.is-account-tab .rvpb-user__name {
+  font-size: 24px;
+}
+
+.rvpb-shell.is-account-tab .rvpb-user__meta,
+.rvpb-shell.is-account-tab .rvpb-user__badge {
+  font-size: 13px;
+}
+
+.rvpb-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rvpb-user {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rvpb-user__name {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rvpb-user__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.rvpb-user__badge,
+.rvpb-card__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.rvpb-header__actions,
+.rvpb-card__actions,
+.rvpb-toolbar__actions {
+  display: flex;
+  align-items: center;
+}
+
+.rvpb-header__actions,
+.rvpb-card__actions {
+  gap: 12px;
+}
+
+.rvpb-toolbar__actions {
+  gap: 4px;
+}
+
+.rvpb-icon-button,
+.rvpb-square-button,
+.rvpb-card__open,
+.rvpb-top-tabs__item,
+.rvpb-view-toggle__item,
+.rvpb-create-button,
+.rvpb-card__preview,
+.rvpb-logout-button {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.rvpb-icon-button,
+.rvpb-square-button,
+.rvpb-card__open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rvpb-icon-button {
+  width: 16px;
+  height: 16px;
+  opacity: 0.9;
+}
+
+.rvpb-logout-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 24px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rvpb-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-top-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rvpb-top-tabs__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.rvpb-top-tabs__item.is-active,
+.rvpb-view-toggle__item.is-active {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.rvpb-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rvpb-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-view-toggle__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 80px;
+  max-width: 104px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rvpb-square-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: #383838;
+}
+
+.rvpb-create-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: #890000;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.rvpb-grid-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(310px, 360px));
+  justify-content: start;
+  align-content: start;
+  gap: 24px;
+  padding: 24px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.74);
+  backdrop-filter: blur(60px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.rvpb-grid-shell::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rvpb-grid-shell::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvpb-grid-shell.is-list {
+  grid-template-columns: 1fr;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card__preview {
+  display: none;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.rvpb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rvpb-card__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.rvpb-card__title-stack {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvpb-card__title-stack h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.rvpb-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.rvpb-card__open {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  transform: rotate(180deg);
+}
+
+.rvpb-card__preview {
+  display: block;
+  width: 100%;
+  height: 194px;
+  overflow: hidden;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rvpb-card__preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
+}
+
+.rvpb-card__preview-placeholder {
+  width: 100%;
+  height: 100%;
+  border-radius: 6px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+}
+
+.rvpb-card__rename-input {
+  width: 100%;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  outline: none;
+}
+
+.rvpb-card__rename-input:focus,
+.rvpb-search-input:focus {
+  border-color: rgba(255, 255, 255, 0.55);
+}
+
+.rvpb-search-input {
+  width: 220px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: #383838;
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+
+.rvpb-empty {
+  grid-column: 1 / -1;
+  padding: 48px 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-error {
+  margin-top: 4px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: rgba(180, 30, 30, 0.18);
+  color: #ffb4b4;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rvpb-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.rvpb-icon-button:hover,
+.rvpb-square-button:hover,
+.rvpb-card__open:hover,
+.rvpb-top-tabs__item:hover,
+.rvpb-view-toggle__item:hover,
+.rvpb-create-button:hover,
+.rvpb-card__preview:hover,
+.rvpb-inline-cta:hover,
+.rvpb-text-link:hover,
+.rvpb-add-row:hover,
+.rvpb-panel-placeholder__link:hover,
+.rvpb-logout-button:hover {
+  filter: brightness(1.08);
+}
+
+.rvpb-icon-button:focus-visible,
+.rvpb-square-button:focus-visible,
+.rvpb-card__open:focus-visible,
+.rvpb-top-tabs__item:focus-visible,
+.rvpb-view-toggle__item:focus-visible,
+.rvpb-create-button:focus-visible,
+.rvpb-card__preview:focus-visible,
+.rvpb-inline-cta:focus-visible,
+.rvpb-text-link:focus-visible,
+.rvpb-add-row:focus-visible,
+.rvpb-panel-placeholder__link:focus-visible,
+.rvpb-logout-button:focus-visible,
+.rvpb-subscription-card:focus-visible,
+.rvpb-contact-option:focus-within,
+.rvpb-input-wrap:focus-within,
+.rvpb-account-input-shell:focus-within,
+.rvpb-account-select-shell:focus-within {
+  outline: 2px solid rgba(255, 255, 255, 0.38);
+  outline-offset: 2px;
+}
+
+.rvpb-icon-button:disabled,
+.rvpb-square-button:disabled,
+.rvpb-card__open:disabled,
+.rvpb-create-button:disabled,
+.rvpb-inline-cta:disabled,
+.rvpb-logout-button:disabled,
+.rvpb-card__preview:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

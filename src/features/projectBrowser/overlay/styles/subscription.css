@@ -1,0 +1,276 @@
+.rvpb-subscription-section {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 640px);
+  gap: 24px 32px;
+  align-items: start;
+  padding: 16px 0;
+}
+
+.rvpb-subscription-section__label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rvpb-subscription-section__label h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.rvpb-subscription-section__label p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rvpb-subscription-section__content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rvpb-subscription-section__content--stacked {
+  gap: 12px;
+}
+
+.rvpb-subscription-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(60px);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.rvpb-subscription-card:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+  transform: translateY(-1px);
+}
+
+.rvpb-subscription-card.is-selected {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.rvpb-subscription-card.is-active {
+  border-color: rgba(137, 0, 0, 0.5);
+  background: rgba(15, 15, 15, 0.74);
+}
+
+.rvpb-subscription-card__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.rvpb-radio,
+.rvpb-radio-faux {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+}
+
+.rvpb-radio.is-selected,
+.rvpb-contact-option input:checked + .rvpb-radio-faux {
+  border-color: #890000;
+  background:
+    radial-gradient(circle, #fff 0 33%, transparent 34%),
+    #890000;
+}
+
+.rvpb-subscription-card__copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rvpb-subscription-card__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.rvpb-subscription-card__title-row strong {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rvpb-subscription-card__chips {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.rvpb-chip,
+.rvpb-icon-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rvpb-icon-chip {
+  width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+.rvpb-icon-chip.is-gold {
+  background: rgba(227, 199, 56, 0.52);
+}
+
+.rvpb-icon-chip.is-blue {
+  background: rgba(100, 199, 241, 0.4);
+}
+
+.rvpb-icon-chip.is-green {
+  background: rgba(94, 152, 102, 0.6);
+}
+
+.rvpb-icon-chip.is-gray {
+  background: rgba(102, 102, 102, 0.6);
+}
+
+.rvpb-subscription-card__description {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rvpb-subscription-card__footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rvpb-payment-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+}
+
+.rvpb-payment-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 30px;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+}
+
+.rvpb-payment-card__copy,
+.rvpb-contact-option__copy {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.rvpb-payment-card__copy {
+  gap: 8px;
+}
+
+.rvpb-contact-option__copy {
+  gap: 4px;
+}
+
+.rvpb-payment-card__copy strong,
+.rvpb-contact-option__copy strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-payment-card__copy span,
+.rvpb-contact-option__copy span {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.rvpb-contact-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rvpb-contact-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.rvpb-contact-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rvpb-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 26px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+}
+
+.rvpb-input-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.rvpb-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  outline: none;
+}
+
+.rvpb-input-wrap input::placeholder {
+  color: rgba(255, 255, 255, 0.44);
+}

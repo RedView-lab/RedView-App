@@ -1,10 +1,5 @@
 import type { ReactNode } from 'react';
 
-import {
-  IconMapPin,
-  IconRoute,
-  IconStopwatch,
-} from '@/features/itineraryPanel/components/icons';
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 
 import type { OverlayTab } from './types';
@@ -22,22 +17,22 @@ const TABS: Array<{
   {
     id: 'projects',
     label: 'Projets',
-    icon: <IconRoute size={13.333} />,
+    icon: <SvgV2Icon name="route.svg" size={16} />,
   },
   {
     id: 'account',
     label: 'Compte',
-    icon: <IconStopwatch size={16} />,
+    icon: <SvgV2Icon name="user-circle.svg" size={16} />,
   },
   {
     id: 'subscription',
     label: 'Abonnement',
-    icon: <SvgV2Icon name="user-circle.svg" size={16} />,
+    icon: <SvgV2Icon name="credit-card-02.svg" size={16} />,
   },
   {
     id: 'settings',
     label: 'Réglages',
-    icon: <IconMapPin size={16} />,
+    icon: <SvgV2Icon name="settings-01.svg" size={16} />,
   },
 ];
 

@@ -1,0 +1,152 @@
+.rvpb-account-notice {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rvpb-account-notice.is-success {
+  background: rgba(32, 123, 64, 0.22);
+  color: #d6ffd7;
+}
+
+.rvpb-account-notice.is-error {
+  background: rgba(180, 30, 30, 0.18);
+  color: #ffb4b4;
+}
+
+.rvpb-account-section__content {
+  gap: 24px;
+}
+
+.rvpb-account-fields {
+  display: grid;
+  gap: 24px;
+}
+
+.rvpb-account-fields--two-up {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rvpb-account-fields--three-up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.rvpb-account-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rvpb-account-field__label,
+.rvpb-account-password-label {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.33;
+}
+
+.rvpb-account-input-shell,
+.rvpb-account-select-shell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid rgba(213, 215, 218, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+}
+
+.rvpb-account-input-shell--with-icon {
+  padding-left: 10px;
+}
+
+.rvpb-account-input-shell--suffix {
+  gap: 4px;
+}
+
+.rvpb-account-input-icon,
+.rvpb-account-select-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.rvpb-account-select-icon {
+  pointer-events: none;
+}
+
+.rvpb-account-flag {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.rvpb-account-input-shell input,
+.rvpb-account-select-shell select {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  outline: none;
+}
+
+.rvpb-account-select-shell select {
+  appearance: none;
+  padding-right: 8px;
+}
+
+.rvpb-account-input-shell input::placeholder {
+  color: rgba(255, 255, 255, 0.42);
+}
+
+.rvpb-account-input-suffix {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 15px;
+}
+
+.rvpb-account-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 41px;
+}
+
+.rvpb-account-actions--with-divider {
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-account-inline-status {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 13px;
+}
+
+.rvpb-account-password-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 200px) minmax(0, 1fr);
+  gap: 24px 32px;
+  align-items: start;
+}
+
+.rvpb-account-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

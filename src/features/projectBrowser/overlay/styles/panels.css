@@ -1,0 +1,124 @@
+.rvpb-subscription-panel,
+.rvpb-account-panel,
+.rvpb-panel-placeholder {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px 0 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.rvpb-account-panel::-webkit-scrollbar,
+.rvpb-subscription-panel::-webkit-scrollbar,
+.rvpb-panel-placeholder::-webkit-scrollbar {
+  width: 6px;
+}
+
+.rvpb-account-panel::-webkit-scrollbar-thumb,
+.rvpb-subscription-panel::-webkit-scrollbar-thumb,
+.rvpb-panel-placeholder::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvpb-panel-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.rvpb-panel-placeholder > * {
+  max-width: 520px;
+}
+
+.rvpb-panel-placeholder__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-panel-placeholder h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.rvpb-panel-placeholder p {
+  margin: 0 0 18px;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.55;
+}
+
+.rvpb-inline-cta,
+.rvpb-text-link,
+.rvpb-add-row,
+.rvpb-panel-placeholder__link {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+.rvpb-inline-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-inline-cta.is-danger {
+  background: #890000;
+}
+
+.rvpb-text-link,
+.rvpb-panel-placeholder__link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.rvpb-add-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  align-self: flex-start;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rvpb-inline-note {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.rvpb-link-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
