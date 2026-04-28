@@ -9,6 +9,7 @@ type SubscriptionPlanCardProps = {
   onSelect: (planId: SubscriptionPlanId) => void;
   ctaLabel?: string;
   ctaTone?: 'danger' | 'neutral';
+  ctaDisabled?: boolean;
   onCtaClick?: () => void;
   ctaHelper?: string;
 };
@@ -20,6 +21,7 @@ export function SubscriptionPlanCard({
   onSelect,
   ctaLabel,
   ctaTone = 'neutral',
+  ctaDisabled = false,
   onCtaClick,
   ctaHelper,
 }: SubscriptionPlanCardProps) {
@@ -65,6 +67,7 @@ export function SubscriptionPlanCard({
           <button
             type="button"
             className={`rvpb-inline-cta${ctaTone === 'danger' ? ' is-danger' : ''}`}
+            disabled={ctaDisabled}
             onClick={(event) => {
               event.stopPropagation();
               onCtaClick?.();

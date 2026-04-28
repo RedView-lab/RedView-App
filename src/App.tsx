@@ -324,7 +324,7 @@ function App() {
   }
 
   if (!isSubscribed) {
-    return <PayWall landingUrl={landingUrl} />
+    return <PayWall />
   }
 
   return (

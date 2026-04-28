@@ -4,7 +4,14 @@
     "api/overpass.ts": { "maxDuration": 90 },
     "api/poi.ts": { "maxDuration": 30 },
     "api/openmeteo.ts": { "maxDuration": 30 },
-    "api/meteofrance.ts": { "maxDuration": 60 }
+    "api/meteofrance.ts": { "maxDuration": 60 },
+    "api/billing/overview.ts": { "maxDuration": 15 },
+    "api/billing/contact.ts": { "maxDuration": 15 },
+    "api/billing/checkout.ts": { "maxDuration": 30 },
+    "api/billing/subscription.ts": { "maxDuration": 30 },
+    "api/billing/payment-method.ts": { "maxDuration": 30 },
+    "api/billing/portal.ts": { "maxDuration": 30 },
+    "api/stripe/webhook.ts": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/viewer", "destination": "/viewer.html" },

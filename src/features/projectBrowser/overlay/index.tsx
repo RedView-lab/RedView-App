@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 import {
@@ -16,7 +16,7 @@ import {
   renameProject,
   type ProjectSummary,
 } from '@/lib/projects';
-import { readStoredSupabaseSession, supabase } from '@/lib/supabase';
+import { readStoredSupabaseSession } from '@/lib/supabase';
 
 import { AccountPanel } from './account/AccountPanel';
 import {
@@ -28,26 +28,45 @@ import {
 import type { AccountProfile } from './account/types';
 import { PlaceholderPanel } from './PlaceholderPanel';
 import { ProjectsPanel } from './ProjectsPanel';
+import {
+  BillingActionModal,
+  type BillingModalCompletion,
+  type BillingModalState,
+} from './BillingActionModal';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import {
   accountTierLabel,
-  LANDING_URL,
+  hasPaidSubscription,
   readBillingContactPreference,
   resolveActivePlanId,
   writeBillingContactPreference,
 } from './subscription';
+import {
+  applyPaymentMethodSetup,
+  cancelManagedSubscription,
+  changeSubscriptionPlan,
+  createPaymentMethodSetupIntent,
+  createSubscriptionIntent,
+  fetchBillingOverview,
+  persistBillingContactPreference,
+  resumeManagedSubscription,
+  syncManagedSubscription,
+  type BillingOverviewResponse,
+} from './billingApi';
 import { TopTabs } from './TopTabs';
 import type {
   BillingContactPreference,
+  PaymentMethodSummary,
   ProjectBrowserOverlayProps,
   OverlayTab,
   SubscriptionPlanId,
-  SubscriptionSnapshot,
   SubscriptionState,
 } from './types';
 import { formatSavedAt } from './utils';
 
 import './styles.css';
+
+type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
 export function ProjectBrowserOverlay({
   open,
@@ -82,14 +101,73 @@ export function ProjectBrowserOverlay({
   const [contactPreference, setContactPreference] = useState<BillingContactPreference>(() =>
     readBillingContactPreference(userId),
   );
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodSummary | null>(null);
+  const [billingActionBusy, setBillingActionBusy] = useState(false);
+  const [billingActionError, setBillingActionError] = useState<string | null>(null);
+  const [billingModal, setBillingModal] = useState<BillingModalState | null>(null);
+  const [contactStatusMessage, setContactStatusMessage] = useState<string | null>(null);
+  const syncedContactPreferenceRef = useRef<string | null>(null);
+  const contactHydratedRef = useRef(false);
 
   useEffect(() => {
     setContactPreference(readBillingContactPreference(userId));
+    syncedContactPreferenceRef.current = null;
+    contactHydratedRef.current = false;
   }, [userId]);
 
   useEffect(() => {
     writeBillingContactPreference(userId, contactPreference);
   }, [contactPreference, userId]);
+
+  useEffect(() => {
+    if (!open || !userId || !contactHydratedRef.current) return;
+
+    const serialized = JSON.stringify(contactPreference);
+    if (syncedContactPreferenceRef.current === serialized) {
+      return;
+    }
+
+    setContactStatusMessage('Enregistrement de votre e-mail de facturation…');
+    const timeout = window.setTimeout(() => {
+      void persistBillingContactPreference(contactPreference)
+        .then((nextPreference) => {
+          syncedContactPreferenceRef.current = JSON.stringify(nextPreference);
+          setContactPreference(nextPreference);
+          setContactStatusMessage('E-mail de facturation enregistré.');
+        })
+        .catch((nextError) => {
+          setContactStatusMessage(
+            nextError instanceof Error
+              ? nextError.message
+              : 'Impossible d’enregistrer l’e-mail de facturation.',
+          );
+        });
+    }, 450);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [contactPreference, open, userId]);
+
+  const applyBillingOverview = useCallback((overview: BillingOverviewResponse) => {
+    setSubscriptionState({
+      isLoading: false,
+      error: null,
+      snapshot: overview.subscription,
+    });
+    setSelectedPlanId(resolveActivePlanId(overview.subscription));
+    setPaymentMethod(overview.paymentMethod);
+    setContactPreference(overview.contactPreference);
+    syncedContactPreferenceRef.current = JSON.stringify(overview.contactPreference);
+    contactHydratedRef.current = true;
+    setContactStatusMessage(null);
+    setBillingActionError(null);
+  }, []);
+
+  const refreshBillingOverview = useCallback(async () => {
+    const overview = await fetchBillingOverview();
+    applyBillingOverview(overview);
+  }, [applyBillingOverview]);
 
   const setBusy = useCallback((id: string, busy: boolean) => {
     setBusyIds((prev) => {
@@ -136,29 +214,11 @@ export function ProjectBrowserOverlay({
 
     void (async () => {
       try {
-        const { data, error: nextError } = await supabase
-          .from('user_subscription_status')
-          .select('is_subscribed, status, price_id, current_period_end, cancel_at_period_end')
-          .eq('user_id', userId)
-          .maybeSingle();
+        const overview = await fetchBillingOverview();
 
         if (cancelled) return;
-        if (nextError) throw nextError;
 
-        const snapshot: SubscriptionSnapshot = {
-          isSubscribed: data?.is_subscribed ?? false,
-          status: data?.status ?? 'demo',
-          priceId: data?.price_id ?? null,
-          currentPeriodEnd: data?.current_period_end ?? null,
-          cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
-        };
-
-        setSubscriptionState({
-          isLoading: false,
-          error: null,
-          snapshot,
-        });
-        setSelectedPlanId(resolveActivePlanId(snapshot));
+        applyBillingOverview(overview);
       } catch (nextError) {
         if (cancelled) return;
         setSubscriptionState({
@@ -169,13 +229,14 @@ export function ProjectBrowserOverlay({
               : 'Impossible de charger les informations d’abonnement.',
           snapshot: null,
         });
+        setPaymentMethod(null);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, userId]);
+  }, [applyBillingOverview, open, userId]);
 
   useEffect(() => {
     if (!open) return;
@@ -308,9 +369,128 @@ export function ProjectBrowserOverlay({
     : projects;
 
   const lastEdited = projects[0];
-  const openSubscriptionPage = () => {
-    window.open(`${LANDING_URL}/pricing`, '_blank', 'noopener,noreferrer');
-  };
+  const handlePlanSelection = useCallback(
+    async (requestedPlanId: ManagedPlanId) => {
+      setBillingActionBusy(true);
+      setBillingActionError(null);
+
+      try {
+        const result = hasPaidSubscription(subscriptionState.snapshot)
+          ? await changeSubscriptionPlan(requestedPlanId)
+          : await createSubscriptionIntent(requestedPlanId);
+
+        if (result.requiresPaymentConfirmation && result.clientSecret) {
+          setBillingModal({
+            mode: 'subscription',
+            clientSecret: result.clientSecret,
+            subscriptionId: result.subscriptionId,
+            planId: requestedPlanId,
+            title: hasPaidSubscription(subscriptionState.snapshot)
+              ? 'Confirmer le changement de plan'
+              : 'Finaliser votre abonnement',
+            description: hasPaidSubscription(subscriptionState.snapshot)
+              ? 'Validez ici le paiement ou le prorata éventuel sans quitter RedView.'
+              : 'Saisissez votre moyen de paiement Stripe directement dans RedView pour activer cette offre.',
+            submitLabel: hasPaidSubscription(subscriptionState.snapshot)
+              ? 'Confirmer le changement'
+              : 'Activer l’abonnement',
+          });
+          return;
+        }
+
+        await refreshBillingOverview();
+      } catch (nextError) {
+        setBillingActionError(
+          nextError instanceof Error
+            ? nextError.message
+            : 'Impossible de lancer cette action de facturation.',
+        );
+      } finally {
+        setBillingActionBusy(false);
+      }
+    },
+    [refreshBillingOverview, subscriptionState.snapshot],
+  );
+
+  const handleManagedSubscriptionToggle = useCallback(async () => {
+    if (!hasPaidSubscription(subscriptionState.snapshot)) {
+      return;
+    }
+
+    setBillingActionBusy(true);
+    setBillingActionError(null);
+
+    try {
+      if (subscriptionState.snapshot?.cancelAtPeriodEnd) {
+        await resumeManagedSubscription();
+      } else {
+        await cancelManagedSubscription();
+      }
+
+      await refreshBillingOverview();
+    } catch (nextError) {
+      setBillingActionError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Impossible de mettre à jour le renouvellement automatique.',
+      );
+    } finally {
+      setBillingActionBusy(false);
+    }
+  }, [refreshBillingOverview, subscriptionState.snapshot]);
+
+  const handlePaymentMethodAction = useCallback(async () => {
+    if (!hasPaidSubscription(subscriptionState.snapshot)) {
+      const targetPlanId: ManagedPlanId =
+        selectedPlanId !== 'demo' ? selectedPlanId : 'proMonthly';
+      await handlePlanSelection(targetPlanId);
+      return;
+    }
+
+    setBillingActionBusy(true);
+    setBillingActionError(null);
+
+    try {
+      const result = await createPaymentMethodSetupIntent();
+      setBillingModal({
+        mode: 'payment-method',
+        clientSecret: result.clientSecret,
+        title: 'Mettre à jour votre moyen de paiement',
+        description:
+          'Ajoutez ou remplacez votre carte sans sortir de RedView. Les prochains prélèvements utiliseront ce moyen de paiement.',
+        submitLabel: 'Enregistrer cette carte',
+      });
+    } catch (nextError) {
+      setBillingActionError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Impossible d’ouvrir le formulaire de carte.',
+      );
+    } finally {
+      setBillingActionBusy(false);
+    }
+  }, [handlePlanSelection, selectedPlanId, subscriptionState.snapshot]);
+
+  const handleBillingModalComplete = useCallback(
+    async (completion: BillingModalCompletion) => {
+      if (completion.mode === 'payment-method') {
+        const overview = await applyPaymentMethodSetup(completion.setupIntentId);
+        applyBillingOverview(overview);
+        setBillingModal(null);
+        return;
+      }
+
+      await syncManagedSubscription(completion.subscriptionId);
+      await refreshBillingOverview();
+      setBillingModal(null);
+    },
+    [applyBillingOverview, refreshBillingOverview],
+  );
+
+  const closeBillingModal = useCallback(() => {
+    setBillingModal(null);
+  }, []);
+
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)
     : displayName || 'Utilisateur';
@@ -402,7 +582,13 @@ export function ProjectBrowserOverlay({
             contactPreference={contactPreference}
             setContactPreference={setContactPreference}
             accountEmail={accountEmail}
-            openSubscriptionPage={openSubscriptionPage}
+            paymentMethod={paymentMethod}
+            billingActionBusy={billingActionBusy}
+            billingActionError={billingActionError}
+            contactStatusMessage={contactStatusMessage}
+            onSelectPlan={handlePlanSelection}
+            onToggleManagedSubscription={handleManagedSubscriptionToggle}
+            onManagePaymentMethod={handlePaymentMethodAction}
           />
         ) : null}
 
@@ -423,6 +609,14 @@ export function ProjectBrowserOverlay({
           <PlaceholderPanel
             title="Réglages"
             description="Les réglages globaux de ce tableau de bord restent à connecter. Le shell Figma est désormais prêt à accueillir cette page sans toucher à la grille projets."
+          />
+        ) : null}
+
+        {billingModal ? (
+          <BillingActionModal
+            flow={billingModal}
+            onClose={closeBillingModal}
+            onComplete={handleBillingModalComplete}
           />
         ) : null}
       </div>

@@ -1,8 +1,4 @@
-interface PayWallProps {
-  landingUrl: string;
-}
-
-export default function PayWall({ landingUrl }: PayWallProps) {
+export default function PayWall() {
   return (
     <div
       style={{
@@ -22,26 +18,28 @@ export default function PayWall({ landingUrl }: PayWallProps) {
         Subscription required
       </h1>
       <p style={{ color: "#888", marginBottom: "2rem", textAlign: "center", maxWidth: 400 }}>
-        You need an active RedView Pro subscription to access the app.
+        Billing now happens directly inside RedView App. Reconnect with a demo-enabled account or contact support if this access should still be active.
       </p>
-      <a
-        href={`${landingUrl}/pricing`}
+      <button
+        type="button"
         style={{
           background: "#fff",
           color: "#111",
+          border: 0,
           padding: "0.75rem 2rem",
           fontSize: "0.875rem",
           fontWeight: 500,
-          textDecoration: "none",
+          cursor: "pointer",
           transition: "opacity 0.2s",
         }}
+        onClick={() => window.location.reload()}
         onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
         onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
       >
-        Subscribe — 19.99€/month
-      </a>
+        Refresh access
+      </button>
       <p style={{ color: "#555", fontSize: "0.75rem", marginTop: "1rem" }}>
-        Secure payment via Stripe. Cancel anytime.
+        Hosted billing pages on the landing page are disabled.
       </p>
     </div>
   );

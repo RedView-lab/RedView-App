@@ -7,13 +7,15 @@ import {
   statusLabel,
   SUBSCRIPTION_PLANS,
 } from './subscription';
-import { formatShortDate } from './utils';
 import { SubscriptionPlanCard } from './SubscriptionPlanCard';
 import type {
   BillingContactPreference,
+  PaymentMethodSummary,
   SubscriptionPlanId,
   SubscriptionState,
 } from './types';
+
+type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
 type SubscriptionPanelProps = {
   subscriptionState: SubscriptionState;
@@ -22,7 +24,13 @@ type SubscriptionPanelProps = {
   contactPreference: BillingContactPreference;
   setContactPreference: React.Dispatch<React.SetStateAction<BillingContactPreference>>;
   accountEmail: string;
-  openSubscriptionPage: () => void;
+  paymentMethod: PaymentMethodSummary | null;
+  billingActionBusy: boolean;
+  billingActionError: string | null;
+  contactStatusMessage: string | null;
+  onSelectPlan: (planId: ManagedPlanId) => void;
+  onToggleManagedSubscription: () => void;
+  onManagePaymentMethod: () => void;
 };
 
 export function SubscriptionPanel({
@@ -32,17 +40,35 @@ export function SubscriptionPanel({
   contactPreference,
   setContactPreference,
   accountEmail,
-  openSubscriptionPage,
+  paymentMethod,
+  billingActionBusy,
+  billingActionError,
+  contactStatusMessage,
+  onSelectPlan,
+  onToggleManagedSubscription,
+  onManagePaymentMethod,
 }: SubscriptionPanelProps) {
   const selectedPlan =
     SUBSCRIPTION_PLANS.find((plan) => plan.id === selectedPlanId) ?? SUBSCRIPTION_PLANS[2];
   const activePlanId = resolveActivePlanId(subscriptionState.snapshot);
+  const hasManagedSubscription = !isDemoPlan(subscriptionState.snapshot);
+  const paymentMethodLabel = paymentMethod
+    ? `${paymentMethod.brand.toUpperCase()} se terminant par ${paymentMethod.last4}`
+    : hasManagedSubscription
+      ? 'Aucun moyen de paiement par défaut'
+      : 'Plan Demo sans paiement';
+  const paymentMethodHelper = paymentMethod
+    ? `Expire ${String(paymentMethod.expMonth).padStart(2, '0')}/${paymentMethod.expYear}.`
+    : hasManagedSubscription
+      ? 'Ajoutez ou remplacez votre carte directement dans RedView App.'
+      : 'Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.';
+  const panelError = billingActionError ?? subscriptionState.error;
 
   return (
     <section className="rvpb-subscription-panel" aria-label="Gestion de l’abonnement">
-      {subscriptionState.error ? (
+      {panelError ? (
         <div className="rvpb-error" role="alert">
-          {subscriptionState.error}
+          {panelError}
         </div>
       ) : null}
 
@@ -72,21 +98,32 @@ export function SubscriptionPanel({
                 ctaLabel={
                   isActivePlan && !isDemoSelection
                     ? subscriptionState.snapshot?.cancelAtPeriodEnd
-                      ? 'Gérer'
+                      ? 'Reprendre'
                       : 'Interrompre'
                     : isSelectedPlan && !isDemoSelection
-                      ? 'Choisir sur RedView Web'
+                      ? hasManagedSubscription
+                        ? 'Basculer sur cette offre'
+                        : 'Choisir cette offre'
                       : undefined
                 }
                 ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
-                onCtaClick={isDemoSelection ? undefined : openSubscriptionPage}
+                ctaDisabled={billingActionBusy}
+                onCtaClick={
+                  isDemoSelection
+                    ? undefined
+                    : isActivePlan
+                      ? onToggleManagedSubscription
+                      : () => onSelectPlan(plan.id as ManagedPlanId)
+                }
                 ctaHelper={
                   isActivePlan && !isDemoSelection
                     ? subscriptionState.snapshot?.cancelAtPeriodEnd
-                      ? `Fin prévue le ${formatShortDate(subscriptionState.snapshot.currentPeriodEnd)}.`
+                      ? `Le renouvellement automatique reprendra immédiatement si vous confirmez.`
                       : `Statut ${statusLabel(subscriptionState.snapshot).toLowerCase()}.`
                     : isSelectedPlan && !isDemoSelection
-                      ? 'Le changement de plan se fait depuis la page d’abonnement RedView Web.'
+                      ? hasManagedSubscription
+                        ? 'Le changement de plan se confirme ici, sans sortie vers une page Stripe hébergée.'
+                        : 'Le paiement reste dans RedView App via Stripe Elements.'
                       : undefined
                 }
               />
@@ -108,32 +145,38 @@ export function SubscriptionPanel({
               <SvgV2Icon name="credit-card-02.svg" size={18} />
             </div>
             <div className="rvpb-payment-card__copy">
-              <strong>
-                {isDemoPlan(subscriptionState.snapshot)
-                  ? 'Plan Demo sans paiement'
-                  : 'Facturation gérée dans Stripe'}
-              </strong>
-              <span>
-                {isDemoPlan(subscriptionState.snapshot)
-                  ? 'Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.'
-                  : 'Ouvrez le portail sécurisé pour ajouter ou modifier votre moyen de paiement.'}
-              </span>
+              <strong>{paymentMethodLabel}</strong>
+              <span>{paymentMethodHelper}</span>
               <div className="rvpb-link-row">
-                <button type="button" className="rvpb-text-link" onClick={openSubscriptionPage}>
+                <button
+                  type="button"
+                  className="rvpb-text-link"
+                  onClick={onManagePaymentMethod}
+                  disabled={billingActionBusy}
+                >
                   {isDemoPlan(subscriptionState.snapshot)
                     ? 'Choisir une offre payante'
-                    : 'Ouvrir la page d’abonnement'}
+                    : paymentMethod
+                      ? 'Remplacer mon moyen de paiement'
+                      : 'Ajouter un moyen de paiement'}
                 </button>
               </div>
             </div>
           </div>
 
-          <button type="button" className="rvpb-add-row" onClick={openSubscriptionPage}>
+          <button
+            type="button"
+            className="rvpb-add-row"
+            onClick={onManagePaymentMethod}
+            disabled={billingActionBusy}
+          >
             <SvgV2Icon name="plus.svg" size={16} />
             <span>
               {isDemoPlan(subscriptionState.snapshot)
                 ? 'Passer à une offre payante'
-                : 'Ajouter ou modifier un moyen de paiement'}
+                : paymentMethod
+                  ? 'Remplacer le moyen de paiement'
+                  : 'Ajouter un moyen de paiement'}
             </span>
           </button>
         </div>
@@ -147,6 +190,8 @@ export function SubscriptionPanel({
         </div>
 
         <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
+          {contactStatusMessage ? <p className="rvpb-inline-note">{contactStatusMessage}</p> : null}
+
           <label className="rvpb-contact-option">
             <input
               type="radio"

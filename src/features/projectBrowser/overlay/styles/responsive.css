@@ -26,6 +26,25 @@
 }
 
 @media (max-width: 768px) {
+  .rvpb-billing-modal {
+    padding: 16px;
+  }
+
+  .rvpb-billing-modal__header,
+  .rvpb-billing-modal__footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .rvpb-billing-modal__actions {
+    width: 100%;
+    flex-direction: column-reverse;
+  }
+
+  .rvpb-billing-modal__actions > * {
+    width: 100%;
+  }
+
   .rvpb-header,
   .rvpb-toolbar {
     flex-direction: column;
