@@ -1,4 +1,4 @@
-import type mapboxgl from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 import { DEFAULT_ORTHO_BOOT_FALLBACK_MS } from './constants';
 
 export interface MapRuntimeProfile {
@@ -62,7 +62,7 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
   };
 }
 
-export function waitForMapIdleOrTimeout(map: mapboxgl.Map, timeoutMs: number): Promise<void> {
+export function waitForMapIdleOrTimeout(map: MapboxMap, timeoutMs: number): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
     const finish = () => {
