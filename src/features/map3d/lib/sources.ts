@@ -1,8 +1,9 @@
 import { FRANCE_BOUNDS, DEM_SOURCE_MAXZOOM } from './ign.config';
 
 /**
- * Unified DEM source: IGN MNS 0.42m/px for France, Mapbox 30m elsewhere.
- * Processed client-side by Service Worker (sw-dem.js) intercepting /dem-tiles/ requests.
+ * Unified DEM source: high-res national DEM in covered regions, AWS Terrarium
+ * (~30 m global) elsewhere. Processed client-side by Service Worker
+ * (sw-dem.js) intercepting /dem-tiles/ requests.
  */
 export const unifiedDEMSource = {
   id: 'unified-dem',
@@ -11,9 +12,9 @@ export const unifiedDEMSource = {
   // 256px to match the SW output (DEM_TILE_SIZE in config.js)
   tileSize: 256,
   encoding: 'mapbox' as const,
-  // Below z6 the DEM contributes no visible relief at world view but Mapbox
-  // GL would still request ~50 tiles per session for the globe mesh — wasted
-  // bandwidth and (when SW falls through to Mapbox) wasted Raster billing.
+  // Below z6 the DEM contributes no visible relief at world view but the map
+  // renderer would still request ~50 tiles per session for the globe mesh —
+  // wasted bandwidth and wasted global-fallback DEM traffic.
   // Terrain stays disabled at world zoom; the SW also short-circuits z<4.
   minzoom: 6,
   maxzoom: DEM_SOURCE_MAXZOOM,

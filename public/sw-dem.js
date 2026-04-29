@@ -4,14 +4,11 @@
 //
 // Contract with the page (useMap.ts):
 //   1. page registers SW and waits for controllerchange
-//   2. page posts { type: 'SET_MAPBOX_TOKEN', token } and waits for TOKEN_ACK
-//   3. ONLY THEN does the page add /dem-tiles/ and /ortho-tiles/ sources
+//   2. ONLY THEN does the page add /dem-tiles/ and /ortho-tiles/ sources
 //
-// Consequence: when a DEM request reaches this SW, mapboxToken is guaranteed
-// to be set. If it isn't (SW restart mid-session, etc.), we return 204 and
-// let Mapbox GL reuse parent tiles — identical to how plain Mapbox handles
-// missing raster-dem tiles. We NEVER return a fake "flat" elevation tile,
-// which would show the user a lying-flat terrain mesh.
+// Consequence: DEM fetches are entirely local/public-source driven
+// (IGN/swissALTI/AWS Terrarium). We NEVER synthesize a fake "flat" elevation
+// tile; on genuine misses we return 204 so the renderer can reuse parent mesh.
 // ---------------------------------------------------------------------------
 
 importScripts(
@@ -34,9 +31,6 @@ importScripts(
   '/sw-dem/swiss-fetcher.js',
   '/sw-dem/swiss-build.js',
 );
-
-// Shared mutable state (used by sub-modules via global scope)
-let mapboxToken = '';
 
 // Composite concurrency limiter — caps peak memory from simultaneous blends.
 // Raised from 2 → 6: compositeIGNMapbox uses ≤2 MB per call (2× Float32(256²)
@@ -125,23 +119,10 @@ self.addEventListener('activate', (e) => {
         keys.filter((k) => OLD_CACHES.includes(k)).map((k) => caches.delete(k))
       ))
       .then(() => self.clients.claim())
-      .then(() => {
-        // Ask any pre-existing clients to (re)send the token. New clients will
-        // send it on their own boot sequence; this covers the SW-update case.
-        return self.clients.matchAll().then((clients) => {
-          clients.forEach((c) => c.postMessage({ type: 'REQUEST_TOKEN' }));
-        });
-      })
   );
 });
 
 self.addEventListener('message', (e) => {
-  if (e.data?.type === 'SET_MAPBOX_TOKEN') {
-    mapboxToken = e.data.token || '';
-    if (DEBUG) console.log('[sw-dem] TOKEN SET');
-    if (e.source) e.source.postMessage({ type: 'TOKEN_ACK' });
-    return;
-  }
   if (e.data?.type === 'CLEAR_DEM_CACHE') {
     caches.delete(CACHE_NAME);
     return;
@@ -251,9 +232,8 @@ function buildDemResponse(pngBlob, demSource, shortCache) {
   });
 }
 
-// 204 No Content: the canonical "no tile here" signal for Mapbox GL raster-dem.
-// Mapbox reuses the parent tile mesh instead of rendering a hole. This is
-// exactly how plain Mapbox behaves when its own DEM tiles are missing.
+// 204 No Content: canonical "no tile here" signal for the terrain renderer.
+// The renderer reuses the parent tile mesh instead of rendering a hole.
 function noTileResponse(reason) {
   return new Response(null, {
     status: 204,
@@ -274,7 +254,8 @@ function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
   const parentSource = (parentResp.headers.get('X-DEM-Source') || '').toLowerCase();
   if (!parentSource) return true;
 
-  return parentSource.startsWith('mapbox')
+  return parentSource.startsWith('aws-terrarium')
+    || parentSource.startsWith('mapbox')
     || parentSource.startsWith('overzoom')
     || parentSource.includes('fastpath');
 }
@@ -625,15 +606,13 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     }
 
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
-    //    confirmed empty (outside coverage, no Mapbox token, etc.)
+    //    confirmed empty outside the supported LiDAR regions.
     if (!pngBlob) {
-      const isConfirmedEmpty = (!tileIsInFrance && !inSwitzerland) || !mapboxToken;
+      const isConfirmedEmpty = !tileIsInFrance && !inSwitzerland;
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
-      const reason = !mapboxToken
-        ? 'no-token'
-        : (skipMapboxHighZoomLiDAR
-            ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
-            : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage'));
+      const reason = skipMapboxHighZoomLiDAR
+        ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
+        : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage');
       if (upgradePending && upgradePending.length) {
         scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
       }
@@ -661,10 +640,12 @@ async function handleDemRequest(_request, z, x, y, _depth) {
 }
 
 async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion) {
-  // Short cache (15 s) for Mapbox/overzoom fallback tiles inside any LiDAR
+  // Short cache (15 s) for AWS/overzoom fallback tiles inside any LiDAR
   // region (France or Switzerland) at z≥13. These are transient stand-ins
   // while the exact tile finishes building; longer caching masks the upgrade.
-  const shortCache = inLiDARRegion && z >= 13 && (demSource === 'mapbox' || demSource.startsWith('overzoom'));
+  const shortCache = inLiDARRegion
+    && z >= 13
+    && (demSource.startsWith('aws-terrarium') || demSource.startsWith('overzoom'));
   const response = buildDemResponse(pngBlob, demSource, shortCache);
   cache.put(cacheKey, response.clone());
   if (DEBUG) {

@@ -1,5 +1,3 @@
-export const TOKEN_ACK_TIMEOUT = 1500;
-export const TOKEN_ACK_MAX_ATTEMPTS = 3;
 export const SW_CONTROLLER_TIMEOUT = 2500;
 export const DEFAULT_ORTHO_BOOT_FALLBACK_MS = 1500;
 export const DEM_RELOAD_COOLDOWN_MS = 5000;

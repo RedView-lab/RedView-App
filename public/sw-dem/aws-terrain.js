@@ -3,8 +3,8 @@
 //
 // Endpoint: https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png
 //
-// Why: Mapbox raster-DEM tiles (`mapbox.mapbox-terrain-dem-v1`) are billed
-// against the Raster Tiles API SKU. The AWS Open Data Terrain Tiles dataset
+// Why: the previous commercial raster-DEM fallback was billed against the
+// Raster Tiles API SKU. The AWS Open Data Terrain Tiles dataset
 // (legacy Mapzen, hosted free by AWS) covers the entire globe at ~30 m
 // resolution and is free / unlimited. We swap it in everywhere the SW used
 // to call Mapbox for global DEM, drastically cutting the Raster Tiles bill
