@@ -62,7 +62,8 @@ export function addGpxRoute(
     },
   });
 
-  // Core line layer — elevated + emissive so it stays visible above IGN ortho
+  // Core line layer — elevated to avoid terrain drape reordering, but fully
+  // occluded by 3D terrain/objects when it passes behind relief.
   map.addLayer({
     id: GPX_LINE_LAYER_ID,
     type: 'line',
@@ -81,7 +82,7 @@ export function addGpxRoute(
       'line-emissive-strength': 1,
       'line-border-width': 1,
       'line-border-color': 'rgba(255,255,255,0.6)',
-      'line-occlusion-opacity': 0.85,
+      'line-occlusion-opacity': 0,
     },
   });
 

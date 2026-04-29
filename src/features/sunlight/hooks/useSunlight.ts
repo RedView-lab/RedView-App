@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FogSpecification, LightsSpecification, Map as MapboxMap } from 'mapbox-gl';
 
 import { getSunPosition, resolveSunTimesForLocalDay } from '../lib/sun-calc';
+import { addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from '../lib/sun-ray/sun-ray-layer';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
 
 /**
@@ -147,6 +148,7 @@ export function useSunlight(
           ? prev
           : { azimuthDeg: azimuth, altitudeDeg: altitude }
       ));
+      updateSunRayPosition(azimuth, altitude);
 
       try {
         map.setLights(buildLights(azimuth, altitude));
@@ -178,10 +180,35 @@ export function useSunlight(
     };
   }, [map, isMapLoaded, opts.enabled, dateTime]);
 
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    const syncSunRayLayer = () => {
+      if (!optsRef.current.enabled) {
+        removeSunRayLayer(map);
+        return;
+      }
+      try {
+        addSunRayLayer(map);
+        updateSunRayPosition(sunPos.azimuthDeg, sunPos.altitudeDeg);
+      } catch (err) {
+        console.warn('[sunlight] addSunRayLayer failed', err);
+      }
+    };
+
+    syncSunRayLayer();
+    map.on('style.load', syncSunRayLayer);
+    return () => {
+      map.off('style.load', syncSunRayLayer);
+      removeSunRayLayer(map);
+    };
+  }, [map, isMapLoaded, opts.enabled, sunPos.azimuthDeg, sunPos.altitudeDeg]);
+
   // Restore neutral sky when the panel is disabled.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (opts.enabled) return;
+    removeSunRayLayer(map);
     try {
       map.setLights(DEFAULT_LIGHTS);
     } catch {

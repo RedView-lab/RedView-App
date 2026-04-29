@@ -310,7 +310,7 @@ function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | nu
       'line-opacity': 0.34,
       'line-blur': 3.2,
       'line-emissive-strength': 1.1,
-      'line-occlusion-opacity': 0.88,
+      'line-occlusion-opacity': 0,
     },
   });
 
@@ -333,7 +333,7 @@ function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | nu
       'line-emissive-strength': 1.18,
       'line-border-width': 1.6,
       'line-border-color': 'rgba(255,255,255,0.54)',
-      'line-occlusion-opacity': 0.92,
+      'line-occlusion-opacity': 0,
     },
   });
 
@@ -368,7 +368,7 @@ function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
       'line-opacity': 0.34,
       'line-blur': 4,
       'line-emissive-strength': 1.12,
-      'line-occlusion-opacity': 0.9,
+      'line-occlusion-opacity': 0,
     },
   });
 
@@ -391,7 +391,7 @@ function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
       'line-emissive-strength': 1.18,
       'line-border-width': 1.6,
       'line-border-color': 'rgba(255,255,255,0.56)',
-      'line-occlusion-opacity': 0.92,
+      'line-occlusion-opacity': 0,
     },
   });
 
@@ -691,7 +691,7 @@ export function upsertRouteLayer(
         'line-emissive-strength': 1,
         'line-border-width': 1,
         'line-border-color': 'rgba(255,255,255,0.6)',
-        'line-occlusion-opacity': 0.85,
+        'line-occlusion-opacity': 0,
       },
     });
   }
