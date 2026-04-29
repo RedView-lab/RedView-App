@@ -169,13 +169,14 @@ export function createMapLifecycleController({
     const now = Date.now();
     if (now < demPassiveRefreshCoolingUntil) return false;
 
+    if (!refreshDemSource()) return false;
+
     demPassiveRefreshPending = false;
     demPassiveRefreshCoolingUntil = now + DEM_PASSIVE_REFRESH_COOLDOWN_MS;
     demTrackingEnabled = false;
     clearDemTracking();
     reportStatus('loading', 0, 'Affinage relief');
 
-    refreshDemSource();
     armTerrainBootstrap(() => {
       demTrackingEnabled = true;
       scheduleDemSettle();
@@ -234,7 +235,12 @@ export function createMapLifecycleController({
     }, DEM_ACTIVITY_SETTLE_MS);
   };
 
-  const refreshDemSource = () => {
+  const refreshDemSource = (): boolean => {
+    if (!navigator.serviceWorker?.controller) {
+      console.warn('[map3d] DEM source refresh skipped: no active service worker controller');
+      return false;
+    }
+
     disposeTerrainBootstrap?.();
     disposeTerrainBootstrap = null;
 
@@ -259,6 +265,7 @@ export function createMapLifecycleController({
     refreshTrackedSourceIds();
 
     terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+    return true;
   };
 
   const armTerrainBootstrap = (onReady: () => void) => {
@@ -311,16 +318,20 @@ export function createMapLifecycleController({
     if (now < demReloadCoolingUntil) return;
     demReloadCoolingUntil = now + DEM_RELOAD_COOLDOWN_MS;
 
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_DEM_CACHE' });
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+
+    demCacheBust = now;
+    if (!refreshDemSource()) {
+      finishDemActivity('Relief inchangé');
+      return;
+    }
+
     demPassiveRefreshPending = false;
     demTrackingEnabled = false;
     clearDemTracking();
     reportStatus('loading', 0, 'Rechargement relief');
 
-    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_DEM_CACHE' });
-    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
-
-    demCacheBust = now;
-    refreshDemSource();
     armTerrainBootstrap(() => {
       demTrackingEnabled = true;
       scheduleDemSettle();

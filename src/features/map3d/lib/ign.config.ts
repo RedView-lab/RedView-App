@@ -21,13 +21,12 @@ export const IGN_ORTHO_MAXZOOM = 19;
 export const IGN_DEM_MINZOOM = 4;
 export const IGN_DEM_MAXZOOM = 17;
 
-// Mapbox requests tiles up to this zoom from our protocol.
-// MNS LiDAR HD is published natively up to z17 (WGS84G_4_17). At mercator z17
-// in France the ground sample distance drops to ~1 m — matching LiDAR HD's
-// native 1 m grid — so fetching IGN directly at z17 yields TRUE 1 m detail
-// instead of GPU-overzooming a z16 tile (which softens the DEM). Mapbox GL
-// will still overzoom past z17 for the rare very-close view.
-export const DEM_SOURCE_MAXZOOM = 17;
+// The raster-dem source itself must stop at z15. Above that, asking the SW to
+// synthesize child DEM tiles reintroduces the classic "terrain gets flatter as
+// I zoom in" regression: global fallback DEM is native only to z14, and even
+// France/Switzerland LiDAR looks better when Mapbox GL GPU-overzooms the last
+// stable mesh instead of repeatedly swapping to deeper child tiles.
+export const DEM_SOURCE_MAXZOOM = 15;
 
 export const DEM_TILE_SIZE = 512;
 export const DEM_NODATA_THRESHOLD = -10000;
