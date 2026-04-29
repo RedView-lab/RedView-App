@@ -32,25 +32,31 @@ function sunRayCircleColorFromAltitude(altitudeDeg: number): string {
 // ── Geographic computation ─────────────────────────────────────────────
 
 /**
- * Given an anchor [lng, lat] and a sun azimuth, compute a far-away point
- * along the sun's horizontal direction.  We use a simple spherical offset
- * (accurate enough for the 50-80 km distances involved).
+ * Given an anchor [lng, lat] and a sun azimuth + altitude, compute a 3D
+ * source point along the sun direction.  The horizontal offset gives
+ * [lng, lat] and the altitude angle gives the height above ground.
  */
-function computeSourceLngLat(
+function computeSourcePoint(
   anchorLng: number,
   anchorLat: number,
+  anchorElevation: number,
   azimuthDeg: number,
-  distanceKm: number,
-): [number, number] {
+  altitudeDeg: number,
+  horizontalDistKm: number,
+): [number, number, number] {
   const azRad = (azimuthDeg * Math.PI) / 180;
+  const altRad = (altitudeDeg * Math.PI) / 180;
+  const horizM = horizontalDistKm * 1000;
   // East and North offsets in metres
-  const eastM = Math.sin(azRad) * distanceKm * 1000;
-  const northM = Math.cos(azRad) * distanceKm * 1000;
+  const eastM = Math.sin(azRad) * horizM;
+  const northM = Math.cos(azRad) * horizM;
   // Approximate degrees per metre at this latitude
   const cosLat = Math.cos((anchorLat * Math.PI) / 180);
   const dLng = eastM / (111320 * Math.max(cosLat, 0.01));
   const dLat = northM / 110540;
-  return [anchorLng + dLng, anchorLat + dLat];
+  // Height above anchor: tan(altitude) × horizontal distance
+  const heightM = Math.tan(Math.max(altRad, 0.01)) * horizM;
+  return [anchorLng + dLng, anchorLat + dLat, anchorElevation + heightM];
 }
 
 // ── State ──────────────────────────────────────────────────────────────
@@ -60,12 +66,23 @@ let currentAzimuthDeg = 180;
 let currentAltitudeDeg = 45;
 let currentAnchorLng = 0;
 let currentAnchorLat = 0;
+let currentAnchorElevation = 0;
 
 // ── Ensure source + layers ─────────────────────────────────────────────
 
-function buildGeoJSON(anchorLng: number, anchorLat: number, azimuthDeg: number, altitudeDeg: number): GeoJSON.FeatureCollection {
-  const rayDistKm = 50 + (1 - Math.max(0, Math.sin((altitudeDeg * Math.PI) / 180))) * 50;
-  const [srcLng, srcLat] = computeSourceLngLat(anchorLng, anchorLat, azimuthDeg, rayDistKm);
+function buildGeoJSON(
+  anchorLng: number,
+  anchorLat: number,
+  anchorElevation: number,
+  azimuthDeg: number,
+  altitudeDeg: number,
+): GeoJSON.FeatureCollection {
+  // Horizontal distance for the ray — shorter when sun is high, longer at dusk.
+  const horizDistKm = 8 + (1 - Math.max(0, Math.sin((altitudeDeg * Math.PI) / 180))) * 12;
+  const [srcLng, srcLat, srcAlt] = computeSourcePoint(
+    anchorLng, anchorLat, anchorElevation,
+    azimuthDeg, altitudeDeg, horizDistKm,
+  );
 
   return {
     type: 'FeatureCollection',
@@ -75,9 +92,11 @@ function buildGeoJSON(anchorLng: number, anchorLat: number, azimuthDeg: number, 
         properties: { kind: 'ray' },
         geometry: {
           type: 'LineString',
+          // 3D coordinates: [lng, lat, altitude_meters]
+          // Anchor at terrain level, source rises into the sky.
           coordinates: [
-            [anchorLng, anchorLat],
-            [srcLng, srcLat],
+            [anchorLng, anchorLat, anchorElevation],
+            [srcLng, srcLat, srcAlt],
           ],
         },
       },
@@ -86,7 +105,7 @@ function buildGeoJSON(anchorLng: number, anchorLat: number, azimuthDeg: number, 
         properties: { kind: 'anchor' },
         geometry: {
           type: 'Point',
-          coordinates: [anchorLng, anchorLat],
+          coordinates: [anchorLng, anchorLat, anchorElevation],
         },
       },
     ],
@@ -97,7 +116,7 @@ function ensureSourceAndLayers(map: MapboxMap): void {
   if (!map.getSource(SUN_RAY_SOURCE_ID)) {
     map.addSource(SUN_RAY_SOURCE_ID, {
       type: 'geojson',
-      data: buildGeoJSON(currentAnchorLng, currentAnchorLat, currentAzimuthDeg, currentAltitudeDeg),
+      data: buildGeoJSON(currentAnchorLng, currentAnchorLat, currentAnchorElevation, currentAzimuthDeg, currentAltitudeDeg),
     });
   }
 
@@ -114,9 +133,12 @@ function ensureSourceAndLayers(map: MapboxMap): void {
           ? 0.82
           : Math.max(0.16, Math.min(0.82, (currentAltitudeDeg + 2) / 18)),
         'line-blur': 1.2,
+        'line-emissive-strength': 1,
       },
       layout: {
         'line-cap': 'round',
+        // Interpret the 3rd coordinate as metres above sea level
+        'line-elevation-reference': 'sea',
       },
     } as never);
   }
@@ -144,7 +166,7 @@ function applyUpdate(map: MapboxMap): void {
   const src = map.getSource(SUN_RAY_SOURCE_ID) as GeoJSONSource | undefined;
   if (!src) return;
 
-  src.setData(buildGeoJSON(currentAnchorLng, currentAnchorLat, currentAzimuthDeg, currentAltitudeDeg));
+  src.setData(buildGeoJSON(currentAnchorLng, currentAnchorLat, currentAnchorElevation, currentAzimuthDeg, currentAltitudeDeg));
 
   const lineColor = sunRayColorFromAltitude(currentAltitudeDeg);
   const lineOpacity = currentAltitudeDeg >= 12
@@ -183,12 +205,13 @@ export function updateSunRayPosition(
   altitudeDeg: number,
   lng: number,
   lat: number,
-  _elevation: number,
+  elevation: number,
 ): void {
   currentAzimuthDeg = azimuthDeg;
   currentAltitudeDeg = altitudeDeg;
   currentAnchorLng = lng;
   currentAnchorLat = lat;
+  currentAnchorElevation = elevation;
 
   if (currentMap) {
     try {
