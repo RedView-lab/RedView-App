@@ -197,6 +197,11 @@ export class SunRayLayer implements CustomLayerInterface {
   private azimuthDeg = 180;
   private altitudeDeg = 45;
 
+  /** Fixed world-space anchor — set once via updatePosition, never moves with the camera. */
+  private anchorLng = 0;
+  private anchorLat = 0;
+  private anchorElevation = 0;
+
   onAdd(map: MapboxMap, gl: WebGL2RenderingContext): void {
     this.map = map;
     this.gl = gl;
@@ -237,17 +242,16 @@ export class SunRayLayer implements CustomLayerInterface {
     if (!this.map || !this.program || !this.vertexBuffer) return;
     if (this.altitudeDeg <= -1) return;
 
-    const canvas = this.map.getCanvas();
-    const screenWidth = canvas.clientWidth;
-    const screenHeight = canvas.clientHeight;
     const viewport = gl.getParameter(gl.VIEWPORT) as Int32Array;
     const renderWidth = viewport[2];
     const renderHeight = viewport[3];
-    if (screenWidth <= 0 || screenHeight <= 0 || renderWidth <= 0 || renderHeight <= 0) return;
+    if (renderWidth <= 0 || renderHeight <= 0) return;
 
-    const centerLngLat = this.map.unproject([screenWidth * 0.5, screenHeight * 0.5]);
-    const terrainElevation = this.map.queryTerrainElevation?.(centerLngLat) ?? 0;
-    const anchorPoint = mapboxgl.MercatorCoordinate.fromLngLat(centerLngLat, terrainElevation);
+    // Use the stored fixed world-space anchor — does NOT follow the camera.
+    const anchorPoint = mapboxgl.MercatorCoordinate.fromLngLat(
+      { lng: this.anchorLng, lat: this.anchorLat },
+      this.anchorElevation,
+    );
 
     const azimuthRad = (this.azimuthDeg * Math.PI) / 180;
     const altitudeRad = (this.altitudeDeg * Math.PI) / 180;
@@ -323,9 +327,16 @@ export class SunRayLayer implements CustomLayerInterface {
     this.gl = null;
   }
 
-  updatePosition(azimuthDeg: number, altitudeDeg: number): void {
+  /**
+   * Update the sun direction AND the fixed anchor point in world space.
+   * The anchor is the geographic point where the ray "hits" the terrain.
+   */
+  updatePosition(azimuthDeg: number, altitudeDeg: number, lng: number, lat: number, elevation: number): void {
     this.azimuthDeg = azimuthDeg;
     this.altitudeDeg = altitudeDeg;
+    this.anchorLng = lng;
+    this.anchorLat = lat;
+    this.anchorElevation = elevation;
     this.map?.triggerRepaint();
   }
 }
@@ -353,8 +364,8 @@ export function removeSunRayLayer(map: MapboxMap): void {
   sunRayInstance = null;
 }
 
-export function updateSunRayPosition(azimuthDeg: number, altitudeDeg: number): void {
+export function updateSunRayPosition(azimuthDeg: number, altitudeDeg: number, lng: number, lat: number, elevation: number): void {
   if (sunRayInstance) {
-    sunRayInstance.updatePosition(azimuthDeg, altitudeDeg);
+    sunRayInstance.updatePosition(azimuthDeg, altitudeDeg, lng, lat, elevation);
   }
 }

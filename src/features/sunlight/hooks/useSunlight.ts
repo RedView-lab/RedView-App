@@ -120,7 +120,10 @@ export function useSunlight(
     };
   }, [map, isMapLoaded, opts.date]);
 
-  // Update sun position + sky on time scrubs and center changes.
+  // Update sun position + sky on time scrubs.
+  // NOTE: we intentionally do NOT listen to 'moveend' here — the sun ray
+  // must be 100% static when the camera rotates/pans.  It only changes
+  // when the user scrubs the time slider or picks a different date.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
@@ -148,7 +151,11 @@ export function useSunlight(
           ? prev
           : { azimuthDeg: azimuth, altitudeDeg: altitude }
       ));
-      updateSunRayPosition(azimuth, altitude);
+
+      // Pass the fixed world-space anchor (map center + terrain elevation)
+      // so the sun ray stays pinned to this point regardless of camera moves.
+      const terrainElev = map.queryTerrainElevation?.(center) ?? 0;
+      updateSunRayPosition(azimuth, altitude, lon, lat, terrainElev);
 
       try {
         map.setLights(buildLights(azimuth, altitude));
@@ -171,12 +178,11 @@ export function useSunlight(
     };
 
     scheduleApply();
-    map.on('moveend', scheduleApply);
+    // No 'moveend' listener — the ray is static during camera moves.
     return () => {
       if (frameId !== null) {
         cancelAnimationFrame(frameId);
       }
-      map.off('moveend', scheduleApply);
     };
   }, [map, isMapLoaded, opts.enabled, dateTime]);
 
@@ -190,7 +196,9 @@ export function useSunlight(
       }
       try {
         addSunRayLayer(map);
-        updateSunRayPosition(sunPos.azimuthDeg, sunPos.altitudeDeg);
+        const center = map.getCenter();
+        const terrainElev = map.queryTerrainElevation?.(center) ?? 0;
+        updateSunRayPosition(sunPos.azimuthDeg, sunPos.altitudeDeg, center.lng, center.lat, terrainElev);
       } catch (err) {
         console.warn('[sunlight] addSunRayLayer failed', err);
       }
