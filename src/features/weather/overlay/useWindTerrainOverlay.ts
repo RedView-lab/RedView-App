@@ -3,13 +3,12 @@ import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
 import type { WindGridDefinition, WindPoint, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindGridData } from '../lib/open-meteo';
+import { getOverlayRenderSize } from './renderSize';
 
 const SOURCE_ID = 'wind-terrain-overlay-source';
 const LAYER_ID = 'wind-terrain-overlay-layer';
 const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
-const RENDER_MIN = 320;
-const RENDER_MAX = 3072;
 const BOUNDS_PADDING = 0.8;
 const BASE_OPACITY = 0.58;
 
@@ -94,19 +93,6 @@ function containsBounds(
 
 function selectionKey(selection: WindTimeSelection): string {
   return `${selection.date}T${selection.time}`;
-}
-
-function renderSize(map: MapboxMap): { width: number; height: number } {
-  const canvas = map.getCanvas();
-  const width = canvas.width || canvas.clientWidth || RENDER_MIN;
-  const height = canvas.height || canvas.clientHeight || RENDER_MIN;
-  const aspect = width / Math.max(1, height);
-  const zoom = map.getZoom();
-  const baseScale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
-  const dezoomSuperSample = zoom < 8 ? 2 : 1;
-  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * baseScale * dezoomSuperSample)));
-  const targetHeight = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(targetWidth / aspect)));
-  return { width: targetWidth, height: targetHeight };
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -290,7 +276,7 @@ export function useWindTerrainOverlay(
       if (!canMutateStyle()) return;
 
       const coords = imageCoords(dataset.grid.bounds);
-      const size = renderSize(map);
+      const size = getOverlayRenderSize(map);
       const signature = [dataset.selectionKey, dataset.fetchedAt, `${size.width}x${size.height}`].join('|');
       const rendered = renderedRef.current;
       if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {

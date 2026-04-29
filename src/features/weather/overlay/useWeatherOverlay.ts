@@ -3,6 +3,7 @@ import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
 import { buildWeatherGrid, clearWeatherOverlayCache, fetchWeatherGridData, weatherGridSupportsViewport } from './client';
 import { clampForecastSelection } from '../lib/forecastTime.ts';
 import { renderWeatherCanvas } from './render';
+import { getOverlayRenderSize } from './renderSize';
 import type {
   WeatherGridDataset,
   WeatherOverlayMetric,
@@ -21,8 +22,6 @@ const LAYER_PREFIX = 'weather-overlay-layer';
 const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
-const RENDER_MIN = 320;
-const RENDER_MAX = 3072;
 const STATUS_ID = 'weather';
 
 type RefreshReason = 'normal' | 'force' | 'reload';
@@ -162,19 +161,6 @@ async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-function renderSize(map: MapboxMap): { width: number; height: number } {
-  const canvas = map.getCanvas();
-  const width = canvas.width || canvas.clientWidth || RENDER_MIN;
-  const height = canvas.height || canvas.clientHeight || RENDER_MIN;
-  const aspect = width / Math.max(1, height);
-  const zoom = map.getZoom();
-  const baseScale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
-  const dezoomSuperSample = zoom < 8 ? 2 : 1;
-  const targetWidth = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(width * baseScale * dezoomSuperSample)));
-  const targetHeight = Math.max(RENDER_MIN, Math.min(RENDER_MAX, Math.round(targetWidth / aspect)));
-  return { width: targetWidth, height: targetHeight };
-}
-
 function paletteOpacity(state: WeatherOverlayState, key: WeatherOverlayMetric): number {
   const opacity = state.palettes?.[key]?.opacity ?? 100;
   return Math.max(0, Math.min(1, opacity / 100));
@@ -312,7 +298,7 @@ export function useWeatherOverlay(
       }
 
       const coords = imageCoords(dataset.grid.bounds);
-      const size = renderSize(map);
+      const size = getOverlayRenderSize(map);
       const activeLayerMap = new Map(activeLayers.map((layer) => [layer.key, layer] as const));
       const renderableCount = Math.max(1, activeLayers.length);
       let renderedCount = 0;
