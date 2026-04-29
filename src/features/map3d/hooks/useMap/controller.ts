@@ -64,6 +64,7 @@ export function createMapLifecycleController({
   let loadingWatchdog: ReturnType<typeof setTimeout> | null = null;
   let lastReportedState: 'loading' | 'ready' | 'error' = 'loading';
   let disposeTerrainBootstrap: (() => void) | null = null;
+  let disposeStyleRecovery: (() => void) | null = null;
   let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
   let finishOnIdle: (() => void) | null = null;
   let readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -433,6 +434,8 @@ export function createMapLifecycleController({
   const clearStyleBootstrapArtifacts = () => {
     disposeTerrainBootstrap?.();
     disposeTerrainBootstrap = null;
+    disposeStyleRecovery?.();
+    disposeStyleRecovery = null;
     if (orthoBootTimer) {
       clearTimeout(orthoBootTimer);
       orthoBootTimer = null;
@@ -457,6 +460,16 @@ export function createMapLifecycleController({
 
   const bootstrapCurrentStyle = async (): Promise<boolean> => {
     const runId = ++styleBootstrapRunId;
+    const applyStyleDecorators = () => {
+      map.setFog(fogConfig);
+      if (getActiveStyleUrl() !== 'mapbox://styles/mapbox/standard') {
+        try {
+          map.setConfigProperty('basemap', 'lightPreset', 'day');
+        } catch {
+          /* style may not support config properties */
+        }
+      }
+    };
     const styleLoaded = new Promise<void>((resolve) => {
       if (map.isStyleLoaded()) {
         reportStatus('loading', 34, 'Style');
@@ -478,14 +491,7 @@ export function createMapLifecycleController({
 
     reportStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
-    map.setFog(fogConfig);
-    if (getActiveStyleUrl() !== 'mapbox://styles/mapbox/standard') {
-      try {
-        map.setConfigProperty('basemap', 'lightPreset', 'day');
-      } catch {
-        /* style may not support config properties */
-      }
-    }
+    applyStyleDecorators();
 
     if (!swOk) {
       console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
@@ -532,6 +538,35 @@ export function createMapLifecycleController({
       refreshTrackedSourceIds();
       demTrackingEnabled = true;
       scheduleDemSettle();
+    };
+
+    const recoverStyleArtifacts = () => {
+      if (isCancelled() || runId !== styleBootstrapRunId) return;
+
+      applyStyleDecorators();
+      orthoAdded = false;
+
+      try {
+        map.setTerrain(null);
+      } catch {
+        /* terrain may already have been dropped by the style reload */
+      }
+
+      if (!map.getSource(unifiedDEMSource.id)) {
+        refreshDemSource();
+      } else {
+        refreshTrackedSourceIds();
+      }
+
+      reportStatus('loading', 68, 'Relief');
+      armTerrainBootstrap(() => {
+        void addOrthoWhenReady();
+      });
+    };
+
+    map.on('style.load', recoverStyleArtifacts);
+    disposeStyleRecovery = () => {
+      map.off('style.load', recoverStyleArtifacts);
     };
 
     orthoBootTimer = setTimeout(() => {

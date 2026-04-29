@@ -15,7 +15,6 @@ export class TerrainManager {
 
   /** Idempotent. Safe to call multiple times. */
   init(): void {
-    if (this.applied) return;
     this.applyTerrain();
     this.applied = true;
   }
