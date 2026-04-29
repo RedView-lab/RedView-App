@@ -76,6 +76,7 @@ export function createMapLifecycleController({
   let demSettleTimer: ReturnType<typeof setTimeout> | null = null;
   let loadingWatchdog: ReturnType<typeof setTimeout> | null = null;
   let lastReportedState: 'loading' | 'ready' | 'error' = 'loading';
+  let lastReportedProgress = 0;
   let disposeTerrainBootstrap: (() => void) | null = null;
   let disposeStyleRecovery: (() => void) | null = null;
   let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
@@ -185,6 +186,7 @@ export function createMapLifecycleController({
 
   const reportStatus = (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => {
     lastReportedState = state;
+    lastReportedProgress = progress;
     if (state !== 'loading' && loadingWatchdog) {
       clearTimeout(loadingWatchdog);
       loadingWatchdog = null;
@@ -268,11 +270,21 @@ export function createMapLifecycleController({
     demSettleTimer = setTimeout(() => {
       demSettleTimer = null;
       if (isCancelled()) return;
+      const pruned = pruneStalePendingTiles();
+      if (pruned && requestedTiles.size > 0) {
+        publishDemProgress('Tuiles');
+      }
       if (allTilesLoaded() && !map.isMoving()) {
         if (applyPendingDemPassiveRefresh()) return;
         finishDemActivity('Carte prête');
-      } else if (lastReportedState !== 'loading') {
-        reportStatus('loading', 99, 'Tuiles');
+      } else {
+        if (lastReportedState !== 'loading') {
+          reportStatus(
+            'loading',
+            requestedTiles.size > 0 ? Math.max(1, Math.min(99, lastReportedProgress || 99)) : 5,
+            requestedTiles.size > 0 ? 'Tuiles' : 'Déplacement',
+          );
+        }
         armLoadingWatchdog();
       }
     }, DEM_ACTIVITY_SETTLE_MS);
