@@ -59,13 +59,23 @@ export default function MapBlurMirror({
     const canvas = canvasRef.current;
     if (!canvas || !map) return;
 
+    const sourceCanvas = map.getCanvas() as HTMLCanvasElement;
+
     const ctx = canvas.getContext('2d', {
       alpha: true,
       desynchronized: true,
     });
     if (!ctx) return;
 
+    const ACTIVE_FRAME_MS = 1000 / 30;
+    const IDLE_FRAME_MS = 1000 / 12;
+
     let raf = 0;
+    let timer = 0;
+    let lastDrawAt = 0;
+    let isVisible = document.visibilityState !== 'hidden';
+    let cachedTargetRect: DOMRect | null = null;
+    let cachedSourceRect: DOMRect | null = null;
     const ACTIVE_BLUR = Math.max(10, Math.round(blur * 0.55));
     const ACTIVE_SATURATE = Math.max(1, Number((saturate * 0.72).toFixed(2)));
 
@@ -78,19 +88,46 @@ export default function MapBlurMirror({
 
     applyPresentation();
 
+    const clearScheduledDraw = () => {
+      if (raf !== 0) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      if (timer !== 0) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+    };
+
+    const invalidateRects = () => {
+      cachedTargetRect = null;
+      cachedSourceRect = null;
+    };
+
+    const getRenderDpr = (rect: DOMRect) => {
+      const baseDpr = window.devicePixelRatio || 1;
+      const area = rect.width * rect.height;
+      if (area >= 240000) return Math.min(baseDpr, 1);
+      return Math.min(baseDpr, 1.25);
+    };
+
     const draw = () => {
       raf = 0;
-      const src = map.getCanvas() as HTMLCanvasElement;
+      timer = 0;
+      if (!isVisible) return;
+
+      const src = sourceCanvas;
       if (!src || src.width === 0 || src.height === 0) return;
 
-      const dpr = window.devicePixelRatio || 1;
+      lastDrawAt = performance.now();
+
       // Source-canvas pixels per CSS pixel (Mapbox internally uses DPR too).
-      const srcCanvasRect = src.getBoundingClientRect();
+      const srcCanvasRect = cachedSourceRect ?? (cachedSourceRect = src.getBoundingClientRect());
       const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
       const syScale = src.height / Math.max(srcCanvasRect.height, 1);
 
       // Where this mirror sits relative to the map canvas, in CSS px.
-      const mirrorRect = canvas.getBoundingClientRect();
+      const mirrorRect = cachedTargetRect ?? (cachedTargetRect = canvas.getBoundingClientRect());
       const offsetX = mirrorRect.left - srcCanvasRect.left;
       const offsetY = mirrorRect.top - srcCanvasRect.top;
 
@@ -108,6 +145,7 @@ export default function MapBlurMirror({
       );
 
       // Match the mirror canvas's backing-store size to its CSS rect × DPR.
+      const dpr = getRenderDpr(mirrorRect);
       const targetW = Math.max(1, Math.round(mirrorRect.width * dpr));
       const targetH = Math.max(1, Math.round(mirrorRect.height * dpr));
       if (canvas.width !== targetW || canvas.height !== targetH) {
@@ -127,6 +165,25 @@ export default function MapBlurMirror({
     };
 
     const schedule = (force = false) => {
+      if (!isVisible) return;
+
+      const frameBudget = movingRef.current ? ACTIVE_FRAME_MS : IDLE_FRAME_MS;
+      const elapsed = performance.now() - lastDrawAt;
+
+      if (!force && (raf !== 0 || timer !== 0)) return;
+
+      if (!force && elapsed < frameBudget) {
+        timer = window.setTimeout(() => {
+          timer = 0;
+          if (raf === 0) raf = requestAnimationFrame(draw);
+        }, Math.max(0, Math.ceil(frameBudget - elapsed)));
+        return;
+      }
+
+      if (timer !== 0) {
+        clearTimeout(timer);
+        timer = 0;
+      }
       if (raf !== 0) {
         if (!force) return;
         cancelAnimationFrame(raf);
@@ -135,6 +192,7 @@ export default function MapBlurMirror({
     };
 
     requestRedrawRef.current = () => {
+      invalidateRects();
       schedule(true);
     };
 
@@ -145,14 +203,37 @@ export default function MapBlurMirror({
     const onMoveStart = () => {
       movingRef.current = true;
       applyPresentation();
+      cachedTargetRect = null;
       schedule(true);
     };
 
     const onMoveEnd = () => {
       movingRef.current = false;
       applyPresentation();
+      cachedTargetRect = null;
       schedule(true);
     };
+
+    const onVisibility = () => {
+      isVisible = document.visibilityState !== 'hidden';
+      if (!isVisible) {
+        clearScheduledDraw();
+        return;
+      }
+      schedule(true);
+    };
+
+    const targetObserver = new ResizeObserver(() => {
+      cachedTargetRect = null;
+      schedule(true);
+    });
+    targetObserver.observe(canvas);
+
+    const sourceObserver = new ResizeObserver(() => {
+      cachedSourceRect = null;
+      schedule(true);
+    });
+    sourceObserver.observe(sourceCanvas);
 
     // Initial paint + keep redrawing while the map renders.
     map.on('render', onMapRender);
@@ -162,9 +243,11 @@ export default function MapBlurMirror({
 
     // Also redraw when the window resizes (panel rect may move).
     const onResize = () => {
+      invalidateRects();
       schedule(true);
     };
     window.addEventListener('resize', onResize);
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       requestRedrawRef.current = null;
@@ -172,7 +255,10 @@ export default function MapBlurMirror({
       map.off('movestart', onMoveStart);
       map.off('moveend', onMoveEnd);
       window.removeEventListener('resize', onResize);
-      if (raf !== 0) cancelAnimationFrame(raf);
+      document.removeEventListener('visibilitychange', onVisibility);
+      targetObserver.disconnect();
+      sourceObserver.disconnect();
+      clearScheduledDraw();
     };
   }, [blur, map, saturate]);
 
