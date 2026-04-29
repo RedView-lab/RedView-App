@@ -85,6 +85,12 @@ function isMissingStripeCustomerError(error: unknown): boolean {
   );
 }
 
+function isStripeCustomer(
+  customer: Stripe.Customer | Stripe.DeletedCustomer,
+): customer is Stripe.Customer {
+  return !customer.deleted;
+}
+
 async function createAndStoreStripeCustomer(userId: string, email: string | null): Promise<string> {
   const customer = await getStripeServer().customers.create({
     ...(email ? { email } : {}),
@@ -321,7 +327,7 @@ async function getPaymentMethodSummary(
     throw error;
   }
 
-  if (customer.deleted) {
+  if (!isStripeCustomer(customer)) {
     return { customerEmail: null, paymentMethod: null };
   }
 

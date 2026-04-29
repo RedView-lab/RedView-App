@@ -11,6 +11,10 @@ import { getSupabaseAdmin } from '../_lib/supabase.js';
 import { getStripeServer } from '../_lib/stripe.js';
 import { requireEnv } from '../_lib/config.js';
 
+type InvoiceWithPaymentIntent = Stripe.Invoice & {
+  payment_intent?: string | Stripe.PaymentIntent | null;
+};
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.user_id;
   const subscriptionId = typeof session.subscription === 'string' ? session.subscription : null;
@@ -47,7 +51,7 @@ async function syncDefaultPaymentMethodFromInvoice(invoice: Stripe.Invoice) {
     return;
   }
 
-  const paymentIntentRef = invoice.payment_intent;
+  const paymentIntentRef = (invoice as InvoiceWithPaymentIntent).payment_intent;
   const paymentIntentId =
     typeof paymentIntentRef === 'string' ? paymentIntentRef : paymentIntentRef?.id ?? null;
 
