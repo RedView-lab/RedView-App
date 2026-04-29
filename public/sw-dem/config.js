@@ -91,7 +91,10 @@ const ORTHO_TILE_SIZE = 256;
 // overzoom guard. Those tiles were temporary stand-ins but could be cached for
 // a week when they came from the negative-cache path, making seam/wall
 // artefacts persist even after the parent LiDAR tile was healthy again.
-const CACHE_NAME = 'dem-tiles-v38';
+// v39 — evicts global z15+ AWS overzoom children so MapLibre can reuse the
+// parent mesh outside LiDAR regions instead of rendering progressively flatter
+// SW-synthesized child tiles while zooming in.
+const CACHE_NAME = 'dem-tiles-v39';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';

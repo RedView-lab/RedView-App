@@ -84,6 +84,7 @@ const OLD_CACHES = [
   'dem-tiles-v35',
   'dem-tiles-v36',
   'dem-tiles-v37',
+  'dem-tiles-v38',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -584,6 +585,10 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // Inside France/CH at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
     // the LiDAR pipeline returned data. When neither LiDAR source had any
     // coverage, Mapbox overzoomed 30 m is better than nothing.
+    const globalHighZoomParentMesh =
+      z > MAPBOX_DEM_MAXZOOM
+      && !tileTrulyTouchesFrance
+      && !inSwitzerland;
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
         (tileTrulyTouchesFrance && ignHadSomeData) ||
@@ -593,16 +598,21 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         // from a permanent flat patch (see screenshot Apr 24).
         (inSwitzerland && !tileTrulyTouchesFrance && swissTransientFailure)
       );
+    const allowGlobalFallbackTile = !globalHighZoomParentMesh && !skipMapboxHighZoomLiDAR;
     // AWS Terrarium replaces Mapbox terrain-DEM globally. No token needed,
     // free public dataset, ~30 m worldwide. Mapbox SKU savings: ~−40 % of
     // Raster Tiles API. France/CH still use IGN/swissALTI for high zoom.
-    if (!pngBlob && !skipMapboxHighZoomLiDAR) {
+    // Outside LiDAR regions we stop at the dataset's native z14 detail and
+    // let the renderer reuse the parent mesh above that. Synthesizing z15+
+    // child DEM tiles in the SW progressively smooths the relief until the
+    // terrain appears flat.
+    if (!pngBlob && allowGlobalFallbackTile) {
       pngBlob = await fetchAWSTerrainTile(z, x, y);
       if (pngBlob) demSource = 'aws-terrarium';
     }
 
     // 5. Single-step parent overzoom (outside-LiDAR & low-zoom path).
-    if (!pngBlob && !skipMapboxHighZoomLiDAR) {
+    if (!pngBlob && allowGlobalFallbackTile) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth);
       if (fb) {
         pngBlob = fb.blob;
@@ -613,9 +623,11 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
     //    confirmed empty outside the supported LiDAR regions.
     if (!pngBlob) {
-      const isConfirmedEmpty = !tileIsInFrance && !inSwitzerland;
+      const isConfirmedEmpty = globalHighZoomParentMesh || (!tileIsInFrance && !inSwitzerland);
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
-      const reason = skipMapboxHighZoomLiDAR
+      const reason = globalHighZoomParentMesh
+        ? 'global-parent-mesh'
+        : skipMapboxHighZoomLiDAR
         ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
         : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage');
       if (upgradePending && upgradePending.length) {
