@@ -64,6 +64,22 @@ function createEmptyFitRuntime(): ItineraryFitRuntime {
   };
 }
 
+function mergeFitFiles(existingFiles: readonly File[], incomingFiles: readonly File[]): File[] {
+  const merged: File[] = [...existingFiles];
+  const seen = new Set(
+    existingFiles.map((file) => `${file.name}:${file.lastModified}:${file.size}`),
+  );
+
+  for (const file of incomingFiles) {
+    const key = `${file.name}:${file.lastModified}:${file.size}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(file);
+  }
+
+  return merged;
+}
+
 export function useItineraryFitRuntime({
   active,
   projectId,
@@ -300,8 +316,11 @@ export function useItineraryFitRuntime({
         return;
       }
 
+      const currentRuntime = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+      const mergedFitFiles = mergeFitFiles(currentRuntime.fitFiles, fitFiles);
+
       const persistedUploadSignature = buildFitUploadsSignature(
-        fitFiles.map((file) => ({
+        mergedFitFiles.map((file) => ({
           name: file.name,
           lastModified: file.lastModified,
           size: file.size,
@@ -309,8 +328,8 @@ export function useItineraryFitRuntime({
       );
       updateFitRuntime(itineraryId, (current) => ({
         ...current,
-        fitFiles,
-        fitFileNames: fitFiles.map((file) => file.name),
+        fitFiles: mergedFitFiles,
+        fitFileNames: mergedFitFiles.map((file) => file.name),
         predictionResult: null,
         progress: [],
         status: 'ready',
@@ -330,7 +349,7 @@ export function useItineraryFitRuntime({
         return;
       }
 
-      void uploadProjectItineraryFitFiles(projectId, itineraryId, fitFiles)
+      void uploadProjectItineraryFitFiles(projectId, itineraryId, mergedFitFiles)
         .then((fitUploads) => {
           updateFitRuntime(itineraryId, (current) => ({
             ...current,
