@@ -21,7 +21,12 @@ import {
   PENDING_TILE_MAX_AGE_MS,
   TRACKED_SOURCE_TYPES,
 } from './constants';
-import { buildDemTilesTemplate, getDemTileKey, type DemSourceDataLike } from './demTiles';
+import {
+  buildDemTilesTemplate,
+  getDemTileKey,
+  type DemSourceDataLike,
+  type DemTileProfile,
+} from './demTiles';
 import type { MapRuntimeProfile } from './runtimeProfile';
 import { waitForMapIdleOrTimeout } from './runtimeProfile';
 import { swReady } from './serviceWorker';
@@ -36,6 +41,8 @@ interface CreateMapLifecycleControllerOptions {
   getActiveStyleUrl: () => string;
   isCancelled: () => boolean;
 }
+
+const MAPBOX_STANDARD_3D_STYLE_URL = 'mapbox://styles/mapbox/standard';
 
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
@@ -135,6 +142,12 @@ export function createMapLifecycleController({
       return false;
     }
   };
+
+  const getActiveDemProfile = (): DemTileProfile => (
+    getActiveStyleUrl() === MAPBOX_STANDARD_3D_STYLE_URL ? 'terrain' : 'default'
+  );
+
+  const shouldUseIgnOrthoOverlay = (): boolean => false;
 
   const applyUnifiedTerrain = (): boolean => {
     if (!map.getSource(unifiedDEMSource.id)) return false;
@@ -280,7 +293,7 @@ export function createMapLifecycleController({
 
     map.addSource(unifiedDEMSource.id, {
       type: 'raster-dem',
-      tiles: buildDemTilesTemplate(demCacheBust),
+      tiles: buildDemTilesTemplate(demCacheBust, getActiveDemProfile()),
       tileSize: unifiedDEMSource.tileSize,
       encoding: unifiedDEMSource.encoding,
       minzoom: unifiedDEMSource.minzoom,
@@ -598,13 +611,15 @@ export function createMapLifecycleController({
     reportStatus('loading', 68, 'Relief');
 
     let orthoAdded = false;
-    const addOrthoWhenReady = async () => {
+    const finishStyleBootstrapWhenReady = async () => {
       if (isCancelled() || runId !== styleBootstrapRunId || orthoAdded) return;
       orthoAdded = true;
       await waitForMapIdleOrTimeout(map, 500);
       if (isCancelled() || runId !== styleBootstrapRunId) return;
-      reportStatus('loading', 92, 'Textures IGN');
-      addIgnOrthoOverlay();
+      reportStatus('loading', 92, shouldUseIgnOrthoOverlay() ? 'Textures IGN' : 'Fond de carte');
+      if (shouldUseIgnOrthoOverlay()) {
+        addIgnOrthoOverlay();
+      }
       refreshTrackedSourceIds();
       demTrackingEnabled = true;
       scheduleDemSettle();
@@ -630,7 +645,7 @@ export function createMapLifecycleController({
 
       reportStatus('loading', 68, 'Relief');
       armTerrainBootstrap(() => {
-        void addOrthoWhenReady();
+        void finishStyleBootstrapWhenReady();
       });
     };
 
@@ -640,11 +655,11 @@ export function createMapLifecycleController({
     };
 
     orthoBootTimer = setTimeout(() => {
-      void addOrthoWhenReady();
+      void finishStyleBootstrapWhenReady();
     }, runtimeProfile.orthoBootFallbackMs);
 
     armTerrainBootstrap(() => {
-      void addOrthoWhenReady();
+      void finishStyleBootstrapWhenReady();
     });
 
     return true;

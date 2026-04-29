@@ -162,6 +162,8 @@ self.addEventListener('fetch', (event) => {
       parseInt(demMatch[1], 10),
       parseInt(demMatch[2], 10),
       parseInt(demMatch[3], 10),
+      undefined,
+      resolveDemProfile(url),
     ));
     return;
   }
@@ -247,6 +249,23 @@ function isExpertFallbackRiskTile(z, x, y) {
   return z >= 12 && (tileOverlapsFrance(z, x, y) || tileOverlapsSwitzerland(z, x, y));
 }
 
+function resolveDemProfile(url) {
+  return url.searchParams.get('rv-dem-profile') === 'terrain' ? 'terrain' : 'default';
+}
+
+function resolveDemProfileFromRequest(request) {
+  try {
+    return resolveDemProfile(new URL(request.url, self.location.origin));
+  } catch {
+    return 'default';
+  }
+}
+
+function buildDemCacheKey(z, x, y, demProfile) {
+  const profileQuery = demProfile === 'terrain' ? '?rv-dem-profile=terrain' : '';
+  return new Request(`/dem-tiles/${z}/${x}/${y}${profileQuery}`);
+}
+
 function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
   const parentShortTtlMs = parseInt(parentResp.headers.get('x-cache-ttl-ms') || '0', 10);
   const parentHealth = (parentResp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
@@ -265,17 +284,17 @@ function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
     || parentSource.includes('fastpath');
 }
 
-async function tryParentOverzoom(cache, z, x, y, depth) {
+async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') {
   if (depth > 0) return null;
   const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
   for (let pZ = z - 1; pZ >= minParentZ; pZ--) {
     const pX = x >> (z - pZ);
     const pY = y >> (z - pZ);
-    const parentKey = new Request(`/dem-tiles/${pZ}/${pX}/${pY}`);
+    const parentKey = buildDemCacheKey(pZ, pX, pY, demProfile);
 
     let parentResp = await cache.match(parentKey);
     if (!parentResp || parentResp.status !== 200) {
-      parentResp = await handleDemRequest(parentKey, pZ, pX, pY, depth + 1);
+      parentResp = await handleDemRequest(parentKey, pZ, pX, pY, depth + 1, demProfile);
     }
     if (!parentResp || parentResp.status !== 200) continue;
 
@@ -351,7 +370,7 @@ function summarizeDemElevations(elevations) {
   };
 }
 
-async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource) {
+async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile) {
   if (!pngBlob || z < 8) {
     return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
   }
@@ -371,7 +390,7 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource) {
   }
 
   if (current.max <= -9000 || current.mean <= DEM_HEALTH_NODATA_MEAN_M) {
-    const recovered = await tryParentOverzoom(cache, z, x, y, 0);
+    const recovered = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
     if (recovered?.blob) {
       console.warn(
         `[sw-dem][health] rejecting nodata-like tile ${z}/${x}/${y} src=${demSource} mean=${current.mean.toFixed(1)} -> ${recovered.source}`,
@@ -386,7 +405,7 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource) {
     return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'nodata-like' };
   }
 
-  const parentFallback = await tryParentOverzoom(cache, z, x, y, 0);
+  const parentFallback = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
   if (!parentFallback?.blob) {
     return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
   }
@@ -425,8 +444,9 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource) {
   return { blob: pngBlob, demSource, shortCache: false, healthStatus: 'ok' };
 }
 
-async function handleDemRequest(_request, z, x, y, _depth) {
+async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
   if (_depth === undefined) _depth = 0;
+  if (!demProfile) demProfile = resolveDemProfileFromRequest(_request);
 
   // World-zoom short-circuit: no visible terrain relief below z4, and at that
   // zoom Mapbox tiles are tiny fractions of the globe. Returning 204 instantly
@@ -438,7 +458,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
   const t0 = performance.now();
   const inLiDARRiskRegion = isExpertFallbackRiskTile(z, x, y);
   const cache = await caches.open(CACHE_NAME);
-  const cacheKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+  const cacheKey = buildDemCacheKey(z, x, y, demProfile);
 
   // 1. Positive cache
   const cached = await cache.match(cacheKey);
@@ -460,8 +480,8 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     const ttl = parseInt(negCached.headers.get('x-neg-ttl') || String(NEGATIVE_TTL_PIPELINE), 10);
     if (age && (Date.now() - age) < ttl * 1000) {
       // Try overzoom once, else honour the negative cache
-      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-      if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inLiDARRiskRegion);
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
+      if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, inLiDARRiskRegion, '', false, 'ok', demProfile);
       return noTileResponse('neg-cache');
     }
     negCache.delete(cacheKey);
@@ -485,9 +505,11 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     let upgradePending = null; // in-flight IGN sub-tile fetches for background re-cache
     let upgradeSourceHint = '';
     let ignHadSomeData = false; // true when MNS returned partial/full coverage
+    let franceHadSomeData = false;
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
-    const useFranceMNS = shouldUseIGN(z, tileCenterLat);
+    const useFranceTerrainOnly = demProfile === 'terrain';
+    const useFranceMNS = !useFranceTerrainOnly && shouldUseIGN(z, tileCenterLat);
     const useFranceHighres = useFranceMNS || shouldUseIGNHighres(z, tileCenterLat);
 
     // ── Resolve France polygon classification UP-FRONT.
@@ -563,7 +585,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // Race IGN in parallel only for tiles that genuinely straddle the
     // French border polygon — not for every CH tile that bbox-overlaps
     // FRANCE_BOUNDS. This frees the IGN/network queue for Swiss STAC.
-    const raceIGNBorderTile = considerSwiss && tileTrulyTouchesFrance;
+    const raceIGNBorderTile = considerSwiss && tileTrulyTouchesFrance && useFranceMNS;
     let ignResultPromise = null;
     if (raceIGNBorderTile) {
       ignResultPromise = buildIGNTile(z, x, y, franceClass);
@@ -616,6 +638,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         if (ignResult.elevations) {
           // MNS returned actual elevation data (partial or full coverage)
           ignHadSomeData = true;
+          franceHadSomeData = true;
           if (ignResult.blob) {
             pngBlob = ignResult.blob;
             demSource = ignResult.source || 'ign';
@@ -647,6 +670,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
         if (highresResult.elevations) {
+          franceHadSomeData = true;
           if (highresResult.blob) {
             pngBlob = highresResult.blob;
             demSource = highresResult.source || 'ign-highres';
@@ -691,7 +715,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // parent mesh (which is again the LiDAR blob one zoom level up) and
     // retries the IGN pipeline on the next pan/zoom.
     if (!pngBlob && tileIsInFrance && z > MAPBOX_DEM_MAXZOOM) {
-      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
         demSource = fb.source + '-lidar-parent';
@@ -703,7 +727,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // a parent COG-derived blob in our own cache. Use tileTrulyTouchesFrance
     // (not bbox-promoted tileIsInFrance) so deep-CH tiles still hit this path.
     if (!pngBlob && inSwitzerland && !tileTrulyTouchesFrance && z > MAPBOX_DEM_MAXZOOM) {
-      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
         demSource = fb.source + '-swiss-parent';
@@ -720,7 +744,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       && !inSwitzerland;
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
-        (tileTrulyTouchesFrance && ignHadSomeData) ||
+        (tileTrulyTouchesFrance && franceHadSomeData) ||
         (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData) ||
         // Swiss transient failure: do NOT cache a flat Mapbox tile in
         // place of an unbuilt LiDAR tile — visually indistinguishable
@@ -742,7 +766,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
 
     // 5. Single-step parent overzoom (outside-LiDAR & low-zoom path).
     if (!pngBlob && allowGlobalFallbackTile) {
-      const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
         demSource = fb.source;
@@ -760,7 +784,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
         : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage');
       if (upgradePending && upgradePending.length) {
-        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint);
+        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint, demProfile);
       }
       negCache.put(cacheKey, new Response(null, {
         status: 204,
@@ -776,10 +800,10 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    const guarded = await guardDemTileHealth(cache, pngBlob, z, x, y, demSource);
+    const guarded = await guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile);
     if (!guarded.blob) {
       if (upgradePending && upgradePending.length) {
-        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource);
+        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource, demProfile);
       }
       negCache.put(cacheKey, new Response(null, {
         status: 204,
@@ -810,18 +834,19 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       upgradeSourceHint,
       forceShortCache,
       healthStatus,
+      demProfile,
     );
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
-    const fb = await tryParentOverzoom(cache, z, x, y, _depth);
+    const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
     if (fb) {
-      return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland, '', false, 'ok');
+      return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland, '', false, 'ok', demProfile);
     }
     return noTileResponse('error');
   }
 }
 
-async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion, upgradeSourceHint, forceShortCache = false, healthStatus = 'ok') {
+async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion, upgradeSourceHint, forceShortCache = false, healthStatus = 'ok', demProfile = 'default') {
   // Short cache (15 s) for AWS/overzoom fallback tiles inside any LiDAR
   // region (France or Switzerland) at z≥13. These are transient stand-ins
   // while the exact tile finishes building; longer caching masks the upgrade.
@@ -839,7 +864,7 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
   // with a full-quality IGN build. Next time Mapbox requests this tile
   // (natural tile-cache cycling while panning/zooming) it gets best quality.
   if (upgradePending && upgradePending.length) {
-    scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource);
+    scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource, demProfile);
   }
   return response;
 }
@@ -880,8 +905,8 @@ async function materializeUpgradeResult(result, z, x, y, compositeSource) {
   }
 }
 
-function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredSource) {
-  const key = `${z}/${x}/${y}`;
+function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredSource, demProfile = 'default') {
+  const key = `${demProfile}:${z}/${x}/${y}`;
   if (pendingUpgrades.has(key)) return;
   pendingUpgrades.add(key);
 
@@ -892,7 +917,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       const existing = await cache.match(cacheKey);
       if (existing) {
         const src = existing.headers.get('X-DEM-Source') || '';
-        if (src.endsWith('+upgrade') || src === 'ign' || src.startsWith('ign-fallback-z')) {
+        if (src.endsWith('+upgrade') || src === 'ign' || src.startsWith('ign-fallback-z') || src.startsWith('ign-highres')) {
           // Already full-quality — nothing to gain.
           return;
         }
@@ -903,14 +928,20 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       if (tileClass === 'outside') return;
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
-      const rebuilders = preferHighres
+      const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite'));
+      const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite'));
+      const rebuilders = demProfile === 'terrain'
+        ? [highresRebuilder]
+        : preferHighres
         ? [
-            () => buildIGNFallbackTile(z, x, y).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite')),
-            () => buildIGNTile(z, x, y, tileClass).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite')),
+            highresRebuilder,
+            mnsRebuilder,
           ]
         : [
-            () => buildIGNTile(z, x, y, tileClass).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite')),
-            () => buildIGNFallbackTile(z, x, y).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite')),
+            mnsRebuilder,
+            highresRebuilder,
           ];
 
       let upgraded = null;

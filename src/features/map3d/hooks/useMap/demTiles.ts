@@ -1,6 +1,8 @@
 import type { MapSourceDataEvent } from 'mapbox-gl';
 import { unifiedDEMSource } from '../../lib/sources';
 
+export type DemTileProfile = 'default' | 'terrain';
+
 export type DemSourceDataLike = MapSourceDataEvent & {
   coord?: {
     canonical?: { z: number; x: number; y: number };
@@ -31,7 +33,15 @@ export function getDemTileKey(event: DemSourceDataLike): string | null {
   return null;
 }
 
-export function buildDemTilesTemplate(cacheBust: number): string[] {
-  if (cacheBust <= 0) return unifiedDEMSource.tiles;
-  return unifiedDEMSource.tiles.map((tile) => `${tile}?rv-dem=${cacheBust}`);
+export function buildDemTilesTemplate(
+  cacheBust: number,
+  profile: DemTileProfile = 'default',
+): string[] {
+  const queryParams = [
+    ...(profile === 'terrain' ? ['rv-dem-profile=terrain'] : []),
+    ...(cacheBust > 0 ? [`rv-dem=${cacheBust}`] : []),
+  ];
+
+  if (queryParams.length === 0) return unifiedDEMSource.tiles;
+  return unifiedDEMSource.tiles.map((tile) => `${tile}?${queryParams.join('&')}`);
 }
