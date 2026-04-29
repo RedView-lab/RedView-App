@@ -16,6 +16,8 @@ import mapboxgl from 'mapbox-gl';
 export const SUN_RAY_LAYER_ID = 'sun-ray';
 const SUN_RAY_CIRCLE_SOURCE_ID = 'sun-ray-circle-src';
 const SUN_RAY_CIRCLE_LAYER_ID = 'sun-ray-circle';
+const SUN_RAY_ANCHOR_LIFT_METERS = 1.5;
+const SUN_RAY_ELEVATION_RESYNC_THRESHOLD_METERS = 0.25;
 
 // ── Color helpers ──────────────────────────────────────────────────────
 
@@ -82,6 +84,10 @@ class SunRayLayer implements CustomLayerInterface {
 
   /** Pre-computed Mercator vertices: [anchorX, anchorY, anchorZ, srcX, srcY, srcZ] */
   private vertices = new Float32Array(6);
+  private anchorLng: number | null = null;
+  private anchorLat: number | null = null;
+  private anchorElevation = 0;
+  private azimuthDeg = 180;
   private altitudeDeg = 45;
   private needsBufferUpload = true;
 
@@ -118,6 +124,8 @@ class SunRayLayer implements CustomLayerInterface {
   render(gl: WebGL2RenderingContext, matrix: number[]): void {
     if (!this.program || !this.buffer || !this.map) return;
     if (this.altitudeDeg <= -1) return;
+
+    this.syncAnchorElevation();
 
     // Upload vertices to GPU when they change
     if (this.needsBufferUpload) {
@@ -188,14 +196,42 @@ class SunRayLayer implements CustomLayerInterface {
     lat: number,
     elevation: number,
   ): void {
+    this.azimuthDeg = azimuthDeg;
     this.altitudeDeg = altitudeDeg;
+    this.anchorLng = lng;
+    this.anchorLat = lat;
+    this.anchorElevation = elevation;
+
+    this.rebuildVertices();
+    this.map?.triggerRepaint();
+  }
+
+  private syncAnchorElevation(): void {
+    if (!this.map || this.anchorLng == null || this.anchorLat == null) return;
+
+    const liveElevation = this.map.queryTerrainElevation?.([this.anchorLng, this.anchorLat]);
+    if (!Number.isFinite(liveElevation)) return;
+
+    if (Math.abs((liveElevation ?? 0) - this.anchorElevation) <= SUN_RAY_ELEVATION_RESYNC_THRESHOLD_METERS) {
+      return;
+    }
+
+    this.anchorElevation = liveElevation ?? this.anchorElevation;
+    this.rebuildVertices();
+  }
+
+  private rebuildVertices(): void {
+    if (this.anchorLng == null || this.anchorLat == null) return;
 
     // Anchor: fixed point on terrain
-    const anchor = mapboxgl.MercatorCoordinate.fromLngLat({ lng, lat }, elevation);
+    const anchor = mapboxgl.MercatorCoordinate.fromLngLat(
+      { lng: this.anchorLng, lat: this.anchorLat },
+      this.anchorElevation + SUN_RAY_ANCHOR_LIFT_METERS,
+    );
 
     // Source: far point along the sun direction in the sky
-    const azRad = (azimuthDeg * Math.PI) / 180;
-    const altRad = (altitudeDeg * Math.PI) / 180;
+    const azRad = (this.azimuthDeg * Math.PI) / 180;
+    const altRad = (this.altitudeDeg * Math.PI) / 180;
     const cosAlt = Math.cos(altRad);
     const sunEast = Math.sin(azRad) * cosAlt;
     const sunNorth = Math.cos(azRad) * cosAlt;
@@ -212,7 +248,6 @@ class SunRayLayer implements CustomLayerInterface {
     this.vertices[5] = anchor.z + sunUp * rayLenM * ms;
 
     this.needsBufferUpload = true;
-    this.map?.triggerRepaint();
   }
 }
 
@@ -239,6 +274,9 @@ function ensureCircleLayer(map: MapboxMap, lng: number, lat: number, elevation: 
       id: SUN_RAY_CIRCLE_LAYER_ID,
       type: 'circle',
       source: SUN_RAY_CIRCLE_SOURCE_ID,
+      layout: {
+        'circle-elevation-reference': 'hd-road-markup' as unknown as undefined,
+      },
       paint: {
         'circle-radius': 12,
         'circle-color': 'rgba(255, 255, 240, 0.15)',
