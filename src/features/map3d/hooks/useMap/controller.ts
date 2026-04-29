@@ -44,6 +44,7 @@ interface CreateMapLifecycleControllerOptions {
 
 const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
 const MAPBOX_STANDARD_SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/standard-satellite';
+const STYLE_LOAD_WATCHDOG_MS = 8000;
 
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
@@ -579,16 +580,51 @@ export function createMapLifecycleController({
         }
       }
     };
-    const styleLoaded = new Promise<void>((resolve) => {
+    const styleLoaded = new Promise<void>((resolve, reject) => {
       if (map.isStyleLoaded()) {
         reportStatus('loading', 34, 'Style');
         resolve();
         return;
       }
-      map.once('style.load', () => {
+      let settled = false;
+      let watchdog: ReturnType<typeof setTimeout> | null = null;
+      const cleanup = () => {
+        map.off('style.load', onStyleLoad);
+        map.off('styledata', onStyleData);
+        if (watchdog) {
+          clearTimeout(watchdog);
+          watchdog = null;
+        }
+      };
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
         reportStatus('loading', 34, 'Style');
         resolve();
-      });
+      };
+      const onStyleLoad = () => finish();
+      const onStyleData = () => {
+        try {
+          if (map.isStyleLoaded()) finish();
+        } catch {
+          /* style graph still rebuilding */
+        }
+      };
+      map.on('style.load', onStyleLoad);
+      map.on('styledata', onStyleData);
+      watchdog = setTimeout(() => {
+        try {
+          if (map.isStyleLoaded()) {
+            finish();
+            return;
+          }
+        } catch {
+          /* style graph still rebuilding */
+        }
+        cleanup();
+        reject(new Error('Le fond de carte ne s\'est pas initialisé à temps'));
+      }, STYLE_LOAD_WATCHDOG_MS);
     });
 
     await styleLoaded;

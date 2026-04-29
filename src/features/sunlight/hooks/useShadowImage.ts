@@ -67,6 +67,8 @@ const GRID_MIN_W = 768;
 const GRID_MIN_H = 576;
 const GRID_MAX_W = 1600;
 const GRID_MAX_H = 1200;
+const DEM_MIN_SAMPLE_ZOOM = 4;
+const DEM_MAX_SAMPLE_ZOOM = 14;
 
 // Geographic overshoot applied to the sampled bounds. Keeps the cast
 // shadow filling the viewport during small pans/zooms that happen
@@ -138,7 +140,7 @@ function effectiveOverlayOpacity(enabled: boolean, opacity: number, altitudeDeg:
 function chooseDemZoom(map: MapboxMap, gridW: number): number {
   const z = Math.round(map.getZoom());
   const bounds = map.getBounds();
-  if (!bounds) return Math.min(14, Math.max(10, z));
+  if (!bounds) return Math.min(DEM_MAX_SAMPLE_ZOOM, Math.max(DEM_MIN_SAMPLE_ZOOM, z));
   const w = bounds.getWest();
   const e = bounds.getEast();
   const lat = (bounds.getNorth() + bounds.getSouth()) / 2;
@@ -148,7 +150,7 @@ function chooseDemZoom(map: MapboxMap, gridW: number): number {
   // World metres per pixel at zoom Z and the given latitude.
   // demZ such that 40075016.686 * cosLat / (256 * 2^z) ≈ targetMpp
   const ideal = Math.log2((40075016.686 * Math.abs(cosLat)) / (256 * targetMpp));
-  return Math.max(10, Math.min(14, Math.round(ideal)));
+  return Math.max(DEM_MIN_SAMPLE_ZOOM, Math.min(DEM_MAX_SAMPLE_ZOOM, Math.round(ideal)));
 }
 
 /**
@@ -506,6 +508,15 @@ export function useShadowImage(
       }
     };
 
+    const canMutateStyle = () => {
+      if (cancelled) return false;
+      try {
+        return map.isStyleLoaded() && Boolean(map.getStyle());
+      } catch {
+        return false;
+      }
+    };
+
     const requestCompute = (bounds: BoundsTuple, sampleGen: number) => {
       const job: ComputeJob = {
         bounds,
@@ -521,7 +532,7 @@ export function useShadowImage(
     };
 
     const runSampleAndCompute = async () => {
-      if (cancelled || !map.getStyle()) return;
+      if (!canMutateStyle()) return;
       const o = optsRef.current;
       if (!o.enabled) return;
 

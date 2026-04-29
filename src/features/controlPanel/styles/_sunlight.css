@@ -9,6 +9,7 @@
 
 .rvc-sunlight__option-row,
 .rvc-sunlight__time-row,
+.rvc-sunlight__opacity-row,
 .rvc-sunlight__sun-row,
 .rvc-sunlight__toggle-row,
 .rvc-sunlight__row,
@@ -26,6 +27,7 @@
 }
 
 .rvc-sunlight__time-row,
+.rvc-sunlight__opacity-row,
 .rvc-sunlight__sun-row {
   gap: 8px;
 }
@@ -146,6 +148,27 @@
   margin-top: 2px;
 }
 
+.rvc-sunlight__opacity-row {
+  min-height: 30px;
+}
+
+.rvc-sunlight__opacity-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 156px;
+  min-width: 156px;
+}
+
+.rvc-sunlight__opacity-slider-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rvc-sunlight__opacity-slider-wrap .rvc-slider {
+  width: 100%;
+}
+
 .rvc-sunlight__sun-item {
   display: flex;
   flex: 1 1 0;
@@ -245,12 +268,6 @@
 
 .rvc-sunlight__row--split {
   justify-content: space-between;
-}
-
-.rvc-sunlight__shadow-opacity {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
 }
 
 .rvc-sunlight__shadow-opacity-value {

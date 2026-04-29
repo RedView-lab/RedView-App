@@ -18,7 +18,6 @@ import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
-import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
@@ -31,7 +30,6 @@ import {
   IMMERSIVE_EASING,
   IMMERSIVE_TRANSITION_MS,
   PANEL_PADDING,
-  RIGHT_PANEL_COLLAPSED_RAIL_WIDTH,
 } from './constants';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
@@ -253,9 +251,11 @@ export default function Dashboard({
   const rightDockWidth = isMapFocusMode
     ? 0
     : isRightPanelCollapsed
-      ? RIGHT_PANEL_COLLAPSED_RAIL_WIDTH
+      ? 0
       : panelWidth + PANEL_PADDING * 2;
-  const rightDockOffset = isMapFocusMode ? PANEL_PADDING : rightDockWidth + PANEL_PADDING;
+  const rightDockOffset = isMapFocusMode || isRightPanelCollapsed
+    ? PANEL_PADDING
+    : rightDockWidth + PANEL_PADDING;
 
   const statusDockRight = isMapFocusMode
     ? PANEL_PADDING
@@ -309,34 +309,6 @@ export default function Dashboard({
     pointerEvents: isRightPanelCollapsed ? 'none' : 'auto',
     transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
     willChange: 'transform, opacity, filter',
-  };
-
-  const rightPanelRailStyle: CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    right: 6,
-    transform: isRightPanelCollapsed
-      ? 'translate3d(0, -50%, 0)'
-      : 'translate3d(18px, -50%, 0)',
-    opacity: isRightPanelCollapsed ? 1 : 0,
-    pointerEvents: isRightPanelCollapsed ? 'auto' : 'none',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity',
-  };
-
-  const rightPanelRailButtonStyle: CSSProperties = {
-    width: 28,
-    height: 56,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
-    background: 'rgba(17, 17, 19, 0.9)',
-    color: '#ffffff',
-    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-    cursor: 'pointer',
-    padding: 0,
   };
 
   const leftPanelStyle: CSSProperties = {
@@ -440,6 +412,8 @@ export default function Dashboard({
                   isMapLoaded={mapLoaded}
                   immersiveMode={isMapFocusMode}
                   onToggleImmersiveMode={handleToggleMapFocusMode}
+                  showRightPanelRestore={isRightPanelCollapsed && !isMapFocusMode}
+                  onRestoreRightPanel={restoreRightPanel}
                 />
               </div>
 
@@ -601,16 +575,6 @@ export default function Dashboard({
                           <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
                             <ExporterPanel width={panelWidth} />
                           </div>
-                        </div>
-                        <div style={rightPanelRailStyle}>
-                          <button
-                            type="button"
-                            aria-label="Rouvrir le panneau de droite"
-                            onClick={restoreRightPanel}
-                            style={rightPanelRailButtonStyle}
-                          >
-                            <IconArrowLeft size={18} />
-                          </button>
                         </div>
                       </div>
                       </PredictionProvider>

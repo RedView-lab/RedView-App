@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
+import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import {
   IconCompass,
   IconMaximize,
@@ -14,6 +15,8 @@ interface MapViewportControlsProps {
   isMapLoaded: boolean;
   immersiveMode: boolean;
   onToggleImmersiveMode: () => void;
+  showRightPanelRestore?: boolean;
+  onRestoreRightPanel?: () => void;
 }
 
 const CAMERA_DURATION_MS = 650;
@@ -30,6 +33,8 @@ export function MapViewportControls({
   isMapLoaded,
   immersiveMode,
   onToggleImmersiveMode,
+  showRightPanelRestore = false,
+  onRestoreRightPanel,
 }: MapViewportControlsProps) {
   const [bearing, setBearing] = useState(0);
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
@@ -163,6 +168,22 @@ export function MapViewportControls({
       >
         <span>3D</span>
       </button>
+
+      <div
+        className={`rvmvc-map-tools__collapsed-rail${showRightPanelRestore ? ' is-visible' : ''}`}
+        aria-hidden={!showRightPanelRestore}
+      >
+        <button
+          type="button"
+          className="rvmvc-map-tools__collapsed-rail-button"
+          aria-label="Rouvrir le panneau de droite"
+          title="Rouvrir le panneau"
+          onClick={onRestoreRightPanel}
+          tabIndex={showRightPanelRestore ? 0 : -1}
+        >
+          <IconArrowLeft size={18} />
+        </button>
+      </div>
     </aside>
   );
 }

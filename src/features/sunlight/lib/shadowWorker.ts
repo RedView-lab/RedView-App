@@ -19,7 +19,7 @@ const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
 const DEM_CACHE_NAME = 'dem-tiles-v40'; // must match sw-dem/config.js CACHE_NAME
 const MAX_SAMPLE_TILE_COUNT = 256;
-const MIN_SAMPLE_DEM_ZOOM = 10;
+const MIN_SAMPLE_DEM_ZOOM = 4;
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
 type ComputeQuality = 'preview' | 'full';
@@ -392,9 +392,12 @@ function handleCompute(msg: ComputeRequest) {
       scratch.shadow,
       scratch.shadowElev,
     );
-    raster = quality === 'preview'
-      ? shadow
-      : boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
+    if (quality === 'preview') {
+      raster = boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
+    } else {
+      const firstPass = boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
+      raster = softenShadow(firstPass, gridW, gridH, sunAltDeg, scratch.blurTemp, scratch.shadow);
+    }
   } else if (shadowStrength > 0) {
     scratch.shadow.fill(255);
     raster = scratch.shadow;
@@ -566,6 +569,33 @@ function boxBlur3(
   return out;
 }
 
+function softenShadow(
+  src: Uint8Array,
+  W: number,
+  H: number,
+  sunAltDeg: number,
+  temp: Uint16Array,
+  out: Uint8Array,
+): Uint8Array {
+  const softness = Math.max(0, Math.min(1, (22 - sunAltDeg) / 22));
+  if (softness <= 0.02) {
+    out.set(src);
+    return out;
+  }
+
+  const blurred = boxBlur3(src, W, H, temp, out);
+  const keep = 1 - 0.48 * softness;
+  const spread = 0.28 * softness;
+  const liftedFloor = 10 * softness;
+  for (let i = 0; i < blurred.length; i++) {
+    const base = src[i];
+    const soft = blurred[i];
+    const mixed = base * keep + soft * (1 - keep) + spread * soft + liftedFloor;
+    out[i] = Math.max(0, Math.min(255, mixed)) | 0;
+  }
+  return out;
+}
+
 /**
  * Encode the shadow byte-buffer as straight black-with-alpha RGBA so the
  * resulting image can be drawn directly by Mapbox's raster layer with no
@@ -581,12 +611,18 @@ function encodeShadowRgba(
   const strength = Math.max(0, Math.min(1, shadowStrength));
   const floor = (Math.max(0, Math.min(1, nightFloor)) * 255) | 0;
   const rgba = new Uint8Array(W * H * 4);
+  const shadowTintR = 7;
+  const shadowTintG = 11;
+  const shadowTintB = 18;
   for (let i = 0; i < shadow.length; i++) {
-    const cast = (shadow[i] * strength) | 0;
+    const coverage = shadow[i] / 255;
+    const cast = Math.round(Math.pow(coverage, 0.82) * 224 * strength);
     const a = cast > floor ? cast : floor;
     if (a === 0) continue;
     const o = i * 4;
-    // R,G,B already 0 → black overlay with variable alpha.
+    rgba[o] = shadowTintR;
+    rgba[o + 1] = shadowTintG;
+    rgba[o + 2] = shadowTintB;
     rgba[o + 3] = a;
   }
   return rgba;

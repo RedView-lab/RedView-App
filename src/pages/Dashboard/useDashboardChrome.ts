@@ -197,6 +197,7 @@ export function useDashboardChrome({
     exporterPanelHeight,
     centerPanelHeightOverride,
     isMapFocusMode,
+    isRightPanelCollapsed,
     leftPanelOpen,
   });
 
