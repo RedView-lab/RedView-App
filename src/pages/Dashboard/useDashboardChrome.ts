@@ -10,10 +10,10 @@ import { loadViewport, type MapViewport } from '@/features/map3d/lib/viewport-pe
 import {
   CENTER_PANEL_HEIGHT_KEY,
   LEFT_PANEL_WIDTH_KEY,
+  PANEL_COLLAPSE_DRAG_THRESHOLD,
   PANEL_WIDTH_KEY,
   PANEL_PADDING,
   PANEL_WIDTH_MIN_FALLBACK,
-  RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD,
 } from './constants';
 import { getDashboardLayout } from './layout';
 import type { DashboardPersistedMutator } from './useDashboardProjectState';
@@ -48,6 +48,7 @@ export function useDashboardChrome({
     readStoredLeftWidth(),
   );
   const [isLeftResizing, setIsLeftResizing] = useState(false);
+  const [isCenterPanelCollapsed, setIsCenterPanelCollapsed] = useState(false);
   const [centerPanelHeightOverride, setCenterPanelHeightOverride] = useState<number | null>(
     () => readStoredCenterPanelHeight(),
   );
@@ -61,6 +62,7 @@ export function useDashboardChrome({
   const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
   const lastExpandedPanelWidthRef = useRef(panelWidth);
   const lastExpandedLeftPanelWidthRef = useRef(leftPanelWidth);
+  const lastExpandedCenterPanelHeightRef = useRef<number | null>(null);
   const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
 
   useEffect(() => {
@@ -93,6 +95,7 @@ export function useDashboardChrome({
           : readStoredCenterPanelHeight(),
     );
     setIsLeftPanelCollapsed(false);
+    setIsCenterPanelCollapsed(false);
     setIsRightPanelCollapsed(false);
     setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
     setProjectMapViewport(dashboard?.mapViewport ?? loadViewport());
@@ -206,8 +209,14 @@ export function useDashboardChrome({
     centerPanelHeightOverride,
     isMapFocusMode,
     isLeftPanelCollapsed,
+    isCenterPanelCollapsed,
     isRightPanelCollapsed,
   });
+
+  useEffect(() => {
+    if (isCenterPanelCollapsed) return;
+    lastExpandedCenterPanelHeightRef.current = layout.centerPanelHeight;
+  }, [isCenterPanelCollapsed, layout.centerPanelHeight]);
 
   const handleResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -216,7 +225,7 @@ export function useDashboardChrome({
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = layout.scaledViewportWidth - nextEvent.clientX / layout.appScale - PANEL_PADDING;
-        if (raw <= panelMinWidth - RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD) {
+        if (raw <= panelMinWidth - PANEL_COLLAPSE_DRAG_THRESHOLD) {
           setIsRightPanelCollapsed(true);
           return;
         }
@@ -250,7 +259,7 @@ export function useDashboardChrome({
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = nextEvent.clientX / layout.appScale - PANEL_PADDING;
-        if (raw <= panelMinWidth - RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD) {
+        if (raw <= panelMinWidth - PANEL_COLLAPSE_DRAG_THRESHOLD) {
           setIsLeftPanelCollapsed(true);
           return;
         }
@@ -283,6 +292,12 @@ export function useDashboardChrome({
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = layout.scaledViewportHeight - PANEL_PADDING - nextEvent.clientY / layout.appScale;
+        if (raw <= layout.centerPanelMinHeight - PANEL_COLLAPSE_DRAG_THRESHOLD) {
+          setIsCenterPanelCollapsed(true);
+          return;
+        }
+
+        setIsCenterPanelCollapsed(false);
         setCenterPanelHeightOverride(raw);
       };
       const onUp = () => {
@@ -293,8 +308,14 @@ export function useDashboardChrome({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [layout.appScale, layout.scaledViewportHeight],
+    [layout.appScale, layout.centerPanelMinHeight, layout.scaledViewportHeight],
   );
+
+  const restoreCenterPanel = useCallback(() => {
+    const nextHeight = lastExpandedCenterPanelHeightRef.current;
+    setCenterPanelHeightOverride(nextHeight);
+    setIsCenterPanelCollapsed(false);
+  }, []);
 
   const handleToggleMapFocusMode = useCallback(() => {
     setIsMapFocusMode((current) => !current);
@@ -307,6 +328,7 @@ export function useDashboardChrome({
     leftPanelOpen,
     panelWidth,
     isLeftPanelCollapsed,
+    isCenterPanelCollapsed,
     isRightPanelCollapsed,
     leftPanelWidth,
     isResizing,
@@ -320,6 +342,7 @@ export function useDashboardChrome({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,
   };

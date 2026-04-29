@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { SvgV2Icon } from '@/components/SvgV2Icon';
 import {
   MapView,
   MapBlurMirror,
@@ -88,6 +89,7 @@ export default function Dashboard({
     leftPanelOpen,
     panelWidth,
     isLeftPanelCollapsed,
+    isCenterPanelCollapsed,
     isRightPanelCollapsed,
     leftPanelWidth,
     isResizing,
@@ -101,6 +103,7 @@ export default function Dashboard({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,
   } = useDashboardChrome({
@@ -317,6 +320,35 @@ export default function Dashboard({
     willChange: 'transform, opacity',
   };
 
+  const centerCollapsedRailStyle: CSSProperties = {
+    position: 'absolute',
+    top: layout.centerToolbarTop - 36,
+    left: layout.centerToolbarLeft + layout.centerToolbarWidth / 2,
+    zIndex: 27,
+    transform: isCenterPanelCollapsed && !isMapFocusMode
+      ? 'translate3d(-50%, 0, 0)'
+      : 'translate3d(-50%, 18px, 0)',
+    opacity: isCenterPanelCollapsed && !isMapFocusMode ? 1 : 0,
+    pointerEvents: isCenterPanelCollapsed && !isMapFocusMode ? 'auto' : 'none',
+    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    willChange: 'transform, opacity, top, left',
+  };
+
+  const centerCollapsedRailButtonStyle: CSSProperties = {
+    width: 56,
+    height: 28,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    background: 'rgba(17, 17, 19, 0.9)',
+    color: '#ffffff',
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+    cursor: 'pointer',
+    padding: 0,
+  };
+
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',
     top: 0,
@@ -507,6 +539,17 @@ export default function Dashboard({
                 </button>
               </div>
 
+              <div style={centerCollapsedRailStyle}>
+                <button
+                  type="button"
+                  aria-label="Rouvrir le panneau central"
+                  onClick={restoreCenterPanel}
+                  style={centerCollapsedRailButtonStyle}
+                >
+                  <SvgV2Icon name="chevron-down.svg" size={18} />
+                </button>
+              </div>
+
               <DashboardPlaceSearch
                 map={mapInstance}
                 visible={dashboardSearchVisible}
@@ -598,7 +641,7 @@ export default function Dashboard({
                           </div>
                         ) : null}
 
-                        {layout.centerToolbarVisible ? (
+                        {layout.centerPanelVisible ? (
                           <div
                             aria-hidden="true"
                             onMouseDown={handleCenterPanelResizeStart}

@@ -23,6 +23,7 @@ interface DashboardLayoutInput {
   centerPanelHeightOverride: number | null;
   isMapFocusMode: boolean;
   isLeftPanelCollapsed: boolean;
+  isCenterPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
 }
 
@@ -34,6 +35,7 @@ export function getDashboardLayout({
   centerPanelHeightOverride,
   isMapFocusMode,
   isLeftPanelCollapsed,
+  isCenterPanelCollapsed,
   isRightPanelCollapsed,
 }: DashboardLayoutInput) {
   const appScale = clampNumber(
@@ -75,7 +77,7 @@ export function getDashboardLayout({
     designW - centerPanelRegionLeft - centerPanelRegionRight,
   );
   const centerToolbarVisible = centerToolbarWidth >= CENTER_PANEL_MIN_WIDTH;
-  const centerPanelVisible = centerToolbarVisible && !isMapFocusMode;
+  const centerPanelVisible = centerToolbarVisible && !isMapFocusMode && !isCenterPanelCollapsed;
   const centerPanelWidth = centerPanelAvailableWidth;
 
   const centerPanelAvailableHeight = Math.max(
@@ -122,7 +124,7 @@ export function getDashboardLayout({
   const centerToolbarLeft = isMapFocusMode
     ? Math.max(PANEL_PADDING, Math.round((designW - centerToolbarWidth) / 2))
     : centerPanelBaseRegionLeft;
-  const centerToolbarTop = isMapFocusMode
+  const centerToolbarTop = isMapFocusMode || isCenterPanelCollapsed
     ? designH - PANEL_PADDING - CENTER_TOOLBAR_HEIGHT
     : centerPanelTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT;
   const centerPanelResizeHitTop =
@@ -141,6 +143,7 @@ export function getDashboardLayout({
     centerToolbarVisible,
     centerPanelVisible,
     centerPanelWidth,
+    centerPanelMinHeight,
     centerPanelHeight,
     centerPanelLeft,
     centerPanelTop,
