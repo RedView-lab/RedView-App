@@ -218,7 +218,14 @@ export function useItineraryFitRuntime({
             persistedUploadSignature.length > 0
             && current.persistedUploadSignature === persistedUploadSignature
             && current.fitFiles.length > 0;
-          const nextFitFiles = shouldReuseLoadedFiles ? current.fitFiles : fitFiles;
+            const shouldPreserveLocalFiles =
+              persistedUploadSignature.length === 0
+              && current.persistedUploadSignature.length > 0
+              && current.fitFiles.length > 0;
+            const nextFitFiles =
+              shouldReuseLoadedFiles || shouldPreserveLocalFiles
+                ? current.fitFiles
+                : fitFiles;
           const nextFitFileNames = nextFitFiles.map((file) => file.name);
           const sameFitFiles =
             current.fitFiles.length === nextFitFiles.length
@@ -442,7 +449,10 @@ export function useItineraryFitRuntime({
 
     const itineraryId = itinerary.id;
     const gpxFile = buildRouteGpxFile(itinerary);
-    const config = buildPredictionConfigFromRhythm(itinerary.rhythm);
+    const config = buildPredictionConfigFromRhythm(
+      itinerary.rhythm,
+      itinerary.gpxRoute?.points ?? null,
+    );
 
     updateFitRuntime(itineraryId, (current) => ({
       ...current,

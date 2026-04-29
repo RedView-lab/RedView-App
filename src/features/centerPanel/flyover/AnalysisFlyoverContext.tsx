@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -56,6 +57,8 @@ const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
 const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
 const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
 const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
+const HOVER_X_VALUE_EPSILON = 1e-4;
+const HOVER_MARKER_POSITION_EPSILON = 1e-6;
 
 interface AnalysisFlyoverContextValue {
   canPlay: boolean;
@@ -87,17 +90,19 @@ export function AnalysisFlyoverProvider({
 }: AnalysisFlyoverProviderProps) {
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
-  const [manualHoverXValue, setManualHoverXValue] = useState<number | null>(null);
   const [playbackDistanceM, setPlaybackDistanceM] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(DEFAULT_SPEED_INDEX);
   const [playbackSessionId, setPlaybackSessionId] = useState(0);
+  const manualHoverXValueRef = useRef<number | null>(null);
   const playbackDistanceRef = useRef<number | null>(null);
   const lastCameraPointRef = useRef<ReturnType<typeof interpolateRoutePointAtDistance> | null>(null);
   const lastStableBearingRef = useRef<number | null>(null);
   const primedPlaybackSessionRef = useRef<number | null>(null);
   const reliefPitchEnabledRef = useRef(false);
   const reliefPitchOffsetRef = useRef(0);
+  const hoverSyncFrameRef = useRef<number | null>(null);
+  const lastHoverMarkerRef = useRef<{ lon: number; lat: number; color: string } | null>(null);
 
   const interactiveItinerary = useMemo(() => {
     if (!projectStore) return null;
@@ -164,7 +169,7 @@ export function AnalysisFlyoverProvider({
   useEffect(() => {
     setIsPlaying(false);
     setPlaybackDistanceM(null);
-    setManualHoverXValue(null);
+    manualHoverXValueRef.current = null;
     setSpeedIndex(DEFAULT_SPEED_INDEX);
     lastCameraPointRef.current = null;
     lastStableBearingRef.current = null;
@@ -204,13 +209,68 @@ export function AnalysisFlyoverProvider({
     });
   }, [playbackDistanceM, prediction, startTime, totalDistanceM, xMode]);
 
-  const effectiveRoutePoint = useMemo(() => {
-    if (playbackDistanceM != null) {
-      return interpolateRoutePointAtDistance(routePoints, routeGeometry, playbackDistanceM);
+  const clearHoverMarker = useCallback((targetMap: MapboxMap | null) => {
+    if (!targetMap) return;
+    if (lastHoverMarkerRef.current == null) return;
+    lastHoverMarkerRef.current = null;
+    clearAnalysisHoverPoint(targetMap);
+  }, []);
+
+  const syncHoverMarker = useCallback(() => {
+    if (!map) return;
+    if (!interactiveItinerary) {
+      clearHoverMarker(map);
+      return;
     }
-    if (!Number.isFinite(manualHoverXValue)) return null;
-    return locateRoutePointAtX(routePoints, prediction, xMode, manualHoverXValue as number, startTime);
-  }, [manualHoverXValue, playbackDistanceM, prediction, routeGeometry, routePoints, startTime, xMode]);
+
+    const nextRoutePoint = playbackDistanceM != null
+      ? interpolateRoutePointAtDistance(routePoints, routeGeometry, playbackDistanceM)
+      : Number.isFinite(manualHoverXValueRef.current)
+        ? locateRoutePointAtX(routePoints, prediction, xMode, manualHoverXValueRef.current as number, startTime)
+        : null;
+
+    if (!nextRoutePoint) {
+      clearHoverMarker(map);
+      return;
+    }
+
+    const nextMarker = {
+      lon: nextRoutePoint.lon,
+      lat: nextRoutePoint.lat,
+      color: interactiveItinerary.color,
+    };
+    const previousMarker = lastHoverMarkerRef.current;
+    if (
+      previousMarker &&
+      Math.abs(previousMarker.lon - nextMarker.lon) <= HOVER_MARKER_POSITION_EPSILON &&
+      Math.abs(previousMarker.lat - nextMarker.lat) <= HOVER_MARKER_POSITION_EPSILON &&
+      previousMarker.color === nextMarker.color
+    ) {
+      return;
+    }
+
+    lastHoverMarkerRef.current = nextMarker;
+    setAnalysisHoverPoint(map, nextMarker);
+  }, [clearHoverMarker, interactiveItinerary, map, playbackDistanceM, prediction, routeGeometry, routePoints, startTime, xMode]);
+
+  const scheduleHoverMarkerSync = useCallback(() => {
+    if (hoverSyncFrameRef.current !== null) return;
+    hoverSyncFrameRef.current = window.requestAnimationFrame(() => {
+      hoverSyncFrameRef.current = null;
+      syncHoverMarker();
+    });
+  }, [syncHoverMarker]);
+
+  const setManualHoverXValue = useCallback((xValue: number | null) => {
+    const previousValue = manualHoverXValueRef.current;
+    if (previousValue == null || xValue == null) {
+      if (previousValue === xValue) return;
+    } else if (Math.abs(previousValue - xValue) <= HOVER_X_VALUE_EPSILON) {
+      return;
+    }
+    manualHoverXValueRef.current = xValue;
+    scheduleHoverMarkerSync();
+  }, [scheduleHoverMarkerSync]);
 
   const playbackRoutePoint = useMemo(() => {
     if (playbackDistanceM == null) return null;
@@ -276,18 +336,8 @@ export function AnalysisFlyoverProvider({
   }, [baseDurationMs, canPlay, isPlaying, playbackSessionId, speedMultiplier, totalDistanceM]);
 
   useEffect(() => {
-    if (!map) return;
-    if (!effectiveRoutePoint || !interactiveItinerary) {
-      clearAnalysisHoverPoint(map);
-      return;
-    }
-
-    setAnalysisHoverPoint(map, {
-      lon: effectiveRoutePoint.lon,
-      lat: effectiveRoutePoint.lat,
-      color: interactiveItinerary.color,
-    });
-  }, [effectiveRoutePoint, interactiveItinerary, map]);
+    syncHoverMarker();
+  }, [syncHoverMarker]);
 
   useEffect(() => {
     if (!map) return;
@@ -387,6 +437,11 @@ export function AnalysisFlyoverProvider({
   useEffect(() => {
     if (!map) return;
     return () => {
+      if (hoverSyncFrameRef.current !== null) {
+        window.cancelAnimationFrame(hoverSyncFrameRef.current);
+        hoverSyncFrameRef.current = null;
+      }
+      lastHoverMarkerRef.current = null;
       clearAnalysisHoverPoint(map);
       clearAnalysisFlyoverProgress(map);
     };

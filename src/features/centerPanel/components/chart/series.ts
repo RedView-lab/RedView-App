@@ -454,8 +454,6 @@ export function buildSeriesFromPrediction(
     }
   }
 
-  points.sort((a, b) => a.x - b.x);
-
   result = points.length > 1 ? fitChartPointBudget(points) : null;
   predictionCache.set(predictionCacheKey, result);
   return result;
