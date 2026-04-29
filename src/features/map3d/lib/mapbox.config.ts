@@ -16,9 +16,9 @@ export const DEFAULT_VIEW = {
 
 export const FOG_CONFIG = {
   range: [2, 20],
-  color: 'rgb(225, 235, 245)',
-  'high-color': 'rgb(90, 150, 230)',
-  'horizon-blend': 0.02,
-  'space-color': 'rgb(11, 11, 25)',
-  'star-intensity': 0.5,
+  color: 'rgb(255, 196, 150)',
+  'high-color': 'rgb(255, 138, 92)',
+  'horizon-blend': 0.08,
+  'space-color': 'rgb(92, 56, 78)',
+  'star-intensity': 0,
 };

@@ -43,6 +43,7 @@ interface CreateMapLifecycleControllerOptions {
 }
 
 const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
+const MAPBOX_STANDARD_SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/standard-satellite';
 
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
@@ -62,6 +63,10 @@ export function createMapLifecycleController({
   getActiveStyleUrl,
   isCancelled,
 }: CreateMapLifecycleControllerOptions): MapLifecycleController {
+  const supportsStandardLightPreset = (styleUrl: string): boolean => (
+    styleUrl === MAPBOX_STANDARD_STYLE_URL || styleUrl === MAPBOX_STANDARD_SATELLITE_STYLE_URL
+  );
+
   let demCacheBust = 0;
   let demTrackingEnabled = false;
   let demReloadCoolingUntil = 0;
@@ -566,9 +571,9 @@ export function createMapLifecycleController({
     const runId = ++styleBootstrapRunId;
     const applyStyleDecorators = () => {
       map.setFog(fogConfig);
-      if (getActiveStyleUrl() !== MAPBOX_STANDARD_STYLE_URL) {
+      if (supportsStandardLightPreset(getActiveStyleUrl())) {
         try {
-          map.setConfigProperty('basemap', 'lightPreset', 'day');
+          map.setConfigProperty('basemap', 'lightPreset', 'dusk');
         } catch {
           /* style may not support config properties */
         }
