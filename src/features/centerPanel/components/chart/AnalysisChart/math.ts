@@ -63,18 +63,24 @@ export function clipPointsToXDomain(
 
   const firstX = points[0]?.x ?? 0;
   const lastX = points[points.length - 1]?.x ?? 0;
-  const clipped = points
-    .filter((point) => point.x >= xDomain.min && point.x <= xDomain.max)
-    .map((point) => ({ ...point }));
+  if (xDomain.max < firstX || xDomain.min > lastX) return [];
+  if (xDomain.min <= firstX && xDomain.max >= lastX) return points;
 
-  if (xDomain.min >= firstX && xDomain.min <= lastX) {
+  const startIndex = lowerBoundPointIndex(points, xDomain.min);
+  const endIndexExclusive = upperBoundPointIndex(points, xDomain.max);
+  const clipped: { x: number; y: number }[] = [];
+
+  if (xDomain.min > firstX && xDomain.min < lastX) {
     clipped.push({ x: xDomain.min, y: interpolateY(points, xDomain.min) });
   }
-  if (xDomain.max >= firstX && xDomain.max <= lastX) {
-    clipped.push({ x: xDomain.max, y: interpolateY(points, xDomain.max) });
+
+  if (endIndexExclusive > startIndex) {
+    clipped.push(...points.slice(startIndex, endIndexExclusive));
   }
 
-  clipped.sort((left, right) => left.x - right.x);
+  if (xDomain.max > firstX && xDomain.max < lastX) {
+    clipped.push({ x: xDomain.max, y: interpolateY(points, xDomain.max) });
+  }
 
   const deduped: { x: number; y: number }[] = [];
   for (const point of clipped) {
@@ -87,6 +93,28 @@ export function clipPointsToXDomain(
   }
 
   return deduped;
+}
+
+function lowerBoundPointIndex(points: { x: number; y: number }[], xValue: number): number {
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].x < xValue) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function upperBoundPointIndex(points: { x: number; y: number }[], xValue: number): number {
+  let lo = 0;
+  let hi = points.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid].x <= xValue) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 export function compressPointsForPlot(

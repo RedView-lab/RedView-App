@@ -50,6 +50,7 @@ interface TimelineSample {
 const EARTH_RADIUS_M = 6_371_008.8;
 const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
 const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], NormalizedRoutePoint[] | null>();
+const routePointDistancesCache = new WeakMap<RouteChartPoint[], number[]>();
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 const predictionSeriesCache = new WeakMap<PredictionResult, Map<string, ChartPoint[] | null>>();
 const routeBackedSeriesCache = new WeakMap<RouteChartPoint[], RouteBackedSeriesCacheBucket>();
@@ -573,6 +574,9 @@ function interpolateDistanceMFromElapsedHours(
 function getRoutePointDistances(routePoints: RouteChartPoint[]): number[] {
   if (routePoints.length === 0) return [];
 
+  const cached = routePointDistancesCache.get(routePoints);
+  if (cached) return cached;
+
   const distances: number[] = [0];
   let cumulativeDistanceM = 0;
   for (let index = 1; index < routePoints.length; index += 1) {
@@ -585,6 +589,8 @@ function getRoutePointDistances(routePoints: RouteChartPoint[]): number[] {
     }
     distances.push(cumulativeDistanceM);
   }
+
+  routePointDistancesCache.set(routePoints, distances);
   return distances;
 }
 
