@@ -22,6 +22,7 @@ interface DashboardLayoutInput {
   exporterPanelHeight: number;
   centerPanelHeightOverride: number | null;
   isMapFocusMode: boolean;
+  isLeftPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
   leftPanelOpen: boolean;
 }
@@ -33,6 +34,7 @@ export function getDashboardLayout({
   exporterPanelHeight,
   centerPanelHeightOverride,
   isMapFocusMode,
+  isLeftPanelCollapsed,
   isRightPanelCollapsed,
   leftPanelOpen,
 }: DashboardLayoutInput) {
@@ -55,13 +57,15 @@ export function getDashboardLayout({
     rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
   );
 
-  const centerPanelBaseRegionLeft = leftPanelWidth + PANEL_PADDING * 3;
+  const leftPanelReservedWidth = isMapFocusMode || isLeftPanelCollapsed
+    ? 0
+    : leftPanelWidth + PANEL_PADDING * 2;
+  const centerPanelBaseRegionLeft = leftPanelReservedWidth + PANEL_PADDING;
   const rightPanelReservedWidth = isMapFocusMode || isRightPanelCollapsed
     ? 0
     : panelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionRight = rightPanelReservedWidth + PANEL_PADDING;
-  const centerPanelRegionLeft =
-    (leftPanelOpen ? leftPanelWidth + PANEL_PADDING * 2 : 0) + PANEL_PADDING;
+  const centerPanelRegionLeft = leftPanelReservedWidth + PANEL_PADDING;
   const centerPanelRegionRight = rightPanelReservedWidth + PANEL_PADDING;
 
   const centerToolbarWidth = Math.max(
