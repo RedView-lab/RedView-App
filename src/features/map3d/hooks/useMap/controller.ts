@@ -112,6 +112,7 @@ export function createMapLifecycleController({
 
   const refreshTrackedSourceIds = () => {
     trackedSourceIds.clear();
+    if (!canMutateStyle()) return;
     const styleSources = map.getStyle()?.sources ?? {};
     for (const [sourceId, source] of Object.entries(styleSources)) {
       if (TRACKED_SOURCE_TYPES.has((source as { type?: string }).type ?? '')) {
@@ -137,6 +138,15 @@ export function createMapLifecycleController({
       const fn = (map as unknown as { areTilesLoaded?: () => boolean }).areTilesLoaded;
       if (typeof fn === 'function') return fn.call(map);
       return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const canMutateStyle = (): boolean => {
+    if (isCancelled()) return false;
+    try {
+      return map.isStyleLoaded() && Boolean(map.getStyle());
     } catch {
       return false;
     }
@@ -291,6 +301,7 @@ export function createMapLifecycleController({
   };
 
   const refreshDemSource = (): boolean => {
+    if (!canMutateStyle()) return false;
     if (!navigator.serviceWorker?.controller) {
       console.warn('[map3d] DEM source refresh skipped: no active service worker controller');
       return false;
@@ -314,14 +325,19 @@ export function createMapLifecycleController({
       return true;
     }
 
-    map.addSource(unifiedDEMSource.id, {
-      type: 'raster-dem',
-      tiles,
-      tileSize: unifiedDEMSource.tileSize,
-      encoding: unifiedDEMSource.encoding,
-      minzoom: unifiedDEMSource.minzoom,
-      maxzoom: unifiedDEMSource.maxzoom,
-    });
+    try {
+      map.addSource(unifiedDEMSource.id, {
+        type: 'raster-dem',
+        tiles,
+        tileSize: unifiedDEMSource.tileSize,
+        encoding: unifiedDEMSource.encoding,
+        minzoom: unifiedDEMSource.minzoom,
+        maxzoom: unifiedDEMSource.maxzoom,
+      });
+    } catch (error) {
+      console.warn('[map3d] DEM source attach failed', error);
+      return false;
+    }
     refreshTrackedSourceIds();
 
     terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
@@ -376,7 +392,7 @@ export function createMapLifecycleController({
     if (terrainRecoveryTimer) return;
     terrainRecoveryTimer = setTimeout(() => {
       terrainRecoveryTimer = null;
-      if (isCancelled() || !map.isStyleLoaded()) return;
+      if (!canMutateStyle()) return;
       if (!navigator.serviceWorker?.controller) return;
 
       if (!map.getSource(unifiedDEMSource.id)) {
@@ -397,20 +413,25 @@ export function createMapLifecycleController({
   };
 
   const addIgnOrthoOverlay = () => {
-    if (!map.getSource(ignOrthoSource.id)) {
-      map.addSource(ignOrthoSource.id, {
-        type: 'raster',
-        tiles: ignOrthoSource.tiles,
-        tileSize: ignOrthoSource.tileSize,
-        minzoom: ignOrthoSource.minzoom,
-        maxzoom: ignOrthoSource.maxzoom,
-        bounds: ignOrthoSource.bounds,
-        attribution: ignOrthoSource.attribution,
-      });
-    }
+    if (!canMutateStyle()) return;
+    try {
+      if (!map.getSource(ignOrthoSource.id)) {
+        map.addSource(ignOrthoSource.id, {
+          type: 'raster',
+          tiles: ignOrthoSource.tiles,
+          tileSize: ignOrthoSource.tileSize,
+          minzoom: ignOrthoSource.minzoom,
+          maxzoom: ignOrthoSource.maxzoom,
+          bounds: ignOrthoSource.bounds,
+          attribution: ignOrthoSource.attribution,
+        });
+      }
 
-    if (!map.getLayer(ignOrthoLayer.id)) {
-      map.addLayer(ignOrthoLayer);
+      if (!map.getLayer(ignOrthoLayer.id)) {
+        map.addLayer(ignOrthoLayer);
+      }
+    } catch (error) {
+      console.warn('[map3d] IGN ortho attach failed', error);
     }
   };
 
@@ -583,7 +604,11 @@ export function createMapLifecycleController({
   const bootstrapCurrentStyle = async (): Promise<boolean> => {
     const runId = ++styleBootstrapRunId;
     const applyStyleDecorators = () => {
-      map.setFog(fogConfig);
+      try {
+        map.setFog(fogConfig);
+      } catch {
+        /* style may still be finishing its internal graph rebuild */
+      }
       if (supportsStandardLightPreset(getActiveStyleUrl())) {
         try {
           map.setConfigProperty('basemap', 'lightPreset', 'dusk');
@@ -593,7 +618,7 @@ export function createMapLifecycleController({
       }
     };
     const styleLoaded = new Promise<void>((resolve, reject) => {
-      if (map.isStyleLoaded()) {
+      if (canMutateStyle()) {
         reportStatus('loading', 34, 'Style');
         resolve();
         return;
@@ -610,29 +635,25 @@ export function createMapLifecycleController({
       };
       const finish = () => {
         if (settled) return;
+        if (!canMutateStyle()) return;
         settled = true;
         cleanup();
         reportStatus('loading', 34, 'Style');
         resolve();
       };
-      const onStyleLoad = () => finish();
-      const onStyleData = () => {
-        try {
-          if (map.isStyleLoaded()) finish();
-        } catch {
-          /* style graph still rebuilding */
-        }
+      const scheduleFinish = () => {
+        setTimeout(() => {
+          finish();
+        }, 0);
       };
+      const onStyleLoad = () => scheduleFinish();
+      const onStyleData = () => scheduleFinish();
       map.on('style.load', onStyleLoad);
       map.on('styledata', onStyleData);
       watchdog = setTimeout(() => {
-        try {
-          if (map.isStyleLoaded()) {
-            finish();
-            return;
-          }
-        } catch {
-          /* style graph still rebuilding */
+        if (canMutateStyle()) {
+          finish();
+          return;
         }
         cleanup();
         reject(new Error('Le fond de carte ne s\'est pas initialisé à temps'));
@@ -696,27 +717,29 @@ export function createMapLifecycleController({
     };
 
     const recoverStyleArtifacts = () => {
-      if (isCancelled() || runId !== styleBootstrapRunId) return;
+      setTimeout(() => {
+        if (isCancelled() || runId !== styleBootstrapRunId || !canMutateStyle()) return;
 
-      applyStyleDecorators();
-      orthoAdded = false;
+        applyStyleDecorators();
+        orthoAdded = false;
 
-      try {
-        map.setTerrain(null);
-      } catch {
-        /* terrain may already have been dropped by the style reload */
-      }
+        try {
+          map.setTerrain(null);
+        } catch {
+          /* terrain may already have been dropped by the style reload */
+        }
 
-      if (!map.getSource(unifiedDEMSource.id)) {
-        refreshDemSource();
-      } else {
-        refreshTrackedSourceIds();
-      }
+        if (!map.getSource(unifiedDEMSource.id)) {
+          if (!refreshDemSource()) return;
+        } else {
+          refreshTrackedSourceIds();
+        }
 
-      reportStatus('loading', 68, 'Relief');
-      armTerrainBootstrap(() => {
-        void finishStyleBootstrapWhenReady();
-      });
+        reportStatus('loading', 68, 'Relief');
+        armTerrainBootstrap(() => {
+          void finishStyleBootstrapWhenReady();
+        });
+      }, 0);
     };
 
     map.on('style.load', recoverStyleArtifacts);

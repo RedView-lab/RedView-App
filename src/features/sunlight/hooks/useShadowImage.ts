@@ -49,182 +49,31 @@ import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap, ImageSource } from 'mapbox-gl';
 import {
   createOverlayStatus,
-  type OverlayReloadRegistrar,
-  type OverlayStatusReporter,
 } from '@/features/map3d/overlayStatus';
-
-const SOURCE_ID = 'shadow-image';
-const LAYER_ID = 'shadow-image';
-
-// Debounce after move/zoom end before triggering a resample. Short enough
-// to feel responsive, long enough to coalesce a burst of events.
-const SAMPLE_DEBOUNCE_MS = 80;
-
-// Adaptive grid bounds. Small floor so we don't waste cycles on tiny
-// viewports; large cap so Retina/4K monitors still get crisp output
-// without exploding the worker sweep cost (≈linear in W×H).
-const GRID_MIN_W = 768;
-const GRID_MIN_H = 576;
-const GRID_MAX_W = 1600;
-const GRID_MAX_H = 1200;
-const DEM_MIN_SAMPLE_ZOOM = 4;
-const DEM_MAX_SAMPLE_ZOOM = 14;
-
-// Geographic overshoot applied to the sampled bounds. Keeps the cast
-// shadow filling the viewport during small pans/zooms that happen
-// between resamples.
-const BOUNDS_OVERSHOOT = 0.15;
-
-// Time-to-live for revoked blob URLs after a swap. Mapbox finishes
-// uploading the new texture in well under this window.
-const BLOB_REVOKE_DELAY_MS = 1500;
-type ComputeQuality = 'preview' | 'full';
-
-export interface UseShadowImageOptions {
-  enabled: boolean;
-  sunAzimuthDeg: number;
-  sunAltitudeDeg: number;
-  /** 0..1 */
-  opacity: number;
-  timeScrubbing: boolean;
-}
-
-interface UseShadowImageRuntimeOptions {
-  statusReporter?: OverlayStatusReporter;
-  registerReload?: OverlayReloadRegistrar;
-}
-
-interface SampleAck {
-  id: number;
-  type: 'sample-ok';
-  filled: number;
-  total: number;
-  tooMany?: boolean;
-  effectiveZoom?: number;
-  downgraded?: boolean;
-}
-interface ComputeAck { id: number; type: 'compute-ok'; blob: Blob; bounds: [number, number, number, number] }
-interface ComputeEmpty { id: number; type: 'compute-empty' }
-interface ResetAck { id: number; type: 'reset-ok' }
-interface ErrAck { id: number; type: 'error'; message: string }
-type WorkerAck = SampleAck | ComputeAck | ComputeEmpty | ResetAck | ErrAck;
-type BoundsTuple = [number, number, number, number];
-
-interface ComputeJob {
-  bounds: BoundsTuple;
-  sampleGen: number;
-  computeSeq: number;
-  quality: ComputeQuality;
-}
-
-/**
- * Shadow overlay visibility.
- *   alt ≥  0°  : render terrain-cast shadows.
- *   alt <  0°  : keep the overlay enabled so the worker can turn the full
- *                viewport into shadow once the sun is below the horizon.
- */
-function shadowVisibility(altitudeDeg: number): number {
-  return Number.isFinite(altitudeDeg) ? 1 : 0;
-}
-
-function effectiveOverlayOpacity(enabled: boolean, opacity: number, altitudeDeg: number): number {
-  if (!enabled) return 0;
-  if (altitudeDeg < 0) return 1;
-  return Math.max(0, Math.min(1, opacity));
-}
-
-/**
- * Pick a DEM zoom that keeps the sample density close to one DEM pixel per
- * grid cell. Bounded so we never explode the tile count or under-resolve.
- */
-function chooseDemZoom(map: MapboxMap, gridW: number): number {
-  const z = Math.round(map.getZoom());
-  const bounds = map.getBounds();
-  if (!bounds) return Math.min(DEM_MAX_SAMPLE_ZOOM, Math.max(DEM_MIN_SAMPLE_ZOOM, z));
-  const w = bounds.getWest();
-  const e = bounds.getEast();
-  const lat = (bounds.getNorth() + bounds.getSouth()) / 2;
-  const cosLat = Math.cos((lat * Math.PI) / 180);
-  const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
-  const targetMpp = lonExtentM / gridW;
-  // World metres per pixel at zoom Z and the given latitude.
-  // demZ such that 40075016.686 * cosLat / (256 * 2^z) ≈ targetMpp
-  const ideal = Math.log2((40075016.686 * Math.abs(cosLat)) / (256 * targetMpp));
-  return Math.max(DEM_MIN_SAMPLE_ZOOM, Math.min(DEM_MAX_SAMPLE_ZOOM, Math.round(ideal)));
-}
-
-/**
- * Compute the actual grid resolution for the current canvas, capped to
- * the GRID_MAX_* envelope and floored at GRID_MIN_*. The aspect ratio
- * always matches the viewport so the resampled shadow doesn't get
- * non-uniformly stretched.
- */
-function chooseGridSize(map: MapboxMap): { gridW: number; gridH: number } {
-  const canvas = map.getCanvas();
-  const cw = canvas.width || canvas.clientWidth || GRID_MIN_W;
-  const ch = canvas.height || canvas.clientHeight || GRID_MIN_H;
-  const aspect = cw / Math.max(1, ch);
-  let w = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, cw));
-  let h = Math.round(w / aspect);
-  if (h > GRID_MAX_H) {
-    h = GRID_MAX_H;
-    w = Math.round(h * aspect);
-  }
-  if (h < GRID_MIN_H) {
-    h = GRID_MIN_H;
-    w = Math.round(h * aspect);
-  }
-  // Final clamp so no axis ever exceeds the cap (rounding could push 1px over).
-  w = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, w));
-  h = Math.max(GRID_MIN_H, Math.min(GRID_MAX_H, h));
-  return { gridW: w, gridH: h };
-}
-
-/**
- * Apply a symmetric geographic overshoot to a bounds tuple. Latitude is
- * clamped to the Web Mercator usable range so the worker never receives
- * out-of-domain coordinates.
- */
-function withOvershoot(
-  b: BoundsTuple,
-  factor: number,
-): BoundsTuple {
-  const [w, s, e, n] = b;
-  const dx = (e - w) * factor;
-  const dy = (n - s) * factor;
-  const ws = w - dx;
-  const es = e + dx;
-  const ss = Math.max(-85.05, s - dy);
-  const ns = Math.min(85.05, n + dy);
-  // Clamp longitudes to ±180 — viewports near the antimeridian are
-  // effectively unsupported by the single-source design anyway.
-  return [Math.max(-180, ws), ss, Math.min(180, es), ns];
-}
-
-/**
- * Pre-decode a blob URL so the subsequent `ImageSource.updateImage` call
- * sees it as already-cached and resolves on the same frame as the
- * coordinate swap. Returns once the bitmap is ready (or immediately on
- * any failure — the caller still proceeds; worst case we just lose the
- * gap-elimination benefit for that one frame).
- */
-async function preloadBlobUrl(url: string): Promise<void> {
-  try {
-    const img = new Image();
-    img.decoding = 'async';
-    img.src = url;
-    if (img.decode) {
-      await img.decode();
-    } else {
-      await new Promise<void>((resolve) => {
-        img.onload = () => resolve();
-        img.onerror = () => resolve();
-      });
-    }
-  } catch {
-    /* ignore — we'll just have a (very small) chance of a 1-frame swap gap */
-  }
-}
+import type {
+  BoundsTuple,
+  ComputeAck,
+  ComputeEmpty,
+  ComputeJob,
+  ErrAck,
+  SampleAck,
+  UseShadowImageOptions,
+  UseShadowImageRuntimeOptions,
+  WorkerAck,
+} from './useShadowImageShared';
+import {
+  BLOB_REVOKE_DELAY_MS,
+  BOUNDS_OVERSHOOT,
+  chooseDemZoom,
+  chooseGridSize,
+  effectiveOverlayOpacity,
+  LAYER_ID,
+  preloadBlobUrl,
+  SAMPLE_DEBOUNCE_MS,
+  shadowVisibility,
+  SOURCE_ID,
+  withOvershoot,
+} from './useShadowImageShared';
 
 export function useShadowImage(
   map: MapboxMap | null,
