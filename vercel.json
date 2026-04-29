@@ -3,6 +3,7 @@
     "api/brouter.ts": { "maxDuration": 60 },
     "api/overpass.ts": { "maxDuration": 90 },
     "api/poi.ts": { "maxDuration": 30 },
+    "api/geocode-iconic.ts": { "maxDuration": 15 },
     "api/openmeteo.ts": { "maxDuration": 30 },
     "api/meteofrance.ts": { "maxDuration": 60 },
     "api/billing/overview.ts": { "maxDuration": 15 },

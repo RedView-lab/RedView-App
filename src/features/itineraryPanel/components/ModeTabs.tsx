@@ -4,7 +4,6 @@ import {
   IconRoute,
   IconStopwatch,
   IconMapPin,
-  IconNutrition,
 } from './icons';
 
 interface ModeTabsProps {
@@ -16,7 +15,6 @@ const TABS: { id: PanelMode; label: string; Icon: ComponentType<{ size?: number 
   { id: 'tracage', label: 'Traçage', Icon: IconRoute },
   { id: 'rythme', label: 'Rythme', Icon: IconStopwatch },
   { id: 'poi', label: 'POI', Icon: IconMapPin },
-  { id: 'nutrition', label: 'Nutrition', Icon: IconNutrition },
 ];
 
 export function ModeTabs({ active, onChange }: ModeTabsProps) {

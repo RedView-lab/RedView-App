@@ -73,9 +73,16 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   } = props;
 
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
+  const activeMode = project.activeMode === 'nutrition' ? 'tracage' : project.activeMode;
 
   const style: CSSProperties | undefined =
     width !== undefined ? { width: `${width}px` } : undefined;
+
+  useEffect(() => {
+    if (project.activeMode === 'nutrition') {
+      onChangeMode?.('tracage');
+    }
+  }, [onChangeMode, project.activeMode]);
 
   useEffect(() => {
     if (!timelineFullscreen) return;
@@ -190,7 +197,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <div className="rvi-divider" />
 
-      <ModeTabs active={project.activeMode} onChange={onChangeMode} />
+    <ModeTabs active={activeMode} onChange={onChangeMode} />
 
       <div className="rvi-divider" />
 
@@ -210,7 +217,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             ))}
           </div>
         ) : null}
-        {active && project.activeMode === 'tracage' ? (
+        {active && activeMode === 'tracage' ? (
           <>
             <ProfileBar
               profiles={profiles}
@@ -230,7 +237,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             />
           </>
         ) : null}
-        {active && project.activeMode === 'rythme' ? (
+        {active && activeMode === 'rythme' ? (
           <RythmeSection
             rhythm={active.rhythm}
             onChange={onChangeRhythm}
@@ -241,7 +248,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             calculateDisabled={calculateDisabled}
           />
         ) : null}
-        {project.activeMode === 'poi' ? (
+        {activeMode === 'poi' ? (
           active ? (
             <PoiSection
               poi={active.poi}
@@ -260,9 +267,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           ) : (
             <ComingSoonSection title="Points d'intérêt" />
           )
-        ) : null}
-        {project.activeMode === 'nutrition' ? (
-          <ComingSoonSection title="Nutrition" />
         ) : null}
 
         {dockTimelinePanel}

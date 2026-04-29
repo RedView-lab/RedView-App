@@ -58,7 +58,27 @@ interface MapboxResponse {
   features: MapboxFeature[];
 }
 
+interface NominatimSearchResult {
+  place_id: number;
+  osm_type?: string;
+  osm_id?: number;
+  name?: string;
+  display_name: string;
+  lat: string;
+  lon: string;
+  type?: string;
+  extratags?: Record<string, string | undefined>;
+}
+
+interface RankedGeocodeSuggestion extends GeocodeSuggestion {
+  featureType: string;
+  source: 'mapbox' | 'osm';
+  score: number;
+  iconicBoost?: number;
+}
+
 const ENDPOINT = 'https://api.mapbox.com/geocoding/v5/mapbox.places';
+const ICONIC_FALLBACK_ENDPOINT = '/api/geocode-iconic';
 
 // ---------------------------------------------------------------------------
 // Production hardening: small in-memory LRU cache + in-flight dedup + bounded
@@ -126,6 +146,185 @@ function writeForwardCache(key: string, value: GeocodeSuggestion[]): void {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'AbortError';
+}
+
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/['’`]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function resolveCountryCodes(countries?: string): string | null {
+  if (!countries) return null;
+  const codes = countries
+    .split(',')
+    .map((part) => part.trim().toLowerCase())
+    .filter((part) => /^[a-z]{2}$/.test(part));
+  return codes.length > 0 ? codes.join(',') : null;
+}
+
+function shouldQueryIconicFallback(query: string): boolean {
+  const normalized = normalizeSearchText(query);
+  return normalized.length >= 4 && !/\d/.test(normalized);
+}
+
+function scoreSuggestion(
+  suggestion: Pick<RankedGeocodeSuggestion, 'name' | 'fullName' | 'featureType' | 'source' | 'iconicBoost'>,
+  normalizedQuery: string,
+  tokens: string[],
+): number {
+  const normalizedName = normalizeSearchText(suggestion.name);
+  const normalizedFullName = normalizeSearchText(suggestion.fullName);
+  let score = 0;
+
+  if (normalizedName === normalizedQuery) score += 160;
+  else if (normalizedName.startsWith(normalizedQuery)) score += 120;
+  else if (normalizedFullName.startsWith(normalizedQuery)) score += 90;
+  else if (normalizedFullName.includes(normalizedQuery)) score += 60;
+
+  if (tokens.length > 0 && tokens.every((token) => normalizedName.includes(token))) {
+    score += 36;
+  } else if (tokens.length > 0 && tokens.every((token) => normalizedFullName.includes(token))) {
+    score += 18;
+  }
+
+  switch (suggestion.featureType) {
+    case 'peak':
+    case 'viewpoint':
+    case 'mountain':
+    case 'volcano':
+      score += 72;
+      break;
+    case 'poi':
+    case 'attraction':
+    case 'alpine_hut':
+      score += 48;
+      break;
+    case 'place':
+    case 'locality':
+      score += 22;
+      break;
+    case 'neighborhood':
+      score += 6;
+      break;
+    case 'address':
+      score -= 12;
+      break;
+    default:
+      break;
+  }
+
+  if (suggestion.source === 'osm') score += 12;
+  score += suggestion.iconicBoost ?? 0;
+
+  return score;
+}
+
+function dedupeKeyForSuggestion(suggestion: Pick<GeocodeSuggestion, 'name' | 'lon' | 'lat'>): string {
+  return `${normalizeSearchText(suggestion.name)}|${suggestion.lat.toFixed(4)}|${suggestion.lon.toFixed(4)}`;
+}
+
+function rankAndMergeSuggestions(
+  query: string,
+  mapbox: RankedGeocodeSuggestion[],
+  iconic: RankedGeocodeSuggestion[],
+  limit: number,
+): GeocodeSuggestion[] {
+  const normalizedQuery = normalizeSearchText(query);
+  const tokens = normalizedQuery.split(' ').filter(Boolean);
+  const merged = new Map<string, RankedGeocodeSuggestion>();
+
+  for (const suggestion of [...iconic, ...mapbox]) {
+    const ranked: RankedGeocodeSuggestion = {
+      ...suggestion,
+      score: scoreSuggestion(suggestion, normalizedQuery, tokens),
+    };
+    const key = dedupeKeyForSuggestion(ranked);
+    const previous = merged.get(key);
+    if (!previous || ranked.score > previous.score) {
+      merged.set(key, ranked);
+    }
+  }
+
+  return [...merged.values()]
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score;
+      return left.fullName.localeCompare(right.fullName, 'fr');
+    })
+    .slice(0, limit)
+    .map(({ id, name, fullName, lon, lat }) => ({ id, name, fullName, lon, lat }));
+}
+
+async function fetchIconicFallbackPlaces(
+  query: string,
+  opts: GeocodeOptions,
+): Promise<RankedGeocodeSuggestion[]> {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    limit: String(Math.min(Math.max(opts.limit ?? 6, 1), 6)),
+  });
+  params.set('accept-language', opts.language ?? 'fr');
+  const countryCodes = resolveCountryCodes(opts.countries);
+  if (countryCodes) params.set('countrycodes', countryCodes);
+
+  const response = await fetch(`${ICONIC_FALLBACK_ENDPOINT}?${params.toString()}`, {
+    signal: opts.signal,
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new GeocoderError(`Iconic geocoder: HTTP ${response.status}`, response.status, true);
+  }
+
+  const normalizedQuery = normalizeSearchText(query);
+  const rows = ((await response.json()) as NominatimSearchResult[]).filter((row) => {
+    const normalizedName = normalizeSearchText(row.name ?? row.display_name);
+    const normalizedFullName = normalizeSearchText(row.display_name);
+    return (
+      normalizedName === normalizedQuery ||
+      normalizedName.startsWith(normalizedQuery) ||
+      normalizedFullName.includes(normalizedQuery)
+    );
+  });
+
+  const suggestions: RankedGeocodeSuggestion[] = [];
+  for (const row of rows) {
+    const lon = Number(row.lon);
+    const lat = Number(row.lat);
+    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+
+    const extratags = row.extratags ?? {};
+    const elevationMeters = Number(extratags.ele ?? NaN);
+    let iconicBoost = 0;
+    if (extratags.wikipedia) iconicBoost += 120;
+    if (extratags.wikidata) iconicBoost += 40;
+    if (extratags.importance === 'international') iconicBoost += 80;
+    if (Number.isFinite(elevationMeters)) {
+      if (elevationMeters >= 4000) iconicBoost += 70;
+      else if (elevationMeters >= 2500) iconicBoost += 40;
+      else if (elevationMeters >= 1500) iconicBoost += 20;
+    }
+
+    const name = row.name?.trim() || row.display_name.split(',')[0]?.trim() || query.trim();
+    suggestions.push({
+      id: `osm:${row.osm_type ?? 'place'}:${row.osm_id ?? row.place_id}`,
+      name,
+      fullName: row.display_name,
+      lon,
+      lat,
+      featureType: row.type ?? 'unknown',
+      source: 'osm',
+      score: 0,
+      iconicBoost,
+    });
+  }
+
+  return suggestions;
 }
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
@@ -232,10 +431,13 @@ export async function geocodePlaces(
     return existing;
   }
 
+  const finalLimit = Math.min(Math.max(opts.limit ?? 5, 1), 10);
+  const mapboxLimit = Math.min(Math.max(finalLimit + 4, finalLimit), 10);
+
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
     autocomplete: 'true',
-    limit: String(Math.min(Math.max(opts.limit ?? 5, 1), 10)),
+    limit: String(mapboxLimit),
     language: opts.language ?? 'fr',
   });
   if (opts.countries) params.set('country', opts.countries);
@@ -248,15 +450,38 @@ export async function geocodePlaces(
 
   const url = `${ENDPOINT}/${encodeURIComponent(trimmed)}.json?${params.toString()}`;
   const promise = (async () => {
+    const iconicPromise = shouldQueryIconicFallback(trimmed)
+      ? fetchIconicFallbackPlaces(trimmed, {
+          ...opts,
+          limit: 6,
+        }).catch((error: unknown) => {
+          if (isAbortError(error)) throw error;
+          if (typeof console !== 'undefined') {
+            console.warn('[geocoder] iconic fallback failed', error);
+          }
+          return [] as RankedGeocodeSuggestion[];
+        })
+      : Promise.resolve([] as RankedGeocodeSuggestion[]);
+
     const res = await fetchWithRetry(url, opts.signal);
     const json = (await res.json()) as MapboxResponse;
-    const suggestions = (json.features ?? []).map((f) => ({
+    const mapboxSuggestions: RankedGeocodeSuggestion[] = (json.features ?? []).map((f) => ({
       id: f.id,
       name: f.text,
       fullName: f.place_name,
       lon: f.center[0],
       lat: f.center[1],
+      featureType: f.place_type?.[0] ?? 'unknown',
+      source: 'mapbox',
+      score: 0,
     }));
+    const iconicSuggestions = await iconicPromise;
+    const suggestions = rankAndMergeSuggestions(
+      trimmed,
+      mapboxSuggestions,
+      iconicSuggestions,
+      finalLimit,
+    );
     writeForwardCache(cacheKey, suggestions);
     return suggestions;
   })();
