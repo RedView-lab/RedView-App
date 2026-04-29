@@ -278,20 +278,25 @@ export function createMapLifecycleController({
 
     disposeTerrainBootstrap?.();
     disposeTerrainBootstrap = null;
+    const tiles = buildDemTilesTemplate(demCacheBust, getActiveDemProfile());
+    const existingSource = map.getSource(unifiedDEMSource.id) as {
+      setTiles?: (tiles: string[]) => unknown;
+    } | undefined;
 
-    try {
-      map.setTerrain(null);
-    } catch {
-      /* terrain may not be set yet */
-    }
-
-    if (map.getSource(unifiedDEMSource.id)) {
-      map.removeSource(unifiedDEMSource.id);
+    if (existingSource) {
+      if (typeof existingSource.setTiles !== 'function') {
+        console.warn('[map3d] DEM source refresh skipped: source cannot update tiles');
+        return false;
+      }
+      existingSource.setTiles(tiles);
+      refreshTrackedSourceIds();
+      applyUnifiedTerrain();
+      return true;
     }
 
     map.addSource(unifiedDEMSource.id, {
       type: 'raster-dem',
-      tiles: buildDemTilesTemplate(demCacheBust, getActiveDemProfile()),
+      tiles,
       tileSize: unifiedDEMSource.tileSize,
       encoding: unifiedDEMSource.encoding,
       minzoom: unifiedDEMSource.minzoom,
