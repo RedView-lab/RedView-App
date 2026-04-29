@@ -32,9 +32,9 @@
  *  • Grid resolution is now adaptive to the actual map canvas size,
  *    capped at GRID_MAX_W × GRID_MAX_H (1600 × 1200) so large monitors
  *    get sharper shadows without blowing up worker time.
- *  • Resample is scheduled on both `moveend` and `zoomend`; debounce
- *    dropped from 180 ms → 80 ms (still long enough to absorb a single
- *    moveend storm but no longer perceptible).
+ *  • Resample is scheduled on `moveend`, `zoomend`, `rotateend` and
+ *    `pitchend`; debounce dropped from 180 ms → 80 ms (still long enough
+ *    to absorb a single moveend storm but no longer perceptible).
  *  • Worker requests are strictly serialized: at most one inflight + one
  *    pending. Intermediate requests collapse into the pending slot, so
  *    a long zoom storm produces O(1) work instead of one job per event.
@@ -564,8 +564,22 @@ export function useShadowImage(
         demZoom,
       });
       if (cancelled || myGen !== sampleGenRef.current) return;
+      const hasPreviousSample = sampledRef.current && sampledBoundsRef.current;
+
       if (sampleAck.type === 'error') {
         console.warn('[shadow] sample failed', sampleAck.message);
+        if (hasPreviousSample) {
+          applyVisibleOpacity();
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'ready',
+            progress: 100,
+            detail: 'Dernier relief valide conservé',
+            reloadable: true,
+          }));
+          return;
+        }
         publishStatus(createOverlayStatus({
           id: 'shadow',
           label: 'Ombres',
@@ -578,6 +592,18 @@ export function useShadowImage(
       }
       if (sampleAck.tooMany) {
         console.info('[shadow] sample skipped: viewport spans too many DEM tiles');
+        if (hasPreviousSample) {
+          applyVisibleOpacity();
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'ready',
+            progress: 100,
+            detail: 'Dernier relief valide conservé',
+            reloadable: true,
+          }));
+          return;
+        }
         removeSourceAndLayer(true);
         setLayerOpacity(0);
         publishStatus(null);
@@ -585,6 +611,18 @@ export function useShadowImage(
       }
       if (sampleAck.filled === 0) {
         console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: sampledBounds });
+        if (hasPreviousSample) {
+          applyVisibleOpacity();
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'ready',
+            progress: 100,
+            detail: 'Dernier relief valide conservé',
+            reloadable: true,
+          }));
+          return;
+        }
         removeSourceAndLayer(true);
         setLayerOpacity(0);
         publishStatus(createOverlayStatus({
@@ -663,6 +701,8 @@ export function useShadowImage(
 
     const onMoveEnd = () => scheduleSample();
     const onZoomEnd = () => scheduleSample();
+    const onRotateEnd = () => scheduleSample();
+    const onPitchEnd = () => scheduleSample();
     const onStyleLoad = () => {
       removeSourceAndLayer(false);
       if (!optsRef.current.enabled) return;
@@ -674,12 +714,16 @@ export function useShadowImage(
     };
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onZoomEnd);
+    map.on('rotateend', onRotateEnd);
+    map.on('pitchend', onPitchEnd);
     map.on('style.load', onStyleLoad);
 
     return () => {
       cancelled = true;
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onZoomEnd);
+      map.off('rotateend', onRotateEnd);
+      map.off('pitchend', onPitchEnd);
       map.off('style.load', onStyleLoad);
       if (sampleTimerRef.current !== null) {
         clearTimeout(sampleTimerRef.current);
