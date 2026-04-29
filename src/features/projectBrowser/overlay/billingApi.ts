@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 
+import { logBillingUi, logBillingUiError } from './debug';
 import type {
   BillingContactPreference,
   PaymentMethodSummary,
@@ -25,6 +26,20 @@ type PaymentMethodSetupResponse = {
   clientSecret: string;
 };
 
+function summarizeResponse(data: Record<string, unknown>) {
+  return {
+    keys: Object.keys(data),
+    error: typeof data.error === 'string' ? data.error : null,
+    subscriptionId: typeof data.subscriptionId === 'string' ? data.subscriptionId : null,
+    hasClientSecret: typeof data.clientSecret === 'string' && data.clientSecret.length > 0,
+    requiresPaymentConfirmation: data.requiresPaymentConfirmation === true,
+    subscriptionStatus:
+      data.subscription && typeof data.subscription === 'object' && data.subscription
+        ? (data.subscription as Record<string, unknown>).status ?? null
+        : null,
+  };
+}
+
 async function getAccessToken(): Promise<string> {
   const {
     data: { session },
@@ -43,6 +58,13 @@ async function getAccessToken(): Promise<string> {
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  logBillingUi('api-request-start', {
+    path,
+    method: init?.method ?? 'GET',
+    hasBody: Boolean(init?.body),
+    body: typeof init?.body === 'string' ? init.body : null,
+  });
+
   const token = await getAccessToken();
   const response = await fetch(path, {
     ...init,
@@ -54,10 +76,25 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  logBillingUi('api-request-response', {
+    path,
+    method: init?.method ?? 'GET',
+    status: response.status,
+    ok: response.ok,
+    ...summarizeResponse(data),
+  });
+
   if (!response.ok) {
-    throw new Error(
+    const error = new Error(
       typeof data.error === 'string' ? data.error : 'La requête de facturation a échoué.',
     );
+    logBillingUiError('api-request-failed', error, {
+      path,
+      method: init?.method ?? 'GET',
+      status: response.status,
+      ...summarizeResponse(data),
+    });
+    throw error;
   }
 
   return data as T;

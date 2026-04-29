@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 
+import { logBillingUi, logBillingUiError } from './debug';
 import type { SubscriptionPlanId } from './types';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
@@ -53,14 +54,33 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    logBillingUi('billing-modal-form-state', {
+      mode: flow.mode,
+      hasStripe: Boolean(stripe),
+      hasElements: Boolean(elements),
+      hasSubscriptionId: Boolean(flow.subscriptionId),
+    });
+  }, [elements, flow.mode, flow.subscriptionId, stripe]);
+
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!stripe || !elements) {
+      logBillingUi('billing-modal-submit-blocked', {
+        mode: flow.mode,
+        hasStripe: Boolean(stripe),
+        hasElements: Boolean(elements),
+      });
       return;
     }
 
     setSubmitting(true);
     setError(null);
+
+    logBillingUi('billing-modal-submit-start', {
+      mode: flow.mode,
+      hasSubscriptionId: Boolean(flow.subscriptionId),
+    });
 
     try {
       const submitResult = await elements.submit();
@@ -72,6 +92,12 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         const result = await stripe.confirmSetup({
           elements,
           redirect: 'if_required',
+        });
+
+        logBillingUi('billing-modal-confirm-setup-result', {
+          hasError: Boolean(result.error),
+          setupIntentId: result.setupIntent?.id ?? null,
+          setupIntentStatus: result.setupIntent?.status ?? null,
         });
 
         if (result.error) {
@@ -92,6 +118,12 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         redirect: 'if_required',
       });
 
+      logBillingUi('billing-modal-confirm-payment-result', {
+        hasError: Boolean(result.error),
+        paymentIntentId: result.paymentIntent?.id ?? null,
+        paymentIntentStatus: result.paymentIntent?.status ?? null,
+      });
+
       if (result.error) {
         throw new Error(result.error.message);
       }
@@ -105,6 +137,10 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         subscriptionId: flow.subscriptionId,
       });
     } catch (nextError) {
+      logBillingUiError('billing-modal-submit-error', nextError, {
+        mode: flow.mode,
+        hasSubscriptionId: Boolean(flow.subscriptionId),
+      });
       setError(
         nextError instanceof Error
           ? nextError.message
@@ -177,7 +213,22 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 }
 
 export function BillingActionModal({ flow, onClose, onComplete }: BillingActionModalProps) {
+  useEffect(() => {
+    logBillingUi('billing-modal-render', {
+      mode: flow.mode,
+      hasClientSecret: Boolean(flow.clientSecret),
+      hasSubscriptionId: Boolean(flow.subscriptionId),
+      hasStripePromise: Boolean(stripePromise),
+      hasPublishableKey: Boolean(publishableKey),
+    });
+  }, [flow]);
+
   if (!stripePromise) {
+    logBillingUi('billing-modal-stripe-unavailable', {
+      mode: flow.mode,
+      hasPublishableKey: Boolean(publishableKey),
+    });
+
     return (
       <div className="rvpb-billing-modal" role="dialog" aria-modal="true" aria-label="Stripe indisponible">
         <div className="rvpb-billing-modal__backdrop" onClick={onClose} />

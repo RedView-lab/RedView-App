@@ -1,5 +1,6 @@
 import { SvgV2Icon } from '@/components/SvgV2Icon';
 
+import { logBillingUi } from './debug';
 import type { SubscriptionPlanId, SubscriptionPlan } from './types';
 
 type SubscriptionPlanCardProps = {
@@ -30,7 +31,14 @@ export function SubscriptionPlanCard({
       <button
         type="button"
         className="rvpb-subscription-card__select"
-        onClick={() => onSelect(plan.id)}
+        onClick={() => {
+          logBillingUi('select-plan-card', {
+            planId: plan.id,
+            selected,
+            active,
+          });
+          onSelect(plan.id);
+        }}
         aria-pressed={selected}
       >
         <div className="rvpb-subscription-card__top">
@@ -66,6 +74,15 @@ export function SubscriptionPlanCard({
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              logBillingUi('subscription-cta-click', {
+                planId: plan.id,
+                ctaLabel,
+                ctaTone,
+                ctaDisabled,
+                selected,
+                active,
+                hasHandler: Boolean(onCtaClick),
+              });
               void onCtaClick?.();
             }}
           >

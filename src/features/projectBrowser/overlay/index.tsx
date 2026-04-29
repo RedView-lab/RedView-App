@@ -33,6 +33,7 @@ import {
   type BillingModalCompletion,
   type BillingModalState,
 } from './BillingActionModal';
+import { logBillingUi, logBillingUiError } from './debug';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import {
   accountTierLabel,
@@ -371,6 +372,13 @@ export function ProjectBrowserOverlay({
   const lastEdited = projects[0];
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId) => {
+      logBillingUi('handle-plan-selection-start', {
+        requestedPlanId,
+        currentStatus: subscriptionState.snapshot?.status ?? null,
+        currentPriceId: subscriptionState.snapshot?.priceId ?? null,
+        hasPaidSubscription: hasPaidSubscription(subscriptionState.snapshot),
+      });
+
       setBillingActionBusy(true);
       setBillingActionError(null);
 
@@ -379,7 +387,20 @@ export function ProjectBrowserOverlay({
           ? await changeSubscriptionPlan(requestedPlanId)
           : await createSubscriptionIntent(requestedPlanId);
 
+        logBillingUi('handle-plan-selection-result', {
+          requestedPlanId,
+          subscriptionId: result.subscriptionId,
+          subscriptionStatus: result.subscription.status,
+          hasClientSecret: Boolean(result.clientSecret),
+          requiresPaymentConfirmation: result.requiresPaymentConfirmation,
+        });
+
         if (result.clientSecret) {
+          logBillingUi('handle-plan-selection-open-modal', {
+            requestedPlanId,
+            subscriptionId: result.subscriptionId,
+            mode: 'subscription',
+          });
           setBillingModal({
             mode: 'subscription',
             clientSecret: result.clientSecret,
@@ -398,8 +419,15 @@ export function ProjectBrowserOverlay({
           return;
         }
 
+        logBillingUi('handle-plan-selection-refresh-overview', {
+          requestedPlanId,
+          reason: 'missing-client-secret',
+        });
         await refreshBillingOverview();
       } catch (nextError) {
+        logBillingUiError('handle-plan-selection-error', nextError, {
+          requestedPlanId,
+        });
         setBillingActionError(
           nextError instanceof Error
             ? nextError.message
@@ -452,6 +480,9 @@ export function ProjectBrowserOverlay({
 
     try {
       const result = await createPaymentMethodSetupIntent();
+        logBillingUi('handle-payment-method-result', {
+          hasClientSecret: Boolean(result.clientSecret),
+        });
       setBillingModal({
         mode: 'payment-method',
         clientSecret: result.clientSecret,
@@ -461,6 +492,7 @@ export function ProjectBrowserOverlay({
         submitLabel: 'Enregistrer cette carte',
       });
     } catch (nextError) {
+        logBillingUiError('handle-payment-method-error', nextError);
       setBillingActionError(
         nextError instanceof Error
           ? nextError.message
@@ -473,6 +505,16 @@ export function ProjectBrowserOverlay({
 
   const handleBillingModalComplete = useCallback(
     async (completion: BillingModalCompletion) => {
+      logBillingUi('billing-modal-complete', completion.mode === 'payment-method'
+        ? {
+            mode: completion.mode,
+            setupIntentId: completion.setupIntentId,
+          }
+        : {
+            mode: completion.mode,
+            subscriptionId: completion.subscriptionId,
+          });
+
       if (completion.mode === 'payment-method') {
         const overview = await applyPaymentMethodSetup(completion.setupIntentId);
         applyBillingOverview(overview);
@@ -488,6 +530,7 @@ export function ProjectBrowserOverlay({
   );
 
   const closeBillingModal = useCallback(() => {
+    logBillingUi('billing-modal-close');
     setBillingModal(null);
   }, []);
 
