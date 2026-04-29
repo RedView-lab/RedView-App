@@ -20,7 +20,6 @@ interface TimelineScheduleCanvasProps {
   hourMarks: number[];
   hourRowHeightPx: number;
   kmMarkers: KmMarker[];
-  canvasHeight: number;
   canvasStyle: CSSProperties;
   displayDays: Date[];
   selectedDayKey: string;
@@ -45,7 +44,6 @@ export function TimelineScheduleCanvas({
   hourMarks,
   hourRowHeightPx,
   kmMarkers,
-  canvasHeight,
   canvasStyle,
   displayDays,
   selectedDayKey,

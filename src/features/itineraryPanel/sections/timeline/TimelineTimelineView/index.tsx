@@ -336,7 +336,6 @@ export function TimelineTimelineView({
         hourMarks={hourMarks}
         hourRowHeightPx={hourRowHeightPx}
         kmMarkers={kmMarkers}
-        canvasHeight={canvasHeight}
         canvasStyle={canvasStyle}
         displayDays={displayDays}
         selectedDayKey={selectedDayKey}
