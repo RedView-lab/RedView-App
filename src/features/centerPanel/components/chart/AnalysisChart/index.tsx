@@ -10,7 +10,6 @@ import {
   buildNiceTicks,
   buildVisibleXDomain,
   clampXDomainToRoute,
-  clipPointsToXDomain,
   defaultDomainFor,
   detailZoomToVisibleFraction,
   interpolateY,
@@ -111,14 +110,7 @@ export function AnalysisChart({
     const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
     return buildNiceTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
   }, [plotSize.width, plotXDomain.max, plotXDomain.min]);
-  const visibleSeries = useMemo(
-    () =>
-      series.map((entry) => ({
-        ...entry,
-        points: clipPointsToXDomain(entry.points, plotXDomain),
-      })),
-    [plotXDomain, series],
-  );
+  const visibleSeries = useMemo(() => (showSeriesRows ? series : []), [series, showSeriesRows]);
 
   const axis1Series = useMemo(() => series.filter((entry) => entry.axis === 1), [series]);
   const axis2Series = useMemo(() => series.filter((entry) => entry.axis === 2), [series]);
@@ -285,8 +277,8 @@ export function AnalysisChart({
     ? plotXDomain.min + activeHover.ratioX * (plotXDomain.max - plotXDomain.min)
     : null;
   const hoverData = useMemo<HoverCardRow[] | null>(() => {
-    if (hoverXValue == null || !visibleSeries.length) return null;
-    return visibleSeries
+    if (hoverXValue == null || !series.length) return null;
+    return series
       .map<HoverCardRow | null>((entry) => {
         if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
         return {
@@ -300,7 +292,7 @@ export function AnalysisChart({
         };
       })
       .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [hoverXValue, visibleSeries]);
+  }, [hoverXValue, series]);
   const hoverBackdropData = useMemo<HoverCardRow[]>(() => {
     if (hoverXValue == null || !backdropProfiles.length) return [];
     return backdropProfiles
@@ -328,7 +320,7 @@ export function AnalysisChart({
   const hoverMarkers = useMemo(() => {
     if (hoverXValue == null || !activeHover) return [];
 
-    const seriesPoints = visibleSeries
+    const seriesPoints = series
       .map((entry) => {
         if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
         const yValue = interpolateY(entry.points, hoverXValue);
@@ -359,7 +351,7 @@ export function AnalysisChart({
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
     return [...backdropPoints, ...seriesPoints];
-  }, [activeHover, backdropProfiles, backdropYDomain, hoverXValue, plotSize.height, plotY2Domain, plotYDomain, visibleSeries]);
+  }, [activeHover, backdropProfiles, backdropYDomain, hoverXValue, plotSize.height, plotY2Domain, plotYDomain, series]);
 
   useEffect(() => {
     if (!onHoverXValueChange) return;

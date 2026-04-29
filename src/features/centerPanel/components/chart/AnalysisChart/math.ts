@@ -8,7 +8,6 @@ const HOVER_X_EMIT_EPSILON = 1e-4;
 export const MIN_VISIBLE_FRACTION = 0.04;
 const MIN_LOD_LEVEL_POINTS = 256;
 const LOD_TARGET_VISIBLE_POINTS_PER_PX = 3;
-const FINAL_PLOT_POINTS_PER_PX = 2;
 const plotLodLevelsCache = new WeakMap<{ x: number; y: number }[], { x: number; y: number }[][]>();
 
 export function defaultDomainFor(metric: ChartMetricId): AxisDomain {
@@ -126,8 +125,9 @@ export function compressPointsForPlot(
   xDomain: AxisDomain,
   plotWidth: number,
 ): { x: number; y: number }[] {
-  const targetMaxPoints = Math.max(128, Math.round(plotWidth * FINAL_PLOT_POINTS_PER_PX));
-  return compressPointsToTarget(points, xDomain, targetMaxPoints);
+  const bucketCount = Math.max(32, Math.round(plotWidth));
+  if (points.length <= 2 || plotWidth <= 0) return points;
+  return compressPointsToBucketCount(points, xDomain, bucketCount);
 }
 
 export function selectPointsForPlotLod(
@@ -207,9 +207,23 @@ function compressPointsToTarget(
 
   const bucketCount = Math.max(32, Math.ceil(targetMaxPoints / 4));
 
+  return compressPointsToBucketCount(points, xDomain, bucketCount);
+}
+
+function compressPointsToBucketCount(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  bucketCount: number,
+): { x: number; y: number }[] {
+  const span = xDomain.max - xDomain.min;
+  if (points.length <= 2 || span <= 0 || bucketCount <= 0) return points;
+
   const compressed: { x: number; y: number }[] = [];
   let activeBucket = -1;
-  let bucketPoints: { x: number; y: number }[] = [];
+  let firstPoint: { x: number; y: number } | null = null;
+  let lastPoint: { x: number; y: number } | null = null;
+  let minPoint: { x: number; y: number } | null = null;
+  let maxPoint: { x: number; y: number } | null = null;
 
   const pushPoint = (point: { x: number; y: number }) => {
     const previous = compressed[compressed.length - 1];
@@ -224,26 +238,22 @@ function compressPointsToTarget(
   };
 
   const flushBucket = () => {
-    if (bucketPoints.length === 0) return;
-
-    let minPoint = bucketPoints[0];
-    let maxPoint = bucketPoints[0];
-    for (const point of bucketPoints) {
-      if (point.y < minPoint.y) minPoint = point;
-      if (point.y > maxPoint.y) maxPoint = point;
-    }
+    if (!firstPoint || !lastPoint || !minPoint || !maxPoint) return;
 
     const ordered = [
-      bucketPoints[0],
+      firstPoint,
       minPoint,
       maxPoint,
-      bucketPoints[bucketPoints.length - 1],
+      lastPoint,
     ]
       .filter((point, index, array) => array.indexOf(point) === index)
       .sort((left, right) => left.x - right.x);
 
     for (const point of ordered) pushPoint(point);
-    bucketPoints = [];
+    firstPoint = null;
+    lastPoint = null;
+    minPoint = null;
+    maxPoint = null;
   };
 
   for (const point of points) {
@@ -252,8 +262,16 @@ function compressPointsToTarget(
     if (nextBucket !== activeBucket) {
       flushBucket();
       activeBucket = nextBucket;
+      firstPoint = point;
+      lastPoint = point;
+      minPoint = point;
+      maxPoint = point;
+      continue;
     }
-    bucketPoints.push(point);
+
+    lastPoint = point;
+    if (!minPoint || point.y < minPoint.y) minPoint = point;
+    if (!maxPoint || point.y > maxPoint.y) maxPoint = point;
   }
 
   flushBucket();
