@@ -353,9 +353,12 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // (low lat, earlier crossover) and Dunkirk (high lat, later crossover)
     // with the same continuous function instead of a magic-number zoom.
     let upgradePending = null; // in-flight IGN sub-tile fetches for background re-cache
+    let upgradeSourceHint = '';
     let ignHadSomeData = false; // true when MNS returned partial/full coverage
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
+    const useFranceMNS = shouldUseIGN(z, tileCenterLat);
+    const useFranceHighres = useFranceMNS || shouldUseIGNHighres(z, tileCenterLat);
 
     // ── Resolve France polygon classification UP-FRONT.
     // tileOverlapsFrance() is a generous bbox check that ALSO covers most of
@@ -366,7 +369,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // is what gates both branches now.
     let franceClass = 'outside';
     let tileCenterInFrancePoly = false;
-    if (inFrance && shouldUseIGN(z, tileCenterLat)) {
+    if (inFrance && useFranceHighres) {
       if (await ensureFrancePoly()) {
         franceClass = classifyDemTile(z, x, y);
         // classifyDemTile() promotes any z≥12 tile that overlaps the France
@@ -473,12 +476,13 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // tileIsInFrance — to gate IGN. Tiles deep inside CH (e.g. Sion) bbox-overlap
     // FRANCE_BOUNDS but have zero IGN data; running IGN there only burns the
     // request slot pool serially while Swiss STAC starves and times out.
-    if (!pngBlob && tileTrulyTouchesFrance) {
+    if (!pngBlob && tileTrulyTouchesFrance && useFranceMNS) {
       const ignResult = ignResultPromise
         ? await ignResultPromise
         : await buildIGNTile(z, x, y, franceClass);
       if (ignResult) {
         upgradePending = ignResult.pendingFetches;
+        if (ignResult.pendingFetches?.length) upgradeSourceHint = 'ign';
         if (ignResult.elevations) {
           // MNS returned actual elevation data (partial or full coverage)
           ignHadSomeData = true;
@@ -509,7 +513,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
     // HIGHRES covers all of France at ~5 m resolution — 6× better than
     // Mapbox 30 m. Only fires when MNS had no data; when MNS returned
     // partial data the composite path above already handled it.
-    if (!pngBlob && tileTrulyTouchesFrance && !ignHadSomeData) {
+    if (!pngBlob && tileTrulyTouchesFrance && useFranceHighres && !ignHadSomeData) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
         if (highresResult.elevations) {
@@ -528,6 +532,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         }
         // Merge pending fetches from HIGHRES (if any) with MNS pending
         if (highresResult.pendingFetches) {
+          upgradeSourceHint = 'ign-highres';
           upgradePending = upgradePending
             ? [...upgradePending, ...highresResult.pendingFetches]
             : highresResult.pendingFetches;
@@ -614,7 +619,7 @@ async function handleDemRequest(_request, z, x, y, _depth) {
         ? (tileIsInFrance ? 'ign-pending-highzoom' : 'swiss-pending-highzoom')
         : ((tileIsInFrance || inSwitzerland) ? 'pipeline-error' : 'no-coverage');
       if (upgradePending && upgradePending.length) {
-        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
+        scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint);
       }
       negCache.put(cacheKey, new Response(null, {
         status: 204,
@@ -630,16 +635,30 @@ async function handleDemRequest(_request, z, x, y, _depth) {
       return noTileResponse(reason);
     }
 
-    return finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, tileIsInFrance || inSwitzerland);
+    return finalize(
+      cache,
+      cacheKey,
+      t0,
+      z,
+      x,
+      y,
+      pngBlob,
+      demSource,
+      upgradePending,
+      tileIsInFrance || inSwitzerland,
+      upgradeSourceHint,
+    );
   } catch (err) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth);
-    if (fb) return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland);
+    if (fb) {
+      return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland, '');
+    }
     return noTileResponse('error');
   }
 }
 
-async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion) {
+async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgradePending, inLiDARRegion, upgradeSourceHint) {
   // Short cache (15 s) for AWS/overzoom fallback tiles inside any LiDAR
   // region (France or Switzerland) at z≥13. These are transient stand-ins
   // while the exact tile finishes building; longer caching masks the upgrade.
@@ -657,7 +676,7 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
   // with a full-quality IGN build. Next time Mapbox requests this tile
   // (natural tile-cache cycling while panning/zooming) it gets best quality.
   if (upgradePending && upgradePending.length) {
-    scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending);
+    scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint || demSource);
   }
   return response;
 }
@@ -681,7 +700,24 @@ function notifyDemTileCacheUpdated(z, x, y, source) {
 // Coalesce concurrent upgrade jobs for the same tile.
 const pendingUpgrades = new Set();
 
-function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
+async function materializeUpgradeResult(result, z, x, y, compositeSource) {
+  if (!result?.elevations) return null;
+  if (result.blob) {
+    return { blob: result.blob, source: result.source || compositeSource };
+  }
+
+  await acquireComposite();
+  try {
+    return {
+      blob: await compositeIGNMapbox(result.elevations, result.coverage, z, x, y),
+      source: compositeSource,
+    };
+  } finally {
+    releaseComposite();
+  }
+}
+
+function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredSource) {
   const key = `${z}/${x}/${y}`;
   if (pendingUpgrades.has(key)) return;
   pendingUpgrades.add(key);
@@ -702,27 +738,28 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches) {
       // cached-null with TTL). Rebuild — second pass is near-free.
       const tileClass = classifyDemTile(z, x, y);
       if (tileClass === 'outside') return;
-      const ignResult = await buildIGNTile(z, x, y, tileClass);
-      if (!ignResult) return;
+      const preferHighres = typeof preferredSource === 'string'
+        && preferredSource.startsWith('ign-highres');
+      const rebuilders = preferHighres
+        ? [
+            () => buildIGNFallbackTile(z, x, y).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite')),
+            () => buildIGNTile(z, x, y, tileClass).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite')),
+          ]
+        : [
+            () => buildIGNTile(z, x, y, tileClass).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite')),
+            () => buildIGNFallbackTile(z, x, y).then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite')),
+          ];
 
-      let upgradedBlob = ignResult.blob;
-      let upgradedSource = ignResult.source || 'ign';
-      if (!upgradedBlob) {
-        await acquireComposite();
-        try {
-          upgradedBlob = await compositeIGNMapbox(
-            ignResult.elevations, ignResult.coverage, z, x, y,
-          );
-        } finally {
-          releaseComposite();
-        }
-        upgradedSource = 'ign-composite';
+      let upgraded = null;
+      for (const rebuild of rebuilders) {
+        upgraded = await rebuild();
+        if (upgraded?.blob) break;
       }
-      if (!upgradedBlob) return;
+      if (!upgraded?.blob) return;
 
-      await cache.put(cacheKey, buildDemResponse(upgradedBlob, upgradedSource + '+upgrade'));
-      notifyDemTileCacheUpdated(z, x, y, upgradedSource);
-      if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgradedSource}`);
+      await cache.put(cacheKey, buildDemResponse(upgraded.blob, upgraded.source + '+upgrade'));
+      notifyDemTileCacheUpdated(z, x, y, upgraded.source);
+      if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgraded.source}`);
     } catch (e) {
       if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);
     } finally {

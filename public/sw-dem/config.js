@@ -49,20 +49,30 @@ const DESPIKE_THRESHOLD_M = 80;
 const IGN_DEM_MINZOOM = 4;
 const IGN_DEM_MAXZOOM = 17;
 
-// Zoom gate for running the IGN composite pipeline. Pixel-density based: we
-// only invest the IGN fetch + composite cost when the rendered pixel is
-// meaningfully smaller than what Mapbox Terrain-RGB already delivers.
+// France HD engage gates. We open the 5 m HIGHRES fallback one zoom earlier
+// than the full MNS LiDAR path so mountainous terrain sharpens sooner without
+// paying the full MNS fan-out as aggressively across overview zooms.
 //
-// Threshold = 28 m/px. This keeps LiDAR alive one slight dezoom longer
-// (z12 around the Alps / much of France) without reopening the more
-// aggressive z12 coverage we saw with the broader experiment.
-const IGN_ENGAGE_MPP = 28;
-function shouldUseIGN(mercZ, lat) {
-  if (mercZ < IGN_DEM_MINZOOM) return false;
+// HIGHRES threshold = 56 m/px: enables the France HD fallback around z11.
+// MNS threshold = 36 m/px: keeps true LiDAR easy to reach at z12 across
+// France while avoiding a blanket z11 MNS burst.
+const IGN_HIGHRES_ENGAGE_MPP = 56;
+const IGN_MNS_ENGAGE_MPP = 36;
+
+function mercatorMetersPerPixel(mercZ, lat) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
   // Earth circumference at equator in metres
-  const mppAtZ = (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
-  return mppAtZ < IGN_ENGAGE_MPP;
+  return (40075016.686 * Math.abs(cosLat)) / (256 * (1 << mercZ));
+}
+
+function shouldUseIGNHighres(mercZ, lat) {
+  if (mercZ < IGN_DEM_FALLBACK_MINZOOM) return false;
+  return mercatorMetersPerPixel(mercZ, lat) < IGN_HIGHRES_ENGAGE_MPP;
+}
+
+function shouldUseIGN(mercZ, lat) {
+  if (mercZ < IGN_DEM_MINZOOM) return false;
+  return mercatorMetersPerPixel(mercZ, lat) < IGN_MNS_ENGAGE_MPP;
 }
 
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
