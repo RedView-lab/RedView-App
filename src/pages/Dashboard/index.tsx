@@ -18,6 +18,7 @@ import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
+import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
@@ -30,6 +31,7 @@ import {
   IMMERSIVE_EASING,
   IMMERSIVE_TRANSITION_MS,
   PANEL_PADDING,
+  RIGHT_PANEL_COLLAPSED_RAIL_WIDTH,
 } from './constants';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
@@ -86,6 +88,7 @@ export default function Dashboard({
     isMapFocusMode,
     leftPanelOpen,
     panelWidth,
+    isRightPanelCollapsed,
     leftPanelWidth,
     isResizing,
     isLeftResizing,
@@ -98,6 +101,7 @@ export default function Dashboard({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    restoreRightPanel,
   } = useDashboardChrome({
     activeProjectInitial,
     updatePersistedDashboard,
@@ -246,9 +250,16 @@ export default function Dashboard({
       .filter((status): status is OverlayStatusSnapshot => Boolean(status));
   }, [mapStatus, overlayStatuses]);
 
+  const rightDockWidth = isMapFocusMode
+    ? 0
+    : isRightPanelCollapsed
+      ? RIGHT_PANEL_COLLAPSED_RAIL_WIDTH
+      : panelWidth + PANEL_PADDING * 2;
+  const rightDockOffset = isMapFocusMode ? PANEL_PADDING : rightDockWidth + PANEL_PADDING;
+
   const statusDockRight = isMapFocusMode
     ? PANEL_PADDING
-    : panelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+    : rightDockOffset;
   const statusDockLeft = isMapFocusMode && layout.centerToolbarVisible
     ? layout.centerToolbarLeft + layout.centerToolbarWidth / 2
     : undefined;
@@ -265,13 +276,9 @@ export default function Dashboard({
     top: 0,
     right: 0,
     bottom: 0,
-    width: panelWidth + PANEL_PADDING * 2,
+    width: rightDockWidth,
     zIndex: 25,
-    padding: PANEL_PADDING,
     boxSizing: 'border-box',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: PANEL_PADDING,
     overflow: 'hidden',
     opacity: isMapFocusMode ? 0 : 1,
     transform: isMapFocusMode
@@ -279,8 +286,57 @@ export default function Dashboard({
       : 'translate3d(0, 0, 0) scale(1)',
     filter: isMapFocusMode ? 'blur(10px) saturate(0.88)' : 'blur(0px) saturate(1)',
     pointerEvents: isMapFocusMode ? 'none' : 'auto',
+    transition: `width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
+    willChange: 'width, transform, opacity, filter',
+  };
+
+  const rightPanelContentStyle: CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: panelWidth + PANEL_PADDING * 2,
+    padding: PANEL_PADDING,
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: PANEL_PADDING,
+    opacity: isRightPanelCollapsed ? 0 : 1,
+    transform: isRightPanelCollapsed
+      ? 'translate3d(calc(100% + 16px), 0, 0) scale(0.985)'
+      : 'translate3d(0, 0, 0) scale(1)',
+    filter: isRightPanelCollapsed ? 'blur(8px) saturate(0.88)' : 'blur(0px) saturate(1)',
+    pointerEvents: isRightPanelCollapsed ? 'none' : 'auto',
     transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease`,
     willChange: 'transform, opacity, filter',
+  };
+
+  const rightPanelRailStyle: CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    right: 6,
+    transform: isRightPanelCollapsed
+      ? 'translate3d(0, -50%, 0)'
+      : 'translate3d(18px, -50%, 0)',
+    opacity: isRightPanelCollapsed ? 1 : 0,
+    pointerEvents: isRightPanelCollapsed ? 'auto' : 'none',
+    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    willChange: 'transform, opacity',
+  };
+
+  const rightPanelRailButtonStyle: CSSProperties = {
+    width: 28,
+    height: 56,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderRadius: 8,
+    background: 'rgba(17, 17, 19, 0.9)',
+    color: '#ffffff',
+    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
+    cursor: 'pointer',
+    padding: 0,
   };
 
   const leftPanelStyle: CSSProperties = {
@@ -308,9 +364,7 @@ export default function Dashboard({
   const mapViewportControlsStyle: CSSProperties = {
     position: 'absolute',
     top: PANEL_PADDING,
-    right: isMapFocusMode
-      ? PANEL_PADDING
-      : panelWidth + PANEL_PADDING * 2 + PANEL_PADDING,
+    right: rightDockOffset,
     zIndex: 30,
     transition: `right ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
@@ -406,7 +460,7 @@ export default function Dashboard({
                   borderRadius={8}
                 />
               )}
-              {mapLoaded && !isMapFocusMode && (
+              {mapLoaded && !isMapFocusMode && !isRightPanelCollapsed && (
                 <MapBlurMirror
                   map={mapInstance}
                   top={PANEL_PADDING}
@@ -527,24 +581,36 @@ export default function Dashboard({
                       </AnalysisFlyoverProvider>
 
                       <div style={rightPanelStyle}>
-                        <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>
-                          <ControlPanelContainer
-                            map={mapInstance}
-                            isMapLoaded={mapLoaded}
-                            onBasemapChange={setSelectedBasemapId}
-                            onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
-                            onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
-                            onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
-                            onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
-                            lidarDownloadModeActive={lidarModeEnabled}
-                            onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
-                            width={panelWidth}
-                            onResizeStart={handleResizeStart}
-                            isResizing={isResizing}
-                          />
+                        <div style={rightPanelContentStyle}>
+                          <div ref={rightPrimaryPanelHostRef} style={rightPrimaryPanelStyle}>
+                            <ControlPanelContainer
+                              map={mapInstance}
+                              isMapLoaded={mapLoaded}
+                              onBasemapChange={setSelectedBasemapId}
+                              onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
+                              onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
+                              onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
+                              onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
+                              lidarDownloadModeActive={lidarModeEnabled}
+                              onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
+                              width={panelWidth}
+                              onResizeStart={handleResizeStart}
+                              isResizing={isResizing}
+                            />
+                          </div>
+                          <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
+                            <ExporterPanel width={panelWidth} />
+                          </div>
                         </div>
-                        <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
-                          <ExporterPanel width={panelWidth} />
+                        <div style={rightPanelRailStyle}>
+                          <button
+                            type="button"
+                            aria-label="Rouvrir le panneau de droite"
+                            onClick={restoreRightPanel}
+                            style={rightPanelRailButtonStyle}
+                          >
+                            <IconArrowLeft size={18} />
+                          </button>
                         </div>
                       </div>
                       </PredictionProvider>

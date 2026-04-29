@@ -13,6 +13,7 @@ import {
   PANEL_WIDTH_KEY,
   PANEL_PADDING,
   PANEL_WIDTH_MIN_FALLBACK,
+  RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD,
 } from './constants';
 import { getDashboardLayout } from './layout';
 import type { DashboardPersistedMutator } from './useDashboardProjectState';
@@ -39,6 +40,7 @@ export function useDashboardChrome({
     () => loadViewport(),
   );
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
+  const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const leftPanelOpen = !isMapFocusMode;
   const [leftPanelWidth, setLeftPanelWidth] = useState<number>(() =>
@@ -56,6 +58,7 @@ export function useDashboardChrome({
 
   const rightPrimaryPanelHostRef = useRef<HTMLDivElement | null>(null);
   const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
+  const lastExpandedPanelWidthRef = useRef(panelWidth);
   const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
 
   useEffect(() => {
@@ -87,9 +90,15 @@ export function useDashboardChrome({
           ? null
           : readStoredCenterPanelHeight(),
     );
+    setIsRightPanelCollapsed(false);
     setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
     setProjectMapViewport(dashboard?.mapViewport ?? loadViewport());
   }, [activeProjectInitial]);
+
+  useEffect(() => {
+    if (isRightPanelCollapsed) return;
+    lastExpandedPanelWidthRef.current = panelWidth;
+  }, [isRightPanelCollapsed, panelWidth]);
 
   useEffect(() => {
     const node = exporterPanelHostRef.current;
@@ -198,6 +207,12 @@ export function useDashboardChrome({
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = layout.scaledViewportWidth - nextEvent.clientX / layout.appScale - PANEL_PADDING;
+        if (raw <= panelMinWidth - RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD) {
+          setIsRightPanelCollapsed(true);
+          return;
+        }
+
+        setIsRightPanelCollapsed(false);
         setPanelWidth(clampPanelWidth(raw, panelMinWidth));
       };
       const onUp = () => {
@@ -211,6 +226,13 @@ export function useDashboardChrome({
     },
     [layout.appScale, layout.scaledViewportWidth, panelMinWidth],
   );
+
+  const restoreRightPanel = useCallback(() => {
+    const nextWidth = clampPanelWidth(lastExpandedPanelWidthRef.current, panelMinWidth);
+    lastExpandedPanelWidthRef.current = nextWidth;
+    setPanelWidth(nextWidth);
+    setIsRightPanelCollapsed(false);
+  }, [panelMinWidth]);
 
   const handleLeftResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -262,6 +284,7 @@ export function useDashboardChrome({
     isMapFocusMode,
     leftPanelOpen,
     panelWidth,
+    isRightPanelCollapsed,
     leftPanelWidth,
     isResizing,
     isLeftResizing,
@@ -274,5 +297,6 @@ export function useDashboardChrome({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    restoreRightPanel,
   };
 }

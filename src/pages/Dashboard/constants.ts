@@ -4,6 +4,8 @@ export const PANEL_WIDTH_MIN_FALLBACK = LEFT_PANEL_WIDTH_MIN;
 export const PANEL_WIDTH_MAX = 560;
 export const PANEL_WIDTH_DEFAULT = 300;
 export const PANEL_PADDING = 12;
+export const RIGHT_PANEL_COLLAPSE_DRAG_THRESHOLD = 64;
+export const RIGHT_PANEL_COLLAPSED_RAIL_WIDTH = 40;
 export const CENTER_PANEL_HEIGHT_KEY = 'rvc-center-panel-height';
 
 export const LEFT_PANEL_WIDTH_KEY = 'rvi-panel-width';
