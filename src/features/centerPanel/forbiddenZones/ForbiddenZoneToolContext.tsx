@@ -273,7 +273,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       window.cancelAnimationFrame(frame);
       drawControlElementRef.current = null;
       drawRef.current = null;
-      map.removeControl(draw);
+      try {
+        map.removeControl(draw);
+      } catch {
+        // Map teardown can already detach Draw before this effect cleans up.
+      }
     };
     // `armed` intentionally excluded: toggling the tool must NOT destroy /
     // recreate the Draw control — that would reset its mode to simple_select

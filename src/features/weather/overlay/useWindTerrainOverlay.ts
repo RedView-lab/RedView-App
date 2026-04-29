@@ -231,6 +231,17 @@ export function useWindTerrainOverlay(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
+    let cancelled = false;
+
+    const canMutateStyle = () => {
+      if (cancelled) return false;
+      try {
+        return map.isStyleLoaded() && Boolean(map.getStyle());
+      } catch {
+        return false;
+      }
+    };
+
     const hide = () => {
       try {
         if (map.getLayer(LAYER_ID)) map.setLayoutProperty(LAYER_ID, 'visibility', 'none');
@@ -239,30 +250,36 @@ export function useWindTerrainOverlay(
       }
     };
 
-    const ensureLayer = (url: string, coords: ImageCoords) => {
-      if (!map.getSource(SOURCE_ID)) {
-        map.addSource(SOURCE_ID, {
-          type: 'image',
-          url,
-          coordinates: coords,
-        } as never);
+    const ensureLayer = (url: string, coords: ImageCoords): boolean => {
+      if (!canMutateStyle()) return false;
+      try {
+        if (!map.getSource(SOURCE_ID)) {
+          map.addSource(SOURCE_ID, {
+            type: 'image',
+            url,
+            coordinates: coords,
+          } as never);
+        }
+        if (!map.getLayer(LAYER_ID)) {
+          map.addLayer({
+            id: LAYER_ID,
+            type: 'raster',
+            source: SOURCE_ID,
+            slot: 'top',
+            paint: {
+              'raster-opacity': BASE_OPACITY,
+              'raster-fade-duration': 0,
+              'raster-resampling': 'linear',
+            },
+          } as never);
+        }
+        const source = map.getSource(SOURCE_ID) as ImageSource | undefined;
+        source?.updateImage({ url, coordinates: coords });
+        map.setLayoutProperty(LAYER_ID, 'visibility', 'visible');
+        return true;
+      } catch {
+        return false;
       }
-      if (!map.getLayer(LAYER_ID)) {
-        map.addLayer({
-          id: LAYER_ID,
-          type: 'raster',
-          source: SOURCE_ID,
-          slot: 'top',
-          paint: {
-            'raster-opacity': BASE_OPACITY,
-            'raster-fade-duration': 0,
-            'raster-resampling': 'linear',
-          },
-        } as never);
-      }
-      const source = map.getSource(SOURCE_ID) as ImageSource | undefined;
-      source?.updateImage({ url, coordinates: coords });
-      map.setLayoutProperty(LAYER_ID, 'visibility', 'visible');
     };
 
     const renderFromData = async (dataset: WindOverlayDataset | null) => {
@@ -270,19 +287,27 @@ export function useWindTerrainOverlay(
         hide();
         return;
       }
+      if (!canMutateStyle()) return;
 
       const coords = imageCoords(dataset.grid.bounds);
       const size = renderSize(map);
       const signature = [dataset.selectionKey, dataset.fetchedAt, `${size.width}x${size.height}`].join('|');
       const rendered = renderedRef.current;
       if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
-        ensureLayer(rendered.url, rendered.coords);
+        if (!ensureLayer(rendered.url, rendered.coords)) return;
         return;
       }
 
       const canvas = renderWindOverlayCanvas(dataset.grid, dataset.points, size.width, size.height);
       const url = await canvasToObjectUrl(canvas);
-      ensureLayer(url, coords);
+      if (!canMutateStyle()) {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+        return;
+      }
+      if (!ensureLayer(url, coords)) {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
+        return;
+      }
       if (rendered?.url.startsWith('blob:')) {
         window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
       }
@@ -290,6 +315,8 @@ export function useWindTerrainOverlay(
     };
 
     const refresh = async (reason: RefreshReason) => {
+      if (!canMutateStyle()) return;
+
       if (!stateRef.current.enabled) {
         hide();
         return;
@@ -368,6 +395,7 @@ export function useWindTerrainOverlay(
     const onMoveEnd = () => scheduleRefresh('normal');
     const onZoomEnd = () => scheduleRefresh('normal');
     const onStyleLoad = () => {
+      if (!canMutateStyle()) return;
       const rendered = renderedRef.current;
       if (!stateRef.current.enabled) {
         hide();
@@ -383,6 +411,8 @@ export function useWindTerrainOverlay(
     map.on('style.load', onStyleLoad);
 
     return () => {
+      cancelled = true;
+      generationRef.current += 1;
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onZoomEnd);
       map.off('style.load', onStyleLoad);
