@@ -64,12 +64,15 @@ import type {
 import {
   BLOB_REVOKE_DELAY_MS,
   BOUNDS_OVERSHOOT,
+  canMutateShadowStyle,
   chooseDemZoom,
   chooseGridSize,
+  ensureShadowSourceAndLayer,
   effectiveOverlayOpacity,
-  LAYER_ID,
   preloadBlobUrl,
+  removeShadowSourceAndLayer,
   SAMPLE_DEBOUNCE_MS,
+  setShadowLayerOpacity,
   shadowVisibility,
   SOURCE_ID,
   withOvershoot,
@@ -156,12 +159,7 @@ export function useShadowImage(
     if (!map || !isMapLoaded) return;
 
     const setLayerOpacity = (opacity: number) => {
-      if (!map.getLayer(LAYER_ID)) return;
-      try {
-        map.setPaintProperty(LAYER_ID, 'raster-opacity', Math.max(0, Math.min(1, opacity)));
-      } catch {
-        /* no-op */
-      }
+      setShadowLayerOpacity(map, opacity);
     };
 
     const applyVisibleOpacity = () => {
@@ -170,46 +168,11 @@ export function useShadowImage(
     };
 
     const ensureSourceAndLayer = (initialBlobUrl: string, coords: [[number, number], [number, number], [number, number], [number, number]]) => {
-      if (!map.getSource(SOURCE_ID)) {
-        try {
-          map.addSource(SOURCE_ID, {
-            type: 'image',
-            url: initialBlobUrl,
-            coordinates: coords,
-          } as never);
-        } catch (err) {
-          console.warn('[shadow] addSource failed', err);
-          return;
-        }
-      }
-      if (!map.getLayer(LAYER_ID)) {
-        try {
-          map.addLayer({
-            id: LAYER_ID,
-            type: 'raster',
-            source: SOURCE_ID,
-            // Standard style requires an explicit slot, otherwise the layer
-            // lands under the satellite imagery and stays invisible.
-            slot: 'top',
-            paint: {
-              'raster-opacity': effectiveOverlayOpacity(
-                optsRef.current.enabled,
-                optsRef.current.opacity,
-                optsRef.current.sunAltitudeDeg,
-              ),
-              'raster-fade-duration': 0,
-              'raster-resampling': 'linear',
-            },
-          } as never);
-        } catch (err) {
-          console.warn('[shadow] addLayer failed', err);
-        }
-      }
+      ensureShadowSourceAndLayer(map, initialBlobUrl, coords, optsRef.current);
     };
 
     const removeSourceAndLayer = (clearSample: boolean) => {
-      try { if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID); } catch { /* */ }
-      try { if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID); } catch { /* */ }
+      removeShadowSourceAndLayer(map);
       if (clearSample) {
         sampledRef.current = false;
         sampledBoundsRef.current = null;
@@ -357,14 +320,7 @@ export function useShadowImage(
       }
     };
 
-    const canMutateStyle = () => {
-      if (cancelled) return false;
-      try {
-        return map.isStyleLoaded() && Boolean(map.getStyle());
-      } catch {
-        return false;
-      }
-    };
+    const canMutateStyle = () => !cancelled && canMutateShadowStyle(map);
 
     const requestCompute = (bounds: BoundsTuple, sampleGen: number) => {
       const job: ComputeJob = {

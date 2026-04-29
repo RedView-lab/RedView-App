@@ -149,3 +149,66 @@ export async function preloadBlobUrl(url: string): Promise<void> {
     /* ignore */
   }
 }
+
+export function setShadowLayerOpacity(map: MapboxMap, opacity: number): void {
+  if (!map.getLayer(LAYER_ID)) return;
+  try {
+    map.setPaintProperty(LAYER_ID, 'raster-opacity', Math.max(0, Math.min(1, opacity)));
+  } catch {
+    /* no-op */
+  }
+}
+
+export function ensureShadowSourceAndLayer(
+  map: MapboxMap,
+  initialBlobUrl: string,
+  coords: [[number, number], [number, number], [number, number], [number, number]],
+  opts: UseShadowImageOptions,
+): void {
+  if (!map.getSource(SOURCE_ID)) {
+    try {
+      map.addSource(SOURCE_ID, {
+        type: 'image',
+        url: initialBlobUrl,
+        coordinates: coords,
+      } as never);
+    } catch (err) {
+      console.warn('[shadow] addSource failed', err);
+      return;
+    }
+  }
+  if (!map.getLayer(LAYER_ID)) {
+    try {
+      map.addLayer({
+        id: LAYER_ID,
+        type: 'raster',
+        source: SOURCE_ID,
+        slot: 'top',
+        paint: {
+          'raster-opacity': effectiveOverlayOpacity(
+            opts.enabled,
+            opts.opacity,
+            opts.sunAltitudeDeg,
+          ),
+          'raster-fade-duration': 0,
+          'raster-resampling': 'linear',
+        },
+      } as never);
+    } catch (err) {
+      console.warn('[shadow] addLayer failed', err);
+    }
+  }
+}
+
+export function removeShadowSourceAndLayer(map: MapboxMap): void {
+  try { if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID); } catch { /* */ }
+  try { if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID); } catch { /* */ }
+}
+
+export function canMutateShadowStyle(map: MapboxMap): boolean {
+  try {
+    return map.isStyleLoaded() && Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}

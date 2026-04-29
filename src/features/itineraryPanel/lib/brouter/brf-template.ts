@@ -30,68 +30,10 @@
  * lines are interpolated. This keeps the surface tiny and lets us audit
  * the generated profile by eye.
  */
-import type { PrioritiesState, RoadTypesState, RoadPreference } from '../../types';
-import type { ExpertProfileState } from '../../expert/types';
-import { ALL_PARAMETERS } from '../../expert/parameters';
+import type { BrfBuildInputs } from './brf-template/types';
+import { resolveBrfProfileValues } from './brf-template/values';
 
-/* ------------------------------------------------------------------ */
-/* RoadPreference → cost multiplier                                    */
-/* ------------------------------------------------------------------ */
-
-/**
- * Translate a panel preference into a BRouter cost factor.
- *
- * BRouter's costfactor space is log-scale-ish: 1 = neutral, 1.5 = mild
- * penalty, 5 = strong, 100 = severe. The 10000 sentinel means "edge
- * removed entirely from the graph" — but using it as a multiplier
- * triggers two failure modes: (a) the start/end can't snap to a way
- * because every nearby segment becomes infinite, (b) BRouter explodes
- * its search frontier in dense areas trying to escape the exclusion.
- *
- * IMPORTANT: every factor MUST stay >= 1.0. The stock trekking baseline
- * (and our basecost cascade) yields cost-per-meter >= 1 for every
- * routable surface (cycleroutes are 1.0, the global floor). If we
- * multiply by a factor < 1, the per-meter cost drops below 1, which
- * makes BRouter's A* heuristic (= remaining airdistance × 1) *over*-
- * estimate the true cost. The pass-2 search still completes, but the
- * final "re-tracking" pass (RoutingEngine.searchRoutedTrack, line
- * ~1800) fails to follow the guide track and the upstream returns
- * `error re-tracking track` (HTTP 400). See issue
- * https://github.com/abrensch/brouter/issues/77 for the same class of
- * bug triggered by negative turn-cost.
- *
- * So "prefer" is neutral (= tolerate) — differentiation comes from
- * penalising the *other* categories via avoid / forbid. In practice
- * "prefer road, forbid gravel" still routes overwhelmingly on roads.
- *
- *   - prefer   → 1.0   (was 0.5 — caused HTTP 400 on prefer-road combos)
- *   - tolerate → 1.0
- *   - avoid    → 4.0
- *   - forbid   → 50    (any 100 m forbidden segment costs as much as
- *                       5 km of normal road; almost always avoided)
- */
-function prefToFactor(p: RoadPreference): number {
-  switch (p) {
-    case 'prefer':
-      return 1.0;
-    case 'tolerate':
-      return 1.0;
-    case 'avoid':
-      return 4.0;
-    case 'forbid':
-      return 50;
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/* Inputs                                                              */
-/* ------------------------------------------------------------------ */
-
-export interface BrfBuildInputs {
-  priorities: PrioritiesState;
-  roadTypes: RoadTypesState;
-  expert?: ExpertProfileState | null;
-}
+export type { BrfBuildInputs } from './brf-template/types';
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -106,239 +48,57 @@ function brfNum(v: number, digits = 4): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(digits).replace(/\.?0+$/, '');
 }
 
-/**
- * Pick a value from the expert state when expert mode is on, otherwise
- * fall back to the parameter's default. Mirrors `expertStateToOverrides`
- * but returns the typed value directly (ready to interpolate in BRF).
- */
-function expertValue<T>(
-  expert: ExpertProfileState | null | undefined,
-  id: string,
-  fallback: T,
-): T {
-  if (!expert || !expert.enabled) return fallback;
-  const v = expert.values[id];
-  if (v === undefined || v === null) return fallback;
-  return v as unknown as T;
-}
-
-function defaultFor(id: string): unknown {
-  const p = ALL_PARAMETERS.find((p) => p.id === id);
-  return p?.default;
-}
-
 /* ------------------------------------------------------------------ */
 /* Main builder                                                        */
 /* ------------------------------------------------------------------ */
 
 export function buildBrfProfile(inputs: BrfBuildInputs): string {
-  const { priorities, roadTypes, expert } = inputs;
-
-  // ── Per-category cost multipliers ───────────────────────────────
-  // To preserve "prefer X ≠ tolerate X" semantics WITHOUT introducing
-  // sub-1.0 cost factors (which break BRouter's re-tracking — see
-  // prefToFactor docs), we bump every *tolerate* category up to 1.5
-  // when at least one other category is set to "prefer". The preferred
-  // category itself stays at 1.0 → relatively cheaper.
-  const cats: Array<keyof Pick<RoadTypesState,
-    'road' | 'gravel' | 'singletrack' | 'offroad' | 'bikeLanes' | 'majorRoads'>> = [
-    'road', 'gravel', 'singletrack', 'offroad', 'bikeLanes', 'majorRoads',
-  ];
-  const anyPrefer = cats.some((c) => roadTypes[c] === 'prefer');
-  const factorFor = (p: RoadPreference): number => {
-    if (p === 'tolerate' && anyPrefer) return 1.5;
-    return prefToFactor(p);
-  };
-  const f_road = factorFor(roadTypes.road);
-  const f_gravel = factorFor(roadTypes.gravel);
-  const f_singletrack = factorFor(roadTypes.singletrack);
-  const f_offroad = factorFor(roadTypes.offroad);
-  const f_bikelane = factorFor(roadTypes.bikeLanes);
-  const f_major = factorFor(roadTypes.majorRoads);
-  const allowFerries = roadTypes.ferry !== 'forbid';
-  const allowSteps = roadTypes.bikeLanes !== 'forbid' && f_singletrack < 10000;
-
-  // ─── Bipolar slider semantics ─────────────────────────────────────
-  // Every priority slider is bipolar around 50:
-  //   0   = strong "minus" of the labelled metric
-  //   50  = neutral / stock-trekking baseline
-  //   100 = strong "plus" of the labelled metric
-  //
-  // Helper: signed distance from 50 in [-1, +1].
-  const sign = (v: number): number =>
-    Math.max(-1, Math.min(1, (Math.max(0, Math.min(100, v)) - 50) / 50));
-
-  const sElev = sign(priorities.elevation);    // -1 = flat, +1 = hilly
-  const sDist = sign(priorities.distance);     // -1 = shortest, +1 = scenic
-  const sDur = sign(priorities.duration);      // -1 = scenic OK, +1 = fastest
-  const sTranq = sign(priorities.tranquility); // -1 = traffic OK, +1 = quiet
-
-  // ─── Elevation (Dénivelé) ─────────────────────────────────────────
-  // Negative side (sElev < 0): "max-flat" — big uphillcost detours.
-  //   sElev=-1 → uphillcost=300, downhillcost=0, cutoff loose
-  //   sElev= 0 → uphillcost=60                  (stock baseline)
-  // Positive side (sElev > 0): climb-seeker.
-  //   sElev<=0.4 (slider <=70): mild climb-friendly bias.
-  //   sElev>0.4  (slider > 70): "climbing mode" ported from
-  //     earth-explorer-3d (`server/profiles/profileGenerator.ts`):
-  //       - uphillcost=0, downhillcost=0 (no penalty at all on D+)
-  //       - low elevationpenaltybuffer/elevationmaxbuffer + 100% reduce
-  //       - lowered up/downhillcutoff (1.5 → 0.5) so the engine "sees"
-  //         small bumps as relief
-  //       - flat-road costfactor inflated via `climbMul` (1.0 → 2.5):
-  //         every paved/major road becomes more expensive, so the
-  //         engine prefers the same routes via cycleways/tracks/passes.
-  //   Combined with multi-alternative best-of-N (see `client.ts`),
-  //   this is the system that we ship — no Overpass discovery needed.
-  let upCost: number;
-  let downCost: number;
-  let upCutoff: number;
-  let downCutoff: number;
-  let elevPenaltyBuffer: number;
-  let elevMaxBuffer: number;
-  let elevBufferReduce: number;
-  // climbMul: applied as a road-cost multiplier in climbing mode.
-  // 1.0 = no inflation (slider <= 70); 2.5 at slider=100.
-  let climbMul = 1.0;
-  if (sElev <= 0) {
-    upCost = Math.round(60 + (-sElev) * 240); // 60 → 300
-    downCost = 0;
-    upCutoff = 1.5;
-    downCutoff = 1.5;
-    elevPenaltyBuffer = 10;
-    elevMaxBuffer = 20;
-    elevBufferReduce = 0;
-  } else if (sElev <= 0.4) {
-    // Mild climb-friendly bias only (slider 50..70).
-    upCost = Math.round(60 * (1 - sElev * 0.7));   // 60 → ~43
-    downCost = 60;
-    upCutoff = 1.5;
-    downCutoff = 1.5;
-    elevPenaltyBuffer = 10;
-    elevMaxBuffer = 20;
-    elevBufferReduce = 0;
-  } else {
-    // Climbing mode (slider > 70). EE3D's recipe + an extra-aggressive
-    // tier at slider=100 ("max-hilly") tuned to reach ~10 km d+ on
-    // big-mountain routes like Chamonix → Grenoble.
-    const climbScale = (sElev - 0.4) / 0.6; // 0..1 over slider 70..100
-    upCost = 0;
-    downCost = 0;
-    // Push cutoffs even lower at the top of the slider so that BRouter
-    // treats sub-1% slopes as "real" climbs and substitutes in the
-    // (very low) uphillcostfactor — this is what lets the engine pick
-    // a 30 km detour for 1500 m of relief over the flat valley.
-    upCutoff = 1.5 - climbScale * 1.2; // 1.5 → 0.3
-    downCutoff = 1.5 - climbScale * 1.2; // 1.5 → 0.3
-    // Tighten the elevation accumulator further so even small bumps
-    // saturate. Reduce=1.05 means the buffer drains faster than it
-    // fills on flat ground → A* keeps "wanting" the next climb.
-    elevPenaltyBuffer = 1;
-    elevMaxBuffer = 2;
-    elevBufferReduce = 1.05;
-    // Inflate flat-road costs aggressively at slider=100. At 5.0×, a
-    // 1 km of flat valley road costs the same as 5 km of climbing
-    // cycleway, so the engine readily adds long detours to gain D+.
-    climbMul = 1.0 + climbScale * 4.0; // 1.0 → 5.0  (was 2.5)
-  }
-  const considerElevation = true;
-  // EE3D's secret sauce: in climb mode we widen the A* search via
-  // pass1coefficient=1.8 (matches `brouter/profiles2/climbing.brf`)
-  // and emit per-highway uphill/downhillcostfactor below so that
-  // BRouter REPLACES costfactor with the (low) uphillcostfactor on any
-  // segment whose slope saturates the elevation buffer (>0.5% with the
-  // tightened buffer). Result: climbing on a track is ~3× cheaper than
-  // staying on the flat valley road.
-  const inClimbMode = sElev > 0.4;
-  const pass1Coefficient = inClimbMode ? 1.8 : 1.5;
-
-  // ─── Max slope cap ────────────────────────────────────────────────
-  const maxSlope = Math.min(99, Math.max(1, roadTypes.maxSlopePercent || 99));
-  const maxSlopeCost = maxSlope >= 99 ? 0 : 500;
-
-  // ─── Turn cost factor ─────────────────────────────────────────────
-  const turnFactor = (() => {
-    switch (roadTypes.turns) {
-      case 'prefer': return 0.3;
-      case 'tolerate': return 1.0;
-      case 'avoid': return 4.0;
-      case 'forbid': return 50.0;
-    }
-  })();
-
-  // ─── Distance (Distance) ──────────────────────────────────────────
-  // Negative side: shortest path — kill cycleroute detours.
-  // Positive side: long scenic — stick to cycleroutes, penalise direct
-  // non-cycleroute segments to encourage longer detours through bike
-  // infrastructure.
-  const ignoreCycleroutes = sDist <= -0.4; // slider ≤ 30
-  // user_dist_noncycle_penalty: ×1 to ×2 applied to every non-LDCR segment
-  // when the slider is on the "+" side.
-  const distNonCyclePenalty =
-    sDist > 0 ? 1 + sDist * 1.0 : 1; // 1.0 → 2.0
-
-  // ─── Duration (Durée) ─────────────────────────────────────────────
-  // Positive side: minimise time — ignore long-distance cycleroute
-  // detours (the trekking baseline gives them basecost=1, which beats
-  // even unclassified roads, so the engine happily routes via
-  // EuroVelo-style detours that add 30+ km). Also lightly penalise
-  // slow surfaces so the route prefers paved roads.
-  // Negative side: scenic / slow OK — leave defaults but gently nudge
-  // away from the fastest major roads.
-  const durIgnoreCycleroutes = sDur >= 0.4; // slider >= 70
-  // user_dur_slow_penalty: 1.0 → 1.4 on the "+" side. Very mild —
-  // anything stronger triggers paved-road detours that ADD distance
-  // and end up TAKING LONGER than the direct path.
-  const durSlowPenalty = sDur > 0 ? 1 + sDur * 0.4 : 1;
-  // user_dur_fast_penalty: 1.0 → 1.4 on the "-" side, applied to fast
-  // major-ish roads so a low duration priority gently nudges away from
-  // fastest roads.
-  const durFastPenalty = sDur < 0 ? 1 + (-sDur) * 0.4 : 1;
-  // user_dur_minor_penalty: 1.0 → 1.2 on the "+" side, very mild bias
-  // away from service roads.
-  const durMinorPenalty = sDur > 0 ? 1 + sDur * 0.2 : 1;
-
-  // ─── Tranquility (Tranquilité) ────────────────────────────────────
-  // Positive side: max-quiet — turn on every consider_* flag and
-  // penalise major roads heavily. The trekking flags consider_traffic /
-  // consider_town add soft penalties; we add a hard major-road
-  // multiplier on top so the slider visibly reroutes through villages.
-  const considerTraffic = sTranq >= 0.2;
-  const avoidUnsafe = sTranq >= 0.2;
-  const tranqConsiderNoise = sTranq >= 0.4;
-  const tranqMajorPenalty = sTranq > 0 ? 1 + sTranq * 3.0 : 1; // 1.0 → 4.0
-
-  // Cities: the trekking-style additive `town_penalty` (max +1.6) is
-  // far too weak to actually reroute a 100 km trip around villages.
-  // We add a real multiplicative `cities_mult` applied to every way
-  // tagged with estimated_town_class >= 2 (= built-up area).
-  //   tolerate → 1.0   (unchanged)
-  //   avoid    → 6.0   (significant detour)
-  //   forbid   → 50.0  (only crosses towns when geometrically required)
-  const citiesMult =
-    roadTypes.cities === 'forbid' ? 50.0 :
-    roadTypes.cities === 'avoid'  ? 6.0  :
-    sTranq >= 0.6 ? 2.5 :
-    1.0;
-  const considerTown =
-    roadTypes.cities === 'avoid' ||
-    roadTypes.cities === 'forbid' ||
-    sTranq >= 0.2;
-  const tranqStickToCycleroutes = sTranq >= 0.6;
-
-  // Expert overrides (kinematic + advanced) — these flow as raw assigns.
-  const totalMass = expertValue(expert, 'totalMass', defaultFor('totalMass') as number);
-  const maxSpeed = expertValue(expert, 'maxSpeed', defaultFor('maxSpeed') as number);
-  const sCx = expertValue(expert, 'S_C_x', defaultFor('S_C_x') as number);
-  const cR = expertValue(expert, 'C_r', defaultFor('C_r') as number);
-  const bikerPower = expertValue(expert, 'bikerPower', defaultFor('bikerPower') as number);
-  const stickToCycleRoutes = expertValue(expert, 'stick_to_cycleroutes', false);
-  const useProposedCycleRoutes = expertValue(expert, 'use_proposed_cycleroutes', false);
-  const considerNoise = expertValue(expert, 'consider_noise', false);
-  const considerRiver = expertValue(expert, 'consider_river', false);
-  const considerForest = expertValue(expert, 'consider_forest', false);
-  const turnInstructionMode = expertValue(expert, 'turnInstructionMode', 1);
-  const considerTurnRestrictions = expertValue(expert, 'considerTurnRestrictions', true);
+  const {
+    fRoad,
+    fGravel,
+    fSingletrack,
+    fOffroad,
+    fBikelane,
+    fMajor,
+    allowFerries,
+    allowSteps,
+    turnFactor,
+    distNonCyclePenalty,
+    durSlowPenalty,
+    durFastPenalty,
+    durMinorPenalty,
+    tranqMajorPenalty,
+    citiesMult,
+    climbMul,
+    ignoreCycleroutes,
+    stickToCycleRoutes,
+    useProposedCycleRoutes,
+    avoidUnsafe,
+    considerNoise,
+    considerRiver,
+    considerForest,
+    considerTown,
+    considerTraffic,
+    considerElevation,
+    downCost,
+    downCutoff,
+    upCost,
+    upCutoff,
+    elevPenaltyBuffer,
+    elevMaxBuffer,
+    elevBufferReduce,
+    pass1Coefficient,
+    inClimbMode,
+    maxSlope,
+    maxSlopeCost,
+    totalMass,
+    maxSpeed,
+    sCx,
+    cR,
+    bikerPower,
+    turnInstructionMode,
+    considerTurnRestrictions,
+  } = resolveBrfProfileValues(inputs);
 
   return `# *** RedView dynamic profile (auto-generated) ***
 # Generated from the Itinerary Panel state.
@@ -349,12 +109,12 @@ export function buildBrfProfile(inputs: BrfBuildInputs): string {
 assign validForBikes = true
 
 # ─── User-controlled per-category cost multipliers ────────────────
-assign user_factor_road        = ${brfNum(f_road)}
-assign user_factor_gravel      = ${brfNum(f_gravel)}
-assign user_factor_singletrack = ${brfNum(f_singletrack)}
-assign user_factor_offroad     = ${brfNum(f_offroad)}
-assign user_factor_bikelane    = ${brfNum(f_bikelane)}
-assign user_factor_major       = ${brfNum(f_major)}
+assign user_factor_road        = ${brfNum(fRoad)}
+assign user_factor_gravel      = ${brfNum(fGravel)}
+assign user_factor_singletrack = ${brfNum(fSingletrack)}
+assign user_factor_offroad     = ${brfNum(fOffroad)}
+assign user_factor_bikelane    = ${brfNum(fBikelane)}
+assign user_factor_major       = ${brfNum(fMajor)}
 assign user_turn_factor        = ${brfNum(turnFactor)}
 
 # ─── Slider-driven multipliers (way-context applies them) ─────────
@@ -383,12 +143,12 @@ assign user_climb_mul             = ${brfNum(climbMul)}
 # ─── Behaviour ────────────────────────────────────────────────────
 assign allow_steps              = ${brfBool(allowSteps)}
 assign allow_ferries            = ${brfBool(allowFerries)}
-assign ignore_cycleroutes       = ${brfBool(ignoreCycleroutes || durIgnoreCycleroutes)}
-assign stick_to_cycleroutes     = ${brfBool(stickToCycleRoutes || tranqStickToCycleroutes)}
+assign ignore_cycleroutes       = ${brfBool(ignoreCycleroutes)}
+assign stick_to_cycleroutes     = ${brfBool(stickToCycleRoutes)}
 assign use_proposed_cycleroutes = ${brfBool(useProposedCycleRoutes)}
 assign avoid_unsafe             = ${brfBool(avoidUnsafe)}
 assign add_beeline              = false
-assign consider_noise           = ${brfBool(considerNoise || tranqConsiderNoise)}
+assign consider_noise           = ${brfBool(considerNoise)}
 assign consider_river           = ${brfBool(considerRiver)}
 assign consider_forest          = ${brfBool(considerForest)}
 assign consider_town            = ${brfBool(considerTown)}
