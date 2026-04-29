@@ -1,5 +1,5 @@
 // ============================================
-// Standalone LiDAR HD Viewer — Orbit Camera
+// Standalone LiDAR HD Viewer — Orbit CameraTEST
 // ============================================
 
 export class CameraController {
@@ -11,6 +11,7 @@ export class CameraController {
   targetX = 0;
   targetY = 0;
   targetZ = 0;
+  sceneRadius = 500;
 
   private isDragging = false;
   private isPanning = false;
@@ -37,7 +38,8 @@ export class CameraController {
     this.targetX = cx;
     this.targetY = cy;
     this.targetZ = cz;
-    this.radius = extent * 1.2;
+    this.sceneRadius = Math.max(extent, 1);
+    this.radius = this.sceneRadius * 1.2;
     this.theta = Math.PI / 4;
     this.phi = Math.PI / 3;
   }
@@ -123,8 +125,10 @@ export class CameraController {
   getProjMatrix(): Float32Array {
     const aspect = this.canvas.width / this.canvas.height;
     const fov = Math.PI / 4;
-    const near = Math.max(0.5, this.radius * 0.001);
-    const far = this.radius * 10;
+    const near = Math.max(0.05, Math.min(2, this.radius * 0.01));
+    // Keep the far plane anchored to the dataset size so aggressive zooming
+    // doesn't collapse the frustum and make the LiDAR / terrain disappear.
+    const far = Math.max(this.radius * 10, this.radius + this.sceneRadius * 4);
     const f = 1 / Math.tan(fov / 2);
     return new Float32Array([
       f / aspect, 0, 0, 0,
