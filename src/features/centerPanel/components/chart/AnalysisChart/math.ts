@@ -6,6 +6,10 @@ import {
 
 const HOVER_X_EMIT_EPSILON = 1e-4;
 export const MIN_VISIBLE_FRACTION = 0.04;
+const MIN_LOD_LEVEL_POINTS = 256;
+const LOD_TARGET_VISIBLE_POINTS_PER_PX = 3;
+const FINAL_PLOT_POINTS_PER_PX = 2;
+const plotLodLevelsCache = new WeakMap<{ x: number; y: number }[], { x: number; y: number }[][]>();
 
 export function defaultDomainFor(metric: ChartMetricId): AxisDomain {
   switch (metric) {
@@ -122,9 +126,86 @@ export function compressPointsForPlot(
   xDomain: AxisDomain,
   plotWidth: number,
 ): { x: number; y: number }[] {
-  const bucketCount = Math.max(32, Math.round(plotWidth * 1.5));
+  const targetMaxPoints = Math.max(128, Math.round(plotWidth * FINAL_PLOT_POINTS_PER_PX));
+  return compressPointsToTarget(points, xDomain, targetMaxPoints);
+}
+
+export function selectPointsForPlotLod(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  plotWidth: number,
+): { x: number; y: number }[] {
+  if (points.length < 2 || plotWidth <= 0) return points;
+
+  const fullDomain = {
+    min: points[0]?.x ?? xDomain.min,
+    max: points[points.length - 1]?.x ?? xDomain.max,
+  };
+  const fullSpan = fullDomain.max - fullDomain.min;
+  if (!(fullSpan > 0)) {
+    return compressPointsForPlot(clipPointsToXDomain(points, xDomain), xDomain, plotWidth);
+  }
+
+  const visibleSpan = Math.max(0, xDomain.max - xDomain.min);
+  const visibleFraction = clamp(visibleSpan / fullSpan, 0, 1);
+  const targetVisiblePoints = Math.max(
+    192,
+    Math.round(plotWidth * LOD_TARGET_VISIBLE_POINTS_PER_PX),
+  );
+
+  let selected = points;
+  for (const level of getPlotLodLevels(points)) {
+    if (level === points) continue;
+    const expectedVisiblePoints = Math.ceil(level.length * visibleFraction);
+    if (expectedVisiblePoints <= targetVisiblePoints) {
+      selected = level;
+      break;
+    }
+  }
+
+  return compressPointsForPlot(clipPointsToXDomain(selected, xDomain), xDomain, plotWidth);
+}
+
+function getPlotLodLevels(
+  points: { x: number; y: number }[],
+): { x: number; y: number }[][] {
+  const cached = plotLodLevelsCache.get(points);
+  if (cached) return cached;
+
+  if (points.length < MIN_LOD_LEVEL_POINTS * 2) {
+    const trivial = [points];
+    plotLodLevelsCache.set(points, trivial);
+    return trivial;
+  }
+
+  const fullDomain = {
+    min: points[0]?.x ?? 0,
+    max: points[points.length - 1]?.x ?? 0,
+  };
+  const levels: { x: number; y: number }[][] = [points];
+  let targetMaxPoints = Math.floor(points.length / 2);
+
+  while (targetMaxPoints >= MIN_LOD_LEVEL_POINTS) {
+    const reduced = compressPointsToTarget(points, fullDomain, targetMaxPoints);
+    const previous = levels[levels.length - 1] ?? points;
+    if (reduced.length >= previous.length) break;
+    levels.push(reduced);
+    targetMaxPoints = Math.floor(targetMaxPoints / 2);
+  }
+
+  plotLodLevelsCache.set(points, levels);
+  return levels;
+}
+
+function compressPointsToTarget(
+  points: { x: number; y: number }[],
+  xDomain: AxisDomain,
+  targetMaxPoints: number,
+): { x: number; y: number }[] {
   const span = xDomain.max - xDomain.min;
-  if (points.length <= bucketCount * 2 || span <= 0 || plotWidth <= 0) return points;
+  if (points.length <= targetMaxPoints || span <= 0 || targetMaxPoints <= 0) return points;
+
+  const bucketCount = Math.max(32, Math.ceil(targetMaxPoints / 4));
 
   const compressed: { x: number; y: number }[] = [];
   let activeBucket = -1;

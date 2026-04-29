@@ -11,13 +11,13 @@ import {
   buildVisibleXDomain,
   clampXDomainToRoute,
   clipPointsToXDomain,
-  compressPointsForPlot,
   defaultDomainFor,
   detailZoomToVisibleFraction,
   interpolateY,
   normalizeMetricDomain,
   normalizeUnitInterval,
   ratioFor,
+  selectPointsForPlotLod,
   sameOptionalNumber,
 } from './math';
 import { buildPoiMarkerGroups, buildViewportForPoiCluster } from './poi';
@@ -189,11 +189,7 @@ export function AnalysisChart({
       id: profile.id,
       fillColor: withAlpha(profile.color, 0.12),
       lineColor: withAlpha(profile.color, 0.46),
-      points: compressPointsForPlot(
-        clipPointsToXDomain(profile.points, plotXDomain),
-        plotXDomain,
-        plotSize.width,
-      ),
+      points: selectPointsForPlotLod(profile.points, plotXDomain, plotSize.width),
     }));
   }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
 
@@ -264,14 +260,14 @@ export function AnalysisChart({
 
   const seriesLayers = useMemo(
     () =>
-      visibleSeries.map((entry) => ({
+      series.map((entry) => ({
         id: entry.id,
         color: entry.color,
         lineWidth: 1.4,
-        points: compressPointsForPlot(entry.points, plotXDomain, plotSize.width),
+        points: selectPointsForPlotLod(entry.points, plotXDomain, plotSize.width),
         yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,
       })),
-    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, visibleSeries],
+    [plotSize.width, plotXDomain, plotY2Domain, plotYDomain, series],
   );
 
   useEffect(() => {
