@@ -68,6 +68,7 @@ export function createMapLifecycleController({
   let orthoBootTimer: ReturnType<typeof setTimeout> | null = null;
   let finishOnIdle: (() => void) | null = null;
   let readyFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  let terrainRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
   let styleBootstrapRunId = 0;
   let trackingListenersBound = false;
 
@@ -123,6 +124,28 @@ export function createMapLifecycleController({
       if (typeof fn === 'function') return fn.call(map);
       return true;
     } catch {
+      return false;
+    }
+  };
+
+  const isUnifiedTerrainActive = (): boolean => {
+    try {
+      return map.getTerrain()?.source === unifiedDEMSource.id;
+    } catch {
+      return false;
+    }
+  };
+
+  const applyUnifiedTerrain = (): boolean => {
+    if (!map.getSource(unifiedDEMSource.id)) return false;
+    try {
+      if (!terrainRef.current) {
+        terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+      }
+      terrainRef.current.init();
+      return true;
+    } catch (error) {
+      console.warn('[map3d] Unified terrain apply failed', error);
       return false;
     }
   };
@@ -266,6 +289,7 @@ export function createMapLifecycleController({
     refreshTrackedSourceIds();
 
     terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+    applyUnifiedTerrain();
     return true;
   };
 
@@ -273,27 +297,67 @@ export function createMapLifecycleController({
     disposeTerrainBootstrap?.();
 
     let applied = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const complete = () => {
+      if (applied) return;
+      applied = true;
+      map.off('sourcedata', onSourceData);
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      disposeTerrainBootstrap = null;
+      applyUnifiedTerrain();
+      reportStatus('loading', 82, 'Terrain');
+      onReady();
+    };
     const onSourceData = (event: MapSourceDataEvent) => {
       if (applied) return;
       if (event.sourceId !== unifiedDEMSource.id) return;
       if (!event.isSourceLoaded) return;
-      applied = true;
-      map.off('sourcedata', onSourceData);
-      disposeTerrainBootstrap = null;
-      terrainRef.current?.init();
-      reportStatus('loading', 82, 'Terrain');
-      onReady();
+      complete();
     };
 
     disposeTerrainBootstrap = () => {
       map.off('sourcedata', onSourceData);
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
     };
 
+    applyUnifiedTerrain();
     map.on('sourcedata', onSourceData);
 
     if (map.isSourceLoaded(unifiedDEMSource.id)) {
       onSourceData({ sourceId: unifiedDEMSource.id, isSourceLoaded: true } as MapSourceDataEvent);
+    } else {
+      fallbackTimer = setTimeout(complete, 1200);
     }
+  };
+
+  const scheduleTerrainRecovery = () => {
+    if (terrainRecoveryTimer) return;
+    terrainRecoveryTimer = setTimeout(() => {
+      terrainRecoveryTimer = null;
+      if (isCancelled() || !map.isStyleLoaded()) return;
+      if (!navigator.serviceWorker?.controller) return;
+
+      if (!map.getSource(unifiedDEMSource.id)) {
+        if (!refreshDemSource()) return;
+        reportStatus('loading', 68, 'Relief');
+        armTerrainBootstrap(() => {
+          demTrackingEnabled = true;
+          scheduleDemSettle();
+        });
+        return;
+      }
+
+      refreshTrackedSourceIds();
+      if (!isUnifiedTerrainActive()) {
+        applyUnifiedTerrain();
+      }
+    }, 0);
   };
 
   const addIgnOrthoOverlay = () => {
@@ -413,6 +477,7 @@ export function createMapLifecycleController({
     map.on('zoomend', scheduleDemSettle);
     map.on('movestart', onMovestart);
     map.on('idle', onMapIdle);
+    map.on('styledata', scheduleTerrainRecovery);
     navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
     trackingListenersBound = true;
   };
@@ -427,6 +492,7 @@ export function createMapLifecycleController({
     map.off('zoomend', scheduleDemSettle);
     map.off('movestart', onMovestart);
     map.off('idle', onMapIdle);
+    map.off('styledata', scheduleTerrainRecovery);
     navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
     trackingListenersBound = false;
   };
@@ -443,6 +509,10 @@ export function createMapLifecycleController({
     if (readyFallbackTimer) {
       clearTimeout(readyFallbackTimer);
       readyFallbackTimer = null;
+    }
+    if (terrainRecoveryTimer) {
+      clearTimeout(terrainRecoveryTimer);
+      terrainRecoveryTimer = null;
     }
     if (finishOnIdle) {
       map.off('idle', finishOnIdle);
