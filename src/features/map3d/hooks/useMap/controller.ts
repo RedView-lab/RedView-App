@@ -42,7 +42,7 @@ interface CreateMapLifecycleControllerOptions {
   isCancelled: () => boolean;
 }
 
-const MAPBOX_STANDARD_3D_STYLE_URL = 'mapbox://styles/mapbox/standard';
+const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
 
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
@@ -143,9 +143,7 @@ export function createMapLifecycleController({
     }
   };
 
-  const getActiveDemProfile = (): DemTileProfile => (
-    getActiveStyleUrl() === MAPBOX_STANDARD_3D_STYLE_URL ? 'terrain' : 'default'
-  );
+  const getActiveDemProfile = (): DemTileProfile => 'terrain';
 
   const shouldUseIgnOrthoOverlay = (): boolean => false;
 
@@ -545,7 +543,7 @@ export function createMapLifecycleController({
     const runId = ++styleBootstrapRunId;
     const applyStyleDecorators = () => {
       map.setFog(fogConfig);
-      if (getActiveStyleUrl() !== 'mapbox://styles/mapbox/standard') {
+      if (getActiveStyleUrl() !== MAPBOX_STANDARD_STYLE_URL) {
         try {
           map.setConfigProperty('basemap', 'lightPreset', 'day');
         } catch {

@@ -94,7 +94,9 @@ const ORTHO_TILE_SIZE = 256;
 // v39 — evicts global z15+ AWS overzoom children so MapLibre can reuse the
 // parent mesh outside LiDAR regions instead of rendering progressively flatter
 // SW-synthesized child tiles while zooming in.
-const CACHE_NAME = 'dem-tiles-v39';
+// v40 — evicts satellite/default-profile DEM entries now that every 3D
+// basemap uses the protected terrain profile namespace.
+const CACHE_NAME = 'dem-tiles-v40';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v8';
