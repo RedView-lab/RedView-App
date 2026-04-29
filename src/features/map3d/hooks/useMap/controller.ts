@@ -536,11 +536,27 @@ export function createMapLifecycleController({
     }
   };
 
+  const detachManagedTerrain = () => {
+    try {
+      terrainRef.current?.destroy();
+    } catch {
+      /* terrain teardown must stay best-effort during style rebuilds */
+    }
+    terrainRef.current = null;
+
+    try {
+      map.setTerrain(null);
+    } catch {
+      /* style may already be replacing the terrain graph */
+    }
+  };
+
   const prepareStyleChange = (detail = 'Fond de carte') => {
     demPassiveRefreshPending = false;
     demTrackingEnabled = false;
     clearDemTracking();
     clearStyleBootstrapArtifacts();
+    detachManagedTerrain();
     reportStatus('loading', 18, detail);
   };
 
@@ -602,11 +618,7 @@ export function createMapLifecycleController({
 
     ensureTrackingListeners();
 
-    try {
-      map.setTerrain(null);
-    } catch {
-      /* terrain may not be set yet on the initial style */
-    }
+    detachManagedTerrain();
 
     if (!map.getSource(unifiedDEMSource.id)) {
       refreshDemSource();

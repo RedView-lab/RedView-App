@@ -157,7 +157,11 @@ export function useMap(
     activeStyleUrlRef.current = basemapStyleUrl;
     setIsLoaded(false);
     prepareStyleChange('Fond de carte');
-    map.setStyle(basemapStyleUrl);
+    map.setStyle(basemapStyleUrl, {
+      diff: false,
+      localFontFamily: null,
+      localIdeographFontFamily: 'sans-serif',
+    });
     void bootstrapCurrentStyle()
       .then(() => {
         setIsLoaded(true);
