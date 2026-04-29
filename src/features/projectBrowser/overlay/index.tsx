@@ -362,8 +362,6 @@ export function ProjectBrowserOverlay({
     }
   }, [isSigningOut]);
 
-  if (!open) return null;
-
   const q = search.trim().toLowerCase();
   const filtered = q
     ? projects.filter((project) => project.name.toLowerCase().includes(q))
@@ -533,6 +531,8 @@ export function ProjectBrowserOverlay({
     logBillingUi('billing-modal-close');
     setBillingModal(null);
   }, []);
+
+  if (!open) return null;
 
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)
