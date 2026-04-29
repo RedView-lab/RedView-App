@@ -52,16 +52,16 @@ void main() {
 
   float distLine = sdSegment(p, a, b);
   float rayT = segmentT(p, b, a);
-  float lineCore = smoothstep(0.0055, 0.0018, distLine);
-  float lineGlow = exp(-distLine * 45.0) * 0.38;
-  float lineAlpha = (lineCore * 0.88 + lineGlow) * mix(0.45, 1.0, rayT);
+  float lineCore = smoothstep(0.0028, 0.0009, distLine);
+  float lineGlow = exp(-distLine * 82.0) * 0.16;
+  float lineAlpha = (lineCore * 0.92 + lineGlow) * mix(0.55, 1.0, rayT);
 
   float anchorDist = length(p - a);
-  float ring = smoothstep(0.030, 0.026, anchorDist) - smoothstep(0.020, 0.016, anchorDist);
-  float impact = smoothstep(0.010, 0.0035, anchorDist);
-  float halo = exp(-anchorDist * 34.0) * 0.14;
+  float ring = smoothstep(0.025, 0.022, anchorDist) - smoothstep(0.016, 0.013, anchorDist);
+  float impact = smoothstep(0.007, 0.0028, anchorDist);
+  float halo = exp(-anchorDist * 42.0) * 0.09;
 
-  float alpha = (lineAlpha + ring * 0.72 + impact * 0.48 + halo) * u_intensity;
+  float alpha = (lineAlpha + ring * 0.6 + impact * 0.42 + halo) * u_intensity;
   vec3 coreColor = mix(u_color, vec3(1.0), 0.28);
 
   gl_FragColor = vec4(coreColor, clamp(alpha, 0.0, 1.0));
@@ -121,29 +121,67 @@ function projectMercatorPoint(matrix: number[], point: mapboxgl.MercatorCoordina
   };
 }
 
-function normalizeScreenSegment(anchor: ScreenPoint, source: ScreenPoint, width: number, height: number): ScreenPoint {
-  const anchorPxX = anchor.u * width;
-  const anchorPxY = anchor.v * height;
-  const sourcePxX = source.u * width;
-  const sourcePxY = source.v * height;
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
 
-  let dx = sourcePxX - anchorPxX;
-  let dy = sourcePxY - anchorPxY;
-  let length = Math.hypot(dx, dy);
-  if (length < 1) {
-    dx = 0;
-    dy = -1;
-    length = 1;
+function clipScreenRayToViewport(anchor: ScreenPoint, source: ScreenPoint): ScreenPoint {
+  const margin = 0.02;
+  const min = margin;
+  const max = 1 - margin;
+  const dx = source.u - anchor.u;
+  const dy = source.v - anchor.v;
+  const epsilon = 1e-6;
+
+  if (Math.abs(dx) < epsilon && Math.abs(dy) < epsilon) {
+    return {
+      u: anchor.u,
+      v: clamp01(anchor.v - 0.25),
+    };
   }
 
-  const minLength = Math.min(Math.max(Math.min(width, height) * 0.24, 140), Math.max(width, height) * 0.5);
-  const maxLength = Math.max(width, height) * 0.78;
-  const clampedLength = Math.min(maxLength, Math.max(minLength, length));
-  const nx = dx / length;
-  const ny = dy / length;
+  let bestT = Number.POSITIVE_INFINITY;
+  let best: ScreenPoint | null = null;
+
+  if (Math.abs(dx) >= epsilon) {
+    const txMin = (min - anchor.u) / dx;
+    const yAtMin = anchor.v + dy * txMin;
+    if (txMin > 0 && yAtMin >= min && yAtMin <= max && txMin < bestT) {
+      bestT = txMin;
+      best = { u: min, v: yAtMin };
+    }
+
+    const txMax = (max - anchor.u) / dx;
+    const yAtMax = anchor.v + dy * txMax;
+    if (txMax > 0 && yAtMax >= min && yAtMax <= max && txMax < bestT) {
+      bestT = txMax;
+      best = { u: max, v: yAtMax };
+    }
+  }
+
+  if (Math.abs(dy) >= epsilon) {
+    const tyMin = (min - anchor.v) / dy;
+    const xAtMin = anchor.u + dx * tyMin;
+    if (tyMin > 0 && xAtMin >= min && xAtMin <= max && tyMin < bestT) {
+      bestT = tyMin;
+      best = { u: xAtMin, v: min };
+    }
+
+    const tyMax = (max - anchor.v) / dy;
+    const xAtMax = anchor.u + dx * tyMax;
+    if (tyMax > 0 && xAtMax >= min && xAtMax <= max && tyMax < bestT) {
+      bestT = tyMax;
+      best = { u: xAtMax, v: max };
+    }
+  }
+
+  if (best) {
+    return best;
+  }
+
   return {
-    u: (anchorPxX + nx * clampedLength) / width,
-    v: (anchorPxY + ny * clampedLength) / height,
+    u: clamp01(source.u),
+    v: clamp01(source.v),
   };
 }
 
@@ -217,7 +255,7 @@ export class SunRayLayer implements CustomLayerInterface {
     const sunEast = Math.sin(azimuthRad) * horizontalFactor;
     const sunNorth = Math.cos(azimuthRad) * horizontalFactor;
     const sunUp = Math.sin(altitudeRad);
-    const rayDistanceMeters = 12000 + (1 - Math.max(0, sunUp)) * 22000;
+    const rayDistanceMeters = 42000 + (1 - Math.max(0, sunUp)) * 58000;
     const meterScale = anchorPoint.meterInMercatorCoordinateUnits();
     const sourcePoint = new mapboxgl.MercatorCoordinate(
       anchorPoint.x + sunEast * rayDistanceMeters * meterScale,
@@ -229,11 +267,11 @@ export class SunRayLayer implements CustomLayerInterface {
     const projectedSource = projectMercatorPoint(matrix, sourcePoint);
     if (!anchorScreen || !projectedSource) return;
 
-    const sourceScreen = normalizeScreenSegment(anchorScreen, projectedSource, renderWidth, renderHeight);
+    const sourceScreen = clipScreenRayToViewport(anchorScreen, projectedSource);
     const [r, g, b] = sunRayColorFromAltitude(this.altitudeDeg);
     const intensity = this.altitudeDeg >= 12
-      ? 1
-      : Math.max(0.24, Math.min(1, (this.altitudeDeg + 2) / 14));
+      ? 0.82
+      : Math.max(0.16, Math.min(0.82, (this.altitudeDeg + 2) / 18));
 
     const prevProgram = gl.getParameter(gl.CURRENT_PROGRAM);
     const prevBuffer = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
