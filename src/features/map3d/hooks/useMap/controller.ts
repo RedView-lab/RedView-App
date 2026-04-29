@@ -143,7 +143,9 @@ export function createMapLifecycleController({
     }
   };
 
-  const getActiveDemProfile = (): DemTileProfile => 'terrain';
+  const getActiveDemProfile = (): DemTileProfile => (
+    getActiveStyleUrl() === MAPBOX_STANDARD_STYLE_URL ? 'terrain' : 'default'
+  );
 
   const shouldUseIgnOrthoOverlay = (): boolean => false;
 
