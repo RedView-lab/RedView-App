@@ -42,6 +42,11 @@ type SetupIntentWithPaymentMethod = Stripe.SetupIntent & {
   payment_method: string | Stripe.PaymentMethod | null;
 };
 
+type ExpandedInvoice = Stripe.Invoice & {
+  payment_intent?: string | Stripe.PaymentIntent | null;
+  confirmation_secret?: Stripe.Invoice.ConfirmationSecret | null;
+};
+
 export type SubscriptionActionResult = {
   subscriptionId: string;
   subscription: SubscriptionSnapshot;
@@ -238,7 +243,7 @@ function toSnapshotFromStripeSubscription(subscription: Stripe.Subscription): Su
 function getLatestInvoicePaymentIntent(
   subscription: Stripe.Subscription,
 ): Stripe.PaymentIntent | null {
-  const latestInvoice = subscription.latest_invoice;
+  const latestInvoice = subscription.latest_invoice as ExpandedInvoice | string | null;
   if (!latestInvoice || typeof latestInvoice === 'string') {
     return null;
   }
@@ -251,12 +256,27 @@ function getLatestInvoicePaymentIntent(
   return paymentIntent;
 }
 
+function getLatestInvoiceClientSecret(subscription: Stripe.Subscription): string | null {
+  const paymentIntent = getLatestInvoicePaymentIntent(subscription);
+  if (paymentIntent?.client_secret) {
+    return paymentIntent.client_secret;
+  }
+
+  const latestInvoice = subscription.latest_invoice as ExpandedInvoice | string | null;
+  if (!latestInvoice || typeof latestInvoice === 'string') {
+    return null;
+  }
+
+  return latestInvoice.confirmation_secret?.client_secret ?? null;
+}
+
 function buildSubscriptionActionResult(
   subscription: Stripe.Subscription,
 ): SubscriptionActionResult {
   const paymentIntent = getLatestInvoicePaymentIntent(subscription);
   const paymentIntentStatus = paymentIntent?.status ?? null;
-  const hasClientSecret = Boolean(paymentIntent?.client_secret);
+  const clientSecret = getLatestInvoiceClientSecret(subscription);
+  const hasClientSecret = Boolean(clientSecret);
   const requiresPaymentConfirmation =
     hasClientSecret &&
     (subscription.status === 'incomplete' ||
@@ -267,7 +287,7 @@ function buildSubscriptionActionResult(
   return {
     subscriptionId: subscription.id,
     subscription: toSnapshotFromStripeSubscription(subscription),
-    clientSecret: paymentIntent?.client_secret ?? null,
+    clientSecret,
     requiresPaymentConfirmation,
   };
 }
@@ -466,7 +486,7 @@ export async function createManagedSubscription(
     payment_settings: {
       save_default_payment_method: 'on_subscription',
     },
-    expand: ['latest_invoice.payment_intent'],
+    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
     metadata: {
       user_id: userId,
       plan_id: planId,
@@ -483,6 +503,7 @@ export async function changeManagedSubscriptionPlan(
 ): Promise<SubscriptionActionResult> {
   const currentSubscription = await getCurrentManagedStripeSubscription(userId, [
     'latest_invoice.payment_intent',
+    'latest_invoice.confirmation_secret',
   ]);
 
   if (!currentSubscription) {
@@ -512,7 +533,7 @@ export async function changeManagedSubscriptionPlan(
       save_default_payment_method: 'on_subscription',
     },
     proration_behavior: 'always_invoice',
-    expand: ['latest_invoice.payment_intent'],
+    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
     metadata: {
       ...currentSubscription.metadata,
       user_id: userId,
@@ -551,7 +572,7 @@ export async function syncManagedSubscription(
   }
 
   const subscription = await getStripeServer().subscriptions.retrieve(subscriptionId, {
-    expand: ['latest_invoice.payment_intent'],
+    expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
   });
 
   if (getStripeCustomerIdFromSubscription(subscription) !== expectedStripeCustomerId) {
