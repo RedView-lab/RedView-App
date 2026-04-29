@@ -37,6 +37,14 @@ export const FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID = 'brouter-forbidden-zone-draf
 export const FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID = 'brouter-forbidden-zone-draft-vertex-hit-layer';
 export const FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID = 'brouter-forbidden-zone-draft-segment-hit-layer';
 
+function canMutateStyle(map: MapboxMap): boolean {
+  try {
+    return map.isStyleLoaded() && Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 function sanitizeId(id: string): string {
   // Mapbox source/layer ids must be safe â€” strip anything weird.
   return id.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -222,6 +230,7 @@ function buildForbiddenZoneDraftGeoJson(
 }
 
 function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
   const existing = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) return existing;
 
@@ -274,6 +283,7 @@ function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
 }
 
 function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
   const existing = map.getSource(ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) return existing;
 
@@ -331,6 +341,7 @@ function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | nu
 }
 
 function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
   const existing = map.getSource(ROUTE_AUDIT_SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) return existing;
 
@@ -388,6 +399,7 @@ function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
 }
 
 function ensureForbiddenZoneLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
   const existing = map.getSource(FORBIDDEN_ZONE_SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) return existing;
 
@@ -431,6 +443,7 @@ function ensureForbiddenZoneLayers(map: MapboxMap): GeoJSONSource | null {
 }
 
 function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
   const existing = map.getSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID) as GeoJSONSource | undefined;
   if (existing) return existing;
 
@@ -611,6 +624,8 @@ export function upsertRouteLayer(
   coordinates: [number, number][],
   opts: RouteLayerOptions,
 ): void {
+  if (!canMutateStyle(map)) return;
+
   const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
@@ -778,6 +793,8 @@ export function setRouteEndpoints(
   map: MapboxMap,
   endpoints: RouteEndpoint[],
 ): void {
+  if (!canMutateStyle(map)) return;
+
   const features = endpoints.map((p) => ({
     type: 'Feature' as const,
     properties: { kind: p.kind, label: p.label ?? '' },
@@ -841,6 +858,8 @@ export function setRouteAuditFindings(
   findings: Array<{ id: string; coordinates: [number, number][]; title: string; detail: string }>,
   visible: boolean,
 ): void {
+  if (!canMutateStyle(map)) return;
+
   const source = ensureRouteAuditLayers(map);
   if (!source) return;
 
@@ -859,6 +878,8 @@ export function setRouteAuditFindings(
 }
 
 export function clearRouteAuditFindings(map: MapboxMap): void {
+  if (!canMutateStyle(map)) return;
+
   try {
     const source = ensureRouteAuditLayers(map);
     source?.setData(buildRouteAuditGeoJson(null));
@@ -877,6 +898,8 @@ export function setForbiddenZones(
   map: MapboxMap,
   zones: Array<{ id: string; points: Array<{ lon: number; lat: number }> }>,
 ): void {
+  if (!canMutateStyle(map)) return;
+
   try {
     const source = ensureForbiddenZoneLayers(map);
     if (!source) return;
@@ -896,6 +919,8 @@ export function setForbiddenZones(
 }
 
 export function clearForbiddenZones(map: MapboxMap): void {
+  if (!canMutateStyle(map)) return;
+
   try {
     const source = ensureForbiddenZoneLayers(map);
     source?.setData(buildForbiddenZoneGeoJson(null));
@@ -914,6 +939,8 @@ export function setForbiddenZoneDraft(
   map: MapboxMap,
   points: Array<{ lon: number; lat: number }>,
 ): void {
+  if (!canMutateStyle(map)) return;
+
   try {
     const source = ensureForbiddenZoneDraftLayers(map);
     if (!source) return;

@@ -401,11 +401,28 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     let showLodStats = true;
     let lastFrameTime = performance.now();
 
+    let frameHandle: number | null = null;
+    let renderRequested = true;
+    let idleReset = true;
+    let cleanedUp = false;
+
+    const requestRender = () => {
+      renderRequested = true;
+      if (cleanedUp || document.hidden || frameHandle != null) return;
+      frameHandle = window.requestAnimationFrame(renderLoop);
+    };
+
     const renderLoop = () => {
-      if (!renderer) return;
+      frameHandle = null;
+      if (!renderer || cleanedUp || document.hidden) {
+        idleReset = true;
+        return;
+      }
       const now = performance.now();
-      const deltaMs = now - lastFrameTime;
+      const deltaMs = idleReset ? 16.6 : Math.max(0, now - lastFrameTime);
       lastFrameTime = now;
+      idleReset = false;
+      renderRequested = false;
 
       renderer.updateCamera(camera.getViewMatrix(), camera.getProjMatrix());
 
@@ -434,19 +451,27 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       } else {
         statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${tileFileName}`;
       }
-      requestAnimationFrame(renderLoop);
+
+      if (renderRequested) {
+        requestRender();
+      } else {
+        idleReset = true;
+      }
     };
-    requestAnimationFrame(renderLoop);
+    camera.onChange = () => requestRender();
+    requestRender();
 
     // Handle resize
-    window.addEventListener('resize', () => {
+    const handleResize = () => {
       if (!renderer) return;
       resizeCanvas();
       renderer.resize(canvas.width, canvas.height);
-    });
+      requestRender();
+    };
+    window.addEventListener('resize', handleResize);
 
     // Keyboard controls
-    window.addEventListener('keydown', (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (!renderer) return;
       if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
       if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
@@ -457,7 +482,49 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       }
       if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
       if (e.key === 'n' || e.key === 'N') void cycleSnow();
-    });
+      requestRender();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (frameHandle != null) {
+          window.cancelAnimationFrame(frameHandle);
+          frameHandle = null;
+        }
+        idleReset = true;
+        return;
+      }
+      lastFrameTime = performance.now();
+      idleReset = true;
+      requestRender();
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      if (frameHandle != null) {
+        window.cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('pagehide', handlePageHide);
+      camera.onChange = null;
+      camera.destroy();
+      renderer?.destroy();
+      renderer = null;
+    };
+    const handlePageHide = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        handleVisibilityChange();
+        return;
+      }
+      cleanup();
+    };
+    window.addEventListener('pagehide', handlePageHide);
 
     // ---------------- SNOW ❄ ----------------
     // Bouton bas de l'écran : off → cover → thickness → off
@@ -471,6 +538,9 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     let snowIdx = 0;
     let snowFieldLoaded = false;
     let snowLoading = false;
+    const handleSnowClick = () => {
+      void cycleSnow();
+    };
 
     async function cycleSnow() {
       if (!renderer || !snowBtn || snowLoading) return;
@@ -519,6 +589,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
             scaleX: pc.bounds.maxX - pc.bounds.minX,
             scaleZ: pc.bounds.maxY - pc.bounds.minY,
           });
+          requestRender();
           snowFieldLoaded = true;
           console.log(
             `[Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
@@ -531,6 +602,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
           setTimeout(() => { if (snowBtn) snowBtn.textContent = snowModes[0].label; }, 2500);
           snowIdx = 0;
           renderer.setSnowMode(0);
+          requestRender();
           return;
         } finally {
           snowLoading = false;
@@ -541,8 +613,9 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       renderer.setSnowMode(mode.gpu);
       snowBtn.textContent = mode.label;
       snowBtn.classList.toggle('active', mode.gpu !== 0);
+      requestRender();
     }
-    snowBtn?.addEventListener('click', () => void cycleSnow());
+    snowBtn?.addEventListener('click', handleSnowClick);
 
   } catch (err: any) {
     const raw = err?.message || String(err);

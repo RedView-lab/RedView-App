@@ -13,6 +13,14 @@ const SOURCE_ID = 'poi-source';
 const LAYER_ID = 'poi-layer';
 const TEXT_LAYER_ID = 'poi-text-layer';
 
+function canMutateStyle(map: MapboxMap): boolean {
+  try {
+    return map.isStyleLoaded() && Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────
 
 export function usePoi(
@@ -83,7 +91,8 @@ export function usePoi(
 
   // ── Setup source + layers ─────────────────────────────────────────
 
-  const ensureSourceAndLayers = useCallback((m: MapboxMap) => {
+  const ensureSourceAndLayers = useCallback((m: MapboxMap): boolean => {
+    if (!canMutateStyle(m)) return false;
     if (!m.getSource(SOURCE_ID)) {
       m.addSource(SOURCE_ID, {
         type: 'geojson',
@@ -155,11 +164,13 @@ export function usePoi(
         },
       });
     }
+    return true;
   }, []);
 
   // ── Update GeoJSON data ───────────────────────────────────────────
 
   const updateSourceData = useCallback((m: MapboxMap, features: PoiFeature[]) => {
+    if (!canMutateStyle(m)) return;
     const source = m.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
     if (!source) return;
 
@@ -320,7 +331,7 @@ export function usePoi(
 
       if (!mounted) return;
 
-      ensureSourceAndLayers(map);
+      if (!ensureSourceAndLayers(map)) return;
 
       // Seed the POI source from a previously-saved corridor result
       // (rehydrated from Supabase) so the user doesn't have to re-click
@@ -381,12 +392,13 @@ export function usePoi(
       // Defer so useMap's async handler (await swReady → addSource) completes first
       setTimeout(async () => {
         try {
+          if (!canMutateStyle(map)) return;
           resetIconRegistration();
           iconsReady.current = false;
           await registerPoiIcons(map);
           iconsReady.current = true;
 
-          ensureSourceAndLayers(map);
+          if (!ensureSourceAndLayers(map)) return;
 
           if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
             // Corridor mode: re-render last corridor results

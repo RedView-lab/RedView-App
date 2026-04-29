@@ -464,7 +464,21 @@ export async function runWebGLFallback(
   let frames = 0;
   let fps = 0;
 
+  let frameHandle: number | null = null;
+  let renderRequested = true;
+  let cleanedUp = false;
+
+  const requestRender = () => {
+    renderRequested = true;
+    if (cleanedUp || document.hidden || frameHandle != null) return;
+    frameHandle = window.requestAnimationFrame(renderFrame);
+  };
+
   const renderFrame = () => {
+    frameHandle = null;
+    if (cleanedUp || document.hidden) return;
+    renderRequested = false;
+
     const view = camera.getViewMatrix();
     const proj = camera.getProjMatrix();
     const vp = WebGLTerrainRenderer.multiplyMat4(view, proj);
@@ -481,14 +495,53 @@ export async function runWebGLFallback(
         `terrain HD ${mesh.gridWidth}×${mesh.gridHeight} · ` +
         `${canvas.width}×${canvas.height} · WebGL2 [${profile.tier}] · ${opts.tileLabel}`;
     }
-    requestAnimationFrame(renderFrame);
-  };
-  requestAnimationFrame(renderFrame);
 
-  window.addEventListener('resize', () => {
+    if (renderRequested) requestRender();
+  };
+  camera.onChange = () => requestRender();
+  requestRender();
+
+  const handleResize = () => {
     resizeCanvas(canvas, profile.dprCap);
     renderer.resize(canvas.width, canvas.height);
-  });
+    requestRender();
+  };
+  window.addEventListener('resize', handleResize);
+
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      if (frameHandle != null) {
+        window.cancelAnimationFrame(frameHandle);
+        frameHandle = null;
+      }
+      return;
+    }
+    requestRender();
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (frameHandle != null) {
+      window.cancelAnimationFrame(frameHandle);
+      frameHandle = null;
+    }
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    window.removeEventListener('resize', handleResize);
+    window.removeEventListener('pagehide', handlePageHide);
+    camera.onChange = null;
+    camera.destroy();
+    renderer.destroy();
+  };
+  const handlePageHide = (event: PageTransitionEvent) => {
+    if (event.persisted) {
+      handleVisibilityChange();
+      return;
+    }
+    cleanup();
+  };
+  window.addEventListener('pagehide', handlePageHide);
 }
 
 function runTerrainWorker(

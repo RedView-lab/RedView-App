@@ -4,6 +4,14 @@ const GPX_SOURCE_ID = 'gpx-route-source';
 const GPX_GLOW_LAYER_ID = 'gpx-route-glow';
 const GPX_LINE_LAYER_ID = 'gpx-route-line';
 
+function canMutateStyle(map: MapboxMap): boolean {
+  try {
+    return map.isStyleLoaded() && Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 /** Check if the GPX source still exists on the map. */
 export function isGpxRouteOnMap(map: MapboxMap): boolean {
   try {
@@ -16,6 +24,8 @@ export function addGpxRoute(
   map: MapboxMap,
   points: { lat: number; lon: number }[],
 ): void {
+  if (!canMutateStyle(map)) return;
+
   removeGpxRoute(map);
 
   const coordinates = points.map((p) => [p.lon, p.lat]);

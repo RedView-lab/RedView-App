@@ -12,6 +12,7 @@ export class CameraController {
   targetY = 0;
   targetZ = 0;
   sceneRadius = 500;
+  onChange: (() => void) | null = null;
 
   private isDragging = false;
   private isPanning = false;
@@ -42,6 +43,7 @@ export class CameraController {
     this.radius = this.sceneRadius * 1.2;
     this.theta = Math.PI / 4;
     this.phi = Math.PI / 3;
+    this.notifyChange();
   }
 
   private onMouseDown = (e: MouseEvent) => {
@@ -75,6 +77,7 @@ export class CameraController {
       this.targetY += dy * uY * speed;
       this.targetZ += (-dx * rZ + dy * uZ) * speed;
     }
+    this.notifyChange();
   };
 
   private onMouseUp = () => {
@@ -86,7 +89,12 @@ export class CameraController {
     e.preventDefault();
     this.radius *= 1 + e.deltaY * 0.001;
     this.radius = Math.max(1, this.radius);
+    this.notifyChange();
   };
+
+  private notifyChange() {
+    this.onChange?.();
+  }
 
   getEye(): [number, number, number] {
     const x = this.targetX + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
