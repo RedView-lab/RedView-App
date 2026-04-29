@@ -24,7 +24,6 @@ interface DashboardLayoutInput {
   isMapFocusMode: boolean;
   isLeftPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
-  leftPanelOpen: boolean;
 }
 
 export function getDashboardLayout({
@@ -36,7 +35,6 @@ export function getDashboardLayout({
   isMapFocusMode,
   isLeftPanelCollapsed,
   isRightPanelCollapsed,
-  leftPanelOpen,
 }: DashboardLayoutInput) {
   const appScale = clampNumber(
     Math.min(

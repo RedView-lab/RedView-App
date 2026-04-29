@@ -207,7 +207,6 @@ export function useDashboardChrome({
     isMapFocusMode,
     isLeftPanelCollapsed,
     isRightPanelCollapsed,
-    leftPanelOpen,
   });
 
   const handleResizeStart = useCallback(
