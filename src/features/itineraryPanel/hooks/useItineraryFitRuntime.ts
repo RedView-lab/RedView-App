@@ -197,26 +197,44 @@ export function useItineraryFitRuntime({
         });
 
         updateFitRuntime(active.id, (current) => {
+          const activePrediction = active.prediction ?? null;
+          const shouldReuseLoadedFiles =
+            persistedUploadSignature.length > 0
+            && current.persistedUploadSignature === persistedUploadSignature
+            && current.fitFiles.length > 0;
+          const nextFitFiles = shouldReuseLoadedFiles ? current.fitFiles : fitFiles;
+          const nextFitFileNames = nextFitFiles.map((file) => file.name);
+          const sameFitFiles =
+            current.fitFiles.length === nextFitFiles.length
+            && current.fitFiles.every((file, index) => {
+              const nextFile = nextFitFiles[index];
+              return (
+                file.name === nextFile?.name
+                && file.lastModified === nextFile.lastModified
+                && file.size === nextFile.size
+              );
+            });
+
           if (
             current.persistedUploadSignature === persistedUploadSignature
-            && current.predictionResult === (active.prediction ?? null)
-            && current.fitFiles.length === fitFiles.length
+            && current.predictionResult === activePrediction
+            && sameFitFiles
           ) {
             return current;
           }
 
           return {
             ...current,
-            fitFiles,
-            fitFileNames: fitFiles.map((file) => file.name),
-            predictionResult: active.prediction ?? null,
+            fitFiles: nextFitFiles,
+            fitFileNames: nextFitFileNames,
+            predictionResult: activePrediction,
             progress: current.status === 'running' ? current.progress : [],
             status:
               current.status === 'running'
                 ? current.status
-                : active.prediction
+                : activePrediction
                   ? 'success'
-                  : fitFiles.length > 0
+                  : nextFitFiles.length > 0
                     ? 'ready'
                     : 'idle',
             error: current.status === 'running' ? current.error : null,
@@ -226,20 +244,30 @@ export function useItineraryFitRuntime({
       } catch (error) {
         if (cancelled) return;
         console.error('[fit-predictor] failed to hydrate persisted FIT uploads', error);
-        updateFitRuntime(active.id, (current) => ({
-          ...current,
-          fitFiles: [],
-          fitFileNames: [],
-          predictionResult: active.prediction ?? null,
-          progress: [],
-          status: 'error',
-          error:
-            error instanceof Error
-              ? error.message
-              : 'Impossible de recharger les fichiers FIT du projet.',
-          updatedAt: new Date().toISOString(),
-          persistedUploadSignature,
-        }));
+        updateFitRuntime(active.id, (current) => {
+          if (current.fitFiles.length > 0) {
+            return {
+              ...current,
+              predictionResult: active.prediction ?? null,
+              persistedUploadSignature,
+            };
+          }
+
+          return {
+            ...current,
+            fitFiles: [],
+            fitFileNames: [],
+            predictionResult: active.prediction ?? null,
+            progress: [],
+            status: 'error',
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Impossible de recharger les fichiers FIT du projet.',
+            updatedAt: new Date().toISOString(),
+            persistedUploadSignature,
+          };
+        });
       }
     })();
 
