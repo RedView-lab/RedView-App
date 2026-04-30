@@ -14,7 +14,6 @@
 }
 
 .rvi-ghostbtn {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -37,7 +36,6 @@
 }
 
 .rvi-redbtn {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -84,9 +82,4 @@
   line-height: normal;
   padding: 7px 10px 7px 8px;
   gap: 4px;
-}
-
-.rvi-redbtn--sm {
-  height: 26px;
-  padding: 0 8px;
 }

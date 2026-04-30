@@ -1,5 +1,4 @@
-﻿import { CheckboxField } from '../components/PanelCheckbox';
-import { ToggleRow } from '../components/PanelToggle';
+﻿import { CheckboxField, ToggleRow } from '../components/controls';
 import {
   IconChevronDown,
   IconDownloadCircle,
@@ -98,6 +97,7 @@ export function PoiSection({
   poiCount = 0,
   error = null,
   disabled = false,
+  disabledReason = null,
 }: PoiSectionProps) {
   const buttonDisabled = disabled || loading;
   const pct =
@@ -180,6 +180,10 @@ export function PoiSection({
       {error ? (
         <div className="rvi-poi-msg rvi-poi-msg--error" role="alert">
           {error}
+        </div>
+      ) : disabledReason ? (
+        <div className="rvi-poi-msg rvi-poi-msg--hint" role="status">
+          {disabledReason}
         </div>
       ) : null}
     </div>

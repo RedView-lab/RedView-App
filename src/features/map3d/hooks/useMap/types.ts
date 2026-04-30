@@ -1,5 +1,5 @@
 import type { MapViewport } from '../../lib/viewport-persist';
-import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../../overlayStatus';
+import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../../lib/overlayStatus';
 
 export interface UseMapOptions {
   initialViewport?: MapViewport | null;

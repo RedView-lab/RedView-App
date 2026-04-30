@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Feature, FeatureCollection, Polygon } from 'geojson';
 import { type GeoJSONSource, type Map as MapboxMap, type MapMouseEvent } from 'mapbox-gl';
 import type { TileCoord } from '../types';
-import { tileCoordToWgs84Polygon, wgs84ToTileCoord } from '../coordConvert';
+import { tileCoordToWgs84Polygon, wgs84ToTileCoord } from '../lib/coordConvert';
 import { useLidarManager } from './LidarContext';
 
 const SOURCE_ID = 'lidar-selection-source';

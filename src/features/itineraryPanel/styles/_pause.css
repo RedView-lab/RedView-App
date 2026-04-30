@@ -85,7 +85,6 @@
 }
 
 .rvi-pause-chip__native {
-  all: unset;
   display: block;
   box-sizing: border-box;
   min-width: 24px;
@@ -107,7 +106,6 @@
 
 /* ---- Remove (minus) button ------------------------------------------------- */
 .rvi-pause-row__remove {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -202,7 +200,6 @@
 }
 
 .rvi-poipause-cell__native {
-  all: unset;
   display: block;
   box-sizing: border-box;
   width: 100%;

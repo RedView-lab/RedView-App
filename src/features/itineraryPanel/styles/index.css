@@ -1,13 +1,19 @@
 /* Itinerary Panel — left dock.
    Source of truth: Figma 1539:19209 (Traçage) & 1539:19715 (Rythme). */
 @import './_shell.css';
+@import './foundation/_primitives.css';
 @import './_header.css';
 @import './_tabs.css';
 @import './_profile.css';
 @import './_fields.css';
 @import './_pause.css';
 @import './_poi.css';
-@import './_timeline.css';
+@import './timeline/_layout.css';
+@import './timeline/_edit.css';
+@import './timeline/_list.css';
+@import './timeline/_schedule.css';
+@import './timeline/_responsive.css';
+@import './timeline/_filters-table.css';
 @import './_dialog.css';
 @import './_resize.css';
 @import './_collapse.css';

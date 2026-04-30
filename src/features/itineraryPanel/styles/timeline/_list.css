@@ -166,7 +166,6 @@
   margin-left: 4px;
 }
 .rvi-tl-row__action {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -232,7 +231,6 @@
 .rvi-tl-add:hover { background: rgba(255, 255, 255, 0.1); }
 
 .rvi-tl-add__main {
-  all: unset;
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
@@ -255,7 +253,6 @@
   color: var(--rvi-text);
 }
 .rvi-tl-add__chevron {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -294,7 +291,6 @@
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
 }
 .rvi-tl-kind-menu__option {
-  all: unset;
   box-sizing: border-box;
   position: relative;
   z-index: 1;

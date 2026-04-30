@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
-import { AssetIcon } from '@/components/AssetIcon';
+import { AssetIcon } from '@/shared/components/AssetIcon';
 
-import type { OverlayStatusId, OverlayStatusSnapshot } from '../overlayStatus';
+import type { OverlayStatusId, OverlayStatusSnapshot } from '../lib/overlayStatus';
 
 interface MapOverlayStatusDockProps {
   statuses: OverlayStatusSnapshot[];

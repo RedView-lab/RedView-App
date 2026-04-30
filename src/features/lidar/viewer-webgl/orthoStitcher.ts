@@ -7,7 +7,7 @@
 // the four corner UVs (in stitched-texture space [0..1]) so the worker can
 // pre-compute per-vertex UVs.
 
-import { toWgs84 } from '../coordConvert';
+import { toWgs84 } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import type { CornerUV } from './terrainWorker';
 

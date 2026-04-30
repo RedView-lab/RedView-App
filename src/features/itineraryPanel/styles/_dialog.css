@@ -62,7 +62,6 @@
 }
 
 .rvi-dialog__close {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -80,22 +79,6 @@
 .rvi-dialog__close:focus-visible {
   outline: 2px solid var(--rvi-red-accent);
   outline-offset: 2px;
-}
-
-.rvi-dialog__sub {
-  margin: 0;
-  font-size: 13px;
-  color: var(--rvi-text-dim);
-}
-
-.rvi-dialog__error {
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: rgba(255, 96, 96, 0.12);
-  border: 1px solid rgba(255, 96, 96, 0.32);
-  color: #ffa0a0;
-  font-size: 13px;
 }
 
 /* ── Add itinerary popover (Figma node 2190:42467) ────────────── */
@@ -118,7 +101,6 @@
 }
 
 .rvi-add-itin-menu__item {
-  all: unset;
   position: relative;
   z-index: 1;
   display: flex;

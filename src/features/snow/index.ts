@@ -6,11 +6,11 @@
 // ============================================================================
 
 import { fetchAromeSnowGrid } from './lib/aromeFetcher';
-import { DEFAULT_SNOW_CONFIG, type SnowRedistributionConfig } from './config';
+import { DEFAULT_SNOW_CONFIG, type SnowRedistributionConfig } from './lib/config';
 import type { SnowField, SnowHeightmap, SnowProgress } from './types';
 
 export type { SnowField, SnowHeightmap, SnowDisplayMode, SnowProgress } from './types';
-export { DEFAULT_SNOW_CONFIG } from './config';
+export { DEFAULT_SNOW_CONFIG } from './lib/config';
 
 interface WorkerProgress { type: 'progress'; pct: number; label: string }
 interface WorkerDone { type: 'done'; result: { data: ArrayBuffer; width: number; height: number; meanCm: number; maxCm: number; coveragePct: number } }

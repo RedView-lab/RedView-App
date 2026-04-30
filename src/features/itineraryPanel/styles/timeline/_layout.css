@@ -77,7 +77,6 @@
   gap: 2px;
 }
 .rvi-tl-tabs__btn {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -110,7 +109,6 @@
 
 /* Header tool buttons */
 .rvi-tl-tool {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;

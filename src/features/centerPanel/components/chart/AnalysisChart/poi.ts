@@ -95,7 +95,7 @@ export function shouldExpandPoiCluster(
   return isMaxPoiZoom(visibleFraction) || expandedPoiClusterId === group.id;
 }
 
-export function isMaxPoiZoom(visibleFraction: number): boolean {
+function isMaxPoiZoom(visibleFraction: number): boolean {
   return visibleFraction <= MIN_VISIBLE_FRACTION + 1e-3;
 }
 

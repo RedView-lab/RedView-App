@@ -1,5 +1,4 @@
 import { Fragment, useMemo } from 'react';
-import { IconTrash } from '@/features/controlPanel/icons';
 import { IconChevronDown } from '../../CenterPanelIcons';
 import {
   formatAxisValue,
@@ -53,9 +52,7 @@ export function SeriesRow({ seriesEntry, xPositions }: SeriesRowProps) {
           </div>
         ))}
       </div>
-      <button type="button" className="rvchart__series-trash" aria-label="Supprimer">
-        <IconTrash size={12} />
-      </button>
+      <div />
     </div>
   );
 }

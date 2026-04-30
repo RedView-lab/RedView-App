@@ -1,0 +1,1 @@
+export { useMiddleClickAutoscroll } from './useMiddleClickAutoscroll';

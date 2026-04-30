@@ -1,1 +1,2 @@
-export { CenterPanel } from './CenterPanel';
+export { CenterPanel } from './components';
+export { CenterPanelToolbar } from './components';

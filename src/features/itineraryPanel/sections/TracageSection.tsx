@@ -1,6 +1,4 @@
-import { LabeledSlider } from '../components/LabeledSlider';
-import { LabeledSelect, LabeledInput } from '../components/LabeledSelect';
-import { CheckboxField } from '../components/PanelCheckbox';
+import { CheckboxField, LabeledInput, LabeledSelect, LabeledSlider } from '../components/controls';
 import type { PrioritiesState, RoadTypesState } from '../types';
 
 interface TracageSectionProps {

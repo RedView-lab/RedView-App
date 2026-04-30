@@ -49,7 +49,7 @@ import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap, ImageSource } from 'mapbox-gl';
 import {
   createOverlayStatus,
-} from '@/features/map3d/overlayStatus';
+} from '@/features/map3d';
 import type {
   BoundsTuple,
   ComputeAck,

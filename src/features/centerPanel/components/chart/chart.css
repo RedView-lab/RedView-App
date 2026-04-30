@@ -252,10 +252,9 @@
 .rvchart__card-distance { font-weight: 500; }
 .rvchart__card-metrics { display: grid; gap: 4px; color: rgba(255, 255, 255, 0.96); }
 
-/* ---- Bottom rows (X axis + series + add) ---- */
+/* ---- Bottom rows (X axis + series) ---- */
 .rvchart__xaxis,
-.rvchart__series,
-.rvchart__add {
+.rvchart__series {
   display: grid;
   grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
   align-items: center;
@@ -396,35 +395,4 @@
   color: rgba(255, 255, 255, 0.7);
   font: 600 12px/1 'DM Sans', system-ui, sans-serif;
   border-left: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.rvchart__series-trash {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 22px;
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-}
-
-.rvchart__add {
-  height: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.rvchart__add-button {
-  height: 20px;
-  margin: 0 6px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
-  font: 400 11px/1 'DM Sans', system-ui, sans-serif;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
 }

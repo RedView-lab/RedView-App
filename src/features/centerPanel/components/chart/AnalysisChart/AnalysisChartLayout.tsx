@@ -1,5 +1,4 @@
 import { Fragment, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
-import { IconPlusCircle } from '@/features/controlPanel/icons';
 import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
 import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
@@ -314,17 +313,6 @@ export function AnalysisChartLayout({
               <SeriesRow key={entry.id} seriesEntry={entry} xPositions={xPositions} />
             ))
         : null}
-
-      <div className="rvchart__add">
-        <div className="rvchart__series-control">
-          <button type="button" className="rvchart__add-button">
-            <IconPlusCircle size={12} />
-            <span>Ajouter</span>
-          </button>
-        </div>
-        <div />
-        <div />
-      </div>
     </div>
   );
 }

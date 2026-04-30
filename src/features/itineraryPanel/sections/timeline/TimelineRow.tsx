@@ -10,7 +10,7 @@
  * ready to wire to any backend.
  */
 import { IconEye, IconStar, IconTrash } from '../../components/icons';
-import { PlaceSearchInput } from '../../components/PlaceSearchInput';
+import { PlaceSearchInput } from './components';
 import type { TimelineItem } from '../../types';
 import { KindBadge, kindLabel } from './KindBadge';
 

@@ -24,7 +24,7 @@ import {
 import {
   downloadProjectItineraryFitFiles,
   uploadProjectItineraryFitFiles,
-} from '@/lib/projects';
+} from '@/shared/utils/projects';
 import type { ItineraryProject } from '../types';
 
 type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';

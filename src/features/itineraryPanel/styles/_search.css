@@ -9,7 +9,6 @@
 }
 
 .rvi-place-search__input {
-  all: unset;
   flex: 1 1 0;
   min-width: 0;
   padding: 4px 8px;

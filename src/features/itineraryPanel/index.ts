@@ -1,5 +1,5 @@
-export { ItineraryPanelContainer as ItineraryPanel } from './ItineraryPanelContainer';
-export { ItineraryPanel as ItineraryPanelView } from './ItineraryPanel';
+export { ItineraryPanelContainer as ItineraryPanel } from './components/ItineraryPanelContainer';
+export { ItineraryPanel as ItineraryPanelView } from './components/ItineraryPanel';
 export { ProjectProvider, useProjectStore, useProjectStoreOptional } from './context/ProjectStore';
 export {
   PredictionProvider,

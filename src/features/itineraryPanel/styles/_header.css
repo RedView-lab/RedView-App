@@ -17,7 +17,6 @@
 }
 
 .rvi-header__back {
-  all: unset;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -42,7 +41,6 @@
 }
 
 .rvi-header__title {
-  all: unset;
   display: block;
   width: 100%;
   font-size: 16px;
@@ -109,7 +107,6 @@
 }
 
 .rvi-iconbtn {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;

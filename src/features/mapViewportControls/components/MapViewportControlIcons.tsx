@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { AssetIcon, type AssetIconProps } from '@/components/AssetIcon';
+import { AssetIcon, type AssetIconProps } from '@/shared/components/AssetIcon';
 
 export function IconMaximize({ size = 18, ...rest }: AssetIconProps) {
   return (

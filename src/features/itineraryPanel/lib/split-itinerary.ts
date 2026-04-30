@@ -1,4 +1,4 @@
-import { ITINERARY_COLORS } from '../defaultState';
+import { ITINERARY_COLORS } from './defaultState';
 import type { Itinerary, ItineraryProject } from '../types';
 import {
   buildImportedRouteMetrics,

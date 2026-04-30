@@ -58,7 +58,7 @@ export function clampXDomainToRoute(
   return { min, max };
 }
 
-export function clipPointsToXDomain(
+function clipPointsToXDomain(
   points: { x: number; y: number }[],
   xDomain: AxisDomain,
 ): { x: number; y: number }[] {
@@ -120,7 +120,7 @@ function upperBoundPointIndex(points: { x: number; y: number }[], xValue: number
   return lo;
 }
 
-export function compressPointsForPlot(
+function compressPointsForPlot(
   points: { x: number; y: number }[],
   xDomain: AxisDomain,
   plotWidth: number,

@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
+import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import type { TimelineAddItemKind } from '../../types';
 
 interface TimelineKindMenuStyle {

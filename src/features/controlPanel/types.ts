@@ -6,7 +6,7 @@
 import type {
   ControlPanelSectionKey,
   ControlPanelSectionsOpenState,
-} from './persistedState';
+} from './lib/persistedState';
 import type { DownloadProgress } from '@/features/lidar/types';
 
 export type BasemapId =

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AssetIcon } from '@/components/AssetIcon';
+import { AssetIcon } from '@/shared/components/AssetIcon';
 import { clampForecastSelection, getForecastDateForOffset, minutesToTime } from '../lib/forecastTime.ts';
 import type { MapToolsPanelProps } from '../types';
 import { useWind } from '../hooks/useWind';

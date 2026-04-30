@@ -2,7 +2,7 @@ import type { WeatherOverlayMetric } from '@/features/weather/overlay/types';
 import { getWeatherPaletteMetricDefinition } from '@/features/weather/config/paletteMetrics';
 
 import type { WeatherPaletteConfig } from '../types';
-import { buildWeatherPaletteBands } from '../weatherPalette';
+import { buildWeatherPaletteBands } from '../lib/weatherPalette';
 
 const DEFAULT_WEATHER_PALETTE_KEYS: WeatherOverlayMetric[] = [
   'temperature',

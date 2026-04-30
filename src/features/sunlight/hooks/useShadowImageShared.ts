@@ -2,7 +2,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
   OverlayReloadRegistrar,
   OverlayStatusReporter,
-} from '@/features/map3d/overlayStatus';
+} from '@/features/map3d';
 
 export const SOURCE_ID = 'shadow-image';
 export const LAYER_ID = 'shadow-image';

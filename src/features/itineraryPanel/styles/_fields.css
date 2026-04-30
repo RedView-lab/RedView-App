@@ -9,13 +9,6 @@
   line-height: 1.2;
 }
 
-.rvi-grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 12px;
-  width: 100%;
-}
-
 /* ── Priorities grid — Figma 1697:23227 ──────────────────────────
    Two vertical columns (Durée+Distance | Dénivelé+Tranquilité) with
    8px column gap and 2px row gap inside each column. */
@@ -196,7 +189,6 @@
   color: var(--rvi-text);
 }
 .rvi-select__trigger {
-  all: unset;
   position: absolute;
   inset: 0;
   cursor: pointer;
@@ -289,7 +281,6 @@
   background: transparent;
 }
 .rvi-input__native {
-  all: unset;
   flex: 1 1 0;
   min-width: 0;
   font-size: 14px;
@@ -318,7 +309,6 @@
   box-sizing: border-box;
 }
 .rvi-chip-input__native {
-  all: unset;
   width: 100%;
   min-width: 0;
   font-size: 14px;
@@ -336,7 +326,6 @@
 
 /* ── Chip (button-like) for date/time ───────────────────────── */
 .rvi-datechip {
-  all: unset;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -361,13 +350,6 @@
   width: 12px;
   height: 12px;
   flex-shrink: 0;
-}
-.rvi-datechip__native {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  width: 100%;
 }
 
 .rvi-time-input {
@@ -712,7 +694,6 @@
 
 /* Small-width adaptation */
 @media (max-width: 340px) {
-  .rvi-grid-2 { grid-template-columns: 1fr; }
   .rvi-lfield { flex-wrap: wrap; }
   .rvi-select,
   .rvi-input {

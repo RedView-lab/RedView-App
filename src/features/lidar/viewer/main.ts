@@ -6,8 +6,8 @@
 import { LidarRenderer } from './renderer';
 import type { HeightmapParams } from './renderer';
 import { CameraController } from './camera';
-import { buildTileFileName } from '../coordConvert';
-import { saveColorizedData, loadColorizedData, saveTerrainData, loadTerrainData } from '../storage';
+import { buildTileFileName } from '../lib/coordConvert';
+import { saveColorizedData, loadColorizedData, saveTerrainData, loadTerrainData } from '../lib/storage';
 import type { DetectedCrs, AltitudeRef } from '../types';
 import type { AABB } from './lod/types';
 import { LodManager } from './lod/lodManager';

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { AssetIcon } from '@/components/AssetIcon';
+import { AssetIcon } from '@/shared/components/AssetIcon';
 import type { SlopePanelProps, SlopeColorMode } from '../types';
 import { SLOPE_CATEGORIES, degToPercent } from '../lib/slope-config';
 import { loadSlopeState, saveSlopeState } from '../lib/slope-persist';

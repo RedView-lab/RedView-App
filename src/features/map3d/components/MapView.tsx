@@ -5,7 +5,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import type { MapViewport } from '../lib/viewport-persist';
-import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../overlayStatus';
+import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
 
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;

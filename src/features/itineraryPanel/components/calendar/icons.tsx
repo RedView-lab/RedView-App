@@ -1,5 +1,5 @@
-import type { AssetIconProps } from '@/components/AssetIcon';
-import { SvgV2Icon } from '@/components/SvgV2Icon';
+import type { AssetIconProps } from '@/shared/components/AssetIcon';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
 /** Figma I1710:47397;1710:47194 — chevron-left, 20×20 viewBox bounds. */
 export const IconChevronLeft = ({ size = 20, ...p }: AssetIconProps) => (

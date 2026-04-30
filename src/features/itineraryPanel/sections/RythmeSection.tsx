@@ -1,11 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
-import { CheckboxField } from '../components/PanelCheckbox';
-import { ToggleRow } from '../components/PanelToggle';
-import { PanelSelect } from '../components/PanelSelect';
-import { PauseIntervalList } from '../components/PauseIntervalList';
-import { PoiPauseGrid } from '../components/PoiPauseGrid';
-import { Collapse } from '../components/Collapse';
+import { CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
+import { Collapse } from '../components/shell';
+import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
 import { CalendarPopover } from '../components/calendar';
 import {
   IconCalendar,

@@ -137,9 +137,6 @@
   background: var(--rvi-border);
   flex-shrink: 0;
 }
-.rvi-divider--strong {
-  background: var(--rvi-border-strong);
-}
 
 .rvi-row {
   display: flex;
@@ -152,10 +149,6 @@
      the user drags the handle past the floor, the panel starts clipping
      horizontally instead of letting children collide. */
   min-width: min-content;
-}
-.rvi-row--grow > * {
-  flex: 1 1 0;
-  min-width: 0;
 }
 
 /* Routing feedback banners (errors / smart-validator warnings). */

@@ -6,7 +6,7 @@
  * timeline (Feuille de route) at the bottom.
  */
 import type { ExpertProfileState } from './expert/types';
-import type { ControlPanelPersistedState } from '../controlPanel/persistedState';
+import type { ControlPanelPersistedState } from '../controlPanel/lib/persistedState';
 import type { PredictionResult } from '../fitPredictor/types';
 import type { PoiFeature } from '../poi/types';
 

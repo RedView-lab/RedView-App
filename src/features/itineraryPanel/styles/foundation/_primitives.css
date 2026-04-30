@@ -1,0 +1,47 @@
+/* Shared, low-specificity primitives for itinerary panel controls.
+   Keep component partials focused on sizing and appearance rather than
+   repeating native resets in every file. */
+
+:where(
+  .rvi-header__back,
+  .rvi-header__title,
+  .rvi-iconbtn,
+  .rvi-ghostbtn,
+  .rvi-redbtn,
+  .rvi-select__trigger,
+  .rvi-input__native,
+  .rvi-chip-input__native,
+  .rvi-datechip,
+  .rvi-dialog__close,
+  .rvi-add-itin-menu__item,
+  .rvi-pause-chip__native,
+  .rvi-pause-row__remove,
+  .rvi-poipause-cell__native,
+  .rvi-place-search__input,
+  .rvi-categories-btn,
+  .rvi-tl-tabs__btn,
+  .rvi-tl-tool,
+  .rvi-tl-schedule__day,
+  .rvi-tl-edit__zoom-btn,
+  .rvi-tl-edit__chip,
+  .rvi-tl-add-split__main,
+  .rvi-tl-add-split__chevron,
+  .rvi-tl-row__action,
+  .rvi-tl-add__main,
+  .rvi-tl-add__chevron,
+  .rvi-tl-kind-menu__option
+) {
+  all: unset;
+  box-sizing: border-box;
+}
+
+:where(
+  .rvi-input__native,
+  .rvi-chip-input__native,
+  .rvi-pause-chip__native,
+  .rvi-poipause-cell__native,
+  .rvi-place-search__input
+) {
+  font: inherit;
+  color: inherit;
+}

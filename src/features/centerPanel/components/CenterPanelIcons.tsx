@@ -1,5 +1,5 @@
-import type { AssetIconProps } from '@/components/AssetIcon';
-import { SvgV2Icon } from '@/components/SvgV2Icon';
+import type { AssetIconProps } from '@/shared/components/AssetIcon';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import {
   IconCheck,
   IconChevronDown,

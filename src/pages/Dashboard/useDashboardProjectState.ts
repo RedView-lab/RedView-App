@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { getProject, uploadProjectThumbnail } from '@/lib/projects';
-import { replaceProjectLocation } from '@/lib/projectLocation';
-import { captureMapThumbnail } from '@/lib/mapThumbnail';
+import { getProject, uploadProjectThumbnail } from '@/shared/utils/projects';
+import { replaceProjectLocation } from '@/shared/utils/projectLocation';
+import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
 
 export type DashboardPersistedMutator = (
   dashboard: NonNullable<ItineraryProject['dashboard']>,

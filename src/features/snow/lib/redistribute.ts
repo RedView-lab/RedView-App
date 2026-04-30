@@ -21,7 +21,7 @@
 //   G. Conservation de masse adaptive
 // ============================================================================
 
-import type { SnowRedistributionConfig } from '../config';
+import type { SnowRedistributionConfig } from './config';
 import type { SnowProgress } from '../types';
 import {
   computeDinfFlow,

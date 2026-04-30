@@ -12,7 +12,7 @@ import { WebGLTerrainRenderer } from './renderer';
 import type { TerrainGPUData } from './renderer';
 import type { TerrainMeshWebGL, TerrainWorkerInput, TerrainWorkerOutput } from './terrainWorker';
 import { stitchOrtho } from './orthoStitcher';
-import { detectCrs } from '../coordConvert';
+import { detectCrs } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 
 export interface WebGLViewerHandles {

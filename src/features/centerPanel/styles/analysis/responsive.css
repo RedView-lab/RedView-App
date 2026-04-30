@@ -2,14 +2,6 @@
   .rvc-center-analysis__filter-chip {
     max-width: 78px;
   }
-
-  .rvc-center-analysis__hover-cards {
-    gap: 8px;
-  }
-
-  .rvc-center-analysis__hover-card {
-    width: max(78px, calc(var(--rvc-center-hover-group-width) - 4px));
-  }
 }
 
 @container center-panel (max-width: 980px) {

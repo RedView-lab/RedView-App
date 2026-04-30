@@ -12,7 +12,7 @@ import {
   createOverlayStatus,
   type OverlayReloadRegistrar,
   type OverlayStatusReporter,
-} from '../../overlayStatus';
+} from '../../lib/overlayStatus';
 import {
   DEM_ACTIVITY_SETTLE_MS,
   DEM_PASSIVE_REFRESH_COOLDOWN_MS,

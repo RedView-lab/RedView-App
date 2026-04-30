@@ -16,7 +16,7 @@ import type {
   WeatherState,
   WeatherTab,
 } from '../types';
-import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../weatherPalette';
+import { formatWeatherPaletteBandLabel, formatWeatherPaletteValue, weatherPaletteMetricSpec } from '../lib/weatherPalette';
 import {
   FORECAST_MAX_DAY_OFFSET,
   FORECAST_TIME_STEP_MINUTES,

@@ -10,7 +10,7 @@
 // can sample the orthophoto with linear filtering for crisp pixels (no
 // per-cell colour averaging).
 
-import { parseLazBuffer } from '../lazParser';
+import { parseLazBuffer } from '../lib/lazParser';
 import type { PointCloudBounds } from '../types';
 
 export interface CornerUV {

@@ -9,7 +9,7 @@ import {
 
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
-import { createDefaultItinerary, createDefaultProject, ITINERARY_COLORS } from '../defaultState';
+import { createDefaultItinerary, createDefaultProject, ITINERARY_COLORS } from '../lib/defaultState';
 import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
 import {
   mergeItineraryProject,

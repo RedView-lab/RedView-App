@@ -1,5 +1,5 @@
 import { createContext, useContext, useRef, useEffect, type ReactNode } from 'react';
-import { LidarManager } from '../lidarManager';
+import { LidarManager } from '../lib/lidarManager';
 
 const LidarCtx = createContext<LidarManager | null>(null);
 

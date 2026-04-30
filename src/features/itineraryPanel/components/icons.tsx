@@ -4,8 +4,8 @@
  * We re-export shared primitives from the right-dock icon set so the visual
  * language stays consistent across panels.
  */
-import { AssetIcon, type AssetIconProps } from '@/components/AssetIcon';
-import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { AssetIcon, type AssetIconProps } from '@/shared/components/AssetIcon';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
 export {

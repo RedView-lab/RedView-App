@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/components/MapCanvasGlassBackdrop';
+import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { IconChevronDown, IconCheck } from '../icons';
 
 interface SelectOption<T extends string = string> {

@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { SvgV2Icon } from '@/components/SvgV2Icon';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import {
+  createOverlayStatus,
   MapView,
   MapBlurMirror,
   MapOverlayStatusDock,
   type OverlayStatusId,
   type OverlayStatusSnapshot,
 } from '@/features/map3d';
-import { createOverlayStatus } from '@/features/map3d/overlayStatus';
-import { ControlPanelContainer } from '@/features/controlPanel';
-import { DEFAULT_BASEMAP_ID, getBasemapStyleUrl, normalizeBasemapId } from '@/features/controlPanel/basemaps';
-import { ExporterPanel } from '@/features/controlPanel/ExporterPanel';
-import { CenterPanel } from '@/features/centerPanel';
+import {
+  ControlPanelContainer,
+  DEFAULT_BASEMAP_ID,
+  ExporterPanel,
+  getBasemapStyleUrl,
+  normalizeBasemapId,
+} from '@/features/controlPanel';
+import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
-import { CenterPanelToolbar } from '@/features/centerPanel/components/CenterPanelToolbar';
 import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';

@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './lib/supabase'
-import { readProjectIdFromPath } from './lib/projectLocation'
-import PayWall from './components/PayWall'
+import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
+import { readProjectIdFromPath } from './shared/utils/projectLocation'
+import PayWall from './shared/components/PayWall'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))

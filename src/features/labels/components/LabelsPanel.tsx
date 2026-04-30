@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { AssetIcon } from '@/components/AssetIcon';
+import { AssetIcon } from '@/shared/components/AssetIcon';
 import type { LabelsPanelProps, LabelCategory } from '../types';
 import { LABEL_CATEGORIES } from '../lib/label-config';
 import { loadLabelState, saveLabelState } from '../lib/label-persist';

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { TileCoord } from '../types';
-import { wgs84ToTileCoord } from '../coordConvert';
+import { wgs84ToTileCoord } from '../lib/coordConvert';
 import { useLidarManager } from './LidarContext';
 
 /**

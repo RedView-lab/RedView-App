@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { TileCoord, CachedTileInfo, DownloadProgress } from '../types';
-import { toWgs84 } from '../coordConvert';
+import { toWgs84 } from '../lib/coordConvert';
 import { useLidarManager } from './LidarContext';
 
 export function useLidar() {

@@ -1,1 +1,1 @@
-export { ProjectBrowserOverlay } from './overlay';
+export { ProjectBrowserOverlay } from './components';

@@ -1,8 +1,0 @@
-﻿/* Timeline styles split into ordered partials. */
-
-@import './timeline/_layout.css';
-@import './timeline/_edit.css';
-@import './timeline/_list.css';
-@import './timeline/_schedule.css';
-@import './timeline/_responsive.css';
-@import './timeline/_filters-table.css';

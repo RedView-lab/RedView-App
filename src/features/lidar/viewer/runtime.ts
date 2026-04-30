@@ -1,5 +1,5 @@
 import type { AltitudeRef, DetectedCrs, PointCloudData } from '../types';
-import type { WorkerResponse } from '../processWorker';
+import type { WorkerResponse } from '../workers/processWorker';
 import type { AABB, FlatOctree, OctreeWorkerResponse } from './lod/types';
 
 export interface ViewerDomElements {
@@ -37,7 +37,7 @@ export function processPointCloudInWorker(
   setStatus: ViewerStatusReporter,
 ): Promise<PointCloudData> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('../processWorker.ts', import.meta.url), { type: 'module' });
+    const worker = new Worker(new URL('../workers/processWorker.ts', import.meta.url), { type: 'module' });
 
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const msg = e.data;

@@ -15,7 +15,7 @@ import {
   createOverlayStatus,
   type OverlayReloadRegistrar,
   type OverlayStatusReporter,
-} from '@/features/map3d/overlayStatus';
+} from '@/features/map3d';
 
 const SOURCE_PREFIX = 'weather-overlay-source';
 const LAYER_PREFIX = 'weather-overlay-layer';
