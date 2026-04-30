@@ -6,6 +6,11 @@ export type {
 } from './billing/types.js';
 
 export {
+  hasPaidSubscription,
+  normalizeRequestedPlanId,
+} from './billing/types.js';
+
+export {
   getOrCreateStripeCustomer,
   getStripeCustomerId,
   getUserIdFromCustomer,
@@ -17,8 +22,6 @@ export {
   getCurrentManagedSubscriptionRow,
   getSubscriptionIdFromInvoice,
   getSubscriptionSnapshot,
-  hasPaidSubscription,
-  normalizeRequestedPlanId,
   setManagedSubscriptionCancellation,
   syncManagedSubscription,
   upsertSubscription,
