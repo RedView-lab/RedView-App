@@ -15,6 +15,65 @@ import type {
 } from './types.js';
 import { MANAGED_SUBSCRIPTION_STATUSES } from './types.js';
 
+function isSubscriptionStatusViewError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const candidate = error as {
+    code?: string;
+    message?: string;
+    details?: string;
+    hint?: string;
+  };
+
+  const haystack = [candidate.message, candidate.details, candidate.hint]
+    .filter((value): value is string => typeof value === 'string' && value.length > 0)
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    candidate.code === '42P01' ||
+    candidate.code === '42703' ||
+    haystack.includes('user_subscription_status') ||
+    haystack.includes('is_subscribed') ||
+    haystack.includes('cancel_at_period_end')
+  );
+}
+
+function toSnapshotFromStoredSubscription(
+  row: Pick<
+    StoredSubscriptionRow,
+    'status' | 'price_id' | 'current_period_end' | 'cancel_at_period_end'
+  > | null,
+): SubscriptionSnapshot {
+  const status = row?.status ?? 'demo';
+  const isSubscribed = status === 'active' || status === 'trialing';
+
+  return {
+    isSubscribed,
+    status,
+    priceId: row?.price_id ?? null,
+    currentPeriodEnd: row?.current_period_end ?? null,
+    cancelAtPeriodEnd: row?.cancel_at_period_end ?? false,
+  };
+}
+
+async function getSubscriptionSnapshotFromStoredSubscriptions(
+  userId: string,
+): Promise<SubscriptionSnapshot> {
+  const rows = await listStoredSubscriptions(userId);
+  const candidates = rows.filter((row) => MANAGED_SUBSCRIPTION_STATUSES.has(row.status ?? ''));
+
+  candidates.sort((left, right) => {
+    const leftTime = left.current_period_end ? Date.parse(left.current_period_end) : 0;
+    const rightTime = right.current_period_end ? Date.parse(right.current_period_end) : 0;
+    return rightTime - leftTime;
+  });
+
+  return toSnapshotFromStoredSubscription(candidates[0] ?? null);
+}
+
 export async function getSubscriptionSnapshot(userId: string): Promise<SubscriptionSnapshot> {
   const { data, error } = await getSupabaseAdmin()
     .from('user_subscription_status')
@@ -29,6 +88,10 @@ export async function getSubscriptionSnapshot(userId: string): Promise<Subscript
     }>();
 
   if (error) {
+    if (isSubscriptionStatusViewError(error)) {
+      return getSubscriptionSnapshotFromStoredSubscriptions(userId);
+    }
+
     throw error;
   }
 
