@@ -10,8 +10,21 @@ import type {
   RoadTypesState,
 } from '../src/features/itineraryPanel/types';
 
+declare const process: {
+  env: Record<string, string | undefined>;
+  stdout: { _flush?: () => void };
+  exitCode?: number;
+  exit(code?: number): never;
+};
+
 const UPSTREAM =
   process.env.BROUTER_UPSTREAM?.replace(/\/+$/, '') ?? 'http://localhost:17777';
+const ONLY_GROUPS = new Set(
+  (process.env.BROUTER_BENCH_GROUPS ?? '')
+    .split(',')
+    .map((group: string) => group.trim().toUpperCase())
+    .filter(Boolean),
+);
 
 const PT = {
   chamonix: { lat: 45.9237, lon: 6.8694 },
@@ -45,17 +58,190 @@ interface RouteStats {
   ascentM: number;
   descentM: number;
   durationMin: number;
+  tortuosity: number;
   status: number;
   profileId: string;
+  coordinates?: [number, number][];
   error?: string;
 }
 
-async function uploadProfile(brf: string): Promise<string> {
-  const res = await fetch(`${UPSTREAM}/brouter/profile`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
-    body: brf,
+function formatError(error: unknown): string {
+  const err = error as { message?: string; cause?: { code?: string; message?: string } };
+  const message = err?.message ?? String(error);
+  const cause = err?.cause?.code ?? err?.cause?.message;
+  return cause ? `${message} (${cause})` : message;
+}
+
+function haversineKm(a: Point, b: Point): number {
+  const radiusKm = 6371;
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const h = (sinLat * sinLat) + (Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon);
+  return 2 * radiusKm * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+function buildDetourPoint(start: Point, end: Point, along: number, offsetKm: number): Point {
+  const meanLatRad = (((start.lat + end.lat) / 2) * Math.PI) / 180;
+  const kmPerDegLon = Math.max(25, 111.32 * Math.cos(meanLatRad));
+  const kmPerDegLat = 110.57;
+  const dxKm = (end.lon - start.lon) * kmPerDegLon;
+  const dyKm = (end.lat - start.lat) * kmPerDegLat;
+  const lengthKm = Math.max(1, Math.hypot(dxKm, dyKm));
+  const perpX = -dyKm / lengthKm;
+  const perpY = dxKm / lengthKm;
+  const baseLat = start.lat + ((end.lat - start.lat) * along);
+  const baseLon = start.lon + ((end.lon - start.lon) * along);
+  return {
+    lat: Math.max(-85, Math.min(85, baseLat + ((perpY * offsetKm) / kmPerDegLat))),
+    lon: Math.max(-180, Math.min(180, baseLon + ((perpX * offsetKm) / kmPerDegLon))),
+  };
+}
+
+function buildAnchoredDetourPoint(anchor: Point, tangentStart: Point, tangentEnd: Point, offsetKm: number): Point {
+  const meanLatRad = (((tangentStart.lat + tangentEnd.lat) / 2) * Math.PI) / 180;
+  const kmPerDegLon = Math.max(25, 111.32 * Math.cos(meanLatRad));
+  const kmPerDegLat = 110.57;
+  const dxKm = (tangentEnd.lon - tangentStart.lon) * kmPerDegLon;
+  const dyKm = (tangentEnd.lat - tangentStart.lat) * kmPerDegLat;
+  const lengthKm = Math.max(1, Math.hypot(dxKm, dyKm));
+  const perpX = -dyKm / lengthKm;
+  const perpY = dxKm / lengthKm;
+  return {
+    lat: Math.max(-85, Math.min(85, anchor.lat + ((perpY * offsetKm) / kmPerDegLat))),
+    lon: Math.max(-180, Math.min(180, anchor.lon + ((perpX * offsetKm) / kmPerDegLon))),
+  };
+}
+
+function estimateRouteSpanKm(from: Point, to: Point): number {
+  const meanLatRad = (((from.lat + to.lat) / 2) * Math.PI) / 180;
+  const dxKm = (to.lon - from.lon) * Math.max(25, 111.32 * Math.cos(meanLatRad));
+  const dyKm = (to.lat - from.lat) * 110.57;
+  return Math.max(1, Math.hypot(dxKm, dyKm));
+}
+
+function normalizeDetourRatios(values: number[]): number[] {
+  const seen = new Set<number>();
+  const ratios: number[] = [];
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    const normalized = Math.round(Math.max(0.06, Math.min(0.56, value)) * 1000) / 1000;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    ratios.push(normalized);
+  }
+  return ratios;
+}
+
+function sampleRouteAnchor(
+  coordinates: [number, number][],
+  along: number,
+): { anchor: Point; tangentStart: Point; tangentEnd: Point } | null {
+  if (coordinates.length < 2) return null;
+  const routePoints = coordinates.map(([lon, lat]) => ({ lat, lon }));
+  const clampedAlong = Math.max(0.02, Math.min(0.98, along));
+  let totalKm = 0;
+  const cumulativeKm = [0];
+  for (let i = 1; i < routePoints.length; i++) {
+    totalKm += haversineKm(routePoints[i - 1], routePoints[i]);
+    cumulativeKm.push(totalKm);
+  }
+  if (totalKm <= 0) return null;
+  const targetKm = totalKm * clampedAlong;
+  for (let i = 1; i < routePoints.length; i++) {
+    const segStartKm = cumulativeKm[i - 1];
+    const segEndKm = cumulativeKm[i];
+    if (targetKm > segEndKm && i < routePoints.length - 1) continue;
+    const segmentKm = Math.max(0.001, segEndKm - segStartKm);
+    const segAlong = Math.max(0, Math.min(1, (targetKm - segStartKm) / segmentKm));
+    const start = routePoints[i - 1];
+    const end = routePoints[i];
+    return {
+      anchor: {
+        lat: start.lat + ((end.lat - start.lat) * segAlong),
+        lon: start.lon + ((end.lon - start.lon) * segAlong),
+      },
+      tangentStart: start,
+      tangentEnd: end,
+    };
+  }
+  return null;
+}
+
+function isExpectedDetourCandidateFailure(message: string): boolean {
+  return /via\d+-position not mapped|error re-tracking track/i.test(message);
+}
+
+function buildDistanceDetourCandidates(
+  from: Point,
+  to: Point,
+  distanceFocus: number,
+  climbFocus: number,
+  baseRoute: RouteStats | null,
+): Array<{ via: Point[]; label: string }> {
+  if (!baseRoute?.coordinates || baseRoute.coordinates.length < 2) return [];
+  const spanKm = estimateRouteSpanKm(from, to);
+  const focusSum = distanceFocus + climbFocus;
+  const isDistanceOnly = climbFocus < 0.25;
+  const ultraWideRatio = !isDistanceOnly && focusSum >= 1.35
+    ? 0.16 + (distanceFocus * 0.08) + (climbFocus * 0.1)
+    : Number.NaN;
+  const detourRatios = isDistanceOnly
+    ? normalizeDetourRatios([
+        0.035 + (distanceFocus * 0.015),
+        0.055 + (distanceFocus * 0.03),
+      ])
+    : normalizeDetourRatios([
+        0.06 + (distanceFocus * 0.04) + (climbFocus * 0.03),
+        0.11 + (distanceFocus * 0.07) + (climbFocus * 0.06),
+        ultraWideRatio,
+      ]);
+  const basePatterns = [
+    { label: 'detour-left-early', points: [[0.33, 1]] },
+    { label: 'detour-right-early', points: [[0.33, -1]] },
+    { label: 'detour-left-mid', points: [[0.5, 1]] },
+    { label: 'detour-right-mid', points: [[0.5, -1]] },
+    { label: 'detour-left-late', points: [[0.67, 1]] },
+    { label: 'detour-right-late', points: [[0.67, -1]] },
+  ] as const;
+  const complexPatterns = [
+    { label: 's-curve-left-right', points: [[0.34, 1], [0.66, -1]] },
+    { label: 's-curve-right-left', points: [[0.34, -1], [0.66, 1]] },
+    { label: 'zigzag-left', points: [[0.25, 0.72], [0.5, -0.92], [0.75, 0.72]] },
+    { label: 'zigzag-right', points: [[0.25, -0.72], [0.5, 0.92], [0.75, -0.72]] },
+  ] as const;
+  const patterns = isDistanceOnly ? basePatterns : [...basePatterns, ...complexPatterns];
+
+  return detourRatios.flatMap((ratio, ratioIndex) => {
+    const offsetKm = spanKm * ratio;
+    return patterns.flatMap((pattern) => {
+      const via = pattern.points.map(([along, offset]) => {
+        const anchor = sampleRouteAnchor(baseRoute.coordinates ?? [], along);
+        if (!anchor) return null;
+        return buildAnchoredDetourPoint(anchor.anchor, anchor.tangentStart, anchor.tangentEnd, offsetKm * offset);
+      });
+      return via.some((point) => point == null)
+        ? []
+        : [{ label: `${pattern.label}-r${ratioIndex + 1}`, via: via as Point[] }];
+    });
   });
+}
+
+async function uploadProfile(brf: string): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${UPSTREAM}/brouter/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
+      body: brf,
+    });
+  } catch (error) {
+    throw new Error(`profile upload failed: ${formatError(error)}`);
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(`upload HTTP ${res.status}: ${text.slice(0, 200)}`);
   const json = JSON.parse(text) as { profileid?: string; error?: string };
@@ -75,12 +261,20 @@ async function fetchRoute(
     .map((p) => `${p.lon},${p.lat}`)
     .join('|');
   const url = `${UPSTREAM}/brouter?lonlats=${segs}&profile=${profile}&format=geojson&alternativeidx=${alternativeIdx}`;
-  const res = await fetch(url);
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (error) {
+    return {
+      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
+      status: -1, profileId: profile, error: `route fetch failed: ${formatError(error)}`,
+    };
+  }
   const text = await res.text();
   const ct = res.headers.get('content-type') ?? '';
   if (!res.ok || !ct.includes('json') || text.trimStart().toLowerCase().startsWith('error')) {
     return {
-      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0,
+      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
       status: res.status, profileId: profile, error: text.slice(0, 200),
     };
   }
@@ -90,13 +284,16 @@ async function fetchRoute(
   const time = Number(props['total-time']) || 0;
   const asc = Number(props['filtered ascend']) || 0;
   const plain = Number(props['plain-ascend']) || 0;
+  const directKm = haversineKm(from, to);
   return {
     distanceKm: dist / 1000,
     ascentM: asc,
     descentM: asc - plain,
     durationMin: time / 60,
+    tortuosity: directKm > 0 ? (dist / 1000) / directKm : 0,
     status: res.status,
     profileId: profile,
+    coordinates: fc.features?.[0]?.geometry?.coordinates as [number, number][] | undefined,
   };
 }
 
@@ -115,6 +312,10 @@ function plog(msg: string): void {
   if ((process.stdout as { _flush?: () => void })._flush) (process.stdout as { _flush?: () => void })._flush?.();
 }
 
+function wantsGroup(key: string): boolean {
+  return ONLY_GROUPS.size === 0 || ONLY_GROUPS.has(key.toUpperCase());
+}
+
 /**
  * Best-of-N alternative routing — EE3D recipe. Run BRouter with
  * alternativeidx 0..N-1 in parallel, keep whichever climbs the most.
@@ -125,8 +326,10 @@ async function fetchRouteBestOfN(
   to: Point,
   via: Point[] = [],
   n = 4,
+  scoreRoute: (route: RouteStats) => number = (route) => route.ascentM,
+  label = 'max ascent',
 ): Promise<RouteStats> {
-  plog(`best-of-N start  n=${n}  profile=${profile}`);
+  plog(`best-of-N start  n=${n}  mode=${label}  profile=${profile}`);
   const t0 = Date.now();
   const attempts = Array.from({ length: n }, (_, i) =>
     fetchRouteAlt(profile, from, to, via, i),
@@ -134,23 +337,83 @@ async function fetchRouteBestOfN(
   const results = await Promise.all(attempts);
   let best: RouteStats | null = null;
   let bestIdx = -1;
+  let bestScore = -Infinity;
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.error) continue;
-    if (!best || r.ascentM > best.ascentM) {
+    const score = scoreRoute(r);
+    if (Number.isFinite(score) && score > bestScore) {
       best = r;
       bestIdx = i;
+      bestScore = score;
     }
   }
   const ascList = results.map((r) => (r.error ? 'fail' : `${Math.round(r.ascentM)}m`)).join(', ');
-  plog(`best-of-N done in ${Date.now() - t0}ms  d+=[${ascList}]  picked idx=${bestIdx}`);
+  const distList = results.map((r) => (r.error ? 'fail' : `${r.distanceKm.toFixed(1)}km`)).join(', ');
+  plog(`best-of-N done in ${Date.now() - t0}ms  d+=[${ascList}]  dist=[${distList}]  picked idx=${bestIdx} score=${bestScore.toFixed(1)}`);
   if (!best) {
     return {
-      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0,
+      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
       status: -1, profileId: profile,
       error: results[0]?.error ?? 'all alternatives failed',
     };
   }
+  return best;
+}
+
+async function fetchRouteBestWithDistanceDetours(
+  profile: string,
+  from: Point,
+  to: Point,
+  scoreRoute: (route: RouteStats) => number,
+  label: string,
+  distanceFocus: number,
+  climbFocus: number,
+): Promise<RouteStats> {
+  plog(`detour search start mode=${label} profile=${profile}`);
+  let best: RouteStats | null = null;
+  let baseRoute: RouteStats | null = null;
+  let bestLabel = '';
+  let bestScore = -Infinity;
+  let lastError: Error | null = null;
+
+  const consider = (route: RouteStats, candidateLabel: string) => {
+    const score = scoreRoute(route);
+    plog(`detour ${candidateLabel} OK score=${score.toFixed(1)} dist=${route.distanceKm.toFixed(1)}km d+=${Math.round(route.ascentM)}m`);
+    if (Number.isFinite(score) && score > bestScore) {
+      best = route;
+      bestLabel = candidateLabel;
+      bestScore = score;
+    }
+  };
+
+  const alternatives = await fetchRouteBestOfN(profile, from, to, [], 4, scoreRoute, label);
+  if (alternatives.error) {
+    lastError = new Error(alternatives.error);
+    plog(`detour alternatives failed: ${alternatives.error.slice(0, 120)}`);
+  } else {
+    baseRoute = alternatives;
+    consider(alternatives, 'alternatives');
+  }
+
+  for (const candidate of buildDistanceDetourCandidates(from, to, distanceFocus, climbFocus, baseRoute)) {
+    const route = await fetchRoute(profile, from, to, candidate.via, 0);
+    if (route.error) {
+      lastError = new Error(route.error);
+      if (!isExpectedDetourCandidateFailure(route.error)) {
+        plog(`detour ${candidate.label} failed: ${route.error.slice(0, 120)}`);
+      }
+      continue;
+    }
+    consider(route, candidate.label);
+  }
+  if (!best) {
+    return {
+      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
+      status: -1, profileId: profile, error: lastError?.message ?? 'all detours failed',
+    };
+  }
+  plog(`detour search picked ${bestLabel} score=${bestScore.toFixed(1)}`);
   return best;
 }
 
@@ -173,9 +436,56 @@ async function runScenario(s: Scenario): Promise<RouteStats> {
     expert: null,
   });
   const profileId = await uploadProfile(brf);
-  // Climbing mode: fan out best-of-N alternatives, pick the steepest.
+  const distanceFocus = Math.max(0, ((priorities.distance - 50) / 50));
+  const distanceAvoid = Math.max(0, ((50 - priorities.distance) / 50));
+  const climbFocus = Math.max(0, ((priorities.elevation - 50) / 50));
+  const durationFocus = Math.max(0, ((priorities.duration - 50) / 50));
+  if (distanceAvoid > 0.65) {
+    return fetchRouteBestOfN(
+      profileId,
+      ROUTE.from,
+      ROUTE.to,
+      [],
+      4,
+      (route) => -(((route.distanceKm * 1000) * 1.4) + (route.durationMin * 60 * 18)),
+      'min distance + directness',
+    );
+  }
+  if (isClimbingMode(priorities) && distanceFocus > 0.5) {
+    return fetchRouteBestWithDistanceDetours(
+      profileId,
+      ROUTE.from,
+      ROUTE.to,
+      (route) => (route.ascentM * 1000) + ((route.distanceKm * 1000) * 0.08),
+      'max ascent + long distance',
+      distanceFocus,
+      climbFocus,
+    );
+  }
   if (isClimbingMode(priorities)) {
     return fetchRouteBestOfN(profileId, ROUTE.from, ROUTE.to, [], 4);
+  }
+  if (distanceFocus > 0.65) {
+    return fetchRouteBestWithDistanceDetours(
+      profileId,
+      ROUTE.from,
+      ROUTE.to,
+      (route) => route.distanceKm,
+      'max distance',
+      distanceFocus,
+      climbFocus,
+    );
+  }
+  if (durationFocus > 0.65) {
+    return fetchRouteBestOfN(
+      profileId,
+      ROUTE.from,
+      ROUTE.to,
+      [],
+      4,
+      (route) => -((route.durationMin * 60 * 35) + (route.distanceKm * 1000)),
+      'min duration + directness',
+    );
   }
   return fetchRoute(profileId, ROUTE.from, ROUTE.to);
 }
@@ -226,7 +536,7 @@ async function runGroup(label: string, scenarios: Scenario[]): Promise<RunResult
       out.push({ scenario: s, stats: r });
     } catch (e) {
       const stats: RouteStats = {
-        distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0,
+        distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
         status: -1, profileId: '-', error: (e as Error).message,
       };
       console.log(`${s.name.padEnd(widthName)}  ❌ ${(e as Error).message}`);
@@ -236,13 +546,18 @@ async function runGroup(label: string, scenarios: Scenario[]): Promise<RunResult
   return out;
 }
 
-type Metric = keyof Pick<RouteStats, 'distanceKm' | 'ascentM' | 'descentM' | 'durationMin'>;
+type Metric = keyof Pick<RouteStats, 'distanceKm' | 'ascentM' | 'descentM' | 'durationMin' | 'tortuosity'>;
 const METRIC_LABEL: Record<Metric, string> = {
   distanceKm: 'dist (km)',
   ascentM: 'd+ (m)',
   descentM: 'd- (m)',
   durationMin: 'dur (min)',
+  tortuosity: 'tortuosity',
 };
+
+function fmtMetricValue(metric: Metric, value: number): string {
+  return metric === 'tortuosity' ? value.toFixed(3) : value.toFixed(0);
+}
 
 interface AbsCheck {
   kind: 'abs';
@@ -286,7 +601,7 @@ function runChecks(label: string, results: RunResult[], checks: Check[]): void {
       const ok = c.cmp === '>=' ? v >= c.value : v <= c.value;
       if (!ok) failedChecks++;
       console.log(
-        `    ${ok ? '✅' : '❌'} ${r.scenario.name}: ${METRIC_LABEL[c.metric]}=${v.toFixed(0)} ${c.cmp} ${c.value}`,
+        `    ${ok ? '✅' : '❌'} ${r.scenario.name}: ${METRIC_LABEL[c.metric]}=${fmtMetricValue(c.metric, v)} ${c.cmp} ${c.value}`,
       );
     } else if (c.kind === 'delta') {
       const lo = results[c.low];
@@ -301,7 +616,7 @@ function runChecks(label: string, results: RunResult[], checks: Check[]): void {
       if (!ok) failedChecks++;
       const arrow = dv > 0 ? '↑' : dv < 0 ? '↓' : '=';
       console.log(
-        `    ${ok ? '✅' : '❌'} Δ${METRIC_LABEL[c.metric]} ${arrow} ${dv.toFixed(0)} ` +
+        `    ${ok ? '✅' : '❌'} Δ${METRIC_LABEL[c.metric]} ${arrow} ${fmtMetricValue(c.metric, dv)} ` +
           `(${lo.scenario.name} → ${hi.scenario.name}, expect ${c.cmp} ${c.value})`,
       );
     } else {
@@ -318,7 +633,7 @@ function runChecks(label: string, results: RunResult[], checks: Check[]): void {
       const ok = ratio >= c.ratio;
       if (!ok) failedChecks++;
       console.log(
-        `    ${ok ? '✅' : '❌'} ${METRIC_LABEL[c.metric]} ratio = ${hiv.toFixed(0)}/${lov.toFixed(0)} = ${ratio.toFixed(2)}× ` +
+        `    ${ok ? '✅' : '❌'} ${METRIC_LABEL[c.metric]} ratio = ${fmtMetricValue(c.metric, hiv)}/${fmtMetricValue(c.metric, lov)} = ${ratio.toFixed(2)}× ` +
           `(${lo.scenario.name} → ${hi.scenario.name}, expect ≥ ${c.ratio}×)`,
       );
     }
@@ -342,6 +657,11 @@ const DIST_SCENARIOS: Scenario[] = [
   { name: 'D0  distance=0    shortest',   priorities: pri({ distance: 0 }) },
   { name: 'D1  distance=50   neutral',    priorities: pri({ distance: 50 }) },
   { name: 'D2  distance=100  scenic',     priorities: pri({ distance: 100 }) },
+];
+
+const MAX_DISTANCE_CLIMB_SCENARIOS: Scenario[] = [
+  { name: 'X0  neutral baseline',              priorities: pri() },
+  { name: 'X1  distance=100 elevation=100',    priorities: pri({ distance: 100, elevation: 100 }) },
 ];
 
 const DUR_SCENARIOS: Scenario[] = [
@@ -392,56 +712,77 @@ const CITIES_SCENARIOS: Scenario[] = [
   console.log(`Route            : ${ROUTE.label}`);
   console.log(`                   ${ROUTE.from.lat},${ROUTE.from.lon} → ${ROUTE.to.lat},${ROUTE.to.lon}\n`);
 
-  const baseline = await runGroup('Baseline (sanity)', BASELINE_SCENARIOS);
+  const baseline = wantsGroup('B') ? await runGroup('Baseline (sanity)', BASELINE_SCENARIOS) : [];
 
-  const elev = await runGroup('Group E — Dénivelé slider (climbing mode best-of-N above 70)', ELEV_SCENARIOS);
-  runChecks('Élévation', elev, [
-    // With climbing mode on (E3, E4), d+ MUST jump above the neutral baseline.
-    { kind: 'delta', low: 2, high: 3, metric: 'ascentM',  cmp: '>=', value: 200 },
-    { kind: 'delta', low: 2, high: 4, metric: 'ascentM',  cmp: '>=', value: 500 },
-    // Min slider should stay below baseline d+.
-    { kind: 'delta', low: 2, high: 0, metric: 'ascentM',  cmp: '<=', value: -100 },
-    // Absolute target: max-hilly on Chamonix→Grenoble should be > 1700m d+.
-    { kind: 'abs', index: 4, metric: 'ascentM', cmp: '>=', value: 1700 },
-  ]);
+  if (wantsGroup('E')) {
+    const elev = await runGroup('Group E — Dénivelé slider (climbing mode best-of-N above 70)', ELEV_SCENARIOS);
+    runChecks('Élévation', elev, [
+      { kind: 'delta', low: 2, high: 3, metric: 'ascentM',  cmp: '>=', value: 200 },
+      { kind: 'delta', low: 2, high: 4, metric: 'ascentM',  cmp: '>=', value: 500 },
+      { kind: 'delta', low: 2, high: 0, metric: 'ascentM',  cmp: '<=', value: -100 },
+      { kind: 'abs', index: 4, metric: 'ascentM', cmp: '>=', value: 1700 },
+    ]);
+  }
 
-  const dist = await runGroup('Group D — Distance slider', DIST_SCENARIOS);
-  runChecks('Distance', dist, [
-    { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '>=', value: 5 },
-  ]);
+  if (wantsGroup('D')) {
+    const dist = await runGroup('Group D — Distance slider', DIST_SCENARIOS);
+    runChecks('Distance', dist, [
+      { kind: 'abs', index: 0, metric: 'distanceKm', cmp: '<=', value: 165 },
+      { kind: 'delta', low: 1, high: 2, metric: 'distanceKm', cmp: '>=', value: 40 },
+    ]);
+  }
 
-  const dur = await runGroup('Group T — Durée slider', DUR_SCENARIOS);
-  runChecks('Durée', dur, [
-    // Fast mode should not be drastically slower than no-rush mode.
-    // (BRouter computes time separately from cost, so we cannot directly
-    // optimize for time — we only steer the route via cost weights.)
-    { kind: 'delta', low: 0, high: 2, metric: 'durationMin', cmp: '<=', value: 30 },
-  ]);
+  if (wantsGroup('X')) {
+    const maxClimb = await runGroup('Group X — Max distance + max D+', MAX_DISTANCE_CLIMB_SCENARIOS);
+    runChecks('Max distance + D+', maxClimb, [
+      { kind: 'abs', index: 1, metric: 'ascentM', cmp: '>=', value: 10000 },
+      { kind: 'delta', low: 0, high: 1, metric: 'ascentM', cmp: '>=', value: 9000 },
+    ]);
+  }
 
-  const tranq = await runGroup('Group Q — Tranquilité slider', TRANQ_SCENARIOS);
-  runChecks('Tranquilité', tranq, [
-    { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '>=', value: 3 },
-  ]);
+  if (wantsGroup('T')) {
+    const dur = await runGroup('Group T — Durée slider', DUR_SCENARIOS);
+    runChecks('Durée', dur, [
+      { kind: 'delta', low: 0, high: 2, metric: 'durationMin', cmp: '<=', value: -5 },
+      { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '<=', value: -3 },
+      { kind: 'delta', low: 0, high: 2, metric: 'tortuosity', cmp: '<=', value: -0.02 },
+    ]);
+  }
 
-  const slope = await runGroup('Group S — Max slope cap', SLOPE_SCENARIOS);
-  runChecks('Max slope', slope, [
-    { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 5 },
-  ]);
+  if (wantsGroup('Q')) {
+    const tranq = await runGroup('Group Q — Tranquilité slider', TRANQ_SCENARIOS);
+    runChecks('Tranquilité', tranq, [
+      { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '>=', value: 3 },
+    ]);
+  }
 
-  const road = await runGroup('Group R — Road type filters', ROADTYPE_SCENARIOS);
-  runChecks('Road types', road, [
-    { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 0 },
-  ]);
+  if (wantsGroup('S')) {
+    const slope = await runGroup('Group S — Max slope cap', SLOPE_SCENARIOS);
+    runChecks('Max slope', slope, [
+      { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 5 },
+    ]);
+  }
 
-  const turns = await runGroup('Group V — Turns preference', TURNS_SCENARIOS);
-  runChecks('Turns', turns, [
-    { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 0 },
-  ]);
+  if (wantsGroup('R')) {
+    const road = await runGroup('Group R — Road type filters', ROADTYPE_SCENARIOS);
+    runChecks('Road types', road, [
+      { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 0 },
+    ]);
+  }
 
-  const cities = await runGroup('Group C — Cities filter', CITIES_SCENARIOS);
-  runChecks('Cities', cities, [
-    { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '>=', value: 0 },
-  ]);
+  if (wantsGroup('V')) {
+    const turns = await runGroup('Group V — Turns preference', TURNS_SCENARIOS);
+    runChecks('Turns', turns, [
+      { kind: 'delta', low: 0, high: 3, metric: 'distanceKm', cmp: '>=', value: 0 },
+    ]);
+  }
+
+  if (wantsGroup('C')) {
+    const cities = await runGroup('Group C — Cities filter', CITIES_SCENARIOS);
+    runChecks('Cities', cities, [
+      { kind: 'delta', low: 0, high: 2, metric: 'distanceKm', cmp: '>=', value: 0 },
+    ]);
+  }
 
   console.log('\n══════════════════════════════════════════════════════════════════');
   console.log(`Total checks : ${totalChecks}`);

@@ -5,7 +5,13 @@
  * reorganise internals freely.
  */
 export * from './types';
-export { fetchBrouterRoute, uploadCustomProfile, fetchBrouterRouteBestOfN } from './client';
+export {
+  fetchBrouterRoute,
+  uploadCustomProfile,
+  fetchBrouterRouteBestOfN,
+  fetchBrouterRouteBestByScore,
+  fetchBrouterRouteBestWithDistanceDetours,
+} from './client';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './url';
 export { formatForbiddenZonePolygons } from './forbidden-zones';
 export {

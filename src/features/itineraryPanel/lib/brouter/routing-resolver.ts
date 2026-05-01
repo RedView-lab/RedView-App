@@ -56,6 +56,7 @@ function isAllDefault(it: Itinerary, expert?: ExpertProfileState | null): boolea
   if (
     Math.abs((p.tranquility ?? 50) - 50) > 5 ||
     Math.abs((p.elevation ?? 50) - 50) > 5 ||
+    Math.abs((p.duration ?? 50) - 50) > 5 ||
     Math.abs((p.distance ?? 50) - 50) > 5
   ) {
     return false;

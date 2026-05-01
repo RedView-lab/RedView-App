@@ -4,7 +4,9 @@ import {
   buildBrfProfile,
   checkRouteWithinFrance,
   fetchBrouterRoute,
+  fetchBrouterRouteBestByScore,
   fetchBrouterRouteBestOfN,
+  fetchBrouterRouteBestWithDistanceDetours,
   formatForbiddenZonePolygons,
   hashBrf,
   isClimbingMode,
@@ -40,6 +42,58 @@ import {
   toStoredRoutePoints,
   type UseItineraryBrouterRoutingArgs,
 } from './useItineraryBrouterRoutingShared';
+
+function prioritySign(value: number): number {
+  return Math.max(-1, Math.min(1, ((Math.max(0, Math.min(100, value)) - 50) / 50)));
+}
+
+function fetchRouteForPriorities(
+  reqBase: Parameters<typeof fetchBrouterRouteBestByScore>[0],
+  priorities: Itinerary['priorities'],
+): Promise<BrouterRoute> {
+  const climbFocus = Math.max(0, prioritySign(priorities.elevation));
+  const distanceAvoid = Math.max(0, -prioritySign(priorities.distance));
+  const distanceFocus = Math.max(0, prioritySign(priorities.distance));
+  const durationFocus = Math.max(0, prioritySign(priorities.duration));
+  if (distanceAvoid > 0.65) {
+    return fetchBrouterRouteBestByScore(
+      reqBase,
+      (route) => -((route.distanceM * 1.4) + (route.durationS * 18)),
+      'min distance + directness',
+      4,
+    );
+  }
+  if (climbFocus > 0.4 && distanceFocus > 0.5) {
+    return fetchBrouterRouteBestWithDistanceDetours(
+      reqBase,
+      (route) => (route.ascentM * 1000) + (route.distanceM * 0.08),
+      'max ascent + long distance',
+      distanceFocus,
+      climbFocus,
+      4,
+    );
+  }
+  if (climbFocus > 0.4) return fetchBrouterRouteBestOfN(reqBase, 4);
+  if (distanceFocus > 0.65) {
+    return fetchBrouterRouteBestWithDistanceDetours(
+      reqBase,
+      (route) => route.distanceM,
+      'max distance',
+      distanceFocus,
+      climbFocus,
+      4,
+    );
+  }
+  if (durationFocus > 0.65) {
+    return fetchBrouterRouteBestByScore(
+      reqBase,
+      (route) => -((route.durationS * 35) + route.distanceM),
+      'min duration + directness',
+      4,
+    );
+  }
+  return fetchBrouterRoute(reqBase);
+}
 
 export function useItineraryBrouterRouting({
   active,
@@ -167,9 +221,7 @@ export function useItineraryBrouterRouting({
             profile: resolved.profileId,
             signal: ctrl.signal,
           };
-          return climbing
-            ? fetchBrouterRouteBestOfN(reqBase, 4)
-            : fetchBrouterRoute(reqBase);
+          return fetchRouteForPriorities(reqBase, itineraryForRouting.priorities);
         })
         .then((route: BrouterRoute) => {
           if (ctrl.signal.aborted) return;
@@ -315,9 +367,7 @@ export function useItineraryBrouterRouting({
             profile: resolved.profileId,
             signal: ctrl.signal,
           };
-          return climbing
-            ? fetchBrouterRouteBestOfN(reqBase, 4)
-            : fetchBrouterRoute(reqBase);
+          return fetchRouteForPriorities(reqBase, itineraryForRouting.priorities);
         })
         .then((route: BrouterRoute) => {
           if (ctrl.signal.aborted) return;
@@ -502,9 +552,7 @@ export function useItineraryBrouterRouting({
           profile: resolved.profileId,
           signal: ctrl.signal,
         };
-        return climbing
-          ? fetchBrouterRouteBestOfN(reqBase, 4)
-          : fetchBrouterRoute(reqBase);
+        return fetchRouteForPriorities(reqBase, itineraryForRouting.priorities);
       })
       .then((route: BrouterRoute) => {
         if (ctrl.signal.aborted) return;

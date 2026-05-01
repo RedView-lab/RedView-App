@@ -62,12 +62,16 @@ export function buildBrfProfile(inputs: BrfBuildInputs): string {
     fMajor,
     allowFerries,
     allowSteps,
+    shortestMode,
     turnFactor,
-    distNonCyclePenalty,
+    distDetourRelief,
+    distDirectPenalty,
     durSlowPenalty,
     durFastPenalty,
     durMinorPenalty,
     tranqMajorPenalty,
+    tranqFastTrafficPenalty,
+    tranqBackgroundPenalty,
     citiesMult,
     climbMul,
     ignoreCycleroutes,
@@ -80,6 +84,11 @@ export function buildBrfProfile(inputs: BrfBuildInputs): string {
     considerTown,
     considerTraffic,
     considerElevation,
+    signalPenalty,
+    townPenaltyScale,
+    trafficPenaltyScale,
+    forestReliefByClass,
+    riverReliefByClass,
     downCost,
     downCutoff,
     upCost,
@@ -118,31 +127,46 @@ assign user_factor_major       = ${brfNum(fMajor)}
 assign user_turn_factor        = ${brfNum(turnFactor)}
 
 # ─── Slider-driven multipliers (way-context applies them) ─────────
-# distNonCyclePenalty: applied to every non-LDCR segment when the
-# Distance slider is on the "+" side (1.0 → 2.0).
-assign user_dist_noncycle_penalty = ${brfNum(distNonCyclePenalty)}
+# distDetourRelief/directPenalty: at Distance "+", scenic side roads,
+# gravel, tracks and paths become cheap while direct car roads become
+# expensive enough for BRouter to accept real detours.
+assign user_dist_detour_relief    = ${brfNum(distDetourRelief)}
+assign user_dist_direct_penalty   = ${brfNum(distDirectPenalty)}
 # durSlowPenalty: applied to slow surfaces (paths, tracks, footways)
-# when the Durée slider is on the "+" side (1.0 → 3.0).
+# when the Durée slider is on the "+" side (1.0 → 2.35).
 assign user_dur_slow_penalty      = ${brfNum(durSlowPenalty)}
 # durFastPenalty: applied to fast major roads when the Durée slider is
-# on the "-" side (1.0 → 1.4).
+# on the "-" side (1.0 → 1.55).
 assign user_dur_fast_penalty      = ${brfNum(durFastPenalty)}
+# signalPenalty: node initial-cost for traffic lights / stops when
+# the Durée slider is on the "+" side.
+assign user_signal_penalty        = ${brfNum(signalPenalty)}
 # tranqMajorPenalty: applied to major roads when the Tranquilité
-# slider is on the "+" side (1.0 → 4.0).
+# slider is on the "+" side.
 assign user_tranq_major_penalty   = ${brfNum(tranqMajorPenalty)}
+# tranqFastTrafficPenalty: heavy tax for 80+ km/h / high-class traffic roads.
+assign user_tranq_fast_penalty    = ${brfNum(tranqFastTrafficPenalty)}
+# tranqBackgroundPenalty: soft penalty for roads outside green/river
+# corridors when Tranquilité is pushed to the right.
+assign user_tranq_background_penalty = ${brfNum(tranqBackgroundPenalty)}
 # citiesMult: applied to every way in built-up areas (estimated_town_class >= 2).
 assign user_cities_mult           = ${brfNum(citiesMult)}
+# town/traffic penalty scales: stack on top of the pseudo-tag penalties.
+assign user_town_penalty_scale    = ${brfNum(townPenaltyScale)}
+assign user_traffic_penalty_scale = ${brfNum(trafficPenaltyScale)}
 # durMinorPenalty: applied to service / unclassified ways when the
-# Durée slider is on the "+" side (1.0 → 1.8).
+# Durée slider is on the "+" side (1.0 → 1.65).
 assign user_dur_minor_penalty     = ${brfNum(durMinorPenalty)}
-# climbMul: applied to road + major-road categories when the Dénivelé
-# slider is in climbing mode (>70 → 1.0..2.5). Inflates the cost of
-# flat valley roads so the engine prefers detours via passes/cols.
+# climbMul: flat-tax multiplier in climbing mode. Flat segments use the
+# normal costfactor, climbs use uphillcostfactor below. We therefore tax
+# the flat graph heavily instead of rewarding climbing with fake negative
+# incentives.
 assign user_climb_mul             = ${brfNum(climbMul)}
 
 # ─── Behaviour ────────────────────────────────────────────────────
 assign allow_steps              = ${brfBool(allowSteps)}
 assign allow_ferries            = ${brfBool(allowFerries)}
+assign shortest_mode            = ${brfBool(shortestMode)}
 assign ignore_cycleroutes       = ${brfBool(ignoreCycleroutes)}
 assign stick_to_cycleroutes     = ${brfBool(stickToCycleRoutes)}
 assign use_proposed_cycleroutes = ${brfBool(useProposedCycleRoutes)}
@@ -191,12 +215,9 @@ assign correctMisplacedViaPoints         = false
 assign correctMisplacedViaPointsDistance = 400
 assign processUnusedTags                 = false
 
-# Search heuristic: pass1coefficient is the A* heuristic strength of the
-# first BRouter pass. In climbing mode we bump it from 1.5 to 1.8 to
-# match earth-explorer-3d's climbing.brf — combined with the per-way
-# uphillcostfactor block below, this is what produces real D+ on
-# best-of-N alternatives instead of all four collapsing on the same
-# valley road.
+# Search heuristic: keep the A* heuristic conservative in climbing mode.
+# The D+ effect comes from the flat-tax costfactor and best-of-N spread,
+# not from rewarding uphill loops.
 assign pass1coefficient = ${brfNum(pass1Coefficient)}
 assign pass2coefficient = 0
 
@@ -306,7 +327,7 @@ assign onewaypenalty =
        else 0.0
 
 # ── Optional cost penalties (consider_* flags) ────────────────────
-assign town_penalty
+assign raw_town_penalty
    switch consider_town
      switch estimated_town_class=  0
      switch estimated_town_class=1  0.5
@@ -316,7 +337,9 @@ assign town_penalty
      switch estimated_town_class=5  1.4
      switch estimated_town_class=6  1.6 99 0
 
-assign traffic_penalty
+assign town_penalty = multiply raw_town_penalty user_town_penalty_scale
+
+assign raw_traffic_penalty
    switch consider_traffic
       switch estimated_traffic_class=       0
       switch estimated_traffic_class=1|2    0.2
@@ -324,6 +347,8 @@ assign traffic_penalty
       switch estimated_traffic_class=4      0.6
       switch estimated_traffic_class=5      0.8
       switch estimated_traffic_class=6|7    1 99 0
+
+assign traffic_penalty = multiply raw_traffic_penalty user_traffic_penalty_scale
 
 assign noise_penalty
    switch consider_noise
@@ -388,6 +413,20 @@ assign userfactor =
 # All factors stay >= 1.0 to keep BRouter's A* heuristic admissible.
 # ─────────────────────────────────────────────────────────────────
 
+# Rough / indirect surfaces: when the Distance slider goes right, we
+# stop romanticising the road quality and penalise segments that tend to
+# generate scenic detours.
+assign is_distance_detour_surface =
+  if is_ldcr then false
+  else if is_major then false
+  else if is_bikelane then false
+  else if is_road_paved then false
+  else if is_gravel then true
+  else if is_offroad then true
+  else if is_singletrack then true
+  else if highway=track|path|footway|bridleway then true
+  else false
+
 # "Slow" surfaces we want to penalise when the Durée slider is high.
 # Cycleways and grade1 tracks are excluded (they're fast enough).
 assign is_slow_surface =
@@ -401,12 +440,23 @@ assign is_slow_surface =
   )
   else false
 
-assign dist_mult      = if is_ldcr         then 1 else user_dist_noncycle_penalty
-assign dur_slow_mult  = if is_slow_surface then user_dur_slow_penalty else 1
-assign dur_fast_mult  = if is_major        then user_dur_fast_penalty else 1
-assign dur_minor_mult = if ( or highway=service highway=unclassified )
-                          then user_dur_minor_penalty else 1
-assign tranq_mult     = if is_major        then user_tranq_major_penalty else 1
+assign forest_relief =
+  if not consider_forest then 1
+  else if estimated_forest_class=6 then ${brfNum(forestReliefByClass[5])}
+  else if estimated_forest_class=5 then ${brfNum(forestReliefByClass[4])}
+  else if estimated_forest_class=4 then ${brfNum(forestReliefByClass[3])}
+  else if estimated_forest_class=3 then ${brfNum(forestReliefByClass[2])}
+  else if estimated_forest_class=2 then ${brfNum(forestReliefByClass[1])}
+  else ${brfNum(forestReliefByClass[0])}
+
+assign river_relief =
+  if not consider_river then 1
+  else if estimated_river_class=6 then ${brfNum(riverReliefByClass[5])}
+  else if estimated_river_class=5 then ${brfNum(riverReliefByClass[4])}
+  else if estimated_river_class=4 then ${brfNum(riverReliefByClass[3])}
+  else if estimated_river_class=3 then ${brfNum(riverReliefByClass[2])}
+  else if estimated_river_class=2 then ${brfNum(riverReliefByClass[1])}
+  else ${brfNum(riverReliefByClass[0])}
 
 # Cities: hard-multiplier applied to ways inside a built-up area, as
 # detected by BRouter's estimated_town_class heuristic. Anything
@@ -418,17 +468,42 @@ assign in_town =
   if estimated_town_class= then false
   else if estimated_town_class=1 then false
   else true
+
+assign is_direct_distance_road =
+  if is_major then true
+  else if highway=secondary|secondary_link then true
+  else if highway=tertiary|tertiary_link then true
+  else if highway=unclassified then true
+  else false
+
+assign is_fast_traffic_way =
+  if highway=trunk|trunk_link|primary|primary_link then true
+  else if maxspeed=80|90|100|110|120|130 then true
+  else if estimated_traffic_class=5|6|7 then true
+  else false
+
+assign dist_mult      = if is_distance_detour_surface then user_dist_detour_relief
+                        else if is_direct_distance_road then user_dist_direct_penalty
+                        else 1
+assign dur_slow_mult  = if is_slow_surface then user_dur_slow_penalty else 1
+assign dur_fast_mult  = if is_major        then user_dur_fast_penalty else 1
+assign dur_minor_mult = if ( or highway=service highway=unclassified )
+                          then user_dur_minor_penalty else 1
+assign tranq_mult     = if is_fast_traffic_way then user_tranq_fast_penalty
+                        else if is_major then user_tranq_major_penalty
+                        else if in_town then user_tranq_background_penalty
+                        else multiply forest_relief river_relief
+
 assign cities_mult = if in_town then user_cities_mult else 1
 
-# climb_mult: in climbing mode (slider > 70) we inflate the cost of
-# paved/major roads so the engine's best-of-N alternatives spread out
-# towards relief instead of all collapsing onto the flattest valley.
-# Cycleways, tracks and paths are LEFT ALONE so they become the cheap
-# option once the road premium kicks in.
+# climb_mult: flat-tax mode. Only flat-ish segments use this costfactor;
+# real ascents switch to the uphillcostfactor block below. This avoids
+# infinite fake D+ rewards while still making valleys unattractive.
 assign climb_mult =
-  if is_major       then user_climb_mul
-  else if is_road_paved then user_climb_mul
-  else 1
+  if route=ferry then 1
+  else if highway=steps then 1
+  else if highway= then 1
+  else user_climb_mul
 
 assign slider_multiplier =
   multiply dist_mult
@@ -483,6 +558,11 @@ assign basecost =
 # ─────────────────────────────────────────────────────────────────
 assign weightedbase =
   if greater basecost 9999 then 10000
+  else if shortest_mode then
+  (
+    if greater ( multiply userfactor 1 ) 9999 then 9999
+    else multiply userfactor 1
+  )
   else if greater ( multiply combined_factor basecost ) 9999 then 9999
   else multiply combined_factor basecost
 
@@ -497,33 +577,19 @@ assign costfactor
       weightedbase
 
 ${inClimbMode ? `# ─── Climbing-mode: per-way uphill/downhill cost factors ──────────
-# When the elevation buffer saturates (~1m of gain at slope >0.3% with
-# the tightened buffer above), BRouter REPLACES costfactor with
-# uphillcostfactor for the slope segment (and downhillcostfactor on the
-# way back). Climb-friendly highways (cycleway, track, gravel,
-# tertiary…) get values WELL below 1.0 so a kilometre of climbing is
-# cheaper than a kilometre of flat valley road (whose costfactor was
-# multiplied by user_climb_mul ≤ 5.0 above). Major roads get a punitive
-# value so the engine never "climbs" by following a primary road over a
-# col when a tertiary alternative exists. Mirrors and extends
-# brouter/profiles2/climbing.brf from earth-explorer-3d.
+# Climbing mode taxes flat segments above via climb_mult. Uphill factors
+# stay positive and ordinary: we do not reward ascent, we simply stop flat
+# valley roads from being the cheapest option.
 assign uphillcostfactor =
-  if is_major            then 6.0
-  else if is_road_paved  then 0.7
-  else if is_bikelane    then 0.45
-  else if is_gravel      then 0.5
-  else if is_offroad     then 0.55
-  else if is_singletrack then 1.2
-  else 0.6
+  if is_major            then 4.0
+  else if is_road_paved  then 1.45
+  else if is_bikelane    then 1.1
+  else if is_gravel      then 1.15
+  else if is_offroad     then 1.35
+  else if is_singletrack then 2.2
+  else 1.5
 
-assign downhillcostfactor =
-  if is_major            then 6.0
-  else if is_road_paved  then 0.7
-  else if is_bikelane    then 0.45
-  else if is_gravel      then 0.5
-  else if is_offroad     then 0.55
-  else if is_singletrack then 1.2
-  else 0.6
+assign downhillcostfactor = 0
 ` : ''}
 # Voice-hint priority (verbatim trekking)
 assign priorityclassifier =
@@ -587,7 +653,9 @@ assign footaccess =
        else not foot=private|no
 
 assign initialcost =
-       if or highway=traffic_signals and highway=crossing crossing=traffic_signals then 20
+  if or highway=traffic_signals and highway=crossing crossing=traffic_signals then user_signal_penalty
+  else if highway=stop then multiply user_signal_penalty 0.35
+  else if highway=give_way then multiply user_signal_penalty 0.2
        else
        if bikeaccess then 0
        else ( if footaccess then 100 else 1000000 )
