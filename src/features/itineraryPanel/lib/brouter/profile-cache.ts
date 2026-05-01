@@ -13,6 +13,8 @@
 import { uploadCustomProfile } from './client';
 import { hashBrf } from './brf-template';
 
+const PROFILE_UPLOAD_TIMEOUT_MS = 25000;
+
 interface CacheEntry {
   /** custom_<id> returned by the server. */
   profileId: string;
@@ -21,6 +23,31 @@ interface CacheEntry {
 }
 
 const cache = new Map<string, CacheEntry>();
+
+function createAbortError(): Error {
+  if (typeof DOMException !== 'undefined') {
+    return new DOMException('aborted', 'AbortError');
+  }
+  const error = new Error('aborted');
+  error.name = 'AbortError';
+  return error;
+}
+
+function waitForAbort(signal: AbortSignal): Promise<never> {
+  if (signal.aborted) return Promise.reject(createAbortError());
+  return new Promise((_, reject) => {
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(createAbortError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+async function waitForProfileUpload(pending: Promise<string>, signal?: AbortSignal): Promise<string> {
+  if (!signal) return pending;
+  return Promise.race([pending, waitForAbort(signal)]);
+}
 
 /**
  * Ensure `brf` is uploaded to BRouter and return the custom profile id
@@ -40,26 +67,35 @@ export async function ensureProfileUploaded(
     }
     if (cached.pending) {
       console.log('[BRouter] profile upload in-flight, sharing', key);
-      return cached.pending;
+      return waitForProfileUpload(cached.pending, signal);
     }
   }
 
   console.log('[BRouter] profile cache MISS', key, '→ uploading', brf.length, 'B');
+  const uploadCtrl = new AbortController();
+  const timeoutId = setTimeout(() => {
+    uploadCtrl.abort(new Error(`BRouter profile upload timed out after ${PROFILE_UPLOAD_TIMEOUT_MS}ms`));
+  }, PROFILE_UPLOAD_TIMEOUT_MS);
   const pending = (async () => {
-    const result = await uploadCustomProfile(brf, undefined, signal);
-    if (result.error) {
-      // Compile-error: drop the cache entry and surface the message.
+    try {
+      const result = await uploadCustomProfile(brf, undefined, uploadCtrl.signal);
+      if (result.error) {
+        console.error('[BRouter] profile compile error', key, result.error);
+        throw new Error(`BRouter a refusé le profil : ${result.error}`);
+      }
+      cache.set(key, { profileId: result.profileId });
+      console.log('[BRouter] profile uploaded', key, '→', result.profileId);
+      return result.profileId;
+    } catch (error) {
       cache.delete(key);
-      console.error('[BRouter] profile compile error', key, result.error);
-      throw new Error(`BRouter a refusé le profil : ${result.error}`);
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-    cache.set(key, { profileId: result.profileId });
-    console.log('[BRouter] profile uploaded', key, '→', result.profileId);
-    return result.profileId;
   })();
 
   cache.set(key, { profileId: '', pending });
-  return pending;
+  return waitForProfileUpload(pending, signal);
 }
 
 /** Clear the in-memory cache (mostly useful in tests). */
