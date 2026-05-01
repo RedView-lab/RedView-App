@@ -66,6 +66,7 @@ export function TimelineTimelineView({
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [viewportHeight, setViewportHeight] = useState(0);
 
   useEffect(() => {
     setSelectedDayKey(defaultAnchorDayKey);
@@ -88,6 +89,20 @@ export function TimelineTimelineView({
   useEffect(() => {
     const handle = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(handle);
+  }, []);
+
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      setViewportHeight(entry.contentRect.height);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   const selectedDayDate = useMemo(
@@ -173,7 +188,15 @@ export function TimelineTimelineView({
   }, [startMinutes, visibleMinuteBounds]);
 
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
-  const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
+  const baseHourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
+  const availableViewportHeightPx = Math.max(
+    0,
+    viewportHeight - RAIL_HEADER_HEIGHT_PX - 20,
+  );
+  const hourRowHeightPx =
+    availableViewportHeightPx > 0
+      ? Math.max(baseHourRowHeightPx, availableViewportHeightPx / totalHours)
+      : baseHourRowHeightPx;
   const pixelsPerMinute = hourRowHeightPx / 60;
   const canvasBaseHeight = Math.max(totalHours * hourRowHeightPx, 0);
 
