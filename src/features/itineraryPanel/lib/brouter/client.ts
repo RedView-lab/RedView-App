@@ -12,6 +12,9 @@ import {
   type UploadedProfile,
 } from './types';
 import { buildBrouterUrl, buildProfileUploadUrl } from './url';
+
+const WATCHDOG_RETRY_DELAYS_MS = [250, 700, 1500];
+
 interface BrouterFeatureProps {
   'track-length'?: string;
   'total-time'?: string;
@@ -27,6 +30,31 @@ function num(value: unknown): number {
     return Number.isFinite(n) ? n : 0;
   }
   return 0;
+}
+
+function isWatchdogMessage(message: string): boolean {
+  return /thread-priority-watchdog/i.test(message);
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason ?? new Error('Aborted'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    if (signal) {
+      if (signal.aborted) {
+        clearTimeout(timer);
+        reject(signal.reason ?? new Error('Aborted'));
+        return;
+      }
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }
 
 function buildDetourPoint(
@@ -138,13 +166,31 @@ function buildDistanceDetourCandidates(
   const spanKm = estimateRouteSpanKm(req.start, req.end);
   const focusSum = distanceFocus + climbFocus;
   const isDistanceOnly = climbFocus < 0.25;
+  const isExtremeClimbDistance = !isDistanceOnly && distanceFocus >= 0.9 && climbFocus >= 0.9;
+  const isExtremeDistanceOnly = isDistanceOnly && distanceFocus >= 0.9;
+  const buildCandidatesFromSpecs = (
+    specs: Array<{ label: string; ratio: number; points: readonly (readonly [number, number])[] }>,
+  ): Array<{ via: BrouterRequest['via']; label: string }> => {
+    return specs.flatMap((spec) => {
+      const offsetKm = spanKm * spec.ratio;
+      const via = spec.points.map(([along, offset]) => {
+        const anchor = sampleRouteAnchor(baseRoute.coordinates, along);
+        if (!anchor) return null;
+        return buildDetourPoint(anchor.anchor, anchor.tangentStart, anchor.tangentEnd, offsetKm * offset);
+      });
+      return via.some((point) => point == null)
+        ? []
+        : [{ label: spec.label, via: via as BrouterRequest['via'] }];
+    });
+  };
   const ultraWideRatio = !isDistanceOnly && focusSum >= 1.35
     ? 0.16 + (distanceFocus * 0.08) + (climbFocus * 0.1)
     : Number.NaN;
   const detourRatios = isDistanceOnly
     ? normalizeDetourRatios([
-        0.035 + (distanceFocus * 0.015),
-        0.055 + (distanceFocus * 0.03),
+        0.045 + (distanceFocus * 0.035),
+        0.085 + (distanceFocus * 0.07),
+        0.135 + (distanceFocus * 0.105),
       ])
     : normalizeDetourRatios([
         0.06 + (distanceFocus * 0.04) + (climbFocus * 0.03),
@@ -165,6 +211,25 @@ function buildDistanceDetourCandidates(
     { label: 'zigzag-left', points: [[0.25, 0.72], [0.5, -0.92], [0.75, 0.72]] },
     { label: 'zigzag-right', points: [[0.25, -0.72], [0.5, 0.92], [0.75, -0.72]] },
   ] as const;
+  if (isExtremeClimbDistance) {
+    const ultraRatio = Math.min(0.5, Math.max(detourRatios[2] ?? 0.34, 0.34) + 0.12);
+    return buildCandidatesFromSpecs([
+      { label: 'alpine-zigzag-left-r5', ratio: ultraRatio, points: [[0.16, 0.92], [0.36, -1.18], [0.58, 1.25], [0.8, -1.02]] },
+      { label: 'alpine-zigzag-right-r5', ratio: ultraRatio, points: [[0.16, -0.92], [0.36, 1.18], [0.58, -1.25], [0.8, 1.02]] },
+      { label: 'alpine-crown-left-r5', ratio: ultraRatio, points: [[0.2, 1.05], [0.42, -1.28], [0.64, 1.28], [0.84, -1.05]] },
+      { label: 'alpine-crown-right-r5', ratio: ultraRatio, points: [[0.2, -1.05], [0.42, 1.28], [0.64, -1.28], [0.84, 1.05]] },
+    ]);
+  }
+  if (isExtremeDistanceOnly) {
+    const [, , ultraRatio = 0.24] = detourRatios;
+    const hyperRatio = Math.min(0.5, Math.max(ultraRatio + 0.16, 0.42));
+    return buildCandidatesFromSpecs([
+      { label: 'zigzag-left-r4', ratio: hyperRatio, points: [[0.2, 0.96], [0.5, -1.2], [0.8, 0.96]] },
+      { label: 'zigzag-right-r4', ratio: hyperRatio, points: [[0.2, -0.96], [0.5, 1.2], [0.8, -0.96]] },
+      { label: 'crown-left-r4', ratio: hyperRatio, points: [[0.18, 1.05], [0.4, -1.28], [0.62, 1.28], [0.84, -1.05]] },
+      { label: 'crown-right-r4', ratio: hyperRatio, points: [[0.18, -1.05], [0.4, 1.28], [0.62, -1.28], [0.84, 1.05]] },
+    ]);
+  }
   const patterns = isDistanceOnly ? basePatterns : [...basePatterns, ...complexPatterns];
 
   return detourRatios.flatMap((ratio, ratioIndex) => {
@@ -191,54 +256,68 @@ export async function fetchBrouterRoute(
   req: BrouterRequest,
 ): Promise<BrouterRoute> {
   const url = buildBrouterUrl(req);
-  const res = await fetch(url, {
-    method: 'GET',
-    signal: req.signal,
-    headers: { Accept: 'application/json,application/geo+json,text/plain' },
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt <= WATCHDOG_RETRY_DELAYS_MS.length; attempt += 1) {
+    const res = await fetch(url, {
+      method: 'GET',
+      signal: req.signal,
+      headers: { Accept: 'application/json,application/geo+json,text/plain' },
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    const upstream = res.headers.get('x-brouter-upstream-error');
-    const detail = text || upstream || '';
-    throw new Error(
-      `BRouter HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${
-        detail ? ` — ${detail.slice(0, 300)}` : ''
-      }`,
-    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      const upstream = res.headers.get('x-brouter-upstream-error');
+      const detail = text || upstream || '';
+      lastError = new Error(
+        `BRouter HTTP ${res.status}${res.statusText ? ` ${res.statusText}` : ''}${
+          detail ? ` — ${detail.slice(0, 300)}` : ''
+        }`,
+      );
+      if (isWatchdogMessage(lastError.message) && attempt < WATCHDOG_RETRY_DELAYS_MS.length) {
+        await delay(WATCHDOG_RETRY_DELAYS_MS[attempt], req.signal);
+        continue;
+      }
+      throw lastError;
+    }
+
+    const contentType = res.headers.get('content-type') ?? '';
+    const body = await res.text();
+    if (!contentType.includes('json') || body.trim().startsWith('error')) {
+      lastError = new Error(`BRouter: ${body.trim().slice(0, 300)}`);
+      if (isWatchdogMessage(lastError.message) && attempt < WATCHDOG_RETRY_DELAYS_MS.length) {
+        await delay(WATCHDOG_RETRY_DELAYS_MS[attempt], req.signal);
+        continue;
+      }
+      throw lastError;
+    }
+
+    let json: GeoJSON.FeatureCollection;
+    try {
+      json = JSON.parse(body) as GeoJSON.FeatureCollection;
+    } catch (e) {
+      throw new Error(
+        `BRouter: réponse invalide (${(e as Error).message}). Début: ${body.slice(0, 120)}`,
+      );
+    }
+
+    const feature = json.features?.[0];
+    if (!feature || feature.geometry?.type !== 'LineString') {
+      throw new Error('BRouter: aucune trace renvoyée pour ces points.');
+    }
+
+    const coords = feature.geometry.coordinates as [number, number][];
+    const props = (feature.properties ?? {}) as BrouterFeatureProps;
+
+    return {
+      coordinates: coords,
+      distanceM: num(props['track-length']),
+      durationS: num(props['total-time']),
+      ascentM: num(props['filtered ascend']),
+      descentM: num(props['plain-ascend']) - num(props['filtered ascend']),
+      raw: json,
+    };
   }
-
-  const contentType = res.headers.get('content-type') ?? '';
-  const body = await res.text();
-  if (!contentType.includes('json') || body.trim().startsWith('error')) {
-    throw new Error(`BRouter: ${body.trim().slice(0, 300)}`);
-  }
-
-  let json: GeoJSON.FeatureCollection;
-  try {
-    json = JSON.parse(body) as GeoJSON.FeatureCollection;
-  } catch (e) {
-    throw new Error(
-      `BRouter: réponse invalide (${(e as Error).message}). Début: ${body.slice(0, 120)}`,
-    );
-  }
-
-  const feature = json.features?.[0];
-  if (!feature || feature.geometry?.type !== 'LineString') {
-    throw new Error('BRouter: aucune trace renvoyée pour ces points.');
-  }
-
-  const coords = feature.geometry.coordinates as [number, number][];
-  const props = (feature.properties ?? {}) as BrouterFeatureProps;
-
-  return {
-    coordinates: coords,
-    distanceM: num(props['track-length']),
-    durationS: num(props['total-time']),
-    ascentM: num(props['filtered ascend']),
-    descentM: num(props['plain-ascend']) - num(props['filtered ascend']),
-    raw: json,
-  };
+  throw lastError ?? new Error('BRouter: route fetch failed after watchdog retries');
 }
 
 /**
@@ -384,6 +463,14 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
   } catch (error) {
     lastError = error as Error;
     console.warn('[BRouter] distance detour alternatives failed —', lastError.message);
+    try {
+      const fallbackRoute = await fetchBrouterRoute({ ...req, alternativeIdx: 0 });
+      baseRoute = fallbackRoute;
+      consider(fallbackRoute, 'direct-fallback');
+    } catch (fallbackError) {
+      lastError = fallbackError as Error;
+      console.warn('[BRouter] distance detour direct fallback failed —', lastError.message);
+    }
   }
 
   for (const candidate of buildDistanceDetourCandidates(req, distanceFocus, climbFocus, baseRoute)) {

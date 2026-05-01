@@ -19,6 +19,7 @@ declare const process: {
 
 const UPSTREAM =
   process.env.BROUTER_UPSTREAM?.replace(/\/+$/, '') ?? 'http://localhost:17777';
+const WATCHDOG_RETRY_DELAYS_MS = [250, 700, 1500];
 const ONLY_GROUPS = new Set(
   (process.env.BROUTER_BENCH_GROUPS ?? '')
     .split(',')
@@ -70,6 +71,16 @@ function formatError(error: unknown): string {
   const message = err?.message ?? String(error);
   const cause = err?.cause?.code ?? err?.cause?.message;
   return cause ? `${message} (${cause})` : message;
+}
+
+function isWatchdogMessage(message: string): boolean {
+  return /thread-priority-watchdog/i.test(message);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function haversineKm(a: Point, b: Point): number {
@@ -176,6 +187,12 @@ function isExpectedDetourCandidateFailure(message: string): boolean {
   return /via\d+-position not mapped|error re-tracking track/i.test(message);
 }
 
+function scoreMaxAscentLongDistance(route: RouteStats): number {
+  const targetClimbDensity = 38;
+  const flatGapM = Math.max(0, (route.distanceKm * targetClimbDensity) - route.ascentM);
+  return (route.ascentM * 1150) + ((route.distanceKm * 1000) * 0.04) - (flatGapM * 1600);
+}
+
 function buildDistanceDetourCandidates(
   from: Point,
   to: Point,
@@ -187,13 +204,31 @@ function buildDistanceDetourCandidates(
   const spanKm = estimateRouteSpanKm(from, to);
   const focusSum = distanceFocus + climbFocus;
   const isDistanceOnly = climbFocus < 0.25;
+  const isExtremeClimbDistance = !isDistanceOnly && distanceFocus >= 0.9 && climbFocus >= 0.9;
+  const isExtremeDistanceOnly = isDistanceOnly && distanceFocus >= 0.9;
+  const buildCandidatesFromSpecs = (
+    specs: Array<{ label: string; ratio: number; points: readonly (readonly [number, number])[] }>,
+  ): Array<{ via: Point[]; label: string }> => {
+    return specs.flatMap((spec) => {
+      const offsetKm = spanKm * spec.ratio;
+      const via = spec.points.map(([along, offset]) => {
+        const anchor = sampleRouteAnchor(baseRoute.coordinates ?? [], along);
+        if (!anchor) return null;
+        return buildAnchoredDetourPoint(anchor.anchor, anchor.tangentStart, anchor.tangentEnd, offsetKm * offset);
+      });
+      return via.some((point) => point == null)
+        ? []
+        : [{ label: spec.label, via: via as Point[] }];
+    });
+  };
   const ultraWideRatio = !isDistanceOnly && focusSum >= 1.35
     ? 0.16 + (distanceFocus * 0.08) + (climbFocus * 0.1)
     : Number.NaN;
   const detourRatios = isDistanceOnly
     ? normalizeDetourRatios([
-        0.035 + (distanceFocus * 0.015),
-        0.055 + (distanceFocus * 0.03),
+        0.045 + (distanceFocus * 0.035),
+        0.085 + (distanceFocus * 0.07),
+        0.135 + (distanceFocus * 0.105),
       ])
     : normalizeDetourRatios([
         0.06 + (distanceFocus * 0.04) + (climbFocus * 0.03),
@@ -214,6 +249,25 @@ function buildDistanceDetourCandidates(
     { label: 'zigzag-left', points: [[0.25, 0.72], [0.5, -0.92], [0.75, 0.72]] },
     { label: 'zigzag-right', points: [[0.25, -0.72], [0.5, 0.92], [0.75, -0.72]] },
   ] as const;
+  if (isExtremeClimbDistance) {
+    const ultraRatio = Math.min(0.5, Math.max(detourRatios[2] ?? 0.34, 0.34) + 0.12);
+    return buildCandidatesFromSpecs([
+      { label: 'alpine-zigzag-left-r5', ratio: ultraRatio, points: [[0.16, 0.92], [0.36, -1.18], [0.58, 1.25], [0.8, -1.02]] },
+      { label: 'alpine-zigzag-right-r5', ratio: ultraRatio, points: [[0.16, -0.92], [0.36, 1.18], [0.58, -1.25], [0.8, 1.02]] },
+      { label: 'alpine-crown-left-r5', ratio: ultraRatio, points: [[0.2, 1.05], [0.42, -1.28], [0.64, 1.28], [0.84, -1.05]] },
+      { label: 'alpine-crown-right-r5', ratio: ultraRatio, points: [[0.2, -1.05], [0.42, 1.28], [0.64, -1.28], [0.84, 1.05]] },
+    ]);
+  }
+  if (isExtremeDistanceOnly) {
+    const [, , ultraRatio = 0.24] = detourRatios;
+    const hyperRatio = Math.min(0.5, Math.max(ultraRatio + 0.16, 0.42));
+    return buildCandidatesFromSpecs([
+      { label: 'zigzag-left-r4', ratio: hyperRatio, points: [[0.2, 0.96], [0.5, -1.2], [0.8, 0.96]] },
+      { label: 'zigzag-right-r4', ratio: hyperRatio, points: [[0.2, -0.96], [0.5, 1.2], [0.8, -0.96]] },
+      { label: 'crown-left-r4', ratio: hyperRatio, points: [[0.18, 1.05], [0.4, -1.28], [0.62, 1.28], [0.84, -1.05]] },
+      { label: 'crown-right-r4', ratio: hyperRatio, points: [[0.18, -1.05], [0.4, 1.28], [0.62, -1.28], [0.84, 1.05]] },
+    ]);
+  }
   const patterns = isDistanceOnly ? basePatterns : [...basePatterns, ...complexPatterns];
 
   return detourRatios.flatMap((ratio, ratioIndex) => {
@@ -261,39 +315,51 @@ async function fetchRoute(
     .map((p) => `${p.lon},${p.lat}`)
     .join('|');
   const url = `${UPSTREAM}/brouter?lonlats=${segs}&profile=${profile}&format=geojson&alternativeidx=${alternativeIdx}`;
-  let res: Response;
-  try {
-    res = await fetch(url);
-  } catch (error) {
+  let lastFailure: RouteStats | null = null;
+  for (let attempt = 0; attempt <= WATCHDOG_RETRY_DELAYS_MS.length; attempt += 1) {
+    let res: Response;
+    try {
+      res = await fetch(url);
+    } catch (error) {
+      return {
+        distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
+        status: -1, profileId: profile, error: `route fetch failed: ${formatError(error)}`,
+      };
+    }
+    const text = await res.text();
+    const ct = res.headers.get('content-type') ?? '';
+    if (!res.ok || !ct.includes('json') || text.trimStart().toLowerCase().startsWith('error')) {
+      lastFailure = {
+        distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
+        status: res.status, profileId: profile, error: text.slice(0, 200),
+      };
+      if (lastFailure.error && isWatchdogMessage(lastFailure.error) && attempt < WATCHDOG_RETRY_DELAYS_MS.length) {
+        await delay(WATCHDOG_RETRY_DELAYS_MS[attempt]);
+        continue;
+      }
+      return lastFailure;
+    }
+    const fc = JSON.parse(text);
+    const props = fc.features?.[0]?.properties ?? {};
+    const dist = Number(props['track-length']) || 0;
+    const time = Number(props['total-time']) || 0;
+    const asc = Number(props['filtered ascend']) || 0;
+    const plain = Number(props['plain-ascend']) || 0;
+    const directKm = haversineKm(from, to);
     return {
-      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
-      status: -1, profileId: profile, error: `route fetch failed: ${formatError(error)}`,
+      distanceKm: dist / 1000,
+      ascentM: asc,
+      descentM: asc - plain,
+      durationMin: time / 60,
+      tortuosity: directKm > 0 ? (dist / 1000) / directKm : 0,
+      status: res.status,
+      profileId: profile,
+      coordinates: fc.features?.[0]?.geometry?.coordinates as [number, number][] | undefined,
     };
   }
-  const text = await res.text();
-  const ct = res.headers.get('content-type') ?? '';
-  if (!res.ok || !ct.includes('json') || text.trimStart().toLowerCase().startsWith('error')) {
-    return {
-      distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
-      status: res.status, profileId: profile, error: text.slice(0, 200),
-    };
-  }
-  const fc = JSON.parse(text);
-  const props = fc.features?.[0]?.properties ?? {};
-  const dist = Number(props['track-length']) || 0;
-  const time = Number(props['total-time']) || 0;
-  const asc = Number(props['filtered ascend']) || 0;
-  const plain = Number(props['plain-ascend']) || 0;
-  const directKm = haversineKm(from, to);
-  return {
-    distanceKm: dist / 1000,
-    ascentM: asc,
-    descentM: asc - plain,
-    durationMin: time / 60,
-    tortuosity: directKm > 0 ? (dist / 1000) / directKm : 0,
-    status: res.status,
-    profileId: profile,
-    coordinates: fc.features?.[0]?.geometry?.coordinates as [number, number][] | undefined,
+  return lastFailure ?? {
+    distanceKm: 0, ascentM: 0, descentM: 0, durationMin: 0, tortuosity: 0,
+    status: -1, profileId: profile, error: 'route fetch failed after watchdog retries',
   };
 }
 
@@ -391,6 +457,14 @@ async function fetchRouteBestWithDistanceDetours(
   if (alternatives.error) {
     lastError = new Error(alternatives.error);
     plog(`detour alternatives failed: ${alternatives.error.slice(0, 120)}`);
+    const fallbackRoute = await fetchRoute(profile, from, to);
+    if (fallbackRoute.error) {
+      lastError = new Error(fallbackRoute.error);
+      plog(`detour direct fallback failed: ${fallbackRoute.error.slice(0, 120)}`);
+    } else {
+      baseRoute = fallbackRoute;
+      consider(fallbackRoute, 'direct-fallback');
+    }
   } else {
     baseRoute = alternatives;
     consider(alternatives, 'alternatives');
@@ -456,7 +530,7 @@ async function runScenario(s: Scenario): Promise<RouteStats> {
       profileId,
       ROUTE.from,
       ROUTE.to,
-      (route) => (route.ascentM * 1000) + ((route.distanceKm * 1000) * 0.08),
+      scoreMaxAscentLongDistance,
       'max ascent + long distance',
       distanceFocus,
       climbFocus,
@@ -728,7 +802,7 @@ const CITIES_SCENARIOS: Scenario[] = [
     const dist = await runGroup('Group D — Distance slider', DIST_SCENARIOS);
     runChecks('Distance', dist, [
       { kind: 'abs', index: 0, metric: 'distanceKm', cmp: '<=', value: 165 },
-      { kind: 'delta', low: 1, high: 2, metric: 'distanceKm', cmp: '>=', value: 40 },
+      { kind: 'ratio', low: 0, high: 2, metric: 'distanceKm', ratio: 1.5 },
     ]);
   }
 

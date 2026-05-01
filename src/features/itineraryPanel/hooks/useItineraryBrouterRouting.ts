@@ -47,6 +47,13 @@ function prioritySign(value: number): number {
   return Math.max(-1, Math.min(1, ((Math.max(0, Math.min(100, value)) - 50) / 50)));
 }
 
+function scoreMaxAscentLongDistance(route: BrouterRoute): number {
+  const distanceKm = route.distanceM / 1000;
+  const targetClimbDensity = 38;
+  const flatGapM = Math.max(0, (distanceKm * targetClimbDensity) - route.ascentM);
+  return (route.ascentM * 1150) + (route.distanceM * 0.04) - (flatGapM * 1600);
+}
+
 function fetchRouteForPriorities(
   reqBase: Parameters<typeof fetchBrouterRouteBestByScore>[0],
   priorities: Itinerary['priorities'],
@@ -66,7 +73,7 @@ function fetchRouteForPriorities(
   if (climbFocus > 0.4 && distanceFocus > 0.5) {
     return fetchBrouterRouteBestWithDistanceDetours(
       reqBase,
-      (route) => (route.ascentM * 1000) + (route.distanceM * 0.08),
+      scoreMaxAscentLongDistance,
       'max ascent + long distance',
       distanceFocus,
       climbFocus,
