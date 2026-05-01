@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  createProjectFolder,
   createProject,
   deleteProject,
   deleteProjectFitFiles,
+  deleteProjectFolder,
   deleteProjectThumbnail,
   getProjectThumbnailUrls,
-  listProjects,
+  listProjectBrowserSnapshot,
+  renameProjectFolder,
   renameProject,
+  type ProjectFolderSummary,
   type ProjectSummary,
 } from '@/shared/utils/projects';
+
+import { buildFolderBreadcrumbs, computeFolderAggregateSize } from '../lib/tree';
 
 export function useProjectBrowserProjects({
   open,
@@ -18,15 +24,18 @@ export function useProjectBrowserProjects({
   open: boolean;
   onOpenProject: (projectId: string) => void;
 }) {
+  const [folders, setFolders] = useState<ProjectFolderSummary[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
-  const [creating, setCreating] = useState(false);
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'grid' | 'list'>('grid');
   const [showSearch, setShowSearch] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
 
   const setBusy = useCallback((id: string, busy: boolean) => {
     setBusyIds((prev) => {
@@ -41,10 +50,14 @@ export function useProjectBrowserProjects({
     setLoading(true);
     setError(null);
     try {
-      const rows = await listProjects();
-      setProjects(rows);
-      if (rows.length > 0) {
-        getProjectThumbnailUrls(rows.map((row) => row.id))
+      const snapshot = await listProjectBrowserSnapshot();
+      setFolders(snapshot.folders);
+      setProjects(snapshot.projects);
+      setCurrentFolderId((prev) =>
+        prev && !snapshot.folders.some((folder) => folder.id === prev) ? null : prev,
+      );
+      if (snapshot.projects.length > 0) {
+        getProjectThumbnailUrls(snapshot.projects.map((row) => row.id))
           .then((map) => setThumbnails(map))
           .catch((nextError) => console.warn('[ProjectBrowser] thumbnails failed', nextError));
       } else {
@@ -61,15 +74,16 @@ export function useProjectBrowserProjects({
     if (open) void refresh();
   }, [open, refresh]);
 
-  const handleCreate = useCallback(async () => {
-    if (creating) return;
-    setCreating(true);
+  const handleCreateProject = useCallback(async () => {
+    if (creatingProject) return;
+    setCreatingProject(true);
     setError(null);
     try {
-      const row = await createProject();
+      const row = await createProject(undefined, undefined, currentFolderId);
       setProjects((prev) => [
         {
           id: row.id,
+          folderId: row.folder_id,
           name: row.name,
           privacy: row.privacy,
           sizeBytes: row.size_bytes,
@@ -82,9 +96,23 @@ export function useProjectBrowserProjects({
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Échec de la création du projet.');
     } finally {
-      setCreating(false);
+      setCreatingProject(false);
     }
-  }, [creating, onOpenProject]);
+  }, [creatingProject, currentFolderId, onOpenProject]);
+
+  const handleCreateFolder = useCallback(async () => {
+    if (creatingFolder) return;
+    setCreatingFolder(true);
+    setError(null);
+    try {
+      const folder = await createProjectFolder(undefined, currentFolderId);
+      setFolders((prev) => [folder, ...prev]);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Échec de la création du dossier.');
+    } finally {
+      setCreatingFolder(false);
+    }
+  }, [creatingFolder, currentFolderId]);
 
   const handleRename = useCallback(
     async (id: string, nextName: string) => {
@@ -130,29 +158,94 @@ export function useProjectBrowserProjects({
     [setBusy],
   );
 
+  const handleRenameFolder = useCallback(
+    async (id: string, nextName: string) => {
+      setBusy(id, true);
+      try {
+        await renameProjectFolder(id, nextName);
+        setFolders((prev) =>
+          prev.map((folder) =>
+            folder.id === id
+              ? { ...folder, name: nextName, updatedAt: new Date().toISOString() }
+              : folder,
+          ),
+        );
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : 'Échec du renommage du dossier.');
+      } finally {
+        setBusy(id, false);
+      }
+    },
+    [setBusy],
+  );
+
+  const handleDeleteFolder = useCallback(
+    async (id: string) => {
+      setBusy(id, true);
+      try {
+        await deleteProjectFolder(id);
+        setFolders((prev) => prev.filter((folder) => folder.id !== id));
+        setCurrentFolderId((prev) => (prev === id ? null : prev));
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : 'Échec de la suppression du dossier.');
+      } finally {
+        setBusy(id, false);
+      }
+    },
+    [setBusy],
+  );
+
+  const handleOpenFolder = useCallback((folderId: string) => {
+    setCurrentFolderId(folderId);
+  }, []);
+
+  const handleNavigateToFolder = useCallback((folderId: string | null) => {
+    setCurrentFolderId(folderId);
+  }, []);
+
   const q = search.trim().toLowerCase();
-  const filtered = q
-    ? projects.filter((project) => project.name.toLowerCase().includes(q))
-    : projects;
+  const breadcrumbs = buildFolderBreadcrumbs(folders, currentFolderId);
+  const visibleFoldersBase = folders.filter((folder) => folder.parentFolderId === currentFolderId);
+  const visibleProjectsBase = projects.filter((project) => project.folderId === currentFolderId);
+  const visibleFolders = (q
+    ? visibleFoldersBase.filter((folder) => folder.name.toLowerCase().includes(q))
+    : visibleFoldersBase
+  ).map((folder) => ({
+    ...folder,
+    aggregateSizeBytes: computeFolderAggregateSize(folder.id, folders, projects),
+  }));
+  const visibleProjects = q
+    ? visibleProjectsBase.filter((project) => project.name.toLowerCase().includes(q))
+    : visibleProjectsBase;
 
   return {
+    folders,
     projects,
     thumbnails,
     loading,
     error,
     busyIds,
-    creating,
+    creatingProject,
+    creatingFolder,
     search,
     setSearch,
     view,
     setView,
     showSearch,
     setShowSearch,
+    currentFolderId,
+    breadcrumbs,
     refresh,
-    handleCreate,
-    handleRename,
-    handleDelete,
+    handleCreateProject,
+    handleCreateFolder,
+    handleRenameProject: handleRename,
+    handleDeleteProject: handleDelete,
+    handleRenameFolder,
+    handleDeleteFolder,
+    handleOpenFolder,
+    handleNavigateToFolder,
     q,
-    filtered,
+    visibleFolders,
+    visibleProjects,
   };
 }

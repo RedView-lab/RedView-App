@@ -1,12 +1,15 @@
 import {
+  IconChevronDown,
+  IconFolderPlus,
   IconLayoutGrid,
   IconList,
   IconPlusCircle,
   IconSearch,
-  IconSettingsSliders,
 } from '@/features/itineraryPanel/components/icons';
-import type { ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
+import { BrowserBreadcrumb } from './BrowserBreadcrumb';
+import { FolderCard } from './FolderCard';
 import { ProjectCard } from './ProjectCard';
 
 type ProjectsPanelProps = {
@@ -16,17 +19,26 @@ type ProjectsPanelProps = {
   setShowSearch: (show: boolean) => void;
   search: string;
   setSearch: (value: string) => void;
-  handleCreate: () => void;
-  creating: boolean;
+  handleCreateProject: () => void;
+  handleCreateFolder: () => void;
+  creatingProject: boolean;
+  creatingFolder: boolean;
   error: string | null;
   loading: boolean;
   q: string;
-  filtered: ProjectSummary[];
+  currentFolderId: string | null;
+  breadcrumbs: ProjectFolderSummary[];
+  visibleFolders: Array<ProjectFolderSummary & { aggregateSizeBytes: number }>;
+  visibleProjects: ProjectSummary[];
   thumbnails: Record<string, string | null>;
   busyIds: Set<string>;
   onOpenProject: (projectId: string) => void;
-  handleRename: (id: string, nextName: string) => Promise<void>;
-  handleDelete: (id: string) => Promise<void>;
+  onOpenFolder: (folderId: string) => void;
+  onNavigateToFolder: (folderId: string | null) => void;
+  handleRenameProject: (id: string, nextName: string) => Promise<void>;
+  handleDeleteProject: (id: string) => Promise<void>;
+  handleRenameFolder: (id: string, nextName: string) => Promise<void>;
+  handleDeleteFolder: (id: string) => Promise<void>;
 };
 
 export function ProjectsPanel({
@@ -36,43 +48,58 @@ export function ProjectsPanel({
   setShowSearch,
   search,
   setSearch,
-  handleCreate,
-  creating,
+  handleCreateProject,
+  handleCreateFolder,
+  creatingProject,
+  creatingFolder,
   error,
   loading,
   q,
-  filtered,
+  currentFolderId,
+  breadcrumbs,
+  visibleFolders,
+  visibleProjects,
   thumbnails,
   busyIds,
   onOpenProject,
-  handleRename,
-  handleDelete,
+  onOpenFolder,
+  onNavigateToFolder,
+  handleRenameProject,
+  handleDeleteProject,
+  handleRenameFolder,
+  handleDeleteFolder,
 }: ProjectsPanelProps) {
+  const visibleCount = visibleFolders.length + visibleProjects.length;
+
   return (
     <>
       <div className="rvpb-toolbar">
-        <div className="rvpb-view-toggle" role="tablist" aria-label="Affichage des projets">
-          <button
-            type="button"
-            className={`rvpb-view-toggle__item${view === 'grid' ? ' is-active' : ''}`}
-            aria-pressed={view === 'grid'}
-            onClick={() => setView('grid')}
-          >
-            <span>Grille</span>
-            <IconLayoutGrid size={12} />
-          </button>
-          <button
-            type="button"
-            className={`rvpb-view-toggle__item${view === 'list' ? ' is-active' : ''}`}
-            aria-pressed={view === 'list'}
-            onClick={() => setView('list')}
-          >
-            <span>Liste</span>
-            <IconList size={16} />
-          </button>
+        <div className="rvpb-toolbar__start">
+          <BrowserBreadcrumb breadcrumbs={breadcrumbs} onNavigate={onNavigateToFolder} />
         </div>
 
         <div className="rvpb-toolbar__actions">
+          <div className="rvpb-view-toggle" role="tablist" aria-label="Affichage des projets">
+            <button
+              type="button"
+              className={`rvpb-view-toggle__item${view === 'grid' ? ' is-active' : ''}`}
+              aria-pressed={view === 'grid'}
+              onClick={() => setView('grid')}
+            >
+              <span>Grille</span>
+              <IconLayoutGrid size={12} />
+            </button>
+            <button
+              type="button"
+              className={`rvpb-view-toggle__item${view === 'list' ? ' is-active' : ''}`}
+              aria-pressed={view === 'list'}
+              onClick={() => setView('list')}
+            >
+              <span>Liste</span>
+              <IconList size={16} />
+            </button>
+          </div>
+
           {showSearch ? (
             <input
               className="rvpb-search-input"
@@ -94,17 +121,24 @@ export function ProjectsPanel({
               <IconSearch size={18} />
             </button>
           )}
-          <button type="button" className="rvpb-square-button" aria-label="Filtrer les projets">
-            <IconSettingsSliders size={18} />
+          <button
+            type="button"
+            className="rvpb-square-button"
+            aria-label="Créer un dossier"
+            onClick={handleCreateFolder}
+            disabled={creatingFolder}
+          >
+            <IconFolderPlus size={18} />
           </button>
           <button
             type="button"
             className="rvpb-create-button"
-            onClick={handleCreate}
-            disabled={creating}
+            onClick={handleCreateProject}
+            disabled={creatingProject}
           >
             <IconPlusCircle size={20} />
-            <span>{creating ? 'Création…' : 'Créer un projet'}</span>
+            <span>{creatingProject ? 'Création…' : 'Créer un projet'}</span>
+            <IconChevronDown size={16} />
           </button>
         </div>
       </div>
@@ -117,28 +151,44 @@ export function ProjectsPanel({
 
       <section
         className={`rvpb-grid-shell${view === 'list' ? ' is-list' : ''}`}
-        aria-label="Liste des projets"
+        aria-label={currentFolderId ? 'Contenu du dossier courant' : 'Liste des projets'}
       >
-        {loading && filtered.length === 0 ? (
+        {loading && visibleCount === 0 ? (
           <div className="rvpb-empty">Chargement…</div>
-        ) : filtered.length === 0 ? (
+        ) : visibleCount === 0 ? (
           <div className="rvpb-empty">
             {q
-              ? 'Aucun projet ne correspond à votre recherche.'
-              : 'Vous n’avez pas encore de projet. Cliquez sur « Créer un projet » pour commencer.'}
+              ? 'Aucun dossier ou projet ne correspond à votre recherche.'
+              : currentFolderId
+                ? 'Ce dossier est vide. Créez un sous-dossier ou un projet pour commencer.'
+                : 'Vous n’avez pas encore de projet. Créez un dossier ou un projet pour commencer.'}
           </div>
         ) : (
-          filtered.map((project) => (
-            <ProjectCard
-              key={project.id}
-              project={project}
-              thumbnailUrl={thumbnails[project.id] ?? null}
-              busy={busyIds.has(project.id)}
-              onOpen={onOpenProject}
-              onRename={handleRename}
-              onDelete={handleDelete}
-            />
-          ))
+          <>
+            {visibleFolders.map((folder) => (
+              <FolderCard
+                key={folder.id}
+                folder={folder}
+                sizeBytes={folder.aggregateSizeBytes}
+                busy={busyIds.has(folder.id)}
+                onOpen={onOpenFolder}
+                onRename={handleRenameFolder}
+                onDelete={handleDeleteFolder}
+              />
+            ))}
+
+            {visibleProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                thumbnailUrl={thumbnails[project.id] ?? null}
+                busy={busyIds.has(project.id)}
+                onOpen={onOpenProject}
+                onRename={handleRenameProject}
+                onDelete={handleDeleteProject}
+              />
+            ))}
+          </>
         )}
       </section>
     </>

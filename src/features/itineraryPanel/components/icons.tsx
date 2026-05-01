@@ -79,6 +79,48 @@ export const IconArrowLeft = ({ size = 16, ...p }: AssetGlyphProps) => (
   <SvgV2Icon name="arrow-left.svg" size={size} {...p} />
 );
 
+export const IconFolder = ({ size = 20, className, style, ...rest }: AssetGlyphProps) => (
+  <span
+    className={className}
+    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto', ...style }}
+    {...rest}
+  >
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" aria-hidden="true">
+      <path
+        d="M3.75 7.5a2.25 2.25 0 0 1 2.25-2.25h4.061c.522 0 1.022.208 1.391.578l1.22 1.219c.37.37.87.578 1.392.578H18a2.25 2.25 0 0 1 2.25 2.25v7.5A2.25 2.25 0 0 1 18 19.62H6A2.25 2.25 0 0 1 3.75 17.37V7.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  </span>
+);
+
+export const IconFolderPlus = ({ size = 20, className, style, ...rest }: AssetGlyphProps) => (
+  <span
+    className={className}
+    style={{ width: size, height: size, display: 'inline-flex', flex: '0 0 auto', ...style }}
+    {...rest}
+  >
+    <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" aria-hidden="true">
+      <path
+        d="M3.75 7.5a2.25 2.25 0 0 1 2.25-2.25h4.061c.522 0 1.022.208 1.391.578l1.22 1.219c.37.37.87.578 1.392.578H18a2.25 2.25 0 0 1 2.25 2.25v7.5A2.25 2.25 0 0 1 18 19.62H6A2.25 2.25 0 0 1 3.75 17.37V7.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M16.5 11.25v4.5M14.25 13.5h4.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  </span>
+);
+
 export const IconSave = ({ size = 14, ...p }: AssetGlyphProps) => (
   <AssetIcon src={ITINERARY_ICON_ASSETS.save} size={size} {...p} />
 );

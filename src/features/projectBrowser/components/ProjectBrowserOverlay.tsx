@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import {
-  IconDownload,
-  IconSettingsCog,
-  IconShare,
-} from '@/features/itineraryPanel/components/icons';
 import { readStoredSupabaseSession } from '@/shared/services/supabase';
 
 import {
@@ -53,7 +48,6 @@ import type {
   SubscriptionPlanId,
   SubscriptionState,
 } from '../types';
-import { formatSavedAt } from '../lib/utils';
 import { useProjectBrowserProjects } from '../hooks/useProjectBrowserProjects';
 
 import '../styles/index.css';
@@ -92,23 +86,31 @@ export function ProjectBrowserOverlay({
   const syncedContactPreferenceRef = useRef<string | null>(null);
   const contactHydratedRef = useRef(false);
   const {
-    projects,
     thumbnails,
     loading,
     error,
     busyIds,
-    creating,
+    creatingProject,
+    creatingFolder,
     search,
     setSearch,
     view,
     setView,
     showSearch,
     setShowSearch,
-    handleCreate,
-    handleRename,
-    handleDelete,
+    currentFolderId,
+    breadcrumbs,
+    handleCreateProject,
+    handleCreateFolder,
+    handleRenameProject,
+    handleDeleteProject,
+    handleRenameFolder,
+    handleDeleteFolder,
+    handleOpenFolder,
+    handleNavigateToFolder,
     q,
-    filtered,
+    visibleFolders,
+    visibleProjects,
   } = useProjectBrowserProjects({
     open,
     onOpenProject,
@@ -264,7 +266,6 @@ export function ProjectBrowserOverlay({
     }
   }, [isSigningOut]);
 
-  const lastEdited = projects[0];
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId) => {
       logBillingUi('handle-plan-selection-start', {
@@ -434,14 +435,9 @@ export function ProjectBrowserOverlay({
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)
     : displayName || 'Utilisateur';
-  const headerMetaLabel =
-    activeTab === 'account'
-      ? accountLoading
-        ? 'Chargement du compte...'
-        : formatLastConnection(accountProfile?.lastSignInAt ?? null)
-      : lastEdited
-        ? `Dernière modification ${formatSavedAt(lastEdited.updatedAt)}`
-        : 'Aucun projet enregistré';
+  const headerMetaLabel = accountLoading
+    ? 'Chargement du compte...'
+    : formatLastConnection(accountProfile?.lastSignInAt ?? null);
 
   return (
     <div
@@ -462,28 +458,10 @@ export function ProjectBrowserOverlay({
             </div>
           </div>
 
-          {activeTab === 'account' ? (
-            <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
-              <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
-              <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
-            </button>
-          ) : (
-            <div className="rvpb-header__actions">
-              <button type="button" className="rvpb-icon-button" aria-label="Paramètres du compte">
-                <IconSettingsCog size={16} />
-              </button>
-              <button
-                type="button"
-                className="rvpb-icon-button"
-                aria-label="Télécharger vos projets"
-              >
-                <IconDownload size={16} />
-              </button>
-              <button type="button" className="rvpb-icon-button" aria-label="Partager">
-                <IconShare size={16} />
-              </button>
-            </div>
-          )}
+          <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
+            <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
+            <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
+          </button>
         </header>
 
         <div className="rvpb-divider" />
@@ -500,17 +478,26 @@ export function ProjectBrowserOverlay({
             setShowSearch={setShowSearch}
             search={search}
             setSearch={setSearch}
-            handleCreate={handleCreate}
-            creating={creating}
+            handleCreateProject={handleCreateProject}
+            handleCreateFolder={handleCreateFolder}
+            creatingProject={creatingProject}
+            creatingFolder={creatingFolder}
             error={error}
             loading={loading}
             q={q}
-            filtered={filtered}
+            currentFolderId={currentFolderId}
+            breadcrumbs={breadcrumbs}
+            visibleFolders={visibleFolders}
+            visibleProjects={visibleProjects}
             thumbnails={thumbnails}
             busyIds={busyIds}
             onOpenProject={onOpenProject}
-            handleRename={handleRename}
-            handleDelete={handleDelete}
+            onOpenFolder={handleOpenFolder}
+            onNavigateToFolder={handleNavigateToFolder}
+            handleRenameProject={handleRenameProject}
+            handleDeleteProject={handleDeleteProject}
+            handleRenameFolder={handleRenameFolder}
+            handleDeleteFolder={handleDeleteFolder}
           />
         ) : null}
 

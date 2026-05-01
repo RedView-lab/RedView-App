@@ -2,33 +2,34 @@ import { useEffect, useRef, useState } from 'react';
 
 import {
   IconArrowLeft,
+  IconFolder,
   IconSave,
   IconSettingsCog,
   IconTrash,
 } from '@/features/itineraryPanel/components/icons';
-import type { ProjectSummary } from '@/shared/utils/projects';
+import type { ProjectFolderSummary } from '@/shared/utils/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../lib/utils';
 
-type ProjectCardProps = {
-  project: ProjectSummary;
-  thumbnailUrl: string | null;
+type FolderCardProps = {
+  folder: ProjectFolderSummary;
+  sizeBytes: number;
+  busy: boolean;
   onOpen: (id: string) => void;
   onRename: (id: string, nextName: string) => Promise<void> | void;
   onDelete: (id: string) => Promise<void> | void;
-  busy: boolean;
 };
 
-export function ProjectCard({
-  project,
-  thumbnailUrl,
+export function FolderCard({
+  folder,
+  sizeBytes,
+  busy,
   onOpen,
   onRename,
   onDelete,
-  busy,
-}: ProjectCardProps) {
+}: FolderCardProps) {
   const [renaming, setRenaming] = useState(false);
-  const [draft, setDraft] = useState(project.name);
+  const [draft, setDraft] = useState(folder.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -36,31 +37,33 @@ export function ProjectCard({
   }, [renaming]);
 
   useEffect(() => {
-    setDraft(project.name);
-  }, [project.name]);
+    setDraft(folder.name);
+  }, [folder.name]);
 
   const commitRename = async () => {
     const next = draft.trim();
-    if (!next || next === project.name) {
+    if (!next || next === folder.name) {
       setRenaming(false);
-      setDraft(project.name);
+      setDraft(folder.name);
       return;
     }
     try {
-      await onRename(project.id, next);
+      await onRename(folder.id, next);
     } finally {
       setRenaming(false);
     }
   };
 
   const handleDelete = async () => {
-    const ok = window.confirm(`Supprimer définitivement « ${project.name} » ?`);
+    const ok = window.confirm(
+      `Supprimer définitivement le dossier « ${folder.name} » ? Il doit être vide avant suppression.`,
+    );
     if (!ok) return;
-    await onDelete(project.id);
+    await onDelete(folder.id);
   };
 
   return (
-    <article className="rvpb-card">
+    <article className="rvpb-card rvpb-folder-card">
       <div className="rvpb-card__header">
         <div className="rvpb-card__title-stack">
           {renaming ? (
@@ -76,22 +79,23 @@ export function ProjectCard({
                 if (event.key === 'Enter') void commitRename();
                 if (event.key === 'Escape') {
                   setRenaming(false);
-                  setDraft(project.name);
+                  setDraft(folder.name);
                 }
               }}
             />
           ) : (
             <h3 onDoubleClick={() => setRenaming(true)} title="Double-cliquer pour renommer">
-              {project.name}
+              {folder.name}
             </h3>
           )}
+
           <div className="rvpb-card__meta">
-            <span className="rvpb-card__badge">{privacyLabel(project.privacy)}</span>
+            <span className="rvpb-card__badge">{privacyLabel(folder.privacy)}</span>
             <span className="rvpb-card__meta-group">
               <IconSave size={14} />
-              <span>{formatSavedAt(project.updatedAt)}</span>
+              <span>{formatSavedAt(folder.updatedAt)}</span>
             </span>
-            <span>{formatSize(project.sizeBytes)}</span>
+            <span>{formatSize(sizeBytes)}</span>
           </div>
         </div>
 
@@ -99,7 +103,7 @@ export function ProjectCard({
           <button
             type="button"
             className="rvpb-icon-button"
-            aria-label="Renommer le projet"
+            aria-label="Renommer le dossier"
             disabled={busy}
             onClick={() => setRenaming(true)}
           >
@@ -108,7 +112,7 @@ export function ProjectCard({
           <button
             type="button"
             className="rvpb-icon-button"
-            aria-label="Supprimer le projet"
+            aria-label="Supprimer le dossier"
             disabled={busy}
             onClick={handleDelete}
           >
@@ -117,9 +121,9 @@ export function ProjectCard({
           <button
             type="button"
             className="rvpb-card__open"
-            aria-label={`Ouvrir ${project.name}`}
+            aria-label={`Ouvrir le dossier ${folder.name}`}
             disabled={busy}
-            onClick={() => onOpen(project.id)}
+            onClick={() => onOpen(folder.id)}
           >
             <IconArrowLeft size={18} />
           </button>
@@ -128,16 +132,14 @@ export function ProjectCard({
 
       <button
         type="button"
-        className="rvpb-card__preview"
-        onClick={() => onOpen(project.id)}
+        className="rvpb-card__preview rvpb-folder-card__preview"
+        onClick={() => onOpen(folder.id)}
         disabled={busy}
-        aria-label={`Entrer dans ${project.name}`}
+        aria-label={`Entrer dans le dossier ${folder.name}`}
       >
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="Aperçu de projet" />
-        ) : (
-          <div className="rvpb-card__preview-placeholder" aria-hidden="true" />
-        )}
+        <div className="rvpb-card__preview-placeholder rvpb-folder-card__placeholder" aria-hidden="true">
+          <IconFolder size={40} />
+        </div>
       </button>
     </article>
   );
