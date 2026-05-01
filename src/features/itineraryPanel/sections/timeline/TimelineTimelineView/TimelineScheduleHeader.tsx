@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { formatDayLabel, toDayKey } from './utils';
 
 interface TimelineScheduleHeaderProps {
@@ -11,11 +12,14 @@ export function TimelineScheduleHeader({
   selectedDayKey,
   onSelectDay,
 }: TimelineScheduleHeaderProps) {
+  const headerGridStyle = {
+    '--rvi-tl-header-day-count': String(Math.max(1, displayDays.length)),
+  } as CSSProperties;
+
   return (
     <>
       <div className="rvi-tl-schedule__days" role="tablist" aria-label="Jours de la timeline">
-        <span className="rvi-tl-schedule__days-spacer" aria-hidden />
-        <div className="rvi-tl-schedule__days-grid">
+        <div className="rvi-tl-schedule__days-grid" style={headerGridStyle}>
           {displayDays.map((day) => {
             const dayKey = toDayKey(day);
             const isSelected = dayKey === selectedDayKey;
@@ -37,7 +41,6 @@ export function TimelineScheduleHeader({
       </div>
 
       <div className="rvi-tl-schedule__legend" aria-hidden>
-        <span className="rvi-tl-schedule__legend-spacer" />
         <span className="rvi-tl-schedule__legend-grid">
           <span className="rvi-tl-schedule__legend-name">Name</span>
           <span className="rvi-tl-schedule__legend-pause" />

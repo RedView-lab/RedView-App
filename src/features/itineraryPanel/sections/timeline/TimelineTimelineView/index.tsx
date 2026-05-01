@@ -96,6 +96,10 @@ export function TimelineTimelineView({
   );
 
   const dayWindow = useMemo(() => buildDayWindow(selectedDayDate), [selectedDayDate]);
+  const headerDays = useMemo(() => {
+    if (!reference.hasRealDate) return [selectedDayDate];
+    return dayWindow;
+  }, [dayWindow, reference.hasRealDate, selectedDayDate]);
   const displayDays = useMemo(() => {
     if (!reference.hasRealDate || isCompactLayout) return [selectedDayDate];
     return dayWindow;
@@ -326,7 +330,7 @@ export function TimelineTimelineView({
   return (
     <div ref={scheduleRef} className="rvi-tl-schedule" style={scheduleStyle} aria-label="Timeline journaliere">
       <TimelineScheduleHeader
-        displayDays={displayDays}
+        displayDays={headerDays}
         selectedDayKey={selectedDayKey}
         onSelectDay={setSelectedDayKey}
       />
