@@ -6,7 +6,7 @@
  * still drive placement fallback and km markers, but the user now navigates a
  * date strip and reads the route as scheduled checkpoints.
  */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
   MIN_TIMELINE_HOURS,
@@ -21,14 +21,16 @@ import {
   buildDayWindow,
   buildKmMarkers,
   buildPauseAttachment,
+  buildScheduledTimelineState,
   buildScheduledEvents,
   buildScheduledStandalonePauses,
-  buildTimedItems,
   buildVisibleMinuteBounds,
+  distanceAtElapsedSeconds,
   parseDayKey,
   parseStartReference,
   positionTimelineBlocks,
   resolveMarkerKmStep,
+  resolveRideElapsedSecondsAtScheduledElapsed,
   toDayKey,
 } from './utils';
 
@@ -42,6 +44,7 @@ export function TimelineTimelineView({
   selectedIds,
   onToggleSelect,
   onToggleVisibility,
+  onMovePause,
   onToggleFavorite,
   onRemove,
 }: TimelineTimelineViewProps) {
@@ -51,17 +54,20 @@ export function TimelineTimelineView({
   const lastAutoScrollKeyRef = useRef<string | null>(null);
 
   const reference = useMemo(() => parseStartReference(rhythm), [rhythm]);
-  const timedItems = useMemo(
-    () => buildTimedItems(items, prediction, reference),
-    [items, prediction, reference],
+  const scheduleState = useMemo(
+    () => buildScheduledTimelineState(items, prediction, reference, rhythm),
+    [items, prediction, reference, rhythm],
   );
+  const timedItems = scheduleState.timedItems;
+  const intervalPauseItems = scheduleState.intervalPauses;
+  const stopAnchors = scheduleState.stopAnchors;
 
   const defaultAnchorDay = useMemo(() => {
-    const firstDatedItem = timedItems.find((item) => item.dayKey);
+    const firstDatedItem = [...timedItems, ...intervalPauseItems].find((item) => item.dayKey);
     if (firstDatedItem?.date) return new Date(firstDatedItem.date);
     if (reference.reference && reference.hasRealDate) return new Date(reference.reference);
     return new Date();
-  }, [reference, timedItems]);
+  }, [intervalPauseItems, reference, timedItems]);
   const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
@@ -134,12 +140,12 @@ export function TimelineTimelineView({
   );
   const timelineSpansMultipleDays = useMemo(() => {
     const dayKeys = new Set(
-      timedItems
+      [...timedItems, ...intervalPauseItems]
         .map((entry) => entry.dayKey)
         .filter((dayKey): dayKey is string => Boolean(dayKey)),
     );
     return dayKeys.size > 1;
-  }, [timedItems]);
+  }, [intervalPauseItems, timedItems]);
   const pauseItems = useMemo(
     () => timedItems.filter((entry) => entry.item.kind === 'pause'),
     [timedItems],
@@ -155,9 +161,14 @@ export function TimelineTimelineView({
     return pauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
   }, [displayDayKeySet, pauseItems, reference.hasRealDate]);
 
+  const filteredIntervalPauseItems = useMemo(() => {
+    if (!reference.hasRealDate) return intervalPauseItems;
+    return intervalPauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
+  }, [displayDayKeySet, intervalPauseItems, reference.hasRealDate]);
+
   const pauseAttachment = useMemo(
-    () => buildPauseAttachment(filteredPrimaryItems, filteredPauseItems, rhythm),
-    [filteredPauseItems, filteredPrimaryItems, rhythm],
+    () => buildPauseAttachment(filteredPrimaryItems, rhythm),
+    [filteredPrimaryItems, rhythm],
   );
 
   const maxDistanceKm = useMemo(
@@ -170,11 +181,12 @@ export function TimelineTimelineView({
       buildVisibleMinuteBounds(
         filteredPrimaryItems,
         filteredPauseItems,
+        filteredIntervalPauseItems,
         pauseAttachment,
         displayDays,
         reference,
       ),
-    [displayDays, filteredPauseItems, filteredPrimaryItems, pauseAttachment, reference],
+    [displayDays, filteredIntervalPauseItems, filteredPauseItems, filteredPrimaryItems, pauseAttachment, reference],
   );
 
   const startMinutes = useMemo(() => {
@@ -226,16 +238,19 @@ export function TimelineTimelineView({
   );
 
   const scheduledStandalonePauses = useMemo(
-    () => buildScheduledStandalonePauses(pauseAttachment, pixelsPerMinute, startMinutes),
-    [pauseAttachment, pixelsPerMinute, startMinutes],
+    () => buildScheduledStandalonePauses(filteredPauseItems, filteredIntervalPauseItems, pixelsPerMinute, startMinutes),
+    [filteredIntervalPauseItems, filteredPauseItems, pixelsPerMinute, startMinutes],
   );
 
   const standalonePauseDayKeyById = useMemo(
     () =>
       new Map(
-        pauseAttachment.unattachedPauses.map((pause) => [pause.item.id, pause.dayKey ?? null]),
+        [
+          ...filteredPauseItems.map((pause) => [pause.item.id, pause.dayKey ?? null] as const),
+          ...filteredIntervalPauseItems.map((pause) => [pause.id, pause.dayKey ?? null] as const),
+        ],
       ),
-    [pauseAttachment.unattachedPauses],
+    [filteredIntervalPauseItems, filteredPauseItems],
   );
 
   const { events, standalonePauses, canvasHeight, firstVisibleTopPx } = useMemo(
@@ -265,6 +280,7 @@ export function TimelineTimelineView({
         canvasHeight,
         kmMarkerStep,
         maxDistanceKm,
+        stopAnchors,
       ),
     [
       canvasHeight,
@@ -276,7 +292,22 @@ export function TimelineTimelineView({
       prediction,
       reference,
       startMinutes,
+      stopAnchors,
     ],
+  );
+
+  const handleMovePauseScheduled = useCallback(
+    (id: string, scheduledElapsedSeconds: number) => {
+      if (!prediction) return;
+      const rideElapsedSeconds = resolveRideElapsedSecondsAtScheduledElapsed(
+        scheduledElapsedSeconds,
+        stopAnchors.filter((anchor) => anchor.id !== id),
+      );
+      const distanceM = distanceAtElapsedSeconds(prediction, rideElapsedSeconds);
+      if (!Number.isFinite(distanceM)) return;
+      onMovePause?.(id, Math.max(0, (distanceM as number) / 1000));
+    },
+    [onMovePause, prediction, stopAnchors],
   );
 
   const hourMarks = useMemo(
@@ -385,9 +416,14 @@ export function TimelineTimelineView({
         events={events}
         standalonePauses={standalonePauses}
         standalonePauseDayKeyById={standalonePauseDayKeyById}
+        reference={reference}
+        startMinutes={startMinutes}
+        pixelsPerMinute={pixelsPerMinute}
+        canvasHeight={canvasHeight}
         selectedIds={selectedIds}
         onToggleSelect={onToggleSelect}
         onToggleVisibility={onToggleVisibility}
+        onMovePauseScheduled={handleMovePauseScheduled}
         onToggleFavorite={onToggleFavorite}
         onRemove={onRemove}
         resolveColumnPlacement={resolveColumnPlacement}

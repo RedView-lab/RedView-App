@@ -513,6 +513,13 @@ export function ItineraryPanelContainer({
           if (row) row.visible = visible;
         })
       }
+      onMoveTimelinePause={(id, distanceKm) =>
+        updateActive((it) => {
+          const row = it.timeline.find((item) => item.id === id && item.kind === 'pause');
+          if (!row) return;
+          row.distanceKm = Math.max(0, Number(distanceKm.toFixed(3)));
+        })
+      }
       onRemoveTimelineItem={(id) =>
         updateActive((it) => {
           const removedIndex = it.timeline.findIndex((item) => item.id === id);

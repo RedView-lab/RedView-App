@@ -48,6 +48,7 @@ interface TimelinePanelProps {
   onAdd?: (kind: TimelineAddItemKind) => void;
 
   onToggleItem?: (id: string, visible: boolean) => void;
+  onMovePause?: (id: string, distanceKm: number) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
   onRemoveItem?: (id: string) => void;
   onSelectPlace?: (
@@ -71,6 +72,7 @@ export function TimelinePanel({
   onToggleFullscreen,
   onAdd,
   onToggleItem,
+  onMovePause,
   onFavoriteItem,
   onRemoveItem,
   onSelectPlace,
@@ -235,6 +237,7 @@ export function TimelinePanel({
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}
+              onMovePause={onMovePause}
               onToggleFavorite={onFavoriteItem}
               onRemove={onRemoveItem}
             />

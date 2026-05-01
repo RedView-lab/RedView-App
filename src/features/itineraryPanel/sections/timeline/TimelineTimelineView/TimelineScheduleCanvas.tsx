@@ -1,4 +1,13 @@
-import type { CSSProperties, MouseEvent as ReactMouseEvent, RefObject } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type RefObject,
+} from 'react';
 import {
   IconEye,
   IconPauseCircle,
@@ -6,8 +15,17 @@ import {
   IconTrash,
 } from '../../../components/icons';
 import { KindBadge } from '../KindBadge';
-import { TIMELINE_VIEWPORT_TOP_INSET_PX } from './constants';
-import type { KmMarker, TimelineEvent, TimelineStandalonePause } from './types';
+import {
+  MINUTES_PER_DAY,
+  TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
+  TIMELINE_VIEWPORT_TOP_INSET_PX,
+} from './constants';
+import type {
+  KmMarker,
+  StartReference,
+  TimelineEvent,
+  TimelineStandalonePause,
+} from './types';
 import {
   formatDistanceLabel,
   formatHourLabel,
@@ -30,13 +48,27 @@ interface TimelineScheduleCanvasProps {
   events: TimelineEvent[];
   standalonePauses: TimelineStandalonePause[];
   standalonePauseDayKeyById: ReadonlyMap<string, string | null>;
+  reference: StartReference;
+  startMinutes: number;
+  pixelsPerMinute: number;
+  canvasHeight: number;
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
+  onMovePauseScheduled?: (id: string, scheduledElapsedSeconds: number) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
   resolveColumnPlacement: (dayKey: string | null) => CSSProperties;
   resolveNowLinePlacement: () => CSSProperties;
+}
+
+interface PauseDragState {
+  id: string;
+  offsetY: number;
+  heightPx: number;
+  topPx: number;
+  dayKey: string | null;
+  scheduledElapsedSeconds: number;
 }
 
 export function TimelineScheduleCanvas({
@@ -54,14 +86,117 @@ export function TimelineScheduleCanvas({
   events,
   standalonePauses,
   standalonePauseDayKeyById,
+  reference,
+  startMinutes,
+  pixelsPerMinute,
+  canvasHeight,
   selectedIds,
   onToggleSelect,
   onToggleVisibility,
+  onMovePauseScheduled,
   onToggleFavorite,
   onRemove,
   resolveColumnPlacement,
   resolveNowLinePlacement,
 }: TimelineScheduleCanvasProps) {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [dragState, setDragState] = useState<PauseDragState | null>(null);
+  const dayByKey = useMemo(
+    () => new Map(displayDays.map((day) => [toDayKey(day), day])),
+    [displayDays],
+  );
+
+  useEffect(() => {
+    if (!dragState) return;
+
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const target = resolvePauseDragTarget(
+        event.clientX,
+        event.clientY,
+        dragState,
+        canvasRef.current,
+        canvasHeight,
+        displayDays,
+        reference,
+        startMinutes,
+        pixelsPerMinute,
+      );
+      if (!target) return;
+      setDragState((current) => (current
+        ? {
+            ...current,
+            topPx: target.topPx,
+            dayKey: target.dayKey,
+            scheduledElapsedSeconds: target.scheduledElapsedSeconds,
+          }
+        : current));
+    };
+
+    const handlePointerUp = (event: PointerEvent) => {
+      const target = resolvePauseDragTarget(
+        event.clientX,
+        event.clientY,
+        dragState,
+        canvasRef.current,
+        canvasHeight,
+        displayDays,
+        reference,
+        startMinutes,
+        pixelsPerMinute,
+      );
+      if (target) {
+        onMovePauseScheduled?.(dragState.id, target.scheduledElapsedSeconds);
+      }
+      setDragState(null);
+    };
+
+    const handlePointerCancel = () => {
+      setDragState(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    window.addEventListener('pointercancel', handlePointerCancel);
+
+    return () => {
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+      window.removeEventListener('pointercancel', handlePointerCancel);
+    };
+  }, [
+    canvasHeight,
+    displayDays,
+    dragState,
+    onMovePauseScheduled,
+    pixelsPerMinute,
+    reference,
+    startMinutes,
+  ]);
+
+  const handlePausePointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+    pause: TimelineStandalonePause,
+  ) => {
+    if (pause.source !== 'manual' || !onMovePauseScheduled) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    setDragState({
+      id: pause.id,
+      offsetY: event.clientY - blockRect.top,
+      heightPx: pause.heightPx,
+      topPx: pause.topPx,
+      dayKey: pause.dayKey ?? standalonePauseDayKeyById.get(pause.id) ?? null,
+      scheduledElapsedSeconds: 0,
+    });
+  };
+
   return (
     <div ref={viewportRef} className="rvi-tl-schedule__viewport">
       <div className="rvi-tl-schedule__times" aria-hidden>
@@ -83,7 +218,7 @@ export function TimelineScheduleCanvas({
         ))}
       </div>
 
-      <div className="rvi-tl-schedule__canvas" style={canvasStyle}>
+      <div ref={canvasRef} className="rvi-tl-schedule__canvas" style={canvasStyle}>
         <div className="rvi-tl-schedule__grid" aria-hidden>
           {displayDays.map((day) => {
             const dayKey = [
@@ -243,24 +378,125 @@ export function TimelineScheduleCanvas({
           );
         })}
 
-        {standalonePauses.map((pause, index) => (
-          <div
-            key={pause.id}
-            className="rvi-tl-schedule__pause rvi-tl-schedule__pause--standalone"
-            style={{
-              top: pause.topPx,
-              '--rvi-tl-pause-height': `${pause.heightPx}px`,
-              animationDelay: `${Math.min((events.length + index) * 18, 240)}ms`,
-              ...resolveColumnPlacement(standalonePauseDayKeyById.get(pause.id) ?? null),
-            } as CSSProperties}
-          >
-            <IconPauseCircle size={14} />
-            <span>{formatPauseDuration(pause.durationMin)}</span>
-          </div>
-        ))}
+        {standalonePauses.map((pause, index) => {
+          const dragging = dragState?.id === pause.id;
+          const pauseDayKey = dragging
+            ? dragState.dayKey
+            : standalonePauseDayKeyById.get(pause.id) ?? pause.dayKey ?? null;
+          const pauseTopPx = dragging ? dragState.topPx : pause.topPx;
+
+          return (
+            <div
+              key={pause.id}
+              className={[
+                'rvi-tl-schedule__pause',
+                'rvi-tl-schedule__pause--standalone',
+                pause.visible ? 'is-visible' : '',
+                pause.source === 'manual' && onMovePauseScheduled ? 'is-draggable' : '',
+                dragging ? 'is-dragging' : '',
+              ].filter(Boolean).join(' ')}
+              data-source={pause.source}
+              onPointerDown={(event) => handlePausePointerDown(event, pause)}
+              style={{
+                top: pauseTopPx,
+                '--rvi-tl-pause-height': `${pause.heightPx}px`,
+                animationDelay: `${Math.min((events.length + index) * 18, 240)}ms`,
+                ...resolveColumnPlacement(pauseDayKey),
+              } as CSSProperties}
+            >
+              <IconPauseCircle size={14} />
+              <span>{formatPauseDuration(pause.durationMin)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
+}
+
+function resolvePauseDragTarget(
+  clientX: number,
+  clientY: number,
+  dragState: PauseDragState,
+  canvas: HTMLDivElement | null,
+  canvasHeight: number,
+  displayDays: Date[],
+  reference: StartReference,
+  startMinutes: number,
+  pixelsPerMinute: number,
+): { topPx: number; dayKey: string | null; scheduledElapsedSeconds: number } | null {
+  if (!canvas) return null;
+
+  const rect = canvas.getBoundingClientRect();
+  const minTopPx = TIMELINE_VIEWPORT_TOP_INSET_PX;
+  const maxTopPx = Math.max(
+    minTopPx,
+    canvasHeight - dragState.heightPx - TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
+  );
+  const topPx = clamp(clientY - rect.top - dragState.offsetY, minTopPx, maxTopPx);
+
+  let dayKey = dragState.dayKey;
+  if (reference.hasRealDate && displayDays.length > 0) {
+    const relativeX = clamp(clientX - rect.left, 0, Math.max(0, rect.width - 1));
+    const columnWidth = rect.width / Math.max(1, displayDays.length);
+    const dayIndex = Math.min(displayDays.length - 1, Math.floor(relativeX / Math.max(columnWidth, 1)));
+    dayKey = toDayKey(displayDays[dayIndex] ?? displayDays[0]!);
+  }
+
+  const minuteOfDay = clamp(
+    startMinutes + (topPx - TIMELINE_VIEWPORT_TOP_INSET_PX) / Math.max(pixelsPerMinute, 0.001),
+    0,
+    MINUTES_PER_DAY,
+  );
+
+  if (reference.reference && reference.hasRealDate && dayKey) {
+    const day = displayDays.find((entry) => toDayKey(entry) === dayKey) ?? displayDays[0];
+    if (!day) {
+      return {
+        topPx,
+        dayKey,
+        scheduledElapsedSeconds: Math.max(0, (minuteOfDay - startMinutes) * 60),
+      };
+    }
+
+    const scheduledDate = new Date(
+      day.getFullYear(),
+      day.getMonth(),
+      day.getDate(),
+      0,
+      0,
+      0,
+      0,
+    );
+    scheduledDate.setMinutes(minuteOfDay, 0, 0);
+
+    return {
+      topPx,
+      dayKey,
+      scheduledElapsedSeconds: Math.max(
+        0,
+        (scheduledDate.getTime() - reference.reference.getTime()) / 1000,
+      ),
+    };
+  }
+
+  return {
+    topPx,
+    dayKey,
+    scheduledElapsedSeconds: Math.max(0, (minuteOfDay - startMinutes) * 60),
+  };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function toDayKey(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
 }
 
 function stopEventPropagation(event: ReactMouseEvent<HTMLButtonElement>) {

@@ -137,23 +137,28 @@ export function buildTimelineAfterRemoval(
 export function insertTimelineItem(
   timeline: TimelineItem[],
   kind: TimelineAddItemKind,
-): void {
+): TimelineItem | null {
   if (kind === 'start') {
     insertEndpointBeforeCurrent(timeline, 'start');
-    return;
+    return null;
   }
 
   if (kind === 'end') {
     insertEndpointBeforeCurrent(timeline, 'end');
-    return;
+    return null;
   }
 
   const nextItem = createTimelineItem(kind);
-  if (!nextItem) return;
+  if (!nextItem) return null;
+
+  if (nextItem.kind === 'pause') {
+    nextItem.distanceKm = resolveSuggestedPauseDistanceKm(timeline);
+  }
 
   const endIndex = timeline.findIndex((item) => item.kind === 'end');
   const insertAt = endIndex >= 0 ? endIndex : timeline.length;
   timeline.splice(insertAt, 0, nextItem);
+  return nextItem;
 }
 
 function insertEndpointBeforeCurrent(
@@ -252,4 +257,23 @@ function findLastPromotableEndpointIndex(timeline: TimelineItem[]): number {
     if (isPromotableEndpointRow(timeline[index])) return index;
   }
   return -1;
+}
+
+function resolveSuggestedPauseDistanceKm(timeline: TimelineItem[]): number {
+  const distances = timeline
+    .map((item) => item.distanceKm)
+    .filter((distance): distance is number => Number.isFinite(distance));
+
+  if (distances.length === 0) return 0.25;
+
+  const maxDistanceKm = Math.max(0, ...distances);
+  if (maxDistanceKm <= 0.25) return 0.25;
+
+  let candidateKm = Math.max(0.25, maxDistanceKm * 0.5);
+  const occupied = new Set(distances.map((distance) => distance.toFixed(2)));
+  while (occupied.has(candidateKm.toFixed(2)) && candidateKm < maxDistanceKm) {
+    candidateKm = Math.min(maxDistanceKm, candidateKm + 0.25);
+  }
+
+  return Number(candidateKm.toFixed(2));
 }

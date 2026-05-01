@@ -506,6 +506,19 @@
   max-width: calc(100% - 16px);
 }
 
+.rvi-tl-schedule__pause--standalone.is-draggable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.rvi-tl-schedule__pause--standalone.is-dragging {
+  cursor: grabbing;
+  z-index: 6;
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
 .rvi-tl-schedule__actions {
   position: absolute;
   top: 50%;

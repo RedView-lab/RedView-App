@@ -11,6 +11,7 @@ export interface TimelineTimelineViewProps {
   selectedIds?: ReadonlySet<string>;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
+  onMovePause?: (id: string, distanceKm: number) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
 }
@@ -25,10 +26,38 @@ export interface TimedTimelineItem {
   item: TimelineItem;
   sortIndex: number;
   distanceKm: number;
+  rideElapsedSeconds: number;
   elapsedSeconds: number;
   minuteOfDay: number;
   date: Date | null;
   dayKey: string | null;
+}
+
+export interface TimedIntervalPause {
+  id: string;
+  label: string;
+  sortIndex: number;
+  distanceKm: number;
+  durationMin: number;
+  visible: boolean;
+  rideElapsedSeconds: number;
+  elapsedSeconds: number;
+  minuteOfDay: number;
+  date: Date | null;
+  dayKey: string | null;
+}
+
+export interface TimelineStopAnchor {
+  id: string;
+  rideElapsedSeconds: number;
+  scheduledElapsedSeconds: number;
+  durationMin: number;
+}
+
+export interface ScheduledTimelineState {
+  timedItems: TimedTimelineItem[];
+  intervalPauses: TimedIntervalPause[];
+  stopAnchors: TimelineStopAnchor[];
 }
 
 export interface AttachedPause {
@@ -57,12 +86,16 @@ export interface TimelineEvent extends TimedTimelineItem {
 
 export interface TimelineStandalonePause {
   id: string;
+  label: string;
+  source: 'manual' | 'interval';
+  distanceKm: number;
   scheduledTopPx: number;
   topPx: number;
   durationMin: number;
   visible: boolean;
   heightPx: number;
   sortIndex: number;
+  dayKey: string | null;
 }
 
 export interface PauseAttachmentState {
