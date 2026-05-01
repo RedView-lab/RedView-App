@@ -135,6 +135,7 @@ export function ItineraryPanelContainer({
     cancelRouteRequest,
     routeError,
     routeLoading,
+    routeRequestNonce,
     routeWarnings,
   } = useItineraryBrouterRouting({
     active,
@@ -152,8 +153,9 @@ export function ItineraryPanelContainer({
         id: 'itinerary',
         label: 'Itinéraire',
         state: 'loading',
-        progress: 62,
+        progress: 0,
         detail: 'Calcul du tracé en cours',
+        nonce: routeRequestNonce,
         reloadable: false,
       }));
       return;
@@ -172,7 +174,7 @@ export function ItineraryPanelContainer({
     }
 
     onRouteStatusChange(null);
-  }, [onRouteStatusChange, routeError, routeLoading]);
+  }, [onRouteStatusChange, routeError, routeLoading, routeRequestNonce]);
 
   useEffect(() => {
     return () => {

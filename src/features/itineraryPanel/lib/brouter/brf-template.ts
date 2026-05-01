@@ -378,9 +378,20 @@ assign is_road_paved =
   else if isunpaved then false
   else or highway=secondary|secondary_link
        or highway=tertiary|tertiary_link
-       or highway=unclassified
+       or highway=unclassified|road
        or isresidentialorliving
           highway=service
+
+# Route umbrella: what users intuitively read as "la route".
+# This covers nearly all paved on-road options, including cycleways
+# and major roads. Gravel / singletrack / off-road remain handled by
+# their own knobs.
+assign is_route_road =
+  if isunpaved then false
+  else if is_major then true
+  else if is_bikelane then true
+  else if is_road_paved then true
+  else false
 
 # Gravel: unpaved roads + grade1/2 tracks
 assign is_gravel =
@@ -399,14 +410,19 @@ assign is_offroad = or highway=bridleway and highway=track ( or tracktype=grade3
 assign is_singletrack = highway=path|footway
 
 # Per-category factor (1.0 = neutral)
-assign userfactor =
-  if is_bikelane    then user_factor_bikelane
-  else if is_major       then user_factor_major
-  else if is_singletrack then user_factor_singletrack
+# route now acts as a paved-road umbrella; specific paved-road knobs
+# then refine within that family instead of bypassing it entirely.
+assign road_surface_factor = if is_route_road then user_factor_road else 1
+
+assign category_surface_factor =
+  if is_singletrack then user_factor_singletrack
   else if is_offroad     then user_factor_offroad
   else if is_gravel      then user_factor_gravel
-  else if is_road_paved  then user_factor_road
+  else if is_bikelane    then user_factor_bikelane
+  else if is_major       then user_factor_major
   else 1.0
+
+assign userfactor = multiply road_surface_factor category_surface_factor
 
 # ─────────────────────────────────────────────────────────────────
 # Slider-driven extra multipliers (Distance / Durée / Tranquilité).

@@ -133,6 +133,7 @@ export default function Dashboard({
         && current.progress === status.progress
         && current.detail === status.detail
         && current.reloadable === status.reloadable
+        && current.nonce === status.nonce
       ) {
         return prev;
       }

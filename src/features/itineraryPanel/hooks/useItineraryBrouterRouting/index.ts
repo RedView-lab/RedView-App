@@ -34,6 +34,7 @@ export function useItineraryBrouterRouting({
   setProject,
 }: UseItineraryBrouterRoutingArgs) {
   const [routeLoading, setRouteLoading] = useState(false);
+  const [routeRequestNonce, setRouteRequestNonce] = useState(0);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
   const routeAbortRef = useRef<AbortController | null>(null);
@@ -41,6 +42,16 @@ export function useItineraryBrouterRouting({
     routeAbortRef.current?.abort();
     routeAbortRef.current = null;
     setRouteLoading(false);
+  }, []);
+
+  const beginRouteRequest = useCallback(() => {
+    routeAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    routeAbortRef.current = ctrl;
+    setRouteRequestNonce((current) => current + 1);
+    setRouteLoading(true);
+    setRouteError(null);
+    return ctrl;
   }, []);
 
   const startKey = (() => {
@@ -119,11 +130,7 @@ export function useItineraryBrouterRouting({
         return;
       }
 
-      routeAbortRef.current?.abort();
-      const ctrl = new AbortController();
-      routeAbortRef.current = ctrl;
-      setRouteLoading(true);
-      setRouteError(null);
+      const ctrl = beginRouteRequest();
 
       const itineraryForRouting = active;
       const t0 = performance.now();
@@ -194,11 +201,7 @@ export function useItineraryBrouterRouting({
         return;
       }
 
-      routeAbortRef.current?.abort();
-      const ctrl = new AbortController();
-      routeAbortRef.current = ctrl;
-      setRouteLoading(true);
-      setRouteError(null);
+      const ctrl = beginRouteRequest();
 
       const itineraryForRouting = active;
       const t0 = performance.now();
@@ -296,11 +299,7 @@ export function useItineraryBrouterRouting({
       return;
     }
 
-    routeAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    routeAbortRef.current = ctrl;
-    setRouteLoading(true);
-    setRouteError(null);
+    const ctrl = beginRouteRequest();
 
     const itineraryForRouting = active;
     if (!itineraryForRouting) return;
@@ -383,6 +382,7 @@ export function useItineraryBrouterRouting({
     cancelRouteRequest,
     routeError,
     routeLoading,
+    routeRequestNonce,
     routeWarnings,
   };
 }

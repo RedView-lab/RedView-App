@@ -9,6 +9,7 @@ export interface OverlayStatusSnapshot {
   progress: number;
   detail?: string;
   reloadable?: boolean;
+  nonce?: number;
   updatedAt: number;
 }
 
