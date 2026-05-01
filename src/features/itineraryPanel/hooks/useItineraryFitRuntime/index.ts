@@ -5,80 +5,33 @@ import {
   useRef,
   useState,
   type ChangeEvent,
-  type Dispatch,
-  type SetStateAction,
 } from 'react';
 
 import { createFitPredictionEngine } from '@/features/fitPredictor/engine/api';
 import type { PredictionResult } from '@/features/fitPredictor';
+import {
+  uploadProjectItineraryFitFiles,
+} from '@/shared/utils/projects';
 
 import {
   buildPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
-} from '../lib/container-prediction';
+} from '../../lib/container-prediction';
+import { buildFitUploadsSignature } from '../../lib/persisted-fit-files';
+
 import {
-  buildFitUploadsSignature,
-  deserializeLegacyFitUploads,
-} from '../lib/persisted-fit-files';
+  buildLocalFitUploadSignature,
+  fitFilesEqual,
+  mergeFitFiles,
+} from './files';
+import { hydratePersistedFitRuntime } from './hydration';
+import { buildFitStatusText, buildUploadFitLabel } from './labels';
 import {
-  downloadProjectItineraryFitFiles,
-  uploadProjectItineraryFitFiles,
-} from '@/shared/utils/projects';
-import type { ItineraryProject } from '../types';
-
-type FitRuntimeStatus = 'idle' | 'ready' | 'running' | 'success' | 'error';
-
-interface ItineraryFitRuntime {
-  fitFiles: File[];
-  fitFileNames: string[];
-  predictionResult: PredictionResult | null;
-  progress: string[];
-  status: FitRuntimeStatus;
-  error: string | null;
-  updatedAt: string | null;
-  persistedUploadSignature: string;
-}
-
-interface PredictionStoreBridge {
-  setPrediction: (itineraryId: string, result: PredictionResult | null) => void;
-}
-
-interface UseItineraryFitRuntimeArgs {
-  active: ItineraryProject['itineraries'][number] | null;
-  projectId: string | null;
-  predictionStore: PredictionStoreBridge | null;
-  setProject: Dispatch<SetStateAction<ItineraryProject>>;
-}
-
-function createEmptyFitRuntime(): ItineraryFitRuntime {
-  return {
-    fitFiles: [],
-    fitFileNames: [],
-    predictionResult: null,
-    progress: [],
-    status: 'idle',
-    error: null,
-    updatedAt: null,
-    persistedUploadSignature: '',
-  };
-}
-
-function mergeFitFiles(existingFiles: readonly File[], incomingFiles: readonly File[]): File[] {
-  const merged: File[] = [...existingFiles];
-  const seen = new Set(
-    existingFiles.map((file) => `${file.name}:${file.lastModified}:${file.size}`),
-  );
-
-  for (const file of incomingFiles) {
-    const key = `${file.name}:${file.lastModified}:${file.size}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(file);
-  }
-
-  return merged;
-}
+  createEmptyFitRuntime,
+  type ItineraryFitRuntime,
+  type UseItineraryFitRuntimeArgs,
+} from './types';
 
 export function useItineraryFitRuntime({
   active,
@@ -124,34 +77,15 @@ export function useItineraryFitRuntime({
     ].join('|');
   }, [active?.gpxRoute?.points]);
 
-  const uploadFitLabel = useMemo(() => {
-    const count = activeFitRuntime?.fitFiles.length ?? 0;
-    if (count <= 0) return 'Upload .fit';
-    return count === 1 ? '1 FIT' : `${count} FIT`;
-  }, [activeFitRuntime]);
+  const uploadFitLabel = useMemo(
+    () => buildUploadFitLabel(activeFitRuntime),
+    [activeFitRuntime],
+  );
 
-  const fitStatusText = useMemo(() => {
-    if (!activeFitRuntime) return null;
-    const count = activeFitRuntime.fitFiles.length;
-    const countLabel =
-      count <= 0 ? null : count === 1 ? '1 fit chargé' : `${count} fit chargés`;
-    if (activeFitRuntime.status === 'error' && activeFitRuntime.error) {
-      return activeFitRuntime.error;
-    }
-    if (activeFitRuntime.status === 'running') {
-      const progress = activeFitRuntime.progress.at(-1);
-      return progress ?? (countLabel ? `${countLabel} · calcul en cours...` : 'Calcul en cours...');
-    }
-    if (activeFitRuntime.status === 'success') {
-      return countLabel
-        ? `${countLabel} · prédiction terminée`
-        : 'Prédiction terminée';
-    }
-    if (countLabel) {
-      return countLabel;
-    }
-    return null;
-  }, [activeFitRuntime]);
+  const fitStatusText = useMemo(
+    () => buildFitStatusText(activeFitRuntime),
+    [activeFitRuntime],
+  );
 
   const calculateLabel = useMemo(() => {
     if (fitStatusText) return fitStatusText;
@@ -184,64 +118,28 @@ export function useItineraryFitRuntime({
 
     void (async () => {
       try {
-        const legacyFiles = deserializeLegacyFitUploads(
-          persistedUploads.filter((upload) => !upload.path && upload.base64),
-        );
-        const storageUploads = persistedUploads.filter(
-          (upload) => typeof upload.path === 'string' && upload.path.length > 0,
-        );
-        const downloadedFiles = storageUploads.length > 0
-          ? await downloadProjectItineraryFitFiles(storageUploads)
-          : [];
+        const hydrated = await hydratePersistedFitRuntime(active);
         if (cancelled) return;
 
-        const downloadedByPath = new Map<string, File>();
-        for (let index = 0; index < storageUploads.length; index += 1) {
-          const path = storageUploads[index]?.path;
-          const file = downloadedFiles[index];
-          if (path && file) downloadedByPath.set(path, file);
-        }
-
-        const legacyQueue = legacyFiles.slice();
-        const fitFiles = persistedUploads.flatMap((upload) => {
-          if (upload.path) {
-            const file = downloadedByPath.get(upload.path);
-            return file ? [file] : [];
-          }
-          const legacy = legacyQueue.shift();
-          return legacy ? [legacy] : [];
-        });
-
         updateFitRuntime(active.id, (current) => {
-          const activePrediction = active.prediction ?? null;
           const shouldReuseLoadedFiles =
             persistedUploadSignature.length > 0
             && current.persistedUploadSignature === persistedUploadSignature
             && current.fitFiles.length > 0;
-            const shouldPreserveLocalFiles =
-              persistedUploadSignature.length === 0
-              && current.persistedUploadSignature.length > 0
-              && current.fitFiles.length > 0;
-            const nextFitFiles =
-              shouldReuseLoadedFiles || shouldPreserveLocalFiles
-                ? current.fitFiles
-                : fitFiles;
+          const shouldPreserveLocalFiles =
+            persistedUploadSignature.length === 0
+            && current.persistedUploadSignature.length > 0
+            && current.fitFiles.length > 0;
+          const nextFitFiles =
+            shouldReuseLoadedFiles || shouldPreserveLocalFiles
+              ? current.fitFiles
+              : hydrated.fitFiles;
           const nextFitFileNames = nextFitFiles.map((file) => file.name);
-          const sameFitFiles =
-            current.fitFiles.length === nextFitFiles.length
-            && current.fitFiles.every((file, index) => {
-              const nextFile = nextFitFiles[index];
-              return (
-                file.name === nextFile?.name
-                && file.lastModified === nextFile.lastModified
-                && file.size === nextFile.size
-              );
-            });
 
           if (
-            current.persistedUploadSignature === persistedUploadSignature
-            && current.predictionResult === activePrediction
-            && sameFitFiles
+            current.persistedUploadSignature === hydrated.persistedUploadSignature
+            && current.predictionResult === hydrated.predictionResult
+            && fitFilesEqual(current.fitFiles, nextFitFiles)
           ) {
             return current;
           }
@@ -250,18 +148,18 @@ export function useItineraryFitRuntime({
             ...current,
             fitFiles: nextFitFiles,
             fitFileNames: nextFitFileNames,
-            predictionResult: activePrediction,
+            predictionResult: hydrated.predictionResult,
             progress: current.status === 'running' ? current.progress : [],
             status:
               current.status === 'running'
                 ? current.status
-                : activePrediction
+                : hydrated.predictionResult
                   ? 'success'
                   : nextFitFiles.length > 0
                     ? 'ready'
                     : 'idle',
             error: current.status === 'running' ? current.error : null,
-            persistedUploadSignature,
+            persistedUploadSignature: hydrated.persistedUploadSignature,
           };
         });
       } catch (error) {
@@ -326,13 +224,6 @@ export function useItineraryFitRuntime({
       const currentRuntime = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
       const mergedFitFiles = mergeFitFiles(currentRuntime.fitFiles, fitFiles);
 
-      const persistedUploadSignature = buildFitUploadsSignature(
-        mergedFitFiles.map((file) => ({
-          name: file.name,
-          lastModified: file.lastModified,
-          size: file.size,
-        })),
-      );
       updateFitRuntime(itineraryId, (current) => ({
         ...current,
         fitFiles: mergedFitFiles,
@@ -342,7 +233,7 @@ export function useItineraryFitRuntime({
         status: 'ready',
         error: null,
         updatedAt: new Date().toISOString(),
-        persistedUploadSignature,
+        persistedUploadSignature: buildLocalFitUploadSignature(mergedFitFiles),
       }));
 
       predictionStore?.setPrediction(itineraryId, null);

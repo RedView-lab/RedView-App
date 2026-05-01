@@ -44,7 +44,7 @@ interface CreateMapLifecycleControllerOptions {
 
 const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
 const MAPBOX_STANDARD_SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/standard-satellite';
-const STYLE_LOAD_WATCHDOG_MS = 8000;
+const STYLE_LOAD_WATCHDOG_MS = 15000;
 
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
