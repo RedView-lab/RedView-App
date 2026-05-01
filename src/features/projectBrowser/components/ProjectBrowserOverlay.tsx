@@ -86,6 +86,7 @@ export function ProjectBrowserOverlay({
   const syncedContactPreferenceRef = useRef<string | null>(null);
   const contactHydratedRef = useRef(false);
   const {
+    folders,
     thumbnails,
     loading,
     error,
@@ -100,14 +101,28 @@ export function ProjectBrowserOverlay({
     setShowSearch,
     currentFolderId,
     breadcrumbs,
+    draggedItem,
+    dropTarget,
+    dragPreview,
+    toast,
     handleCreateProject,
     handleCreateFolder,
     handleRenameProject,
     handleDeleteProject,
     handleRenameFolder,
     handleDeleteFolder,
+    handleDuplicateProject,
+    handleMoveProject,
+    handleMoveFolder,
     handleOpenFolder,
     handleNavigateToFolder,
+    handleDragStart,
+    handleDragMove,
+    handleDragEnd,
+    handleDragEnterTarget,
+    handleDragLeaveTarget,
+    handleDropIntoFolder,
+    handleDropToRoot,
     q,
     visibleFolders,
     visibleProjects,
@@ -472,6 +487,7 @@ export function ProjectBrowserOverlay({
 
         {activeTab === 'projects' ? (
           <ProjectsPanel
+            folders={folders}
             view={view}
             setView={setView}
             showSearch={showSearch}
@@ -491,6 +507,10 @@ export function ProjectBrowserOverlay({
             visibleProjects={visibleProjects}
             thumbnails={thumbnails}
             busyIds={busyIds}
+            draggedItem={draggedItem}
+            dropTarget={dropTarget}
+            dragPreview={dragPreview}
+            toast={toast}
             onOpenProject={onOpenProject}
             onOpenFolder={handleOpenFolder}
             onNavigateToFolder={handleNavigateToFolder}
@@ -498,6 +518,16 @@ export function ProjectBrowserOverlay({
             handleDeleteProject={handleDeleteProject}
             handleRenameFolder={handleRenameFolder}
             handleDeleteFolder={handleDeleteFolder}
+            handleDuplicateProject={handleDuplicateProject}
+            handleMoveProject={handleMoveProject}
+            handleMoveFolder={handleMoveFolder}
+            handleDragStart={handleDragStart}
+            handleDragMove={handleDragMove}
+            handleDragEnd={handleDragEnd}
+            handleDragEnterTarget={handleDragEnterTarget}
+            handleDragLeaveTarget={handleDragLeaveTarget}
+            handleDropIntoFolder={handleDropIntoFolder}
+            handleDropToRoot={handleDropToRoot}
           />
         ) : null}
 

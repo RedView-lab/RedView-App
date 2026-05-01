@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import {
   IconArrowLeft,
   IconFolder,
   IconSave,
-  IconSettingsCog,
-  IconTrash,
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectFolderSummary } from '@/shared/utils/projects';
 
@@ -15,26 +14,53 @@ type FolderCardProps = {
   folder: ProjectFolderSummary;
   sizeBytes: number;
   busy: boolean;
+  dragActive: boolean;
+  dropActive: boolean;
   onOpen: (id: string) => void;
   onRename: (id: string, nextName: string) => Promise<void> | void;
-  onDelete: (id: string) => Promise<void> | void;
+  onOpenMenu: (id: string, anchorEl: HTMLButtonElement) => void;
+  onDragStart: (item: { type: 'folder'; id: string }, x: number, y: number) => void;
+  onDragMove: (x: number, y: number) => void;
+  onDragEnd: () => void;
+  onDragEnterTarget: (targetId: string) => void;
+  onDragLeaveTarget: (targetId: string) => void;
+  onDropIntoFolder: (folderId: string) => void;
 };
+
+const EMPTY_DRAG_IMAGE =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 export function FolderCard({
   folder,
   sizeBytes,
   busy,
+  dragActive,
+  dropActive,
   onOpen,
   onRename,
-  onDelete,
+  onOpenMenu,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  onDragEnterTarget,
+  onDragLeaveTarget,
+  onDropIntoFolder,
 }: FolderCardProps) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(folder.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dragImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (renaming) inputRef.current?.select();
   }, [renaming]);
+
+  useEffect(() => {
+    const image = new Image();
+    image.src = EMPTY_DRAG_IMAGE;
+    dragImageRef.current = image;
+  }, []);
 
   useEffect(() => {
     setDraft(folder.name);
@@ -54,16 +80,31 @@ export function FolderCard({
     }
   };
 
-  const handleDelete = async () => {
-    const ok = window.confirm(
-      `Supprimer définitivement le dossier « ${folder.name} » ? Il doit être vide avant suppression.`,
-    );
-    if (!ok) return;
-    await onDelete(folder.id);
-  };
-
   return (
-    <article className="rvpb-card rvpb-folder-card">
+    <article
+      className={`rvpb-card rvpb-folder-card${dragActive ? ' is-dragging' : ''}${dropActive ? ' is-drop-target' : ''}`}
+      draggable={!renaming && !busy}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        if (dragImageRef.current) {
+          event.dataTransfer.setDragImage(dragImageRef.current, 0, 0);
+        }
+        onDragStart({ type: 'folder', id: folder.id }, event.clientX, event.clientY);
+      }}
+      onDrag={(event) => {
+        if (event.clientX || event.clientY) {
+          onDragMove(event.clientX, event.clientY);
+        }
+      }}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDragEnter={() => onDragEnterTarget(folder.id)}
+      onDragLeave={() => onDragLeaveTarget(folder.id)}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDropIntoFolder(folder.id);
+      }}
+    >
       <div className="rvpb-card__header">
         <div className="rvpb-card__title-stack">
           {renaming ? (
@@ -101,22 +142,17 @@ export function FolderCard({
 
         <div className="rvpb-card__actions">
           <button
+            ref={menuButtonRef}
             type="button"
-            className="rvpb-icon-button"
-            aria-label="Renommer le dossier"
+            className="rvpb-icon-button rvpb-card__menu-button"
+            aria-label="Actions du dossier"
             disabled={busy}
-            onClick={() => setRenaming(true)}
+            onClick={() => {
+              if (!menuButtonRef.current) return;
+              onOpenMenu(folder.id, menuButtonRef.current);
+            }}
           >
-            <IconSettingsCog size={16} />
-          </button>
-          <button
-            type="button"
-            className="rvpb-icon-button"
-            aria-label="Supprimer le dossier"
-            disabled={busy}
-            onClick={handleDelete}
-          >
-            <IconTrash size={16} />
+            <SvgV2Icon name="dots-vertical.svg" size={16} />
           </button>
           <button
             type="button"

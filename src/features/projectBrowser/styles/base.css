@@ -89,6 +89,8 @@
 
 .rvpb-toolbar__actions {
   gap: 4px;
+  flex: 0 0 auto;
+  min-height: 40px;
 }
 
 .rvpb-icon-button,
@@ -219,10 +221,16 @@
   cursor: default;
 }
 
+.rvpb-breadcrumb__item.is-drop-target {
+  color: #ffd6d6;
+  text-shadow: 0 0 14px rgba(137, 0, 0, 0.46);
+}
+
 .rvpb-view-toggle {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  height: 40px;
   padding: 3px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
@@ -232,22 +240,32 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 80px;
-  max-width: 104px;
-  padding: 4px 8px;
+  gap: 8px;
+  min-width: 86px;
+  height: 34px;
+  padding: 0 14px;
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .rvpb-square-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 40px;
   height: 40px;
   border-radius: 6px;
   background: #383838;
+}
+
+.rvpb-create-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .rvpb-create-button {
@@ -255,15 +273,54 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 190px;
   height: 40px;
-  padding: 9px 10px;
+  padding: 0 14px;
   border-radius: 6px;
   background: #890000;
   cursor: pointer;
   font-size: 16px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1;
   white-space: nowrap;
+}
+
+.rvpb-create-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 240px;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(21, 21, 21, 0.96);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px);
+  z-index: 4;
+}
+
+.rvpb-create-menu__item {
+  appearance: none;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.rvpb-create-menu__item:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .rvpb-grid-shell {
@@ -311,6 +368,48 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  transition:
+    transform 180ms ease,
+    filter 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.rvpb-card.is-dragging {
+  opacity: 0.44;
+  transform: scale(0.985);
+}
+
+.rvpb-folder-card.is-drop-target {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+}
+
+.rvpb-folder-card.is-drop-target .rvpb-card__preview {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 0 0 1px rgba(137, 0, 0, 0.42),
+    0 0 22px rgba(137, 0, 0, 0.24);
+}
+
+.rvpb-folder-card .rvpb-card__preview {
+  position: relative;
+}
+
+.rvpb-folder-card .rvpb-card__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.08), transparent 68%);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+
+.rvpb-folder-card:hover .rvpb-card__preview::after,
+.rvpb-folder-card.is-drop-target .rvpb-card__preview::after {
+  opacity: 1;
 }
 
 .rvpb-card__header {
@@ -361,6 +460,13 @@
   transform: rotate(180deg);
 }
 
+.rvpb-card__menu-button {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .rvpb-card__preview {
   display: block;
   width: 100%;
@@ -394,6 +500,140 @@
 .rvpb-folder-card__placeholder {
   border: 0;
   background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-card-menu {
+  position: fixed;
+  z-index: 90;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(19, 19, 19, 0.96);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(20px);
+}
+
+.rvpb-card-menu__item,
+.rvpb-card-menu__move-item {
+  appearance: none;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  width: 100%;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.rvpb-card-menu__item:hover,
+.rvpb-card-menu__move-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rvpb-card-menu__item--danger {
+  color: #ffb7b7;
+}
+
+.rvpb-card-menu__move-list {
+  display: grid;
+  gap: 4px;
+  padding: 4px 0 6px 10px;
+}
+
+.rvpb-card-menu__move-item {
+  min-height: 34px;
+  padding-left: 10px;
+  justify-content: flex-start;
+}
+
+.rvpb-card-menu__item:disabled,
+.rvpb-card-menu__move-item:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.rvpb-toast {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 88;
+  min-width: 240px;
+  max-width: 360px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.94);
+  color: #fff;
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(18px);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-toast--success {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(112, 196, 140, 0.18);
+}
+
+.rvpb-toast--error {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(196, 112, 112, 0.22);
+}
+
+.rvpb-toast--info {
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(124, 160, 220, 0.2);
+}
+
+.rvpb-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 89;
+  display: grid;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(18, 18, 18, 0.94);
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(137, 0, 0, 0.24);
+  backdrop-filter: blur(20px);
+  pointer-events: none;
+}
+
+.rvpb-drag-preview__eyebrow {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rvpb-drag-preview__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .rvpb-card__rename-input {
@@ -462,6 +702,9 @@
 .rvpb-square-button:hover,
 .rvpb-card__open:hover,
 .rvpb-breadcrumb__item:not(.is-current):hover,
+.rvpb-create-menu__item:hover,
+.rvpb-card-menu__item:hover,
+.rvpb-card-menu__move-item:hover,
 .rvpb-top-tabs__item:hover,
 .rvpb-view-toggle__item:hover,
 .rvpb-create-button:hover,
@@ -478,6 +721,9 @@
 .rvpb-square-button:focus-visible,
 .rvpb-card__open:focus-visible,
 .rvpb-breadcrumb__item:focus-visible,
+.rvpb-create-menu__item:focus-visible,
+.rvpb-card-menu__item:focus-visible,
+.rvpb-card-menu__move-item:focus-visible,
 .rvpb-top-tabs__item:focus-visible,
 .rvpb-view-toggle__item:focus-visible,
 .rvpb-create-button:focus-visible,

@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import {
   IconArrowLeft,
   IconSave,
-  IconSettingsCog,
-  IconTrash,
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectSummary } from '@/shared/utils/projects';
 
@@ -15,25 +14,44 @@ type ProjectCardProps = {
   thumbnailUrl: string | null;
   onOpen: (id: string) => void;
   onRename: (id: string, nextName: string) => Promise<void> | void;
-  onDelete: (id: string) => Promise<void> | void;
   busy: boolean;
+  dragActive: boolean;
+  onOpenMenu: (id: string, anchorEl: HTMLButtonElement) => void;
+  onDragStart: (item: { type: 'project'; id: string }, x: number, y: number) => void;
+  onDragMove: (x: number, y: number) => void;
+  onDragEnd: () => void;
 };
+
+const EMPTY_DRAG_IMAGE =
+  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 export function ProjectCard({
   project,
   thumbnailUrl,
   onOpen,
   onRename,
-  onDelete,
   busy,
+  dragActive,
+  onOpenMenu,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
 }: ProjectCardProps) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dragImageRef = useRef<HTMLImageElement | null>(null);
 
   useEffect(() => {
     if (renaming) inputRef.current?.select();
   }, [renaming]);
+
+  useEffect(() => {
+    const image = new Image();
+    image.src = EMPTY_DRAG_IMAGE;
+    dragImageRef.current = image;
+  }, []);
 
   useEffect(() => {
     setDraft(project.name);
@@ -53,14 +71,24 @@ export function ProjectCard({
     }
   };
 
-  const handleDelete = async () => {
-    const ok = window.confirm(`Supprimer définitivement « ${project.name} » ?`);
-    if (!ok) return;
-    await onDelete(project.id);
-  };
-
   return (
-    <article className="rvpb-card">
+    <article
+      className={`rvpb-card${dragActive ? ' is-dragging' : ''}`}
+      draggable={!renaming && !busy}
+      onDragStart={(event) => {
+        event.dataTransfer.effectAllowed = 'move';
+        if (dragImageRef.current) {
+          event.dataTransfer.setDragImage(dragImageRef.current, 0, 0);
+        }
+        onDragStart({ type: 'project', id: project.id }, event.clientX, event.clientY);
+      }}
+      onDrag={(event) => {
+        if (event.clientX || event.clientY) {
+          onDragMove(event.clientX, event.clientY);
+        }
+      }}
+      onDragEnd={onDragEnd}
+    >
       <div className="rvpb-card__header">
         <div className="rvpb-card__title-stack">
           {renaming ? (
@@ -97,22 +125,17 @@ export function ProjectCard({
 
         <div className="rvpb-card__actions">
           <button
+            ref={menuButtonRef}
             type="button"
-            className="rvpb-icon-button"
-            aria-label="Renommer le projet"
+            className="rvpb-icon-button rvpb-card__menu-button"
+            aria-label="Actions du projet"
             disabled={busy}
-            onClick={() => setRenaming(true)}
+            onClick={() => {
+              if (!menuButtonRef.current) return;
+              onOpenMenu(project.id, menuButtonRef.current);
+            }}
           >
-            <IconSettingsCog size={16} />
-          </button>
-          <button
-            type="button"
-            className="rvpb-icon-button"
-            aria-label="Supprimer le projet"
-            disabled={busy}
-            onClick={handleDelete}
-          >
-            <IconTrash size={16} />
+            <SvgV2Icon name="dots-vertical.svg" size={16} />
           </button>
           <button
             type="button"

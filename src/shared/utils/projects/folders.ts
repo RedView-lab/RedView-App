@@ -2,7 +2,7 @@ import { supabase } from '@/shared/services/supabase';
 
 import { getCurrentUserId } from './auth';
 import { folderRowToSummary } from './mappers';
-import type { ProjectFolderRow, ProjectFolderSummary } from './types';
+import type { ProjectFolderRow, ProjectFolderSummary, ProjectPrivacy } from './types';
 
 export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
   const { data, error } = await supabase
@@ -16,6 +16,7 @@ export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
 export async function createProjectFolder(
   name = 'Nouveau dossier',
   parentFolderId?: string | null,
+  privacy: ProjectPrivacy = 'private',
 ): Promise<ProjectFolderSummary> {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('Folder name cannot be empty');
@@ -26,7 +27,7 @@ export async function createProjectFolder(
       user_id: await getCurrentUserId(),
       parent_folder_id: parentFolderId ?? null,
       name: trimmed,
-      privacy: 'private',
+      privacy,
     })
     .select('id, parent_folder_id, name, privacy, created_at, updated_at')
     .single();

@@ -54,6 +54,24 @@ export async function getProjectThumbnailUrls(
   return out;
 }
 
+export async function duplicateProjectThumbnail(
+  sourceProjectId: string,
+  targetProjectId: string,
+): Promise<boolean> {
+  const urls = await getProjectThumbnailUrls([sourceProjectId]);
+  const sourceUrl = urls[sourceProjectId];
+  if (!sourceUrl) return false;
+
+  const response = await fetch(sourceUrl);
+  if (!response.ok) {
+    throw new Error('Impossible de copier la miniature du projet.');
+  }
+
+  const blob = await response.blob();
+  await uploadProjectThumbnail(targetProjectId, blob);
+  return true;
+}
+
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
   try {
     const { data: sessionData } = await supabase.auth.getUser();

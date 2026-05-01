@@ -46,3 +46,30 @@ export function computeFolderAggregateSize(
     return total;
   }, 0);
 }
+
+export function collectFolderDescendantIds(
+  folders: ProjectFolderSummary[],
+  folderId: string,
+): Set<string> {
+  const descendants = new Set<string>();
+  const queue = [folderId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift() as string;
+    for (const folder of folders) {
+      if (folder.parentFolderId !== currentId || descendants.has(folder.id)) continue;
+      descendants.add(folder.id);
+      queue.push(folder.id);
+    }
+  }
+
+  return descendants;
+}
+
+export function buildFolderPathLabel(
+  folders: ProjectFolderSummary[],
+  folderId: string,
+): string {
+  const breadcrumb = buildFolderBreadcrumbs(folders, folderId);
+  return ['Projets', ...breadcrumb.map((folder) => folder.name)].join(' / ');
+}

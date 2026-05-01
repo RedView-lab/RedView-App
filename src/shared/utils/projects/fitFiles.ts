@@ -111,6 +111,31 @@ export async function downloadProjectItineraryFitFiles(
   );
 }
 
+export async function duplicateProjectItineraryFitFiles(
+  sourceItineraries: Array<{ id: string; fitUploads?: ItineraryFitUpload[] | null }>,
+  targetProjectId: string,
+): Promise<Record<string, ItineraryFitUpload[]>> {
+  const uploadsByItineraryId: Record<string, ItineraryFitUpload[]> = {};
+
+  for (const itinerary of sourceItineraries) {
+    const sourceUploads = itinerary.fitUploads?.filter(
+      (upload) => typeof upload.path === 'string' && upload.path.length > 0,
+    );
+    if (!sourceUploads || sourceUploads.length === 0) continue;
+
+    const files = await downloadProjectItineraryFitFiles(sourceUploads);
+    if (files.length === 0) continue;
+
+    uploadsByItineraryId[itinerary.id] = await uploadProjectItineraryFitFiles(
+      targetProjectId,
+      itinerary.id,
+      files,
+    );
+  }
+
+  return uploadsByItineraryId;
+}
+
 export async function deleteProjectFitFiles(projectId: string): Promise<void> {
   try {
     const userId = await getCurrentUserId();

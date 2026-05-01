@@ -3,15 +3,33 @@ import type { ProjectFolderSummary } from '@/shared/utils/projects';
 type BrowserBreadcrumbProps = {
   breadcrumbs: ProjectFolderSummary[];
   onNavigate: (folderId: string | null) => void;
+  rootDropActive?: boolean;
+  onDropToRoot?: () => void;
+  onDragEnterRoot?: () => void;
+  onDragLeaveRoot?: () => void;
 };
 
-export function BrowserBreadcrumb({ breadcrumbs, onNavigate }: BrowserBreadcrumbProps) {
+export function BrowserBreadcrumb({
+  breadcrumbs,
+  onNavigate,
+  rootDropActive = false,
+  onDropToRoot,
+  onDragEnterRoot,
+  onDragLeaveRoot,
+}: BrowserBreadcrumbProps) {
   return (
     <nav className="rvpb-breadcrumb" aria-label="Chemin du dossier courant">
       <button
         type="button"
-        className={`rvpb-breadcrumb__item${breadcrumbs.length === 0 ? ' is-current' : ''}`}
+        className={`rvpb-breadcrumb__item${breadcrumbs.length === 0 ? ' is-current' : ''}${rootDropActive ? ' is-drop-target' : ''}`}
         onClick={() => onNavigate(null)}
+        onDragOver={(event) => event.preventDefault()}
+        onDragEnter={() => onDragEnterRoot?.()}
+        onDragLeave={() => onDragLeaveRoot?.()}
+        onDrop={(event) => {
+          event.preventDefault();
+          onDropToRoot?.();
+        }}
       >
         Projets
       </button>
