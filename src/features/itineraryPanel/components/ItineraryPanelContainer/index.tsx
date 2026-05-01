@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import {
+  createOverlayStatus,
+  type OverlayStatusReporter,
+} from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
@@ -44,6 +48,7 @@ interface ItineraryPanelContainerProps {
   projectId?: string | null;
   map: MapboxMap | null;
   isMapLoaded: boolean;
+  onRouteStatusChange?: OverlayStatusReporter;
   width?: number;
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
@@ -54,6 +59,7 @@ export function ItineraryPanelContainer({
   projectId,
   map,
   isMapLoaded,
+  onRouteStatusChange,
   width,
   onResizeStart,
   isResizing,
@@ -137,6 +143,42 @@ export function ItineraryPanelContainer({
     rollbackPendingTraceAppend,
     setProject,
   });
+
+  useEffect(() => {
+    if (!onRouteStatusChange) return;
+
+    if (routeLoading) {
+      onRouteStatusChange(createOverlayStatus({
+        id: 'itinerary',
+        label: 'Itinéraire',
+        state: 'loading',
+        progress: 62,
+        detail: 'Calcul du tracé en cours',
+        reloadable: false,
+      }));
+      return;
+    }
+
+    if (routeError) {
+      onRouteStatusChange(createOverlayStatus({
+        id: 'itinerary',
+        label: 'Itinéraire',
+        state: 'error',
+        progress: 100,
+        detail: routeError,
+        reloadable: false,
+      }));
+      return;
+    }
+
+    onRouteStatusChange(null);
+  }, [onRouteStatusChange, routeError, routeLoading]);
+
+  useEffect(() => {
+    return () => {
+      onRouteStatusChange?.(null);
+    };
+  }, [onRouteStatusChange]);
 
   const activeIdRef = useRef(project.activeItineraryId);
   activeIdRef.current = project.activeItineraryId;

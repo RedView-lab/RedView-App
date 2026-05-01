@@ -156,6 +156,168 @@ function normalizeDetourRatios(values: number[]): number[] {
   return ratios;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function computeClimbEfficiency(
+  route: BrouterRoute,
+  baseline: BrouterRoute,
+): { addedDistanceKm: number; addedAscentM: number; gainPerAddedKm: number } {
+  const addedDistanceKm = (route.distanceM - baseline.distanceM) / 1000;
+  const addedAscentM = route.ascentM - baseline.ascentM;
+  const gainPerAddedKm = addedAscentM / Math.max(0.5, addedDistanceKm);
+  return { addedDistanceKm, addedAscentM, gainPerAddedKm };
+}
+
+function scoreMinDistanceMaxAscent(route: BrouterRoute, baseline: BrouterRoute): number {
+  const distanceKm = route.distanceM / 1000;
+  const baseDistanceKm = baseline.distanceM / 1000;
+  const addedDistanceKm = Math.max(0, distanceKm - baseDistanceKm);
+  const addedAscentM = Math.max(0, route.ascentM - baseline.ascentM);
+  const gainPerAddedKm = addedAscentM / Math.max(2.2, addedDistanceKm);
+  const climbDensity = route.ascentM / Math.max(1, distanceKm);
+  const softBudgetKm = Math.max(7, baseDistanceKm * 0.08);
+  const overBudgetKm = Math.max(0, addedDistanceKm - softBudgetKm);
+  return (
+    (gainPerAddedKm * 6400)
+    + (addedAscentM * 7)
+    + (climbDensity * 220)
+    - (addedDistanceKm * 120)
+    - (overBudgetKm * overBudgetKm * 320)
+  );
+}
+
+function computeRouteLateralBias(
+  coordinates: [number, number][],
+  start: BrouterRequest['start'],
+  end: BrouterRequest['end'],
+): number {
+  const directDx = end.lon - start.lon;
+  const directDy = end.lat - start.lat;
+  const directNorm = Math.hypot(directDx, directDy);
+  if (directNorm <= 1e-9 || coordinates.length < 2) return 0;
+  const sampleAlongs = [0.36, 0.5, 0.64];
+  let weightedBias = 0;
+  let weightSum = 0;
+  for (const along of sampleAlongs) {
+    const anchor = sampleRouteAnchor(coordinates, along);
+    if (!anchor) continue;
+    const relDx = anchor.anchor.lon - start.lon;
+    const relDy = anchor.anchor.lat - start.lat;
+    const signedArea = ((directDx * relDy) - (directDy * relDx)) / directNorm;
+    const weight = 1 - Math.abs(along - 0.5);
+    weightedBias += signedArea * weight;
+    weightSum += weight;
+  }
+  return weightSum > 0 ? weightedBias / weightSum : 0;
+}
+
+function buildClimbEfficiencyDetourCandidates(
+  req: Omit<BrouterRequest, 'alternativeIdx'>,
+  baseRoute: BrouterRoute,
+): Array<{ via: BrouterRequest['via']; label: string; alternativeIdxs: readonly (0 | 1 | 2 | 3)[] }> {
+  if ((req.via?.length ?? 0) > 0 || baseRoute.coordinates.length < 2) return [];
+  const spanKm = estimateRouteSpanKm(req.start, req.end);
+  const baseDistanceKm = baseRoute.distanceM / 1000;
+  const baseClimbDensity = baseRoute.ascentM / Math.max(1, baseDistanceKm);
+  const densityBoost = clamp((28 - baseClimbDensity) / 20, 0, 1);
+  const tortuosity = baseDistanceKm / Math.max(1, pointDistanceKm(req.start, req.end));
+  const compactness = clamp((tortuosity - 1.02) / 0.22, 0, 1);
+  const scale = 1 + (densityBoost * 0.7) - (compactness * 0.18);
+  const searchBreadth = clamp(0.28 + (densityBoost * 0.78) - (compactness * 0.18), 0.2, 1);
+  const sideBias = computeRouteLateralBias(baseRoute.coordinates, req.start, req.end);
+  const preferredSign = Math.abs(sideBias) < 1e-4 ? -1 : (sideBias > 0 ? -1 : 1);
+  const hedgeSign = -preferredSign;
+  const buildCandidate = (
+    label: string,
+    ratio: number,
+    points: readonly (readonly [number, number])[],
+    sign: number,
+    alternativeIdxs: readonly (0 | 1 | 2 | 3)[],
+  ): { via: BrouterRequest['via']; label: string; alternativeIdxs: readonly (0 | 1 | 2 | 3)[] } | null => {
+    const offsetKm = spanKm * clamp(ratio * scale * (1 + (searchBreadth * 0.08)), 0.012, 0.058);
+    const via = points.map(([along, offset]) => {
+      const anchor = sampleRouteAnchor(baseRoute.coordinates, along);
+      if (!anchor) return null;
+      return buildDetourPoint(anchor.anchor, anchor.tangentStart, anchor.tangentEnd, offsetKm * offset * sign);
+    });
+    if (via.some((point) => point == null)) return null;
+    return {
+      label,
+      via: via as BrouterRequest['via'],
+      alternativeIdxs,
+    };
+  };
+  const preferMirrorProbe = Math.abs(sideBias) < 0.0012 || searchBreadth > 0.72;
+  const shouldProbeWideSweep = searchBreadth > 0.42;
+  const shouldProbeCrown = searchBreadth > 0.6;
+  const shouldProbeZigzag = searchBreadth > 0.74;
+
+  return [
+    buildCandidate('adaptive-mid-tight', 0.017, [[0.5, 1]], preferredSign, [0, 1]),
+    buildCandidate(
+      'adaptive-mid-boost',
+      0.023 + (densityBoost * 0.004),
+      [[0.5, 1.12]],
+      preferredSign,
+      searchBreadth > 0.55 ? [0, 1, 2] : [0, 1],
+    ),
+    buildCandidate(
+      'adaptive-mid-double',
+      0.022 + (densityBoost * 0.004),
+      [[0.46, 0.68], [0.6, 1.02]],
+      preferredSign,
+      [0, 1],
+    ),
+    shouldProbeWideSweep
+      ? buildCandidate(
+          'adaptive-early-late-sweep',
+          0.021 + (densityBoost * 0.003),
+          [[0.34, 0.66], [0.68, 1.02]],
+          preferredSign,
+          [0, 1],
+        )
+      : null,
+    shouldProbeCrown
+      ? buildCandidate(
+          'adaptive-mid-crown',
+          0.027 + (densityBoost * 0.005),
+          [[0.32, 0.62], [0.5, -0.84], [0.72, 0.7]],
+          preferredSign,
+          [0, 1, 2],
+        )
+      : null,
+    preferMirrorProbe
+      ? buildCandidate(
+          'adaptive-mid-hedge',
+          0.021 + (densityBoost * 0.003),
+          [[0.5, 0.98]],
+          hedgeSign,
+          [0, 1],
+        )
+      : null,
+    searchBreadth > 0.58
+      ? buildCandidate(
+          'adaptive-hedge-sweep',
+          0.023 + (densityBoost * 0.004),
+          [[0.38, 0.74], [0.64, 1.02]],
+          hedgeSign,
+          [0, 1],
+        )
+      : null,
+    shouldProbeZigzag
+      ? buildCandidate(
+          'adaptive-mid-zigzag',
+          0.026 + (densityBoost * 0.004),
+          [[0.28, 0.58], [0.52, 1.02], [0.76, 0.7]],
+          preferredSign,
+          [0, 1],
+        )
+      : null,
+  ].filter((candidate): candidate is { via: BrouterRequest['via']; label: string; alternativeIdxs: readonly (0 | 1 | 2 | 3)[] } => candidate != null);
+}
+
 function buildDistanceDetourCandidates(
   req: Omit<BrouterRequest, 'alternativeIdx'>,
   distanceFocus: number,
@@ -485,5 +647,62 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
   }
   if (!best) throw lastError ?? new Error('BRouter distance detours: every candidate failed');
   console.log(`[BRouter] distance detour picked ${bestLabel} (${label}, score=${bestScore.toFixed(2)})`);
+  return best;
+}
+
+export async function fetchBrouterRouteBestWithClimbEfficiency(
+  req: Omit<BrouterRequest, 'alternativeIdx'>,
+): Promise<BrouterRoute> {
+  const directBase = await fetchBrouterRoute({ ...req, alternativeIdx: 0 });
+  let best: BrouterRoute = directBase;
+  let bestLabel = 'direct-alt-0';
+  let bestScore = scoreMinDistanceMaxAscent(directBase, directBase);
+
+  const consider = (route: BrouterRoute, candidateLabel: string) => {
+    const score = scoreMinDistanceMaxAscent(route, directBase);
+    const efficiency = computeClimbEfficiency(route, directBase);
+    console.log(
+      `[BRouter] climb-efficiency ${candidateLabel} OK — score=${score.toFixed(2)}, gain=${Math.round(efficiency.addedAscentM)} m, extra=${efficiency.addedDistanceKm.toFixed(1)} km, gain/km=${efficiency.gainPerAddedKm.toFixed(1)}`,
+    );
+    if (Number.isFinite(score) && score > bestScore) {
+      best = route;
+      bestLabel = candidateLabel;
+      bestScore = score;
+    }
+  };
+
+  if ((req.via?.length ?? 0) > 0) {
+    for (const alternativeIdx of [1, 2, 3] as const) {
+      try {
+        consider(await fetchBrouterRoute({ ...req, alternativeIdx }), `direct-alt-${alternativeIdx}`);
+      } catch (error) {
+        console.warn(`[BRouter] climb-efficiency direct alt ${alternativeIdx} failed —`, (error as Error).message);
+      }
+    }
+    console.log(`[BRouter] climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
+    return best;
+  }
+
+  for (const candidate of buildClimbEfficiencyDetourCandidates(req, directBase)) {
+    for (const alternativeIdx of candidate.alternativeIdxs) {
+      try {
+        consider(
+          await fetchBrouterRoute({
+            ...req,
+            via: candidate.via,
+            alternativeIdx,
+          }),
+          `${candidate.label}-alt${alternativeIdx}`,
+        );
+      } catch (error) {
+        const routeError = error as Error;
+        if (!isExpectedDetourCandidateFailure(routeError)) {
+          console.warn(`[BRouter] climb-efficiency ${candidate.label} alt ${alternativeIdx} failed —`, routeError.message);
+        }
+      }
+    }
+  }
+
+  console.log(`[BRouter] climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
   return best;
 }

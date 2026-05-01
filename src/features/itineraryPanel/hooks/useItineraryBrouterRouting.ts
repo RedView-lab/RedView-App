@@ -5,6 +5,7 @@ import {
   checkRouteWithinFrance,
   fetchBrouterRoute,
   fetchBrouterRouteBestByScore,
+  fetchBrouterRouteBestWithClimbEfficiency,
   fetchBrouterRouteBestOfN,
   fetchBrouterRouteBestWithDistanceDetours,
   formatForbiddenZonePolygons,
@@ -62,6 +63,9 @@ function fetchRouteForPriorities(
   const distanceAvoid = Math.max(0, -prioritySign(priorities.distance));
   const distanceFocus = Math.max(0, prioritySign(priorities.distance));
   const durationFocus = Math.max(0, prioritySign(priorities.duration));
+  if (climbFocus > 0.4 && distanceAvoid > 0.65) {
+    return fetchBrouterRouteBestWithClimbEfficiency(reqBase);
+  }
   if (distanceAvoid > 0.65) {
     return fetchBrouterRouteBestByScore(
       reqBase,

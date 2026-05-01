@@ -44,6 +44,7 @@ interface DashboardProps {
 }
 
 const OVERLAY_LABEL: Record<Exclude<OverlayStatusId, 'map'>, string> = {
+  itinerary: 'Itinéraire',
   weather: 'Météo',
   shadow: 'Ombres',
 };
@@ -223,6 +224,13 @@ export default function Dashboard({
     [setOverlayStatus],
   );
 
+  const handleItineraryRouteStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => {
+      setOverlayStatus('itinerary', status);
+    },
+    [setOverlayStatus],
+  );
+
   const handleWeatherOverlayReloadChange = useCallback(
     (reload: (() => void) | null) => {
       setOverlayReloader('weather', reload);
@@ -238,7 +246,7 @@ export default function Dashboard({
   );
 
   const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['shadow', 'map', 'weather'];
+    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'weather'];
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
       ...overlayStatuses,
       ...(mapStatus
@@ -458,6 +466,7 @@ export default function Dashboard({
                             projectId={activeProjectId}
                             map={mapInstance}
                             isMapLoaded={mapLoaded}
+                            onRouteStatusChange={handleItineraryRouteStatusChange}
                             width={leftPanelWidth}
                             onResizeStart={handleLeftResizeStart}
                             isResizing={isLeftResizing}

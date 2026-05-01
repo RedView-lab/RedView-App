@@ -1,4 +1,4 @@
-export type OverlayStatusId = 'map' | 'weather' | 'shadow';
+export type OverlayStatusId = 'map' | 'weather' | 'shadow' | 'itinerary';
 
 export type OverlayStatusState = 'loading' | 'ready' | 'error';
 

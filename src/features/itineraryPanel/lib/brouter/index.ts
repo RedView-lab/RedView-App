@@ -11,6 +11,7 @@ export {
   fetchBrouterRouteBestOfN,
   fetchBrouterRouteBestByScore,
   fetchBrouterRouteBestWithDistanceDetours,
+  fetchBrouterRouteBestWithClimbEfficiency,
 } from './client';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './url';
 export { formatForbiddenZonePolygons } from './forbidden-zones';
