@@ -70,6 +70,14 @@ const SCENARIOS: BenchmarkScenario[] = [
     roadTypes: roadTypes(),
   },
   {
+    name: 'cities-avoid-only',
+    roadTypes: roadTypes({ cities: 'avoid' }),
+  },
+  {
+    name: 'cities-forbid-only',
+    roadTypes: roadTypes({ cities: 'forbid' }),
+  },
+  {
     name: 'road-forbid-only',
     roadTypes: roadTypes({ road: 'forbid' }),
   },

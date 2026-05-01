@@ -149,7 +149,7 @@ assign user_tranq_fast_penalty    = ${brfNum(tranqFastTrafficPenalty)}
 # tranqBackgroundPenalty: soft penalty for roads outside green/river
 # corridors when Tranquilité is pushed to the right.
 assign user_tranq_background_penalty = ${brfNum(tranqBackgroundPenalty)}
-# citiesMult: applied to every way in built-up areas (estimated_town_class >= 2).
+# citiesMult: applied to every way in built-up areas (estimated_town_class >= 1).
 assign user_cities_mult           = ${brfNum(citiesMult)}
 # town/traffic penalty scales: stack on top of the pseudo-tag penalties.
 assign user_town_penalty_scale    = ${brfNum(townPenaltyScale)}
@@ -475,15 +475,32 @@ assign river_relief =
   else ${brfNum(riverReliefByClass[0])}
 
 # Cities: hard-multiplier applied to ways inside a built-up area, as
-# detected by BRouter's estimated_town_class heuristic. Anything
-# class >= 2 (small town -> city centre) is penalised. The trekking
+# detected by BRouter's estimated_town_class heuristic. BRouter maps
+# every populated settlement below ~80k inhabitants to class 1, so we
+# must include class 1 here or the filter misses most towns/villages.
+# The trekking
 # additive town_penalty is ALSO active when consider_town=true, so
 # the two stack: town_penalty for soft preference, cities_mult for the
 # explicit "avoid" / "forbid" filter.
 assign in_town =
   if estimated_town_class= then false
-  else if estimated_town_class=1 then false
   else true
+
+# Villages often slip through BRouter's town heuristic, but their road
+# fabric still looks urban: residential/service streets or tertiary/
+# unclassified connectors carrying non-trivial local traffic.
+# Keep dedicated bike infrastructure out of this fallback so the user
+# can still traverse town by protected cycling links when needed.
+assign is_settlement_road =
+  if is_bikelane then false
+  else if isresidentialorliving then true
+  else if highway=service then true
+  else if and not isunpaved ( and highway=tertiary|tertiary_link|unclassified estimated_traffic_class=2|3|4|5|6|7 ) then true
+  else false
+
+assign settlement_cities_mult =
+  if greater user_cities_mult 1 then multiply user_cities_mult 1.35
+  else 1
 
 assign is_direct_distance_road =
   if is_major then true
@@ -510,7 +527,9 @@ assign tranq_mult     = if is_fast_traffic_way then user_tranq_fast_penalty
                         else if in_town then user_tranq_background_penalty
                         else multiply forest_relief river_relief
 
-assign cities_mult = if in_town then user_cities_mult else 1
+assign cities_mult = if in_town then user_cities_mult
+                     else if is_settlement_road then settlement_cities_mult
+                     else 1
 
 # climb_mult: flat-tax mode. Only flat-ish segments use this costfactor;
 # real ascents switch to the uphillcostfactor block below. This avoids
