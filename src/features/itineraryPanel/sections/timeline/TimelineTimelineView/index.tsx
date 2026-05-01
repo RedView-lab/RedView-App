@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
   MIN_TIMELINE_HOURS,
+  MINUTES_PER_DAY,
   RAIL_HEADER_HEIGHT_PX,
   RAIL_ITEM_HEIGHT_PX,
 } from './constants';
@@ -131,6 +132,14 @@ export function TimelineTimelineView({
     () => timedItems.filter((entry) => entry.item.kind !== 'pause'),
     [timedItems],
   );
+  const timelineSpansMultipleDays = useMemo(() => {
+    const dayKeys = new Set(
+      timedItems
+        .map((entry) => entry.dayKey)
+        .filter((dayKey): dayKey is string => Boolean(dayKey)),
+    );
+    return dayKeys.size > 1;
+  }, [timedItems]);
   const pauseItems = useMemo(
     () => timedItems.filter((entry) => entry.item.kind === 'pause'),
     [timedItems],
@@ -183,9 +192,12 @@ export function TimelineTimelineView({
       Number.NEGATIVE_INFINITY,
     );
     if (!Number.isFinite(lastVisibleMinute)) return startMinutes + 60;
+    if (reference.hasRealDate && timelineSpansMultipleDays) {
+      return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, MINUTES_PER_DAY);
+    }
     const roundedEnd = Math.ceil(lastVisibleMinute / 60) * 60;
     return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, roundedEnd);
-  }, [startMinutes, visibleMinuteBounds]);
+  }, [reference.hasRealDate, startMinutes, timelineSpansMultipleDays, visibleMinuteBounds]);
 
   const totalHours = Math.max(MIN_TIMELINE_HOURS, Math.ceil((endMinutes - startMinutes) / 60));
   const baseHourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;

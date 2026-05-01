@@ -17,7 +17,7 @@ interface TimelineEditPanelProps {
   onChangeZoomLevel?: (next: number) => void;
 }
 
-const MARKER_STEP_OPTIONS = [25, 50, 100] as const;
+const MARKER_STEP_OPTIONS = [50] as const;
 const SCALE_OPTIONS = ['Date'] as const;
 const ZOOM_MIN = 0.75;
 const ZOOM_MAX = 1.5;

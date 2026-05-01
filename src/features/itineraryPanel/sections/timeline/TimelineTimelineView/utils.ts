@@ -165,10 +165,10 @@ export function resolveMarkerKmStep(
   markerStepKm?: number,
 ): number {
   if (Number.isFinite(markerStepKm) && markerStepKm !== undefined && markerStepKm > 0) {
-    return Math.max(5, Math.round(markerStepKm / 5) * 5);
+    return Math.max(50, Math.round(markerStepKm / 5) * 5);
   }
   const kmPerRow = config?.kmPerRow ?? DEFAULT_TIMELINE_RAIL.kmPerRow;
-  const rawStep = Math.max(KM_MARKER_MIN_STEP, kmPerRow * 5);
+  const rawStep = Math.max(50, KM_MARKER_MIN_STEP, kmPerRow * 5);
   return Math.ceil(rawStep / 5) * 5;
 }
 
@@ -265,7 +265,7 @@ export function buildVisibleMinuteBounds(
   displayDays: Date[],
   reference: StartReference,
 ): number[] {
-  const bounds = [reference.startMinutes];
+  const bounds: number[] = [];
 
   filteredPrimaryItems.forEach((entry, index) => {
     const attachedPauses = pauseAttachment.attachedByEventId.get(entry.item.id) ?? [];
@@ -292,7 +292,8 @@ export function buildVisibleMinuteBounds(
     );
   });
 
-  return bounds.filter((value) => Number.isFinite(value));
+  const finiteBounds = bounds.filter((value) => Number.isFinite(value));
+  return finiteBounds.length > 0 ? finiteBounds : [reference.startMinutes];
 }
 
 export function buildScheduledEvents(
@@ -456,6 +457,8 @@ export function buildKmMarkers(
   if (totalDistanceM <= 0) return [];
 
   const markers: KmMarker[] = [];
+  let lastPlacedTopPx = Number.NEGATIVE_INFINITY;
+
   for (let km = kmMarkerStep; km < maxDistanceKm; km += kmMarkerStep) {
     const elapsedSeconds =
       elapsedSecondsAtDistance(prediction, km * 1000, totalDistanceM) ?? estimateElapsedSeconds(km);
@@ -470,8 +473,18 @@ export function buildKmMarkers(
     const minuteOfDay = markerDate
       ? getMinuteOfDay(markerDate)
       : reference.startMinutes + elapsedSeconds / 60;
-    const topPx = (minuteOfDay - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const rawTopPx =
+      (minuteOfDay - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const topPx = resolveKmMarkerTopPx(
+      rawTopPx,
+      startMinutes,
+      pixelsPerMinute,
+      lastPlacedTopPx,
+      canvasHeight,
+    );
     if (topPx < -20 || topPx > canvasHeight + 20) continue;
+
+    lastPlacedTopPx = topPx;
 
     markers.push({
       id: `km-${km}`,
@@ -486,6 +499,38 @@ export function buildKmMarkers(
 function estimateElapsedSeconds(distanceKm: number): number {
   const fallbackSpeedKmh = 18;
   return (Math.max(0, distanceKm) / fallbackSpeedKmh) * 3600;
+}
+
+function resolveKmMarkerTopPx(
+  rawTopPx: number,
+  startMinutes: number,
+  pixelsPerMinute: number,
+  lastPlacedTopPx: number,
+  canvasHeight: number,
+): number {
+  const hourBoundaryClearancePx = 16;
+  const hourBoundaryOffsetPx = 18;
+  const markerSpacingPx = 18;
+  let resolvedTopPx = rawTopPx;
+
+  const relativeMinutes = (rawTopPx - TIMELINE_VIEWPORT_TOP_INSET_PX) / pixelsPerMinute;
+  const previousHourBoundaryMinutes = Math.floor(relativeMinutes / 60) * 60;
+  const nextHourBoundaryMinutes = previousHourBoundaryMinutes + 60;
+
+  [previousHourBoundaryMinutes, nextHourBoundaryMinutes].forEach((boundaryMinutes) => {
+    const boundaryTopPx =
+      (boundaryMinutes + startMinutes - startMinutes) * pixelsPerMinute +
+      TIMELINE_VIEWPORT_TOP_INSET_PX;
+    if (Math.abs(resolvedTopPx - boundaryTopPx) <= hourBoundaryClearancePx) {
+      resolvedTopPx = Math.max(resolvedTopPx, boundaryTopPx + hourBoundaryOffsetPx);
+    }
+  });
+
+  if (Number.isFinite(lastPlacedTopPx) && resolvedTopPx - lastPlacedTopPx < markerSpacingPx) {
+    resolvedTopPx = lastPlacedTopPx + markerSpacingPx;
+  }
+
+  return Math.min(canvasHeight - TIMELINE_VIEWPORT_BOTTOM_INSET_PX, resolvedTopPx);
 }
 
 function resolveSecondsToNextPoi(
