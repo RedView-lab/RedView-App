@@ -19,6 +19,7 @@ import {
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
 } from '../../lib/defaultState';
+import { resolveFavoritePoiPauseDurationMin } from '../../sections/timeline/TimelineTimelineView/utilsParts/schedule-stops';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import type { PoiFeature } from '@/features/poi/types';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
@@ -543,7 +544,13 @@ export function ItineraryPanelContainer({
       onFavoriteTimelineItem={(id, favorite) =>
         updateActive((it) => {
           const row = it.timeline.find((item) => item.id === id);
-          if (row) row.favorite = favorite;
+          if (!row) return;
+
+          const hasAutomaticFavoritePause =
+            !favorite && resolveFavoritePoiPauseDurationMin(row, it.rhythm) > 0;
+          if (hasAutomaticFavoritePause) return;
+
+          row.favorite = favorite;
         })
       }
       onSearchTimeline={() => {}}

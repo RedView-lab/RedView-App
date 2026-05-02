@@ -282,6 +282,7 @@ export function TimelineScheduleCanvas({
           const visible = event.item.visible !== false;
           const selected = selectedIds?.has(event.item.id) ?? false;
           const hasAttachedPauses = event.attachedPauses.length > 0;
+          const isFavoriteLocked = event.item.kind === 'poi' && hasAttachedPauses && event.item.favorite;
           const title =
             event.item.kind === 'pause' && event.item.durationMin
               ? formatPauseDuration(event.item.durationMin)
@@ -362,10 +363,12 @@ export function TimelineScheduleCanvas({
                   className={`rvi-tl-schedule__action rvi-tl-schedule__action--favorite${event.item.favorite ? ' is-on is-fav' : ''}`}
                   onClick={(actionEvent) => {
                     stopEventPropagation(actionEvent);
+                    if (isFavoriteLocked) return;
                     onToggleFavorite?.(event.item.id, !event.item.favorite);
                   }}
-                  aria-label="Favori"
+                  aria-label={isFavoriteLocked ? 'Favori verrouille par pause automatique' : 'Favori'}
                   aria-pressed={!!event.item.favorite}
+                  disabled={isFavoriteLocked}
                 >
                   <IconStar size={12} />
                 </button>
