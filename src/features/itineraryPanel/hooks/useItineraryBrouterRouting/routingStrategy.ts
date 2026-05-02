@@ -25,6 +25,10 @@ export function fetchRouteForPriorities(
   reqBase: PriorityRouteRequest,
   priorities: Itinerary['priorities'],
 ): Promise<BrouterRoute> {
+  if (reqBase.profile?.startsWith('custom_')) {
+    return fetchBrouterRoute(reqBase);
+  }
+
   const climbFocus = Math.max(0, prioritySign(priorities.elevation));
   const distanceAvoid = Math.max(0, -prioritySign(priorities.distance));
   const distanceFocus = Math.max(0, prioritySign(priorities.distance));
