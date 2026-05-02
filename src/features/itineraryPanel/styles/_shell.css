@@ -131,6 +131,125 @@
   cursor: all-scroll;
 }
 
+.rvi-panel__mode-layout {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 100%;
+  gap: 12px;
+}
+
+.rvi-panel__mode-main {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  opacity: calc(1 - (var(--rvi-main-dispawn, 0) * 0.16));
+  transform: translateY(calc(var(--rvi-main-dispawn, 0) * -12px));
+  transition:
+    opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rvi-panel__mode-main::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.rvi-panel__mode-main::after {
+  content: '';
+  position: sticky;
+  inset: auto 0 0 0;
+  display: block;
+  height: 40px;
+  margin-top: auto;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 12, 0),
+    rgba(10, 10, 12, calc(0.68 * var(--rvi-main-dispawn, 0)))
+  );
+  opacity: calc(0.28 + (var(--rvi-main-dispawn, 0) * 0.72));
+  transition: opacity 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rvi-panel__mode-main-inner {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: min-content;
+  gap: 12px;
+}
+
+.rvi-panel__dock-slot {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 0;
+  transition: flex-basis 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rvi-panel__dock-content {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.rvi-panel__dock-content > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.rvi-panel__dock-resize-hitbox {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.rvi-panel__dock-resize-grip {
+  width: min(88px, 28%);
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 10px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 1px rgba(0, 0, 0, 0.12);
+  transition:
+    background 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.rvi-panel__dock-resize-hitbox:hover .rvi-panel__dock-resize-grip,
+.rvi-panel__dock-resize-hitbox.is-dragging .rvi-panel__dock-resize-grip {
+  background: rgba(255, 255, 255, 0.24);
+  transform: scaleX(1.04);
+  box-shadow:
+    0 12px 26px rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(197, 0, 0, 0.28);
+}
+
+.rvi-panel__mode-layout.is-dock-resizing .rvi-panel__mode-main,
+.rvi-panel__mode-layout.is-dock-resizing .rvi-panel__mode-main::after,
+.rvi-panel__mode-layout.is-dock-resizing .rvi-panel__dock-slot,
+.rvi-panel__mode-layout.is-dock-resizing .rvi-panel__dock-resize-grip {
+  transition: none;
+}
+
 .rvi-divider {
   height: 1px;
   width: 100%;
