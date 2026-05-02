@@ -542,6 +542,9 @@
 
 .rvi-tl-schedule__pause-favorite {
   grid-column: 6;
+  justify-self: end;
+  flex-shrink: 0;
+  min-width: var(--rvi-tl-fav-col);
 }
 
 .rvi-tl-schedule__pause--standalone.is-draggable .rvi-tl-schedule__pause-card {

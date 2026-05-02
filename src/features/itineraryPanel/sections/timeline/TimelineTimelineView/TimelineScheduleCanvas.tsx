@@ -434,7 +434,10 @@ export function TimelineScheduleCanvas({
                   <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--next">
                     {formatLegDuration(pause.toNextSeconds)}
                   </span>
-                  <span className="rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite" aria-hidden>
+                  <span
+                    className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${pause.source === 'interval' ? ' is-active' : ''}`}
+                    aria-hidden
+                  >
                     <IconStar size={12} />
                   </span>
                 </div>
