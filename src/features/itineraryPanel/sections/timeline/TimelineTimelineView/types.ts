@@ -89,9 +89,11 @@ export interface TimelineStandalonePause {
   label: string;
   source: 'manual' | 'interval';
   distanceKm: number;
+  elapsedSeconds: number;
   scheduledTopPx: number;
   topPx: number;
   durationMin: number;
+  toNextSeconds: number | null;
   visible: boolean;
   heightPx: number;
   sortIndex: number;

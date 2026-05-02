@@ -10,7 +10,6 @@ import {
 } from 'react';
 import {
   IconEye,
-  IconPauseCircle,
   IconStar,
   IconTrash,
 } from '../../../components/icons';
@@ -323,7 +322,7 @@ export function TimelineScheduleCanvas({
                           className={`rvi-tl-schedule__pause-chip${pause.visible ? ' is-visible' : ''}`}
                         >
                           <span className="rvi-tl-schedule__pause-chip-icon" aria-hidden>
-                            <IconPauseCircle size={14} />
+                            <KindBadge kind="pause" size={24} />
                           </span>
                           <span>{formatPauseDuration(pause.durationMin)}</span>
                         </span>
@@ -412,8 +411,28 @@ export function TimelineScheduleCanvas({
                 ...resolveColumnPlacement(pauseDayKey),
               } as CSSProperties}
             >
-              <IconPauseCircle size={14} />
-              <span>{formatPauseDuration(pause.durationMin)}</span>
+              <div
+                className="rvi-tl-schedule__pause-card"
+                onPointerDown={(event) => handlePausePointerDown(event, pause)}
+              >
+                <div className="rvi-tl-schedule__pause-main">
+                  <span className="rvi-tl-schedule__pause-icon" aria-hidden>
+                    <KindBadge kind="pause" size={24} />
+                  </span>
+                  <span className="rvi-tl-schedule__pause-name" title={formatPauseDuration(pause.durationMin)}>
+                    {formatPauseDuration(pause.durationMin)}
+                  </span>
+                  <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--from-start">
+                    {formatDistanceLabel(pause.distanceKm)}
+                  </span>
+                  <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--next">
+                    {formatLegDuration(pause.toNextSeconds)}
+                  </span>
+                  <span className="rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite" aria-hidden>
+                    <IconStar size={12} />
+                  </span>
+                </div>
+              </div>
             </div>
           );
         })}

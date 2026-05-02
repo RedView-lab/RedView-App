@@ -5,6 +5,7 @@ import { resolveVisualDurationMin } from './format';
 export function buildScheduledStandalonePauses(
   manualPauseItems: TimedTimelineItem[],
   intervalPauseItems: TimedIntervalPause[],
+  primaryItems: TimedTimelineItem[],
   pixelsPerMinute: number,
   startMinutes: number,
 ): TimelineStandalonePause[] {
@@ -13,9 +14,11 @@ export function buildScheduledStandalonePauses(
     label: pause.item.label,
     source: 'manual' as const,
     distanceKm: pause.distanceKm,
+    elapsedSeconds: pause.elapsedSeconds,
     scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
     topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
     durationMin: pause.item.durationMin ?? 0,
+    toNextSeconds: resolveSecondsToNextPoi(primaryItems, pause.elapsedSeconds),
     visible: pause.item.visible !== false,
     heightPx: resolveStandalonePauseHeightPx(pause.item.durationMin ?? 0, pixelsPerMinute),
     sortIndex: pause.sortIndex,
@@ -27,9 +30,11 @@ export function buildScheduledStandalonePauses(
     label: pause.label,
     source: 'interval' as const,
     distanceKm: pause.distanceKm,
+    elapsedSeconds: pause.elapsedSeconds,
     scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
     topPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
     durationMin: pause.durationMin,
+    toNextSeconds: resolveSecondsToNextPoi(primaryItems, pause.elapsedSeconds),
     visible: pause.visible,
     heightPx: resolveStandalonePauseHeightPx(pause.durationMin, pixelsPerMinute),
     sortIndex: pause.sortIndex,
@@ -45,4 +50,18 @@ function resolveStandalonePauseHeightPx(durationMin: number, pixelsPerMinute: nu
   const resolvedDurationMin = resolveVisualDurationMin(durationMin);
   if (resolvedDurationMin <= 0) return PAUSE_CHIP_MIN_HEIGHT_PX;
   return Math.max(PAUSE_CHIP_MIN_HEIGHT_PX, resolvedDurationMin * pixelsPerMinute);
+}
+
+function resolveSecondsToNextPoi(
+  entries: TimedTimelineItem[],
+  currentElapsedSeconds: number,
+): number | null {
+  for (let index = 0; index < entries.length; index += 1) {
+    const candidate = entries[index];
+    if (!candidate || candidate.item.kind !== 'poi') continue;
+    if (candidate.elapsedSeconds <= currentElapsedSeconds) continue;
+    return Math.max(0, candidate.elapsedSeconds - currentElapsedSeconds);
+  }
+
+  return null;
 }

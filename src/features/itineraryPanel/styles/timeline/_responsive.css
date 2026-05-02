@@ -4,7 +4,7 @@
   .rvi-tl-schedule {
     --rvi-tl-times-col: 46px;
     --rvi-tl-icon-col: 18px;
-    --rvi-tl-pause-col: 62px;
+    --rvi-tl-pause-col: 72px;
     --rvi-tl-start-col: 54px;
     --rvi-tl-next-col: 50px;
     --rvi-tl-fav-col: 0px;
@@ -37,7 +37,21 @@
     line-height: 18px;
   }
 
+  .rvi-tl-schedule__pause-chip {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
+  .rvi-tl-schedule__pause-name {
+    font-size: 12px;
+    line-height: 18px;
+  }
+
   .rvi-tl-schedule__event-card {
+    min-height: 34px;
+  }
+
+  .rvi-tl-schedule__pause-card {
     min-height: 34px;
   }
 
@@ -67,7 +81,7 @@
   .rvi-tl-schedule {
     --rvi-tl-times-col: 48px;
     --rvi-tl-icon-col: 20px;
-    --rvi-tl-pause-col: 62px;
+    --rvi-tl-pause-col: 70px;
     --rvi-tl-start-col: 52px;
     --rvi-tl-next-col: 52px;
     --rvi-tl-fav-col: 20px;

@@ -238,8 +238,15 @@ export function TimelineTimelineView({
   );
 
   const scheduledStandalonePauses = useMemo(
-    () => buildScheduledStandalonePauses(filteredPauseItems, filteredIntervalPauseItems, pixelsPerMinute, startMinutes),
-    [filteredIntervalPauseItems, filteredPauseItems, pixelsPerMinute, startMinutes],
+    () =>
+      buildScheduledStandalonePauses(
+        filteredPauseItems,
+        filteredIntervalPauseItems,
+        filteredPrimaryItems,
+        pixelsPerMinute,
+        startMinutes,
+      ),
+    [filteredIntervalPauseItems, filteredPauseItems, filteredPrimaryItems, pixelsPerMinute, startMinutes],
   );
 
   const standalonePauseDayKeyById = useMemo(
