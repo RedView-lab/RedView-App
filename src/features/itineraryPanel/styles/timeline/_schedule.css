@@ -507,18 +507,17 @@
 }
 
 .rvi-tl-schedule__pause--standalone {
-  left: auto;
-  width: auto;
-  max-width: calc(100% - 12px);
+  min-width: 0;
 }
 
 .rvi-tl-schedule__pause-main {
   display: grid;
   grid-template-columns:
     var(--rvi-tl-icon-col)
-    minmax(48px, 1fr)
-    minmax(32px, var(--rvi-tl-start-col))
-    minmax(32px, var(--rvi-tl-next-col))
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col))
     var(--rvi-tl-fav-col);
   align-items: center;
   column-gap: var(--rvi-tl-card-gap);
@@ -535,6 +534,7 @@
 }
 
 .rvi-tl-schedule__pause-name {
+  grid-column: 2 / 4;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -546,15 +546,15 @@
 }
 
 .rvi-tl-schedule__pause-metric--from-start {
-  grid-column: 3;
-}
-
-.rvi-tl-schedule__pause-metric--next {
   grid-column: 4;
 }
 
-.rvi-tl-schedule__pause-favorite {
+.rvi-tl-schedule__pause-metric--next {
   grid-column: 5;
+}
+
+.rvi-tl-schedule__pause-favorite {
+  grid-column: 6;
 }
 
 .rvi-tl-schedule__pause--standalone.is-draggable .rvi-tl-schedule__pause-card {
