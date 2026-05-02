@@ -37,9 +37,12 @@ export interface TimedTimelineItem {
   dayKey: string | null;
 }
 
-export interface TimedIntervalPause {
+export interface TimedAutoPause {
   id: string;
   label: string;
+  source: 'interval' | 'favorite-poi';
+  attachedToItemId: string | null;
+  poiCategory?: PoiCategory;
   sortIndex: number;
   distanceKm: number;
   durationMin: number;
@@ -60,7 +63,7 @@ export interface TimelineStopAnchor {
 
 export interface ScheduledTimelineState {
   timedItems: TimedTimelineItem[];
-  intervalPauses: TimedIntervalPause[];
+  autoPauses: TimedAutoPause[];
   stopAnchors: TimelineStopAnchor[];
 }
 
@@ -69,6 +72,7 @@ export interface AttachedPause {
   durationMin: number;
   visible: boolean;
   heightPx: number;
+  source: 'favorite-poi';
 }
 
 export interface EventSpanSegment {
@@ -91,7 +95,8 @@ export interface TimelineEvent extends TimedTimelineItem {
 export interface TimelineStandalonePause {
   id: string;
   label: string;
-  source: 'manual' | 'interval';
+  source: 'manual' | 'interval' | 'favorite-poi';
+  poiCategory?: PoiCategory;
   distanceKm: number;
   elapsedSeconds: number;
   scheduledTopPx: number;
@@ -106,7 +111,7 @@ export interface TimelineStandalonePause {
 
 export interface PauseAttachmentState {
   attachedByEventId: Map<string, Array<Omit<AttachedPause, 'heightPx'>>>;
-  unattachedPauses: TimedTimelineItem[];
+  unattachedPauses: TimedAutoPause[];
 }
 
 export interface TimelinePositioningResult {

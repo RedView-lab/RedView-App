@@ -110,6 +110,7 @@ export function createDefaultItinerary(
       pauseEveryIntervalEnabled: false,
       pauseEveryIntervalMin: null,
       pauseIntervals: [],
+      pausePositionOverridesKm: {},
     },
     poi: {
       fountains: { enabled: true, distanceM: 40 },

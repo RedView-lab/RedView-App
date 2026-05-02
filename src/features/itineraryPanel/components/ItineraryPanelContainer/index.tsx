@@ -517,7 +517,9 @@ export function ItineraryPanelContainer({
       }
       onMoveTimelinePause={(id, distanceKm) =>
         updateActive((it) => {
-          moveTimelinePauseItem(it.timeline, id, distanceKm);
+          const moved = moveTimelinePauseItem(it.timeline, id, distanceKm);
+          if (moved) return;
+          it.rhythm.pausePositionOverridesKm[id] = Math.max(0, Number(distanceKm.toFixed(3)));
         })
       }
       onChangeTimelinePauseDuration={(id, durationMin) =>

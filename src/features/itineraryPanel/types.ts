@@ -183,6 +183,8 @@ export interface RhythmState {
   pauseEveryIntervalMin: number | null;
   /** User-defined pause rows displayed when the master toggle is on. */
   pauseIntervals: PauseIntervalRow[];
+  /** Per-generated-pause distance overrides keyed by pause id. */
+  pausePositionOverridesKm: Record<string, number>;
 }
 
 export type TimelineItemKind =

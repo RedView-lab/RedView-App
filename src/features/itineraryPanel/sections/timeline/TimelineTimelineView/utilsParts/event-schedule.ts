@@ -10,7 +10,6 @@ import type {
   EventSpanSegment,
   PauseAttachmentState,
   StartReference,
-  TimedIntervalPause,
   TimedTimelineItem,
   TimelineEvent,
 } from '../types';
@@ -19,7 +18,7 @@ import { addDays, getMinuteOfDay, resolveVisualDurationMin, toDayKey } from './f
 export function buildVisibleMinuteBounds(
   filteredPrimaryItems: TimedTimelineItem[],
   filteredPauseItems: TimedTimelineItem[],
-  filteredIntervalPauseItems: TimedIntervalPause[],
+  unattachedAutoPauseItems: PauseAttachmentState['unattachedPauses'],
   pauseAttachment: PauseAttachmentState,
   displayDays: Date[],
   reference: StartReference,
@@ -51,7 +50,7 @@ export function buildVisibleMinuteBounds(
     );
   });
 
-  filteredIntervalPauseItems.forEach((entry) => {
+  unattachedAutoPauseItems.forEach((entry) => {
     collectVisibleMinuteBounds(
       bounds,
       entry.date,

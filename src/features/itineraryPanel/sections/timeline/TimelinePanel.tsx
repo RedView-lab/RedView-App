@@ -150,9 +150,9 @@ export function TimelinePanel({
     if (view !== 'sheet') return [];
 
     const reference = parseStartReference(rhythm);
-    const { intervalPauses } = buildScheduledTimelineState(items, prediction, reference, rhythm);
+    const { autoPauses } = buildScheduledTimelineState(items, prediction, reference, rhythm);
 
-    return intervalPauses.map((pause) => ({
+    return autoPauses.map((pause) => ({
       id: pause.id,
       kind: 'pause' as const,
       label: pause.label,

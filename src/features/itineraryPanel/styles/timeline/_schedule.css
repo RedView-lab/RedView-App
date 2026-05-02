@@ -436,6 +436,29 @@
   cursor: pointer;
 }
 
+.rvi-tl-schedule__pause-chip.is-dragging {
+  opacity: 0.35;
+}
+
+.rvi-tl-schedule__pause-chip-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  color: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  line-height: 1.2;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.rvi-tl-schedule__pause-chip-input:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
 .rvi-tl-schedule__pause-chip-icon {
   display: inline-flex;
   align-items: center;
@@ -557,6 +580,10 @@
 .rvi-tl-schedule__pause--standalone.is-draggable .rvi-tl-schedule__pause-card {
   cursor: grab;
   touch-action: none;
+}
+
+.rvi-tl-schedule__pause--standalone.is-draggable .rvi-tl-schedule__pause-chip-icon {
+  cursor: grab;
 }
 
 .rvi-tl-schedule__pause--standalone.is-dragging .rvi-tl-schedule__pause-card {

@@ -65,15 +65,15 @@ export function TimelineTimelineView({
     [items, prediction, reference, rhythm],
   );
   const timedItems = scheduleState.timedItems;
-  const intervalPauseItems = scheduleState.intervalPauses;
+  const autoPauseItems = scheduleState.autoPauses;
   const stopAnchors = scheduleState.stopAnchors;
 
   const defaultAnchorDay = useMemo(() => {
-    const firstDatedItem = [...timedItems, ...intervalPauseItems].find((item) => item.dayKey);
+    const firstDatedItem = [...timedItems, ...autoPauseItems].find((item) => item.dayKey);
     if (firstDatedItem?.date) return new Date(firstDatedItem.date);
     if (reference.reference && reference.hasRealDate) return new Date(reference.reference);
     return new Date();
-  }, [intervalPauseItems, reference, timedItems]);
+  }, [autoPauseItems, reference, timedItems]);
   const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
@@ -146,12 +146,12 @@ export function TimelineTimelineView({
   );
   const timelineSpansMultipleDays = useMemo(() => {
     const dayKeys = new Set(
-      [...timedItems, ...intervalPauseItems]
+      [...timedItems, ...autoPauseItems]
         .map((entry) => entry.dayKey)
         .filter((dayKey): dayKey is string => Boolean(dayKey)),
     );
     return dayKeys.size > 1;
-  }, [intervalPauseItems, timedItems]);
+  }, [autoPauseItems, timedItems]);
   const pauseItems = useMemo(
     () => timedItems.filter((entry) => entry.item.kind === 'pause'),
     [timedItems],
@@ -167,14 +167,14 @@ export function TimelineTimelineView({
     return pauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
   }, [displayDayKeySet, pauseItems, reference.hasRealDate]);
 
-  const filteredIntervalPauseItems = useMemo(() => {
-    if (!reference.hasRealDate) return intervalPauseItems;
-    return intervalPauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [displayDayKeySet, intervalPauseItems, reference.hasRealDate]);
+  const filteredAutoPauseItems = useMemo(() => {
+    if (!reference.hasRealDate) return autoPauseItems;
+    return autoPauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
+  }, [autoPauseItems, displayDayKeySet, reference.hasRealDate]);
 
   const pauseAttachment = useMemo(
-    () => buildPauseAttachment(filteredPrimaryItems, rhythm),
-    [filteredPrimaryItems, rhythm],
+    () => buildPauseAttachment(filteredPrimaryItems, filteredAutoPauseItems),
+    [filteredAutoPauseItems, filteredPrimaryItems],
   );
 
   const maxDistanceKm = useMemo(
@@ -187,12 +187,12 @@ export function TimelineTimelineView({
       buildVisibleMinuteBounds(
         filteredPrimaryItems,
         filteredPauseItems,
-        filteredIntervalPauseItems,
+        pauseAttachment.unattachedPauses,
         pauseAttachment,
         displayDays,
         reference,
       ),
-    [displayDays, filteredIntervalPauseItems, filteredPauseItems, filteredPrimaryItems, pauseAttachment, reference],
+    [displayDays, filteredPauseItems, filteredPrimaryItems, pauseAttachment, reference],
   );
 
   const startMinutes = useMemo(() => {
@@ -247,12 +247,12 @@ export function TimelineTimelineView({
     () =>
       buildScheduledStandalonePauses(
         filteredPauseItems,
-        filteredIntervalPauseItems,
+        pauseAttachment.unattachedPauses,
         filteredPrimaryItems,
         pixelsPerMinute,
         startMinutes,
       ),
-    [filteredIntervalPauseItems, filteredPauseItems, filteredPrimaryItems, pixelsPerMinute, startMinutes],
+    [filteredPauseItems, filteredPrimaryItems, pauseAttachment.unattachedPauses, pixelsPerMinute, startMinutes],
   );
 
   const standalonePauseDayKeyById = useMemo(
@@ -260,10 +260,10 @@ export function TimelineTimelineView({
       new Map(
         [
           ...filteredPauseItems.map((pause) => [pause.item.id, pause.dayKey ?? null] as const),
-          ...filteredIntervalPauseItems.map((pause) => [pause.id, pause.dayKey ?? null] as const),
+          ...pauseAttachment.unattachedPauses.map((pause) => [pause.id, pause.dayKey ?? null] as const),
         ],
       ),
-    [filteredIntervalPauseItems, filteredPauseItems],
+    [filteredPauseItems, pauseAttachment.unattachedPauses],
   );
 
   const { events, standalonePauses, canvasHeight, firstVisibleTopPx } = useMemo(

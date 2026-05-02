@@ -67,11 +67,24 @@ interface TimelineScheduleCanvasProps {
 
 interface PauseDragState {
   id: string;
+  source: TimelineStandalonePause['source'];
+  poiCategory?: PoiCategory;
+  durationMin: number;
+  distanceKm: number;
+  toNextSeconds: number | null;
   offsetY: number;
   heightPx: number;
   topPx: number;
   dayKey: string | null;
   scheduledElapsedSeconds: number;
+}
+
+interface PauseDurationEditState {
+  kind: 'manual' | 'interval' | 'favorite-poi';
+  targetId: string;
+  draft: string;
+  previousDurationMin: number;
+  poiCategory?: PoiCategory;
 }
 
 export function TimelineScheduleCanvas({
@@ -104,7 +117,9 @@ export function TimelineScheduleCanvas({
   resolveNowLinePlacement,
 }: TimelineScheduleCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const pauseDurationInputRef = useRef<HTMLInputElement | null>(null);
   const [dragState, setDragState] = useState<PauseDragState | null>(null);
+  const [editingPauseDuration, setEditingPauseDuration] = useState<PauseDurationEditState | null>(null);
   const hourMarkSegments = useMemo(
     () => hourMarks.slice(0, -1).map((markMinute, index) => ({
       key: `${markMinute}-${hourMarks[index + 1]}`,
@@ -185,21 +200,47 @@ export function TimelineScheduleCanvas({
     startMinutes,
   ]);
 
+  useEffect(() => {
+    if (!editingPauseDuration) return;
+    const input = pauseDurationInputRef.current;
+    if (!input) return;
+    input.focus();
+    input.select();
+  }, [editingPauseDuration]);
+
   const handlePausePointerDown = (
-    event: ReactPointerEvent<HTMLDivElement>,
-    pause: TimelineStandalonePause,
+    event: ReactPointerEvent<HTMLElement>,
+    pause: Pick<
+      TimelineStandalonePause,
+      'id' | 'source' | 'poiCategory' | 'durationMin' | 'distanceKm' | 'toNextSeconds' | 'heightPx' | 'topPx' | 'dayKey'
+    >,
   ) => {
-    if (pause.source !== 'manual' || !onMovePauseScheduled) return;
+    if (!onMovePauseScheduled) return;
 
     event.preventDefault();
     event.stopPropagation();
 
     const blockRect = event.currentTarget.getBoundingClientRect();
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    const minTopPx = TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const maxTopPx = Math.max(
+      minTopPx,
+      canvasHeight - pause.heightPx - TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
+    );
+    const initialTopPx = canvasRect
+      ? clamp(blockRect.top - canvasRect.top, minTopPx, maxTopPx)
+      : clamp(pause.topPx, minTopPx, maxTopPx);
+
     setDragState({
       id: pause.id,
+      source: pause.source,
+      poiCategory: pause.poiCategory,
+      durationMin: pause.durationMin,
+      distanceKm: pause.distanceKm,
+      toNextSeconds: pause.toNextSeconds,
       offsetY: event.clientY - blockRect.top,
       heightPx: pause.heightPx,
-      topPx: pause.topPx,
+      topPx: initialTopPx,
       dayKey: pause.dayKey ?? standalonePauseDayKeyById.get(pause.id) ?? null,
       scheduledElapsedSeconds: 0,
     });
@@ -213,9 +254,13 @@ export function TimelineScheduleCanvas({
     event.preventDefault();
     event.stopPropagation();
     if (!poiCategory || !onChangeFavoritePoiPauseDuration) return;
-    const nextDurationMin = requestPauseDurationMin(currentDurationMin);
-    if (nextDurationMin === null) return;
-    onChangeFavoritePoiPauseDuration(poiCategory, nextDurationMin);
+    setEditingPauseDuration({
+      kind: 'favorite-poi',
+      targetId: `poi:${poiCategory}`,
+      draft: formatPauseDurationInput(currentDurationMin),
+      previousDurationMin: currentDurationMin,
+      poiCategory,
+    });
   };
 
   const handleStandalonePauseDurationClick = (
@@ -224,18 +269,77 @@ export function TimelineScheduleCanvas({
   ) => {
     event.preventDefault();
     event.stopPropagation();
-    const nextDurationMin = requestPauseDurationMin(pause.durationMin);
-    if (nextDurationMin === null) return;
+    if (pause.source === 'manual' && onChangePauseDuration) {
+      setEditingPauseDuration({
+        kind: 'manual',
+        targetId: pause.id,
+        draft: formatPauseDurationInput(pause.durationMin),
+        previousDurationMin: pause.durationMin,
+      });
+      return;
+    }
 
-    if (pause.source === 'manual') {
-      onChangePauseDuration?.(pause.id, nextDurationMin);
+    if (pause.source === 'favorite-poi' && pause.poiCategory && onChangeFavoritePoiPauseDuration) {
+      setEditingPauseDuration({
+        kind: 'favorite-poi',
+        targetId: `poi:${pause.poiCategory}`,
+        draft: formatPauseDurationInput(pause.durationMin),
+        previousDurationMin: pause.durationMin,
+        poiCategory: pause.poiCategory,
+      });
       return;
     }
 
     const pauseIntervalId = resolveIntervalPauseId(pause.id);
-    if (!pauseIntervalId) return;
-    onChangeIntervalPauseDuration?.(pauseIntervalId, nextDurationMin);
+    if (!pauseIntervalId || !onChangeIntervalPauseDuration) return;
+    setEditingPauseDuration({
+      kind: 'interval',
+      targetId: pauseIntervalId,
+      draft: formatPauseDurationInput(pause.durationMin),
+      previousDurationMin: pause.durationMin,
+    });
   };
+
+  const handlePauseDurationDraftChange = (draft: string) => {
+    setEditingPauseDuration((current) => (current ? { ...current, draft } : current));
+  };
+
+  const commitPauseDurationEdit = () => {
+    setEditingPauseDuration((current) => {
+      if (!current) return current;
+      const nextDurationMin = parsePauseDurationInput(current.draft, current.previousDurationMin);
+      if (current.kind === 'favorite-poi') {
+        if (current.poiCategory) {
+          onChangeFavoritePoiPauseDuration?.(current.poiCategory, nextDurationMin);
+        }
+        return null;
+      }
+      if (current.kind === 'manual') {
+        onChangePauseDuration?.(current.targetId, nextDurationMin);
+        return null;
+      }
+      onChangeIntervalPauseDuration?.(current.targetId, nextDurationMin);
+      return null;
+    });
+  };
+
+  const cancelPauseDurationEdit = () => {
+    setEditingPauseDuration(null);
+  };
+
+  const isAttachedPauseDragging = useMemo(
+    () => dragState !== null && !standalonePauses.some((pause) => pause.id === dragState.id),
+    [dragState, standalonePauses],
+  );
+
+  const dragOverlayStyle = useMemo(() => {
+    if (!dragState) return null;
+    return {
+      top: dragState.topPx,
+      '--rvi-tl-pause-height': `${dragState.heightPx}px`,
+      ...resolveColumnPlacement(dragState.dayKey),
+    } as CSSProperties;
+  }, [dragState, resolveColumnPlacement]);
 
   return (
     <div ref={viewportRef} className="rvi-tl-schedule__viewport">
@@ -325,6 +429,9 @@ export function TimelineScheduleCanvas({
           const canEditFavoritePoiPause = Boolean(
             event.item.poiCategory && onChangeFavoritePoiPauseDuration,
           );
+          const favoritePoiPauseEditTargetId = event.item.poiCategory ? `poi:${event.item.poiCategory}` : null;
+          const isEditingFavoritePoiPause = favoritePoiPauseEditTargetId !== null
+            && editingPauseDuration?.targetId === favoritePoiPauseEditTargetId;
           const isFavoriteLocked = event.item.kind === 'poi' && hasAttachedPauses && event.item.favorite;
           const title =
             event.item.kind === 'pause' && event.item.durationMin
@@ -367,27 +474,72 @@ export function TimelineScheduleCanvas({
                             'rvi-tl-schedule__pause-chip',
                             pause.visible ? 'is-visible' : '',
                             canEditFavoritePoiPause ? 'is-editable' : '',
+                            dragState?.id === pause.id ? 'is-dragging' : '',
                           ].filter(Boolean).join(' ')}
                           style={{
                             minHeight: pause.heightPx,
                             height: pause.heightPx,
                           }}
-                          onPointerDown={canEditFavoritePoiPause ? (pointerEvent) => {
-                              pointerEvent.stopPropagation();
-                          } : undefined}
-                          onClick={canEditFavoritePoiPause ? (clickEvent) => handleFavoritePoiPauseDurationClick(
-                            event.item.poiCategory,
-                            pause.durationMin,
-                            clickEvent,
-                          ) : undefined}
                           title={canEditFavoritePoiPause
                             ? `${formatPauseDuration(pause.durationMin)} · cliquer pour modifier`
                             : formatPauseDuration(pause.durationMin)}
                         >
-                          <span className="rvi-tl-schedule__pause-chip-icon" aria-hidden>
+                          <span
+                            className="rvi-tl-schedule__pause-chip-icon"
+                            aria-hidden
+                            onPointerDown={onMovePauseScheduled ? (pointerEvent) => {
+                              handlePausePointerDown(pointerEvent, {
+                                id: pause.id,
+                                source: 'favorite-poi',
+                                poiCategory: event.item.poiCategory,
+                                durationMin: pause.durationMin,
+                                distanceKm: event.distanceKm,
+                                toNextSeconds: event.toNextSeconds,
+                                heightPx: pause.heightPx,
+                                topPx: event.topPx,
+                                dayKey: event.dayKey,
+                              });
+                            } : undefined}
+                          >
                             <KindBadge kind="pause" size={24} />
                           </span>
-                          <span>{formatPauseDuration(pause.durationMin)}</span>
+                          {isEditingFavoritePoiPause ? (
+                            <input
+                              ref={pauseDurationInputRef}
+                              className="rvi-tl-schedule__pause-chip-input"
+                              value={editingPauseDuration?.draft ?? ''}
+                              onChange={(changeEvent) => {
+                                handlePauseDurationDraftChange(changeEvent.target.value);
+                              }}
+                              onPointerDown={(pointerEvent) => {
+                                pointerEvent.stopPropagation();
+                              }}
+                              onClick={(clickEvent) => {
+                                clickEvent.stopPropagation();
+                              }}
+                              onBlur={commitPauseDurationEdit}
+                              onKeyDown={(keyEvent) => {
+                                if (keyEvent.key === 'Enter') {
+                                  keyEvent.preventDefault();
+                                  commitPauseDurationEdit();
+                                } else if (keyEvent.key === 'Escape') {
+                                  keyEvent.preventDefault();
+                                  cancelPauseDurationEdit();
+                                }
+                              }}
+                              aria-label="Modifier la durée de la pause"
+                            />
+                          ) : (
+                            <span
+                              onClick={canEditFavoritePoiPause ? (clickEvent) => handleFavoritePoiPauseDurationClick(
+                                event.item.poiCategory,
+                                pause.durationMin,
+                                clickEvent,
+                              ) : undefined}
+                            >
+                              {formatPauseDuration(pause.durationMin)}
+                            </span>
+                          )}
                         </span>
                       ))}
                     </span>
@@ -459,6 +611,16 @@ export function TimelineScheduleCanvas({
           const canEditStandalonePause = (
             (pause.source === 'manual' && onChangePauseDuration)
             || (pause.source === 'interval' && onChangeIntervalPauseDuration)
+            || (pause.source === 'favorite-poi' && pause.poiCategory && onChangeFavoritePoiPauseDuration)
+          );
+          const standalonePauseEditTargetId = pause.source === 'interval'
+            ? resolveIntervalPauseId(pause.id)
+            : pause.source === 'favorite-poi' && pause.poiCategory
+              ? `poi:${pause.poiCategory}`
+              : pause.id;
+          const isEditingStandalonePause = Boolean(
+            standalonePauseEditTargetId
+            && editingPauseDuration?.targetId === standalonePauseEditTargetId,
           );
 
           return (
@@ -468,7 +630,7 @@ export function TimelineScheduleCanvas({
                 'rvi-tl-schedule__pause',
                 'rvi-tl-schedule__pause--standalone',
                 pause.visible ? 'is-visible' : '',
-                pause.source === 'manual' && onMovePauseScheduled ? 'is-draggable' : '',
+                onMovePauseScheduled ? 'is-draggable' : '',
                 dragging ? 'is-dragging' : '',
               ].filter(Boolean).join(' ')}
               data-source={pause.source}
@@ -502,7 +664,35 @@ export function TimelineScheduleCanvas({
                     } : undefined}
                     onClick={canEditStandalonePause ? (clickEvent) => handleStandalonePauseDurationClick(pause, clickEvent) : undefined}
                   >
-                    <span>{formatPauseDuration(pause.durationMin)}</span>
+                    {isEditingStandalonePause ? (
+                      <input
+                        ref={pauseDurationInputRef}
+                        className="rvi-tl-schedule__pause-chip-input"
+                        value={editingPauseDuration?.draft ?? ''}
+                        onChange={(changeEvent) => {
+                          handlePauseDurationDraftChange(changeEvent.target.value);
+                        }}
+                        onPointerDown={(pointerEvent) => {
+                          pointerEvent.stopPropagation();
+                        }}
+                        onClick={(clickEvent) => {
+                          clickEvent.stopPropagation();
+                        }}
+                        onBlur={commitPauseDurationEdit}
+                        onKeyDown={(keyEvent) => {
+                          if (keyEvent.key === 'Enter') {
+                            keyEvent.preventDefault();
+                            commitPauseDurationEdit();
+                          } else if (keyEvent.key === 'Escape') {
+                            keyEvent.preventDefault();
+                            cancelPauseDurationEdit();
+                          }
+                        }}
+                        aria-label="Modifier la durée de la pause"
+                      />
+                    ) : (
+                      <span>{formatPauseDuration(pause.durationMin)}</span>
+                    )}
                   </span>
                   <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--from-start">
                     {formatDistanceLabel(pause.distanceKm)}
@@ -511,7 +701,7 @@ export function TimelineScheduleCanvas({
                     {formatLegDuration(pause.toNextSeconds)}
                   </span>
                   <span
-                    className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${pause.source === 'interval' ? ' is-active' : ''}`}
+                    className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${pause.source !== 'manual' ? ' is-active' : ''}`}
                     aria-hidden
                   >
                     <IconStar size={12} />
@@ -521,6 +711,43 @@ export function TimelineScheduleCanvas({
             </div>
           );
         })}
+
+        {dragState && isAttachedPauseDragging && dragOverlayStyle ? (
+          <div
+            className={[
+              'rvi-tl-schedule__pause',
+              'rvi-tl-schedule__pause--standalone',
+              'is-visible',
+              'is-draggable',
+              'is-dragging',
+            ].join(' ')}
+            data-source={dragState.source}
+            style={dragOverlayStyle}
+          >
+            <div className="rvi-tl-schedule__pause-card">
+              <div className="rvi-tl-schedule__pause-main">
+                <span className="rvi-tl-schedule__event-icon" aria-hidden>
+                  <KindBadge kind="pause" size={24} />
+                </span>
+                <span className="rvi-tl-schedule__pause-chip rvi-tl-schedule__pause-chip--standalone">
+                  <span>{formatPauseDuration(dragState.durationMin)}</span>
+                </span>
+                <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--from-start">
+                  {formatDistanceLabel(dragState.distanceKm)}
+                </span>
+                <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--next">
+                  {formatLegDuration(dragState.toNextSeconds)}
+                </span>
+                <span
+                  className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${dragState.source !== 'manual' ? ' is-active' : ''}`}
+                  aria-hidden
+                >
+                  <IconStar size={12} />
+                </span>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -613,17 +840,6 @@ function toDayKey(date: Date): string {
 
 function stopEventPropagation(event: ReactMouseEvent<HTMLButtonElement>) {
   event.stopPropagation();
-}
-
-function requestPauseDurationMin(currentDurationMin: number): number | null {
-  if (typeof window === 'undefined' || typeof window.prompt !== 'function') return null;
-
-  const rawValue = window.prompt(
-    'Durée de la pause (ex: 15min, 1h30)',
-    formatPauseDurationInput(currentDurationMin),
-  );
-  if (rawValue === null) return null;
-  return parsePauseDurationInput(rawValue, currentDurationMin);
 }
 
 function resolveIntervalPauseId(pauseId: string): string | null {

@@ -5,7 +5,7 @@ export {
 } from './schedule-state';
 export {
   applyStopAnchorsToRideElapsedSeconds,
-  buildTimedIntervalPauses,
+  buildTimedAutoPauses,
   distanceAtElapsedSeconds,
   resolveFavoritePoiPauseDurationMin,
   resolveRideElapsedSecondsAtScheduledElapsed,

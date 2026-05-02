@@ -1,10 +1,10 @@
 import { PAUSE_CHIP_MIN_HEIGHT_PX } from '../constants';
-import type { TimedIntervalPause, TimedTimelineItem, TimelineStandalonePause } from '../types';
+import type { TimedAutoPause, TimedTimelineItem, TimelineStandalonePause } from '../types';
 import { resolveVisualDurationMin } from './format';
 
 export function buildScheduledStandalonePauses(
   manualPauseItems: TimedTimelineItem[],
-  intervalPauseItems: TimedIntervalPause[],
+  autoPauseItems: TimedAutoPause[],
   primaryItems: TimedTimelineItem[],
   pixelsPerMinute: number,
   startMinutes: number,
@@ -25,10 +25,11 @@ export function buildScheduledStandalonePauses(
     dayKey: pause.dayKey,
   }));
 
-  const intervalPauses = intervalPauseItems.map((pause) => ({
+  const autoPauses = autoPauseItems.map((pause) => ({
     id: pause.id,
     label: pause.label,
-    source: 'interval' as const,
+    source: pause.source,
+    poiCategory: pause.poiCategory,
     distanceKm: pause.distanceKm,
     elapsedSeconds: pause.elapsedSeconds,
     scheduledTopPx: (pause.minuteOfDay - startMinutes) * pixelsPerMinute,
@@ -41,7 +42,7 @@ export function buildScheduledStandalonePauses(
     dayKey: pause.dayKey,
   }));
 
-  return [...manualPauses, ...intervalPauses].sort(
+  return [...manualPauses, ...autoPauses].sort(
     (left, right) => left.scheduledTopPx - right.scheduledTopPx || left.sortIndex - right.sortIndex,
   );
 }

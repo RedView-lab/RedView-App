@@ -8,7 +8,7 @@ import type {
   TimelineStopAnchor,
 } from '../types';
 import { getMinuteOfDay, toDayKey } from './format';
-import { buildTimedIntervalPauses, resolveTimelineStopDurationMin } from './schedule-stops';
+import { buildTimedAutoPauses, resolveTimelineStopDurationMin } from './schedule-stops';
 
 export function resolveTotalDistanceM(
   items: TimelineItem[],
@@ -53,9 +53,9 @@ export function buildScheduledTimelineState(
       };
     });
 
-  const intervalPauses = buildTimedIntervalPauses(prediction, reference, rhythm, totalDistanceM);
+  const autoPauses = buildTimedAutoPauses(baseItems, prediction, reference, rhythm, totalDistanceM);
   const scheduledItems = new Map<string, TimedTimelineItem>();
-  const scheduledIntervals = new Map<string, ScheduledTimelineState['intervalPauses'][number]>();
+  const scheduledAutoPauses = new Map<string, ScheduledTimelineState['autoPauses'][number]>();
   const stopAnchors: TimelineStopAnchor[] = [];
   let cumulativeStopMinutes = 0;
 
@@ -65,14 +65,14 @@ export function buildScheduledTimelineState(
       kind: entry.item.kind,
       rideElapsedSeconds: entry.rideElapsedSeconds,
       distanceKm: entry.distanceKm,
-      durationMin: resolveTimelineStopDurationMin(entry.item, rhythm),
+      durationMin: resolveTimelineStopDurationMin(entry.item),
       sortIndex: entry.sortIndex,
       entry,
       source: 'item' as const,
     })),
-    ...intervalPauses.map((entry) => ({
+    ...autoPauses.map((entry) => ({
       id: entry.id,
-      kind: 'intervalPause' as const,
+      kind: entry.source === 'favorite-poi' ? 'favoritePoiPause' as const : 'intervalPause' as const,
       rideElapsedSeconds: entry.rideElapsedSeconds,
       distanceKm: entry.distanceKm,
       durationMin: entry.durationMin,
@@ -104,7 +104,7 @@ export function buildScheduledTimelineState(
         dayKey: scheduledTiming.dayKey,
       });
     } else {
-      scheduledIntervals.set(entity.id, {
+      scheduledAutoPauses.set(entity.id, {
         ...entity.entry,
         elapsedSeconds: scheduledElapsedSeconds,
         minuteOfDay: scheduledTiming.minuteOfDay,
@@ -128,9 +128,9 @@ export function buildScheduledTimelineState(
     timedItems: baseItems
       .map((entry) => scheduledItems.get(entry.item.id))
       .filter((entry): entry is TimedTimelineItem => Boolean(entry)),
-    intervalPauses: intervalPauses
-      .map((entry) => scheduledIntervals.get(entry.id))
-      .filter((entry): entry is ScheduledTimelineState['intervalPauses'][number] => Boolean(entry)),
+    autoPauses: autoPauses
+      .map((entry) => scheduledAutoPauses.get(entry.id))
+      .filter((entry): entry is ScheduledTimelineState['autoPauses'][number] => Boolean(entry)),
     stopAnchors,
   };
 }
@@ -158,7 +158,7 @@ function resolveScheduledTiming(
   };
 }
 
-function rankScheduledEntity(kind: TimelineItem['kind'] | 'intervalPause'): number {
+function rankScheduledEntity(kind: TimelineItem['kind'] | 'intervalPause' | 'favoritePoiPause'): number {
   switch (kind) {
     case 'start':
       return 0;
@@ -169,6 +169,8 @@ function rankScheduledEntity(kind: TimelineItem['kind'] | 'intervalPause'): numb
     case 'pause':
       return 3;
     case 'intervalPause':
+      return 4;
+    case 'favoritePoiPause':
       return 4;
     case 'end':
       return 5;
