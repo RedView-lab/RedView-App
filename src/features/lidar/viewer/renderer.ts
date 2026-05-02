@@ -20,6 +20,7 @@ export class LidarRenderer {
   private format!: GPUTextureFormat;
   private pipeline!: GPURenderPipeline;
   private terrainPipeline!: GPURenderPipeline;
+  private previewPipeline!: GPURenderPipeline;
   private cameraBuffer!: GPUBuffer;
   private pointBindGroup!: GPUBindGroup;
   private terrainBindGroup!: GPUBindGroup;
@@ -48,6 +49,7 @@ export class LidarRenderer {
 
   private buffers: { pos: GPUBuffer; col: GPUBuffer; count: number }[] = [];
   private terrainMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
+  private previewMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
   private canvasWidth = 1;
   private canvasHeight = 1;
   private hmOriginX = 0;
@@ -71,6 +73,8 @@ export class LidarRenderer {
   deviceLost = false;
   /** Platform profile detected at init (Apple vs Desktop). */
   platform: PlatformProfile | null = null;
+  private gpuDrivenDensitySupported = false;
+  private gpuDrivenDensityActive = false;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (!navigator.gpu) throw new Error('WebGPU non supporté');
@@ -80,6 +84,7 @@ export class LidarRenderer {
     // --- Platform detection ---
     const { vendor, arch, desc, isApple, profile } = resolvePlatformInfo((adapter as any).info ?? null);
     this.platform = profile;
+    this.gpuDrivenDensitySupported = !isApple;
 
     console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
     console.log(`[LiDAR GPU] Platform profile: ${isApple ? 'Apple (Metal)' : 'Desktop'}`);
@@ -206,6 +211,44 @@ export class LidarRenderer {
       depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
     });
 
+    this.previewPipeline = this.device.createRenderPipeline({
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.terrainBindGroupLayout] }),
+      vertex: {
+        module: terrainShader,
+        entryPoint: 'terrain_vs',
+        buffers: [
+          {
+            arrayStride: 24,
+            stepMode: 'vertex',
+            attributes: [
+              { shaderLocation: 0, offset: 0, format: 'float32x3' as GPUVertexFormat },
+              { shaderLocation: 1, offset: 12, format: 'float32x3' as GPUVertexFormat },
+            ],
+          },
+          {
+            arrayStride: 4,
+            stepMode: 'vertex',
+            attributes: [
+              { shaderLocation: 2, offset: 0, format: 'unorm8x4' as GPUVertexFormat },
+            ],
+          },
+        ],
+      },
+      fragment: {
+        module: terrainShader,
+        entryPoint: 'terrain_fs',
+        targets: [{
+          format: this.format,
+          blend: {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+          },
+        }],
+      },
+      primitive: { topology: 'triangle-list', cullMode: 'none' },
+      depthStencil: { depthWriteEnabled: true, depthCompare: 'less', format: 'depth24plus' },
+    });
+
     // Check for pipeline creation validation errors
     const pipelineError = await this.device.popErrorScope();
     if (pipelineError) {
@@ -250,6 +293,10 @@ export class LidarRenderer {
 
     this.rebuildBindGroups();
     this.resize(canvas.width, canvas.height);
+  }
+
+  getPointChunkCapacity(): number {
+    return this.pointChunkCapacity;
   }
 
   private rebuildBindGroups() {
@@ -401,6 +448,15 @@ export class LidarRenderer {
       pass.drawIndexed(this.terrainMesh.count);
     }
 
+    if (this.previewMesh) {
+      pass.setPipeline(this.previewPipeline);
+      pass.setBindGroup(0, this.terrainBindGroup);
+      pass.setVertexBuffer(0, this.previewMesh.vertBuf);
+      pass.setVertexBuffer(1, this.previewMesh.colBuf);
+      pass.setIndexBuffer(this.previewMesh.idxBuf, 'uint32');
+      pass.drawIndexed(this.previewMesh.count);
+    }
+
     pass.setPipeline(this.pipeline);
 
     if (this.voxelChunks.length > 0) {
@@ -421,6 +477,32 @@ export class LidarRenderer {
   private currentDensityLeaf = 1.0;
   private currentDensityVoxel = 1.0;
 
+  private shouldUseGpuDrivenDensity(nodes: VisibleNode[]): boolean {
+    if (!this.gpuDrivenDensitySupported) return false;
+
+    let visibleLeafNodes = 0;
+    let thinnedLeafNodes = 0;
+    let totalLeafDensity = 0;
+
+    for (let index = 0; index < nodes.length; index += 1) {
+      const node = nodes[index];
+      if (node.isVoxel || node.count === 0) continue;
+      visibleLeafNodes += 1;
+      totalLeafDensity += node.density;
+      if (node.density < 0.995) thinnedLeafNodes += 1;
+    }
+
+    if (visibleLeafNodes < 96 || thinnedLeafNodes < 24) return false;
+    const avgLeafDensity = totalLeafDensity / Math.max(visibleLeafNodes, 1);
+    return avgLeafDensity < 0.92;
+  }
+
+  private setGpuDrivenDensityActive(active: boolean): void {
+    if (this.gpuDrivenDensityActive === active) return;
+    this.gpuDrivenDensityActive = active;
+    console.log(`[LiDAR GPU] Density path: ${active ? 'GPU-driven batching' : 'CPU-driven thinning'}`);
+  }
+
   private drawNodesBatched(
     pass: GPURenderPassEncoder,
     nodes: VisibleNode[],
@@ -428,11 +510,20 @@ export class LidarRenderer {
     isVoxel: boolean,
     camBuffer: GPUBuffer,
   ): void {
+    const useGpuDrivenDensity = !isVoxel && this.shouldUseGpuDrivenDensity(nodes);
+    if (!isVoxel) this.setGpuDrivenDensityActive(useGpuDrivenDensity);
+
     const chunkState = { index: -1 };
     let batchStart = -1;
-    let batchCount = 0;       // instances actually drawn (count * density, ceil)
+    let batchCount = 0;       // instances submitted to draw
     let batchSrcCount = 0;    // points consumed in source buffer (full count)
     let batchDensity = 1.0;
+
+    const flushBatch = () => {
+      if (batchStart < 0) return;
+      if (useGpuDrivenDensity) this.setDensityUniform(camBuffer, batchDensity, isVoxel);
+      drawRange(pass, chunks, batchStart, batchCount, chunkState);
+    };
 
     for (let i = 0; i < nodes.length; i++) {
       const n = nodes[i];
@@ -443,44 +534,33 @@ export class LidarRenderer {
       // produces a spatially-uniform random subset without per-vertex hashing.
       // Voxels are already a coarse representation → never thinned (density=1).
       const d = isVoxel ? 1.0 : (n.density > 0.995 ? 1.0 : Math.round(n.density * 100) / 100);
-      const drawCount = isVoxel ? n.count : Math.max(1, Math.ceil(n.count * d));
+      const drawCount = useGpuDrivenDensity || isVoxel
+        ? n.count
+        : Math.max(1, Math.ceil(n.count * d));
 
-      // We can extend the current batch only if source ranges are contiguous
-      // AND we're drawing every point of both nodes (d == 1). With d < 1, the
-      // tail of the current node is intentionally skipped — extending the
-      // draw would incorrectly render those skipped points instead of the
-      // head of the next node.
-      const canBatch = batchStart >= 0
-        && n.offset === batchStart + batchSrcCount
-        && d === 1.0
-        && batchDensity === 1.0;
+      const canBatch = useGpuDrivenDensity
+        ? batchStart >= 0
+          && n.offset === batchStart + batchSrcCount
+          && Math.abs(d - batchDensity) < 0.005
+        : batchStart >= 0
+          && n.offset === batchStart + batchSrcCount
+          && d === 1.0
+          && batchDensity === 1.0;
 
       if (canBatch) {
         batchCount += drawCount;
         batchSrcCount += n.count;
       } else {
-        if (batchStart >= 0) {
-          drawRange(pass, chunks, batchStart, batchCount, chunkState);
-        }
+        flushBatch();
         batchStart = n.offset;
         batchCount = drawCount;
         batchSrcCount = n.count;
         batchDensity = d;
       }
     }
-    if (batchStart >= 0) {
-      drawRange(pass, chunks, batchStart, batchCount, chunkState);
-    }
-    // Suppress unused-parameter warning while keeping signature stable for
-    // potential reuse by future GPU-side density variants.
-    void camBuffer;
+    flushBatch();
   }
 
-  /**
-   * @deprecated Replaced by CPU-side density (instanceCount reduction).
-   * Kept for potential future use if we re-introduce per-fragment thinning.
-   */
-  // @ts-expect-error - intentionally retained for future use
   private setDensityUniform(camBuffer: GPUBuffer, density: number, isVoxel: boolean): void {
     const current = isVoxel ? this.currentDensityVoxel : this.currentDensityLeaf;
     if (Math.abs(density - current) < 0.001) return;
@@ -542,6 +622,44 @@ export class LidarRenderer {
     idxBuf.unmap();
 
     this.terrainMesh = { vertBuf, colBuf, idxBuf, count: indices.length };
+  }
+
+  setPreviewMesh(vertices: Float32Array, colors: Uint8Array, indices: Uint32Array): void {
+    this.clearPreviewMesh();
+
+    const vertBuf = this.device.createBuffer({
+      size: vertices.byteLength,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true,
+    });
+    new Float32Array(vertBuf.getMappedRange()).set(vertices);
+    vertBuf.unmap();
+
+    const colBuf = this.device.createBuffer({
+      size: colors.byteLength,
+      usage: GPUBufferUsage.VERTEX,
+      mappedAtCreation: true,
+    });
+    new Uint8Array(colBuf.getMappedRange()).set(colors);
+    colBuf.unmap();
+
+    const idxBuf = this.device.createBuffer({
+      size: indices.byteLength,
+      usage: GPUBufferUsage.INDEX,
+      mappedAtCreation: true,
+    });
+    new Uint32Array(idxBuf.getMappedRange()).set(indices);
+    idxBuf.unmap();
+
+    this.previewMesh = { vertBuf, colBuf, idxBuf, count: indices.length };
+  }
+
+  clearPreviewMesh(): void {
+    if (!this.previewMesh) return;
+    this.previewMesh.vertBuf.destroy();
+    this.previewMesh.colBuf.destroy();
+    this.previewMesh.idxBuf.destroy();
+    this.previewMesh = null;
   }
 
   updateCamera(view: Float32Array, proj: Float32Array) {
@@ -657,6 +775,7 @@ export class LidarRenderer {
       this.terrainMesh.colBuf.destroy();
       this.terrainMesh.idxBuf.destroy();
     }
+    this.clearPreviewMesh();
     destroyPointChunks(this.leafChunks);
     destroyPointChunks(this.voxelChunks);
     this.cameraBuffer?.destroy();

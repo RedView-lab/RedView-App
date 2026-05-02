@@ -1,13 +1,15 @@
 import type { TileCoord } from '../../types';
 import { LidarManager } from '../../lib/lidarManager';
+import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 import { buildTileNavigatorCells, buildTileNavigatorLabel, tileCoordKey } from './model';
 import { ensureViewerTileNavigator } from './template';
 
 interface ViewerTileNavigatorOptions {
   currentTile: TileCoord;
-  pairedTile?: TileCoord | null;
+  activeTiles: TileCoord[];
   manager: LidarManager;
-  onSelectTile: (coord: TileCoord) => void;
+  onPreviewTile?: (coord: TileCoord | null) => void;
+  onSelectTiles: (coords: TileCoord[]) => void;
 }
 
 function sameTile(a: TileCoord | undefined, b: TileCoord): boolean {
@@ -28,14 +30,16 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
   }
 
   let currentTile = options.currentTile;
-  const pairedTile = options.pairedTile ?? null;
+  const activeTiles = options.activeTiles.slice(0, MAX_VIEWER_SCENE_TILES);
+  const activeTileKeys = new Set(activeTiles.map((tile) => tileCoordKey(tile)));
   let destroyed = false;
   let loadingTileKey: string | null = null;
   let cachedTileKeys = new Set<string>();
+  let pendingTile: TileCoord | null = null;
 
-  const defaultStatus = pairedTile
-    ? '2 tuiles actives | rouge = principale | ambre = secondaire'
-    : 'Rouge = ouverte | orange = cache | gris = a telecharger';
+  const defaultStatus =
+    `${activeTiles.length}/${MAX_VIEWER_SCENE_TILES} tuiles actives | ` +
+    'rouge = principale | ambre = actives | orange = cache';
 
   const setStatus = (message: string) => {
     statusEl.textContent = message;
@@ -49,7 +53,8 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       const cellKey = tileCoordKey(cell.coord);
       const isCurrent = sameTile(currentTile, cell.coord);
       const isLoading = loadingTileKey === cellKey;
-      const isPaired = pairedTile ? sameTile(pairedTile, cell.coord) : false;
+      const isActiveSecondary = !isCurrent && activeTileKeys.has(cellKey);
+      const isPending = pendingTile ? sameTile(pendingTile, cell.coord) : false;
       const isCached = cachedTileKeys.has(cellKey);
       const button = document.createElement('button');
 
@@ -61,7 +66,8 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
 
       if (isCurrent) button.classList.add('is-current');
       else if (isLoading) button.classList.add('is-loading');
-      else if (isPaired) button.classList.add('is-paired');
+      else if (isPending) button.classList.add('is-pending');
+      else if (isActiveSecondary) button.classList.add('is-paired');
       else if (isCached) button.classList.add('is-cached');
       else button.classList.add('is-idle');
 
@@ -113,13 +119,52 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
     const targetKey = tileCoordKey(coord);
     if (loadingTileKey || sameTile(currentTile, coord)) return;
 
+    if (!pendingTile || !sameTile(pendingTile, coord)) {
+      const isActiveSecondary = activeTileKeys.has(targetKey) && !sameTile(currentTile, coord);
+      pendingTile = coord;
+      options.onPreviewTile?.(coord);
+      if (isActiveSecondary) {
+        setStatus(`Preview ${coord.xKm}/${coord.yKm} · reclique pour retirer`);
+      } else if (cachedTileKeys.has(targetKey)) {
+        if (activeTiles.length >= MAX_VIEWER_SCENE_TILES) {
+          setStatus(`Preview ${coord.xKm}/${coord.yKm} · limite ${MAX_VIEWER_SCENE_TILES} tuiles atteinte`);
+        } else {
+          setStatus(`Preview ${coord.xKm}/${coord.yKm} · reclique pour ajouter`);
+        }
+      } else {
+        setStatus(`Preview ${coord.xKm}/${coord.yKm} · reclique pour telecharger`);
+      }
+      render();
+      return;
+    }
+
+    if (activeTileKeys.has(targetKey) && !sameTile(currentTile, coord)) {
+      pendingTile = null;
+      options.onPreviewTile?.(null);
+      setStatus(`Retrait ${coord.xKm}/${coord.yKm} du lot...`);
+      options.onSelectTiles(activeTiles.filter((tile) => !sameTile(tile, coord)));
+      return;
+    }
+
     if (cachedTileKeys.has(targetKey)) {
-      setStatus(`Assemblage ${currentTile.xKm}/${currentTile.yKm} + ${coord.xKm}/${coord.yKm}...`);
-      options.onSelectTile(coord);
+      if (activeTiles.length >= MAX_VIEWER_SCENE_TILES) {
+        setStatus(`Limite atteinte: ${MAX_VIEWER_SCENE_TILES} tuiles maximum.`);
+        pendingTile = null;
+        options.onPreviewTile?.(null);
+        render();
+        return;
+      }
+
+      pendingTile = null;
+      options.onPreviewTile?.(null);
+      setStatus(`Assemblage ${activeTiles.length + 1}/${MAX_VIEWER_SCENE_TILES} tuiles...`);
+      options.onSelectTiles([...activeTiles, coord]);
       return;
     }
 
     loadingTileKey = targetKey;
+    pendingTile = null;
+    options.onPreviewTile?.(null);
     setStatus(`Telechargement ${coord.xKm}/${coord.yKm}...`);
     render();
 
@@ -134,8 +179,13 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       return;
     }
 
-    setStatus(`Assemblage ${currentTile.xKm}/${currentTile.yKm} + ${coord.xKm}/${coord.yKm}...`);
-    options.onSelectTile(coord);
+    if (activeTiles.length >= MAX_VIEWER_SCENE_TILES) {
+      setStatus(`Tuile telechargee, mais limite ${MAX_VIEWER_SCENE_TILES} deja atteinte.`);
+      return;
+    }
+
+    setStatus(`Assemblage ${activeTiles.length + 1}/${MAX_VIEWER_SCENE_TILES} tuiles...`);
+    options.onSelectTiles([...activeTiles, coord]);
   };
 
   const unsubscribe = options.manager.on((event) => {
@@ -158,6 +208,7 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
   return {
     destroy() {
       destroyed = true;
+      options.onPreviewTile?.(null);
       unsubscribe();
       root.remove();
     },

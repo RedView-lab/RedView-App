@@ -112,24 +112,12 @@ export function screenSpaceSize(
   let minNdcY = Infinity, maxNdcY = -Infinity;
   let anyBehind = false;
 
-  const corners = [
-    aabb.minX, aabb.minY, aabb.minZ,
-    aabb.maxX, aabb.minY, aabb.minZ,
-    aabb.minX, aabb.maxY, aabb.minZ,
-    aabb.maxX, aabb.maxY, aabb.minZ,
-    aabb.minX, aabb.minY, aabb.maxZ,
-    aabb.maxX, aabb.minY, aabb.maxZ,
-    aabb.minX, aabb.maxY, aabb.maxZ,
-    aabb.maxX, aabb.maxY, aabb.maxZ,
-  ];
-
-  for (let i = 0; i < 24; i += 3) {
-    const x = corners[i], y = corners[i + 1], z = corners[i + 2];
+  const projectCorner = (x: number, y: number, z: number) => {
     const w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15];
 
     if (w <= 0.001) {
       anyBehind = true;
-      continue;
+      return;
     }
 
     const invW = 1 / w;
@@ -140,7 +128,16 @@ export function screenSpaceSize(
     if (ndcX > maxNdcX) maxNdcX = ndcX;
     if (ndcY < minNdcY) minNdcY = ndcY;
     if (ndcY > maxNdcY) maxNdcY = ndcY;
-  }
+  };
+
+  projectCorner(aabb.minX, aabb.minY, aabb.minZ);
+  projectCorner(aabb.maxX, aabb.minY, aabb.minZ);
+  projectCorner(aabb.minX, aabb.maxY, aabb.minZ);
+  projectCorner(aabb.maxX, aabb.maxY, aabb.minZ);
+  projectCorner(aabb.minX, aabb.minY, aabb.maxZ);
+  projectCorner(aabb.maxX, aabb.minY, aabb.maxZ);
+  projectCorner(aabb.minX, aabb.maxY, aabb.maxZ);
+  projectCorner(aabb.maxX, aabb.maxY, aabb.maxZ);
 
   if (anyBehind) {
     if (maxNdcX === -Infinity) return 0;

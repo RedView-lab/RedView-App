@@ -31,6 +31,34 @@ export interface ViewerSceneData {
   tileFileLabel: string;
 }
 
+function getSceneLoadConcurrency(totalTiles: number): number {
+  const hardwareThreads = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
+  const preferred = Math.max(2, Math.ceil(hardwareThreads / 4));
+  return Math.max(1, Math.min(totalTiles, Math.min(4, preferred)));
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  const runWorker = async () => {
+    while (true) {
+      const index = cursor;
+      cursor += 1;
+      if (index >= items.length) return;
+      results[index] = await mapper(items[index], index);
+    }
+  };
+
+  const workers = Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, () => runWorker());
+  await Promise.all(workers);
+  return results;
+}
+
 function buildTileFileCandidates(coord: TileCoord): { fileName: string; legacyFileName: string } {
   return {
     fileName: `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`,
@@ -263,10 +291,14 @@ export async function loadViewerScene(
     return all.findIndex((candidate) => `${candidate.xKm}_${candidate.yKm}_${candidate.projection}_${candidate.altRef}` === key) === index;
   });
 
-  const loadedTiles: LoadedViewerTile[] = [];
-  for (let index = 0; index < uniqueTiles.length; index += 1) {
-    loadedTiles.push(await loadViewerTile(uniqueTiles[index], setStatus, index + 1, uniqueTiles.length));
-  }
+  const loadConcurrency = getSceneLoadConcurrency(uniqueTiles.length);
+  setStatus(`Preparation scene ${uniqueTiles.length} tuiles · ${loadConcurrency} taches en parallele`, 4);
+
+  const loadedTiles = await mapWithConcurrency(
+    uniqueTiles,
+    loadConcurrency,
+    (coord, index) => loadViewerTile(coord, setStatus, index + 1, uniqueTiles.length),
+  );
 
   const pointCloud = mergePointClouds(loadedTiles);
   let terrainMesh = mergeTerrainMeshes(loadedTiles, pointCloud);

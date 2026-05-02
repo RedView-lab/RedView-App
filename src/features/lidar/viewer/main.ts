@@ -9,11 +9,11 @@ import { LidarRenderer } from './renderer';
 import type { HeightmapParams } from './renderer';
 import { CameraController } from './camera';
 import { buildTileFileName, getTileInfo, toWgs84 } from '../lib/coordConvert';
-import type { DetectedCrs, AltitudeRef } from '../types';
+import type { DetectedCrs, AltitudeRef, TileCoord } from '../types';
 import type { AABB } from './lod/types';
 import { LodManager } from './lod/lodManager';
 import { LidarManager } from '../lib/lidarManager';
-import { buildViewerUrl } from '../lib/viewerUrl';
+import { buildViewerUrl, MAX_VIEWER_SCENE_TILES } from '../lib/viewerUrl';
 import {
   createViewerPanel,
   densityScaleToPercent,
@@ -26,6 +26,7 @@ import {
 } from './panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import { createViewerTileNavigator } from './tileNavigator/controller';
+import { buildTilePreviewMesh } from './preview/tilePreview';
 import { loadViewerScene } from './session/dataset';
 import {
   buildOctreeInWorker,
@@ -78,12 +79,57 @@ function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): str
   return `Tuile ${x}/${y} (${projection})`;
 }
 
+function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>): string {
+  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
+}
+
+function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileCoord): TileCoord[] {
+  const tiles: TileCoord[] = [primaryTile];
+  const seen = new Set<string>([tileCoordKey(primaryTile)]);
+
+  const appendTile = (xKm: number, yKm: number) => {
+    if (!Number.isFinite(xKm) || !Number.isFinite(yKm)) return;
+    if (tiles.length >= MAX_VIEWER_SCENE_TILES) return;
+
+    const coord: TileCoord = {
+      ...primaryTile,
+      xKm,
+      yKm,
+    };
+    const key = tileCoordKey(coord);
+    if (seen.has(key)) return;
+    seen.add(key);
+    tiles.push(coord);
+  };
+
+  for (const rawTile of params.getAll('tile')) {
+    const [rawX, rawY] = rawTile.split(',', 2);
+    appendTile(parseInt(rawX || '', 10), parseInt(rawY || '', 10));
+  }
+
+  const legacySecondaryXKm = parseInt(params.get('sx') || '', 10);
+  const legacySecondaryYKm = parseInt(params.get('sy') || '', 10);
+  appendTile(legacySecondaryXKm, legacySecondaryYKm);
+
+  return tiles;
+}
+
+function computeSceneBudgetScale(tileCount: number, totalPoints: number, pointChunkCapacity: number): number {
+  if (tileCount <= 1) return 1.0;
+
+  const tilePressureScale = 1 / (1 + (tileCount - 1) * 0.16);
+  const chunkPressureRatio = totalPoints / Math.max(pointChunkCapacity * 1.5, 1);
+  const chunkPressureScale = chunkPressureRatio <= 1
+    ? 1.0
+    : 1 / (1 + Math.log2(chunkPressureRatio) * 0.18);
+
+  return Math.max(0.35, Math.min(1.0, tilePressureScale * chunkPressureScale));
+}
+
 // --- Parse URL params ---
 const params = new URLSearchParams(window.location.search);
 const xKm = parseInt(params.get('x') || '', 10);
 const yKm = parseInt(params.get('y') || '', 10);
-const secondaryXKm = parseInt(params.get('sx') || '', 10);
-const secondaryYKm = parseInt(params.get('sy') || '', 10);
 const crs = (params.get('crs') || 'LAMB93') as DetectedCrs;
 const altRef = (params.get('alt') || 'IGN69') as AltitudeRef;
 
@@ -103,16 +149,8 @@ const viewerTileCoord = {
   territory: tileInfo.territory,
   projection: crs,
   altRef,
-} as const;
-const pairedTileCoord = !isNaN(secondaryXKm) && !isNaN(secondaryYKm)
-  && (secondaryXKm !== xKm || secondaryYKm !== yKm)
-  ? {
-      ...viewerTileCoord,
-      xKm: secondaryXKm,
-      yKm: secondaryYKm,
-    }
-  : null;
-const sceneTileCoords = pairedTileCoord ? [viewerTileCoord, pairedTileCoord] : [viewerTileCoord];
+} as TileCoord;
+const sceneTileCoords = parseSceneTileCoords(params, viewerTileCoord);
 const panelTileLabel = sceneTileCoords
   .map((coord) => buildPanelTileLabel(coord.xKm, coord.yKm, coord.projection))
   .join(' + ');
@@ -143,7 +181,7 @@ function switchToWebGLFallback() {
 
 async function startWebGLFallback(reasonForLog: string): Promise<void> {
   if (sceneTileCoords.length > 1) {
-    throw new Error('Le mode LowQuality/WebGL ne supporte pas encore l affichage simultane de deux tuiles.');
+    throw new Error('Le mode LowQuality/WebGL ne supporte qu une seule tuile a la fois.');
   }
   await launchWebGLFallback({
     reasonForLog,
@@ -277,7 +315,17 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     const lodManager = new LodManager();
     lodManager.setOctree(octree);
     if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
-    lodManager.setSceneBudgetScale(sceneTileCoords.length > 1 ? 0.72 : 1.0);
+    const sceneBudgetScale = computeSceneBudgetScale(
+      sceneTileCoords.length,
+      pointCloud.count,
+      renderer.getPointChunkCapacity(),
+    );
+    lodManager.setSceneBudgetScale(sceneBudgetScale);
+    console.log(
+      `[Viewer] Scene budget scale ${sceneBudgetScale.toFixed(2)} for ` +
+      `${sceneTileCoords.length} tile(s), ${pointCloud.count.toLocaleString()} pts, ` +
+      `chunkCapacity=${renderer.getPointChunkCapacity().toLocaleString()}`,
+    );
 
     const [lon, lat] = toWgs84(
       (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2,
@@ -319,10 +367,20 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     });
     const tileNavigator = createViewerTileNavigator({
       currentTile: viewerTileCoord,
-      pairedTile: pairedTileCoord,
+      activeTiles: sceneTileCoords,
       manager: lidarManager,
-      onSelectTile: (coord) => {
-        window.location.assign(buildViewerUrl(viewerTileCoord, coord));
+      onPreviewTile: (coord) => {
+        if (!renderer) return;
+        if (!coord) {
+          renderer.clearPreviewMesh();
+          return;
+        }
+        const previewMesh = buildTilePreviewMesh(coord, pointCloud.bounds, terrainMesh);
+        renderer.setPreviewMesh(previewMesh.vertices, previewMesh.colors, previewMesh.indices);
+        requestRender();
+      },
+      onSelectTiles: (coords) => {
+        window.location.assign(buildViewerUrl(viewerTileCoord, coords.slice(1)));
       },
     });
 
