@@ -119,13 +119,20 @@ export function formatPauseDuration(minutes: number): string {
 }
 
 export function formatHourLabel(hour: number, isBoundary: boolean): string {
-  const date = new Date(2000, 0, 1, hour, 0, 0, 0);
+  const normalizedMinuteOfDay = ((Math.round(hour) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const hours = Math.floor(normalizedMinuteOfDay / 60);
+  const minutes = normalizedMinuteOfDay % 60;
+  const date = new Date(2000, 0, 1, hours, minutes, 0, 0);
   if (isBoundary) {
     return date
-      .toLocaleTimeString('en-US', { hour: 'numeric', hour12: true })
+      .toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: minutes > 0 ? '2-digit' : undefined,
+        hour12: true,
+      })
       .replace('\u202f', ' ');
   }
-  return `${hour}:00`;
+  return `${hours}:${String(minutes).padStart(2, '0')}`;
 }
 
 export function getMinuteOfDay(date: Date): number {

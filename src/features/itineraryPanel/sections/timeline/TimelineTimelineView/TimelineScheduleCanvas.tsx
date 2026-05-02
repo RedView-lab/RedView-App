@@ -41,7 +41,6 @@ interface TimelineScheduleCanvasProps {
   canvasStyle: CSSProperties;
   displayDays: Date[];
   selectedDayKey: string;
-  totalHours: number;
   currentTimeLineTopPx: number | null;
   now: Date;
   visibleWindowHasEvents: boolean;
@@ -79,7 +78,6 @@ export function TimelineScheduleCanvas({
   canvasStyle,
   displayDays,
   selectedDayKey,
-  totalHours,
   currentTimeLineTopPx,
   now,
   visibleWindowHasEvents,
@@ -104,6 +102,14 @@ export function TimelineScheduleCanvas({
   const dayByKey = useMemo(
     () => new Map(displayDays.map((day) => [toDayKey(day), day])),
     [displayDays],
+  );
+  const hourMarkSegments = useMemo(
+    () => hourMarks.slice(0, -1).map((markMinute, index) => ({
+      key: `${markMinute}-${hourMarks[index + 1]}`,
+      topPx: (markMinute - startMinutes) * pixelsPerMinute,
+      heightPx: (hourMarks[index + 1] - markMinute) * pixelsPerMinute,
+    })),
+    [hourMarks, pixelsPerMinute, startMinutes],
   );
 
   useEffect(() => {
@@ -200,12 +206,12 @@ export function TimelineScheduleCanvas({
   return (
     <div ref={viewportRef} className="rvi-tl-schedule__viewport">
       <div className="rvi-tl-schedule__times" aria-hidden>
-        {hourMarks.map((hour, index) => {
-          const topPx = index * hourRowHeightPx + TIMELINE_VIEWPORT_TOP_INSET_PX;
+        {hourMarks.map((markMinute, index) => {
+          const topPx = (markMinute - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
           return (
-            <div key={hour} className="rvi-tl-schedule__time" style={{ top: topPx }}>
+            <div key={markMinute} className="rvi-tl-schedule__time" style={{ top: topPx }}>
               <span className="rvi-tl-schedule__time-label">
-                {formatHourLabel(hour, index === 0 || index === hourMarks.length - 1)}
+                {formatHourLabel(markMinute, index === 0 || index === hourMarks.length - 1)}
               </span>
             </div>
           );
@@ -229,8 +235,15 @@ export function TimelineScheduleCanvas({
             const isSelected = dayKey === selectedDayKey;
             return (
               <div key={dayKey} className={`rvi-tl-schedule__grid-day${isSelected ? ' is-selected' : ''}`}>
-                {Array.from({ length: totalHours }).map((_, index) => (
-                  <div key={`${dayKey}-${index}`} className="rvi-tl-schedule__grid-row" />
+                {hourMarkSegments.map((segment) => (
+                  <div
+                    key={`${dayKey}-${segment.key}`}
+                    className="rvi-tl-schedule__grid-row"
+                    style={{
+                      height: segment.heightPx,
+                      minHeight: segment.heightPx,
+                    }}
+                  />
                 ))}
               </div>
             );

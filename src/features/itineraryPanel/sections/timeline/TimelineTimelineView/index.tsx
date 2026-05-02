@@ -195,7 +195,7 @@ export function TimelineTimelineView({
       Number.POSITIVE_INFINITY,
     );
     if (!Number.isFinite(firstMinute)) return reference.startMinutes;
-    return Math.max(0, Math.floor(firstMinute / 60) * 60);
+    return Math.max(0, Math.floor(firstMinute / 10) * 10);
   }, [reference.startMinutes, visibleMinuteBounds]);
 
   const endMinutes = useMemo(() => {
@@ -222,7 +222,7 @@ export function TimelineTimelineView({
       ? Math.max(baseHourRowHeightPx, availableViewportHeightPx / totalHours)
       : baseHourRowHeightPx;
   const pixelsPerMinute = hourRowHeightPx / 60;
-  const canvasBaseHeight = Math.max(totalHours * hourRowHeightPx, 0);
+  const canvasBaseHeight = Math.max((endMinutes - startMinutes) * pixelsPerMinute, 0);
 
   const scheduledEvents = useMemo(
     () =>
@@ -311,8 +311,26 @@ export function TimelineTimelineView({
   );
 
   const hourMarks = useMemo(
-    () => Array.from({ length: totalHours + 1 }, (_, index) => startMinutes / 60 + index),
-    [startMinutes, totalHours],
+    () => {
+      const marks = [startMinutes];
+      let nextHourMinute = Math.ceil(startMinutes / 60) * 60;
+
+      if (nextHourMinute <= startMinutes) {
+        nextHourMinute += 60;
+      }
+
+      while (nextHourMinute < endMinutes) {
+        marks.push(nextHourMinute);
+        nextHourMinute += 60;
+      }
+
+      if (marks[marks.length - 1] !== endMinutes) {
+        marks.push(endMinutes);
+      }
+
+      return marks;
+    },
+    [endMinutes, startMinutes],
   );
 
   const currentTimeLineTopPx = useMemo(() => {
@@ -409,7 +427,6 @@ export function TimelineTimelineView({
         canvasStyle={canvasStyle}
         displayDays={displayDays}
         selectedDayKey={selectedDayKey}
-        totalHours={totalHours}
         currentTimeLineTopPx={currentTimeLineTopPx}
         now={now}
         visibleWindowHasEvents={visibleWindowHasEvents}
