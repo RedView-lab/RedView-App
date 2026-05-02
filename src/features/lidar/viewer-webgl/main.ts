@@ -15,6 +15,7 @@ import { stitchOrtho } from './orthoStitcher';
 import { detectCrs, toWgs84 } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import { createViewerPanel, type SnowModeKey } from '../viewer/panel/controller';
+import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from '../viewer/panel/location';
 
 export interface WebGLViewerHandles {
   canvas: HTMLCanvasElement;
@@ -32,24 +33,6 @@ export interface WebGLViewerOptions {
 }
 
 interface ParsedHeader { bounds: PointCloudBounds; crs: DetectedCrs; }
-
-function formatDms(value: number, positiveHemisphere: string, negativeHemisphere: string): string {
-  const absolute = Math.abs(value);
-  const degrees = Math.floor(absolute);
-  const minutesFloat = (absolute - degrees) * 60;
-  const minutes = Math.floor(minutesFloat);
-  const seconds = Math.round((minutesFloat - minutes) * 60);
-  const hemisphere = value >= 0 ? positiveHemisphere : negativeHemisphere;
-  return `${degrees}° ${String(minutes).padStart(2, '0')}′ ${String(seconds).padStart(2, '0')}″ ${hemisphere}`;
-}
-
-function buildLocationLabel(lon: number, lat: number): string {
-  return `${formatDms(lat, 'N', 'S')} · ${formatDms(lon, 'E', 'W')}`;
-}
-
-function buildGoogleMapsUrl(lon: number, lat: number): string {
-  return `https://www.google.com/maps?q=${lat},${lon}`;
-}
 
 const EXPORT_GLB_MAX_GRID = 2048;
 const EXPORT_GLB_MIN_RES_M = 0.25;
@@ -224,8 +207,8 @@ export async function runWebGLFallback(
   let panelSnowHandler = async (_mode: SnowModeKey) => {};
   const panel = createViewerPanel({
     tileLabel: opts.tileLabel,
-    locationLabel: buildLocationLabel(lon, lat),
-    googleMapsUrl: buildGoogleMapsUrl(lon, lat),
+    locationLabel: buildTileLocationLabel(lon, lat),
+    googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
     onSnowModeChange: (mode) => {
       void panelSnowHandler(mode);
     },

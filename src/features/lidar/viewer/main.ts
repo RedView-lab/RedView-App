@@ -17,9 +17,12 @@ import {
   densityScaleToPercent,
   percentToDensityScale,
   percentToPointSize,
+  POINT_SIZE_MAX,
+  POINT_SIZE_MIN,
   pointSizeToPercent,
   type SnowModeKey,
 } from './panel/controller';
+import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import {
   buildOctreeInWorker,
   buildRGBA,
@@ -42,24 +45,6 @@ const statsEl = document.getElementById('stats')!;
 
 function setStatus(msg: string, pct?: number) {
   setViewerStatus(statusEl, barFill, msg, pct);
-}
-
-function formatDms(value: number, positiveHemisphere: string, negativeHemisphere: string): string {
-  const absolute = Math.abs(value);
-  const degrees = Math.floor(absolute);
-  const minutesFloat = (absolute - degrees) * 60;
-  const minutes = Math.floor(minutesFloat);
-  const seconds = Math.round((minutesFloat - minutes) * 60);
-  const hemisphere = value >= 0 ? positiveHemisphere : negativeHemisphere;
-  return `${degrees}° ${String(minutes).padStart(2, '0')}′ ${String(seconds).padStart(2, '0')}″ ${hemisphere}`;
-}
-
-function buildLocationLabel(lon: number, lat: number): string {
-  return `${formatDms(lat, 'N', 'S')} · ${formatDms(lon, 'E', 'W')}`;
-}
-
-function buildGoogleMapsUrl(lon: number, lat: number): string {
-  return `https://www.google.com/maps?q=${lat},${lon}`;
 }
 
 function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
@@ -266,8 +251,8 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     let panelSnowHandler = async (_mode: SnowModeKey) => {};
     const panel = createViewerPanel({
       tileLabel: buildPanelTileLabel(xKm, yKm, crs),
-      locationLabel: buildLocationLabel(lon, lat),
-      googleMapsUrl: buildGoogleMapsUrl(lon, lat),
+      locationLabel: buildTileLocationLabel(lon, lat),
+      googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
       pointSizePercent: pointSizeToPercent(renderer.pointSize),
       densityPercent: densityScaleToPercent(lodManager.getUserDensityScale()),
       onPointSizeChange: (percent) => {
@@ -375,7 +360,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       if (!renderer) return;
       if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
       if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
-      renderer.pointSize = Math.max(0.2, Math.min(1.0, renderer.pointSize));
+      renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize));
       if (e.key === 't' || e.key === 'T') renderer.terrainVisible = !renderer.terrainVisible;
       if (e.key === 'l' || e.key === 'L') {
         renderer.lodThreshold = renderer.lodThreshold > 0 ? 0 : Math.max(50, extent * 0.5);

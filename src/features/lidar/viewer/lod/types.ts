@@ -44,8 +44,8 @@ export const FRAME_WINDOW = 8;
 /** Target frame time in ms (60fps) */
 export const TARGET_FRAME_MS = 16.6;
 
-/** Minimum density floor (never remove more than 85% of points) */
-export const MIN_DENSITY = 0.15;
+/** Minimum density floor (slider value 1 = keep 1% of the voxel budget) */
+export const MIN_DENSITY = 0.01;
 
 /** Temporal density blend rate (lerp towards target density each frame) */
 export const DENSITY_BLEND_RATE = 0.3;

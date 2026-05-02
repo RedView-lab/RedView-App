@@ -2,9 +2,9 @@ import { ensureViewerPanel } from './template';
 
 export type SnowModeKey = 'off' | 'cover' | 'thickness';
 
-export const POINT_SIZE_MIN = 0.2;
+export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
-export const DENSITY_SCALE_MIN = 0.15;
+export const DENSITY_SCALE_MIN = 0.01;
 export const DENSITY_SCALE_MAX = 1.0;
 
 interface ViewerPanelOptions {
@@ -33,26 +33,34 @@ function toSliderPercent(value: number): number {
   return clamp(Math.round(value), 1, 100);
 }
 
+function interpolateLog(min: number, max: number, normalized: number): number {
+  return min * Math.pow(max / min, normalized);
+}
+
+function normalizeLog(value: number, min: number, max: number): number {
+  return Math.log(value / min) / Math.log(max / min);
+}
+
 export function pointSizeToPercent(pointSize: number): number {
-  const normalized = (clamp(pointSize, POINT_SIZE_MIN, POINT_SIZE_MAX) - POINT_SIZE_MIN)
-    / (POINT_SIZE_MAX - POINT_SIZE_MIN);
+  const normalized = normalizeLog(
+    clamp(pointSize, POINT_SIZE_MIN, POINT_SIZE_MAX),
+    POINT_SIZE_MIN,
+    POINT_SIZE_MAX,
+  );
   return toSliderPercent(1 + normalized * 99);
 }
 
 export function percentToPointSize(percent: number): number {
   const normalized = (toSliderPercent(percent) - 1) / 99;
-  return POINT_SIZE_MIN + normalized * (POINT_SIZE_MAX - POINT_SIZE_MIN);
+  return interpolateLog(POINT_SIZE_MIN, POINT_SIZE_MAX, normalized);
 }
 
 export function densityScaleToPercent(scale: number): number {
-  const normalized = (clamp(scale, DENSITY_SCALE_MIN, DENSITY_SCALE_MAX) - DENSITY_SCALE_MIN)
-    / (DENSITY_SCALE_MAX - DENSITY_SCALE_MIN);
-  return toSliderPercent(1 + normalized * 99);
+  return toSliderPercent(clamp(scale, DENSITY_SCALE_MIN, DENSITY_SCALE_MAX) * 100);
 }
 
 export function percentToDensityScale(percent: number): number {
-  const normalized = (toSliderPercent(percent) - 1) / 99;
-  return DENSITY_SCALE_MIN + normalized * (DENSITY_SCALE_MAX - DENSITY_SCALE_MIN);
+  return toSliderPercent(percent) / 100;
 }
 
 function queryElement<T extends HTMLElement>(id: string): T | null {
