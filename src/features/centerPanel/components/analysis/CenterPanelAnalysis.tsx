@@ -166,6 +166,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           routePoints,
           routeSource,
           startTime,
+          itinerary,
         ),
         axis2Points: buildSeriesFromPrediction(
           prediction,
@@ -174,6 +175,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           routePoints,
           routeSource,
           startTime,
+          itinerary,
         ),
         altitudePoints: buildSeriesFromPrediction(
           prediction,
@@ -182,6 +184,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           routePoints,
           routeSource,
           startTime,
+          itinerary,
         ),
       });
     }

@@ -86,6 +86,7 @@ export function buildFixedDistanceAverageSeries(
   metric: ChartMetricId,
   xMode: AxisMode,
   startTime?: string | null,
+  projectElapsedHours?: (elapsedHours: number) => number,
 ): ChartPoint[] | null {
   const samples = buildDistanceMetricSamples(prediction, metric);
   if (samples.length < 2) return null;
@@ -106,19 +107,23 @@ export function buildFixedDistanceAverageSeries(
     const startX =
       xMode === 'distance'
         ? startDistanceM / 1000
-        : projectElapsedHoursToX(
-            interpolateElapsedHoursAtDistance(samples, startDistanceM),
-            xMode,
-            startTime,
-          );
+        : (projectElapsedHours
+            ? projectElapsedHours(interpolateElapsedHoursAtDistance(samples, startDistanceM))
+            : projectElapsedHoursToX(
+                interpolateElapsedHoursAtDistance(samples, startDistanceM),
+                xMode,
+                startTime,
+              ));
     const endX =
       xMode === 'distance'
         ? endDistanceM / 1000
-        : projectElapsedHoursToX(
-            interpolateElapsedHoursAtDistance(samples, endDistanceM),
-            xMode,
-            startTime,
-          );
+        : (projectElapsedHours
+            ? projectElapsedHours(interpolateElapsedHoursAtDistance(samples, endDistanceM))
+            : projectElapsedHoursToX(
+                interpolateElapsedHoursAtDistance(samples, endDistanceM),
+                xMode,
+                startTime,
+              ));
 
     if (Number.isFinite(avg) && Number.isFinite(startX) && Number.isFinite(endX) && endX > startX) {
       if (result.length === 0) {

@@ -1,3 +1,5 @@
+import type { PredictionResult } from '@/features/fitPredictor';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/pauseAwareSchedule';
 import type { Itinerary } from '@/features/itineraryPanel';
 import type { ItineraryVisualNode } from '@/features/itineraryPanel/lineage/itineraryLineage';
 
@@ -52,11 +54,14 @@ function itineraryDistanceKm(itinerary: Itinerary): number | undefined {
   return endRow?.distanceKm ?? undefined;
 }
 
-export function buildValues(itinerary: Itinerary): string[] {
+export function buildValues(itinerary: Itinerary, prediction?: PredictionResult | null): string[] {
   const metrics = itinerary.metrics ?? {};
+  const durationSec = prediction
+    ? (buildPauseAwareSchedule(itinerary, prediction)?.totalDurationSeconds ?? metrics.durationSec)
+    : metrics.durationSec;
   return [
     formatDistance(itineraryDistanceKm(itinerary)),
-    formatDuration(metrics.durationSec),
+    formatDuration(durationSec),
     formatAscent(metrics.ascentM),
     formatDescent(metrics.descentM),
     formatPercent(metrics.avgSlopePercent),

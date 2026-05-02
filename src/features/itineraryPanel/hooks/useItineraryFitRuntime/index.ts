@@ -18,6 +18,7 @@ import {
   buildRouteGpxFile,
   hasUsableRouteElevation,
 } from '../../lib/container-prediction';
+import { buildPauseAwareSchedule } from '../../lib/pauseAwareSchedule';
 import { buildFitUploadsSignature } from '../../lib/persisted-fit-files';
 
 import {
@@ -373,7 +374,7 @@ export function useItineraryFitRuntime({
                   pendingFitRecompute: undefined,
                   metrics: {
                     ...curr.metrics,
-                    durationSec: result.total_time_s,
+                    durationSec: buildPauseAwareSchedule(curr, result)?.totalDurationSeconds ?? result.total_time_s,
                   },
                 }
               : curr,

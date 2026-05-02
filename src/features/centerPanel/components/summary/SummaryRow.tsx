@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 
 import { Collapse } from '@/features/itineraryPanel/components/shell';
+import { usePredictionStoreOptional } from '@/features/itineraryPanel';
 import type { ItineraryVisualNode } from '@/features/itineraryPanel/lineage/itineraryLineage';
 
 import {
@@ -49,7 +50,9 @@ export function SummaryRow({
   onOpenMenu,
 }: SummaryRowProps) {
   const { itinerary, depth, startDistanceKm } = node;
-  const values = buildValues(itinerary);
+  const predictionStore = usePredictionStoreOptional();
+  const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+  const values = buildValues(itinerary, prediction);
   const analysisVisible = itinerary.analysisVisible !== false;
   const hasChildren = childCount > 0;
   const isMergeSelected = mergeSelectionOrder != null;
