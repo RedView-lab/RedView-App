@@ -493,7 +493,7 @@
   width: 100%;
   min-width: 0;
   min-height: 32px;
-  padding: 4px 6px 4px 4px;
+  padding: 4px var(--rvi-tl-card-pad-right) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
@@ -525,24 +525,11 @@
   min-width: 0;
 }
 
-.rvi-tl-schedule__pause-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--rvi-tl-icon-col);
-  height: 24px;
-}
-
-.rvi-tl-schedule__pause-name {
-  grid-column: 2 / 4;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
-  font-variant-numeric: tabular-nums;
+.rvi-tl-schedule__pause-chip--standalone {
+  grid-column: 1 / 4;
+  width: auto;
+  max-width: 100%;
+  justify-self: start;
 }
 
 .rvi-tl-schedule__pause-metric--from-start {

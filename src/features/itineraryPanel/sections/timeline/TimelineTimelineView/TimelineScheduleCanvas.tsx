@@ -419,11 +419,14 @@ export function TimelineScheduleCanvas({
                 onPointerDown={(event) => handlePausePointerDown(event, pause)}
               >
                 <div className="rvi-tl-schedule__pause-main">
-                  <span className="rvi-tl-schedule__pause-icon" aria-hidden>
-                    <KindBadge kind="pause" size={24} />
-                  </span>
-                  <span className="rvi-tl-schedule__pause-name" title={formatPauseDuration(pause.durationMin)}>
-                    {formatPauseDuration(pause.durationMin)}
+                  <span
+                    className="rvi-tl-schedule__pause-chip rvi-tl-schedule__pause-chip--standalone"
+                    title={formatPauseDuration(pause.durationMin)}
+                  >
+                    <span className="rvi-tl-schedule__pause-chip-icon" aria-hidden>
+                      <KindBadge kind="pause" size={24} />
+                    </span>
+                    <span>{formatPauseDuration(pause.durationMin)}</span>
                   </span>
                   <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__pause-metric--from-start">
                     {formatDistanceLabel(pause.distanceKm)}
