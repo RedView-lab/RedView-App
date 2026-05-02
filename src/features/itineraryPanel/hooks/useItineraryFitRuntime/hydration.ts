@@ -9,6 +9,11 @@ import {
 } from '../../lib/schedule';
 import type { ItineraryProject } from '../../types';
 
+type FitHydrationItinerary = Pick<
+  ItineraryProject['itineraries'][number],
+  'fitUploads' | 'prediction'
+>;
+
 export interface HydratedFitRuntimeData {
   fitFiles: File[];
   fitFileNames: string[];
@@ -17,7 +22,7 @@ export interface HydratedFitRuntimeData {
 }
 
 export async function hydratePersistedFitRuntime(
-  itinerary: ItineraryProject['itineraries'][number],
+  itinerary: FitHydrationItinerary,
 ): Promise<HydratedFitRuntimeData> {
   const persistedUploads = itinerary.fitUploads ?? [];
   const persistedUploadSignature = buildFitUploadsSignature(persistedUploads);

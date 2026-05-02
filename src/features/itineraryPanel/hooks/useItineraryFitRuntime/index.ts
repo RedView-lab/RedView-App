@@ -49,6 +49,7 @@ export function useItineraryFitRuntime({
     Record<string, ItineraryFitRuntime>
   >({});
   const fitRuntimeRef = useRef(fitRuntimeByItineraryId);
+  const failedHydrationSignatureRef = useRef<Record<string, string>>({});
   fitRuntimeRef.current = fitRuntimeByItineraryId;
 
   useEffect(() => {
@@ -77,6 +78,20 @@ export function useItineraryFitRuntime({
       last?.distanceM ?? '',
     ].join('|');
   }, [active?.gpxRoute?.points]);
+  const activePersistedUploadSignature = active
+    ? buildFitUploadsSignature(active.fitUploads ?? [])
+    : '';
+  const activePrediction = active?.prediction ?? null;
+  const activeFitHydrationInput = useMemo(
+    () =>
+      active
+        ? {
+            fitUploads: active.fitUploads ?? [],
+            prediction: activePrediction,
+          }
+        : null,
+    [active?.id, activePersistedUploadSignature, activePrediction],
+  );
 
   const uploadFitLabel = useMemo(
     () => buildUploadFitLabel(activeFitRuntime),
@@ -111,18 +126,32 @@ export function useItineraryFitRuntime({
   );
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !activeFitHydrationInput) return;
 
-    const persistedUploads = active.fitUploads ?? [];
-    const persistedUploadSignature = buildFitUploadsSignature(persistedUploads);
+    const itineraryId = active.id;
+    const persistedUploadSignature = activePersistedUploadSignature;
+    const currentRuntime =
+      fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+
+    const alreadyFailedSameSignature =
+      currentRuntime.fitFiles.length === 0
+      && currentRuntime.persistedUploadSignature === persistedUploadSignature
+      && failedHydrationSignatureRef.current[itineraryId] === persistedUploadSignature;
+
+    if (alreadyFailedSameSignature) {
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {
       try {
-        const hydrated = await hydratePersistedFitRuntime(active);
+        const hydrated = await hydratePersistedFitRuntime(activeFitHydrationInput);
         if (cancelled) return;
 
-        updateFitRuntime(active.id, (current) => {
+        delete failedHydrationSignatureRef.current[itineraryId];
+
+        updateFitRuntime(itineraryId, (current) => {
           const shouldReuseLoadedFiles =
             persistedUploadSignature.length > 0
             && current.persistedUploadSignature === persistedUploadSignature
@@ -165,12 +194,16 @@ export function useItineraryFitRuntime({
         });
       } catch (error) {
         if (cancelled) return;
+
+        failedHydrationSignatureRef.current[itineraryId] =
+          persistedUploadSignature;
+
         console.error('[fit-predictor] failed to hydrate persisted FIT uploads', error);
-        updateFitRuntime(active.id, (current) => {
+        updateFitRuntime(itineraryId, (current) => {
           if (current.fitFiles.length > 0) {
             return {
               ...current,
-              predictionResult: active.prediction ?? null,
+              predictionResult: activePrediction,
               persistedUploadSignature,
             };
           }
@@ -179,7 +212,7 @@ export function useItineraryFitRuntime({
             ...current,
             fitFiles: [],
             fitFileNames: [],
-            predictionResult: active.prediction ?? null,
+            predictionResult: activePrediction,
             progress: [],
             status: 'error',
             error:
@@ -196,7 +229,7 @@ export function useItineraryFitRuntime({
     return () => {
       cancelled = true;
     };
-  }, [active, projectId, updateFitRuntime]);
+  }, [active?.id, activeFitHydrationInput, activePersistedUploadSignature, activePrediction, updateFitRuntime]);
 
   const handleUploadFitRequest = useCallback(() => {
     if (!active) return;
