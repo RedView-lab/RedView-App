@@ -19,6 +19,8 @@ import {
   TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
   TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from './constants';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
+import type { PoiCategory } from '../../../types';
 import type {
   KmMarker,
   StartReference,
@@ -54,6 +56,9 @@ interface TimelineScheduleCanvasProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePauseScheduled?: (id: string, scheduledElapsedSeconds: number) => void;
+  onChangePauseDuration?: (id: string, durationMin: number) => void;
+  onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
+  onChangeFavoritePoiPauseDuration?: (category: PoiCategory, durationMin: number) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
   resolveColumnPlacement: (dayKey: string | null) => CSSProperties;
@@ -90,6 +95,9 @@ export function TimelineScheduleCanvas({
   onToggleSelect,
   onToggleVisibility,
   onMovePauseScheduled,
+  onChangePauseDuration,
+  onChangeIntervalPauseDuration,
+  onChangeFavoritePoiPauseDuration,
   onToggleFavorite,
   onRemove,
   resolveColumnPlacement,
@@ -197,6 +205,38 @@ export function TimelineScheduleCanvas({
     });
   };
 
+  const handleFavoritePoiPauseDurationClick = (
+    poiCategory: PoiCategory | undefined,
+    currentDurationMin: number,
+    event: ReactMouseEvent<HTMLSpanElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!poiCategory || !onChangeFavoritePoiPauseDuration) return;
+    const nextDurationMin = requestPauseDurationMin(currentDurationMin);
+    if (nextDurationMin === null) return;
+    onChangeFavoritePoiPauseDuration(poiCategory, nextDurationMin);
+  };
+
+  const handleStandalonePauseDurationClick = (
+    pause: TimelineStandalonePause,
+    event: ReactMouseEvent<HTMLSpanElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const nextDurationMin = requestPauseDurationMin(pause.durationMin);
+    if (nextDurationMin === null) return;
+
+    if (pause.source === 'manual') {
+      onChangePauseDuration?.(pause.id, nextDurationMin);
+      return;
+    }
+
+    const pauseIntervalId = resolveIntervalPauseId(pause.id);
+    if (!pauseIntervalId) return;
+    onChangeIntervalPauseDuration?.(pauseIntervalId, nextDurationMin);
+  };
+
   return (
     <div ref={viewportRef} className="rvi-tl-schedule__viewport">
       <div className="rvi-tl-schedule__times" aria-hidden>
@@ -282,6 +322,9 @@ export function TimelineScheduleCanvas({
           const visible = event.item.visible !== false;
           const selected = selectedIds?.has(event.item.id) ?? false;
           const hasAttachedPauses = event.attachedPauses.length > 0;
+          const canEditFavoritePoiPause = Boolean(
+            event.item.poiCategory && onChangeFavoritePoiPauseDuration,
+          );
           const isFavoriteLocked = event.item.kind === 'poi' && hasAttachedPauses && event.item.favorite;
           const title =
             event.item.kind === 'pause' && event.item.durationMin
@@ -320,7 +363,26 @@ export function TimelineScheduleCanvas({
                       {event.attachedPauses.map((pause) => (
                         <span
                           key={pause.id}
-                          className={`rvi-tl-schedule__pause-chip${pause.visible ? ' is-visible' : ''}`}
+                          className={[
+                            'rvi-tl-schedule__pause-chip',
+                            pause.visible ? 'is-visible' : '',
+                            canEditFavoritePoiPause ? 'is-editable' : '',
+                          ].filter(Boolean).join(' ')}
+                          style={{
+                            minHeight: pause.heightPx,
+                            height: pause.heightPx,
+                          }}
+                          onPointerDown={canEditFavoritePoiPause ? (pointerEvent) => {
+                              pointerEvent.stopPropagation();
+                          } : undefined}
+                          onClick={canEditFavoritePoiPause ? (clickEvent) => handleFavoritePoiPauseDurationClick(
+                            event.item.poiCategory,
+                            pause.durationMin,
+                            clickEvent,
+                          ) : undefined}
+                          title={canEditFavoritePoiPause
+                            ? `${formatPauseDuration(pause.durationMin)} · cliquer pour modifier`
+                            : formatPauseDuration(pause.durationMin)}
                         >
                           <span className="rvi-tl-schedule__pause-chip-icon" aria-hidden>
                             <KindBadge kind="pause" size={24} />
@@ -394,6 +456,10 @@ export function TimelineScheduleCanvas({
             ? dragState.dayKey
             : standalonePauseDayKeyById.get(pause.id) ?? pause.dayKey ?? null;
           const pauseTopPx = dragging ? dragState.topPx : pause.topPx;
+          const canEditStandalonePause = (
+            (pause.source === 'manual' && onChangePauseDuration)
+            || (pause.source === 'interval' && onChangeIntervalPauseDuration)
+          );
 
           return (
             <div
@@ -423,8 +489,18 @@ export function TimelineScheduleCanvas({
                     <KindBadge kind="pause" size={24} />
                   </span>
                   <span
-                    className="rvi-tl-schedule__pause-chip rvi-tl-schedule__pause-chip--standalone"
-                    title={formatPauseDuration(pause.durationMin)}
+                    className={[
+                      'rvi-tl-schedule__pause-chip',
+                      'rvi-tl-schedule__pause-chip--standalone',
+                      canEditStandalonePause ? 'is-editable' : '',
+                    ].filter(Boolean).join(' ')}
+                    title={canEditStandalonePause
+                      ? `${formatPauseDuration(pause.durationMin)} · cliquer pour modifier`
+                      : formatPauseDuration(pause.durationMin)}
+                    onPointerDown={canEditStandalonePause ? (pointerEvent) => {
+                      pointerEvent.stopPropagation();
+                    } : undefined}
+                    onClick={canEditStandalonePause ? (clickEvent) => handleStandalonePauseDurationClick(pause, clickEvent) : undefined}
                   >
                     <span>{formatPauseDuration(pause.durationMin)}</span>
                   </span>
@@ -537,4 +613,21 @@ function toDayKey(date: Date): string {
 
 function stopEventPropagation(event: ReactMouseEvent<HTMLButtonElement>) {
   event.stopPropagation();
+}
+
+function requestPauseDurationMin(currentDurationMin: number): number | null {
+  if (typeof window === 'undefined' || typeof window.prompt !== 'function') return null;
+
+  const rawValue = window.prompt(
+    'Durée de la pause (ex: 15min, 1h30)',
+    formatPauseDurationInput(currentDurationMin),
+  );
+  if (rawValue === null) return null;
+  return parsePauseDurationInput(rawValue, currentDurationMin);
+}
+
+function resolveIntervalPauseId(pauseId: string): string | null {
+  const separatorIndex = pauseId.indexOf('::');
+  if (separatorIndex <= 0) return null;
+  return pauseId.slice(0, separatorIndex);
 }

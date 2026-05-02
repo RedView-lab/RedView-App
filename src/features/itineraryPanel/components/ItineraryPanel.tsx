@@ -10,7 +10,7 @@ import {
   RouteStatusBanners,
 } from './shell';
 import { TimelinePanel } from '../sections/timeline';
-import type { ItineraryPanelProps, PanelMode } from '../types';
+import type { ItineraryPanelProps, PanelMode, PoiCategory } from '../types';
 import '../styles/index.css';
 
 function resolveVisiblePanelMode(mode: PanelMode): Exclude<PanelMode, 'nutrition'> {
@@ -65,6 +65,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onAddTimelineItem,
     onToggleTimelineItem,
     onMoveTimelinePause,
+    onChangeTimelinePauseDuration,
     onRemoveTimelineItem,
     onFavoriteTimelineItem,
     onOpenTimelineSettings,
@@ -116,6 +117,25 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onAdd: onAddTimelineItem,
         onToggleItem: onToggleTimelineItem,
         onMovePause: onMoveTimelinePause,
+        onChangePauseDuration: onChangeTimelinePauseDuration,
+        onChangeIntervalPauseDuration: (pauseIntervalId: string, durationMin: number) => {
+          if (!active || !onChangeRhythm) return;
+          onChangeRhythm(
+            'pauseIntervals',
+            active.rhythm.pauseIntervals.map((row) => (
+              row.id === pauseIntervalId
+                ? { ...row, durationMin: Math.max(0, Math.round(durationMin)) }
+                : row
+            )),
+          );
+        },
+        onChangeFavoritePoiPauseDuration: (category: PoiCategory, durationMin: number) => {
+          if (!active || !onChangeRhythm) return;
+          onChangeRhythm('poiPauseDurations', {
+            ...active.rhythm.poiPauseDurations,
+            [category]: Math.max(0, Math.round(durationMin)),
+          });
+        },
         onFavoriteItem: onFavoriteTimelineItem,
         onRemoveItem: onRemoveTimelineItem,
         onSelectPlace: onSelectTimelinePlace,

@@ -541,6 +541,7 @@ export interface ItineraryPanelProps {
   onAddTimelineItem?: (kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => void;
   onToggleTimelineItem?: (id: string, visible: boolean) => void;
   onMoveTimelinePause?: (id: string, distanceKm: number) => void;
+  onChangeTimelinePauseDuration?: (id: string, durationMin: number) => void;
   onRemoveTimelineItem?: (id: string) => void;
   onFavoriteTimelineItem?: (id: string, favorite: boolean) => void;
   onSearchTimeline?: () => void;

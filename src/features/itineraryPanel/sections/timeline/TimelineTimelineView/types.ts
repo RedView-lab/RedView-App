@@ -1,5 +1,5 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import type { RhythmState, TimelineItem, TimelineRailConfig } from '../../../types';
+import type { PoiCategory, RhythmState, TimelineItem, TimelineRailConfig } from '../../../types';
 
 export interface TimelineTimelineViewProps {
   items: TimelineItem[];
@@ -12,6 +12,9 @@ export interface TimelineTimelineViewProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
+  onChangePauseDuration?: (id: string, durationMin: number) => void;
+  onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
+  onChangeFavoritePoiPauseDuration?: (category: PoiCategory, durationMin: number) => void;
   onRegisterPauseInsertionResolver?: (resolver: (() => number | null) | null) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;

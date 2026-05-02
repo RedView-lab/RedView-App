@@ -47,6 +47,9 @@ export function TimelineTimelineView({
   onToggleSelect,
   onToggleVisibility,
   onMovePause,
+  onChangePauseDuration,
+  onChangeIntervalPauseDuration,
+  onChangeFavoritePoiPauseDuration,
   onRegisterPauseInsertionResolver,
   onToggleFavorite,
   onRemove,
@@ -502,6 +505,9 @@ export function TimelineTimelineView({
         onToggleSelect={onToggleSelect}
         onToggleVisibility={onToggleVisibility}
         onMovePauseScheduled={handleMovePauseScheduled}
+        onChangePauseDuration={onChangePauseDuration}
+        onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
+        onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
         onToggleFavorite={onToggleFavorite}
         onRemove={onRemove}
         resolveColumnPlacement={resolveColumnPlacement}

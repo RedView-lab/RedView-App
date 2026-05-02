@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type {
+  PoiCategory,
   RhythmState,
   TimelineAddItemKind,
   TimelineAddItemOptions,
@@ -51,6 +52,9 @@ interface TimelinePanelProps {
 
   onToggleItem?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
+  onChangePauseDuration?: (id: string, durationMin: number) => void;
+  onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
+  onChangeFavoritePoiPauseDuration?: (category: PoiCategory, durationMin: number) => void;
   onFavoriteItem?: (id: string, favorite: boolean) => void;
   onRemoveItem?: (id: string) => void;
   onSelectPlace?: (
@@ -75,6 +79,9 @@ export function TimelinePanel({
   onAdd,
   onToggleItem,
   onMovePause,
+  onChangePauseDuration,
+  onChangeIntervalPauseDuration,
+  onChangeFavoritePoiPauseDuration,
   onFavoriteItem,
   onRemoveItem,
   onSelectPlace,
@@ -262,6 +269,9 @@ export function TimelinePanel({
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}
               onMovePause={onMovePause}
+              onChangePauseDuration={onChangePauseDuration}
+              onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
+              onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
               onRegisterPauseInsertionResolver={(resolver) => {
                 pauseInsertionResolverRef.current = resolver;
               }}

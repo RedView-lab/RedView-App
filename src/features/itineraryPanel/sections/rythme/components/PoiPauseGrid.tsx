@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PanelCheckbox } from '../../../components/controls';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
 import type { PoiCategory } from '../../../types';
 
 /**
@@ -82,7 +83,7 @@ function PoiPauseCell({
   onToggle,
   onValueChange,
 }: CellProps) {
-  const displayed = checked && value !== null ? formatDuration(value) : '-';
+  const displayed = checked && value !== null ? formatPauseDurationInput(value) : '-';
   const [draft, setDraft] = useState(displayed);
 
   useEffect(() => {
@@ -94,9 +95,9 @@ function PoiPauseCell({
       setDraft('-');
       return;
     }
-    const nextMinutes = parseDurationToMinutes(draft, value ?? 15);
+    const nextMinutes = parsePauseDurationInput(draft, value ?? 15);
     onValueChange(nextMinutes);
-    setDraft(formatDuration(nextMinutes));
+    setDraft(formatPauseDurationInput(nextMinutes));
   };
 
   return (
@@ -143,28 +144,3 @@ function pairs<T>(list: readonly T[]): T[][] {
   return out;
 }
 
-/** "240" → "4h", "15" → "15min", "210" → "3h30". */
-function formatDuration(min: number): string {
-  if (!Number.isFinite(min) || min <= 0) return '-';
-  if (min >= 60) {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
-  }
-  return `${min}min`;
-}
-
-/** Accepts "5", "5min", "4h", "1h30", "210" → minutes. Falls back to prev. */
-function parseDurationToMinutes(raw: string, prev: number): number {
-  const text = raw.trim().toLowerCase();
-  if (!text || text === '-') return prev;
-  const hMatch = text.match(/^(\d+)\s*h\s*(\d{0,2})$/);
-  if (hMatch) {
-    const h = parseInt(hMatch[1], 10);
-    const m = hMatch[2] ? parseInt(hMatch[2], 10) : 0;
-    return h * 60 + m;
-  }
-  const minMatch = text.match(/^(\d+)\s*(min|m)?$/);
-  if (minMatch) return parseInt(minMatch[1], 10);
-  return prev;
-}

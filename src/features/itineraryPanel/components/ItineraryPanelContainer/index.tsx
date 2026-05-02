@@ -520,6 +520,13 @@ export function ItineraryPanelContainer({
           moveTimelinePauseItem(it.timeline, id, distanceKm);
         })
       }
+      onChangeTimelinePauseDuration={(id, durationMin) =>
+        updateActive((it) => {
+          const row = it.timeline.find((item) => item.id === id && item.kind === 'pause');
+          if (!row) return;
+          row.durationMin = Math.max(0, Math.round(durationMin));
+        })
+      }
       onRemoveTimelineItem={(id) =>
         updateActive((it) => {
           const removedIndex = it.timeline.findIndex((item) => item.id === id);

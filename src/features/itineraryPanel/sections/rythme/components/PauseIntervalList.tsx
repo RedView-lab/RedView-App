@@ -1,4 +1,5 @@
 import { IconMinus } from '../../../components/icons';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
 import type { PauseIntervalRow } from '../../../types';
 
 interface PauseIntervalListProps {
@@ -41,10 +42,10 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
                 className="rvi-pause-chip__native"
                 type="text"
                 inputMode="numeric"
-                value={formatDuration(row.durationMin)}
+                value={formatPauseDurationInput(row.durationMin)}
                 onChange={(e) =>
                   update(row.id, {
-                    durationMin: parseDurationToMinutes(
+                    durationMin: parsePauseDurationInput(
                       e.target.value,
                       row.durationMin,
                     ),
@@ -62,10 +63,10 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
                 className="rvi-pause-chip__native"
                 type="text"
                 inputMode="numeric"
-                value={formatDuration(row.intervalMin)}
+                value={formatPauseDurationInput(row.intervalMin)}
                 onChange={(e) =>
                   update(row.id, {
-                    intervalMin: parseDurationToMinutes(
+                    intervalMin: parsePauseDurationInput(
                       e.target.value,
                       row.intervalMin,
                     ),
@@ -90,28 +91,3 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
   );
 }
 
-/** "210" → "3h30", "5" → "5min". */
-function formatDuration(min: number): string {
-  if (!Number.isFinite(min) || min <= 0) return '';
-  if (min >= 60) {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`;
-  }
-  return `${min}min`;
-}
-
-/** Accepts "5", "5min", "1h30", "210" → minutes. Falls back to previous. */
-function parseDurationToMinutes(raw: string, prev: number): number {
-  const text = raw.trim().toLowerCase();
-  if (!text) return 0;
-  const hMatch = text.match(/^(\d+)\s*h\s*(\d{0,2})$/);
-  if (hMatch) {
-    const h = parseInt(hMatch[1], 10);
-    const m = hMatch[2] ? parseInt(hMatch[2], 10) : 0;
-    return h * 60 + m;
-  }
-  const minMatch = text.match(/^(\d+)\s*(min|m)?$/);
-  if (minMatch) return parseInt(minMatch[1], 10);
-  return prev;
-}
