@@ -35,6 +35,9 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 const QUALITY_TIER_SCALES = [1.0, 0.72, 0.48, 0.28] as const;
+const IDLE_DENSITY_BUCKETS = 20;
+const ACTIVE_DENSITY_BUCKETS = 12;
+const STRESSED_DENSITY_BUCKETS = 8;
 
 export class LodManager {
   private octree: FlatOctree | null = null;
@@ -502,6 +505,19 @@ export class LodManager {
     return Math.max(1, Math.floor(this.pointBudget * this.userDensityScale * this.sceneBudgetScale));
   }
 
+  private quantizeLeafDensity(density: number): number {
+    const clamped = Math.max(MIN_DENSITY, Math.min(1.0, density));
+    if (clamped >= 0.995) return 1.0;
+
+    const bucketCount = this.framePressure > 1.16 || this.motionPressure > 0.55
+      ? STRESSED_DENSITY_BUCKETS
+      : this.framePressure > 1.04 || this.motionPressure > 0.18
+        ? ACTIVE_DENSITY_BUCKETS
+        : IDLE_DENSITY_BUCKETS;
+
+    return Math.max(MIN_DENSITY, Math.round(clamped * bucketCount) / bucketCount);
+  }
+
   // ── Temporal density smoothing ──
 
   private applyTemporalSmoothing(): void {
@@ -519,6 +535,10 @@ export class LodManager {
         // Lerp towards target density for smooth transitions
         const target = node.density;
         node.density = prev + (target - prev) * DENSITY_BLEND_RATE;
+      }
+
+      if (!node.isVoxel) {
+        node.density = this.quantizeLeafDensity(node.density);
       }
 
       swap.set(key, node.density);

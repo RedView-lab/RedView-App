@@ -70,13 +70,14 @@ export function drawRange(
   offset: number,
   count: number,
   chunkState: { index: number },
-): void {
+): number {
   let remaining = count;
   let currentOffset = offset;
+  let drawCalls = 0;
 
   while (remaining > 0) {
     const chunkIndex = findChunkIndex(chunks, currentOffset, chunkState.index);
-    if (chunkIndex < 0) return;
+    if (chunkIndex < 0) return drawCalls;
 
     const chunk = chunks[chunkIndex];
     if (chunkState.index !== chunkIndex) {
@@ -87,17 +88,20 @@ export function drawRange(
 
     const localOffset = currentOffset - chunk.pointOffset;
     if (localOffset < 0 || localOffset >= chunk.count) {
-      return;
+      return drawCalls;
     }
     const drawCount = Math.min(remaining, chunk.count - localOffset);
     if (drawCount <= 0) {
-      return;
+      return drawCalls;
     }
     pass.draw(4, drawCount, 0, localOffset);
+    drawCalls += 1;
 
     currentOffset += drawCount;
     remaining -= drawCount;
   }
+
+  return drawCalls;
 }
 
 function findChunkIndex(chunks: PointChunkBuffers[], offset: number, hint: number): number {

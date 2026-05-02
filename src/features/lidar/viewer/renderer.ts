@@ -75,6 +75,9 @@ export class LidarRenderer {
   platform: PlatformProfile | null = null;
   private gpuDrivenDensitySupported = false;
   private gpuDrivenDensityActive = false;
+  private lastLeafBatchCount = 0;
+  private lastVoxelBatchCount = 0;
+  private lastDrawCallCount = 0;
 
   async init(canvas: HTMLCanvasElement): Promise<void> {
     if (!navigator.gpu) throw new Error('WebGPU non supporté');
@@ -299,6 +302,15 @@ export class LidarRenderer {
     return this.pointChunkCapacity;
   }
 
+  getLastRenderStats(): { leafBatches: number; voxelBatches: number; drawCalls: number; gpuDrivenDensity: boolean } {
+    return {
+      leafBatches: this.lastLeafBatchCount,
+      voxelBatches: this.lastVoxelBatchCount,
+      drawCalls: this.lastDrawCallCount,
+      gpuDrivenDensity: this.gpuDrivenDensityActive,
+    };
+  }
+
   private rebuildBindGroups() {
     this.pointBindGroup = this.device.createBindGroup({
       layout: this.pointBindGroupLayout,
@@ -412,6 +424,9 @@ export class LidarRenderer {
 
     const colorView = this.context.getCurrentTexture().createView();
     const effectiveVoxelSize = voxelPointSize ?? this.pointSize;
+    this.lastLeafBatchCount = 0;
+    this.lastVoxelBatchCount = 0;
+    this.lastDrawCallCount = 0;
 
     if (effectiveVoxelSize !== this.pointSize) {
       this._tempFloat[0] = effectiveVoxelSize;
@@ -446,6 +461,7 @@ export class LidarRenderer {
       pass.setVertexBuffer(1, this.terrainMesh.colBuf);
       pass.setIndexBuffer(this.terrainMesh.idxBuf, 'uint32');
       pass.drawIndexed(this.terrainMesh.count);
+      this.lastDrawCallCount += 1;
     }
 
     if (this.previewMesh) {
@@ -455,6 +471,7 @@ export class LidarRenderer {
       pass.setVertexBuffer(1, this.previewMesh.colBuf);
       pass.setIndexBuffer(this.previewMesh.idxBuf, 'uint32');
       pass.drawIndexed(this.previewMesh.count);
+      this.lastDrawCallCount += 1;
     }
 
     pass.setPipeline(this.pipeline);
@@ -518,11 +535,14 @@ export class LidarRenderer {
     let batchCount = 0;       // instances submitted to draw
     let batchSrcCount = 0;    // points consumed in source buffer (full count)
     let batchDensity = 1.0;
+    let emittedBatches = 0;
+    let emittedDrawCalls = 0;
 
     const flushBatch = () => {
       if (batchStart < 0) return;
       if (useGpuDrivenDensity) this.setDensityUniform(camBuffer, batchDensity, isVoxel);
-      drawRange(pass, chunks, batchStart, batchCount, chunkState);
+      emittedDrawCalls += drawRange(pass, chunks, batchStart, batchCount, chunkState);
+      emittedBatches += 1;
     };
 
     for (let i = 0; i < nodes.length; i++) {
@@ -559,6 +579,13 @@ export class LidarRenderer {
       }
     }
     flushBatch();
+
+    this.lastDrawCallCount += emittedDrawCalls;
+    if (isVoxel) {
+      this.lastVoxelBatchCount = emittedBatches;
+      return;
+    }
+    this.lastLeafBatchCount = emittedBatches;
   }
 
   private setDensityUniform(camBuffer: GPUBuffer, density: number, isVoxel: boolean): void {

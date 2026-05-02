@@ -434,12 +434,14 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       renderer.renderLOD(lodManager.getVisibleNodes(), voxelSize);
 
       const s = lodManager.stats;
+      const renderStats = renderer.getLastRenderStats();
       const gpu = renderer.platform?.isApple ? ' [Apple]' : '';
       if (showLodStats) {
         statsEl.textContent =
           `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
           ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
           ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
+          ` · draws ${renderStats.drawCalls} · batches ${renderStats.leafBatches + renderStats.voxelBatches}${renderStats.gpuDrivenDensity ? ' gpu' : ''}` +
           ` · qual ${(s.qualityScale * 100).toFixed(0)}% · move ${(s.motionPressure * 100).toFixed(0)}%` +
           ` · voxel ${renderer.pointSize.toFixed(2)}m` +
           ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
