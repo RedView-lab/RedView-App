@@ -3,6 +3,7 @@ import {
   DAY_WINDOW_DAYS,
   DEFAULT_START_MINUTES,
   MIN_RENDER_DURATION_MIN,
+  MINUTES_PER_DAY,
   WEEKDAY_SHORT,
 } from '../constants';
 import type { StartReference } from '../types';

@@ -73,7 +73,6 @@ interface PauseDragState {
 export function TimelineScheduleCanvas({
   viewportRef,
   hourMarks,
-  hourRowHeightPx,
   kmMarkers,
   canvasStyle,
   displayDays,
@@ -99,10 +98,6 @@ export function TimelineScheduleCanvas({
 }: TimelineScheduleCanvasProps) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [dragState, setDragState] = useState<PauseDragState | null>(null);
-  const dayByKey = useMemo(
-    () => new Map(displayDays.map((day) => [toDayKey(day), day])),
-    [displayDays],
-  );
   const hourMarkSegments = useMemo(
     () => hourMarks.slice(0, -1).map((markMinute, index) => ({
       key: `${markMinute}-${hourMarks[index + 1]}`,
