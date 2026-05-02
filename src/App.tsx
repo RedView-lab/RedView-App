@@ -59,6 +59,10 @@ type CachedSubscriptionSnapshot = {
   cachedAt: number
 }
 
+type BootstrapSession = { user: { id: string; email?: string } } | null
+
+let initialSessionBootstrapPromise: Promise<BootstrapSession> | null = null
+
 function getSubscriptionCacheKey(userId: string): string {
   return `${SUBSCRIPTION_CACHE_KEY_PREFIX}${userId}`
 }
@@ -107,6 +111,49 @@ function writeCachedSubscription(userId: string, isSubscribed: boolean): void {
   }
 }
 
+function resolveInitialSupabaseSession(): Promise<BootstrapSession> {
+  if (!initialSessionBootstrapPromise) {
+    initialSessionBootstrapPromise = (async () => {
+      const hash = window.location.hash.substring(1)
+      const params = new URLSearchParams(hash)
+      const accessToken = params.get('access_token')
+      const refreshToken = params.get('refresh_token')
+      const storedSession = readStoredSupabaseSession()
+
+      if (accessToken && refreshToken) {
+        window.history.replaceState(null, '', window.location.pathname)
+        const { data, error } = await awaitSupabaseAuth(
+          supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          }),
+          'supabase.auth.setSession',
+        )
+        if (error) throw error
+        return data.session
+      }
+
+      if (!storedSession) {
+        return null
+      }
+
+      try {
+        const { data, error } = await awaitSupabaseAuth(
+          supabase.auth.getSession(),
+          'supabase.auth.getSession',
+        )
+        if (error) throw error
+        return data.session ?? storedSession
+      } catch (warmupError) {
+        console.warn('[app] supabase.auth.getSession() warmup failed', warmupError)
+        return storedSession
+      }
+    })()
+  }
+
+  return initialSessionBootstrapPromise
+}
+
 function App() {
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredSupabaseSession())
   const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
@@ -127,54 +174,9 @@ function App() {
     let authBootstrapSettled = false
 
     const resolveInitialSession = async () => {
-      const hash = window.location.hash.substring(1)
-      const params = new URLSearchParams(hash)
-      const accessToken = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
-      const storedSession = readStoredSupabaseSession()
-
       try {
-        if (accessToken && refreshToken) {
-          // Clear hash from the URL immediately so refresh spam cannot re-process stale tokens.
-          window.history.replaceState(null, '', window.location.pathname)
-          const { data, error } = await awaitSupabaseAuth(
-            supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            }),
-            'supabase.auth.setSession',
-          )
-          if (error) throw error
-          if (!cancelled) setSession(data.session)
-          return
-        }
-
-        if (!storedSession) {
-          if (!cancelled) setSession(null)
-          return
-        }
-
-        // Optimistic UI: surface the stored session immediately so the dashboard can mount.
-        if (!cancelled) setSession(storedSession)
-
-        // IMPORTANT: pre-warm the supabase-js auth client. Without this the very first
-        // authenticated query (e.g. `from('user_subscription_status')`) is the one that
-        // triggers `_initialize()` + a possible refresh token roundtrip, which on a cold
-        // tab routinely blows past the subscription bootstrap timeout. `getSession()` waits
-        // on the LockManager for any in-flight refresh and returns a usable token, so all
-        // subsequent PostgREST calls run against an already-initialised client.
-        try {
-          const { data, error } = await awaitSupabaseAuth(
-            supabase.auth.getSession(),
-            'supabase.auth.getSession',
-          )
-          if (error) throw error
-          if (!cancelled && data.session) setSession(data.session)
-        } catch (warmupError) {
-          // Non-fatal: the subscription bootstrap below will retry via refreshSession() if
-          // it fails. We just log and let the rest of the bootstrap proceed.
-          console.warn('[app] supabase.auth.getSession() warmup failed', warmupError)
-        }
+        const nextSession = await resolveInitialSupabaseSession()
+        if (!cancelled) setSession(nextSession)
       } catch (error) {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
         if (!cancelled && !hasStoredSupabaseSession()) setSession(null)
