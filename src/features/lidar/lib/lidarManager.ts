@@ -4,6 +4,7 @@ import type {
 import { wgs84ToTileCoord, toWgs84, buildTileFileName } from './coordConvert';
 import { downloadTile } from './downloader';
 import { deleteTile, listCachedTiles, getStorageUsage } from './storage';
+import { buildViewerUrl } from './viewerUrl';
 
 export class LidarManager {
   private listeners: LidarEventCallback[] = [];
@@ -94,7 +95,7 @@ export class LidarManager {
   }
 
   openViewer(coord: TileCoord): void {
-    const url = `/viewer.html?x=${coord.xKm}&y=${coord.yKm}&crs=${coord.projection}&alt=${coord.altRef}`;
+    const url = buildViewerUrl(coord);
     window.open(url, '_blank');
   }
 

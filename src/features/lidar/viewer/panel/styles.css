@@ -293,33 +293,109 @@
 
 .viewer-panel__select-wrap {
   position: relative;
+  min-width: 146px;
 }
 
-.viewer-panel__select {
-  appearance: none;
-  min-width: 172px;
-  padding: 7px 34px 7px 10px;
-  border: 0;
+.viewer-panel__select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 8px 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(36, 36, 36, 0.98);
   color: #fff;
   font-size: 14px;
   font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 
-.viewer-panel__select:disabled {
+.viewer-panel__select-trigger:hover:not(:disabled) {
+  background: rgba(44, 44, 44, 0.98);
+}
+
+.viewer-panel__select-trigger:disabled {
   opacity: 0.45;
+  cursor: default;
 }
 
 .viewer-panel__select-chevron {
-  position: absolute;
-  top: 50%;
-  right: 10px;
   width: 16px;
   height: 16px;
   color: rgba(255, 255, 255, 0.72);
-  transform: translateY(-50%);
-  pointer-events: none;
+  flex: 0 0 auto;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.viewer-panel.is-snow-menu-open .viewer-panel__select-chevron {
+  transform: rotate(180deg);
+}
+
+.viewer-panel__select-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.74);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.34);
+}
+
+.viewer-panel__select-menu[hidden] {
+  display: none;
+}
+
+.viewer-panel__select-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 30px;
+  padding: 6px 6px 6px 10px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.viewer-panel__select-option:hover,
+.viewer-panel__select-option.is-selected {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.viewer-panel__select-option-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-panel__select-check {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  opacity: 0;
+}
+
+.viewer-panel__select-option.is-selected .viewer-panel__select-check {
+  opacity: 1;
 }
 
 .viewer-panel__cta {

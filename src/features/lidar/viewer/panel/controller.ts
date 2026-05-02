@@ -25,6 +25,11 @@ interface LowQualityButtonState {
   title?: string;
 }
 
+const SNOW_MODE_LABELS: Record<Exclude<SnowModeKey, 'off'>, string> = {
+  cover: 'Couverture neigeuse',
+  thickness: 'Epaisseur (cm)',
+};
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -75,7 +80,12 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const pointSizeInput = queryElement<HTMLInputElement>('panel-point-size');
   const densityInput = queryElement<HTMLInputElement>('panel-point-density');
   const snowToggle = queryElement<HTMLInputElement>('panel-snow-toggle');
-  const snowModeSelect = queryElement<HTMLSelectElement>('panel-snow-mode');
+  const snowModeButton = queryElement<HTMLButtonElement>('panel-snow-mode-button');
+  const snowModeValue = queryElement<HTMLSpanElement>('panel-snow-mode-value');
+  const snowModeMenu = queryElement<HTMLDivElement>('panel-snow-mode-menu');
+  const snowModeOptions = Array.from(
+    root.querySelectorAll<HTMLButtonElement>('[data-snow-mode-option]'),
+  );
   const lowQualityBtn = queryElement<HTMLButtonElement>('panel-engine-btn');
   const lowQualityBtnLabel = queryElement<HTMLSpanElement>('panel-engine-btn-label');
   const settingsBtn = queryElement<HTMLButtonElement>('panel-settings-btn');
@@ -84,12 +94,38 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   let pointControlsDisabled = false;
   let snowLoading = false;
   let settingsEnabled = false;
+  let snowModeMenuOpen = false;
   let lastSnowMode: Exclude<SnowModeKey, 'off'> = 'cover';
+
+  const syncSnowModeSelection = () => {
+    if (snowModeValue) snowModeValue.textContent = SNOW_MODE_LABELS[lastSnowMode];
+    snowModeOptions.forEach((option) => {
+      const isSelected = option.dataset.snowModeOption === lastSnowMode;
+      option.classList.toggle('is-selected', isSelected);
+      option.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
+  };
+
+  const closeSnowModeMenu = () => {
+    snowModeMenuOpen = false;
+    snowModeMenu?.setAttribute('hidden', '');
+    snowModeButton?.setAttribute('aria-expanded', 'false');
+    root?.classList.remove('is-snow-menu-open');
+  };
+
+  const openSnowModeMenu = () => {
+    if (!snowModeMenu || !snowModeButton || snowModeButton.disabled) return;
+    snowModeMenuOpen = true;
+    snowModeMenu.removeAttribute('hidden');
+    snowModeButton.setAttribute('aria-expanded', 'true');
+    root?.classList.add('is-snow-menu-open');
+  };
 
   const syncSnowAvailability = () => {
     const snowEnabled = snowToggle?.checked ?? false;
-    if (snowModeSelect) snowModeSelect.disabled = snowLoading || !snowEnabled;
+    if (snowModeButton) snowModeButton.disabled = snowLoading || !snowEnabled;
     if (snowToggle) snowToggle.disabled = snowLoading;
+    if ((snowModeButton?.disabled ?? false) && snowModeMenuOpen) closeSnowModeMenu();
     root?.classList.toggle('is-snow-loading', snowLoading);
   };
 
@@ -112,15 +148,20 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   };
 
   const handleDocumentClick = (event: MouseEvent) => {
-    if (!settingsMenu || settingsMenu.hasAttribute('hidden')) return;
     const target = event.target;
     if (!(target instanceof Node)) return;
-    if (settingsMenu.contains(target) || settingsBtn?.contains(target)) return;
-    closeSettingsMenu();
+    if (settingsMenu && !settingsMenu.hasAttribute('hidden')) {
+      if (!settingsMenu.contains(target) && !settingsBtn?.contains(target)) closeSettingsMenu();
+    }
+    if (snowModeMenu && snowModeMenuOpen) {
+      if (!snowModeMenu.contains(target) && !snowModeButton?.contains(target)) closeSnowModeMenu();
+    }
   };
 
   const handleEscape = (event: KeyboardEvent) => {
-    if (event.key === 'Escape') closeSettingsMenu();
+    if (event.key !== 'Escape') return;
+    closeSettingsMenu();
+    closeSnowModeMenu();
   };
 
   const handleSettingsClick = (event: MouseEvent) => {
@@ -145,14 +186,26 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const handleSnowToggle = () => {
     if (!snowToggle) return;
     const nextMode = snowToggle.checked
-      ? (snowModeSelect?.value as Exclude<SnowModeKey, 'off'> | undefined) ?? lastSnowMode
+      ? lastSnowMode
       : 'off';
     options.onSnowModeChange?.(nextMode);
   };
 
-  const handleSnowModeSelect = () => {
-    const selected = (snowModeSelect?.value as Exclude<SnowModeKey, 'off'> | undefined) ?? 'cover';
+  const handleSnowModeButtonClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    if (snowModeButton?.disabled) return;
+    if (snowModeMenuOpen) closeSnowModeMenu();
+    else openSnowModeMenu();
+  };
+
+  const handleSnowModeOptionClick = (event: MouseEvent) => {
+    const option = event.currentTarget;
+    if (!(option instanceof HTMLButtonElement)) return;
+    const selected = option.dataset.snowModeOption as Exclude<SnowModeKey, 'off'> | undefined;
+    if (!selected) return;
     lastSnowMode = selected;
+    syncSnowModeSelection();
+    closeSnowModeMenu();
     if (snowToggle?.checked) options.onSnowModeChange?.(selected);
   };
 
@@ -161,11 +214,13 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   if (mapsLinkEl) mapsLinkEl.href = options.googleMapsUrl;
   if (pointSizeInput) pointSizeInput.value = String(toSliderPercent(options.pointSizePercent ?? 50));
   if (densityInput) densityInput.value = String(toSliderPercent(options.densityPercent ?? 100));
+  syncSnowModeSelection();
 
   pointSizeInput?.addEventListener('input', handlePointSizeInput);
   densityInput?.addEventListener('input', handleDensityInput);
   snowToggle?.addEventListener('change', handleSnowToggle);
-  snowModeSelect?.addEventListener('change', handleSnowModeSelect);
+  snowModeButton?.addEventListener('click', handleSnowModeButtonClick);
+  snowModeOptions.forEach((option) => option.addEventListener('click', handleSnowModeOptionClick));
   lowQualityBtn?.addEventListener('click', () => options.onLowQualityClick?.());
   settingsBtn?.addEventListener('click', handleSettingsClick);
   document.addEventListener('click', handleDocumentClick);
@@ -196,7 +251,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     setSnowMode(mode: SnowModeKey) {
       if (mode !== 'off') lastSnowMode = mode;
       if (snowToggle) snowToggle.checked = mode !== 'off';
-      if (snowModeSelect && mode !== 'off') snowModeSelect.value = mode;
+      syncSnowModeSelection();
       syncSnowAvailability();
     },
     setSnowLoading(loading: boolean) {
@@ -220,7 +275,8 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       pointSizeInput?.removeEventListener('input', handlePointSizeInput);
       densityInput?.removeEventListener('input', handleDensityInput);
       snowToggle?.removeEventListener('change', handleSnowToggle);
-      snowModeSelect?.removeEventListener('change', handleSnowModeSelect);
+      snowModeButton?.removeEventListener('click', handleSnowModeButtonClick);
+      snowModeOptions.forEach((option) => option.removeEventListener('click', handleSnowModeOptionClick));
       settingsBtn?.removeEventListener('click', handleSettingsClick);
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('keydown', handleEscape);

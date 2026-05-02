@@ -74,13 +74,26 @@ const PANEL_TEMPLATE = `
     <div class="viewer-panel__select-row">
       <p class="viewer-panel__label">Affichage</p>
       <div class="viewer-panel__select-wrap">
-        <select id="panel-snow-mode" class="viewer-panel__select">
-          <option value="cover">Couverture neigeuse</option>
-          <option value="thickness">Epaisseur (cm)</option>
-        </select>
-        <svg class="viewer-panel__select-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="m4 6 4 4 4-4"></path>
-        </svg>
+        <button id="panel-snow-mode-button" class="viewer-panel__select-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+          <span id="panel-snow-mode-value">Couverture neigeuse</span>
+          <svg class="viewer-panel__select-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m4 6 4 4 4-4"></path>
+          </svg>
+        </button>
+        <div id="panel-snow-mode-menu" class="viewer-panel__select-menu" role="listbox" hidden>
+          <button class="viewer-panel__select-option is-selected" type="button" role="option" data-snow-mode-option="cover" aria-selected="true">
+            <span class="viewer-panel__select-option-label">Couverture neigeuse</span>
+            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
+            </svg>
+          </button>
+          <button class="viewer-panel__select-option" type="button" role="option" data-snow-mode-option="thickness" aria-selected="false">
+            <span class="viewer-panel__select-option-label">Epaisseur (cm)</span>
+            <svg class="viewer-panel__select-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m3.5 8.2 2.7 2.7 6-6"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
     <div class="viewer-panel__divider"></div>

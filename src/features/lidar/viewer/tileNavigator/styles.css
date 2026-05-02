@@ -1,0 +1,111 @@
+.viewer-tile-nav {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 70;
+  width: min(296px, calc(100vw - 24px));
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(8, 8, 8, 0.84);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.36);
+  color: #fff;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+}
+
+.viewer-tile-nav * {
+  font-family: inherit;
+}
+
+.viewer-tile-nav__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.viewer-tile-nav__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.viewer-tile-nav__status {
+  min-height: 32px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.viewer-tile-nav__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.viewer-tile-nav__cell {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+}
+
+.viewer-tile-nav__cell:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.viewer-tile-nav__cell:disabled {
+  cursor: default;
+}
+
+.viewer-tile-nav__cell.is-current {
+  background: linear-gradient(180deg, #d31111 0%, #9d0707 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+.viewer-tile-nav__cell.is-cached {
+  background: linear-gradient(180deg, #ffb347 0%, #f08f17 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.viewer-tile-nav__cell.is-paired {
+  background: linear-gradient(180deg, #ffb347 0%, #da7b08 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 247, 214, 0.88);
+}
+
+.viewer-tile-nav__cell.is-idle {
+  background: #d5d5d5;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+
+.viewer-tile-nav__cell.is-loading {
+  background: linear-gradient(180deg, #7a0c0c 0%, #3d0505 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  animation: viewer-tile-nav-pulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes viewer-tile-nav-pulse {
+  from {
+    opacity: 0.6;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .viewer-tile-nav {
+    left: 12px;
+    bottom: 12px;
+    width: min(248px, calc(100vw - 24px));
+    padding: 12px;
+  }
+
+  .viewer-tile-nav__grid {
+    gap: 8px;
+  }
+}

@@ -4,14 +4,16 @@
 // Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
 
 import './panel/styles.css';
+import './tileNavigator/styles.css';
 import { LidarRenderer } from './renderer';
 import type { HeightmapParams } from './renderer';
 import { CameraController } from './camera';
-import { buildTileFileName, toWgs84 } from '../lib/coordConvert';
-import { saveColorizedData, loadColorizedData, saveTerrainData, loadTerrainData } from '../lib/storage';
+import { buildTileFileName, getTileInfo, toWgs84 } from '../lib/coordConvert';
 import type { DetectedCrs, AltitudeRef } from '../types';
 import type { AABB } from './lod/types';
 import { LodManager } from './lod/lodManager';
+import { LidarManager } from '../lib/lidarManager';
+import { buildViewerUrl } from '../lib/viewerUrl';
 import {
   createViewerPanel,
   densityScaleToPercent,
@@ -23,6 +25,8 @@ import {
   type SnowModeKey,
 } from './panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
+import { createViewerTileNavigator } from './tileNavigator/controller';
+import { loadViewerScene } from './session/dataset';
 import {
   buildOctreeInWorker,
   buildRGBA,
@@ -31,7 +35,6 @@ import {
   launchWebGLFallback,
   loadTileFromOPFS,
   preflightWebGPU,
-  processPointCloudInWorker,
   setViewerStatus,
   showFatalError,
 } from './runtime';
@@ -43,8 +46,32 @@ const statusEl = document.getElementById('status')!;
 const barFill = document.getElementById('bar-fill')!;
 const statsEl = document.getElementById('stats')!;
 
+type IdleSchedulerWindow = Window & {
+  requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
+};
+
+let cacheWriteQueue = Promise.resolve();
+
 function setStatus(msg: string, pct?: number) {
   setViewerStatus(statusEl, barFill, msg, pct);
+}
+
+function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): void {
+  cacheWriteQueue = cacheWriteQueue
+    .then(async () => {
+      await new Promise<void>((resolve) => {
+        const idleWindow = window as IdleSchedulerWindow;
+        if (typeof idleWindow.requestIdleCallback === 'function') {
+          idleWindow.requestIdleCallback(() => resolve(), { timeout: 1500 });
+          return;
+        }
+        window.setTimeout(resolve, 250);
+      });
+      await task();
+    })
+    .catch((error) => {
+      console.warn(`[Viewer] Background cache write failed (${label})`, error);
+    });
 }
 
 function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
@@ -55,6 +82,8 @@ function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): str
 const params = new URLSearchParams(window.location.search);
 const xKm = parseInt(params.get('x') || '', 10);
 const yKm = parseInt(params.get('y') || '', 10);
+const secondaryXKm = parseInt(params.get('sx') || '', 10);
+const secondaryYKm = parseInt(params.get('sy') || '', 10);
 const crs = (params.get('crs') || 'LAMB93') as DetectedCrs;
 const altRef = (params.get('alt') || 'IGN69') as AltitudeRef;
 
@@ -67,7 +96,29 @@ const tileFileName = `${buildTileFileName(xKm, yKm, crs, altRef)}.copc.laz`;
 // Legacy naming used yKm directly instead of yKm+1 (NW corner). Fall back to it
 // for tiles downloaded before the naming convention fix.
 const legacyTileFileName = `${buildTileFileName(xKm, yKm - 1, crs, altRef)}.copc.laz`;
-document.title = `LiDAR — ${tileFileName}`;
+const tileInfo = getTileInfo(crs);
+const viewerTileCoord = {
+  xKm,
+  yKm,
+  territory: tileInfo.territory,
+  projection: crs,
+  altRef,
+} as const;
+const pairedTileCoord = !isNaN(secondaryXKm) && !isNaN(secondaryYKm)
+  && (secondaryXKm !== xKm || secondaryYKm !== yKm)
+  ? {
+      ...viewerTileCoord,
+      xKm: secondaryXKm,
+      yKm: secondaryYKm,
+    }
+  : null;
+const sceneTileCoords = pairedTileCoord ? [viewerTileCoord, pairedTileCoord] : [viewerTileCoord];
+const panelTileLabel = sceneTileCoords
+  .map((coord) => buildPanelTileLabel(coord.xKm, coord.yKm, coord.projection))
+  .join(' + ');
+document.title = `LiDAR — ${sceneTileCoords
+  .map((coord) => `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`)
+  .join(' + ')}`;
 
 // --- Load tile from OPFS ---
 async function loadFromOPFS(): Promise<ArrayBuffer> {
@@ -91,6 +142,9 @@ function switchToWebGLFallback() {
 }
 
 async function startWebGLFallback(reasonForLog: string): Promise<void> {
+  if (sceneTileCoords.length > 1) {
+    throw new Error('Le mode LowQuality/WebGL ne supporte pas encore l affichage simultane de deux tuiles.');
+  }
   await launchWebGLFallback({
     reasonForLog,
     dom: { canvas, overlay, statusEl, barFill, statsEl },
@@ -149,39 +203,16 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     }
     console.log(`[Viewer] Preflight OK — vendor=${pre.vendor} arch=${pre.arch} desc=${pre.desc}`);
 
-    // 1. Try loading colorized cache first
-    setStatus('Chargement du cache colorisé...', 5);
-    let pointCloud = await loadColorizedData(tileFileName);
-
-    if (pointCloud) {
-      console.log('[Viewer] Loaded colorized cache — skipping parse+colorize');
-      setStatus('Cache colorisé chargé', 80);
-    } else {
-      // 2. No cache — load raw LAZ, parse + colorize in Worker
-      setStatus(`Chargement LAZ : ${tileFileName}`, 10);
-      const buffer = await loadFromOPFS();
-      setStatus(`Fichier chargé (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB)`, 15);
-
-      pointCloud = await processPointCloudInWorker(buffer, setStatus);
-      setStatus('Traitement terminé — mise en cache...', 78);
-
-      await saveColorizedData(tileFileName, pointCloud);
-      setStatus('Cache colorisé sauvegardé', 80);
-    }
+    const scene = await loadViewerScene(sceneTileCoords, setStatus);
+    const pointCloud = scene.pointCloud;
 
     // 3. Build RGBA colors
     const rgba = buildRGBA(pointCloud);
 
-    // 3b. Generate terrain heightmap mesh (cached)
-    setStatus('Génération du terrain...', 82);
-    let terrainMesh = await loadTerrainData(tileFileName);
-    if (terrainMesh) {
-      console.log('[Viewer] Loaded terrain cache');
-    } else {
-      const { generateHeightmap } = await import('./heightmap');
-      terrainMesh = await generateHeightmap(pointCloud);
-      await saveTerrainData(tileFileName, terrainMesh);
-    }
+    // 3b. The scene terrain is merged once so the primary tile and the added
+    // neighbor share the same height texture, one terrain pass, and one octree.
+    setStatus('Assemblage du terrain...', 82);
+    const terrainMesh = scene.terrainMesh;
     console.log(`[Viewer] Terrain: ${terrainMesh.vertexCount.toLocaleString()} vertices, ${(terrainMesh.indexCount / 3).toLocaleString()} triangles`);
 
     // 4. Center positions relative to bounding box center
@@ -246,11 +277,17 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     const lodManager = new LodManager();
     lodManager.setOctree(octree);
     if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
+    lodManager.setSceneBudgetScale(sceneTileCoords.length > 1 ? 0.72 : 1.0);
 
-    const [lon, lat] = toWgs84((xKm + 0.5) * 1000, (yKm + 0.5) * 1000, crs);
+    const [lon, lat] = toWgs84(
+      (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2,
+      (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2,
+      crs,
+    );
+    const lidarManager = new LidarManager();
     let panelSnowHandler = async (_mode: SnowModeKey) => {};
     const panel = createViewerPanel({
-      tileLabel: buildPanelTileLabel(xKm, yKm, crs),
+      tileLabel: panelTileLabel,
       locationLabel: buildTileLocationLabel(lon, lat),
       googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
       pointSizePercent: pointSizeToPercent(renderer.pointSize),
@@ -275,12 +312,26 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     panel.setSnowMode('off');
     panel.setLowQualityButtonState({
       label: 'Passer en mode LowQuality',
-      title: 'Bascule vers le moteur WebGL HD (terrain texture sans nuage de points).',
+      disabled: sceneTileCoords.length > 1,
+      title: sceneTileCoords.length > 1
+        ? 'Le mode LowQuality est limite a une seule tuile.'
+        : 'Bascule vers le moteur WebGL HD (terrain texture sans nuage de points).',
+    });
+    const tileNavigator = createViewerTileNavigator({
+      currentTile: viewerTileCoord,
+      pairedTile: pairedTileCoord,
+      manager: lidarManager,
+      onSelectTile: (coord) => {
+        window.location.assign(buildViewerUrl(viewerTileCoord, coord));
+      },
     });
 
     // Done — hide overlay
     setStatus('Prêt', 100);
     setTimeout(() => overlay.classList.add('hidden'), 300);
+    for (const write of scene.cacheWrites) {
+      enqueueBackgroundCacheWrite(write.label, write.task);
+    }
 
     // 8. Render loop with LOD
     let showLodStats = true;
@@ -332,9 +383,9 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
           ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
           ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
           ` · voxel ${renderer.pointSize.toFixed(2)}m` +
-          ` · ${canvas.width}×${canvas.height}${gpu}`;
+          ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
       } else {
-        statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${tileFileName}`;
+        statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${scene.tileFileLabel}`;
       }
 
       if (renderRequested) {
@@ -407,6 +458,8 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       window.removeEventListener('pagehide', handlePageHide);
       camera.onChange = null;
       camera.destroy();
+      tileNavigator.destroy();
+      lidarManager.destroy();
       panel.destroy();
       renderer?.destroy();
       renderer = null;

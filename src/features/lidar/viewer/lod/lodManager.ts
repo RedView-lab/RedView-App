@@ -41,6 +41,7 @@ export class LodManager {
 
   density = 1.0;
   private userDensityScale = 1.0;
+  private sceneBudgetScale = 1.0;
 
   private refinedLastFrame = new Set<number>();
   private refinedThisFrame = new Set<number>();
@@ -162,6 +163,11 @@ export class LodManager {
 
   setUserDensityScale(scale: number): void {
     this.userDensityScale = Math.max(MIN_DENSITY, Math.min(1.0, scale));
+    this.stats.pointBudget = this.getEffectivePointBudget();
+  }
+
+  setSceneBudgetScale(scale: number): void {
+    this.sceneBudgetScale = Math.max(0.35, Math.min(1.0, scale));
     this.stats.pointBudget = this.getEffectivePointBudget();
   }
 
@@ -466,7 +472,7 @@ export class LodManager {
   }
 
   private getEffectivePointBudget(): number {
-    return Math.max(1, Math.floor(this.pointBudget * this.userDensityScale));
+    return Math.max(1, Math.floor(this.pointBudget * this.userDensityScale * this.sceneBudgetScale));
   }
 
   // ── Temporal density smoothing ──

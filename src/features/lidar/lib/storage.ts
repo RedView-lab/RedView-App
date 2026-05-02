@@ -2,10 +2,27 @@ import type { TileCoord, CachedTileInfo, PointCloudData, DetectedCrs } from '../
 import { buildTileFileName } from './coordConvert';
 
 const LIDAR_DIR = 'lidar-hd';
+const MAX_COLORIZED_CACHE_BYTES = 128 * 1024 * 1024;
+const MAX_TERRAIN_CACHE_BYTES = 96 * 1024 * 1024;
 
 async function getLidarDir(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
   return root.getDirectoryHandle(LIDAR_DIR, { create: true });
+}
+
+async function removeFileIfPresent(dir: FileSystemDirectoryHandle, fileName: string): Promise<void> {
+  try {
+    await dir.removeEntry(fileName);
+  } catch {
+    /* file absent, ignore */
+  }
+}
+
+async function writeBufferChunk(
+  writable: FileSystemWritableFileStream,
+  data: ArrayBuffer | ArrayBufferView,
+): Promise<void> {
+  await writable.write(data as FileSystemWriteChunkType);
 }
 
 function tileKey(coord: TileCoord): string {
@@ -129,8 +146,14 @@ export async function saveColorizedData(lazFileName: string, pc: PointCloudData)
   const clsBytes = pc.count;
   const totalSize = headerSize + posBytes + colBytes + clsBytes;
 
-  const buf = new ArrayBuffer(totalSize);
-  const view = new DataView(buf);
+  if (totalSize > MAX_COLORIZED_CACHE_BYTES) {
+    console.log(`[LiDAR storage] Skip colorized cache for ${lazFileName}: ${(totalSize / 1024 / 1024).toFixed(1)} MB exceeds cap.`);
+    await removeFileIfPresent(dir, fileName);
+    return;
+  }
+
+  const header = new ArrayBuffer(headerSize);
+  const view = new DataView(header);
   let offset = 0;
 
   view.setUint32(offset, pc.count, true); offset += 4;
@@ -141,15 +164,18 @@ export async function saveColorizedData(lazFileName: string, pc: PointCloudData)
   view.setFloat64(offset, pc.bounds.maxY, true); offset += 8;
   view.setFloat64(offset, pc.bounds.maxZ, true); offset += 8;
   view.setUint8(offset, crsBytes.length); offset += 1;
-  new Uint8Array(buf, offset, crsBytes.length).set(crsBytes); offset += crsBytes.length;
-  new Uint8Array(buf, offset, posBytes).set(new Uint8Array(pc.positions.buffer, pc.positions.byteOffset, posBytes)); offset += posBytes;
-  new Uint8Array(buf, offset, colBytes).set(pc.colors.subarray(0, colBytes)); offset += colBytes;
-  new Uint8Array(buf, offset, clsBytes).set(pc.classifications.subarray(0, clsBytes));
+  new Uint8Array(header, offset, crsBytes.length).set(crsBytes);
 
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(buf);
-  await writable.close();
+  try {
+    await writeBufferChunk(writable, header);
+    await writeBufferChunk(writable, new Uint8Array(pc.positions.buffer, pc.positions.byteOffset, posBytes));
+    await writeBufferChunk(writable, pc.colors.subarray(0, colBytes));
+    await writeBufferChunk(writable, pc.classifications.subarray(0, clsBytes));
+  } finally {
+    await writable.close();
+  }
 }
 
 export async function loadColorizedData(lazFileName: string): Promise<PointCloudData | null> {
@@ -158,6 +184,11 @@ export async function loadColorizedData(lazFileName: string): Promise<PointCloud
     const fileName = colorizedKey(lazFileName);
     const fileHandle = await dir.getFileHandle(fileName);
     const file = await fileHandle.getFile();
+    if (file.size > MAX_COLORIZED_CACHE_BYTES) {
+      console.log(`[LiDAR storage] Ignore oversized colorized cache for ${lazFileName}: ${(file.size / 1024 / 1024).toFixed(1)} MB.`);
+      await removeFileIfPresent(dir, fileName);
+      return null;
+    }
     const buf = await file.arrayBuffer();
     const view = new DataView(buf);
     let offset = 0;
@@ -208,29 +239,46 @@ export async function saveTerrainData(lazFileName: string, mesh: TerrainCache): 
   const colBytes = mesh.vertexCount * 4;
   const idxBytes = mesh.indexCount * 4;
   const hmBytes = mesh.gridWidth * mesh.gridHeight * 4;
-  const buf = new ArrayBuffer(headerSize + vertBytes + colBytes + idxBytes + hmBytes);
-  const view = new DataView(buf);
+  const totalSize = headerSize + vertBytes + colBytes + idxBytes + hmBytes;
+
+  if (totalSize > MAX_TERRAIN_CACHE_BYTES) {
+    console.log(`[LiDAR storage] Skip terrain cache for ${lazFileName}: ${(totalSize / 1024 / 1024).toFixed(1)} MB exceeds cap.`);
+    await removeFileIfPresent(dir, fileName);
+    return;
+  }
+
+  const header = new ArrayBuffer(headerSize);
+  const view = new DataView(header);
   view.setUint32(0, mesh.vertexCount, true);
   view.setUint32(4, mesh.indexCount, true);
   view.setUint32(8, mesh.gridWidth, true);
   view.setUint32(12, mesh.gridHeight, true);
-  let off = headerSize;
-  new Uint8Array(buf, off, vertBytes).set(new Uint8Array(mesh.vertices.buffer, mesh.vertices.byteOffset, vertBytes)); off += vertBytes;
-  new Uint8Array(buf, off, colBytes).set(mesh.colors.subarray(0, colBytes)); off += colBytes;
-  new Uint8Array(buf, off, idxBytes).set(new Uint8Array(mesh.indices.buffer, mesh.indices.byteOffset, idxBytes)); off += idxBytes;
-  new Uint8Array(buf, off, hmBytes).set(new Uint8Array(mesh.heightGrid.buffer, mesh.heightGrid.byteOffset, hmBytes));
 
   const fh = await dir.getFileHandle(fileName, { create: true });
   const w = await fh.createWritable();
-  await w.write(buf);
-  await w.close();
+  try {
+    await writeBufferChunk(w, header);
+    await writeBufferChunk(w, new Uint8Array(mesh.vertices.buffer, mesh.vertices.byteOffset, vertBytes));
+    await writeBufferChunk(w, mesh.colors.subarray(0, colBytes));
+    await writeBufferChunk(w, new Uint8Array(mesh.indices.buffer, mesh.indices.byteOffset, idxBytes));
+    await writeBufferChunk(w, new Uint8Array(mesh.heightGrid.buffer, mesh.heightGrid.byteOffset, hmBytes));
+  } finally {
+    await w.close();
+  }
 }
 
 export async function loadTerrainData(lazFileName: string): Promise<TerrainCache | null> {
   try {
     const dir = await getLidarDir();
-    const fh = await dir.getFileHandle(terrainKey(lazFileName));
-    const buf = await (await fh.getFile()).arrayBuffer();
+    const fileName = terrainKey(lazFileName);
+    const fh = await dir.getFileHandle(fileName);
+    const file = await fh.getFile();
+    if (file.size > MAX_TERRAIN_CACHE_BYTES) {
+      console.log(`[LiDAR storage] Ignore oversized terrain cache for ${lazFileName}: ${(file.size / 1024 / 1024).toFixed(1)} MB.`);
+      await removeFileIfPresent(dir, fileName);
+      return null;
+    }
+    const buf = await file.arrayBuffer();
     const view = new DataView(buf);
     if (buf.byteLength < 16) return null;
     const vertexCount = view.getUint32(0, true);
