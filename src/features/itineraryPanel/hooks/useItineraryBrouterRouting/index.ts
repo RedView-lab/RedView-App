@@ -43,21 +43,38 @@ export function useItineraryBrouterRouting({
     routeAbortRef.current = null;
     setRouteLoading(false);
   }, []);
+  const activeRef = useRef(active);
+
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
 
   const beginRouteRequest = useCallback(() => {
     routeAbortRef.current?.abort();
     const ctrl = new AbortController();
     routeAbortRef.current = ctrl;
-    setRouteRequestNonce((current) => current + 1);
-    setRouteLoading(true);
-    setRouteError(null);
+    queueMicrotask(() => {
+      setRouteRequestNonce((current) => current + 1);
+      setRouteLoading(true);
+      setRouteError(null);
+    });
     return ctrl;
   }, []);
+  const settleRouteState = useCallback((nextError: string | null) => {
+    setRouteError(nextError);
+    setRouteLoading(false);
+  }, []);
+  const deferRouteState = useCallback((nextError: string | null) => {
+    queueMicrotask(() => {
+      settleRouteState(nextError);
+    });
+  }, [settleRouteState]);
 
   const startKey = (() => {
     const row = active?.timeline.find((item) => item.kind === 'start');
     return row && row.lat != null && row.lon != null ? `${row.lon},${row.lat}` : '';
   })();
+  const activeId = active?.id ?? '';
 
   const endKey = (() => {
     const row = active?.timeline.find((item) => item.kind === 'end');
@@ -73,10 +90,15 @@ export function useItineraryBrouterRouting({
   const hasWaypointOverride = viaKey.length > 0;
   const profileId = active?.profileId ?? 'gravel-default';
   const climbing = active ? isClimbingMode(active.priorities) : false;
-  const prioritiesJson = active ? JSON.stringify(active.priorities) : '';
-  const roadTypesJson = active ? JSON.stringify(active.roadTypes) : '';
-  const expertJson = active ? JSON.stringify(active.expertProfile) : '';
   const forbiddenPolygons = formatForbiddenZonePolygons(active?.forbiddenZones);
+  const pendingRoutePatchKey = active?.pendingRoutePatch
+    ? JSON.stringify(active.pendingRoutePatch)
+    : '';
+  const pendingTraceExtensionKey = active?.pendingTraceExtension
+    ? JSON.stringify(active.pendingTraceExtension)
+    : '';
+  const gpxRouteSource = active?.gpxRoute?.source ?? '';
+  const gpxRoutePointCount = active?.gpxRoute?.points.length ?? 0;
 
   const brfHash = useMemo(() => {
     if (!active) return '';
@@ -102,18 +124,19 @@ export function useItineraryBrouterRouting({
       console.warn('[BRouter] buildBrfProfile threw:', error);
       return '';
     }
-  }, [active, expertJson, prioritiesJson, roadTypesJson]);
+  }, [active]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    const pendingRoutePatch = active?.pendingRoutePatch;
-    const pendingTraceExtension = active?.pendingTraceExtension;
-    const existingBrouterPoints = active?.gpxRoute?.source === 'brouter'
-      ? active.gpxRoute.points
+    const currentActive = activeRef.current;
+    const pendingRoutePatch = currentActive?.pendingRoutePatch;
+    const pendingTraceExtension = currentActive?.pendingTraceExtension;
+    const existingBrouterPoints = currentActive?.gpxRoute?.source === 'brouter'
+      ? currentActive.gpxRoute.points
       : null;
 
     if (
-      active &&
+      currentActive &&
       pendingRoutePatch &&
       existingBrouterPoints &&
       existingBrouterPoints.length >= 2
@@ -125,14 +148,13 @@ export function useItineraryBrouterRouting({
       ];
       const bounds = checkRouteWithinFrance(patchPoints);
       if (!bounds.ok) {
-        setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
-        setRouteLoading(false);
+        deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
         return;
       }
 
       const ctrl = beginRouteRequest();
 
-      const itineraryForRouting = active;
+      const itineraryForRouting = currentActive;
       const t0 = performance.now();
       console.log(
         '[BRouter] local patch START hash=',
@@ -187,7 +209,7 @@ export function useItineraryBrouterRouting({
     }
 
     if (
-      active &&
+      currentActive &&
       pendingTraceExtension &&
       existingBrouterPoints &&
       existingBrouterPoints.length >= 2
@@ -196,14 +218,13 @@ export function useItineraryBrouterRouting({
       const appendEnd = pendingTraceExtension.to;
       const bounds = checkRouteWithinFrance([appendStart, appendEnd]);
       if (!bounds.ok) {
-        setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
-        setRouteLoading(false);
+        deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
         return;
       }
 
       const ctrl = beginRouteRequest();
 
-      const itineraryForRouting = active;
+      const itineraryForRouting = currentActive;
       const t0 = performance.now();
       console.log(
         '[BRouter] append segment START hash=',
@@ -245,8 +266,8 @@ export function useItineraryBrouterRouting({
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
-          if (active && isBrouterUnmappedPointError(error)) {
-            rollbackPendingTraceAppend(active.id);
+          if (currentActive && isBrouterUnmappedPointError(error)) {
+            rollbackPendingTraceAppend(currentActive.id);
           }
           console.error('[BRouter append fail]', error);
           setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
@@ -259,14 +280,12 @@ export function useItineraryBrouterRouting({
     }
 
     if (!startKey || !endKey) {
-      setRouteError(null);
-      setRouteLoading(false);
+      deferRouteState(null);
       return;
     }
 
-    if (active?.gpxRoute?.source === 'gpx' && !hasWaypointOverride) {
-      setRouteError(null);
-      setRouteLoading(false);
+    if (currentActive?.gpxRoute?.source === 'gpx' && !hasWaypointOverride) {
+      deferRouteState(null);
       return;
     }
 
@@ -287,21 +306,20 @@ export function useItineraryBrouterRouting({
     ];
     const bounds = checkRouteWithinFrance(allPoints);
     if (!bounds.ok) {
-      if (active && hasRouteLayer(map, active.id)) {
+      if (currentActive && hasRouteLayer(map, currentActive.id)) {
         try {
-          removeRouteLayer(map, active.id);
+          removeRouteLayer(map, currentActive.id);
         } catch {
           // noop
         }
       }
-      setRouteError(bounds.reason ?? 'Itinéraire hors zone autorisée.');
-      setRouteLoading(false);
+      deferRouteState(bounds.reason ?? 'Itinéraire hors zone autorisée.');
       return;
     }
 
     const ctrl = beginRouteRequest();
 
-    const itineraryForRouting = active;
+  const itineraryForRouting = currentActive;
     if (!itineraryForRouting) return;
 
     const t0 = performance.now();
@@ -354,8 +372,8 @@ export function useItineraryBrouterRouting({
           route.coordinates.length,
         );
         const shouldAutoFit = !(
-          active?.gpxRoute?.source === 'brouter' &&
-          (active.gpxRoute.points.length ?? 0) >= 2
+          currentActive?.gpxRoute?.source === 'brouter' &&
+          (currentActive.gpxRoute.points.length ?? 0) >= 2
         );
         if (shouldAutoFit) {
           try {
@@ -376,7 +394,27 @@ export function useItineraryBrouterRouting({
       });
 
     return () => ctrl.abort();
-  }, [active, brfHash, climbing, endKey, forbiddenPolygons, hasWaypointOverride, isMapLoaded, map, profileId, rollbackPendingTraceAppend, setProject, startKey, viaKey]);
+  }, [
+    activeId,
+    beginRouteRequest,
+    brfHash,
+    climbing,
+    endKey,
+    forbiddenPolygons,
+    deferRouteState,
+    gpxRoutePointCount,
+    gpxRouteSource,
+    hasWaypointOverride,
+    isMapLoaded,
+    map,
+    pendingRoutePatchKey,
+    pendingTraceExtensionKey,
+    profileId,
+    rollbackPendingTraceAppend,
+    setProject,
+    startKey,
+    viaKey,
+  ]);
 
   return {
     cancelRouteRequest,
