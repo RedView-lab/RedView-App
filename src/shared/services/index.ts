@@ -1,4 +1,7 @@
 export {
+  getSupabaseAccessToken,
+  getSupabaseSession,
+  getSupabaseUser,
   SUPABASE_AUTH_STORAGE_KEY,
   hasStoredSupabaseSession,
   readStoredSupabaseSession,

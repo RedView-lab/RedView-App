@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/services/supabase';
+import { getSupabaseAccessToken } from '@/shared/services/supabase';
 
 import { logBillingUi, logBillingUiError } from './debug';
 import type {
@@ -41,20 +41,13 @@ function summarizeResponse(data: Record<string, unknown>) {
 }
 
 async function getAccessToken(): Promise<string> {
-  const {
-    data: { session },
-    error,
-  } = await supabase.auth.getSession();
+  const token = await getSupabaseAccessToken();
 
-  if (error) {
-    throw error;
-  }
-
-  if (!session?.access_token) {
+  if (!token) {
     throw new Error('Session expirée. Reconnectez-vous pour gérer votre abonnement.');
   }
 
-  return session.access_token;
+  return token;
 }
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {

@@ -1,7 +1,18 @@
+import { navigatorLock } from "@supabase/auth-js";
 import { createClient } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const SUPABASE_AUTH_LOCK_TIMEOUT_MS = 30000;
+
+function supabaseAuthLock<R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> {
+	return navigatorLock(
+		name,
+		acquireTimeout <= 0 ? acquireTimeout : Math.max(acquireTimeout, SUPABASE_AUTH_LOCK_TIMEOUT_MS),
+		fn,
+	);
+}
 
 function buildSupabaseAuthStorageKey(url: string | undefined): string {
 	if (!url) return "";
@@ -21,6 +32,8 @@ export interface StoredSupabaseSessionSnapshot {
 		email?: string;
 	};
 }
+
+let inFlightSessionPromise: Promise<Session | null> | null = null;
 
 type StoredSupabaseSessionPayload = {
 	access_token?: unknown;
@@ -63,6 +76,38 @@ export function readStoredSupabaseSession(): StoredSupabaseSessionSnapshot | nul
 	};
 }
 
+export async function getSupabaseSession(): Promise<Session | null> {
+	if (!inFlightSessionPromise) {
+		inFlightSessionPromise = (async () => {
+			const {
+				data: { session },
+				error,
+			} = await supabase.auth.getSession();
+
+			if (error) throw error;
+			return session;
+		})();
+	}
+
+	try {
+		return await inFlightSessionPromise;
+	} finally {
+		if (inFlightSessionPromise) {
+			inFlightSessionPromise = null;
+		}
+	}
+}
+
+export async function getSupabaseUser(): Promise<User | null> {
+	const session = await getSupabaseSession();
+	return session?.user ?? null;
+}
+
+export async function getSupabaseAccessToken(): Promise<string | null> {
+	const session = await getSupabaseSession();
+	return session?.access_token ?? null;
+}
+
 export const supabase = createClient(
 	supabaseUrl,
 	supabaseAnonKey,
@@ -71,6 +116,7 @@ export const supabase = createClient(
 				auth: {
 					storageKey: SUPABASE_AUTH_STORAGE_KEY,
 					detectSessionInUrl: false,
+					lock: supabaseAuthLock,
 				},
 		  }
 		: undefined,

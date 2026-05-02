@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
+import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
 import { readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
 import './index.css'
@@ -138,12 +138,8 @@ function resolveInitialSupabaseSession(): Promise<BootstrapSession> {
       }
 
       try {
-        const { data, error } = await awaitSupabaseAuth(
-          supabase.auth.getSession(),
-          'supabase.auth.getSession',
-        )
-        if (error) throw error
-        return data.session ?? storedSession
+        const session = await awaitSupabaseAuth(getSupabaseSession(), 'supabase.auth.getSession')
+        return session ?? storedSession
       } catch (warmupError) {
         console.warn('[app] supabase.auth.getSession() warmup failed', warmupError)
         return storedSession

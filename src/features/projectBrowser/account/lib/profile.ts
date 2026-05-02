@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/services/supabase';
+import { getSupabaseUser, supabase } from '@/shared/services/supabase';
 
 import {
   DEFAULT_COUNTRY,
@@ -98,12 +98,7 @@ export function formatLastConnection(lastSignInAt: string | null) {
 }
 
 export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayName: string): Promise<AccountProfile> {
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error) throw error;
+  const user = await getSupabaseUser();
   if (!user) throw new Error('Session utilisateur introuvable.');
 
   const metadata = readMetadata(user);
@@ -121,12 +116,7 @@ export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayN
 }
 
 export async function saveAccountIdentity(form: AccountIdentityForm) {
-  const {
-    data: { user },
-    error: readError,
-  } = await supabase.auth.getUser();
-
-  if (readError) throw readError;
+  const user = await getSupabaseUser();
   if (!user) throw new Error('Session utilisateur introuvable.');
 
   const metadata = readMetadata(user);
@@ -144,12 +134,7 @@ export async function saveAccountIdentity(form: AccountIdentityForm) {
 }
 
 export async function saveAccountPractice(form: AccountPracticeForm) {
-  const {
-    data: { user },
-    error: readError,
-  } = await supabase.auth.getUser();
-
-  if (readError) throw readError;
+  const user = await getSupabaseUser();
   if (!user) throw new Error('Session utilisateur introuvable.');
 
   const metadata = readMetadata(user);

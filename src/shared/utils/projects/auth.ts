@@ -1,9 +1,10 @@
-import { supabase } from '@/shared/services/supabase';
+import { getSupabaseUser, readStoredSupabaseSession } from '@/shared/services/supabase';
 
 export async function getCurrentUserId(): Promise<string> {
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getUser();
-  if (sessionErr) throw sessionErr;
-  const user = sessionData.user;
+  const storedSession = readStoredSupabaseSession();
+  if (storedSession?.user.id) return storedSession.user.id;
+
+  const user = await getSupabaseUser();
   if (!user) throw new Error('Not authenticated');
   return user.id;
 }

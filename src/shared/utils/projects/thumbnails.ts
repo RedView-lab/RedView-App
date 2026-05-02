@@ -1,4 +1,4 @@
-import { supabase } from '@/shared/services/supabase';
+import { getSupabaseUser, readStoredSupabaseSession, supabase } from '@/shared/services/supabase';
 
 const THUMBNAIL_BUCKET = 'project-thumbnails';
 const THUMBNAIL_SIGNED_URL_TTL = 60 * 60;
@@ -7,13 +7,19 @@ function thumbnailPath(userId: string, projectId: string): string {
   return `${userId}/${projectId}.png`;
 }
 
-export async function uploadProjectThumbnail(projectId: string, blob: Blob): Promise<void> {
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getUser();
-  if (sessionErr) throw sessionErr;
-  const user = sessionData.user;
-  if (!user) throw new Error('Not authenticated');
+async function getAuthenticatedUserId(): Promise<string> {
+  const storedSession = readStoredSupabaseSession();
+  if (storedSession?.user.id) return storedSession.user.id;
 
-  const { error } = await supabase.storage.from(THUMBNAIL_BUCKET).upload(thumbnailPath(user.id, projectId), blob, {
+  const user = await getSupabaseUser();
+  if (!user) throw new Error('Not authenticated');
+  return user.id;
+}
+
+export async function uploadProjectThumbnail(projectId: string, blob: Blob): Promise<void> {
+  const userId = await getAuthenticatedUserId();
+
+  const { error } = await supabase.storage.from(THUMBNAIL_BUCKET).upload(thumbnailPath(userId, projectId), blob, {
     contentType: 'image/png',
     upsert: true,
     cacheControl: '3600',
@@ -27,12 +33,9 @@ export async function getProjectThumbnailUrls(
   const out: Record<string, string | null> = {};
   if (projectIds.length === 0) return out;
 
-  const { data: sessionData, error: sessionErr } = await supabase.auth.getUser();
-  if (sessionErr) throw sessionErr;
-  const user = sessionData.user;
-  if (!user) throw new Error('Not authenticated');
+  const userId = await getAuthenticatedUserId();
 
-  const paths = projectIds.map((id) => thumbnailPath(user.id, id));
+  const paths = projectIds.map((id) => thumbnailPath(userId, id));
   const { data, error } = await supabase.storage
     .from(THUMBNAIL_BUCKET)
     .createSignedUrls(paths, THUMBNAIL_SIGNED_URL_TTL);
@@ -74,10 +77,8 @@ export async function duplicateProjectThumbnail(
 
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
   try {
-    const { data: sessionData } = await supabase.auth.getUser();
-    const user = sessionData.user;
-    if (!user) return;
-    await supabase.storage.from(THUMBNAIL_BUCKET).remove([thumbnailPath(user.id, projectId)]);
+    const userId = await getAuthenticatedUserId();
+    await supabase.storage.from(THUMBNAIL_BUCKET).remove([thumbnailPath(userId, projectId)]);
   } catch (error) {
     console.warn('[projects] deleteProjectThumbnail failed', error);
   }
