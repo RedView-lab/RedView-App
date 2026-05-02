@@ -5,8 +5,7 @@ import type {
   ItineraryProject,
   RouteRenderMode,
 } from '../../types';
-import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult } from '../../lib/merge-itinerary';
-import type { SplitItineraryProjectResult } from '../../lib/split-itinerary';
+import type { MergeItineraryConnectorSegment, MergeItineraryProjectResult, SplitItineraryProjectResult } from '../../lib/project';
 
 export interface TraceHistoryEntry {
   itineraryId: string;

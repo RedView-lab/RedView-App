@@ -1,5 +1,3 @@
-@import './base.css';
-@import './panels.css';
-@import './account.css';
-@import './subscription.css';
-@import './responsive.css';
+@import './foundation/index.css';
+@import './layout/index.css';
+@import './sections/index.css';

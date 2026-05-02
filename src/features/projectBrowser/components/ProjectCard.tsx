@@ -7,7 +7,7 @@ import {
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectSummary } from '@/shared/utils/projects';
 
-import { formatSavedAt, formatSize, privacyLabel } from '../lib/utils';
+import { formatSavedAt, formatSize, privacyLabel } from '../lib';
 
 type ProjectCardProps = {
   project: ProjectSummary;

@@ -1,5 +1,5 @@
 import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor/types';
-import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/route-distance';
+import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/routes';
 import { kindLabel, poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import type { Itinerary, PauseIntervalRow, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
 

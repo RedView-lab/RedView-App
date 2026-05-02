@@ -5,7 +5,7 @@
  */
 import { useMemo, useState } from 'react';
 import type { ExpertProfileState } from '../types';
-import { generateBrfFromExpertState } from '../../lib/brouter/profile-template';
+import { generateBrfFromExpertState } from '../../lib/brouter/profiles/profile-template';
 
 interface BrfPreviewProps {
   state: ExpertProfileState;

@@ -11,14 +11,15 @@ import { useItineraryBrouterRouting } from '../../hooks/useItineraryBrouterRouti
 import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
-import { poiFeaturesToTimelineItems } from '../../lib/poi-to-timeline';
+import { poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { useProjectStore } from '../../context/ProjectStore';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import {
   createDefaultItinerary,
   DEFAULT_PROFILES,
   ITINERARY_COLORS,
-} from '../../lib/defaultState';
+  normalizeItineraryRhythmState,
+} from '../../lib/project';
 import { resolveFavoritePoiPauseDurationMin } from '../../sections/timeline/TimelineTimelineView/utilsParts/schedule-stops';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import type { PoiFeature } from '@/features/poi/types';
@@ -27,7 +28,7 @@ import {
   buildImportedRouteMetrics,
   createImportedTimeline,
   normalizeImportedRoutePoints,
-} from '../../lib/imported-route';
+} from '../../lib/routes';
 import type {
   Itinerary,
   ItineraryProject,
@@ -519,7 +520,7 @@ export function ItineraryPanelContainer({
         updateActive((it) => {
           const moved = moveTimelinePauseItem(it.timeline, id, distanceKm);
           if (moved) return;
-          it.rhythm.pausePositionOverridesKm ??= {};
+          it.rhythm = normalizeItineraryRhythmState(it.rhythm);
           it.rhythm.pausePositionOverridesKm[id] = Math.max(0, Number(distanceKm.toFixed(3)));
         })
       }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { getProject, uploadProjectThumbnail } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
@@ -238,15 +239,16 @@ export function useDashboardProjectState({
 
   const queueProjectSave = useCallback(
     (next: ItineraryProject) => {
-      activeProjectSnapshotRef.current = next;
-      pendingSaveRef.current = next;
+      const normalizedNext = normalizeItineraryProject(next);
+      activeProjectSnapshotRef.current = normalizedNext;
+      pendingSaveRef.current = normalizedNext;
 
       const id = activeProjectIdRef.current;
       if (id) {
-        replaceProjectLocation({ id, name: next.name || 'project' });
+        replaceProjectLocation({ id, name: normalizedNext.name || 'project' });
         // Synchronous write-through cache: even if the network request is
         // cancelled or delayed, a same-browser refresh rehydrates this snapshot.
-        writeProjectCache(id, next);
+        writeProjectCache(id, normalizedNext);
       }
 
       if (saveTimerRef.current != null) {
@@ -304,38 +306,41 @@ export function useDashboardProjectState({
         && Number.isFinite(localUpdatedAtMs)
         && (!Number.isFinite(serverUpdatedAtMs) || localUpdatedAtMs > serverUpdatedAtMs);
       const hydratedProject = localIsNewer ? localCache.project : serverProject;
+      const normalizedHydratedProject = normalizeItineraryProject(hydratedProject);
+      const normalizedServerProject = normalizeItineraryProject(serverProject);
 
       activeProjectIdRef.current = row.id;
-      activeProjectSnapshotRef.current = hydratedProject;
-      lastSavedSerializedRef.current = JSON.stringify(serverProject);
+      activeProjectSnapshotRef.current = normalizedHydratedProject;
+      lastSavedSerializedRef.current = JSON.stringify(normalizedServerProject);
       pendingSaveRef.current = null;
-      setActiveProjectInitial(hydratedProject);
+      setActiveProjectInitial(normalizedHydratedProject);
       setActiveProjectId(row.id);
       setProjectBrowserOpen(false);
       replaceProjectLocation({
         id: row.id,
-        name: row.name || hydratedProject.name || 'project',
+        name: row.name || normalizedHydratedProject.name || 'project',
       });
 
       // If the local browser copy is fresher than the server snapshot,
       // immediately schedule a normal save to push it back upstream.
       if (localIsNewer) {
-        queueProjectSave(hydratedProject);
+        queueProjectSave(normalizedHydratedProject);
       }
     } catch (error) {
       const localCache = readProjectCache(projectId);
       if (localCache) {
+        const normalizedLocalProject = normalizeItineraryProject(localCache.project);
         activeProjectIdRef.current = projectId;
-        activeProjectSnapshotRef.current = localCache.project;
-        pendingSaveRef.current = localCache.project;
-        setActiveProjectInitial(localCache.project);
+        activeProjectSnapshotRef.current = normalizedLocalProject;
+        pendingSaveRef.current = normalizedLocalProject;
+        setActiveProjectInitial(normalizedLocalProject);
         setActiveProjectId(projectId);
         setProjectBrowserOpen(false);
         replaceProjectLocation({
           id: projectId,
-          name: localCache.project.name || 'project',
+          name: normalizedLocalProject.name || 'project',
         });
-        queueProjectSave(localCache.project);
+        queueProjectSave(normalizedLocalProject);
       } else {
         console.error('[Dashboard] failed to open project', error);
         if (activeProjectIdRef.current == null) {

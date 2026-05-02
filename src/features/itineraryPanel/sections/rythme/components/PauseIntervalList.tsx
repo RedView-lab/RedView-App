@@ -1,5 +1,5 @@
 import { IconMinus } from '../../../components/icons';
-import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
 import type { PauseIntervalRow } from '../../../types';
 
 interface PauseIntervalListProps {

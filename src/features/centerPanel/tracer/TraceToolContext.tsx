@@ -13,7 +13,7 @@ import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
-} from '@/features/itineraryPanel/lib/geocoder';
+} from '@/features/itineraryPanel/lib/geocoding';
 
 const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 

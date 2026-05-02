@@ -1,5 +1,5 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/pauseAwareSchedule';
+import { buildPauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary } from '@/features/itineraryPanel';
 import type { ItineraryVisualNode } from '@/features/itineraryPanel/lineage/itineraryLineage';
 

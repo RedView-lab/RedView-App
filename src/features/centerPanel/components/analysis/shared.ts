@@ -9,7 +9,7 @@ import {
 import {
   getItineraryEndDistanceKm,
 } from '@/features/itineraryPanel/lineage/itineraryLineage';
-import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/lib/defaultState';
+import { createDefaultAnalysisPanelState } from '@/features/itineraryPanel/lib/project';
 import type {
   AnalysisFiltersState,
   AnalysisPanelState,

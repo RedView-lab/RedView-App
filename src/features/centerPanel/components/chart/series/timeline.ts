@@ -1,5 +1,5 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import { projectRideElapsedSecondsToScheduledSeconds, type PauseAwarePauseSpan, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/pauseAwareSchedule';
+import { projectRideElapsedSecondsToScheduledSeconds, type PauseAwarePauseSpan, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { AxisMode, ChartMetricId, ChartPoint } from '../seriesCommon';
 import { projectElapsedHoursToX } from '../seriesPredictionMath';
 

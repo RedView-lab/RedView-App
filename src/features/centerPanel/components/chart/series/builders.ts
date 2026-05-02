@@ -1,5 +1,5 @@
 import type { PredictionResult } from '@/features/fitPredictor';
-import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/pauseAwareSchedule';
+import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import { metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
 import {

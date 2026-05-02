@@ -6,7 +6,7 @@ import {
 import {
   buildFitUploadsSignature,
   deserializeLegacyFitUploads,
-} from '../../lib/persisted-fit-files';
+} from '../../lib/schedule';
 import type { ItineraryProject } from '../../types';
 
 export interface HydratedFitRuntimeData {

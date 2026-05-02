@@ -14,16 +14,16 @@ import {
   createDefaultProject,
   ITINERARY_COLORS,
   normalizeItineraryProject,
-} from '../lib/defaultState';
-import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
+} from '../lib/project';
+import { cleanGpxGlitches } from '../lib/routes';
 import {
   mergeItineraryProject,
   type MergeItineraryConnectorSegment,
-} from '../lib/merge-itinerary';
-import { reverseItineraryGpxProject } from '../lib/reverse-itinerary-gpx';
-import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/split-itinerary';
+} from '../lib/project';
+import { reverseItineraryGpxProject } from '../lib/project';
+import { splitItineraryProject, type SplitItineraryProjectResult } from '../lib/project';
 import { computeRouteElevationMetrics } from '../lib/route-metrics';
-import { simplifyRouteToMaxPoints } from '../lib/simplify-route';
+import { simplifyRouteToMaxPoints } from '../lib/routes';
 import { ProjectStoreContext } from './ProjectStore/context';
 import { buildPendingRoutePatchForForbiddenZone } from './ProjectStore/forbiddenZonePatch';
 import { useTraceHistory } from './ProjectStore/useTraceHistory';

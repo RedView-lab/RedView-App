@@ -1,18 +1,7 @@
 /* Imports every style file for the control panel. Edit the sub-files, not
    the bundle. Source of truth: Figma node 1407:17211. */
-@import './_shell.css';
-@import './_section.css';
-@import './_controls.css';
-@import './_color-palette.css';
-@import './_basemaps.css';
-@import './_lidar.css';
-@import './_buttons.css';
-@import './_labels.css';
-@import './_routes.css';
-@import './_exporter.css';
-@import './_slopes.css';
-@import './_altitude.css';
-@import './_weather.css';
-@import './_wind.css';
-@import './_resize.css';
-@import './_sunlight.css';
+@import './foundation/index.css';
+@import './layout/index.css';
+@import './controls/index.css';
+@import './layers/index.css';
+@import './exporter/index.css';

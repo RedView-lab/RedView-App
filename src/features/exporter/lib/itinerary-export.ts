@@ -1,6 +1,6 @@
 import { Encoder, Profile } from '@garmin/fitsdk';
 
-import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/route-distance';
+import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/routes';
 import type { Itinerary, TimelineItem } from '@/features/itineraryPanel/types';
 
 export type ItineraryExportFormat = 'gpx' | 'fit';

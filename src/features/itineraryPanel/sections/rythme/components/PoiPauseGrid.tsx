@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { PanelCheckbox } from '../../../components/controls';
-import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
 import type { PoiCategory } from '../../../types';
 
 /**

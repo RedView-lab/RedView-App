@@ -18,7 +18,7 @@ import {
   type BillingModalCompletion,
   type BillingModalState,
 } from './BillingActionModal';
-import { logBillingUi, logBillingUiError } from '../lib/debug';
+import { logBillingUi, logBillingUiError } from '../lib';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import {
   accountTierLabel,
@@ -26,7 +26,7 @@ import {
   readBillingContactPreference,
   resolveActivePlanId,
   writeBillingContactPreference,
-} from '../lib/subscription';
+} from '../lib';
 import {
   applyPaymentMethodSetup,
   cancelManagedSubscription,
@@ -38,7 +38,7 @@ import {
   resumeManagedSubscription,
   syncManagedSubscription,
   type BillingOverviewResponse,
-} from '../lib/billingApi';
+} from '../lib';
 import { TopTabs } from './TopTabs';
 import type {
   BillingContactPreference,

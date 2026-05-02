@@ -1,7 +1,7 @@
 import {
   cumulativeRouteLengthsM,
   projectPointAlongRoute,
-} from '../../lib/route-distance';
+} from '../../lib/routes';
 import type {
   Itinerary,
   ItineraryForbiddenZone,

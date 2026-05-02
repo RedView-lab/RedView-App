@@ -6,13 +6,13 @@
  * ratio high.
  *
  * Encoding rules + the URL-safe whitelist live in
- * `lib/brouter/param-encoding.ts` so this path and `basicStateToOverrides`
+ * `lib/brouter/profiles/param-encoding.ts` so this path and `basicStateToOverrides`
  * can never diverge.
  */
 import {
   URL_SAFE_PARAMETER_IDS,
   encodeParamValue,
-} from '../lib/brouter/param-encoding';
+} from '../lib/brouter/profiles/param-encoding';
 import { ALL_PARAMETERS } from './parameters';
 import type { ExpertProfileState, ParameterValue } from './types';
 

@@ -5,7 +5,7 @@ import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
 import { useForbiddenZoneToolOptional } from '../../forbiddenZones';
-import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/clean-gpx-glitches';
+import { cleanGpxGlitches } from '@/features/itineraryPanel/lib/routes';
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { IconChevronDown } from '../CenterPanelIcons';
 import { useAnalysisFlyover } from '../../flyover';

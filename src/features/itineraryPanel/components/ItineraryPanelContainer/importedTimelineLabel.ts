@@ -1,7 +1,7 @@
 import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
-} from '../../lib/geocoder';
+} from '../../lib/geocoding';
 
 export async function resolveImportedTimelineLabel(
   lon: number,

@@ -1,4 +1,4 @@
-import { cumulativeRouteLengthsM, projectPointAlongRoute, roundDistanceKm } from '../../lib/route-distance';
+import { cumulativeRouteLengthsM, projectPointAlongRoute, roundDistanceKm } from '../../lib/routes';
 import type { Itinerary, ItineraryRouteAuditFinding } from '../../types';
 
 import type { RoutePoints } from './types';

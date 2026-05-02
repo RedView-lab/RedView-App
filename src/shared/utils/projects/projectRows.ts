@@ -1,4 +1,4 @@
-import { createDefaultProject } from '@/features/itineraryPanel/lib/defaultState';
+import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
 import { supabase } from '@/shared/services/supabase';
 
 import { getCurrentUserId } from './auth';

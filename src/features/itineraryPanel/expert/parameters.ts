@@ -12,7 +12,7 @@
  *
  * If you add a parameter here, double-check it appears as `assign` in
  * the chosen base profile (see `panelProfileToBrouter` in
- * `lib/brouter/profile-overrides.ts`); otherwise the override is
+ * `lib/brouter/profiles/profile-overrides.ts`); otherwise the override is
  * silently ignored by BRouter.
  */
 import type { ParameterDefinition } from './types';

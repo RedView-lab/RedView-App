@@ -4,7 +4,7 @@ import {
   haversineRouteDistanceM,
   projectPointAlongRoute,
   roundDistanceKm,
-} from '../../lib/route-distance';
+} from '../../lib/routes';
 import { computeRouteSurfaceMetricsFromBrouter } from '../../lib/route-metrics';
 import type { Itinerary } from '../../types';
 

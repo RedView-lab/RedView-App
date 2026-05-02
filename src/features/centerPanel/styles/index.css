@@ -1,4 +1,4 @@
-@import './_shell.css';
-@import './_toolbar.css';
-@import './_summary.css';
+@import './foundation/index.css';
+@import './chrome/index.css';
+@import './sections/index.css';
 @import './analysis/index.css';

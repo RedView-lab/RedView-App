@@ -5,7 +5,7 @@ import { loadStripe } from '@stripe/stripe-js';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-import { logBillingUi, logBillingUiError } from '../lib/debug';
+import { logBillingUi, logBillingUiError } from '../lib';
 import type { SubscriptionPlanId } from '../types';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;

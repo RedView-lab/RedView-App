@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
-import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoder';
+import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
 import './dashboard-place-search.css';
 
 interface DashboardPlaceSearchProps {

@@ -12,42 +12,42 @@ export {
   fetchBrouterRouteBestByScore,
   fetchBrouterRouteBestWithDistanceDetours,
   fetchBrouterRouteBestWithClimbEfficiency,
-} from './client';
-export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './url';
-export { formatForbiddenZonePolygons } from './forbidden-zones';
+} from './api';
+export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
+export { formatForbiddenZonePolygons } from './geo';
 export {
   panelProfileToBrouter,
   basicStateToOverrides,
   buildOverridesForItinerary,
-} from './profile-overrides';
+} from './profiles';
 export {
   URL_SAFE_PARAMETER_IDS,
   encodeParamValue,
   safeOverride,
   sanitizeOverrides,
-} from './param-encoding';
+} from './profiles';
 export {
   generateBrfFromExpertState,
   validateBrfText,
-} from './profile-template';
+} from './profiles';
 export {
   isInFrance,
   checkRouteWithinFrance,
   type LatLon,
   type FranceBoundsCheck,
-} from './france-bounds';
-export { buildBrfProfile, hashBrf, type BrfBuildInputs } from './brf-template';
+} from './geo';
+export { buildBrfProfile, hashBrf, type BrfBuildInputs } from './profiles';
 export {
   ensureProfileUploaded,
   clearProfileCache,
   profileCacheSize,
-} from './profile-cache';
+} from './profiles';
 export {
   resolveRoadTypes,
   type RoadTypesResolution,
-} from './road-types-resolver';
+} from './routing';
 export {
   resolveItineraryRouting,
   type ResolvedRouting,
-} from './routing-resolver';
-export { isClimbingMode, CLIMBING_SLIDER_THRESHOLD } from './climb-mode';
+} from './routing';
+export { isClimbingMode, CLIMBING_SLIDER_THRESHOLD } from './routing';

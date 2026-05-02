@@ -21,7 +21,7 @@ import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdr
 import {
   geocodePlaces,
   type GeocodeSuggestion,
-} from '../../../lib/geocoder';
+} from '../../../lib/geocoding';
 
 interface PlaceSearchInputProps {
   value: string;

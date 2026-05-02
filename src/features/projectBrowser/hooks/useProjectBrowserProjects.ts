@@ -21,8 +21,7 @@ import {
   type ProjectSummary,
 } from '@/shared/utils/projects';
 
-import { buildCopiedName } from '../lib/naming';
-import { buildFolderBreadcrumbs, computeFolderAggregateSize } from '../lib/tree';
+import { buildCopiedName, buildFolderBreadcrumbs, computeFolderAggregateSize } from '../lib';
 
 type BrowserToast = {
   kind: 'success' | 'error' | 'info';

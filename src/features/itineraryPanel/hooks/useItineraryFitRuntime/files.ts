@@ -1,4 +1,4 @@
-import { buildFitUploadsSignature } from '../../lib/persisted-fit-files';
+import { buildFitUploadsSignature } from '../../lib/schedule';
 
 export function mergeFitFiles(existingFiles: readonly File[], incomingFiles: readonly File[]): File[] {
   const merged: File[] = [...existingFiles];

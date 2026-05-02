@@ -13,7 +13,7 @@ import {
   MERGE_CONNECT_THRESHOLD_M,
   shouldRouteMergedGap,
   type MergeItineraryConnectorSegment,
-} from '@/features/itineraryPanel/lib/merge-itinerary';
+} from '@/features/itineraryPanel/lib/project';
 import {
   checkRouteWithinFrance,
   fetchBrouterRoute,

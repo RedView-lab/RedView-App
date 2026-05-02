@@ -6,7 +6,7 @@ import {
   resolveActivePlanId,
   statusLabel,
   SUBSCRIPTION_PLANS,
-} from '../lib/subscription';
+} from '../lib';
 import { SubscriptionPlanCard } from './SubscriptionPlanCard';
 import type {
   BillingContactPreference,

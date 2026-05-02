@@ -17,9 +17,9 @@ import {
   buildPredictionConfigFromRhythm,
   buildRouteGpxFile,
   hasUsableRouteElevation,
-} from '../../lib/container-prediction';
-import { buildPauseAwareSchedule } from '../../lib/pauseAwareSchedule';
-import { buildFitUploadsSignature } from '../../lib/persisted-fit-files';
+} from '../../lib/schedule';
+import { buildPauseAwareSchedule } from '../../lib/schedule';
+import { buildFitUploadsSignature } from '../../lib/schedule';
 
 import {
   buildLocalFitUploadSignature,

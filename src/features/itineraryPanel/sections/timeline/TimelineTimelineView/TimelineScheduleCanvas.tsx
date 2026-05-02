@@ -19,7 +19,7 @@ import {
   TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
   TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from './constants';
-import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/pauseDuration';
+import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
 import type { PoiCategory } from '../../../types';
 import type {
   KmMarker,
