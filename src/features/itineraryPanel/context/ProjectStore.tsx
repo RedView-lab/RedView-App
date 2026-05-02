@@ -9,7 +9,12 @@ import {
 
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 
-import { createDefaultItinerary, createDefaultProject, ITINERARY_COLORS } from '../lib/defaultState';
+import {
+  createDefaultItinerary,
+  createDefaultProject,
+  ITINERARY_COLORS,
+  normalizeItineraryProject,
+} from '../lib/defaultState';
 import { cleanGpxGlitches } from '../lib/clean-gpx-glitches';
 import {
   mergeItineraryProject,
@@ -48,7 +53,7 @@ export function ProjectProvider({
   children,
 }: ProjectProviderProps) {
   const [project, setProjectInternal] = useState<ItineraryProject>(
-    () => initialProject ?? createDefaultProject(),
+    () => (initialProject ? normalizeItineraryProject(initialProject) : createDefaultProject()),
   );
   const projectRef = useRef(project);
   projectRef.current = project;
@@ -68,7 +73,8 @@ export function ProjectProvider({
           typeof action === 'function'
             ? (action as (p: ItineraryProject) => ItineraryProject)(prev)
             : action;
-        if (next === prev) return prev;
+        const normalizedNext = normalizeItineraryProject(next);
+        if (normalizedNext === prev) return prev;
         // Synchronously notify the parent so unload flushes capture
         // the freshest snapshot. Every real mutation must be persisted —
         // the previous "skip first change" guard caused the very first
@@ -76,11 +82,11 @@ export function ProjectProvider({
         // search) to be silently dropped if the user refreshed before
         // a second mutation triggered another save.
         try {
-          onProjectChangeRef.current?.(next);
+          onProjectChangeRef.current?.(normalizedNext);
         } catch (err) {
           console.error('[ProjectProvider] onProjectChange threw', err);
         }
-        return next;
+        return normalizedNext;
       });
     },
     [],

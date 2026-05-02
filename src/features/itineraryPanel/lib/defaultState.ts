@@ -2,6 +2,7 @@ import type {
   AnalysisPanelState,
   Itinerary,
   ItineraryProject,
+  RhythmState,
   RouteProfile,
   TimelineItem,
 } from '../types';
@@ -51,6 +52,66 @@ const DEFAULT_TIMELINE_END: TimelineItem = {
   distanceKm: null,
 };
 
+export function createDefaultRhythmState(): RhythmState {
+  return {
+    startDate: null,
+    startTime: null,
+    gender: 'default',
+    usePastActivities: false,
+    ftp: null,
+    systemWeightKg: null,
+    tiresMm: null,
+    useWeather: false,
+    weatherWeight: 100,
+    useSurfaces: false,
+    surfacesWeight: 100,
+    pauseAtFavoritePois: false,
+    poiPauseDurations: {
+      fountains: 15,
+      toilets: null,
+      supermarkets: 15,
+      gasStations: null,
+      bakeries: 15,
+      fastFood: null,
+      cafes: null,
+      bars: null,
+      restaurants: 15,
+      bikeShops: null,
+      hotels: 15,
+      refuges: 15,
+      passes: null,
+    },
+    pauseEveryIntervalEnabled: false,
+    pauseEveryIntervalMin: null,
+    pauseIntervals: [],
+    pausePositionOverridesKm: {},
+  };
+}
+
+export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | null): RhythmState {
+  const base = createDefaultRhythmState();
+  return {
+    ...base,
+    ...rhythm,
+    poiPauseDurations: {
+      ...base.poiPauseDurations,
+      ...(rhythm?.poiPauseDurations ?? {}),
+    },
+    pauseIntervals: Array.isArray(rhythm?.pauseIntervals) ? rhythm.pauseIntervals : base.pauseIntervals,
+    pausePositionOverridesKm: rhythm?.pausePositionOverridesKm ?? {},
+  };
+}
+
+export function normalizeItineraryProject(project: ItineraryProject): ItineraryProject {
+  return {
+    ...project,
+    itineraries: project.itineraries.map((itinerary) => ({
+      ...itinerary,
+      rhythm: normalizeItineraryRhythmState(itinerary.rhythm),
+    })),
+  };
+}
+
 export function createDefaultItinerary(
   index = 1,
   color: string = ITINERARY_COLORS[0],
@@ -79,39 +140,7 @@ export function createDefaultItinerary(
       cities: 'tolerate',
       applyToAllItineraries: false,
     },
-    rhythm: {
-      startDate: null,
-      startTime: null,
-      gender: 'default',
-      usePastActivities: false,
-      ftp: null,
-      systemWeightKg: null,
-      tiresMm: null,
-      useWeather: false,
-      weatherWeight: 100,
-      useSurfaces: false,
-      surfacesWeight: 100,
-      pauseAtFavoritePois: false,
-      poiPauseDurations: {
-        fountains: 15,
-        toilets: null,
-        supermarkets: 15,
-        gasStations: null,
-        bakeries: 15,
-        fastFood: null,
-        cafes: null,
-        bars: null,
-        restaurants: 15,
-        bikeShops: null,
-        hotels: 15,
-        refuges: 15,
-        passes: null,
-      },
-      pauseEveryIntervalEnabled: false,
-      pauseEveryIntervalMin: null,
-      pauseIntervals: [],
-      pausePositionOverridesKm: {},
-    },
+    rhythm: createDefaultRhythmState(),
     poi: {
       fountains: { enabled: true, distanceM: 40 },
       toilets: { enabled: true, distanceM: 40 },

@@ -519,6 +519,7 @@ export function ItineraryPanelContainer({
         updateActive((it) => {
           const moved = moveTimelinePauseItem(it.timeline, id, distanceKm);
           if (moved) return;
+          it.rhythm.pausePositionOverridesKm ??= {};
           it.rhythm.pausePositionOverridesKm[id] = Math.max(0, Number(distanceKm.toFixed(3)));
         })
       }
