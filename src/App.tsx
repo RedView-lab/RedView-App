@@ -42,6 +42,18 @@ function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: strin
   })
 }
 
+async function awaitSupabaseAuth<T>(promise: PromiseLike<T>, label: string): Promise<T> {
+  const timer = window.setTimeout(() => {
+    console.warn(`[app] ${label} is still pending after ${AUTH_BOOT_TIMEOUT_MS}ms`)
+  }, AUTH_BOOT_TIMEOUT_MS)
+
+  try {
+    return await promise
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 type CachedSubscriptionSnapshot = {
   isSubscribed: boolean
   cachedAt: number
@@ -112,6 +124,7 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
+    let authBootstrapSettled = false
 
     const resolveInitialSession = async () => {
       const hash = window.location.hash.substring(1)
@@ -124,12 +137,11 @@ function App() {
         if (accessToken && refreshToken) {
           // Clear hash from the URL immediately so refresh spam cannot re-process stale tokens.
           window.history.replaceState(null, '', window.location.pathname)
-          const { data, error } = await withTimeout(
+          const { data, error } = await awaitSupabaseAuth(
             supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             }),
-            AUTH_BOOT_TIMEOUT_MS,
             'supabase.auth.setSession',
           )
           if (error) throw error
@@ -152,9 +164,8 @@ function App() {
         // on the LockManager for any in-flight refresh and returns a usable token, so all
         // subsequent PostgREST calls run against an already-initialised client.
         try {
-          const { data, error } = await withTimeout(
+          const { data, error } = await awaitSupabaseAuth(
             supabase.auth.getSession(),
-            AUTH_BOOT_TIMEOUT_MS,
             'supabase.auth.getSession',
           )
           if (error) throw error
@@ -168,6 +179,7 @@ function App() {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
         if (!cancelled && !hasStoredSupabaseSession()) setSession(null)
       } finally {
+        authBootstrapSettled = true
         if (!cancelled) setAuthStatus('ready')
       }
     }
@@ -177,7 +189,7 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (cancelled) return
       setSession(nextSession)
-      setAuthStatus('ready')
+      if (authBootstrapSettled) setAuthStatus('ready')
     })
 
     return () => {
@@ -270,9 +282,8 @@ function App() {
         console.warn('[app] Subscription bootstrap failed, refreshing auth before redirecting', error)
 
         try {
-          const { data, error: refreshError } = await withTimeout(
+          const { data, error: refreshError } = await awaitSupabaseAuth(
             supabase.auth.refreshSession(),
-            AUTH_BOOT_TIMEOUT_MS,
             'supabase.auth.refreshSession',
           )
 
