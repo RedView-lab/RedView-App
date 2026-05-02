@@ -3,14 +3,23 @@
 // ============================================
 // Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
 
+import './panel/styles.css';
 import { LidarRenderer } from './renderer';
 import type { HeightmapParams } from './renderer';
 import { CameraController } from './camera';
-import { buildTileFileName } from '../lib/coordConvert';
+import { buildTileFileName, toWgs84 } from '../lib/coordConvert';
 import { saveColorizedData, loadColorizedData, saveTerrainData, loadTerrainData } from '../lib/storage';
 import type { DetectedCrs, AltitudeRef } from '../types';
 import type { AABB } from './lod/types';
 import { LodManager } from './lod/lodManager';
+import {
+  createViewerPanel,
+  densityScaleToPercent,
+  percentToDensityScale,
+  percentToPointSize,
+  pointSizeToPercent,
+  type SnowModeKey,
+} from './panel/controller';
 import {
   buildOctreeInWorker,
   buildRGBA,
@@ -33,6 +42,28 @@ const statsEl = document.getElementById('stats')!;
 
 function setStatus(msg: string, pct?: number) {
   setViewerStatus(statusEl, barFill, msg, pct);
+}
+
+function formatDms(value: number, positiveHemisphere: string, negativeHemisphere: string): string {
+  const absolute = Math.abs(value);
+  const degrees = Math.floor(absolute);
+  const minutesFloat = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = Math.round((minutesFloat - minutes) * 60);
+  const hemisphere = value >= 0 ? positiveHemisphere : negativeHemisphere;
+  return `${degrees}° ${String(minutes).padStart(2, '0')}′ ${String(seconds).padStart(2, '0')}″ ${hemisphere}`;
+}
+
+function buildLocationLabel(lon: number, lat: number): string {
+  return `${formatDms(lat, 'N', 'S')} · ${formatDms(lon, 'E', 'W')}`;
+}
+
+function buildGoogleMapsUrl(lon: number, lat: number): string {
+  return `https://www.google.com/maps?q=${lat},${lon}`;
+}
+
+function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
+  return `Tuile ${x}/${y} (${projection})`;
 }
 
 // --- Parse URL params ---
@@ -60,29 +91,18 @@ async function loadFromOPFS(): Promise<ArrayBuffer> {
 
 // --- Main ---
 let renderer: LidarRenderer | null = null;
-
-// Engine switch button (bottom-right). One-way: WebGPU → WebGL.
-// In WebGL mode it stays visible but disabled as an indicator.
-const engineBtn = document.getElementById('engine-btn') as HTMLButtonElement | null;
 const forceWebGL = params.get('engine') === 'webgl';
-if (engineBtn) {
-  if (forceWebGL) {
-    engineBtn.textContent = '⚙ Moteur : WebGL HD';
-    engineBtn.disabled = true;
-    engineBtn.title = 'Moteur WebGL HD actif. Rechargez sans le paramètre ?engine=webgl pour revenir à WebGPU.';
-  } else {
-    engineBtn.addEventListener('click', () => {
-      if (!confirm(
-        'Basculer vers le moteur WebGL HD ?\n\n' +
-        '• Terrain texturé orthophoto en haute résolution\n' +
-        '• Pas de nuage de points LiDAR (compatible toutes machines)\n' +
-        '• Action irréversible : il faudra recharger pour revenir à WebGPU.'
-      )) return;
-      const url = new URL(window.location.href);
-      url.searchParams.set('engine', 'webgl');
-      window.location.href = url.toString();
-    });
-  }
+
+function switchToWebGLFallback() {
+  if (!confirm(
+    'Basculer vers le moteur WebGL HD ?\n\n' +
+    '• Terrain texturé orthophoto en haute résolution\n' +
+    '• Pas de nuage de points LiDAR (compatible toutes machines)\n' +
+    '• Action irréversible : il faudra recharger pour revenir à WebGPU.'
+  )) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set('engine', 'webgl');
+  window.location.href = url.toString();
 }
 
 async function startWebGLFallback(reasonForLog: string): Promise<void> {
@@ -242,6 +262,37 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     lodManager.setOctree(octree);
     if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
 
+    const [lon, lat] = toWgs84((xKm + 0.5) * 1000, (yKm + 0.5) * 1000, crs);
+    let panelSnowHandler = async (_mode: SnowModeKey) => {};
+    const panel = createViewerPanel({
+      tileLabel: buildPanelTileLabel(xKm, yKm, crs),
+      locationLabel: buildLocationLabel(lon, lat),
+      googleMapsUrl: buildGoogleMapsUrl(lon, lat),
+      pointSizePercent: pointSizeToPercent(renderer.pointSize),
+      densityPercent: densityScaleToPercent(lodManager.getUserDensityScale()),
+      onPointSizeChange: (percent) => {
+        if (!renderer) return;
+        renderer.pointSize = percentToPointSize(percent);
+        requestRender();
+      },
+      onDensityChange: (percent) => {
+        lodManager.setUserDensityScale(percentToDensityScale(percent));
+        requestRender();
+      },
+      onSnowModeChange: (mode) => {
+        void panelSnowHandler(mode);
+      },
+      onLowQualityClick: () => {
+        switchToWebGLFallback();
+      },
+    });
+    panel.setSettingsEnabled(false);
+    panel.setSnowMode('off');
+    panel.setLowQualityButtonState({
+      label: 'Passer en mode LowQuality',
+      title: 'Bascule vers le moteur WebGL HD (terrain texture sans nuage de points).',
+    });
+
     // Done — hide overlay
     setStatus('Prêt', 100);
     setTimeout(() => overlay.classList.add('hidden'), 300);
@@ -324,13 +375,21 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       if (!renderer) return;
       if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
       if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
-      renderer.pointSize = Math.max(0.01, Math.min(10, renderer.pointSize));
+      renderer.pointSize = Math.max(0.2, Math.min(1.0, renderer.pointSize));
       if (e.key === 't' || e.key === 'T') renderer.terrainVisible = !renderer.terrainVisible;
       if (e.key === 'l' || e.key === 'L') {
         renderer.lodThreshold = renderer.lodThreshold > 0 ? 0 : Math.max(50, extent * 0.5);
       }
       if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
-      if (e.key === 'n' || e.key === 'N') void cycleSnow();
+      if (e.key === 'n' || e.key === 'N') {
+        const nextMode: SnowModeKey = snowMode === 'off'
+          ? 'cover'
+          : snowMode === 'cover'
+            ? 'thickness'
+            : 'off';
+        void panelSnowHandler(nextMode);
+      }
+      panel.setPointSizePercent(pointSizeToPercent(renderer.pointSize));
       requestRender();
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -363,6 +422,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       window.removeEventListener('pagehide', handlePageHide);
       camera.onChange = null;
       camera.destroy();
+      panel.destroy();
       renderer?.destroy();
       renderer = null;
     };
@@ -376,95 +436,86 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     window.addEventListener('pagehide', handlePageHide);
 
     // ---------------- SNOW ❄ ----------------
-    // Bouton bas de l'écran : off → cover → thickness → off
-    // Au premier passage non-off, fetch AROME via Open-Meteo + redistribution.
-    const snowBtn = document.getElementById('snow-btn') as HTMLButtonElement | null;
-    const snowModes: Array<{ key: 'off' | 'cover' | 'thickness'; gpu: 0 | 1 | 2; label: string }> = [
-      { key: 'off',       gpu: 0, label: '❄ Neige : off' },
-      { key: 'cover',     gpu: 1, label: '❄ Couverture' },
-      { key: 'thickness', gpu: 2, label: '❄ Épaisseur (cm)' },
-    ];
-    let snowIdx = 0;
+    // Le panneau Figma pilote les modes neige (off / couverture / épaisseur).
+    const snowModes: Record<SnowModeKey, 0 | 1 | 2> = {
+      off: 0,
+      cover: 1,
+      thickness: 2,
+    };
+    let snowMode: SnowModeKey = 'off';
     let snowFieldLoaded = false;
     let snowLoading = false;
-    const handleSnowClick = () => {
-      void cycleSnow();
-    };
 
-    async function cycleSnow() {
-      if (!renderer || !snowBtn || snowLoading) return;
+    async function ensureSnowFieldLoaded() {
+      if (!renderer || snowLoading || snowFieldLoaded) return true;
       const pc = pointCloud;
       const tm = terrainMesh;
-      if (!pc || !tm) return;
-      const next = (snowIdx + 1) % snowModes.length;
-      const mode = snowModes[next];
-      // Premier passage en mode != off → on calcule le champ de neige
-      if (!snowFieldLoaded && mode.gpu !== 0) {
-        snowLoading = true;
-        snowBtn.classList.add('loading');
-        snowBtn.textContent = '❄ Calcul…';
-        try {
-          const { runSnowPipeline } = await import('../../snow');
-          const field = await runSnowPipeline(
-            {
-              data: tm.heightGrid,
-              width: tm.gridWidth,
-              height: tm.gridHeight,
-              bounds: pc.bounds,
-              crs,
-            },
-            {
-              progress: (pct, label) => {
-                snowBtn.textContent = `❄ ${label} ${pct.toFixed(0)}%`;
-              },
-            },
-          );
-          // Le champ de neige est row-major SUD→NORD ; le renderer attend
-          // l'orientation heightmap (NORD→SUD). On flip les lignes.
-          const flipped = new Float32Array(field.data.length);
-          for (let y = 0; y < field.height; y++) {
-            const srcRow = (field.height - 1 - y) * field.width;
-            const dstRow = y * field.width;
-            for (let x = 0; x < field.width; x++) {
-              flipped[dstRow + x] = field.data[srcRow + x];
-            }
+      if (!pc || !tm) return false;
+      snowLoading = true;
+      panel.setSnowLoading(true);
+      try {
+        const { runSnowPipeline } = await import('../../snow');
+        const field = await runSnowPipeline(
+          {
+            data: tm.heightGrid,
+            width: tm.gridWidth,
+            height: tm.gridHeight,
+            bounds: pc.bounds,
+            crs,
+          },
+          { progress: () => undefined },
+        );
+        const flipped = new Float32Array(field.data.length);
+        for (let y = 0; y < field.height; y++) {
+          const srcRow = (field.height - 1 - y) * field.width;
+          const dstRow = y * field.width;
+          for (let x = 0; x < field.width; x++) {
+            flipped[dstRow + x] = field.data[srcRow + x];
           }
-          renderer.setSnow({
-            data: flipped,
-            width: field.width,
-            height: field.height,
-            originX: pc.bounds.minX - cx,
-            originZ: -(pc.bounds.maxY - cy),
-            scaleX: pc.bounds.maxX - pc.bounds.minX,
-            scaleZ: pc.bounds.maxY - pc.bounds.minY,
-          });
-          requestRender();
-          snowFieldLoaded = true;
-          console.log(
-            `[Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
-            `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
-            `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
-          );
-        } catch (err) {
-          console.error('[Viewer] Snow fetch failed:', err);
-          snowBtn.textContent = '❄ Erreur';
-          setTimeout(() => { if (snowBtn) snowBtn.textContent = snowModes[0].label; }, 2500);
-          snowIdx = 0;
-          renderer.setSnowMode(0);
-          requestRender();
+        }
+        renderer.setSnow({
+          data: flipped,
+          width: field.width,
+          height: field.height,
+          originX: pc.bounds.minX - cx,
+          originZ: -(pc.bounds.maxY - cy),
+          scaleX: pc.bounds.maxX - pc.bounds.minX,
+          scaleZ: pc.bounds.maxY - pc.bounds.minY,
+        });
+        requestRender();
+        snowFieldLoaded = true;
+        console.log(
+          `[Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
+          `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
+          `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
+        );
+        return true;
+      } catch (err) {
+        console.error('[Viewer] Snow fetch failed:', err);
+        renderer.setSnowMode(0);
+        requestRender();
+        return false;
+      } finally {
+        snowLoading = false;
+        panel.setSnowLoading(false);
+      }
+    }
+
+    panelSnowHandler = async (nextMode: SnowModeKey) => {
+      if (!renderer || snowLoading) return;
+      if (nextMode !== 'off') {
+        const ready = await ensureSnowFieldLoaded();
+        if (!ready) {
+          snowMode = 'off';
+          panel.setSnowMode('off');
           return;
-        } finally {
-          snowLoading = false;
-          snowBtn.classList.remove('loading');
         }
       }
-      snowIdx = next;
-      renderer.setSnowMode(mode.gpu);
-      snowBtn.textContent = mode.label;
-      snowBtn.classList.toggle('active', mode.gpu !== 0);
+      snowMode = nextMode;
+      renderer.setSnowMode(snowModes[nextMode]);
+      panel.setSnowMode(nextMode);
       requestRender();
-    }
-    snowBtn?.addEventListener('click', handleSnowClick);
+    };
 
   } catch (err: any) {
     const raw = err?.message || String(err);

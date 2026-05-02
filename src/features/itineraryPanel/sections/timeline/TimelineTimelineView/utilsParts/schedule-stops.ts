@@ -101,7 +101,7 @@ export function buildTimedAutoPauses(
     if (durationMin <= 0 || entry.item.kind !== 'poi') return;
 
     const pauseId = `poi-pause-${entry.item.id}`;
-    const distanceKm = resolvePauseDistanceKm(entry.distanceKm, overrideDistancesKm[pauseId], totalDistanceM);
+    const distanceKm = Number(entry.distanceKm.toFixed(3));
     const rideElapsedSeconds = resolveRideElapsedSecondsForDistance(
       prediction,
       distanceKm,
@@ -113,7 +113,7 @@ export function buildTimedAutoPauses(
       id: pauseId,
       label: `Pause ${entry.item.label}`,
       source: 'favorite-poi',
-      attachedToItemId: isSamePauseDistance(distanceKm, entry.distanceKm) ? entry.item.id : null,
+      attachedToItemId: entry.item.id,
       poiCategory: entry.item.poiCategory,
       sortIndex,
       distanceKm,
@@ -199,10 +199,6 @@ function resolveRideElapsedSecondsForDistance(
     totalDistanceM,
   );
   return resolvedRideElapsedSeconds ?? fallbackRideElapsedSeconds;
-}
-
-function isSamePauseDistance(leftDistanceKm: number, rightDistanceKm: number): boolean {
-  return Math.abs(leftDistanceKm - rightDistanceKm) <= 0.001;
 }
 
 function buildIntervalStopTimes(intervalMin: number, totalRideSeconds: number): number[] {

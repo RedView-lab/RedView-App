@@ -521,6 +521,10 @@ export function ItineraryPanelContainer({
           const moved = moveTimelinePauseItem(it.timeline, id, distanceKm);
           if (moved) return;
           it.rhythm = normalizeItineraryRhythmState(it.rhythm);
+          if (id.startsWith('poi-pause-')) {
+            delete it.rhythm.pausePositionOverridesKm[id];
+            return;
+          }
           it.rhythm.pausePositionOverridesKm[id] = Math.max(0, Number(distanceKm.toFixed(3)));
         })
       }

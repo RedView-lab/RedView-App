@@ -40,6 +40,7 @@ export class LodManager {
   private visiblePointCount = 0;
 
   density = 1.0;
+  private userDensityScale = 1.0;
 
   private refinedLastFrame = new Set<number>();
   private refinedThisFrame = new Set<number>();
@@ -126,7 +127,7 @@ export class LodManager {
     // Front-to-back sort only helps TBDR architectures (Apple). On
     // immediate-mode dGPUs it just costs CPU and breaks draw batching.
     this.sortFrontToBack = profile.isApple;
-    this.stats.pointBudget = this.pointBudget;
+    this.stats.pointBudget = this.getEffectivePointBudget();
     console.log(
       `[LOD] Platform budget: ${(this.pointBudget / 1e6).toFixed(1)}M ` +
       `(max ${(this.maxBudget / 1e6).toFixed(1)}M) target ${this.targetFrameMs.toFixed(1)}ms ` +
@@ -152,7 +153,16 @@ export class LodManager {
   }
 
   getPointBudget(): number {
-    return this.pointBudget;
+    return this.getEffectivePointBudget();
+  }
+
+  getUserDensityScale(): number {
+    return this.userDensityScale;
+  }
+
+  setUserDensityScale(scale: number): void {
+    this.userDensityScale = Math.max(MIN_DENSITY, Math.min(1.0, scale));
+    this.stats.pointBudget = this.getEffectivePointBudget();
   }
 
   update(
@@ -207,7 +217,7 @@ export class LodManager {
 
     this.stats.visiblePoints = this.visiblePointCount;
     this.stats.visibleNodes = this.visibleNodes.length;
-    this.stats.pointBudget = this.pointBudget;
+    this.stats.pointBudget = this.getEffectivePointBudget();
 
     if (!this.lastCamera) {
       this.lastCamera = { posX: camPosX, posY: camPosY, posZ: camPosZ, fwdX: camFwdX, fwdY: camFwdY, fwdZ: camFwdZ };
@@ -412,8 +422,9 @@ export class LodManager {
   private enforceBudget(): void {
     const nodes = this.visibleNodes;
     const n = nodes.length;
+    const effectiveBudget = this.getEffectivePointBudget();
 
-    if (this.visiblePointCount <= this.pointBudget) {
+    if (this.visiblePointCount <= effectiveBudget) {
       this.density = 1.0;
       return;
     }
@@ -434,7 +445,7 @@ export class LodManager {
     }
 
     const avgSS = totalSS / leafPointCount;
-    const budgetRatio = this.pointBudget / this.visiblePointCount;
+    const budgetRatio = effectiveBudget / this.visiblePointCount;
 
     for (let i = 0; i < n; i++) {
       const node = nodes[i];
@@ -452,6 +463,10 @@ export class LodManager {
     }
 
     this.density = Math.max(MIN_DENSITY, budgetRatio);
+  }
+
+  private getEffectivePointBudget(): number {
+    return Math.max(1, Math.floor(this.pointBudget * this.userDensityScale));
   }
 
   // ── Temporal density smoothing ──

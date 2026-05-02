@@ -217,6 +217,7 @@ export function TimelineScheduleCanvas({
     >,
   ) => {
     if (!onMovePauseScheduled) return;
+    if (pause.source === 'favorite-poi') return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -543,19 +544,7 @@ export function TimelineScheduleCanvas({
                           <span
                             className="rvi-tl-schedule__pause-chip-icon"
                             aria-hidden
-                            onPointerDown={onMovePauseScheduled ? (pointerEvent) => {
-                              handlePausePointerDown(pointerEvent, {
-                                id: pause.id,
-                                source: 'favorite-poi',
-                                poiCategory: event.item.poiCategory,
-                                durationMin: pause.durationMin,
-                                distanceKm: event.distanceKm,
-                                toNextSeconds: event.toNextSeconds,
-                                heightPx: pause.heightPx,
-                                topPx: previewEvent.topPx,
-                                dayKey: previewEvent.dayKey,
-                              });
-                            } : undefined}
+                            onPointerDown={undefined}
                           >
                             <KindBadge kind="pause" size={24} />
                           </span>
@@ -670,6 +659,7 @@ export function TimelineScheduleCanvas({
             || (pause.source === 'interval' && onChangeIntervalPauseDuration)
             || (pause.source === 'favorite-poi' && pause.poiCategory && onChangeFavoritePoiPauseDuration)
           );
+          const canDragStandalonePause = pause.source !== 'favorite-poi' && Boolean(onMovePauseScheduled);
           const standalonePauseEditTargetId = pause.source === 'interval'
             ? resolveIntervalPauseId(pause.id)
             : pause.source === 'favorite-poi' && pause.poiCategory
@@ -687,11 +677,11 @@ export function TimelineScheduleCanvas({
                 'rvi-tl-schedule__pause',
                 'rvi-tl-schedule__pause--standalone',
                 pause.visible ? 'is-visible' : '',
-                onMovePauseScheduled ? 'is-draggable' : '',
+                canDragStandalonePause ? 'is-draggable' : '',
                 dragging ? 'is-dragging' : '',
               ].filter(Boolean).join(' ')}
               data-source={pause.source}
-              onPointerDown={(event) => handlePausePointerDown(event, pause)}
+              onPointerDown={canDragStandalonePause ? (event) => handlePausePointerDown(event, pause) : undefined}
               style={{
                 top: pauseTopPx,
                 '--rvi-tl-pause-height': `${previewPause.heightPx}px`,
@@ -701,7 +691,7 @@ export function TimelineScheduleCanvas({
             >
               <div
                 className="rvi-tl-schedule__pause-card"
-                onPointerDown={(event) => handlePausePointerDown(event, pause)}
+                onPointerDown={canDragStandalonePause ? (event) => handlePausePointerDown(event, pause) : undefined}
               >
                 <div className="rvi-tl-schedule__pause-main">
                   <span className="rvi-tl-schedule__event-icon" aria-hidden>

@@ -12,8 +12,9 @@ import { WebGLTerrainRenderer } from './renderer';
 import type { TerrainGPUData } from './renderer';
 import type { TerrainMeshWebGL, TerrainWorkerInput, TerrainWorkerOutput } from './terrainWorker';
 import { stitchOrtho } from './orthoStitcher';
-import { detectCrs } from '../lib/coordConvert';
+import { detectCrs, toWgs84 } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
+import { createViewerPanel, type SnowModeKey } from '../viewer/panel/controller';
 
 export interface WebGLViewerHandles {
   canvas: HTMLCanvasElement;
@@ -31,6 +32,24 @@ export interface WebGLViewerOptions {
 }
 
 interface ParsedHeader { bounds: PointCloudBounds; crs: DetectedCrs; }
+
+function formatDms(value: number, positiveHemisphere: string, negativeHemisphere: string): string {
+  const absolute = Math.abs(value);
+  const degrees = Math.floor(absolute);
+  const minutesFloat = (absolute - degrees) * 60;
+  const minutes = Math.floor(minutesFloat);
+  const seconds = Math.round((minutesFloat - minutes) * 60);
+  const hemisphere = value >= 0 ? positiveHemisphere : negativeHemisphere;
+  return `${degrees}° ${String(minutes).padStart(2, '0')}′ ${String(seconds).padStart(2, '0')}″ ${hemisphere}`;
+}
+
+function buildLocationLabel(lon: number, lat: number): string {
+  return `${formatDms(lat, 'N', 'S')} · ${formatDms(lon, 'E', 'W')}`;
+}
+
+function buildGoogleMapsUrl(lon: number, lat: number): string {
+  return `https://www.google.com/maps?q=${lat},${lon}`;
+}
 
 const EXPORT_GLB_MAX_GRID = 2048;
 const EXPORT_GLB_MIN_RES_M = 0.25;
@@ -199,6 +218,26 @@ export async function runWebGLFallback(
   const header = readBoundsFromLasHeader(opts.buffer);
   if (!header) throw new Error("En-tête LAS illisible — fichier corrompu ?");
   const parsedHeader = header;
+  const centerX = (parsedHeader.bounds.minX + parsedHeader.bounds.maxX) / 2;
+  const centerY = (parsedHeader.bounds.minY + parsedHeader.bounds.maxY) / 2;
+  const [lon, lat] = toWgs84(centerX, centerY, parsedHeader.crs);
+  let panelSnowHandler = async (_mode: SnowModeKey) => {};
+  const panel = createViewerPanel({
+    tileLabel: opts.tileLabel,
+    locationLabel: buildLocationLabel(lon, lat),
+    googleMapsUrl: buildGoogleMapsUrl(lon, lat),
+    onSnowModeChange: (mode) => {
+      void panelSnowHandler(mode);
+    },
+  });
+  panel.setPointControlsDisabled(true);
+  panel.setSettingsEnabled(true);
+  panel.setSnowMode('off');
+  panel.setLowQualityButtonState({
+    label: 'Mode LowQuality actif',
+    disabled: true,
+    title: 'Le moteur WebGL HD est deja actif. Rechargez sans ?engine=webgl pour revenir au mode WebGPU.',
+  });
 
   // 3. Kick off ortho stitch + terrain build IN PARALLEL. Stitch needs only
   // the header; terrain worker needs a stitched UV anchor — but in stitched
@@ -244,32 +283,23 @@ export async function runWebGLFallback(
   setTimeout(() => overlay.classList.add('hidden'), 250);
 
   // ---------------- SNOW ❄ ----------------
-  // Same UX as the WebGPU viewer: bottom-of-screen button cycles
-  // off → cover → thickness. First non-off click triggers a one-shot
-  // AROME fetch + redistribution worker. Result is uploaded as an R32F
-  // texture sampled in the fragment shader.
-  const snowBtn = document.getElementById('snow-btn') as HTMLButtonElement | null;
-  type SnowMode = { key: 'off' | 'cover' | 'thickness'; gpu: 0 | 1 | 2; label: string };
-  const snowModes: SnowMode[] = [
-    { key: 'off',       gpu: 0, label: '❄ Neige : off' },
-    { key: 'cover',     gpu: 1, label: '❄ Couverture' },
-    { key: 'thickness', gpu: 2, label: '❄ Épaisseur (cm)' },
-  ];
-  let snowIdx = 0;
+  // Le panneau partagé pilote les modes neige, même en fallback WebGL HD.
+  const snowModes: Record<SnowModeKey, 0 | 1 | 2> = {
+    off: 0,
+    cover: 1,
+    thickness: 2,
+  };
+  let snowMode: SnowModeKey = 'off';
   let snowFieldLoaded = false;
   let snowLoading = false;
 
   const cx = (mesh.bounds.minX + mesh.bounds.maxX) / 2;
   const cy = (mesh.bounds.minY + mesh.bounds.maxY) / 2;
 
-  async function cycleSnow() {
-    if (!snowBtn || snowLoading) return;
-    const next = (snowIdx + 1) % snowModes.length;
-    const mode = snowModes[next];
-    if (!snowFieldLoaded && mode.gpu !== 0) {
+  async function ensureSnowFieldLoaded() {
+    if (snowLoading || snowFieldLoaded) return true;
       snowLoading = true;
-      snowBtn.classList.add('loading');
-      snowBtn.textContent = '❄ Calcul…';
+      panel.setSnowLoading(true);
       try {
         const { runSnowPipeline } = await import('../../snow');
         const field = await runSnowPipeline(
@@ -280,11 +310,7 @@ export async function runWebGLFallback(
             bounds: mesh.bounds,
             crs: parsedHeader.crs,
           },
-          {
-            progress: (pct, label) => {
-              snowBtn.textContent = `❄ ${label} ${pct.toFixed(0)}%`;
-            },
-          },
+          { progress: () => undefined },
         );
         // Snow field is row-major SOUTH→NORTH; the renderer's V axis goes
         // NORTH→SOUTH (snow originZ anchors the top edge at -maxY). Flip rows.
@@ -311,28 +337,42 @@ export async function runWebGLFallback(
           `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
           `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
         );
+        return true;
       } catch (err) {
         console.error('[WebGL Viewer] Snow fetch failed:', err);
-        snowBtn.textContent = '❄ Erreur';
-        setTimeout(() => { if (snowBtn) snowBtn.textContent = snowModes[0].label; }, 2500);
-        snowIdx = 0;
         renderer.setSnowMode(0);
-        snowLoading = false;
-        snowBtn.classList.remove('loading');
-        return;
+        return false;
       } finally {
         snowLoading = false;
-        snowBtn.classList.remove('loading');
+        panel.setSnowLoading(false);
       }
     }
-    snowIdx = next;
-    renderer.setSnowMode(mode.gpu);
-    snowBtn.textContent = mode.label;
-    snowBtn.classList.toggle('active', mode.gpu !== 0);
+
+  async function applySnowMode(nextMode: SnowModeKey) {
+    if (snowLoading) return;
+    if (nextMode !== 'off') {
+      const ready = await ensureSnowFieldLoaded();
+      if (!ready) {
+        snowMode = 'off';
+        panel.setSnowMode('off');
+        return;
+      }
+    }
+    snowMode = nextMode;
+    renderer.setSnowMode(snowModes[nextMode]);
+    panel.setSnowMode(nextMode);
   }
-  snowBtn?.addEventListener('click', () => void cycleSnow());
+  panelSnowHandler = applySnowMode;
+
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'n' || e.key === 'N') void cycleSnow();
+    if (e.key === 'n' || e.key === 'N') {
+      const nextMode: SnowModeKey = snowMode === 'off'
+        ? 'cover'
+        : snowMode === 'cover'
+          ? 'thickness'
+          : 'off';
+      void applySnowMode(nextMode);
+    }
   });
 
   const exportWrap = document.getElementById('export-wrap') as HTMLDivElement | null;

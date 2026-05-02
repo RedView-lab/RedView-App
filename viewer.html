@@ -84,110 +84,6 @@
       z-index: 50;
       pointer-events: none;
     }
-    #bottom-actions {
-      position: fixed;
-      bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 60;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .viewer-pill {
-      position: relative;
-      z-index: 60;
-      padding: 10px 18px;
-      background: rgba(20, 30, 60, 0.7);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      color: #fff;
-      font-family: system-ui, sans-serif;
-      font-size: 13px;
-      font-weight: 500;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 999px;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s, transform 0.1s;
-      min-width: 180px;
-      text-align: center;
-    }
-    .viewer-pill:hover { background: rgba(40, 60, 100, 0.85); }
-    .viewer-pill:active { transform: scale(0.97); }
-    .viewer-pill.loading { opacity: 0.7; cursor: wait; }
-    .viewer-pill.active { background: rgba(180, 220, 255, 0.85); color: #0a1530; }
-    .viewer-pill[disabled] { opacity: 0.6; cursor: not-allowed; }
-    #export-wrap {
-      position: relative;
-      display: none;
-    }
-    #export-wrap.visible {
-      display: block;
-    }
-    #export-menu {
-      position: absolute;
-      bottom: calc(100% + 10px);
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding: 8px;
-      min-width: 170px;
-      border-radius: 16px;
-      background: rgba(8, 12, 24, 0.92);
-      border: 1px solid rgba(255,255,255,0.12);
-      box-shadow: 0 14px 36px rgba(0,0,0,0.34);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-    }
-    #export-menu[hidden] {
-      display: none;
-    }
-    .export-format-btn {
-      padding: 9px 12px;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 12px;
-      background: rgba(255,255,255,0.05);
-      color: #fff;
-      font-family: system-ui, sans-serif;
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-    }
-    .export-format-btn:hover {
-      background: rgba(64, 97, 174, 0.35);
-      border-color: rgba(171, 201, 255, 0.4);
-    }
-    .export-format-btn[disabled] {
-      opacity: 0.55;
-      cursor: not-allowed;
-    }
-    #engine-btn {
-      position: fixed;
-      bottom: 16px;
-      right: 16px;
-      z-index: 60;
-      padding: 8px 14px;
-      background: rgba(20, 30, 60, 0.7);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      color: #fff;
-      font-family: system-ui, sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 999px;
-      cursor: pointer;
-      user-select: none;
-      transition: background 0.15s, transform 0.1s, opacity 0.15s;
-    }
-    #engine-btn:hover { background: rgba(40, 60, 100, 0.85); }
-    #engine-btn:active { transform: scale(0.97); }
-    #engine-btn[disabled] { opacity: 0.55; cursor: not-allowed; }
   </style>
 </head>
 <body>
@@ -205,17 +101,6 @@
     +/- : Taille · T : Terrain · L : LOD · Q : Stats · N : Neige
   </div>
   <div id="watermark">RedView LiDAR HD</div>
-  <div id="bottom-actions">
-    <button id="snow-btn" class="viewer-pill" type="button">❄ Neige : off</button>
-    <div id="export-wrap">
-      <button id="export-btn" class="viewer-pill" type="button">⤓ Exporter</button>
-      <div id="export-menu" hidden>
-        <button class="export-format-btn" data-format="gltf" type="button">GLTF</button>
-        <button class="export-format-btn" data-format="fbx" type="button">FBX</button>
-      </div>
-    </div>
-  </div>
-  <button id="engine-btn" type="button" title="Bascule vers le moteur WebGL HD (terrain texturé sans nuage de points). Irréversible — il faudra recharger pour revenir à WebGPU.">⚙ Moteur : WebGPU</button>
 
   <script type="module" src="/src/features/lidar/viewer/main.ts"></script>
 </body>
