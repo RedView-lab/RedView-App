@@ -34,6 +34,8 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
+const QUALITY_TIER_SCALES = [1.0, 0.72, 0.48, 0.28] as const;
+
 export class LodManager {
   private octree: FlatOctree | null = null;
   private visibleNodes: VisibleNode[] = [];
@@ -77,6 +79,8 @@ export class LodManager {
   private framesSeen = 0;
   private slowFrameCount = 0;
   private fastFrameCount = 0;
+  private motionPressure = 0;
+  private framePressure = 1;
 
   /** Temporal density smoothing: stores previous frame density per node offset key */
   private prevDensity = new Map<number, number>();
@@ -96,6 +100,8 @@ export class LodManager {
     voxelSamples: 0,
     frustumCulled: 0,
     lodSkipped: 0,
+    qualityScale: 1,
+    motionPressure: 0,
   };
 
   setOctree(octree: FlatOctree) {
@@ -180,6 +186,7 @@ export class LodManager {
   ): void {
     if (!this.octree) return;
 
+    this.updateMotionPressure(camPosX, camPosY, camPosZ, camFwdX, camFwdY, camFwdZ);
     this.updateBudget(deltaMs);
 
     if (this.checkTemporalCoherence(camPosX, camPosY, camPosZ, camFwdX, camFwdY, camFwdZ)) {
@@ -298,6 +305,8 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: 1.0,
+          qualityTier: 0,
+          qualityScale: 1.0,
           fadeAlpha: 1.0,
           camDist2,
         });
@@ -316,6 +325,8 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: 1.0,
+          qualityTier: 0,
+          qualityScale: 1.0,
           fadeAlpha: 1.0,
           camDist2,
         });
@@ -341,6 +352,8 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: voxelAlpha,  // GPU stochastic discard handles partial rendering
+          qualityTier: 0,
+          qualityScale: 1.0,
           fadeAlpha: voxelAlpha,
           camDist2,
         });
@@ -382,6 +395,8 @@ export class LodManager {
           depth: node.depth,
           screenSize: ss,
           density: 1.0,
+          qualityTier: 0,
+          qualityScale: 1.0,
           fadeAlpha: 1.0,
           camDist2,
         });
@@ -415,6 +430,8 @@ export class LodManager {
         depth: node.depth,
         screenSize: ss,
         density: 1.0,
+        qualityTier: 0,
+        qualityScale: 1.0,
         fadeAlpha: 1.0,
         camDist2,
       });
@@ -429,9 +446,11 @@ export class LodManager {
     const nodes = this.visibleNodes;
     const n = nodes.length;
     const effectiveBudget = this.getEffectivePointBudget();
+    const qualityAdjustedPointCount = this.applyQualityTiers(effectiveBudget);
 
-    if (this.visiblePointCount <= effectiveBudget) {
+    if (qualityAdjustedPointCount <= effectiveBudget) {
       this.density = 1.0;
+      this.visiblePointCount = qualityAdjustedPointCount;
       return;
     }
 
@@ -440,8 +459,9 @@ export class LodManager {
     let leafPointCount = 0;
     for (let i = 0; i < n; i++) {
       if (!nodes[i].isVoxel) {
-        totalSS += nodes[i].screenSize * nodes[i].count;
-        leafPointCount += nodes[i].count;
+        const weightedCount = Math.max(1, Math.ceil(nodes[i].count * nodes[i].qualityScale));
+        totalSS += nodes[i].screenSize * weightedCount;
+        leafPointCount += weightedCount;
       }
     }
 
@@ -451,7 +471,7 @@ export class LodManager {
     }
 
     const avgSS = totalSS / leafPointCount;
-    const budgetRatio = effectiveBudget / this.visiblePointCount;
+    const budgetRatio = effectiveBudget / qualityAdjustedPointCount;
 
     for (let i = 0; i < n; i++) {
       const node = nodes[i];
@@ -460,15 +480,22 @@ export class LodManager {
       if (node.isVoxel) continue;
 
       // Tiny nodes always render at full density (< 1000 points = negligible cost)
-      if (node.count < 1000) continue;
+      if (node.count < 1000) {
+        node.density = Math.max(MIN_DENSITY, node.qualityScale * node.fadeAlpha);
+        continue;
+      }
 
       // Proportional density: nodes with larger screen size keep more points
       const ssWeight = avgSS > 0 ? node.screenSize / avgSS : 1;
       const rawDensity = budgetRatio * Math.sqrt(ssWeight);
-      node.density = Math.max(MIN_DENSITY, Math.min(1.0, rawDensity)) * node.fadeAlpha;
+      const qualityBudgetScale = node.qualityScale * Math.max(MIN_DENSITY, Math.min(1.0, rawDensity));
+      node.density = Math.max(MIN_DENSITY, qualityBudgetScale * node.fadeAlpha);
     }
 
-    this.density = Math.max(MIN_DENSITY, budgetRatio);
+    this.visiblePointCount = this.estimateVisiblePointCount();
+    this.density = Math.max(MIN_DENSITY, Math.min(1.0, budgetRatio));
+    this.stats.qualityScale = this.estimateLeafQualityScale();
+    this.stats.motionPressure = this.motionPressure;
   }
 
   private getEffectivePointBudget(): number {
@@ -501,6 +528,76 @@ export class LodManager {
     const tmp = this.prevDensity;
     this.prevDensity = swap;
     this.prevDensitySwap = tmp;
+    this.visiblePointCount = this.estimateVisiblePointCount();
+    this.stats.qualityScale = this.estimateLeafQualityScale();
+    this.stats.motionPressure = this.motionPressure;
+  }
+
+  private applyQualityTiers(effectiveBudget: number): number {
+    const nodes = this.visibleNodes;
+    const budgetPressure = this.visiblePointCount / Math.max(effectiveBudget, 1);
+    let total = 0;
+
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node.isVoxel) {
+        node.qualityTier = 0;
+        node.qualityScale = 1.0;
+        node.density = node.fadeAlpha;
+        total += Math.max(1, Math.ceil(node.count * node.density));
+        continue;
+      }
+
+      const qualityTier = this.selectQualityTier(node.screenSize, budgetPressure);
+      node.qualityTier = qualityTier;
+      node.qualityScale = QUALITY_TIER_SCALES[qualityTier];
+      node.density = Math.max(MIN_DENSITY, node.qualityScale * node.fadeAlpha);
+      total += Math.max(1, Math.ceil(node.count * node.density));
+    }
+
+    this.visiblePointCount = total;
+    this.stats.qualityScale = this.estimateLeafQualityScale();
+    this.stats.motionPressure = this.motionPressure;
+    return total;
+  }
+
+  private selectQualityTier(screenSize: number, budgetPressure: number): number {
+    let tier = 0;
+    if (screenSize < 95) tier = 2;
+    else if (screenSize < 150) tier = 1;
+
+    if (screenSize < 72) tier += 1;
+    if (this.motionPressure > 0.18) tier += 1;
+    if (this.motionPressure > 0.55) tier += 1;
+    if (this.framePressure > 1.04) tier += 1;
+    if (this.framePressure > 1.18) tier += 1;
+    if (budgetPressure > 1.08) tier += 1;
+    if (budgetPressure > 1.32) tier += 1;
+    if (screenSize > 220) tier -= 1;
+    if (screenSize > 320) tier -= 1;
+
+    return Math.max(0, Math.min(QUALITY_TIER_SCALES.length - 1, tier));
+  }
+
+  private estimateVisiblePointCount(): number {
+    let total = 0;
+    for (let i = 0; i < this.visibleNodes.length; i++) {
+      const node = this.visibleNodes[i];
+      total += Math.max(1, Math.ceil(node.count * node.density));
+    }
+    return total;
+  }
+
+  private estimateLeafQualityScale(): number {
+    let weightedQuality = 0;
+    let weightedPoints = 0;
+    for (let i = 0; i < this.visibleNodes.length; i++) {
+      const node = this.visibleNodes[i];
+      if (node.isVoxel || node.count === 0) continue;
+      weightedQuality += node.qualityScale * node.count;
+      weightedPoints += node.count;
+    }
+    return weightedPoints > 0 ? weightedQuality / weightedPoints : 1;
   }
 
   private checkTemporalCoherence(
@@ -521,6 +618,30 @@ export class LodManager {
     return true;
   }
 
+  private updateMotionPressure(
+    px: number, py: number, pz: number,
+    fx: number, fy: number, fz: number,
+  ): void {
+    if (!this.lastCamera) {
+      this.motionPressure *= 0.85;
+      return;
+    }
+
+    const lc = this.lastCamera;
+    const dx = px - lc.posX;
+    const dy = py - lc.posY;
+    const dz = pz - lc.posZ;
+    const posDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const posPressure = Math.min(1, posDist / (TEMPORAL_POS_THRESHOLD * 5));
+
+    const dot = fx * lc.fwdX + fy * lc.fwdY + fz * lc.fwdZ;
+    const angle = Math.acos(Math.min(1, Math.max(-1, dot))) * (180 / Math.PI);
+    const rotPressure = Math.min(1, angle / (TEMPORAL_ROT_THRESHOLD * 7));
+
+    const targetPressure = Math.max(posPressure, rotPressure);
+    this.motionPressure += (targetPressure - this.motionPressure) * 0.25;
+  }
+
   private updateBudget(deltaMs: number): void {
     // Clamp pathological values (tab switch, GC pause) so they don't poison
     // the EWMA and trigger spurious budget cuts on the next frame.
@@ -537,6 +658,7 @@ export class LodManager {
 
     const avgMs = this.avgFrameMs;
     this.stats.fps = Math.round(1000 / avgMs);
+    this.framePressure = avgMs / Math.max(this.targetFrameMs, 1);
 
     const target = this.targetFrameMs;
     if (avgMs > target * 1.15) {

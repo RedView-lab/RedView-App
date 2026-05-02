@@ -121,6 +121,8 @@ export interface VisibleNode {
   depth: number;
   screenSize: number;
   density: number;
+  qualityTier: number;
+  qualityScale: number;
   /** Cross-fade alpha for smooth LOD transitions (0 = fully transparent, 1 = fully opaque) */
   fadeAlpha: number;
   /** Squared distance from camera to node center, used for front-to-back sort. */

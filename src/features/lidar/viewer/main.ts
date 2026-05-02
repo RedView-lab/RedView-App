@@ -440,6 +440,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
           `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
           ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
           ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
+          ` · qual ${(s.qualityScale * 100).toFixed(0)}% · move ${(s.motionPressure * 100).toFixed(0)}%` +
           ` · voxel ${renderer.pointSize.toFixed(2)}m` +
           ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
       } else {
