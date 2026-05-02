@@ -99,32 +99,49 @@ export function useItineraryBrouterRouting({
     : '';
   const gpxRouteSource = active?.gpxRoute?.source ?? '';
   const gpxRoutePointCount = active?.gpxRoute?.points.length ?? 0;
+  const prioritiesKey = active ? JSON.stringify(active.priorities) : '';
+  const roadTypesKey = active ? JSON.stringify(active.roadTypes) : '';
+  const expertProfileKey = active?.expertProfile
+    ? JSON.stringify(active.expertProfile)
+    : '';
 
-  const brfHash = useMemo(() => {
-    if (!active) return '';
+  const brfInputs = useMemo(() => {
+    if (!prioritiesKey || !roadTypesKey) return null;
+    return {
+      priorities: JSON.parse(prioritiesKey),
+      roadTypes: JSON.parse(roadTypesKey),
+      expert: expertProfileKey ? JSON.parse(expertProfileKey) : undefined,
+    };
+  }, [expertProfileKey, prioritiesKey, roadTypesKey]);
+
+  const brfProfile = useMemo(() => {
+    if (!brfInputs) return '';
     try {
-      const brf = buildBrfProfile({
-        priorities: active.priorities,
-        roadTypes: active.roadTypes,
-        expert: active.expertProfile,
-      });
-      const hash = hashBrf(brf);
-      console.log(
-        '[BRouter] BRF hash =',
-        hash,
-        '| size =',
-        brf.length,
-        'B | profile =',
-        active.profileId,
-        '| priorities =',
-        active.priorities,
-      );
-      return hash;
+      return buildBrfProfile(brfInputs);
     } catch (error) {
       console.warn('[BRouter] buildBrfProfile threw:', error);
       return '';
     }
-  }, [active]);
+  }, [brfInputs]);
+
+  const brfHash = useMemo(() => {
+    if (!brfProfile) return '';
+    return hashBrf(brfProfile);
+  }, [brfProfile]);
+
+  useEffect(() => {
+    if (!brfProfile) return;
+    console.log(
+      '[BRouter] BRF hash =',
+      brfHash,
+      '| size =',
+      brfProfile.length,
+      'B | profile =',
+      profileId,
+      '| priorities =',
+      prioritiesKey,
+    );
+  }, [brfHash, brfProfile, prioritiesKey, profileId]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
