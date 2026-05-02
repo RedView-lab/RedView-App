@@ -27,6 +27,7 @@ import type {
   TimelineEvent,
   TimelineStandalonePause,
 } from './types';
+import { positionTimelineBlocks } from './utils';
 import {
   formatDistanceLabel,
   formatHourLabel,
@@ -341,6 +342,60 @@ export function TimelineScheduleCanvas({
     } as CSSProperties;
   }, [dragState, resolveColumnPlacement]);
 
+  const previewPositioning = useMemo(() => {
+    if (!dragState) {
+      return {
+        events,
+        standalonePauses,
+      };
+    }
+
+    const previewPauseDayKeyById = new Map(standalonePauseDayKeyById);
+    previewPauseDayKeyById.set(dragState.id, dragState.dayKey);
+
+    const draggedStandalonePause = standalonePauses.find((pause) => pause.id === dragState.id);
+    const previewStandalonePauses = draggedStandalonePause
+      ? standalonePauses.map((pause) => (pause.id === dragState.id
+        ? {
+            ...pause,
+            scheduledTopPx: dragState.topPx,
+            topPx: dragState.topPx,
+            dayKey: dragState.dayKey,
+          }
+        : pause))
+      : [
+          ...standalonePauses,
+          {
+            id: dragState.id,
+            label: '',
+            source: dragState.source,
+            poiCategory: dragState.poiCategory,
+            distanceKm: dragState.distanceKm,
+            elapsedSeconds: dragState.scheduledElapsedSeconds,
+            scheduledTopPx: dragState.topPx,
+            topPx: dragState.topPx,
+            durationMin: dragState.durationMin,
+            toNextSeconds: dragState.toNextSeconds,
+            visible: true,
+            heightPx: dragState.heightPx,
+            sortIndex: Number.MAX_SAFE_INTEGER,
+            dayKey: dragState.dayKey,
+          },
+        ];
+
+    return positionTimelineBlocks(events, previewStandalonePauses, previewPauseDayKeyById, 0);
+  }, [dragState, events, standalonePauseDayKeyById, standalonePauses]);
+
+  const previewEventMap = useMemo(
+    () => new Map(previewPositioning.events.map((event) => [event.item.id, event] as const)),
+    [previewPositioning.events],
+  );
+
+  const previewStandalonePauseMap = useMemo(
+    () => new Map(previewPositioning.standalonePauses.map((pause) => [pause.id, pause] as const)),
+    [previewPositioning.standalonePauses],
+  );
+
   return (
     <div ref={viewportRef} className="rvi-tl-schedule__viewport">
       <div className="rvi-tl-schedule__times" aria-hidden>
@@ -423,9 +478,10 @@ export function TimelineScheduleCanvas({
         })}
 
         {events.map((event, index) => {
+          const previewEvent = previewEventMap.get(event.item.id) ?? event;
           const visible = event.item.visible !== false;
           const selected = selectedIds?.has(event.item.id) ?? false;
-          const hasAttachedPauses = event.attachedPauses.length > 0;
+          const hasAttachedPauses = previewEvent.attachedPauses.length > 0;
           const canEditFavoritePoiPause = Boolean(
             event.item.poiCategory && onChangeFavoritePoiPauseDuration,
           );
@@ -438,11 +494,11 @@ export function TimelineScheduleCanvas({
               ? formatPauseDuration(event.item.durationMin)
               : event.item.label || 'Point sans nom';
           const eventStyle = {
-            top: event.topPx,
-            minHeight: event.heightPx,
-            '--rvi-tl-card-height': `${event.cardHeightPx}px`,
+            top: previewEvent.topPx,
+            minHeight: previewEvent.heightPx,
+            '--rvi-tl-card-height': `${previewEvent.cardHeightPx}px`,
             animationDelay: `${Math.min(index * 18, 240)}ms`,
-            ...resolveColumnPlacement(event.spanSegments[0]?.dayKey ?? event.dayKey),
+            ...resolveColumnPlacement(previewEvent.spanSegments[0]?.dayKey ?? previewEvent.dayKey),
           } as CSSProperties;
 
           return (
@@ -467,7 +523,7 @@ export function TimelineScheduleCanvas({
                   </span>
                   {hasAttachedPauses ? (
                     <span className="rvi-tl-schedule__event-pauses">
-                      {event.attachedPauses.map((pause) => (
+                      {previewEvent.attachedPauses.map((pause) => (
                         <span
                           key={pause.id}
                           className={[
@@ -496,8 +552,8 @@ export function TimelineScheduleCanvas({
                                 distanceKm: event.distanceKm,
                                 toNextSeconds: event.toNextSeconds,
                                 heightPx: pause.heightPx,
-                                topPx: event.topPx,
-                                dayKey: event.dayKey,
+                                topPx: previewEvent.topPx,
+                                dayKey: previewEvent.dayKey,
                               });
                             } : undefined}
                           >
@@ -603,11 +659,12 @@ export function TimelineScheduleCanvas({
         })}
 
         {standalonePauses.map((pause, index) => {
+          const previewPause = previewStandalonePauseMap.get(pause.id) ?? pause;
           const dragging = dragState?.id === pause.id;
           const pauseDayKey = dragging
             ? dragState.dayKey
-            : standalonePauseDayKeyById.get(pause.id) ?? pause.dayKey ?? null;
-          const pauseTopPx = dragging ? dragState.topPx : pause.topPx;
+            : standalonePauseDayKeyById.get(pause.id) ?? previewPause.dayKey ?? null;
+          const pauseTopPx = dragging ? dragState.topPx : previewPause.topPx;
           const canEditStandalonePause = (
             (pause.source === 'manual' && onChangePauseDuration)
             || (pause.source === 'interval' && onChangeIntervalPauseDuration)
@@ -637,7 +694,7 @@ export function TimelineScheduleCanvas({
               onPointerDown={(event) => handlePausePointerDown(event, pause)}
               style={{
                 top: pauseTopPx,
-                '--rvi-tl-pause-height': `${pause.heightPx}px`,
+                '--rvi-tl-pause-height': `${previewPause.heightPx}px`,
                 animationDelay: `${Math.min((events.length + index) * 18, 240)}ms`,
                 ...resolveColumnPlacement(pauseDayKey),
               } as CSSProperties}
