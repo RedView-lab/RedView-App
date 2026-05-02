@@ -5,11 +5,12 @@
  * callback props so the parent container can wire them to a backend,
  * optimistic updates, undo/redo etc.
  */
-import { useEffect, useMemo, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import type {
   RhythmState,
   TimelineAddItemKind,
+  TimelineAddItemOptions,
   TimelineItem,
   TimelineRailConfig,
   TimelineView,
@@ -46,7 +47,7 @@ interface TimelinePanelProps {
   onChangeView?: (v: TimelineView) => void;
   onOpenSettings?: () => void;
   onToggleFullscreen?: () => void;
-  onAdd?: (kind: TimelineAddItemKind) => void;
+  onAdd?: (kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => void;
 
   onToggleItem?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
@@ -85,6 +86,7 @@ export function TimelinePanel({
   const [timelineEditOpen, setTimelineEditOpen] = useState(false);
   const [timelineMarkerStepKm, setTimelineMarkerStepKm] = useState(50);
   const [timelineZoomLevel, setTimelineZoomLevel] = useState(1);
+  const pauseInsertionResolverRef = useRef<(() => number | null) | null>(null);
 
   // Filter + table-settings state — local for now; the wiring to backend
   // will move these into the project state once persistence lands.
@@ -131,7 +133,10 @@ export function TimelinePanel({
   };
 
   const handleSelectAddKind = (kind: TimelineAddItemKind) => {
-    onAdd?.(kind);
+    const addOptions = kind === 'pause' && view === 'timeline'
+      ? buildPauseAddOptions(pauseInsertionResolverRef.current?.())
+      : undefined;
+    onAdd?.(kind, addOptions);
   };
 
   const intervalPauseSheetItems = useMemo(() => {
@@ -257,6 +262,9 @@ export function TimelinePanel({
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}
               onMovePause={onMovePause}
+              onRegisterPauseInsertionResolver={(resolver) => {
+                pauseInsertionResolverRef.current = resolver;
+              }}
               onToggleFavorite={onFavoriteItem}
               onRemove={onRemoveItem}
             />
@@ -273,6 +281,13 @@ export function TimelinePanel({
       />
     </section>
   );
+}
+
+function buildPauseAddOptions(distanceKm: number | null | undefined): TimelineAddItemOptions | undefined {
+  if (!Number.isFinite(distanceKm)) return undefined;
+  return {
+    distanceKm: Math.max(0, Number((distanceKm as number).toFixed(3))),
+  };
 }
 
 function matchesTimelineFilter(

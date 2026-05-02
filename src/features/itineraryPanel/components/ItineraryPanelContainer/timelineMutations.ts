@@ -1,5 +1,6 @@
 import type {
   Itinerary,
+  TimelineAddItemOptions,
   TimelineAddItemKind,
   TimelineItem,
 } from '../../types';
@@ -137,6 +138,7 @@ export function buildTimelineAfterRemoval(
 export function insertTimelineItem(
   timeline: TimelineItem[],
   kind: TimelineAddItemKind,
+  options?: TimelineAddItemOptions,
 ): TimelineItem | null {
   if (kind === 'start') {
     insertEndpointBeforeCurrent(timeline, 'start');
@@ -152,13 +154,31 @@ export function insertTimelineItem(
   if (!nextItem) return null;
 
   if (nextItem.kind === 'pause') {
-    nextItem.distanceKm = resolveSuggestedPauseDistanceKm(timeline);
+    nextItem.distanceKm = resolveInitialPauseDistanceKm(timeline, options);
+    timeline.splice(resolvePauseInsertIndex(timeline, nextItem.distanceKm), 0, nextItem);
+    return nextItem;
   }
 
   const endIndex = timeline.findIndex((item) => item.kind === 'end');
   const insertAt = endIndex >= 0 ? endIndex : timeline.length;
   timeline.splice(insertAt, 0, nextItem);
   return nextItem;
+}
+
+export function moveTimelinePauseItem(
+  timeline: TimelineItem[],
+  rowId: string,
+  distanceKm: number,
+): boolean {
+  const rowIndex = timeline.findIndex((item) => item.id === rowId && item.kind === 'pause');
+  if (rowIndex < 0) return false;
+
+  const [pause] = timeline.splice(rowIndex, 1);
+  if (!pause || pause.kind !== 'pause') return false;
+
+  pause.distanceKm = normalizePauseDistanceKm(distanceKm);
+  timeline.splice(resolvePauseInsertIndex(timeline, pause.distanceKm), 0, pause);
+  return true;
 }
 
 function insertEndpointBeforeCurrent(
@@ -276,4 +296,32 @@ function resolveSuggestedPauseDistanceKm(timeline: TimelineItem[]): number {
   }
 
   return Number(candidateKm.toFixed(2));
+}
+
+function resolveInitialPauseDistanceKm(
+  timeline: TimelineItem[],
+  options?: TimelineAddItemOptions,
+): number {
+  if (Number.isFinite(options?.distanceKm)) {
+    return normalizePauseDistanceKm(options?.distanceKm as number);
+  }
+  return resolveSuggestedPauseDistanceKm(timeline);
+}
+
+function normalizePauseDistanceKm(distanceKm: number): number {
+  return Math.max(0, Number(distanceKm.toFixed(3)));
+}
+
+function resolvePauseInsertIndex(timeline: TimelineItem[], distanceKm: number): number {
+  const endIndex = timeline.findIndex((item) => item.kind === 'end');
+  const searchEnd = endIndex >= 0 ? endIndex : timeline.length;
+
+  for (let index = 0; index < searchEnd; index += 1) {
+    const itemDistanceKm = timeline[index]?.distanceKm;
+    if (Number.isFinite(itemDistanceKm) && (itemDistanceKm as number) > distanceKm) {
+      return index;
+    }
+  }
+
+  return searchEnd;
 }

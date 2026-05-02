@@ -12,6 +12,7 @@ export interface TimelineTimelineViewProps {
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
+  onRegisterPauseInsertionResolver?: (resolver: (() => number | null) | null) => void;
   onToggleFavorite?: (id: string, favorite: boolean) => void;
   onRemove?: (id: string) => void;
 }

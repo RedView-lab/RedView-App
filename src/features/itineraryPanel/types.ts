@@ -202,6 +202,10 @@ export type TimelineAddItemKind =
   | 'start'
   | 'end';
 
+export interface TimelineAddItemOptions {
+  distanceKm?: number;
+}
+
 export interface TimelineItem {
   id: string;
   kind: TimelineItemKind;
@@ -534,7 +538,7 @@ export interface ItineraryPanelProps {
 
   // timeline
   onChangeTimelineView?: (view: TimelineView) => void;
-  onAddTimelineItem?: (kind: TimelineAddItemKind) => void;
+  onAddTimelineItem?: (kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => void;
   onToggleTimelineItem?: (id: string, visible: boolean) => void;
   onMoveTimelinePause?: (id: string, distanceKm: number) => void;
   onRemoveTimelineItem?: (id: string) => void;

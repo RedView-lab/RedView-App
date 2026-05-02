@@ -13,6 +13,8 @@ import {
   MINUTES_PER_DAY,
   RAIL_HEADER_HEIGHT_PX,
   RAIL_ITEM_HEIGHT_PX,
+  TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
+  TIMELINE_VIEWPORT_TOP_INSET_PX,
 } from './constants';
 import { TimelineScheduleCanvas } from './TimelineScheduleCanvas';
 import { TimelineScheduleHeader } from './TimelineScheduleHeader';
@@ -45,6 +47,7 @@ export function TimelineTimelineView({
   onToggleSelect,
   onToggleVisibility,
   onMovePause,
+  onRegisterPauseInsertionResolver,
   onToggleFavorite,
   onRemove,
 }: TimelineTimelineViewProps) {
@@ -316,6 +319,57 @@ export function TimelineTimelineView({
     },
     [onMovePause, prediction, stopAnchors],
   );
+
+  const resolveVisiblePauseInsertionDistanceKm = useCallback(() => {
+    if (!prediction) return null;
+
+    const viewport = viewportRef.current;
+    if (!viewport) return null;
+
+    const rawTopPx = viewport.scrollTop + (viewport.clientHeight > 0 ? viewport.clientHeight * 0.5 : 0);
+    const minTopPx = TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const maxTopPx = Math.max(minTopPx, canvasHeight - TIMELINE_VIEWPORT_BOTTOM_INSET_PX);
+    const topPx = Math.min(maxTopPx, Math.max(minTopPx, rawTopPx));
+    const minuteOfDay = Math.min(
+      MINUTES_PER_DAY,
+      Math.max(
+        0,
+        startMinutes + ((topPx - TIMELINE_VIEWPORT_TOP_INSET_PX) / Math.max(pixelsPerMinute, 0.001)),
+      ),
+    );
+
+    let scheduledElapsedSeconds = Math.max(0, (minuteOfDay - startMinutes) * 60);
+    if (reference.reference && reference.hasRealDate) {
+      const scheduledDate = new Date(
+        selectedDayDate.getFullYear(),
+        selectedDayDate.getMonth(),
+        selectedDayDate.getDate(),
+        0,
+        0,
+        0,
+        0,
+      );
+      scheduledDate.setMinutes(minuteOfDay, 0, 0);
+      scheduledElapsedSeconds = Math.max(
+        0,
+        (scheduledDate.getTime() - reference.reference.getTime()) / 1000,
+      );
+    }
+
+    const rideElapsedSeconds = resolveRideElapsedSecondsAtScheduledElapsed(
+      scheduledElapsedSeconds,
+      stopAnchors,
+    );
+    const distanceM = distanceAtElapsedSeconds(prediction, rideElapsedSeconds);
+    if (!Number.isFinite(distanceM)) return null;
+
+    return Math.max(0, Number((((distanceM as number) / 1000)).toFixed(3)));
+  }, [canvasHeight, pixelsPerMinute, prediction, reference, selectedDayDate, startMinutes, stopAnchors]);
+
+  useEffect(() => {
+    onRegisterPauseInsertionResolver?.(resolveVisiblePauseInsertionDistanceKm);
+    return () => onRegisterPauseInsertionResolver?.(null);
+  }, [onRegisterPauseInsertionResolver, resolveVisiblePauseInsertionDistanceKm]);
 
   const hourMarks = useMemo(
     () => {

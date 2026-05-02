@@ -43,6 +43,7 @@ import {
   buildPendingRoutePatchForEditedRow,
   buildTimelineAfterRemoval,
   insertTimelineItem,
+  moveTimelinePauseItem,
 } from './timelineMutations';
 
 interface ItineraryPanelContainerProps {
@@ -503,9 +504,9 @@ export function ItineraryPanelContainer({
       onChangeTimelineView={(view: TimelineView) =>
         setProject((p) => ({ ...p, timelineView: view }))
       }
-      onAddTimelineItem={(kind) =>
+      onAddTimelineItem={(kind, options) =>
         updateActive((it) => {
-          insertTimelineItem(it.timeline, kind);
+          insertTimelineItem(it.timeline, kind, options);
         })
       }
       onToggleTimelineItem={(id, visible) =>
@@ -516,9 +517,7 @@ export function ItineraryPanelContainer({
       }
       onMoveTimelinePause={(id, distanceKm) =>
         updateActive((it) => {
-          const row = it.timeline.find((item) => item.id === id && item.kind === 'pause');
-          if (!row) return;
-          row.distanceKm = Math.max(0, Number(distanceKm.toFixed(3)));
+          moveTimelinePauseItem(it.timeline, id, distanceKm);
         })
       }
       onRemoveTimelineItem={(id) =>
