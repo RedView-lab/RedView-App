@@ -1,11 +1,6 @@
 export function formatPauseDurationInput(min: number): string {
-  if (!Number.isFinite(min) || min <= 0) return '0min';
-  if (min >= 60) {
-    const hours = Math.floor(min / 60);
-    const minutes = min % 60;
-    return minutes === 0 ? `${hours}h` : `${hours}h${String(minutes).padStart(2, '0')}`;
-  }
-  return `${min}min`;
+  if (!Number.isFinite(min) || min <= 0) return '0';
+  return String(Math.max(0, Math.round(min)));
 }
 
 export function parsePauseDurationInput(raw: string, prev: number): number {
