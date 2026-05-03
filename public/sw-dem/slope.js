@@ -4,12 +4,24 @@
 // from the DEM cache — eliminates the visible seams that edge-replication
 // produces between adjacent slope tiles.
 //
-// Output: 16-bit slope-only RGBA PNG.
-//   - R,G encode slope angle: V = round(deg * 65535 / 90)
-//                             R = V >> 8, G = V & 255
-//                             deg = V * 90 / 65535  (recovered GPU-side)
-//   - B = 0 (reserved for future encodings)
-//   - A    = 0 on NoData, 255 otherwise
+// Output: 8-bit slope-only RGBA PNG with a sqrt-gamma encoding.
+//   - R encodes the slope angle on a perceptual ramp:
+//       R = round(sqrt(deg / 90) * 255)
+//       deg = (R / 255)^2 * 90      (recovered GPU-side)
+//     The sqrt is critical: it concentrates the 256 distinct codes near low
+//     slopes (≈0.04°/step at 0°, ≈0.56°/step at 90°), so the 0–7° "flat"
+//     band — where any quantization is most visible — gets ~67 codes
+//     instead of the ~20 codes a linear 8-bit ramp would give.
+//   - G,B = 0
+//   - A   = 0 on NoData, 255 otherwise
+//
+// Why a SINGLE channel instead of the previous 16-bit RG packing:
+//   raster-resampling: 'linear' bilinearly interpolates each channel
+//   independently. With 16-bit RG, every R-byte boundary (~0.35°) makes
+//   bilinear sampling produce nonsense decoded values between adjacent
+//   pixels — visible as a regular dot/grid moiré on otherwise smooth
+//   terrain. A single-channel ramp interpolates correctly under bilinear,
+//   eliminating the artefact entirely without any smoothing post-pass.
 //
 // Colorisation, hide-bands, and colour-mode (gradient/step) are applied
 // GPU-side via Mapbox `raster-color` + `raster-color-mix` paint properties.
@@ -124,7 +136,7 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
   return slopes;
 }
 
-// ── Slope-only RGBA PNG (RG = encoded angle, A = NoData mask) ─────────
+// ── Slope-only RGBA PNG (R = sqrt-encoded angle, A = NoData mask) ─────
 async function encodeSlopePng(slopes, ownElev) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
@@ -139,9 +151,8 @@ async function encodeSlopePng(slopes, ownElev) {
   for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
   for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
 
-  // Encode on 16 bits so the 1 m terrain profile does not collapse into
-  // visible ~0.35° steps. Precision becomes ~0.0014° per code.
-  const SCALE = 65535 / 90;
+  // sqrt-gamma encoding: R = round(sqrt(deg/90) * 255). See header comment.
+  const INV_MAX = 1 / 90;
 
   for (let j = 0; j < n; j++) {
     const elev = ownElev[j];
@@ -153,9 +164,9 @@ async function encodeSlopePng(slopes, ownElev) {
     }
     let d = slopes[j];
     if (d < 0) d = 0; else if (d > 90) d = 90;
-    const enc = Math.max(0, Math.min(65535, Math.round(d * SCALE)));
-    rgba[idx] = (enc >> 8) & 0xff;
-    rgba[idx + 1] = enc & 0xff;
+    const enc = Math.max(0, Math.min(255, Math.round(Math.sqrt(d * INV_MAX) * 255)));
+    rgba[idx] = enc;
+    rgba[idx + 1] = 0;
     rgba[idx + 2] = 0;
     rgba[idx + 3] = 255;
   }
@@ -196,36 +207,14 @@ function downsampleSlopes(slopes, factor) {
   return out;
 }
 
-function smoothSlopes(slopes) {
-  const size = DEM_TILE_SIZE;
-  const tmp = new Float32Array(size * size);
-  const out = new Float32Array(size * size);
-
-  for (let y = 0; y < size; y++) {
-    const row = y * size;
-    for (let x = 0; x < size; x++) {
-      const left = slopes[row + (x > 0 ? x - 1 : 0)];
-      const mid = slopes[row + x];
-      const right = slopes[row + (x + 1 < size ? x + 1 : size - 1)];
-      tmp[row + x] = (left + 2 * mid + right) * 0.25;
-    }
-  }
-
-  for (let y = 0; y < size; y++) {
-    const prevRow = (y > 0 ? y - 1 : 0) * size;
-    const row = y * size;
-    const nextRow = (y + 1 < size ? y + 1 : size - 1) * size;
-    for (let x = 0; x < size; x++) {
-      out[row + x] = (tmp[prevRow + x] + 2 * tmp[row + x] + tmp[nextRow + x]) * 0.25;
-    }
-  }
-
-  return out;
-}
-
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
+//
+// No CPU-side smoothing: the previous 1-2-1 separable blur was masking the
+// real artefact (16-bit RG bilinear glitch). With single-channel sqrt-gamma
+// encoding the GPU samples the slope ramp cleanly and shows the raw 1 m
+// terrain signal as-is — no flou needed.
 async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
@@ -234,9 +223,6 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const pad = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
-  if (demProfile === 'terrain' && (!resFactor || resFactor <= 1) && z >= 14) {
-    slopes = smoothSlopes(slopes);
-  }
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
   const blob = await encodeSlopePng(slopes, ownElev);

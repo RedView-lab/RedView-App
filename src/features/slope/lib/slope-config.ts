@@ -26,14 +26,26 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
 
 // `["raster-value"]` returns the value decoded by raster-color-mix and
 // clamped to raster-color-range, **in the same units as the range**
-// (NOT normalised to [0, 1]). With our setup the range is [0, 90] degrees,
-// so stop positions in the interpolate/step expression must also be in
-// degrees — otherwise any pixel above ~1° lands past the last stop and the
-// whole tile renders with the final band's color.
+// (NOT normalised to [0, 1]). With the sqrt-gamma encoding (see
+// slope-source.ts), the SW writes R = round(sqrt(deg/90) * 255) and the
+// raster-color-mix decodes that to V = sqrt(deg/90) * 90 ∈ [0, 90]. So the
+// stop positions in the interpolate/step expression must be expressed in
+// the same V-space, not raw degrees: a category breakpoint at deg_k must
+// be placed at V_k = sqrt(deg_k/90) * 90 = sqrt(deg_k * 90).
+//
+// We deliberately do NOT linearise the gradient back to degrees: the sqrt
+// gamma concentrates colour resolution in the low-slope range (the part
+// the user actually scrutinises), which is exactly what we want. Between
+// two consecutive breakpoints the colour still lerps smoothly — just on a
+// slightly squashed axis, which is visually imperceptible.
 export const MAX_SLOPE_DEG = 90;
 
 function degStop(deg: number): number {
-  return deg;
+  // Map a degree breakpoint to the raster-value (sqrt-gamma) space.
+  // Identity at 0° and at 90° (the two anchors), monotonic in between.
+  if (deg <= 0) return 0;
+  if (deg >= MAX_SLOPE_DEG) return MAX_SLOPE_DEG;
+  return Math.sqrt(deg * MAX_SLOPE_DEG);
 }
 
 /**

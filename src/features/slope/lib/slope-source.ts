@@ -67,33 +67,31 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
 
 // ── Build layer definition ────────────────────────────────────────────
 //
-// SW PNG encoding:
-//   V = round(slopeDeg * 65535 / 90) (0° → 0, 90° → 65535)
-//   R = V >> 8
-//   G = V & 255
-//   B = 0
+// SW PNG encoding (sqrt-gamma, single channel):
+//   R = round(sqrt(deg / 90) * 255)
+//   G = B = 0
 //   A = 0 on NoData, 255 otherwise
 //
-// raster-color-mix decodes back to degrees: deg = V * (90 / 65535)
-// raster-color-range [0, 90] then normalises into [0, 1] for the
-// raster-color expression (which uses degNorm = deg / 90).
+// raster-color-mix [90, 0, 0, 0] decodes R→[0,90] perceptual units.
+// The actual degree value is recovered in `buildSlopeColorExpression`,
+// which transforms each stop position via `degToEncoded(deg) = sqrt(deg/90) * 90`
+// so that the gradient breakpoints fall at the correct raster-value.
+//
+// Why single-channel: bilinear `raster-resampling: 'linear'` filters each
+// PNG channel independently. The previous 16-bit RG packing produced a
+// regular dot/grid moiré wherever R changed between adjacent pixels (every
+// ~0.35°): the bilinear (R, G) midpoint decodes to a wildly wrong value at
+// the byte boundary. With a single channel + sqrt gamma the bilinear sample
+// is always a smooth interpolation of the perceptual ramp, so the overlay
+// shows the raw 1 m DEM signal as a clean continuous gradient.
 //
 // slot: 'top' — must match the IGN ortho layer's slot so the overlay paints
 // ABOVE the orthophoto. With slot: 'middle' the ortho tiles fully occlude
 // the slope raster inside France and the user sees nothing.
-//
-// raster-color-mix decoding:
-//   Mapbox normalises channels to [0, 1] before applying the mix, so with
-//   V = R_byte*256 + G_byte the decoder becomes:
-//     decoded_deg = (R_norm * (90*256/257)) + (G_norm * (90/257))
-//                 = ((R_byte*256 + G_byte) / 65535) * 90
-//                 = original deg ✓
-//   Keeping the decode affine across channels means linear raster sampling
-//   stays smooth while the extra precision removes visible micro-banding.
 
 const SLOPE_DECODE_MIX: [number, number, number, number] = [
-  (MAX_SLOPE_DEG * 256) / 257,
-  MAX_SLOPE_DEG / 257,
+  MAX_SLOPE_DEG,
+  0,
   0,
   0,
 ];
