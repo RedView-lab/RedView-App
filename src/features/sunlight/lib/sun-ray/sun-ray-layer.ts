@@ -19,6 +19,22 @@ const SUN_RAY_CIRCLE_LAYER_ID = 'sun-ray-circle';
 const SUN_RAY_ANCHOR_LIFT_METERS = 1.5;
 const SUN_RAY_ELEVATION_RESYNC_THRESHOLD_METERS = 0.25;
 
+function hasStyleLayer(map: MapboxMap, layerId: string): boolean {
+  try {
+    return Boolean(map.getLayer(layerId));
+  } catch {
+    return false;
+  }
+}
+
+function hasStyleSource(map: MapboxMap, sourceId: string): boolean {
+  try {
+    return Boolean(map.getSource(sourceId));
+  } catch {
+    return false;
+  }
+}
+
 // ── Color helpers ──────────────────────────────────────────────────────
 
 function sunRayColor(altitudeDeg: number): [number, number, number] {
@@ -263,13 +279,13 @@ function ensureCircleLayer(map: MapboxMap, lng: number, lat: number, elevation: 
     }],
   };
 
-  if (!map.getSource(SUN_RAY_CIRCLE_SOURCE_ID)) {
+  if (!hasStyleSource(map, SUN_RAY_CIRCLE_SOURCE_ID)) {
     map.addSource(SUN_RAY_CIRCLE_SOURCE_ID, { type: 'geojson', data });
   } else {
     (map.getSource(SUN_RAY_CIRCLE_SOURCE_ID) as GeoJSONSource).setData(data);
   }
 
-  if (!map.getLayer(SUN_RAY_CIRCLE_LAYER_ID)) {
+  if (!hasStyleLayer(map, SUN_RAY_CIRCLE_LAYER_ID)) {
     map.addLayer({
       id: SUN_RAY_CIRCLE_LAYER_ID,
       type: 'circle',
@@ -305,9 +321,9 @@ let currentMap: MapboxMap | null = null;
 
 export function addSunRayLayer(map: MapboxMap): void {
   currentMap = map;
-  if (sunRayInstance && map.getLayer(SUN_RAY_LAYER_ID)) return;
+  if (sunRayInstance && hasStyleLayer(map, SUN_RAY_LAYER_ID)) return;
   if (sunRayInstance) sunRayInstance = null;
-  if (map.getLayer(SUN_RAY_LAYER_ID)) {
+  if (hasStyleLayer(map, SUN_RAY_LAYER_ID)) {
     try { map.removeLayer(SUN_RAY_LAYER_ID); } catch { /* */ }
   }
   sunRayInstance = new SunRayLayer();
@@ -316,8 +332,12 @@ export function addSunRayLayer(map: MapboxMap): void {
 
 export function removeSunRayLayer(map: MapboxMap): void {
   removeCircleLayer(map);
-  if (map.getLayer(SUN_RAY_LAYER_ID)) {
-    try { map.removeLayer(SUN_RAY_LAYER_ID); } catch { /* */ }
+  try {
+    if (hasStyleLayer(map, SUN_RAY_LAYER_ID)) {
+      map.removeLayer(SUN_RAY_LAYER_ID);
+    }
+  } catch {
+    /* map may be tearing down */
   }
   sunRayInstance = null;
   currentMap = null;

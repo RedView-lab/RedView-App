@@ -12,6 +12,14 @@ const SELECTED_FILL_ID = 'lidar-selection-selected-fill';
 const SELECTED_LINE_ID = 'lidar-selection-selected-line';
 const LAYER_ORDER = [HOVER_FILL_ID, SELECTED_FILL_ID, HOVER_LINE_ID, SELECTED_LINE_ID] as const;
 
+function canInspectStyle(map: MapboxMap): boolean {
+  try {
+    return Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 type SelectionFeature = Feature<Polygon, { role: 'hover' | 'selected'; tileId: string }>;
 
 function sameTile(a: TileCoord | null, b: TileCoord | null): boolean {
@@ -55,9 +63,10 @@ function buildFeatureCollection(
 }
 
 function restackSelectionLayers(map: MapboxMap): void {
+  if (!canInspectStyle(map)) return;
   for (const layerId of LAYER_ORDER) {
-    if (!map.getLayer(layerId)) continue;
     try {
+      if (!map.getLayer(layerId)) continue;
       map.moveLayer(layerId);
     } catch {
       // Mapbox can reject a move while the style graph is still settling.
@@ -66,93 +75,105 @@ function restackSelectionLayers(map: MapboxMap): void {
 }
 
 function ensureSelectionLayers(map: MapboxMap): void {
-  if (!map.getSource(SOURCE_ID)) {
-    map.addSource(SOURCE_ID, {
-      type: 'geojson',
-      data: {
-        type: 'FeatureCollection',
-        features: [],
-      },
-    });
-  }
+  if (!canInspectStyle(map)) return;
 
-  if (!map.getLayer(HOVER_FILL_ID)) {
-    map.addLayer({
-      id: HOVER_FILL_ID,
-      type: 'fill',
-      source: SOURCE_ID,
-      slot: 'top',
-      filter: ['==', ['get', 'role'], 'hover'],
-      paint: {
-        'fill-color': '#ff453a',
-        'fill-opacity': 0.08,
-        'fill-emissive-strength': 1,
-      },
-    });
-  }
+  try {
+    if (!map.getSource(SOURCE_ID)) {
+      map.addSource(SOURCE_ID, {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [],
+        },
+      });
+    }
 
-  if (!map.getLayer(HOVER_LINE_ID)) {
-    map.addLayer({
-      id: HOVER_LINE_ID,
-      type: 'line',
-      source: SOURCE_ID,
-      slot: 'top',
-      filter: ['==', ['get', 'role'], 'hover'],
-      paint: {
-        'line-color': '#ff453a',
-        'line-opacity': 0.95,
-        'line-width': 2,
-        'line-dasharray': [2, 2],
-        'line-emissive-strength': 1,
-        'line-occlusion-opacity': 1,
-      },
-    });
-  }
+    if (!map.getLayer(HOVER_FILL_ID)) {
+      map.addLayer({
+        id: HOVER_FILL_ID,
+        type: 'fill',
+        source: SOURCE_ID,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'hover'],
+        paint: {
+          'fill-color': '#ff453a',
+          'fill-opacity': 0.08,
+          'fill-emissive-strength': 1,
+        },
+      });
+    }
 
-  if (!map.getLayer(SELECTED_FILL_ID)) {
-    map.addLayer({
-      id: SELECTED_FILL_ID,
-      type: 'fill',
-      source: SOURCE_ID,
-      slot: 'top',
-      filter: ['==', ['get', 'role'], 'selected'],
-      paint: {
-        'fill-color': '#ff3b30',
-        'fill-opacity': 0.14,
-        'fill-emissive-strength': 1,
-      },
-    });
-  }
+    if (!map.getLayer(HOVER_LINE_ID)) {
+      map.addLayer({
+        id: HOVER_LINE_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'hover'],
+        paint: {
+          'line-color': '#ff453a',
+          'line-opacity': 0.95,
+          'line-width': 2,
+          'line-dasharray': [2, 2],
+          'line-emissive-strength': 1,
+          'line-occlusion-opacity': 1,
+        },
+      });
+    }
 
-  if (!map.getLayer(SELECTED_LINE_ID)) {
-    map.addLayer({
-      id: SELECTED_LINE_ID,
-      type: 'line',
-      source: SOURCE_ID,
-      slot: 'top',
-      filter: ['==', ['get', 'role'], 'selected'],
-      paint: {
-        'line-color': '#ff3b30',
-        'line-opacity': 1,
-        'line-width': 2.5,
-        'line-emissive-strength': 1,
-        'line-occlusion-opacity': 1,
-      },
-    });
+    if (!map.getLayer(SELECTED_FILL_ID)) {
+      map.addLayer({
+        id: SELECTED_FILL_ID,
+        type: 'fill',
+        source: SOURCE_ID,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'selected'],
+        paint: {
+          'fill-color': '#ff3b30',
+          'fill-opacity': 0.14,
+          'fill-emissive-strength': 1,
+        },
+      });
+    }
+
+    if (!map.getLayer(SELECTED_LINE_ID)) {
+      map.addLayer({
+        id: SELECTED_LINE_ID,
+        type: 'line',
+        source: SOURCE_ID,
+        slot: 'top',
+        filter: ['==', ['get', 'role'], 'selected'],
+        paint: {
+          'line-color': '#ff3b30',
+          'line-opacity': 1,
+          'line-width': 2.5,
+          'line-emissive-strength': 1,
+          'line-occlusion-opacity': 1,
+        },
+      });
+    }
+  } catch {
+    return;
   }
 
   restackSelectionLayers(map);
 }
 
 function removeSelectionLayers(map: MapboxMap): void {
-  for (const layerId of [SELECTED_LINE_ID, SELECTED_FILL_ID, HOVER_LINE_ID, HOVER_FILL_ID]) {
-    if (map.getLayer(layerId)) {
-      map.removeLayer(layerId);
-    }
-  }
+  if (!canInspectStyle(map)) return;
 
-  if (map.getSource(SOURCE_ID)) {
-    map.removeSource(SOURCE_ID);
+  try {
+    for (const layerId of [SELECTED_LINE_ID, SELECTED_FILL_ID, HOVER_LINE_ID, HOVER_FILL_ID]) {
+      if (map.getLayer(layerId)) {
+        map.removeLayer(layerId);
+      }
+    }
+
+    if (map.getSource(SOURCE_ID)) {
+      map.removeSource(SOURCE_ID);
+    }
+  } catch {
+    /* map may be tearing down */
   }
 }
 
