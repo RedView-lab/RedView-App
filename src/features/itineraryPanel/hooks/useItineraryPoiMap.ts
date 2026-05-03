@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { usePoi } from '@/features/poi/hooks/usePoi';
+import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 import {
   addGpxRoute,
   fitMapToRoute,
@@ -52,19 +53,7 @@ function buildRenderedRouteKey(
   points: { lat: number; lon: number }[] | null | undefined,
 ): string {
   if (!points || points.length === 0) return itineraryId ? `${itineraryId}:empty` : 'empty';
-
-  const indices = Array.from(
-    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
-  );
-
-  return [
-    itineraryId ?? 'no-itinerary',
-    String(points.length),
-    ...indices.map((index) => {
-      const point = points[index]!;
-      return `${index}:${point.lon.toFixed(6)}:${point.lat.toFixed(6)}`;
-    }),
-  ].join('|');
+  return `${itineraryId ?? 'no-itinerary'}:${buildRouteContentSignature(points)}`;
 }
 
 export interface UseItineraryPoiMapResult {

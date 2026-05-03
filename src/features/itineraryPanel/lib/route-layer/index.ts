@@ -151,8 +151,6 @@ export function upsertRouteLayer(
   coordinates: [number, number][],
   opts: RouteLayerOptions,
 ): void {
-  if (!canMutateStyle(map)) return;
-
   const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
@@ -170,6 +168,7 @@ export function upsertRouteLayer(
       /* noop */
     }
   } else {
+    if (!canMutateStyle(map)) return;
     map.addSource(srcId, {
       type: 'geojson',
       lineMetrics: true,

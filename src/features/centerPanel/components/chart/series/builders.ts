@@ -1,4 +1,5 @@
 import type { PredictionResult } from '@/features/fitPredictor';
+import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary } from '@/features/itineraryPanel/types';
 import { metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
@@ -46,11 +47,20 @@ function buildSeriesFromRouteProfile(
   const profile = normalizeRouteProfile(routePoints);
   if (!profile) return null;
 
+  const routeSignature = routePoints ? buildRouteContentSignature(routePoints) : '';
+
   const routeCache = routePoints
     ? getRouteBackedSeriesCacheMap(routePoints, xMode === 'distance' ? null : prediction)
     : null;
   const routeCacheKey = routePoints
-    ? getRouteBackedSeriesCacheKey(metric, xMode, routeSource, startTime, pauseSchedule?.pauseSignature)
+    ? getRouteBackedSeriesCacheKey(
+        metric,
+        xMode,
+        routeSource,
+        startTime,
+        pauseSchedule?.pauseSignature,
+        routeSignature,
+      )
     : null;
   if (routeCache && routeCacheKey) {
     const cached = routeCache.get(routeCacheKey);

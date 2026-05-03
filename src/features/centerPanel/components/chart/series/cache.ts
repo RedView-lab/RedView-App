@@ -49,8 +49,16 @@ export function getRouteBackedSeriesCacheKey(
   routeSource?: 'gpx' | 'brouter',
   startTime?: string | null,
   pauseSignature?: string,
+  routeSignature?: string,
 ): string {
-  return [metric, xMode, routeSource ?? '', xMode === 'heure' ? startTime ?? '' : '', pauseSignature ?? ''].join('|');
+  return [
+    metric,
+    xMode,
+    routeSource ?? '',
+    xMode === 'heure' ? startTime ?? '' : '',
+    pauseSignature ?? '',
+    routeSignature ?? '',
+  ].join('|');
 }
 
 export function getPredictionSeriesCacheKey(

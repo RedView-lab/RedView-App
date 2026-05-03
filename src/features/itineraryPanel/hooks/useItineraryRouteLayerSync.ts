@@ -15,11 +15,12 @@ import {
   setRouteEndpoints,
   upsertRouteLayer,
 } from '../lib/route-layer';
+import { buildRouteContentSignature } from '../lib/routes';
 import type { ItineraryProject } from '../types';
 
-function canMutateStyle(map: MapboxMap): boolean {
+function canAccessStyle(map: MapboxMap): boolean {
   try {
-    return map.isStyleLoaded() && Boolean(map.getStyle());
+    return Boolean(map.getStyle());
   } catch {
     return false;
   }
@@ -43,15 +44,11 @@ export function useItineraryRouteLayerSync({
     return itineraries
       .map((it) => {
         const len = it.gpxRoute?.points.length ?? 0;
-        const head = it.gpxRoute?.points[0];
-        const tail = it.gpxRoute?.points[len - 1];
-        const headKey = head ? `${head.lon.toFixed(5)},${head.lat.toFixed(5)}` : '';
-        const tailKey = tail ? `${tail.lon.toFixed(5)},${tail.lat.toFixed(5)}` : '';
+        const routeKey = buildRouteContentSignature(it.gpxRoute?.points);
         return [
           it.id,
           len,
-          headKey,
-          tailKey,
+          routeKey,
           it.color,
           it.opacity ?? 100,
           it.visible !== false ? 1 : 0,
@@ -67,7 +64,7 @@ export function useItineraryRouteLayerSync({
   }, [itineraries]);
 
   const replayRouteState = useCallback((): boolean => {
-    if (!map || !isMapLoaded || !canMutateStyle(map)) return false;
+    if (!map || !isMapLoaded || !canAccessStyle(map)) return false;
 
     for (const it of itineraries) {
       const pts = it.gpxRoute?.points;

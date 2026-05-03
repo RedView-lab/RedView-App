@@ -11,4 +11,6 @@ export {
   projectPointAlongRoute,
   roundDistanceKm,
 } from './route-distance';
+export { buildRouteContentSignature } from './route-signature';
+export type { RouteSignaturePoint } from './route-signature';
 export { simplifyRouteToMaxPoints } from './simplify-route';

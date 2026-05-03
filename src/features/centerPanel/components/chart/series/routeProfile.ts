@@ -1,4 +1,5 @@
 import type { RouteChartPoint } from '../seriesCommon';
+import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 
 export interface NormalizedRoutePoint {
   distanceM: number;
@@ -8,8 +9,14 @@ export interface NormalizedRoutePoint {
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const GRADIENT_SEGMENT_M = 30;
-const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], NormalizedRoutePoint[] | null>();
-const routePointDistancesCache = new WeakMap<RouteChartPoint[], number[]>();
+const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], {
+  signature: string;
+  value: NormalizedRoutePoint[] | null;
+}>();
+const routePointDistancesCache = new WeakMap<RouteChartPoint[], {
+  signature: string;
+  value: number[];
+}>();
 
 export const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
 
@@ -108,8 +115,10 @@ export function normalizeRouteProfile(
 ): NormalizedRoutePoint[] | null {
   if (!routePoints || routePoints.length < 2) return null;
 
+  const signature = buildRouteContentSignature(routePoints);
+
   const cached = normalizedRouteProfileCache.get(routePoints);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined && cached.signature === signature) return cached.value;
 
   const samples: Array<{ distanceM: number; elevationM: number; gradientPct?: number | null }> = [];
   let cumulativeDistanceM = 0;
@@ -134,7 +143,7 @@ export function normalizeRouteProfile(
   }
 
   if (samples.length < 2) {
-    normalizedRouteProfileCache.set(routePoints, null);
+    normalizedRouteProfileCache.set(routePoints, { signature, value: null });
     return null;
   }
 
@@ -147,15 +156,16 @@ export function normalizeRouteProfile(
     gradientPct: computeGradientPercentAtIndex(distances, smoothedElevations, index),
   }));
 
-  normalizedRouteProfileCache.set(routePoints, normalized);
+  normalizedRouteProfileCache.set(routePoints, { signature, value: normalized });
   return normalized;
 }
 
 export function getRoutePointDistances(routePoints: RouteChartPoint[]): number[] {
   if (routePoints.length === 0) return [];
 
+  const signature = buildRouteContentSignature(routePoints);
   const cached = routePointDistancesCache.get(routePoints);
-  if (cached) return cached;
+  if (cached && cached.signature === signature) return cached.value;
 
   const distances: number[] = [0];
   let cumulativeDistanceM = 0;
@@ -170,7 +180,7 @@ export function getRoutePointDistances(routePoints: RouteChartPoint[]): number[]
     distances.push(cumulativeDistanceM);
   }
 
-  routePointDistancesCache.set(routePoints, distances);
+  routePointDistancesCache.set(routePoints, { signature, value: distances });
   return distances;
 }
 
