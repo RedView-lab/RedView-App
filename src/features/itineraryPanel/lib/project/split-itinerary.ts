@@ -79,7 +79,7 @@ export function splitItineraryProject(
   createdItinerary.id = createdItineraryId;
   createdItinerary.name = createdItineraryName;
   createdItinerary.color = nextColor;
-  createdItinerary.visible = false;
+  createdItinerary.visible = true;
   createdItinerary.splitRelation = {
     parentItineraryId: source.id,
     rootItineraryId: source.splitRelation?.rootItineraryId ?? source.id,

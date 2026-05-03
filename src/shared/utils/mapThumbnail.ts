@@ -1,5 +1,5 @@
 /**
- * Capture a downsized PNG snapshot of the live Mapbox canvas.
+ * Capture a downsized JPEG snapshot of the live Mapbox canvas.
  *
  * Used by the project browser to show a per-project thumbnail.
  * Requires the Map to have been instantiated with
@@ -8,7 +8,7 @@
  * The capture pipeline is:
  *   map canvas (full device-pixel resolution)
  *     → offscreen canvas at `targetWidth` (object-fit: cover)
- *     → PNG blob
+ *     → JPEG blob
  *
  * Returns null if the map isn't ready or the capture failed for any
  * reason (read-back blocked, taint, OOM…). Callers should treat null
@@ -18,7 +18,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 export async function captureMapThumbnail(
   map: MapboxMap | null,
-  targetWidth = 480,
+  targetWidth = 360,
   aspectRatio = 16 / 9,
 ): Promise<Blob | null> {
   if (!map) return null;
@@ -34,6 +34,10 @@ export async function captureMapThumbnail(
     off.height = targetHeight;
     const ctx = off.getContext('2d');
     if (!ctx) return null;
+    ctx.fillStyle = '#141414';
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
     // Cover: scale to fill, crop excess.
     const srcAspect = src.width / src.height;
@@ -51,7 +55,7 @@ export async function captureMapThumbnail(
     ctx.drawImage(src, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
 
     return await new Promise<Blob | null>((resolve) => {
-      off.toBlob((b) => resolve(b), 'image/png', 0.85);
+      off.toBlob((b) => resolve(b), 'image/jpeg', 0.72);
     });
   } catch (e) {
     console.warn('[thumbnail] capture failed', e);

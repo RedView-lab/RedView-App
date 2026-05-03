@@ -52,6 +52,7 @@ export function useItineraryRouteLayerSync({
           it.color,
           it.opacity ?? 100,
           it.visible !== false ? 1 : 0,
+          it.analysisVisible !== false ? 1 : 0,
           it.routeAudit?.visible ? 1 : 0,
           it.routeAudit?.findings.length ?? 0,
           (it.forbiddenZones ?? []).map((zone) => {
@@ -70,7 +71,8 @@ export function useItineraryRouteLayerSync({
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
       const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
-      const routeVisible = it.visible !== false || active?.id === it.id;
+      const routeVisible =
+        it.visible !== false || active?.id === it.id || it.analysisVisible !== false;
       try {
         upsertRouteLayer(map, it.id, coords, {
           color: it.color,

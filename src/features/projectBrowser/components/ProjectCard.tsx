@@ -8,6 +8,7 @@ import {
 import type { ProjectSummary } from '@/shared/utils/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../lib';
+import { PROJECT_BROWSER_PREVIEW_URL } from '../lib/projects';
 
 type ProjectCardProps = {
   project: ProjectSummary;
@@ -39,6 +40,8 @@ export function ProjectCard({
 }: ProjectCardProps) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
+  const [previewSrc, setPreviewSrc] = useState(thumbnailUrl ?? PROJECT_BROWSER_PREVIEW_URL);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const dragImageRef = useRef<HTMLImageElement | null>(null);
@@ -56,6 +59,11 @@ export function ProjectCard({
   useEffect(() => {
     setDraft(project.name);
   }, [project.name]);
+
+  useEffect(() => {
+    setPreviewSrc(thumbnailUrl ?? PROJECT_BROWSER_PREVIEW_URL);
+    setPreviewUnavailable(false);
+  }, [thumbnailUrl]);
 
   const commitRename = async () => {
     const next = draft.trim();
@@ -156,8 +164,19 @@ export function ProjectCard({
         disabled={busy}
         aria-label={`Entrer dans ${project.name}`}
       >
-        {thumbnailUrl ? (
-          <img src={thumbnailUrl} alt="Aperçu de projet" />
+        {!previewUnavailable ? (
+          <img
+            src={previewSrc}
+            alt="Aperçu de projet"
+            loading="lazy"
+            onError={() => {
+              if (previewSrc !== PROJECT_BROWSER_PREVIEW_URL) {
+                setPreviewSrc(PROJECT_BROWSER_PREVIEW_URL);
+                return;
+              }
+              setPreviewUnavailable(true);
+            }}
+          />
         ) : (
           <div className="rvpb-card__preview-placeholder" aria-hidden="true" />
         )}
