@@ -17,9 +17,8 @@ const FORECAST_API_BASE = OPENMETEO_FORECAST_URL;
 const CLIMATE_API_BASE = OPENMETEO_CLIMATE_URL;
 const FORECAST_CACHE_TTL_MS = 20 * 60 * 1000;
 const TREND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-// Self-hosted VPS → we can push much bigger batches with no throttling.
-const FORECAST_BATCH_SIZE = 400;
-const TRENDS_BATCH_SIZE = 320;
+const FORECAST_BATCH_SIZE = 84;
+const TRENDS_BATCH_SIZE = 96;
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
 const MIN_REQUEST_GAP_MS = 0;
@@ -178,19 +177,19 @@ function maxPointsForZoom(
   pixelWidth: number,
   pixelHeight: number,
 ): number {
-  // Self-hosted VPS → we can afford much denser grids.
   const targetPx = weatherTargetCellPixels(mode, zoom, metrics);
   const targetCols = Math.max(2, Math.ceil(pixelWidth / Math.max(8, targetPx)) + 1);
   const targetRows = Math.max(2, Math.ceil(pixelHeight / Math.max(8, targetPx)) + 1);
-  const screenBudget = Math.ceil(targetCols * targetRows * 1.5);
+  const screenBudget = Math.ceil(targetCols * targetRows * (mode === 'forecast' ? 0.16 : 0.14));
   const metricBoost = weatherMetricPointBudgetBoost(metrics);
-  const hardCap = mode === 'forecast' ? 28000 : 18000;
 
   if (mode === 'forecast') {
-    const base = zoom <= 4.5 ? 9000 : zoom <= 6.5 ? 6500 : zoom <= 8.5 ? 4200 : 2600;
+    const base = zoom <= 4.5 ? 384 : zoom <= 6.5 ? 320 : 256;
+    const hardCap = zoom <= 4.5 ? 960 : zoom <= 6.5 ? 768 : 640;
     return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
   }
-  const base = zoom <= 4.5 ? 4200 : zoom <= 6.5 ? 2800 : zoom <= 8.5 ? 1800 : 1100;
+  const base = zoom <= 4.5 ? 224 : zoom <= 6.5 ? 180 : 140;
+  const hardCap = zoom <= 4.5 ? 640 : zoom <= 6.5 ? 512 : 384;
   return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
 }
 

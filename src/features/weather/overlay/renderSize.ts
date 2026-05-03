@@ -1,7 +1,7 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 const RENDER_MIN = 320;
-const RENDER_MAX = 3072;
+const RENDER_MAX = 2304;
 
 function overlayRenderDpr(canvas: HTMLCanvasElement): number {
   const clientWidth = Math.max(1, canvas.clientWidth || canvas.width || RENDER_MIN);
@@ -27,8 +27,8 @@ function overlayRenderDpr(canvas: HTMLCanvasElement): number {
     || (nav.hardwareConcurrency > 0 && nav.hardwareConcurrency <= 6);
 
   if (constrained || area >= 900_000) return Math.min(nativeDpr, 1);
-  if (area >= 500_000) return Math.min(nativeDpr, 1.25);
-  return Math.min(nativeDpr, 1.5);
+  if (area >= 500_000) return Math.min(nativeDpr, 1.15);
+  return Math.min(nativeDpr, 1.35);
 }
 
 export function getOverlayRenderSize(map: MapboxMap): { width: number; height: number } {
@@ -37,8 +37,8 @@ export function getOverlayRenderSize(map: MapboxMap): { width: number; height: n
   const clientHeight = Math.max(RENDER_MIN, canvas.clientHeight || canvas.height || RENDER_MIN);
   const aspect = clientWidth / Math.max(1, clientHeight);
   const zoom = map.getZoom();
-  const baseScale = zoom >= 10 ? 1 : zoom >= 8 ? 0.9 : zoom >= 6 ? 0.8 : 0.7;
-  const dezoomSuperSample = zoom < 8 ? 2 : 1;
+  const baseScale = zoom >= 10 ? 1 : zoom >= 8 ? 0.88 : zoom >= 6 ? 0.74 : 0.62;
+  const dezoomSuperSample = zoom < 7 ? 1.15 : 1;
   const dpr = overlayRenderDpr(canvas);
   const targetWidth = Math.max(
     RENDER_MIN,

@@ -82,12 +82,6 @@ function rangeForMetric(metric: WeatherOverlayMetric, samples: WeatherOverlaySam
   return { min, max };
 }
 
-function visiblePaletteBands(paletteBands: PaletteBandLike[] | undefined): PaletteBandLike[] | undefined {
-  if (!paletteBands?.length) return paletteBands;
-  const visibleBands = paletteBands.filter((band) => band.visible !== false);
-  return visibleBands.length > 0 ? visibleBands : paletteBands;
-}
-
 function paletteStops(
   metric: WeatherOverlayMetric,
   paletteBands: PaletteBandLike[] | undefined,
@@ -96,7 +90,7 @@ function paletteStops(
 ): readonly ColorStop[] {
   if (!paletteBands?.length) return getWeatherOverlayColorStops(metric);
 
-  const bandsForStops = visiblePaletteBands(paletteBands) ?? paletteBands;
+  const bandsForStops = paletteBands;
   const span = Math.max(1e-6, maxValue - minValue);
   const stops: ColorStop[] = [];
 
@@ -144,22 +138,24 @@ function paletteRange(
   return { min: minValue, max: maxValue };
 }
 
-function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color {
-  for (const band of paletteBands) {
-    if (Number.isFinite(band.maxValue) && value < (band.maxValue as number)) return hexToRgb(band.color);
+function paletteBandForValue(paletteBands: PaletteBandLike[] | undefined, value: number): PaletteBandLike | null {
+  if (!paletteBands?.length) return null;
+  for (let index = 0; index < paletteBands.length; index += 1) {
+    const band = paletteBands[index];
+    const maxValue = Number.isFinite(band.maxValue) ? (band.maxValue as number) : Number.POSITIVE_INFINITY;
+    if (value < maxValue || index === paletteBands.length - 1) return band;
   }
-  return hexToRgb(paletteBands[paletteBands.length - 1]?.color ?? '#FFFFFF');
+  return paletteBands[paletteBands.length - 1] ?? null;
+}
+
+function steppedBandColor(paletteBands: PaletteBandLike[], value: number): Color {
+  return hexToRgb(paletteBandForValue(paletteBands, value)?.color ?? '#FFFFFF');
 }
 
 function bandAlpha(mode: WeatherOverlayMode, paletteBands: PaletteBandLike[] | undefined, value: number): number {
+  void mode;
   if (!paletteBands?.length) return 255;
-  if (mode === 'gradient') return paletteBands.some((band) => band.visible !== false) ? 255 : 0;
-  for (const band of paletteBands) {
-    if (Number.isFinite(band.maxValue) && value < (band.maxValue as number)) {
-      return band.visible === false ? 0 : 255;
-    }
-  }
-  return paletteBands[paletteBands.length - 1]?.visible === false ? 0 : 255;
+  return paletteBandForValue(paletteBands, value)?.visible === false ? 0 : 255;
 }
 
 function interpolatePaletteColor(stops: readonly ColorStop[], ratio: number): Color {

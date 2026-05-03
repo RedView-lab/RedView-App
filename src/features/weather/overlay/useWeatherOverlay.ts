@@ -22,6 +22,7 @@ const LAYER_PREFIX = 'weather-overlay-layer';
 const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
 const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
+const STYLE_SYNC_RETRY_MS = 96;
 const STATUS_ID = 'weather';
 
 type RefreshReason = 'normal' | 'force' | 'reload';
@@ -184,6 +185,7 @@ export function useWeatherOverlay(
   const lastFetchTimeRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const styleRetryRef = useRef<number | null>(null);
   const generationRef = useRef(0);
   const scheduleRefreshRef = useRef<((reason: RefreshReason) => void) | null>(null);
   const hideAllRef = useRef<(() => void) | null>(null);
@@ -236,14 +238,35 @@ export function useWeatherOverlay(
       }
     };
 
-    const setLayerOpacity = (key: WeatherOverlayMetric) => {
+    const setLayerPaint = (key: WeatherOverlayMetric, mode: WeatherOverlayMode) => {
       try {
         if (map.getLayer(layerId(key))) {
           map.setPaintProperty(layerId(key), 'raster-opacity', paletteOpacity(stateRef.current, key));
+          map.setPaintProperty(layerId(key), 'raster-resampling', mode === 'fill' ? 'nearest' : 'linear');
         }
       } catch {
         /* no-op */
       }
+    };
+
+    const publishStyleSyncStatus = (progress: number) => {
+      publishStatus(createOverlayStatus({
+        id: STATUS_ID,
+        label: 'Météo',
+        state: 'loading',
+        progress: Math.max(0, Math.min(99, progress)),
+        detail: 'Synchronisation du style',
+        reloadable: true,
+      }));
+    };
+
+    const scheduleStyleRetry = () => {
+      if (styleRetryRef.current != null) return;
+      styleRetryRef.current = window.setTimeout(() => {
+        styleRetryRef.current = null;
+        if (cancelled) return;
+        scheduleRefreshRef.current?.('force');
+      }, STYLE_SYNC_RETRY_MS);
     };
 
     const hideAll = () => {
@@ -251,7 +274,12 @@ export function useWeatherOverlay(
       publishStatus(null);
     };
 
-    const ensureLayer = (key: WeatherOverlayMetric, url: string, coords: ImageCoords): boolean => {
+    const ensureLayer = (
+      key: WeatherOverlayMetric,
+      mode: WeatherOverlayMode,
+      url: string,
+      coords: ImageCoords,
+    ): boolean => {
       if (!canMutateStyle()) return false;
       try {
         if (!map.getSource(sourceId(key))) {
@@ -270,13 +298,13 @@ export function useWeatherOverlay(
             paint: {
               'raster-opacity': 1,
               'raster-fade-duration': 0,
-              'raster-resampling': 'linear',
+              'raster-resampling': mode === 'fill' ? 'nearest' : 'linear',
             },
           } as never);
         }
         const source = map.getSource(sourceId(key)) as ImageSource | undefined;
         source?.updateImage({ url, coordinates: coords });
-        setLayerOpacity(key);
+        setLayerPaint(key, mode);
         setVisibility(key, true);
         return true;
       } catch {
@@ -284,17 +312,21 @@ export function useWeatherOverlay(
       }
     };
 
-    const renderFromData = async (dataset: WeatherGridDataset | null, progressBase = 76) => {
+    const renderFromData = async (dataset: WeatherGridDataset | null, progressBase = 76): Promise<boolean> => {
       if (!dataset) {
         hideAll();
-        return;
+        return true;
       }
-      if (!canMutateStyle()) return;
+      if (!canMutateStyle()) {
+        publishStyleSyncStatus(Math.max(74, progressBase - 2));
+        scheduleStyleRetry();
+        return false;
+      }
 
       const activeLayers = activeRenderableLayers(stateRef.current);
       if (!stateRef.current.enabled || activeLayers.length === 0) {
         hideAll();
-        return;
+        return true;
       }
 
       const coords = imageCoords(dataset.grid.bounds);
@@ -318,7 +350,11 @@ export function useWeatherOverlay(
         ].join('|');
         const rendered = renderedRef.current[key];
         if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
-          if (!ensureLayer(key, rendered.url, rendered.coords)) return;
+          if (!ensureLayer(key, activeLayer.mode, rendered.url, rendered.coords)) {
+            publishStyleSyncStatus(Math.max(74, progressBase - 2));
+            scheduleStyleRetry();
+            return false;
+          }
           renderedCount += 1;
           publishStatus(createOverlayStatus({
             id: STATUS_ID,
@@ -345,11 +381,15 @@ export function useWeatherOverlay(
         await preload(url);
         if (!canMutateStyle()) {
           if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-          return;
+          publishStyleSyncStatus(Math.max(74, progressBase - 2));
+          scheduleStyleRetry();
+          return false;
         }
-        if (!ensureLayer(key, url, coords)) {
+        if (!ensureLayer(key, activeLayer.mode, url, coords)) {
           if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-          return;
+          publishStyleSyncStatus(Math.max(74, progressBase - 2));
+          scheduleStyleRetry();
+          return false;
         }
         if (rendered?.url.startsWith('blob:')) {
           window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
@@ -374,6 +414,7 @@ export function useWeatherOverlay(
         detail: 'Overlay prêt',
         reloadable: true,
       }));
+      return true;
     };
 
     const refresh = async (reason: RefreshReason) => {
@@ -517,9 +558,9 @@ export function useWeatherOverlay(
       }
       for (const activeLayer of activeLayers) {
         const rendered = renderedRef.current[activeLayer.key];
-        if (rendered) ensureLayer(activeLayer.key, rendered.url, rendered.coords);
+        if (rendered) ensureLayer(activeLayer.key, activeLayer.mode, rendered.url, rendered.coords);
       }
-      if (!dataRef.current) scheduleRefresh('force');
+      scheduleRefresh('force');
     };
 
     hideAllRef.current = hideAll;
@@ -539,6 +580,7 @@ export function useWeatherOverlay(
       hideAllRef.current = null;
       abortRef.current?.abort();
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
+      if (styleRetryRef.current != null) window.clearTimeout(styleRetryRef.current);
       for (const rendered of Object.values(renderedRef.current)) {
         if (rendered?.url.startsWith('blob:')) URL.revokeObjectURL(rendered.url);
       }
@@ -584,8 +626,8 @@ export function useWeatherOverlay(
     for (const layer of activeLayers) {
       try {
         if (map.getLayer(layerId(layer.key))) {
-          const opacity = state.palettes?.[layer.key]?.opacity ?? 100;
-          map.setPaintProperty(layerId(layer.key), 'raster-opacity', Math.max(0, Math.min(1, opacity / 100)));
+          map.setPaintProperty(layerId(layer.key), 'raster-opacity', paletteOpacity(state, layer.key));
+          map.setPaintProperty(layerId(layer.key), 'raster-resampling', layer.mode === 'fill' ? 'nearest' : 'linear');
         }
       } catch {
         /* layer may not exist yet */
