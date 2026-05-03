@@ -18,6 +18,9 @@ import {
  *      reload (`reloadMapElevation`, cooldown bypassed).
  *   3. After repeated failures, the standard reload escalation kicks
  *      in (style re-apply, etc.).
+ *   4. NEW: if the SW controller is now available but no DEM source
+ *      was ever added (late-SW-claim session stuck in plain-Mapbox
+ *      mode), re-trigger the full bootstrap from scratch.
  */
 export function attachHeartbeat(ctx: Ctx): void {
   const { map, isCancelled } = ctx;
@@ -60,6 +63,18 @@ export function attachHeartbeat(ctx: Ctx): void {
         }
       }
 
+      // NEW: If the DEM source was never added AND the SW controller
+      // is now available, we're in a late-SW-claim session that got
+      // stuck in plain-Mapbox mode. The only fix is to re-run the
+      // full bootstrap — `reloadMapElevation` can't help because
+      // `refreshDemSource` requires the source to exist first.
+      if (!sourcePresent && navigator.serviceWorker?.controller) {
+        console.warn('[map3d] heartbeat: DEM source missing but SW available — re-bootstrapping');
+        st.heartbeatFailures = 0;
+        void fns.bootstrapCurrentStyle();
+        return;
+      }
+
       // Either the source is gone or re-attach didn't take. Escalate
       // to a full reload (cooldown bypassed) once we're sure it's not
       // a one-shot blip.
@@ -79,3 +94,4 @@ export function attachHeartbeat(ctx: Ctx): void {
     st.heartbeatFailures = 0;
   };
 }
+

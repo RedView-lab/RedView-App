@@ -78,10 +78,36 @@ export function attachListeners(ctx: Ctx): void {
         return;
       }
     }
+    // Anti-flat: if no DEM source exists but the SW controller is
+    // now available (late-claim session), trigger a full bootstrap
+    // recovery from idle — the earliest safe point to mutate the style.
+    if (
+      fns.canMutateStyle()
+      && !map.getSource(unifiedDEMSource.id)
+      && navigator.serviceWorker?.controller
+    ) {
+      console.warn('[map3d] idle: DEM source missing but SW available — re-bootstrapping');
+      void fns.bootstrapCurrentStyle();
+      return;
+    }
     if (!fns.allTilesLoaded()) return;
     if (map.isMoving()) return;
     if (fns.applyPendingDemPassiveRefresh()) return;
     fns.finishDemActivity('Carte prête');
+  };
+
+  // Anti-flat: verify terrain binding after every zoom operation.
+  // Mapbox GL v3 occasionally drops terrain silently during zoom
+  // transitions (when the tile pyramid crosses z-level boundaries).
+  // Re-attach immediately so the user never sees a flat frame.
+  const onZoomEndTerrainCheck = () => {
+    if (!st.demTrackingEnabled || isCancelled()) return;
+    if (!fns.canMutateStyle()) return;
+    const sourcePresent = !!map.getSource(unifiedDEMSource.id);
+    if (sourcePresent && !fns.isUnifiedTerrainActive()) {
+      console.warn('[map3d] zoomend: terrain detached — re-attaching');
+      fns.applyUnifiedTerrain();
+    }
   };
 
   const onServiceWorkerMessage = (event: MessageEvent) => {
@@ -107,6 +133,7 @@ export function attachListeners(ctx: Ctx): void {
     map.on('error', onTrackedTileError);
     map.on('moveend', fns.scheduleDemSettle);
     map.on('zoomend', fns.scheduleDemSettle);
+    map.on('zoomend', onZoomEndTerrainCheck);
     map.on('movestart', onMovestart);
     map.on('idle', onMapIdle);
     map.on('styledata', fns.scheduleTerrainRecovery);
@@ -122,6 +149,7 @@ export function attachListeners(ctx: Ctx): void {
     map.off('error', onTrackedTileError);
     map.off('moveend', fns.scheduleDemSettle);
     map.off('zoomend', fns.scheduleDemSettle);
+    map.off('zoomend', onZoomEndTerrainCheck);
     map.off('movestart', onMovestart);
     map.off('idle', onMapIdle);
     map.off('styledata', fns.scheduleTerrainRecovery);

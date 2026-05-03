@@ -1,6 +1,6 @@
 import { unifiedDEMSource } from '../../../lib/sources';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
-import { swReady } from '../serviceWorker';
+import { swReady, swLateReady } from '../serviceWorker';
 import {
   MAPBOX_STANDARD_STYLE_URL,
   MAPBOX_STANDARD_SATELLITE_STYLE_URL,
@@ -23,6 +23,11 @@ const supportsStandardLightPreset = (styleUrl: string): boolean => (
  *    scratch on `style.load` (the previous source's tile pyramid is
  *    typically dropped by setStyle({diff:false}) anyway, but rebuilding
  *    explicitly avoids the half-empty pyramid case).
+ *  - Late-SW recovery: when the SW takes longer than 2.5 s to claim,
+ *    the plain-Mapbox fallback path now schedules a background listener
+ *    on `swLateReady`. If the controller appears within ~20 s, the
+ *    full DEM/terrain bootstrap is re-triggered automatically instead
+ *    of leaving the map permanently flat.
  */
 export function attachStyleBootstrap(ctx: Ctx): void {
   const { map, isCancelled, getActiveStyleUrl, fogConfig, runtimeProfile } = ctx;
@@ -139,7 +144,11 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     fns.refreshTrackedSourceIds();
-    const swOk = await swReady;
+    // swReady resolves once (cached). On a late-recovery re-run the
+    // promise may still be `false` even though the controller has since
+    // appeared. Check the live controller reference as a secondary gate
+    // so the DEM path runs whenever the SW is actually available.
+    const swOk = (await swReady) || !!navigator.serviceWorker?.controller;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
 
     fns.reportStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
@@ -164,6 +173,36 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         if (st.lastReportedState === 'ready') return;
         fns.finishDemActivity('Carte prête');
       }, 8000);
+
+      // ── Late-SW recovery ──────────────────────────────────────────
+      // The SW didn't claim within 2.5 s, but it may still be installing.
+      // Wait for it in the background: if it appears within ~20 s,
+      // re-trigger the full DEM/terrain bootstrap so the map doesn't
+      // stay flat forever. This is the key fix for the "tout devient
+      // plat quand je zoom" regression.
+      void swLateReady.then((lateOk) => {
+        if (!lateOk) return;
+        if (isCancelled()) return;
+        // Only recover if we're still in the same bootstrap run (no
+        // basemap switch happened in the meantime) and the DEM source
+        // hasn't been attached yet by another path.
+        if (runId !== st.styleBootstrapRunId) return;
+        if (map.getSource(unifiedDEMSource.id)) return;
+        if (!fns.canMutateStyle()) return;
+
+        console.log('[map3d] Late SW recovery: re-triggering full DEM bootstrap');
+        fns.reportStatus('loading', 50, 'Récupération relief');
+        // Clear the plain-Mapbox idle listener to avoid interference
+        if (st.finishOnIdle) {
+          map.off('idle', st.finishOnIdle);
+          st.finishOnIdle = null;
+        }
+        // Re-run the full bootstrap — this time swReady is already
+        // resolved true (or the controller is now available), so the
+        // DEM/terrain path will execute.
+        void fns.bootstrapCurrentStyle();
+      });
+
       return false;
     }
 
