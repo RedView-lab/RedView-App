@@ -323,6 +323,13 @@ export function useSlope(
     let watchdog: ReturnType<typeof setTimeout> | null = null;
     let lastEmittedProgress = -1;
     let lastEmittedState: 'loading' | 'ready' = 'loading';
+    // Stagnation tracker: timestamp of the last time `loaded.size` (or
+    // `requested.size`) advanced. When the SW pipeline drops a tile (rare
+    // dispatcher exception inside an async branch, neighbour DEM 204 that
+    // never bubbles up as `sourcedata`) the requested/loaded counts can
+    // freeze mid-load. The watchdog now force-completes the pill on
+    // stagnation instead of silently strand-locking the user at 86 %.
+    let lastProgressMs = Date.now();
 
     const tileKey = (event: MapSourceDataEvent): string | null => {
       const tileID = (event as unknown as { tile?: { tileID?: { canonical?: { z: number; x: number; y: number } } } })
@@ -367,15 +374,35 @@ export function useSlope(
     const armWatchdog = () => {
       if (watchdog) clearTimeout(watchdog);
       // The slope SW pipeline can be slow on first cold viewport (many
-      // composites + Horn + encode). The watchdog only force-completes
-      // if the same totals stick for 12s — long enough not to lie about
-      // progress, short enough to recover from a stuck state.
+      // composites + Horn + encode). The watchdog has two completion
+      // paths:
+      //   • all requested tiles are loaded → emit ready immediately.
+      //   • progress has been frozen for ≥ STAGNATION_MS → force-emit
+      //     ready with a "stragglers" detail so the user is unblocked
+      //     instead of stuck at 86 %.
+      // We re-arm on every load/loaded event so the timer naturally
+      // tracks the most recent activity.
+      const STAGNATION_MS = 8000;
       watchdog = setTimeout(() => {
         watchdog = null;
-        if (loaded.size >= requested.size && requested.size > 0) {
+        if (requested.size === 0) return;
+        if (loaded.size >= requested.size) {
           emit('ready', 100, 'Pentes prêtes');
+          return;
         }
-      }, 12000);
+        const sinceProgress = Date.now() - lastProgressMs;
+        if (sinceProgress >= STAGNATION_MS) {
+          // Force-complete on stagnation. The remaining tiles either
+          // 204'd (no DEM coverage) or hit a transient SW pipeline
+          // hiccup; either way we don't want to lie about progress
+          // forever. Mapbox will quietly retry on the next pan/zoom.
+          const stragglers = requested.size - loaded.size;
+          emit('ready', 100, `Pentes prêtes (${stragglers} en attente)`);
+          return;
+        }
+        // Still progressing — re-arm and keep showing the latest %.
+        armWatchdog();
+      }, STAGNATION_MS);
     };
 
     const scheduleSettle = () => {
@@ -390,7 +417,10 @@ export function useSlope(
       if (!isSlopeEvent(event)) return;
       const key = tileKey(event);
       if (!key) return;
-      requested.add(key);
+      if (!requested.has(key)) {
+        requested.add(key);
+        lastProgressMs = Date.now();
+      }
       scheduleSettle();
       armWatchdog();
     };
@@ -399,15 +429,20 @@ export function useSlope(
       if (!isSlopeEvent(event)) return;
       const key = tileKey(event);
       if (key) {
-        requested.add(key);
-        loaded.add(key);
+        if (!requested.has(key)) {
+          requested.add(key);
+          lastProgressMs = Date.now();
+        }
+        if (!loaded.has(key)) {
+          loaded.add(key);
+          lastProgressMs = Date.now();
+        }
       }
-      if (event.isSourceLoaded) {
-        // Mapbox signals the source is fully loaded — flush as ready.
-        scheduleSettle();
-      } else {
-        scheduleSettle();
-      }
+      // Always re-arm so stagnation is measured from the most recent
+      // load — otherwise a stalled tail of pre-existing requests could
+      // never recover.
+      armWatchdog();
+      scheduleSettle();
     };
 
     const onError = (event: MapSourceDataEvent) => {
@@ -417,7 +452,9 @@ export function useSlope(
         // Drop from requested so we don't get stuck at <100%.
         requested.delete(key);
         loaded.delete(key);
+        lastProgressMs = Date.now();
       }
+      armWatchdog();
       scheduleSettle();
     };
 
