@@ -74,6 +74,47 @@ export interface RouteLayerOptions {
   visible: boolean;
 }
 
+function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
+  try {
+    const layers = map.getStyle()?.layers ?? [];
+    const index = layers.findIndex((layer) => layer.id === layerId);
+    if (index < 0) return false;
+    return layers.slice(index + 1).some((layer) => layer.type === 'raster');
+  } catch {
+    return false;
+  }
+}
+
+function setPaintPropertyIfChanged(
+  map: MapboxMap,
+  layerId: string,
+  property: Parameters<MapboxMap['setPaintProperty']>[1],
+  value: unknown,
+): void {
+  try {
+    if (map.getPaintProperty(layerId, property) !== value) {
+      map.setPaintProperty(layerId, property, value as never);
+    }
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
+function setLayoutPropertyIfChanged(
+  map: MapboxMap,
+  layerId: string,
+  property: Parameters<MapboxMap['setLayoutProperty']>[1],
+  value: unknown,
+): void {
+  try {
+    if (map.getLayoutProperty(layerId, property) !== value) {
+      map.setLayoutProperty(layerId, property, value as never);
+    }
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
 export function hasRouteLayer(map: MapboxMap, itineraryId: string): boolean {
   try {
     return !!map.getSource(ids(itineraryId).source);
@@ -186,17 +227,29 @@ export function upsertRouteLayer(
   // the current store state regardless of the upsert path taken above.
   try {
     if (map.getLayer(glowId)) {
-      map.setPaintProperty(glowId, 'line-color', opts.color);
-      map.setPaintProperty(glowId, 'line-opacity', 0.4 * opacity);
-      map.setLayoutProperty(glowId, 'visibility', visibility);
+      setPaintPropertyIfChanged(map, glowId, 'line-color', opts.color);
+      setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0.4 * opacity);
+      setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
     }
     if (map.getLayer(lineId)) {
-      map.setPaintProperty(lineId, 'line-color', opts.color);
-      map.setPaintProperty(lineId, 'line-opacity', opacity);
-      map.setLayoutProperty(lineId, 'visibility', visibility);
+      setPaintPropertyIfChanged(map, lineId, 'line-color', opts.color);
+      setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
+      setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
     }
+    raiseRouteLayer(map, itineraryId);
     // Keep endpoint markers (if any) on top of the route lines.
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
+export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
+  const { glow: glowId, line: lineId } = ids(itineraryId);
+  try {
+    if (!hasRasterLayerAbove(map, glowId) && !hasRasterLayerAbove(map, lineId)) return;
+    if (map.getLayer(glowId)) map.moveLayer(glowId);
+    if (map.getLayer(lineId)) map.moveLayer(lineId);
   } catch {
     /* map may be tearing down */
   }

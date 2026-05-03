@@ -12,6 +12,17 @@ function canMutateStyle(map: MapboxMap): boolean {
   }
 }
 
+function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
+  try {
+    const layers = map.getStyle()?.layers ?? [];
+    const index = layers.findIndex((layer) => layer.id === layerId);
+    if (index < 0) return false;
+    return layers.slice(index + 1).some((layer) => layer.type === 'raster');
+  } catch {
+    return false;
+  }
+}
+
 /** Check if the GPX source still exists on the map. */
 export function isGpxRouteOnMap(map: MapboxMap): boolean {
   try {
@@ -98,6 +109,14 @@ export function removeGpxRoute(map: MapboxMap): void {
     if (map.getLayer(GPX_LINE_LAYER_ID)) map.removeLayer(GPX_LINE_LAYER_ID);
     if (map.getLayer(GPX_GLOW_LAYER_ID)) map.removeLayer(GPX_GLOW_LAYER_ID);
     if (map.getSource(GPX_SOURCE_ID)) map.removeSource(GPX_SOURCE_ID);
+  } catch { /* map might be destroyed */ }
+}
+
+export function raiseGpxRoute(map: MapboxMap): void {
+  try {
+    if (!hasRasterLayerAbove(map, GPX_GLOW_LAYER_ID) && !hasRasterLayerAbove(map, GPX_LINE_LAYER_ID)) return;
+    if (map.getLayer(GPX_GLOW_LAYER_ID)) map.moveLayer(GPX_GLOW_LAYER_ID);
+    if (map.getLayer(GPX_LINE_LAYER_ID)) map.moveLayer(GPX_LINE_LAYER_ID);
   } catch { /* map might be destroyed */ }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import {
@@ -17,6 +17,14 @@ import {
 } from '../lib/route-layer';
 import type { ItineraryProject } from '../types';
 
+function canMutateStyle(map: MapboxMap): boolean {
+  try {
+    return map.isStyleLoaded() && Boolean(map.getStyle());
+  } catch {
+    return false;
+  }
+}
+
 interface UseItineraryRouteLayerSyncArgs {
   active: ItineraryProject['itineraries'][number] | null;
   isMapLoaded: boolean;
@@ -30,6 +38,7 @@ export function useItineraryRouteLayerSync({
   itineraries,
   map,
 }: UseItineraryRouteLayerSyncArgs): void {
+  const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerSignature = useMemo(() => {
     return itineraries
       .map((it) => {
@@ -57,8 +66,9 @@ export function useItineraryRouteLayerSync({
       .join('|');
   }, [itineraries]);
 
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
+  const replayRouteState = useCallback((): boolean => {
+    if (!map || !isMapLoaded || !canMutateStyle(map)) return false;
+
     for (const it of itineraries) {
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
@@ -102,49 +112,52 @@ export function useItineraryRouteLayerSync({
       clearForbiddenZoneDraft(map);
       clearRouteEndpoints(map);
     }
-  }, [active, isMapLoaded, layerSignature, map, itineraries]);
+
+    return true;
+  }, [active, isMapLoaded, itineraries, map]);
+
+  const scheduleReplayRouteState = useCallback(() => {
+    if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
+    replayTimerRef.current = setTimeout(() => {
+      replayTimerRef.current = null;
+      replayRouteState();
+    }, 0);
+  }, [replayRouteState]);
+
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    if (!replayRouteState()) scheduleReplayRouteState();
+  }, [isMapLoaded, layerSignature, map, replayRouteState, scheduleReplayRouteState]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const onStyleLoad = () => {
-      setTimeout(() => {
-        try {
-          removeAllRouteLayers(map);
-          clearRouteAuditFindings(map);
-          clearForbiddenZones(map);
-          clearForbiddenZoneDraft(map);
-          clearRouteEndpoints(map);
-          for (const it of itineraries) {
-            const pts = it.gpxRoute?.points;
-            if (!pts || pts.length < 2) continue;
-            const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
-            upsertRouteLayer(map, it.id, coords, {
-              color: it.color,
-              opacity01: (it.opacity ?? 100) / 100,
-              visible: it.visible !== false,
-            });
-          }
-          if (active) {
-            setRouteAuditFindings(
-              map,
-              active.routeAudit?.findings ?? [],
-              active.routeAudit?.visible === true,
-            );
-            setForbiddenZones(map, active.forbiddenZones ?? []);
-            const endpoints = collectActiveRouteEndpoints(active.timeline);
-            if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
-          }
-        } catch {
-          // noop
-        }
-      }, 0);
+      try {
+        removeAllRouteLayers(map);
+        clearRouteAuditFindings(map);
+        clearForbiddenZones(map);
+        clearForbiddenZoneDraft(map);
+        clearRouteEndpoints(map);
+      } catch {
+        /* noop */
+      }
+      scheduleReplayRouteState();
+    };
+    const onStyleData = () => {
+      scheduleReplayRouteState();
     };
 
     map.on('style.load', onStyleLoad);
+    map.on('styledata', onStyleData);
     return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+        replayTimerRef.current = null;
+      }
       map.off('style.load', onStyleLoad);
+      map.off('styledata', onStyleData);
     };
-  }, [active, isMapLoaded, itineraries, layerSignature, map]);
+  }, [isMapLoaded, map, scheduleReplayRouteState]);
 }
 
 function collectActiveRouteEndpoints(

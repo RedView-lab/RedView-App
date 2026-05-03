@@ -6,6 +6,7 @@ import {
   addGpxRoute,
   fitMapToRoute,
   isGpxRouteOnMap,
+  raiseGpxRoute,
   removeGpxRoute,
 } from '@/features/poi/lib/gpx-layer';
 import type {
@@ -132,6 +133,7 @@ export function useItineraryPoiMap(
 
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
+  const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const renderedRouteKeyRef = useRef<string | null>(null);
   const fittedRouteKeyRef = useRef<string | null>(null);
   const gpxRouteKey = useMemo(
@@ -162,6 +164,8 @@ export function useItineraryPoiMap(
         if (!isGpxRouteOnMap(map) || renderedRouteKeyRef.current !== gpxRouteKey) {
           addGpxRoute(map, gpxRoute.points);
           renderedRouteKeyRef.current = gpxRouteKey;
+        } else {
+          raiseGpxRoute(map);
         }
         if (fittedRouteKeyRef.current !== gpxRouteKey) {
           fitMapToRoute(map, gpxRoute.points);
@@ -186,22 +190,38 @@ export function useItineraryPoiMap(
   // layers). Defer so useMap's async setup completes first.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    const onStyleLoad = () => {
-      if (!gpxNeedsRender || !gpxRoute || isGpxRouteOnMap(map)) return;
-      setTimeout(() => {
-        if (gpxRoute && !isGpxRouteOnMap(map)) {
-          try {
-            addGpxRoute(map, gpxRoute.points);
-            renderedRouteKeyRef.current = gpxRouteKey;
-          } catch {
-            /* noop */
-          }
+    const replayGpxRoute = () => {
+      if (!gpxNeedsRender || !gpxRoute) return;
+      try {
+        if (isGpxRouteOnMap(map)) {
+          raiseGpxRoute(map);
+        } else {
+          addGpxRoute(map, gpxRoute.points);
+          renderedRouteKeyRef.current = gpxRouteKey;
         }
+      } catch {
+        /* noop */
+      }
+    };
+    const scheduleReplayGpxRoute = () => {
+      if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
+      replayTimerRef.current = setTimeout(() => {
+        replayTimerRef.current = null;
+        replayGpxRoute();
       }, 0);
     };
+    const onStyleLoad = () => {
+      scheduleReplayGpxRoute();
+    };
     map.on('style.load', onStyleLoad);
+    map.on('styledata', onStyleLoad);
     return () => {
+      if (replayTimerRef.current) {
+        clearTimeout(replayTimerRef.current);
+        replayTimerRef.current = null;
+      }
       map.off('style.load', onStyleLoad);
+      map.off('styledata', onStyleLoad);
     };
   }, [map, isMapLoaded, gpxRoute, gpxNeedsRender, gpxRouteKey]);
 
