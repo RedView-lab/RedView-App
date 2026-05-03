@@ -116,6 +116,23 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') 
       const parentBlob = await parentResp.clone().blob();
       const overzoomed = await overzoomDemTile(parentBlob, pZ, pX, pY, z, x, y);
       if (overzoomed) {
+        // Reject parent overzooms that collapse to a flat zero raster over
+        // France/CH. A z14 cached tile that decoded as all-0 (Mapbox/AWS
+        // tile over a no-data pocket, decoded-as-zero placeholder) would
+        // otherwise propagate as a perfectly flat slab to every child
+        // tile that falls back to it. Continue to the next parent zoom.
+        if (isExpertFallbackRiskTile(z, x, y)) {
+          try {
+            const overzoomedElev = await decodeTerrainRGBBlob(overzoomed);
+            const stats = summarizeDemElevations(overzoomedElev);
+            if (isFlatlinedInlandStats(stats, z, x, y)) {
+              if (DEBUG) console.warn(
+                `[sw-dem][overzoom] skip flat-inland parent ${pZ}/${pX}/${pY} for ${z}/${x}/${y} src=${parentSource}`,
+              );
+              continue;
+            }
+          } catch { /* if decode fails, accept as before */ }
+        }
         return { blob: overzoomed, source: `overzoom-z${pZ}:${parentSource}` };
       }
     } catch (err) {

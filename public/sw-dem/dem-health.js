@@ -11,6 +11,23 @@ const DEM_HEALTH_MIN_COLLAPSED_RANGE_M = 4;
 const DEM_HEALTH_MAX_MEAN_DELTA_M = 180;
 const DEM_HEALTH_VERTICAL_OFFSET_M = 180;
 const DEM_HEALTH_NODATA_MEAN_M = -8000;
+// Inland (France/CH) tiles whose elevation raster is essentially the
+// constant zero plane (range < 0.5 m AND |mean| < 1 m) are corruption
+// artefacts — typically a parent overzoom of an empty Mapbox/AWS tile or
+// a decoded-as-zero placeholder. Real flat valleys at high zoom always
+// sit at ≥ 50 m (Loire ~50 m, Saône ~170 m, Rhône ~100 m, lowest CH point
+// 193 m), so this filter cannot reject genuine LiDAR data. Without it the
+// renderer paints a perfectly flat slab of terrain inside an otherwise 3D
+// landscape (see screenshot, May 3 2026).
+const DEM_HEALTH_FLAT_INLAND_RANGE_M = 0.5;
+const DEM_HEALTH_FLAT_INLAND_MEAN_ABS_M = 1.0;
+
+function isFlatlinedInlandStats(stats, z, x, y) {
+  if (!stats?.valid) return false;
+  if (!isExpertFallbackRiskTile(z, x, y)) return false;
+  return stats.range < DEM_HEALTH_FLAT_INLAND_RANGE_M
+    && Math.abs(stats.mean) < DEM_HEALTH_FLAT_INLAND_MEAN_ABS_M;
+}
 
 function summarizeDemElevations(elevations) {
   if (!elevations?.length) {
@@ -88,6 +105,36 @@ async function guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile
       };
     }
     return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'nodata-like' };
+  }
+
+  // Flat-inland defence — see DEM_HEALTH_FLAT_INLAND_RANGE_M comment above.
+  // A range≈0 raster over France or Switzerland at z≥12 means the tile
+  // would render as a perfectly flat slab. Refuse it: try a parent
+  // overzoom; only accept the recovery if it actually carries relief.
+  if (isFlatlinedInlandStats(current, z, x, y)) {
+    const recovered = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
+    if (recovered?.blob) {
+      let recoveredStats = { valid: false };
+      try {
+        const recoveredElev = await decodeTerrainRGBBlob(recovered.blob);
+        recoveredStats = summarizeDemElevations(recoveredElev);
+      } catch { /* fall through and reject */ }
+      if (recoveredStats.valid && !isFlatlinedInlandStats(recoveredStats, z, x, y)) {
+        console.warn(
+          `[sw-dem][health] rejecting flat-inland tile ${z}/${x}/${y} src=${demSource} mean=${current.mean.toFixed(2)} range=${current.range.toFixed(2)} -> ${recovered.source}`,
+        );
+        return {
+          blob: recovered.blob,
+          demSource: `${recovered.source}-flatguard`,
+          shortCache: true,
+          healthStatus: 'recovered',
+        };
+      }
+    }
+    console.warn(
+      `[sw-dem][health] rejecting flat-inland tile ${z}/${x}/${y} src=${demSource} mean=${current.mean.toFixed(2)} range=${current.range.toFixed(2)} (no recovery)`,
+    );
+    return { blob: null, demSource, shortCache: true, healthStatus: 'suspect', reason: 'flat-inland' };
   }
 
   const parentFallback = await tryParentOverzoom(cache, z, x, y, 0, demProfile);
