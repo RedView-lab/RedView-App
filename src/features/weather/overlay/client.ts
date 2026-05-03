@@ -182,8 +182,15 @@ function maxPointsForZoom(
   const targetRows = Math.max(2, Math.ceil(pixelHeight / Math.max(8, targetPx)) + 1);
   const screenBudget = Math.ceil(targetCols * targetRows * (mode === 'forecast' ? 0.48 : 0.14));
   const metricBoost = weatherMetricPointBudgetBoost(metrics);
+  const rainFocusedForecast = mode === 'forecast' && metrics.includes('rain');
 
   if (mode === 'forecast') {
+    if (rainFocusedForecast) {
+      const rainScreenBudget = Math.ceil(targetCols * targetRows * 0.72);
+      const base = zoom <= 4.5 ? 32_768 : zoom <= 6.5 ? 24_576 : zoom <= 8.5 ? 8_192 : 2_560;
+      const hardCap = zoom <= 4.5 ? 49_152 : zoom <= 6.5 ? 32_768 : zoom <= 8.5 ? 12_288 : 4_096;
+      return Math.min(hardCap, Math.max(Math.round(base * metricBoost), rainScreenBudget));
+    }
     const base = zoom <= 4.5 ? 6_144 : zoom <= 6.5 ? 4_096 : zoom <= 8.5 ? 2_560 : 1_536;
     const hardCap = zoom <= 4.5 ? 12_288 : zoom <= 6.5 ? 8_192 : zoom <= 8.5 ? 5_120 : 3_072;
     return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
