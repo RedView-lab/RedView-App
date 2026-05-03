@@ -17,7 +17,7 @@ const FORECAST_API_BASE = OPENMETEO_FORECAST_URL;
 const CLIMATE_API_BASE = OPENMETEO_CLIMATE_URL;
 const FORECAST_CACHE_TTL_MS = 20 * 60 * 1000;
 const TREND_CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const FORECAST_BATCH_SIZE = 84;
+const FORECAST_BATCH_SIZE = 200;
 const TRENDS_BATCH_SIZE = 96;
 const MAX_RETRIES = 2;
 const INITIAL_BACKOFF_MS = 1_000;
@@ -180,12 +180,12 @@ function maxPointsForZoom(
   const targetPx = weatherTargetCellPixels(mode, zoom, metrics);
   const targetCols = Math.max(2, Math.ceil(pixelWidth / Math.max(8, targetPx)) + 1);
   const targetRows = Math.max(2, Math.ceil(pixelHeight / Math.max(8, targetPx)) + 1);
-  const screenBudget = Math.ceil(targetCols * targetRows * (mode === 'forecast' ? 0.16 : 0.14));
+  const screenBudget = Math.ceil(targetCols * targetRows * (mode === 'forecast' ? 0.48 : 0.14));
   const metricBoost = weatherMetricPointBudgetBoost(metrics);
 
   if (mode === 'forecast') {
-    const base = zoom <= 4.5 ? 384 : zoom <= 6.5 ? 320 : 256;
-    const hardCap = zoom <= 4.5 ? 960 : zoom <= 6.5 ? 768 : 640;
+    const base = zoom <= 4.5 ? 6_144 : zoom <= 6.5 ? 4_096 : zoom <= 8.5 ? 2_560 : 1_536;
+    const hardCap = zoom <= 4.5 ? 12_288 : zoom <= 6.5 ? 8_192 : zoom <= 8.5 ? 5_120 : 3_072;
     return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
   }
   const base = zoom <= 4.5 ? 224 : zoom <= 6.5 ? 180 : 140;
@@ -329,8 +329,8 @@ async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function inFrance(points: WeatherGridPoint[]): boolean {
-  return points.every((point) => point.lat >= 41 && point.lat <= 52 && point.lng >= -6 && point.lng <= 10);
+function supportsFranceHdForecast(point: WeatherGridPoint): boolean {
+  return point.lat >= 41 && point.lat <= 52 && point.lng >= -6 && point.lng <= 10;
 }
 
 function unwrapCoord(value: number | number[]): number {
@@ -442,21 +442,21 @@ async function fetchJsonWithBackoff(url: string, signal?: AbortSignal): Promise<
   throw lastError ?? new Error('Open-Meteo fetch failed');
 }
 
-async function fetchForecastBatch(
+async function fetchForecastBatchSubset(
   points: WeatherGridPoint[],
   forecastIso: string,
+  franceModel: boolean,
   signal?: AbortSignal,
 ): Promise<WeatherOverlaySample[]> {
   const lats = points.map((point) => point.lat.toFixed(4)).join(',');
   const lngs = points.map((point) => point.lng.toFixed(4)).join(',');
-  const franceModel = inFrance(points) ? '&models=meteofrance_arome_france_hd' : '';
   const timeParam = encodeURIComponent(forecastIso);
   const url =
     `${FORECAST_API_BASE}?latitude=${lats}&longitude=${lngs}` +
     `&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover` +
     `&start_hour=${timeParam}&end_hour=${timeParam}` +
     `&timezone=Europe%2FParis&temperature_unit=celsius&precipitation_unit=mm&cell_selection=nearest` +
-    franceModel;
+    (franceModel ? '&models=meteofrance_arome_france_hd' : '');
 
   const json = await fetchJsonWithBackoff(url, signal);
   const items: ForecastBatchItem[] = Array.isArray(json) ? json as ForecastBatchItem[] : [json as ForecastBatchItem];
@@ -473,6 +473,35 @@ async function fetchForecastBatch(
       humidity: firstFinite(item.hourly?.relative_humidity_2m),
     };
   });
+}
+
+async function fetchForecastBatch(
+  points: WeatherGridPoint[],
+  forecastIso: string,
+  signal?: AbortSignal,
+): Promise<WeatherOverlaySample[]> {
+  const results = new Array<WeatherOverlaySample>(points.length);
+  const franceIndexes: number[] = [];
+  const fallbackIndexes: number[] = [];
+
+  points.forEach((point, index) => {
+    if (supportsFranceHdForecast(point)) franceIndexes.push(index);
+    else fallbackIndexes.push(index);
+  });
+
+  const fillResults = async (indexes: number[], franceModel: boolean): Promise<void> => {
+    if (indexes.length === 0) return;
+    const subset = indexes.map((index) => points[index]);
+    const fetched = await fetchForecastBatchSubset(subset, forecastIso, franceModel, signal);
+    fetched.forEach((sample, subsetIndex) => {
+      results[indexes[subsetIndex]] = sample;
+    });
+  };
+
+  await fillResults(franceIndexes, true);
+  await fillResults(fallbackIndexes, false);
+
+  return results;
 }
 
 async function fetchTrendBatch(
