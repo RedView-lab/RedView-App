@@ -31,6 +31,20 @@ export interface ViewerSceneData {
   tileFileLabel: string;
 }
 
+const DEFAULT_MULTI_TILE_POINT_CAP = 8_000_000;
+const MIN_MULTI_TILE_POINT_CAP = 2_500_000;
+const MAX_MULTI_TILE_POINT_CAP = 12_000_000;
+
+export interface ViewerSceneLoadOptions {
+  multiTilePointCap?: number;
+  deviceMemoryGiB?: number;
+  gpuInfo?: {
+    vendor?: string;
+    arch?: string;
+    desc?: string;
+  };
+}
+
 function getSceneLoadConcurrency(totalTiles: number): number {
   const hardwareThreads = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 4 : 4;
   const preferred = Math.max(2, Math.ceil(hardwareThreads / 4));
@@ -77,28 +91,192 @@ function unionBounds(boundsList: PointCloudData['bounds'][]): PointCloudData['bo
   }));
 }
 
-function mergePointClouds(tiles: LoadedViewerTile[]): PointCloudData {
-  if (tiles.length === 1) return tiles[0].pointCloud;
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
 
+function roundPointCap(value: number): number {
+  return Math.max(MIN_MULTI_TILE_POINT_CAP, Math.round(value / 250_000) * 250_000);
+}
+
+function resolveMultiTilePointCap(
+  tileCount: number,
+  options?: ViewerSceneLoadOptions,
+): number {
+  const explicitCap = options?.multiTilePointCap;
+  if (Number.isFinite(explicitCap) && explicitCap && explicitCap > 0) {
+    return Math.floor(explicitCap);
+  }
+
+  const rawMemoryGiB = options?.deviceMemoryGiB;
+  const memoryGiB = Number.isFinite(rawMemoryGiB) && rawMemoryGiB
+    ? clamp(rawMemoryGiB, 1, 16)
+    : 4;
+
+  const gpuInfo = options?.gpuInfo;
+  const gpuHaystack = `${gpuInfo?.vendor ?? ''} ${gpuInfo?.arch ?? ''} ${gpuInfo?.desc ?? ''}`.toLowerCase();
+  const isApple = gpuHaystack.includes('apple');
+  const isDedicatedGpu = /nvidia|geforce|rtx|quadro|tesla|radeon\s+rx|radeon\s+pro|amd|arc\s|battlemage|alchemist/.test(gpuHaystack);
+  const isIntegratedGpu = !isDedicatedGpu && /intel|iris|uhd|hd graphics|vega|apu|integrated/.test(gpuHaystack);
+
+  let cap = memoryGiB <= 2
+    ? 2_500_000
+    : memoryGiB <= 4
+      ? 4_500_000
+      : memoryGiB < 8
+        ? 6_500_000
+        : DEFAULT_MULTI_TILE_POINT_CAP;
+
+  if (isDedicatedGpu) {
+    cap += memoryGiB >= 8 ? 2_000_000 : 1_000_000;
+  } else if (isApple) {
+    cap += memoryGiB >= 8 ? 750_000 : 250_000;
+  } else if (isIntegratedGpu) {
+    cap -= memoryGiB <= 4 ? 750_000 : 250_000;
+  }
+
+  if (tileCount >= 8) cap *= 0.94;
+  else if (tileCount >= 6) cap *= 0.97;
+
+  return clamp(roundPointCap(cap), MIN_MULTI_TILE_POINT_CAP, MAX_MULTI_TILE_POINT_CAP);
+}
+
+function computeMergedPointTargetCount(
+  tiles: LoadedViewerTile[],
+  multiTilePointCap: number,
+): { totalCount: number; targetCount: number } {
   const totalCount = tiles.reduce((sum, tile) => sum + tile.pointCloud.count, 0);
-  const positions = new Float32Array(totalCount * 3);
-  const colors = new Uint8Array(totalCount * 3);
-  const classifications = new Uint8Array(totalCount);
-  const bounds = unionBounds(tiles.map((tile) => tile.pointCloud.bounds));
+  if (tiles.length <= 1 || totalCount <= multiTilePointCap) {
+    return { totalCount, targetCount: totalCount };
+  }
+  return { totalCount, targetCount: multiTilePointCap };
+}
 
-  let pointOffset = 0;
-  for (const tile of tiles) {
+function computeTilePointQuotas(tiles: LoadedViewerTile[], targetCount: number, totalCount: number): Uint32Array {
+  const quotas = new Uint32Array(tiles.length);
+  if (targetCount >= totalCount) {
+    for (let index = 0; index < tiles.length; index += 1) quotas[index] = tiles[index].pointCloud.count;
+    return quotas;
+  }
+
+  const remainders: Array<{ index: number; remainder: number; count: number }> = [];
+  let assigned = 0;
+
+  for (let index = 0; index < tiles.length; index += 1) {
+    const count = tiles[index].pointCloud.count;
+    const rawQuota = (count / totalCount) * targetCount;
+    const baseQuota = Math.min(count, Math.floor(rawQuota));
+    quotas[index] = baseQuota;
+    assigned += baseQuota;
+    remainders.push({ index, remainder: rawQuota - baseQuota, count });
+  }
+
+  const nonEmptyTileCount = tiles.reduce((sum, tile) => sum + (tile.pointCloud.count > 0 ? 1 : 0), 0);
+  if (targetCount >= nonEmptyTileCount) {
+    for (let index = 0; index < tiles.length; index += 1) {
+      if (tiles[index].pointCloud.count === 0 || quotas[index] > 0) continue;
+      quotas[index] = 1;
+      assigned += 1;
+    }
+  }
+
+  if (assigned > targetCount) {
+    const trimOrder = [...remainders].sort((left, right) => left.count - right.count || left.remainder - right.remainder);
+    for (const entry of trimOrder) {
+      if (assigned <= targetCount) break;
+      if (quotas[entry.index] <= 1) continue;
+      quotas[entry.index] -= 1;
+      assigned -= 1;
+    }
+  }
+
+  if (assigned < targetCount) {
+    const growOrder = [...remainders].sort((left, right) => right.remainder - left.remainder || right.count - left.count);
+    let growCursor = 0;
+    while (assigned < targetCount && growOrder.length > 0) {
+      const entry = growOrder[growCursor % growOrder.length];
+      growCursor += 1;
+      if (quotas[entry.index] >= tiles[entry.index].pointCloud.count) continue;
+      quotas[entry.index] += 1;
+      assigned += 1;
+    }
+  }
+
+  return quotas;
+}
+
+function copyTilePointSample(
+  tile: LoadedViewerTile,
+  quota: number,
+  positions: Float32Array,
+  colors: Uint8Array,
+  classifications: Uint8Array,
+  pointOffset: number,
+): number {
+  if (quota <= 0 || tile.pointCloud.count <= 0) return pointOffset;
+
+  if (quota >= tile.pointCloud.count) {
     positions.set(tile.pointCloud.positions, pointOffset * 3);
     colors.set(tile.pointCloud.colors, pointOffset * 3);
     classifications.set(tile.pointCloud.classifications, pointOffset);
-    pointOffset += tile.pointCloud.count;
+    return pointOffset + tile.pointCloud.count;
+  }
+
+  const sampleStep = tile.pointCloud.count / quota;
+  for (let sampleIndex = 0; sampleIndex < quota; sampleIndex += 1) {
+    const srcIndex = Math.min(tile.pointCloud.count - 1, Math.floor((sampleIndex + 0.5) * sampleStep));
+    const srcPos = srcIndex * 3;
+    const dstPos = (pointOffset + sampleIndex) * 3;
+    positions[dstPos] = tile.pointCloud.positions[srcPos];
+    positions[dstPos + 1] = tile.pointCloud.positions[srcPos + 1];
+    positions[dstPos + 2] = tile.pointCloud.positions[srcPos + 2];
+    colors[dstPos] = tile.pointCloud.colors[srcPos];
+    colors[dstPos + 1] = tile.pointCloud.colors[srcPos + 1];
+    colors[dstPos + 2] = tile.pointCloud.colors[srcPos + 2];
+    classifications[pointOffset + sampleIndex] = tile.pointCloud.classifications[srcIndex];
+  }
+
+  return pointOffset + quota;
+}
+
+function mergePointClouds(tiles: LoadedViewerTile[], multiTilePointCap: number): PointCloudData {
+  if (tiles.length === 1) return tiles[0].pointCloud;
+
+  const { totalCount, targetCount } = computeMergedPointTargetCount(tiles, multiTilePointCap);
+  const positions = new Float32Array(targetCount * 3);
+  const colors = new Uint8Array(targetCount * 3);
+  const classifications = new Uint8Array(targetCount);
+  const bounds = unionBounds(tiles.map((tile) => tile.pointCloud.bounds));
+  const quotas = computeTilePointQuotas(tiles, targetCount, totalCount);
+
+  let pointOffset = 0;
+  for (let index = 0; index < tiles.length; index += 1) {
+    pointOffset = copyTilePointSample(
+      tiles[index],
+      quotas[index],
+      positions,
+      colors,
+      classifications,
+      pointOffset,
+    );
+  }
+
+  const mergedCount = pointOffset;
+  if (mergedCount !== targetCount) {
+    throw new Error(`Merged point cloud quota mismatch: expected ${targetCount}, got ${mergedCount}`);
+  }
+
+  if (targetCount < totalCount) {
+    console.warn(
+      `[Viewer] Multi-tile scene sampled from ${totalCount.toLocaleString()} to ${targetCount.toLocaleString()} points before octree build.`,
+    );
   }
 
   return {
     positions,
     colors,
     classifications,
-    count: totalCount,
+    count: targetCount,
     bounds,
     crs: tiles[0].pointCloud.crs,
   };
@@ -163,6 +341,7 @@ function mergeHeightGrid(tiles: LoadedViewerTile[], mergedPointCloud: PointCloud
   }
 
   const mergedBounds = mergedPointCloud.bounds;
+  const mergedCenterZ = (mergedBounds.minZ + mergedBounds.maxZ) / 2;
   const gridWidth = Math.round((mergedBounds.maxX - mergedBounds.minX) / stepX) + 1;
   const gridHeight = Math.round((mergedBounds.maxY - mergedBounds.minY) / stepY) + 1;
   const heightGrid = new Float32Array(gridWidth * gridHeight).fill(Number.NaN);
@@ -170,13 +349,16 @@ function mergeHeightGrid(tiles: LoadedViewerTile[], mergedPointCloud: PointCloud
   for (const tile of tiles) {
     const bounds = tile.pointCloud.bounds;
     const terrain = tile.terrainMesh;
+    const tileCenterZ = (bounds.minZ + bounds.maxZ) / 2;
+    const deltaHeight = tileCenterZ - mergedCenterZ;
     const offsetX = Math.round((bounds.minX - mergedBounds.minX) / stepX);
     const offsetY = Math.round((bounds.minY - mergedBounds.minY) / stepY);
 
     for (let row = 0; row < terrain.gridHeight; row += 1) {
-      const srcStart = row * terrain.gridWidth;
       const dstStart = (offsetY + row) * gridWidth + offsetX;
-      heightGrid.set(terrain.heightGrid.subarray(srcStart, srcStart + terrain.gridWidth), dstStart);
+      for (let column = 0; column < terrain.gridWidth; column += 1) {
+        heightGrid[dstStart + column] = terrain.heightGrid[row * terrain.gridWidth + column] + deltaHeight;
+      }
     }
   }
 
@@ -285,6 +467,7 @@ async function loadViewerTile(
 export async function loadViewerScene(
   tileCoords: TileCoord[],
   setStatus: ViewerStatusReporter,
+  options?: ViewerSceneLoadOptions,
 ): Promise<ViewerSceneData> {
   const uniqueTiles = tileCoords.filter((coord, index, all) => {
     const key = `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
@@ -300,7 +483,20 @@ export async function loadViewerScene(
     (coord, index) => loadViewerTile(coord, setStatus, index + 1, uniqueTiles.length),
   );
 
-  const pointCloud = mergePointClouds(loadedTiles);
+  const multiTilePointCap = resolveMultiTilePointCap(uniqueTiles.length, options);
+  const { totalCount, targetCount } = computeMergedPointTargetCount(loadedTiles, multiTilePointCap);
+  if (targetCount < totalCount) {
+    setStatus(
+      `Scene dense: cap adaptatif ${targetCount.toLocaleString()} / ${totalCount.toLocaleString()} pts...`,
+      74,
+    );
+    console.warn(
+      `[Viewer] Adaptive multi-tile point cap: ${targetCount.toLocaleString()} / ${totalCount.toLocaleString()} ` +
+      `(tiles=${uniqueTiles.length}, RAM=${options?.deviceMemoryGiB ?? 'n/a'} GiB, GPU=${options?.gpuInfo?.vendor ?? 'unknown'} ${options?.gpuInfo?.arch ?? ''})`,
+    );
+  }
+
+  const pointCloud = mergePointClouds(loadedTiles, multiTilePointCap);
   let terrainMesh = mergeTerrainMeshes(loadedTiles, pointCloud);
   if (!terrainMesh) {
     setStatus('Fusion terrain impossible, regeneration scene...', 76);

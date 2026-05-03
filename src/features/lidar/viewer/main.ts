@@ -51,6 +51,10 @@ type IdleSchedulerWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
 };
 
+type MemoryAwareNavigator = Navigator & {
+  deviceMemory?: number;
+};
+
 let cacheWriteQueue = Promise.resolve();
 
 function setStatus(msg: string, pct?: number) {
@@ -241,7 +245,16 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     }
     console.log(`[Viewer] Preflight OK — vendor=${pre.vendor} arch=${pre.arch} desc=${pre.desc}`);
 
-    const scene = await loadViewerScene(sceneTileCoords, setStatus);
+    const deviceMemoryGiB = (navigator as MemoryAwareNavigator).deviceMemory;
+
+    const scene = await loadViewerScene(sceneTileCoords, setStatus, {
+      deviceMemoryGiB,
+      gpuInfo: {
+        vendor: pre.vendor,
+        arch: pre.arch,
+        desc: pre.desc,
+      },
+    });
     const pointCloud = scene.pointCloud;
 
     // 3. Build RGBA colors
