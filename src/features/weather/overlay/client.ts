@@ -119,6 +119,18 @@ const cache = new Map<string, CachedSampleEntry>();
 let rateLimitedUntil = 0;
 let lastRequestTime = 0;
 
+function needsGlobalForecastModel(metrics: readonly WeatherOverlayMetric[]): boolean {
+  return metrics.includes('cloudCover');
+}
+
+export function weatherDataSelectionKey(
+  selection: WeatherSelection,
+  metrics: readonly WeatherOverlayMetric[] = [],
+): string {
+  if (selection.mode !== 'forecast') return selection.key;
+  return `${selection.key}:${needsGlobalForecastModel(metrics) ? 'default-model' : 'france-hd'}`;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
@@ -485,14 +497,16 @@ async function fetchForecastBatchSubset(
 async function fetchForecastBatch(
   points: WeatherGridPoint[],
   forecastIso: string,
+  metrics: readonly WeatherOverlayMetric[],
   signal?: AbortSignal,
 ): Promise<WeatherOverlaySample[]> {
   const results = new Array<WeatherOverlaySample>(points.length);
   const franceIndexes: number[] = [];
   const fallbackIndexes: number[] = [];
+  const preferGlobalModel = needsGlobalForecastModel(metrics);
 
   points.forEach((point, index) => {
-    if (supportsFranceHdForecast(point)) franceIndexes.push(index);
+    if (!preferGlobalModel && supportsFranceHdForecast(point)) franceIndexes.push(index);
     else fallbackIndexes.push(index);
   });
 
@@ -615,17 +629,19 @@ export function weatherGridSupportsViewport(
 export async function fetchWeatherGridData(
   selection: WeatherSelection,
   grid: WeatherGridDefinition,
+  metrics: readonly WeatherOverlayMetric[] = [],
   signal?: AbortSignal,
   onProgress?: (completed: number, total: number) => void,
 ): Promise<WeatherOverlaySample[]> {
   const ttlMs = selection.mode === 'forecast' ? FORECAST_CACHE_TTL_MS : TREND_CACHE_TTL_MS;
   const batchSize = selection.mode === 'forecast' ? FORECAST_BATCH_SIZE : TRENDS_BATCH_SIZE;
+  const selectionCacheKey = weatherDataSelectionKey(selection, metrics);
   const samples = new Array<WeatherOverlaySample>(grid.points.length);
   const uncachedIndexes: number[] = [];
   const totalPoints = Math.max(1, grid.points.length);
 
   grid.points.forEach((point, index) => {
-    const cached = getCached(selection.key, point, ttlMs);
+    const cached = getCached(selectionCacheKey, point, ttlMs);
     if (cached) samples[index] = cached;
     else uncachedIndexes.push(index);
   });
@@ -639,7 +655,7 @@ export async function fetchWeatherGridData(
     const batchIndexes = uncachedIndexes.slice(offset, offset + batchSize);
     const batchPoints = batchIndexes.map((index) => grid.points[index]);
     const fetched = selection.mode === 'forecast'
-      ? await fetchForecastBatch(batchPoints, selection.forecastIso ?? '', signal)
+      ? await fetchForecastBatch(batchPoints, selection.forecastIso ?? '', metrics, signal)
       : await fetchTrendBatch(batchPoints, selection.monthIso ?? '', signal);
 
     fetched.forEach((sample, batchIndex) => {
@@ -651,7 +667,7 @@ export async function fetchWeatherGridData(
         lng: point.lng,
       };
       samples[pointIndex] = normalisedSample;
-      setCached(selection.key, point, normalisedSample);
+      setCached(selectionCacheKey, point, normalisedSample);
     });
     onProgress?.(
       Math.min(totalPoints, grid.points.length - uncachedIndexes.length + offset + batchIndexes.length),

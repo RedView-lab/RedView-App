@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
-import { buildWeatherGrid, clearWeatherOverlayCache, fetchWeatherGridData, weatherGridSupportsViewport } from './client';
+import {
+  buildWeatherGrid,
+  clearWeatherOverlayCache,
+  fetchWeatherGridData,
+  weatherDataSelectionKey,
+  weatherGridSupportsViewport,
+} from './client';
 import { clampForecastSelection } from '../lib/forecastTime.ts';
 import { renderWeatherCanvas } from './render';
 import { getOverlayRenderSize } from './renderSize';
@@ -618,8 +624,9 @@ export function useWeatherOverlay(
       const selection = selectionFromState(nextState);
       const viewport = getViewportBounds(map);
       const activeMetrics = activeLayers.map((layer) => layer.key);
+      const dataSelectionKey = weatherDataSelectionKey(selection, activeMetrics);
       const currentDataset = dataRef.current;
-      const sameSelection = currentDataset?.selectionKey === selection.key;
+      const sameSelection = currentDataset?.selectionKey === dataSelectionKey;
       const reusableGrid = currentDataset
         ? weatherGridSupportsViewport(currentDataset.grid, viewport, selection.mode, activeMetrics)
         : false;
@@ -682,6 +689,7 @@ export function useWeatherOverlay(
         const samples = await fetchWeatherGridData(
           selection,
           grid,
+          activeMetrics,
           controller.signal,
           (completed, total) => {
             publishStatus(createOverlayStatus({
@@ -696,7 +704,7 @@ export function useWeatherOverlay(
         );
         if (controller.signal.aborted || generation !== generationRef.current) return;
         dataRef.current = {
-          selectionKey: selection.key,
+          selectionKey: dataSelectionKey,
           grid,
           samples,
           fetchedAt: Date.now(),
