@@ -98,7 +98,10 @@ const ORTHO_TILE_SIZE = 256;
 // SW-synthesized child tiles while zooming in.
 // v40 — evicts satellite/default-profile DEM entries now that every 3D
 // basemap uses the protected terrain profile namespace.
-const CACHE_NAME = 'dem-tiles-v41';
+// v42 — evicts high-zoom global parent-overzoom children that could still be
+// created through negative-cache/error recovery and make terrain flatten while
+// zooming in outside LiDAR regions.
+const CACHE_NAME = 'dem-tiles-v42';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v13';

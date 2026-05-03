@@ -88,8 +88,15 @@ function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
     || parentSource.includes('fastpath');
 }
 
+function shouldAllowParentOverzoomFallback(z, x, y) {
+  if (z <= MAPBOX_DEM_MAXZOOM) return true;
+  return isExpertFallbackRiskTile(z, x, y);
+}
+
 async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') {
   if (depth > 0) return null;
+  if (!shouldAllowParentOverzoomFallback(z, x, y)) return null;
+
   const minParentZ = Math.max(0, z - DEM_OVERZOOM_MAX_DEPTH);
   for (let pZ = z - 1; pZ >= minParentZ; pZ--) {
     const pX = x >> (z - pZ);
