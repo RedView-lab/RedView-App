@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 const IGN_WMTS_BASE = 'https://data.geopf.fr/wmts';
+const IGN_WMS_BASE = 'https://data.geopf.fr/wms-r/wms';
 // MNS LiDAR HD (Modèle Numérique de Surface — top-of-canopy, trees, rocks,
 // buildings included). This is what gives the user the "20 cm detail with
 // rocks and trees" relief they want to see. LiDAR HD native grid is ~1 m,
@@ -18,9 +19,10 @@ const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
 const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
-// HIGHRES fallback: 5 m DEM covering all of France (vs LiDAR HD ~1 m but
-// patchy coverage). Used when MNS returns 0 coverage — 6× better than Mapbox
-// 30 m. Same WGS84G grid formula as MNS but different TileMatrixSet (z6-14).
+// RGE ALTI terrain model (MNT / bare earth). IGN officially publishes this
+// dataset at 1 m and 5 m resolution; the WMTS endpoint below exposes the same
+// terrain product on a coarser tiled grid, while the WMS endpoint can serve a
+// direct 32-bit raster for an arbitrary bbox.
 const IGN_DEM_FALLBACK_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES';
 const IGN_DEM_FALLBACK_TILEMATRIXSET = 'WGS84G_6_14';
 const IGN_DEM_FALLBACK_MINZOOM = 6;
@@ -49,7 +51,7 @@ const DESPIKE_THRESHOLD_M = 80;
 const IGN_DEM_MINZOOM = 4;
 const IGN_DEM_MAXZOOM = 17;
 
-// France HD engage gates. We open the 5 m HIGHRES fallback one zoom earlier
+// France HD engage gates. We open the RGE ALTI terrain fallback one zoom earlier
 // than the full MNS LiDAR path so mountainous terrain sharpens sooner without
 // paying the full MNS fan-out as aggressively across overview zooms.
 //

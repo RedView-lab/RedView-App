@@ -190,6 +190,9 @@ async function getIGNTileWithFallback(z, col, row) {
 const highresTileCache = new Map();
 const highresInflight = new Map();
 const HIGHRES_CACHE_MAX = 300;
+const terrainWmsTileCache = new Map();
+const terrainWmsInflight = new Map();
+const TERRAIN_WMS_CACHE_MAX = 300;
 
 function buildHighresTileURL(z, col, row) {
   return (
@@ -198,6 +201,19 @@ function buildHighresTileURL(z, col, row) {
     `&FORMAT=${encodeURIComponent(IGN_DEM_FORMAT)}` +
     `&TILEMATRIXSET=${IGN_DEM_FALLBACK_TILEMATRIXSET}` +
     `&TILEMATRIX=${z}&TILEROW=${row}&TILECOL=${col}`
+  );
+}
+
+function buildTerrainWmsTileURL(mercZ, mercX, mercY) {
+  const bounds = mercatorTileBounds(mercZ, mercX, mercY);
+  // WMS 1.3.0 axis order for EPSG:4326 is latitude,longitude.
+  const bbox = [bounds.south, bounds.west, bounds.north, bounds.east].join(',');
+  return (
+    `${IGN_WMS_BASE}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0` +
+    `&LAYERS=${IGN_DEM_FALLBACK_LAYER}&STYLES=` +
+    `&FORMAT=${encodeURIComponent(IGN_DEM_FORMAT)}` +
+    `&CRS=EPSG:4326&BBOX=${bbox}` +
+    `&WIDTH=${DEM_TILE_SIZE}&HEIGHT=${DEM_TILE_SIZE}`
   );
 }
 
@@ -258,6 +274,69 @@ async function getHighresTile(z, col, row) {
   });
 
   highresInflight.set(key, promise);
+  return promise;
+}
+
+function getCachedTerrainWms(key) {
+  if (!terrainWmsTileCache.has(key)) return { hit: false };
+  const entry = terrainWmsTileCache.get(key);
+  if (entry instanceof Float32Array) return { hit: true, data: entry };
+  if (entry && entry._null) {
+    if (Date.now() - entry.ts < entry.ttl) return { hit: true, data: null };
+    terrainWmsTileCache.delete(key);
+    return { hit: false };
+  }
+  if (entry === null) {
+    terrainWmsTileCache.delete(key);
+    return { hit: false };
+  }
+  return { hit: true, data: entry };
+}
+
+function cacheTerrainWmsNull(key, errorType) {
+  const ttl = errorType === 'permanent' ? IGN_NULL_TTL_PERMANENT : IGN_NULL_TTL_TRANSIENT;
+  terrainWmsTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
+}
+
+async function getTerrainWmsTile(mercZ, mercX, mercY) {
+  const key = `wms/${mercZ}/${mercX}/${mercY}`;
+  const cached = getCachedTerrainWms(key);
+  if (cached.hit) return cached.data;
+
+  if (terrainWmsInflight.has(key)) return terrainWmsInflight.get(key);
+
+  const promise = scheduleIGN(async () => {
+    const cached2 = getCachedTerrainWms(key);
+    if (cached2.hit) return cached2.data;
+
+    const url = buildTerrainWmsTileURL(mercZ, mercX, mercY);
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+      if (!res.ok) {
+        cacheTerrainWmsNull(key, res.status === 404 ? 'permanent' : 'transient');
+        return null;
+      }
+      const buf = await res.arrayBuffer();
+      if (buf.byteLength !== DEM_TILE_SIZE * DEM_TILE_SIZE * 4) {
+        cacheTerrainWmsNull(key, 'permanent');
+        return null;
+      }
+      const data = decodeBIL32(buf);
+      evict(terrainWmsTileCache, TERRAIN_WMS_CACHE_MAX);
+      terrainWmsTileCache.set(key, data);
+      return data;
+    } catch {
+      cacheTerrainWmsNull(key, 'transient');
+      return null;
+    }
+  }).then((result) => {
+    if (result === PRUNED_SENTINEL) return null;
+    return result;
+  }).finally(() => {
+    terrainWmsInflight.delete(key);
+  });
+
+  terrainWmsInflight.set(key, promise);
   return promise;
 }
 

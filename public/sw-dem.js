@@ -664,11 +664,25 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 3a. HIGHRES (5 m DEM) fallback — broader coverage than MNS LiDAR HD.
-    // Used when MNS returned 0 coverage (no LiDAR HD data for this area).
-    // HIGHRES covers all of France at ~5 m resolution — 6× better than
-    // Mapbox 30 m. Only fires when MNS had no data; when MNS returned
-    // partial data the composite path above already handled it.
+    // 3a. Verified terrain path for slope math.
+    // In `demProfile=terrain` we bypass the overzoomed WMTS fallback and use
+    // the official RGE ALTI WMS directly as BIL32 for the exact tile bbox.
+    if (!pngBlob && tileTrulyTouchesFrance && useFranceTerrainOnly) {
+      const terrainResult = await buildIGNTerrainTile(z, x, y);
+      if (terrainResult?.elevations) {
+        franceHadSomeData = true;
+        await acquireComposite();
+        try {
+          pngBlob = await compositeIGNMapbox(terrainResult.elevations, terrainResult.coverage, z, x, y);
+        } finally {
+          releaseComposite();
+        }
+        demSource = 'ign-rgealti-wms-composite';
+      }
+    }
+
+    // 3b. WMTS terrain fallback — kept as a backup when the direct WMS
+    // request fails or returns no usable coverage.
     if (!pngBlob && tileTrulyTouchesFrance && useFranceHighres && !ignHadSomeData) {
       const highresResult = await buildIGNFallbackTile(z, x, y);
       if (highresResult) {
@@ -697,7 +711,7 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 3b. High-zoom-in-France LiDAR-preserving fallback.
+    // 3c. High-zoom-in-France LiDAR-preserving fallback.
     //
     // Problem we are solving: when IGN fails transiently on a single tile
     // inside France at mercZ > MAPBOX_DEM_MAXZOOM (queue prune, LiDAR-HD
@@ -725,7 +739,7 @@ async function handleDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 3c. Same LiDAR-preserving path for Switzerland: at high zoom we never
+    // 3d. Same LiDAR-preserving path for Switzerland: at high zoom we never
     // want to fall through to a server-overzoomed Mapbox tile when we have
     // a parent COG-derived blob in our own cache. Use tileTrulyTouchesFrance
     // (not bbox-promoted tileIsInFrance) so deep-CH tiles still hit this path.
@@ -931,12 +945,14 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       if (tileClass === 'outside') return;
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
+      const terrainRebuilder = () => buildIGNTerrainTile(z, x, y)
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite'));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite'));
       const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite'));
       const rebuilders = demProfile === 'terrain'
-        ? [highresRebuilder]
+        ? [terrainRebuilder, highresRebuilder]
         : preferHighres
         ? [
             highresRebuilder,

@@ -545,3 +545,102 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
   return { blob: null, elevations, coverage, source, pendingFetches };
 }
+
+// ---------------------------------------------------------------------------
+// Build direct RGE ALTI terrain tile from the official WMS endpoint.
+// This is the verified bare-earth source used by slope calculations in
+// `demProfile=terrain` mode. It returns a 256x256 BIL32 raster for the exact
+// Mercator tile bbox, avoiding the WMTS z14 clamp of the legacy HIGHRES path.
+// ---------------------------------------------------------------------------
+async function buildIGNTerrainTile(mercZ, mercX, mercY) {
+  const t0 = performance.now();
+  const rawElevations = await getTerrainWmsTile(mercZ, mercX, mercY);
+  if (!rawElevations || rawElevations.length !== DEM_TILE_SIZE * DEM_TILE_SIZE) {
+    return null;
+  }
+
+  const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
+  const elevations = new Float32Array(totalPixels);
+  const coverage = new Uint8Array(totalPixels);
+  let coveredCount = 0;
+
+  for (let i = 0; i < totalPixels; i++) {
+    const value = rawElevations[i];
+    if (!Number.isNaN(value) && value >= MIN_VALID_ELEVATION_M && value <= MAX_VALID_ELEVATION_M) {
+      elevations[i] = value;
+      coverage[i] = 1;
+      coveredCount++;
+    }
+  }
+
+  if (coveredCount === 0) {
+    const dt = (performance.now() - t0).toFixed(1);
+    console.log(`[sw-dem][build-terrain] ${mercZ}/${mercX}/${mercY} — 0 WMS coverage, ${dt}ms`);
+    return null;
+  }
+
+  const source = 'ign-rgealti-wms';
+
+  if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
+    try {
+      const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
+      if (mbBlob) {
+        const mbElev = await decodeTerrainRGBBlob(mbBlob);
+        if (mbElev && mbElev.length > 0) {
+          const mbSize = Math.round(Math.sqrt(mbElev.length));
+          const mbScale = mbSize / DEM_TILE_SIZE;
+          for (let i = 0; i < totalPixels; i++) {
+            if (!coverage[i]) {
+              if (mbScale === 1) {
+                elevations[i] = mbElev[i];
+              } else {
+                const py = (i / DEM_TILE_SIZE) | 0;
+                const px = i % DEM_TILE_SIZE;
+                const mx = Math.min((px * mbScale) | 0, mbSize - 1);
+                const my = Math.min((py * mbScale) | 0, mbSize - 1);
+                elevations[i] = mbElev[my * mbSize + mx];
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  const coverageRatio = coveredCount / totalPixels;
+  const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
+  for (let pass = 0; pass < dilationPasses; pass++) {
+    const newElevations = new Float32Array(elevations);
+    const newCoverage = new Uint8Array(coverage);
+    for (let py = 0; py < DEM_TILE_SIZE; py++) {
+      for (let px = 0; px < DEM_TILE_SIZE; px++) {
+        const idx = py * DEM_TILE_SIZE + px;
+        if (coverage[idx]) continue;
+        let sum = 0, count = 0;
+        if (py > 0 && coverage[idx - DEM_TILE_SIZE]) { sum += elevations[idx - DEM_TILE_SIZE]; count++; }
+        if (py < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE]) { sum += elevations[idx + DEM_TILE_SIZE]; count++; }
+        if (px > 0 && coverage[idx - 1]) { sum += elevations[idx - 1]; count++; }
+        if (px < DEM_TILE_SIZE - 1 && coverage[idx + 1]) { sum += elevations[idx + 1]; count++; }
+        if (py > 0 && px > 0 && coverage[idx - DEM_TILE_SIZE - 1]) { sum += elevations[idx - DEM_TILE_SIZE - 1]; count++; }
+        if (py > 0 && px < DEM_TILE_SIZE - 1 && coverage[idx - DEM_TILE_SIZE + 1]) { sum += elevations[idx - DEM_TILE_SIZE + 1]; count++; }
+        if (py < DEM_TILE_SIZE - 1 && px > 0 && coverage[idx + DEM_TILE_SIZE - 1]) { sum += elevations[idx + DEM_TILE_SIZE - 1]; count++; }
+        if (py < DEM_TILE_SIZE - 1 && px < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE + 1]) { sum += elevations[idx + DEM_TILE_SIZE + 1]; count++; }
+        if (count > 0) {
+          newElevations[idx] = sum / count;
+          newCoverage[idx] = 1;
+          coveredCount++;
+        }
+      }
+    }
+    elevations.set(newElevations);
+    coverage.set(newCoverage);
+  }
+
+  const dt = (performance.now() - t0).toFixed(1);
+  const covPct = (coveredCount / totalPixels * 100).toFixed(1);
+  console.log(`[sw-dem][build-terrain] ${mercZ}/${mercX}/${mercY} — coverage ${covPct}%, ${dt}ms`);
+  despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+  return { blob: null, elevations, coverage, source, pendingFetches: null };
+}
