@@ -167,6 +167,12 @@ function paletteOpacity(state: WeatherOverlayState, key: WeatherOverlayMetric): 
   return Math.max(0, Math.min(1, opacity / 100));
 }
 
+function styleSyncProgress(reason: RefreshReason): number {
+  if (reason === 'reload') return 8;
+  if (reason === 'force') return 74;
+  return 12;
+}
+
 export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -418,7 +424,11 @@ export function useWeatherOverlay(
     };
 
     const refresh = async (reason: RefreshReason) => {
-      if (!canMutateStyle()) return;
+      if (!canMutateStyle()) {
+        publishStyleSyncStatus(styleSyncProgress(reason));
+        scheduleStyleRetry();
+        return;
+      }
 
       const nextState = stateRef.current;
       const activeLayers = activeRenderableLayers(nextState);
