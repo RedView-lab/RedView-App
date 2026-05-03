@@ -180,6 +180,13 @@ export function useLidarSelection(
   useEffect(() => {
     if (!map) return;
 
+    let canvas: ReturnType<MapboxMap['getCanvas']> | null = null;
+    try {
+      canvas = map.getCanvas();
+    } catch {
+      canvas = null;
+    }
+
     const updateSourceData = () => {
       if (!map.isStyleLoaded()) return;
 
@@ -260,14 +267,14 @@ export function useLidarSelection(
     map.on('contextmenu', handleContextMenu);
     map.on('style.load', handleStyleLoad);
     map.on('styledata', handleStyleData);
-    map.getCanvas().addEventListener('mouseleave', handleMouseLeave);
+    canvas?.addEventListener('mouseleave', handleMouseLeave);
 
     if (enabled) {
-      map.getCanvas().style.cursor = 'crosshair';
+      if (canvas) canvas.style.cursor = 'crosshair';
       scheduleOverlaySync();
     } else {
       hoveredRef.current = null;
-      map.getCanvas().style.cursor = '';
+      if (canvas) canvas.style.cursor = '';
       scheduleOverlaySync();
     }
 
@@ -278,8 +285,8 @@ export function useLidarSelection(
       map.off('contextmenu', handleContextMenu);
       map.off('style.load', handleStyleLoad);
       map.off('styledata', handleStyleData);
-      map.getCanvas().removeEventListener('mouseleave', handleMouseLeave);
-      map.getCanvas().style.cursor = '';
+      canvas?.removeEventListener('mouseleave', handleMouseLeave);
+      if (canvas) canvas.style.cursor = '';
       removeSelectionLayers(map);
     };
   }, [map, manager, enabled]);
