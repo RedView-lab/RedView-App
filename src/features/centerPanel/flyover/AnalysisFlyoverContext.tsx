@@ -29,12 +29,17 @@ import {
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
 import {
+  buildItineraryVisualNodes,
+  getItineraryStartDistanceKm,
+} from '@/features/itineraryPanel/lineage/itineraryLineage';
+import {
   clearAnalysisFlyoverProgress,
   clearAnalysisHoverPoint,
   setRouteLayerVisibility,
   setAnalysisFlyoverProgress,
   setAnalysisHoverPoint,
 } from '@/features/itineraryPanel/lib/route-layer';
+import { selectInteractiveItineraryForChartX } from '../components/analysis/shared';
 
 const SPEED_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const;
 const DEFAULT_SPEED_INDEX = 2;
@@ -123,6 +128,15 @@ export function AnalysisFlyoverProvider({
 
   const xMode = ((projectStore?.project.analysis?.xMode as AxisMode | undefined) ??
     'distance') as AxisMode;
+  const visibleChartNodes = useMemo(() => {
+    if (!projectStore) return [];
+    return buildItineraryVisualNodes(projectStore.project.itineraries)
+      .filter(
+        ({ itinerary }) =>
+          itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
+      )
+      .map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm }));
+  }, [projectStore]);
   const routePoints = interactiveItinerary?.gpxRoute?.points ?? null;
   const prediction =
     interactiveItinerary != null
@@ -201,13 +215,16 @@ export function AnalysisFlyoverProvider({
 
   const controlledHoverXValue = useMemo(() => {
     if (playbackDistanceM == null || totalDistanceM <= 0) return null;
-    return xValueFromDistance(playbackDistanceM, {
+    const localXValue = xValueFromDistance(playbackDistanceM, {
       prediction,
       totalDistanceM,
       xMode,
       startTime,
     });
-  }, [playbackDistanceM, prediction, startTime, totalDistanceM, xMode]);
+    if (!Number.isFinite(localXValue)) return null;
+    if (xMode !== 'distance') return localXValue;
+    return localXValue + getItineraryStartDistanceKm(interactiveItinerary ?? undefined as never);
+  }, [interactiveItinerary, playbackDistanceM, prediction, startTime, totalDistanceM, xMode]);
 
   const clearHoverMarker = useCallback((targetMap: MapboxMap | null) => {
     if (!targetMap) return;
@@ -223,10 +240,39 @@ export function AnalysisFlyoverProvider({
       return;
     }
 
+    const manualHoverXValue = manualHoverXValueRef.current;
+    const targetItinerary = Number.isFinite(manualHoverXValue)
+      ? selectInteractiveItineraryForChartX(
+          visibleChartNodes,
+          interactiveItinerary.id,
+          xMode,
+          manualHoverXValue as number,
+        )
+      : interactiveItinerary;
+    if (!targetItinerary) {
+      clearHoverMarker(map);
+      return;
+    }
+
+    const targetPrediction =
+      predictionStore?.predictions[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+    const targetRoutePoints = targetItinerary.gpxRoute?.points ?? null;
+    const targetStartTime = targetItinerary.rhythm.startTime ?? null;
+    const localHoverXValue =
+      xMode === 'distance' && Number.isFinite(manualHoverXValue)
+        ? (manualHoverXValue as number) - getItineraryStartDistanceKm(targetItinerary)
+        : manualHoverXValue;
+
     const nextRoutePoint = playbackDistanceM != null
       ? interpolateRoutePointAtDistance(routePoints, routeGeometry, playbackDistanceM)
-      : Number.isFinite(manualHoverXValueRef.current)
-        ? locateRoutePointAtX(routePoints, prediction, xMode, manualHoverXValueRef.current as number, startTime)
+      : Number.isFinite(localHoverXValue)
+        ? locateRoutePointAtX(
+            targetRoutePoints,
+            targetPrediction,
+            xMode,
+            localHoverXValue as number,
+            targetStartTime,
+          )
         : null;
 
     if (!nextRoutePoint) {
@@ -237,7 +283,7 @@ export function AnalysisFlyoverProvider({
     const nextMarker = {
       lon: nextRoutePoint.lon,
       lat: nextRoutePoint.lat,
-      color: interactiveItinerary.color,
+      color: targetItinerary.color,
     };
     const previousMarker = lastHoverMarkerRef.current;
     if (
@@ -251,7 +297,18 @@ export function AnalysisFlyoverProvider({
 
     lastHoverMarkerRef.current = nextMarker;
     setAnalysisHoverPoint(map, nextMarker);
-  }, [clearHoverMarker, interactiveItinerary, map, playbackDistanceM, prediction, routeGeometry, routePoints, startTime, xMode]);
+  }, [
+    clearHoverMarker,
+    interactiveItinerary,
+    map,
+    playbackDistanceM,
+    predictionStore,
+    routeGeometry,
+    routePoints,
+    visibleChartNodes,
+    startTime,
+    xMode,
+  ]);
 
   const scheduleHoverMarkerSync = useCallback(() => {
     if (hoverSyncFrameRef.current !== null) return;

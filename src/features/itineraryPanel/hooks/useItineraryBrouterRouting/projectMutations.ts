@@ -65,6 +65,7 @@ export function applyPendingRoutePatch(project: ItineraryProject, route: Brouter
       current.id === project.activeItineraryId
         ? {
             ...current,
+            visible: true,
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: mergedRoutePoints,
@@ -134,6 +135,7 @@ export function applyPendingTraceAppend(project: ItineraryProject, route: Broute
       current.id === project.activeItineraryId
         ? {
             ...current,
+            visible: true,
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: mergedRoutePoints,
@@ -225,6 +227,7 @@ export function applyRecomputedRoute(project: ItineraryProject, route: BrouterRo
       current.id === project.activeItineraryId
         ? {
             ...current,
+            visible: true,
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
               points: routePoints,

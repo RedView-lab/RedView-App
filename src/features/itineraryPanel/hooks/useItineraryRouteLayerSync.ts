@@ -70,11 +70,12 @@ export function useItineraryRouteLayerSync({
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
       const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
+      const routeVisible = it.visible !== false || active?.id === it.id;
       try {
         upsertRouteLayer(map, it.id, coords, {
           color: it.color,
           opacity01: (it.opacity ?? 100) / 100,
-          visible: it.visible !== false,
+          visible: routeVisible,
         });
       } catch (error) {
         console.warn('[route-layer] upsert failed for', it.id, error);
