@@ -23,6 +23,9 @@ const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rai
 const MOVE_DEBOUNCE_MS = 220;
 const MIN_FETCH_INTERVAL_MS = 800;
 const STYLE_SYNC_RETRY_MS = 96;
+const STYLE_SYNC_WATCHDOG_MS = 15_000;
+const STYLE_SYNC_POLL_MS = 2_000;
+const STYLE_SYNC_MAX_POLLS = 15;
 const STATUS_ID = 'weather';
 
 type RefreshReason = 'normal' | 'force' | 'reload';
@@ -173,6 +176,40 @@ function styleSyncProgress(reason: RefreshReason): number {
   return 12;
 }
 
+interface StyleHealth {
+  hasStyle: boolean;
+  isStyleLoaded: boolean;
+  sourceCount: number;
+  layerCount: number;
+}
+
+function readStyleHealth(map: MapboxMap): StyleHealth {
+  try {
+    const style = map.getStyle();
+    return {
+      hasStyle: Boolean(style),
+      isStyleLoaded: map.isStyleLoaded(),
+      sourceCount: Object.keys(style?.sources ?? {}).length,
+      layerCount: Array.isArray(style?.layers) ? style.layers.length : 0,
+    };
+  } catch {
+    return {
+      hasStyle: false,
+      isStyleLoaded: false,
+      sourceCount: 0,
+      layerCount: 0,
+    };
+  }
+}
+
+function logWeatherOverlay(event: string, payload?: Record<string, unknown>): void {
+  if (payload) {
+    console.info(`[weather-overlay] ${event}`, payload);
+    return;
+  }
+  console.info(`[weather-overlay] ${event}`);
+}
+
 export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -192,6 +229,11 @@ export function useWeatherOverlay(
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<number | null>(null);
   const styleRetryRef = useRef<number | null>(null);
+  const styleWatchdogRef = useRef<number | null>(null);
+  const stylePollRef = useRef<number | null>(null);
+  const styleFallbackUsableRef = useRef(false);
+  const stylePollCountRef = useRef(0);
+  const lastStyleBlockLogAtRef = useRef(0);
   const generationRef = useRef(0);
   const scheduleRefreshRef = useRef<((reason: RefreshReason) => void) | null>(null);
   const hideAllRef = useRef<(() => void) | null>(null);
@@ -225,13 +267,53 @@ export function useWeatherOverlay(
 
     let cancelled = false;
 
+    const clearStyleRecoveryTimers = () => {
+      if (styleRetryRef.current != null) {
+        window.clearTimeout(styleRetryRef.current);
+        styleRetryRef.current = null;
+      }
+      if (styleWatchdogRef.current != null) {
+        window.clearTimeout(styleWatchdogRef.current);
+        styleWatchdogRef.current = null;
+      }
+      if (stylePollRef.current != null) {
+        window.clearInterval(stylePollRef.current);
+        stylePollRef.current = null;
+      }
+      stylePollCountRef.current = 0;
+    };
+
     const canMutateStyle = () => {
       if (cancelled) return false;
       try {
+        if (styleFallbackUsableRef.current) {
+          const style = map.getStyle();
+          return Boolean(style) && Object.keys(style.sources ?? {}).length > 0;
+        }
         return map.isStyleLoaded() && Boolean(map.getStyle());
       } catch {
         return false;
       }
+    };
+
+    const styleRecoveryActive = () => (
+      styleRetryRef.current != null
+      || styleWatchdogRef.current != null
+      || stylePollRef.current != null
+    );
+
+    const promoteStyleFallbackIfUsable = (trigger: string): boolean => {
+      if (styleFallbackUsableRef.current) return true;
+      const health = readStyleHealth(map);
+      if (!health.hasStyle || health.sourceCount === 0) return false;
+      styleFallbackUsableRef.current = true;
+      logWeatherOverlay('forcing style usability fallback', {
+        trigger,
+        isStyleLoaded: health.isStyleLoaded,
+        sourceCount: health.sourceCount,
+        layerCount: health.layerCount,
+      });
+      return true;
     };
 
     const setVisibility = (key: WeatherOverlayMetric, visible: boolean) => {
@@ -266,6 +348,22 @@ export function useWeatherOverlay(
       }));
     };
 
+    const maybeLogStyleBlock = (reason: RefreshReason, trigger: string) => {
+      const now = Date.now();
+      if (now - lastStyleBlockLogAtRef.current < 1_000) return;
+      lastStyleBlockLogAtRef.current = now;
+      const health = readStyleHealth(map);
+      logWeatherOverlay('waiting for style sync', {
+        reason,
+        trigger,
+        isStyleLoaded: health.isStyleLoaded,
+        hasStyle: health.hasStyle,
+        sourceCount: health.sourceCount,
+        layerCount: health.layerCount,
+        fallbackUsable: styleFallbackUsableRef.current,
+      });
+    };
+
     const scheduleStyleRetry = () => {
       if (styleRetryRef.current != null) return;
       styleRetryRef.current = window.setTimeout(() => {
@@ -273,6 +371,68 @@ export function useWeatherOverlay(
         if (cancelled) return;
         scheduleRefreshRef.current?.('force');
       }, STYLE_SYNC_RETRY_MS);
+    };
+
+    const armStyleRecovery = (reason: RefreshReason, trigger: string) => {
+      publishStyleSyncStatus(styleSyncProgress(reason));
+      scheduleStyleRetry();
+      maybeLogStyleBlock(reason, trigger);
+
+      if (styleWatchdogRef.current == null) {
+        styleWatchdogRef.current = window.setTimeout(() => {
+          styleWatchdogRef.current = null;
+          if (cancelled || canMutateStyle()) return;
+          const health = readStyleHealth(map);
+          console.warn('[weather-overlay] style sync watchdog fired', {
+            reason,
+            trigger,
+            isStyleLoaded: health.isStyleLoaded,
+            hasStyle: health.hasStyle,
+            sourceCount: health.sourceCount,
+            layerCount: health.layerCount,
+          });
+          if (promoteStyleFallbackIfUsable('watchdog')) {
+            scheduleRefreshRef.current?.('force');
+            return;
+          }
+          if (stylePollRef.current != null) return;
+          stylePollCountRef.current = 0;
+          stylePollRef.current = window.setInterval(() => {
+            if (cancelled) {
+              if (stylePollRef.current != null) {
+                window.clearInterval(stylePollRef.current);
+                stylePollRef.current = null;
+              }
+              return;
+            }
+            stylePollCountRef.current += 1;
+            if (canMutateStyle() || promoteStyleFallbackIfUsable('poll')) {
+              logWeatherOverlay('style sync recovered', {
+                via: canMutateStyle() ? 'poll-ready' : 'poll-fallback',
+                polls: stylePollCountRef.current,
+              });
+              if (stylePollRef.current != null) {
+                window.clearInterval(stylePollRef.current);
+                stylePollRef.current = null;
+              }
+              stylePollCountRef.current = 0;
+              scheduleRefreshRef.current?.('force');
+              return;
+            }
+            if (stylePollCountRef.current >= STYLE_SYNC_MAX_POLLS) {
+              console.warn('[weather-overlay] style sync polling exhausted', {
+                polls: stylePollCountRef.current,
+                ...readStyleHealth(map),
+              });
+              if (stylePollRef.current != null) {
+                window.clearInterval(stylePollRef.current);
+                stylePollRef.current = null;
+              }
+              stylePollCountRef.current = 0;
+            }
+          }, STYLE_SYNC_POLL_MS);
+        }, STYLE_SYNC_WATCHDOG_MS);
+      }
     };
 
     const hideAll = () => {
@@ -324,8 +484,7 @@ export function useWeatherOverlay(
         return true;
       }
       if (!canMutateStyle()) {
-        publishStyleSyncStatus(Math.max(74, progressBase - 2));
-        scheduleStyleRetry();
+        armStyleRecovery('force', 'renderFromData-precheck');
         return false;
       }
 
@@ -357,8 +516,7 @@ export function useWeatherOverlay(
         const rendered = renderedRef.current[key];
         if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
           if (!ensureLayer(key, activeLayer.mode, rendered.url, rendered.coords)) {
-            publishStyleSyncStatus(Math.max(74, progressBase - 2));
-            scheduleStyleRetry();
+            armStyleRecovery('force', `ensureLayer-reuse:${key}`);
             return false;
           }
           renderedCount += 1;
@@ -387,14 +545,12 @@ export function useWeatherOverlay(
         await preload(url);
         if (!canMutateStyle()) {
           if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-          publishStyleSyncStatus(Math.max(74, progressBase - 2));
-          scheduleStyleRetry();
+          armStyleRecovery('force', `render-url-ready:${key}`);
           return false;
         }
         if (!ensureLayer(key, activeLayer.mode, url, coords)) {
           if (url.startsWith('blob:')) URL.revokeObjectURL(url);
-          publishStyleSyncStatus(Math.max(74, progressBase - 2));
-          scheduleStyleRetry();
+          armStyleRecovery('force', `ensureLayer-new:${key}`);
           return false;
         }
         if (rendered?.url.startsWith('blob:')) {
@@ -420,14 +576,24 @@ export function useWeatherOverlay(
         detail: 'Overlay prêt',
         reloadable: true,
       }));
+      clearStyleRecoveryTimers();
       return true;
     };
 
     const refresh = async (reason: RefreshReason) => {
       if (!canMutateStyle()) {
-        publishStyleSyncStatus(styleSyncProgress(reason));
-        scheduleStyleRetry();
+        armStyleRecovery(reason, 'refresh-precheck');
         return;
+      }
+
+      if (styleFallbackUsableRef.current) {
+        const health = readStyleHealth(map);
+        logWeatherOverlay('refresh proceeding with style fallback', {
+          reason,
+          isStyleLoaded: health.isStyleLoaded,
+          sourceCount: health.sourceCount,
+          layerCount: health.layerCount,
+        });
       }
 
       const nextState = stateRef.current;
@@ -497,6 +663,14 @@ export function useWeatherOverlay(
           reloadable: true,
         }));
         const grid = buildWeatherGrid(map, selection.mode, activeMetrics);
+        logWeatherOverlay('grid prepared', {
+          reason,
+          selection: selection.key,
+          rows: grid.rows,
+          cols: grid.cols,
+          spacing: grid.spacing,
+          points: grid.points.length,
+        });
         publishStatus(createOverlayStatus({
           id: STATUS_ID,
           label: 'Météo',
@@ -527,6 +701,11 @@ export function useWeatherOverlay(
           samples,
           fetchedAt: Date.now(),
         };
+        logWeatherOverlay('samples fetched', {
+          selection: selection.key,
+          count: samples.length,
+          generation,
+        });
         lastViewportRef.current = viewport;
         lastFetchTimeRef.current = Date.now();
         await renderFromData(dataRef.current, 76);
@@ -559,8 +738,27 @@ export function useWeatherOverlay(
 
     const onMoveEnd = () => scheduleRefresh('normal');
     const onZoomEnd = () => scheduleRefresh('normal');
+    const onStyleData = () => {
+      if (!styleRecoveryActive()) return;
+      if (canMutateStyle() || promoteStyleFallbackIfUsable('styledata')) {
+        logWeatherOverlay('styledata recovery event', {
+          fallbackUsable: styleFallbackUsableRef.current,
+          ...readStyleHealth(map),
+        });
+        scheduleRefresh('force');
+        return;
+      }
+      armStyleRecovery('force', 'styledata');
+    };
     const onStyleLoad = () => {
-      if (!canMutateStyle()) return;
+      if (!canMutateStyle() && !promoteStyleFallbackIfUsable('style.load')) {
+        armStyleRecovery('force', 'style.load');
+        return;
+      }
+      logWeatherOverlay('style.load recovery event', {
+        fallbackUsable: styleFallbackUsableRef.current,
+        ...readStyleHealth(map),
+      });
       const activeLayers = activeRenderableLayers(stateRef.current);
       if (!stateRef.current.enabled || activeLayers.length === 0) {
         hideAll();
@@ -578,6 +776,7 @@ export function useWeatherOverlay(
 
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onZoomEnd);
+    map.on('styledata', onStyleData);
     map.on('style.load', onStyleLoad);
 
     return () => {
@@ -585,12 +784,14 @@ export function useWeatherOverlay(
       generationRef.current += 1;
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onZoomEnd);
+      map.off('styledata', onStyleData);
       map.off('style.load', onStyleLoad);
       scheduleRefreshRef.current = null;
       hideAllRef.current = null;
       abortRef.current?.abort();
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
-      if (styleRetryRef.current != null) window.clearTimeout(styleRetryRef.current);
+      clearStyleRecoveryTimers();
+      styleFallbackUsableRef.current = false;
       for (const rendered of Object.values(renderedRef.current)) {
         if (rendered?.url.startsWith('blob:')) URL.revokeObjectURL(rendered.url);
       }
