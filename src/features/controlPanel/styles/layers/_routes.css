@@ -59,10 +59,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
-  min-width: var(--rvc-panel-route-opacity-width);
+  gap: 6px;
+  width: var(--rvc-panel-route-opacity-width);
   min-height: 28px;
-  padding: 6px 8px 6px 5px;
+  margin-left: 4px;
+  padding: 6px 9px 6px 8px;
   background: #3d3d3d;
   border-radius: 5px;
   justify-self: end;
@@ -105,7 +106,7 @@
 
 .rvc-routes__opacity-input {
   all: unset;
-  width: max(22px, calc(var(--rvc-panel-route-opacity-width) - 32px));
+  width: max(24px, calc(var(--rvc-panel-route-opacity-width) - 40px));
   text-align: right;
   color: var(--rvc-text);
   font-size: 14px;

@@ -7,7 +7,7 @@
   --rvc-panel-select-sm: 96px;
   --rvc-panel-select-md: 124px;
   --rvc-panel-route-mode-width: 80px;
-  --rvc-panel-route-opacity-width: 62px;
+  --rvc-panel-route-opacity-width: 74px;
   --rvc-panel-opacity-control-width: 124px;
   --rvc-panel-altitude-slider-width: 96px;
   --rvc-red: #890000;
@@ -100,7 +100,7 @@
     --rvc-panel-select-sm: 90px;
     --rvc-panel-select-md: 116px;
     --rvc-panel-route-mode-width: 76px;
-    --rvc-panel-route-opacity-width: 58px;
+    --rvc-panel-route-opacity-width: 68px;
     --rvc-panel-opacity-control-width: 116px;
     --rvc-panel-altitude-slider-width: 88px;
   }
