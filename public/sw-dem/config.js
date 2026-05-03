@@ -101,8 +101,12 @@ const ORTHO_TILE_SIZE = 256;
 // v42 — evicts high-zoom global parent-overzoom children that could still be
 // created through negative-cache/error recovery and make terrain flatten while
 // zooming in outside LiDAR regions.
-const CACHE_NAME = 'dem-tiles-v42';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
+// v43 / v25 — evicts z15 global 204 negative-cache entries created while
+// MAPBOX_DEM_MAXZOOM was 14 (the source maxzoom was 15, so Mapbox requested
+// z15 tiles but the SW returned 204 → flat terrain on zoom-in). Now
+// MAPBOX_DEM_MAXZOOM=15 so the SW serves real AWS-overzoomed tiles at z15.
+const CACHE_NAME = 'dem-tiles-v43';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v25';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v13';
 const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';

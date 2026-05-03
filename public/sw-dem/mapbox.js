@@ -6,9 +6,13 @@
 // never calls Mapbox terrain-DEM v1 anymore.
 // ---------------------------------------------------------------------------
 
-// Native max zoom of the public global fallback dataset. Upstream code already
-// handles parent-overzoom above this level.
-const MAPBOX_DEM_MAXZOOM = 14;
+// Must match DEM_SOURCE_MAXZOOM (ign.config.ts) — the maxzoom declared on the
+// raster-dem source. The SW must serve real elevation tiles at every zoom level
+// Mapbox can request. Returning 204 at maxzoom makes the terrain flat because
+// Mapbox's GPU overzooming starts from the maxzoom tile (which would be empty).
+// AWS Terrarium native is z14; at z15 the SW bicubic-overzooms the z14 parent
+// which preserves relief much better than an empty 204 slot.
+const MAPBOX_DEM_MAXZOOM = 15;
 
 async function fetchMapboxTile(z, x, y) {
   return fetchAWSTerrainTile(z, x, y);
