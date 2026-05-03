@@ -86,6 +86,7 @@ const OLD_CACHES = [
   'dem-tiles-v37',
   'dem-tiles-v38',
   'dem-tiles-v39',
+  'dem-tiles-v40',
   'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
   'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
   'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
@@ -102,7 +103,7 @@ const OLD_CACHES = [
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7', 'slope-tiles-v8',
-  'slope-tiles-v9', 'slope-tiles-v10', 'slope-tiles-v11',
+  'slope-tiles-v9', 'slope-tiles-v10', 'slope-tiles-v11', 'slope-tiles-v12',
   'shadow-tiles-v1',
 ];
 

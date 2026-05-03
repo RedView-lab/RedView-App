@@ -208,12 +208,21 @@ function buildTerrainWmsTileURL(mercZ, mercX, mercY) {
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
   // WMS 1.3.0 axis order for EPSG:4326 is latitude,longitude.
   const bbox = [bounds.south, bounds.west, bounds.north, bounds.east].join(',');
+  // 2× supersample: ask the WMS for a 512×512 raster on the same bbox, then
+  // box-average to 256×256 in getTerrainWmsTile. The IGN MNT WMS server
+  // appears to use nearest-neighbour resampling along the latitude axis when
+  // the requested grid spacing is finer than its native ~1 m source. At z≥15
+  // a 256×256 request would return rows of identical elevations with sharp
+  // jumps at source-row boundaries, which Horn's method then turns into the
+  // characteristic horizontal stripe pattern in the slope overlay. Asking
+  // for double the resolution and averaging is proper anti-aliasing (not a
+  // post-hoc blur) and erases the staircase without softening real edges.
   return (
     `${IGN_WMS_BASE}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0` +
     `&LAYERS=${IGN_DEM_FALLBACK_LAYER}&STYLES=` +
     `&FORMAT=${encodeURIComponent(IGN_DEM_FORMAT)}` +
     `&CRS=EPSG:4326&BBOX=${bbox}` +
-    `&WIDTH=${DEM_TILE_SIZE}&HEIGHT=${DEM_TILE_SIZE}`
+    `&WIDTH=${DEM_TILE_SIZE * 2}&HEIGHT=${DEM_TILE_SIZE * 2}`
   );
 }
 
@@ -317,11 +326,33 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
         return null;
       }
       const buf = await res.arrayBuffer();
-      if (buf.byteLength !== DEM_TILE_SIZE * DEM_TILE_SIZE * 4) {
+      // Supersampled request: expect (DEM_TILE_SIZE*2)² float32 values.
+      const SS = DEM_TILE_SIZE * 2;
+      if (buf.byteLength !== SS * SS * 4) {
         cacheTerrainWmsNull(key, 'permanent');
         return null;
       }
-      const data = decodeBIL32(buf);
+      const hi = decodeBIL32(buf);
+      // Box-average 2×2 → 1 into a DEM_TILE_SIZE² Float32Array. NaN-aware so
+      // sentinel/no-data pixels never poison the average; if all four samples
+      // are NaN we propagate NaN so downstream coverage tracking still works.
+      const data = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
+      for (let y = 0; y < DEM_TILE_SIZE; y++) {
+        const sy = y * 2;
+        for (let x = 0; x < DEM_TILE_SIZE; x++) {
+          const sx = x * 2;
+          const a = hi[sy * SS + sx];
+          const b = hi[sy * SS + sx + 1];
+          const c = hi[(sy + 1) * SS + sx];
+          const d = hi[(sy + 1) * SS + sx + 1];
+          let sum = 0, n = 0;
+          if (!Number.isNaN(a)) { sum += a; n++; }
+          if (!Number.isNaN(b)) { sum += b; n++; }
+          if (!Number.isNaN(c)) { sum += c; n++; }
+          if (!Number.isNaN(d)) { sum += d; n++; }
+          data[y * DEM_TILE_SIZE + x] = n > 0 ? sum / n : NaN;
+        }
+      }
       evict(terrainWmsTileCache, TERRAIN_WMS_CACHE_MAX);
       terrainWmsTileCache.set(key, data);
       return data;

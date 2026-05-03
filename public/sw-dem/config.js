@@ -98,10 +98,10 @@ const ORTHO_TILE_SIZE = 256;
 // SW-synthesized child tiles while zooming in.
 // v40 — evicts satellite/default-profile DEM entries now that every 3D
 // basemap uses the protected terrain profile namespace.
-const CACHE_NAME = 'dem-tiles-v40';
+const CACHE_NAME = 'dem-tiles-v41';
 const NEGATIVE_CACHE_NAME = 'dem-negative-v24';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
-const SLOPE_CACHE_NAME = 'slope-tiles-v12';
+const SLOPE_CACHE_NAME = 'slope-tiles-v13';
 const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';
 const STATIC_CACHE_NAME = 'dem-static-v1';
 
