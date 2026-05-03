@@ -68,11 +68,13 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
 // ── Build layer definition ────────────────────────────────────────────
 //
 // SW PNG encoding:
-//   R = round(slopeDeg * 255 / 90)   (0° → 0, 90° → 255)
-//   G = B = 0
+//   V = round(slopeDeg * 65535 / 90) (0° → 0, 90° → 65535)
+//   R = V >> 8
+//   G = V & 255
+//   B = 0
 //   A = 0 on NoData, 255 otherwise
 //
-// raster-color-mix decodes back to degrees: deg = R * (90 / 255)
+// raster-color-mix decodes back to degrees: deg = V * (90 / 65535)
 // raster-color-range [0, 90] then normalises into [0, 1] for the
 // raster-color expression (which uses degNorm = deg / 90).
 //
@@ -81,17 +83,20 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
 // the slope raster inside France and the user sees nothing.
 //
 // raster-color-mix decoding:
-//   Mapbox normalises raster channel values to [0, 1] before applying the
-//   mix coefficients, so for an R-encoded slope (R_byte = round(deg*255/90))
-//   the decoder is:
-//     decoded_deg = R_norm * 90
-//                 = (R_byte / 255) * 90
+//   Mapbox normalises channels to [0, 1] before applying the mix, so with
+//   V = R_byte*256 + G_byte the decoder becomes:
+//     decoded_deg = (R_norm * (90*256/257)) + (G_norm * (90/257))
+//                 = ((R_byte*256 + G_byte) / 65535) * 90
 //                 = original deg ✓
-//   Hence mix = [90, 0, 0, 0]. (Using 90/255 here was the bug that made
-//   every tile look almost entirely flat — the decoded value never exceeded
-//   ~0.35° even on cliffs.)
+//   Keeping the decode affine across channels means linear raster sampling
+//   stays smooth while the extra precision removes visible micro-banding.
 
-const SLOPE_DECODE_MIX: [number, number, number, number] = [MAX_SLOPE_DEG, 0, 0, 0];
+const SLOPE_DECODE_MIX: [number, number, number, number] = [
+  (MAX_SLOPE_DEG * 256) / 257,
+  MAX_SLOPE_DEG / 257,
+  0,
+  0,
+];
 const SLOPE_DECODE_RANGE: [number, number] = [0, MAX_SLOPE_DEG];
 
 export function buildSlopeLayer(

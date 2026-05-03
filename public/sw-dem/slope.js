@@ -4,10 +4,11 @@
 // from the DEM cache — eliminates the visible seams that edge-replication
 // produces between adjacent slope tiles.
 //
-// Output: 8-bit slope-only RGBA PNG.
-//   - R channel encodes slope angle: R = round(deg * 255 / 90)
-//                                    deg = R * 90 / 255  (recovered GPU-side)
-//   - G, B = 0 (reserved for future encodings)
+// Output: 16-bit slope-only RGBA PNG.
+//   - R,G encode slope angle: V = round(deg * 65535 / 90)
+//                             R = V >> 8, G = V & 255
+//                             deg = V * 90 / 65535  (recovered GPU-side)
+//   - B = 0 (reserved for future encodings)
 //   - A    = 0 on NoData, 255 otherwise
 //
 // Colorisation, hide-bands, and colour-mode (gradient/step) are applied
@@ -123,7 +124,7 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
   return slopes;
 }
 
-// ── Slope-only RGBA PNG (R = encoded angle, A = NoData mask) ──────────
+// ── Slope-only RGBA PNG (RG = encoded angle, A = NoData mask) ─────────
 async function encodeSlopePng(slopes, ownElev) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
@@ -138,9 +139,9 @@ async function encodeSlopePng(slopes, ownElev) {
   for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
   for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
 
-  // Encode: R = round(deg * 255 / 90). 0° → 0, 90° → 255 (~0.353° per step).
-  // Mapbox decodes via raster-color-mix [90/255, 0, 0, 0] → degrees.
-  const SCALE = 255 / 90;
+  // Encode on 16 bits so the 1 m terrain profile does not collapse into
+  // visible ~0.35° steps. Precision becomes ~0.0014° per code.
+  const SCALE = 65535 / 90;
 
   for (let j = 0; j < n; j++) {
     const elev = ownElev[j];
@@ -152,9 +153,9 @@ async function encodeSlopePng(slopes, ownElev) {
     }
     let d = slopes[j];
     if (d < 0) d = 0; else if (d > 90) d = 90;
-    const enc = (d * SCALE + 0.5) | 0;
-    rgba[idx]     = enc > 255 ? 255 : enc;
-    rgba[idx + 1] = 0;
+    const enc = Math.max(0, Math.min(65535, Math.round(d * SCALE)));
+    rgba[idx] = (enc >> 8) & 0xff;
+    rgba[idx + 1] = enc & 0xff;
     rgba[idx + 2] = 0;
     rgba[idx + 3] = 255;
   }
