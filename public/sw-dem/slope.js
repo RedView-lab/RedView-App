@@ -196,6 +196,33 @@ function downsampleSlopes(slopes, factor) {
   return out;
 }
 
+function smoothSlopes(slopes) {
+  const size = DEM_TILE_SIZE;
+  const tmp = new Float32Array(size * size);
+  const out = new Float32Array(size * size);
+
+  for (let y = 0; y < size; y++) {
+    const row = y * size;
+    for (let x = 0; x < size; x++) {
+      const left = slopes[row + (x > 0 ? x - 1 : 0)];
+      const mid = slopes[row + x];
+      const right = slopes[row + (x + 1 < size ? x + 1 : size - 1)];
+      tmp[row + x] = (left + 2 * mid + right) * 0.25;
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const prevRow = (y > 0 ? y - 1 : 0) * size;
+    const row = y * size;
+    const nextRow = (y + 1 < size ? y + 1 : size - 1) * size;
+    for (let x = 0; x < size; x++) {
+      out[row + x] = (tmp[prevRow + x] + 2 * tmp[row + x] + tmp[nextRow + x]) * 0.25;
+    }
+  }
+
+  return out;
+}
+
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
@@ -207,6 +234,9 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const pad = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
+  if (demProfile === 'terrain' && (!resFactor || resFactor <= 1) && z >= 14) {
+    slopes = smoothSlopes(slopes);
+  }
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
   const blob = await encodeSlopePng(slopes, ownElev);

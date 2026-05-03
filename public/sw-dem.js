@@ -102,6 +102,7 @@ const OLD_CACHES = [
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
   'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7', 'slope-tiles-v8',
+  'slope-tiles-v9', 'slope-tiles-v10',
   'shadow-tiles-v1',
 ];
 
