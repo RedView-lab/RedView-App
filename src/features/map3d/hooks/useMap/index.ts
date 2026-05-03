@@ -88,6 +88,27 @@ export function useMap(
     prepareStyleChangeRef.current = lifecycle.prepareStyleChange;
     bootstrapStyleRef.current = lifecycle.bootstrapCurrentStyle;
 
+    // Reveal the map as soon as Mapbox emits any of these signals.
+    // Decoupled from `bootstrapCurrentStyle()` because that promise can
+    // stall when the watchdog falls back to its deferred path (style
+    // sprite/image rejection storms keep `isStyleLoaded()` false past
+    // 15s and the late-style listener may never re-fire on some
+    // basemap variants). The map is visually usable long before the
+    // bootstrap fully wires DEM/terrain — keeping the "Chargement du
+    // globe…" overlay until the bootstrap promise resolves was the
+    // visible bug ("3D visible mais loader bloqué à 30%").
+    const revealMap = () => {
+      if (cancelled) return;
+      setIsLoaded(true);
+    };
+    map.once('load', revealMap);
+    map.once('idle', revealMap);
+    // Hard fallback: if neither `load` nor `idle` fired within 8s, the
+    // map is almost certainly already rendering tiles (Mapbox keeps
+    // those events suppressed when sprite/image errors loop). Reveal
+    // anyway so the user isn't stuck behind the overlay forever.
+    const revealFallbackTimer = setTimeout(revealMap, 8000);
+
     void lifecycle.bootstrapCurrentStyle()
       .then(() => {
         if (!cancelled) setIsLoaded(true);
@@ -146,6 +167,7 @@ export function useMap(
 
     return () => {
       cancelled = true;
+      clearTimeout(revealFallbackTimer);
       lifecycle.cleanup();
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
@@ -185,6 +207,19 @@ export function useMap(
       localFontFamily: null,
       localIdeographFontFamily: 'sans-serif',
     });
+
+    // Reveal as soon as the new style yields any rendered output, with
+    // a hard 8s fallback. Same rationale as the initial-mount path: the
+    // bootstrap promise can stall under sprite/image error storms.
+    let switchCancelled = false;
+    const revealAfterSwitch = () => {
+      if (switchCancelled) return;
+      setIsLoaded(true);
+    };
+    map.once('load', revealAfterSwitch);
+    map.once('idle', revealAfterSwitch);
+    const switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
+
     void bootstrapCurrentStyle()
       .then(() => {
         setIsLoaded(true);
@@ -198,6 +233,13 @@ export function useMap(
         );
         setIsLoaded(true);
       });
+
+    return () => {
+      switchCancelled = true;
+      clearTimeout(switchFallbackTimer);
+      map.off('load', revealAfterSwitch);
+      map.off('idle', revealAfterSwitch);
+    };
   }, [basemapStyleUrl]);
 
   useEffect(() => {

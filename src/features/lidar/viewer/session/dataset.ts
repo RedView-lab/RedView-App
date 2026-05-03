@@ -127,16 +127,27 @@ function resolveMultiTilePointCap(
         ? 6_500_000
         : DEFAULT_MULTI_TILE_POINT_CAP;
 
+  // dGPU/Apple boosts help quality for small scenes, but they push memory
+  // pressure too far on dense multi-tile scenes (worker allocates two large
+  // Float32Array copies for the octree build). Scale the boost down with tile
+  // count so 6-9 tile scenes don't trigger "Array buffer allocation failed"
+  // in the octree worker on 8 GiB machines reporting deviceMemory=8.
+  const boostScale = tileCount >= 8 ? 0.25 : tileCount >= 6 ? 0.5 : tileCount >= 4 ? 0.75 : 1;
   if (isDedicatedGpu) {
-    cap += memoryGiB >= 8 ? 2_000_000 : 1_000_000;
+    cap += (memoryGiB >= 8 ? 2_000_000 : 1_000_000) * boostScale;
   } else if (isApple) {
-    cap += memoryGiB >= 8 ? 750_000 : 250_000;
+    cap += (memoryGiB >= 8 ? 750_000 : 250_000) * boostScale;
   } else if (isIntegratedGpu) {
     cap -= memoryGiB <= 4 ? 750_000 : 250_000;
   }
 
-  if (tileCount >= 8) cap *= 0.94;
-  else if (tileCount >= 6) cap *= 0.97;
+  // Per-tile-count attenuation. The previous 0.94/0.97 factors were not
+  // enough: the merged scene plus the worker's transient octree buffers
+  // (positions+colors input, leafPositions+leafColors output, voxel arrays,
+  // per-node JS index arrays) easily exceeded 400 MB on 7-tile scenes.
+  if (tileCount >= 8) cap *= 0.7;
+  else if (tileCount >= 6) cap *= 0.8;
+  else if (tileCount >= 4) cap *= 0.9;
 
   return clamp(roundPointCap(cap), MIN_MULTI_TILE_POINT_CAP, MAX_MULTI_TILE_POINT_CAP);
 }
