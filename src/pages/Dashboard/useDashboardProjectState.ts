@@ -13,6 +13,7 @@ export type DashboardPersistedMutator = (
 interface UseDashboardProjectStateArgs {
   initialProjectId?: string | null;
   mapInstance: MapboxMap | null;
+  beforeCloseProject?: () => Promise<void> | void;
 }
 
 interface LocalProjectCacheEntry {
@@ -143,6 +144,7 @@ function writeProjectCache(projectId: string, project: ItineraryProject): void {
 export function useDashboardProjectState({
   initialProjectId,
   mapInstance,
+  beforeCloseProject,
 }: UseDashboardProjectStateArgs) {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeProjectInitial, setActiveProjectInitial] =
@@ -412,9 +414,11 @@ export function useDashboardProjectState({
       }
     }
 
+    await beforeCloseProject?.();
+
     setProjectBrowserOpen(true);
     replaceProjectLocation(null);
-  }, [flushSave, mapInstance]);
+  }, [beforeCloseProject, flushSave, mapInstance]);
 
   return {
     activeProjectId,

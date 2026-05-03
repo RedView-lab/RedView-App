@@ -62,6 +62,13 @@ export default function Dashboard({
   const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
 
+  const prepareProjectClose = useCallback(async () => {
+    setMapLoaded(false);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }, []);
+
   const {
     activeProjectId,
     activeProjectInitial,
@@ -75,6 +82,7 @@ export default function Dashboard({
   } = useDashboardProjectState({
     initialProjectId,
     mapInstance,
+    beforeCloseProject: prepareProjectClose,
   });
 
   const initialBasemapId = normalizeBasemapId(
