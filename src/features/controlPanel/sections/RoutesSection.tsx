@@ -130,26 +130,28 @@ export function RoutesSection({
             </ColorPalettePicker>
             <div className="rvc-routes__label">{route.label}</div>
             <Select
+              className="rvc-routes__mode-select"
               width="var(--rvc-panel-route-mode-width)"
               value={route.mode}
               options={MODE_OPTIONS}
               onChange={(v) => onModeChange?.(route.id, v)}
             />
-            <button
-              type="button"
-              className="rvc-routes__eye"
-              onClick={() => onVisibilityToggle?.(route.id)}
-              aria-pressed={route.visible}
-              aria-label={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
-              title={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
-              data-visible={route.visible ? 'true' : 'false'}
-            >
-              <IconEye size={14} />
-            </button>
-            <OpacityPill
-              value={route.opacity}
-              onChange={(next) => onOpacityChange?.(route.id, next)}
-            />
+            <div className="rvc-routes__visibility-group" data-visible={route.visible ? 'true' : 'false'}>
+              <button
+                type="button"
+                className="rvc-routes__eye"
+                onClick={() => onVisibilityToggle?.(route.id)}
+                aria-pressed={route.visible}
+                aria-label={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
+                title={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
+              >
+                <IconEye size={14} />
+              </button>
+              <OpacityPill
+                value={route.opacity}
+                onChange={(next) => onOpacityChange?.(route.id, next)}
+              />
+            </div>
           </div>
         ))}
       </div>

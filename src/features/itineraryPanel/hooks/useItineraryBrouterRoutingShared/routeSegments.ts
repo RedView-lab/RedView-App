@@ -14,7 +14,21 @@ export function routePointsEqual(
   left: RoutePoints | null | undefined,
   right: RoutePoints | null | undefined,
 ): boolean {
-  return routePointsSignature(left) === routePointsSignature(right);
+  if (left === right) return true;
+  if (!left || !right) return !left && !right;
+  if (left.length !== right.length) return false;
+
+  for (let index = 0; index < left.length; index += 1) {
+    const leftPoint = left[index];
+    const rightPoint = right[index];
+    if (!sameFiniteNumber(leftPoint.lat, rightPoint.lat, 1e-6)) return false;
+    if (!sameFiniteNumber(leftPoint.lon, rightPoint.lon, 1e-6)) return false;
+    if (!sameOptionalFiniteNumber(leftPoint.distanceM, rightPoint.distanceM, 0.25)) return false;
+    if (!sameOptionalFiniteNumber(leftPoint.elevationM, rightPoint.elevationM, 0.1)) return false;
+    if (!sameOptionalFiniteNumber(leftPoint.gradientPct, rightPoint.gradientPct, 0.05)) return false;
+  }
+
+  return true;
 }
 
 export function getRoutePointTotalDistanceM(points: RoutePoints): number {
@@ -162,27 +176,20 @@ export function mergeSurfaceMetrics(
   };
 }
 
-function routePointsSignature(points: RoutePoints | null | undefined): string {
-  if (!points || points.length === 0) return 'empty';
-  const indices = Array.from(new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]));
-  return [
-    String(points.length),
-    ...indices.map((index) => {
-      const point = points[index];
-      return [
-        index,
-        point.lat.toFixed(6),
-        point.lon.toFixed(6),
-        Number.isFinite(point.distanceM) ? (point.distanceM as number).toFixed(1) : 'null',
-        Number.isFinite(point.elevationM)
-          ? (point.elevationM as number).toFixed(2)
-          : 'null',
-        Number.isFinite(point.gradientPct)
-          ? (point.gradientPct as number).toFixed(3)
-          : 'null',
-      ].join(':');
-    }),
-  ].join('|');
+function sameFiniteNumber(left: number, right: number, tolerance: number): boolean {
+  return Math.abs(left - right) <= tolerance;
+}
+
+function sameOptionalFiniteNumber(
+  left: number | null | undefined,
+  right: number | null | undefined,
+  tolerance: number,
+): boolean {
+  const leftFinite = Number.isFinite(left);
+  const rightFinite = Number.isFinite(right);
+  if (leftFinite !== rightFinite) return false;
+  if (!leftFinite && !rightFinite) return true;
+  return Math.abs((left as number) - (right as number)) <= tolerance;
 }
 
 function sameRoutePoint(left: RoutePoint | undefined, right: RoutePoint | undefined): boolean {
