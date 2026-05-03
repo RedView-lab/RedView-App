@@ -416,6 +416,13 @@ export function useDashboardProjectState({
 
     await beforeCloseProject?.();
 
+    activeProjectIdRef.current = null;
+    activeProjectSnapshotRef.current = null;
+    pendingSaveRef.current = null;
+    lastSavedSerializedRef.current = null;
+    setActiveProjectInitial(null);
+    setActiveProjectId(null);
+
     setProjectBrowserOpen(true);
     replaceProjectLocation(null);
   }, [beforeCloseProject, flushSave, mapInstance]);
