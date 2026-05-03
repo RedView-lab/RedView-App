@@ -115,6 +115,8 @@ export interface FlatOctree {
 
 /** Visible node descriptor used by renderer to issue draw calls */
 export interface VisibleNode {
+  /** Octree node id (stable across frames, dense in [0, octree.nodeCount)). */
+  nodeId: number;
   offset: number;
   count: number;
   isVoxel: boolean;

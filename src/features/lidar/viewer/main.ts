@@ -393,7 +393,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
 
     // 8. Render loop with LOD
     let showLodStats = true;
-    let lastFrameTime = performance.now();
+    let lastCpuFrameMs = 16.6;
 
     let frameHandle: number | null = null;
     let renderRequested = true;
@@ -412,9 +412,8 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         idleReset = true;
         return;
       }
-      const now = performance.now();
-      const deltaMs = idleReset ? 16.6 : Math.max(0, now - lastFrameTime);
-      lastFrameTime = now;
+      const frameStart = performance.now();
+      const budgetSampleMs = idleReset ? Math.max(16.6, lastCpuFrameMs) : lastCpuFrameMs;
       idleReset = false;
       renderRequested = false;
 
@@ -427,7 +426,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         cpx, cpy, cpz,
         cfx, cfy, cfz,
         canvas.width, canvas.height,
-        deltaMs,
+        budgetSampleMs,
       );
 
       const voxelSize = lodManager.getVoxelPointSize(renderer.pointSize);
@@ -448,6 +447,8 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       } else {
         statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${scene.tileFileLabel}`;
       }
+
+      lastCpuFrameMs = Math.max(1, performance.now() - frameStart);
 
       if (renderRequested) {
         requestRender();
@@ -500,7 +501,6 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         idleReset = true;
         return;
       }
-      lastFrameTime = performance.now();
       idleReset = true;
       requestRender();
     };

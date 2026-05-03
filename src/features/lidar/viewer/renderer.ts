@@ -46,6 +46,9 @@ export class LidarRenderer {
   private _lastView = new Float32Array(16);
   private _lastProj = new Float32Array(16);
   private _viewProjValid = false;
+  /** Pre-allocated camera position / forward typed arrays (avoid per-frame array literals). */
+  private _lastCamPosArr = new Float32Array(3);
+  private _lastCamFwdArr = new Float32Array(3);
 
   private buffers: { pos: GPUBuffer; col: GPUBuffer; count: number }[] = [];
   private terrainMesh: { vertBuf: GPUBuffer; colBuf: GPUBuffer; idxBuf: GPUBuffer; count: number } | null = null;
@@ -66,8 +69,8 @@ export class LidarRenderer {
   private leafChunks: PointChunkBuffers[] = [];
   private voxelChunks: PointChunkBuffers[] = [];
   lastViewProj: Float32Array = new Float32Array(16);
-  lastCamPos: [number, number, number] = [0, 0, 0];
-  lastCamFwd: [number, number, number] = [0, 0, -1];
+  lastCamPos: Float32Array | [number, number, number] = new Float32Array(3);
+  lastCamFwd: Float32Array | [number, number, number] = new Float32Array([0, 0, -1]);
 
   /** True when device is lost and not yet recovered. Guards render calls. */
   deviceLost = false;
@@ -87,7 +90,14 @@ export class LidarRenderer {
     // --- Platform detection ---
     const { vendor, arch, desc, isApple, profile } = resolvePlatformInfo((adapter as any).info ?? null);
     this.platform = profile;
-    this.gpuDrivenDensitySupported = !isApple;
+    // GPU-driven density (mid-pass uniform writes per batch) is disabled:
+    // queue.writeBuffer calls inside an open render pass are coalesced before
+    // submit (last-write-wins), so the per-batch density never actually
+    // applied — and each writeBuffer also forces a driver sync stall that
+    // starves the GPU during camera motion. CPU-side spatial thinning
+    // (Fisher–Yates shuffle at build time → drawCount = count*density) is
+    // sufficient and keeps draw batching contiguous.
+    this.gpuDrivenDensitySupported = false;
 
     console.log(`[LiDAR GPU] Adapter: vendor=${vendor} arch=${arch} desc=${desc}`);
     console.log(`[LiDAR GPU] Platform profile: ${isApple ? 'Apple (Metal)' : 'Desktop'}`);
@@ -433,10 +443,10 @@ export class LidarRenderer {
       this.device.queue.writeBuffer(this.cameraBufferVoxel, 28 * 4, this._tempFloat);
     }
 
-    // Reset density to 1.0 for both camera buffers at start of frame
-    this._densityFloat[0] = 1.0;
-    this.device.queue.writeBuffer(this.cameraBuffer, 40 * 4, this._densityFloat);
-    this.device.queue.writeBuffer(this.cameraBufferVoxel, 40 * 4, this._densityFloat);
+    // Density is always 1.0 in the uniform now that GPU-driven density is
+    // disabled (updateCamera() already writes f[40]=1.0 as part of the full
+    // uniform). The previous unconditional writeBuffer calls here forced
+    // extra CPU/GPU sync per frame for no benefit.
 
     const enc = this.device.createCommandEncoder();
     const pass = enc.beginRenderPass({
@@ -718,8 +728,10 @@ export class LidarRenderer {
     const sunDir = [0.4, 0.8, 0.45, 0];
 
     this.lastViewProj = vp;
-    this.lastCamPos = [camX, camY, camZ];
-    this.lastCamFwd = [-view[2], -view[6], -view[10]];
+    this._lastCamPosArr[0] = camX; this._lastCamPosArr[1] = camY; this._lastCamPosArr[2] = camZ;
+    this._lastCamFwdArr[0] = -view[2]; this._lastCamFwdArr[1] = -view[6]; this._lastCamFwdArr[2] = -view[10];
+    this.lastCamPos = this._lastCamPosArr;
+    this.lastCamFwd = this._lastCamFwdArr;
 
     const f = this.uniformCache;
     f.set(vp, 0);

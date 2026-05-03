@@ -44,13 +44,21 @@ export class LodManager {
   private visibleNodes: VisibleNode[] = [];
   private visiblePointCount = 0;
 
+  /** Pool of VisibleNode objects, reused across frames to avoid GC pressure. */
+  private _nodePool: VisibleNode[] = [];
+  private _nodePoolCursor = 0;
+
   density = 1.0;
   private userDensityScale = 1.0;
   private sceneBudgetScale = 1.0;
 
-  private refinedLastFrame = new Set<number>();
-  private refinedThisFrame = new Set<number>();
-  private refinedSpare = new Set<number>();
+  /**
+   * refinedLastFrame[id] = 1 if node id was refined last frame (hysteresis check).
+   * Flat Uint8Array keyed by stable octree node id beats Set<number> by 5–10×
+   * on the hot collectVisible path.
+   */
+  private refinedLastFrame: Uint8Array = new Uint8Array(0);
+  private refinedThisFrame: Uint8Array = new Uint8Array(0);
 
   private lastCamera: CameraState | null = null;
   private cacheValid = false;
@@ -85,9 +93,17 @@ export class LodManager {
   private motionPressure = 0;
   private framePressure = 1;
 
-  /** Temporal density smoothing: stores previous frame density per node offset key */
-  private prevDensity = new Map<number, number>();
-  private prevDensitySwap = new Map<number, number>();
+  /** Temporal density smoothing — flat Float32Array keyed by stable octree node id. */
+  private prevDensity: Float32Array = new Float32Array(0);
+  /** prevDensityValid[id] = 1 if prevDensity[id] holds a valid value from last frame. */
+  private prevDensityValid: Uint8Array = new Uint8Array(0);
+  private prevDensityValidSwap: Uint8Array = new Uint8Array(0);
+  private prevDensitySwap: Float32Array = new Float32Array(0);
+
+  /** Cached dynamic LOD coefficients computed once per frame in update(). */
+  private cachedMinScreenPx = 2.0;
+  private cachedFadeLowBase = LOD_FADE_LOW;
+  private cachedFadeHighBase = LOD_FADE_HIGH;
 
   voxelMinDepth = 0;
   private rootExtent = 1;
@@ -109,11 +125,14 @@ export class LodManager {
 
   setOctree(octree: FlatOctree) {
     this.octree = octree;
-    this.refinedLastFrame.clear();
+    this.refinedLastFrame = new Uint8Array(octree.nodeCount);
+    this.refinedThisFrame = new Uint8Array(octree.nodeCount);
+    this.prevDensity = new Float32Array(octree.nodeCount);
+    this.prevDensitySwap = new Float32Array(octree.nodeCount);
+    this.prevDensityValid = new Uint8Array(octree.nodeCount);
+    this.prevDensityValidSwap = new Uint8Array(octree.nodeCount);
     this.lastCamera = null;
     this.cacheValid = false;
-    this.prevDensity.clear();
-    this.prevDensitySwap.clear();
     this.stats.totalPoints = octree.totalLeafPoints;
     this.stats.totalNodes = octree.nodeCount;
     this.stats.maxDepth = octree.maxDepthReached;
@@ -200,13 +219,21 @@ export class LodManager {
 
     const planes = extractFrustumPlanes(viewProj);
 
-    const recycled = this.refinedSpare;
-    this.refinedSpare = this.refinedLastFrame;
+    // Swap refined-frame buffers (this-frame → last-frame), zero new this-frame.
+    const tmpRef = this.refinedLastFrame;
     this.refinedLastFrame = this.refinedThisFrame;
-    recycled.clear();
-    this.refinedThisFrame = recycled;
+    this.refinedThisFrame = tmpRef;
+    this.refinedThisFrame.fill(0);
+
+    // Hoist dynamic LOD coefficients out of the recursive collectVisible hot path
+    // (otherwise these run thousands of times per frame).
+    const dynLodScale = this.getDynamicLodScale();
+    this.cachedMinScreenPx = this.getDynamicMinScreenSizePx();
+    this.cachedFadeLowBase = LOD_FADE_LOW * this.lodScreenScale * dynLodScale;
+    this.cachedFadeHighBase = LOD_FADE_HIGH * this.lodScreenScale * dynLodScale;
 
     this.visibleNodes.length = 0;
+    this._nodePoolCursor = 0;
     this.visiblePointCount = 0;
     this.voxelMinDepth = this.octree.maxDepthReached;
     this.stats.frustumCulled = 0;
@@ -246,6 +273,33 @@ export class LodManager {
 
   // ── LOD collection with smooth cross-fade zone ──
 
+  /**
+   * Acquire a VisibleNode from the pool. Reusing pre-allocated objects
+   * eliminates per-frame GC pressure (collectVisible can produce thousands
+   * of nodes per frame on multi-tile scenes).
+   */
+  private acquireNode(): VisibleNode {
+    let node = this._nodePool[this._nodePoolCursor];
+    if (!node) {
+      node = {
+        nodeId: 0,
+        offset: 0,
+        count: 0,
+        isVoxel: false,
+        depth: 0,
+        screenSize: 0,
+        density: 1.0,
+        qualityTier: 0,
+        qualityScale: 1.0,
+        fadeAlpha: 1.0,
+        camDist2: 0,
+      };
+      this._nodePool[this._nodePoolCursor] = node;
+    }
+    this._nodePoolCursor++;
+    return node;
+  }
+
   private collectVisible(
     node: SerializedNode,
     planes: FrustumPlanes,
@@ -258,6 +312,8 @@ export class LodManager {
     camZ: number = 0,
   ): void {
     if (node.subtreePointCount === 0 && node.voxelCount === 0) return;
+
+    const dynamicMinScreenSizePx = this.cachedMinScreenPx;
 
     if (testFrustum) {
       const result = frustumTestAABB(planes, node.aabb);
@@ -275,7 +331,7 @@ export class LodManager {
     // Micro-node skip: nodes that project to < minScreenSizePx contribute
     // nothing visually but still cost a draw call + per-vertex shading.
     // Drop them entirely (their parent's voxels already cover the area).
-    if (ss < this.minScreenSizePx) {
+    if (ss < dynamicMinScreenSizePx) {
       this.stats.lodSkipped++;
       return;
     }
@@ -288,31 +344,29 @@ export class LodManager {
     const dxC = acx - camX, dyC = acy - camY, dzC = acz - camZ;
     const camDist2 = dxC * dxC + dyC * dyC + dzC * dzC;
 
-    // Hysteresis: refined nodes use lower threshold to avoid oscillation
-    // lodScreenScale (>1 on Apple) inflates the threshold so nodes drop to
-    // voxels at a larger projected size \u2014 fewer leaves rendered far away.
-    let fadeLow = LOD_FADE_LOW * this.lodScreenScale;
-    let fadeHigh = LOD_FADE_HIGH * this.lodScreenScale;
-    if (this.refinedLastFrame.has(node.id)) {
-      fadeLow *= HYSTERESIS_FACTOR;
-      fadeHigh *= HYSTERESIS_FACTOR;
-    }
+    // Hysteresis: refined nodes use lower threshold to avoid oscillation.
+    // Base thresholds were already scaled by lodScreenScale * dynLodScale
+    // once per frame in update() — only the per-node hysteresis remains.
+    const wasRefined = this.refinedLastFrame[node.id] === 1;
+    const fadeLow = wasRefined ? this.cachedFadeLowBase * HYSTERESIS_FACTOR : this.cachedFadeLowBase;
+    const fadeHigh = wasRefined ? this.cachedFadeHighBase * HYSTERESIS_FACTOR : this.cachedFadeHighBase;
 
     // Leaves always render at full opacity
     if (node.isLeaf) {
       if (node.pointCount > 0) {
-        this.visibleNodes.push({
-          offset: node.pointOffset,
-          count: node.pointCount,
-          isVoxel: false,
-          depth: node.depth,
-          screenSize: ss,
-          density: 1.0,
-          qualityTier: 0,
-          qualityScale: 1.0,
-          fadeAlpha: 1.0,
-          camDist2,
-        });
+        const vn = this.acquireNode();
+        vn.nodeId = node.id;
+        vn.offset = node.pointOffset;
+        vn.count = node.pointCount;
+        vn.isVoxel = false;
+        vn.depth = node.depth;
+        vn.screenSize = ss;
+        vn.density = 1.0;
+        vn.qualityTier = 0;
+        vn.qualityScale = 1.0;
+        vn.fadeAlpha = 1.0;
+        vn.camDist2 = camDist2;
+        this.visibleNodes.push(vn);
         this.visiblePointCount += node.pointCount;
       }
       return;
@@ -321,18 +375,19 @@ export class LodManager {
     // Below fade zone: render only voxels (coarse LOD)
     if (ss < fadeLow) {
       if (node.voxelCount > 0) {
-        this.visibleNodes.push({
-          offset: node.voxelOffset,
-          count: node.voxelCount,
-          isVoxel: true,
-          depth: node.depth,
-          screenSize: ss,
-          density: 1.0,
-          qualityTier: 0,
-          qualityScale: 1.0,
-          fadeAlpha: 1.0,
-          camDist2,
-        });
+        const vn = this.acquireNode();
+        vn.nodeId = node.id;
+        vn.offset = node.voxelOffset;
+        vn.count = node.voxelCount;
+        vn.isVoxel = true;
+        vn.depth = node.depth;
+        vn.screenSize = ss;
+        vn.density = 1.0;
+        vn.qualityTier = 0;
+        vn.qualityScale = 1.0;
+        vn.fadeAlpha = 1.0;
+        vn.camDist2 = camDist2;
+        this.visibleNodes.push(vn);
         this.visiblePointCount += node.voxelCount;
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
       }
@@ -348,24 +403,25 @@ export class LodManager {
 
       // Emit fading-out voxels for this node
       if (node.voxelCount > 0 && voxelAlpha > 0.05) {
-        this.visibleNodes.push({
-          offset: node.voxelOffset,
-          count: node.voxelCount,
-          isVoxel: true,
-          depth: node.depth,
-          screenSize: ss,
-          density: voxelAlpha,  // GPU stochastic discard handles partial rendering
-          qualityTier: 0,
-          qualityScale: 1.0,
-          fadeAlpha: voxelAlpha,
-          camDist2,
-        });
+        const vn = this.acquireNode();
+        vn.nodeId = node.id;
+        vn.offset = node.voxelOffset;
+        vn.count = node.voxelCount;
+        vn.isVoxel = true;
+        vn.depth = node.depth;
+        vn.screenSize = ss;
+        vn.density = voxelAlpha;
+        vn.qualityTier = 0;
+        vn.qualityScale = 1.0;
+        vn.fadeAlpha = voxelAlpha;
+        vn.camDist2 = camDist2;
+        this.visibleNodes.push(vn);
         this.visiblePointCount += Math.ceil(node.voxelCount * voxelAlpha);
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
       }
 
       // Emit fading-in children
-      this.refinedThisFrame.add(node.id);
+      this.refinedThisFrame[node.id] = 1;
       const pointsBefore = this.visiblePointCount;
 
       for (let i = 0; i < 8; i++) {
@@ -391,18 +447,19 @@ export class LodManager {
       const childrenContributed = this.visiblePointCount > pointsBefore;
       if (!childrenContributed && node.voxelCount > 0 && voxelAlpha <= 0.05) {
         // Fallback: no children contributed, show voxels full
-        this.visibleNodes.push({
-          offset: node.voxelOffset,
-          count: node.voxelCount,
-          isVoxel: true,
-          depth: node.depth,
-          screenSize: ss,
-          density: 1.0,
-          qualityTier: 0,
-          qualityScale: 1.0,
-          fadeAlpha: 1.0,
-          camDist2,
-        });
+        const vn = this.acquireNode();
+        vn.nodeId = node.id;
+        vn.offset = node.voxelOffset;
+        vn.count = node.voxelCount;
+        vn.isVoxel = true;
+        vn.depth = node.depth;
+        vn.screenSize = ss;
+        vn.density = 1.0;
+        vn.qualityTier = 0;
+        vn.qualityScale = 1.0;
+        vn.fadeAlpha = 1.0;
+        vn.camDist2 = camDist2;
+        this.visibleNodes.push(vn);
         this.visiblePointCount += node.voxelCount;
         if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
       }
@@ -412,7 +469,7 @@ export class LodManager {
     }
 
     // Above fade zone: recurse fully into children
-    this.refinedThisFrame.add(node.id);
+    this.refinedThisFrame[node.id] = 1;
 
     const pointsBefore = this.visiblePointCount;
 
@@ -426,18 +483,19 @@ export class LodManager {
     const childrenContributed = this.visiblePointCount > pointsBefore;
 
     if (!childrenContributed && node.voxelCount > 0) {
-      this.visibleNodes.push({
-        offset: node.voxelOffset,
-        count: node.voxelCount,
-        isVoxel: true,
-        depth: node.depth,
-        screenSize: ss,
-        density: 1.0,
-        qualityTier: 0,
-        qualityScale: 1.0,
-        fadeAlpha: 1.0,
-        camDist2,
-      });
+      const vn = this.acquireNode();
+      vn.nodeId = node.id;
+      vn.offset = node.voxelOffset;
+      vn.count = node.voxelCount;
+      vn.isVoxel = true;
+      vn.depth = node.depth;
+      vn.screenSize = ss;
+      vn.density = 1.0;
+      vn.qualityTier = 0;
+      vn.qualityScale = 1.0;
+      vn.fadeAlpha = 1.0;
+      vn.camDist2 = camDist2;
+      this.visibleNodes.push(vn);
       this.visiblePointCount += node.voxelCount;
       if (node.depth < this.voxelMinDepth) this.voxelMinDepth = node.depth;
     }
@@ -505,6 +563,20 @@ export class LodManager {
     return Math.max(1, Math.floor(this.pointBudget * this.userDensityScale * this.sceneBudgetScale));
   }
 
+  private getDynamicLodScale(): number {
+    const multiTilePressure = 1 + (1 - this.sceneBudgetScale) * 1.15;
+    const motionPressureScale = 1 + this.motionPressure * 0.55;
+    const framePressureScale = 1 + Math.max(0, this.framePressure - 1) * 0.75;
+    return Math.min(2.4, multiTilePressure * motionPressureScale * framePressureScale);
+  }
+
+  private getDynamicMinScreenSizePx(): number {
+    const scenePressure = 1 + (1 - this.sceneBudgetScale) * 0.9;
+    const motionPressureScale = 1 + this.motionPressure * 0.35;
+    const framePressureScale = 1 + Math.max(0, this.framePressure - 1) * 0.45;
+    return Math.min(7.5, this.minScreenSizePx * scenePressure * motionPressureScale * framePressureScale);
+  }
+
   private quantizeLeafDensity(density: number): number {
     const clamped = Math.max(MIN_DENSITY, Math.min(1.0, density));
     if (clamped >= 0.995) return 1.0;
@@ -524,30 +596,37 @@ export class LodManager {
     const nodes = this.visibleNodes;
     const n = nodes.length;
     const swap = this.prevDensitySwap;
-    swap.clear();
+    const swapValid = this.prevDensityValidSwap;
+    // Zero only the validity flags (1 byte/node) — actual density values can
+    // stay stale, the validity mask gates reads.
+    swapValid.fill(0);
+    const prev = this.prevDensity;
+    const prevValid = this.prevDensityValid;
 
     for (let i = 0; i < n; i++) {
       const node = nodes[i];
-      const key = node.offset; // unique per node in flattened buffer
-      const prev = this.prevDensity.get(key);
+      const id = node.nodeId;
 
-      if (prev !== undefined) {
+      if (prevValid[id] === 1) {
         // Lerp towards target density for smooth transitions
         const target = node.density;
-        node.density = prev + (target - prev) * DENSITY_BLEND_RATE;
+        node.density = prev[id] + (target - prev[id]) * DENSITY_BLEND_RATE;
       }
 
       if (!node.isVoxel) {
         node.density = this.quantizeLeafDensity(node.density);
       }
 
-      swap.set(key, node.density);
+      swap[id] = node.density;
+      swapValid[id] = 1;
     }
 
-    // Swap maps (avoid allocations)
-    const tmp = this.prevDensity;
+    // Swap typed arrays (no allocation)
     this.prevDensity = swap;
-    this.prevDensitySwap = tmp;
+    this.prevDensitySwap = prev;
+    this.prevDensityValid = swapValid;
+    this.prevDensityValidSwap = prevValid;
+
     this.visiblePointCount = this.estimateVisiblePointCount();
     this.stats.qualityScale = this.estimateLeafQualityScale();
     this.stats.motionPressure = this.motionPressure;
