@@ -91,20 +91,35 @@ export function useLabels(
     applyAll(map, labelState);
   }, [map, isMapLoaded, labelState]);
 
-  // Re-apply after style.load (style resets wipe config properties)
+  // Re-apply after style rebuilds. Some basemap variants keep emitting
+  // styledata while imported label layers are still being attached.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
-    const onStyleLoad = () => {
-      // Defer to let useMap's init handler finish (addSource, terrain, etc.)
-      setTimeout(() => {
+    let applyTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const scheduleApply = () => {
+      if (applyTimer !== null) return;
+      applyTimer = setTimeout(() => {
+        applyTimer = null;
         applyAll(map, stateRef.current);
       }, 0);
     };
 
+    const onStyleLoad = () => {
+      scheduleApply();
+    };
+
+    const onStyleData = () => {
+      scheduleApply();
+    };
+
     map.on('style.load', onStyleLoad);
+    map.on('styledata', onStyleData);
     return () => {
+      if (applyTimer !== null) clearTimeout(applyTimer);
       map.off('style.load', onStyleLoad);
+      map.off('styledata', onStyleData);
     };
   }, [map, isMapLoaded]);
 }
