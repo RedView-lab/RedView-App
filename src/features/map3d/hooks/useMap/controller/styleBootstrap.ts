@@ -37,6 +37,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
   fns.prepareStyleChange = (detail = 'Fond de carte') => {
     st.demPassiveRefreshPending = false;
     st.demTrackingEnabled = false;
+    st.spriteStormBypass = false;
     fns.clearDemTracking();
     fns.clearStyleBootstrapArtifacts();
     fns.detachManagedTerrain();
@@ -132,14 +133,66 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
 
     if (!fns.canMutateStyle()) {
-      const onLateStyleLoad = () => {
-        map.off('style.load', onLateStyleLoad);
-        map.off('styledata', onLateStyleLoad);
+      // Mapbox 3.x can enter a state where isStyleLoaded() stays false
+      // indefinitely (SVG sprite rejection storm) even though tiles, layers
+      // and sources are fully operational. In that scenario neither
+      // style.load nor styledata fire again, so event-only recovery is a
+      // dead-end.
+      //
+      // Two reinforcements:
+      //  1. A polling interval (every 2 s, up to 30 s) that checks whether
+      //     canMutateStyle() finally flipped, OR whether getStyle() has
+      //     sources — if so, the style is "good enough" for terrain.
+      //  2. The event listeners are still registered as a fast path.
+      let lateRecovered = false;
+      const doLateRecovery = () => {
+        if (lateRecovered) return;
+        lateRecovered = true;
+        map.off('style.load', onLateEvent);
+        map.off('styledata', onLateEvent);
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
         if (isCancelled()) return;
         void fns.bootstrapCurrentStyle();
       };
-      map.on('style.load', onLateStyleLoad);
-      map.on('styledata', onLateStyleLoad);
+      const onLateEvent = () => doLateRecovery();
+      map.on('style.load', onLateEvent);
+      map.on('styledata', onLateEvent);
+
+      // Polling fallback: check whether the style became usable even
+      // though the events never fire. Also detect the "sprite-storm"
+      // case: getStyle() has sources but isStyleLoaded() is stuck false.
+      let pollCount = 0;
+      const MAX_POLLS = 15; // 15 × 2 s = 30 s max
+      let pollTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+        pollCount += 1;
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          return;
+        }
+        if (fns.canMutateStyle()) {
+          doLateRecovery();
+          return;
+        }
+        // Force-mutable fallback: if the style object has sources, the
+        // rendering pipeline is alive — only sprites are blocking
+        // isStyleLoaded(). We can safely attach terrain anyway.
+        try {
+          const style = map.getStyle();
+          if (style && Object.keys(style.sources ?? {}).length > 0) {
+            console.warn(
+              '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
+            );
+            st.spriteStormBypass = true;
+            doLateRecovery();
+            return;
+          }
+        } catch { /* style not ready yet */ }
+        if (pollCount >= MAX_POLLS) {
+          console.warn('[map3d] late style recovery polling exhausted after 30 s');
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        }
+      }, 2000);
+
       return false;
     }
 

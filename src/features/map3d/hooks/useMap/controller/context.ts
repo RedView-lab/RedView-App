@@ -80,6 +80,7 @@ export interface ControllerState {
   heartbeatFailures: number;
   setTilesVerifyTimer: ReturnType<typeof setTimeout> | null;
   hasReportedReadyOnce: boolean;
+  spriteStormBypass: boolean;
 
   requestedTiles: Set<string>;
   loadedTiles: Set<string>;
@@ -173,6 +174,7 @@ export function createInitialState(): ControllerState {
     heartbeatFailures: 0,
     setTilesVerifyTimer: null,
     hasReportedReadyOnce: false,
+    spriteStormBypass: false,
 
     requestedTiles: new Set<string>(),
     loadedTiles: new Set<string>(),
@@ -189,6 +191,14 @@ export function attachHelpers(ctx: Ctx): void {
   fns.canMutateStyle = () => {
     if (isCancelled()) return false;
     try {
+      // When Mapbox 3.x is stuck in a sprite/image rejection storm,
+      // isStyleLoaded() stays false forever even though sources, layers
+      // and the rendering pipeline are fully operational. The
+      // spriteStormBypass flag (set by the polling fallback in
+      // styleBootstrap.ts) relaxes the check so terrain can attach.
+      if (st.spriteStormBypass) {
+        return Boolean(map.getStyle());
+      }
       return map.isStyleLoaded() && Boolean(map.getStyle());
     } catch {
       return false;
