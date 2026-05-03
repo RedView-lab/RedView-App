@@ -117,8 +117,31 @@ export function useMap(
     };
     map.on('moveend', onMoveEnd);
 
+    let lastSvgWarnAt = 0;
+    let suppressedSvgErrors = 0;
     map.on('error', (event) => {
-      console.error('[mapbox]', event.error?.message || event);
+      const message = event.error?.message || String(event);
+      // Mapbox 3.x explicitly rejects SVG assets referenced by the active
+      // style/sprite. Some basemap variants keep retrying the failing image
+      // every frame, which floods the console (and can stall the style
+      // bootstrap). Rate-limit the log so a single failing asset doesn't
+      // drown real diagnostics.
+      if (message.includes('SVGs are not supported')) {
+        const now = Date.now();
+        if (now - lastSvgWarnAt < 5000) {
+          suppressedSvgErrors += 1;
+          return;
+        }
+        const skipped = suppressedSvgErrors;
+        suppressedSvgErrors = 0;
+        lastSvgWarnAt = now;
+        console.warn(
+          '[mapbox] image rejected (SVG not supported by Mapbox 3.x); further occurrences suppressed for 5s',
+          skipped > 0 ? `(${skipped} suppressed)` : '',
+        );
+        return;
+      }
+      console.error('[mapbox]', message);
     });
 
     return () => {

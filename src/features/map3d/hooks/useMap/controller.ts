@@ -214,6 +214,28 @@ export function createMapLifecycleController({
   const finishDemActivity = (detail = 'Carte prête') => {
     clearDemTracking();
     if (!isCancelled()) {
+      // Self-heal: if we're about to report "ready" but terrain isn't
+      // actually wired to the unified DEM, the bootstrap finished in a
+      // flat 2D state. Auto-trigger a reload instead of falsely
+      // reporting 100% — that's what made the manual reload button feel
+      // useless ("ça met 100% mais tout reste plat").
+      if (!isUnifiedTerrainActive() && map.getSource(unifiedDEMSource.id)) {
+        // Source exists but terrain isn't bound — re-attach in place
+        // before claiming success.
+        applyUnifiedTerrain();
+      }
+      if (
+        !isUnifiedTerrainActive()
+        && navigator.serviceWorker?.controller
+        && canMutateStyle()
+        && !reloadInProgress
+      ) {
+        console.warn('[map3d] bootstrap finished flat; triggering self-heal reload');
+        // Bypass cooldown for the self-heal path.
+        demReloadCoolingUntil = 0;
+        reloadMapElevation();
+        return;
+      }
       demTrackingEnabled = true;
       reportStatus('ready', 100, detail);
     }
@@ -300,7 +322,7 @@ export function createMapLifecycleController({
     }, DEM_ACTIVITY_SETTLE_MS);
   };
 
-  const refreshDemSource = (): boolean => {
+  const refreshDemSource = (options: { forceRebuild?: boolean } = {}): boolean => {
     if (!canMutateStyle()) return false;
     if (!navigator.serviceWorker?.controller) {
       console.warn('[map3d] DEM source refresh skipped: no active service worker controller');
@@ -314,7 +336,7 @@ export function createMapLifecycleController({
       setTiles?: (tiles: string[]) => unknown;
     } | undefined;
 
-    if (existingSource) {
+    if (existingSource && !options.forceRebuild) {
       if (typeof existingSource.setTiles !== 'function') {
         console.warn('[map3d] DEM source refresh skipped: source cannot update tiles');
         return false;
@@ -323,6 +345,20 @@ export function createMapLifecycleController({
       refreshTrackedSourceIds();
       applyUnifiedTerrain();
       return true;
+    }
+
+    if (existingSource && options.forceRebuild) {
+      // Full rebuild: detach managed terrain first so mapbox doesn't crash
+      // when the raster-dem source disappears underneath the active terrain
+      // graph, then drop the source so the next addSource refills the tile
+      // pyramid from scratch (setTiles alone leaves cached empty tiles in
+      // place, which is what keeps the map flat after a soft reload).
+      detachManagedTerrain();
+      try {
+        map.removeSource(unifiedDEMSource.id);
+      } catch (error) {
+        console.warn('[map3d] DEM source remove failed (forceRebuild)', error);
+      }
     }
 
     try {
@@ -435,19 +471,23 @@ export function createMapLifecycleController({
     }
   };
 
-  const reloadMapElevation = () => {
-    const now = Date.now();
-    if (now < demReloadCoolingUntil) return;
-    demReloadCoolingUntil = now + DEM_RELOAD_COOLDOWN_MS;
+  let reloadVerifyTimer: ReturnType<typeof setTimeout> | null = null;
+  let reloadReadinessTimer: ReturnType<typeof setTimeout> | null = null;
+  let reloadInProgress = false;
+  let reloadStyleEscalations = 0;
 
-    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_DEM_CACHE' });
-    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+  const performReloadOnce = (): boolean => {
+    if (!canMutateStyle()) return false;
+    if (!navigator.serviceWorker?.controller) return false;
 
-    demCacheBust = now;
-    if (!refreshDemSource()) {
-      finishDemActivity('Relief inchangé');
-      return;
-    }
+    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DEM_CACHE' });
+    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+
+    demCacheBust = Date.now();
+    // Force a real source rebuild — `setTiles` alone keeps mapbox's
+    // existing (possibly empty) tile pyramid, which is the typical cause
+    // of "reload says 100% but the map stays flat".
+    if (!refreshDemSource({ forceRebuild: true })) return false;
 
     demPassiveRefreshPending = false;
     demTrackingEnabled = false;
@@ -458,6 +498,104 @@ export function createMapLifecycleController({
       demTrackingEnabled = true;
       scheduleDemSettle();
     });
+    scheduleTerrainVerifyAfterReload();
+    return true;
+  };
+
+  const scheduleTerrainVerifyAfterReload = () => {
+    if (reloadVerifyTimer) clearTimeout(reloadVerifyTimer);
+    reloadVerifyTimer = setTimeout(() => {
+      reloadVerifyTimer = null;
+      if (isCancelled()) return;
+      // If terrain is still not the unified DEM, escalate: do a full
+      // setStyle re-apply (limited to 2 attempts) so the style.load
+      // recovery handler rebuilds DEM + terrain from scratch.
+      if (!isUnifiedTerrainActive() || !map.getSource(unifiedDEMSource.id)) {
+        if (reloadStyleEscalations >= 2) {
+          console.warn('[map3d] reload escalation exhausted; map may stay flat');
+          reportStatus('error', 0, 'Relief 3D indisponible');
+          reloadInProgress = false;
+          return;
+        }
+        reloadStyleEscalations += 1;
+        console.warn(
+          '[map3d] reload: terrain still flat, forcing style re-apply',
+          reloadStyleEscalations,
+        );
+        reportStatus('loading', 12, 'Reconstruction fond de carte');
+        try {
+          // Detach managed terrain first to avoid the updateTerrain /
+          // removeSource crash mapbox throws when terrain references a
+          // source about to be rebuilt by setStyle.
+          detachManagedTerrain();
+          map.setStyle(getActiveStyleUrl(), {
+            diff: false,
+            localFontFamily: null,
+            localIdeographFontFamily: 'sans-serif',
+          });
+        } catch (error) {
+          console.warn('[map3d] forced setStyle failed', error);
+          reportStatus('error', 0, 'Relief 3D indisponible');
+          reloadInProgress = false;
+          return;
+        }
+        // After style.load fires, recoverStyleArtifacts re-runs and we
+        // re-attempt the elevation refresh.
+        const onLateStyleLoad = () => {
+          map.off('style.load', onLateStyleLoad);
+          if (isCancelled()) return;
+          // Give the recovery handler a tick to rewire the DEM source,
+          // then retry the actual reload.
+          setTimeout(() => {
+            if (isCancelled()) return;
+            performReloadOnce();
+          }, 250);
+        };
+        map.on('style.load', onLateStyleLoad);
+        return;
+      }
+      reloadInProgress = false;
+      reloadStyleEscalations = 0;
+    }, 2500);
+  };
+
+  const reloadMapElevation = () => {
+    const now = Date.now();
+    if (now < demReloadCoolingUntil) return;
+    demReloadCoolingUntil = now + DEM_RELOAD_COOLDOWN_MS;
+    if (reloadInProgress) return;
+
+    if (performReloadOnce()) {
+      reloadInProgress = true;
+      return;
+    }
+
+    // Conditions weren't ready (style not loaded yet, SW controller
+    // missing). Don't fake a 100% "ready" status — that's what made the
+    // button look broken. Instead poll for readiness for up to ~10s and
+    // retry, then surface a real error if it still can't run.
+    reloadInProgress = true;
+    reportStatus('loading', 8, 'En attente du fond de carte');
+    if (reloadReadinessTimer) clearTimeout(reloadReadinessTimer);
+    const startedAt = Date.now();
+    const tryAgain = () => {
+      reloadReadinessTimer = null;
+      if (isCancelled()) {
+        reloadInProgress = false;
+        return;
+      }
+      if (performReloadOnce()) return;
+      if (Date.now() - startedAt > 10000) {
+        console.warn('[map3d] reload aborted: style/SW never became ready');
+        reportStatus('error', 0, 'Rechargement impossible');
+        reloadInProgress = false;
+        // Reset cooldown so the user can try again immediately.
+        demReloadCoolingUntil = 0;
+        return;
+      }
+      reloadReadinessTimer = setTimeout(tryAgain, 400);
+    };
+    reloadReadinessTimer = setTimeout(tryAgain, 200);
   };
 
   const onTrackedSourceDataLoading = (event: MapSourceDataEvent) => {
@@ -571,6 +709,16 @@ export function createMapLifecycleController({
       clearTimeout(terrainRecoveryTimer);
       terrainRecoveryTimer = null;
     }
+    if (reloadVerifyTimer) {
+      clearTimeout(reloadVerifyTimer);
+      reloadVerifyTimer = null;
+    }
+    if (reloadReadinessTimer) {
+      clearTimeout(reloadReadinessTimer);
+      reloadReadinessTimer = null;
+    }
+    reloadInProgress = false;
+    reloadStyleEscalations = 0;
     if (finishOnIdle) {
       map.off('idle', finishOnIdle);
       finishOnIdle = null;
@@ -617,7 +765,7 @@ export function createMapLifecycleController({
         }
       }
     };
-    const styleLoaded = new Promise<void>((resolve, reject) => {
+    const styleLoaded = new Promise<void>((resolve, _reject) => {
       if (canMutateStyle()) {
         reportStatus('loading', 34, 'Style');
         resolve();
@@ -625,6 +773,7 @@ export function createMapLifecycleController({
       }
       let settled = false;
       let watchdog: ReturnType<typeof setTimeout> | null = null;
+      let watchdogFired = false;
       const cleanup = () => {
         map.off('style.load', onStyleLoad);
         map.off('styledata', onStyleData);
@@ -635,10 +784,20 @@ export function createMapLifecycleController({
       };
       const finish = () => {
         if (settled) return;
+        if (isCancelled() || runId !== styleBootstrapRunId) {
+          settled = true;
+          cleanup();
+          resolve();
+          return;
+        }
         if (!canMutateStyle()) return;
         settled = true;
         cleanup();
-        reportStatus('loading', 34, 'Style');
+        reportStatus(
+          'loading',
+          34,
+          watchdogFired ? 'Style (récupération)' : 'Style',
+        );
         resolve();
       };
       const scheduleFinish = () => {
@@ -651,12 +810,24 @@ export function createMapLifecycleController({
       map.on('style.load', onStyleLoad);
       map.on('styledata', onStyleData);
       watchdog = setTimeout(() => {
+        watchdog = null;
         if (canMutateStyle()) {
           finish();
           return;
         }
-        cleanup();
-        reject(new Error('Le fond de carte ne s\'est pas initialisé à temps'));
+        // Soft-fail: keep listeners attached so the bootstrap resumes
+        // whenever Mapbox eventually finishes loading the style. Hard-
+        // rejecting here used to leave the map permanently flat (no
+        // terrain attached) when sprite/image requests stall — typical
+        // when Mapbox 3.x rejects an SVG asset referenced by the basemap
+        // and keeps retrying it.
+        watchdogFired = true;
+        console.warn(
+          '[map3d] style.load not seen within',
+          STYLE_LOAD_WATCHDOG_MS,
+          'ms; awaiting late completion (terrain attach deferred)',
+        );
+        reportStatus('loading', 30, 'Fond de carte (lent)');
       }, STYLE_LOAD_WATCHDOG_MS);
     });
 
