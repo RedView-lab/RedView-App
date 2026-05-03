@@ -22,9 +22,16 @@ export type SlopeColorMode = 'gradient' | 'step';
 
 // ── Persisted user state ──────────────────────────────────────────────
 
-/** Slope sampling resolution. '0.40m (LIDAR)' = native LIDAR (no downsampling),
- *  others apply a box-average over the elevation grid before slope computation. */
-export type SlopeResolutionKey = '0.40m (LIDAR)' | '1m' | '5m' | '10m';
+/**
+ * Explicit slope calculation source.
+ *
+ * SURFACE uses the visible LiDAR surface model (MNS / DSM).
+ * TERRAIN uses the bare-earth IGN terrain model (MNT / DTM) for slope
+ * calculation while keeping the visual LiDAR surface rendering elsewhere.
+ */
+export type SlopeResolutionKey = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)';
+
+export type SlopeDemProfile = 'default' | 'terrain';
 
 export interface SlopeState {
   enabled: boolean;

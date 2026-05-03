@@ -4,7 +4,13 @@ import { DEFAULT_SLOPE_STATE } from './slope-config';
 const STORAGE_KEY = 'redview_slope_prefs';
 const BREAKPOINTS_KEY = 'redview_slope_breakpoints';
 
-const VALID_RESOLUTIONS: SlopeResolutionKey[] = ['0.40m (LIDAR)', '1m', '5m', '10m'];
+const VALID_RESOLUTIONS: SlopeResolutionKey[] = ['0.40m (LIDAR SURFACE)', '1m (LIDAR TERRAIN)'];
+
+function migrateLegacyResolution(value: unknown): SlopeResolutionKey | null {
+  if (value === '0.40m (LIDAR)') return '0.40m (LIDAR SURFACE)';
+  if (value === '1m' || value === '5m' || value === '10m') return '1m (LIDAR TERRAIN)';
+  return null;
+}
 
 export function loadSlopeState(): SlopeState {
   try {
@@ -12,6 +18,7 @@ export function loadSlopeState(): SlopeState {
     if (!raw) return { ...DEFAULT_SLOPE_STATE };
 
     const parsed = JSON.parse(raw) as Partial<SlopeState>;
+    const migratedResolution = migrateLegacyResolution(parsed.resolution);
     return {
       enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : DEFAULT_SLOPE_STATE.enabled,
       opacity: typeof parsed.opacity === 'number' ? parsed.opacity : DEFAULT_SLOPE_STATE.opacity,
@@ -19,9 +26,10 @@ export function loadSlopeState(): SlopeState {
         ? parsed.colorMode
         : DEFAULT_SLOPE_STATE.colorMode,
       resolution:
-        parsed.resolution && VALID_RESOLUTIONS.includes(parsed.resolution as SlopeResolutionKey)
+        migratedResolution
+          ?? (parsed.resolution && VALID_RESOLUTIONS.includes(parsed.resolution as SlopeResolutionKey)
           ? (parsed.resolution as SlopeResolutionKey)
-          : DEFAULT_SLOPE_STATE.resolution,
+          : DEFAULT_SLOPE_STATE.resolution),
     };
   } catch {
     return { ...DEFAULT_SLOPE_STATE };

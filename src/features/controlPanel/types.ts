@@ -61,7 +61,7 @@ export interface RouteItem {
   visible: boolean;
 }
 
-export type SlopeResolution = '0.40m (LIDAR)' | '1m' | '5m' | '10m' | string;
+export type SlopeResolution = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
 export type SlopeColorization = 'gradient' | 'stepped' | string;
 export type SlopeScale = 'percent' | 'degree' | string;
 export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;

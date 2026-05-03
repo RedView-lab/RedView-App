@@ -4,6 +4,8 @@ import type { SlopeColorMode, SlopeCategory } from '../types';
 import {
   SLOPE_SOURCE_ID,
   SLOPE_LAYER_ID,
+  type SlopeTileSourceOptions,
+  buildSlopeSourceKey,
   buildSlopeTileSource,
   buildSlopeLayer,
   buildSlopeColorExpression,
@@ -47,11 +49,11 @@ function addSlopeLayer(
   colorMode: SlopeColorMode,
   categories: SlopeCategory[],
   hiddenIds: Set<string>,
-  resolutionFactor: number,
+  sourceOptions: SlopeTileSourceOptions,
 ) {
   try {
     if (!map.getSource(SLOPE_SOURCE_ID)) {
-      map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(resolutionFactor));
+      map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(sourceOptions));
     }
     if (!map.getLayer(SLOPE_LAYER_ID)) {
       const layer = buildSlopeLayer(opacity, colorMode, categories, hiddenIds);
@@ -125,7 +127,7 @@ export function useSlope(
   colorMode: SlopeColorMode,
   hiddenRanges?: ReadonlyArray<readonly [number, number]>,
   categories?: SlopeCategory[],
-  resolutionFactor: number = 1,
+  sourceOptions: SlopeTileSourceOptions = { demProfile: 'default', resolutionFactor: 1 },
 ) {
   // Memoise the hidden-ids set so dependent effects compare a stable value.
   const hiddenIds = useMemo(
@@ -145,6 +147,7 @@ export function useSlope(
     () => Array.from(hiddenIds).sort().join(','),
     [hiddenIds],
   );
+  const sourceKey = useMemo(() => buildSlopeSourceKey(sourceOptions), [sourceOptions]);
 
   // Refs for values needed inside style.load / mount callbacks.
   const opacityRef = useRef(opacity);
@@ -152,22 +155,22 @@ export function useSlope(
   const enabledRef = useRef(enabled);
   const categoriesRef = useRef(categories);
   const hiddenIdsRef = useRef(hiddenIds);
-  const resolutionFactorRef = useRef(resolutionFactor);
+  const sourceOptionsRef = useRef(sourceOptions);
   opacityRef.current = opacity;
   colorModeRef.current = colorMode;
   enabledRef.current = enabled;
   categoriesRef.current = categories;
   hiddenIdsRef.current = hiddenIds;
-  resolutionFactorRef.current = resolutionFactor;
+  sourceOptionsRef.current = sourceOptions;
 
   // Tracks whether the source+layer are currently mounted in the map.
   // Reset to false whenever the style is reloaded (Mapbox wipes custom
   // sources/layers on style swap). NOT in sync with `enabled` — we keep
   // the layer mounted across enable/disable toggles and use visibility.
   const mountedRef = useRef(false);
-  // Last resolution factor we mounted with — used to detect real
-  // data-affecting changes (the only thing that justifies a rebuild).
-  const mountedResolutionRef = useRef<number | null>(null);
+  // Last source key we mounted with — used to detect real data-affecting
+  // changes (DEM profile / sampling factor).
+  const mountedSourceKeyRef = useRef<string | null>(null);
 
   // ── 1. Mount layer on first enable (idempotent) ──────────────────────
   // We add the layer the first time the user enables slope. After that,
@@ -182,16 +185,16 @@ export function useSlope(
       colorModeRef.current,
       categoriesRef.current ?? [],
       hiddenIdsRef.current,
-      resolutionFactorRef.current,
+      sourceOptionsRef.current,
     );
     mountedRef.current = true;
-    mountedResolutionRef.current = resolutionFactorRef.current;
+    mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
   }, [map, isMapLoaded, enabled]);
 
-  // ── 1b. Rebuild source on resolution change (real data change) ───────
+  // ── 1b. Rebuild source on DEM-profile / sampling change ───────────────
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
-    if (mountedResolutionRef.current === resolutionFactor) return;
+    if (mountedSourceKeyRef.current === sourceKey) return;
     removeSlopeLayer(map);
     mountedRef.current = false;
     addSlopeLayer(
@@ -200,13 +203,13 @@ export function useSlope(
       colorModeRef.current,
       categoriesRef.current ?? [],
       hiddenIdsRef.current,
-      resolutionFactor,
+      sourceOptions,
     );
     mountedRef.current = true;
-    mountedResolutionRef.current = resolutionFactor;
+    mountedSourceKeyRef.current = sourceKey;
     // Re-apply visibility in case the layer is currently disabled.
     setSlopeVisibility(map, enabledRef.current);
-  }, [map, isMapLoaded, resolutionFactor]);
+  }, [map, isMapLoaded, sourceKey, sourceOptions]);
 
   // ── 2. Visibility flip → instant on rapid toggles ────────────────────
   useEffect(() => {
@@ -258,7 +261,7 @@ export function useSlope(
     const onStyleLoad = () => {
       // Style swap wipes all custom sources/layers — reset our mount flag.
       mountedRef.current = false;
-      mountedResolutionRef.current = null;
+      mountedSourceKeyRef.current = null;
       // Defer to the next tick so style.load completes before we touch it.
       setTimeout(() => {
         if (!enabledRef.current) return;
@@ -268,10 +271,10 @@ export function useSlope(
           colorModeRef.current,
           categoriesRef.current ?? [],
           hiddenIdsRef.current,
-          resolutionFactorRef.current,
+          sourceOptionsRef.current,
         );
         mountedRef.current = true;
-        mountedResolutionRef.current = resolutionFactorRef.current;
+        mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
       }, 0);
     };
 

@@ -3,7 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
 import { generateDynamicCategories, clampBreakpoints } from '@/features/slope/lib/slope-config';
-import { resolutionToFactor } from '@/features/slope/lib/slope-source';
+import { resolutionToSourceOptions } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeCategory, SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types';
 
@@ -206,7 +206,7 @@ export function useControlPanelTerrainState({
       [coloredDynamicCategories, slopeBandVisibility],
     ),
     coloredDynamicCategories,
-    resolutionToFactor(slopeState.resolution),
+    resolutionToSourceOptions(slopeState.resolution),
   );
 
   useEffect(() => {
@@ -431,7 +431,7 @@ export function useControlPanelTerrainState({
       ),
       onSlopeResolutionChange: useCallback(
         (value: SlopeResolution) => {
-          const valid: SlopeResolutionKey[] = ['0.40m (LIDAR)', '1m', '5m', '10m'];
+          const valid: SlopeResolutionKey[] = ['0.40m (LIDAR SURFACE)', '1m (LIDAR TERRAIN)'];
           if (!valid.includes(value as SlopeResolutionKey)) return;
           persistSlope({ ...slopeState, resolution: value as SlopeResolutionKey });
         },

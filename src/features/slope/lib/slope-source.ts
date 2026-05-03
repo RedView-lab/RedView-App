@@ -1,4 +1,4 @@
-import type { SlopeColorMode, SlopeCategory, SlopeResolutionKey } from '../types';
+import type { SlopeColorMode, SlopeCategory, SlopeDemProfile, SlopeResolutionKey } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
@@ -6,35 +6,59 @@ import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 export const SLOPE_SOURCE_ID = 'slope-tiles';
 export const SLOPE_LAYER_ID = 'slope-overlay';
 
-// ── Resolution → downsample factor ────────────────────────────────────
-// '0.40m (LIDAR)' is the native LIDAR resolution (no downsampling). The
-// other options instruct the SW to box-average the elevation grid before
-// computing slope, producing a coarser/smoother look.
-const RESOLUTION_FACTOR: Record<SlopeResolutionKey, number> = {
-  '0.40m (LIDAR)': 1,
-  '1m': 2,
-  '5m': 8,
-  '10m': 16,
+export interface SlopeTileSourceOptions {
+  demProfile: SlopeDemProfile;
+  resolutionFactor: number;
+}
+
+const DEFAULT_SOURCE_OPTIONS: SlopeTileSourceOptions = {
+  demProfile: 'default',
+  resolutionFactor: 1,
 };
 
-export function resolutionToFactor(res: SlopeResolutionKey | undefined): number {
-  if (!res) return 1;
-  return RESOLUTION_FACTOR[res] ?? 1;
+const RESOLUTION_OPTIONS: Record<SlopeResolutionKey, SlopeTileSourceOptions> = {
+  '0.40m (LIDAR SURFACE)': {
+    demProfile: 'default',
+    resolutionFactor: 1,
+  },
+  '1m (LIDAR TERRAIN)': {
+    demProfile: 'terrain',
+    resolutionFactor: 1,
+  },
+};
+
+export function resolutionToSourceOptions(
+  res: SlopeResolutionKey | undefined,
+): SlopeTileSourceOptions {
+  if (!res) return DEFAULT_SOURCE_OPTIONS;
+  return RESOLUTION_OPTIONS[res] ?? DEFAULT_SOURCE_OPTIONS;
+}
+
+export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined): string {
+  const resolved = options ?? DEFAULT_SOURCE_OPTIONS;
+  return `${resolved.demProfile}:${resolved.resolutionFactor}`;
 }
 
 // ── Raster source definition ──────────────────────────────────────────
 //
-// Tile URL only varies on `resFactor` (the only parameter that actually
-// changes the slope numbers). Color mode, category breakpoints and
+// Tile URL only varies on DEM profile + `resFactor` (the parameters that
+// actually change the slope numbers). Color mode, category breakpoints and
 // band-visibility are applied GPU-side via raster-color paint properties,
 // so changing them never invalidates the SW tile cache and never refetches
 // any tile — `setPaintProperty` is instant and synchronous on the GPU.
 
-export function buildSlopeTileSource(resolutionFactor: number = 1) {
-  const resQuery = resolutionFactor > 1 ? `?res=${resolutionFactor}` : '';
+export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_SOURCE_OPTIONS) {
+  const params = new URLSearchParams();
+  if (options.resolutionFactor > 1) {
+    params.set('res', String(options.resolutionFactor));
+  }
+  if (options.demProfile === 'terrain') {
+    params.set('rv-dem-profile', 'terrain');
+  }
+  const query = params.toString();
   return {
     type: 'raster' as const,
-    tiles: [`/slope-tiles/{z}/{x}/{y}${resQuery}`],
+    tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 6,
     maxzoom: 17,

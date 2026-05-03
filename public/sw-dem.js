@@ -42,7 +42,7 @@ const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
 
-// In-flight slope tile dedup: key = `${z}/${x}/${y}?${resFactor}` →
+// In-flight slope tile dedup: key = `${profile}:${z}/${x}/${y}?${resFactor}` →
 // Promise<Response>. Lets concurrent requests for the same tile share
 // the single ongoing computation instead of duplicating the Horn pipeline.
 const SLOPE_INFLIGHT = new Map();
@@ -101,7 +101,7 @@ const OLD_CACHES = [
   'dem-negative-v23',
   'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
   'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
-  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7',
+  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7', 'slope-tiles-v8',
   'shadow-tiles-v1',
 ];
 
@@ -182,11 +182,13 @@ self.addEventListener('fetch', (event) => {
   const slopeMatch = url.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (slopeMatch) {
     const slopeRes = url.searchParams.get('res') || '';
+    const slopeDemProfile = resolveDemProfile(url);
     event.respondWith(handleSlopeRequest(
       parseInt(slopeMatch[1], 10),
       parseInt(slopeMatch[2], 10),
       parseInt(slopeMatch[3], 10),
       slopeRes,
+      slopeDemProfile,
     ));
     return;
   }
@@ -989,14 +991,16 @@ function transparentTileResponse() {
   });
 }
 
-async function handleSlopeRequest(z, x, y, resParam) {
+async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
   const resFactor = (() => {
     const n = parseInt(resParam, 10);
     return Number.isFinite(n) && n > 1 ? Math.min(n, 64) : 1;
   })();
-  const resSuffix = resFactor > 1 ? `?res=${resFactor}` : '';
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}${resSuffix}`);
+  const params = new URLSearchParams();
+  if (resFactor > 1) params.set('res', String(resFactor));
+  if (demProfile === 'terrain') params.set('rv-dem-profile', 'terrain');
+  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}${params.size ? `?${params.toString()}` : ''}`);
   const cached = await slopeCache.match(cacheKey);
   if (cached) return cached;
 
@@ -1006,7 +1010,7 @@ async function handleSlopeRequest(z, x, y, resParam) {
   // Horn + PNG-encode pipeline. We share the first promise across all
   // callers and clone the response per-consumer (Response bodies are
   // single-use streams).
-  const inflightKey = `${z}/${x}/${y}?${resFactor}`;
+  const inflightKey = `${demProfile}:${z}/${x}/${y}?${resFactor}`;
   const existing = SLOPE_INFLIGHT.get(inflightKey);
   if (existing) {
     try { return (await existing).clone(); }
@@ -1015,10 +1019,10 @@ async function handleSlopeRequest(z, x, y, resParam) {
 
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
-    const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
+    const demKey = buildDemCacheKey(z, x, y, demProfile);
     let demResponse = await demCache.match(demKey);
     if (!demResponse || demResponse.status !== 200) {
-      demResponse = await handleDemRequest(demKey, z, x, y);
+      demResponse = await handleDemRequest(demKey, z, x, y, undefined, demProfile);
     }
     if (!demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
@@ -1033,21 +1037,22 @@ async function handleSlopeRequest(z, x, y, resParam) {
       [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
     ].map(async ([nx, ny]) => {
       if (ny < 0 || nx < 0) return;
-      const nKey = new Request(`/dem-tiles/${z}/${nx}/${ny}`);
+      const nKey = buildDemCacheKey(z, nx, ny, demProfile);
       const existingDem = await demCache.match(nKey);
       if (existingDem && existingDem.status === 200) return;
-      try { await handleDemRequest(nKey, z, nx, ny); } catch { /* ignore */ }
+      try { await handleDemRequest(nKey, z, nx, ny, undefined, demProfile); } catch { /* ignore */ }
     }));
 
     try {
       const demBlob = await demResponse.clone().blob();
-      const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor);
+      const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);
       const response = new Response(slopeBlob, {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
           'Cache-Control': 'public, max-age=604800',
           'X-Tile-Type': 'slope',
+          'X-DEM-Profile': demProfile,
         },
       });
       slopeCache.put(cacheKey, response.clone());

@@ -32,10 +32,8 @@ interface Props {
 }
 
 const RESOLUTION_OPTIONS: { value: SlopeResolution; label: string }[] = [
-  { value: '0.40m (LIDAR)', label: '0.40m (LIDAR)' },
-  { value: '1m', label: '1m' },
-  { value: '5m', label: '5m' },
-  { value: '10m', label: '10m' },
+  { value: '0.40m (LIDAR SURFACE)', label: '0.40m LIDAR SURFACE' },
+  { value: '1m (LIDAR TERRAIN)', label: '1m LIDAR TERRAIN' },
 ];
 
 // Figma node 1792:73116 — dropdown options "Remplissage" / "Dégradé"

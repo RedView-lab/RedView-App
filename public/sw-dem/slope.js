@@ -32,7 +32,13 @@ function computeCellSize(z, x, y, tileSize) {
 // outside coverage) we replicate the own-tile edge — identical to the old
 // behaviour, so there is no regression; where neighbours *are* cached (the
 // common case during steady viewing) the seam disappears.
-async function buildPaddedElevations(ownElev, z, x, y, demCache) {
+function buildSlopeDemCachePath(z, x, y, demProfile) {
+  return demProfile === 'terrain'
+    ? `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=terrain`
+    : `/dem-tiles/${z}/${x}/${y}`;
+}
+
+async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
   const pad = new Float32Array(P * P);
@@ -44,7 +50,7 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache) {
 
   async function cachedElev(nx, ny) {
     if (!demCache) return null;
-    const resp = await demCache.match(new Request(`/dem-tiles/${z}/${nx}/${ny}`));
+    const resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
     if (!resp || resp.status !== 200) return null;
     try { return await decodeTerrainRGBBlob(await resp.clone().blob()); }
     catch { return null; }
@@ -192,12 +198,12 @@ function downsampleSlopes(slopes, factor) {
 // ── Full pipeline — DEM blob → slope PNG blob ─────────────────────────
 // `demCache` is optional; when provided we borrow neighbour tile borders
 // to seam-correct the slope at tile edges.
-async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor) {
+async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile) {
   const t0 = performance.now();
   const ownElev = await decodeTerrainRGBBlob(demBlob);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const pad = await buildPaddedElevations(ownElev, z, x, y, demCache);
+  const pad = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
@@ -207,7 +213,7 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor) {
 
   if (DEBUG) {
     console.log(
-      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1}`
+      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1} profile=${demProfile || 'default'}`
     );
   }
   return blob;
