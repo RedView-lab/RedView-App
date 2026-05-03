@@ -1,5 +1,5 @@
 import type { MapSourceDataEvent } from 'mapbox-gl';
-import { unifiedDEMSource } from '../../../lib/sources';
+import { unifiedDEMSource, awsFallbackDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
 import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
@@ -232,6 +232,62 @@ export function attachDemSource(ctx: Ctx): void {
       onSourceData({ sourceId: unifiedDEMSource.id, isSourceLoaded: true } as MapSourceDataEvent);
     } else {
       fallbackTimer = setTimeout(complete, 1200);
+    }
+  };
+
+  // ── AWS Terrarium direct fallback ──────────────────────────────────
+  // Used when the SW never claims. Attaches AWS Open Data Terrarium
+  // tiles directly as a raster-dem source with native `terrarium`
+  // encoding. Mapbox GL v3 handles the decode on the GPU — no SW
+  // pipeline, no re-encoding, no overzoom logic. ~30 m global terrain.
+  fns.attachAwsFallbackTerrain = () => {
+    if (!fns.canMutateStyle()) return;
+    // Don't attach if the unified-dem source is already present
+    // (SW path took over).
+    if (map.getSource(unifiedDEMSource.id)) return;
+    // Don't double-attach.
+    if (map.getSource(awsFallbackDEMSource.id)) return;
+
+    try {
+      map.addSource(awsFallbackDEMSource.id, {
+        type: 'raster-dem',
+        tiles: awsFallbackDEMSource.tiles,
+        tileSize: awsFallbackDEMSource.tileSize,
+        encoding: awsFallbackDEMSource.encoding,
+        minzoom: awsFallbackDEMSource.minzoom,
+        maxzoom: awsFallbackDEMSource.maxzoom,
+      });
+    } catch (error) {
+      console.warn('[map3d] AWS fallback DEM source attach failed', error);
+      return;
+    }
+
+    try {
+      if (!terrainRef.current) {
+        terrainRef.current = new TerrainManager(map, awsFallbackDEMSource.id);
+      }
+      terrainRef.current.init();
+      console.log('[map3d] AWS Terrarium fallback terrain attached');
+    } catch (error) {
+      console.warn('[map3d] AWS fallback terrain apply failed', error);
+    }
+  };
+
+  fns.detachAwsFallbackTerrain = () => {
+    try {
+      terrainRef.current?.destroy();
+    } catch { /* best-effort */ }
+    terrainRef.current = null;
+    try {
+      map.setTerrain(null);
+    } catch { /* best-effort */ }
+    try {
+      if (map.getSource(awsFallbackDEMSource.id)) {
+        map.removeSource(awsFallbackDEMSource.id);
+        console.log('[map3d] AWS fallback DEM source removed');
+      }
+    } catch (error) {
+      console.warn('[map3d] AWS fallback DEM source remove failed', error);
     }
   };
 }

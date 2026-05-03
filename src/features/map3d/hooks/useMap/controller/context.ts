@@ -117,6 +117,8 @@ export interface ControllerFns {
   scheduleTerrainRecovery: () => void;
   scheduleSetTilesVerify: () => void;
   armTerrainBootstrap: (onReady: () => void) => void;
+  attachAwsFallbackTerrain: () => void;
+  detachAwsFallbackTerrain: () => void;
 
   // reload
   performReloadOnce: () => boolean;

@@ -41,3 +41,23 @@ export const ignOrthoSource = {
   bounds: FRANCE_BOUNDS,
   attribution: '&copy; IGN - Géoplateforme',
 };
+
+/**
+ * AWS Open Data Terrarium fallback — used when the Service Worker is
+ * unavailable (registration timeout, controller never claimed). Provides
+ * ~30 m global terrain directly from AWS S3 with native `terrarium`
+ * encoding that Mapbox GL v3 decodes on the GPU — no SW pipeline needed.
+ *
+ * The unified-dem SW path is always preferred because it composites
+ * high-res IGN LiDAR over France/Switzerland. This source is the last
+ * resort to avoid a completely flat map.
+ */
+export const awsFallbackDEMSource = {
+  id: 'aws-fallback-dem',
+  type: 'raster-dem' as const,
+  tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+  tileSize: 256,
+  encoding: 'terrarium' as const,
+  minzoom: 4,
+  maxzoom: 14,  // AWS Terrarium native max is z14
+};

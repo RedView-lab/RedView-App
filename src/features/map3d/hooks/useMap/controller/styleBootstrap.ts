@@ -40,6 +40,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     st.spriteStormBypass = false;
     fns.clearDemTracking();
     fns.clearStyleBootstrapArtifacts();
+    fns.detachAwsFallbackTerrain();
     fns.detachManagedTerrain();
     fns.reportStatus('loading', 18, detail);
   };
@@ -209,50 +210,56 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     applyStyleDecorators();
 
     if (!swOk) {
-      console.warn('[map3d] Running in plain-Mapbox mode (no IGN DEM/ortho overlay)');
+      console.warn('[map3d] SW unavailable — attaching AWS Terrarium fallback DEM (~30 m global)');
       st.demTrackingEnabled = true;
+      fns.reportStatus('loading', 60, 'Relief AWS (fallback)');
+
+      // ── AWS Terrarium direct fallback ──────────────────────────────
+      // Attach the AWS Open Data Terrarium tiles directly as a
+      // raster-dem source with native `terrarium` encoding. Mapbox GL
+      // v3 decodes terrarium on the GPU — no SW pipeline needed.
+      // This gives the user 3D terrain everywhere at ~30 m resolution,
+      // much better than a completely flat map.
+      fns.attachAwsFallbackTerrain();
+
       fns.reportStatus('loading', 80, 'Tuiles satellites');
       st.finishOnIdle = () => {
         if (isCancelled() || runId !== st.styleBootstrapRunId) return;
         if (!fns.allTilesLoaded() || map.isMoving()) return;
         map.off('idle', st.finishOnIdle!);
         st.finishOnIdle = null;
-        fns.finishDemActivity('Carte prête');
+        fns.finishDemActivity('Carte prête (relief 30 m)');
       };
       map.on('idle', st.finishOnIdle);
       st.readyFallbackTimer = setTimeout(() => {
         st.readyFallbackTimer = null;
         if (isCancelled() || runId !== st.styleBootstrapRunId) return;
         if (st.lastReportedState === 'ready') return;
-        fns.finishDemActivity('Carte prête');
+        fns.finishDemActivity('Carte prête (relief 30 m)');
       }, 8000);
 
       // ── Late-SW recovery ──────────────────────────────────────────
       // The SW didn't claim within 2.5 s, but it may still be installing.
       // Wait for it in the background: if it appears within ~20 s,
-      // re-trigger the full DEM/terrain bootstrap so the map doesn't
-      // stay flat forever. This is the key fix for the "tout devient
-      // plat quand je zoom" regression.
+      // remove the AWS fallback and re-trigger the full DEM/terrain
+      // bootstrap with IGN LiDAR HD.
       void swLateReady.then((lateOk) => {
         if (!lateOk) return;
         if (isCancelled()) return;
-        // Only recover if we're still in the same bootstrap run (no
-        // basemap switch happened in the meantime) and the DEM source
-        // hasn't been attached yet by another path.
         if (runId !== st.styleBootstrapRunId) return;
+        // Only upgrade if the unified-dem source hasn't been attached
+        // yet by another path.
         if (map.getSource(unifiedDEMSource.id)) return;
         if (!fns.canMutateStyle()) return;
 
-        console.log('[map3d] Late SW recovery: re-triggering full DEM bootstrap');
-        fns.reportStatus('loading', 50, 'Récupération relief');
-        // Clear the plain-Mapbox idle listener to avoid interference
+        console.log('[map3d] Late SW recovery: upgrading from AWS fallback to full DEM pipeline');
+        fns.reportStatus('loading', 50, 'Récupération relief HD');
+        // Remove the AWS fallback source/terrain before re-bootstrapping
+        fns.detachAwsFallbackTerrain();
         if (st.finishOnIdle) {
           map.off('idle', st.finishOnIdle);
           st.finishOnIdle = null;
         }
-        // Re-run the full bootstrap — this time swReady is already
-        // resolved true (or the controller is now available), so the
-        // DEM/terrain path will execute.
         void fns.bootstrapCurrentStyle();
       });
 

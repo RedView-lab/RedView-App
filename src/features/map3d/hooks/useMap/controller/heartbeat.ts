@@ -1,4 +1,4 @@
-import { unifiedDEMSource } from '../../../lib/sources';
+import { unifiedDEMSource, awsFallbackDEMSource } from '../../../lib/sources';
 import {
   TERRAIN_HEARTBEAT_INTERVAL_MS,
   TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD,
@@ -42,7 +42,28 @@ export function attachHeartbeat(ctx: Ctx): void {
       if (!fns.canMutateStyle()) return;
 
       const sourcePresent = !!map.getSource(unifiedDEMSource.id);
+      const awsFallbackPresent = !!map.getSource(awsFallbackDEMSource.id);
       const terrainBound = fns.isUnifiedTerrainActive();
+
+      // AWS fallback terrain is active — this is the expected state
+      // when the SW never claimed. The terrain is real (~30 m AWS
+      // Terrarium), just lower resolution. Don't report flat state.
+      if (awsFallbackPresent && !sourcePresent) {
+        try {
+          const currentTerrain = map.getTerrain();
+          if (currentTerrain?.source === awsFallbackDEMSource.id) {
+            st.heartbeatFailures = 0;
+            return;
+          }
+        } catch { /* terrain query failed */ }
+        // AWS source exists but terrain isn't bound — try re-attaching
+        try {
+          map.setTerrain({ source: awsFallbackDEMSource.id, exaggeration: 1.5 });
+          st.heartbeatFailures = 0;
+          return;
+        } catch { /* fallback re-attach failed */ }
+      }
+
       if (sourcePresent && terrainBound) {
         st.heartbeatFailures = 0;
         return;
@@ -51,7 +72,7 @@ export function attachHeartbeat(ctx: Ctx): void {
       st.heartbeatFailures += 1;
       console.warn(
         '[map3d] heartbeat: flat state detected',
-        { sourcePresent, terrainBound, failures: st.heartbeatFailures },
+        { sourcePresent, awsFallbackPresent, terrainBound, failures: st.heartbeatFailures },
       );
 
       // Soft fix first: re-attach if the source is still there.
@@ -63,11 +84,10 @@ export function attachHeartbeat(ctx: Ctx): void {
         }
       }
 
-      // NEW: If the DEM source was never added AND the SW controller
+      // If the DEM source was never added AND the SW controller
       // is now available, we're in a late-SW-claim session that got
       // stuck in plain-Mapbox mode. The only fix is to re-run the
-      // full bootstrap — `reloadMapElevation` can't help because
-      // `refreshDemSource` requires the source to exist first.
+      // full bootstrap.
       if (!sourcePresent && navigator.serviceWorker?.controller) {
         console.warn('[map3d] heartbeat: DEM source missing but SW available — re-bootstrapping');
         st.heartbeatFailures = 0;
@@ -77,8 +97,12 @@ export function attachHeartbeat(ctx: Ctx): void {
 
       // Either the source is gone or re-attach didn't take. Escalate
       // to a full reload (cooldown bypassed) once we're sure it's not
-      // a one-shot blip.
-      if (st.heartbeatFailures >= TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD) {
+      // a one-shot blip — but only if the SW is available, since
+      // reloadMapElevation requires the controller.
+      if (
+        st.heartbeatFailures >= TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD
+        && navigator.serviceWorker?.controller
+      ) {
         st.heartbeatFailures = 0;
         st.demReloadCoolingUntil = 0;
         fns.reloadMapElevation();
