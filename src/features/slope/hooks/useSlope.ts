@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
 import type { SlopeColorMode, SlopeCategory } from '../types';
 import {
   SLOPE_SOURCE_ID,
@@ -10,6 +10,10 @@ import {
   buildSlopeLayer,
   buildSlopeColorExpression,
 } from '../lib/slope-source';
+import {
+  createOverlayStatus,
+  type OverlayStatusReporter,
+} from '@/features/map3d';
 
 // ── DevTools helper: clear slope cache ────────────────────────────────
 // Usage: window.__clearSlopeCache() in DevTools, then reload the map.
@@ -128,6 +132,7 @@ export function useSlope(
   hiddenRanges?: ReadonlyArray<readonly [number, number]>,
   categories?: SlopeCategory[],
   sourceOptions: SlopeTileSourceOptions = { demProfile: 'default', resolutionFactor: 1 },
+  onLoadStatusChange?: OverlayStatusReporter,
 ) {
   // Memoise the hidden-ids set so dependent effects compare a stable value.
   const hiddenIds = useMemo(
@@ -294,4 +299,143 @@ export function useSlope(
       mountedRef.current = false;
     };
   }, [map]);
+
+  // ── 7. Tile load progress reporter ───────────────────────────────────
+  // Tracks slope tile fetches at the source level (`sourcedataloading` ↔
+  // `sourcedata`) so the user sees a real "Pentes XX%" pill while the SW
+  // pipeline (DEM decode → Horn → PNG encode) processes tiles. Without
+  // this reporter the slope toggle silently appeared to do nothing for
+  // several seconds on first activation.
+  const onLoadStatusChangeRef = useRef(onLoadStatusChange);
+  onLoadStatusChangeRef.current = onLoadStatusChange;
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const reporter = onLoadStatusChangeRef.current;
+    if (!reporter) return;
+    if (!enabled) {
+      reporter(null);
+      return;
+    }
+
+    const requested = new Set<string>();
+    const loaded = new Set<string>();
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let lastEmittedProgress = -1;
+    let lastEmittedState: 'loading' | 'ready' = 'loading';
+
+    const tileKey = (event: MapSourceDataEvent): string | null => {
+      const tileID = (event as unknown as { tile?: { tileID?: { canonical?: { z: number; x: number; y: number } } } })
+        .tile?.tileID?.canonical;
+      if (!tileID) return null;
+      return `${tileID.z}/${tileID.x}/${tileID.y}`;
+    };
+
+    const isSlopeEvent = (event: MapSourceDataEvent): boolean => (
+      event.sourceId === SLOPE_SOURCE_ID
+    );
+
+    const emit = (state: 'loading' | 'ready', progress: number, detail?: string) => {
+      if (state === lastEmittedState && progress === lastEmittedProgress) return;
+      lastEmittedState = state;
+      lastEmittedProgress = progress;
+      onLoadStatusChangeRef.current?.(createOverlayStatus({
+        id: 'slope',
+        label: 'Pentes',
+        state,
+        progress,
+        detail,
+      }));
+    };
+
+    const publishProgress = () => {
+      const total = requested.size;
+      const done = loaded.size;
+      if (total === 0) {
+        emit('loading', 5, 'En attente de tuiles');
+        return;
+      }
+      if (done >= total) {
+        emit('ready', 100, 'Pentes prêtes');
+        return;
+      }
+      const ratio = done / Math.max(total, 1);
+      const pct = Math.max(1, Math.min(99, Math.round(ratio * 100)));
+      emit('loading', pct, `Tuiles ${done}/${total}`);
+    };
+
+    const armWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog);
+      // The slope SW pipeline can be slow on first cold viewport (many
+      // composites + Horn + encode). The watchdog only force-completes
+      // if the same totals stick for 12s — long enough not to lie about
+      // progress, short enough to recover from a stuck state.
+      watchdog = setTimeout(() => {
+        watchdog = null;
+        if (loaded.size >= requested.size && requested.size > 0) {
+          emit('ready', 100, 'Pentes prêtes');
+        }
+      }, 12000);
+    };
+
+    const scheduleSettle = () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        publishProgress();
+      }, 120);
+    };
+
+    const onLoading = (event: MapSourceDataEvent) => {
+      if (!isSlopeEvent(event)) return;
+      const key = tileKey(event);
+      if (!key) return;
+      requested.add(key);
+      scheduleSettle();
+      armWatchdog();
+    };
+
+    const onLoaded = (event: MapSourceDataEvent) => {
+      if (!isSlopeEvent(event)) return;
+      const key = tileKey(event);
+      if (key) {
+        requested.add(key);
+        loaded.add(key);
+      }
+      if (event.isSourceLoaded) {
+        // Mapbox signals the source is fully loaded — flush as ready.
+        scheduleSettle();
+      } else {
+        scheduleSettle();
+      }
+    };
+
+    const onError = (event: MapSourceDataEvent) => {
+      if (!isSlopeEvent(event)) return;
+      const key = tileKey(event);
+      if (key) {
+        // Drop from requested so we don't get stuck at <100%.
+        requested.delete(key);
+        loaded.delete(key);
+      }
+      scheduleSettle();
+    };
+
+    map.on('sourcedataloading', onLoading);
+    map.on('sourcedata', onLoaded);
+    map.on('dataabort', onError);
+
+    // Seed initial state so the user sees a pill immediately on enable.
+    emit('loading', 5, 'Préparation des pentes');
+    armWatchdog();
+
+    return () => {
+      map.off('sourcedataloading', onLoading);
+      map.off('sourcedata', onLoaded);
+      map.off('dataabort', onError);
+      if (settleTimer) clearTimeout(settleTimer);
+      if (watchdog) clearTimeout(watchdog);
+      onLoadStatusChangeRef.current?.(null);
+    };
+  }, [map, isMapLoaded, enabled]);
 }

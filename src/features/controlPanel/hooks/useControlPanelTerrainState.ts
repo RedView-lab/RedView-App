@@ -13,6 +13,8 @@ import { loadAltitudeBreakpoints, saveAltitudeBreakpoints } from '@/features/alt
 import { useAltitude } from '@/features/altitude/hooks/useAltitude';
 import type { AltitudeColorMode, AltitudeScaleSettingKey } from '@/features/altitude/types';
 
+import type { OverlayStatusReporter } from '@/features/map3d';
+
 import type { ControlPanelPersistedState } from '../lib/persistedState';
 import type {
   AltitudeBand,
@@ -82,6 +84,7 @@ interface UseControlPanelTerrainStateArgs {
   isMapLoaded: boolean;
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
+  onSlopeOverlayStatusChange?: OverlayStatusReporter;
 }
 
 export interface TerrainHandlers {
@@ -113,6 +116,7 @@ export function useControlPanelTerrainState({
   isMapLoaded,
   initialControlPanel,
   updateProjectControlPanel,
+  onSlopeOverlayStatusChange,
 }: UseControlPanelTerrainStateArgs): TerrainStateResult {
   const [slopeState, setSlopeState] = useState(() => {
     const loaded = initialControlPanel.slopes?.state ?? loadSlopeState();
@@ -207,6 +211,7 @@ export function useControlPanelTerrainState({
     ),
     coloredDynamicCategories,
     resolutionToSourceOptions(slopeState.resolution),
+    onSlopeOverlayStatusChange,
   );
 
   useEffect(() => {
