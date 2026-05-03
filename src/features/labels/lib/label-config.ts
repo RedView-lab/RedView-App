@@ -26,13 +26,21 @@ export const LABEL_CATEGORIES: LabelCategoryDef[] = [
     id: 'roads',
     label: 'Routes',
     defaultEnabled: true,
-    mapping: { type: 'config', configKey: ['showRoadLabels', 'showRoadsAndTransit', 'showPedestrianRoads'] },
+    mapping: {
+      type: 'mixed',
+      configKey: ['showRoadLabels', 'showRoadsAndTransit', 'showPedestrianRoads'],
+      pattern: /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield).*(label|number|ref|symbol)|(label|number|ref|symbol).*(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield)/i,
+    },
   },
   {
     id: 'places',
     label: 'Villes & Lieux',
     defaultEnabled: true,
-    mapping: { type: 'config', configKey: 'showPlaceLabels' },
+    mapping: {
+      type: 'mixed',
+      configKey: 'showPlaceLabels',
+      pattern: /(place|settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|region|province|state).*(label|name|symbol)|(label|name|symbol).*(place|settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|region|province|state)/i,
+    },
   },
   {
     id: 'naturalParks',
@@ -44,7 +52,11 @@ export const LABEL_CATEGORIES: LabelCategoryDef[] = [
     id: 'countries',
     label: 'Frontières',
     defaultEnabled: false,
-    mapping: { type: 'config', configKey: 'showAdminBoundaries' },
+    mapping: {
+      type: 'mixed',
+      configKey: 'showAdminBoundaries',
+      pattern: /(country|admin|boundary|border|state|province).*(label|name|line)|(label|name|line).*(country|admin|boundary|border|state|province)/i,
+    },
   },
   {
     id: 'waterBody',
