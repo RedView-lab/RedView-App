@@ -38,7 +38,6 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     st.demPassiveRefreshPending = false;
     st.demTrackingEnabled = false;
     st.spriteStormBypass = false;
-    st.satelliteDemRebuildPending = getActiveStyleUrl() === MAPBOX_STANDARD_SATELLITE_STYLE_URL;
     fns.clearDemTracking();
     fns.clearStyleBootstrapArtifacts();
     fns.detachAwsFallbackTerrain();
@@ -271,22 +270,8 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     fns.detachManagedTerrain();
 
-    let forceDemRebuild = false;
-    if (st.satelliteDemRebuildPending && getActiveStyleUrl() === MAPBOX_STANDARD_SATELLITE_STYLE_URL) {
-      navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_DEM_CACHE' });
-      navigator.serviceWorker.controller?.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
-      st.demCacheBust = Date.now();
-      st.demPassiveRefreshPending = false;
-      fns.clearDemTracking();
-      forceDemRebuild = true;
-    }
-
-    if (!map.getSource(unifiedDEMSource.id) || forceDemRebuild) {
-      if (!fns.refreshDemSource({ forceRebuild: forceDemRebuild })) return false;
-      if (forceDemRebuild) {
-        st.satelliteDemRebuildPending = false;
-        fns.scheduleTerrainVerifyAfterReload();
-      }
+    if (!map.getSource(unifiedDEMSource.id)) {
+      if (!fns.refreshDemSource()) return false;
     }
     fns.reportStatus('loading', 68, 'Relief');
 

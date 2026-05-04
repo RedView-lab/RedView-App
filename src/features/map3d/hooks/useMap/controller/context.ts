@@ -81,7 +81,6 @@ export interface ControllerState {
   setTilesVerifyTimer: ReturnType<typeof setTimeout> | null;
   hasReportedReadyOnce: boolean;
   spriteStormBypass: boolean;
-  satelliteDemRebuildPending: boolean;
 
   requestedTiles: Set<string>;
   loadedTiles: Set<string>;
@@ -178,7 +177,6 @@ export function createInitialState(): ControllerState {
     setTilesVerifyTimer: null,
     hasReportedReadyOnce: false,
     spriteStormBypass: false,
-    satelliteDemRebuildPending: false,
 
     requestedTiles: new Set<string>(),
     loadedTiles: new Set<string>(),
@@ -188,7 +186,7 @@ export function createInitialState(): ControllerState {
 }
 
 export function attachHelpers(ctx: Ctx): void {
-  const { map, isCancelled, getActiveStyleUrl } = ctx;
+  const { map, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
 
@@ -266,9 +264,11 @@ export function attachHelpers(ctx: Ctx): void {
     return `${event.sourceId}:${tileKey}`;
   };
 
-  fns.getActiveDemProfile = () => (
-    getActiveStyleUrl() === MAPBOX_STANDARD_STYLE_URL ? 'terrain' : 'default'
-  );
+  // All basemap styles use the same 'terrain' DEM profile so the SW
+  // cache (keyed by profile) is shared across style switches. This
+  // avoids a full re-fetch when switching from topo to satellite and
+  // ensures both styles get the same IGN LiDAR HD / AWS Terrarium data.
+  fns.getActiveDemProfile = () => 'terrain';
 
   fns.shouldUseIgnOrthoOverlay = () => false;
 }
