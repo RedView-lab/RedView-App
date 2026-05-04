@@ -19,8 +19,13 @@
   }
 
   .rvpb-subscription-section,
+  .rvpb-settings-row,
   .rvpb-account-fields--three-up,
   .rvpb-account-password-row {
+    grid-template-columns: 1fr;
+  }
+
+  .rvpb-settings-feedback {
     grid-template-columns: 1fr;
   }
 }
@@ -65,11 +70,28 @@
   }
 
   .rvpb-subscription-section,
+  .rvpb-settings-row,
   .rvpb-account-fields--two-up,
   .rvpb-account-fields--three-up,
   .rvpb-account-password-row {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .rvpb-settings-display-options {
+    gap: 16px;
+  }
+
+  .rvpb-settings-display-card,
+  .rvpb-settings-display-card__preview,
+  .rvpb-settings-select {
+    width: 100%;
+    max-width: none;
+  }
+
+  .rvpb-settings-feedback__title-card h2 {
+    max-width: none;
+    font-size: 40px;
   }
 
   .rvpb-input-wrap {

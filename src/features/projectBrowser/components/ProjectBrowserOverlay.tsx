@@ -11,7 +11,7 @@ import {
   signOutAccount,
   type AccountProfile,
 } from '../account';
-import { PlaceholderPanel } from './PlaceholderPanel';
+import { SettingsPanel } from '../settings';
 import { ProjectsPanel } from './ProjectsPanel';
 import {
   BillingActionModal,
@@ -563,10 +563,7 @@ export function ProjectBrowserOverlay({
         ) : null}
 
         {activeTab === 'settings' ? (
-          <PlaceholderPanel
-            title="Réglages"
-            description="Les réglages globaux de ce tableau de bord restent à connecter. Le shell Figma est désormais prêt à accueillir cette page sans toucher à la grille projets."
-          />
+          <SettingsPanel />
         ) : null}
 
         {billingModal ? (

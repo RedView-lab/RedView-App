@@ -1,5 +1,6 @@
 .rvpb-subscription-panel,
 .rvpb-account-panel,
+.rvpb-settings-panel,
 .rvpb-panel-placeholder {
   flex: 1 1 auto;
   min-height: 0;
@@ -11,15 +12,272 @@
 
 .rvpb-account-panel::-webkit-scrollbar,
 .rvpb-subscription-panel::-webkit-scrollbar,
+.rvpb-settings-panel::-webkit-scrollbar,
 .rvpb-panel-placeholder::-webkit-scrollbar {
   width: 6px;
 }
 
 .rvpb-account-panel::-webkit-scrollbar-thumb,
 .rvpb-subscription-panel::-webkit-scrollbar-thumb,
+.rvpb-settings-panel::-webkit-scrollbar-thumb,
 .rvpb-panel-placeholder::-webkit-scrollbar-thumb {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
+}
+
+.rvpb-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rvpb-settings-row {
+  display: grid;
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
+  gap: 16px 32px;
+  align-items: start;
+}
+
+.rvpb-settings-row__label {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.rvpb-settings-row__control {
+  min-width: 0;
+}
+
+.rvpb-settings-select {
+  position: relative;
+  display: inline-flex;
+  width: 100%;
+  max-width: 200px;
+}
+
+.rvpb-settings-select select {
+  appearance: none;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 36px 8px 12px;
+  border: 1px solid rgba(213, 215, 218, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  line-height: 24px;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.rvpb-settings-select select:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rvpb-settings-select select:focus-visible {
+  border-color: rgba(255, 255, 255, 0.28);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
+}
+
+.rvpb-settings-select__chevron {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  pointer-events: none;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.rvpb-settings-display-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  min-width: 0;
+}
+
+.rvpb-settings-display-card {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.rvpb-settings-display-card__preview {
+  position: relative;
+  display: block;
+  width: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(213, 215, 218, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  transition:
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
+}
+
+.rvpb-settings-display-card:hover .rvpb-settings-display-card__preview {
+  transform: translateY(-1px);
+}
+
+.rvpb-settings-display-card.is-selected .rvpb-settings-display-card__preview {
+  border-color: #ffffff;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px #9e77ed;
+}
+
+.rvpb-settings-display-card__preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.rvpb-settings-display-card__marker {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #7f56d9;
+  box-shadow: 0 0 0 4px rgba(127, 86, 217, 0.18);
+}
+
+.rvpb-settings-display-card__label {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.rvpb-settings-switch {
+  appearance: none;
+  position: relative;
+  width: 40px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #e9eaeb;
+  border-radius: 999px;
+  background: #f5f5f5;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.rvpb-settings-switch.is-on {
+  border-color: #7f56d9;
+  background: #7f56d9;
+}
+
+.rvpb-settings-switch__thumb {
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid #d5d7da;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.rvpb-settings-switch.is-on .rvpb-settings-switch__thumb {
+  transform: translateX(20px);
+  border-color: #7f56d9;
+}
+
+.rvpb-settings-feedback {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  gap: 12px;
+}
+
+.rvpb-settings-feedback__title-card,
+.rvpb-settings-feedback__body-card {
+  min-height: 204px;
+  padding: 18px 16px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rvpb-settings-feedback__title-card h2 {
+  margin: 0;
+  max-width: 9ch;
+  font-size: clamp(38px, 4.5vw, 56px);
+  font-weight: 500;
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+}
+
+.rvpb-settings-feedback__body-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 20px;
+}
+
+.rvpb-settings-feedback__body-card p {
+  margin: 0;
+  max-width: 40ch;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.rvpb-settings-feedback__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.rvpb-settings-feedback__chip:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.rvpb-settings-feedback__chip:focus-visible,
+.rvpb-settings-switch:focus-visible,
+.rvpb-settings-display-card:focus-visible {
+  outline: 2px solid #9e77ed;
+  outline-offset: 3px;
+}
+
+.rvpb-settings-feedback__chip-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
 .rvpb-panel-placeholder {

@@ -6,215 +6,50 @@ import {
   fetchWeatherGridData,
   weatherDataSelectionKey,
   weatherGridSupportsViewport,
-} from './client';
-import { clampForecastSelection } from '../lib/forecastTime.ts';
-import { renderWeatherCanvas } from './render';
-import { getOverlayRenderSize } from './renderSize';
+} from '../client';
+import { renderWeatherCanvas } from '../render';
+import { getOverlayRenderSize } from '../renderSize';
 import type {
   WeatherGridDataset,
   WeatherOverlayMetric,
   WeatherOverlayMode,
   WeatherOverlayState,
-  WeatherSelection,
-} from './types';
+} from '../types';
 import {
   createOverlayStatus,
   type OverlayReloadRegistrar,
   type OverlayStatusReporter,
 } from '@/features/map3d';
-
-const SOURCE_PREFIX = 'weather-overlay-source';
-const LAYER_PREFIX = 'weather-overlay-layer';
-const SUPPORTED_KEYS: WeatherOverlayMetric[] = ['temperature', 'feelsLike', 'rain', 'cloudCover', 'humidity'];
-const MOVE_DEBOUNCE_MS = 220;
-const MIN_FETCH_INTERVAL_MS = 800;
-const STYLE_SYNC_RETRY_MS = 96;
-const STYLE_SYNC_WATCHDOG_MS = 15_000;
-const STYLE_SYNC_POLL_MS = 2_000;
-const STYLE_SYNC_MAX_POLLS = 15;
-const STATUS_ID = 'weather';
-
-type RefreshReason = 'normal' | 'force' | 'reload';
-
-interface ViewportBounds {
-  north: number;
-  south: number;
-  east: number;
-  west: number;
-  zoom: number;
-  pixelWidth: number;
-  pixelHeight: number;
-}
-
-type ImageCoords = [[number, number], [number, number], [number, number], [number, number]];
-
-interface RenderedLayerEntry {
-  url: string;
-  coords: ImageCoords;
-  signature: string;
-}
-
-function getViewportBounds(map: MapboxMap): ViewportBounds {
-  const bounds = map.getBounds();
-  const canvas = map.getCanvas();
-  const pixelWidth = Math.max(320, canvas.clientWidth || canvas.width || 320);
-  const pixelHeight = Math.max(240, canvas.clientHeight || canvas.height || 240);
-  if (!bounds) {
-    return {
-      north: 0,
-      south: 0,
-      east: 0,
-      west: 0,
-      zoom: map.getZoom(),
-      pixelWidth,
-      pixelHeight,
-    };
-  }
-  return {
-    north: bounds.getNorth(),
-    south: bounds.getSouth(),
-    east: bounds.getEast(),
-    west: bounds.getWest(),
-    zoom: map.getZoom(),
-    pixelWidth,
-    pixelHeight,
-  };
-}
-
-function containsBounds(container: [number, number, number, number], viewport: ViewportBounds): boolean {
-  return viewport.west >= container[0]
-    && viewport.south >= container[1]
-    && viewport.east <= container[2]
-    && viewport.north <= container[3];
-}
-
-function selectionFromState(state: WeatherOverlayState): WeatherSelection {
-  if (state.tab === 'trends') {
-    const monthIso = state.date.slice(0, 7);
-    return { mode: 'trends', key: `trends:${monthIso}`, monthIso };
-  }
-
-  const forecast = clampForecastSelection({
-    date: state.date,
-    time: state.time,
-    forecastDay: state.forecastDay,
-  });
-  return {
-    mode: 'forecast',
-    key: `forecast:${forecast.date}T${forecast.time}`,
-    forecastIso: `${forecast.date}T${forecast.time}`,
-  };
-}
-
-function sourceId(key: WeatherOverlayMetric): string {
-  return `${SOURCE_PREFIX}-${key}`;
-}
-
-function layerId(key: WeatherOverlayMetric): string {
-  return `${LAYER_PREFIX}-${key}`;
-}
-
-function activeRenderableLayers(state: WeatherOverlayState): { key: WeatherOverlayMetric; mode: WeatherOverlayMode }[] {
-  return state.layers
-    .filter((layer): layer is { key: WeatherOverlayMetric; enabled: boolean; mode: WeatherOverlayMode } =>
-      SUPPORTED_KEYS.includes(layer.key as WeatherOverlayMetric)
-      && layer.enabled
-      && (layer.mode === 'gradient' || layer.mode === 'fill'),
-    )
-    .map((layer) => ({ key: layer.key, mode: layer.mode }));
-}
-
-function imageCoords(bounds: [number, number, number, number]): ImageCoords {
-  return [
-    [bounds[0], bounds[3]],
-    [bounds[2], bounds[3]],
-    [bounds[2], bounds[1]],
-    [bounds[0], bounds[1]],
-  ];
-}
-
-async function preload(url: string): Promise<void> {
-  void url;
-}
-
-function coordsEqual(left: ImageCoords, right: ImageCoords): boolean {
-  return left.every((point, index) => point[0] === right[index]?.[0] && point[1] === right[index]?.[1]);
-}
-
-// Fast FNV-1a 32-bit hash. ~50-100x cheaper than JSON.stringify on hot paths.
-function hashStr(input: string, seed = 0x811c9dc5): number {
-  let h = seed >>> 0;
-  for (let i = 0; i < input.length; i++) {
-    h ^= input.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
-
-function paletteSignature(state: WeatherOverlayState, key: WeatherOverlayMetric): string {
-  const palette = state.palettes?.[key];
-  if (!palette) return '0';
-  let h = hashStr(`${palette.scaleSetting ?? ''}`);
-  const bands = palette.bands;
-  if (bands) {
-    for (let i = 0; i < bands.length; i++) {
-      const band = bands[i];
-      h = hashStr(`|${band.color}|${band.visible !== false ? 1 : 0}|${band.minValue}|${band.maxValue}`, h);
-    }
-  }
-  return h.toString(36);
-}
-
-async function canvasToObjectUrl(canvas: HTMLCanvasElement): Promise<string> {
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) return canvas.toDataURL('image/png');
-  return URL.createObjectURL(blob);
-}
-
-function paletteOpacity(state: WeatherOverlayState, key: WeatherOverlayMetric): number {
-  const opacity = state.palettes?.[key]?.opacity ?? 100;
-  return Math.max(0, Math.min(1, opacity / 100));
-}
-
-function styleSyncProgress(reason: RefreshReason): number {
-  if (reason === 'reload') return 8;
-  if (reason === 'force') return 74;
-  return 12;
-}
-
-interface StyleHealth {
-  hasStyle: boolean;
-  isStyleLoaded: boolean;
-  sourceCount: number;
-  layerCount: number;
-}
-
-function readStyleHealth(map: MapboxMap): StyleHealth {
-  try {
-    const style = map.getStyle();
-    return {
-      hasStyle: Boolean(style),
-      isStyleLoaded: map.isStyleLoaded(),
-      sourceCount: Object.keys(style?.sources ?? {}).length,
-      layerCount: Array.isArray(style?.layers) ? style.layers.length : 0,
-    };
-  } catch {
-    return {
-      hasStyle: false,
-      isStyleLoaded: false,
-      sourceCount: 0,
-      layerCount: 0,
-    };
-  }
-}
-
-function logWeatherOverlay(event: string, payload?: Record<string, unknown>): void {
-  if (payload) {
-    console.info(`[weather-overlay] ${event}`, payload);
-    return;
-  }
-  console.info(`[weather-overlay] ${event}`);
-}
+import {
+  MIN_FETCH_INTERVAL_MS,
+  MOVE_DEBOUNCE_MS,
+  STATUS_ID,
+  STYLE_SYNC_MAX_POLLS,
+  STYLE_SYNC_POLL_MS,
+  STYLE_SYNC_RETRY_MS,
+  STYLE_SYNC_WATCHDOG_MS,
+  SUPPORTED_KEYS,
+  type RefreshReason,
+  layerId,
+  sourceId,
+} from './constants';
+import {
+  activeRenderableLayers,
+  canvasToObjectUrl,
+  containsBounds,
+  coordsEqual,
+  getViewportBounds,
+  imageCoords,
+  logWeatherOverlay,
+  paletteOpacity,
+  paletteSignature,
+  preload,
+  readStyleHealth,
+  selectionFromState,
+  styleSyncProgress,
+  type RenderedLayerEntry,
+  type ViewportBounds,
+} from './helpers';
 
 export function useWeatherOverlay(
   map: MapboxMap | null,
@@ -379,6 +214,10 @@ export function useWeatherOverlay(
       }, STYLE_SYNC_RETRY_MS);
     };
 
+    const completeStyleRecovery = () => {
+      clearStyleRecoveryTimers();
+    };
+
     const armStyleRecovery = (reason: RefreshReason, trigger: string) => {
       publishStyleSyncStatus(styleSyncProgress(reason));
       scheduleStyleRetry();
@@ -398,6 +237,7 @@ export function useWeatherOverlay(
             layerCount: health.layerCount,
           });
           if (promoteStyleFallbackIfUsable('watchdog')) {
+            completeStyleRecovery();
             scheduleRefreshRef.current?.('force');
             return;
           }
@@ -417,6 +257,7 @@ export function useWeatherOverlay(
                 via: canMutateStyle() ? 'poll-ready' : 'poll-fallback',
                 polls: stylePollCountRef.current,
               });
+              completeStyleRecovery();
               if (stylePollRef.current != null) {
                 window.clearInterval(stylePollRef.current);
                 stylePollRef.current = null;
@@ -450,7 +291,7 @@ export function useWeatherOverlay(
       key: WeatherOverlayMetric,
       mode: WeatherOverlayMode,
       url: string,
-      coords: ImageCoords,
+      coords: ReturnType<typeof imageCoords>,
     ): boolean => {
       if (!canMutateStyle()) return false;
       try {
@@ -494,16 +335,16 @@ export function useWeatherOverlay(
         return false;
       }
 
-      const activeLayers = activeRenderableLayers(stateRef.current);
-      if (!stateRef.current.enabled || activeLayers.length === 0) {
+      const currentActiveLayers = activeRenderableLayers(stateRef.current);
+      if (!stateRef.current.enabled || currentActiveLayers.length === 0) {
         hideAll();
         return true;
       }
 
       const coords = imageCoords(dataset.grid.bounds);
       const size = getOverlayRenderSize(map);
-      const activeLayerMap = new Map(activeLayers.map((layer) => [layer.key, layer] as const));
-      const renderableCount = Math.max(1, activeLayers.length);
+      const activeLayerMap = new Map(currentActiveLayers.map((layer) => [layer.key, layer] as const));
+      const renderableCount = Math.max(1, currentActiveLayers.length);
       let renderedCount = 0;
       for (const key of SUPPORTED_KEYS) {
         const activeLayer = activeLayerMap.get(key);
@@ -603,8 +444,8 @@ export function useWeatherOverlay(
       }
 
       const nextState = stateRef.current;
-      const activeLayers = activeRenderableLayers(nextState);
-      if (!nextState.enabled || activeLayers.length === 0) {
+      const currentActiveLayers = activeRenderableLayers(nextState);
+      if (!nextState.enabled || currentActiveLayers.length === 0) {
         hideAll();
         return;
       }
@@ -623,7 +464,7 @@ export function useWeatherOverlay(
 
       const selection = selectionFromState(nextState);
       const viewport = getViewportBounds(map);
-      const activeMetrics = activeLayers.map((layer) => layer.key);
+      const activeMetrics = currentActiveLayers.map((layer) => layer.key);
       const dataSelectionKey = weatherDataSelectionKey(selection, activeMetrics);
       const currentDataset = dataRef.current;
       const sameSelection = currentDataset?.selectionKey === dataSelectionKey;
@@ -639,8 +480,7 @@ export function useWeatherOverlay(
 
       if (
         !explicitReload
-        &&
-        !force
+        && !force
         && sameSelection
         && Date.now() - lastFetchTimeRef.current < MIN_FETCH_INTERVAL_MS
         && currentDataset
@@ -753,6 +593,7 @@ export function useWeatherOverlay(
           fallbackUsable: styleFallbackUsableRef.current,
           ...readStyleHealth(map),
         });
+        completeStyleRecovery();
         scheduleRefresh('force');
         return;
       }
@@ -767,12 +608,13 @@ export function useWeatherOverlay(
         fallbackUsable: styleFallbackUsableRef.current,
         ...readStyleHealth(map),
       });
-      const activeLayers = activeRenderableLayers(stateRef.current);
-      if (!stateRef.current.enabled || activeLayers.length === 0) {
+      completeStyleRecovery();
+      const currentActiveLayers = activeRenderableLayers(stateRef.current);
+      if (!stateRef.current.enabled || currentActiveLayers.length === 0) {
         hideAll();
         return;
       }
-      for (const activeLayer of activeLayers) {
+      for (const activeLayer of currentActiveLayers) {
         const rendered = renderedRef.current[activeLayer.key];
         if (rendered) ensureLayer(activeLayer.key, activeLayer.mode, rendered.url, rendered.coords);
       }
