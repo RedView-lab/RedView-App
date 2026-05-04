@@ -16,7 +16,11 @@ import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
 
 export const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
 export const MAPBOX_STANDARD_SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/standard-satellite';
-export const STYLE_LOAD_WATCHDOG_MS = 15000;
+// Reduced from 15 s to 5 s: Standard-Satellite never fires style.load due
+// to SVG sprite rejection storms in Mapbox 3.x. After this timeout the
+// inline sprite-storm bypass detects style sources and proceeds immediately
+// with DEM/terrain attachment instead of making the user stare at a flat map.
+export const STYLE_LOAD_WATCHDOG_MS = 5000;
 
 // Anti-flat reinforcement constants. Picked low enough to detect a
 // flat-state regression quickly but high enough to leave Mapbox time to

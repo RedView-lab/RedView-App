@@ -140,61 +140,73 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // style.load nor styledata fire again, so event-only recovery is a
       // dead-end.
       //
-      // Two reinforcements:
-      //  1. A polling interval (every 2 s, up to 30 s) that checks whether
-      //     canMutateStyle() finally flipped, OR whether getStyle() has
-      //     sources — if so, the style is "good enough" for terrain.
-      //  2. The event listeners are still registered as a fast path.
-      let lateRecovered = false;
-      const doLateRecovery = () => {
-        if (lateRecovered) return;
-        lateRecovered = true;
-        map.off('style.load', onLateEvent);
-        map.off('styledata', onLateEvent);
-        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        if (isCancelled()) return;
-        void fns.bootstrapCurrentStyle();
-      };
-      const onLateEvent = () => doLateRecovery();
-      map.on('style.load', onLateEvent);
-      map.on('styledata', onLateEvent);
+      // Aggressive inline check: if getStyle() already has sources, the
+      // rendering pipeline is alive — only sprites are blocking
+      // isStyleLoaded(). Enable spriteStormBypass and continue the
+      // bootstrap *inline* instead of returning false and waiting 2+ s
+      // for the polling loop. This eliminates the visible flat-terrain
+      // gap that occurred between the 15 s watchdog and the first poll.
+      try {
+        const style = map.getStyle();
+        if (style && Object.keys(style.sources ?? {}).length > 0) {
+          console.warn(
+            '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap inline (sprite storm bypass)',
+          );
+          st.spriteStormBypass = true;
+          // Fall through to DEM attachment below — don't return false.
+        }
+      } catch { /* style not ready yet */ }
 
-      // Polling fallback: check whether the style became usable even
-      // though the events never fire. Also detect the "sprite-storm"
-      // case: getStyle() has sources but isStyleLoaded() is stuck false.
-      let pollCount = 0;
-      const MAX_POLLS = 15; // 15 × 2 s = 30 s max
-      let pollTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
-        pollCount += 1;
-        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+      // If the bypass didn't activate (style truly has no sources yet),
+      // fall back to the event + polling loop.
+      if (!fns.canMutateStyle()) {
+        let lateRecovered = false;
+        const doLateRecovery = () => {
+          if (lateRecovered) return;
+          lateRecovered = true;
+          map.off('style.load', onLateEvent);
+          map.off('styledata', onLateEvent);
           if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          return;
-        }
-        if (fns.canMutateStyle()) {
-          doLateRecovery();
-          return;
-        }
-        // Force-mutable fallback: if the style object has sources, the
-        // rendering pipeline is alive — only sprites are blocking
-        // isStyleLoaded(). We can safely attach terrain anyway.
-        try {
-          const style = map.getStyle();
-          if (style && Object.keys(style.sources ?? {}).length > 0) {
-            console.warn(
-              '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
-            );
-            st.spriteStormBypass = true;
+          if (isCancelled()) return;
+          void fns.bootstrapCurrentStyle();
+        };
+        const onLateEvent = () => doLateRecovery();
+        map.on('style.load', onLateEvent);
+        map.on('styledata', onLateEvent);
+
+        // Polling fallback: check every 1 s (was 2 s — tightened to
+        // reduce the flat-terrain window on genuinely slow styles).
+        let pollCount = 0;
+        const MAX_POLLS = 30; // 30 × 1 s = 30 s max
+        let pollTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
+          pollCount += 1;
+          if (isCancelled() || runId !== st.styleBootstrapRunId) {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            return;
+          }
+          if (fns.canMutateStyle()) {
             doLateRecovery();
             return;
           }
-        } catch { /* style not ready yet */ }
-        if (pollCount >= MAX_POLLS) {
-          console.warn('[map3d] late style recovery polling exhausted after 30 s');
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-        }
-      }, 2000);
+          try {
+            const style = map.getStyle();
+            if (style && Object.keys(style.sources ?? {}).length > 0) {
+              console.warn(
+                '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
+              );
+              st.spriteStormBypass = true;
+              doLateRecovery();
+              return;
+            }
+          } catch { /* style not ready yet */ }
+          if (pollCount >= MAX_POLLS) {
+            console.warn('[map3d] late style recovery polling exhausted after 30 s');
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          }
+        }, 1000);
 
-      return false;
+        return false;
+      }
     }
 
     fns.refreshTrackedSourceIds();

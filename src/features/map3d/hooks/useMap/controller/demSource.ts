@@ -98,10 +98,34 @@ export function attachDemSource(ctx: Ctx): void {
       // pyramid from scratch (setTiles alone leaves cached empty tiles in
       // place, which is what keeps the map flat after a soft reload).
       fns.detachManagedTerrain();
+      let removeSucceeded = false;
       try {
         map.removeSource(unifiedDEMSource.id);
+        removeSucceeded = true;
       } catch (error) {
         console.warn('[map3d] DEM source remove failed (forceRebuild)', error);
+        // Mapbox 3.x can crash in removeSource when the internal terrain
+        // graph has a stale reference (Cannot read properties of undefined
+        // reading 'get'). If the source still exists, fall back to a soft
+        // setTiles refresh — better than crashing the whole bootstrap.
+        const staleSource = map.getSource(unifiedDEMSource.id) as {
+          setTiles?: (tiles: string[]) => unknown;
+        } | undefined;
+        if (staleSource && typeof staleSource.setTiles === 'function') {
+          console.warn('[map3d] falling back to setTiles after failed removeSource');
+          staleSource.setTiles(tiles);
+          fns.refreshTrackedSourceIds();
+          terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+          fns.applyUnifiedTerrain();
+          fns.scheduleSetTilesVerify();
+          return true;
+        }
+      }
+      // If removeSource threw but the source is actually gone (race
+      // condition), treat as a successful remove and fall through to
+      // addSource below.
+      if (!removeSucceeded && map.getSource(unifiedDEMSource.id)) {
+        return false;
       }
     }
 
