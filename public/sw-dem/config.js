@@ -105,8 +105,14 @@ const ORTHO_TILE_SIZE = 256;
 // MAPBOX_DEM_MAXZOOM was 14 (the source maxzoom was 15, so Mapbox requested
 // z15 tiles but the SW returned 204 → flat terrain on zoom-in). Now
 // MAPBOX_DEM_MAXZOOM=15 so the SW serves real AWS-overzoomed tiles at z15.
-const CACHE_NAME = 'dem-tiles-v43';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v25';
+// v44 / v26 — all basemap styles now use the unified 'default' DEM profile
+// (IGN MNS LiDAR HD with buildings/trees/rocks). Previously topo used
+// 'terrain' (RGE ALTI bare-earth) while satellite used 'default'. Old tiles
+// cached under the 'terrain' profile key from the topo style are now
+// unreachable and must be purged so the SW re-fetches everything through
+// the 'default'-keyed MNS LiDAR HD pipeline for all styles.
+const CACHE_NAME = 'dem-tiles-v44';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v26';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v13';
 const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';

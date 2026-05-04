@@ -31,6 +31,10 @@
 // (IGN/swissALTI/AWS Terrarium). We NEVER synthesize a fake "flat" elevation
 // tile; on genuine misses we return 204 so the renderer can reuse parent mesh.
 // ---------------------------------------------------------------------------
+// Cache stamp — bumped on every cache-invalidating change so the browser
+// detects a byte diff in this file and triggers install→activate→purge.
+// Current: dem-tiles-v44 / dem-negative-v26 (unified 'default' DEM profile)
+// ---------------------------------------------------------------------------
 
 importScripts(
   // ── Pipeline primitives (config + math + low-level fetchers) ──────────

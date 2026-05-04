@@ -264,11 +264,14 @@ export function attachHelpers(ctx: Ctx): void {
     return `${event.sourceId}:${tileKey}`;
   };
 
-  // All basemap styles use the same 'terrain' DEM profile so the SW
+  // All basemap styles use the same 'default' DEM profile so the SW
   // cache (keyed by profile) is shared across style switches. This
   // avoids a full re-fetch when switching from topo to satellite and
-  // ensures both styles get the same IGN LiDAR HD / AWS Terrarium data.
-  fns.getActiveDemProfile = () => 'terrain';
+  // ensures both styles get IGN MNS LiDAR HD (0.40 cm, with buildings,
+  // trees, rocks). The 'terrain' profile is reserved for slope/altitude
+  // computation — it routes to RGE ALTI WMS (bare-earth) which strips
+  // canopy/buildings and is unsuitable for 3D terrain display.
+  fns.getActiveDemProfile = () => 'default';
 
   fns.shouldUseIgnOrthoOverlay = () => false;
 }
