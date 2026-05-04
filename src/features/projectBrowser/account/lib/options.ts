@@ -1,7 +1,7 @@
 export const ACCOUNT_COUNTRY_OPTIONS = [
-  { value: 'FR', label: 'France', flag: 'linear-gradient(90deg, #1d4ed8 0 33.33%, #ffffff 33.33% 66.66%, #dc2626 66.66% 100%)' },
-  { value: 'CH', label: 'Suisse', flag: 'linear-gradient(90deg, #dc2626 0%, #dc2626 100%)' },
-  { value: 'BE', label: 'Belgique', flag: 'linear-gradient(90deg, #111827 0 33.33%, #facc15 33.33% 66.66%, #dc2626 66.66% 100%)' },
+  { value: 'FR', label: 'France', flagCode: 'FR' },
+  { value: 'CH', label: 'Suisse', flagCode: 'CH' },
+  { value: 'BE', label: 'Belgique', flagCode: 'BE' },
 ] as const;
 
 export const ACCOUNT_SPORT_OPTIONS = [

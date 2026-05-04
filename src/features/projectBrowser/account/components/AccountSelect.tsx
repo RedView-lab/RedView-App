@@ -6,6 +6,7 @@ export type AccountSelectOption = {
   value: string;
   label: string;
   flag?: string;
+  flagCode?: string;
 };
 
 type AccountSelectProps = {

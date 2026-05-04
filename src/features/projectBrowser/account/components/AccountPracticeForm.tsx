@@ -14,8 +14,27 @@ type AccountPracticeFormProps = {
   onAddSport: () => void;
 };
 
-function findCountryStyle(countryCode: string) {
-  return ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode)?.flag;
+const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
+
+function findCountryOption(countryCode: string) {
+  return ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode);
+}
+
+function CountryFlag({ option }: { option?: AccountSelectOption }) {
+  if (!option?.flagCode) {
+    return <span className="rvpb-account-flag rvpb-account-flag--fallback" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="rvpb-account-flag" aria-hidden="true">
+      <img
+        className="rvpb-account-flag__image"
+        src={`${COUNTRY_FLAG_BASE_PATH}/${option.flagCode}.svg`}
+        alt=""
+        loading="lazy"
+      />
+    </span>
+  );
 }
 
 const sportOptions: AccountSelectOption[] = ACCOUNT_SPORT_OPTIONS.map((option) => ({
@@ -34,7 +53,7 @@ export function AccountPracticeForm({
   onChange,
   onAddSport,
 }: AccountPracticeFormProps) {
-  const countryFlag = findCountryStyle(value.country) ?? ACCOUNT_COUNTRY_OPTIONS[0].flag;
+  const selectedCountryOption = findCountryOption(value.country) ?? ACCOUNT_COUNTRY_OPTIONS[0];
 
   return (
     <AccountSection title="Pratique">
@@ -44,15 +63,9 @@ export function AccountPracticeForm({
           value={value.country}
           options={ACCOUNT_COUNTRY_OPTIONS}
           renderValuePrefix={(selectedOption: AccountSelectOption | undefined) => (
-            <span
-              className="rvpb-account-flag"
-              style={{ background: selectedOption?.flag ?? countryFlag }}
-              aria-hidden="true"
-            />
+            <CountryFlag option={selectedOption ?? selectedCountryOption} />
           )}
-          renderOptionPrefix={(option: AccountSelectOption) => (
-            <span className="rvpb-account-flag" style={{ background: option.flag ?? countryFlag }} aria-hidden="true" />
-          )}
+          renderOptionPrefix={(option: AccountSelectOption) => <CountryFlag option={option} />}
           onChange={(nextCountry: string) =>
             onChange({
               ...value,

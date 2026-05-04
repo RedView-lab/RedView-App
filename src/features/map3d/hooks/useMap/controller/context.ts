@@ -81,6 +81,7 @@ export interface ControllerState {
   setTilesVerifyTimer: ReturnType<typeof setTimeout> | null;
   hasReportedReadyOnce: boolean;
   spriteStormBypass: boolean;
+  satelliteDemRebuildPending: boolean;
 
   requestedTiles: Set<string>;
   loadedTiles: Set<string>;
@@ -177,6 +178,7 @@ export function createInitialState(): ControllerState {
     setTilesVerifyTimer: null,
     hasReportedReadyOnce: false,
     spriteStormBypass: false,
+    satelliteDemRebuildPending: false,
 
     requestedTiles: new Set<string>(),
     loadedTiles: new Set<string>(),

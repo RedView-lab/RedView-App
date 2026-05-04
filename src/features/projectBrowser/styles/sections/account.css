@@ -104,11 +104,27 @@
 }
 
 .rvpb-account-flag {
+  display: inline-flex;
   flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
   width: 20px;
   height: 20px;
+  overflow: hidden;
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+.rvpb-account-flag__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rvpb-account-flag--fallback {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvpb-account-select-value,
