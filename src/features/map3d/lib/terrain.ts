@@ -16,14 +16,21 @@ export class TerrainManager {
   /** Idempotent. Safe to call multiple times. */
   init(): void {
     this.applyTerrain();
-    this.applied = true;
   }
 
   private applyTerrain(): void {
-    this.map.setTerrain({
-      source: this.sourceId,
-      exaggeration: this.exaggeration,
-    });
+    try {
+      this.map.setTerrain({
+        source: this.sourceId,
+        exaggeration: this.exaggeration,
+      });
+      this.applied = true;
+    } catch (error) {
+      // setTerrain can throw during sprite storms, stale style graphs,
+      // or when the source was removed between check and apply. Don't
+      // mark applied=true so subsequent init() calls can retry.
+      console.warn('[terrain] setTerrain failed — will retry on next init()', error);
+    }
   }
 
   setExaggeration(value: number): void {

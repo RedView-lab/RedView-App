@@ -35,6 +35,11 @@ export function attachStyleBootstrap(ctx: Ctx): void {
   const st = ctx.state;
 
   fns.prepareStyleChange = (detail = 'Fond de carte') => {
+    // Stop the heartbeat FIRST — it must not detect the intentionally
+    // flat state caused by setStyle({diff:false}) and launch a parasitic
+    // bootstrapCurrentStyle() call that races the legitimate style switch.
+    fns.stopTerrainHeartbeat();
+    st.hasReportedReadyOnce = false;
     st.demPassiveRefreshPending = false;
     st.demTrackingEnabled = false;
     st.spriteStormBypass = false;
@@ -219,7 +224,32 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     fns.reportStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
-    applyStyleDecorators();
+    // In sprite-storm bypass mode, defer fog/decorators until the base map
+    // has had time to load its first batch of tiles. Applying fog
+    // immediately produces large pink patches (fog color rgb(255,196,150))
+    // wherever satellite tiles haven't loaded yet — jarring for the user.
+    if (st.spriteStormBypass) {
+      const applyDecoratorsDeferred = () => {
+        if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+        applyStyleDecorators();
+      };
+      let decoratorsApplied = false;
+      const onFirstIdle = () => {
+        if (decoratorsApplied) return;
+        decoratorsApplied = true;
+        clearTimeout(decoratorTimer);
+        applyDecoratorsDeferred();
+      };
+      map.once('idle', onFirstIdle);
+      const decoratorTimer = setTimeout(() => {
+        if (decoratorsApplied) return;
+        decoratorsApplied = true;
+        map.off('idle', onFirstIdle);
+        applyDecoratorsDeferred();
+      }, 2000);
+    } else {
+      applyStyleDecorators();
+    }
 
     if (!swOk) {
       console.warn('[map3d] SW unavailable — attaching AWS Terrarium fallback DEM (~30 m global)');
@@ -284,8 +314,20 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     if (!map.getSource(unifiedDEMSource.id)) {
       if (!fns.refreshDemSource()) return false;
+    } else {
+      // Source already exists (e.g. topo → satellite switch where
+      // prepareStyleChange detached terrain but kept the source).
+      // Re-bind terrain to the existing source — without this the
+      // map stays 2D forever because refreshDemSource is skipped.
+      fns.applyUnifiedTerrain();
     }
     fns.reportStatus('loading', 68, 'Relief');
+
+    // Start heartbeat proactively so self-heal works even if the
+    // finishDemActivity path is slow or stalls. The heartbeat's own
+    // guards (hasReportedReadyOnce, reloadInProgress) limit it to
+    // acting only when the system has settled.
+    fns.startTerrainHeartbeat();
 
     let orthoAdded = false;
     const finishStyleBootstrapWhenReady = async () => {

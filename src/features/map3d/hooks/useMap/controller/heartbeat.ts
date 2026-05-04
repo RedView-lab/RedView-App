@@ -30,16 +30,21 @@ export function attachHeartbeat(ctx: Ctx): void {
   fns.startTerrainHeartbeat = () => {
     if (st.heartbeatTimer) return;
     st.heartbeatFailures = 0;
+    let tickCount = 0;
     st.heartbeatTimer = setInterval(() => {
+      tickCount += 1;
       if (isCancelled()) {
         fns.stopTerrainHeartbeat();
         return;
       }
-      // Don't probe before the first ready or while a reload is
-      // already in flight — those paths handle their own verification.
-      if (!st.hasReportedReadyOnce) return;
+      // Don't probe while a reload is already in flight — those paths
+      // handle their own verification.
       if (st.reloadInProgress) return;
       if (!fns.canMutateStyle()) return;
+      // Allow self-heal even before the first "ready" report if the
+      // heartbeat has been ticking for a while (>15s = 3 ticks). This
+      // covers bootstraps that stall and never call finishDemActivity.
+      if (!st.hasReportedReadyOnce && tickCount < 3) return;
 
       const sourcePresent = !!map.getSource(unifiedDEMSource.id);
       const awsFallbackPresent = !!map.getSource(awsFallbackDEMSource.id);

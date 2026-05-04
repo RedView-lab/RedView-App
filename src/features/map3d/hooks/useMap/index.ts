@@ -109,15 +109,27 @@ export function useMap(
     // anyway so the user isn't stuck behind the overlay forever.
     const revealFallbackTimer = setTimeout(revealMap, 8000);
 
-    void lifecycle.bootstrapCurrentStyle()
-      .then(() => {
-        if (!cancelled) setIsLoaded(true);
-      })
-      .catch((error) => {
-        console.error('[map3d] init failed', error);
-        lifecycle.reportStatus('error', 0, error instanceof Error ? error.message : 'Chargement impossible');
-        if (!cancelled) setIsLoaded(true);
-      });
+    let mountRetries = 0;
+    const MAX_MOUNT_RETRIES = 3;
+    const attemptInitBootstrap = (): Promise<void> =>
+      lifecycle.bootstrapCurrentStyle()
+        .then((ok) => {
+          if (!cancelled) setIsLoaded(true);
+          if (!ok && !cancelled && mountRetries < MAX_MOUNT_RETRIES) {
+            mountRetries += 1;
+            console.warn(`[map3d] initial bootstrap returned false, retrying (${mountRetries}/${MAX_MOUNT_RETRIES})`);
+            setTimeout(() => {
+              if (!cancelled) void attemptInitBootstrap();
+            }, 3000);
+          }
+        })
+        .catch((error) => {
+          console.error('[map3d] init failed', error);
+          lifecycle.reportStatus('error', 0, error instanceof Error ? error.message : 'Chargement impossible');
+          if (!cancelled) setIsLoaded(true);
+        });
+
+    void attemptInitBootstrap();
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     const persistViewport = (viewport: MapViewport) => {
@@ -220,19 +232,34 @@ export function useMap(
     map.once('idle', revealAfterSwitch);
     const switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
 
-    void bootstrapCurrentStyle()
-      .then(() => {
-        setIsLoaded(true);
-      })
-      .catch((error) => {
-        console.error('[map3d] style switch failed', error);
-        lifecycle.reportStatus(
-          'error',
-          0,
-          error instanceof Error ? error.message : 'Changement de fond de carte impossible',
-        );
-        setIsLoaded(true);
-      });
+    let switchRetries = 0;
+    const MAX_SWITCH_RETRIES = 3;
+    const attemptBootstrap = (): Promise<void> =>
+      bootstrapCurrentStyle()
+        .then((ok) => {
+          setIsLoaded(true);
+          // If bootstrap returned false (style not ready, went through
+          // polling path), retry after a short delay — don't leave the
+          // map flat forever.
+          if (!ok && !switchCancelled && switchRetries < MAX_SWITCH_RETRIES) {
+            switchRetries += 1;
+            console.warn(`[map3d] style switch bootstrap returned false, retrying (${switchRetries}/${MAX_SWITCH_RETRIES})`);
+            setTimeout(() => {
+              if (!switchCancelled) void attemptBootstrap();
+            }, 3000);
+          }
+        })
+        .catch((error) => {
+          console.error('[map3d] style switch failed', error);
+          lifecycle.reportStatus(
+            'error',
+            0,
+            error instanceof Error ? error.message : 'Changement de fond de carte impossible',
+          );
+          setIsLoaded(true);
+        });
+
+    void attemptBootstrap();
 
     return () => {
       switchCancelled = true;
