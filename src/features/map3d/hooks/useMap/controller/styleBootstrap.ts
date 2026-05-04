@@ -145,17 +145,27 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // style.load nor styledata fire again, so event-only recovery is a
       // dead-end.
       //
-      // Aggressive inline check: if getStyle() already has sources, the
+      // Aggressive inline check: if getStyle() already has content, the
       // rendering pipeline is alive — only sprites are blocking
       // isStyleLoaded(). Enable spriteStormBypass and continue the
       // bootstrap *inline* instead of returning false and waiting 2+ s
       // for the polling loop. This eliminates the visible flat-terrain
       // gap that occurred between the 15 s watchdog and the first poll.
+      //
+      // IMPORTANT: Standard-Satellite uses Mapbox v3 imported style
+      // fragments — its sources live inside the fragment, NOT in the
+      // root style.sources. We check style.layers instead, which ARE
+      // populated from imported fragments.
       try {
         const style = map.getStyle();
-        if (style && Object.keys(style.sources ?? {}).length > 0) {
+        const hasContent = style && (
+          (style.layers?.length ?? 0) > 0
+          || Object.keys(style.sources ?? {}).length > 0
+        );
+        if (hasContent) {
           console.warn(
-            '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap inline (sprite storm bypass)',
+            '[map3d] style has content but isStyleLoaded() is false — forcing terrain bootstrap inline (sprite storm bypass)',
+            { layers: style!.layers?.length ?? 0, sources: Object.keys(style!.sources ?? {}).length },
           );
           st.spriteStormBypass = true;
           // Fall through to DEM attachment below — don't return false.
@@ -195,9 +205,14 @@ export function attachStyleBootstrap(ctx: Ctx): void {
           }
           try {
             const style = map.getStyle();
-            if (style && Object.keys(style.sources ?? {}).length > 0) {
+            const hasContent = style && (
+              (style.layers?.length ?? 0) > 0
+              || Object.keys(style.sources ?? {}).length > 0
+            );
+            if (hasContent) {
               console.warn(
-                '[map3d] style has sources but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
+                '[map3d] style has content but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
+                { layers: style!.layers?.length ?? 0, sources: Object.keys(style!.sources ?? {}).length },
               );
               st.spriteStormBypass = true;
               doLateRecovery();
