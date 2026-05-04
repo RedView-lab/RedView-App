@@ -33,7 +33,7 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v44 / dem-negative-v26 (unified 'default' DEM profile)
+// Current: dem-tiles-v45 / dem-negative-v27 (France high-zoom transient-miss guard)
 // ---------------------------------------------------------------------------
 
 importScripts(

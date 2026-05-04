@@ -111,8 +111,12 @@ const ORTHO_TILE_SIZE = 256;
 // cached under the 'terrain' profile key from the topo style are now
 // unreachable and must be purged so the SW re-fetches everything through
 // the 'default'-keyed MNS LiDAR HD pipeline for all styles.
-const CACHE_NAME = 'dem-tiles-v44';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v26';
+// v45 / v27 — evicts France high-zoom fallback children created when IGN
+// transient misses were still allowed to fall through to AWS Terrarium.
+// Those cached z15+ children flatten relief only after zoom-in because they
+// replace the valid parent LiDAR mesh with a coarse child tile.
+const CACHE_NAME = 'dem-tiles-v45';
+const NEGATIVE_CACHE_NAME = 'dem-negative-v27';
 const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
 const SLOPE_CACHE_NAME = 'slope-tiles-v13';
 const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';

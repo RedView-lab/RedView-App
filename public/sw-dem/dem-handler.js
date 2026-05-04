@@ -110,6 +110,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     let upgradeSourceHint = '';
     let ignHadSomeData = false; // true when MNS returned partial/full coverage
     let franceHadSomeData = false;
+    let franceTransientFailure = false; // IGN timed out / partially settled; keep parent mesh instead of caching flat AWS child
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
     const useFranceTerrainOnly = demProfile === 'terrain';
@@ -261,7 +262,15 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         // adjacent tiles. Fall through to HIGHRES fallback below.
         if (!ignHadSomeData && ignResult.allPermanent404) {
           mnsAreaNegSet(z, x, y);
+        } else if (!ignHadSomeData) {
+          // Expert guard: if IGN didn't produce a usable child tile yet and
+          // the miss is not a confirmed permanent 404, do NOT drop to the
+          // global AWS path at z>MAPBOX_DEM_MAXZOOM. That caches a visually
+          // flat child and breaks parent-mesh continuity on zoom-in.
+          franceTransientFailure = true;
         }
+      } else {
+        franceTransientFailure = true;
       }
     }
 
@@ -363,6 +372,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     const skipMapboxHighZoomLiDAR =
       z > MAPBOX_DEM_MAXZOOM && (
         (tileTrulyTouchesFrance && franceHadSomeData) ||
+        // France transient failure: same policy as Switzerland. A high-zoom
+        // IGN miss must preserve the parent LiDAR mesh, not cache a flat AWS
+        // child that only appears after zooming in.
+        (tileTrulyTouchesFrance && franceTransientFailure) ||
         (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData) ||
         // Swiss transient failure: do NOT cache a flat Mapbox tile in
         // place of an unbuilt LiDAR tile — visually indistinguishable
