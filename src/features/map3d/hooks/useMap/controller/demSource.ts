@@ -3,7 +3,7 @@ import { unifiedDEMSource, awsFallbackDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
 import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
-import { DEM_SETTILE_VERIFY_MS } from './context';
+import { DEM_SETTILE_VERIFY_MS, STYLE_LOAD_WATCHDOG_MS } from './context';
 
 /**
  * DEM source + terrain attachment lifecycle.
@@ -23,6 +23,8 @@ export function attachDemSource(ctx: Ctx): void {
   const { map, terrainRef, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
+  const terrainRecoveryRetryMs = 120;
+  const maxTerrainRecoveryAttempts = Math.ceil((STYLE_LOAD_WATCHDOG_MS + 1000) / terrainRecoveryRetryMs);
 
   fns.applyManagedTerrain = () => {
     if (map.getSource(unifiedDEMSource.id)) {
@@ -201,11 +203,31 @@ export function attachDemSource(ctx: Ctx): void {
     // would race the rebuild.
     const runRecovery = (attempt: number) => {
       st.terrainRecoveryTimer = null;
-      if (!fns.canMutateStyle()) {
-        if (attempt >= 12) return;
+      const canRecoverDuringImportedStyleSettling = () => {
+        try {
+          const style = map.getStyle();
+          const hasContent = style && (
+            (style.layers?.length ?? 0) > 0
+            || Object.keys(style.sources ?? {}).length > 0
+          );
+          if (!hasContent) return false;
+          if (!st.spriteStormBypass) {
+            console.warn(
+              '[map3d] terrain recovery: style has content while isStyleLoaded() is false — enabling sprite-storm bypass',
+              { layers: style.layers?.length ?? 0, sources: Object.keys(style.sources ?? {}).length },
+            );
+            st.spriteStormBypass = true;
+          }
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      if (!fns.canMutateStyle() && !canRecoverDuringImportedStyleSettling()) {
+        if (attempt >= maxTerrainRecoveryAttempts) return;
         st.terrainRecoveryTimer = setTimeout(() => {
           runRecovery(attempt + 1);
-        }, 120);
+        }, terrainRecoveryRetryMs);
         return;
       }
       if (!navigator.serviceWorker?.controller) return;
