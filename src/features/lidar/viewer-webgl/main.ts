@@ -16,6 +16,7 @@ import { detectCrs, toWgs84 } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import { createViewerPanel, type SnowModeKey } from '../viewer/panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from '../viewer/panel/location';
+import { exitLidarViewer, switchViewerEngine } from '../viewer/panel/runtime/navigation';
 
 export interface WebGLViewerHandles {
   canvas: HTMLCanvasElement;
@@ -209,17 +210,26 @@ export async function runWebGLFallback(
     tileLabel: opts.tileLabel,
     locationLabel: buildTileLocationLabel(lon, lat),
     googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
+    engineMode: 'webgl',
+    engineOptions: [
+      { key: 'webgpu', title: 'Revenir au moteur WebGpu (+ précis).' },
+      { key: 'webgl' },
+    ],
+    onEngineModeChange: (mode) => {
+      switchViewerEngine(mode);
+    },
     onSnowModeChange: (mode) => {
       void panelSnowHandler(mode);
     },
+    onPrimaryActionClick: () => {
+      exitLidarViewer();
+    },
   });
   panel.setPointControlsDisabled(true);
-  panel.setSettingsEnabled(true);
   panel.setSnowMode('off');
-  panel.setLowQualityButtonState({
-    label: 'Mode LowQuality actif',
-    disabled: true,
-    title: 'Le moteur WebGL HD est deja actif. Rechargez sans ?engine=webgl pour revenir au mode WebGPU.',
+  panel.setPrimaryActionState({
+    label: 'Quitter le mode LIDAR',
+    title: 'Fermer le viewer LiDAR et revenir à l’application.',
   });
 
   // 3. Kick off ortho stitch + terrain build IN PARALLEL. Stitch needs only

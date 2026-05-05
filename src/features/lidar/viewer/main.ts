@@ -26,6 +26,7 @@ import {
   type SnowModeKey,
 } from './panel/controller';
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
+import { exitLidarViewer, switchViewerEngine } from './panel/runtime/navigation';
 import { createViewerTileNavigator } from './tileNavigator/controller';
 import { buildTilePreviewMesh } from './preview/tilePreview';
 import { createViewerLoadingOverlay } from './loading/controller';
@@ -172,18 +173,6 @@ async function loadFromOPFS(): Promise<ArrayBuffer> {
 // --- Main ---
 let renderer: LidarRenderer | null = null;
 const forceWebGL = params.get('engine') === 'webgl';
-
-function switchToWebGLFallback() {
-  if (!confirm(
-    'Basculer vers le moteur WebGL HD ?\n\n' +
-    '• Terrain texturé orthophoto en haute résolution\n' +
-    '• Pas de nuage de points LiDAR (compatible toutes machines)\n' +
-    '• Action irréversible : il faudra recharger pour revenir à WebGPU.'
-  )) return;
-  const url = new URL(window.location.href);
-  url.searchParams.set('engine', 'webgl');
-  window.location.href = url.toString();
-}
 
 async function startWebGLFallback(reasonForLog: string): Promise<void> {
   if (sceneTileCoords.length > 1) {
@@ -355,6 +344,17 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       googleMapsUrl: buildGoogleMapsTileCenterUrl(lon, lat),
       pointSizePercent: pointSizeToPercent(renderer.pointSize),
       densityPercent: densityScaleToPercent(lodManager.getUserDensityScale()),
+      engineMode: 'webgpu',
+      engineOptions: [
+        { key: 'webgpu' },
+        {
+          key: 'webgl',
+          disabled: sceneTileCoords.length > 1,
+          title: sceneTileCoords.length > 1
+            ? 'Le mode WebGl HD est limité à une seule tuile.'
+            : 'Basculer vers le moteur WebGl HD.',
+        },
+      ],
       onPointSizeChange: (percent) => {
         if (!renderer) return;
         renderer.pointSize = percentToPointSize(percent);
@@ -364,21 +364,20 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         lodManager.setUserDensityScale(percentToDensityScale(percent));
         requestRender();
       },
+      onEngineModeChange: (mode) => {
+        switchViewerEngine(mode);
+      },
       onSnowModeChange: (mode) => {
         void panelSnowHandler(mode);
       },
-      onLowQualityClick: () => {
-        switchToWebGLFallback();
+      onPrimaryActionClick: () => {
+        exitLidarViewer();
       },
     });
-    panel.setSettingsEnabled(false);
     panel.setSnowMode('off');
-    panel.setLowQualityButtonState({
-      label: 'Passer en mode LowQuality',
-      disabled: sceneTileCoords.length > 1,
-      title: sceneTileCoords.length > 1
-        ? 'Le mode LowQuality est limite a une seule tuile.'
-        : 'Bascule vers le moteur WebGL HD (terrain texture sans nuage de points).',
+    panel.setPrimaryActionState({
+      label: 'Quitter le mode LIDAR',
+      title: 'Fermer le viewer LiDAR et revenir à l’application.',
     });
     const tileNavigator = createViewerTileNavigator({
       currentTile: viewerTileCoord,
