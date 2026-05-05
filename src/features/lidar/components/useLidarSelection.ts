@@ -12,11 +12,37 @@ const SELECTED_FILL_ID = 'lidar-selection-selected-fill';
 const SELECTED_LINE_ID = 'lidar-selection-selected-line';
 const LAYER_ORDER = [HOVER_FILL_ID, SELECTED_FILL_ID, HOVER_LINE_ID, SELECTED_LINE_ID] as const;
 
+interface StyleHealth {
+  hasStyle: boolean;
+  isStyleLoaded: boolean;
+  sourceCount: number;
+  layerCount: number;
+}
+
 function canInspectStyle(map: MapboxMap): boolean {
   try {
     return Boolean(map.getStyle());
   } catch {
     return false;
+  }
+}
+
+function readStyleHealth(map: MapboxMap): StyleHealth {
+  try {
+    const style = map.getStyle();
+    return {
+      hasStyle: Boolean(style),
+      isStyleLoaded: map.isStyleLoaded(),
+      sourceCount: Object.keys(style?.sources ?? {}).length,
+      layerCount: Array.isArray(style?.layers) ? style.layers.length : 0,
+    };
+  } catch {
+    return {
+      hasStyle: false,
+      isStyleLoaded: false,
+      sourceCount: 0,
+      layerCount: 0,
+    };
   }
 }
 
@@ -202,6 +228,7 @@ export function useLidarSelection(
   const onDisableRef = useRef(onDisable);
   const syncFrameRef = useRef<number | null>(null);
   const syncTimeoutRef = useRef<number | null>(null);
+  const styleFallbackUsableRef = useRef(false);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -214,6 +241,8 @@ export function useLidarSelection(
   useEffect(() => {
     if (!map) return;
 
+    styleFallbackUsableRef.current = false;
+
     let canvas: ReturnType<MapboxMap['getCanvas']> | null = null;
     try {
       canvas = map.getCanvas();
@@ -221,10 +250,27 @@ export function useLidarSelection(
       canvas = null;
     }
 
+    const canMutateOverlayStyle = (): boolean => {
+      const health = readStyleHealth(map);
+      if (!health.hasStyle) return false;
+      if (health.isStyleLoaded) return true;
+      if (!styleFallbackUsableRef.current) return false;
+      return health.sourceCount > 0 || health.layerCount > 0;
+    };
+
+    const promoteStyleFallbackIfUsable = (): boolean => {
+      if (styleFallbackUsableRef.current) return true;
+      const health = readStyleHealth(map);
+      if (!health.hasStyle) return false;
+      if (health.sourceCount === 0 && health.layerCount === 0) return false;
+      styleFallbackUsableRef.current = true;
+      return true;
+    };
+
     // Returns true when data was successfully pushed, false when the style
     // graph was not ready (caller can schedule a retry).
     const updateSourceData = (): boolean => {
-      if (!map.isStyleLoaded()) return false;
+      if (!canMutateOverlayStyle() && !promoteStyleFallbackIfUsable()) return false;
 
       const ready = ensureSelectionLayers(map);
       if (!ready) return false;
@@ -272,7 +318,9 @@ export function useLidarSelection(
       if (sameTile(nextCoord, hoveredRef.current)) return;
 
       hoveredRef.current = nextCoord;
-      updateSourceData();
+      if (!updateSourceData()) {
+        scheduleOverlaySync();
+      }
     };
 
     const handleClick = (event: MapMouseEvent) => {
@@ -289,7 +337,9 @@ export function useLidarSelection(
 
     const handleMouseLeave = () => {
       hoveredRef.current = null;
-      updateSourceData();
+      if (!updateSourceData()) {
+        scheduleOverlaySync();
+      }
     };
 
     const handleStyleLoad = () => {
@@ -304,7 +354,9 @@ export function useLidarSelection(
       if (!enabledRef.current) return;
       event.preventDefault();
       hoveredRef.current = null;
-      updateSourceData();
+      if (!updateSourceData()) {
+        scheduleOverlaySync();
+      }
       onDisableRef.current?.();
     };
 
