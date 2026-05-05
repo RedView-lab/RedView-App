@@ -3,8 +3,6 @@ export const MAP_CACHE_EPOCH = '2026-05-05-map-reset-1';
 export const MAP_CACHE_EPOCH_STORAGE_KEY = 'redview:map-cache-epoch';
 export const PROJECT_CACHE_KEY_PREFIX_BASE = 'redview:project-cache:';
 export const PROJECT_CACHE_KEY_PREFIX = `${PROJECT_CACHE_KEY_PREFIX_BASE}${MAP_CACHE_EPOCH}:`;
-export const VIEWPORT_STORAGE_KEY_BASE = 'redview-map-viewport';
-export const VIEWPORT_STORAGE_KEY = `${VIEWPORT_STORAGE_KEY_BASE}:${MAP_CACHE_EPOCH}`;
 
 const MAP_CACHE_PREFIXES = [
   'dem-tiles-',
@@ -46,12 +44,6 @@ function purgeLegacyMapLocalStorage(): void {
       ) {
         window.localStorage.removeItem(key);
         continue;
-      }
-      if (
-        key.startsWith(VIEWPORT_STORAGE_KEY_BASE)
-        && key !== VIEWPORT_STORAGE_KEY
-      ) {
-        window.localStorage.removeItem(key);
       }
     }
   } catch (error) {

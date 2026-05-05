@@ -23,26 +23,29 @@
 // Current: dem-tiles-v45 / dem-negative-v27 (France high-zoom transient-miss guard)
 // ---------------------------------------------------------------------------
 
+const swModuleEpoch = new URL(self.location.href).searchParams.get('rv-map-cache-epoch') || 'base';
+const withEpoch = (path) => `${path}?rv-map-cache-epoch=${encodeURIComponent(swModuleEpoch)}`;
+
 importScripts(
   // ── Pipeline primitives (config + math + low-level fetchers) ──────────
-  '/sw-dem/core/config.js',
-  '/sw-dem/core/geo.js',
-  '/sw-dem/core/interpolation.js',
-  '/sw-dem/core/terrain-rgb.js',
-  '/sw-dem/sources/ign-fetcher.js',
-  '/sw-dem/sources/mapbox.js',
-  '/sw-dem/sources/aws-terrain.js',
-  '/sw-dem/processing/build-tile.js',
-  '/sw-dem/processing/composite.js',
-  '/sw-dem/sources/ortho.js',
-  '/sw-dem/processing/slope.js',
-  '/sw-dem/processing/altitude.js',
+  withEpoch('/sw-dem/core/config.js'),
+  withEpoch('/sw-dem/core/geo.js'),
+  withEpoch('/sw-dem/core/interpolation.js'),
+  withEpoch('/sw-dem/core/terrain-rgb.js'),
+  withEpoch('/sw-dem/sources/ign-fetcher.js'),
+  withEpoch('/sw-dem/sources/mapbox.js'),
+  withEpoch('/sw-dem/sources/aws-terrain.js'),
+  withEpoch('/sw-dem/processing/build-tile.js'),
+  withEpoch('/sw-dem/processing/composite.js'),
+  withEpoch('/sw-dem/sources/ortho.js'),
+  withEpoch('/sw-dem/processing/slope.js'),
+  withEpoch('/sw-dem/processing/altitude.js'),
   // Switzerland — swissSURFACE3D Raster (COG over STAC, 0.5 m LiDAR DSM)
-  '/sw-dem/swiss/swiss-config.js',
-  '/sw-dem/swiss/swiss-coords.js',
-  '/sw-dem/swiss/swiss-cog.js',
-  '/sw-dem/swiss/swiss-fetcher.js',
-  '/sw-dem/swiss/swiss-build.js',
+  withEpoch('/sw-dem/swiss/swiss-config.js'),
+  withEpoch('/sw-dem/swiss/swiss-coords.js'),
+  withEpoch('/sw-dem/swiss/swiss-cog.js'),
+  withEpoch('/sw-dem/swiss/swiss-fetcher.js'),
+  withEpoch('/sw-dem/swiss/swiss-build.js'),
 
   // ── SW orchestration (lifecycle + handlers) ───────────────────────────
   // Order matters only for declaration-before-use of `const`/`let` at
@@ -51,12 +54,12 @@ importScripts(
   // defined in any order. We list lifecycle first (declares the global
   // in-flight Maps + composite limiter), then helpers, then handlers,
   // then the router (which only registers a listener).
-  '/sw-dem/runtime/lifecycle.js',
-  '/sw-dem/runtime/dem-helpers.js',
-  '/sw-dem/runtime/dem-health.js',
-  '/sw-dem/runtime/upgrade-scheduler.js',
-  '/sw-dem/runtime/dem-handler.js',
-  '/sw-dem/runtime/slope-handler.js',
-  '/sw-dem/runtime/altitude-handler.js',
-  '/sw-dem/runtime/router.js',
+  withEpoch('/sw-dem/runtime/lifecycle.js'),
+  withEpoch('/sw-dem/runtime/dem-helpers.js'),
+  withEpoch('/sw-dem/runtime/dem-health.js'),
+  withEpoch('/sw-dem/runtime/upgrade-scheduler.js'),
+  withEpoch('/sw-dem/runtime/dem-handler.js'),
+  withEpoch('/sw-dem/runtime/slope-handler.js'),
+  withEpoch('/sw-dem/runtime/altitude-handler.js'),
+  withEpoch('/sw-dem/runtime/router.js'),
 );

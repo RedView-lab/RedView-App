@@ -1,5 +1,4 @@
-import { VIEWPORT_STORAGE_KEY as STORAGE_KEY } from './mapCacheEpoch';
-
+const STORAGE_KEY = 'redview-map-viewport';
 const SAVE_DEBOUNCE_MS = 1000;
 
 export interface MapViewport {

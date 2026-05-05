@@ -3,6 +3,67 @@ import {
 } from './constants';
 import { ensureMapCacheEpochReset, MAP_CACHE_EPOCH } from '../../lib/mapCacheEpoch';
 
+const MAP_CACHE_AUTO_RELOAD_SESSION_KEY = 'redview:map-cache-auto-reload';
+
+function getServiceWorkerEpoch(serviceWorker: ServiceWorker | null | undefined): string | null {
+  if (!serviceWorker?.scriptURL) return null;
+  try {
+    return new URL(serviceWorker.scriptURL).searchParams.get('rv-map-cache-epoch');
+  } catch {
+    return null;
+  }
+}
+
+function hasReloadedForCurrentEpoch(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(MAP_CACHE_AUTO_RELOAD_SESSION_KEY) === MAP_CACHE_EPOCH;
+  } catch {
+    return false;
+  }
+}
+
+function markReloadedForCurrentEpoch(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(MAP_CACHE_AUTO_RELOAD_SESSION_KEY, MAP_CACHE_EPOCH);
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function scheduleEpochTakeoverReload(epochReset: boolean): void {
+  if (!epochReset || typeof window === 'undefined' || hasReloadedForCurrentEpoch()) return;
+
+  let reloaded = false;
+  const reloadOnce = (reason: string) => {
+    if (reloaded || hasReloadedForCurrentEpoch()) return;
+    reloaded = true;
+    markReloadedForCurrentEpoch();
+    console.warn(`[sw-dem] map cache epoch changed; reloading page once (${reason})`);
+    window.location.reload();
+  };
+
+  const currentEpoch = getServiceWorkerEpoch(navigator.serviceWorker.controller);
+  if (currentEpoch === MAP_CACHE_EPOCH) {
+    reloadOnce('controller already updated');
+    return;
+  }
+
+  const onControllerChange = () => {
+    if (getServiceWorkerEpoch(navigator.serviceWorker.controller) !== MAP_CACHE_EPOCH) return;
+    navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    clearTimeout(fallbackTimer);
+    reloadOnce('controllerchange');
+  };
+
+  navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+  const fallbackTimer = window.setTimeout(() => {
+    navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    reloadOnce('takeover timeout');
+  }, 2500);
+}
+
 function notifyMapCacheReset(serviceWorker: ServiceWorker | null | undefined): void {
   serviceWorker?.postMessage({
     type: 'PURGE_MAP_CACHES',
@@ -60,6 +121,7 @@ export const swReady: Promise<boolean> = (async () => {
     if (epochReset) {
       notifyRegistrationMapCacheReset(registration);
       notifyMapCacheReset(navigator.serviceWorker.controller);
+      scheduleEpochTakeoverReload(true);
     }
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
