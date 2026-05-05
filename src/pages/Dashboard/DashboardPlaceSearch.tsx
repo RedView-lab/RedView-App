@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
@@ -12,9 +12,57 @@ interface DashboardPlaceSearchProps {
   top: number;
 }
 
-const SEARCH_FLY_TO_DURATION_MS = 900;
-const SEARCH_MIN_ZOOM = 13.5;
+const SEARCH_PRELOAD_LEAD_MS = 140;
+const SEARCH_NEAR_ZOOM = 14.4;
+const SEARCH_MEDIUM_ZOOM = 13.4;
+const SEARCH_FAR_ZOOM = 12.35;
+const SEARCH_NEAR_MAX_KM = 45;
+const SEARCH_MEDIUM_MAX_KM = 180;
 const SEARCH_COUNTRIES = 'fr,ch,be,lu,it,de,es,ad';
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function distanceKm(from: { lon: number; lat: number }, to: { lon: number; lat: number }): number {
+  const toRad = (value: number) => value * Math.PI / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(to.lat - from.lat);
+  const dLon = toRad(to.lon - from.lon);
+  const lat1 = toRad(from.lat);
+  const lat2 = toRad(to.lat);
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const a = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getSearchCameraProfile(map: MapboxMap, suggestion: GeocodeSuggestion) {
+  const currentCenter = map.getCenter();
+  const jumpDistanceKm = distanceKm(
+    { lon: currentCenter.lng, lat: currentCenter.lat },
+    { lon: suggestion.lon, lat: suggestion.lat },
+  );
+
+  const targetZoom = jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+    ? clamp(map.getZoom(), 13.6, SEARCH_NEAR_ZOOM)
+    : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+      ? clamp(map.getZoom(), 12.8, SEARCH_MEDIUM_ZOOM)
+      : clamp(map.getZoom(), 11.6, SEARCH_FAR_ZOOM);
+
+  const duration = jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+    ? 1050
+    : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+      ? 1450
+      : 1900;
+
+  return {
+    targetZoom,
+    duration,
+    screenSpeed: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.15 : 0.95,
+    curve: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.2 : 1.42,
+  };
+}
 
 function SearchIcon() {
   return (
@@ -41,6 +89,14 @@ export function DashboardPlaceSearch({
   const [proximity, setProximity] = useState<{ lon: number; lat: number } | undefined>(
     undefined,
   );
+  const flightTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (flightTimerRef.current !== null) {
+      window.clearTimeout(flightTimerRef.current);
+      flightTimerRef.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!map) {
@@ -64,12 +120,38 @@ export function DashboardPlaceSearch({
   const handlePick = useCallback(
     (suggestion: GeocodeSuggestion) => {
       if (!map) return;
-      map.easeTo({
-        center: [suggestion.lon, suggestion.lat],
-        zoom: Math.max(map.getZoom(), SEARCH_MIN_ZOOM),
-        duration: SEARCH_FLY_TO_DURATION_MS,
-        essential: true,
+
+      if (flightTimerRef.current !== null) {
+        window.clearTimeout(flightTimerRef.current);
+        flightTimerRef.current = null;
+      }
+
+      const { targetZoom, duration, screenSpeed, curve } = getSearchCameraProfile(map, suggestion);
+      const center: [number, number] = [suggestion.lon, suggestion.lat];
+      const camera = {
+        center,
+        zoom: targetZoom,
+        bearing: map.getBearing(),
+        pitch: map.getPitch(),
+      };
+
+      map.stop();
+      map.jumpTo({
+        ...camera,
+        preloadOnly: true,
       });
+
+      flightTimerRef.current = window.setTimeout(() => {
+        flightTimerRef.current = null;
+        map.flyTo({
+          ...camera,
+          duration,
+          curve,
+          screenSpeed,
+          maxDuration: 2200,
+          essential: true,
+        });
+      }, SEARCH_PRELOAD_LEAD_MS);
     },
     [map],
   );
