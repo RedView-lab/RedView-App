@@ -14,6 +14,62 @@ import type { UseMapOptions } from './types';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+type MapboxStyleDefinition = Record<string, unknown>;
+
+const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
+
+function getMapboxStyleApiUrl(styleUrl: string): string | null {
+  const prefix = 'mapbox://styles/';
+  if (!styleUrl.startsWith(prefix)) return null;
+  const stylePath = styleUrl.slice(prefix.length);
+  return `https://api.mapbox.com/styles/v1/${stylePath}?access_token=${encodeURIComponent(MAPBOX_TOKEN)}`;
+}
+
+function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefinition {
+  return JSON.parse(JSON.stringify(style)) as MapboxStyleDefinition;
+}
+
+async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyleDefinition> {
+  const cached = prefetchedStyleCache.get(styleUrl);
+  if (cached) return cloneStyleDefinition(cached);
+
+  const apiUrl = getMapboxStyleApiUrl(styleUrl);
+  if (!apiUrl) throw new Error(`Unsupported style URL: ${styleUrl}`);
+
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 6000);
+    try {
+      const response = await fetch(apiUrl, {
+        signal: controller.signal,
+        credentials: 'omit',
+        cache: attempt === 0 ? 'default' : 'reload',
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} while fetching style ${styleUrl}`);
+      }
+      const style = (await response.json()) as MapboxStyleDefinition;
+      prefetchedStyleCache.set(styleUrl, style);
+      return cloneStyleDefinition(style);
+    } catch (error) {
+      lastError = error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Failed to fetch style ${styleUrl}`);
+}
+
+async function resolveStyleInput(styleUrl: string): Promise<string | MapboxStyleDefinition> {
+  return getMapboxStyleApiUrl(styleUrl)
+    ? fetchMapboxStyleDefinition(styleUrl)
+    : styleUrl;
+}
+
 const DEFAULT_BASEMAP_CONFIG = {
   styleUrl: MAPBOX_STYLE,
   visualFamily: 'mapbox-classic-v12',
@@ -226,26 +282,12 @@ export function useMap(
       return;
     }
 
-    activeBasemapConfigRef.current = basemapConfig;
-    setIsLoaded(false);
-    prepareStyleChange('Fond de carte');
-    map.setStyle(basemapConfig.styleUrl, {
-      diff: false,
-      localFontFamily: null,
-      localIdeographFontFamily: 'sans-serif',
-    });
-
-    // Reveal as soon as the new style yields any rendered output, with
-    // a hard 8s fallback. Same rationale as the initial-mount path: the
-    // bootstrap promise can stall under sprite/image error storms.
     let switchCancelled = false;
     const revealAfterSwitch = () => {
       if (switchCancelled) return;
       setIsLoaded(true);
     };
-    map.once('load', revealAfterSwitch);
-    map.once('idle', revealAfterSwitch);
-    const switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
+    let switchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
     let switchRetries = 0;
     const MAX_SWITCH_RETRIES = 3;
@@ -274,11 +316,63 @@ export function useMap(
           setIsLoaded(true);
         });
 
-    void attemptBootstrap();
+    const startStyleSwitch = async (): Promise<void> => {
+      const previousConfig = activeConfig;
+      let styleInput: string | MapboxStyleDefinition;
+      try {
+        styleInput = await resolveStyleInput(basemapConfig.styleUrl);
+      } catch (error) {
+        if (switchCancelled) return;
+        console.error('[map3d] style switch prefetch failed', error);
+        activeBasemapConfigRef.current = previousConfig;
+        lifecycle.reportStatus(
+          'error',
+          0,
+          error instanceof Error ? error.message : 'Chargement du fond de carte impossible',
+        );
+        setIsLoaded(true);
+        return;
+      }
+      if (switchCancelled) return;
+
+      activeBasemapConfigRef.current = basemapConfig;
+      setIsLoaded(false);
+      prepareStyleChange('Fond de carte');
+
+      try {
+        map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
+          diff: false,
+          localFontFamily: null,
+          localIdeographFontFamily: 'sans-serif',
+        });
+      } catch (error) {
+        if (switchCancelled) return;
+        console.error('[map3d] setStyle failed', error);
+        activeBasemapConfigRef.current = previousConfig;
+        lifecycle.reportStatus(
+          'error',
+          0,
+          error instanceof Error ? error.message : 'Changement de fond de carte impossible',
+        );
+        setIsLoaded(true);
+        return;
+      }
+
+      // Reveal as soon as the new style yields any rendered output, with
+      // a hard 8s fallback. Same rationale as the initial-mount path: the
+      // bootstrap promise can stall under sprite/image error storms.
+      map.once('load', revealAfterSwitch);
+      map.once('idle', revealAfterSwitch);
+      switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
+
+      void attemptBootstrap();
+    };
+
+    void startStyleSwitch();
 
     return () => {
       switchCancelled = true;
-      clearTimeout(switchFallbackTimer);
+      if (switchFallbackTimer) clearTimeout(switchFallbackTimer);
       map.off('load', revealAfterSwitch);
       map.off('idle', revealAfterSwitch);
     };
