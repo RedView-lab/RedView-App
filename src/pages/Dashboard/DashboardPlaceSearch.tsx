@@ -4,7 +4,6 @@ import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdr
 import type { BasemapRenderConfig } from '@/features/controlPanel';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
-import { waitForMapIdleOrTimeout } from '@/features/map3d/hooks/useMap/runtimeProfile';
 import './dashboard-place-search.css';
 
 interface DashboardPlaceSearchProps {
@@ -215,21 +214,14 @@ export function DashboardPlaceSearch({
       if (!map) return;
 
       clearPendingSearchTransition(map);
-      const transitionToken = settleTokenRef.current;
 
-      const {
-        targetZoom,
-        duration,
-        screenSpeed,
-        curve,
-        preloadLeadMs,
-        entryZoom,
-        entryPitch,
-        finalPitch,
-        shouldStageFinalApproach,
-        settleWaitMs,
-        finalApproachDuration,
-      } = getSearchCameraProfile(map, basemapConfig, suggestion);
+      // Instant teleport. Animated flyTo (1-4 s) made the user wait for the
+      // camera before they could see anything; replaced by jumpTo so the
+      // viewport snaps to the target in a single frame. Tiles paint in as
+      // they arrive — same wall-clock cost, but the user perceives the
+      // teleport as immediate instead of waiting through a flight + staged
+      // satellite settle.
+      const { targetZoom, finalPitch } = getSearchCameraProfile(map, basemapConfig, suggestion);
       const center: [number, number] = [suggestion.lon, suggestion.lat];
       const finalCamera = {
         center,
@@ -237,58 +229,22 @@ export function DashboardPlaceSearch({
         bearing: map.getBearing(),
         pitch: finalPitch,
       };
-      const entryCamera = {
-        center,
-        zoom: entryZoom,
-        bearing: map.getBearing(),
-        pitch: entryPitch,
-      };
 
       map.stop();
-      const preloadCamera = shouldStageFinalApproach ? entryCamera : finalCamera;
-      const preloadOptions = {
-        ...preloadCamera,
-        duration,
-        curve,
-        screenSpeed,
-        maxDuration: 2200,
-        essential: true,
-        preloadOnly: true,
-      };
-      map.flyTo(preloadOptions);
-
-      flightTimerRef.current = window.setTimeout(() => {
-        if (transitionToken !== settleTokenRef.current) return;
-        flightTimerRef.current = null;
-
-        if (shouldStageFinalApproach) {
-          const onEntryMoveEnd = () => {
-            if (pendingMoveEndRef.current !== onEntryMoveEnd) return;
-            map.off('moveend', onEntryMoveEnd);
-            pendingMoveEndRef.current = null;
-            void waitForMapIdleOrTimeout(map, settleWaitMs).then(() => {
-              if (transitionToken !== settleTokenRef.current) return;
-              if (map.isMoving()) return;
-              map.easeTo({
-                ...finalCamera,
-                duration: finalApproachDuration,
-                essential: true,
-              });
-            });
-          };
-          pendingMoveEndRef.current = onEntryMoveEnd;
-          map.on('moveend', onEntryMoveEnd);
-        }
-
+      // Warm the tile cache for the destination viewport without moving
+      // the camera. preloadOnly returns immediately and queues fetches,
+      // so the subsequent jumpTo can paint sooner.
+      try {
         map.flyTo({
-          ...(shouldStageFinalApproach ? entryCamera : finalCamera),
-          duration,
-          curve,
-          screenSpeed,
-          maxDuration: 2200,
+          ...finalCamera,
+          duration: 0,
           essential: true,
+          preloadOnly: true,
         });
-      }, preloadLeadMs);
+      } catch {
+        /* preloadOnly is best-effort */
+      }
+      map.jumpTo(finalCamera);
     },
     [basemapConfig, clearPendingSearchTransition, map],
   );
