@@ -13,7 +13,7 @@ import {
   ControlPanelContainer,
   DEFAULT_BASEMAP_ID,
   ExporterPanel,
-  getBasemapStyleUrl,
+  getBasemapConfig,
   normalizeBasemapId,
 } from '@/features/controlPanel';
 import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
@@ -360,7 +360,7 @@ export default function Dashboard({
                 onLidarSelectionDisable={() => setLidarModeEnabled(false)}
                 initialViewport={projectMapViewport}
                 onViewportChange={handleMapViewportChange}
-                basemapStyleUrl={getBasemapStyleUrl(effectiveBasemapId)}
+                basemapConfig={getBasemapConfig(effectiveBasemapId)}
               />
 
               <MapOverlayStatusDock

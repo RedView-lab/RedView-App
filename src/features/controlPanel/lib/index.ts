@@ -1,9 +1,15 @@
 export {
   buildBasemapList,
   DEFAULT_BASEMAP_ID,
+  getBasemapConfig,
   getBasemapStyleUrl,
   MAPBOX_BASEMAPS,
   normalizeBasemapId,
+} from './basemaps';
+export type {
+  BasemapRenderConfig,
+  BasemapTerrainContract,
+  BasemapVisualFamily,
 } from './basemaps';
 export { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 export {

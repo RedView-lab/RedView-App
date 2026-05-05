@@ -6,12 +6,13 @@ import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
+import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
 
 interface MapViewProps {
   onMapReady?: (map: MapboxMap) => void;
   onMapLoadStatusChange?: OverlayStatusReporter;
   onMapReloadChange?: OverlayReloadRegistrar;
-  basemapStyleUrl?: string;
+  basemapConfig?: BasemapRenderConfig;
   lidarSelectionEnabled?: boolean;
   onLidarSelectionDisable?: () => void;
   initialViewport?: MapViewport | null;
@@ -22,7 +23,7 @@ export default function MapView({
   onMapReady,
   onMapLoadStatusChange,
   onMapReloadChange,
-  basemapStyleUrl,
+  basemapConfig,
   lidarSelectionEnabled = false,
   onLidarSelectionDisable,
   initialViewport,
@@ -34,7 +35,7 @@ export default function MapView({
     onViewportChange,
     onLoadStatusChange: onMapLoadStatusChange,
     registerReload: onMapReloadChange,
-    basemapStyleUrl,
+    basemapConfig,
   });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);

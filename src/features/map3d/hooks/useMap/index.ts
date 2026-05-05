@@ -14,6 +14,12 @@ import type { UseMapOptions } from './types';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
+const DEFAULT_BASEMAP_CONFIG = {
+  styleUrl: MAPBOX_STYLE,
+  visualFamily: 'mapbox-classic-v12',
+  terrainContract: 'unified-dem-v1',
+} as const;
+
 export function useMap(
   containerRef: RefObject<HTMLDivElement | null>,
   options: UseMapOptions = {},
@@ -27,12 +33,12 @@ export function useMap(
     onViewportChange,
     onLoadStatusChange,
     registerReload,
-    basemapStyleUrl = MAPBOX_STYLE,
+    basemapConfig = DEFAULT_BASEMAP_CONFIG,
   } = options;
   const onViewportChangeRef = useRef(onViewportChange);
   const onLoadStatusChangeRef = useRef(onLoadStatusChange);
   const registerReloadRef = useRef(registerReload);
-  const activeStyleUrlRef = useRef(basemapStyleUrl);
+  const activeBasemapConfigRef = useRef(basemapConfig);
   const prepareStyleChangeRef = useRef<((detail?: string) => void) | null>(null);
   const bootstrapStyleRef = useRef<(() => Promise<boolean>) | null>(null);
 
@@ -56,7 +62,7 @@ export function useMap(
     const runtimeProfile = getMapRuntimeProfile();
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: basemapStyleUrl,
+      style: basemapConfig.styleUrl,
       center: savedVp?.center ?? DEFAULT_VIEW.center,
       zoom: savedVp?.zoom ?? DEFAULT_VIEW.zoom,
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
@@ -77,7 +83,9 @@ export function useMap(
       terrainRef,
       onLoadStatusChangeRef,
       registerReloadRef,
-      getActiveStyleUrl: () => activeStyleUrlRef.current,
+      getActiveStyleUrl: () => activeBasemapConfigRef.current.styleUrl,
+      getActiveVisualFamily: () => activeBasemapConfigRef.current.visualFamily,
+      getActiveTerrainContract: () => activeBasemapConfigRef.current.terrainContract,
       isCancelled: () => cancelled,
     });
     lifecycleRef.current = lifecycle;
@@ -209,12 +217,19 @@ export function useMap(
     const prepareStyleChange = prepareStyleChangeRef.current;
     const bootstrapCurrentStyle = bootstrapStyleRef.current;
     if (!map || !lifecycle || !prepareStyleChange || !bootstrapCurrentStyle) return;
-    if (basemapStyleUrl === activeStyleUrlRef.current) return;
+    const activeConfig = activeBasemapConfigRef.current;
+    if (
+      basemapConfig.styleUrl === activeConfig.styleUrl
+      && basemapConfig.visualFamily === activeConfig.visualFamily
+      && basemapConfig.terrainContract === activeConfig.terrainContract
+    ) {
+      return;
+    }
 
-    activeStyleUrlRef.current = basemapStyleUrl;
+    activeBasemapConfigRef.current = basemapConfig;
     setIsLoaded(false);
     prepareStyleChange('Fond de carte');
-    map.setStyle(basemapStyleUrl, {
+    map.setStyle(basemapConfig.styleUrl, {
       diff: false,
       localFontFamily: null,
       localIdeographFontFamily: 'sans-serif',
@@ -267,7 +282,7 @@ export function useMap(
       map.off('load', revealAfterSwitch);
       map.off('idle', revealAfterSwitch);
     };
-  }, [basemapStyleUrl]);
+  }, [basemapConfig]);
 
   useEffect(() => {
     const map = mapRef.current;

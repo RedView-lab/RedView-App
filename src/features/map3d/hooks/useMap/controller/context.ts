@@ -14,8 +14,8 @@ import type { MapRuntimeProfile } from '../runtimeProfile';
 import { getDemTileKey, type DemSourceDataLike, type DemTileProfile } from '../demTiles';
 import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
 
-export const MAPBOX_STANDARD_STYLE_URL = 'mapbox://styles/mapbox/standard';
-export const MAPBOX_STANDARD_SATELLITE_STYLE_URL = 'mapbox://styles/mapbox/standard-satellite';
+export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
+export type TerrainBootstrapContract = 'unified-dem-v1';
 // Reduced from 15 s to 5 s: Standard-Satellite never fires style.load due
 // to SVG sprite rejection storms in Mapbox 3.x. After this timeout the
 // inline sprite-storm bypass detects style sources and proceeds immediately
@@ -37,6 +37,8 @@ export interface CreateMapLifecycleControllerOptions {
   onLoadStatusChangeRef: MutableRefObject<OverlayStatusReporter | undefined>;
   registerReloadRef: MutableRefObject<OverlayReloadRegistrar | undefined>;
   getActiveStyleUrl: () => string;
+  getActiveVisualFamily: () => BasemapVisualFamily;
+  getActiveTerrainContract: () => TerrainBootstrapContract;
   isCancelled: () => boolean;
 }
 

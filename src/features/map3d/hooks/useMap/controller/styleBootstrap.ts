@@ -2,14 +2,12 @@ import { unifiedDEMSource } from '../../../lib/sources';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import { swReady, swLateReady } from '../serviceWorker';
 import {
-  MAPBOX_STANDARD_STYLE_URL,
-  MAPBOX_STANDARD_SATELLITE_STYLE_URL,
   STYLE_LOAD_WATCHDOG_MS,
   type Ctx,
 } from './context';
 
-const supportsStandardLightPreset = (styleUrl: string): boolean => (
-  styleUrl === MAPBOX_STANDARD_STYLE_URL || styleUrl === MAPBOX_STANDARD_SATELLITE_STYLE_URL
+const supportsStandardLightPreset = (visualFamily: Ctx['getActiveVisualFamily'] extends never ? never : ReturnType<Ctx['getActiveVisualFamily']>): boolean => (
+  visualFamily === 'mapbox-standard-v3'
 );
 
 /**
@@ -30,7 +28,7 @@ const supportsStandardLightPreset = (styleUrl: string): boolean => (
  *    of leaving the map permanently flat.
  */
 export function attachStyleBootstrap(ctx: Ctx): void {
-  const { map, isCancelled, getActiveStyleUrl, fogConfig, runtimeProfile } = ctx;
+  const { map, isCancelled, getActiveVisualFamily, getActiveTerrainContract, fogConfig, runtimeProfile } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
 
@@ -58,7 +56,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       } catch {
         /* style may still be finishing its internal graph rebuild */
       }
-      if (supportsStandardLightPreset(getActiveStyleUrl())) {
+      if (supportsStandardLightPreset(getActiveVisualFamily())) {
         try {
           map.setConfigProperty('basemap', 'lightPreset', 'dusk');
         } catch {
@@ -327,6 +325,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     fns.detachManagedTerrain();
 
+    const terrainContract = getActiveTerrainContract();
     if (map.getSource(unifiedDEMSource.id)) {
       // Treat every basemap switch the same way, regardless of whether the
       // previous style was a legacy v11/v12 stylesheet or a Standard v3
@@ -335,7 +334,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // and Standard-Satellite is exactly the style family that can delay or
       // suppress the later style.load recovery path. Rebuild immediately so
       // terrain always reattaches onto a fresh source contract.
-      if (!fns.refreshDemSource({ forceRebuild: true })) return false;
+      if (!fns.refreshDemSource({ forceRebuild: terrainContract === 'unified-dem-v1' })) return false;
     } else {
       if (!fns.refreshDemSource()) return false;
     }

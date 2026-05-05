@@ -1,10 +1,11 @@
 import type { MapViewport } from '../../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../../lib/overlayStatus';
+import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
 
 export interface UseMapOptions {
   initialViewport?: MapViewport | null;
   onViewportChange?: (viewport: MapViewport) => void;
   onLoadStatusChange?: OverlayStatusReporter;
   registerReload?: OverlayReloadRegistrar;
-  basemapStyleUrl?: string;
+  basemapConfig?: BasemapRenderConfig;
 }

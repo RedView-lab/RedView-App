@@ -1,10 +1,17 @@
 import type { Basemap, BasemapId } from '../types';
 
-interface BasemapOption {
+export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
+export type BasemapTerrainContract = 'unified-dem-v1';
+
+export interface BasemapRenderConfig {
   id: BasemapId;
   label: string;
   styleUrl: string;
+  visualFamily: BasemapVisualFamily;
+  terrainContract: BasemapTerrainContract;
 }
+
+interface BasemapOption extends BasemapRenderConfig {}
 
 // Stick to Mapbox-owned public style URLs so the app only pays for the same
 // GL JS map usage it already has, without introducing custom Styles API churn.
@@ -13,31 +20,43 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
     id: 'satellite',
     label: 'Satellite',
     styleUrl: 'mapbox://styles/mapbox/standard-satellite',
+    visualFamily: 'mapbox-standard-v3',
+    terrainContract: 'unified-dem-v1',
   },
   {
     id: 'streets',
     label: 'Streets',
     styleUrl: 'mapbox://styles/mapbox/streets-v12',
+    visualFamily: 'mapbox-classic-v12',
+    terrainContract: 'unified-dem-v1',
   },
   {
     id: 'topographic',
     label: 'Topographique',
     styleUrl: 'mapbox://styles/mapbox/outdoors-v12',
+    visualFamily: 'mapbox-classic-v12',
+    terrainContract: 'unified-dem-v1',
   },
   {
     id: 'standard',
     label: 'Standard / 3D',
     styleUrl: 'mapbox://styles/mapbox/standard',
+    visualFamily: 'mapbox-standard-v3',
+    terrainContract: 'unified-dem-v1',
   },
   {
     id: 'light',
     label: 'Light',
     styleUrl: 'mapbox://styles/mapbox/light-v11',
+    visualFamily: 'mapbox-classic-v12',
+    terrainContract: 'unified-dem-v1',
   },
   {
     id: 'dark',
     label: 'Dark',
     styleUrl: 'mapbox://styles/mapbox/dark-v11',
+    visualFamily: 'mapbox-classic-v12',
+    terrainContract: 'unified-dem-v1',
   },
 ] as const;
 
@@ -68,7 +87,11 @@ export function buildBasemapList(activeId: BasemapId | null | undefined): Basema
 }
 
 export function getBasemapStyleUrl(id: BasemapId | null | undefined): string {
+  return getBasemapConfig(id).styleUrl;
+}
+
+export function getBasemapConfig(id: BasemapId | null | undefined): BasemapRenderConfig {
   const resolvedId = normalizeBasemapId(id);
-  return MAPBOX_BASEMAPS.find((basemap) => basemap.id === resolvedId)?.styleUrl
-    ?? MAPBOX_BASEMAPS[0].styleUrl;
+  return MAPBOX_BASEMAPS.find((basemap) => basemap.id === resolvedId)
+    ?? MAPBOX_BASEMAPS[0];
 }
