@@ -1,4 +1,4 @@
-import redviewLogoIconUrl from './redview-logo-icon.svg';
+import redviewLogoFullUrl from './redview-logo-full.png';
 
 export interface ViewerLoadingOverlayElements {
   statusEl: HTMLElement;
@@ -19,13 +19,7 @@ export function createViewerLoadingOverlay(overlay: HTMLElement): ViewerLoadingO
   overlay.innerHTML = `
     <div class="rv-lidar-loader" role="progressbar" aria-label="Chargement du Viewer LIDAR" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
       <div class="rv-lidar-loader__brand" aria-hidden="true">
-        <div class="rv-lidar-loader__wordmark">
-          <span class="rv-lidar-loader__wordmark-red">RED</span>
-          <span class="rv-lidar-loader__wordmark-view">view</span>
-          <span class="rv-lidar-loader__brand-icon">
-            <img class="rv-lidar-loader__brand-icon-svg" src="${redviewLogoIconUrl}" alt="" />
-          </span>
-        </div>
+        <img class="rv-lidar-loader__brand-image" src="${redviewLogoFullUrl}" alt="" />
       </div>
       <div class="rv-lidar-loader__progress-shell">
         <div class="rv-lidar-loader__track">

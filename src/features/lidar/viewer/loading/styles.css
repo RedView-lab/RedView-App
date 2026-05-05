@@ -7,10 +7,8 @@
   place-items: center;
   overflow: hidden;
   background:
-    linear-gradient(135deg, rgba(38, 48, 54, 0.26) 0%, rgba(38, 48, 54, 0) 32%),
-    linear-gradient(225deg, rgba(95, 72, 36, 0.18) 0%, rgba(95, 72, 36, 0) 34%),
-    linear-gradient(320deg, rgba(19, 71, 96, 0.30) 8%, rgba(19, 71, 96, 0) 38%),
-    linear-gradient(180deg, rgba(17, 24, 31, 0.98) 0%, rgba(10, 15, 24, 0.99) 48%, rgba(8, 11, 18, 1) 100%);
+    linear-gradient(180deg, rgba(7, 10, 15, 0.26) 0%, rgba(7, 10, 15, 0.36) 100%),
+    url('./loading-lidar-bg.png') center center / cover no-repeat;
   z-index: 100;
   transition: opacity 0.28s ease;
 }
@@ -18,28 +16,11 @@
 #overlay::before {
   content: '';
   position: absolute;
-  inset: -14% -8% auto -16%;
-  height: 58%;
-  border-radius: 42% 58% 39% 61% / 61% 34% 66% 39%;
+  inset: 0;
   background:
-    linear-gradient(120deg, rgba(129, 86, 34, 0.18) 0%, rgba(129, 86, 34, 0) 54%),
-    linear-gradient(188deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0) 66%);
-  filter: blur(72px);
-  transform: rotate(-8deg);
-  pointer-events: none;
-}
-
-#overlay::after {
-  content: '';
-  position: absolute;
-  inset: auto -10% -22% 20%;
-  height: 62%;
-  border-radius: 57% 43% 52% 48% / 45% 56% 44% 55%;
-  background:
-    linear-gradient(135deg, rgba(23, 92, 123, 0.30) 0%, rgba(23, 92, 123, 0) 48%),
-    linear-gradient(225deg, rgba(42, 113, 72, 0.18) 0%, rgba(42, 113, 72, 0) 44%);
-  filter: blur(88px);
-  transform: rotate(9deg);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018) 0%, rgba(255, 255, 255, 0) 26%),
+    linear-gradient(180deg, rgba(5, 8, 12, 0.18) 0%, rgba(5, 8, 12, 0.08) 50%, rgba(5, 8, 12, 0.24) 100%);
+  backdrop-filter: blur(12px);
   pointer-events: none;
 }
 
@@ -51,57 +32,23 @@
 .rv-lidar-loader {
   position: relative;
   z-index: 1;
-  display: flex;
   width: min(300px, calc(100vw - 48px));
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
+  height: 145px;
 }
 
 .rv-lidar-loader__brand {
+  position: absolute;
+  left: 50%;
+  top: -1px;
   display: flex;
   height: 39px;
-  width: 236px;
+  width: 214.11px;
   align-items: center;
   justify-content: center;
+  transform: translateX(calc(-50% + 0.5px));
 }
 
-.rv-lidar-loader__wordmark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
-.rv-lidar-loader__wordmark-red {
-  color: rgba(255, 255, 255, 0.98);
-  font-family: 'Rethink Sans', 'Segoe UI', sans-serif;
-  font-size: 57px;
-  font-weight: 600;
-  letter-spacing: -0.08em;
-  line-height: 0.8;
-}
-
-.rv-lidar-loader__wordmark-view {
-  margin-left: -1px;
-  color: rgba(255, 255, 255, 0.98);
-  font-family: 'Rethink Sans', 'Segoe UI', sans-serif;
-  font-size: 57px;
-  font-weight: 800;
-  letter-spacing: -0.08em;
-  line-height: 0.8;
-}
-
-.rv-lidar-loader__brand-icon {
-  display: inline-flex;
-  height: 39px;
-  width: 39px;
-  margin-left: 2px;
-  align-items: center;
-  justify-content: center;
-}
-
-.rv-lidar-loader__brand-icon-svg {
+.rv-lidar-loader__brand-image {
   display: block;
   height: 100%;
   width: 100%;
@@ -109,6 +56,9 @@
 }
 
 .rv-lidar-loader__progress-shell {
+  position: absolute;
+  top: 63px;
+  left: 0;
   display: flex;
   width: 100%;
   align-items: center;
@@ -157,13 +107,17 @@
 }
 
 .rv-lidar-loader__status {
+  position: absolute;
+  top: 121px;
+  left: 50%;
   min-width: 100%;
   color: rgba(255, 255, 255, 0.64);
   text-align: center;
   font-family: 'Rethink Sans', 'Segoe UI', sans-serif;
   font-size: 18px;
   font-weight: 400;
-  line-height: 1.2;
+  line-height: normal;
+  transform: translateX(-50%);
 }
 
 .rv-lidar-loader__status[data-loading-error='true'] {
@@ -186,15 +140,21 @@
 @media (max-width: 640px) {
   .rv-lidar-loader {
     width: min(300px, calc(100vw - 32px));
-    gap: 20px;
+    height: 139px;
   }
 
   .rv-lidar-loader__brand {
-    transform: scale(0.9);
+    top: 0;
+    transform: translateX(-50%) scale(0.92);
     transform-origin: center center;
   }
 
+  .rv-lidar-loader__progress-shell {
+    top: 61px;
+  }
+
   .rv-lidar-loader__status {
+    top: 117px;
     font-size: 16px;
   }
 }
