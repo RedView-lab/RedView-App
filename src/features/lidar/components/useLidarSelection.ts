@@ -74,9 +74,10 @@ function restackSelectionLayers(map: MapboxMap): void {
   }
 }
 
-function ensureSelectionLayers(map: MapboxMap): void {
-  if (!canInspectStyle(map)) return;
+function ensureSelectionLayers(map: MapboxMap): boolean {
+  if (!canInspectStyle(map)) return false;
 
+  // Each section is isolated so a single failure doesn't prevent the rest.
   try {
     if (!map.getSource(SOURCE_ID)) {
       map.addSource(SOURCE_ID, {
@@ -87,7 +88,11 @@ function ensureSelectionLayers(map: MapboxMap): void {
         },
       });
     }
+  } catch {
+    return false;
+  }
 
+  try {
     if (!map.getLayer(HOVER_FILL_ID)) {
       map.addLayer({
         id: HOVER_FILL_ID,
@@ -102,7 +107,9 @@ function ensureSelectionLayers(map: MapboxMap): void {
         },
       });
     }
+  } catch { /* skip */ }
 
+  try {
     if (!map.getLayer(HOVER_LINE_ID)) {
       map.addLayer({
         id: HOVER_LINE_ID,
@@ -120,7 +127,9 @@ function ensureSelectionLayers(map: MapboxMap): void {
         },
       });
     }
+  } catch { /* skip */ }
 
+  try {
     if (!map.getLayer(SELECTED_FILL_ID)) {
       map.addLayer({
         id: SELECTED_FILL_ID,
@@ -135,7 +144,9 @@ function ensureSelectionLayers(map: MapboxMap): void {
         },
       });
     }
+  } catch { /* skip */ }
 
+  try {
     if (!map.getLayer(SELECTED_LINE_ID)) {
       map.addLayer({
         id: SELECTED_LINE_ID,
@@ -152,11 +163,13 @@ function ensureSelectionLayers(map: MapboxMap): void {
         },
       });
     }
-  } catch {
-    return;
-  }
+  } catch { /* skip */ }
 
   restackSelectionLayers(map);
+
+  // Source may not be immediately queryable right after addSource during a style
+  // graph rebuild — signal success only when we can actually retrieve it.
+  return Boolean(map.getSource(SOURCE_ID));
 }
 
 function removeSelectionLayers(map: MapboxMap): void {
@@ -208,15 +221,19 @@ export function useLidarSelection(
       canvas = null;
     }
 
-    const updateSourceData = () => {
-      if (!map.isStyleLoaded()) return;
+    // Returns true when data was successfully pushed, false when the style
+    // graph was not ready (caller can schedule a retry).
+    const updateSourceData = (): boolean => {
+      if (!map.isStyleLoaded()) return false;
 
-      ensureSelectionLayers(map);
+      const ready = ensureSelectionLayers(map);
+      if (!ready) return false;
 
       const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined;
-      if (!source) return;
+      if (!source) return false;
 
       source.setData(buildFeatureCollection(hoveredRef.current, selectedRef.current, enabledRef.current));
+      return true;
     };
 
     const clearScheduledSync = () => {
@@ -232,15 +249,20 @@ export function useLidarSelection(
 
     const scheduleOverlaySync = () => {
       clearScheduledSync();
-      updateSourceData();
+      if (updateSourceData()) return;  // fast path — style already ready
       syncFrameRef.current = window.requestAnimationFrame(() => {
         syncFrameRef.current = null;
-        updateSourceData();
+        if (updateSourceData()) return;
+        // Style still not ready — cascade: 150 ms then 500 ms retries.
+        syncTimeoutRef.current = window.setTimeout(() => {
+          syncTimeoutRef.current = null;
+          if (updateSourceData()) return;
+          syncTimeoutRef.current = window.setTimeout(() => {
+            syncTimeoutRef.current = null;
+            updateSourceData();
+          }, 400);
+        }, 150);
       });
-      syncTimeoutRef.current = window.setTimeout(() => {
-        syncTimeoutRef.current = null;
-        updateSourceData();
-      }, 150);
     };
 
     const handleMouseMove = (event: MapMouseEvent) => {
@@ -258,7 +280,10 @@ export function useLidarSelection(
 
       const coord = hoveredRef.current ?? wgs84ToTileCoord(event.lngLat.lng, event.lngLat.lat);
       selectedRef.current = coord;
-      updateSourceData();
+      // Use scheduleOverlaySync (not bare updateSourceData) so that if the
+      // style graph is momentarily rebuilding the selection is retried — a
+      // click fires exactly once and has no automatic follow-up unlike mousemove.
+      scheduleOverlaySync();
       void manager.downloadTile(coord);
     };
 
