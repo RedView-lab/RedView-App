@@ -1,5 +1,6 @@
 import type { MapSourceDataEvent } from 'mapbox-gl';
 import { unifiedDEMSource } from '../../lib/sources';
+import { MAP_CACHE_EPOCH } from '../../lib/mapCacheEpoch';
 
 export type DemTileProfile = 'default' | 'terrain';
 
@@ -38,6 +39,7 @@ export function buildDemTilesTemplate(
   profile: DemTileProfile = 'default',
 ): string[] {
   const queryParams = [
+    `rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`,
     ...(profile === 'terrain' ? ['rv-dem-profile=terrain'] : []),
     ...(cacheBust > 0 ? [`rv-dem=${cacheBust}`] : []),
   ];

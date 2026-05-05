@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { getProject, uploadProjectThumbnail } from '@/shared/utils/projects';
@@ -21,7 +22,6 @@ interface LocalProjectCacheEntry {
   project: ItineraryProject;
 }
 
-const PROJECT_CACHE_KEY_PREFIX = 'redview:project-cache:';
 const KEEPALIVE_BODY_LIMIT_BYTES = 60_000;
 const cacheWritesDisabledForProject = new Set<string>();
 

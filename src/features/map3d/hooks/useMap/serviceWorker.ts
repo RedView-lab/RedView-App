@@ -1,6 +1,23 @@
 import {
   SW_CONTROLLER_TIMEOUT,
 } from './constants';
+import { ensureMapCacheEpochReset, MAP_CACHE_EPOCH } from '../../lib/mapCacheEpoch';
+
+function notifyMapCacheReset(serviceWorker: ServiceWorker | null | undefined): void {
+  serviceWorker?.postMessage({
+    type: 'PURGE_MAP_CACHES',
+    epoch: MAP_CACHE_EPOCH,
+  });
+}
+
+function notifyRegistrationMapCacheReset(
+  registration: ServiceWorkerRegistration | null | undefined,
+): void {
+  if (!registration) return;
+  notifyMapCacheReset(registration.installing);
+  notifyMapCacheReset(registration.waiting);
+  notifyMapCacheReset(registration.active);
+}
 
 async function waitForServiceWorkerController(timeoutMs: number): Promise<ServiceWorker | null> {
   if (!('serviceWorker' in navigator)) return null;
@@ -34,12 +51,25 @@ async function waitForServiceWorkerController(timeoutMs: number): Promise<Servic
 export const swReady: Promise<boolean> = (async () => {
   if (!('serviceWorker' in navigator)) return false;
   try {
-    await navigator.serviceWorker.register('/sw-dem.js', { scope: '/' });
+    const epochReset = await ensureMapCacheEpochReset();
+    const registration = await navigator.serviceWorker.register(
+      `/sw-dem.js?rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`,
+      { scope: '/' },
+    );
+
+    if (epochReset) {
+      notifyRegistrationMapCacheReset(registration);
+      notifyMapCacheReset(navigator.serviceWorker.controller);
+    }
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
     if (!controller) {
       console.warn('[sw-dem] No controller after registration timeout - proceeding without DEM enhancement');
       return false;
+    }
+
+    if (epochReset) {
+      notifyMapCacheReset(controller);
     }
 
     return true;

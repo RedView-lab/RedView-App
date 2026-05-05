@@ -24,7 +24,7 @@ import {
 
 const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
-const DEM_CACHE_NAME = 'dem-tiles-v40'; // must match sw-dem/config.js CACHE_NAME
+const DEM_CACHE_PREFIX = 'dem-tiles-';
 const MAX_SAMPLE_TILE_COUNT = 256;
 const MIN_SAMPLE_DEM_ZOOM = 4;
 const PREVIEW_MAX_W = 448;
@@ -93,6 +93,15 @@ interface ComputeGrid {
 
 let state: GridState | null = null;
 
+async function openLatestDemCache(): Promise<Cache> {
+  const cacheNames = await caches.keys();
+  const candidates = cacheNames
+    .filter((cacheName) => cacheName.startsWith(DEM_CACHE_PREFIX))
+    .sort()
+    .reverse();
+  return caches.open(candidates[0] ?? `${DEM_CACHE_PREFIX}runtime`);
+}
+
 self.onmessage = async (e: MessageEvent<Request>) => {
   const msg = e.data;
   try {
@@ -141,7 +150,7 @@ async function handleSample(msg: SampleRequest) {
     return;
   }
 
-  const cache = await caches.open(DEM_CACHE_NAME);
+  const cache = await openLatestDemCache();
   type DecodedTile = { x: number; y: number; elev: Float32Array | null };
   const tiles: Promise<DecodedTile>[] = [];
   for (let ty = coverage.yMin; ty <= coverage.yMax; ty++) {

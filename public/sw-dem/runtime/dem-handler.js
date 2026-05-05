@@ -335,13 +335,17 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     //
     // At this zoom the only admissible fallback is our OWN cache: mid-zoom
     // parent tiles (z ≤ 14) in France are already LiDAR-HD composites.
-    // Bicubic-overzooming a z14 LiDAR tile to z17 preserves real relief
+    // Bicubic-overzooming a z14 LiDAR tile to z15/16/17 preserves real relief
     // (rocks, ridgelines, couloirs) — infinitely better than stretching a
-    // 30 m Mapbox pixel. If no LiDAR parent is available either, we return
-    // 204 with a very short TTL so Mapbox GL falls back to its own cached
-    // parent mesh (which is again the LiDAR blob one zoom level up) and
-    // retries the IGN pipeline on the next pan/zoom.
-    if (!pngBlob && tileIsInFrance && z > MAPBOX_DEM_MAXZOOM) {
+    // 30 m AWS/Mapbox pixel. This guard must start at z15, not z16: the
+    // raster-dem source itself stops at z15, so the first zoom-in child tile
+    // after a project load is already the critical threshold where a transient
+    // IGN miss can flatten the terrain if we let it fall through to AWS.
+    // If no LiDAR parent is available either, we return 204 with a very short
+    // TTL so Mapbox GL falls back to its own cached parent mesh (which is
+    // again the LiDAR blob one zoom level up) and retries the IGN pipeline on
+    // the next pan/zoom.
+    if (!pngBlob && tileIsInFrance && z >= MAPBOX_DEM_MAXZOOM) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
@@ -349,11 +353,11 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 3d. Same LiDAR-preserving path for Switzerland: at high zoom we never
-    // want to fall through to a server-overzoomed Mapbox tile when we have
-    // a parent COG-derived blob in our own cache. Use tileTrulyTouchesFrance
-    // (not bbox-promoted tileIsInFrance) so deep-CH tiles still hit this path.
-    if (!pngBlob && inSwitzerland && !tileTrulyTouchesFrance && z > MAPBOX_DEM_MAXZOOM) {
+    // 3d. Same LiDAR-preserving path for Switzerland: at z15+ we never want
+    // to fall through to a coarse fallback tile when we have a parent
+    // COG-derived blob in our own cache. Use tileTrulyTouchesFrance (not
+    // bbox-promoted tileIsInFrance) so deep-CH tiles still hit this path.
+    if (!pngBlob && inSwitzerland && !tileTrulyTouchesFrance && z >= MAPBOX_DEM_MAXZOOM) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
@@ -370,11 +374,11 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       && !tileTrulyTouchesFrance
       && !inSwitzerland;
     const skipMapboxHighZoomLiDAR =
-      z > MAPBOX_DEM_MAXZOOM && (
+      z >= MAPBOX_DEM_MAXZOOM && (
         (tileTrulyTouchesFrance && franceHadSomeData) ||
         // France transient failure: same policy as Switzerland. A high-zoom
-        // IGN miss must preserve the parent LiDAR mesh, not cache a flat AWS
-        // child that only appears after zooming in.
+        // IGN miss must preserve the parent LiDAR mesh, including at z15,
+        // not cache a flat AWS child that only appears after zooming in.
         (tileTrulyTouchesFrance && franceTransientFailure) ||
         (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData) ||
         // Swiss transient failure: do NOT cache a flat Mapbox tile in

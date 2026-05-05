@@ -81,46 +81,18 @@ const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
 
-// Bumped cache versions — invalidates tiles cached during the "système D"
-// era that served fake flat 200s. Old cache names are listed in
-// sw-dem.js OLD_CACHES and purged on activate.
-// v23 / v17 / v8 — evicts:
-//   (a) MNS-era tiles (canopy offset producing 15–40 m cliffs)
-//   (b) v22 tiles cached during the brief window where HIGHRES was queried
-//       against the wrong TileMatrixSet WGS84G_4_17, causing every sub-tile
-//       to 404 and the whole IGN path to fall through to overzoomed Mapbox.
-// v38 / v24 — evicts long-lived fallback children created before the expert
-// overzoom guard. Those tiles were temporary stand-ins but could be cached for
-// a week when they came from the negative-cache path, making seam/wall
-// artefacts persist even after the parent LiDAR tile was healthy again.
-// v39 — evicts global z15+ AWS overzoom children so MapLibre can reuse the
-// parent mesh outside LiDAR regions instead of rendering progressively flatter
-// SW-synthesized child tiles while zooming in.
-// v40 — evicts satellite/default-profile DEM entries now that every 3D
-// basemap uses the protected terrain profile namespace.
-// v42 — evicts high-zoom global parent-overzoom children that could still be
-// created through negative-cache/error recovery and make terrain flatten while
-// zooming in outside LiDAR regions.
-// v43 / v25 — evicts z15 global 204 negative-cache entries created while
-// MAPBOX_DEM_MAXZOOM was 14 (the source maxzoom was 15, so Mapbox requested
-// z15 tiles but the SW returned 204 → flat terrain on zoom-in). Now
-// MAPBOX_DEM_MAXZOOM=15 so the SW serves real AWS-overzoomed tiles at z15.
-// v44 / v26 — all basemap styles now use the unified 'default' DEM profile
-// (IGN MNS LiDAR HD with buildings/trees/rocks). Previously topo used
-// 'terrain' (RGE ALTI bare-earth) while satellite used 'default'. Old tiles
-// cached under the 'terrain' profile key from the topo style are now
-// unreachable and must be purged so the SW re-fetches everything through
-// the 'default'-keyed MNS LiDAR HD pipeline for all styles.
-// v45 / v27 — evicts France high-zoom fallback children created when IGN
-// transient misses were still allowed to fall through to AWS Terrarium.
-// Those cached z15+ children flatten relief only after zoom-in because they
-// replace the valid parent LiDAR mesh with a coarse child tile.
-const CACHE_NAME = 'dem-tiles-v45';
-const NEGATIVE_CACHE_NAME = 'dem-negative-v27';
-const ORTHO_CACHE_NAME = 'ortho-tiles-v9';
-const SLOPE_CACHE_NAME = 'slope-tiles-v13';
-const ALTITUDE_CACHE_NAME = 'altitude-tiles-v1';
-const STATIC_CACHE_NAME = 'dem-static-v1';
+// Global map-cache epoch. Bump this single token when a release must force a
+// full reset of DEM / ortho / slope / altitude / project-map caches for every
+// client. The app also propagates the same epoch into DEM request URLs and
+// one-shot browser-side purges.
+const MAP_CACHE_EPOCH = '2026-05-05-map-reset-1';
+
+const CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
+const NEGATIVE_CACHE_NAME = `dem-negative-${MAP_CACHE_EPOCH}`;
+const ORTHO_CACHE_NAME = `ortho-tiles-${MAP_CACHE_EPOCH}`;
+const SLOPE_CACHE_NAME = `slope-tiles-${MAP_CACHE_EPOCH}`;
+const ALTITUDE_CACHE_NAME = `altitude-tiles-${MAP_CACHE_EPOCH}`;
+const STATIC_CACHE_NAME = `dem-static-${MAP_CACHE_EPOCH}`;
 
 // Debug flag — gate verbose per-tile logging. Warnings and errors always log.
 const DEBUG = false;

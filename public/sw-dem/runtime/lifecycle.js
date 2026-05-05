@@ -52,53 +52,37 @@ function releaseComposite() {
   }
 }
 
-// Cache versions we want to purge on activation. Any old/stale name lands here.
-const OLD_CACHES = [
-  'dem-tiles-v1', 'dem-tiles-v2', 'dem-tiles-v3', 'dem-tiles-v4',
-  'dem-tiles-v5', 'dem-tiles-v6', 'dem-tiles-v7', 'dem-tiles-v8',
-  'dem-tiles-v9', 'dem-tiles-v10', 'dem-tiles-v11', 'dem-tiles-v12',
-  'dem-tiles-v13', 'dem-tiles-v14', 'dem-tiles-v15', 'dem-tiles-v16',
-  'dem-tiles-v17', 'dem-tiles-v18', 'dem-tiles-v19', 'dem-tiles-v20',
-  'dem-tiles-v21', 'dem-tiles-v22', 'dem-tiles-v23', 'dem-tiles-v24',
-  'dem-tiles-v25', 'dem-tiles-v26', 'dem-tiles-v27', 'dem-tiles-v28',
-  'dem-tiles-v29',
-  'dem-tiles-v30',
-  'dem-tiles-v31',
-  'dem-tiles-v32',
-  'dem-tiles-v33',
-  'dem-tiles-v34',
-  'dem-tiles-v35',
-  'dem-tiles-v36',
-  'dem-tiles-v37',
-  'dem-tiles-v38',
-  'dem-tiles-v39',
-  'dem-tiles-v40',
-  'dem-tiles-v41',
-  'dem-tiles-v42',
-  'dem-tiles-v43',
-  'dem-tiles-v44',
-  'dem-negative-v1', 'dem-negative-v2', 'dem-negative-v3',
-  'dem-negative-v4', 'dem-negative-v5', 'dem-negative-v6',
-  'dem-negative-v7', 'dem-negative-v8', 'dem-negative-v9',
-  'dem-negative-v10', 'dem-negative-v11', 'dem-negative-v12',
-  'dem-negative-v13', 'dem-negative-v14', 'dem-negative-v15',
-  'dem-negative-v16',
-  'dem-negative-v17',
-  'dem-negative-v18',
-  'dem-negative-v19',
-  'dem-negative-v20',
-  'dem-negative-v21',
-  'dem-negative-v22',
-  'dem-negative-v23',
-  'dem-negative-v24',
-  'dem-negative-v25',
-  'dem-negative-v26',
-  'ortho-tiles-v1', 'ortho-tiles-v2', 'ortho-tiles-v3', 'ortho-tiles-v4',
-  'ortho-tiles-v5', 'ortho-tiles-v6', 'ortho-tiles-v7', 'ortho-tiles-v8',
-  'slope-tiles-v1', 'slope-tiles-v2', 'slope-tiles-v3', 'slope-tiles-v4', 'slope-tiles-v5', 'slope-tiles-v6', 'slope-tiles-v7', 'slope-tiles-v8',
-  'slope-tiles-v9', 'slope-tiles-v10', 'slope-tiles-v11', 'slope-tiles-v12',
-  'shadow-tiles-v1',
+const MAP_CACHE_PREFIXES = [
+  'dem-tiles-',
+  'dem-negative-',
+  'ortho-tiles-',
+  'slope-tiles-',
+  'altitude-tiles-',
+  'shadow-tiles-',
+  'dem-static-',
 ];
+
+const CURRENT_MAP_CACHE_NAMES = new Set([
+  CACHE_NAME,
+  NEGATIVE_CACHE_NAME,
+  ORTHO_CACHE_NAME,
+  SLOPE_CACHE_NAME,
+  ALTITUDE_CACHE_NAME,
+  STATIC_CACHE_NAME,
+]);
+
+function isManagedMapCacheName(cacheName) {
+  return MAP_CACHE_PREFIXES.some((prefix) => cacheName.startsWith(prefix));
+}
+
+function purgeManagedMapCaches({ includeCurrent = false } = {}) {
+  return caches.keys().then((keys) => Promise.all(
+    keys
+      .filter((cacheName) => isManagedMapCacheName(cacheName))
+      .filter((cacheName) => includeCurrent || !CURRENT_MAP_CACHE_NAMES.has(cacheName))
+      .map((cacheName) => caches.delete(cacheName))
+  ));
+}
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
@@ -111,15 +95,16 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(
-        keys.filter((k) => OLD_CACHES.includes(k)).map((k) => caches.delete(k))
-      ))
+    purgeManagedMapCaches()
       .then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('message', (e) => {
+  if (e.data?.type === 'PURGE_MAP_CACHES') {
+    purgeManagedMapCaches({ includeCurrent: true });
+    return;
+  }
   if (e.data?.type === 'CLEAR_DEM_CACHE') {
     caches.delete(CACHE_NAME);
     return;
