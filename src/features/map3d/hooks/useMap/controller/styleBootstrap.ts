@@ -327,14 +327,17 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     fns.detachManagedTerrain();
 
-    if (!map.getSource(unifiedDEMSource.id)) {
-      if (!fns.refreshDemSource()) return false;
+    if (map.getSource(unifiedDEMSource.id)) {
+      // Treat every basemap switch the same way, regardless of whether the
+      // previous style was a legacy v11/v12 stylesheet or a Standard v3
+      // imported style. A surviving raster-dem source is not trustworthy
+      // here: its tile pyramid may belong to the previous style lifecycle,
+      // and Standard-Satellite is exactly the style family that can delay or
+      // suppress the later style.load recovery path. Rebuild immediately so
+      // terrain always reattaches onto a fresh source contract.
+      if (!fns.refreshDemSource({ forceRebuild: true })) return false;
     } else {
-      // Source already exists (e.g. topo → satellite switch where
-      // prepareStyleChange detached terrain but kept the source).
-      // Re-bind terrain to the existing source — without this the
-      // map stays 2D forever because refreshDemSource is skipped.
-      fns.applyUnifiedTerrain();
+      if (!fns.refreshDemSource()) return false;
     }
     fns.reportStatus('loading', 68, 'Relief');
 
