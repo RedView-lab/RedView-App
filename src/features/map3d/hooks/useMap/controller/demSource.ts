@@ -199,9 +199,15 @@ export function attachDemSource(ctx: Ctx): void {
     // Small delay (instead of 0) lets Mapbox finish the styledata
     // burst that often precedes terrain detach — checking immediately
     // would race the rebuild.
-    st.terrainRecoveryTimer = setTimeout(() => {
+    const runRecovery = (attempt: number) => {
       st.terrainRecoveryTimer = null;
-      if (!fns.canMutateStyle()) return;
+      if (!fns.canMutateStyle()) {
+        if (attempt >= 12) return;
+        st.terrainRecoveryTimer = setTimeout(() => {
+          runRecovery(attempt + 1);
+        }, 120);
+        return;
+      }
       if (!navigator.serviceWorker?.controller) return;
 
       if (!map.getSource(unifiedDEMSource.id)) {
@@ -224,6 +230,10 @@ export function attachDemSource(ctx: Ctx): void {
           fns.refreshDemSource({ forceRebuild: true });
         }
       }
+    };
+
+    st.terrainRecoveryTimer = setTimeout(() => {
+      runRecovery(0);
     }, 60);
   };
 
