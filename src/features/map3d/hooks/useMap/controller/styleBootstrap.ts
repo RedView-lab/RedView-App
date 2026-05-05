@@ -132,7 +132,16 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       map.on('styledata', onStyleData);
       watchdog = setTimeout(() => {
         watchdog = null;
+        if (settled) return;
         if (fns.canMutateStyle()) {
+          finish();
+          return;
+        }
+        // If style content already exists (sprite-storm in progress) the
+        // bypass path will accept it — try that first instead of logging
+        // a misleading "style.load not seen" warn that ends up spamming
+        // every 5 s on basemap switches.
+        if (promoteStyleContentBypass('style watchdog')) {
           finish();
           return;
         }
@@ -324,7 +333,14 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     fns.ensureTrackingListeners();
 
-    fns.detachManagedTerrain();
+    // Anti-flat: do NOT call detachManagedTerrain() here. refreshDemSource
+    // (in the forceRebuild path) already detaches terrain *just before*
+    // removing the source, then re-attaches it after addSource. Detaching
+    // unconditionally here used to leave the map flat for the entire window
+    // between this line and the subsequent setTerrain inside
+    // refreshDemSource — visible during heartbeat-triggered re-bootstraps
+    // and during setStyle({diff:false}) retries ("tile devient plate au
+    // zoom" regression).
 
     const terrainContract = getActiveTerrainContract();
     if (map.getSource(unifiedDEMSource.id)) {
@@ -335,7 +351,12 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // and Standard-Satellite is exactly the style family that can delay or
       // suppress the later style.load recovery path. Rebuild immediately so
       // terrain always reattaches onto a fresh source contract.
-      if (!fns.refreshDemSource({ forceRebuild: terrainContract === 'unified-dem-v1' })) return false;
+      if (!fns.refreshDemSource({ forceRebuild: terrainContract === 'unified-dem-v1' })) {
+        // Last-resort: refreshDemSource detached terrain internally before
+        // failing. Try a soft re-attach so we don't leave the map flat.
+        fns.applyUnifiedTerrain();
+        return false;
+      }
     } else {
       if (!fns.refreshDemSource()) return false;
     }

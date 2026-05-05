@@ -138,6 +138,12 @@ export function attachDemSource(ctx: Ctx): void {
       // condition), treat as a successful remove and fall through to
       // addSource below.
       if (!removeSucceeded && map.getSource(unifiedDEMSource.id)) {
+        // Anti-flat: terrain was detached at the top of this branch and
+        // the setTiles fallback above didn't fire (no setTiles method).
+        // The source is still there — re-bind terrain to it before bailing
+        // out so we never leave the map flat with a usable DEM source
+        // sitting underneath.
+        fns.applyUnifiedTerrain();
         return false;
       }
     }
