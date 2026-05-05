@@ -64,6 +64,26 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         }
       }
     };
+    const promoteStyleContentBypass = (logLabel: string): boolean => {
+      try {
+        const style = map.getStyle();
+        const hasContent = style && (
+          (style.layers?.length ?? 0) > 0
+          || Object.keys(style.sources ?? {}).length > 0
+        );
+        if (!hasContent) return false;
+        if (!st.spriteStormBypass) {
+          console.warn(
+            `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
+            { layers: style.layers?.length ?? 0, sources: Object.keys(style.sources ?? {}).length },
+          );
+          st.spriteStormBypass = true;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    };
     const styleLoaded = new Promise<void>((resolve) => {
       if (fns.canMutateStyle()) {
         fns.reportStatus('loading', 34, 'Style');
@@ -89,7 +109,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
           resolve();
           return;
         }
-        if (!deferred && !fns.canMutateStyle()) return;
+        if (!deferred && !fns.canMutateStyle() && !promoteStyleContentBypass('style readiness')) return;
         settled = true;
         cleanup();
         fns.reportStatus(
@@ -154,21 +174,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // fragments — its sources live inside the fragment, NOT in the
       // root style.sources. We check style.layers instead, which ARE
       // populated from imported fragments.
-      try {
-        const style = map.getStyle();
-        const hasContent = style && (
-          (style.layers?.length ?? 0) > 0
-          || Object.keys(style.sources ?? {}).length > 0
-        );
-        if (hasContent) {
-          console.warn(
-            '[map3d] style has content but isStyleLoaded() is false — forcing terrain bootstrap inline (sprite storm bypass)',
-            { layers: style!.layers?.length ?? 0, sources: Object.keys(style!.sources ?? {}).length },
-          );
-          st.spriteStormBypass = true;
-          // Fall through to DEM attachment below — don't return false.
-        }
-      } catch { /* style not ready yet */ }
+      promoteStyleContentBypass('style bootstrap');
 
       // If the bypass didn't activate (style truly has no sources yet),
       // fall back to the event + polling loop.
@@ -201,22 +207,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
             doLateRecovery();
             return;
           }
-          try {
-            const style = map.getStyle();
-            const hasContent = style && (
-              (style.layers?.length ?? 0) > 0
-              || Object.keys(style.sources ?? {}).length > 0
-            );
-            if (hasContent) {
-              console.warn(
-                '[map3d] style has content but isStyleLoaded() is false — forcing terrain bootstrap (sprite storm workaround)',
-                { layers: style!.layers?.length ?? 0, sources: Object.keys(style!.sources ?? {}).length },
-              );
-              st.spriteStormBypass = true;
-              doLateRecovery();
-              return;
-            }
-          } catch { /* style not ready yet */ }
+          if (promoteStyleContentBypass('late style recovery')) {
+            doLateRecovery();
+            return;
+          }
           if (pollCount >= MAX_POLLS) {
             console.warn('[map3d] late style recovery polling exhausted after 30 s');
             if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
