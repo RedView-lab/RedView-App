@@ -24,6 +24,17 @@ export function attachDemSource(ctx: Ctx): void {
   const fns = ctx.fns;
   const st = ctx.state;
 
+  fns.applyManagedTerrain = () => {
+    if (map.getSource(unifiedDEMSource.id)) {
+      return fns.applyUnifiedTerrain();
+    }
+    if (map.getSource(awsFallbackDEMSource.id)) {
+      fns.attachAwsFallbackTerrain();
+      return fns.isManagedTerrainActive();
+    }
+    return false;
+  };
+
   fns.applyUnifiedTerrain = () => {
     if (!map.getSource(unifiedDEMSource.id)) return false;
     try {
@@ -269,29 +280,32 @@ export function attachDemSource(ctx: Ctx): void {
     // Don't attach if the unified-dem source is already present
     // (SW path took over).
     if (map.getSource(unifiedDEMSource.id)) return;
-    // Don't double-attach.
-    if (map.getSource(awsFallbackDEMSource.id)) return;
+    const sourceAlreadyPresent = !!map.getSource(awsFallbackDEMSource.id);
 
-    try {
-      map.addSource(awsFallbackDEMSource.id, {
-        type: 'raster-dem',
-        tiles: awsFallbackDEMSource.tiles,
-        tileSize: awsFallbackDEMSource.tileSize,
-        encoding: awsFallbackDEMSource.encoding,
-        minzoom: awsFallbackDEMSource.minzoom,
-        maxzoom: awsFallbackDEMSource.maxzoom,
-      });
-    } catch (error) {
-      console.warn('[map3d] AWS fallback DEM source attach failed', error);
-      return;
+    if (!sourceAlreadyPresent) {
+      try {
+        map.addSource(awsFallbackDEMSource.id, {
+          type: 'raster-dem',
+          tiles: awsFallbackDEMSource.tiles,
+          tileSize: awsFallbackDEMSource.tileSize,
+          encoding: awsFallbackDEMSource.encoding,
+          minzoom: awsFallbackDEMSource.minzoom,
+          maxzoom: awsFallbackDEMSource.maxzoom,
+        });
+      } catch (error) {
+        console.warn('[map3d] AWS fallback DEM source attach failed', error);
+        return;
+      }
     }
 
     try {
-      if (!terrainRef.current) {
-        terrainRef.current = new TerrainManager(map, awsFallbackDEMSource.id);
-      }
+      terrainRef.current = new TerrainManager(map, awsFallbackDEMSource.id);
       terrainRef.current.init();
-      console.log('[map3d] AWS Terrarium fallback terrain attached');
+      console.log(
+        sourceAlreadyPresent
+          ? '[map3d] AWS Terrarium fallback terrain re-attached'
+          : '[map3d] AWS Terrarium fallback terrain attached',
+      );
     } catch (error) {
       console.warn('[map3d] AWS fallback terrain apply failed', error);
     }

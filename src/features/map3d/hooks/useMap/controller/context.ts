@@ -4,7 +4,7 @@ import type {
   Map as MapboxMap,
   MapSourceDataEvent,
 } from 'mapbox-gl';
-import { unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
 import {
   type OverlayReloadRegistrar,
@@ -97,7 +97,9 @@ export interface ControllerState {
 export interface ControllerFns {
   // helpers
   canMutateStyle: () => boolean;
+  getManagedTerrainSourceId: () => string | null;
   isUnifiedTerrainActive: () => boolean;
+  isManagedTerrainActive: () => boolean;
   allTilesLoaded: () => boolean;
   isTrackedSource: (sourceId: string | undefined | null) => boolean;
   buildTileKey: (event: MapSourceDataEvent) => string | null;
@@ -117,6 +119,7 @@ export interface ControllerFns {
   clearDemTracking: () => void;
 
   // dem / terrain
+  applyManagedTerrain: () => boolean;
   applyUnifiedTerrain: () => boolean;
   refreshDemSource: (options?: { forceRebuild?: boolean }) => boolean;
   detachManagedTerrain: () => void;
@@ -216,6 +219,26 @@ export function attachHelpers(ctx: Ctx): void {
   fns.isUnifiedTerrainActive = () => {
     try {
       return map.getTerrain()?.source === unifiedDEMSource.id;
+    } catch {
+      return false;
+    }
+  };
+
+  fns.getManagedTerrainSourceId = () => {
+    try {
+      if (map.getSource(unifiedDEMSource.id)) return unifiedDEMSource.id;
+      if (map.getSource(awsFallbackDEMSource.id)) return awsFallbackDEMSource.id;
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  fns.isManagedTerrainActive = () => {
+    try {
+      const expectedSourceId = fns.getManagedTerrainSourceId();
+      if (!expectedSourceId) return false;
+      return map.getTerrain()?.source === expectedSourceId;
     } catch {
       return false;
     }

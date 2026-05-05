@@ -58,17 +58,22 @@ export function attachStatus(ctx: Ctx): void {
     // flat 2D state. Auto-trigger a reload instead of falsely
     // reporting 100% — that's what made the manual reload button feel
     // useless ("ça met 100% mais tout reste plat").
-    if (!fns.isUnifiedTerrainActive() && map.getSource(unifiedDEMSource.id)) {
-      // Source exists but terrain isn't bound — re-attach in place
-      // before claiming success.
-      fns.applyUnifiedTerrain();
+    if (!fns.isManagedTerrainActive() && fns.getManagedTerrainSourceId()) {
+      // A terrain source exists but the renderer lost its binding.
+      // Re-attach in place before claiming success.
+      fns.applyManagedTerrain();
     }
     if (
-      !fns.isUnifiedTerrainActive()
+      !fns.isManagedTerrainActive()
       && navigator.serviceWorker?.controller
       && fns.canMutateStyle()
       && !st.reloadInProgress
     ) {
+      if (!map.getSource(unifiedDEMSource.id)) {
+        console.warn('[map3d] bootstrap finished on fallback terrain; upgrading to unified DEM');
+        void fns.bootstrapCurrentStyle();
+        return;
+      }
       console.warn('[map3d] bootstrap finished flat; triggering self-heal reload');
       st.demReloadCoolingUntil = 0;
       fns.reloadMapElevation();

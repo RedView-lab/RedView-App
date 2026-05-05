@@ -260,6 +260,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     if (!swOk) {
       console.warn('[map3d] SW unavailable — attaching AWS Terrarium fallback DEM (~30 m global)');
+      fns.ensureTrackingListeners();
       st.demTrackingEnabled = true;
       fns.reportStatus('loading', 60, 'Relief AWS (fallback)');
 
@@ -270,6 +271,12 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // This gives the user 3D terrain everywhere at ~30 m resolution,
       // much better than a completely flat map.
       fns.attachAwsFallbackTerrain();
+      fns.refreshTrackedSourceIds();
+
+      if (!fns.isManagedTerrainActive()) {
+        console.warn('[map3d] AWS fallback terrain did not attach cleanly');
+        return false;
+      }
 
       fns.reportStatus('loading', 80, 'Tuiles satellites');
       st.finishOnIdle = () => {
@@ -312,7 +319,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         void fns.bootstrapCurrentStyle();
       });
 
-      return false;
+      return true;
     }
 
     fns.ensureTrackingListeners();

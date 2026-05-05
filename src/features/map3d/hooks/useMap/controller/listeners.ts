@@ -1,5 +1,5 @@
 import type { ErrorEvent as MapboxErrorEvent, MapSourceDataEvent } from 'mapbox-gl';
-import { unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import type { Ctx } from './context';
 
 /**
@@ -15,6 +15,19 @@ export function attachListeners(ctx: Ctx): void {
   const { map, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
+
+  const repairManagedTerrain = (): boolean => {
+    const managedSourceId = fns.getManagedTerrainSourceId();
+    if (!managedSourceId) return false;
+    if (managedSourceId === unifiedDEMSource.id) {
+      return fns.applyUnifiedTerrain();
+    }
+    if (managedSourceId === awsFallbackDEMSource.id) {
+      fns.attachAwsFallbackTerrain();
+      return fns.isManagedTerrainActive();
+    }
+    return false;
+  };
 
   const onTrackedSourceDataLoading = (event: MapSourceDataEvent) => {
     if (!st.demTrackingEnabled) return;
@@ -59,28 +72,9 @@ export function attachListeners(ctx: Ctx): void {
 
   const onMapIdle = () => {
     if (!st.demTrackingEnabled || isCancelled()) return;
-    // Anti-flat: idle is the cheapest reliable signal that terrain
-    // detach happened silently. If the DEM source exists but terrain
-    // isn't bound, re-attach immediately.
-    if (
-      fns.canMutateStyle()
-      && map.getSource(unifiedDEMSource.id)
-      && !fns.isUnifiedTerrainActive()
-    ) {
-      console.warn('[map3d] idle: terrain detached from unified-dem; re-attaching');
-      fns.applyUnifiedTerrain();
-      if (!fns.isUnifiedTerrainActive()) {
-        // Re-attach refused — escalate to forceful rebuild via the
-        // standard reload path (cooldown bypassed since this is a
-        // genuine regression, not user-initiated).
-        st.demReloadCoolingUntil = 0;
-        fns.reloadMapElevation();
-        return;
-      }
-    }
-    // Anti-flat: if no DEM source exists but the SW controller is
-    // now available (late-claim session), trigger a full bootstrap
-    // recovery from idle — the earliest safe point to mutate the style.
+    // Anti-flat: if the unified DEM source is still missing but the SW
+    // controller finally appeared, upgrade the AWS/plain fallback path
+    // immediately from idle — the earliest safe point to mutate style.
     if (
       fns.canMutateStyle()
       && !map.getSource(unifiedDEMSource.id)
@@ -89,6 +83,25 @@ export function attachListeners(ctx: Ctx): void {
       console.warn('[map3d] idle: DEM source missing but SW available — re-bootstrapping');
       void fns.bootstrapCurrentStyle();
       return;
+    }
+    // Anti-flat: idle is the cheapest reliable signal that terrain
+    // detach happened silently. If the DEM source exists but terrain
+    // isn't bound, re-attach immediately.
+    if (fns.canMutateStyle()) {
+      const managedSourceId = fns.getManagedTerrainSourceId();
+      if (managedSourceId && !fns.isManagedTerrainActive()) {
+        console.warn(
+          `[map3d] idle: terrain detached from ${managedSourceId}; re-attaching`,
+        );
+        if (!repairManagedTerrain() && managedSourceId === unifiedDEMSource.id) {
+        // Re-attach refused — escalate to forceful rebuild via the
+        // standard reload path (cooldown bypassed since this is a
+        // genuine regression, not user-initiated).
+          st.demReloadCoolingUntil = 0;
+          fns.reloadMapElevation();
+          return;
+        }
+      }
     }
     if (!fns.allTilesLoaded()) return;
     if (map.isMoving()) return;
@@ -103,10 +116,10 @@ export function attachListeners(ctx: Ctx): void {
   const onZoomEndTerrainCheck = () => {
     if (!st.demTrackingEnabled || isCancelled()) return;
     if (!fns.canMutateStyle()) return;
-    const sourcePresent = !!map.getSource(unifiedDEMSource.id);
-    if (sourcePresent && !fns.isUnifiedTerrainActive()) {
-      console.warn('[map3d] zoomend: terrain detached — re-attaching');
-      fns.applyUnifiedTerrain();
+    const managedSourceId = fns.getManagedTerrainSourceId();
+    if (managedSourceId && !fns.isManagedTerrainActive()) {
+      console.warn(`[map3d] zoomend: terrain detached from ${managedSourceId}; re-attaching`);
+      repairManagedTerrain();
     }
   };
 
