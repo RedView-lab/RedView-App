@@ -24,6 +24,11 @@ interface CacheWriteTask {
   task: () => Promise<void>;
 }
 
+interface SceneTileProgressState {
+  progress: number;
+  detail: string;
+}
+
 export interface ViewerSceneData {
   pointCloud: PointCloudData;
   terrainMesh: TerrainCache;
@@ -34,6 +39,9 @@ export interface ViewerSceneData {
 const DEFAULT_MULTI_TILE_POINT_CAP = 8_000_000;
 const MIN_MULTI_TILE_POINT_CAP = 2_500_000;
 const MAX_MULTI_TILE_POINT_CAP = 12_000_000;
+const TILE_LOAD_COMPLETE_PROGRESS = 0.92;
+const SCENE_LOAD_START_PCT = 4;
+const SCENE_LOAD_END_PCT = 80;
 
 export interface ViewerSceneLoadOptions {
   multiTilePointCap?: number;
@@ -97,6 +105,51 @@ function clamp(value: number, min: number, max: number): number {
 
 function roundPointCap(value: number): number {
   return Math.max(MIN_MULTI_TILE_POINT_CAP, Math.round(value / 250_000) * 250_000);
+}
+
+function createSceneProgressReporter(
+  tileCoords: TileCoord[],
+  setStatus: ViewerStatusReporter,
+): {
+  updateTileProgress: (index: number, detail: string, progress: number) => void;
+  updateSceneProgress: (detail: string, progress: number) => void;
+} {
+  const states: SceneTileProgressState[] = tileCoords.map((coord) => ({
+    progress: 0,
+    detail: `En attente ${coord.xKm}/${coord.yKm}`,
+  }));
+  let sceneFloor = 0;
+  let sceneDetail = states[0]?.detail ?? 'Préparation de la scène';
+
+  const emit = (overrideDetail?: string) => {
+    const averageTileProgress = states.length > 0
+      ? states.reduce((sum, state) => sum + state.progress, 0) / states.length
+      : 1;
+    const normalized = clamp(Math.max(sceneFloor, averageTileProgress), 0, 1);
+    const detail = overrideDetail
+      ?? (sceneFloor > averageTileProgress ? sceneDetail : undefined)
+      ?? states
+        .slice()
+        .sort((left, right) => right.progress - left.progress)[0]?.detail
+      ?? sceneDetail;
+    const pct = SCENE_LOAD_START_PCT + normalized * (SCENE_LOAD_END_PCT - SCENE_LOAD_START_PCT);
+    setStatus(detail, pct);
+  };
+
+  return {
+    updateTileProgress(index: number, detail: string, progress: number) {
+      const state = states[index];
+      if (!state) return;
+      state.detail = detail;
+      state.progress = Math.max(state.progress, clamp(progress, 0, TILE_LOAD_COMPLETE_PROGRESS));
+      emit();
+    },
+    updateSceneProgress(detail: string, progress: number) {
+      sceneDetail = detail;
+      sceneFloor = Math.max(sceneFloor, clamp(progress, 0, 1));
+      emit(detail);
+    },
+  };
 }
 
 function resolveMultiTilePointCap(
@@ -438,7 +491,7 @@ function mergeTerrainMeshes(tiles: LoadedViewerTile[], mergedPointCloud: PointCl
 
 async function loadViewerTile(
   coord: TileCoord,
-  setStatus: ViewerStatusReporter,
+  reportProgress: (detail: string, progress: number) => void,
   index: number,
   total: number,
 ): Promise<LoadedViewerTile> {
@@ -447,23 +500,28 @@ async function loadViewerTile(
   let shouldSaveColorizedCache = false;
   let shouldSaveTerrainCache = false;
 
-  setStatus(`Cache colorise ${index}/${total} : ${tileTag}`, 5 + index * 10);
+  reportProgress(`Cache colorise ${index}/${total} : ${tileTag}`, 0.06);
   let pointCloud = await loadColorizedData(fileName);
   if (!pointCloud) {
-    setStatus(`Chargement LAZ ${tileTag}`, 10 + index * 15);
+    reportProgress(`Chargement LAZ ${index}/${total} : ${tileTag}`, 0.12);
     const buffer = await loadTileFromOPFS([fileName, legacyFileName]);
     pointCloud = await processPointCloudInWorker(buffer, (message, pct) => {
-      setStatus(`${tileTag} · ${message}`, 15 + (pct ?? 0) * 0.55);
+      const normalized = 0.18 + Math.max(0, Math.min(1, (pct ?? 0) / 100)) * 0.54;
+      reportProgress(`${tileTag} · ${message}`, normalized);
     });
     shouldSaveColorizedCache = true;
+  } else {
+    reportProgress(`Cache LiDAR prêt ${index}/${total} : ${tileTag}`, 0.78);
   }
 
-  setStatus(`Terrain ${index}/${total} : ${tileTag}`, 60 + index * 10);
+  reportProgress(`Terrain ${index}/${total} : ${tileTag}`, 0.82);
   let terrainMesh = await loadTerrainData(fileName);
   if (!terrainMesh) {
     terrainMesh = await generateHeightmap(pointCloud);
     shouldSaveTerrainCache = true;
   }
+
+  reportProgress(`Dalle prête ${index}/${total} : ${tileTag}`, TILE_LOAD_COMPLETE_PROGRESS);
 
   return {
     coord,
@@ -486,20 +544,29 @@ export async function loadViewerScene(
   });
 
   const loadConcurrency = getSceneLoadConcurrency(uniqueTiles.length);
-  setStatus(`Preparation scene ${uniqueTiles.length} tuiles · ${loadConcurrency} taches en parallele`, 4);
+  const progress = createSceneProgressReporter(uniqueTiles, setStatus);
+  progress.updateSceneProgress(
+    `Preparation scene ${uniqueTiles.length} tuiles · ${loadConcurrency} taches en parallele`,
+    0,
+  );
 
   const loadedTiles = await mapWithConcurrency(
     uniqueTiles,
     loadConcurrency,
-    (coord, index) => loadViewerTile(coord, setStatus, index + 1, uniqueTiles.length),
+    (coord, index) => loadViewerTile(
+      coord,
+      (detail, normalizedProgress) => progress.updateTileProgress(index, detail, normalizedProgress),
+      index + 1,
+      uniqueTiles.length,
+    ),
   );
 
   const multiTilePointCap = resolveMultiTilePointCap(uniqueTiles.length, options);
   const { totalCount, targetCount } = computeMergedPointTargetCount(loadedTiles, multiTilePointCap);
   if (targetCount < totalCount) {
-    setStatus(
+    progress.updateSceneProgress(
       `Scene dense: cap adaptatif ${targetCount.toLocaleString()} / ${totalCount.toLocaleString()} pts...`,
-      74,
+      0.95,
     );
     console.warn(
       `[Viewer] Adaptive multi-tile point cap: ${targetCount.toLocaleString()} / ${totalCount.toLocaleString()} ` +
@@ -508,11 +575,13 @@ export async function loadViewerScene(
   }
 
   const pointCloud = mergePointClouds(loadedTiles, multiTilePointCap);
+  progress.updateSceneProgress(`Assemblage final ${uniqueTiles.length} tuiles...`, 0.97);
   let terrainMesh = mergeTerrainMeshes(loadedTiles, pointCloud);
   if (!terrainMesh) {
-    setStatus('Fusion terrain impossible, regeneration scene...', 76);
+    progress.updateSceneProgress('Fusion terrain impossible, regeneration scene...', 0.985);
     terrainMesh = await generateHeightmap(pointCloud);
   }
+  progress.updateSceneProgress(`Scene prête ${uniqueTiles.length} tuiles`, 1);
 
   const cacheWrites: CacheWriteTask[] = [];
   for (const tile of loadedTiles) {

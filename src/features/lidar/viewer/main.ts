@@ -3,6 +3,7 @@
 // ============================================
 // Reads tile params from URL, loads from OPFS, parses+colorizes in a Worker, renders with WebGPU.
 
+import './loading/styles.css';
 import './panel/styles.css';
 import './tileNavigator/styles.css';
 import { LidarRenderer } from './renderer';
@@ -27,6 +28,7 @@ import {
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import { createViewerTileNavigator } from './tileNavigator/controller';
 import { buildTilePreviewMesh } from './preview/tilePreview';
+import { createViewerLoadingOverlay } from './loading/controller';
 import { loadViewerScene } from './session/dataset';
 import {
   buildOctreeInWorker,
@@ -43,9 +45,9 @@ import {
 // --- DOM refs ---
 const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 const overlay = document.getElementById('overlay')!;
-const statusEl = document.getElementById('status')!;
-const barFill = document.getElementById('bar-fill')!;
 const statsEl = document.getElementById('stats')!;
+const loadingOverlay = createViewerLoadingOverlay(overlay);
+const { statusEl, detailEl, barFill, percentEl } = loadingOverlay;
 
 type IdleSchedulerWindow = Window & {
   requestIdleCallback?: (callback: IdleRequestCallback, options?: IdleRequestOptions) => number;
@@ -58,7 +60,7 @@ type MemoryAwareNavigator = Navigator & {
 let cacheWriteQueue = Promise.resolve();
 
 function setStatus(msg: string, pct?: number) {
-  setViewerStatus(statusEl, barFill, msg, pct);
+  setViewerStatus(statusEl, barFill, msg, pct, { percentEl, detailEl });
 }
 
 function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): void {

@@ -12,9 +12,44 @@ export interface ViewerDomElements {
 
 export type ViewerStatusReporter = (msg: string, pct?: number) => void;
 
-export function setViewerStatus(statusEl: HTMLElement, barFill: HTMLElement, msg: string, pct?: number) {
-  statusEl.textContent = msg;
-  if (pct != null) barFill.style.width = `${Math.min(100, pct)}%`;
+export function setViewerStatus(
+  statusEl: HTMLElement,
+  barFill: HTMLElement,
+  msg: string,
+  pct?: number,
+  extras?: {
+    percentEl?: HTMLElement;
+    detailEl?: HTMLElement;
+  },
+) {
+  const isErrorState = /^(?:❌|⚠️)/.test(msg) || /\berreur\b/i.test(msg) || /\bimpossible\b/i.test(msg);
+  const visibleMessage = isErrorState ? msg : 'Chargement du Viewer LIDAR';
+  statusEl.textContent = visibleMessage;
+  statusEl.toggleAttribute('data-loading-error', isErrorState);
+  if (!isErrorState) {
+    statusEl.setAttribute('title', msg);
+  } else {
+    statusEl.removeAttribute('title');
+  }
+
+  if (extras?.detailEl) {
+    extras.detailEl.textContent = msg;
+  }
+
+  if (pct != null) {
+    const clampedPct = Math.max(0, Math.min(100, pct));
+    const roundedPct = Math.round(clampedPct);
+    barFill.style.width = `${clampedPct}%`;
+    if (extras?.percentEl) {
+      extras.percentEl.textContent = `${roundedPct}%`;
+    }
+
+    const progressHost = barFill.closest('[role="progressbar"]');
+    if (progressHost) {
+      progressHost.setAttribute('aria-valuenow', String(roundedPct));
+      progressHost.setAttribute('aria-valuetext', msg);
+    }
+  }
 }
 
 export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBuffer> {
