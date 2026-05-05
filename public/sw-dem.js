@@ -2,26 +2,13 @@
 // Service Worker — Client-side DEM + Ortho + Slope + Altitude tile processor
 //
 // THIN ENTRY POINT — only loads sub-modules via importScripts(). All real
-// logic lives in /sw-dem/*.js. The split (May 03) lets each pipeline concern
-// be debugged/edited independently:
+// logic lives under /sw-dem/ subfolders grouped by responsibility:
 //
-//   /sw-dem/lifecycle.js        — install/activate/message handlers,
-//                                 composite limiter, in-flight Maps
-//                                 (DEM_INFLIGHT, SLOPE_INFLIGHT, ALTITUDE_INFLIGHT),
-//                                 OLD_CACHES purge list.
-//   /sw-dem/router.js           — single fetch listener, dispatches to
-//                                 the right handler.
-//   /sw-dem/dem-helpers.js      — buildDemResponse, noTileResponse,
-//                                 transparentTileResponse, parent-overzoom
-//                                 fallback, profile resolution, cache key
-//                                 builder.
-//   /sw-dem/dem-health.js       — guardDemTileHealth + nodata/anomaly
-//                                 rejection logic.
-//   /sw-dem/dem-handler.js      — handleDemRequest (top-level dispatcher).
-//   /sw-dem/upgrade-scheduler.js — finalize() + background IGN re-cache.
-//   /sw-dem/slope-handler.js    — handleSlopeRequest (uses slope.js for
-//                                 the actual Horn / encoding).
-//   /sw-dem/altitude-handler.js — handleAltitudeRequest.
+//   /sw-dem/core/               — config, geometry, interpolation, RGB decode.
+//   /sw-dem/sources/            — IGN / AWS / Mapbox / ortho fetch adapters.
+//   /sw-dem/processing/         — tile build, composite, slope, altitude math.
+//   /sw-dem/swiss/              — swissSURFACE3D config, coords, COG, fetch, build.
+//   /sw-dem/runtime/            — lifecycle, router, helpers, health, handlers.
 //
 // Contract with the page (useMap.ts):
 //   1. page registers SW and waits for controllerchange
@@ -38,24 +25,24 @@
 
 importScripts(
   // ── Pipeline primitives (config + math + low-level fetchers) ──────────
-  '/sw-dem/config.js',
-  '/sw-dem/geo.js',
-  '/sw-dem/interpolation.js',
-  '/sw-dem/terrain-rgb.js',
-  '/sw-dem/ign-fetcher.js',
-  '/sw-dem/mapbox.js',
-  '/sw-dem/aws-terrain.js',
-  '/sw-dem/build-tile.js',
-  '/sw-dem/composite.js',
-  '/sw-dem/ortho.js',
-  '/sw-dem/slope.js',
-  '/sw-dem/altitude.js',
+  '/sw-dem/core/config.js',
+  '/sw-dem/core/geo.js',
+  '/sw-dem/core/interpolation.js',
+  '/sw-dem/core/terrain-rgb.js',
+  '/sw-dem/sources/ign-fetcher.js',
+  '/sw-dem/sources/mapbox.js',
+  '/sw-dem/sources/aws-terrain.js',
+  '/sw-dem/processing/build-tile.js',
+  '/sw-dem/processing/composite.js',
+  '/sw-dem/sources/ortho.js',
+  '/sw-dem/processing/slope.js',
+  '/sw-dem/processing/altitude.js',
   // Switzerland — swissSURFACE3D Raster (COG over STAC, 0.5 m LiDAR DSM)
-  '/sw-dem/swiss-config.js',
-  '/sw-dem/swiss-coords.js',
-  '/sw-dem/swiss-cog.js',
-  '/sw-dem/swiss-fetcher.js',
-  '/sw-dem/swiss-build.js',
+  '/sw-dem/swiss/swiss-config.js',
+  '/sw-dem/swiss/swiss-coords.js',
+  '/sw-dem/swiss/swiss-cog.js',
+  '/sw-dem/swiss/swiss-fetcher.js',
+  '/sw-dem/swiss/swiss-build.js',
 
   // ── SW orchestration (lifecycle + handlers) ───────────────────────────
   // Order matters only for declaration-before-use of `const`/`let` at
@@ -64,12 +51,12 @@ importScripts(
   // defined in any order. We list lifecycle first (declares the global
   // in-flight Maps + composite limiter), then helpers, then handlers,
   // then the router (which only registers a listener).
-  '/sw-dem/lifecycle.js',
-  '/sw-dem/dem-helpers.js',
-  '/sw-dem/dem-health.js',
-  '/sw-dem/upgrade-scheduler.js',
-  '/sw-dem/dem-handler.js',
-  '/sw-dem/slope-handler.js',
-  '/sw-dem/altitude-handler.js',
-  '/sw-dem/router.js',
+  '/sw-dem/runtime/lifecycle.js',
+  '/sw-dem/runtime/dem-helpers.js',
+  '/sw-dem/runtime/dem-health.js',
+  '/sw-dem/runtime/upgrade-scheduler.js',
+  '/sw-dem/runtime/dem-handler.js',
+  '/sw-dem/runtime/slope-handler.js',
+  '/sw-dem/runtime/altitude-handler.js',
+  '/sw-dem/runtime/router.js',
 );
