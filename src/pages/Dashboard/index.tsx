@@ -61,6 +61,10 @@ export default function Dashboard({
   const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
   const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
+  const activeBasemapConfig = useMemo(
+    () => getBasemapConfig(effectiveBasemapId),
+    [effectiveBasemapId],
+  );
 
   const prepareProjectClose = useCallback(async () => {
     setMapLoaded(false);
@@ -360,7 +364,7 @@ export default function Dashboard({
                 onLidarSelectionDisable={() => setLidarModeEnabled(false)}
                 initialViewport={projectMapViewport}
                 onViewportChange={handleMapViewportChange}
-                basemapConfig={getBasemapConfig(effectiveBasemapId)}
+                basemapConfig={activeBasemapConfig}
               />
 
               <MapOverlayStatusDock
@@ -421,6 +425,7 @@ export default function Dashboard({
 
               <DashboardPlaceSearch
                 map={mapInstance}
+                basemapConfig={activeBasemapConfig}
                 visible={dashboardSearchVisible}
                 left={dashboardSearchLeft}
                 top={PANEL_PADDING}

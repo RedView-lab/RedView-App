@@ -1,24 +1,55 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import type { BasemapRenderConfig } from '@/features/controlPanel';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
+import { waitForMapIdleOrTimeout } from '@/features/map3d/hooks/useMap/runtimeProfile';
 import './dashboard-place-search.css';
 
 interface DashboardPlaceSearchProps {
   map: MapboxMap | null;
+  basemapConfig: BasemapRenderConfig;
   visible: boolean;
   left: number;
   top: number;
 }
 
 const SEARCH_PRELOAD_LEAD_MS = 140;
+const SEARCH_SATELLITE_PRELOAD_LEAD_MS = 240;
 const SEARCH_NEAR_ZOOM = 14.4;
 const SEARCH_MEDIUM_ZOOM = 13.4;
 const SEARCH_FAR_ZOOM = 12.35;
 const SEARCH_NEAR_MAX_KM = 45;
 const SEARCH_MEDIUM_MAX_KM = 180;
 const SEARCH_COUNTRIES = 'fr,ch,be,lu,it,de,es,ad';
+const SEARCH_SATELLITE_STAGE_MIN_KM = 16;
+const SEARCH_SATELLITE_NEAR_ENTRY_PITCH = 46;
+const SEARCH_SATELLITE_MEDIUM_ENTRY_PITCH = 34;
+const SEARCH_SATELLITE_FAR_ENTRY_PITCH = 26;
+const SEARCH_SATELLITE_NEAR_ZOOM_DELTA = 0.35;
+const SEARCH_SATELLITE_MEDIUM_ZOOM_DELTA = 0.7;
+const SEARCH_SATELLITE_FAR_ZOOM_DELTA = 0.95;
+const SEARCH_SATELLITE_NEAR_SETTLE_MS = 700;
+const SEARCH_SATELLITE_MEDIUM_SETTLE_MS = 1100;
+const SEARCH_SATELLITE_FAR_SETTLE_MS = 1500;
+const SEARCH_SATELLITE_NEAR_RESTORE_MS = 550;
+const SEARCH_SATELLITE_MEDIUM_RESTORE_MS = 700;
+const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
+
+interface SearchCameraProfile {
+  targetZoom: number;
+  duration: number;
+  screenSpeed: number;
+  curve: number;
+  preloadLeadMs: number;
+  entryZoom: number;
+  entryPitch: number;
+  finalPitch: number;
+  shouldStageFinalApproach: boolean;
+  settleWaitMs: number;
+  finalApproachDuration: number;
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
@@ -37,8 +68,13 @@ function distanceKm(from: { lon: number; lat: number }, to: { lon: number; lat: 
   return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-function getSearchCameraProfile(map: MapboxMap, suggestion: GeocodeSuggestion) {
+function getSearchCameraProfile(
+  map: MapboxMap,
+  basemapConfig: BasemapRenderConfig,
+  suggestion: GeocodeSuggestion,
+): SearchCameraProfile {
   const currentCenter = map.getCenter();
+  const currentPitch = map.getPitch();
   const jumpDistanceKm = distanceKm(
     { lon: currentCenter.lng, lat: currentCenter.lat },
     { lon: suggestion.lon, lat: suggestion.lat },
@@ -56,11 +92,56 @@ function getSearchCameraProfile(map: MapboxMap, suggestion: GeocodeSuggestion) {
       ? 1450
       : 1900;
 
+  const isSatellite = basemapConfig.id === 'satellite';
+  const shouldStageFinalApproach = isSatellite && (
+    jumpDistanceKm >= SEARCH_SATELLITE_STAGE_MIN_KM
+    || currentPitch >= SEARCH_SATELLITE_NEAR_ENTRY_PITCH
+  );
+
+  const entryZoom = shouldStageFinalApproach
+    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+      ? Math.max(13.1, targetZoom - SEARCH_SATELLITE_NEAR_ZOOM_DELTA)
+      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+        ? Math.max(12.2, targetZoom - SEARCH_SATELLITE_MEDIUM_ZOOM_DELTA)
+        : Math.max(11.1, targetZoom - SEARCH_SATELLITE_FAR_ZOOM_DELTA)
+    : targetZoom;
+
+  const entryPitch = shouldStageFinalApproach
+    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+      ? Math.min(currentPitch, SEARCH_SATELLITE_NEAR_ENTRY_PITCH)
+      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+        ? Math.min(currentPitch, SEARCH_SATELLITE_MEDIUM_ENTRY_PITCH)
+        : Math.min(currentPitch, SEARCH_SATELLITE_FAR_ENTRY_PITCH)
+    : currentPitch;
+
+  const settleWaitMs = shouldStageFinalApproach
+    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+      ? SEARCH_SATELLITE_NEAR_SETTLE_MS
+      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+        ? SEARCH_SATELLITE_MEDIUM_SETTLE_MS
+        : SEARCH_SATELLITE_FAR_SETTLE_MS
+    : 0;
+
+  const finalApproachDuration = shouldStageFinalApproach
+    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
+      ? SEARCH_SATELLITE_NEAR_RESTORE_MS
+      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
+        ? SEARCH_SATELLITE_MEDIUM_RESTORE_MS
+        : SEARCH_SATELLITE_FAR_RESTORE_MS
+    : 0;
+
   return {
     targetZoom,
     duration,
     screenSpeed: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.15 : 0.95,
     curve: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.2 : 1.42,
+    preloadLeadMs: shouldStageFinalApproach ? SEARCH_SATELLITE_PRELOAD_LEAD_MS : SEARCH_PRELOAD_LEAD_MS,
+    entryZoom,
+    entryPitch,
+    finalPitch: currentPitch,
+    shouldStageFinalApproach,
+    settleWaitMs,
+    finalApproachDuration,
   };
 }
 
@@ -82,6 +163,7 @@ function SearchIcon() {
 
 export function DashboardPlaceSearch({
   map,
+  basemapConfig,
   visible,
   left,
   top,
@@ -90,13 +172,24 @@ export function DashboardPlaceSearch({
     undefined,
   );
   const flightTimerRef = useRef<number | null>(null);
+  const settleTokenRef = useRef(0);
+  const pendingMoveEndRef = useRef<(() => void) | null>(null);
 
-  useEffect(() => () => {
+  const clearPendingSearchTransition = useCallback((mapInstance: MapboxMap | null) => {
+    settleTokenRef.current += 1;
     if (flightTimerRef.current !== null) {
       window.clearTimeout(flightTimerRef.current);
       flightTimerRef.current = null;
     }
+    if (mapInstance && pendingMoveEndRef.current) {
+      mapInstance.off('moveend', pendingMoveEndRef.current);
+      pendingMoveEndRef.current = null;
+    }
   }, []);
+
+  useEffect(() => () => {
+    clearPendingSearchTransition(map);
+  }, [clearPendingSearchTransition, map]);
 
   useEffect(() => {
     if (!map) {
@@ -121,39 +214,83 @@ export function DashboardPlaceSearch({
     (suggestion: GeocodeSuggestion) => {
       if (!map) return;
 
-      if (flightTimerRef.current !== null) {
-        window.clearTimeout(flightTimerRef.current);
-        flightTimerRef.current = null;
-      }
+      clearPendingSearchTransition(map);
+      const transitionToken = settleTokenRef.current;
 
-      const { targetZoom, duration, screenSpeed, curve } = getSearchCameraProfile(map, suggestion);
+      const {
+        targetZoom,
+        duration,
+        screenSpeed,
+        curve,
+        preloadLeadMs,
+        entryZoom,
+        entryPitch,
+        finalPitch,
+        shouldStageFinalApproach,
+        settleWaitMs,
+        finalApproachDuration,
+      } = getSearchCameraProfile(map, basemapConfig, suggestion);
       const center: [number, number] = [suggestion.lon, suggestion.lat];
-      const camera = {
+      const finalCamera = {
         center,
         zoom: targetZoom,
         bearing: map.getBearing(),
-        pitch: map.getPitch(),
+        pitch: finalPitch,
+      };
+      const entryCamera = {
+        center,
+        zoom: entryZoom,
+        bearing: map.getBearing(),
+        pitch: entryPitch,
       };
 
       map.stop();
-      map.jumpTo({
-        ...camera,
+      const preloadCamera = shouldStageFinalApproach ? entryCamera : finalCamera;
+      const preloadOptions = {
+        ...preloadCamera,
+        duration,
+        curve,
+        screenSpeed,
+        maxDuration: 2200,
+        essential: true,
         preloadOnly: true,
-      });
+      };
+      map.flyTo(preloadOptions);
 
       flightTimerRef.current = window.setTimeout(() => {
+        if (transitionToken !== settleTokenRef.current) return;
         flightTimerRef.current = null;
+
+        if (shouldStageFinalApproach) {
+          const onEntryMoveEnd = () => {
+            if (pendingMoveEndRef.current !== onEntryMoveEnd) return;
+            map.off('moveend', onEntryMoveEnd);
+            pendingMoveEndRef.current = null;
+            void waitForMapIdleOrTimeout(map, settleWaitMs).then(() => {
+              if (transitionToken !== settleTokenRef.current) return;
+              if (map.isMoving()) return;
+              map.easeTo({
+                ...finalCamera,
+                duration: finalApproachDuration,
+                essential: true,
+              });
+            });
+          };
+          pendingMoveEndRef.current = onEntryMoveEnd;
+          map.on('moveend', onEntryMoveEnd);
+        }
+
         map.flyTo({
-          ...camera,
+          ...(shouldStageFinalApproach ? entryCamera : finalCamera),
           duration,
           curve,
           screenSpeed,
           maxDuration: 2200,
           essential: true,
         });
-      }, SEARCH_PRELOAD_LEAD_MS);
+      }, preloadLeadMs);
     },
-    [map],
+    [basemapConfig, clearPendingSearchTransition, map],
   );
 
   const wrapperStyle: CSSProperties = {
