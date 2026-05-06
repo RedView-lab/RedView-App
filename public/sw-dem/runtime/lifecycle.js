@@ -127,4 +127,36 @@ self.addEventListener('message', (e) => {
     caches.delete(NEGATIVE_CACHE_NAME);
     return;
   }
+  // Per-tile invalidation of slope+altitude derived caches. Sent by the
+  // map controller after the DEM service worker upgrades a DEM tile to
+  // higher quality (e.g. France HIGHRES kicks in mid-session). Without
+  // this the slope/altitude PNGs cached in the SW still encode the old
+  // low-quality DEM, so the user sees stale slope/altitude even after
+  // the DEM tile itself is upgraded — the "delais" the user reports.
+  if (e.data?.type === 'INVALIDATE_DERIVED_TILE') {
+    const z = e.data.z | 0;
+    const x = e.data.x | 0;
+    const y = e.data.y | 0;
+    if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return;
+    const tilePath = `/${z}/${x}/${y}`;
+    Promise.all([
+      caches.open(SLOPE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
+        return Promise.all(keys
+          .filter((req) => {
+            try { return new URL(req.url).pathname === `/slope-tiles${tilePath}`; }
+            catch { return false; }
+          })
+          .map((req) => cache.delete(req)));
+      })),
+      caches.open(ALTITUDE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
+        return Promise.all(keys
+          .filter((req) => {
+            try { return new URL(req.url).pathname === `/altitude-tiles${tilePath}`; }
+            catch { return false; }
+          })
+          .map((req) => cache.delete(req)));
+      })),
+    ]).catch(() => { /* best-effort */ });
+    return;
+  }
 });

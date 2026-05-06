@@ -128,6 +128,49 @@ export function attachListeners(ctx: Ctx): void {
     if (event.data?.type !== 'DEM_TILE_CACHE_UPDATED') return;
     st.demPassiveRefreshPending = true;
     fns.scheduleDemSettle();
+
+    // Per-tile invalidation of derived slope/altitude caches so the
+    // upgraded DEM resolution actually shows up in the overlays. Without
+    // this the user sees a "delais" between DEM HD upgrading and slope
+    // catching up — slope/altitude PNGs encode the OLD DEM until the SW
+    // entry is deleted.
+    const z = event.data.z | 0;
+    const x = event.data.x | 0;
+    const y = event.data.y | 0;
+    if (Number.isFinite(z) && Number.isFinite(x) && Number.isFinite(y)) {
+      try {
+        navigator.serviceWorker?.controller?.postMessage({
+          type: 'INVALIDATE_DERIVED_TILE',
+          z,
+          x,
+          y,
+        });
+      } catch { /* best-effort */ }
+      // Then nudge Mapbox to refetch slope/altitude. We debounce a full
+      // sourceCache reload because many DEM tiles may upgrade in quick
+      // succession (after a fresh viewport settles); reloading once per
+      // burst is far cheaper than per-tile and visually identical.
+      if (st.derivedReloadTimer) clearTimeout(st.derivedReloadTimer);
+      st.derivedReloadTimer = setTimeout(() => {
+        st.derivedReloadTimer = null;
+        try {
+          // Internal but stable Mapbox API for v3.x.
+          const sourceCaches = (map.style as unknown as {
+            _sourceCaches?: Record<string, { reload?: () => void }>;
+            sourceCaches?: Record<string, { reload?: () => void }>;
+          });
+          const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
+          if (!caches) return;
+          for (const key of Object.keys(caches)) {
+            // Mapbox keys may be `other:slope-source` style; match the
+            // tail conservatively.
+            if (key.endsWith('slope-source') || key.endsWith('altitude-source')) {
+              try { caches[key].reload?.(); } catch { /* noop */ }
+            }
+          }
+        } catch { /* noop */ }
+      }, 350);
+    }
   };
 
   const onMovestart = () => {

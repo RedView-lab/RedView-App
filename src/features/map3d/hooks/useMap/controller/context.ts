@@ -89,6 +89,9 @@ export interface ControllerState {
   hasReportedReadyOnce: boolean;
   spriteStormBypass: boolean;
 
+  /** Debounce slope/altitude sourceCache reload after burst DEM upgrades. */
+  derivedReloadTimer: ReturnType<typeof setTimeout> | null;
+
   requestedTiles: Set<string>;
   loadedTiles: Set<string>;
   trackedSourceIds: Set<string>;
@@ -188,6 +191,8 @@ export function createInitialState(): ControllerState {
     setTilesVerifyTimer: null,
     hasReportedReadyOnce: false,
     spriteStormBypass: false,
+
+    derivedReloadTimer: null,
 
     requestedTiles: new Set<string>(),
     loadedTiles: new Set<string>(),

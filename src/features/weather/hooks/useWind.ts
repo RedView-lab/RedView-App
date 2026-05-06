@@ -264,8 +264,31 @@ export function useWind(
       };
       map.on('moveend', onMoveEnd);
 
+      // Re-add the custom particle layer after every style swap. Mapbox
+      // wipes all custom layers on style.load and there's no built-in
+      // recovery — without this, switching basemaps (or any internal
+      // styledata reload) silently removes the wind layer and the user
+      // sees no particles even though the toggle reads as enabled.
+      const onStyleLoad = () => {
+        try {
+          initWindParticles(map);
+          layerInitRef.current = true;
+          // Force a re-fetch so the freshly-initialised GPU texture has
+          // data; clear viewport refs so the "already covered" early
+          // exit in fetchForViewport doesn't skip the re-feed.
+          lastBoundsRef.current = null;
+          lastFetchBoundsRef.current = null;
+          if (debounceRef.current) clearTimeout(debounceRef.current);
+          debounceRef.current = setTimeout(() => fetchForViewport(map), 50);
+        } catch (err) {
+          console.warn('[wind] re-init after style.load failed', err);
+        }
+      };
+      map.on('style.load', onStyleLoad);
+
       return () => {
         map.off('moveend', onMoveEnd);
+        map.off('style.load', onStyleLoad);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
         abortRef.current?.abort();

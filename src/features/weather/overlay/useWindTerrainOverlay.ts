@@ -219,10 +219,16 @@ export function useWindTerrainOverlay(
 
     let cancelled = false;
 
+    // Lenient mutation gate: `isStyleLoaded()` flickers `false` on every
+    // styledata event during heavy DEM/ortho tile churn. Mapbox accepts
+    // `addSource`/`addLayer`/`updateImage` as long as a real style object
+    // exists, so we only require that. The strict-gate version silently
+    // aborted refresh() under load, leaving the wind overlay invisible
+    // ("ne marche pas du tout").
     const canMutateStyle = () => {
       if (cancelled) return false;
       try {
-        return map.isStyleLoaded() && Boolean(map.getStyle());
+        return Boolean(map.getStyle());
       } catch {
         return false;
       }
