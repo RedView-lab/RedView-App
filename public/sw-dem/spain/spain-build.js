@@ -46,20 +46,27 @@ function drainSpainQueue() {
 }
 
 // Reproject the WCS source raster (axis-aligned in the coverage's native UTM
-// CRS) onto the Mercator tile's pixel grid. Each output pixel is sampled at
-// the SAME (lng, lat) convention used by the IGN/build-tile sampler — pixel
-// centre at ((px+0.5)/DEM_TILE_SIZE, (py+0.5)/DEM_TILE_SIZE) of the Mercator
-// tile bounds. This is critical for seam continuity: adjacent Mercator tiles
-// fetch DIFFERENT UTM bboxes (each padded outward to enclose the projected
-// quadrilateral), so directly using the WCS raster as if it were Mercator-
-// aligned drifted the eastern edge of tile A vs. the western edge of tile B
-// by up to half a UTM source pixel — visible in 3D as a few-metre vertical
-// "wall" at every Spanish tile boundary on steep terrain (Pyrénées, Picos).
+// CRS) onto the Mercator tile's pixel grid. Two regimes:
 //
-// With per-pixel reprojection both tiles sample the same continuous source
-// function at identical geographic coordinates along their shared edge, so
-// the seam closes (subject only to the source raster's interpolation, which
-// is what IGN / France already does).
+//   (A) Source pitch ≤ destination pitch  → area-weighted BOX AVERAGE.
+//       For each Mercator output pixel we project the 4 corners to UTM,
+//       compute the source-pixel bbox of that footprint, and average every
+//       source pixel inside (with fractional weights on edge pixels). This
+//       is exact area resampling and is what suppresses the moiré / grid
+//       artefact that point-bilinear produces on slope/altitude overlays
+//       when source-grid pitch is comparable to destination pitch — same
+//       root cause as the May 03 France WMS fix where a 0.40 m surface
+//       requested at 1 m output produced regular horizontal stripes; the
+//       cure there was 2× supersample + box-average inside getTerrainWmsTile.
+//
+//   (B) Source pitch > destination pitch (zoomed in beyond source res) →
+//       fall back to coverage-weighted bilinear, which is the optimal
+//       interpolant when the source is the limiting band.
+//
+// Per-pixel reprojection (rather than blitting the UTM raster as if it were
+// Mercator-aligned) is also what closes the inter-tile seams: adjacent
+// Mercator tiles fetch DIFFERENT UTM bboxes, so the only way both tiles
+// agree along their shared edge is to sample at the same (lng, lat).
 function _resampleSpainSourceToMercator(
   srcElev, srcCov, srcW, srcH, bounds, mercZ, mercX, mercY, utmZone,
 ) {
@@ -70,61 +77,123 @@ function _resampleSpainSourceToMercator(
   const dN = bounds.maxN - bounds.minN;
   if (!(dE > 0) || !(dN > 0)) return { elevations: outElev, coverage: outCov };
 
-  for (let py = 0; py < DEM_TILE_SIZE; py++) {
-    const yFrac = (mercY + (py + 0.5) / DEM_TILE_SIZE) / n;
+  const invDE = 1 / dE;
+  const invDN = 1 / dN;
+
+  // Precompute source-pixel coordinates for every CORNER of every output
+  // pixel (DEM_TILE_SIZE+1 corners per axis). This lets each pixel reuse
+  // the four corners stored as fX/fY (source-pixel space) instead of
+  // re-projecting four (lng, lat) → UTM points per output pixel — saves
+  // ~3× the projection work which dominates the cost of the resample.
+  const C = DEM_TILE_SIZE + 1;
+  const fX = new Float32Array(C * C);
+  const fY = new Float32Array(C * C);
+  for (let cy = 0; cy < C; cy++) {
+    const yFrac = (mercY + cy / DEM_TILE_SIZE) / n;
     const lat = mercatorYToLat(yFrac);
-    for (let px = 0; px < DEM_TILE_SIZE; px++) {
-      const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
+    for (let cx = 0; cx < C; cx++) {
+      const xFrac = (mercX + cx / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
       const p = wgs84ToSpainProjected(lng, lat, utmZone);
+      // Source pixel coords (TIFF row 0 = north) — note this is in source
+      // pixel CORNER space (not centre), which is what we need for box
+      // averaging: a value of 0 means "left edge of column 0".
+      fX[cy * C + cx] = (p.E - bounds.minE) * invDE * srcW;
+      fY[cy * C + cx] = (bounds.maxN - p.N) * invDN * srcH;
+    }
+  }
 
-      // Source pixel centre (i, j) is at UTM
-      //   E = bounds.minE + (i + 0.5) * dE / srcW
-      //   N = bounds.maxN - (j + 0.5) * dN / srcH   (TIFF row 0 = north)
-      const fx = ((p.E - bounds.minE) / dE) * srcW - 0.5;
-      const fy = ((bounds.maxN - p.N) / dN) * srcH - 0.5;
+  for (let py = 0; py < DEM_TILE_SIZE; py++) {
+    for (let px = 0; px < DEM_TILE_SIZE; px++) {
+      const c00 = py * C + px;
+      const c10 = c00 + 1;
+      const c01 = c00 + C;
+      const c11 = c01 + 1;
+      const x00 = fX[c00], y00 = fY[c00];
+      const x10 = fX[c10], y10 = fY[c10];
+      const x01 = fX[c01], y01 = fY[c01];
+      const x11 = fX[c11], y11 = fY[c11];
 
-      const x0 = Math.max(0, Math.min(srcW - 1, Math.floor(fx)));
-      const y0 = Math.max(0, Math.min(srcH - 1, Math.floor(fy)));
-      const x1 = Math.max(0, Math.min(srcW - 1, x0 + 1));
-      const y1 = Math.max(0, Math.min(srcH - 1, y0 + 1));
-      const tx = Math.max(0, Math.min(1, fx - Math.floor(fx)));
-      const ty = Math.max(0, Math.min(1, fy - Math.floor(fy)));
+      // Source bbox of the destination pixel footprint.
+      let sxMin = x00; if (x10 < sxMin) sxMin = x10; if (x01 < sxMin) sxMin = x01; if (x11 < sxMin) sxMin = x11;
+      let sxMax = x00; if (x10 > sxMax) sxMax = x10; if (x01 > sxMax) sxMax = x01; if (x11 > sxMax) sxMax = x11;
+      let syMin = y00; if (y10 < syMin) syMin = y10; if (y01 < syMin) syMin = y01; if (y11 < syMin) syMin = y11;
+      let syMax = y00; if (y10 > syMax) syMax = y10; if (y01 > syMax) syMax = y01; if (y11 > syMax) syMax = y11;
 
-      const i00 = y0 * srcW + x0;
-      const i10 = y0 * srcW + x1;
-      const i01 = y1 * srcW + x0;
-      const i11 = y1 * srcW + x1;
-      const c00 = srcCov[i00];
-      const c10 = srcCov[i10];
-      const c01 = srcCov[i01];
-      const c11 = srcCov[i11];
       const dstIdx = py * DEM_TILE_SIZE + px;
 
-      if (c00 && c10 && c01 && c11) {
-        const v00 = srcElev[i00];
-        const v10 = srcElev[i10];
-        const v01 = srcElev[i01];
-        const v11 = srcElev[i11];
-        outElev[dstIdx] = (1 - tx) * (1 - ty) * v00
-          + tx * (1 - ty) * v10
-          + (1 - tx) * ty * v01
-          + tx * ty * v11;
-        outCov[dstIdx] = 1;
-      } else {
-        // Coverage-weighted bilinear so partially-covered neighbourhoods near
-        // the coastline / coverage edge degrade gracefully instead of
-        // blackholing whole output pixels.
+      // Clip to source raster.
+      if (sxMax <= 0 || syMax <= 0 || sxMin >= srcW || syMin >= srcH) continue;
+      if (sxMin < 0) sxMin = 0;
+      if (syMin < 0) syMin = 0;
+      if (sxMax > srcW) sxMax = srcW;
+      if (syMax > srcH) syMax = srcH;
+
+      const fwX = sxMax - sxMin;
+      const fwY = syMax - syMin;
+
+      // Regime B — destination pixel covers less than one full source pixel
+      // (≈ < 1 in either axis): point-bilinear at the centroid of the four
+      // corners. Box-averaging a sub-pixel area would just collapse to a
+      // single source value and reintroduce nearest-neighbour stair-step.
+      if (fwX < 1 && fwY < 1) {
+        const fx = ((x00 + x10 + x01 + x11) * 0.25) - 0.5;
+        const fy = ((y00 + y10 + y01 + y11) * 0.25) - 0.5;
+        const ix0 = Math.max(0, Math.min(srcW - 1, Math.floor(fx)));
+        const iy0 = Math.max(0, Math.min(srcH - 1, Math.floor(fy)));
+        const ix1 = Math.max(0, Math.min(srcW - 1, ix0 + 1));
+        const iy1 = Math.max(0, Math.min(srcH - 1, iy0 + 1));
+        const tx = Math.max(0, Math.min(1, fx - Math.floor(fx)));
+        const ty = Math.max(0, Math.min(1, fy - Math.floor(fy)));
+        const i00 = iy0 * srcW + ix0;
+        const i10 = iy0 * srcW + ix1;
+        const i01 = iy1 * srcW + ix0;
+        const i11 = iy1 * srcW + ix1;
+        const k00 = srcCov[i00];
+        const k10 = srcCov[i10];
+        const k01 = srcCov[i01];
+        const k11 = srcCov[i11];
         let sum = 0;
         let w = 0;
-        if (c00) { const wt = (1 - tx) * (1 - ty); sum += srcElev[i00] * wt; w += wt; }
-        if (c10) { const wt = tx * (1 - ty);       sum += srcElev[i10] * wt; w += wt; }
-        if (c01) { const wt = (1 - tx) * ty;       sum += srcElev[i01] * wt; w += wt; }
-        if (c11) { const wt = tx * ty;             sum += srcElev[i11] * wt; w += wt; }
-        if (w > 0) {
-          outElev[dstIdx] = sum / w;
-          outCov[dstIdx] = 1;
+        if (k00) { const wt = (1 - tx) * (1 - ty); sum += srcElev[i00] * wt; w += wt; }
+        if (k10) { const wt = tx * (1 - ty);       sum += srcElev[i10] * wt; w += wt; }
+        if (k01) { const wt = (1 - tx) * ty;       sum += srcElev[i01] * wt; w += wt; }
+        if (k11) { const wt = tx * ty;             sum += srcElev[i11] * wt; w += wt; }
+        if (w > 0) { outElev[dstIdx] = sum / w; outCov[dstIdx] = 1; }
+        continue;
+      }
+
+      // Regime A — area-weighted box average over the source footprint.
+      // Iterate every source pixel touched by [sxMin..sxMax] × [syMin..syMax]
+      // and weight each by the fractional area of its overlap with the
+      // destination pixel's source bbox.
+      const ix0 = Math.floor(sxMin);
+      const iy0 = Math.floor(syMin);
+      const ix1 = Math.min(srcW - 1, Math.ceil(sxMax) - 1);
+      const iy1 = Math.min(srcH - 1, Math.ceil(syMax) - 1);
+      let sum = 0;
+      let wSum = 0;
+      for (let iy = iy0; iy <= iy1; iy++) {
+        const cellTop = iy;
+        const cellBot = iy + 1;
+        const dy = Math.min(syMax, cellBot) - Math.max(syMin, cellTop);
+        if (dy <= 0) continue;
+        const rowBase = iy * srcW;
+        for (let ix = ix0; ix <= ix1; ix++) {
+          const cellL = ix;
+          const cellR = ix + 1;
+          const dx = Math.min(sxMax, cellR) - Math.max(sxMin, cellL);
+          if (dx <= 0) continue;
+          const idx = rowBase + ix;
+          if (!srcCov[idx]) continue;
+          const w = dx * dy;
+          sum += srcElev[idx] * w;
+          wSum += w;
         }
+      }
+      if (wSum > 0) {
+        outElev[dstIdx] = sum / wSum;
+        outCov[dstIdx] = 1;
       }
     }
   }
@@ -385,16 +454,9 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   if (!parsed.coveredCount) return { status: 'empty' };
 
   // Gap-fill on the SOURCE UTM raster (now SPAIN_WCS_OUTPUT_PX²) before
-  // reprojecting so the bilinear sampler doesn't pull from holes near the
-  // coverage edge.
+  // reprojecting so the box-average sampler doesn't pull from holes near
+  // the coverage edge.
   fillSpainCoverage(parsed.elevations, parsed.coverage, parsed.width);
-
-  // Edge-preserving low-pass on the SOURCE raster to remove the 1 m
-  // Int16-quantization "stair-step" contours that appear on smooth slopes
-  // in 3D rendering. Apply pre-reprojection so the bilinear sampler later
-  // operates on already-smooth values (otherwise reprojection would mix
-  // smoothed and raw rows together, breaking the variance gate).
-  smoothSpainQuantization(parsed.elevations, parsed.coverage, parsed.width);
 
   // Reproject the source UTM raster onto the Mercator tile grid using the
   // same per-pixel (lng, lat) convention the IGN/build-tile sampler uses.

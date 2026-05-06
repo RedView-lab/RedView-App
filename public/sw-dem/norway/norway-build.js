@@ -65,21 +65,119 @@ function _norwayDecodeTileBytes(compression, encoded) {
   throw new Error(`unsupported TIFF compression=${compression}`);
 }
 
-function _resampleNorwayCoverage(elevations, coverage, srcWidth, srcHeight) {
-  if (srcWidth === DEM_TILE_SIZE && srcHeight === DEM_TILE_SIZE) {
-    return { elevations, coverage };
-  }
-
+function _resampleNorwaySourceToMercator(
+  srcElev, srcCov, srcW, srcH, bounds, mercZ, mercX, mercY, zone,
+) {
+  // Same area-weighted box-average reprojection used by the Spain pipeline
+  // (see spain-build.js for the full rationale). Two regimes:
+  //   (A) src pitch ≤ dst pitch → average all source pixels touching each
+  //       destination pixel's UTM footprint (anti-aliasing).
+  //   (B) src pitch > dst pitch → coverage-weighted bilinear at the centroid
+  //       (proper interpolation when source is the limiting band).
+  // Per-pixel reprojection also closes the inter-tile seam that the previous
+  // identity passthrough produced (adjacent Mercator tiles fetch DIFFERENT
+  // UTM bboxes — only sampling at common (lng, lat) keeps edges continuous).
   const outElev = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const outCov = new Uint8Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
+  const n = 1 << mercZ;
+  const dE = bounds.maxE - bounds.minE;
+  const dN = bounds.maxN - bounds.minN;
+  if (!(dE > 0) || !(dN > 0)) return { elevations: outElev, coverage: outCov };
+
+  const invDE = 1 / dE;
+  const invDN = 1 / dN;
+
+  const C = DEM_TILE_SIZE + 1;
+  const fX = new Float32Array(C * C);
+  const fY = new Float32Array(C * C);
+  for (let cy = 0; cy < C; cy++) {
+    const yFrac = (mercY + cy / DEM_TILE_SIZE) / n;
+    const lat = mercatorYToLat(yFrac);
+    for (let cx = 0; cx < C; cx++) {
+      const xFrac = (mercX + cx / DEM_TILE_SIZE) / n;
+      const lng = xFrac * 360 - 180;
+      const p = wgs84ToNorwayUTM(lng, lat, zone);
+      fX[cy * C + cx] = (p.E - bounds.minE) * invDE * srcW;
+      fY[cy * C + cx] = (bounds.maxN - p.N) * invDN * srcH;
+    }
+  }
+
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
-    const sy = Math.min(srcHeight - 1, Math.floor(((py + 0.5) / DEM_TILE_SIZE) * srcHeight));
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
-      const sx = Math.min(srcWidth - 1, Math.floor(((px + 0.5) / DEM_TILE_SIZE) * srcWidth));
-      const srcIdx = sy * srcWidth + sx;
+      const c00 = py * C + px;
+      const c10 = c00 + 1;
+      const c01 = c00 + C;
+      const c11 = c01 + 1;
+      const x00 = fX[c00], y00 = fY[c00];
+      const x10 = fX[c10], y10 = fY[c10];
+      const x01 = fX[c01], y01 = fY[c01];
+      const x11 = fX[c11], y11 = fY[c11];
+
+      let sxMin = x00; if (x10 < sxMin) sxMin = x10; if (x01 < sxMin) sxMin = x01; if (x11 < sxMin) sxMin = x11;
+      let sxMax = x00; if (x10 > sxMax) sxMax = x10; if (x01 > sxMax) sxMax = x01; if (x11 > sxMax) sxMax = x11;
+      let syMin = y00; if (y10 < syMin) syMin = y10; if (y01 < syMin) syMin = y01; if (y11 < syMin) syMin = y11;
+      let syMax = y00; if (y10 > syMax) syMax = y10; if (y01 > syMax) syMax = y01; if (y11 > syMax) syMax = y11;
+
       const dstIdx = py * DEM_TILE_SIZE + px;
-      if (coverage[srcIdx]) {
-        outElev[dstIdx] = elevations[srcIdx];
+
+      if (sxMax <= 0 || syMax <= 0 || sxMin >= srcW || syMin >= srcH) continue;
+      if (sxMin < 0) sxMin = 0;
+      if (syMin < 0) syMin = 0;
+      if (sxMax > srcW) sxMax = srcW;
+      if (syMax > srcH) syMax = srcH;
+
+      const fwX = sxMax - sxMin;
+      const fwY = syMax - syMin;
+
+      if (fwX < 1 && fwY < 1) {
+        const fx = ((x00 + x10 + x01 + x11) * 0.25) - 0.5;
+        const fy = ((y00 + y10 + y01 + y11) * 0.25) - 0.5;
+        const ix0 = Math.max(0, Math.min(srcW - 1, Math.floor(fx)));
+        const iy0 = Math.max(0, Math.min(srcH - 1, Math.floor(fy)));
+        const ix1 = Math.max(0, Math.min(srcW - 1, ix0 + 1));
+        const iy1 = Math.max(0, Math.min(srcH - 1, iy0 + 1));
+        const tx = Math.max(0, Math.min(1, fx - Math.floor(fx)));
+        const ty = Math.max(0, Math.min(1, fy - Math.floor(fy)));
+        const i00 = iy0 * srcW + ix0;
+        const i10 = iy0 * srcW + ix1;
+        const i01 = iy1 * srcW + ix0;
+        const i11 = iy1 * srcW + ix1;
+        const k00 = srcCov[i00];
+        const k10 = srcCov[i10];
+        const k01 = srcCov[i01];
+        const k11 = srcCov[i11];
+        let sum = 0;
+        let w = 0;
+        if (k00) { const wt = (1 - tx) * (1 - ty); sum += srcElev[i00] * wt; w += wt; }
+        if (k10) { const wt = tx * (1 - ty);       sum += srcElev[i10] * wt; w += wt; }
+        if (k01) { const wt = (1 - tx) * ty;       sum += srcElev[i01] * wt; w += wt; }
+        if (k11) { const wt = tx * ty;             sum += srcElev[i11] * wt; w += wt; }
+        if (w > 0) { outElev[dstIdx] = sum / w; outCov[dstIdx] = 1; }
+        continue;
+      }
+
+      const ix0 = Math.floor(sxMin);
+      const iy0 = Math.floor(syMin);
+      const ix1 = Math.min(srcW - 1, Math.ceil(sxMax) - 1);
+      const iy1 = Math.min(srcH - 1, Math.ceil(syMax) - 1);
+      let sum = 0;
+      let wSum = 0;
+      for (let iy = iy0; iy <= iy1; iy++) {
+        const dy = Math.min(syMax, iy + 1) - Math.max(syMin, iy);
+        if (dy <= 0) continue;
+        const rowBase = iy * srcW;
+        for (let ix = ix0; ix <= ix1; ix++) {
+          const dx = Math.min(sxMax, ix + 1) - Math.max(sxMin, ix);
+          if (dx <= 0) continue;
+          const idx = rowBase + ix;
+          if (!srcCov[idx]) continue;
+          const w = dx * dy;
+          sum += srcElev[idx] * w;
+          wSum += w;
+        }
+      }
+      if (wSum > 0) {
+        outElev[dstIdx] = sum / wSum;
         outCov[dstIdx] = 1;
       }
     }
@@ -171,10 +269,12 @@ async function parseNorwayGeoTIFF(buffer) {
     }
   }
 
-  const resampled = _resampleNorwayCoverage(elevations, coverage, width, height);
+  const resampled = { elevations, coverage, width, height };
   return {
     elevations: resampled.elevations,
     coverage: resampled.coverage,
+    width: resampled.width,
+    height: resampled.height,
     coveredCount,
   };
 }
@@ -190,6 +290,10 @@ function buildNorwayWCSUrl(zone, mercZ, mercX, mercY) {
     extent.maxN.toFixed(3),
   ].join(',');
 
+  // Request NORWAY_WCS_OUTPUT_PX² (512²) — 4× the destination pitch — so the
+  // local UTM→Mercator reprojection has enough source samples per output
+  // pixel to do area-weighted box averaging instead of point-bilinear. This
+  // is what eliminates the slope/altitude grid moiré on Norwegian terrain.
   return `${cfg.base}`
     + `?service=WCS`
     + `&version=${NORWAY_WCS_VERSION}`
@@ -197,8 +301,8 @@ function buildNorwayWCSUrl(zone, mercZ, mercX, mercY) {
     + `&coverage=${encodeURIComponent(cfg.coverage)}`
     + `&crs=EPSG:${cfg.epsg}`
     + `&bbox=${bbox}`
-    + `&width=${DEM_TILE_SIZE}`
-    + `&height=${DEM_TILE_SIZE}`
+    + `&width=${NORWAY_WCS_OUTPUT_PX}`
+    + `&height=${NORWAY_WCS_OUTPUT_PX}`
     + `&format=${encodeURIComponent(NORWAY_WCS_FORMAT)}`
     + `&interpolation=linear`;
 }
@@ -221,12 +325,34 @@ async function fetchNorwayCoverage(zone, mercZ, mercX, mercY) {
     };
   }
 
-  const parsed = await parseNorwayGeoTIFF(await response.arrayBuffer());
+  let parsed;
+  try {
+    parsed = await parseNorwayGeoTIFF(await response.arrayBuffer());
+  } catch (error) {
+    if (DEBUG) console.warn('[norway] TIFF parse failed', error?.message || error);
+    return { status: 'empty' };
+  }
   if (!parsed.coveredCount) return { status: 'empty' };
+
+  // Reproject UTM source raster onto Mercator with area-weighted box
+  // averaging — closes inter-tile seams AND removes the slope/altitude
+  // grid moiré that point-bilinear produces when src pitch ≈ dst pitch.
+  const extent = projectMercatorTileToNorwayUTMExtent(mercZ, mercX, mercY, zone);
+  const projected = _resampleNorwaySourceToMercator(
+    parsed.elevations,
+    parsed.coverage,
+    parsed.width,
+    parsed.height,
+    extent,
+    mercZ,
+    mercX,
+    mercY,
+    zone,
+  );
   return {
     status: 'ok',
-    elevations: parsed.elevations,
-    coverage: parsed.coverage,
+    elevations: projected.elevations,
+    coverage: projected.coverage,
   };
 }
 

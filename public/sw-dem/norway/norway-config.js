@@ -12,10 +12,22 @@ const NORWAY_BOUNDS = [2.0, 57.0, 33.4, 72.2];
 const NORWAY_DEM_MINZOOM = 10;
 const NORWAY_ENGAGE_MPP = 72;
 const NORWAY_WCS_VERSION = '1.0.0';
-const NORWAY_FETCH_TIMEOUT_MS = 15_000;
+// Cold backend (`hoydedata.no`) can take 15-25 s to render a fresh tile;
+// 30 s prevents abort-and-retry storms when panning to a new region.
+const NORWAY_FETCH_TIMEOUT_MS = 30_000;
 const NORWAY_CONCURRENCY = 12;
 const NORWAY_QUEUE_MAX = 240;
 const NORWAY_WCS_FORMAT = 'GeoTIFF';
+// Server-side raster size — request a 2× supersample of the output tile
+// pitch so the local UTM→Mercator reprojection can do area-weighted box
+// averaging (≈4 source pixels per destination pixel) instead of point-
+// bilinear. Point sampling on a UTM raster requested at the same pitch
+// as the Mercator output produced regular grid/moiré artefacts on the
+// slope overlay (visible as oblique stripes on smooth terrain) — same
+// failure mode as the May 03 France WMS 0.40 m → 1 m issue. 4× bandwidth
+// (~520 KB → 4× = ~2 MB per Norway tile of float32 GeoTIFF, but Norway is
+// already opt-in for high-zoom and on-fibre is imperceptible.
+const NORWAY_WCS_OUTPUT_PX = 512;
 
 const NORWAY_WCS_ZONES = {
   32: {
