@@ -25,18 +25,31 @@ const SPAIN_CANARY_BOUNDS = [-19.5, 27.0, -12.0, 30.5];
 const SPAIN_DEM_RESOLUTION_M = 5;
 const SPAIN_DEM_MINZOOM = 12;
 const SPAIN_ENGAGE_MPP = 32;
-const SPAIN_FETCH_TIMEOUT_MS = 15_000;
-// Each request now returns a fixed 256x256 16-bit TIFF (~131 KB) thanks to
-// scaleSize, and is served by a CloudFront edge with year-long max-age.
-// We can safely run a deeper queue / higher concurrency than the original
-// design that assumed multi-MB payloads.
+// IDEE backend can be slow on cold misses (server-side raster generation
+// for the requested bbox). 15 s was occasionally too tight on first visits
+// to a fresh region — the abort fired, work was wasted and tiles were
+// re-queued, snowballing perceived "an eternity to load" on first paint.
+const SPAIN_FETCH_TIMEOUT_MS = 30_000;
+// Each request returns a fixed 16-bit TIFF served by a CloudFront edge with
+// year-long max-age. 256² (~131 KB) was the original choice; bumped to 512²
+// (~520 KB) so the source raster matches the MDT5 native 5 m grid at z14-15
+// (a z14 Spanish tile is ~2.5 km wide → 500² native pixels, so 512² captures
+// essentially every native pixel without server-side downsampling and its
+// associated low-pass artefacts that produced the visible "wavy contour"
+// lines on smooth slopes). 4× more bytes per tile, but on fibre that's
+// imperceptible compared to backend cold-miss latency, and CloudFront still
+// year-caches everything.
 const SPAIN_CONCURRENCY = 16;
 const SPAIN_QUEUE_MAX = 400;
-// Server-side output dimensions — must match DEM_TILE_SIZE so the parsed
-// TIFF can skip the local nearest-neighbour resample entirely.
-const SPAIN_WCS_OUTPUT_PX = 256;
+const SPAIN_WCS_OUTPUT_PX = 512;
 const SPAIN_WCS_VERSION = '2.0.1';
 const SPAIN_WCS_FORMAT = 'image/tiff';
+// MDT5 stores elevations as Int16 in metres → 1 m vertical quantization. On
+// pentes douces (≤ ~15°) this surfaces as 1 m horizontal "stair" contours
+// in the 3D mesh ("micro-ondulations"). A light 3×3 low-pass applied only
+// where the local 3×3 height span is below this threshold smooths the
+// quantization without softening real cliffs / ridges.
+const SPAIN_SMOOTH_VARIANCE_M = 4;
 
 const SPAIN_WCS_COVERAGES = {
   mainland: {

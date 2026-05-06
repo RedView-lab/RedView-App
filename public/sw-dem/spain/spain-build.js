@@ -131,7 +131,8 @@ function _resampleSpainSourceToMercator(
   return { elevations: outElev, coverage: outCov };
 }
 
-function fillSpainCoverage(elevations, coverage) {
+function fillSpainCoverage(elevations, coverage, size) {
+  const W = size || DEM_TILE_SIZE;
   let coveredCount = 0;
   for (let i = 0; i < coverage.length; i++) if (coverage[i]) coveredCount++;
   if (coveredCount === 0 || coveredCount === coverage.length) return coveredCount;
@@ -140,19 +141,19 @@ function fillSpainCoverage(elevations, coverage) {
     const nextElevations = new Float32Array(elevations);
     const nextCoverage = new Uint8Array(coverage);
     let passChanged = false;
-    for (let py = 0; py < DEM_TILE_SIZE; py++) {
-      for (let px = 0; px < DEM_TILE_SIZE; px++) {
-        const idx = py * DEM_TILE_SIZE + px;
+    for (let py = 0; py < W; py++) {
+      for (let px = 0; px < W; px++) {
+        const idx = py * W + px;
         if (coverage[idx]) continue;
         let sum = 0;
         let count = 0;
         for (let oy = -1; oy <= 1; oy++) {
           const ny = py + oy;
-          if (ny < 0 || ny >= DEM_TILE_SIZE) continue;
+          if (ny < 0 || ny >= W) continue;
           for (let ox = -1; ox <= 1; ox++) {
             const nx = px + ox;
-            if ((ox === 0 && oy === 0) || nx < 0 || nx >= DEM_TILE_SIZE) continue;
-            const nIdx = ny * DEM_TILE_SIZE + nx;
+            if ((ox === 0 && oy === 0) || nx < 0 || nx >= W) continue;
+            const nIdx = ny * W + nx;
             if (!coverage[nIdx]) continue;
             sum += elevations[nIdx];
             count++;
@@ -172,6 +173,55 @@ function fillSpainCoverage(elevations, coverage) {
   }
 
   return coveredCount;
+}
+
+// Edge-preserving low-pass for the Int16-quantized MDT5 raster. MDT5 stores
+// elevations as integer metres, so smooth slopes (≤ ~15°) develop visible 1 m
+// "stair-step" contours when triangulated by Mapbox terrain — they read as
+// micro-ondulations parallel to the iso-level lines on the snow / pasture
+// surfaces in 3D. A 3×3 weighted mean (centre 4 / edges 2 / corners 1, gain 16)
+// applied only where the local 3×3 height span is < SPAIN_SMOOTH_VARIANCE_M
+// removes the steps without softening real cliffs / ridges (which all exceed
+// the threshold by definition).
+function smoothSpainQuantization(elevations, coverage, size) {
+  const out = new Float32Array(elevations);
+  for (let y = 1; y < size - 1; y++) {
+    for (let x = 1; x < size - 1; x++) {
+      const idx = y * size + x;
+      if (!coverage[idx]) continue;
+      const i_n  = idx - size;
+      const i_s  = idx + size;
+      const i_w  = idx - 1;
+      const i_e  = idx + 1;
+      const i_nw = i_n - 1;
+      const i_ne = i_n + 1;
+      const i_sw = i_s - 1;
+      const i_se = i_s + 1;
+      if (!(coverage[i_n] && coverage[i_s] && coverage[i_w] && coverage[i_e]
+            && coverage[i_nw] && coverage[i_ne] && coverage[i_sw] && coverage[i_se])) continue;
+      const c  = elevations[idx];
+      const vn = elevations[i_n];
+      const vs = elevations[i_s];
+      const vw = elevations[i_w];
+      const ve = elevations[i_e];
+      const vnw = elevations[i_nw];
+      const vne = elevations[i_ne];
+      const vsw = elevations[i_sw];
+      const vse = elevations[i_se];
+      let mn = c, mx = c;
+      if (vn < mn) mn = vn; if (vn > mx) mx = vn;
+      if (vs < mn) mn = vs; if (vs > mx) mx = vs;
+      if (vw < mn) mn = vw; if (vw > mx) mx = vw;
+      if (ve < mn) mn = ve; if (ve > mx) mx = ve;
+      if (vnw < mn) mn = vnw; if (vnw > mx) mx = vnw;
+      if (vne < mn) mn = vne; if (vne > mx) mx = vne;
+      if (vsw < mn) mn = vsw; if (vsw > mx) mx = vsw;
+      if (vse < mn) mn = vse; if (vse > mx) mx = vse;
+      if (mx - mn > SPAIN_SMOOTH_VARIANCE_M) continue; // edge / cliff — preserve
+      out[idx] = (vnw + 2 * vn + vne + 2 * vw + 4 * c + 2 * ve + vsw + 2 * vs + vse) / 16;
+    }
+  }
+  elevations.set(out);
 }
 
 function buildSpainWCSUrl(coverage, bounds) {
@@ -334,9 +384,17 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   }
   if (!parsed.coveredCount) return { status: 'empty' };
 
-  // Gap-fill on the SOURCE UTM raster (still 256×256) before reprojecting
-  // so the bilinear sampler doesn't pull from holes near the coverage edge.
-  fillSpainCoverage(parsed.elevations, parsed.coverage);
+  // Gap-fill on the SOURCE UTM raster (now SPAIN_WCS_OUTPUT_PX²) before
+  // reprojecting so the bilinear sampler doesn't pull from holes near the
+  // coverage edge.
+  fillSpainCoverage(parsed.elevations, parsed.coverage, parsed.width);
+
+  // Edge-preserving low-pass on the SOURCE raster to remove the 1 m
+  // Int16-quantization "stair-step" contours that appear on smooth slopes
+  // in 3D rendering. Apply pre-reprojection so the bilinear sampler later
+  // operates on already-smooth values (otherwise reprojection would mix
+  // smoothed and raw rows together, breaking the variance gate).
+  smoothSpainQuantization(parsed.elevations, parsed.coverage, parsed.width);
 
   // Reproject the source UTM raster onto the Mercator tile grid using the
   // same per-pixel (lng, lat) convention the IGN/build-tile sampler uses.
