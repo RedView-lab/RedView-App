@@ -1,13 +1,35 @@
-import type { PointCloudData } from '../types';
+import type { PointCloudData, DetectedCrs } from '../types';
 import { toWgs84 } from './coordConvert';
 
 const WMTS_ZOOM = 19;
 const TILE_SIZE = 256;
 const DEFAULT_R = 128, DEFAULT_G = 128, DEFAULT_B = 128;
 
-async function fetchOrthoTile(zoom: number, tileX: number, tileY: number): Promise<Uint8Array | null> {
+// IGN — Géoplateforme orthophotos (France).
+const IGN_ORTHO_URL = (z: number, x: number, y: number) =>
+  `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}`;
+
+// swisstopo — SWISSIMAGE (Switzerland). Public WMTS, CORS-enabled, no key.
+// The 3857 matrix set uses the same Web-Mercator tile grid as IGN PM, so the
+// existing wgs84→pixel math (`wgs84ToAbsPixel`) works unchanged.
+// Sub-domains wmts0..9 are load-balanced; we pick one per tile to spread load.
+const SWISS_ORTHO_URL = (z: number, x: number, y: number) => {
+  const sub = (x + y) % 10;
+  return `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${z}/${x}/${y}.jpeg`;
+};
+
+function orthoUrlForCrs(crs: DetectedCrs, z: number, x: number, y: number): string {
+  return crs === 'CH1903_LV95' ? SWISS_ORTHO_URL(z, x, y) : IGN_ORTHO_URL(z, x, y);
+}
+
+async function fetchOrthoTile(
+  zoom: number,
+  tileX: number,
+  tileY: number,
+  crs: DetectedCrs,
+): Promise<Uint8Array | null> {
   try {
-    const response = await fetch(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIXSET=PM&TILEMATRIX=${zoom}&TILEROW=${tileY}&TILECOL=${tileX}`);
+    const response = await fetch(orthoUrlForCrs(crs, zoom, tileX, tileY));
     if (!response.ok) return null;
 
     const blob = await response.blob();
@@ -76,7 +98,7 @@ export async function colorizePointCloud(
 
   for (let i = 0; i < tileJobs.length; i += BATCH_SIZE) {
     const batch = tileJobs.slice(i, i + BATCH_SIZE);
-    const results = await Promise.all(batch.map(t => fetchOrthoTile(WMTS_ZOOM, t.col, t.row)));
+    const results = await Promise.all(batch.map(t => fetchOrthoTile(WMTS_ZOOM, t.col, t.row, crs)));
     for (let j = 0; j < batch.length; j++) {
       tileData[batch[j].idx] = results[j];
     }

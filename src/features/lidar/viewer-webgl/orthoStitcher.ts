@@ -31,11 +31,18 @@ function wgs84ToAbsPixel(lon: number, lat: number, zoom: number): AbsPx {
   return { px, py };
 }
 
-async function fetchTile(col: number, row: number): Promise<ImageBitmap | null> {
-  const url =
-    `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
-    `&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg` +
-    `&TILEMATRIXSET=PM&TILEMATRIX=${WMTS_ZOOM}&TILEROW=${row}&TILECOL=${col}`;
+async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<ImageBitmap | null> {
+  let url: string;
+  if (crs === 'CH1903_LV95') {
+    // swisstopo SWISSIMAGE — Web-Mercator (3857) tile grid, public + CORS.
+    const sub = (col + row) % 10;
+    url = `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${WMTS_ZOOM}/${col}/${row}.jpeg`;
+  } else {
+    url =
+      `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
+      `&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg` +
+      `&TILEMATRIXSET=PM&TILEMATRIX=${WMTS_ZOOM}&TILEROW=${row}&TILECOL=${col}`;
+  }
   try {
     const r = await fetch(url);
     if (!r.ok) return null;
@@ -96,7 +103,7 @@ export async function stitchOrtho(
   let done = 0;
   for (let i = 0; i < jobs.length; i += BATCH) {
     const batch = jobs.slice(i, i + BATCH);
-    const bitmaps = await Promise.all(batch.map((j) => fetchTile(j.col, j.row)));
+    const bitmaps = await Promise.all(batch.map((j) => fetchTile(j.col, j.row, crs)));
     for (let k = 0; k < batch.length; k++) {
       const bm = bitmaps[k];
       if (!bm) continue;
