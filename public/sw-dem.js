@@ -46,6 +46,10 @@ importScripts(
   withEpoch('/sw-dem/swiss/swiss-cog.js'),
   withEpoch('/sw-dem/swiss/swiss-fetcher.js'),
   withEpoch('/sw-dem/swiss/swiss-build.js'),
+  // Norway — national DTM via Kartverket / Geonorge WCS (UTM 32/33/35)
+  withEpoch('/sw-dem/norway/norway-config.js'),
+  withEpoch('/sw-dem/norway/norway-coords.js'),
+  withEpoch('/sw-dem/norway/norway-build.js'),
 
   // ── SW orchestration (lifecycle + handlers) ───────────────────────────
   // Order matters only for declaration-before-use of `const`/`let` at

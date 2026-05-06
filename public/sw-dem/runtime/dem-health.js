@@ -11,12 +11,13 @@ const DEM_HEALTH_MIN_COLLAPSED_RANGE_M = 4;
 const DEM_HEALTH_MAX_MEAN_DELTA_M = 180;
 const DEM_HEALTH_VERTICAL_OFFSET_M = 180;
 const DEM_HEALTH_NODATA_MEAN_M = -8000;
-// Inland (France/CH) tiles whose elevation raster is essentially the
+// Inland (France/CH/Norway) tiles whose elevation raster is essentially the
 // constant zero plane (range < 0.5 m AND |mean| < 1 m) are corruption
 // artefacts — typically a parent overzoom of an empty Mapbox/AWS tile or
 // a decoded-as-zero placeholder. Real flat valleys at high zoom always
 // sit at ≥ 50 m (Loire ~50 m, Saône ~170 m, Rhône ~100 m, lowest CH point
-// 193 m), so this filter cannot reject genuine LiDAR data. Without it the
+// 193 m, lowland south-east Norway well above sea level), so this filter
+// cannot reject genuine high-res data. Without it the
 // renderer paints a perfectly flat slab of terrain inside an otherwise 3D
 // landscape (see screenshot, May 3 2026).
 const DEM_HEALTH_FLAT_INLAND_RANGE_M = 0.5;

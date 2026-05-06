@@ -50,7 +50,11 @@ function transparentTileResponse() {
 }
 
 function isExpertFallbackRiskTile(z, x, y) {
-  return z >= 12 && (tileOverlapsFrance(z, x, y) || tileOverlapsSwitzerland(z, x, y));
+  return z >= 12 && (
+    tileOverlapsFrance(z, x, y)
+    || tileOverlapsSwitzerland(z, x, y)
+    || tileOverlapsNorway(z, x, y)
+  );
 }
 
 function resolveDemProfile(url) {
