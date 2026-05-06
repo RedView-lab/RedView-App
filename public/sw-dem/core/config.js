@@ -85,7 +85,12 @@ const ORTHO_TILE_SIZE = 256;
 // full reset of DEM / ortho / slope / altitude / project-map caches for every
 // client. The app also propagates the same epoch into DEM request URLs and
 // one-shot browser-side purges.
-const MAP_CACHE_EPOCH = '2026-05-05-map-reset-1';
+//
+// 2026-05-06-spain-fix-1 ("v0.2"): forces a full reset to evict the partial
+// flat tiles cached on the France–Spain Pyrenees border before the Spain
+// branch was allowed to fill IGN gaps and before WCS server-side scaleSize
+// reduced the per-tile bandwidth from ~8 MB (z12) down to ~131 KB.
+const MAP_CACHE_EPOCH = '2026-05-06-spain-fix-1';
 
 const CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const NEGATIVE_CACHE_NAME = `dem-negative-${MAP_CACHE_EPOCH}`;

@@ -31,7 +31,12 @@ function spainScheduleFetch(fn) {
 
 function drainSpainQueue() {
   while (_spainActive < SPAIN_CONCURRENCY && _spainQueue.length > 0) {
-    const { fn, resolve, reject } = _spainQueue.pop();
+    // FIFO: take the OLDEST queued task. The previous LIFO `pop()` made the
+    // newest tile request always preempt older ones, so panning across the
+    // Pyrenees produced a head-of-line block where the first viewport tiles
+    // were perpetually pushed back and eventually pruned out as PRUNED_SENTINEL
+    // — surfacing as "loading bloque a 1%" on the slope/altitude pill.
+    const { fn, resolve, reject } = _spainQueue.shift();
     _spainActive++;
     fn().then(resolve).catch(reject).finally(() => {
       _spainActive--;
@@ -106,6 +111,10 @@ function fillSpainCoverage(elevations, coverage) {
 }
 
 function buildSpainWCSUrl(coverage, bounds) {
+  // scaleSize forces the server to return exactly SPAIN_WCS_OUTPUT_PX² pixels,
+  // CloudFront-cacheable, regardless of the native footprint. Without it a
+  // single z12 tile transfers ~8 MB of native 5 m raster which serialised the
+  // SW fetch queue and tripped the 15 s timeout under realistic viewports.
   return 'https://servicios.idee.es/wcs-inspire/mdt'
     + `?service=WCS`
     + `&version=${SPAIN_WCS_VERSION}`
@@ -113,7 +122,8 @@ function buildSpainWCSUrl(coverage, bounds) {
     + `&coverageId=${encodeURIComponent(coverage.coverageId)}`
     + `&format=${encodeURIComponent(SPAIN_WCS_FORMAT)}`
     + `&subset=x(${bounds.minE},${bounds.maxE})`
-    + `&subset=y(${bounds.minN},${bounds.maxN})`;
+    + `&subset=y(${bounds.minN},${bounds.maxN})`
+    + `&scaleSize=x(${SPAIN_WCS_OUTPUT_PX}),y(${SPAIN_WCS_OUTPUT_PX})`;
 }
 
 async function parseSpainGeoTIFF(buffer) {
@@ -244,7 +254,18 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
     };
   }
 
-  const parsed = await parseSpainGeoTIFF(await response.arrayBuffer());
+  // Server occasionally returns a tiny placeholder TIFF (~500 B) for tiles
+  // that fall fully on ocean / outside coverage. parseSpainGeoTIFF throws
+  // 'TIFF buffer too short' in that case; catch it and surface as 'empty'
+  // so the dispatcher records a clean negative cache and falls through to
+  // the global path instead of bubbling an unhandled rejection.
+  let parsed;
+  try {
+    parsed = await parseSpainGeoTIFF(await response.arrayBuffer());
+  } catch (error) {
+    if (DEBUG) console.warn('[spain] TIFF parse failed', error?.message || error);
+    return { status: 'empty' };
+  }
   if (!parsed.coveredCount) return { status: 'empty' };
 
   fillSpainCoverage(parsed.elevations, parsed.coverage);

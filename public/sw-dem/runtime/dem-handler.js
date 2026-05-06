@@ -265,12 +265,29 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
 
     // ── Spain branch — national MDT 5 m from the INSPIRE WCS. The official
     // service exposes mainland / Balearic coverage in EPSG:25830 and Canary
-    // coverage in EPSG:4083. We keep France priority on any tile that truly
-    // touches the France polygon so the Pyrenees border cannot regress to the
-    // lower-resolution Spanish path on the French side.
+    // coverage in EPSG:4083. Border policy: Spain runs whenever the tile is
+    // not *predominantly* French. Tiles whose centre is on the Spanish side
+    // of the Pyrenees were previously skipped here and re-routed to IGN MNS,
+    // which has zero data south of the border — the Spanish half of those
+    // tiles got composited against Mapbox 30 m and showed up as a flat
+    // patch that never recovered ("Espagne plat au reload"). Predominantly
+    // French border tiles still fall through to IGN below; we fire Spain in
+    // parallel for them and merge it into the IGN coverage so the Spanish
+    // strip is filled with native 5 m DEM instead of Mapbox 30 m.
     let spainHadSomeData = false;
     let spainTransientFailure = false;
-    considerSpain = inSpain && !tileTrulyTouchesFrance && shouldUseSpain(z, tileCenterLat);
+    considerSpain = inSpain && !tilePredominantlyFrench && shouldUseSpain(z, tileCenterLat);
+    const spainBorderFillEligible =
+      inSpain
+      && tilePredominantlyFrench
+      && shouldUseSpain(z, tileCenterLat);
+    let spainBorderFillPromise = null;
+    if (spainBorderFillEligible) {
+      // Fire-and-forget parallel fetch — awaited only if IGN actually ran
+      // and produced partial coverage. Cheap (~131 KB / tile) thanks to
+      // server-side scaleSize, deduped across slope/altitude pre-warm.
+      spainBorderFillPromise = buildSpainTile(z, x, y).catch(() => null);
+    }
     if (!pngBlob && considerSpain) {
       const spainResult = await buildSpainTile(z, x, y);
       if (spainResult?.elevations) {
@@ -308,6 +325,37 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           // MNS returned actual elevation data (partial or full coverage)
           ignHadSomeData = true;
           franceHadSomeData = true;
+          // Border-tile Spain merge: fill any pixel that IGN left uncovered
+          // (typically the Spanish strip of a Pyrenees border tile) with the
+          // Spanish 5 m MDT before compositing. Without this the gap would
+          // composite against Mapbox 30 m and surface as a flat patch.
+          if (spainBorderFillPromise && !ignResult.blob) {
+            try {
+              const sp = await spainBorderFillPromise;
+              if (sp?.elevations && sp?.coverage) {
+                const cov = ignResult.coverage;
+                const elv = ignResult.elevations;
+                let merged = 0;
+                for (let i = 0; i < cov.length; i++) {
+                  if (!cov[i] && sp.coverage[i]) {
+                    elv[i] = sp.elevations[i];
+                    cov[i] = 1;
+                    merged++;
+                  }
+                }
+                if (merged > 0) {
+                  spainHadSomeData = true;
+                  if (DEBUG) {
+                    console.log(
+                      `[sw-dem][border-fill] %c ${z}/${x}/${y} %c IGN+Spain merged ${merged} px`,
+                      'background:#A63A00;color:#fff;padding:1px 4px;border-radius:2px', '',
+                    );
+                  }
+                }
+              }
+            } catch { /* best-effort */ }
+            spainBorderFillPromise = null;
+          }
           if (ignResult.blob) {
             pngBlob = ignResult.blob;
             demSource = ignResult.source || 'ign';
