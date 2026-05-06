@@ -1,5 +1,6 @@
 import type { ErrorEvent as MapboxErrorEvent, MapSourceDataEvent } from 'mapbox-gl';
-import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, ignOrthoSource, unifiedDEMSource } from '../../../lib/sources';
+import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
 
 /**
@@ -151,6 +152,17 @@ export function attachListeners(ctx: Ctx): void {
     map.on('idle', onMapIdle);
     map.on('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
+    // Strava-style speculative prefetch: warm the 1-tile ring outside the
+    // visible bbox + the 4 z+1 children of centre on every idle. Tiles land
+    // in the SW CacheStorage at low H2 priority (won't preempt visible-tile
+    // fetches) so subsequent pans / zooms render from cache instead of
+    // paying provider RTT (50–400 ms cold).
+    if (!st.disposeViewportPrefetch) {
+      const handle = installViewportPrefetch(map, {
+        isOrthoActive: () => Boolean(map.getSource(ignOrthoSource.id)),
+      });
+      st.disposeViewportPrefetch = handle.dispose;
+    }
     st.trackingListenersBound = true;
   };
 
@@ -167,6 +179,8 @@ export function attachListeners(ctx: Ctx): void {
     map.off('idle', onMapIdle);
     map.off('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
+    st.disposeViewportPrefetch?.();
+    st.disposeViewportPrefetch = null;
     st.trackingListenersBound = false;
   };
 

@@ -69,6 +69,7 @@ export interface ControllerState {
   lastReportedProgress: number;
   disposeTerrainBootstrap: (() => void) | null;
   disposeStyleRecovery: (() => void) | null;
+  disposeViewportPrefetch: (() => void) | null;
   orthoBootTimer: ReturnType<typeof setTimeout> | null;
   finishOnIdle: (() => void) | null;
   readyFallbackTimer: ReturnType<typeof setTimeout> | null;
@@ -169,6 +170,7 @@ export function createInitialState(): ControllerState {
     lastReportedProgress: 0,
     disposeTerrainBootstrap: null,
     disposeStyleRecovery: null,
+    disposeViewportPrefetch: null,
     orthoBootTimer: null,
     finishOnIdle: null,
     readyFallbackTimer: null,

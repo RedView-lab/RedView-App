@@ -113,7 +113,12 @@ async function getIGNTile(z, col, row) {
 
     const url = buildDEMTileURL(z, col, row);
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+      // priority:'high' is a HTTP/2 stream-priority hint (Chrome/Edge/Safari
+      // honour it natively, Firefox ignores). DEM tiles drive the visible
+      // mesh — they MUST land before lazy assets (analytics, prefetch link
+      // hints, etc.) on the shared geopf H2 connection. Free ~30–80 ms TTFB
+      // win when the connection has any background traffic.
+      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
         cacheNull(key, errorType);
@@ -257,7 +262,7 @@ async function getHighresTile(z, col, row) {
 
     const url = buildHighresTileURL(z, col, row);
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
       if (!res.ok) {
         cacheHighresNull(key, res.status === 404 ? 'permanent' : 'transient');
         return null;
@@ -320,7 +325,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
 
     const url = buildTerrainWmsTileURL(mercZ, mercX, mercY);
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS) });
+      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
       if (!res.ok) {
         cacheTerrainWmsNull(key, res.status === 404 ? 'permanent' : 'transient');
         return null;

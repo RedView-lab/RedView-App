@@ -15,8 +15,13 @@ const NORWAY_WCS_VERSION = '1.0.0';
 // Cold backend (`hoydedata.no`) can take 15-25 s to render a fresh tile;
 // 30 s prevents abort-and-retry storms when panning to a new region.
 const NORWAY_FETCH_TIMEOUT_MS = 30_000;
-const NORWAY_CONCURRENCY = 12;
-const NORWAY_QUEUE_MAX = 240;
+// Concurrency raised 12→20 (May 06 perf pass): hoydedata.no ArcGIS
+// ImageServer comfortably multiplexes 20+ HTTP/2 streams per origin and
+// 12 was throttling the burst when entering Norway from satellite zoom-out
+// (~25 tiles in a 600 ms pan). Queue 240→400 prevents head-of-line
+// pruning of the original viewport once the pan settles.
+const NORWAY_CONCURRENCY = 20;
+const NORWAY_QUEUE_MAX = 400;
 const NORWAY_WCS_FORMAT = 'GeoTIFF';
 // Server-side raster size — request a 2× supersample of the output tile
 // pitch so the local UTM→Mercator reprojection can do area-weighted box

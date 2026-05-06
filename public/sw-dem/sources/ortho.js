@@ -359,7 +359,7 @@ async function handleOrthoRequest(z, x, y) {
           // Fallback: fetch without clipping, through ortho concurrency limiter
           const response = await scheduleOrtho(async () => {
             const url = buildOrthoTileURL(z, x, y);
-            const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
+            const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS), priority: 'high' });
             if (!res.ok) return null;
             return new Response(await res.blob(), {
               status: 200,
@@ -385,7 +385,7 @@ async function handleOrthoRequest(z, x, y) {
         // Fetch IGN tile through the ortho concurrency limiter
         const fetchResult = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
-          const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS) });
+          const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS), priority: 'high' });
           if (!res.ok) {
             const errorType = res.status === 404 ? 'permanent' : 'transient';
             orthoNegSet(tileKey, errorType);

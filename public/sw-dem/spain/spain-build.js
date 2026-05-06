@@ -441,7 +441,7 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
 
   const response = await spainScheduleFetch(async () => {
     try {
-      return await fetch(url, { signal: AbortSignal.timeout(SPAIN_FETCH_TIMEOUT_MS) });
+      return await fetch(url, { signal: AbortSignal.timeout(SPAIN_FETCH_TIMEOUT_MS), priority: 'high' });
     } catch (error) {
       return { _error: error };
     }

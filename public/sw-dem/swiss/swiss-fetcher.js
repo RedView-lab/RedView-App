@@ -64,6 +64,7 @@ async function swissRangeFetch(url, offset, length) {
         const res = await fetch(url, {
           headers: { Range: `bytes=${offset}-${offset + length - 1}` },
           signal: AbortSignal.timeout(SWISS_COG_RANGE_TIMEOUT_MS),
+          priority: 'high',
         });
         if (!res.ok && res.status !== 206) {
           // Permanent: 4xx → don't retry. 5xx → retry.
@@ -166,6 +167,7 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
       const res = await fetch(url, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(SWISS_STAC_FETCH_TIMEOUT_MS),
+        priority: 'high',
       });
       if (!res.ok) {
         // 4xx → permanent (treat as "ok, zero features"). 5xx → transient.
@@ -352,6 +354,7 @@ async function openSwissCOG(url) {
           const res = await fetch(url, {
             headers: { Range: `bytes=0-${bytesNeeded - 1}` },
             signal: AbortSignal.timeout(SWISS_COG_HEADER_TIMEOUT_MS),
+            priority: 'high',
           });
           if (!res.ok && res.status !== 206) {
             // 4xx → permanent (file deleted / wrong URL)

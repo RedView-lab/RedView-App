@@ -39,7 +39,7 @@ async function fetchAWSTerrainTile(z, x, y) {
   const url = `${AWS_TERRAIN_BASE}/${fetchZ}/${fetchX}/${fetchY}.png`;
   try {
     const t0 = performance.now();
-    const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(6000), priority: 'high' });
     const dt = (performance.now() - t0).toFixed(0);
 
     if (!res.ok) {

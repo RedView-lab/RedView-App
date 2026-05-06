@@ -39,8 +39,16 @@ const SPAIN_FETCH_TIMEOUT_MS = 30_000;
 // lines on smooth slopes). 4× more bytes per tile, but on fibre that's
 // imperceptible compared to backend cold-miss latency, and CloudFront still
 // year-caches everything.
-const SPAIN_CONCURRENCY = 16;
-const SPAIN_QUEUE_MAX = 400;
+// Concurrency raised 16→24 (May 06 perf pass): IDEE responses are now
+// CloudFront-edge cached year-long thanks to scaleSize=512 capping, so the
+// real cost per request is dominated by RTT, not backend compute. HTTP/2 on
+// servicios.idee.es comfortably multiplexes 24+ streams; previously 16 hit
+// pruning during fast pans across the Pyrenees viewport (which can require
+// 30+ Spanish tiles in a single burst once mainland + canary hops merge).
+// Queue 400→600 keeps the head from being pruned out from under the active
+// viewport when the pan stalls briefly on a dezoom.
+const SPAIN_CONCURRENCY = 24;
+const SPAIN_QUEUE_MAX = 600;
 const SPAIN_WCS_OUTPUT_PX = 512;
 const SPAIN_WCS_VERSION = '2.0.1';
 const SPAIN_WCS_FORMAT = 'image/tiff';

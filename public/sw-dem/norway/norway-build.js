@@ -311,7 +311,7 @@ async function fetchNorwayCoverage(zone, mercZ, mercX, mercY) {
   const url = buildNorwayWCSUrl(zone, mercZ, mercX, mercY);
   const response = await norwayScheduleFetch(async () => {
     try {
-      return await fetch(url, { signal: AbortSignal.timeout(NORWAY_FETCH_TIMEOUT_MS) });
+      return await fetch(url, { signal: AbortSignal.timeout(NORWAY_FETCH_TIMEOUT_MS), priority: 'high' });
     } catch (error) {
       return { _error: error };
     }

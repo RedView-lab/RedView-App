@@ -8,10 +8,26 @@
     <!-- Rethink Sans — design-system font (Figma source of truth).
          Without this, system-ui only ships Regular + Bold, so every
          SemiBold (600) / Medium (500) request renders as full Bold. -->
+        <!-- Tile-origin warmup. Each preconnect saves the cold DNS+TCP+TLS
+             handshake (~150–400 ms one-shot) on the FIRST tile fetched from
+             that origin — multiplied across France/Spain/Norway/Switzerland/
+             AWS at app boot, this is the single biggest first-paint win on
+             fibre (where the bottleneck is RTT, not bandwidth). All origins
+             below are public CORS-enabled CDNs already used by the SW DEM
+             pipeline. crossorigin is required so the warmed connection is
+             actually reused by `fetch(..., {mode:'cors'})` (the SW default).-->
         <link rel="dns-prefetch" href="https://api.mapbox.com" />
         <link rel="preconnect" href="https://api.mapbox.com" crossorigin />
         <link rel="dns-prefetch" href="https://data.geopf.fr" />
         <link rel="preconnect" href="https://data.geopf.fr" crossorigin />
+        <link rel="dns-prefetch" href="https://data.geo.admin.ch" />
+        <link rel="preconnect" href="https://data.geo.admin.ch" crossorigin />
+        <link rel="dns-prefetch" href="https://servicios.idee.es" />
+        <link rel="preconnect" href="https://servicios.idee.es" crossorigin />
+        <link rel="dns-prefetch" href="https://hoydedata.no" />
+        <link rel="preconnect" href="https://hoydedata.no" crossorigin />
+        <link rel="dns-prefetch" href="https://s3.amazonaws.com" />
+        <link rel="preconnect" href="https://s3.amazonaws.com" crossorigin />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
