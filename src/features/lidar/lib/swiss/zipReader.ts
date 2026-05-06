@@ -194,11 +194,13 @@ export async function extractLasFromZip(zipBytes: ArrayBuffer): Promise<ArrayBuf
 
   if (lasEntry.compressionMethod === 0) {
     // Stored — copy out so the slice doesn't pin the original buffer.
-    return compressed.slice().buffer;
+    const copy = new Uint8Array(compressed.byteLength);
+    copy.set(compressed);
+    return copy.buffer as ArrayBuffer;
   }
   if (lasEntry.compressionMethod === 8) {
     const inflated = await inflateRaw(compressed);
-    return inflated.buffer;
+    return inflated.buffer as ArrayBuffer;
   }
   throw new Error(`ZIP: unsupported compression method ${lasEntry.compressionMethod} for ${lasEntry.fileName}`);
 }
