@@ -94,16 +94,16 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
     if (!match) continue;
 
     const [, territory, xStr, yStr, projection, altRef] = match;
-    // File name encodes the NW corner (y = south edge + 1 km), but TileCoord
-    // uses the south edge convention. Subtract 1 so the round-trip through
-    // buildTileFileName() reproduces the same filename (otherwise deleteTile
-    // would target a non-existent file and silently fail).
+    // For IGN tiles the filename encodes the NW corner (y = south edge + 1 km)
+    // and TileCoord uses the south edge convention. For Swiss tiles the
+    // filename already encodes the SW corner (no offset).
+    const isSwiss = territory === 'CH';
     tiles.push({
       coord: {
         xKm: parseInt(xStr, 10),
-        yKm: parseInt(yStr, 10) - 1,
+        yKm: parseInt(yStr, 10) - (isSwiss ? 0 : 1),
         territory: territory as any,
-        projection: projection as any,
+        projection: (isSwiss ? 'CH1903_LV95' : projection) as any,
         altRef: altRef as any,
       },
       fileName: name,

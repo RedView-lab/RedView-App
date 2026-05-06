@@ -1,6 +1,8 @@
 import type { TileCoord, DownloadProgress } from '../types';
 import { resolveDownloadUrls, cacheDownloadUrl } from './wfsClient';
 import { saveTile, hasTile, loadTile } from './storage';
+import { resolveSwissDownloadUrls } from './swiss/stacClient';
+import { extractLasFromZip } from './swiss/zipReader';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
@@ -36,6 +38,10 @@ export async function downloadTile(
     onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'cached', message: 'Chargement depuis le cache...' });
     const cached = await loadTile(coord);
     if (cached) return cached;
+  }
+
+  if (coord.projection === 'CH1903_LV95') {
+    return downloadSwissTile(coord, onProgress);
   }
 
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Découverte des zones...' });
@@ -183,3 +189,64 @@ async function fetchWithRetry(
     throw err;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Swiss (swisstopo swissSURFACE3D) download path
+// ---------------------------------------------------------------------------
+
+async function downloadSwissTile(
+  coord: TileCoord,
+  onProgress?: (progress: DownloadProgress) => void
+): Promise<ArrayBuffer> {
+  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche STAC swisstopo...' });
+
+  const urls = await resolveSwissDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
+  if (urls.length === 0) {
+    throw new Error(`Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}).`);
+  }
+
+  let lastError: Error | null = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    try {
+      await waitForRateLimit();
+      const zipBuffer = await fetchWithRetry(url, coord, onProgress);
+      if (!zipBuffer) continue;
+
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded: zipBuffer.byteLength,
+        totalBytes: zipBuffer.byteLength,
+        phase: 'downloading',
+        message: 'Décompression .las.zip...',
+      });
+
+      const lasBuffer = await extractLasFromZip(zipBuffer);
+
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded: lasBuffer.byteLength,
+        totalBytes: lasBuffer.byteLength,
+        phase: 'downloading',
+        message: 'Sauvegarde en cache local...',
+      });
+      await saveTile(coord, lasBuffer);
+      return lasBuffer;
+    } catch (err: any) {
+      lastError = err;
+      if (err.status === 404) {
+        // try next year
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        continue;
+      }
+      console.warn(`[Swiss Download] Failed for ${url}: ${err.message}`);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      continue;
+    }
+  }
+
+  throw new Error(
+    `Impossible de télécharger la tuile swissSURFACE3D (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+  );
+}
+

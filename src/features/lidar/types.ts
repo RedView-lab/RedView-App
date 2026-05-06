@@ -1,11 +1,11 @@
 /** Detected Coordinate Reference System */
-export type DetectedCrs = 'LAMB93' | 'RGR92UTM40S';
+export type DetectedCrs = 'LAMB93' | 'RGR92UTM40S' | 'CH1903_LV95';
 
-/** Territory code for IGN tile naming */
-export type Territory = 'FXX' | 'REU';
+/** Territory code for IGN/Swiss tile naming */
+export type Territory = 'FXX' | 'REU' | 'CH';
 
 /** Altitude reference system */
-export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89';
+export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02';
 
 /** Status of a LiDAR tile in the pipeline */
 export type LidarTileStatus =

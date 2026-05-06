@@ -77,7 +77,7 @@ export async function parseLazBuffer(
 
     onProgress?.('Calcul des bornes...', 80);
     const bounds = computeBounds(positions, pointCount);
-    const crs = detectCrs(bounds.minY, bounds.maxY);
+    const crs = detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
 
     onProgress?.('Prêt', 100);
     return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
@@ -111,7 +111,7 @@ export async function parseLazBuffer(
 
   onProgress?.('Calcul des bornes...', 80);
   const bounds = computeBounds(positions, pointCount);
-  const crs = detectCrs(bounds.minY, bounds.maxY);
+  const crs = detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
 
   onProgress?.('Prêt', 100);
   return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
