@@ -68,15 +68,29 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     // viewport (instead of N×4 awaited cycles per slope tile). The slope
     // response is NOT blocked on this — buildPaddedElevations already
     // falls back to own-edge replication when a neighbour is missing.
+    //
+    // Self-healing seam: if any neighbour was missing at compute time, the
+    // slope tile we cache now has 1-px own-edge replication on that side
+    // (visible as inter-tile seams, especially at high res like 1 m
+    // surface). Once the missing neighbours land in the DEM cache we
+    // notify the page so it invalidates this slope tile and reloads —
+    // the recomputed tile will use real neighbour data and be seam-free.
+    const missingNeighbours = [];
+    const neighbourFetches = [];
     for (const [nx, ny] of [
       [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
     ]) {
       if (ny < 0 || nx < 0) continue;
       const nKey = buildDemCacheKey(z, nx, ny, demProfile);
-      demCache.match(nKey).then((existingDem) => {
-        if (existingDem && existingDem.status === 200) return;
-        return handleDemRequest(nKey, z, nx, ny, undefined, demProfile);
-      }).catch(() => { /* best-effort */ });
+      neighbourFetches.push(
+        demCache.match(nKey).then((existingDem) => {
+          if (existingDem && existingDem.status === 200) return false;
+          missingNeighbours.push([nx, ny]);
+          return handleDemRequest(nKey, z, nx, ny, undefined, demProfile)
+            .then(() => true)
+            .catch(() => false);
+        }).catch(() => false),
+      );
     }
 
     try {
@@ -92,6 +106,26 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
         },
       });
       slopeCache.put(cacheKey, response.clone());
+
+      // Self-heal kick: if some neighbours were missing, wait for them to
+      // land then notify the page so it invalidates this slope tile and
+      // re-requests it (the recompute will read the now-cached neighbours
+      // and produce a seam-free tile). Coalesced through DEM_INFLIGHT
+      // and the controller's debounced sourceCache.reload(); the cost is
+      // capped to one extra slope recompute per (z,x,y) per cold-load.
+      if (missingNeighbours.length > 0) {
+        Promise.allSettled(neighbourFetches).then(() => {
+          try {
+            self.clients.matchAll({ type: 'window' }).then((clients) => {
+              clients.forEach((client) => client.postMessage({
+                type: 'DEM_TILE_CACHE_UPDATED',
+                z, x, y,
+                source: 'slope-seam-heal',
+              }));
+            }).catch(() => { /* best-effort */ });
+          } catch { /* noop */ }
+        });
+      }
       return response;
     } catch (err) {
       console.error('[slope]', z, x, y, err);

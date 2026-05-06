@@ -320,10 +320,25 @@ export function AnalysisChart({
   const hoverMarkers = useMemo(() => {
     if (hoverXValue == null || !activeHover) return [];
 
+    // The marker dot must sit ON the rendered curve, not on the underlying
+    // full-resolution data: the canvas draws LoD-decimated points
+    // (see `seriesLayers` / `backdropSeries` above), so when the LoD
+    // bucketing flattens a sharp spike (sorted [first, min, max, last]
+    // segments per bucket), the linearly-interpolated rendered Y at
+    // hoverXValue can differ noticeably from `interpolateY(fullPoints,
+    // hoverXValue)`. Sampling the same decimated arrays here keeps the
+    // marker glued to the visible line. Tooltip values continue to use
+    // the full-resolution arrays for accuracy (see hoverData /
+    // hoverBackdropData above).
     const seriesPoints = series
       .map((entry) => {
         if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
-        const yValue = interpolateY(entry.points, hoverXValue);
+        const lodLayer = seriesLayers.find((layer) => layer.id === entry.id);
+        const lodPoints = lodLayer?.points ?? entry.points;
+        const yValue = interpolateY(
+          pointSeriesCoversX(lodPoints, hoverXValue) ? lodPoints : entry.points,
+          hoverXValue,
+        );
         if (!Number.isFinite(yValue)) return null;
         const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
         return {
@@ -339,7 +354,12 @@ export function AnalysisChart({
       .map((profile) => {
         if (!backdropYDomain) return null;
         if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
-        const yValue = interpolateY(profile.points, hoverXValue);
+        const lodLayer = backdropSeries.find((layer) => layer.id === profile.id);
+        const lodPoints = lodLayer?.points ?? profile.points;
+        const yValue = interpolateY(
+          pointSeriesCoversX(lodPoints, hoverXValue) ? lodPoints : profile.points,
+          hoverXValue,
+        );
         if (!Number.isFinite(yValue)) return null;
         return {
           id: `${profile.id}::marker`,
@@ -351,7 +371,7 @@ export function AnalysisChart({
       .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
 
     return [...backdropPoints, ...seriesPoints];
-  }, [activeHover, backdropProfiles, backdropYDomain, hoverXValue, plotSize.height, plotY2Domain, plotYDomain, series]);
+  }, [activeHover, backdropProfiles, backdropSeries, backdropYDomain, hoverXValue, plotSize.height, plotY2Domain, plotYDomain, series, seriesLayers]);
 
   useEffect(() => {
     if (!onHoverXValueChange) return;

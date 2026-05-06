@@ -71,8 +71,9 @@ export function useItineraryRouteLayerSync({
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
       const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
-      const routeVisible =
-        it.visible !== false || active?.id === it.id || it.analysisVisible !== false;
+      // Visible iff the user has not explicitly hidden the trace.
+      // (`analysisVisible` controls the central chart/profile, not the map line.)
+      const routeVisible = it.visible !== false;
       try {
         upsertRouteLayer(map, it.id, coords, {
           color: it.color,
