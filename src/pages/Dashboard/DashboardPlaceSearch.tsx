@@ -4,6 +4,7 @@ import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdr
 import type { BasemapRenderConfig } from '@/features/controlPanel';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
+import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import './dashboard-place-search.css';
 
 interface DashboardPlaceSearchProps {
@@ -231,9 +232,26 @@ export function DashboardPlaceSearch({
       };
 
       map.stop();
-      // Warm the tile cache for the destination viewport without moving
-      // the camera. preloadOnly returns immediately and queues fetches,
-      // so the subsequent jumpTo can paint sooner.
+
+      // Pre-warm the SW DEM/ortho cache for the destination BEFORE the
+      // camera moves. This kicks off ~14 high-priority tile fetches
+      // (3×3 destination bbox + 4 z+1 children + 1 z-1 parent) that race
+      // ahead of the jumpTo, so by the time the camera lands the
+      // foreground LiDAR / IGN tiles are already in CacheStorage.
+      // Aborts any in-flight ambient prefetch from the previous viewport.
+      try {
+        getViewportPrefetch()?.prewarmDestination(
+          suggestion.lon,
+          suggestion.lat,
+          targetZoom,
+        );
+      } catch {
+        /* prewarm is best-effort — never block the search teleport */
+      }
+
+      // Warm Mapbox's own tile cache (vector base, satellite) the same
+      // way. preloadOnly returns immediately and queues fetches, so the
+      // subsequent jumpTo can paint sooner.
       try {
         map.flyTo({
           ...finalCamera,
