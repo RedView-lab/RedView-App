@@ -386,6 +386,32 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
+    // 3a-bis. Spain rescue for predominantly-French tiles where IGN has no
+    // data. The MNS LiDAR HD coverage stops at the actual French border, so
+    // a tile whose centre is in France but whose only relief lives across
+    // the ridge in Spain (Pic du Midi south slopes, Aneto north faces) used
+    // to fall through here, eventually serve AWS 30 m, and look flat. The
+    // Spain border-fill fetch was already kicked off earlier in parallel —
+    // if IGN returned nothing usable, promote it to a primary source.
+    if (!pngBlob && spainBorderFillPromise && !ignHadSomeData) {
+      try {
+        const sp = await spainBorderFillPromise;
+        if (sp?.elevations && sp?.coverage) {
+          spainHadSomeData = true;
+          await acquireComposite();
+          try {
+            pngBlob = await compositeIGNMapbox(sp.elevations, sp.coverage, z, x, y);
+          } finally {
+            releaseComposite();
+          }
+          demSource = sp.source ? `${sp.source}-border-rescue` : 'spain-mdt-border-rescue';
+        } else if (sp?.source === 'spain-unavailable') {
+          spainTransientFailure = true;
+        }
+      } catch { /* best-effort */ }
+      spainBorderFillPromise = null;
+    }
+
     // 3a. Verified terrain path for slope math.
     // In `demProfile=terrain` we bypass the overzoomed WMTS fallback and use
     // the official RGE ALTI WMS directly as BIL32 for the exact tile bbox.
@@ -488,10 +514,15 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 3f. Same parent-mesh preservation for Spain MDT 5 m. If the WCS has a
-    // transient miss at high zoom we keep the cached parent mesh rather than
-    // persisting a coarse AWS child across the Pyrenees or Sierra relief.
-    if (!pngBlob && considerSpain && z >= MAPBOX_DEM_MAXZOOM) {
+    // 3f. Spain MDT 5 m parent-mesh preservation. When the WCS transient
+    // misses, prefer overzooming a previously cached Spain parent tile over
+    // dropping to AWS Terrarium. Applies at every Spain-engaged zoom (z>=12),
+    // not just z>=15: a transient failure at z=14 used to cache AWS as the
+    // Spain slot for 30 days, then on zoom-in to z=15+ the parent-overzoom
+    // rejected the AWS-tagged parent and the renderer fell back to the same
+    // cached AWS z=14 — visually a 30 m blurred mesh that the user reads as
+    // "the terrain went flat when I zoomed in over Spain".
+    if (!pngBlob && considerSpain) {
       const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
       if (fb) {
         pngBlob = fb.blob;
@@ -500,35 +531,33 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     }
 
     // 4. Mapbox global fallback — only at low zoom or outside France/CH/NO/ES.
-    // Inside France/CH/NO/ES at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
-    // the LiDAR pipeline returned data. When neither LiDAR source had any
-    // coverage, Mapbox overzoomed 30 m is better than nothing.
+    // Inside France/CH/NO/ES we skip this whenever the LiDAR pipeline either
+    // already produced data OR transient-failed. The previous version only
+    // skipped at `z >= MAPBOX_DEM_MAXZOOM` (15), which meant a single transient
+    // Spain/IGN failure at z=12–14 would cache an AWS Terrarium tile under
+    // the LiDAR slot for 30 days. Then on zoom-in to z=15+, parent-overzoom
+    // correctly rejected the AWS-tagged parent (`shouldSkipUnsafeOverzoomParent`),
+    // returned 204, and Mapbox's GPU fell back to the same cached AWS z=14 tile
+    // — visually a 30 m blurred mesh that the user reads as "the terrain went
+    // flat when I zoomed in over Spain".
+    //
+    // Now: if the tile is in a covered region AND the region's pipeline
+    // engaged (had data OR transient-failed), we never let AWS Terrarium
+    // poison the cache slot — we 204 with a short TTL so the next request
+    // hits the LiDAR pipeline again. AWS only fills the slot when the region
+    // truly has no data and we're below the renderer's max zoom (z<15).
     const globalHighZoomParentMesh =
       z > MAPBOX_DEM_MAXZOOM
       && !tileTrulyTouchesFrance
       && !inSwitzerland
       && !inNorway
       && !considerSpain;
-    const skipMapboxHighZoomLiDAR =
-      z >= MAPBOX_DEM_MAXZOOM && (
-        (tileTrulyTouchesFrance && franceHadSomeData) ||
-        // France transient failure: same policy as Switzerland. A high-zoom
-        // IGN miss must preserve the parent LiDAR mesh, including at z15,
-        // not cache a flat AWS child that only appears after zooming in.
-        (tileTrulyTouchesFrance && franceTransientFailure) ||
-        (inSwitzerland && !tileTrulyTouchesFrance && swissHadSomeData) ||
-        // Swiss transient failure: do NOT cache a flat Mapbox tile in
-        // place of an unbuilt LiDAR tile — visually indistinguishable
-        // from a permanent flat patch (see screenshot Apr 24).
-        (inSwitzerland && !tileTrulyTouchesFrance && swissTransientFailure) ||
-        // Norway transient failure: same anti-flat rule. Once the national
-        // DTM path engaged, keep the parent mesh rather than locking in a
-        // coarse AWS child tile during zoom-in.
-        (inNorway && norwayHadSomeData) ||
-        (inNorway && norwayTransientFailure) ||
-        (considerSpain && spainHadSomeData) ||
-        (considerSpain && spainTransientFailure)
-      );
+    const lidarRegionEngaged =
+      (tileTrulyTouchesFrance && (franceHadSomeData || franceTransientFailure)) ||
+      (inSwitzerland && !tileTrulyTouchesFrance && (swissHadSomeData || swissTransientFailure)) ||
+      (inNorway && (norwayHadSomeData || norwayTransientFailure)) ||
+      (considerSpain && (spainHadSomeData || spainTransientFailure));
+    const skipMapboxHighZoomLiDAR = lidarRegionEngaged;
     const allowGlobalFallbackTile = !globalHighZoomParentMesh && !skipMapboxHighZoomLiDAR;
     // AWS Terrarium replaces Mapbox terrain-DEM globally. No token needed,
     // free public dataset, ~30 m worldwide. Mapbox SKU savings: ~−40 % of
