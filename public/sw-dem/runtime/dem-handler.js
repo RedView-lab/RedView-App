@@ -6,11 +6,12 @@
 //   2. negative cache  (TTL-bounded, with a single overzoom rescue try)
 //   3. Switzerland LiDAR DSM via swissSURFACE3D (if tile inside CH)
 //   4. Norway national DTM via Kartverket / Geonorge WCS (if tile inside NO)
-//   5. France IGN MNS / RGE ALTI / WMTS-fallback pipelines
-//   6. LiDAR-preserving parent overzoom inside FR/CH/NO at z > MAPBOX_DEM_MAXZOOM
-//   7. AWS Terrarium global fallback
-//   8. Final parent overzoom on outside-LiDAR / low-zoom path
-//   9. 204 + negative cache
+//   5. Spain national MDT 5 m via IGN / IDEE WCS (if tile inside ES)
+//   6. France IGN MNS / RGE ALTI / WMTS-fallback pipelines
+//   7. LiDAR-preserving parent overzoom inside FR/CH/NO/ES at z > MAPBOX_DEM_MAXZOOM
+//   8. AWS Terrarium global fallback
+//   9. Final parent overzoom on outside-LiDAR / low-zoom path
+//   10. 204 + negative cache
 //
 // In-flight coalescing (DEM_INFLIGHT, declared in lifecycle.js): identical
 // concurrent requests for the same (z, x, y, demProfile) share a single
@@ -95,7 +96,9 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   const inFrance = tileOverlapsFrance(z, x, y);
   const inSwitzerland = tileOverlapsSwitzerland(z, x, y);
   const inNorway = tileOverlapsNorway(z, x, y);
+  const inSpain = tileOverlapsSpain(z, x, y);
   let tileIsInFrance = false; // hoisted so catch-handler can use it for finalize()
+  let considerSpain = false;
   try {
     let pngBlob;
     let demSource = 'none';
@@ -260,6 +263,36 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
+    // ── Spain branch — national MDT 5 m from the INSPIRE WCS. The official
+    // service exposes mainland / Balearic coverage in EPSG:25830 and Canary
+    // coverage in EPSG:4083. We keep France priority on any tile that truly
+    // touches the France polygon so the Pyrenees border cannot regress to the
+    // lower-resolution Spanish path on the French side.
+    let spainHadSomeData = false;
+    let spainTransientFailure = false;
+    considerSpain = inSpain && !tileTrulyTouchesFrance && shouldUseSpain(z, tileCenterLat);
+    if (!pngBlob && considerSpain) {
+      const spainResult = await buildSpainTile(z, x, y);
+      if (spainResult?.elevations) {
+        spainHadSomeData = true;
+        await acquireComposite();
+        try {
+          pngBlob = await compositeIGNMapbox(
+            spainResult.elevations,
+            spainResult.coverage,
+            z,
+            x,
+            y,
+          );
+        } finally {
+          releaseComposite();
+        }
+        demSource = spainResult.source || 'spain-mdt-composite';
+      } else if (spainResult?.source === 'spain-unavailable') {
+        spainTransientFailure = true;
+      }
+    }
+
     // Use tileTrulyTouchesFrance (real polygon overlap) — not the bbox-promoted
     // tileIsInFrance — to gate IGN. Tiles deep inside CH (e.g. Sion) bbox-overlap
     // FRANCE_BOUNDS but have zero IGN data; running IGN there only burns the
@@ -407,15 +440,27 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
-    // 4. Mapbox global fallback — only at low zoom or outside France/CH/NO.
-    // Inside France/CH/NO at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
+    // 3f. Same parent-mesh preservation for Spain MDT 5 m. If the WCS has a
+    // transient miss at high zoom we keep the cached parent mesh rather than
+    // persisting a coarse AWS child across the Pyrenees or Sierra relief.
+    if (!pngBlob && considerSpain && z >= MAPBOX_DEM_MAXZOOM) {
+      const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
+      if (fb) {
+        pngBlob = fb.blob;
+        demSource = fb.source + '-spain-parent';
+      }
+    }
+
+    // 4. Mapbox global fallback — only at low zoom or outside France/CH/NO/ES.
+    // Inside France/CH/NO/ES at mercZ > MAPBOX_DEM_MAXZOOM we skip this ONLY when
     // the LiDAR pipeline returned data. When neither LiDAR source had any
     // coverage, Mapbox overzoomed 30 m is better than nothing.
     const globalHighZoomParentMesh =
       z > MAPBOX_DEM_MAXZOOM
       && !tileTrulyTouchesFrance
       && !inSwitzerland
-      && !inNorway;
+      && !inNorway
+      && !considerSpain;
     const skipMapboxHighZoomLiDAR =
       z >= MAPBOX_DEM_MAXZOOM && (
         (tileTrulyTouchesFrance && franceHadSomeData) ||
@@ -432,7 +477,9 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         // DTM path engaged, keep the parent mesh rather than locking in a
         // coarse AWS child tile during zoom-in.
         (inNorway && norwayHadSomeData) ||
-        (inNorway && norwayTransientFailure)
+        (inNorway && norwayTransientFailure) ||
+        (considerSpain && spainHadSomeData) ||
+        (considerSpain && spainTransientFailure)
       );
     const allowGlobalFallbackTile = !globalHighZoomParentMesh && !skipMapboxHighZoomLiDAR;
     // AWS Terrarium replaces Mapbox terrain-DEM globally. No token needed,
@@ -459,15 +506,17 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
     //    confirmed empty outside the supported LiDAR regions.
     if (!pngBlob) {
-      const isConfirmedEmpty = globalHighZoomParentMesh || (!tileIsInFrance && !inSwitzerland);
+      const isConfirmedEmpty = globalHighZoomParentMesh || (!tileIsInFrance && !inSwitzerland && !inNorway && !considerSpain);
       const ttl = isConfirmedEmpty ? NEGATIVE_TTL_CONFIRMED : NEGATIVE_TTL_PIPELINE;
       const reason = globalHighZoomParentMesh
         ? 'global-parent-mesh'
         : skipMapboxHighZoomLiDAR
         ? (tileIsInFrance
             ? 'ign-pending-highzoom'
-            : (inNorway ? 'norway-pending-highzoom' : 'swiss-pending-highzoom'))
-        : ((tileIsInFrance || inSwitzerland || inNorway) ? 'pipeline-error' : 'no-coverage');
+            : (inNorway
+                ? 'norway-pending-highzoom'
+                : (considerSpain ? 'spain-pending-highzoom' : 'swiss-pending-highzoom')))
+        : ((tileIsInFrance || inSwitzerland || inNorway || considerSpain) ? 'pipeline-error' : 'no-coverage');
       if (upgradePending && upgradePending.length) {
         scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint, demProfile);
       }
@@ -515,7 +564,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       pngBlob,
       demSource,
       upgradePending,
-      tileIsInFrance || inSwitzerland || inNorway,
+      tileIsInFrance || inSwitzerland || inNorway || considerSpain,
       upgradeSourceHint,
       forceShortCache,
       healthStatus,
@@ -525,7 +574,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     console.error('[sw-dem] error', z, x, y, err);
     const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
     if (fb) {
-      return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland || inNorway, '', false, 'ok', demProfile);
+      return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland || inNorway || considerSpain, '', false, 'ok', demProfile);
     }
     return noTileResponse('error');
   }

@@ -54,6 +54,7 @@ function isExpertFallbackRiskTile(z, x, y) {
     tileOverlapsFrance(z, x, y)
     || tileOverlapsSwitzerland(z, x, y)
     || tileOverlapsNorway(z, x, y)
+    || tileOverlapsSpain(z, x, y)
   );
 }
 

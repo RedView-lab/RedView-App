@@ -8,6 +8,8 @@
 //   /sw-dem/sources/            — IGN / AWS / Mapbox / ortho fetch adapters.
 //   /sw-dem/processing/         — tile build, composite, slope, altitude math.
 //   /sw-dem/swiss/              — swissSURFACE3D config, coords, COG, fetch, build.
+//   /sw-dem/norway/             — Norway NHM DTM WCS config, coords, build.
+//   /sw-dem/spain/              — Spain MDT WCS config, coords, build.
 //   /sw-dem/runtime/            — lifecycle, router, helpers, health, handlers.
 //
 // Contract with the page (useMap.ts):
@@ -50,6 +52,10 @@ importScripts(
   withEpoch('/sw-dem/norway/norway-config.js'),
   withEpoch('/sw-dem/norway/norway-coords.js'),
   withEpoch('/sw-dem/norway/norway-build.js'),
+  // Spain — national MDT 5 m via IGN / IDEE WCS
+  withEpoch('/sw-dem/spain/spain-config.js'),
+  withEpoch('/sw-dem/spain/spain-coords.js'),
+  withEpoch('/sw-dem/spain/spain-build.js'),
 
   // ── SW orchestration (lifecycle + handlers) ───────────────────────────
   // Order matters only for declaration-before-use of `const`/`let` at

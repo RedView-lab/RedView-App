@@ -11,7 +11,7 @@ const DEM_HEALTH_MIN_COLLAPSED_RANGE_M = 4;
 const DEM_HEALTH_MAX_MEAN_DELTA_M = 180;
 const DEM_HEALTH_VERTICAL_OFFSET_M = 180;
 const DEM_HEALTH_NODATA_MEAN_M = -8000;
-// Inland (France/CH/Norway) tiles whose elevation raster is essentially the
+// Inland (France/CH/Norway/Spain) tiles whose elevation raster is essentially the
 // constant zero plane (range < 0.5 m AND |mean| < 1 m) are corruption
 // artefacts — typically a parent overzoom of an empty Mapbox/AWS tile or
 // a decoded-as-zero placeholder. Real flat valleys at high zoom always
