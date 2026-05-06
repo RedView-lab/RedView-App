@@ -28,3 +28,5 @@ export {
   setLidarTileLabel,
 } from './tileLabels';
 export { cacheDownloadUrl, resolveDownloadUrls } from './wfsClient';
+export * as swiss from './swiss';
+export type { SwissTileCoord, SwissTileStacItem } from './swiss';

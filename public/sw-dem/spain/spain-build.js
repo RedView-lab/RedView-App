@@ -252,14 +252,16 @@ function fillSpainCoverage(elevations, coverage, size) {
 // applied only where the local 3×3 height span is < SPAIN_SMOOTH_VARIANCE_M
 // removes the steps without softening real cliffs / ridges (which all exceed
 // the threshold by definition).
-function smoothSpainQuantization(elevations, coverage, size) {
+function smoothSpainQuantization(elevations, coverage, width, height) {
+  const W = width;
+  const H = height || width;
   const out = new Float32Array(elevations);
-  for (let y = 1; y < size - 1; y++) {
-    for (let x = 1; x < size - 1; x++) {
-      const idx = y * size + x;
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const idx = y * W + x;
       if (!coverage[idx]) continue;
-      const i_n  = idx - size;
-      const i_s  = idx + size;
+      const i_n  = idx - W;
+      const i_s  = idx + W;
       const i_w  = idx - 1;
       const i_e  = idx + 1;
       const i_nw = i_n - 1;
@@ -293,11 +295,20 @@ function smoothSpainQuantization(elevations, coverage, size) {
   elevations.set(out);
 }
 
-function buildSpainWCSUrl(coverage, bounds) {
-  // scaleSize forces the server to return exactly SPAIN_WCS_OUTPUT_PX² pixels,
-  // CloudFront-cacheable, regardless of the native footprint. Without it a
-  // single z12 tile transfers ~8 MB of native 5 m raster which serialised the
-  // SW fetch queue and tripped the 15 s timeout under realistic viewports.
+function buildSpainWCSUrl(coverage, bounds, outW, outH) {
+  // scaleSize is CAPPED at the native MDT5 footprint (≈ extent_m / 5 m).
+  //
+  // Asking the server for MORE pixels than the native resolution makes it
+  // bilinearly UPSAMPLE its Int16 (1 m quantised) raster — adjacent rows
+  // end up with identical values, then Horn 3×3 in slope.js explodes the
+  // duplication into the regular horizontal stripes seen on z14+ tiles in
+  // Andalucía / Pyrenees. Capping at native = the 5 m grid stays a 5 m
+  // grid; our area-weighted client-side resampler then produces the only
+  // legitimate sub-source-pixel values from neighbour averaging instead of
+  // server-side row duplication.
+  //
+  // Asking for FEWER pixels than native at low zoom is OK and bandwidth-
+  // friendly (the server's box average is fine for a strict downsample).
   return 'https://servicios.idee.es/wcs-inspire/mdt'
     + `?service=WCS`
     + `&version=${SPAIN_WCS_VERSION}`
@@ -306,7 +317,7 @@ function buildSpainWCSUrl(coverage, bounds) {
     + `&format=${encodeURIComponent(SPAIN_WCS_FORMAT)}`
     + `&subset=x(${bounds.minE},${bounds.maxE})`
     + `&subset=y(${bounds.minN},${bounds.maxN})`
-    + `&scaleSize=x(${SPAIN_WCS_OUTPUT_PX}),y(${SPAIN_WCS_OUTPUT_PX})`;
+    + `&scaleSize=x(${outW}),y(${outH})`;
 }
 
 async function parseSpainGeoTIFF(buffer) {
@@ -420,7 +431,13 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   const bounds = projectMercatorTileToSpainCoverageBounds(mercZ, mercX, mercY, coverage);
   const nativeWidth = Math.max(1, Math.round((bounds.maxE - bounds.minE) / SPAIN_DEM_RESOLUTION_M));
   const nativeHeight = Math.max(1, Math.round((bounds.maxN - bounds.minN) / SPAIN_DEM_RESOLUTION_M));
-  const url = buildSpainWCSUrl(coverage, bounds);
+  // Cap the requested raster at the native MDT5 grid: anything finer would
+  // be a server-side bilinear UPSAMPLE of Int16 1 m elevations, the source
+  // of the horizontal striping the slope/altitude overlays exhibited at
+  // z14+. See buildSpainWCSUrl comment for the full explanation.
+  const outW = Math.max(1, Math.min(SPAIN_WCS_OUTPUT_PX, nativeWidth));
+  const outH = Math.max(1, Math.min(SPAIN_WCS_OUTPUT_PX, nativeHeight));
+  const url = buildSpainWCSUrl(coverage, bounds, outW, outH);
 
   const response = await spainScheduleFetch(async () => {
     try {
@@ -457,6 +474,17 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   // reprojecting so the box-average sampler doesn't pull from holes near
   // the coverage edge.
   fillSpainCoverage(parsed.elevations, parsed.coverage, parsed.width);
+
+  // Edge-preserving low-pass on the SOURCE raster to dissolve the Int16
+  // 1 m quantization. MDT5 stores integer-metre elevations, so a smooth
+  // gentle slope (e.g. 4 % = 20 cm per 5 m pixel) materialises as
+  // alternating "0 m / +1 m" rows. Horn 3×3 in slope.js then explodes
+  // those into the regular striping seen on the Andalucía / Pyrenees
+  // overlays. Smoothing must run on the UTM raster (where the quantization
+  // physically lives) BEFORE reprojection, otherwise it cross-contaminates
+  // pixels along the rotated dest-grid axis. The 4-metre threshold leaves
+  // every real cliff / ridge untouched.
+  smoothSpainQuantization(parsed.elevations, parsed.coverage, parsed.width, parsed.height);
 
   // Reproject the source UTM raster onto the Mercator tile grid using the
   // same per-pixel (lng, lat) convention the IGN/build-tile sampler uses.
