@@ -45,22 +45,86 @@ function drainSpainQueue() {
   }
 }
 
-function _resampleSpainCoverage(elevations, coverage, srcWidth, srcHeight) {
-  if (srcWidth === DEM_TILE_SIZE && srcHeight === DEM_TILE_SIZE) {
-    return { elevations, coverage };
-  }
-
+// Reproject the WCS source raster (axis-aligned in the coverage's native UTM
+// CRS) onto the Mercator tile's pixel grid. Each output pixel is sampled at
+// the SAME (lng, lat) convention used by the IGN/build-tile sampler — pixel
+// centre at ((px+0.5)/DEM_TILE_SIZE, (py+0.5)/DEM_TILE_SIZE) of the Mercator
+// tile bounds. This is critical for seam continuity: adjacent Mercator tiles
+// fetch DIFFERENT UTM bboxes (each padded outward to enclose the projected
+// quadrilateral), so directly using the WCS raster as if it were Mercator-
+// aligned drifted the eastern edge of tile A vs. the western edge of tile B
+// by up to half a UTM source pixel — visible in 3D as a few-metre vertical
+// "wall" at every Spanish tile boundary on steep terrain (Pyrénées, Picos).
+//
+// With per-pixel reprojection both tiles sample the same continuous source
+// function at identical geographic coordinates along their shared edge, so
+// the seam closes (subject only to the source raster's interpolation, which
+// is what IGN / France already does).
+function _resampleSpainSourceToMercator(
+  srcElev, srcCov, srcW, srcH, bounds, mercZ, mercX, mercY, utmZone,
+) {
   const outElev = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
   const outCov = new Uint8Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
+  const n = 1 << mercZ;
+  const dE = bounds.maxE - bounds.minE;
+  const dN = bounds.maxN - bounds.minN;
+  if (!(dE > 0) || !(dN > 0)) return { elevations: outElev, coverage: outCov };
+
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
-    const sy = Math.min(srcHeight - 1, Math.floor(((py + 0.5) / DEM_TILE_SIZE) * srcHeight));
+    const yFrac = (mercY + (py + 0.5) / DEM_TILE_SIZE) / n;
+    const lat = mercatorYToLat(yFrac);
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
-      const sx = Math.min(srcWidth - 1, Math.floor(((px + 0.5) / DEM_TILE_SIZE) * srcWidth));
-      const srcIdx = sy * srcWidth + sx;
+      const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
+      const lng = xFrac * 360 - 180;
+      const p = wgs84ToSpainProjected(lng, lat, utmZone);
+
+      // Source pixel centre (i, j) is at UTM
+      //   E = bounds.minE + (i + 0.5) * dE / srcW
+      //   N = bounds.maxN - (j + 0.5) * dN / srcH   (TIFF row 0 = north)
+      const fx = ((p.E - bounds.minE) / dE) * srcW - 0.5;
+      const fy = ((bounds.maxN - p.N) / dN) * srcH - 0.5;
+
+      const x0 = Math.max(0, Math.min(srcW - 1, Math.floor(fx)));
+      const y0 = Math.max(0, Math.min(srcH - 1, Math.floor(fy)));
+      const x1 = Math.max(0, Math.min(srcW - 1, x0 + 1));
+      const y1 = Math.max(0, Math.min(srcH - 1, y0 + 1));
+      const tx = Math.max(0, Math.min(1, fx - Math.floor(fx)));
+      const ty = Math.max(0, Math.min(1, fy - Math.floor(fy)));
+
+      const i00 = y0 * srcW + x0;
+      const i10 = y0 * srcW + x1;
+      const i01 = y1 * srcW + x0;
+      const i11 = y1 * srcW + x1;
+      const c00 = srcCov[i00];
+      const c10 = srcCov[i10];
+      const c01 = srcCov[i01];
+      const c11 = srcCov[i11];
       const dstIdx = py * DEM_TILE_SIZE + px;
-      if (coverage[srcIdx]) {
-        outElev[dstIdx] = elevations[srcIdx];
+
+      if (c00 && c10 && c01 && c11) {
+        const v00 = srcElev[i00];
+        const v10 = srcElev[i10];
+        const v01 = srcElev[i01];
+        const v11 = srcElev[i11];
+        outElev[dstIdx] = (1 - tx) * (1 - ty) * v00
+          + tx * (1 - ty) * v10
+          + (1 - tx) * ty * v01
+          + tx * ty * v11;
         outCov[dstIdx] = 1;
+      } else {
+        // Coverage-weighted bilinear so partially-covered neighbourhoods near
+        // the coastline / coverage edge degrade gracefully instead of
+        // blackholing whole output pixels.
+        let sum = 0;
+        let w = 0;
+        if (c00) { const wt = (1 - tx) * (1 - ty); sum += srcElev[i00] * wt; w += wt; }
+        if (c10) { const wt = tx * (1 - ty);       sum += srcElev[i10] * wt; w += wt; }
+        if (c01) { const wt = (1 - tx) * ty;       sum += srcElev[i01] * wt; w += wt; }
+        if (c11) { const wt = tx * ty;             sum += srcElev[i11] * wt; w += wt; }
+        if (w > 0) {
+          outElev[dstIdx] = sum / w;
+          outCov[dstIdx] = 1;
+        }
       }
     }
   }
@@ -223,10 +287,12 @@ async function parseSpainGeoTIFF(buffer) {
     }
   }
 
-  const resampled = _resampleSpainCoverage(elevations, coverage, width, height);
+  const resampledSrc = { elevations, coverage, width, height };
   return {
-    elevations: resampled.elevations,
-    coverage: resampled.coverage,
+    elevations: resampledSrc.elevations,
+    coverage: resampledSrc.coverage,
+    width: resampledSrc.width,
+    height: resampledSrc.height,
     coveredCount,
   };
 }
@@ -268,12 +334,34 @@ async function fetchSpainCoverage(coverage, mercZ, mercX, mercY) {
   }
   if (!parsed.coveredCount) return { status: 'empty' };
 
+  // Gap-fill on the SOURCE UTM raster (still 256×256) before reprojecting
+  // so the bilinear sampler doesn't pull from holes near the coverage edge.
   fillSpainCoverage(parsed.elevations, parsed.coverage);
-  despikeElevations(parsed.elevations, parsed.coverage, DEM_TILE_SIZE);
+
+  // Reproject the source UTM raster onto the Mercator tile grid using the
+  // same per-pixel (lng, lat) convention the IGN/build-tile sampler uses.
+  // Without this the raw axis-aligned UTM raster was treated as if it were
+  // already Mercator-aligned, which produced sub-pixel offsets along every
+  // tile edge — visible as a few-metre vertical "wall" between adjacent
+  // Spanish tiles on steep terrain (Pyrénées, Picos de Europa, Sierra
+  // Nevada) in 3D mode.
+  const projected = _resampleSpainSourceToMercator(
+    parsed.elevations,
+    parsed.coverage,
+    parsed.width,
+    parsed.height,
+    bounds,
+    mercZ,
+    mercX,
+    mercY,
+    coverage.utmZone,
+  );
+
+  despikeElevations(projected.elevations, projected.coverage, DEM_TILE_SIZE);
   return {
     status: 'ok',
-    elevations: parsed.elevations,
-    coverage: parsed.coverage,
+    elevations: projected.elevations,
+    coverage: projected.coverage,
     nativeWidth,
     nativeHeight,
   };

@@ -91,7 +91,7 @@ const ORTHO_TILE_SIZE = 256;
 // the `aws-terrarium`-tagged tiles that were cached for 30 days under the
 // Spain slot whenever the WCS transient-failed at z=12–14, then defeated
 // every subsequent zoom-in attempt to reach the real 5 m mesh.
-const MAP_CACHE_EPOCH = '2026-05-06-spain-fix-2';
+const MAP_CACHE_EPOCH = '2026-05-06-spain-seam-fix-1';
 
 const CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const NEGATIVE_CACHE_NAME = `dem-negative-${MAP_CACHE_EPOCH}`;
