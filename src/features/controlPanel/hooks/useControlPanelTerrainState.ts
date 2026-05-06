@@ -85,6 +85,7 @@ interface UseControlPanelTerrainStateArgs {
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
+  onAltitudeOverlayStatusChange?: OverlayStatusReporter;
 }
 
 export interface TerrainHandlers {
@@ -117,6 +118,7 @@ export function useControlPanelTerrainState({
   initialControlPanel,
   updateProjectControlPanel,
   onSlopeOverlayStatusChange,
+  onAltitudeOverlayStatusChange,
 }: UseControlPanelTerrainStateArgs): TerrainStateResult {
   const [slopeState, setSlopeState] = useState(() => {
     const loaded = initialControlPanel.slopes?.state ?? loadSlopeState();
@@ -328,6 +330,7 @@ export function useControlPanelTerrainState({
     altitudeState.colorMode,
     altitudeCategories,
     altitudeState.hiddenBandIds,
+    onAltitudeOverlayStatusChange,
   );
 
   const slopesSlice = useMemo(

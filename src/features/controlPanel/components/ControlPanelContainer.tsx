@@ -33,6 +33,7 @@ export interface ControlPanelContainerProps {
   onShadowOverlayStatusChange?: OverlayStatusReporter;
   onShadowOverlayReloadChange?: OverlayReloadRegistrar;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
+  onAltitudeOverlayStatusChange?: OverlayStatusReporter;
   onToggleLidarDownloadMode?: () => void;
   lidarDownloadModeActive?: boolean;
   width?: number;
@@ -59,6 +60,7 @@ export function ControlPanelContainer({
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
   onSlopeOverlayStatusChange,
+  onAltitudeOverlayStatusChange,
   onToggleLidarDownloadMode,
   lidarDownloadModeActive,
   width,
@@ -90,6 +92,7 @@ export function ControlPanelContainer({
     initialControlPanel,
     updateProjectControlPanel,
     onSlopeOverlayStatusChange,
+    onAltitudeOverlayStatusChange,
   });
   const overlayState = useControlPanelOverlayState({
     map,

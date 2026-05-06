@@ -131,7 +131,20 @@ export function useWeatherOverlay(
           const style = map.getStyle();
           return Boolean(style) && Object.keys(style.sources ?? {}).length > 0;
         }
-        return map.isStyleLoaded() && Boolean(map.getStyle());
+        if (map.isStyleLoaded() && Boolean(map.getStyle())) return true;
+        // Eager fallback promotion: the strict `isStyleLoaded()` flag flips
+        // back to false on EVERY `styledata` event (DEM/slope/altitude tile
+        // arrivals, ortho crossfade, terrain attach, etc.), so during a
+        // heavy load it can be `false` for many seconds at a stretch. As
+        // long as the style HAS sources we're safe to add an image source
+        // + raster layer — Mapbox accepts mutations on a non-fully-idle
+        // style without throwing. Promote the fallback inline so the
+        // weather pipeline never waits on the watchdog.
+        if (promoteStyleFallbackIfUsable('canMutateStyle-eager')) {
+          const style = map.getStyle();
+          return Boolean(style) && Object.keys(style.sources ?? {}).length > 0;
+        }
+        return false;
       } catch {
         return false;
       }

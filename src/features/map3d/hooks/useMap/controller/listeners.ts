@@ -160,6 +160,27 @@ export function attachListeners(ctx: Ctx): void {
     if (!st.disposeViewportPrefetch) {
       const handle = installViewportPrefetch(map, {
         isOrthoActive: () => Boolean(map.getSource(ignOrthoSource.id)),
+        // Slope/altitude tiles are derived from cached DEM by the SW.
+        // Warming them alongside their parent DEM tile means: by the time
+        // the user pans/zooms into the prefetched neighbourhood the SW
+        // pipeline (Horn / decode / PNG encode) has already run — the
+        // raster appears within one Mapbox tile-load round-trip instead
+        // of several seconds of cold pipeline. Detection is layer-based
+        // (style.getLayer) — the slope/altitude hooks toggle the layer
+        // visibility, not the source presence, so we have to look at the
+        // layer.
+        isSlopeActive: () => {
+          try {
+            return Boolean(map.getLayer('slope-overlay'))
+              && map.getLayoutProperty('slope-overlay', 'visibility') !== 'none';
+          } catch { return false; }
+        },
+        isAltitudeActive: () => {
+          try {
+            return Boolean(map.getLayer('altitude-overlay'))
+              && map.getLayoutProperty('altitude-overlay', 'visibility') !== 'none';
+          } catch { return false; }
+        },
       });
       st.disposeViewportPrefetch = handle.dispose;
     }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, MapSourceDataEvent } from 'mapbox-gl';
 import type { AltitudeCategory, AltitudeColorMode } from '../types';
 import {
   ALTITUDE_LAYER_ID,
@@ -8,6 +8,10 @@ import {
   buildAltitudeLayer,
   buildAltitudeTileSource,
 } from '../lib/altitude-source';
+import {
+  createOverlayStatus,
+  type OverlayStatusReporter,
+} from '@/features/map3d';
 
 if (typeof window !== 'undefined') {
   (window as unknown as Record<string, unknown>).__clearAltitudeCache = () => {
@@ -63,6 +67,7 @@ export function useAltitude(
   colorMode: AltitudeColorMode,
   categories: AltitudeCategory[],
   hiddenBandIds?: ReadonlyArray<string>,
+  onLoadStatusChange?: OverlayStatusReporter,
 ) {
   const hiddenIds = useMemo(() => new Set(hiddenBandIds ?? []), [hiddenBandIds]);
   const categoriesKey = useMemo(
@@ -160,4 +165,157 @@ export function useAltitude(
       mountedRef.current = false;
     };
   }, [map]);
+
+  // ── Tile load progress reporter ───────────────────────────────────────
+  // Mirrors the slope reporter (see useSlope.ts) — without it the user
+  // toggles altitude on and sees absolutely nothing happen for the
+  // several seconds the SW pipeline takes to decode DEM tiles into
+  // Terrarium-style PNGs across the visible viewport. The pill provides
+  // immediate "Altitude X/Y" feedback and a stagnation watchdog that
+  // force-completes after 8 s so we never strand the user mid-load.
+  const onLoadStatusChangeRef = useRef(onLoadStatusChange);
+  onLoadStatusChangeRef.current = onLoadStatusChange;
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    const reporter = onLoadStatusChangeRef.current;
+    if (!reporter) return;
+    if (!enabled) {
+      reporter(null);
+      return;
+    }
+
+    const requested = new Set<string>();
+    const loaded = new Set<string>();
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | null = null;
+    let lastEmittedProgress = -1;
+    let lastEmittedState: 'loading' | 'ready' = 'loading';
+    let lastProgressMs = Date.now();
+
+    const tileKey = (event: MapSourceDataEvent): string | null => {
+      const tileID = (event as unknown as {
+        tile?: { tileID?: { canonical?: { z: number; x: number; y: number } } };
+      }).tile?.tileID?.canonical;
+      if (!tileID) return null;
+      return `${tileID.z}/${tileID.x}/${tileID.y}`;
+    };
+
+    const isAltitudeEvent = (event: MapSourceDataEvent): boolean => (
+      event.sourceId === ALTITUDE_SOURCE_ID
+    );
+
+    const emit = (state: 'loading' | 'ready', progress: number, detail?: string) => {
+      if (state === lastEmittedState && progress === lastEmittedProgress) return;
+      lastEmittedState = state;
+      lastEmittedProgress = progress;
+      onLoadStatusChangeRef.current?.(createOverlayStatus({
+        id: 'altitude',
+        label: 'Altitude',
+        state,
+        progress,
+        detail,
+      }));
+    };
+
+    const publishProgress = () => {
+      const total = requested.size;
+      const done = loaded.size;
+      if (total === 0) {
+        emit('loading', 5, 'En attente de tuiles');
+        return;
+      }
+      if (done >= total) {
+        emit('ready', 100, 'Altitude prête');
+        return;
+      }
+      const ratio = done / Math.max(total, 1);
+      const pct = Math.max(1, Math.min(99, Math.round(ratio * 100)));
+      emit('loading', pct, `Tuiles ${done}/${total}`);
+    };
+
+    const armWatchdog = () => {
+      if (watchdog) clearTimeout(watchdog);
+      const STAGNATION_MS = 8000;
+      watchdog = setTimeout(() => {
+        watchdog = null;
+        if (requested.size === 0) return;
+        if (loaded.size >= requested.size) {
+          emit('ready', 100, 'Altitude prête');
+          return;
+        }
+        const sinceProgress = Date.now() - lastProgressMs;
+        if (sinceProgress >= STAGNATION_MS) {
+          const stragglers = requested.size - loaded.size;
+          emit('ready', 100, `Altitude prête (${stragglers} en attente)`);
+          return;
+        }
+        armWatchdog();
+      }, STAGNATION_MS);
+    };
+
+    const scheduleSettle = () => {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        publishProgress();
+      }, 120);
+    };
+
+    const onLoading = (event: MapSourceDataEvent) => {
+      if (!isAltitudeEvent(event)) return;
+      const key = tileKey(event);
+      if (!key) return;
+      if (!requested.has(key)) {
+        requested.add(key);
+        lastProgressMs = Date.now();
+      }
+      scheduleSettle();
+      armWatchdog();
+    };
+
+    const onLoaded = (event: MapSourceDataEvent) => {
+      if (!isAltitudeEvent(event)) return;
+      const key = tileKey(event);
+      if (key) {
+        if (!requested.has(key)) {
+          requested.add(key);
+          lastProgressMs = Date.now();
+        }
+        if (!loaded.has(key)) {
+          loaded.add(key);
+          lastProgressMs = Date.now();
+        }
+      }
+      armWatchdog();
+      scheduleSettle();
+    };
+
+    const onError = (event: MapSourceDataEvent) => {
+      if (!isAltitudeEvent(event)) return;
+      const key = tileKey(event);
+      if (key) {
+        requested.delete(key);
+        loaded.delete(key);
+        lastProgressMs = Date.now();
+      }
+      armWatchdog();
+      scheduleSettle();
+    };
+
+    map.on('sourcedataloading', onLoading);
+    map.on('sourcedata', onLoaded);
+    map.on('dataabort', onError);
+
+    emit('loading', 5, 'Préparation altitude');
+    armWatchdog();
+
+    return () => {
+      map.off('sourcedataloading', onLoading);
+      map.off('sourcedata', onLoaded);
+      map.off('dataabort', onError);
+      if (settleTimer) clearTimeout(settleTimer);
+      if (watchdog) clearTimeout(watchdog);
+      onLoadStatusChangeRef.current?.(null);
+    };
+  }, [map, isMapLoaded, enabled]);
 }

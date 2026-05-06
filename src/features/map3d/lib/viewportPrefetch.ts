@@ -106,6 +106,10 @@ function lngLatToTile(lng: number, lat: number, z: number): { x: number; y: numb
 export interface ViewportPrefetchOptions {
   /** Returns true when the IGN ortho overlay is engaged on the map. */
   isOrthoActive?: () => boolean;
+  /** Returns true when the slope overlay layer is visible on the map. */
+  isSlopeActive?: () => boolean;
+  /** Returns true when the altitude overlay layer is visible on the map. */
+  isAltitudeActive?: () => boolean;
 }
 
 export interface PrewarmDestinationOptions {
@@ -233,9 +237,22 @@ export function installViewportPrefetch(
     includeRing: boolean,
     includeChildren: boolean,
     includeParent: boolean,
+    slopeOn: boolean = false,
+    altitudeOn: boolean = false,
   ): string[] => {
     const urls: string[] = [];
     const cap = (1 << z) - 1;
+
+    // Helper: derived overlays (slope/altitude) are SW-built from the DEM.
+    // Warming them at the same time as the DEM tile means the SW pipeline
+    // (Horn, decode, PNG encode) runs while the user is still panning,
+    // not after they stop. Slope/altitude have their own tile-zoom range
+    // (minzoom: 6, maxzoom: 17 in the source spec) — we let the SW reject
+    // out-of-range requests rather than gate here.
+    const pushDerived = (z: number, x: number, y: number) => {
+      if (slopeOn) urls.push(`/slope-tiles/${z}/${x}/${y}?pf=1`);
+      if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
+    };
 
     if (includeRing && !tilted) {
       const rxMin = Math.max(0, bboxXMin - PREFETCH_RING);
@@ -247,6 +264,7 @@ export function installViewportPrefetch(
           if (x >= bboxXMin && x <= bboxXMax && y >= bboxYMin && y <= bboxYMax) continue;
           urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
           if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
+          pushDerived(z, x, y);
         }
       }
     }
@@ -274,6 +292,7 @@ export function installViewportPrefetch(
         if (t.x < 0 || t.y < 0 || t.x > cap1 || t.y > cap1) continue;
         urls.push(`/dem-tiles/${z1}/${t.x}/${t.y}?pf=1`);
         if (orthoOn && z1 >= 11) urls.push(`/ortho-tiles/${z1}/${t.x}/${t.y}?pf=1`);
+        pushDerived(z1, t.x, t.y);
       }
     }
 
@@ -288,6 +307,7 @@ export function installViewportPrefetch(
       if (p.x >= 0 && p.y >= 0 && p.x <= capM && p.y <= capM) {
         urls.push(`/dem-tiles/${zM}/${p.x}/${p.y}?pf=1`);
         if (orthoOn && zM >= 11) urls.push(`/ortho-tiles/${zM}/${p.x}/${p.y}?pf=1`);
+        pushDerived(zM, p.x, p.y);
       }
     }
 
@@ -354,11 +374,15 @@ export function installViewportPrefetch(
     lastFiredAt = performance.now();
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
+    const slopeOn = opts.isSlopeActive?.() ?? false;
+    const altitudeOn = opts.isAltitudeActive?.() ?? false;
     const urls = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,
       /* includeRing */ true,
       /* includeChildren */ true,
       /* includeParent */ true,
+      slopeOn,
+      altitudeOn,
     );
 
     if (urls.length === 0) return;
@@ -402,6 +426,8 @@ export function installViewportPrefetch(
     const z = Math.max(PREFETCH_MIN_ZOOM, Math.min(PREFETCH_MAX_ZOOM, Math.round(zoom)));
     const radius = Math.max(0, Math.min(3, prewarmOpts.radius ?? 1));
     const orthoOn = prewarmOpts.withOrtho ?? (opts.isOrthoActive?.() ?? false);
+    const slopeOn = opts.isSlopeActive?.() ?? false;
+    const altitudeOn = opts.isAltitudeActive?.() ?? false;
     const includeChildren = prewarmOpts.includeChildren ?? true;
 
     const c = lngLatToTile(lng, lat, z);
@@ -421,6 +447,8 @@ export function installViewportPrefetch(
       for (let y = yMin; y <= yMax; y++) {
         urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
         if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
+        if (slopeOn) urls.push(`/slope-tiles/${z}/${x}/${y}?pf=1`);
+        if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
       }
     }
 
@@ -434,6 +462,8 @@ export function installViewportPrefetch(
       /* includeRing */ false,
       includeChildren,
       /* includeParent */ true,
+      slopeOn,
+      altitudeOn,
     );
     for (const u of extras) urls.push(u);
 

@@ -48,6 +48,7 @@ const OVERLAY_LABEL: Record<Exclude<OverlayStatusId, 'map'>, string> = {
   weather: 'Météo',
   shadow: 'Ombres',
   slope: 'Pentes',
+  altitude: 'Altitude',
 };
 
 export default function Dashboard({
@@ -245,6 +246,13 @@ export default function Dashboard({
     [setOverlayStatus],
   );
 
+  const handleAltitudeOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => {
+      setOverlayStatus('altitude', status);
+    },
+    [setOverlayStatus],
+  );
+
   const handleItineraryRouteStatusChange = useCallback(
     (status: OverlayStatusSnapshot | null) => {
       setOverlayStatus('itinerary', status);
@@ -267,7 +275,7 @@ export default function Dashboard({
   );
 
   const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'slope', 'weather'];
+    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'altitude', 'slope', 'weather'];
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
       ...overlayStatuses,
       ...(mapStatus
@@ -531,6 +539,7 @@ export default function Dashboard({
                               onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
                               onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
                               onSlopeOverlayStatusChange={handleSlopeOverlayStatusChange}
+                              onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
                               lidarDownloadModeActive={lidarModeEnabled}
                               onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
                               width={panelWidth}
