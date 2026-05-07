@@ -169,6 +169,20 @@ export function installViewportPrefetch(
   // canonical way to cancel mid-flight fetches.
   let activeAbort: AbortController | null = null;
 
+  // Separate handle for the search-bar / programmatic prewarm batch. We
+  // intentionally let prewarm RUN past a subsequent ambient cycle (the
+  // destination tiles are useful for ~30 s of panning), but we MUST be
+  // able to abort it the moment the user starts a NEW gesture (pan,
+  // pinch-zoom, dezoom). Otherwise: search-bar jump fires 14 high-prio
+  // tiles + their IGN sub-tile fan-out (~50+ fetches), user immediately
+  // dezooms, and Mapbox's new visible tile burst at the lower zoom hits
+  // a SW dispatcher whose IGN/composite queues + browser HTTP/2 connection
+  // pool are saturated by the now-irrelevant prewarm work. User-visible
+  // symptom: "arrival zone instantaneous, dezoom dies, almost nothing
+  // loads". Aborting prewarm on user gesture frees the queues for the
+  // foreground burst.
+  let prewarmAbort: AbortController | null = null;
+
   // Last centre tile observed at fire time. Used to detect teleports
   // between two idle events (e.g. search-bar jump): if the next centre
   // is more than TELEPORT_TILE_DELTA tiles away at the same zoom, we
@@ -484,8 +498,10 @@ export function installViewportPrefetch(
     // Destination-prewarm runs at HIGH priority. We deliberately do NOT
     // store this controller as `activeAbort`: we want it to run to
     // completion even if the user pans afterward — the destination tiles
-    // are useful for ~30 s of panning around.
-    dispatchBatch(urls, 'high');
+    // are useful for ~30 s of panning around. We DO store it as
+    // `prewarmAbort` so a real user gesture (movestart/zoomstart with
+    // originalEvent) can cancel it — see the gesture listener below.
+    prewarmAbort = dispatchBatch(urls, 'high');
   };
 
   // Trigger ONLY on `idle`. `idle` fires after Mapbox confirms every source
@@ -496,6 +512,53 @@ export function installViewportPrefetch(
   // entered the LIFO queue first and got popped first → "background loads
   // ultra-fast, foreground stays low-quality forever".
   map.on('idle', schedule);
+
+  // ── User-gesture cancellation ────────────────────────────────────────
+  //
+  // The instant the user starts a NEW pan / pinch / scroll-zoom, abort
+  // every in-flight prefetch batch (ambient AND prewarm). Rationale:
+  //   * Ambient batches were targeting the OLD viewport — those tiles are
+  //     about to be off-screen anyway.
+  //   * Prewarm batches from a previous search-bar jump are still firing
+  //     IGN sub-tile fan-out for the arrival viewport; if the user is
+  //     already moving away, that work is wasted bandwidth competing with
+  //     the new visible-tile burst Mapbox is about to issue.
+  // We filter by `originalEvent` to avoid aborting on programmatic camera
+  // updates (jumpTo/easeTo from search bar, viewport controls, flyover
+  // analysis): those are the very callers that just asked for the prewarm.
+  // Only DOM-originated events count as user gestures here.
+  //
+  // NOTE: Mapbox's TS typings for `zoomstart`/`movestart` don't include
+  // `originalEvent`, but the runtime event payload always has it (set when
+  // the gesture comes from a DOM event, undefined otherwise — see
+  // mapbox-gl/src/ui/handler_inertia.js). We accept `unknown` and narrow.
+  const cancelOnUserGesture = (e: unknown): void => {
+    const evt = e as { originalEvent?: unknown } | null | undefined;
+    if (!evt || !evt.originalEvent) return;
+    if (activeAbort) {
+      activeAbort.abort();
+      activeAbort = null;
+    }
+    if (prewarmAbort) {
+      prewarmAbort.abort();
+      prewarmAbort = null;
+    }
+    // Reset signature so the next `idle` re-fires the ambient cycle for
+    // the new viewport (otherwise the cached signature could short-circuit
+    // identical-bbox refresh).
+    lastSignature = '';
+    // Clear any scheduled but not-yet-fired ambient batch. The post-idle
+    // delay was set during the PREVIOUS idle for the OLD viewport; firing
+    // it now would just enqueue tiles we no longer want.
+    if (scheduled != null) {
+      clearTimeout(scheduled);
+      scheduled = null;
+    }
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  map.on('movestart', cancelOnUserGesture as any);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  map.on('zoomstart', cancelOnUserGesture as any);
 
   const handle: ViewportPrefetchHandle = {
     dispose: (): void => {
@@ -509,7 +572,15 @@ export function installViewportPrefetch(
         activeAbort.abort();
         activeAbort = null;
       }
+      if (prewarmAbort) {
+        prewarmAbort.abort();
+        prewarmAbort = null;
+      }
       map.off('idle', schedule);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.off('movestart', cancelOnUserGesture as any);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.off('zoomstart', cancelOnUserGesture as any);
       if (currentHandle === handle) currentHandle = null;
     },
     trigger: schedule,

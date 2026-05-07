@@ -7,12 +7,7 @@
 
 export { usePoi } from './hooks/usePoi';
 export { parseGpxFile, sampleRoutePoints } from './lib/gpx-loader';
-export {
-  addGpxRoute,
-  removeGpxRoute,
-  fitMapToRoute,
-  isGpxRouteOnMap,
-} from './lib/gpx-layer';
+export { fitMapToRoute } from './lib/gpx-layer';
 export type {
   PoiCategory,
   PoiFeature,

@@ -6,6 +6,39 @@
 // Split out of sw-dem.js (May 03).
 // ---------------------------------------------------------------------------
 
+// Speculative-prefetch shedding. Requests carrying `?pf=1` are issued by
+// `viewportPrefetch.ts` for tiles the user has not yet looked at. They are
+// expendable: the next real Mapbox request for the same tile will run the
+// pipeline normally. When the DEM dispatcher is already saturated (a real
+// foreground burst is mid-flight), we drop incoming pf=1 ortho/slope/
+// altitude requests at the router so they never reach the per-handler
+// queue. This is the SW-side complement of the browser-side prewarm-abort
+// on user gesture: if a stale prewarm slips past gesture cancellation,
+// it cannot starve the foreground burst once the pipeline is already busy.
+//
+// Threshold uses DEM_INFLIGHT.size as a proxy for "system under load".
+// All four families (DEM/ortho/slope/altitude) ultimately drive DEM
+// pipeline pressure (slope/altitude pre-warm 4 neighbour DEMs, ortho
+// shares the same geopf HTTP/2 connection pool).
+const PREFETCH_SHED_THRESHOLD = 24;
+
+function isPrefetchRequest(url) {
+  return url.searchParams.get('pf') === '1';
+}
+
+function noTileResponseRouter(reason) {
+  return new Response(null, {
+    status: 204,
+    headers: { 'X-DEM-Reason': reason },
+  });
+}
+
+function shedPrefetchIfBusy(url) {
+  if (!isPrefetchRequest(url)) return null;
+  if (DEM_INFLIGHT.size < PREFETCH_SHED_THRESHOLD) return null;
+  return noTileResponseRouter('prefetch-shed');
+}
+
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -24,6 +57,8 @@ self.addEventListener('fetch', (event) => {
 
   const orthoMatch = url.pathname.match(/^\/ortho-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (orthoMatch) {
+    const shed = shedPrefetchIfBusy(url);
+    if (shed) { event.respondWith(shed); return; }
     event.respondWith(handleOrthoRequest(
       parseInt(orthoMatch[1], 10),
       parseInt(orthoMatch[2], 10),
@@ -34,6 +69,8 @@ self.addEventListener('fetch', (event) => {
 
   const slopeMatch = url.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (slopeMatch) {
+    const shed = shedPrefetchIfBusy(url);
+    if (shed) { event.respondWith(shed); return; }
     const slopeRes = url.searchParams.get('res') || '';
     const slopeDemProfile = resolveDemProfile(url);
     event.respondWith(handleSlopeRequest(
@@ -48,6 +85,8 @@ self.addEventListener('fetch', (event) => {
 
   const altitudeMatch = url.pathname.match(/^\/altitude-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (altitudeMatch) {
+    const shed = shedPrefetchIfBusy(url);
+    if (shed) { event.respondWith(shed); return; }
     event.respondWith(handleAltitudeRequest(
       parseInt(altitudeMatch[1], 10),
       parseInt(altitudeMatch[2], 10),

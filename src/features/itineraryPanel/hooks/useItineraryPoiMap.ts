@@ -3,13 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { usePoi } from '@/features/poi/hooks/usePoi';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
-import {
-  addGpxRoute,
-  fitMapToRoute,
-  isGpxRouteOnMap,
-  raiseGpxRoute,
-  removeGpxRoute,
-} from '@/features/poi/lib/gpx-layer';
+import { fitMapToRoute } from '@/features/poi/lib/gpx-layer';
 import type {
   PoiCategory as FeaturePoiCategory,
   PoiFeature,
@@ -122,8 +116,6 @@ export function useItineraryPoiMap(
 
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
-  const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const renderedRouteKeyRef = useRef<string | null>(null);
   const fittedRouteKeyRef = useRef<string | null>(null);
   const gpxRouteKey = useMemo(
     () => buildRenderedRouteKey(active?.id ?? null, gpxRoute?.points),
@@ -142,77 +134,25 @@ export function useItineraryPoiMap(
     persistedPoiFeatures,
   );
 
-  // ── Render the active itinerary's GPX track ───────────────────────
-  // Skip when the route was synthesised from BRouter — the BRouter layer
-  // already paints it, and stacking two lines would tint the colour.
-  const gpxNeedsRender = gpxRoute && gpxRoute.source !== 'brouter';
+  // ── Auto-fit the camera to the active itinerary's GPX track ──────
+  // Rendering of the trace itself is owned by the unified route-layer
+  // pipeline (`useItineraryRouteLayerSync`), which honours the per-
+  // itinerary visibility / opacity / colour. We only care about the
+  // one-shot camera fit here.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
-    if (gpxNeedsRender && gpxRoute) {
-      try {
-        if (!isGpxRouteOnMap(map) || renderedRouteKeyRef.current !== gpxRouteKey) {
-          addGpxRoute(map, gpxRoute.points);
-          renderedRouteKeyRef.current = gpxRouteKey;
-        } else {
-          raiseGpxRoute(map);
-        }
-        if (fittedRouteKeyRef.current !== gpxRouteKey) {
-          fitMapToRoute(map, gpxRoute.points);
-          fittedRouteKeyRef.current = gpxRouteKey;
-        }
-      } catch {
-        /* map may be tearing down */
-      }
-    } else if (isGpxRouteOnMap(map)) {
-      try {
-        removeGpxRoute(map);
-        renderedRouteKeyRef.current = null;
-        fittedRouteKeyRef.current = null;
-      } catch {
-        /* noop */
-      }
+    if (!gpxRoute || gpxRoute.points.length < 2) {
+      fittedRouteKeyRef.current = null;
+      return;
     }
-  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender, gpxRouteKey]);
-
-  // Re-add the GPX after a Mapbox style.load (Standard Satellite fires
-  // style.load multiple times as imports/terrain settle, wiping custom
-  // layers). Defer so useMap's async setup completes first.
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
-    const replayGpxRoute = () => {
-      if (!gpxNeedsRender || !gpxRoute) return;
-      try {
-        if (isGpxRouteOnMap(map)) {
-          raiseGpxRoute(map);
-        } else {
-          addGpxRoute(map, gpxRoute.points);
-          renderedRouteKeyRef.current = gpxRouteKey;
-        }
-      } catch {
-        /* noop */
-      }
-    };
-    const scheduleReplayGpxRoute = () => {
-      if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
-      replayTimerRef.current = setTimeout(() => {
-        replayTimerRef.current = null;
-        replayGpxRoute();
-      }, 0);
-    };
-    const onStyleLoad = () => {
-      scheduleReplayGpxRoute();
-    };
-    map.on('style.load', onStyleLoad);
-    map.on('styledata', onStyleLoad);
-    return () => {
-      if (replayTimerRef.current) {
-        clearTimeout(replayTimerRef.current);
-        replayTimerRef.current = null;
-      }
-      map.off('style.load', onStyleLoad);
-      map.off('styledata', onStyleLoad);
-    };
-  }, [map, isMapLoaded, gpxRoute, gpxNeedsRender, gpxRouteKey]);
+    if (fittedRouteKeyRef.current === gpxRouteKey) return;
+    try {
+      fitMapToRoute(map, gpxRoute.points);
+      fittedRouteKeyRef.current = gpxRouteKey;
+    } catch {
+      /* map may be tearing down */
+    }
+  }, [map, isMapLoaded, gpxRoute, gpxRouteKey]);
 
   return {
     loading,
