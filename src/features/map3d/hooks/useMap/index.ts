@@ -289,22 +289,19 @@ export function useMap(
     };
     let switchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 
-    let switchRetries = 0;
-    const MAX_SWITCH_RETRIES = 3;
+    // Single-shot bootstrap. The bootstrap promise itself now waits on
+    // real Mapbox readiness signals (style.load / styledata-with-content
+    // / sourcedata / first idle) and only returns false on cancellation
+    // — there is no timing race left to retry around. Retry-on-false
+    // would fire a parallel bootstrap against the same map and racing
+    // setStyle calls, which is exactly what produced the
+    // "[map3d] style switch bootstrap returned false, retrying"
+    // log spam + permanent flat terrain seen on Standard-Satellite
+    // switches.
     const attemptBootstrap = (): Promise<void> =>
       bootstrapCurrentStyle()
-        .then((ok) => {
+        .then(() => {
           setIsLoaded(true);
-          // If bootstrap returned false (style not ready, went through
-          // polling path), retry after a short delay — don't leave the
-          // map flat forever.
-          if (!ok && !switchCancelled && switchRetries < MAX_SWITCH_RETRIES) {
-            switchRetries += 1;
-            console.warn(`[map3d] style switch bootstrap returned false, retrying (${switchRetries}/${MAX_SWITCH_RETRIES})`);
-            setTimeout(() => {
-              if (!switchCancelled) void attemptBootstrap();
-            }, 3000);
-          }
         })
         .catch((error) => {
           console.error('[map3d] style switch failed', error);

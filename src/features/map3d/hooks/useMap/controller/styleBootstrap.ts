@@ -2,7 +2,7 @@ import { unifiedDEMSource } from '../../../lib/sources';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import { swReady, swLateReady } from '../serviceWorker';
 import {
-  STYLE_LOAD_WATCHDOG_MS,
+  STYLE_READINESS_TELEMETRY_INTERVAL_MS,
   type Ctx,
 } from './context';
 
@@ -67,15 +67,23 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     const promoteStyleContentBypass = (logLabel: string): boolean => {
       try {
         const style = map.getStyle();
-        const hasContent = style && (
-          (style.layers?.length ?? 0) > 0
-          || Object.keys(style.sources ?? {}).length > 0
-        );
+        if (!style) return false;
+        const layerCount = style.layers?.length ?? 0;
+        const sourceCount = Object.keys(style.sources ?? {}).length;
+        // Mapbox v3 imported style fragments (Standard / Standard-Satellite)
+        // expose their layers/sources via `imports`; even when the root
+        // style.layers and style.sources arrays are empty, an import entry
+        // with `data` populated means the rendering pipeline has the style
+        // graph it needs to draw.
+        const imports = (style as unknown as { imports?: Array<{ data?: unknown }> }).imports;
+        const hasImportContent = Array.isArray(imports)
+          && imports.some((imp) => imp && imp.data != null);
+        const hasContent = layerCount > 0 || sourceCount > 0 || hasImportContent;
         if (!hasContent) return false;
         if (!st.spriteStormBypass) {
           console.warn(
             `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
-            { layers: style.layers?.length ?? 0, sources: Object.keys(style.sources ?? {}).length },
+            { layers: layerCount, sources: sourceCount, imports: Array.isArray(imports) ? imports.length : 0 },
           );
           st.spriteStormBypass = true;
         }
@@ -84,6 +92,29 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         return false;
       }
     };
+    // Event-driven style readiness gate.
+    //
+    // Pro-grade replacement of the previous "5 s watchdog → soft-fail →
+    // outer 3× retry → inner 1 s polling" stack, which raced itself and
+    // left the map flat whenever Mapbox 3.x's `isStyleLoaded()` got
+    // stuck false (typical sprite/import-fragment storm on
+    // Standard-Satellite). The gate now:
+    //
+    //   1. Resolves on the FIRST genuine signal that the rendering
+    //      pipeline is alive:
+    //        • `style.load`         — Mapbox's intended "fully ready"
+    //        • `styledata`          — content arrived; recheck readiness
+    //        • `sourcedata`         — a source produced data; pipeline
+    //                                 is definitely live
+    //        • `idle`               — painter rendered a frame; this is
+    //                                 the strongest possible proof, and
+    //                                 promotes the sprite-storm bypass
+    //                                 even if `isStyleLoaded()` is stuck
+    //   2. Never soft-fails on a timer. A genuinely stuck style is
+    //      surfaced via periodic telemetry warns (every 15 s) so it is
+    //      still observable; the bootstrap simply waits.
+    //   3. Cleans up listeners on cancellation / runId rotation so
+    //      basemap switches in flight cannot leak handlers.
     const styleLoaded = new Promise<void>((resolve) => {
       if (fns.canMutateStyle()) {
         fns.reportStatus('loading', 34, 'Style');
@@ -91,17 +122,26 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         return;
       }
       let settled = false;
-      let watchdog: ReturnType<typeof setTimeout> | null = null;
-      let watchdogFired = false;
+      let telemetryTimer: ReturnType<typeof setInterval> | null = null;
+      let telemetryTicks = 0;
       const cleanup = () => {
         map.off('style.load', onStyleLoad);
         map.off('styledata', onStyleData);
-        if (watchdog) {
-          clearTimeout(watchdog);
-          watchdog = null;
+        map.off('sourcedata', onSourceData);
+        map.off('idle', onIdle);
+        if (telemetryTimer) {
+          clearInterval(telemetryTimer);
+          telemetryTimer = null;
         }
       };
-      const finish = (deferred = false) => {
+      const settle = (label: string) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        fns.reportStatus('loading', 34, label);
+        resolve();
+      };
+      const tryReady = (origin: string) => {
         if (settled) return;
         if (isCancelled() || runId !== st.styleBootstrapRunId) {
           settled = true;
@@ -109,125 +149,98 @@ export function attachStyleBootstrap(ctx: Ctx): void {
           resolve();
           return;
         }
-        if (!deferred && !fns.canMutateStyle() && !promoteStyleContentBypass('style readiness')) return;
-        settled = true;
-        cleanup();
-        fns.reportStatus(
-          'loading',
-          deferred ? 30 : 34,
-          deferred
-            ? 'Fond de carte (lent)'
-            : watchdogFired ? 'Style (récupération)' : 'Style',
-        );
-        resolve();
+        if (fns.canMutateStyle()) {
+          settle('Style');
+          return;
+        }
+        if (promoteStyleContentBypass(origin)) {
+          settle('Style (récupération)');
+        }
       };
-      const scheduleFinish = () => {
-        setTimeout(() => {
-          finish();
-        }, 0);
+      const onStyleLoad = () => tryReady('style.load');
+      const onStyleData = () => tryReady('styledata');
+      const onSourceData = () => tryReady('sourcedata');
+      const onIdle = () => {
+        // First idle = Mapbox finished a render pass. That can only
+        // happen if the style graph is operational — promote the bypass
+        // unconditionally even if `getStyle()` still looks empty in this
+        // microtask.
+        if (settled) return;
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          settled = true;
+          cleanup();
+          resolve();
+          return;
+        }
+        if (fns.canMutateStyle()) {
+          settle('Style');
+          return;
+        }
+        // promoteStyleContentBypass may legitimately return false on the
+        // very first idle (style.imports is sometimes populated only
+        // after the first paint commits). In that case, force the
+        // bypass: idle is a strictly stronger signal than getStyle()
+        // content inspection.
+        if (!promoteStyleContentBypass('idle')) {
+          if (!st.spriteStormBypass) {
+            console.warn('[map3d] first idle reached without style content — forcing sprite-storm bypass');
+            st.spriteStormBypass = true;
+          }
+        }
+        settle('Style (idle)');
       };
-      const onStyleLoad = () => scheduleFinish();
-      const onStyleData = () => scheduleFinish();
       map.on('style.load', onStyleLoad);
       map.on('styledata', onStyleData);
-      watchdog = setTimeout(() => {
-        watchdog = null;
-        if (settled) return;
-        if (fns.canMutateStyle()) {
-          finish();
+      map.on('sourcedata', onSourceData);
+      map.on('idle', onIdle);
+      // Telemetry-only watchdog. Logs diagnostics every 15 s so a
+      // genuinely stuck style is observable, but never soft-fails the
+      // bootstrap. After 60 s we log an error tag for production
+      // monitoring; the listeners stay attached.
+      telemetryTimer = setInterval(() => {
+        if (settled) {
+          if (telemetryTimer) { clearInterval(telemetryTimer); telemetryTimer = null; }
           return;
         }
-        // If style content already exists (sprite-storm in progress) the
-        // bypass path will accept it — try that first instead of logging
-        // a misleading "style.load not seen" warn that ends up spamming
-        // every 5 s on basemap switches.
-        if (promoteStyleContentBypass('style watchdog')) {
-          finish();
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          settled = true;
+          cleanup();
+          resolve();
           return;
         }
-        // Soft-fail: resolve the bootstrap so the page-side "Chargement
-        // du globe…" loader can hide. We schedule a late re-bootstrap
-        // (below, after `await styleLoaded`) that fires when Mapbox
-        // eventually finishes the style. Hard-rejecting here used to
-        // leave the map permanently flat (no terrain attached) when
-        // sprite/image requests stall — typical when Mapbox 3.x rejects
-        // an SVG asset referenced by the basemap and keeps retrying it.
-        watchdogFired = true;
-        console.warn(
-          '[map3d] style.load not seen within',
-          STYLE_LOAD_WATCHDOG_MS,
-          'ms; deferring DEM/terrain attach until late style.load',
-        );
-        finish(true);
-      }, STYLE_LOAD_WATCHDOG_MS);
+        telemetryTicks += 1;
+        let layers = 0;
+        let sources = 0;
+        let importsLen = 0;
+        try {
+          const s = map.getStyle();
+          layers = s?.layers?.length ?? 0;
+          sources = Object.keys(s?.sources ?? {}).length;
+          const imp = (s as unknown as { imports?: unknown[] })?.imports;
+          if (Array.isArray(imp)) importsLen = imp.length;
+        } catch { /* ignore */ }
+        const elapsedSec = telemetryTicks * (STYLE_READINESS_TELEMETRY_INTERVAL_MS / 1000);
+        const tag = elapsedSec >= 60 ? 'error' : 'warn';
+        const msg = `[map3d] style readiness still pending after ${elapsedSec}s — waiting on Mapbox events`;
+        const diag = { isStyleLoaded: (() => { try { return map.isStyleLoaded(); } catch { return false; } })(), layers, sources, imports: importsLen };
+        if (tag === 'error') console.error(msg, diag);
+        else console.warn(msg, diag);
+        // Re-probe in case a styledata/sourcedata event was suppressed
+        // (extremely rare, but cheap to guard against).
+        tryReady('telemetry-probe');
+      }, STYLE_READINESS_TELEMETRY_INTERVAL_MS);
     });
 
     await styleLoaded;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
 
     if (!fns.canMutateStyle()) {
-      // Mapbox 3.x can enter a state where isStyleLoaded() stays false
-      // indefinitely (SVG sprite rejection storm) even though tiles, layers
-      // and sources are fully operational. In that scenario neither
-      // style.load nor styledata fire again, so event-only recovery is a
-      // dead-end.
-      //
-      // Aggressive inline check: if getStyle() already has content, the
-      // rendering pipeline is alive — only sprites are blocking
-      // isStyleLoaded(). Enable spriteStormBypass and continue the
-      // bootstrap *inline* instead of returning false and waiting 2+ s
-      // for the polling loop. This eliminates the visible flat-terrain
-      // gap that occurred between the 15 s watchdog and the first poll.
-      //
-      // IMPORTANT: Standard-Satellite uses Mapbox v3 imported style
-      // fragments — its sources live inside the fragment, NOT in the
-      // root style.sources. We check style.layers instead, which ARE
-      // populated from imported fragments.
-      promoteStyleContentBypass('style bootstrap');
-
-      // If the bypass didn't activate (style truly has no sources yet),
-      // fall back to the event + polling loop.
-      if (!fns.canMutateStyle()) {
-        let lateRecovered = false;
-        const doLateRecovery = () => {
-          if (lateRecovered) return;
-          lateRecovered = true;
-          map.off('style.load', onLateEvent);
-          map.off('styledata', onLateEvent);
-          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          if (isCancelled()) return;
-          void fns.bootstrapCurrentStyle();
-        };
-        const onLateEvent = () => doLateRecovery();
-        map.on('style.load', onLateEvent);
-        map.on('styledata', onLateEvent);
-
-        // Polling fallback: check every 1 s (was 2 s — tightened to
-        // reduce the flat-terrain window on genuinely slow styles).
-        let pollCount = 0;
-        const MAX_POLLS = 30; // 30 × 1 s = 30 s max
-        let pollTimer: ReturnType<typeof setInterval> | null = setInterval(() => {
-          pollCount += 1;
-          if (isCancelled() || runId !== st.styleBootstrapRunId) {
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-            return;
-          }
-          if (fns.canMutateStyle()) {
-            doLateRecovery();
-            return;
-          }
-          if (promoteStyleContentBypass('late style recovery')) {
-            doLateRecovery();
-            return;
-          }
-          if (pollCount >= MAX_POLLS) {
-            console.warn('[map3d] late style recovery polling exhausted after 30 s');
-            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-          }
-        }, 1000);
-
-        return false;
-      }
+      // Defensive: the event-driven gate above only resolves when
+      // `canMutateStyle()` is true or the sprite-storm bypass is
+      // engaged. Reaching here means a cancellation or runId rotation
+      // raced the gate at exactly the resolve boundary — bail cleanly
+      // so the subsequent style switch / mount can take over.
+      return false;
     }
 
     fns.refreshTrackedSourceIds();
