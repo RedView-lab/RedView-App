@@ -244,12 +244,24 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     fns.refreshTrackedSourceIds();
-    // swReady resolves once (cached). On a late-recovery re-run the
-    // promise may still be `false` even though the controller has since
-    // appeared. Check the live controller reference as a secondary gate
-    // so the DEM path runs whenever the SW is actually available.
-    const swOk = (await swReady) || !!navigator.serviceWorker?.controller;
+    // SW readiness gate. The downstream `refreshDemSource` requires
+    // BOTH a resolved registration AND an attached `controller` (it
+    // bails immediately with "no active service worker controller"
+    // otherwise — that exact race produced the previous initial
+    // bootstrap → false → retry → AWS-stuck cascade).
+    //
+    // We therefore require the controller here too. When the SW is
+    // installing/activating but hasn't claimed the page yet, we
+    // intentionally take the AWS Terrarium fallback path below; its
+    // built-in `swLateReady` listener will upgrade to the full IGN
+    // pipeline as soon as the controller appears, with no parallel
+    // bootstrap re-entry.
+    const swRegistered = await swReady;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
+    // Authoritative gate is the controller (refreshDemSource bails
+    // without it). swRegistered is kept only for the warn message
+    // distinction below.
+    const swOk = !!navigator.serviceWorker?.controller;
 
     fns.reportStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
@@ -281,7 +293,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     if (!swOk) {
-      console.warn('[map3d] SW unavailable — attaching AWS Terrarium fallback DEM (~30 m global)');
+      const reason = swRegistered
+        ? 'SW controller not yet claimed (install/activate race)'
+        : 'SW unavailable';
+      console.warn(`[map3d] ${reason} — attaching AWS Terrarium fallback DEM (~30 m global); will upgrade to IGN MNS LiDAR HD via swLateReady`);
       fns.ensureTrackingListeners();
       st.demTrackingEnabled = true;
       fns.reportStatus('loading', 60, 'Relief AWS (fallback)');

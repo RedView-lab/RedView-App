@@ -173,19 +173,20 @@ export function useMap(
     // anyway so the user isn't stuck behind the overlay forever.
     const revealFallbackTimer = setTimeout(revealMap, 8000);
 
-    let mountRetries = 0;
-    const MAX_MOUNT_RETRIES = 3;
+    // Single-shot bootstrap. The bootstrap promise now waits on real
+    // Mapbox readiness signals (style.load / styledata-with-content /
+    // sourcedata / first idle) and, on the SW path, falls through to
+    // the AWS Terrarium fallback when the SW controller hasn't claimed
+    // yet — that fallback already arms a `swLateReady` listener which
+    // auto-upgrades to IGN MNS as soon as the controller appears, with
+    // no parallel bootstrap race. Retrying here would fire a second
+    // bootstrap against the same map (the source of the previous
+    // "[map3d] initial bootstrap returned false, retrying" log spam +
+    // permanent flat terrain).
     const attemptInitBootstrap = (): Promise<void> =>
       lifecycle.bootstrapCurrentStyle()
-        .then((ok) => {
+        .then(() => {
           if (!cancelled) setIsLoaded(true);
-          if (!ok && !cancelled && mountRetries < MAX_MOUNT_RETRIES) {
-            mountRetries += 1;
-            console.warn(`[map3d] initial bootstrap returned false, retrying (${mountRetries}/${MAX_MOUNT_RETRIES})`);
-            setTimeout(() => {
-              if (!cancelled) void attemptInitBootstrap();
-            }, 3000);
-          }
         })
         .catch((error) => {
           console.error('[map3d] init failed', error);
