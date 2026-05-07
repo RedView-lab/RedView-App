@@ -243,6 +243,21 @@ function drainOrtho() {
   }
 }
 
+// Drain queued-but-not-yet-running ortho entries on viewport change.
+// Mirror of `flushIGNQueue()` in ign-fetcher.js — see that function for
+// the rationale. In-flight ortho tiles complete and cache normally.
+function flushOrthoQueue() {
+  if (orthoQueue.length === 0) return 0;
+  const pruned = orthoQueue.length;
+  while (orthoQueue.length > 0) {
+    const stale = orthoQueue.pop();
+    stale.resolve(PRUNED_SENTINEL);
+  }
+  orthoPrunedTotal += pruned;
+  if (DEBUG) console.warn(`[sw-dem][ortho-queue] flushed ${pruned} stale on viewport change`);
+  return pruned;
+}
+
 // In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-fetcher.js)
 const orthoInflight = new Map();
 

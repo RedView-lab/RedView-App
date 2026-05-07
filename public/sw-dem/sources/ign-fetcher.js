@@ -59,6 +59,30 @@ function drainIGN() {
   }
 }
 
+// Drain every queued-but-not-yet-running IGN entry, resolving each with
+// PRUNED_SENTINEL. Posted by the browser on user gesture (`zoomstart` /
+// `movestart`) via the `CANCEL_STALE_DEM` SW message: when the viewport
+// changes, the previous viewport's queued IGN sub-tile fetches are now
+// targeting the wrong zoom — they would just block the new viewport's
+// burst from reaching the IGN concurrency slots. In-flight fetches are
+// NOT cancelled (they're paid for, the response will populate the cache
+// for the next time the user revisits that area).
+//
+// Returns the number of pruned entries for diagnostics.
+function flushIGNQueue() {
+  if (ignQueue.length === 0) return 0;
+  const pruned = ignQueue.length;
+  // Resolve in reverse insertion order so promise chains unwind LIFO
+  // (matches the normal scheduler popping order).
+  while (ignQueue.length > 0) {
+    const stale = ignQueue.pop();
+    stale.resolve(PRUNED_SENTINEL);
+  }
+  ignPrunedTotal += pruned;
+  if (DEBUG) console.warn(`[sw-dem][queue] flushed ${pruned} stale on viewport change`);
+  return pruned;
+}
+
 function buildDEMTileURL(z, col, row) {
   return (
     `${IGN_WMTS_BASE}?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +

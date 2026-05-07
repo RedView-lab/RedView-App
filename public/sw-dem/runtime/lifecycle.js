@@ -127,6 +127,21 @@ self.addEventListener('message', (e) => {
     caches.delete(NEGATIVE_CACHE_NAME);
     return;
   }
+  // Drain queued (not-yet-running) IGN + Ortho fetches. Sent by the
+  // browser on user gesture (zoomstart/movestart) so the new viewport's
+  // burst doesn't sit behind the previous viewport's leftover queue.
+  // In-flight fetches are NOT cancelled — they complete and populate
+  // the cache for next time the user revisits that area.
+  if (e.data?.type === 'CANCEL_STALE_DEM') {
+    let ign = 0;
+    let ortho = 0;
+    try { ign = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
+    try { ortho = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
+    if (DEBUG && (ign + ortho) > 0) {
+      console.warn(`[sw-dem][cancel-stale] flushed ign=${ign} ortho=${ortho}`);
+    }
+    return;
+  }
   // Per-tile invalidation of slope+altitude derived caches. Sent by the
   // map controller after the DEM service worker upgrades a DEM tile to
   // higher quality (e.g. France HIGHRES kicks in mid-session). Without

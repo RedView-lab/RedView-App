@@ -554,6 +554,21 @@ export function installViewportPrefetch(
       clearTimeout(scheduled);
       scheduled = null;
     }
+    // Tell the SW to drain its queued (not-yet-running) IGN + Ortho
+    // fetches. Without this, the new viewport's burst sits behind the
+    // PREVIOUS viewport's pending sub-tile queue (≤ 600 entries at z=12
+    // across France because each Mercator tile fans out into ~6 IGN
+    // sub-tiles). Per-tile wall-clock blew past 16-42 s during dezoom
+    // because the soft deadline (1.2 s at z=12) couldn't fire — the SW
+    // main thread was glued to CPU resampling, the macrotask setTimeout
+    // never got a slot, and `Promise.race([allSettled, setTimeout])`
+    // effectively waited for everything.  In-flight requests complete
+    // and cache normally; only queued ones get the PRUNED_SENTINEL.
+    const sw = typeof navigator !== 'undefined' ? navigator.serviceWorker : null;
+    if (sw && sw.controller) {
+      try { sw.controller.postMessage({ type: 'CANCEL_STALE_DEM' }); }
+      catch { /* SW gone away — fine */ }
+    }
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   map.on('movestart', cancelOnUserGesture as any);
