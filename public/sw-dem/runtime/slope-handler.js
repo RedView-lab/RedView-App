@@ -26,6 +26,10 @@
 
 const SLOPE_NEIGHBOUR_WARM_DELAY_MS = 120;
 
+function isSlopeWorkCancelled(generation) {
+  return generation !== slopeCancelGeneration;
+}
+
 function slopeNeighbourWarmList(z, neighbours) {
   const n = 1 << z;
   const seen = new Set();
@@ -43,11 +47,12 @@ function slopeNeighbourWarmList(z, neighbours) {
   return out;
 }
 
-function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours) {
+function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours, generation) {
   const missing = slopeNeighbourWarmList(z, neighbours);
   if (missing.length === 0 || !demCache) return;
 
   setTimeout(() => {
+    if (isSlopeWorkCancelled(generation)) return;
     const fetches = missing.map(([nx, ny]) => {
       const nKey = buildDemCacheKey(z, nx, ny, demProfile);
       return demCache.match(nKey).then((existingDem) => {
@@ -59,6 +64,7 @@ function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours) {
     });
 
     Promise.allSettled(fetches).then((results) => {
+      if (isSlopeWorkCancelled(generation)) return;
       const warmed = results.some((result) => result.status === 'fulfilled' && result.value === true);
       if (!warmed) return;
       try {
@@ -100,12 +106,16 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     catch { /* fall through and recompute */ }
   }
 
+  const generation = slopeCancelGeneration;
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
     const demKey = buildDemCacheKey(z, x, y, demProfile);
     let demResponse = await demCache.match(demKey);
     if (!demResponse || demResponse.status !== 200) {
       demResponse = await handleDemRequest(demKey, z, x, y, undefined, demProfile);
+    }
+    if (isSlopeWorkCancelled(generation)) {
+      return transparentTileResponse();
     }
     if (!demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
@@ -114,6 +124,9 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     try {
       const demBlob = await demResponse.clone().blob();
       const slopeResult = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);
+      if (isSlopeWorkCancelled(generation)) {
+        return transparentTileResponse();
+      }
       const slopeBlob = slopeResult?.blob || slopeResult;
       const response = new Response(slopeBlob, {
         status: 200,
@@ -124,14 +137,14 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
           'X-DEM-Profile': demProfile,
         },
       });
-      slopeCache.put(cacheKey, response.clone());
+      if (!isSlopeWorkCancelled(generation)) slopeCache.put(cacheKey, response.clone());
 
       // Seam self-heal happens after the visible tile is returned. The first
       // pass is fast and uses replicated own-tile edges where needed; the
       // delayed warmup triggers one debounced Mapbox reload once neighbour DEM
       // tiles are available, yielding seam-free borders without starving the
       // foreground burst.
-      scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, slopeResult?.missingNeighbours);
+      scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, slopeResult?.missingNeighbours, generation);
       return response;
     } catch (err) {
       console.error('[slope]', z, x, y, err);
@@ -144,6 +157,8 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     const response = await work;
     return response.clone();
   } finally {
-    SLOPE_INFLIGHT.delete(inflightKey);
+    if (SLOPE_INFLIGHT.get(inflightKey) === work) {
+      SLOPE_INFLIGHT.delete(inflightKey);
+    }
   }
 }

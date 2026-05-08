@@ -24,6 +24,7 @@ const _compositeQueue = [];
 // the single ongoing computation instead of duplicating the Horn pipeline.
 const SLOPE_INFLIGHT = new Map();
 const ALTITUDE_INFLIGHT = new Map();
+let slopeCancelGeneration = 0;
 
 // In-flight DEM tile dedup. Same idea as SLOPE_INFLIGHT but applies to the
 // raw `/dem-tiles/...` endpoint. Without this, every slope tile triggers
@@ -36,6 +37,21 @@ const ALTITUDE_INFLIGHT = new Map();
 // slope responses miss the Mapbox tile-load deadline and never fire
 // `sourcedata`. Coalescing collapses the 5×-fan-out back to 1 per tile.
 const DEM_INFLIGHT = new Map();
+
+function cancelSlopeWork() {
+  slopeCancelGeneration += 1;
+  const slopeCount = SLOPE_INFLIGHT.size;
+  SLOPE_INFLIGHT.clear();
+  let terrainDemCount = 0;
+  for (const key of Array.from(DEM_INFLIGHT.keys())) {
+    if (String(key).startsWith('terrain:')) {
+      DEM_INFLIGHT.delete(key);
+      terrainDemCount += 1;
+    }
+  }
+  try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
+  return { slopeCount, terrainDemCount };
+}
 
 function acquireComposite() {
   if (_compositeActive < COMPOSITE_MAX_CONCURRENT) {
@@ -114,6 +130,20 @@ self.addEventListener('message', (e) => {
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     caches.delete(SLOPE_CACHE_NAME);
+    return;
+  }
+  if (e.data?.type === 'CANCEL_SLOPE_WORK') {
+    const cancelled = cancelSlopeWork();
+    let ignQ = 0, ignF = 0, orthoQ = 0, orthoF = 0;
+    try { ignQ = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
+    try { ignF = typeof cancelInFlightIGN === 'function' ? cancelInFlightIGN() : 0; } catch { /* ignore */ }
+    try { orthoQ = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
+    try { orthoF = typeof cancelInFlightOrtho === 'function' ? cancelInFlightOrtho() : 0; } catch { /* ignore */ }
+    if (DEBUG && (cancelled.slopeCount + cancelled.terrainDemCount + ignQ + ignF + orthoQ + orthoF) > 0) {
+      console.warn(
+        `[sw-dem][cancel-slope] slope=${cancelled.slopeCount}, terrain-dem=${cancelled.terrainDemCount}, ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}`,
+      );
+    }
     return;
   }
   if (e.data?.type === 'CLEAR_ALTITUDE_CACHE') {

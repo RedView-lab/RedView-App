@@ -94,6 +94,39 @@ function setSlopeVisibility(map: MapboxMap, visible: boolean) {
   }
 }
 
+function cancelSlopeWorkerPressure() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CANCEL_SLOPE_WORK' });
+  } catch {
+    /* service worker may not be controlling this page yet */
+  }
+}
+
+function reloadMapSourceCache(map: MapboxMap, sourceId: string) {
+  try {
+    const sourceCaches = (map.style as unknown as {
+      _sourceCaches?: Record<string, { reload?: () => void }>;
+      sourceCaches?: Record<string, { reload?: () => void }>;
+    });
+    const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
+    if (!caches) return;
+    for (const key of Object.keys(caches)) {
+      if (key === sourceId || key.endsWith(`:${sourceId}`)) {
+        try { caches[key].reload?.(); } catch { /* best-effort */ }
+      }
+    }
+  } catch {
+    /* source cache internals are best-effort only */
+  }
+}
+
+function recoverBaseTerrainAfterSlopeCancel(map: MapboxMap) {
+  setTimeout(() => {
+    reloadMapSourceCache(map, 'unified-dem');
+    reloadMapSourceCache(map, 'ign-ortho');
+  }, 150);
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────
 //
 // Update model — designed for instant UX on rapid toggling:
@@ -158,6 +191,7 @@ export function useSlope(
   const opacityRef = useRef(opacity);
   const colorModeRef = useRef(colorMode);
   const enabledRef = useRef(enabled);
+  const previousEnabledRef = useRef(enabled);
   const categoriesRef = useRef(categories);
   const hiddenIdsRef = useRef(hiddenIds);
   const sourceOptionsRef = useRef(sourceOptions);
@@ -220,6 +254,28 @@ export function useSlope(
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
     setSlopeVisibility(map, enabled);
+  }, [map, isMapLoaded, enabled]);
+
+  // ── 2b. Disable cleanup for the heavy 1 m terrain slope pipeline ─────
+  useEffect(() => {
+    const wasEnabled = previousEnabledRef.current;
+    previousEnabledRef.current = enabled;
+    if (!map || !isMapLoaded) return;
+    if (enabled || !wasEnabled) return;
+
+    cancelSlopeWorkerPressure();
+
+    // The 1 m terrain profile fans out through the slow RGE ALTI/DEM path.
+    // Keeping that source mounted after the toggle is off lets already queued
+    // slope tiles continue to compete with terrain and ortho. Tear it down on
+    // disable; normal surface slope keeps the instant visibility-toggle path.
+    if (sourceOptionsRef.current.demProfile === 'terrain' && mountedRef.current) {
+      removeSlopeLayer(map);
+      mountedRef.current = false;
+      mountedSourceKeyRef.current = null;
+    }
+
+    recoverBaseTerrainAfterSlopeCancel(map);
   }, [map, isMapLoaded, enabled]);
 
   // ── 3. Opacity → instant ─────────────────────────────────────────────
