@@ -16,7 +16,9 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
   // while the exact tile finishes building; longer caching masks the upgrade.
   const shortCache = forceShortCache || (inLiDARRegion
     && z >= 13
-    && (demSource.startsWith('aws-terrarium') || demSource.startsWith('overzoom')));
+    && (demSource.startsWith('aws-terrarium')
+      || demSource.startsWith('aws-emergency')
+      || demSource.startsWith('overzoom')));
   const response = buildDemResponse(pngBlob, demSource, shortCache, healthStatus);
   cache.put(cacheKey, response.clone());
   if (DEBUG) {

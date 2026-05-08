@@ -88,6 +88,7 @@ function shouldSkipUnsafeOverzoomParent(parentResp, z, x, y) {
   if (!parentSource) return true;
 
   return parentSource.startsWith('aws-terrarium')
+    || parentSource.startsWith('aws-emergency')
     || parentSource.startsWith('mapbox')
     || parentSource.startsWith('overzoom')
     || parentSource.includes('fastpath');

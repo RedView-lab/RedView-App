@@ -684,6 +684,8 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       return noTileResponse(reason);
     }
 
+    const preGuardShortCache = forceShortCache;
+    const preGuardHealthStatus = healthStatus;
     const guarded = await guardDemTileHealth(cache, pngBlob, z, x, y, demSource, demProfile);
     if (!guarded.blob) {
       if (upgradePending && upgradePending.length) {
@@ -701,8 +703,8 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
 
     pngBlob = guarded.blob;
     demSource = guarded.demSource;
-    forceShortCache = guarded.shortCache;
-    healthStatus = guarded.healthStatus;
+    forceShortCache = preGuardShortCache || guarded.shortCache;
+    healthStatus = guarded.healthStatus !== 'ok' ? guarded.healthStatus : preGuardHealthStatus;
 
     return finalize(
       cache,
