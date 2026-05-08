@@ -175,3 +175,37 @@ export const swLateReady: Promise<boolean> = (async () => {
   console.warn('[sw-dem] Controller never appeared within late-recovery window');
   return false;
 })();
+
+/**
+ * Event-driven controller wait. If the SW controller is already
+ * present, resolves immediately with `true`. Otherwise listens for
+ * `controllerchange` for up to `timeoutMs` ms and resolves `true` as
+ * soon as the controller appears, `false` if the timeout fires first.
+ *
+ * Use this at bootstrap time to bridge the install/activate window:
+ * the cached `swReady` promise has a 2.5 s budget at module-load time,
+ * which is too short for cold installs on slow networks. Re-checking
+ * here prevents the "SW unavailable → AWS Terrarium fallback" warning
+ * when the controller is actually moments away from claiming.
+ */
+export function awaitController(timeoutMs: number): Promise<boolean> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) {
+    return Promise.resolve(false);
+  }
+  if (navigator.serviceWorker.controller) return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      navigator.serviceWorker.removeEventListener('controllerchange', onChange);
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    const onChange = () => {
+      if (navigator.serviceWorker.controller) finish(true);
+    };
+    navigator.serviceWorker.addEventListener('controllerchange', onChange);
+    const timer = setTimeout(() => finish(!!navigator.serviceWorker.controller), timeoutMs);
+  });
+}

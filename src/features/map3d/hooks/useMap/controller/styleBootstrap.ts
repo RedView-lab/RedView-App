@@ -1,6 +1,6 @@
 import { unifiedDEMSource } from '../../../lib/sources';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
-import { swReady, swLateReady } from '../serviceWorker';
+import { swReady, swLateReady, awaitController } from '../serviceWorker';
 import {
   STYLE_READINESS_TELEMETRY_INTERVAL_MS,
   type Ctx,
@@ -244,24 +244,34 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     fns.refreshTrackedSourceIds();
-    // SW readiness gate. The downstream `refreshDemSource` requires
-    // BOTH a resolved registration AND an attached `controller` (it
-    // bails immediately with "no active service worker controller"
-    // otherwise — that exact race produced the previous initial
-    // bootstrap → false → retry → AWS-stuck cascade).
-    //
-    // We therefore require the controller here too. When the SW is
-    // installing/activating but hasn't claimed the page yet, we
-    // intentionally take the AWS Terrarium fallback path below; its
-    // built-in `swLateReady` listener will upgrade to the full IGN
-    // pipeline as soon as the controller appears, with no parallel
-    // bootstrap re-entry.
+    // SW readiness gate. We need an actual `controller` for the DEM
+    // source to flow through the SW pipeline (`refreshDemSource` bails
+    // immediately otherwise). Three sources of truth, evaluated in
+    // order of authority:
+    //   1. `navigator.serviceWorker.controller` right now — fastest
+    //      path, no await on a returning visit where the SW already
+    //      controls the page.
+    //   2. The cached `swReady` promise — resolved when the controller
+    //      claimed within 2.5 s of module load.
+    //   3. Event-driven `awaitController(5000)` — bridges the
+    //      install/activate window on cold visits where the controller
+    //      is moments away from claiming. Without this, the cached
+    //      `swReady === false` would force the AWS Terrarium fallback
+    //      branch even though the SW becomes available 100 ms later.
     const swRegistered = await swReady;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
-    // Authoritative gate is the controller (refreshDemSource bails
-    // without it). swRegistered is kept only for the warn message
-    // distinction below.
-    const swOk = !!navigator.serviceWorker?.controller;
+    // Strictly check the controller — refreshDemSource bails without
+    // one regardless of swReady's resolved value. swRegistered is kept
+    // only for the warn-message label below.
+    let swOk = !!navigator.serviceWorker?.controller;
+    if (!swOk) {
+      // Wait briefly for the controller to claim before falling back.
+      // 5 s is a generous-but-bounded budget that comfortably covers
+      // a cold install on slow networks while not stretching the
+      // user-perceived map-ready time when no SW is actually coming.
+      swOk = await awaitController(5000);
+      if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
+    }
 
     fns.reportStatus('loading', swOk ? 52 : 46, swOk ? 'Sources IGN' : 'Fond de carte');
 
