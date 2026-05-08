@@ -127,18 +127,26 @@ self.addEventListener('message', (e) => {
     caches.delete(NEGATIVE_CACHE_NAME);
     return;
   }
-  // Drain queued (not-yet-running) IGN + Ortho fetches. Sent by the
-  // browser on user gesture (zoomstart/movestart) so the new viewport's
-  // burst doesn't sit behind the previous viewport's leftover queue.
-  // In-flight fetches are NOT cancelled — they complete and populate
-  // the cache for next time the user revisits that area.
+  // Drain queued IGN + Ortho fetches AND abort their in-flight HTTP
+  // requests on user gesture (zoomstart/movestart). Without aborting
+  // in-flight, the new viewport's burst still waits up to 15 s for the
+  // 40 IGN concurrency slots (occupied by previous viewport's pending
+  // fetches) to free one-by-one — visible as "burst then nothing then
+  // burst" loading after a dezoom. The abortable controllers carry
+  // USER_CANCEL_REASON so the per-fetch catch handlers skip negative
+  // caching for tiles WE just killed (a re-request issued moments
+  // later for the new — often overlapping — viewport must hit the
+  // network, not a transient null entry).
   if (e.data?.type === 'CANCEL_STALE_DEM') {
-    let ign = 0;
-    let ortho = 0;
-    try { ign = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
-    try { ortho = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
-    if (DEBUG && (ign + ortho) > 0) {
-      console.warn(`[sw-dem][cancel-stale] flushed ign=${ign} ortho=${ortho}`);
+    let ignQ = 0, ignF = 0, orthoQ = 0, orthoF = 0;
+    try { ignQ = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
+    try { ignF = typeof cancelInFlightIGN === 'function' ? cancelInFlightIGN() : 0; } catch { /* ignore */ }
+    try { orthoQ = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
+    try { orthoF = typeof cancelInFlightOrtho === 'function' ? cancelInFlightOrtho() : 0; } catch { /* ignore */ }
+    if (DEBUG && (ignQ + ignF + orthoQ + orthoF) > 0) {
+      console.warn(
+        `[sw-dem][cancel-stale] ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}`,
+      );
     }
     return;
   }

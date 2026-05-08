@@ -245,7 +245,9 @@ function drainOrtho() {
 
 // Drain queued-but-not-yet-running ortho entries on viewport change.
 // Mirror of `flushIGNQueue()` in ign-fetcher.js — see that function for
-// the rationale. In-flight ortho tiles complete and cache normally.
+// the rationale. Paired with `cancelInFlightOrtho()` so the new viewport
+// gets all 16 ortho concurrency slots immediately instead of waiting
+// up to 8 s for the previous viewport's HTTP responses to land.
 function flushOrthoQueue() {
   if (orthoQueue.length === 0) return 0;
   const pruned = orthoQueue.length;
@@ -256,6 +258,45 @@ function flushOrthoQueue() {
   orthoPrunedTotal += pruned;
   if (DEBUG) console.warn(`[sw-dem][ortho-queue] flushed ${pruned} stale on viewport change`);
   return pruned;
+}
+
+// In-flight AbortController registry — see ign-fetcher.js for the
+// detailed rationale (same pattern). USER_CANCEL_REASON is the abort
+// reason used by `cancelInFlightOrtho()`; when the catch handler sees
+// it, it skips `orthoNegSet()` so a re-request for the new viewport
+// (likely overlapping) actually hits the network.
+const orthoActiveControllers = new Set();
+
+function orthoFetchInit() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    try { controller.abort('rv-ortho-timeout'); } catch { /* ignore */ }
+  }, ORTHO_FETCH_TIMEOUT_MS);
+  orthoActiveControllers.add(controller);
+  const cleanup = () => {
+    clearTimeout(timeout);
+    orthoActiveControllers.delete(controller);
+  };
+  return {
+    controller,
+    cleanup,
+    init: { signal: controller.signal, priority: 'high' },
+  };
+}
+
+function isOrthoUserCancel(controller) {
+  return controller.signal.aborted && controller.signal.reason === USER_CANCEL_REASON;
+}
+
+function cancelInFlightOrtho() {
+  if (orthoActiveControllers.size === 0) return 0;
+  let n = 0;
+  for (const c of orthoActiveControllers) {
+    try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
+  }
+  orthoActiveControllers.clear();
+  if (DEBUG) console.warn(`[sw-dem][ortho-queue] aborted ${n} in-flight ortho fetches on viewport change`);
+  return n;
 }
 
 // In-flight deduplication for ortho tiles (same pattern as ignInflight in ign-fetcher.js)
@@ -374,12 +415,17 @@ async function handleOrthoRequest(z, x, y) {
           // Fallback: fetch without clipping, through ortho concurrency limiter
           const response = await scheduleOrtho(async () => {
             const url = buildOrthoTileURL(z, x, y);
-            const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS), priority: 'high' });
-            if (!res.ok) return null;
-            return new Response(await res.blob(), {
-              status: 200,
-              headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
-            });
+            const { cleanup, init } = orthoFetchInit();
+            try {
+              const res = await fetch(url, init);
+              if (!res.ok) return null;
+              return new Response(await res.blob(), {
+                status: 200,
+                headers: { 'Content-Type': 'image/jpeg', 'Cache-Control': 'public, max-age=604800' },
+              });
+            } finally {
+              cleanup();
+            }
           });
           if (!response || response === PRUNED_SENTINEL) return null;
           cache.put(cacheKey, response.clone());
@@ -400,18 +446,32 @@ async function handleOrthoRequest(z, x, y) {
         // Fetch IGN tile through the ortho concurrency limiter
         const fetchResult = await scheduleOrtho(async () => {
           const url = buildOrthoTileURL(z, x, y);
-          const res = await fetch(url, { signal: AbortSignal.timeout(ORTHO_FETCH_TIMEOUT_MS), priority: 'high' });
-          if (!res.ok) {
-            const errorType = res.status === 404 ? 'permanent' : 'transient';
-            orthoNegSet(tileKey, errorType);
-            return null;
+          const { controller, cleanup, init } = orthoFetchInit();
+          try {
+            const res = await fetch(url, init);
+            if (!res.ok) {
+              const errorType = res.status === 404 ? 'permanent' : 'transient';
+              orthoNegSet(tileKey, errorType);
+              return null;
+            }
+            const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
+            if (!contentType.startsWith('image/')) {
+              orthoNegSet(tileKey, 'permanent');
+              return null;
+            }
+            return await res.blob();
+          } catch (err) {
+            // User-cancel from CANCEL_STALE_DEM: do NOT negative-cache —
+            // a re-request for the (likely overlapping) new viewport must
+            // hit the network. Return null so the outer pipeline treats
+            // it as "no tile this round" without poisoning future fetches.
+            if (isOrthoUserCancel(controller)) return null;
+            // Real timeout / network error: let outer catch handle it
+            // (it will orthoNegSet with 'transient').
+            throw err;
+          } finally {
+            cleanup();
           }
-          const contentType = (res.headers.get('Content-Type') || '').toLowerCase();
-          if (!contentType.startsWith('image/')) {
-            orthoNegSet(tileKey, 'permanent');
-            return null;
-          }
-          return await res.blob();
         });
 
         // scheduleOrtho may return PRUNED_SENTINEL if the request was pruned from the queue

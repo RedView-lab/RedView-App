@@ -65,8 +65,10 @@ function drainIGN() {
 // changes, the previous viewport's queued IGN sub-tile fetches are now
 // targeting the wrong zoom — they would just block the new viewport's
 // burst from reaching the IGN concurrency slots. In-flight fetches are
-// NOT cancelled (they're paid for, the response will populate the cache
-// for the next time the user revisits that area).
+// aborted by `cancelInFlightIGN()` (paired call from the same message
+// handler) so all 40 concurrency slots become available immediately for
+// the new viewport instead of trickling free over up to 15 s as the
+// previous viewport's HTTP responses landed one by one.
 //
 // Returns the number of pruned entries for diagnostics.
 function flushIGNQueue() {
@@ -81,6 +83,48 @@ function flushIGNQueue() {
   ignPrunedTotal += pruned;
   if (DEBUG) console.warn(`[sw-dem][queue] flushed ${pruned} stale on viewport change`);
   return pruned;
+}
+
+// In-flight AbortController registry. Every IGN sub-tile fetch (MNS,
+// HIGHRES, terrain WMS) registers its controller here for the duration
+// of the network request. `cancelInFlightIGN()` aborts them all with
+// USER_CANCEL_REASON; the per-fetch catch handlers then check the
+// signal reason and skip negative-cache writes (otherwise tiles we
+// just killed would be blacklisted for IGN_NULL_TTL_TRANSIENT and the
+// re-request issued ~50 ms later for the new viewport would return
+// null without ever hitting the network).
+const ignActiveControllers = new Set();
+
+function ignFetchInit(extra) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    try { controller.abort('rv-ign-timeout'); } catch { /* ignore */ }
+  }, IGN_FETCH_TIMEOUT_MS);
+  ignActiveControllers.add(controller);
+  const cleanup = () => {
+    clearTimeout(timeout);
+    ignActiveControllers.delete(controller);
+  };
+  return {
+    controller,
+    cleanup,
+    init: { signal: controller.signal, priority: 'high', ...(extra || {}) },
+  };
+}
+
+function isIGNUserCancel(controller) {
+  return controller.signal.aborted && controller.signal.reason === USER_CANCEL_REASON;
+}
+
+function cancelInFlightIGN() {
+  if (ignActiveControllers.size === 0) return 0;
+  let n = 0;
+  for (const c of ignActiveControllers) {
+    try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
+  }
+  ignActiveControllers.clear();
+  if (DEBUG) console.warn(`[sw-dem][queue] aborted ${n} in-flight IGN fetches on viewport change`);
+  return n;
 }
 
 function buildDEMTileURL(z, col, row) {
@@ -136,13 +180,14 @@ async function getIGNTile(z, col, row) {
     if (cached2.hit) return cached2.data;
 
     const url = buildDEMTileURL(z, col, row);
+    const { controller, cleanup, init } = ignFetchInit();
     try {
       // priority:'high' is a HTTP/2 stream-priority hint (Chrome/Edge/Safari
       // honour it natively, Firefox ignores). DEM tiles drive the visible
       // mesh — they MUST land before lazy assets (analytics, prefetch link
       // hints, etc.) on the shared geopf H2 connection. Free ~30–80 ms TTFB
       // win when the connection has any background traffic.
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
+      const res = await fetch(url, init);
       if (!res.ok) {
         const errorType = res.status === 404 ? 'permanent' : 'transient';
         cacheNull(key, errorType);
@@ -158,8 +203,15 @@ async function getIGNTile(z, col, row) {
       ignTileCache.set(key, data);
       return data;
     } catch {
+      // Skip neg-cache when WE aborted the fetch on a user gesture
+      // (CANCEL_STALE_DEM): the new viewport often re-requests overlapping
+      // tiles within ~50 ms and must hit the real network, not a transient
+      // null entry caused by our own cancellation.
+      if (isIGNUserCancel(controller)) return null;
       cacheNull(key, 'transient');
       return null;
+    } finally {
+      cleanup();
     }
   }).then((result) => {
     // If the request was pruned from the queue, do NOT cache — return null
@@ -285,8 +337,9 @@ async function getHighresTile(z, col, row) {
     if (cached2.hit) return cached2.data;
 
     const url = buildHighresTileURL(z, col, row);
+    const { controller, cleanup, init } = ignFetchInit();
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
+      const res = await fetch(url, init);
       if (!res.ok) {
         cacheHighresNull(key, res.status === 404 ? 'permanent' : 'transient');
         return null;
@@ -301,8 +354,11 @@ async function getHighresTile(z, col, row) {
       highresTileCache.set(key, data);
       return data;
     } catch {
+      if (isIGNUserCancel(controller)) return null;
       cacheHighresNull(key, 'transient');
       return null;
+    } finally {
+      cleanup();
     }
   }).then((result) => {
     if (result === PRUNED_SENTINEL) return null;
@@ -348,8 +404,9 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
     if (cached2.hit) return cached2.data;
 
     const url = buildTerrainWmsTileURL(mercZ, mercX, mercY);
+    const { controller, cleanup, init } = ignFetchInit();
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(IGN_FETCH_TIMEOUT_MS), priority: 'high' });
+      const res = await fetch(url, init);
       if (!res.ok) {
         cacheTerrainWmsNull(key, res.status === 404 ? 'permanent' : 'transient');
         return null;
@@ -386,8 +443,11 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
       terrainWmsTileCache.set(key, data);
       return data;
     } catch {
+      if (isIGNUserCancel(controller)) return null;
       cacheTerrainWmsNull(key, 'transient');
       return null;
+    } finally {
+      cleanup();
     }
   }).then((result) => {
     if (result === PRUNED_SENTINEL) return null;

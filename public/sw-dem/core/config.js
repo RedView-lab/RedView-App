@@ -91,7 +91,15 @@ const ORTHO_TILE_SIZE = 256;
 // the `aws-terrarium`-tagged tiles that were cached for 30 days under the
 // Spain slot whenever the WCS transient-failed at z=12–14, then defeated
 // every subsequent zoom-in attempt to reach the real 5 m mesh.
-const MAP_CACHE_EPOCH = '2026-05-07-cancel-stale-1';
+const MAP_CACHE_EPOCH = '2026-05-08-abort-inflight-1';
+
+// AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
+// in-flight IGN/Ortho fetch. The catch handlers check
+// `controller.signal.reason === USER_CANCEL_REASON` and SKIP negative-cache
+// writes for those tiles — a re-request issued moments later (the new
+// viewport often overlaps the old one) must run the real pipeline, not get
+// short-circuited by a transient null entry caused by our own abort.
+const USER_CANCEL_REASON = 'rv-user-gesture-cancel';
 
 const CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const NEGATIVE_CACHE_NAME = `dem-negative-${MAP_CACHE_EPOCH}`;
