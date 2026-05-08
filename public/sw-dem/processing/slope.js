@@ -175,7 +175,16 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   pad[(S + 1) * P] = ownElev[(S - 1) * S];
   pad[(S + 1) * P + (S + 1)] = ownElev[(S - 1) * S + (S - 1)];
 
-  return { pad, missingNeighbours };
+  return {
+    pad,
+    missingNeighbours,
+    edgeNeighbours: {
+      north: Boolean(nN),
+      east: Boolean(nE),
+      south: Boolean(nS),
+      west: Boolean(nW),
+    },
+  };
 }
 
 // ── Horn's method on the padded buffer ────────────────────────────────
@@ -213,19 +222,28 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
 }
 
 // ── Slope-only RGBA PNG (R = sqrt-encoded angle, A = NoData mask) ─────
-async function encodeSlopePng(slopes, ownElev) {
+async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
 
   // ── Border slope clamping ───────────────────────────────────────────
-  // Slope at tile edges can spike because adjacent DEM tiles round-trip
-  // independently through Terrain-RGB encoding (±0.1 m). Replace border
-  // pixels with the nearest interior slope to remove the 1-pixel seam.
-  for (let c = 0; c < size; c++) slopes[c] = slopes[size + c];
-  for (let c = 0; c < size; c++) slopes[(size - 1) * size + c] = slopes[(size - 2) * size + c];
-  for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
-  for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
+  // Only clamp fallback borders where the neighbour DEM was missing. When a
+  // neighbour is available, Horn's kernel already used its edge samples; if we
+  // overwrite that result with the own-tile interior we reintroduce a visible
+  // per-tile demarcation in 1 m terrain mode.
+  if (!edgeNeighbours?.north) {
+    for (let c = 0; c < size; c++) slopes[c] = slopes[size + c];
+  }
+  if (!edgeNeighbours?.south) {
+    for (let c = 0; c < size; c++) slopes[(size - 1) * size + c] = slopes[(size - 2) * size + c];
+  }
+  if (!edgeNeighbours?.west) {
+    for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
+  }
+  if (!edgeNeighbours?.east) {
+    for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
+  }
 
   // sqrt-gamma encoding: R = round(sqrt(deg/90) * 255). See header comment.
   const INV_MAX = 1 / 90;
@@ -296,12 +314,12 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const { pad, missingNeighbours } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
+  const { pad, missingNeighbours, edgeNeighbours } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
-  const blob = await encodeSlopePng(slopes, ownElev);
+  const blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);
   const t4 = performance.now();
 
   if (DEBUG) {

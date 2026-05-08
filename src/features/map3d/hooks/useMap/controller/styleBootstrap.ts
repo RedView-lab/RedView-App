@@ -427,7 +427,11 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
     const recoverStyleArtifacts = () => {
       setTimeout(() => {
-        if (isCancelled() || runId !== st.styleBootstrapRunId || !fns.canMutateStyle()) return;
+        if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+        if (!fns.canMutateStyle()) {
+          fns.scheduleTerrainRecovery();
+          return;
+        }
 
         applyStyleDecorators();
         orthoAdded = false;

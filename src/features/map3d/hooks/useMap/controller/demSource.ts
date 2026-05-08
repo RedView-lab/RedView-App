@@ -212,15 +212,23 @@ export function attachDemSource(ctx: Ctx): void {
       const canRecoverDuringImportedStyleSettling = () => {
         try {
           const style = map.getStyle();
+          const imports = (style as unknown as { imports?: Array<{ data?: unknown }> } | null)?.imports;
+          const hasImportContent = Array.isArray(imports)
+            && imports.some((imp) => imp && imp.data != null);
           const hasContent = style && (
             (style.layers?.length ?? 0) > 0
             || Object.keys(style.sources ?? {}).length > 0
+            || hasImportContent
           );
           if (!hasContent) return false;
           if (!st.spriteStormBypass) {
             console.warn(
               '[map3d] terrain recovery: style has content while isStyleLoaded() is false — enabling sprite-storm bypass',
-              { layers: style.layers?.length ?? 0, sources: Object.keys(style.sources ?? {}).length },
+              {
+                layers: style.layers?.length ?? 0,
+                sources: Object.keys(style.sources ?? {}).length,
+                imports: Array.isArray(imports) ? imports.length : 0,
+              },
             );
             st.spriteStormBypass = true;
           }

@@ -94,6 +94,7 @@ export function attachStatus(ctx: Ctx): void {
     const now = Date.now();
     if (now < st.demPassiveRefreshCoolingUntil) return false;
 
+    st.demCacheBust = now;
     if (!fns.refreshDemSource()) return false;
 
     st.demPassiveRefreshPending = false;

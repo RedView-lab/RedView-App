@@ -86,11 +86,15 @@ const ORTHO_TILE_SIZE = 256;
 // client. The app also propagates the same epoch into DEM request URLs and
 // one-shot browser-side purges.
 //
+// 2026-05-08-satellite-dem-refresh-3: keeps neighbour-computed slope borders
+// in 1 m terrain mode and forces Standard-Satellite DEM refresh/recovery to
+// purge stale flat tiles from Mapbox's raster-dem pyramid.
+//
 // 2026-05-08-slope-1m-fast-quality-1: ships the 1 m slope pipeline update
 // (terrain-profile prefetch, decoded DEM LRU, deferred neighbour seam-heal,
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
-const MAP_CACHE_EPOCH = '2026-05-08-slope-1m-fast-quality-1';
+const MAP_CACHE_EPOCH = '2026-05-08-satellite-dem-refresh-3';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check
