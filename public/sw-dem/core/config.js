@@ -91,7 +91,7 @@ const ORTHO_TILE_SIZE = 256;
 // the `aws-terrarium`-tagged tiles that were cached for 30 days under the
 // Spain slot whenever the WCS transient-failed at z=12–14, then defeated
 // every subsequent zoom-in attempt to reach the real 5 m mesh.
-const MAP_CACHE_EPOCH = '2026-05-08-build-deadline-1';
+const MAP_CACHE_EPOCH = '2026-05-08-emergency-parent-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

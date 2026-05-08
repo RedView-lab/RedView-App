@@ -608,6 +608,51 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       }
     }
 
+    // 5b. Emergency degraded-parent — last resort to defeat "flat-on-zoom-in"
+    //     during a cold viewport over a LiDAR region.
+    //
+    // Failure path we are catching:
+    //   - User opens a project at z15-17 over the Alps. Mapbox's tile pyramid
+    //     is empty (no parent z14 cached yet on cold load).
+    //   - The IGN MNS pipeline transient-fails on the first burst (queue
+    //     saturation + soft deadline) → franceTransientFailure=true.
+    //   - tryParentOverzoom recursively walks z-1, z-2... but every parent
+    //     ALSO runs the saturated IGN pipeline → also 204s → no LiDAR
+    //     parent in our cache to overzoom.
+    //   - Pipeline reaches step 6 → returns 204.
+    //   - Mapbox GL has no fallback parent in its OWN tile cache (cold
+    //     pyramid) so it renders the requested tile as a flat plane at
+    //     elevation 0 — exactly the "relief devient plat quand je zoom"
+    //     symptom.
+    //
+    // Fix: serve AWS Terrarium (auto-clamps to its native z14) tagged with
+    //   - X-DEM-Health: degraded → shouldSkipUnsafeOverzoomParent refuses
+    //     to overzoom this for child tiles, so the coarse tile cannot
+    //     poison child meshes (existing guard).
+    //   - shortCache=true → 15 s TTL → next request retries the IGN
+    //     pipeline, which by then is unsaturated and serves crisp LiDAR.
+    //
+    // Worst case the user sees ≤ 15 s of coarse 30 m terrain before the
+    // pipeline self-upgrades to LiDAR HD. That is infinitely better than
+    // a flat plane and avoids the visual "the relief disappeared" bug.
+    if (!pngBlob && lidarRegionEngaged && z >= MAPBOX_DEM_MAXZOOM) {
+      try {
+        const emergency = await fetchAWSTerrainTile(z, x, y);
+        if (emergency) {
+          pngBlob = emergency;
+          demSource = 'aws-emergency-parent';
+          forceShortCache = true;
+          healthStatus = 'degraded';
+          if (DEBUG) {
+            console.warn(
+              `[sw-dem][emergency] %c DEGRADED PARENT %c ${z}/${x}/${y} — LiDAR transient + no cached parent, serving AWS 30m with shortCache=15s`,
+              'background:#FF6F00;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', '',
+            );
+          }
+        }
+      } catch { /* best-effort — fall through to 204 */ }
+    }
+
     // 6. Nothing worked — 204 with short TTL for transient failures, long for
     //    confirmed empty outside the supported LiDAR regions.
     if (!pngBlob) {
