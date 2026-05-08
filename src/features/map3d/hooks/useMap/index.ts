@@ -18,6 +18,10 @@ type MapboxStyleDefinition = Record<string, unknown>;
 
 const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
 
+function createEmptyBootstrapStyle(): MapboxStyleDefinition {
+  return { version: 8, sources: {}, layers: [] };
+}
+
 function getMapboxStyleApiUrl(styleUrl: string): string | null {
   const prefix = 'mapbox://styles/';
   if (!styleUrl.startsWith(prefix)) return null;
@@ -116,9 +120,12 @@ export function useMap(
     let cancelled = false;
     const savedVp = initialViewport ?? loadViewport();
     const runtimeProfile = getMapRuntimeProfile();
+    const shouldHydrateInitialStyle = getMapboxStyleApiUrl(basemapConfig.styleUrl) != null;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: basemapConfig.styleUrl,
+      style: (shouldHydrateInitialStyle
+        ? createEmptyBootstrapStyle()
+        : basemapConfig.styleUrl) as ConstructorParameters<typeof mapboxgl.Map>[0]['style'],
       center: savedVp?.center ?? DEFAULT_VIEW.center,
       zoom: savedVp?.zoom ?? DEFAULT_VIEW.zoom,
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
@@ -165,13 +172,16 @@ export function useMap(
       if (cancelled) return;
       setIsLoaded(true);
     };
-    map.once('load', revealMap);
-    map.once('idle', revealMap);
-    // Hard fallback: if neither `load` nor `idle` fired within 8s, the
-    // map is almost certainly already rendering tiles (Mapbox keeps
-    // those events suppressed when sprite/image errors loop). Reveal
-    // anyway so the user isn't stuck behind the overlay forever.
-    const revealFallbackTimer = setTimeout(revealMap, 8000);
+    let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const armInitialReveal = () => {
+      map.once('load', revealMap);
+      map.once('idle', revealMap);
+      // Hard fallback: if neither `load` nor `idle` fired within 8s, the
+      // map is almost certainly already rendering tiles (Mapbox keeps
+      // those events suppressed when sprite/image errors loop). Reveal
+      // anyway so the user isn't stuck behind the overlay forever.
+      revealFallbackTimer = setTimeout(revealMap, 8000);
+    };
 
     // Single-shot bootstrap. The bootstrap promise now waits on real
     // Mapbox readiness signals (style.load / styledata-with-content /
@@ -194,7 +204,41 @@ export function useMap(
           if (!cancelled) setIsLoaded(true);
         });
 
-    void attemptInitBootstrap();
+    const startInitialStyleAndBootstrap = async (): Promise<void> => {
+      if (shouldHydrateInitialStyle) {
+        let styleInput: string | MapboxStyleDefinition;
+        try {
+          styleInput = await resolveStyleInput(basemapConfig.styleUrl);
+        } catch (error) {
+          if (cancelled) return;
+          console.warn('[map3d] initial style prefetch failed; falling back to style URL', error);
+          styleInput = basemapConfig.styleUrl;
+        }
+        if (cancelled) return;
+        lifecycle.prepareStyleChange('Fond de carte');
+        try {
+          map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
+            diff: false,
+            localFontFamily: null,
+            localIdeographFontFamily: 'sans-serif',
+          });
+        } catch (error) {
+          console.error('[map3d] initial setStyle failed', error);
+          lifecycle.reportStatus(
+            'error',
+            0,
+            error instanceof Error ? error.message : 'Chargement du fond de carte impossible',
+          );
+          if (!cancelled) setIsLoaded(true);
+          return;
+        }
+      }
+
+      armInitialReveal();
+      void attemptInitBootstrap();
+    };
+
+    void startInitialStyleAndBootstrap();
 
     let saveTimer: ReturnType<typeof setTimeout> | null = null;
     const persistViewport = (viewport: MapViewport) => {
@@ -244,7 +288,9 @@ export function useMap(
 
     return () => {
       cancelled = true;
-      clearTimeout(revealFallbackTimer);
+      if (revealFallbackTimer) clearTimeout(revealFallbackTimer);
+      map.off('load', revealMap);
+      map.off('idle', revealMap);
       lifecycle.cleanup();
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {

@@ -122,6 +122,9 @@ export function attachListeners(ctx: Ctx): void {
       console.warn(`[map3d] zoomend: terrain detached from ${managedSourceId}; re-attaching`);
       repairManagedTerrain();
     }
+    if (managedSourceId === unifiedDEMSource.id) {
+      fns.scheduleSetTilesVerify();
+    }
   };
 
   const onServiceWorkerMessage = (event: MessageEvent) => {

@@ -193,10 +193,10 @@ export function attachDemSource(ctx: Ctx): void {
       } catch {
         unifiedLoaded = false;
       }
-      const hasUnifiedTilesTracked = Array.from(st.loadedTiles)
-        .some((k) => k.startsWith(`${unifiedDEMSource.id}:`));
-      if (!unifiedLoaded && !hasUnifiedTilesTracked) {
-        console.warn('[map3d] setTiles verify: no DEM tiles loaded, forcing rebuild');
+      const hasUnifiedTileActivity = [...st.requestedTiles, ...st.loadedTiles]
+        .some((key) => key.startsWith(`${unifiedDEMSource.id}:`));
+      if (!unifiedLoaded && !hasUnifiedTileActivity) {
+        console.warn('[map3d] setTiles verify: no DEM tile activity, forcing rebuild');
         fns.refreshDemSource({ forceRebuild: true });
       }
     }, DEM_SETTILE_VERIFY_MS);
