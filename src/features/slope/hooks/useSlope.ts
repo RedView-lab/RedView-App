@@ -69,11 +69,28 @@ function addSlopeLayer(
 }
 
 function removeSlopeLayer(map: MapboxMap) {
+  let terrainBefore: ReturnType<MapboxMap['getTerrain']> | null = null;
+  try {
+    terrainBefore = map.getTerrain() ?? null;
+  } catch {
+    terrainBefore = null;
+  }
   try {
     if (map.getLayer(SLOPE_LAYER_ID)) map.removeLayer(SLOPE_LAYER_ID);
     if (map.getSource(SLOPE_SOURCE_ID)) map.removeSource(SLOPE_SOURCE_ID);
   } catch {
     /* style may be transitioning — safe to ignore */
+  }
+  if (terrainBefore?.source) {
+    setTimeout(() => {
+      try {
+        if (terrainBefore?.source && map.getSource(terrainBefore.source)) {
+          map.setTerrain(terrainBefore);
+        }
+      } catch {
+        /* terrain may already be restored or the map may be transitioning */
+      }
+    }, 0);
   }
 }
 
@@ -100,31 +117,6 @@ function cancelSlopeWorkerPressure() {
   } catch {
     /* service worker may not be controlling this page yet */
   }
-}
-
-function reloadMapSourceCache(map: MapboxMap, sourceId: string) {
-  try {
-    const sourceCaches = (map.style as unknown as {
-      _sourceCaches?: Record<string, { reload?: () => void }>;
-      sourceCaches?: Record<string, { reload?: () => void }>;
-    });
-    const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
-    if (!caches) return;
-    for (const key of Object.keys(caches)) {
-      if (key === sourceId || key.endsWith(`:${sourceId}`)) {
-        try { caches[key].reload?.(); } catch { /* best-effort */ }
-      }
-    }
-  } catch {
-    /* source cache internals are best-effort only */
-  }
-}
-
-function recoverBaseTerrainAfterSlopeCancel(map: MapboxMap) {
-  setTimeout(() => {
-    reloadMapSourceCache(map, 'unified-dem');
-    reloadMapSourceCache(map, 'ign-ortho');
-  }, 150);
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────
@@ -274,8 +266,6 @@ export function useSlope(
       mountedRef.current = false;
       mountedSourceKeyRef.current = null;
     }
-
-    recoverBaseTerrainAfterSlopeCancel(map);
   }, [map, isMapLoaded, enabled]);
 
   // ── 3. Opacity → instant ─────────────────────────────────────────────

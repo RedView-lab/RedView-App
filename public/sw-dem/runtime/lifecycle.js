@@ -42,15 +42,8 @@ function cancelSlopeWork() {
   slopeCancelGeneration += 1;
   const slopeCount = SLOPE_INFLIGHT.size;
   SLOPE_INFLIGHT.clear();
-  let terrainDemCount = 0;
-  for (const key of Array.from(DEM_INFLIGHT.keys())) {
-    if (String(key).startsWith('terrain:')) {
-      DEM_INFLIGHT.delete(key);
-      terrainDemCount += 1;
-    }
-  }
   try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
-  return { slopeCount, terrainDemCount };
+  return { slopeCount };
 }
 
 function acquireComposite() {
@@ -134,15 +127,8 @@ self.addEventListener('message', (e) => {
   }
   if (e.data?.type === 'CANCEL_SLOPE_WORK') {
     const cancelled = cancelSlopeWork();
-    let ignQ = 0, ignF = 0, orthoQ = 0, orthoF = 0;
-    try { ignQ = typeof flushIGNQueue === 'function' ? flushIGNQueue() : 0; } catch { /* ignore */ }
-    try { ignF = typeof cancelInFlightIGN === 'function' ? cancelInFlightIGN() : 0; } catch { /* ignore */ }
-    try { orthoQ = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
-    try { orthoF = typeof cancelInFlightOrtho === 'function' ? cancelInFlightOrtho() : 0; } catch { /* ignore */ }
-    if (DEBUG && (cancelled.slopeCount + cancelled.terrainDemCount + ignQ + ignF + orthoQ + orthoF) > 0) {
-      console.warn(
-        `[sw-dem][cancel-slope] slope=${cancelled.slopeCount}, terrain-dem=${cancelled.terrainDemCount}, ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}`,
-      );
+    if (DEBUG && cancelled.slopeCount > 0) {
+      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount}`);
     }
     return;
   }
