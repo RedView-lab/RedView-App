@@ -236,7 +236,7 @@ function isCachedPermanent404(key) {
   return entry && entry._null && entry.errorType === 'permanent';
 }
 
-async function getIGNTileWithFallback(z, col, row) {
+async function getIGNTileWithFallback(z, col, row, deadlineAt) {
   const data = await getIGNTile(z, col, row);
   if (data) return { data, actualZ: z, actualCol: col, actualRow: row };
 
@@ -253,6 +253,24 @@ async function getIGNTileWithFallback(z, col, row) {
   for (let fbZ = z - 1; fbZ >= minZ; fbZ--) {
     fbCol = fbCol >> 1;
     fbRow = fbRow >> 1;
+    // Per-build deadline check: when the caller (build-tile.js) is past
+    // its soft deadline, give up on the fallback chain. Without this each
+    // sub-tile that 404s at native zoom can hold an IGN slot for up to
+    // IGN_FALLBACK_MAX_DEPTH × IGN_FETCH_TIMEOUT_MS = 45 s while sequentially
+    // trying z-1, z-2, z-3 — starving the next viewport burst and producing
+    // the 17–71 s wall-clock per-tile builds the user reported. Cached
+    // (z-1) hits still resolve instantly even past the deadline since
+    // `getIGNTile` is short-circuited by the in-memory cache.
+    if (typeof deadlineAt === 'number' && performance.now() >= deadlineAt) {
+      // Try the very next zoom level only if it's already cached — costs
+      // nothing and may give us a quick coarse answer the renderer uses
+      // as overzoom mesh.
+      const cached = getCached(`${fbZ}/${fbCol}/${fbRow}`);
+      if (cached.hit && cached.data) {
+        return { data: cached.data, actualZ: fbZ, actualCol: fbCol, actualRow: fbRow };
+      }
+      return null;
+    }
     const fbData = await getIGNTile(fbZ, fbCol, fbRow);
     if (fbData) {
       return { data: fbData, actualZ: fbZ, actualCol: fbCol, actualRow: fbRow };

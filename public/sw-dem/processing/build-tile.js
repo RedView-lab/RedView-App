@@ -76,6 +76,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // as null for the immediate build. The original promises are kept alive
   // (`fetches`) so the caller can await them in background and trigger a
   // cache-upgrade once the tail stragglers arrive.
+  //
+  // Compute the absolute soft-deadline timestamp BEFORE launching fetches
+  // so it can be passed into each `getIGNTileWithFallback` call. Without
+  // this, a sub-tile that 404s at native zoom would hold an IGN slot for
+  // up to IGN_FALLBACK_MAX_DEPTH × IGN_FETCH_TIMEOUT_MS ≈ 45 s while
+  // sequentially probing z-1, z-2, z-3 — saturating the 40-slot queue and
+  // producing the 17–71 s per-build wall-clock the user reported.
+  const softDeadlineMs = typeof ignSoftDeadlineMs === 'function'
+    ? ignSoftDeadlineMs(mercZ)
+    : IGN_SUBTILE_SOFT_DEADLINE_MS;
+  const deadlineAt = t0 + softDeadlineMs;
+
   const tileMap = new Map();
   const fetches = [];
   const keys = [];
@@ -83,7 +95,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   let settledCount = 0;
   let anySuccess = false;
   const allSettled = new Promise((resolveAll) => {
-    const checkDone = () => { if (settledCount >= fetchCount) resolveAll(); };
+    // checkDone is invoked from EVERY sub-tile fetch resolution microtask.
+    // We piggyback the deadline check on it instead of relying on a
+    // standalone `setTimeout(softDeadlineMs)`: the macrotask `setTimeout`
+    // gets starved for tens of seconds when 200+ fetches are resolving in
+    // parallel (each microtask chain runs arrayBuffer → decodeBIL32 →
+    // cache write), which is exactly when we need the deadline to fire.
+    // checkDone runs in the same microtask graph as the fetch resolutions
+    // so it ALWAYS gets scheduling parity with them.
+    const checkDone = () => {
+      if (settledCount >= fetchCount) { resolveAll(); return; }
+      if (performance.now() >= deadlineAt) { resolveAll(); return; }
+    };
     for (let row = tl.row; row <= br.row; row++) {
       for (let col = tl.col; col <= br.col; col++) {
         fetchCount++;
@@ -91,7 +114,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         keys.push(key);
         tileMap.set(key, undefined); // placeholder — "pending"
         fetches.push(
-          getIGNTileWithFallback(demZ, col, row).then((result) => {
+          getIGNTileWithFallback(demZ, col, row, deadlineAt).then((result) => {
             tileMap.set(key, result);
             settledCount++;
             if (result && result.data) anySuccess = true;
@@ -104,18 +127,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     if (fetchCount === 0) resolveAll();
   });
 
-  // Soft per-build deadline — serve best available result ASAP, let stragglers
-  // finish in the background (see `pendingFetches` in return value). The
-  // deadline is zoom-adaptive: at low zoom a single Mapbox tile enqueues
-  // dozens of WGS84G sub-tiles; waiting the full 3 s means the SW stalls for
-  // 30+ s across a dezoom viewport and starves Mapbox base-map fetches.
-  //
-  // Early exit: if ALL sub-tiles have settled AND none succeeded, don't wait
-  // for the deadline — this area has no MNS data and we should fall through
-  // to HIGHRES/Mapbox ASAP instead of blocking for 4-8 s.
-  const softDeadlineMs = typeof ignSoftDeadlineMs === 'function'
-    ? ignSoftDeadlineMs(mercZ)
-    : IGN_SUBTILE_SOFT_DEADLINE_MS;
+  // Macrotask deadline fallback — fires the race resolver in the rare case
+  // where the SW thread genuinely goes idle (no fetches arriving) AND we're
+  // still past the deadline. Normally checkDone already fired this above.
   await Promise.race([
     allSettled,
     new Promise((resolve) => setTimeout(resolve, softDeadlineMs)),
