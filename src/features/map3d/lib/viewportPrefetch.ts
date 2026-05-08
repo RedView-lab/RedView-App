@@ -237,6 +237,25 @@ export function installViewportPrefetch(
     return controller;
   };
 
+  const getSlopeTileQuery = (): string => {
+    try {
+      const source = map.getStyle()?.sources?.['slope-tiles'] as { tiles?: string[] } | undefined;
+      const template = source?.tiles?.[0];
+      if (!template) return '';
+      const queryStart = template.indexOf('?');
+      return queryStart >= 0 ? template.slice(queryStart) : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const slopePrefetchUrl = (z: number, x: number, y: number): string => {
+    const query = getSlopeTileQuery();
+    return query
+      ? `/slope-tiles/${z}/${x}/${y}${query}&pf=1`
+      : `/slope-tiles/${z}/${x}/${y}?pf=1`;
+  };
+
   // Build the URL list for an arbitrary anchor / zoom / bbox.
   // Used by both the ambient `fire()` cycle and `prewarmDestination`.
   const buildUrls = (
@@ -258,13 +277,11 @@ export function installViewportPrefetch(
     const cap = (1 << z) - 1;
 
     // Helper: derived overlays (slope/altitude) are SW-built from the DEM.
-    // Warming them at the same time as the DEM tile means the SW pipeline
-    // (Horn, decode, PNG encode) runs while the user is still panning,
-    // not after they stop. Slope/altitude have their own tile-zoom range
-    // (minzoom: 6, maxzoom: 17 in the source spec) — we let the SW reject
-    // out-of-range requests rather than gate here.
+    // Slope must reuse the active source query (`rv-dem-profile=terrain`,
+    // `res=...`) so the 1 m terrain mode warms the real foreground pipeline
+    // instead of spending idle bandwidth on the default surface slope cache.
     const pushDerived = (z: number, x: number, y: number) => {
-      if (slopeOn) urls.push(`/slope-tiles/${z}/${x}/${y}?pf=1`);
+      if (slopeOn) urls.push(slopePrefetchUrl(z, x, y));
       if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
     };
 
@@ -461,7 +478,7 @@ export function installViewportPrefetch(
       for (let y = yMin; y <= yMax; y++) {
         urls.push(`/dem-tiles/${z}/${x}/${y}?pf=1`);
         if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${x}/${y}?pf=1`);
-        if (slopeOn) urls.push(`/slope-tiles/${z}/${x}/${y}?pf=1`);
+        if (slopeOn) urls.push(slopePrefetchUrl(z, x, y));
         if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
       }
     }

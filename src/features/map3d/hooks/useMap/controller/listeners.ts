@@ -161,10 +161,14 @@ export function attachListeners(ctx: Ctx): void {
           });
           const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
           if (!caches) return;
+          const isDerivedSourceCache = (key: string): boolean => (
+            key === 'slope-tiles'
+            || key === 'altitude-tiles'
+            || key.endsWith(':slope-tiles')
+            || key.endsWith(':altitude-tiles')
+          );
           for (const key of Object.keys(caches)) {
-            // Mapbox keys may be `other:slope-source` style; match the
-            // tail conservatively.
-            if (key.endsWith('slope-source') || key.endsWith('altitude-source')) {
+            if (isDerivedSourceCache(key)) {
               try { caches[key].reload?.(); } catch { /* noop */ }
             }
           }

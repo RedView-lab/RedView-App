@@ -86,12 +86,11 @@ const ORTHO_TILE_SIZE = 256;
 // client. The app also propagates the same epoch into DEM request URLs and
 // one-shot browser-side purges.
 //
-// 2026-05-06-spain-fix-2: extends the anti-AWS-poisoning guard to all Spain
-// engage zooms (z>=12, previously z>=15 only). Forces a one-shot purge of
-// the `aws-terrarium`-tagged tiles that were cached for 30 days under the
-// Spain slot whenever the WCS transient-failed at z=12–14, then defeated
-// every subsequent zoom-in attempt to reach the real 5 m mesh.
-const MAP_CACHE_EPOCH = '2026-05-08-degraded-health-preserve-1';
+// 2026-05-08-slope-1m-fast-quality-1: ships the 1 m slope pipeline update
+// (terrain-profile prefetch, decoded DEM LRU, deferred neighbour seam-heal,
+// derived-cache reload fix). Bumping here guarantees sw-dem submodules are
+// fetched with a new query string and stale slope/DEM entries are purged once.
+const MAP_CACHE_EPOCH = '2026-05-08-slope-1m-fast-quality-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

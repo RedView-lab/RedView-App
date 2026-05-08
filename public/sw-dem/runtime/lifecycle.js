@@ -102,14 +102,17 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'PURGE_MAP_CACHES') {
+    try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
   if (e.data?.type === 'CLEAR_DEM_CACHE') {
+    try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
     return;
   }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
+    try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     caches.delete(SLOPE_CACHE_NAME);
     return;
   }
@@ -161,12 +164,24 @@ self.addEventListener('message', (e) => {
     const x = e.data.x | 0;
     const y = e.data.y | 0;
     if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return;
-    const tilePath = `/${z}/${x}/${y}`;
+    try { if (typeof invalidateSlopeProcessingTile === 'function') invalidateSlopeProcessingTile(z, x, y); } catch { /* ignore */ }
+    const max = (1 << z) - 1;
+    const slopeTiles = [
+      [x, y],
+      [x, y - 1],
+      [x + 1, y],
+      [x, y + 1],
+      [x - 1, y],
+    ].filter(([tx, ty]) => tx >= 0 && ty >= 0 && tx <= max && ty <= max);
+    const altitudeTilePath = `/altitude-tiles/${z}/${x}/${y}`;
     Promise.all([
       caches.open(SLOPE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
         return Promise.all(keys
           .filter((req) => {
-            try { return new URL(req.url).pathname === `/slope-tiles${tilePath}`; }
+            try {
+              const path = new URL(req.url).pathname;
+              return slopeTiles.some(([tx, ty]) => path === `/slope-tiles/${z}/${tx}/${ty}`);
+            }
             catch { return false; }
           })
           .map((req) => cache.delete(req)));
@@ -174,7 +189,7 @@ self.addEventListener('message', (e) => {
       caches.open(ALTITUDE_CACHE_NAME).then((cache) => cache.keys().then((keys) => {
         return Promise.all(keys
           .filter((req) => {
-            try { return new URL(req.url).pathname === `/altitude-tiles${tilePath}`; }
+            try { return new URL(req.url).pathname === altitudeTilePath; }
             catch { return false; }
           })
           .map((req) => cache.delete(req)));

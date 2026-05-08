@@ -30,6 +30,71 @@
 // no SW round-trip, no DEM re-decode, no PNG re-encode).
 // ---------------------------------------------------------------------------
 
+// DEM PNG decode is one of the hottest CPU paths in the 1 m slope overlay.
+// A cold viewport can ask each elevation tile as: own DEM for its slope tile
+// plus north/east/south/west neighbour for four adjacent slope tiles. Without
+// an in-memory decoded cache, that is up to 5 Terrain-RGB decodes per DEM tile
+// on top of CacheStorage blob reads. Keep a small LRU of Float32Array grids in
+// the service worker so visible-tile slope builds share decoded elevations.
+const SLOPE_DECODED_DEM_CACHE_MAX = 160;
+const slopeDecodedDemCache = new Map();
+const slopeDecodedDemInflight = new Map();
+let slopeDecodeCacheGeneration = 0;
+
+function slopeDemDecodeKey(z, x, y, demProfile) {
+  return `${demProfile || 'default'}:${z}/${x}/${y}`;
+}
+
+function rememberSlopeDecodedDem(key, elevations, generation) {
+  if (!elevations) return elevations;
+  if (generation !== slopeDecodeCacheGeneration) return elevations;
+  if (slopeDecodedDemCache.has(key)) slopeDecodedDemCache.delete(key);
+  slopeDecodedDemCache.set(key, elevations);
+  while (slopeDecodedDemCache.size > SLOPE_DECODED_DEM_CACHE_MAX) {
+    const oldest = slopeDecodedDemCache.keys().next().value;
+    if (oldest === undefined) break;
+    slopeDecodedDemCache.delete(oldest);
+  }
+  return elevations;
+}
+
+async function decodeSlopeDemBlob(demBlob, z, x, y, demProfile) {
+  const key = slopeDemDecodeKey(z, x, y, demProfile);
+  if (slopeDecodedDemCache.has(key)) {
+    const cached = slopeDecodedDemCache.get(key);
+    slopeDecodedDemCache.delete(key);
+    slopeDecodedDemCache.set(key, cached);
+    return cached;
+  }
+  if (slopeDecodedDemInflight.has(key)) return slopeDecodedDemInflight.get(key);
+
+  const generation = slopeDecodeCacheGeneration;
+  const work = decodeTerrainRGBBlob(demBlob)
+    .then((elevations) => rememberSlopeDecodedDem(key, elevations, generation))
+    .finally(() => slopeDecodedDemInflight.delete(key));
+  slopeDecodedDemInflight.set(key, work);
+  return work;
+}
+
+function clearSlopeProcessingCaches() {
+  slopeDecodeCacheGeneration++;
+  slopeDecodedDemCache.clear();
+  slopeDecodedDemInflight.clear();
+}
+
+function invalidateSlopeProcessingTile(z, x, y) {
+  slopeDecodeCacheGeneration++;
+  slopeDecodedDemCache.delete(slopeDemDecodeKey(z, x, y, 'default'));
+  slopeDecodedDemCache.delete(slopeDemDecodeKey(z, x, y, 'terrain'));
+  slopeDecodedDemInflight.delete(slopeDemDecodeKey(z, x, y, 'default'));
+  slopeDecodedDemInflight.delete(slopeDemDecodeKey(z, x, y, 'terrain'));
+}
+
+function isValidSlopeTileCoord(z, x, y) {
+  const n = 1 << z;
+  return x >= 0 && y >= 0 && x < n && y < n;
+}
+
 // ── Ground-cell size (meters per DEM pixel) ───────────────────────────
 function computeCellSize(z, x, y, tileSize) {
   const bounds = mercatorTileBounds(z, x, y);
@@ -55,6 +120,7 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
   const pad = new Float32Array(P * P);
+  const missingNeighbours = [];
 
   // Copy own tile into interior [1..S, 1..S]
   for (let r = 0; r < S; r++) {
@@ -62,11 +128,21 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   }
 
   async function cachedElev(nx, ny) {
-    if (!demCache) return null;
+    if (!isValidSlopeTileCoord(z, nx, ny)) return null;
+    if (!demCache) {
+      missingNeighbours.push([nx, ny]);
+      return null;
+    }
     const resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
-    if (!resp || resp.status !== 200) return null;
-    try { return await decodeTerrainRGBBlob(await resp.clone().blob()); }
-    catch { return null; }
+    if (!resp || resp.status !== 200) {
+      missingNeighbours.push([nx, ny]);
+      return null;
+    }
+    try { return await decodeSlopeDemBlob(await resp.clone().blob(), z, nx, ny, demProfile); }
+    catch {
+      missingNeighbours.push([nx, ny]);
+      return null;
+    }
   }
 
   const [nN, nE, nS, nW] = await Promise.all([
@@ -99,7 +175,7 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   pad[(S + 1) * P] = ownElev[(S - 1) * S];
   pad[(S + 1) * P + (S + 1)] = ownElev[(S - 1) * S + (S - 1)];
 
-  return pad;
+  return { pad, missingNeighbours };
 }
 
 // ── Horn's method on the padded buffer ────────────────────────────────
@@ -217,10 +293,10 @@ function downsampleSlopes(slopes, factor) {
 // terrain signal as-is — no flou needed.
 async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile) {
   const t0 = performance.now();
-  const ownElev = await decodeTerrainRGBBlob(demBlob);
+  const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const pad = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
+  const { pad, missingNeighbours } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
@@ -230,9 +306,9 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
 
   if (DEBUG) {
     console.log(
-      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1} profile=${demProfile || 'default'}`
+      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1} profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
     );
   }
-  return blob;
+  return { blob, missingNeighbours };
 }
 

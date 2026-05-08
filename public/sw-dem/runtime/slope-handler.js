@@ -15,16 +15,64 @@
 // queue contention starved real slope responses past Mapbox's tile-load
 // deadline, leaving the "Pentes XX/YY" pill stuck around 80–90 %.
 //
-// Now we kick the neighbour pre-warm as fire-and-forget. Each DEM call is
-// deduped by DEM_INFLIGHT so an adjacent slope tile that needs the same
-// neighbour shares the in-flight Promise. Slope tile #1 will use replicated
-// edges (1-px own-tile fallback inside buildPaddedElevations); slope tile
-// #2 (neighbour now cached) gets the seam-free version.  The visible
-// difference is minimal at typical opacity, the throughput improvement is
-// large.
+// Now we build the visible slope tile first, report which neighbours were
+// missing, then warm those neighbours after the response has been cached.
+// This keeps foreground tiles ahead of seam-heal work in the shared IGN/WMS
+// queue while preserving the second-pass seam-free quality once neighbours
+// land in the DEM cache.
 //
 // Split out of sw-dem.js (May 03).
 // ---------------------------------------------------------------------------
+
+const SLOPE_NEIGHBOUR_WARM_DELAY_MS = 120;
+
+function slopeNeighbourWarmList(z, neighbours) {
+  const n = 1 << z;
+  const seen = new Set();
+  const out = [];
+  for (const item of neighbours || []) {
+    if (!Array.isArray(item)) continue;
+    const nx = item[0] | 0;
+    const ny = item[1] | 0;
+    if (nx < 0 || ny < 0 || nx >= n || ny >= n) continue;
+    const key = `${nx}/${ny}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push([nx, ny]);
+  }
+  return out;
+}
+
+function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours) {
+  const missing = slopeNeighbourWarmList(z, neighbours);
+  if (missing.length === 0 || !demCache) return;
+
+  setTimeout(() => {
+    const fetches = missing.map(([nx, ny]) => {
+      const nKey = buildDemCacheKey(z, nx, ny, demProfile);
+      return demCache.match(nKey).then((existingDem) => {
+        if (existingDem && existingDem.status === 200) return true;
+        return handleDemRequest(nKey, z, nx, ny, undefined, demProfile)
+          .then((resp) => Boolean(resp && resp.status === 200))
+          .catch(() => false);
+      }).catch(() => false);
+    });
+
+    Promise.allSettled(fetches).then((results) => {
+      const warmed = results.some((result) => result.status === 'fulfilled' && result.value === true);
+      if (!warmed) return;
+      try {
+        self.clients.matchAll({ type: 'window' }).then((clients) => {
+          clients.forEach((client) => client.postMessage({
+            type: 'DEM_TILE_CACHE_UPDATED',
+            z, x, y,
+            source: 'slope-seam-heal',
+          }));
+        }).catch(() => { /* best-effort */ });
+      } catch { /* noop */ }
+    });
+  }, SLOPE_NEIGHBOUR_WARM_DELAY_MS);
+}
 
 async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
@@ -63,39 +111,10 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
       return transparentTileResponse();
     }
 
-    // Fire-and-forget neighbour pre-warm. Deduped by DEM_INFLIGHT so it
-    // costs one dispatcher cycle per neighbour at most across the entire
-    // viewport (instead of N×4 awaited cycles per slope tile). The slope
-    // response is NOT blocked on this — buildPaddedElevations already
-    // falls back to own-edge replication when a neighbour is missing.
-    //
-    // Self-healing seam: if any neighbour was missing at compute time, the
-    // slope tile we cache now has 1-px own-edge replication on that side
-    // (visible as inter-tile seams, especially at high res like 1 m
-    // surface). Once the missing neighbours land in the DEM cache we
-    // notify the page so it invalidates this slope tile and reloads —
-    // the recomputed tile will use real neighbour data and be seam-free.
-    const missingNeighbours = [];
-    const neighbourFetches = [];
-    for (const [nx, ny] of [
-      [x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y],
-    ]) {
-      if (ny < 0 || nx < 0) continue;
-      const nKey = buildDemCacheKey(z, nx, ny, demProfile);
-      neighbourFetches.push(
-        demCache.match(nKey).then((existingDem) => {
-          if (existingDem && existingDem.status === 200) return false;
-          missingNeighbours.push([nx, ny]);
-          return handleDemRequest(nKey, z, nx, ny, undefined, demProfile)
-            .then(() => true)
-            .catch(() => false);
-        }).catch(() => false),
-      );
-    }
-
     try {
       const demBlob = await demResponse.clone().blob();
-      const slopeBlob = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);
+      const slopeResult = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);
+      const slopeBlob = slopeResult?.blob || slopeResult;
       const response = new Response(slopeBlob, {
         status: 200,
         headers: {
@@ -107,25 +126,12 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
       });
       slopeCache.put(cacheKey, response.clone());
 
-      // Self-heal kick: if some neighbours were missing, wait for them to
-      // land then notify the page so it invalidates this slope tile and
-      // re-requests it (the recompute will read the now-cached neighbours
-      // and produce a seam-free tile). Coalesced through DEM_INFLIGHT
-      // and the controller's debounced sourceCache.reload(); the cost is
-      // capped to one extra slope recompute per (z,x,y) per cold-load.
-      if (missingNeighbours.length > 0) {
-        Promise.allSettled(neighbourFetches).then(() => {
-          try {
-            self.clients.matchAll({ type: 'window' }).then((clients) => {
-              clients.forEach((client) => client.postMessage({
-                type: 'DEM_TILE_CACHE_UPDATED',
-                z, x, y,
-                source: 'slope-seam-heal',
-              }));
-            }).catch(() => { /* best-effort */ });
-          } catch { /* noop */ }
-        });
-      }
+      // Seam self-heal happens after the visible tile is returned. The first
+      // pass is fast and uses replicated own-tile edges where needed; the
+      // delayed warmup triggers one debounced Mapbox reload once neighbour DEM
+      // tiles are available, yielding seam-free borders without starving the
+      // foreground burst.
+      scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, slopeResult?.missingNeighbours);
       return response;
     } catch (err) {
       console.error('[slope]', z, x, y, err);
