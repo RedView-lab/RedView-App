@@ -127,8 +127,18 @@ self.addEventListener('message', (e) => {
   }
   if (e.data?.type === 'CANCEL_SLOPE_WORK') {
     const cancelled = cancelSlopeWork();
-    if (DEBUG && cancelled.slopeCount > 0) {
-      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount}`);
+    // Free terrain-WMS IGN slots immediately so the basemap (default
+    // DEM profile) doesn't have to wait up to IGN_FETCH_TIMEOUT_MS for
+    // the slope-driven backlog to drain. Safe today because the basemap
+    // is hard-coded to demProfile='default' and the 'slope-terrain'
+    // purpose tag is only ever set by getTerrainWmsTile, which is
+    // exclusive to the 1 m slope pipeline.
+    let queuedTerrain = 0;
+    let inflightTerrain = 0;
+    try { queuedTerrain = typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
+    try { inflightTerrain = typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
+    if (DEBUG && (cancelled.slopeCount > 0 || queuedTerrain > 0 || inflightTerrain > 0)) {
+      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount} terrainQueued=${queuedTerrain} terrainInflight=${inflightTerrain}`);
     }
     return;
   }

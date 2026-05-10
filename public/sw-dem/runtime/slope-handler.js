@@ -121,6 +121,25 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
       return transparentTileResponse();
     }
 
+    // Gate the slope overlay to genuine LiDAR-grade DEM sources.
+    //
+    // Both slope resolution presets ('0.40m (LIDAR SURFACE)' and
+    // '1m (LIDAR TERRAIN)') promise LiDAR-derived numbers, but the DEM
+    // dispatcher will happily fall back to AWS Terrarium / Mapbox global
+    // tiles outside France/Switzerland/Norway/Spain (or inside those
+    // regions on cold-load before the LiDAR pipeline lands). Computing
+    // a Horn slope on a 30 m AWS pixel and painting it under the
+    // "0.40 m" / "1 m" label is misleading: the user sees a coloured
+    // gradient that has nothing to do with LiDAR detail. Skip the
+    // colourisation entirely on non-LiDAR sources \u2014 the basemap remains
+    // visible and the slope toggle correctly degrades to "no overlay
+    // here" instead of "fake LiDAR slope".
+    const demSource = (demResponse.headers.get('X-DEM-Source') || '').toLowerCase();
+    const isLidarSource = demSource && !demSource.startsWith('aws-') && !demSource.startsWith('mapbox');
+    if (!isLidarSource) {
+      return transparentTileResponse();
+    }
+
     try {
       const demBlob = await demResponse.clone().blob();
       const slopeResult = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);

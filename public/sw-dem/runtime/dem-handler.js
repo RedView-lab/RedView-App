@@ -463,6 +463,16 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           releaseComposite();
         }
         demSource = 'ign-rgealti-wms-composite';
+      } else {
+        // Terrain WMS came back empty — could be a genuine WMS error, a
+        // user-cancel from CANCEL_SLOPE_WORK aborting the in-flight slot,
+        // or a queued entry that got pruned. In any of those cases the
+        // 1 m slope pipeline has no usable input. Mark as transient so
+        // step 4 below short-circuits the AWS Terrarium fallback and we
+        // 204 instead of caching a flat 30 m tile under the
+        // `?rv-dem-profile=terrain` slot (which would later show as a
+        // flat slope when the user re-enables 1 m slope).
+        franceTransientFailure = true;
       }
     }
 

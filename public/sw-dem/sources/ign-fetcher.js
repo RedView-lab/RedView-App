@@ -9,6 +9,15 @@ let activeIGN = 0;
 const ignQueue = [];
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
+// Purpose tagging — lets CANCEL_SLOPE_WORK abort ONLY the IGN fetches that
+// were spawned to satisfy a slope-tile request (purpose 'slope-terrain'),
+// without touching basemap-driven IGN fetches. Safe today because the
+// basemap is hard-coded to the 'default' DEM profile (see
+// useMap/controller/context.ts getActiveDemProfile) and the 'slope-terrain'
+// tag is only set inside getTerrainWmsTile / queued terrain WMS work — both
+// of which exist solely to feed the 1 m slope pipeline.
+const PURPOSE_SLOPE_TERRAIN = 'slope-terrain';
+
 function evict(cache, max) {
   if (cache.size <= max) return;
   const iter = cache.keys();
@@ -19,9 +28,9 @@ function evict(cache, max) {
   }
 }
 
-function scheduleIGN(fn) {
+function scheduleIGN(fn, purpose) {
   return new Promise((resolve, reject) => {
-    ignQueue.push({ fn, resolve, reject, ts: performance.now() });
+    ignQueue.push({ fn, resolve, reject, ts: performance.now(), purpose: purpose || null });
     // When the queue overflows, drop the OLDEST entries by enqueue timestamp
     // (tiles requested during an earlier pan gesture) instead of the head.
     // Ensures the current viewport survives rapid panning.
@@ -94,21 +103,43 @@ function flushIGNQueue() {
 // re-request issued ~50 ms later for the new viewport would return
 // null without ever hitting the network).
 const ignActiveControllers = new Set();
+// Per-purpose controller registry — populated alongside ignActiveControllers
+// when ignFetchInit is called with { purpose }. Only used by
+// cancelInFlightIGNByPurpose, which aborts a narrow tag without touching the
+// global set (basemap fetches keep running).
+const ignActiveControllersByPurpose = new Map();
 
 function ignFetchInit(extra) {
+  const purpose = extra && typeof extra === 'object' ? extra.purpose || null : null;
+  // Strip the SW-internal `purpose` field before forwarding to fetch init —
+  // it isn't a valid RequestInit option and would be ignored, but keeping it
+  // out of the spread avoids future linter/typing surprises.
+  const fetchExtra = (extra && typeof extra === 'object')
+    ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'purpose'))
+    : (extra || {});
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     try { controller.abort('rv-ign-timeout'); } catch { /* ignore */ }
   }, IGN_FETCH_TIMEOUT_MS);
   ignActiveControllers.add(controller);
+  let purposeBucket = null;
+  if (purpose) {
+    purposeBucket = ignActiveControllersByPurpose.get(purpose);
+    if (!purposeBucket) {
+      purposeBucket = new Set();
+      ignActiveControllersByPurpose.set(purpose, purposeBucket);
+    }
+    purposeBucket.add(controller);
+  }
   const cleanup = () => {
     clearTimeout(timeout);
     ignActiveControllers.delete(controller);
+    if (purposeBucket) purposeBucket.delete(controller);
   };
   return {
     controller,
     cleanup,
-    init: { signal: controller.signal, priority: 'high', ...(extra || {}) },
+    init: { signal: controller.signal, priority: 'high', ...fetchExtra },
   };
 }
 
@@ -123,7 +154,46 @@ function cancelInFlightIGN() {
     try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
   }
   ignActiveControllers.clear();
+  ignActiveControllersByPurpose.clear();
   if (DEBUG) console.warn(`[sw-dem][queue] aborted ${n} in-flight IGN fetches on viewport change`);
+  return n;
+}
+
+// Drain queued (not-yet-running) IGN entries that match a purpose tag.
+// Returns the count of pruned entries. Safe to call concurrently with
+// drainIGN — pruned items resolve with PRUNED_SENTINEL so their callers
+// see a normal `null` return.
+function flushIGNQueueByPurpose(purpose) {
+  if (!purpose || ignQueue.length === 0) return 0;
+  let pruned = 0;
+  for (let i = ignQueue.length - 1; i >= 0; i--) {
+    if (ignQueue[i].purpose === purpose) {
+      const stale = ignQueue.splice(i, 1)[0];
+      stale.resolve(PRUNED_SENTINEL);
+      pruned++;
+    }
+  }
+  if (pruned > 0) ignPrunedTotal += pruned;
+  return pruned;
+}
+
+// Abort only IGN HTTP fetches tagged with `purpose`. Used by
+// CANCEL_SLOPE_WORK to free terrain-WMS concurrency slots immediately
+// when the user disables 1 m slope, instead of waiting up to
+// IGN_FETCH_TIMEOUT_MS for each in-flight slot to drain naturally
+// (visible as a multi-second stall on subsequent satellite/DEM tile
+// loads). The basemap pipeline is unaffected because it uses the
+// default DEM profile, which never sets a purpose tag.
+function cancelInFlightIGNByPurpose(purpose) {
+  const bucket = ignActiveControllersByPurpose.get(purpose);
+  if (!bucket || bucket.size === 0) return 0;
+  let n = 0;
+  for (const c of bucket) {
+    try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
+    ignActiveControllers.delete(c);
+  }
+  bucket.clear();
+  if (DEBUG && n > 0) console.warn(`[sw-dem][cancel-slope] aborted ${n} in-flight IGN ${purpose} fetches`);
   return n;
 }
 
@@ -423,7 +493,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
     if (cached2.hit) return cached2.data;
 
     const url = buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample);
-    const { controller, cleanup, init } = ignFetchInit();
+    const { controller, cleanup, init } = ignFetchInit({ purpose: PURPOSE_SLOPE_TERRAIN });
     try {
       const res = await fetch(url, init);
       if (!res.ok) {
@@ -470,7 +540,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
     } finally {
       cleanup();
     }
-  }).then((result) => {
+  }, PURPOSE_SLOPE_TERRAIN).then((result) => {
     if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {
