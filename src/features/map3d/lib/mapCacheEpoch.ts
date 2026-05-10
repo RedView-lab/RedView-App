@@ -1,4 +1,4 @@
-export const MAP_CACHE_EPOCH = '2026-05-08-slope-cancel-3';
+export const MAP_CACHE_EPOCH = '2026-05-10-overseas-france-ign-1';
 
 export const MAP_CACHE_EPOCH_STORAGE_KEY = 'redview:map-cache-epoch';
 export const PROJECT_CACHE_KEY_PREFIX_BASE = 'redview:project-cache:';

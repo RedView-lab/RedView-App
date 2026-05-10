@@ -33,6 +33,18 @@ function tileOverlapsFrance(z, x, y) {
   return !(b.east < w || b.west > e || b.south > n || b.north < s);
 }
 
+// True when the tile bbox overlaps any French overseas territory bbox
+// (REU / GLP / MTQ / MYT / GUF). Used by the DEM dispatcher to engage the
+// IGN HD pipeline outside metropolitan France — same WMTS endpoint, same
+// global WGS84G TileMatrixSet, just a different bbox gate.
+function tileOverlapsOverseasFrance(z, x, y) {
+  const b = mercatorTileBounds(z, x, y);
+  for (const [w, s, e, n] of OVERSEAS_FRANCE_BOUNDS) {
+    if (!(b.east < w || b.west > e || b.south > n || b.north < s)) return true;
+  }
+  return false;
+}
+
 // Polygon-based DEM tile classification (requires ensureFrancePoly() loaded)
 // Returns 'inside' | 'border' | 'outside'
 //

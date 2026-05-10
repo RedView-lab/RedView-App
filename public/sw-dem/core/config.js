@@ -29,6 +29,28 @@ const IGN_DEM_FALLBACK_MINZOOM = 6;
 const IGN_DEM_FALLBACK_MAXZOOM = 14;
 
 const FRANCE_BOUNDS = [-5.5, 41.0, 10.0, 51.5];
+
+// Overseas French territories (DOM-TOM) where IGN publishes the same
+// HIGHRES / HIGHRES.MNS LiDAR pyramid on the global WGS84G TileMatrixSet.
+// Each entry is [west, south, east, north] in lng/lat. Tiles inside any of
+// these bboxes are treated like "predominantly French inside" tiles by the
+// dispatcher (skip CH/NO/ES branches, skip the france-border.json polygon
+// test which is metro-only, go straight into the IGN HD path).
+//
+// Coverage notes (verified on geoplateforme):
+//   - REU (La Réunion)      : LiDAR HD published 2023-2024, full island
+//   - GLP (Guadeloupe)      : LiDAR HD published, full archipelago
+//   - MTQ (Martinique)      : LiDAR HD published, full island
+//   - MYT (Mayotte)         : LiDAR HD published, full island
+//   - GUF (Guyane française): RGE ALTI 5 m + partial LiDAR HD
+const OVERSEAS_FRANCE_BOUNDS = [
+  [55.20, -21.40, 55.85, -20.85], // Réunion
+  [-61.85, 15.80, -61.00, 16.55], // Guadeloupe
+  [-61.25, 14.35, -60.80, 14.90], // Martinique
+  [45.00, -13.05, 45.30, -12.60], // Mayotte
+  [-54.65, 2.10, -51.60, 5.80],   // Guyane française
+];
+
 const DEM_TILE_SIZE = 256;
 const IGN_SRC_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
@@ -94,7 +116,7 @@ const ORTHO_TILE_SIZE = 256;
 // (terrain-profile prefetch, decoded DEM LRU, deferred neighbour seam-heal,
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
-const MAP_CACHE_EPOCH = '2026-05-08-slope-cancel-3';
+const MAP_CACHE_EPOCH = '2026-05-10-overseas-france-ign-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

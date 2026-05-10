@@ -122,6 +122,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   }
 
   const inFrance = tileOverlapsFrance(z, x, y);
+  const inOverseasFrance = tileOverlapsOverseasFrance(z, x, y);
   const inSwitzerland = tileOverlapsSwitzerland(z, x, y);
   const inNorway = tileOverlapsNorway(z, x, y);
   const inSpain = tileOverlapsSpain(z, x, y);
@@ -175,6 +176,14 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         const centerLat = (tileBounds.north + tileBounds.south) / 2;
         tileCenterInFrancePoly = pointInFrance(centerLng, centerLat);
       }
+    } else if (inOverseasFrance && useFranceHighres) {
+      // Overseas French territories (REU/GLP/MTQ/MYT/GUF) — france-border.json
+      // is metro-only so the polygon test would always answer "outside" and
+      // skip the IGN HD path. We treat the whole bbox as 'inside' (no CH/NO/ES
+      // disambiguation needed — these bboxes don't overlap any other national
+      // pipeline) so buildIGNTile runs without the per-pixel polygon clip.
+      franceClass = 'inside';
+      tileCenterInFrancePoly = true;
     }
     // tileIsInFrance: any French overlap (used for IGN gating, finalize
     // flags). Border tiles still go through IGN even when the centre is

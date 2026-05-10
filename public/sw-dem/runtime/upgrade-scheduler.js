@@ -90,7 +90,9 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       }
       // All sub-tiles are now in the IGN memory cache (either as data or as
       // cached-null with TTL). Rebuild — second pass is near-free.
-      const tileClass = classifyDemTile(z, x, y);
+      const tileClass = tileOverlapsOverseasFrance(z, x, y)
+        ? 'inside'
+        : classifyDemTile(z, x, y);
       if (tileClass === 'outside') return;
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
