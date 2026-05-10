@@ -1,6 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
-import { readProjectIdFromPath } from './shared/utils/projectLocation'
+import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
 import './index.css'
 
@@ -161,9 +161,25 @@ function App() {
     const storedSession = readStoredSupabaseSession()
     return readCachedSubscription(storedSession?.user.id) ?? false
   })
-  const [initialProjectId] = useState(() => readProjectIdFromPath(window.location.pathname))
+  const [pathname, setPathname] = useState(() => window.location.pathname)
+  const initialProjectId = readProjectIdFromPath(pathname)
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
+
+  useEffect(() => {
+    const syncPathname = () => {
+      const nextPath = window.location.pathname
+      setPathname((prev) => (prev === nextPath ? prev : nextPath))
+    }
+
+    window.addEventListener('popstate', syncPathname)
+    window.addEventListener(PROJECT_LOCATION_CHANGE_EVENT, syncPathname)
+
+    return () => {
+      window.removeEventListener('popstate', syncPathname)
+      window.removeEventListener(PROJECT_LOCATION_CHANGE_EVENT, syncPathname)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false

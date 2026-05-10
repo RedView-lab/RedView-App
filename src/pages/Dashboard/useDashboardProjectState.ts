@@ -161,6 +161,7 @@ export function useDashboardProjectState({
   const saveTimerRef = useRef<number | null>(null);
   const activeProjectIdRef = useRef<string | null>(null);
   const isClosingProjectRef = useRef(false);
+  const suppressedInitialProjectIdRef = useRef<string | null>(null);
   activeProjectIdRef.current = activeProjectId;
 
   /**
@@ -297,6 +298,7 @@ export function useDashboardProjectState({
 
   const handleOpenProject = useCallback(async (projectId: string) => {
     setProjectLoading(true);
+    suppressedInitialProjectIdRef.current = null;
     isClosingProjectRef.current = false;
     setIsClosingProject(false);
     try {
@@ -359,7 +361,14 @@ export function useDashboardProjectState({
   }, [queueProjectSave]);
 
   useEffect(() => {
+    if (initialProjectId !== suppressedInitialProjectIdRef.current) {
+      suppressedInitialProjectIdRef.current = null;
+    }
+  }, [initialProjectId]);
+
+  useEffect(() => {
     if (!initialProjectId || activeProjectId != null || projectLoading) return;
+    if (suppressedInitialProjectIdRef.current === initialProjectId) return;
     void handleOpenProject(initialProjectId);
   }, [activeProjectId, handleOpenProject, initialProjectId, projectLoading]);
 
@@ -413,6 +422,7 @@ export function useDashboardProjectState({
       await flushSave();
 
       const id = activeProjectIdRef.current;
+      suppressedInitialProjectIdRef.current = id;
       if (id) {
         try {
           const blob = await captureMapThumbnail(mapInstance);

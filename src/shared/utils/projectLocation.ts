@@ -4,6 +4,7 @@ interface ProjectRouteTarget {
 }
 
 const PROJECT_ROUTE_PREFIX = '/project/';
+export const PROJECT_LOCATION_CHANGE_EVENT = 'redview:project-location-change';
 
 function normaliseProjectSlug(name: string): string {
   return name
@@ -46,4 +47,7 @@ export function replaceProjectLocation(project: ProjectRouteTarget | null): void
   const nextPath = project ? buildProjectPath(project) : '/';
   if (window.location.pathname === nextPath) return;
   window.history.replaceState(null, '', nextPath);
+  window.dispatchEvent(new CustomEvent(PROJECT_LOCATION_CHANGE_EVENT, {
+    detail: { path: nextPath },
+  }));
 }
