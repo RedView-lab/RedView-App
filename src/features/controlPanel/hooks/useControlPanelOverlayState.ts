@@ -67,6 +67,18 @@ function toPersistedSunlightState(state: SunlightState) {
   };
 }
 
+function isValidClockTime(value: string): boolean {
+  return /^\d{2}:\d{2}$/u.test(value);
+}
+
+function isNightTime(value: string, sunrise: string, sunset: string): boolean {
+  if (!isValidClockTime(value) || !isValidClockTime(sunrise) || !isValidClockTime(sunset)) {
+    return false;
+  }
+
+  return value < sunrise || value > sunset;
+}
+
 interface UseControlPanelOverlayStateArgs {
   map: MapboxMap | null;
   isMapLoaded: boolean;
@@ -327,6 +339,23 @@ export function useControlPanelOverlayState({
     }),
     [sunlightState, sunlightTimes],
   );
+
+  useEffect(() => {
+    if (sunlightState.timeScrubbing) return;
+    const nextSunsetTime = sunlightTimes.sunsetTime;
+    if (!isValidClockTime(nextSunsetTime)) return;
+    if (!isNightTime(sunlightState.time, sunlightTimes.sunriseTime, nextSunsetTime)) return;
+
+    setSunlightState((prev) => {
+      if (prev.timeScrubbing || prev.time === nextSunsetTime) return prev;
+      const next = {
+        ...prev,
+        time: nextSunsetTime,
+      };
+      persistSunlightToProject(next);
+      return next;
+    });
+  }, [persistSunlightToProject, sunlightState.time, sunlightState.timeScrubbing, sunlightTimes.sunriseTime, sunlightTimes.sunsetTime]);
 
   const persistWeatherToProject = useCallback(
     (nextWeather: WeatherState) => {

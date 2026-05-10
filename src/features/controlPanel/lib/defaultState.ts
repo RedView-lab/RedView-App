@@ -114,7 +114,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     enabled: true,
     customDateEnabled: true,
     date: '2026-04-22',
-    time: '09:30',
+    time: '19:33',
     timeScrubbing: false,
     sunriseTime: '06:45',
     sunsetTime: '19:33',
