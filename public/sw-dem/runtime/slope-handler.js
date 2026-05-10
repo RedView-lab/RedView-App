@@ -121,22 +121,27 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
       return transparentTileResponse();
     }
 
-    // Gate the slope overlay to genuine LiDAR-grade DEM sources.
+    // Gate the slope overlay to genuine relief sources.
     //
-    // Both slope resolution presets ('0.40m (LIDAR SURFACE)' and
-    // '1m (LIDAR TERRAIN)') promise LiDAR-derived numbers, but the DEM
-    // dispatcher will happily fall back to AWS Terrarium / Mapbox global
-    // tiles outside France/Switzerland/Norway/Spain (or inside those
-    // regions on cold-load before the LiDAR pipeline lands). Computing
-    // a Horn slope on a 30 m AWS pixel and painting it under the
-    // "0.40 m" / "1 m" label is misleading: the user sees a coloured
-    // gradient that has nothing to do with LiDAR detail. Skip the
-    // colourisation entirely on non-LiDAR sources \u2014 the basemap remains
-    // visible and the slope toggle correctly degrades to "no overlay
-    // here" instead of "fake LiDAR slope".
+    // - `aws-terrarium` is the legitimate global best-source outside the
+    //   LiDAR regions (FR/CH/NO/ES). Morocco, Iceland, Patagonia\u2026 the user
+    //   knows it's ~30 m and still wants slope coloured \u2014 it's the only
+    //   relief signal available there. Allow it.
+    // - `aws-emergency-parent` is the transient-failure fallback INSIDE a
+    //   LiDAR region (cold load, IGN/Swiss queue saturation). Painting a
+    //   slope from a 30 m AWS pixel under the "0.40 m LIDAR" / "1 m LIDAR"
+    //   label is misleading because LiDAR is supposed to be available;
+    //   skip until the LiDAR pipeline lands and the DEM upgrades. The
+    //   transparent response is not cached, so the next slope request
+    //   recomputes against the upgraded DEM tile.
+    // - `mapbox` is the legacy global path; same reasoning as the
+    //   emergency parent (only ever set as a fallback inside a covered
+    //   region today).
     const demSource = (demResponse.headers.get('X-DEM-Source') || '').toLowerCase();
-    const isLidarSource = demSource && !demSource.startsWith('aws-') && !demSource.startsWith('mapbox');
-    if (!isLidarSource) {
+    const isMisleadingSource =
+      demSource.startsWith('aws-emergency') ||
+      demSource.startsWith('mapbox');
+    if (isMisleadingSource) {
       return transparentTileResponse();
     }
 
