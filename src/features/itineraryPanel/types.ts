@@ -462,6 +462,7 @@ export interface ItineraryPanelProps {
   width?: number;
   onResizeStart?: (ev: React.MouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
+  isReturningToBrowser?: boolean;
 
   // project-level
   onBackToHome?: () => void;

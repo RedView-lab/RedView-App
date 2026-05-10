@@ -1,5 +1,5 @@
 import {
-  IconArrowLeft,
+  IconClose,
   IconSave,
   IconSettingsCog,
   IconDownload,
@@ -12,6 +12,7 @@ interface PanelHeaderProps {
   sizeBytes: number | null;
   privacy: 'private' | 'public';
   onBack?: () => void;
+  backDisabled?: boolean;
   onRename?: (next: string) => void;
   onSettings?: () => void;
   onDownload?: () => void;
@@ -39,6 +40,7 @@ export function PanelHeader({
   sizeBytes,
   privacy,
   onBack,
+  backDisabled = false,
   onRename,
   onSettings,
   onDownload,
@@ -51,10 +53,15 @@ export function PanelHeader({
         <button
           type="button"
           className="rvi-header__back"
-          onClick={onBack}
-          aria-label="Retour au menu principal"
+          onClick={() => {
+            if (backDisabled) return;
+            onBack?.();
+          }}
+          disabled={!onBack || backDisabled}
+          aria-label={backDisabled ? 'Retour au gestionnaire en cours' : 'Retour au gestionnaire de projet'}
+          title={backDisabled ? 'Retour au gestionnaire en cours' : 'Retour au gestionnaire de projet'}
         >
-          <IconArrowLeft size={22} />
+          <IconClose size={18} />
         </button>
         <div className="rvi-header__info">
           <input

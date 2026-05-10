@@ -77,6 +77,7 @@ export default function Dashboard({
   const {
     activeProjectId,
     activeProjectInitial,
+    isClosingProject,
     projectLoading,
     projectBrowserOpen,
     setProjectBrowserOpen,
@@ -500,6 +501,7 @@ export default function Dashboard({
                             width={leftPanelWidth}
                             onResizeStart={handleLeftResizeStart}
                             isResizing={isLeftResizing}
+                            isReturningToBrowser={isClosingProject}
                             onBackToHome={handleBackToBrowser}
                           />
                         </div>
@@ -564,7 +566,7 @@ export default function Dashboard({
           <ProjectBrowserOverlay
             open={projectBrowserOpen || activeProjectId == null}
             displayName={displayName}
-            canClose={activeProjectId != null && !projectLoading}
+            canClose={activeProjectId != null && !projectLoading && !isClosingProject}
             onOpenProject={handleOpenProject}
             onRequestClose={() => setProjectBrowserOpen(false)}
           />

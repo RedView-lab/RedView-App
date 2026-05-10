@@ -32,6 +32,15 @@
   background: rgba(255, 255, 255, 0.16);
 }
 
+.rvi-header__back:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.rvi-header__back:disabled:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
 .rvi-header__info {
   flex: 1 1 0;
   min-width: 0;

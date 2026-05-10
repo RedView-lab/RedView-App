@@ -27,6 +27,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     canRedo,
     width,
     isResizing,
+    isReturningToBrowser,
     onResizeStart,
     onBackToHome,
     onSaveProject,
@@ -189,6 +190,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         savedAt={project.savedAt}
         sizeBytes={project.sizeBytes}
         privacy={project.privacy}
+        backDisabled={isReturningToBrowser}
         onBack={onBackToHome}
         onRename={onRenameProject}
         onSettings={onSaveProject}

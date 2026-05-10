@@ -150,6 +150,7 @@ export function useDashboardProjectState({
   const [activeProjectInitial, setActiveProjectInitial] =
     useState<ItineraryProject | null>(null);
   const [projectLoading, setProjectLoading] = useState(false);
+  const [isClosingProject, setIsClosingProject] = useState(false);
   const [projectBrowserOpen, setProjectBrowserOpen] = useState(true);
 
   const activeProjectSnapshotRef = useRef<ItineraryProject | null>(null);
@@ -159,6 +160,7 @@ export function useDashboardProjectState({
   const lastSavedSerializedRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const activeProjectIdRef = useRef<string | null>(null);
+  const isClosingProjectRef = useRef(false);
   activeProjectIdRef.current = activeProjectId;
 
   /**
@@ -295,6 +297,8 @@ export function useDashboardProjectState({
 
   const handleOpenProject = useCallback(async (projectId: string) => {
     setProjectLoading(true);
+    isClosingProjectRef.current = false;
+    setIsClosingProject(false);
     try {
       const row = await getProject(projectId);
       if (!row) throw new Error('Project not found');
@@ -400,36 +404,47 @@ export function useDashboardProjectState({
   }, [flushSave]);
 
   const handleBackToBrowser = useCallback(async () => {
-    await flushSave();
+    if (isClosingProjectRef.current) return;
 
-    const id = activeProjectIdRef.current;
-    if (id) {
-      try {
-        const blob = await captureMapThumbnail(mapInstance);
-        if (blob) {
-          await uploadProjectThumbnail(id, blob);
+    isClosingProjectRef.current = true;
+    setIsClosingProject(true);
+
+    try {
+      await flushSave();
+
+      const id = activeProjectIdRef.current;
+      if (id) {
+        try {
+          const blob = await captureMapThumbnail(mapInstance);
+          if (blob) {
+            await uploadProjectThumbnail(id, blob);
+          }
+        } catch (error) {
+          console.warn('[Dashboard] thumbnail upload failed', error);
         }
-      } catch (error) {
-        console.warn('[Dashboard] thumbnail upload failed', error);
       }
+
+      await beforeCloseProject?.();
+
+      activeProjectIdRef.current = null;
+      activeProjectSnapshotRef.current = null;
+      pendingSaveRef.current = null;
+      lastSavedSerializedRef.current = null;
+      setActiveProjectInitial(null);
+      setActiveProjectId(null);
+
+      setProjectBrowserOpen(true);
+      replaceProjectLocation(null);
+    } finally {
+      isClosingProjectRef.current = false;
+      setIsClosingProject(false);
     }
-
-    await beforeCloseProject?.();
-
-    activeProjectIdRef.current = null;
-    activeProjectSnapshotRef.current = null;
-    pendingSaveRef.current = null;
-    lastSavedSerializedRef.current = null;
-    setActiveProjectInitial(null);
-    setActiveProjectId(null);
-
-    setProjectBrowserOpen(true);
-    replaceProjectLocation(null);
   }, [beforeCloseProject, flushSave, mapInstance]);
 
   return {
     activeProjectId,
     activeProjectInitial,
+    isClosingProject,
     projectLoading,
     projectBrowserOpen,
     setProjectBrowserOpen,
