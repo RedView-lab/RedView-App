@@ -137,8 +137,24 @@ self.addEventListener('message', (e) => {
     let inflightTerrain = 0;
     try { queuedTerrain = typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
     try { inflightTerrain = typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
-    if (DEBUG && (cancelled.slopeCount > 0 || queuedTerrain > 0 || inflightTerrain > 0)) {
-      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount} terrainQueued=${queuedTerrain} terrainInflight=${inflightTerrain}`);
+    // Drop in-flight DEM dedup entries scoped to the terrain profile.
+    // Those entries are consumed exclusively by the slope pipeline (the
+    // basemap uses demProfile='default'), so once the user disables
+    // slope they're orphan promises holding ortho/composite resources
+    // and blocking new basemap-profile DEM requests for the same tile
+    // from re-entering the dispatcher cleanly. Removing them now lets
+    // the next basemap fetch run unencumbered.
+    let demDropped = 0;
+    try {
+      for (const key of Array.from(DEM_INFLIGHT.keys())) {
+        if (typeof key === 'string' && key.indexOf('terrain:') === 0) {
+          DEM_INFLIGHT.delete(key);
+          demDropped++;
+        }
+      }
+    } catch { /* ignore */ }
+    if (DEBUG && (cancelled.slopeCount > 0 || queuedTerrain > 0 || inflightTerrain > 0 || demDropped > 0)) {
+      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount} terrainQueued=${queuedTerrain} terrainInflight=${inflightTerrain} demInflightDropped=${demDropped}`);
     }
     return;
   }
