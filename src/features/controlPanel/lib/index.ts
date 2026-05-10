@@ -7,6 +7,7 @@ export {
   normalizeBasemapId,
 } from './basemaps';
 export type {
+  BasemapLightPreset,
   BasemapRenderConfig,
   BasemapTerrainContract,
   BasemapVisualFamily,

@@ -16,6 +16,7 @@ import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
 
 export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
 export type TerrainBootstrapContract = 'unified-dem-v1';
+export type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
 // Event-driven style readiness — the bootstrap waits indefinitely for
 // real Mapbox signals (style.load / styledata-with-content / sourcedata
 // / first idle) instead of guessing at a timeout. This constant only
@@ -57,6 +58,7 @@ export interface CreateMapLifecycleControllerOptions {
   getActiveStyleUrl: () => string;
   getActiveVisualFamily: () => BasemapVisualFamily;
   getActiveTerrainContract: () => TerrainBootstrapContract;
+  getActiveLightPreset: () => BasemapLightPreset | undefined;
   isCancelled: () => boolean;
 }
 

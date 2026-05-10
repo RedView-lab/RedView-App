@@ -85,6 +85,7 @@ const DEFAULT_BASEMAP_CONFIG = {
   styleUrl: MAPBOX_STYLE,
   visualFamily: 'mapbox-classic-v12',
   terrainContract: 'unified-dem-v1',
+  lightPreset: undefined,
 } as const;
 
 export function useMap(
@@ -156,6 +157,7 @@ export function useMap(
       getActiveStyleUrl: () => activeBasemapConfigRef.current.styleUrl,
       getActiveVisualFamily: () => activeBasemapConfigRef.current.visualFamily,
       getActiveTerrainContract: () => activeBasemapConfigRef.current.terrainContract,
+      getActiveLightPreset: () => activeBasemapConfigRef.current.lightPreset,
       isCancelled: () => cancelled,
     });
     lifecycleRef.current = lifecycle;
@@ -375,6 +377,7 @@ export function useMap(
       basemapConfig.styleUrl === activeConfig.styleUrl
       && basemapConfig.visualFamily === activeConfig.visualFamily
       && basemapConfig.terrainContract === activeConfig.terrainContract
+      && basemapConfig.lightPreset === activeConfig.lightPreset
     ) {
       return;
     }

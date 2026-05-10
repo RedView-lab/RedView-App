@@ -29,9 +29,28 @@ const supportsStandardLightPreset = (visualFamily: Ctx['getActiveVisualFamily'] 
  *    of leaving the map permanently flat.
  */
 export function attachStyleBootstrap(ctx: Ctx): void {
-  const { map, isCancelled, getActiveVisualFamily, getActiveTerrainContract, fogConfig, runtimeProfile } = ctx;
+  const {
+    map,
+    isCancelled,
+    getActiveVisualFamily,
+    getActiveTerrainContract,
+    getActiveLightPreset,
+    fogConfig,
+    runtimeProfile,
+  } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
+
+  const applyConfiguredLightPreset = () => {
+    if (!supportsStandardLightPreset(getActiveVisualFamily())) return;
+    const lightPreset = getActiveLightPreset();
+    if (!lightPreset) return;
+    try {
+      map.setConfigProperty('basemap', 'lightPreset', lightPreset);
+    } catch {
+      /* style may not support config properties */
+    }
+  };
 
   fns.prepareStyleChange = (detail = 'Fond de carte') => {
     // Stop the heartbeat FIRST — it must not detect the intentionally
@@ -57,13 +76,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       } catch {
         /* style may still be finishing its internal graph rebuild */
       }
-      if (supportsStandardLightPreset(getActiveVisualFamily())) {
-        try {
-          map.setConfigProperty('basemap', 'lightPreset', 'dusk');
-        } catch {
-          /* style may not support config properties */
-        }
-      }
+      applyConfiguredLightPreset();
     };
     const promoteStyleContentBypass = (logLabel: string): boolean => {
       try {
@@ -541,10 +554,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     return true;
   };
 
-  // Permanent lightPreset='dusk' guard.
+  // Permanent lightPreset guard.
   //
   // Symptom: occasionally the user sees the Mapbox Standard scene flip from
-  // dusk (golden hour) to plain day (bright blue) or night (dark) "for no
+  // its configured preset to plain day (bright blue) or night (dark) "for no
   // reason". Root cause: the basemap-config preset is only applied via
   // `applyStyleDecorators()` inside `bootstrapCurrentStyle()` (on
   // `style.load` recovery). However Mapbox v3 imported style fragments
@@ -553,33 +566,34 @@ export function attachStyleBootstrap(ctx: Ctx): void {
   // already fired, or when an unrelated `setConfigProperty('basemap', ...)`
   // call (labels toggle, etc.) triggers an internal style refresh that
   // resets sibling config keys we never touched. The result: lightPreset
-  // silently reverts to its built-in default ('day' on Standard, 'dusk' on
-  // some satellite variants but not all), and `useSunlight`'s
+  // silently reverts to its built-in default, and `useSunlight`'s
   // `setLights()` overlay no longer compensates because it does not touch
   // the preset.
   //
-  // Fix: a single permanent `styledata` listener that re-applies
-  // `lightPreset='dusk'` whenever the imported config has drifted away
-  // from it. The check uses `getConfigProperty` so we do not loop (the
-  // setter is only called when the value actually differs).
-  let lastDuskReapplyAt = 0;
-  const enforceDuskPreset = () => {
+  // Fix: a single permanent `styledata` listener that re-applies the
+  // configured preset whenever the imported config has drifted away from
+  // it. The check uses `getConfigProperty` so we do not loop (the setter
+  // is only called when the value actually differs).
+  let lastLightPresetReapplyAt = 0;
+  const enforceConfiguredLightPreset = () => {
     if (!supportsStandardLightPreset(getActiveVisualFamily())) return;
+    const lightPreset = getActiveLightPreset();
+    if (!lightPreset) return;
     if (!fns.canMutateStyle()) return;
     // Cheap throttle — styledata can fire rapidly during sprite/import
     // settling. We only need a single reapply per refresh burst.
     const now = performance.now();
-    if (now - lastDuskReapplyAt < 100) return;
+    if (now - lastLightPresetReapplyAt < 100) return;
     try {
       const current = (map as unknown as {
         getConfigProperty?: (importId: string, configKey: string) => unknown;
       }).getConfigProperty?.('basemap', 'lightPreset');
-      if (current === 'dusk') return;
-      lastDuskReapplyAt = now;
-      map.setConfigProperty('basemap', 'lightPreset', 'dusk');
+      if (current === lightPreset) return;
+      lastLightPresetReapplyAt = now;
+      map.setConfigProperty('basemap', 'lightPreset', lightPreset);
     } catch {
       /* style transitioning — next styledata will retry */
     }
   };
-  map.on('styledata', enforceDuskPreset);
+  map.on('styledata', enforceConfiguredLightPreset);
 }

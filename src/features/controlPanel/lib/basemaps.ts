@@ -2,6 +2,7 @@ import type { Basemap, BasemapId } from '../types';
 
 export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
 export type BasemapTerrainContract = 'unified-dem-v1';
+export type BasemapLightPreset = 'dawn' | 'day' | 'dusk' | 'night';
 
 export interface BasemapRenderConfig {
   id: BasemapId;
@@ -9,6 +10,7 @@ export interface BasemapRenderConfig {
   styleUrl: string;
   visualFamily: BasemapVisualFamily;
   terrainContract: BasemapTerrainContract;
+  lightPreset?: BasemapLightPreset;
 }
 
 interface BasemapOption extends BasemapRenderConfig {}
@@ -22,6 +24,7 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
     styleUrl: 'mapbox://styles/mapbox/standard-satellite',
     visualFamily: 'mapbox-standard-v3',
     terrainContract: 'unified-dem-v1',
+    lightPreset: 'day',
   },
   {
     id: 'streets',
@@ -43,6 +46,7 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
     styleUrl: 'mapbox://styles/mapbox/standard',
     visualFamily: 'mapbox-standard-v3',
     terrainContract: 'unified-dem-v1',
+    lightPreset: 'dusk',
   },
   {
     id: 'light',
