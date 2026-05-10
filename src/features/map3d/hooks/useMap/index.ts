@@ -33,6 +33,16 @@ function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefiniti
   return JSON.parse(JSON.stringify(style)) as MapboxStyleDefinition;
 }
 
+// Prefetch budget per attempt. Kept tight so a slow Mapbox CDN response
+// (cold incognito session, no service-worker cache, no HTTP cache) never
+// blocks the bootstrap longer than this — we fall back to letting Mapbox
+// fetch the style natively from the URL string instead. Previous value
+// (6 s × 2 attempts = up to 12 s) caused the visible bug where a slow
+// cold prefetch left the map sitting on the empty bootstrap shell
+// indefinitely whenever a React StrictMode unmount/remount cancelled the
+// in-flight await before `setStyle()` could be applied.
+const STYLE_PREFETCH_TIMEOUT_MS = 2500;
+
 async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyleDefinition> {
   const cached = prefetchedStyleCache.get(styleUrl);
   if (cached) return cloneStyleDefinition(cached);
@@ -40,38 +50,35 @@ async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyle
   const apiUrl = getMapboxStyleApiUrl(styleUrl);
   if (!apiUrl) throw new Error(`Unsupported style URL: ${styleUrl}`);
 
-  let lastError: unknown = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 6000);
-    try {
-      const response = await fetch(apiUrl, {
-        signal: controller.signal,
-        credentials: 'omit',
-        cache: attempt === 0 ? 'default' : 'reload',
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status} while fetching style ${styleUrl}`);
-      }
-      const style = (await response.json()) as MapboxStyleDefinition;
-      prefetchedStyleCache.set(styleUrl, style);
-      return cloneStyleDefinition(style);
-    } catch (error) {
-      lastError = error;
-    } finally {
-      window.clearTimeout(timeout);
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), STYLE_PREFETCH_TIMEOUT_MS);
+  try {
+    const response = await fetch(apiUrl, {
+      signal: controller.signal,
+      credentials: 'omit',
+      cache: 'default',
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} while fetching style ${styleUrl}`);
     }
+    const style = (await response.json()) as MapboxStyleDefinition;
+    prefetchedStyleCache.set(styleUrl, style);
+    return cloneStyleDefinition(style);
+  } finally {
+    window.clearTimeout(timeout);
   }
-
-  throw lastError instanceof Error
-    ? lastError
-    : new Error(`Failed to fetch style ${styleUrl}`);
 }
 
 async function resolveStyleInput(styleUrl: string): Promise<string | MapboxStyleDefinition> {
-  return getMapboxStyleApiUrl(styleUrl)
-    ? fetchMapboxStyleDefinition(styleUrl)
-    : styleUrl;
+  if (!getMapboxStyleApiUrl(styleUrl)) return styleUrl;
+  try {
+    return await fetchMapboxStyleDefinition(styleUrl);
+  } catch (error) {
+    // Never block the bootstrap on prefetch failure. Mapbox can resolve
+    // `mapbox://` URLs natively; a string fallback always works.
+    console.warn('[map3d] style prefetch failed, falling back to URL', error);
+    return styleUrl;
+  }
 }
 
 const DEFAULT_BASEMAP_CONFIG = {
@@ -204,16 +211,57 @@ export function useMap(
           if (!cancelled) setIsLoaded(true);
         });
 
+    // Stuck-shell watchdog. The map is created with an empty bootstrap
+    // style ({version:8, sources:{}, layers:[]}) so we can prefetch the
+    // real Mapbox style in parallel. If the real `setStyle()` never
+    // applies (cold-cache prefetch race, cancelled await, network hiccup),
+    // the map silently sits on that empty shell forever — no `[map3d]`
+    // logs, weather-overlay watchdogs see `hasStyle:true, sourceCount:0`
+    // and the user has to F5 manually. This watchdog detects that state
+    // (no real style content after STUCK_SHELL_WATCHDOG_MS) and forces a
+    // direct setStyle from the URL string, which Mapbox fetches itself
+    // through the standard internal pipeline.
+    const STUCK_SHELL_WATCHDOG_MS = 4000;
+    let stuckShellTimer: ReturnType<typeof setTimeout> | null = null;
+    const armStuckShellWatchdog = () => {
+      if (stuckShellTimer) clearTimeout(stuckShellTimer);
+      stuckShellTimer = setTimeout(() => {
+        stuckShellTimer = null;
+        if (cancelled) return;
+        let hasContent = false;
+        try {
+          const style = map.getStyle();
+          const layerCount = style?.layers?.length ?? 0;
+          const sourceCount = Object.keys(style?.sources ?? {}).length;
+          const imports = (style as unknown as { imports?: Array<{ data?: unknown }> })?.imports;
+          const hasImportContent = Array.isArray(imports)
+            && imports.some((imp) => imp && imp.data != null);
+          hasContent = layerCount > 0 || sourceCount > 0 || hasImportContent;
+        } catch { /* getStyle threw — treat as stuck */ }
+        if (hasContent) return;
+        console.warn(
+          `[map3d] stuck on empty bootstrap shell after ${STUCK_SHELL_WATCHDOG_MS} ms — forcing direct setStyle from URL`,
+        );
+        try {
+          lifecycle.prepareStyleChange('Fond de carte (recovery)');
+          map.setStyle(basemapConfig.styleUrl as Parameters<typeof map.setStyle>[0], {
+            diff: false,
+            localFontFamily: null,
+            localIdeographFontFamily: 'sans-serif',
+          });
+          // Re-trigger the bootstrap against the real style.
+          void attemptInitBootstrap();
+        } catch (error) {
+          console.error('[map3d] stuck-shell recovery setStyle failed', error);
+        }
+      }, STUCK_SHELL_WATCHDOG_MS);
+    };
+
     const startInitialStyleAndBootstrap = async (): Promise<void> => {
       if (shouldHydrateInitialStyle) {
-        let styleInput: string | MapboxStyleDefinition;
-        try {
-          styleInput = await resolveStyleInput(basemapConfig.styleUrl);
-        } catch (error) {
-          if (cancelled) return;
-          console.warn('[map3d] initial style prefetch failed; falling back to style URL', error);
-          styleInput = basemapConfig.styleUrl;
-        }
+        // resolveStyleInput now never throws — it falls back to the URL
+        // string on any prefetch failure (timeout, network, parse).
+        const styleInput = await resolveStyleInput(basemapConfig.styleUrl);
         if (cancelled) return;
         lifecycle.prepareStyleChange('Fond de carte');
         try {
@@ -235,6 +283,7 @@ export function useMap(
       }
 
       armInitialReveal();
+      armStuckShellWatchdog();
       void attemptInitBootstrap();
     };
 
@@ -289,6 +338,7 @@ export function useMap(
     return () => {
       cancelled = true;
       if (revealFallbackTimer) clearTimeout(revealFallbackTimer);
+      if (stuckShellTimer) clearTimeout(stuckShellTimer);
       map.off('load', revealMap);
       map.off('idle', revealMap);
       lifecycle.cleanup();
