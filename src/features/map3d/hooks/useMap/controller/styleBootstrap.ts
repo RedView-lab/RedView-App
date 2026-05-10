@@ -3,6 +3,7 @@ import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import { swReady, swLateReady, awaitController } from '../serviceWorker';
 import {
   STYLE_READINESS_TELEMETRY_INTERVAL_MS,
+  STYLE_READINESS_FORCE_BYPASS_MS,
   type Ctx,
 } from './context';
 
@@ -124,6 +125,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       let settled = false;
       let telemetryTimer: ReturnType<typeof setInterval> | null = null;
       let telemetryTicks = 0;
+      let forceBypassTimer: ReturnType<typeof setTimeout> | null = null;
       const cleanup = () => {
         map.off('style.load', onStyleLoad);
         map.off('styledata', onStyleData);
@@ -132,6 +134,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         if (telemetryTimer) {
           clearInterval(telemetryTimer);
           telemetryTimer = null;
+        }
+        if (forceBypassTimer) {
+          clearTimeout(forceBypassTimer);
+          forceBypassTimer = null;
         }
       };
       const settle = (label: string) => {
@@ -193,6 +199,65 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       map.on('styledata', onStyleData);
       map.on('sourcedata', onSourceData);
       map.on('idle', onIdle);
+
+      // Root-level safety net #1 — synchronous + rAF probe.
+      // If the style settled before our listeners attached (cold cache
+      // hit, or a setStyle({diff:false}) that completed in the same
+      // microtask), no event will ever fire again for this run. Probe
+      // immediately and on the next two animation frames so we don't
+      // depend on Mapbox emitting a fresh signal for an already-loaded
+      // style.
+      let probeRafs = 0;
+      const probeOnce = (origin: string) => {
+        if (settled) return;
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          settled = true;
+          cleanup();
+          resolve();
+          return;
+        }
+        if (fns.canMutateStyle()) { settle('Style'); return; }
+        if (promoteStyleContentBypass(origin)) { settle('Style (récupération)'); return; }
+        if (probeRafs < 2) {
+          probeRafs += 1;
+          requestAnimationFrame(() => probeOnce(`probe-raf-${probeRafs}`));
+        }
+      };
+      probeOnce('probe-sync');
+
+      // Root-level safety net #2 — hard force-bypass timer.
+      // Visible bug ("aucun mapload qui arrive en satellite, tout
+      // devient plat au zoom"): Mapbox sometimes emits NO usable
+      // readiness event after attaching a freshly hydrated satellite
+      // style — no `style.load`, no `styledata`, no `sourcedata`, no
+      // `idle`. Without this timer, the bootstrap sat indefinitely on
+      // the styleLoaded promise (first telemetry tick is 15 s away,
+      // by which point the user is already zooming on a flat map and
+      // has to reload manually). After STYLE_READINESS_FORCE_BYPASS_MS
+      // we apply the same recovery the `idle` handler already does —
+      // force sprite-storm bypass, then resolve — so the rest of the
+      // bootstrap (DEM source, terrain attach, heartbeat) can run.
+      // The heartbeat then self-heals any residual flat state.
+      forceBypassTimer = setTimeout(() => {
+        forceBypassTimer = null;
+        if (settled) return;
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          settled = true;
+          cleanup();
+          resolve();
+          return;
+        }
+        if (fns.canMutateStyle()) { settle('Style'); return; }
+        if (!promoteStyleContentBypass('force-bypass')) {
+          if (!st.spriteStormBypass) {
+            console.warn(
+              `[map3d] no Mapbox readiness event in ${STYLE_READINESS_FORCE_BYPASS_MS} ms — forcing sprite-storm bypass to unblock terrain bootstrap`,
+            );
+            st.spriteStormBypass = true;
+          }
+        }
+        settle('Style (forcé)');
+      }, STYLE_READINESS_FORCE_BYPASS_MS);
       // Telemetry-only watchdog. Logs diagnostics every 15 s so a
       // genuinely stuck style is observable, but never soft-fails the
       // bootstrap. After 60 s we log an error tag for production

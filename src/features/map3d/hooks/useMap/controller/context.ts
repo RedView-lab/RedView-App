@@ -28,6 +28,18 @@ export const STYLE_READINESS_TELEMETRY_INTERVAL_MS = 15000;
 // bootstrap promise itself.
 export const STYLE_LOAD_WATCHDOG_MS = 5000;
 
+// Root-level safety net: if no real Mapbox readiness signal
+// (`style.load` / `styledata` with content / `sourcedata` / first
+// `idle`) has fired within this window, we force-engage the sprite-
+// storm bypass and resume the bootstrap. This catches the cold
+// Standard-Satellite startup where listeners attach a tick after the
+// prefetched style has already started settling and Mapbox emits no
+// further events for it (visible bug: zero `[map3d]` logs, map stays
+// flat at zoom until the user reloads). 3500 ms is short enough to
+// recover before the user starts zooming and long enough to let real
+// events win on healthy starts.
+export const STYLE_READINESS_FORCE_BYPASS_MS = 3500;
+
 // Anti-flat reinforcement constants. Picked low enough to detect a
 // flat-state regression quickly but high enough to leave Mapbox time to
 // settle a freshly attached terrain graph between checks.
