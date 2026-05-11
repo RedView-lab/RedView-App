@@ -21,14 +21,17 @@ import {
   lngLatToMercTile,
   rawPng,
 } from './shadowWorkerEncoding';
+import { MAP_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
 
 const DEM_TILE_SIZE = 256;
 const DEM_NODATA_THRESHOLD = -10000;
-const DEM_CACHE_PREFIX = 'dem-tiles-';
+const DEM_CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const MAX_SAMPLE_TILE_COUNT = 256;
 const MIN_SAMPLE_DEM_ZOOM = 4;
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
+const MIN_RELIEF_RANGE_FOR_FALLBACK_M = 18;
+const MIN_CAST_SHADOW_COVERAGE = 0.0015;
 type ComputeQuality = 'preview' | 'full';
 
 interface SampleRequest {
@@ -93,13 +96,8 @@ interface ComputeGrid {
 
 let state: GridState | null = null;
 
-async function openLatestDemCache(): Promise<Cache> {
-  const cacheNames = await caches.keys();
-  const candidates = cacheNames
-    .filter((cacheName) => cacheName.startsWith(DEM_CACHE_PREFIX))
-    .sort()
-    .reverse();
-  return caches.open(candidates[0] ?? `${DEM_CACHE_PREFIX}runtime`);
+async function openCurrentDemCache(): Promise<Cache> {
+  return caches.open(DEM_CACHE_NAME);
 }
 
 self.onmessage = async (e: MessageEvent<Request>) => {
@@ -150,7 +148,7 @@ async function handleSample(msg: SampleRequest) {
     return;
   }
 
-  const cache = await openLatestDemCache();
+  const cache = await openCurrentDemCache();
   type DecodedTile = { x: number; y: number; elev: Float32Array | null };
   const tiles: Promise<DecodedTile>[] = [];
   for (let ty = coverage.yMin; ty <= coverage.yMax; ty++) {
@@ -414,6 +412,18 @@ function handleCompute(msg: ComputeRequest) {
       const firstPass = boxBlur3(shadow, gridW, gridH, scratch.blurTemp, scratch.blurOut);
       raster = softenShadow(firstPass, gridW, gridH, sunAltDeg, scratch.blurTemp, scratch.shadow);
     }
+    if (needsReliefFallback(raster, elev, sunAltDeg)) {
+      raster = computeReliefFallbackShadow(
+        elev,
+        gridW,
+        gridH,
+        sunAzDeg,
+        sunAltDeg,
+        cellSizeX,
+        cellSizeY,
+        scratch.shadow,
+      );
+    }
   } else if (shadowStrength > 0) {
     scratch.shadow.fill(255);
     raster = scratch.shadow;
@@ -441,6 +451,80 @@ function selectComputeGrid(state: GridState, quality: ComputeQuality): ComputeGr
   }
 
   return state.previewGrid ?? state;
+}
+
+function needsReliefFallback(raster: Uint8Array, elev: Float32Array, sunAltDeg: number): boolean {
+  if (sunAltDeg >= 72) return false;
+
+  let shadowPixels = 0;
+  for (let index = 0; index < raster.length; index++) {
+    if (raster[index] > 6) shadowPixels++;
+  }
+  if (shadowPixels / Math.max(1, raster.length) >= MIN_CAST_SHADOW_COVERAGE) return false;
+
+  let minElev = Infinity;
+  let maxElev = -Infinity;
+  for (let index = 0; index < elev.length; index++) {
+    const value = elev[index];
+    if (!Number.isFinite(value) || value <= DEM_NODATA_THRESHOLD) continue;
+    if (value < minElev) minElev = value;
+    if (value > maxElev) maxElev = value;
+  }
+
+  return Number.isFinite(minElev)
+    && Number.isFinite(maxElev)
+    && maxElev - minElev >= MIN_RELIEF_RANGE_FOR_FALLBACK_M;
+}
+
+function computeReliefFallbackShadow(
+  elev: Float32Array,
+  gridW: number,
+  gridH: number,
+  sunAzDeg: number,
+  sunAltDeg: number,
+  cellSizeX: number,
+  cellSizeY: number,
+  out: Uint8Array,
+): Uint8Array {
+  out.fill(0);
+  if (gridW < 3 || gridH < 3) return out;
+
+  const azRad = (sunAzDeg * Math.PI) / 180;
+  const altRad = (sunAltDeg * Math.PI) / 180;
+  const sunX = Math.sin(azRad) * Math.cos(altRad);
+  const sunY = -Math.cos(azRad) * Math.cos(altRad);
+  const sunZ = Math.sin(altRad);
+  const altitudeBoost = Math.max(0.35, Math.min(1, (28 - sunAltDeg) / 24));
+
+  for (let row = 1; row < gridH - 1; row++) {
+    const rowOffset = row * gridW;
+    for (let col = 1; col < gridW - 1; col++) {
+      const index = rowOffset + col;
+      const left = elev[index - 1];
+      const right = elev[index + 1];
+      const up = elev[index - gridW];
+      const down = elev[index + gridW];
+      if (
+        !Number.isFinite(left) || !Number.isFinite(right) ||
+        !Number.isFinite(up) || !Number.isFinite(down) ||
+        left <= DEM_NODATA_THRESHOLD || right <= DEM_NODATA_THRESHOLD ||
+        up <= DEM_NODATA_THRESHOLD || down <= DEM_NODATA_THRESHOLD
+      ) {
+        continue;
+      }
+
+      const dzDx = (right - left) / Math.max(1, 2 * cellSizeX);
+      const dzDy = (down - up) / Math.max(1, 2 * cellSizeY);
+      const normalScale = 1 / Math.sqrt(dzDx * dzDx + dzDy * dzDy + 1);
+      const illumination = ((-dzDx * sunX) + (-dzDy * sunY) + sunZ) * normalScale;
+      if (illumination >= 0.34) continue;
+
+      const shade = Math.min(1, (0.34 - illumination) / 0.52);
+      out[index] = Math.max(0, Math.min(180, shade * 180 * altitudeBoost)) | 0;
+    }
+  }
+
+  return boxBlur3(out, gridW, gridH, new Uint16Array(gridW * gridH), out.slice());
 }
 
 /**

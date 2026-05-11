@@ -153,7 +153,9 @@ export async function preloadBlobUrl(url: string): Promise<void> {
 export function setShadowLayerOpacity(map: MapboxMap, opacity: number): void {
   if (!map.getLayer(LAYER_ID)) return;
   try {
-    map.setPaintProperty(LAYER_ID, 'raster-opacity', Math.max(0, Math.min(1, opacity)));
+    const clampedOpacity = Math.max(0, Math.min(1, opacity));
+    map.setLayoutProperty(LAYER_ID, 'visibility', clampedOpacity > 0 ? 'visible' : 'none');
+    map.setPaintProperty(LAYER_ID, 'raster-opacity', clampedOpacity);
   } catch {
     /* no-op */
   }
@@ -184,6 +186,11 @@ export function ensureShadowSourceAndLayer(
         type: 'raster',
         source: SOURCE_ID,
         slot: 'top',
+        layout: {
+          visibility: effectiveOverlayOpacity(opts.enabled, opts.opacity, opts.sunAltitudeDeg) > 0
+            ? 'visible'
+            : 'none',
+        },
         paint: {
           'raster-opacity': effectiveOverlayOpacity(
             opts.enabled,
