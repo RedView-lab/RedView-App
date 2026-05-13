@@ -70,6 +70,7 @@ import {
   computeNightFloor,
   ensureShadowSourceAndLayer,
   effectiveOverlayOpacity,
+  LAYER_ID,
   preloadBlobUrl,
   removeShadowSourceAndLayer,
   SAMPLE_DEBOUNCE_MS,
@@ -78,6 +79,11 @@ import {
   SOURCE_ID,
   withOvershoot,
 } from './useShadowImageShared';
+
+const MIN_USABLE_SAMPLE_FILL_RATIO = 0.70;
+const PARTIAL_SAMPLE_RETRY_DELAY_MS = 1200;
+const MAX_PARTIAL_SAMPLE_RETRIES = 4;
+const MIN_VISIBLE_SHADOW_ALPHA_RATIO = 0.001;
 
 export function useShadowImage(
   map: MapboxMap | null,
@@ -95,6 +101,7 @@ export function useShadowImage(
   const sampleTimerRef = useRef<number | null>(null);
   const sunRecomputeFrameRef = useRef<number | null>(null);
   const sampledRef = useRef(false);
+  const partialSampleRetryCountRef = useRef(0);
   /**
    * Bounds last successfully sampled (with overshoot already applied).
    * Used as the geographic anchor for the displayed image until the next
@@ -257,6 +264,29 @@ export function useShadowImage(
         return;
       }
 
+      const alphaRatio = ack.totalPixels && ack.alphaPixels !== undefined
+        ? ack.alphaPixels / ack.totalPixels
+        : 1;
+      if (o.sunAltitudeDeg >= 0 && o.sunAltitudeDeg < 72 && alphaRatio < MIN_VISIBLE_SHADOW_ALPHA_RATIO) {
+        console.warn('[shadow] compute produced an empty visible overlay', {
+          alphaPixels: ack.alphaPixels,
+          shadowPixels: ack.shadowPixels,
+          totalPixels: ack.totalPixels,
+          sunAltDeg: o.sunAltitudeDeg,
+          sunAzDeg: o.sunAzimuthDeg,
+        });
+        setLayerOpacity(0);
+        publishStatus(createOverlayStatus({
+          id: 'shadow',
+          label: 'Ombres',
+          state: 'error',
+          progress: 0,
+          detail: 'Image d\'ombre vide',
+          reloadable: true,
+        }));
+        return;
+      }
+
       const url = URL.createObjectURL(ack.blob);
       const coords: [[number, number], [number, number], [number, number], [number, number]] = [
         [job.bounds[0], job.bounds[3]],
@@ -282,12 +312,36 @@ export function useShadowImage(
 
       ensureSourceAndLayer(url, coords);
       const src = map.getSource(SOURCE_ID) as ImageSource | undefined;
+      if (!src || !map.getLayer(LAYER_ID)) {
+        URL.revokeObjectURL(url);
+        setLayerOpacity(0);
+        publishStatus(createOverlayStatus({
+          id: 'shadow',
+          label: 'Ombres',
+          state: 'error',
+          progress: 0,
+          detail: 'Couche d\'ombre absente',
+          reloadable: true,
+        }));
+        return;
+      }
       if (src) {
         try {
           src.updateImage({ url, coordinates: coords });
           applyVisibleOpacity();
         } catch (err) {
           console.warn('[shadow] updateImage failed', err);
+          URL.revokeObjectURL(url);
+          setLayerOpacity(0);
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'error',
+            progress: 0,
+            detail: 'Application de l\'ombre impossible',
+            reloadable: true,
+          }));
+          return;
         }
       }
 
@@ -457,25 +511,71 @@ export function useShadowImage(
         }));
         return;
       }
-      sampledRef.current = true;
-      sampledBoundsRef.current = sampledBounds;
       const fillRatio = sampleAck.total > 0 ? sampleAck.filled / sampleAck.total : 0;
-      // Partial-coverage retry: when the worker only got a fraction of
-      // the requested DEM cells (cold cache, IGN pipeline still warming
-      // up, or a 204 burst from saturated queues), the encoded shadow
-      // PNG would have NaN-shaped holes that cast no shadow → user sees
-      // "no shadow" while the status pill reports ready. Schedule a
-      // delayed resample so the SW has time to populate cache, and only
-      // proceed with the current (partial) compute as a stop-gap.
-      if (fillRatio < 0.70) {
+      if (fillRatio < MIN_USABLE_SAMPLE_FILL_RATIO) {
+        partialSampleRetryCountRef.current++;
         if (sampleTimerRef.current !== null) {
           clearTimeout(sampleTimerRef.current);
         }
         sampleTimerRef.current = (setTimeout(() => {
           sampleTimerRef.current = null;
           if (!cancelled && optsRef.current.enabled) requestResample();
-        }, 1200) as unknown) as number;
+        }, PARTIAL_SAMPLE_RETRY_DELAY_MS) as unknown) as number;
+
+        if (partialSampleRetryCountRef.current <= MAX_PARTIAL_SAMPLE_RETRIES) {
+          if (hasPreviousSample) {
+            applyVisibleOpacity();
+          } else {
+            setLayerOpacity(0);
+          }
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'loading',
+            progress: 52,
+            detail: `Relief partiel (${Math.round(fillRatio * 100)}%)`,
+            reloadable: true,
+          }));
+          return;
+        }
+
+        console.warn('[shadow] sample partial: insufficient DEM coverage', {
+          demZoom,
+          effectiveZoom: sampleAck.effectiveZoom,
+          filled: sampleAck.filled,
+          total: sampleAck.total,
+          fillRatio,
+          bounds: sampledBounds,
+        });
+        if (!hasPreviousSample) {
+          removeSourceAndLayer(true);
+          setLayerOpacity(0);
+          publishStatus(createOverlayStatus({
+            id: 'shadow',
+            label: 'Ombres',
+            state: 'error',
+            progress: 0,
+            detail: 'Relief incomplet',
+            reloadable: true,
+          }));
+          return;
+        }
+
+        applyVisibleOpacity();
+        publishStatus(createOverlayStatus({
+          id: 'shadow',
+          label: 'Ombres',
+          state: 'ready',
+          progress: 100,
+          detail: 'Dernier relief valide conservé',
+          reloadable: true,
+        }));
+        return;
       }
+
+      partialSampleRetryCountRef.current = 0;
+      sampledRef.current = true;
+      sampledBoundsRef.current = sampledBounds;
       publishStatus(createOverlayStatus({
         id: 'shadow',
         label: 'Ombres',

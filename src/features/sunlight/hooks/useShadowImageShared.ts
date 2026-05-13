@@ -46,6 +46,9 @@ export interface ComputeAck {
   type: 'compute-ok';
   blob: Blob;
   bounds: [number, number, number, number];
+  alphaPixels?: number;
+  shadowPixels?: number;
+  totalPixels?: number;
 }
 
 export interface ComputeEmpty {

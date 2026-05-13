@@ -31,7 +31,7 @@ const MIN_SAMPLE_DEM_ZOOM = 4;
 const PREVIEW_MAX_W = 448;
 const PREVIEW_MAX_H = 320;
 const MIN_RELIEF_RANGE_FOR_FALLBACK_M = 18;
-const MIN_CAST_SHADOW_COVERAGE = 0.0015;
+const MIN_CAST_SHADOW_COVERAGE = 0.012;
 type ComputeQuality = 'preview' | 'full';
 
 interface SampleRequest {
@@ -150,9 +150,11 @@ async function handleSample(msg: SampleRequest) {
 
   const cache = await openCurrentDemCache();
   type DecodedTile = {
-    x: number;
-    y: number;
-    z: number;
+    leafX: number;
+    leafY: number;
+    dataX: number;
+    dataY: number;
+    dataZ: number;
     elev: Float32Array | null;
   };
   const tiles: Promise<DecodedTile>[] = [];
@@ -172,7 +174,12 @@ async function handleSample(msg: SampleRequest) {
   const tileByLeaf = new Map<string, CachedTile>();
   for (const t of decoded) {
     if (t.elev && t.elev.length > 0) {
-      tileByLeaf.set(`${t.x}/${t.y}`, { z: t.z, x: t.x, y: t.y, elev: t.elev });
+      tileByLeaf.set(`${t.leafX}/${t.leafY}`, {
+        z: t.dataZ,
+        x: t.dataX,
+        y: t.dataY,
+        elev: t.elev,
+      });
     }
   }
 
@@ -308,9 +315,16 @@ async function loadTileWithParents(
   z: number,
   x: number,
   y: number,
-): Promise<{ x: number; y: number; z: number; elev: Float32Array | null }> {
+): Promise<{
+  leafX: number;
+  leafY: number;
+  dataX: number;
+  dataY: number;
+  dataZ: number;
+  elev: Float32Array | null;
+}> {
   if (x < 0 || y < 0 || x >= 1 << z || y >= 1 << z) {
-    return { x, y, z, elev: null };
+    return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev: null };
   }
 
   // Step 1 — try the requested leaf tile from cache. `ignoreSearch: true`
@@ -323,7 +337,7 @@ async function loadTileWithParents(
   const direct = await cacheMatchAny(cache, url);
   if (direct) {
     const elev = await safeDecode(direct);
-    if (elev) return { x, y, z, elev };
+    if (elev) return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev };
   }
 
   // Step 2 — walk up to MAX_PARENT_WALK ancestors. A coarser tile
@@ -340,7 +354,7 @@ async function loadTileWithParents(
     const parent = await cacheMatchAny(cache, parentUrl);
     if (parent) {
       const elev = await safeDecode(parent);
-      if (elev) return { x: px, y: py, z: pz, elev };
+      if (elev) return { leafX: x, leafY: y, dataX: px, dataY: py, dataZ: pz, elev };
     }
   }
 
@@ -352,12 +366,12 @@ async function loadTileWithParents(
     const resp = await fetch(url);
     if (resp && resp.status === 200) {
       const elev = await safeDecode(resp);
-      if (elev) return { x, y, z, elev };
+      if (elev) return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev };
     }
   } catch {
     /* network/abort — yield null below */
   }
-  return { x, y, z, elev: null };
+  return { leafX: x, leafY: y, dataX: x, dataY: y, dataZ: z, elev: null };
 }
 
 async function cacheMatchAny(cache: Cache, url: string): Promise<Response | null> {
@@ -374,7 +388,7 @@ async function safeDecode(resp: Response): Promise<Float32Array | null> {
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
-    return elev.length > 0 ? elev : null;
+    return elev.length === DEM_TILE_SIZE * DEM_TILE_SIZE ? elev : null;
   } catch {
     return null;
   }
@@ -493,6 +507,7 @@ function handleCompute(msg: ComputeRequest) {
   }
 
   const rgba = encodeShadowRgba(raster, gridW, gridH, shadowStrength, nightFloor);
+  const stats = collectShadowStats(raster, rgba);
   const blob = new Blob([rawPng(gridW, gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
 
   (self as unknown as Worker).postMessage(
@@ -501,8 +516,25 @@ function handleCompute(msg: ComputeRequest) {
       type: 'compute-ok',
       blob,
       bounds: state.bounds,
+      alphaPixels: stats.alphaPixels,
+      shadowPixels: stats.shadowPixels,
+      totalPixels: stats.totalPixels,
     },
   );
+}
+
+function collectShadowStats(raster: Uint8Array, rgba: Uint8Array): {
+  alphaPixels: number;
+  shadowPixels: number;
+  totalPixels: number;
+} {
+  let alphaPixels = 0;
+  let shadowPixels = 0;
+  for (let index = 0; index < raster.length; index++) {
+    if (raster[index] > 6) shadowPixels++;
+    if (rgba[index * 4 + 3] > 0) alphaPixels++;
+  }
+  return { alphaPixels, shadowPixels, totalPixels: raster.length };
 }
 
 function selectComputeGrid(state: GridState, quality: ComputeQuality): ComputeGrid {
