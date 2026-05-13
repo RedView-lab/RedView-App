@@ -459,6 +459,23 @@ export function useShadowImage(
       }
       sampledRef.current = true;
       sampledBoundsRef.current = sampledBounds;
+      const fillRatio = sampleAck.total > 0 ? sampleAck.filled / sampleAck.total : 0;
+      // Partial-coverage retry: when the worker only got a fraction of
+      // the requested DEM cells (cold cache, IGN pipeline still warming
+      // up, or a 204 burst from saturated queues), the encoded shadow
+      // PNG would have NaN-shaped holes that cast no shadow → user sees
+      // "no shadow" while the status pill reports ready. Schedule a
+      // delayed resample so the SW has time to populate cache, and only
+      // proceed with the current (partial) compute as a stop-gap.
+      if (fillRatio < 0.70) {
+        if (sampleTimerRef.current !== null) {
+          clearTimeout(sampleTimerRef.current);
+        }
+        sampleTimerRef.current = (setTimeout(() => {
+          sampleTimerRef.current = null;
+          if (!cancelled && optsRef.current.enabled) requestResample();
+        }, 1200) as unknown) as number;
+      }
       publishStatus(createOverlayStatus({
         id: 'shadow',
         label: 'Ombres',

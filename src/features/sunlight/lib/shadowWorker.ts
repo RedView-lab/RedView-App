@@ -149,22 +149,30 @@ async function handleSample(msg: SampleRequest) {
   }
 
   const cache = await openCurrentDemCache();
-  type DecodedTile = { x: number; y: number; elev: Float32Array | null };
+  type DecodedTile = {
+    x: number;
+    y: number;
+    z: number;
+    elev: Float32Array | null;
+  };
   const tiles: Promise<DecodedTile>[] = [];
   for (let ty = coverage.yMin; ty <= coverage.yMax; ty++) {
     for (let tx = coverage.xMin; tx <= coverage.xMax; tx++) {
-      tiles.push(loadTile(cache, effectiveZoom, tx, ty));
+      tiles.push(loadTileWithParents(cache, effectiveZoom, tx, ty));
     }
   }
   const decoded = await Promise.all(tiles);
 
   let filled = 0;
-  // For each grid cell, project to lon/lat → tile pixel → bilinear lookup.
-  // Cache decoded tiles by (x,y).
-  const tileMap = new Map<string, Float32Array>();
+  // Each requested (effectiveZoom, x, y) maps to either the leaf tile
+  // (when present in cache) or an ancestor tile that covers it. Storing
+  // the ancestor's (z, x, y) lets the cell-lookup loop below project
+  // grid-cell coords into the ancestor's pixel space.
+  type CachedTile = { z: number; x: number; y: number; elev: Float32Array };
+  const tileByLeaf = new Map<string, CachedTile>();
   for (const t of decoded) {
     if (t.elev && t.elev.length > 0) {
-      tileMap.set(`${t.x}/${t.y}`, t.elev);
+      tileByLeaf.set(`${t.x}/${t.y}`, { z: t.z, x: t.x, y: t.y, elev: t.elev });
     }
   }
 
@@ -189,12 +197,18 @@ async function handleSample(msg: SampleRequest) {
       const tileXf = ((lng + 180) / 360) * nTiles;
       const tx = Math.floor(tileXf);
       const ty = Math.floor(tileYf);
-      const tile = tileMap.get(`${tx}/${ty}`);
-      if (!tile) continue;
-      // Pixel within the tile.
-      const px = (tileXf - tx) * DEM_TILE_SIZE;
-      const py = (tileYf - ty) * DEM_TILE_SIZE;
-      const v = bilinearSample(tile, DEM_TILE_SIZE, DEM_TILE_SIZE, px, py);
+      const leaf = tileByLeaf.get(`${tx}/${ty}`);
+      if (!leaf) continue;
+      // Project the leaf-zoom continuous tile coords into the ancestor
+      // tile's pixel space. dz=0 → identity; dz>0 → divide-and-shift so a
+      // 256-px ancestor tile is sampled at the equivalent sub-region of
+      // the requested leaf tile.
+      const dz = effectiveZoom - leaf.z;
+      const ancestorTileXf = tileXf / (1 << dz);
+      const ancestorTileYf = tileYf / (1 << dz);
+      const px = (ancestorTileXf - leaf.x) * DEM_TILE_SIZE;
+      const py = (ancestorTileYf - leaf.y) * DEM_TILE_SIZE;
+      const v = bilinearSample(leaf.elev, DEM_TILE_SIZE, DEM_TILE_SIZE, px, py);
       if (Number.isFinite(v) && v > DEM_NODATA_THRESHOLD) {
         elev[r * gridW + c] = v;
         filled++;
@@ -289,34 +303,80 @@ function buildPreviewGrid(state: GridState): ComputeGrid | null {
   };
 }
 
-async function loadTile(
+async function loadTileWithParents(
   cache: Cache,
   z: number,
   x: number,
   y: number,
-): Promise<{ x: number; y: number; elev: Float32Array | null }> {
+): Promise<{ x: number; y: number; z: number; elev: Float32Array | null }> {
   if (x < 0 || y < 0 || x >= 1 << z || y >= 1 << z) {
-    return { x, y, elev: null };
+    return { x, y, z, elev: null };
   }
+
+  // Step 1 — try the requested leaf tile from cache. `ignoreSearch: true`
+  // makes the lookup tolerate any query string Mapbox/the SW may have
+  // appended (cache-epoch, profile, dem-bust). The SW writes under the
+  // bare key for default profile, but defensive ignoreSearch protects
+  // against future variations and lets us pick up the basemap's cached
+  // tile even if its key differs from ours.
   const url = new URL(`/dem-tiles/${z}/${x}/${y}`, self.location.origin).toString();
-  // Try the cache first; if missing, request via the SW (will trigger a build).
-  let resp = await cache.match(url);
-  if (!resp || resp.status !== 200) {
-    try {
-      resp = await fetch(url);
-    } catch {
-      return { x, y, elev: null };
+  const direct = await cacheMatchAny(cache, url);
+  if (direct) {
+    const elev = await safeDecode(direct);
+    if (elev) return { x, y, z, elev };
+  }
+
+  // Step 2 — walk up to MAX_PARENT_WALK ancestors. A coarser tile
+  // already in cache lets us bilinear-sample at the leaf cell positions,
+  // which is far better than a NaN hole. The shadow sweep is robust to
+  // mixed-resolution input because we still translate cells through
+  // mercator math.
+  const MAX_PARENT_WALK = 4;
+  for (let dz = 1; dz <= MAX_PARENT_WALK && z - dz >= 0; dz++) {
+    const pz = z - dz;
+    const px = x >> dz;
+    const py = y >> dz;
+    const parentUrl = new URL(`/dem-tiles/${pz}/${px}/${py}`, self.location.origin).toString();
+    const parent = await cacheMatchAny(cache, parentUrl);
+    if (parent) {
+      const elev = await safeDecode(parent);
+      if (elev) return { x: px, y: py, z: pz, elev };
     }
   }
-  if (!resp || resp.status !== 200) {
-    return { x, y, elev: null };
+
+  // Step 3 — last resort: trigger an SW build for the leaf. This is
+  // expensive under load (saturated IGN queue) but unavoidable on a cold
+  // viewport. We still return null on 204 so the caller falls back to
+  // partial coverage rather than blocking forever.
+  try {
+    const resp = await fetch(url);
+    if (resp && resp.status === 200) {
+      const elev = await safeDecode(resp);
+      if (elev) return { x, y, z, elev };
+    }
+  } catch {
+    /* network/abort — yield null below */
   }
+  return { x, y, z, elev: null };
+}
+
+async function cacheMatchAny(cache: Cache, url: string): Promise<Response | null> {
+  try {
+    const resp = await cache.match(url, { ignoreSearch: true });
+    if (resp && resp.status === 200) return resp;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+async function safeDecode(resp: Response): Promise<Float32Array | null> {
   try {
     const blob = await resp.clone().blob();
     const elev = await decodeTerrainRGB(blob);
-    return { x, y, elev };
+    return elev.length > 0 ? elev : null;
   } catch {
-    return { x, y, elev: null };
+    return null;
   }
 }
 
