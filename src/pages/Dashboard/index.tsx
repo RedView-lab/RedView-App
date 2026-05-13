@@ -43,14 +43,6 @@ interface DashboardProps {
   initialProjectId?: string | null;
 }
 
-const OVERLAY_LABEL: Record<Exclude<OverlayStatusId, 'map'>, string> = {
-  itinerary: 'Itinéraire',
-  weather: 'Météo',
-  shadow: 'Ombres',
-  slope: 'Pentes',
-  altitude: 'Altitude',
-};
-
 export default function Dashboard({
   email,
   initialProjectId,
@@ -162,24 +154,10 @@ export default function Dashboard({
       if (id !== 'map') {
         setOverlayStatuses((prev) => {
           const current = prev[id];
-          if (current) {
-            if (current.reloadable) return prev;
-            return {
-              ...prev,
-              [id]: { ...current, reloadable: true },
-            };
-          }
+          if (!current || current.reloadable) return prev;
           return {
             ...prev,
-            [id]: {
-              id,
-              label: OVERLAY_LABEL[id],
-              state: 'ready',
-              progress: 100,
-              detail: 'Overlay prêt',
-              reloadable: true,
-              updatedAt: Date.now(),
-            },
+            [id]: { ...current, reloadable: true },
           };
         });
       }
