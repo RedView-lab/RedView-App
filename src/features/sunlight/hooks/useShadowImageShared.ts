@@ -84,6 +84,32 @@ export function effectiveOverlayOpacity(enabled: boolean, opacity: number, altit
   return Math.max(0, Math.min(1, opacity));
 }
 
+/**
+ * Twilight / night uniform veil strength sent to the shadow worker as
+ * `nightFloor` (0..1). The worker uses it as `alpha = max(castShadow, floor)`
+ * inside `encodeShadowRgba()`, so when the sun is below the horizon and the
+ * cast-shadow buffer is empty (worker short-circuits at `sunAltDeg <= 0`),
+ * this is the ONLY thing keeping the overlay non-transparent.
+ *
+ * Without this, late-evening / night frames produced a fully transparent PNG
+ * even though `effectiveOverlayOpacity()` had already forced the raster
+ * layer opacity to 1.0 — the symptom was "no shadow / no darkening at
+ * night" while the SW kept handing back perfectly transparent tiles.
+ *
+ * Ramp matches astronomical twilight bands so dusk reads naturally:
+ *   • sun ≥  0°  → 0          (daylight, cast shadows do all the work)
+ *   • sun =  0°… −6°  civil twilight     → 0    → 0.30
+ *   • sun = −6°…−12°  nautical twilight  → 0.30 → 0.50
+ *   • sun ≤ −12°  astronomical / night   → 0.55 (capped, never opaque)
+ */
+export function computeNightFloor(altitudeDeg: number): number {
+  if (!Number.isFinite(altitudeDeg) || altitudeDeg >= 0) return 0;
+  const a = -altitudeDeg;
+  if (a <= 6) return (a / 6) * 0.30;
+  if (a <= 12) return 0.30 + ((a - 6) / 6) * 0.20;
+  return 0.55;
+}
+
 export function chooseDemZoom(map: MapboxMap, gridW: number): number {
   const z = Math.round(map.getZoom());
   const bounds = map.getBounds();

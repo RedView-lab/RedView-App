@@ -67,6 +67,7 @@ import {
   canMutateShadowStyle,
   chooseDemZoom,
   chooseGridSize,
+  computeNightFloor,
   ensureShadowSourceAndLayer,
   effectiveOverlayOpacity,
   preloadBlobUrl,
@@ -210,6 +211,11 @@ export function useShadowImage(
 
       const o = optsRef.current;
       const shadowStrength = shadowVisibility(o.sunAltitudeDeg);
+      const nightFloor = computeNightFloor(o.sunAltitudeDeg);
+      // Daylight + opacity slider at 0 → nothing to draw. At night we still
+      // need to run the worker so the uniform `nightFloor` veil is encoded
+      // into the PNG (the cast-shadow buffer is empty below the horizon, so
+      // the floor is the ONLY non-transparent contribution).
       if (!o.enabled || (o.sunAltitudeDeg >= 0 && o.opacity <= 0) || shadowStrength <= 0) {
         setLayerOpacity(0);
         return;
@@ -220,7 +226,7 @@ export function useShadowImage(
         sunAzDeg: o.sunAzimuthDeg,
         sunAltDeg: o.sunAltitudeDeg,
         shadowStrength,
-        nightFloor: 0,
+        nightFloor,
         quality: job.quality,
       });
       if (cancelled) return;
