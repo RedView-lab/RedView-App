@@ -52,26 +52,21 @@ function getCached(lat: number, lng: number, selection: WindTimeSelection): Wind
     cache.delete(key);
     return null;
   }
-  const exact = entry.hours.get(normaliseWindRequestedHourKey(selection.date, selection.time));
-  if (exact) return exact;
-
-  let fallback: WindPoint | null = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
-  const targetHour = Number(normaliseWindRequestedHourKey(selection.date, selection.time).slice(11, 13));
-  for (const [hourKey, point] of entry.hours) {
-    if (!hourKey.startsWith(`${selection.date}T`)) continue;
-    const hour = Number(hourKey.slice(11, 13));
-    const delta = Math.abs(targetHour - hour);
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      fallback = point;
-    }
-  }
-  return fallback;
+  return entry.hours.get(normaliseWindRequestedHourKey(selection.date, selection.time)) ?? null;
 }
 
 function setCache(lat: number, lng: number, dateIso: string, hours: Map<string, WindPoint>): void {
-  cache.set(toDailyCacheKey(lat, lng, dateIso), { hours, fetchedAt: Date.now() });
+  const key = toDailyCacheKey(lat, lng, dateIso);
+  const existing = cache.get(key);
+  const mergedHours = existing && Date.now() - existing.fetchedAt <= CACHE_TTL_MS
+    ? new Map(existing.hours)
+    : new Map<string, WindPoint>();
+
+  hours.forEach((point, hourKey) => {
+    mergedHours.set(hourKey, point);
+  });
+
+  cache.set(key, { hours: mergedHours, fetchedAt: Date.now() });
 }
 
 function gridSelectionCacheKey(grid: WindGridDefinition, selection: WindTimeSelection): string {
@@ -163,27 +158,65 @@ function resolveWindSource(url: string, response: Response): WindDataSource {
   return 'direct';
 }
 
+function supportsFranceHdWind(coord: { lat: number; lng: number }): boolean {
+  return coord.lat >= 41 && coord.lat <= 52 && coord.lng >= -6 && coord.lng <= 10;
+}
+
+function formatDateIso(date: Date): string {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function formatTimeIso(date: Date): string {
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
+function shiftSelectionByHours(selection: WindTimeSelection, hoursOffset: number): WindTimeSelection | null {
+  const normalised = normaliseWindSelection(selection);
+  const [yearText, monthText, dayText] = normalised.date.split('-');
+  const [hourText, minuteText] = normalised.time.split(':');
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hours = Number(hourText);
+  const minutes = Number(minuteText);
+
+  if (![year, month, day, hours, minutes].every(Number.isFinite)) return null;
+
+  const next = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  if (Number.isNaN(next.getTime())) return null;
+
+  next.setHours(next.getHours() + hoursOffset);
+
+  return {
+    ...selection,
+    date: formatDateIso(next),
+    time: normaliseWindRequestedHourKey(formatDateIso(next), formatTimeIso(next)).slice(11),
+  };
+}
+
 /**
  * Fetch a single batch of wind data (up to BATCH_SIZE coordinates).
  */
 async function fetchBatch(
   coords: { lat: number; lng: number }[],
   selection: WindTimeSelection,
+  franceModel: boolean,
   signal?: AbortSignal,
 ): Promise<FetchBatchResult> {
   const lats = coords.map((c) => c.lat.toFixed(4)).join(',');
   const lngs = coords.map((c) => c.lng.toFixed(4)).join(',');
-
-  // Use Météo-France AROME HD (1.5km) when all points fall within France coverage
-  const inFrance = coords.every(
-    (c) => c.lat >= 41 && c.lat <= 52 && c.lng >= -6 && c.lng <= 10,
-  );
-  const modelParam = inFrance ? '&models=meteofrance_arome_france_hd' : '';
+  const forecastIso = normaliseWindRequestedHourKey(selection.date, selection.time);
+  const timeParam = encodeURIComponent(forecastIso);
+  const modelParam = franceModel ? '&models=meteofrance_arome_france_hd' : '';
 
   const url =
     `${API_BASE}?latitude=${lats}&longitude=${lngs}` +
     `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
-    `&start_date=${selection.date}&end_date=${selection.date}` +
+    `&start_hour=${timeParam}&end_hour=${timeParam}` +
     `&wind_speed_unit=ms&timeformat=iso8601&timezone=${encodeURIComponent(WIND_TIMEZONE)}&cell_selection=nearest` +
     modelParam;
 
@@ -220,7 +253,7 @@ async function fetchBatch(
     if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${res.statusText}`);
 
     const source = resolveWindSource(url, res);
-    console.info(`[wind] Open-Meteo batch ${coords.length} coords via ${source}`);
+    console.info(`[wind] Open-Meteo batch ${coords.length} coords via ${source}${franceModel ? ' (AROME HD)' : ''}`);
 
     const json = await res.json();
 
@@ -258,7 +291,7 @@ async function fetchWindGridForSelectionInternal(
   // 1. Check cache first
   for (let index = 0; index < grid.points.length; index += 1) {
     const point = grid.points[index];
-    const cached = getCached(point.lat, point.lng, selection);
+    const cached = getCached(point.lat, point.lng, normalisedSelection);
     if (cached) {
       results[index] = {
         ...cached,
@@ -296,27 +329,41 @@ async function fetchWindGridForSelectionInternal(
     }
 
     const batchIndexes = uncachedIndexes.slice(i, i + BATCH_SIZE);
-    const batch = batchIndexes.map((index) => grid.points[index]);
     const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-    const { points, source } = await fetchBatch(batch, normalisedSelection, signal);
-    lastSource = source;
+    const franceIndexes: number[] = [];
+    const fallbackIndexes: number[] = [];
 
-    points.forEach((point, batchIndex) => {
-      const pointIndex = batchIndexes[batchIndex];
-      const gridPoint = grid.points[pointIndex];
-      const normalisedPoint: WindPoint = {
-        ...point,
-        lat: gridPoint.lat,
-        lng: gridPoint.lng,
-      };
-      results[pointIndex] = normalisedPoint;
+    batchIndexes.forEach((pointIndex) => {
+      if (supportsFranceHdWind(grid.points[pointIndex])) franceIndexes.push(pointIndex);
+      else fallbackIndexes.push(pointIndex);
     });
+
+    const fillBatch = async (pointIndexes: number[], franceModel: boolean): Promise<void> => {
+      if (pointIndexes.length === 0) return;
+      const batch = pointIndexes.map((pointIndex) => grid.points[pointIndex]);
+      const { points, source } = await fetchBatch(batch, normalisedSelection, franceModel, signal);
+      lastSource = source;
+
+      points.forEach((point, batchIndex) => {
+        const pointIndex = pointIndexes[batchIndex];
+        const gridPoint = grid.points[pointIndex];
+        const normalisedPoint: WindPoint = {
+          ...point,
+          lat: gridPoint.lat,
+          lng: gridPoint.lng,
+        };
+        results[pointIndex] = normalisedPoint;
+      });
+    };
+
+    await fillBatch(franceIndexes, true);
+    await fillBatch(fallbackIndexes, false);
 
     onProgress?.({
       completedBatches: batchNumber,
       totalBatches,
-      source,
-      detail: `Vent ${normalisedSelection.date} ${normalisedSelection.time} ${batchNumber}/${totalBatches} via ${source}`,
+      source: lastSource,
+      detail: `Vent ${normalisedSelection.date} ${normalisedSelection.time} ${batchNumber}/${totalBatches}${lastSource ? ` via ${lastSource}` : ''}`,
     });
   }
 
@@ -365,7 +412,8 @@ export function hasWindGridSelectionCached(
   grid: WindGridDefinition,
   selection: WindTimeSelection,
 ): boolean {
-  return grid.points.every((point) => getCached(point.lat, point.lng, selection));
+  const normalisedSelection = normaliseWindSelection(selection);
+  return grid.points.every((point) => getCached(point.lat, point.lng, normalisedSelection));
 }
 
 export async function fetchWindGridData(
@@ -383,27 +431,26 @@ export async function prefetchWindGridData(
   selection: WindTimeSelection,
   signal?: AbortSignal,
 ): Promise<void> {
-  const baseDate = new Date(`${selection.date}T00:00:00`);
-  if (Number.isNaN(baseDate.getTime())) return;
+  const candidates = [
+    shiftSelectionByHours(selection, 1),
+    shiftSelectionByHours(selection, 24),
+  ];
+  const seen = new Set<string>();
 
-  for (let dayOffset = 1; dayOffset <= 2; dayOffset += 1) {
-    const nextDate = new Date(baseDate);
-    nextDate.setDate(baseDate.getDate() + dayOffset);
-    const dateIso = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, '0')}-${String(nextDate.getDate()).padStart(2, '0')}`;
-    const nextSelection: WindTimeSelection = {
-      ...selection,
-      date: dateIso,
-    };
-
+  for (const nextSelection of candidates) {
+    if (!nextSelection) continue;
+    const nextSelectionKey = windSelectionKey(nextSelection);
+    if (seen.has(nextSelectionKey)) continue;
+    seen.add(nextSelectionKey);
     if (hasWindGridSelectionCached(grid, nextSelection)) continue;
 
     try {
       await fetchWindGridForSelection(grid, nextSelection, signal);
       if (signal?.aborted) return;
-      console.info(`[wind] prefetched hourly cache for ${dateIso}`);
+      console.info(`[wind] prefetched hourly cache for ${nextSelectionKey}`);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      console.warn(`[wind] background prefetch failed for ${dateIso}`, error);
+      console.warn(`[wind] background prefetch failed for ${nextSelectionKey}`, error);
       return;
     }
   }

@@ -14,7 +14,7 @@ import { normaliseWindSelection, windSelectionKey } from '../lib/windSelection';
 // ── Configuration ─────────────────────────────────────────────────────
 
 const DEBOUNCE_MS = 800;
-const MIN_FETCH_INTERVAL_MS = 8_000;
+const MIN_FETCH_INTERVAL_MS = 1_500;
 const VIEWPORT_SHIFT_THRESHOLD = 0.25;
 const ZOOM_DELTA_THRESHOLD = 1.2;
 const BOUNDS_PADDING = 0.8;
@@ -80,11 +80,14 @@ export function useWind(
   const lastBoundsRef = useRef<ViewportBounds | null>(null);
   const lastFetchBoundsRef = useRef<{ north: number; south: number; east: number; west: number } | null>(null);
   const lastSelectionRef = useRef<WindTimeSelection | null>(null);
+  const selectionRef = useRef<WindTimeSelection>(normaliseWindSelection(selection));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerInitRef = useRef(false);
   const lastFetchTimeRef = useRef(0);
 
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionEffectReadyRef = useRef(false);
+  selectionRef.current = normaliseWindSelection(selection);
 
   const publishStatus = useCallback((status: ReturnType<typeof createOverlayStatus> | null) => {
     statusReporter?.(status);
@@ -94,7 +97,7 @@ export function useWind(
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
-      const resolvedSelection = normaliseWindSelection(selection);
+      const resolvedSelection = selectionRef.current;
       const resolvedSelectionKey = windSelectionKey(resolvedSelection);
       const bounds = getViewportBounds(m);
       const selectionChanged = lastSelectionRef.current == null
@@ -111,11 +114,11 @@ export function useWind(
       };
 
       const grid = computeWindGrid(fetchBounds, bounds, bounds.zoom);
-      const selectionCached = grid.points.length > 0 && hasWindGridSelectionCached(grid, selection);
+      const selectionCached = grid.points.length > 0 && hasWindGridSelectionCached(grid, resolvedSelection);
 
       // Rate-limit guard: if too soon, schedule a deferred retry
       const timeSinceLastFetch = Date.now() - lastFetchTimeRef.current;
-      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS && !selectionCached) {
+      if (timeSinceLastFetch < MIN_FETCH_INTERVAL_MS && !selectionCached && !selectionChanged) {
         // Schedule retry after cooldown expires (only if not already scheduled)
         if (!retryTimerRef.current) {
           const delay = MIN_FETCH_INTERVAL_MS - timeSinceLastFetch + 100;
@@ -299,8 +302,25 @@ export function useWind(
         }));
       }
     },
-    [particlesEnabled, publishStatus, selection],
+    [particlesEnabled, publishStatus],
   );
+
+  useEffect(() => {
+    if (!selectionEffectReadyRef.current) {
+      selectionEffectReadyRef.current = true;
+      return;
+    }
+    if (!map || !enabled) return;
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    void fetchForViewport(map);
+  }, [enabled, fetchForViewport, map, selection.date, selection.time]);
 
   // ── Init / destroy on enable toggle ─────────────────────────────
 

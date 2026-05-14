@@ -389,6 +389,11 @@ export function useMap(
     let switchCancelled = false;
     const revealAfterSwitch = () => {
       if (switchCancelled) return;
+      try {
+        if (!styleHasUsableContent(map.getStyle())) return;
+      } catch {
+        return;
+      }
       setIsLoaded(true);
     };
     let switchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -405,7 +410,7 @@ export function useMap(
     const attemptBootstrap = (): Promise<void> =>
       bootstrapCurrentStyle()
         .then((bootstrapped) => {
-          if (!bootstrapped) return;
+          if (!bootstrapped || switchCancelled) return;
           setIsLoaded(true);
         })
         .catch((error) => {
