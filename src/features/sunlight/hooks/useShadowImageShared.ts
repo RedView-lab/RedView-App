@@ -243,7 +243,20 @@ export function removeShadowSourceAndLayer(map: MapboxMap): void {
 
 export function canMutateShadowStyle(map: MapboxMap): boolean {
   try {
-    return map.isStyleLoaded() && Boolean(map.getStyle());
+    const style = map.getStyle() as {
+      layers?: unknown[];
+      sources?: Record<string, unknown>;
+      imports?: Array<{ data?: unknown }>;
+    } | undefined;
+    if (!style) return false;
+    if (map.isStyleLoaded()) return true;
+
+    const layerCount = style.layers?.length ?? 0;
+    const sourceCount = Object.keys(style.sources ?? {}).length;
+    const hasImportContent = Array.isArray(style.imports)
+      && style.imports.some((entry) => entry && entry.data != null);
+
+    return layerCount > 0 || sourceCount > 0 || hasImportContent;
   } catch {
     return false;
   }
