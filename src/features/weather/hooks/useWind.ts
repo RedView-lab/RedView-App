@@ -3,11 +3,13 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { WindState, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindGridData, prefetchWindGridData, clearWindCache, hasWindGridSelectionCached } from '../lib/open-meteo';
+import { createOverlayStatus, type OverlayReloadRegistrar, type OverlayStatusReporter } from '@/features/map3d';
 import {
   initWindParticles,
   updateWindParticles,
   removeWindParticles,
 } from '../lib/wind-layer';
+import { normaliseWindSelection, windSelectionKey } from '../lib/windSelection';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
@@ -65,7 +67,13 @@ export function useWind(
   map: MapboxMap | null,
   enabled: boolean,
   selection: WindTimeSelection,
+  options: {
+    particlesEnabled?: boolean;
+    statusReporter?: OverlayStatusReporter;
+    registerReload?: OverlayReloadRegistrar;
+  } = {},
 ): WindState {
+  const { particlesEnabled = true, statusReporter, registerReload } = options;
   const [state, setState] = useState<WindState>(EMPTY_WIND_STATE);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -78,14 +86,19 @@ export function useWind(
 
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const publishStatus = useCallback((status: ReturnType<typeof createOverlayStatus> | null) => {
+    statusReporter?.(status);
+  }, [statusReporter]);
+
   // ── Fetch regular VPS wind grid → feed particles directly ──
 
   const fetchForViewport = useCallback(
     async (m: MapboxMap) => {
+      const resolvedSelection = normaliseWindSelection(selection);
+      const resolvedSelectionKey = windSelectionKey(resolvedSelection);
       const bounds = getViewportBounds(m);
-      const selectionChanged =
-        lastSelectionRef.current?.date !== selection.date
-        || lastSelectionRef.current?.time !== selection.time;
+      const selectionChanged = lastSelectionRef.current == null
+        || windSelectionKey(lastSelectionRef.current) !== resolvedSelectionKey;
 
       // Expand bounds by 50% margin to create a data reservoir
       const latPad = (bounds.north - bounds.south) * BOUNDS_PADDING;
@@ -111,6 +124,14 @@ export function useWind(
             loading: true,
             progress: Math.max(s.progress, 12),
             detail: `Pause API ${Math.ceil(delay / 1000)}s avant nouvelle requête`,
+          }));
+          publishStatus(createOverlayStatus({
+            id: 'wind',
+            label: 'Vent',
+            state: 'loading',
+            progress: 12,
+            detail: `Pause API ${Math.ceil(delay / 1000)}s avant nouvelle requête`,
+            reloadable: true,
           }));
           retryTimerRef.current = setTimeout(() => {
             retryTimerRef.current = null;
@@ -156,6 +177,14 @@ export function useWind(
         progress: 8,
         detail: 'Préparation de la grille vent',
       }));
+      publishStatus(createOverlayStatus({
+        id: 'wind',
+        label: 'Vent',
+        state: 'loading',
+        progress: 8,
+        detail: 'Préparation de la grille vent',
+        reloadable: true,
+      }));
 
       try {
         let resolvedSource: WindState['source'] = null;
@@ -167,6 +196,14 @@ export function useWind(
             progress: 0,
             detail: 'Aucune grille vent disponible',
           }));
+          publishStatus(createOverlayStatus({
+            id: 'wind',
+            label: 'Vent',
+            state: 'error',
+            progress: 0,
+            detail: 'Aucune grille vent disponible',
+            reloadable: true,
+          }));
           return;
         }
 
@@ -174,10 +211,18 @@ export function useWind(
           ...s,
           loading: true,
           progress: 22,
-          detail: `Vent ${selection.date} ${selection.time} ${grid.cols}×${grid.rows}`,
+          detail: `Vent ${resolvedSelection.date} ${resolvedSelection.time} ${grid.cols}×${grid.rows}`,
+        }));
+        publishStatus(createOverlayStatus({
+          id: 'wind',
+          label: 'Vent',
+          state: 'loading',
+          progress: 22,
+          detail: `Vent ${resolvedSelection.date} ${resolvedSelection.time} ${grid.cols}×${grid.rows}`,
+          reloadable: true,
         }));
 
-        const windPoints = await fetchWindGridData(grid, selection, controller.signal, ({
+        const windPoints = await fetchWindGridData(grid, resolvedSelection, controller.signal, ({
           completedBatches,
           totalBatches,
           source,
@@ -192,20 +237,30 @@ export function useWind(
             detail,
             source: source ?? s.source,
           }));
+          publishStatus(createOverlayStatus({
+            id: 'wind',
+            label: 'Vent',
+            state: 'loading',
+            progress: Math.min(96, 28 + Math.round(batchRatio * 58)),
+            detail,
+            reloadable: true,
+          }));
         });
         if (controller.signal.aborted) return;
 
-        updateWindParticles(m, grid, windPoints);
+        if (particlesEnabled) {
+          updateWindParticles(m, grid, windPoints);
+        }
         lastBoundsRef.current = bounds;
         lastFetchBoundsRef.current = grid.bounds;
-        lastSelectionRef.current = selection;
+        lastSelectionRef.current = resolvedSelection;
         lastFetchTimeRef.current = Date.now();
 
-        void prefetchWindGridData(grid, selection, controller.signal);
+        void prefetchWindGridData(grid, resolvedSelection, controller.signal);
 
         console.info(`[wind] ready with direct grid ${grid.cols}x${grid.rows} (${windPoints.length} points)`);
 
-        setState({
+        const nextState = {
           loading: false,
           error: null,
           pointCount: windPoints.length,
@@ -213,7 +268,16 @@ export function useWind(
           progress: 100,
           detail: 'Champ de vent chargé',
           source: resolvedSource,
-        });
+        };
+        setState(nextState);
+        publishStatus(createOverlayStatus({
+          id: 'wind',
+          label: 'Vent',
+          state: 'ready',
+          progress: 100,
+          detail: nextState.detail ?? undefined,
+          reloadable: true,
+        }));
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         const message = err instanceof Error ? err.message : 'Wind fetch failed';
@@ -225,9 +289,17 @@ export function useWind(
           progress: 0,
           detail: 'Impossible de charger le vent',
         }));
+        publishStatus(createOverlayStatus({
+          id: 'wind',
+          label: 'Vent',
+          state: 'error',
+          progress: 0,
+          detail: message,
+          reloadable: true,
+        }));
       }
     },
-    [selection],
+    [particlesEnabled, publishStatus, selection],
   );
 
   // ── Init / destroy on enable toggle ─────────────────────────────
@@ -242,18 +314,39 @@ export function useWind(
           detail: 'Carte non prête, attente du chargement Mapbox',
           progress: 0,
         }));
+        publishStatus(createOverlayStatus({
+          id: 'wind',
+          label: 'Vent',
+          state: 'loading',
+          progress: 0,
+          detail: 'Carte non prête, attente du chargement Mapbox',
+          reloadable: true,
+        }));
       }
       return;
     }
 
     if (enabled) {
-      try {
-        initWindParticles(map);
-        layerInitRef.current = true;
-      } catch (err) {
-        console.error('[wind] init failed:', err);
-        setState((s) => ({ ...s, error: 'Wind particle init failed' }));
-        return;
+      if (particlesEnabled) {
+        try {
+          initWindParticles(map);
+          layerInitRef.current = true;
+        } catch (err) {
+          console.error('[wind] init failed:', err);
+          setState((s) => ({ ...s, error: 'Wind particle init failed' }));
+          publishStatus(createOverlayStatus({
+            id: 'wind',
+            label: 'Vent',
+            state: 'error',
+            progress: 0,
+            detail: 'Wind particle init failed',
+            reloadable: true,
+          }));
+          return;
+        }
+      } else if (layerInitRef.current) {
+        removeWindParticles(map);
+        layerInitRef.current = false;
       }
 
       fetchForViewport(map);
@@ -271,8 +364,10 @@ export function useWind(
       // sees no particles even though the toggle reads as enabled.
       const onStyleLoad = () => {
         try {
-          initWindParticles(map);
-          layerInitRef.current = true;
+          if (particlesEnabled) {
+            initWindParticles(map);
+            layerInitRef.current = true;
+          }
           // Force a re-fetch so the freshly-initialised GPU texture has
           // data; clear viewport refs so the "already covered" early
           // exit in fetchForViewport doesn't skip the re-feed.
@@ -292,12 +387,13 @@ export function useWind(
         if (debounceRef.current) clearTimeout(debounceRef.current);
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
         abortRef.current?.abort();
-        removeWindParticles(map);
+        if (layerInitRef.current) removeWindParticles(map);
         layerInitRef.current = false;
         lastBoundsRef.current = null;
         lastFetchBoundsRef.current = null;
         lastSelectionRef.current = null;
         setState(EMPTY_WIND_STATE);
+        publishStatus(null);
       };
     } else {
       if (layerInitRef.current) {
@@ -311,9 +407,43 @@ export function useWind(
         lastSelectionRef.current = null;
         clearWindCache();
         setState(EMPTY_WIND_STATE);
+      } else {
+        abortRef.current?.abort();
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+        lastBoundsRef.current = null;
+        lastFetchBoundsRef.current = null;
+        lastSelectionRef.current = null;
+        clearWindCache();
+        setState(EMPTY_WIND_STATE);
       }
+      publishStatus(null);
     }
-  }, [map, enabled, fetchForViewport]);
+  }, [map, enabled, fetchForViewport, particlesEnabled, publishStatus]);
+
+  useEffect(() => {
+    if (!registerReload) return;
+    if (!map || !enabled) {
+      registerReload(null);
+      return;
+    }
+    registerReload(() => {
+      clearWindCache();
+      lastFetchBoundsRef.current = null;
+      lastBoundsRef.current = null;
+      lastSelectionRef.current = null;
+      lastFetchTimeRef.current = 0;
+      abortRef.current?.abort();
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      void fetchForViewport(map);
+    });
+    return () => {
+      registerReload(null);
+    };
+  }, [enabled, fetchForViewport, map, registerReload]);
 
   return state;
 }

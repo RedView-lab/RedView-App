@@ -86,6 +86,8 @@ interface UseControlPanelOverlayStateArgs {
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   onWeatherOverlayStatusChange?: OverlayStatusReporter;
   onWeatherOverlayReloadChange?: OverlayReloadRegistrar;
+  onWindOverlayStatusChange?: OverlayStatusReporter;
+  onWindOverlayReloadChange?: OverlayReloadRegistrar;
   onShadowOverlayStatusChange?: OverlayStatusReporter;
   onShadowOverlayReloadChange?: OverlayReloadRegistrar;
 }
@@ -123,6 +125,8 @@ export function useControlPanelOverlayState({
   updateProjectControlPanel,
   onWeatherOverlayStatusChange,
   onWeatherOverlayReloadChange,
+  onWindOverlayStatusChange,
+  onWindOverlayReloadChange,
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
 }: UseControlPanelOverlayStateArgs): OverlayStateResult {
@@ -216,7 +220,16 @@ export function useControlPanelOverlayState({
       terrainOverlayEnabled: initial.terrainOverlayEnabled ?? fallback.terrainOverlayEnabled,
     };
   });
-  const windState = useWind(isMapLoaded ? map : null, windEnabled && windSelection.particlesEnabled, windSelection);
+  const windState = useWind(
+    isMapLoaded ? map : null,
+    windEnabled && (windSelection.particlesEnabled || windSelection.terrainOverlayEnabled),
+    windSelection,
+    {
+      particlesEnabled: windSelection.particlesEnabled,
+      statusReporter: onWindOverlayStatusChange,
+      registerReload: onWindOverlayReloadChange,
+    },
+  );
   useWindTerrainOverlay(
     isMapLoaded ? map : null,
     isMapLoaded,

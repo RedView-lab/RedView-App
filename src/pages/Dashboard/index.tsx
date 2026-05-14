@@ -211,6 +211,13 @@ export default function Dashboard({
     [setOverlayStatus],
   );
 
+  const handleWindOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => {
+      setOverlayStatus('wind', status);
+    },
+    [setOverlayStatus],
+  );
+
   const handleShadowOverlayStatusChange = useCallback(
     (status: OverlayStatusSnapshot | null) => {
       setOverlayStatus('shadow', status);
@@ -246,6 +253,13 @@ export default function Dashboard({
     [setOverlayReloader],
   );
 
+  const handleWindOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => {
+      setOverlayReloader('wind', reload);
+    },
+    [setOverlayReloader],
+  );
+
   const handleShadowOverlayReloadChange = useCallback(
     (reload: (() => void) | null) => {
       setOverlayReloader('shadow', reload);
@@ -254,7 +268,7 @@ export default function Dashboard({
   );
 
   const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'altitude', 'slope', 'weather'];
+    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'altitude', 'slope', 'weather', 'wind'];
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
       ...overlayStatuses,
       ...(mapStatus
@@ -516,6 +530,8 @@ export default function Dashboard({
                               onBasemapChange={setSelectedBasemapId}
                               onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
                               onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
+                              onWindOverlayStatusChange={handleWindOverlayStatusChange}
+                              onWindOverlayReloadChange={handleWindOverlayReloadChange}
                               onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
                               onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
                               onSlopeOverlayStatusChange={handleSlopeOverlayStatusChange}

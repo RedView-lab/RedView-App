@@ -30,6 +30,8 @@ export interface ControlPanelContainerProps {
   onBasemapChange?: (id: BasemapId) => void;
   onWeatherOverlayStatusChange?: OverlayStatusReporter;
   onWeatherOverlayReloadChange?: OverlayReloadRegistrar;
+  onWindOverlayStatusChange?: OverlayStatusReporter;
+  onWindOverlayReloadChange?: OverlayReloadRegistrar;
   onShadowOverlayStatusChange?: OverlayStatusReporter;
   onShadowOverlayReloadChange?: OverlayReloadRegistrar;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
@@ -57,6 +59,8 @@ export function ControlPanelContainer({
   onBasemapChange,
   onWeatherOverlayStatusChange,
   onWeatherOverlayReloadChange,
+  onWindOverlayStatusChange,
+  onWindOverlayReloadChange,
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
   onSlopeOverlayStatusChange,
@@ -101,6 +105,8 @@ export function ControlPanelContainer({
     updateProjectControlPanel,
     onWeatherOverlayStatusChange,
     onWeatherOverlayReloadChange,
+    onWindOverlayStatusChange,
+    onWindOverlayReloadChange,
     onShadowOverlayStatusChange,
     onShadowOverlayReloadChange,
   });

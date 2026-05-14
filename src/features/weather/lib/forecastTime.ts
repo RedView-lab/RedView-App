@@ -50,23 +50,15 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
-function roundUpToStep(minutes: number, stepMinutes: number): number {
-  return Math.ceil(minutes / stepMinutes) * stepMinutes;
-}
-
-function roundToStep(minutes: number, stepMinutes: number): number {
-  return Math.round(minutes / stepMinutes) * stepMinutes;
+function floorToStep(minutes: number, stepMinutes: number): number {
+  return Math.floor(minutes / stepMinutes) * stepMinutes;
 }
 
 export function getForecastWindowStart(now: Date = new Date()): Date {
   const start = new Date(now);
   start.setSeconds(0, 0);
-  const roundedMinutes = roundUpToStep((start.getHours() * 60) + start.getMinutes(), FORECAST_TIME_STEP_MINUTES);
+  const roundedMinutes = floorToStep((start.getHours() * 60) + start.getMinutes(), FORECAST_TIME_STEP_MINUTES);
   start.setHours(0, 0, 0, 0);
-  if (roundedMinutes >= 24 * 60) {
-    start.setDate(start.getDate() + 1);
-    return start;
-  }
   start.setMinutes(roundedMinutes);
   return start;
 }
@@ -115,7 +107,7 @@ export function clampForecastSelection(
   const minMinutes = getForecastMinMinutesForDate(dateIso, now);
   const maxMinutes = getForecastMaxMinutesForDate(dateIso);
   const rawMinutes = timeToMinutes(selection.time || minutesToTime(minMinutes));
-  const alignedMinutes = roundToStep(rawMinutes, FORECAST_TIME_STEP_MINUTES);
+  const alignedMinutes = floorToStep(rawMinutes, FORECAST_TIME_STEP_MINUTES);
   const safeMinutes = clamp(alignedMinutes, minMinutes, maxMinutes);
 
   return {

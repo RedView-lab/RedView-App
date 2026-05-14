@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FORECAST_MAX_DAY_OFFSET, getForecastDateForOffset, getForecastMaxMinutesForDate, getForecastMinMinutesForDate, getForecastOffsetForDate, getForecastBaseDate, minutesToTime, timeToMinutes } from '@/features/weather/lib/forecastTime';
+import { snapWindMinutes } from '@/features/weather/lib/windSelection';
 import type { WindPanelState } from '../types';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
@@ -169,7 +170,7 @@ export function WindSection({
 
   const updateTimeFromMinutes = (minutes: number) => {
     onDateChange?.({
-      time: minutesToTime(clamp(minutes, minSelectableMinutes, maxSelectableMinutes)),
+      time: minutesToTime(snapWindMinutes(clamp(minutes, minSelectableMinutes, maxSelectableMinutes))),
     });
   };
 

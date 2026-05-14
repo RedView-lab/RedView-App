@@ -1,6 +1,12 @@
 import type { WindPoint, WindDataSource, WindGridDefinition, WindTimeSelection } from '../types';
 import { coordCacheKey } from './wind-grid';
 import { OPENMETEO_FORECAST_URL } from './openMeteoConfig';
+import {
+  normaliseWindRequestedHourKey,
+  normaliseWindSelection,
+  windSelectionKey,
+  WIND_TIMEZONE,
+} from './windSelection';
 
 // ── Configuration ─────────────────────────────────────────────────────
 
@@ -38,13 +44,6 @@ function normaliseApiHourKey(timeValue: string): string | null {
   return match ? `${match[1]}:00` : null;
 }
 
-function normaliseRequestedHourKey(dateIso: string, time: string): string {
-  const [hoursText = '0', minutesText = '0'] = time.split(':');
-  const totalMinutes = (Number(hoursText) || 0) * 60 + (Number(minutesText) || 0);
-  const roundedHour = Math.max(0, Math.min(23, Math.round(totalMinutes / 60)));
-  return `${dateIso}T${String(roundedHour).padStart(2, '0')}:00`;
-}
-
 function getCached(lat: number, lng: number, selection: WindTimeSelection): WindPoint | null {
   const key = toDailyCacheKey(lat, lng, selection.date);
   const entry = cache.get(key);
@@ -53,12 +52,12 @@ function getCached(lat: number, lng: number, selection: WindTimeSelection): Wind
     cache.delete(key);
     return null;
   }
-  const exact = entry.hours.get(normaliseRequestedHourKey(selection.date, selection.time));
+  const exact = entry.hours.get(normaliseWindRequestedHourKey(selection.date, selection.time));
   if (exact) return exact;
 
   let fallback: WindPoint | null = null;
   let bestDelta = Number.POSITIVE_INFINITY;
-  const targetHour = Number(normaliseRequestedHourKey(selection.date, selection.time).slice(11, 13));
+  const targetHour = Number(normaliseWindRequestedHourKey(selection.date, selection.time).slice(11, 13));
   for (const [hourKey, point] of entry.hours) {
     if (!hourKey.startsWith(`${selection.date}T`)) continue;
     const hour = Number(hourKey.slice(11, 13));
@@ -77,9 +76,10 @@ function setCache(lat: number, lng: number, dateIso: string, hours: Map<string, 
 
 function gridSelectionCacheKey(grid: WindGridDefinition, selection: WindTimeSelection): string {
   const { north, south, east, west, spacing } = grid.bounds;
+  const normalisedSelection = normaliseWindSelection(selection);
   return [
-    selection.date,
-    selection.time,
+    normalisedSelection.date,
+    normalisedSelection.time,
     grid.rows,
     grid.cols,
     north.toFixed(6),
@@ -184,7 +184,7 @@ async function fetchBatch(
     `${API_BASE}?latitude=${lats}&longitude=${lngs}` +
     `&hourly=wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
     `&start_date=${selection.date}&end_date=${selection.date}` +
-    `&wind_speed_unit=ms&timeformat=iso8601&timezone=auto&cell_selection=nearest` +
+    `&wind_speed_unit=ms&timeformat=iso8601&timezone=${encodeURIComponent(WIND_TIMEZONE)}&cell_selection=nearest` +
     modelParam;
 
   let lastError: Error | null = null;
@@ -251,6 +251,7 @@ async function fetchWindGridForSelectionInternal(
   signal?: AbortSignal,
   onProgress?: (progress: WindFetchProgress) => void,
 ): Promise<{ points: WindPoint[]; source: WindDataSource | null }> {
+  const normalisedSelection = normaliseWindSelection(selection);
   const results = new Array<WindPoint>(grid.points.length);
   const uncachedIndexes: number[] = [];
 
@@ -279,7 +280,7 @@ async function fetchWindGridForSelectionInternal(
     completedBatches: 0,
     totalBatches,
     source: null,
-    detail: `Préparation vent ${selection.date} ${selection.time} (${grid.cols}×${grid.rows})`,
+    detail: `Préparation vent ${normalisedSelection.date} ${normalisedSelection.time} (${grid.cols}×${grid.rows})`,
   });
 
   // 2. Batch fetch uncached coordinates (with inter-batch delay)
@@ -297,7 +298,7 @@ async function fetchWindGridForSelectionInternal(
     const batchIndexes = uncachedIndexes.slice(i, i + BATCH_SIZE);
     const batch = batchIndexes.map((index) => grid.points[index]);
     const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
-    const { points, source } = await fetchBatch(batch, selection, signal);
+    const { points, source } = await fetchBatch(batch, normalisedSelection, signal);
     lastSource = source;
 
     points.forEach((point, batchIndex) => {
@@ -315,7 +316,7 @@ async function fetchWindGridForSelectionInternal(
       completedBatches: batchNumber,
       totalBatches,
       source,
-      detail: `Vent ${selection.date} ${selection.time} ${batchNumber}/${totalBatches} via ${source}`,
+      detail: `Vent ${normalisedSelection.date} ${normalisedSelection.time} ${batchNumber}/${totalBatches} via ${source}`,
     });
   }
 
@@ -344,7 +345,7 @@ async function fetchWindGridForSelection(
       completedBatches: 0,
       totalBatches: 1,
       source: null,
-      detail: `Réutilisation du chargement vent en cours (${grid.cols}×${grid.rows})`,
+      detail: `Réutilisation du chargement vent en cours ${windSelectionKey(selection)} (${grid.cols}×${grid.rows})`,
     });
     return existing;
   }

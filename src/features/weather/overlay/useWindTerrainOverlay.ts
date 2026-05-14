@@ -4,6 +4,7 @@ import type { WindGridDefinition, WindPoint, WindTimeSelection } from '../types'
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindGridData } from '../lib/open-meteo';
 import { getOverlayRenderSize } from './renderSize';
+import { windSelectionKey } from '../lib/windSelection';
 
 const SOURCE_ID = 'wind-terrain-overlay-source';
 const LAYER_ID = 'wind-terrain-overlay-layer';
@@ -89,10 +90,6 @@ function containsBounds(
     && viewport.south >= container.south
     && viewport.east <= container.east
     && viewport.north <= container.north;
-}
-
-function selectionKey(selection: WindTimeSelection): string {
-  return `${selection.date}T${selection.time}`;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -212,7 +209,7 @@ export function useWindTerrainOverlay(
   const renderedRef = useRef<RenderedLayerEntry | null>(null);
   const generationRef = useRef(0);
   const scheduleRefreshRef = useRef<((reason: RefreshReason) => void) | null>(null);
-  const selectionKeyMemo = useMemo(() => selectionKey(selection), [selection.date, selection.time]);
+  const selectionKeyMemo = useMemo(() => windSelectionKey(selection), [selection.date, selection.time]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -316,7 +313,7 @@ export function useWindTerrainOverlay(
 
       const viewport = getViewportBounds(map);
       const currentDataset = dataRef.current;
-      const sameSelection = currentDataset?.selectionKey === selectionKey(stateRef.current.selection);
+      const sameSelection = currentDataset?.selectionKey === windSelectionKey(stateRef.current.selection);
 
       if (
         reason === 'normal'
@@ -358,7 +355,7 @@ export function useWindTerrainOverlay(
         const points = await fetchWindGridData(grid, stateRef.current.selection, controller.signal);
         if (controller.signal.aborted || generation !== generationRef.current) return;
         dataRef.current = {
-          selectionKey: selectionKey(stateRef.current.selection),
+          selectionKey: windSelectionKey(stateRef.current.selection),
           grid,
           points,
           fetchedAt: Date.now(),
