@@ -3,6 +3,7 @@ import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
 import type { WindGridDefinition, WindPoint, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindGridData } from '../lib/open-meteo';
+import { isWindProjectionSupported } from '../lib/windProjection';
 import { getOverlayRenderSize } from './renderSize';
 import { windSelectionKey } from '../lib/windSelection';
 
@@ -231,6 +232,31 @@ export function useWindTerrainOverlay(
       }
     };
 
+    const projectionSupported = () => {
+      try {
+        return isWindProjectionSupported(map);
+      } catch {
+        return false;
+      }
+    };
+
+    const releaseRenderedUrl = () => {
+      if (renderedRef.current?.url.startsWith('blob:')) {
+        URL.revokeObjectURL(renderedRef.current.url);
+      }
+      renderedRef.current = null;
+    };
+
+    const clearOverlay = () => {
+      try {
+        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
+      } catch {
+        /* no-op */
+      }
+      releaseRenderedUrl();
+    };
+
     const hide = () => {
       try {
         if (map.getLayer(LAYER_ID)) map.setLayoutProperty(LAYER_ID, 'visibility', 'none');
@@ -277,6 +303,10 @@ export function useWindTerrainOverlay(
         return;
       }
       if (!canMutateStyle()) return;
+      if (!projectionSupported()) {
+        clearOverlay();
+        return;
+      }
 
       const coords = imageCoords(dataset.grid.bounds);
       const size = getOverlayRenderSize(map);
@@ -305,6 +335,11 @@ export function useWindTerrainOverlay(
 
     const refresh = async (reason: RefreshReason) => {
       if (!canMutateStyle()) return;
+
+      if (!projectionSupported()) {
+        clearOverlay();
+        return;
+      }
 
       if (!stateRef.current.enabled) {
         hide();
@@ -383,8 +418,18 @@ export function useWindTerrainOverlay(
 
     const onMoveEnd = () => scheduleRefresh('normal');
     const onZoomEnd = () => scheduleRefresh('normal');
+    const onStyleData = () => {
+      if (!canMutateStyle()) return;
+      if (!projectionSupported()) {
+        clearOverlay();
+      }
+    };
     const onStyleLoad = () => {
       if (!canMutateStyle()) return;
+      if (!projectionSupported()) {
+        clearOverlay();
+        return;
+      }
       const rendered = renderedRef.current;
       if (!stateRef.current.enabled) {
         hide();
@@ -397,6 +442,7 @@ export function useWindTerrainOverlay(
     scheduleRefreshRef.current = scheduleRefresh;
     map.on('moveend', onMoveEnd);
     map.on('zoomend', onZoomEnd);
+    map.on('styledata', onStyleData);
     map.on('style.load', onStyleLoad);
 
     return () => {
@@ -404,18 +450,12 @@ export function useWindTerrainOverlay(
       generationRef.current += 1;
       map.off('moveend', onMoveEnd);
       map.off('zoomend', onZoomEnd);
+      map.off('styledata', onStyleData);
       map.off('style.load', onStyleLoad);
       scheduleRefreshRef.current = null;
       abortRef.current?.abort();
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
-      if (renderedRef.current?.url.startsWith('blob:')) URL.revokeObjectURL(renderedRef.current.url);
-      renderedRef.current = null;
-      try {
-        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
-        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
-      } catch {
-        /* no-op */
-      }
+      clearOverlay();
     };
   }, [isMapLoaded, map]);
 
