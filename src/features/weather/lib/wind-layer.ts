@@ -9,19 +9,35 @@ let windLayer: WindCustomLayer | null = null;
 
 // ── Public API ────────────────────────────────────────────────────────
 
+export function canRenderWindParticles(map: MapboxMap): boolean {
+  try {
+    return !map._showingGlobe();
+  } catch {
+    return false;
+  }
+}
+
 /** Add the wind particle custom layer to the map as world-space 3D particles. */
-export function initWindParticles(map: MapboxMap): void {
+export function initWindParticles(map: MapboxMap): boolean {
+  if (!canRenderWindParticles(map)) {
+    if (windLayer) {
+      removeWindParticles(map);
+    }
+    return false;
+  }
+
   // If we already have a singleton AND Mapbox still has the layer, no-op.
   // After a style swap Mapbox wipes the layer but our ref survives — in
   // that case we drop the stale singleton and rebuild so callers can use
   // initWindParticles() as an idempotent recovery hook from style.load.
   if (windLayer) {
-    if (map.getLayer(WIND_LAYER_ID)) return;
+    if (map.getLayer(WIND_LAYER_ID)) return true;
     windLayer = null;
   }
   try {
     windLayer = new WindCustomLayer();
     map.addLayer(windLayer);
+    return true;
   } catch (e) {
     windLayer = null;
     console.error('[wind] Custom layer init failed:', e);

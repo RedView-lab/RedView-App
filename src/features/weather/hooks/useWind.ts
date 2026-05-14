@@ -93,6 +93,20 @@ export function useWind(
     statusReporter?.(status);
   }, [statusReporter]);
 
+  const syncParticleLayer = useCallback((m: MapboxMap): boolean => {
+    if (!particlesEnabled) {
+      if (layerInitRef.current) {
+        removeWindParticles(m);
+      }
+      layerInitRef.current = false;
+      return false;
+    }
+
+    const initialized = initWindParticles(m);
+    layerInitRef.current = initialized;
+    return initialized;
+  }, [particlesEnabled]);
+
   // ── Fetch regular VPS wind grid → feed particles directly ──
 
   const fetchForViewport = useCallback(
@@ -251,7 +265,7 @@ export function useWind(
         });
         if (controller.signal.aborted) return;
 
-        if (particlesEnabled) {
+        if (particlesEnabled && layerInitRef.current) {
           updateWindParticles(m, grid, windPoints);
         }
         lastBoundsRef.current = bounds;
@@ -347,26 +361,20 @@ export function useWind(
     }
 
     if (enabled) {
-      if (particlesEnabled) {
-        try {
-          initWindParticles(map);
-          layerInitRef.current = true;
-        } catch (err) {
-          console.error('[wind] init failed:', err);
-          setState((s) => ({ ...s, error: 'Wind particle init failed' }));
-          publishStatus(createOverlayStatus({
-            id: 'wind',
-            label: 'Vent',
-            state: 'error',
-            progress: 0,
-            detail: 'Wind particle init failed',
-            reloadable: true,
-          }));
-          return;
-        }
-      } else if (layerInitRef.current) {
-        removeWindParticles(map);
-        layerInitRef.current = false;
+      try {
+        syncParticleLayer(map);
+      } catch (err) {
+        console.error('[wind] init failed:', err);
+        setState((s) => ({ ...s, error: 'Wind particle init failed' }));
+        publishStatus(createOverlayStatus({
+          id: 'wind',
+          label: 'Vent',
+          state: 'error',
+          progress: 0,
+          detail: 'Wind particle init failed',
+          reloadable: true,
+        }));
+        return;
       }
 
       fetchForViewport(map);
@@ -375,7 +383,22 @@ export function useWind(
         if (debounceRef.current) clearTimeout(debounceRef.current);
         debounceRef.current = setTimeout(() => fetchForViewport(map), DEBOUNCE_MS);
       };
+      const onZoom = () => {
+        try {
+          const wasInitialized = layerInitRef.current;
+          const isInitialized = syncParticleLayer(map);
+          if (isInitialized && !wasInitialized) {
+            lastBoundsRef.current = null;
+            lastFetchBoundsRef.current = null;
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => fetchForViewport(map), 50);
+          }
+        } catch (err) {
+          console.warn('[wind] particle sync during zoom failed', err);
+        }
+      };
       map.on('moveend', onMoveEnd);
+      map.on('zoom', onZoom);
 
       // Re-add the custom particle layer after every style swap. Mapbox
       // wipes all custom layers on style.load and there's no built-in
@@ -384,10 +407,7 @@ export function useWind(
       // sees no particles even though the toggle reads as enabled.
       const onStyleLoad = () => {
         try {
-          if (particlesEnabled) {
-            initWindParticles(map);
-            layerInitRef.current = true;
-          }
+          syncParticleLayer(map);
           // Force a re-fetch so the freshly-initialised GPU texture has
           // data; clear viewport refs so the "already covered" early
           // exit in fetchForViewport doesn't skip the re-feed.
@@ -403,6 +423,7 @@ export function useWind(
 
       return () => {
         map.off('moveend', onMoveEnd);
+        map.off('zoom', onZoom);
         map.off('style.load', onStyleLoad);
         if (debounceRef.current) clearTimeout(debounceRef.current);
         if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
@@ -439,7 +460,7 @@ export function useWind(
       }
       publishStatus(null);
     }
-  }, [map, enabled, fetchForViewport, particlesEnabled, publishStatus]);
+  }, [map, enabled, fetchForViewport, particlesEnabled, publishStatus, syncParticleLayer]);
 
   useEffect(() => {
     if (!registerReload) return;
