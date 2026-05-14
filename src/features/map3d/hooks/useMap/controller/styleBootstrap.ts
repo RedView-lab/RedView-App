@@ -6,6 +6,7 @@ import {
   STYLE_READINESS_FORCE_BYPASS_MS,
   type Ctx,
 } from './context';
+import { getStyleContentStats } from './styleContent';
 
 const supportsStandardLightPreset = (visualFamily: Ctx['getActiveVisualFamily'] extends never ? never : ReturnType<Ctx['getActiveVisualFamily']>): boolean => (
   visualFamily === 'mapbox-standard-v3'
@@ -82,22 +83,12 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       try {
         const style = map.getStyle();
         if (!style) return false;
-        const layerCount = style.layers?.length ?? 0;
-        const sourceCount = Object.keys(style.sources ?? {}).length;
-        // Mapbox v3 imported style fragments (Standard / Standard-Satellite)
-        // expose their layers/sources via `imports`; even when the root
-        // style.layers and style.sources arrays are empty, an import entry
-        // with `data` populated means the rendering pipeline has the style
-        // graph it needs to draw.
-        const imports = (style as unknown as { imports?: Array<{ data?: unknown }> }).imports;
-        const hasImportContent = Array.isArray(imports)
-          && imports.some((imp) => imp && imp.data != null);
-        const hasContent = layerCount > 0 || sourceCount > 0 || hasImportContent;
-        if (!hasContent) return false;
+        const stats = getStyleContentStats(style);
+        if (!stats.hasContent) return false;
         if (!st.spriteStormBypass) {
           console.warn(
             `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
-            { layers: layerCount, sources: sourceCount, imports: Array.isArray(imports) ? imports.length : 0 },
+            { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
           );
           st.spriteStormBypass = true;
         }

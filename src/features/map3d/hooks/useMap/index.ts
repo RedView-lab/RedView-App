@@ -9,6 +9,7 @@ import {
 import { loadViewport, saveViewport, type MapViewport } from '../../lib/viewport-persist';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
+import { styleHasUsableContent } from './controller/styleContent';
 import { getMapRuntimeProfile } from './runtimeProfile';
 import type { UseMapOptions } from './types';
 
@@ -179,6 +180,11 @@ export function useMap(
     // visible bug ("3D visible mais loader bloqué à 30%").
     const revealMap = () => {
       if (cancelled) return;
+      try {
+        if (!styleHasUsableContent(map.getStyle())) return;
+      } catch {
+        return;
+      }
       setIsLoaded(true);
     };
     let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -204,8 +210,9 @@ export function useMap(
     // permanent flat terrain).
     const attemptInitBootstrap = (): Promise<void> =>
       lifecycle.bootstrapCurrentStyle()
-        .then(() => {
-          if (!cancelled) setIsLoaded(true);
+        .then((bootstrapped) => {
+          if (!bootstrapped || cancelled) return;
+          setIsLoaded(true);
         })
         .catch((error) => {
           console.error('[map3d] init failed', error);
@@ -232,13 +239,7 @@ export function useMap(
         if (cancelled) return;
         let hasContent = false;
         try {
-          const style = map.getStyle();
-          const layerCount = style?.layers?.length ?? 0;
-          const sourceCount = Object.keys(style?.sources ?? {}).length;
-          const imports = (style as unknown as { imports?: Array<{ data?: unknown }> })?.imports;
-          const hasImportContent = Array.isArray(imports)
-            && imports.some((imp) => imp && imp.data != null);
-          hasContent = layerCount > 0 || sourceCount > 0 || hasImportContent;
+          hasContent = styleHasUsableContent(map.getStyle());
         } catch { /* getStyle threw — treat as stuck */ }
         if (hasContent) return;
         console.warn(
@@ -261,6 +262,9 @@ export function useMap(
 
     const startInitialStyleAndBootstrap = async (): Promise<void> => {
       if (shouldHydrateInitialStyle) {
+        // Arm recovery BEFORE the async prefetch so a stalled/cancelled
+        // hydration can never strand the map on the empty bootstrap shell.
+        armStuckShellWatchdog();
         // resolveStyleInput now never throws — it falls back to the URL
         // string on any prefetch failure (timeout, network, parse).
         const styleInput = await resolveStyleInput(basemapConfig.styleUrl);
@@ -285,7 +289,7 @@ export function useMap(
       }
 
       armInitialReveal();
-      armStuckShellWatchdog();
+      if (!shouldHydrateInitialStyle) armStuckShellWatchdog();
       void attemptInitBootstrap();
     };
 
@@ -400,7 +404,8 @@ export function useMap(
     // switches.
     const attemptBootstrap = (): Promise<void> =>
       bootstrapCurrentStyle()
-        .then(() => {
+        .then((bootstrapped) => {
+          if (!bootstrapped) return;
           setIsLoaded(true);
         })
         .catch((error) => {

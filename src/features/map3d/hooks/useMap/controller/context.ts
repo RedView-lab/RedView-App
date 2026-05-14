@@ -13,6 +13,7 @@ import {
 import type { MapRuntimeProfile } from '../runtimeProfile';
 import { getDemTileKey, type DemSourceDataLike, type DemTileProfile } from '../demTiles';
 import { PENDING_TILE_MAX_AGE_MS, TRACKED_SOURCE_TYPES } from '../constants';
+import { styleHasUsableContent } from './styleContent';
 
 export type BasemapVisualFamily = 'mapbox-standard-v3' | 'mapbox-classic-v12';
 export type TerrainBootstrapContract = 'unified-dem-v1';
@@ -229,15 +230,16 @@ export function attachHelpers(ctx: Ctx): void {
   fns.canMutateStyle = () => {
     if (isCancelled()) return false;
     try {
+      const style = map.getStyle();
       // When Mapbox 3.x is stuck in a sprite/image rejection storm,
       // isStyleLoaded() stays false forever even though sources, layers
       // and the rendering pipeline are fully operational. The
       // spriteStormBypass flag (set by the polling fallback in
       // styleBootstrap.ts) relaxes the check so terrain can attach.
       if (st.spriteStormBypass) {
-        return Boolean(map.getStyle());
+        return Boolean(style) && styleHasUsableContent(style);
       }
-      return map.isStyleLoaded() && Boolean(map.getStyle());
+      return map.isStyleLoaded() && Boolean(style);
     } catch {
       return false;
     }
