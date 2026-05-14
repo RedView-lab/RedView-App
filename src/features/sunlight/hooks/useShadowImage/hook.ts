@@ -1,55 +1,6 @@
-/**
- * Live cast-shadow overlay backed by a single Mapbox `ImageSource`.
- *
- * v4 — Apr 21 2026 — responsiveness/stability pass.
- *
- * Symptom we're fixing: during a zoom (or rapid pan) the shadow briefly
- * "jumps" to a wrong location for a few frames before settling back. Three
- * root causes were addressed:
- *
- *  1. Texture-swap gap. `ImageSource.updateImage({url, coordinates})`
- *     swaps the *coordinates* synchronously but loads the new URL async.
- *     During that ~1–3 frame window Mapbox draws the previous texture
- *     stretched onto the new geographic coordinates → the shadow appears
- *     in the wrong place. Fix: pre-decode the blob via
- *     `HTMLImageElement.decode()` BEFORE calling `updateImage`. The URL
- *     is then in the browser's image cache, so Mapbox's internal load
- *     resolves on the same frame as the coordinate update.
- *
- *  2. Race condition. Multiple `sample+compute` rounds could finish out
- *     of order; the older result would clobber the newer one. Fix: a
- *     monotonic generation counter; any worker ack older than the
- *     current generation is discarded.
- *
- *  3. Edge starvation on pan/zoom. After a resample the image was
- *     pinned to the exact viewport bounds, so any subsequent pan/zoom
- *     immediately revealed shadow-less pixels at the edges. Fix: sample
- *     with a configurable overshoot (default 15 %) so the user can pan
- *     within that buffer without seeing a hole.
- *
- * Additional precision/perf work:
- *
- *  • Grid resolution is now adaptive to the actual map canvas size,
- *    capped at GRID_MAX_W × GRID_MAX_H (1600 × 1200) so large monitors
- *    get sharper shadows without blowing up worker time.
- *  • Resample is scheduled on `moveend`, `zoomend`, `rotateend` and
- *    `pitchend`; debounce dropped from 180 ms → 80 ms (still long enough
- *    to absorb a single moveend storm but no longer perceptible).
- *  • Worker requests are strictly serialized: at most one inflight + one
- *    pending. Intermediate requests collapse into the pending slot, so
- *    a long zoom storm produces O(1) work instead of one job per event.
- *  • User opacity no longer triggers worker compute. The worker now renders
- *    geometry-only shadow content while the final intensity is applied via
- *    the raster layer's `raster-opacity`, making slider drags instant.
- *  • Toggle-off now hides the layer without discarding the sampled DEM grid,
- *    so a rapid re-enable can reuse warm state instead of restarting cold.
- */
-
 import { useEffect, useRef } from 'react';
 import type { Map as MapboxMap, ImageSource } from 'mapbox-gl';
-import {
-  createOverlayStatus,
-} from '@/features/map3d';
+import type { OverlayStatusSnapshot } from '@/features/map3d';
 import type {
   BoundsTuple,
   ComputeAck,
@@ -60,7 +11,7 @@ import type {
   UseShadowImageOptions,
   UseShadowImageRuntimeOptions,
   WorkerAck,
-} from './useShadowImageShared';
+} from '../useShadowImageShared';
 import {
   BLOB_REVOKE_DELAY_MS,
   BOUNDS_OVERSHOOT,
@@ -78,12 +29,19 @@ import {
   shadowVisibility,
   SOURCE_ID,
   withOvershoot,
-} from './useShadowImageShared';
-
-const MIN_USABLE_SAMPLE_FILL_RATIO = 0.70;
-const PARTIAL_SAMPLE_RETRY_DELAY_MS = 1200;
-const MAX_PARTIAL_SAMPLE_RETRIES = 4;
-const MIN_VISIBLE_SHADOW_ALPHA_RATIO = 0.001;
+} from '../useShadowImageShared';
+import {
+  MAX_PARTIAL_SAMPLE_RETRIES,
+  MIN_USABLE_SAMPLE_FILL_RATIO,
+  MIN_VISIBLE_SHADOW_ALPHA_RATIO,
+  PARTIAL_SAMPLE_RETRY_DELAY_MS,
+  STYLE_PREPARATION_RETRY_DELAY_MS,
+} from './constants';
+import {
+  shadowErrorStatus,
+  shadowLoadingStatus,
+  shadowReadyStatus,
+} from './status';
 
 export function useShadowImage(
   map: MapboxMap | null,
@@ -102,25 +60,12 @@ export function useShadowImage(
   const sunRecomputeFrameRef = useRef<number | null>(null);
   const sampledRef = useRef(false);
   const partialSampleRetryCountRef = useRef(0);
-  /**
-   * Bounds last successfully sampled (with overshoot already applied).
-   * Used as the geographic anchor for the displayed image until the next
-   * resample completes.
-   */
   const sampledBoundsRef = useRef<BoundsTuple | null>(null);
-  // Promise resolvers keyed by request id so we can await each round-trip.
-  const pendingRef = useRef(new Map<number, (a: WorkerAck) => void>());
+  const pendingRef = useRef(new Map<number, (ack: WorkerAck) => void>());
 
-  // Generation token. Incremented on every new sample-and-compute run; any
-  // ack belonging to an older generation is dropped before it can clobber
-  // newer state.
   const sampleGenRef = useRef(0);
-  // Strict serialization: at most one inflight resample, plus one pending
-  // slot that future requests collapse into.
   const inflightRef = useRef(false);
   const pendingResampleRef = useRef(false);
-  // Compute-only updates are also latest-wins: one inflight worker compute,
-  // plus one pending slot overwritten by the newest sun/time state.
   const computeSeqRef = useRef(0);
   const computeInflightRef = useRef(false);
   const pendingComputeRef = useRef<ComputeJob | null>(null);
@@ -129,22 +74,21 @@ export function useShadowImage(
   const recomputeRef = useRef<(() => void) | null>(null);
   const setLayerOpacityRef = useRef<((opacity: number) => void) | null>(null);
 
-  const publishStatus = (status: ReturnType<typeof createOverlayStatus> | null) => {
+  const publishStatus = (status: OverlayStatusSnapshot | null) => {
     statusReporter?.(status);
   };
 
-  // ── Worker lifecycle ──────────────────────────────────────────────────
   useEffect(() => {
     const worker = new Worker(
-      new URL('../lib/shadowWorker.ts', import.meta.url),
+      new URL('../../lib/shadowWorker.ts', import.meta.url),
       { type: 'module' },
     );
     workerRef.current = worker;
-    worker.onmessage = (e: MessageEvent<WorkerAck>) => {
-      const resolver = pendingRef.current.get(e.data.id);
+    worker.onmessage = (event: MessageEvent<WorkerAck>) => {
+      const resolver = pendingRef.current.get(event.data.id);
       if (resolver) {
-        pendingRef.current.delete(e.data.id);
-        resolver(e.data);
+        pendingRef.current.delete(event.data.id);
+        resolver(event.data);
       }
     };
     return () => {
@@ -162,7 +106,6 @@ export function useShadowImage(
     };
   }, []);
 
-  // ── Source / layer ensure, resample, compute and visibility ───────────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
@@ -171,11 +114,14 @@ export function useShadowImage(
     };
 
     const applyVisibleOpacity = () => {
-      const o = optsRef.current;
-      setLayerOpacity(effectiveOverlayOpacity(o.enabled, o.opacity, o.sunAltitudeDeg));
+      const current = optsRef.current;
+      setLayerOpacity(effectiveOverlayOpacity(current.enabled, current.opacity, current.sunAltitudeDeg));
     };
 
-    const ensureSourceAndLayer = (initialBlobUrl: string, coords: [[number, number], [number, number], [number, number], [number, number]]) => {
+    const ensureSourceAndLayer = (
+      initialBlobUrl: string,
+      coords: [[number, number], [number, number], [number, number], [number, number]],
+    ) => {
       ensureShadowSourceAndLayer(map, initialBlobUrl, coords, optsRef.current);
     };
 
@@ -192,13 +138,13 @@ export function useShadowImage(
     let cancelled = false;
     setLayerOpacityRef.current = setLayerOpacity;
 
-    const post = <T extends WorkerAck>(msg: object): Promise<T> => {
-      const w = workerRef.current;
-      if (!w) return Promise.reject(new Error('worker not ready'));
+    const post = <T extends WorkerAck>(message: object): Promise<T> => {
+      const worker = workerRef.current;
+      if (!worker) return Promise.reject(new Error('worker not ready'));
       const id = ++reqIdRef.current;
       return new Promise<T>((resolve) => {
-        pendingRef.current.set(id, resolve as (a: WorkerAck) => void);
-        w.postMessage({ ...msg, id });
+        pendingRef.current.set(id, resolve as (ack: WorkerAck) => void);
+        worker.postMessage({ ...message, id });
       });
     };
 
@@ -207,31 +153,23 @@ export function useShadowImage(
       if (job.sampleGen !== sampleGenRef.current) return;
       if (job.computeSeq !== computeSeqRef.current) return;
 
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'loading',
-        progress: job.quality === 'preview' ? 62 : 68,
-        detail: job.quality === 'preview' ? 'Aperçu des ombres' : 'Calcul des ombres',
-        reloadable: true,
-      }));
+      publishStatus(shadowLoadingStatus(
+        job.quality === 'preview' ? 62 : 68,
+        job.quality === 'preview' ? 'Apercu des ombres' : 'Calcul des ombres',
+      ));
 
-      const o = optsRef.current;
-      const shadowStrength = shadowVisibility(o.sunAltitudeDeg);
-      const nightFloor = computeNightFloor(o.sunAltitudeDeg);
-      // Daylight + opacity slider at 0 → nothing to draw. At night we still
-      // need to run the worker so the uniform `nightFloor` veil is encoded
-      // into the PNG (the cast-shadow buffer is empty below the horizon, so
-      // the floor is the ONLY non-transparent contribution).
-      if (!o.enabled || (o.sunAltitudeDeg >= 0 && o.opacity <= 0) || shadowStrength <= 0) {
+      const current = optsRef.current;
+      const shadowStrength = shadowVisibility(current.sunAltitudeDeg);
+      const nightFloor = computeNightFloor(current.sunAltitudeDeg);
+      if (!current.enabled || (current.sunAltitudeDeg >= 0 && current.opacity <= 0) || shadowStrength <= 0) {
         setLayerOpacity(0);
         return;
       }
 
       const ack = await post<ComputeAck | ComputeEmpty | ErrAck>({
         type: 'compute',
-        sunAzDeg: o.sunAzimuthDeg,
-        sunAltDeg: o.sunAltitudeDeg,
+        sunAzDeg: current.sunAzimuthDeg,
+        sunAltDeg: current.sunAltitudeDeg,
         shadowStrength,
         nightFloor,
         quality: job.quality,
@@ -241,49 +179,32 @@ export function useShadowImage(
       if (job.computeSeq !== computeSeqRef.current) return;
       if (ack.type === 'error') {
         console.warn('[shadow] compute failed', ack.message);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: ack.message,
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus(ack.message));
         return;
       }
       if (ack.type !== 'compute-ok') {
         setLayerOpacity(0);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: 'Calcul vide',
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus('Calcul vide'));
         return;
       }
 
       const alphaRatio = ack.totalPixels && ack.alphaPixels !== undefined
         ? ack.alphaPixels / ack.totalPixels
         : 1;
-      if (o.sunAltitudeDeg >= 0 && o.sunAltitudeDeg < 72 && alphaRatio < MIN_VISIBLE_SHADOW_ALPHA_RATIO) {
+      if (
+        current.sunAltitudeDeg >= 0
+        && current.sunAltitudeDeg < 72
+        && alphaRatio < MIN_VISIBLE_SHADOW_ALPHA_RATIO
+      ) {
         console.warn('[shadow] compute produced an empty visible overlay', {
           alphaPixels: ack.alphaPixels,
           shadowPixels: ack.shadowPixels,
           totalPixels: ack.totalPixels,
-          sunAltDeg: o.sunAltitudeDeg,
-          sunAzDeg: o.sunAzimuthDeg,
+          sunAltDeg: current.sunAltitudeDeg,
+          sunAzDeg: current.sunAzimuthDeg,
         });
         setLayerOpacity(0);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: 'Image d\'ombre vide',
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus('Image d\'ombre vide'));
         return;
       }
 
@@ -295,14 +216,7 @@ export function useShadowImage(
         [job.bounds[0], job.bounds[1]],
       ];
 
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'loading',
-        progress: 86,
-        detail: 'Assemblage',
-        reloadable: true,
-      }));
+      publishStatus(shadowLoadingStatus(86, 'Assemblage'));
 
       await preloadBlobUrl(url);
       if (cancelled || job.sampleGen !== sampleGenRef.current || job.computeSeq !== computeSeqRef.current) {
@@ -311,54 +225,31 @@ export function useShadowImage(
       }
 
       ensureSourceAndLayer(url, coords);
-      const src = map.getSource(SOURCE_ID) as ImageSource | undefined;
-      if (!src || !map.getLayer(LAYER_ID)) {
+      const source = map.getSource(SOURCE_ID) as ImageSource | undefined;
+      if (!source || !map.getLayer(LAYER_ID)) {
         URL.revokeObjectURL(url);
         setLayerOpacity(0);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: 'Couche d\'ombre absente',
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus('Couche d\'ombre absente'));
         return;
       }
-      if (src) {
-        try {
-          src.updateImage({ url, coordinates: coords });
-          applyVisibleOpacity();
-        } catch (err) {
-          console.warn('[shadow] updateImage failed', err);
-          URL.revokeObjectURL(url);
-          setLayerOpacity(0);
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'error',
-            progress: 0,
-            detail: 'Application de l\'ombre impossible',
-            reloadable: true,
-          }));
-          return;
-        }
+      try {
+        source.updateImage({ url, coordinates: coords });
+        applyVisibleOpacity();
+      } catch (error) {
+        console.warn('[shadow] updateImage failed', error);
+        URL.revokeObjectURL(url);
+        setLayerOpacity(0);
+        publishStatus(shadowErrorStatus('Application de l\'ombre impossible'));
+        return;
       }
 
-      const prev = lastBlobUrlRef.current;
+      const previous = lastBlobUrlRef.current;
       lastBlobUrlRef.current = url;
-      if (prev) {
-        setTimeout(() => URL.revokeObjectURL(prev), BLOB_REVOKE_DELAY_MS);
+      if (previous) {
+        setTimeout(() => URL.revokeObjectURL(previous), BLOB_REVOKE_DELAY_MS);
       }
 
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'ready',
-        progress: 100,
-        detail: 'Overlay prêt',
-        reloadable: true,
-      }));
+      publishStatus(shadowReadyStatus('Overlay pret'));
     };
 
     const processComputeQueue = async (initialJob: ComputeJob) => {
@@ -393,25 +284,43 @@ export function useShadowImage(
         pendingComputeRef.current = job;
         return;
       }
-      void processComputeQueue(job).catch((err) => console.warn('[shadow] compute queue error', err));
+      void processComputeQueue(job).catch((error) => console.warn('[shadow] compute queue error', error));
+    };
+
+    const requestResample = () => {
+      if (inflightRef.current) {
+        pendingResampleRef.current = true;
+        return;
+      }
+      inflightRef.current = true;
+      runSampleAndCompute()
+        .catch((error) => console.warn('[shadow] resample error', error))
+        .finally(() => {
+          inflightRef.current = false;
+          if (pendingResampleRef.current && !cancelled && optsRef.current.enabled) {
+            pendingResampleRef.current = false;
+            requestResample();
+          }
+        });
     };
 
     const runSampleAndCompute = async () => {
-      if (!canMutateStyle()) return;
-      const o = optsRef.current;
-      if (!o.enabled) return;
+      const current = optsRef.current;
+      if (!current.enabled) return;
+      if (!canMutateStyle()) {
+        publishStatus(shadowLoadingStatus(6, 'Style en preparation'));
+        if (sampleTimerRef.current === null) {
+          sampleTimerRef.current = (setTimeout(() => {
+            sampleTimerRef.current = null;
+            if (!cancelled && optsRef.current.enabled) requestResample();
+          }, STYLE_PREPARATION_RETRY_DELAY_MS) as unknown) as number;
+        }
+        return;
+      }
 
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'loading',
-        progress: 12,
-        detail: 'Préparation',
-        reloadable: true,
-      }));
+      publishStatus(shadowLoadingStatus(12, 'Preparation'));
 
       const myGen = ++sampleGenRef.current;
-
       const rawBounds = map.getBounds();
       if (!rawBounds) return;
       const sampledBounds = withOvershoot([
@@ -423,14 +332,7 @@ export function useShadowImage(
       const { gridW, gridH } = chooseGridSize(map);
       const demZoom = chooseDemZoom(map, gridW);
 
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'loading',
-        progress: 28,
-        detail: 'Échantillonnage du relief',
-        reloadable: true,
-      }));
+      publishStatus(shadowLoadingStatus(28, 'Echantillonnage du relief'));
 
       const sampleAck = await post<SampleAck | ErrAck>({
         type: 'sample',
@@ -446,38 +348,17 @@ export function useShadowImage(
         console.warn('[shadow] sample failed', sampleAck.message);
         if (hasPreviousSample) {
           applyVisibleOpacity();
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'ready',
-            progress: 100,
-            detail: 'Dernier relief valide conservé',
-            reloadable: true,
-          }));
+          publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
           return;
         }
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: sampleAck.message,
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus(sampleAck.message));
         return;
       }
       if (sampleAck.tooMany) {
         console.info('[shadow] sample skipped: viewport spans too many DEM tiles');
         if (hasPreviousSample) {
           applyVisibleOpacity();
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'ready',
-            progress: 100,
-            detail: 'Dernier relief valide conservé',
-            reloadable: true,
-          }));
+          publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
           return;
         }
         removeSourceAndLayer(true);
@@ -489,28 +370,15 @@ export function useShadowImage(
         console.warn('[shadow] sample empty: no DEM coverage in viewport', { demZoom, bounds: sampledBounds });
         if (hasPreviousSample) {
           applyVisibleOpacity();
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'ready',
-            progress: 100,
-            detail: 'Dernier relief valide conservé',
-            reloadable: true,
-          }));
+          publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
           return;
         }
         removeSourceAndLayer(true);
         setLayerOpacity(0);
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'error',
-          progress: 0,
-          detail: 'Aucune donnée terrain',
-          reloadable: true,
-        }));
+        publishStatus(shadowErrorStatus('Aucune donnee terrain'));
         return;
       }
+
       const fillRatio = sampleAck.total > 0 ? sampleAck.filled / sampleAck.total : 0;
       if (fillRatio < MIN_USABLE_SAMPLE_FILL_RATIO) {
         partialSampleRetryCountRef.current++;
@@ -528,14 +396,7 @@ export function useShadowImage(
           } else {
             setLayerOpacity(0);
           }
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'loading',
-            progress: 52,
-            detail: `Relief partiel (${Math.round(fillRatio * 100)}%)`,
-            reloadable: true,
-          }));
+          publishStatus(shadowLoadingStatus(52, `Relief partiel (${Math.round(fillRatio * 100)}%)`));
           return;
         }
 
@@ -550,60 +411,25 @@ export function useShadowImage(
         if (!hasPreviousSample) {
           removeSourceAndLayer(true);
           setLayerOpacity(0);
-          publishStatus(createOverlayStatus({
-            id: 'shadow',
-            label: 'Ombres',
-            state: 'error',
-            progress: 0,
-            detail: 'Relief incomplet',
-            reloadable: true,
-          }));
+          publishStatus(shadowErrorStatus('Relief incomplet'));
           return;
         }
 
         applyVisibleOpacity();
-        publishStatus(createOverlayStatus({
-          id: 'shadow',
-          label: 'Ombres',
-          state: 'ready',
-          progress: 100,
-          detail: 'Dernier relief valide conservé',
-          reloadable: true,
-        }));
+        publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
         return;
       }
 
       partialSampleRetryCountRef.current = 0;
       sampledRef.current = true;
       sampledBoundsRef.current = sampledBounds;
-      publishStatus(createOverlayStatus({
-        id: 'shadow',
-        label: 'Ombres',
-        state: 'loading',
-        progress: 58,
-        detail: sampleAck.downgraded
-          ? `Relief capturé (DEM z${sampleAck.effectiveZoom ?? demZoom})`
-          : 'Relief capturé',
-        reloadable: true,
-      }));
+      publishStatus(shadowLoadingStatus(
+        58,
+        sampleAck.downgraded
+          ? `Relief capture (DEM z${sampleAck.effectiveZoom ?? demZoom})`
+          : 'Relief capture',
+      ));
       requestCompute(sampledBounds, myGen);
-    };
-
-    const requestResample = () => {
-      if (inflightRef.current) {
-        pendingResampleRef.current = true;
-        return;
-      }
-      inflightRef.current = true;
-      runSampleAndCompute()
-        .catch((err) => console.warn('[shadow] resample error', err))
-        .finally(() => {
-          inflightRef.current = false;
-          if (pendingResampleRef.current && !cancelled && optsRef.current.enabled) {
-            pendingResampleRef.current = false;
-            requestResample();
-          }
-        });
     };
 
     const scheduleSample = () => {
@@ -703,7 +529,6 @@ export function useShadowImage(
     };
   }, [isMapLoaded, map, opts.enabled, registerReload]);
 
-  // ── Toggle / visibility changes ────────────────────────────────────────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const setLayerOpacity = setLayerOpacityRef.current;
@@ -721,7 +546,6 @@ export function useShadowImage(
     }
   }, [isMapLoaded, map, opts.enabled, statusReporter]);
 
-  // Opacity scrubs stay on the Mapbox paint property and never hit the worker.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const setLayerOpacity = setLayerOpacityRef.current;
@@ -729,7 +553,6 @@ export function useShadowImage(
     setLayerOpacity(effectiveOverlayOpacity(opts.enabled, opts.opacity, opts.sunAltitudeDeg));
   }, [map, isMapLoaded, opts.enabled, opts.opacity, opts.sunAltitudeDeg]);
 
-  // Sun/time changes reuse the sampled grid and coalesce to the latest state.
   useEffect(() => {
     if (!map || !isMapLoaded || !opts.enabled) return;
     if (sunRecomputeFrameRef.current !== null) {
