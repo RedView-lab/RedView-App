@@ -11,8 +11,29 @@ const RETRY_BASE_DELAY_429_MS = 2000;
 const RETRY_BASE_DELAY_5XX_MS = 1000;
 const INTER_REQUEST_DELAY_MS = 200;
 
+type DownloadFailure = Error & {
+  status?: number;
+  code?: string;
+};
+
 function formatBytesAsMb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function describeCandidateUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    const downloadIndex = parts.findIndex((part) => part === 'LiDARHD-NUALID');
+    if (downloadIndex >= 0 && downloadIndex + 2 < parts.length) {
+      const zoneName = parts[downloadIndex + 1];
+      const fileName = parts[downloadIndex + 2];
+      return `${zoneName}/${fileName}`;
+    }
+  } catch {
+    // Ignore parse failures and keep the raw URL.
+  }
+  return url;
 }
 
 let rateLimitUntil = 0;
@@ -56,7 +77,8 @@ export async function downloadTile(
     throw new Error(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
   }
 
-  let lastError: Error | null = null;
+  let lastError: DownloadFailure | null = null;
+  let preferredError: DownloadFailure | null = null;
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
@@ -69,23 +91,31 @@ export async function downloadTile(
         return buffer;
       }
     } catch (err: any) {
-      lastError = err;
-      if (err.status === 404) {
+      const failure = err as DownloadFailure;
+      lastError = failure;
+      if (failure.status !== 404 || preferredError == null) {
+        preferredError = failure;
+      }
+      if (failure.status === 404) {
         if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
         continue;
       }
-      console.warn(`[Download] Failed for ${url}: ${err.message}`);
+      console.warn(`[Download] Failed for ${url}: ${failure.message}`);
       if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
       continue;
     }
   }
 
-  const triedZones = urls.map(u => {
-    const match = u.match(/zone=([^&]+)/);
-    return match ? match[1] : u;
-  }).filter((v, i, a) => a.indexOf(v) === i);
-  console.error(`[Download] All ${urls.length} candidate URLs failed for tile (${coord.xKm}, ${coord.yKm}). Zones tried: ${triedZones.join(', ')}`);
-  throw new Error(`Impossible de télécharger la tuile LiDAR HD pour (${coord.xKm}, ${coord.yKm}) — ${urls.length} URLs testées dans ${triedZones.length} zone(s) [${triedZones.slice(0, 5).join(', ')}${triedZones.length > 5 ? '...' : ''}]. Dernière erreur: ${lastError?.message || 'inconnue'}`);
+  const triedCandidates = urls
+    .map((url) => describeCandidateUrl(url))
+    .filter((value, index, all) => all.indexOf(value) === index);
+  const finalError = preferredError ?? lastError;
+  console.error(`[Download] All ${urls.length} candidate URLs failed for tile (${coord.xKm}, ${coord.yKm}). Candidates tried: ${triedCandidates.join(', ')}`);
+  throw new Error(
+    `Impossible de télécharger la tuile LiDAR HD pour (${coord.xKm}, ${coord.yKm}) — ` +
+    `${urls.length} URL(s) testée(s), candidats [${triedCandidates.slice(0, 5).join(', ')}${triedCandidates.length > 5 ? '...' : ''}]. ` +
+    `Dernière erreur utile: ${finalError?.message || 'inconnue'}`
+  );
 }
 
 async function fetchWithRetry(
