@@ -25,6 +25,7 @@ const _compositeQueue = [];
 const SLOPE_INFLIGHT = new Map();
 const ALTITUDE_INFLIGHT = new Map();
 let slopeCancelGeneration = 0;
+let altitudeCancelGeneration = 0;
 
 // In-flight DEM tile dedup. Same idea as SLOPE_INFLIGHT but applies to the
 // raw `/dem-tiles/...` endpoint. Without this, every slope tile triggers
@@ -44,6 +45,13 @@ function cancelSlopeWork() {
   SLOPE_INFLIGHT.clear();
   try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
   return { slopeCount };
+}
+
+function cancelAltitudeWork() {
+  altitudeCancelGeneration += 1;
+  const altitudeCount = ALTITUDE_INFLIGHT.size;
+  ALTITUDE_INFLIGHT.clear();
+  return { altitudeCount };
 }
 
 function acquireComposite() {
@@ -112,11 +120,13 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('message', (e) => {
   if (e.data?.type === 'PURGE_MAP_CACHES') {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
+    try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
   if (e.data?.type === 'CLEAR_DEM_CACHE') {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
+    try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
     return;
   }
@@ -158,7 +168,15 @@ self.addEventListener('message', (e) => {
     }
     return;
   }
+  if (e.data?.type === 'CANCEL_ALTITUDE_WORK') {
+    const cancelled = cancelAltitudeWork();
+    if (DEBUG && cancelled.altitudeCount > 0) {
+      console.warn(`[sw-dem][cancel-altitude] altitude=${cancelled.altitudeCount}`);
+    }
+    return;
+  }
   if (e.data?.type === 'CLEAR_ALTITUDE_CACHE') {
+    try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     caches.delete(ALTITUDE_CACHE_NAME);
     return;
   }
@@ -207,6 +225,7 @@ self.addEventListener('message', (e) => {
     const y = e.data.y | 0;
     if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) return;
     try { if (typeof invalidateSlopeProcessingTile === 'function') invalidateSlopeProcessingTile(z, x, y); } catch { /* ignore */ }
+    try { if (typeof invalidateAltitudeProcessingTile === 'function') invalidateAltitudeProcessingTile(z, x, y); } catch { /* ignore */ }
     const max = (1 << z) - 1;
     const slopeTiles = [
       [x, y],

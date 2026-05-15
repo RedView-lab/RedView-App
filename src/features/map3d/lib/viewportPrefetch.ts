@@ -585,6 +585,8 @@ export function installViewportPrefetch(
     if (sw && sw.controller) {
       try { sw.controller.postMessage({ type: 'CANCEL_STALE_DEM' }); }
       catch { /* SW gone away — fine */ }
+      try { sw.controller.postMessage({ type: 'CANCEL_ALTITUDE_WORK' }); }
+      catch { /* SW gone away — fine */ }
     }
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

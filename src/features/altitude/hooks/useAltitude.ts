@@ -59,6 +59,14 @@ function setAltitudeVisibility(map: MapboxMap, visible: boolean) {
   }
 }
 
+function cancelAltitudeWorkerPressure() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage({ type: 'CANCEL_ALTITUDE_WORK' });
+  } catch {
+    /* service worker may not be controlling this page yet */
+  }
+}
+
 export function useAltitude(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -81,13 +89,17 @@ export function useAltitude(
   const enabledRef = useRef(enabled);
   const categoriesRef = useRef(categories);
   const hiddenIdsRef = useRef(hiddenIds);
-  opacityRef.current = opacity;
-  colorModeRef.current = colorMode;
-  enabledRef.current = enabled;
-  categoriesRef.current = categories;
-  hiddenIdsRef.current = hiddenIds;
+  const previousEnabledRef = useRef(enabled);
 
   const mountedRef = useRef(false);
+
+  useEffect(() => {
+    opacityRef.current = opacity;
+    colorModeRef.current = colorMode;
+    enabledRef.current = enabled;
+    categoriesRef.current = categories;
+    hiddenIdsRef.current = hiddenIds;
+  }, [opacity, colorMode, enabled, categories, hiddenIds]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
@@ -105,6 +117,14 @@ export function useAltitude(
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
     setAltitudeVisibility(map, enabled);
+  }, [map, isMapLoaded, enabled]);
+
+  useEffect(() => {
+    const wasEnabled = previousEnabledRef.current;
+    previousEnabledRef.current = enabled;
+    if (!map || !isMapLoaded) return;
+    if (enabled || !wasEnabled) return;
+    cancelAltitudeWorkerPressure();
   }, [map, isMapLoaded, enabled]);
 
   useEffect(() => {
@@ -128,7 +148,7 @@ export function useAltitude(
     } catch {
       /* layer may not exist yet */
     }
-  }, [map, isMapLoaded, colorMode, categoriesKey, hiddenKey]);
+  }, [map, isMapLoaded, colorMode, categories, hiddenIds, categoriesKey, hiddenKey]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -174,7 +194,10 @@ export function useAltitude(
   // immediate "Altitude X/Y" feedback and a stagnation watchdog that
   // force-completes after 8 s so we never strand the user mid-load.
   const onLoadStatusChangeRef = useRef(onLoadStatusChange);
-  onLoadStatusChangeRef.current = onLoadStatusChange;
+  useEffect(() => {
+    onLoadStatusChangeRef.current = onLoadStatusChange;
+  }, [onLoadStatusChange]);
+
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const reporter = onLoadStatusChangeRef.current;

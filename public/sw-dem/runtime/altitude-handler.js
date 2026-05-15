@@ -7,6 +7,10 @@
 // Split out of sw-dem.js (May 03).
 // ---------------------------------------------------------------------------
 
+function isAltitudeWorkCancelled(generation) {
+  return generation !== altitudeCancelGeneration;
+}
+
 async function handleAltitudeRequest(z, x, y) {
   const altitudeCache = await caches.open(ALTITUDE_CACHE_NAME);
   const cacheKey = new Request(`/altitude-tiles/${z}/${x}/${y}`);
@@ -20,6 +24,7 @@ async function handleAltitudeRequest(z, x, y) {
     catch { /* fall through and recompute */ }
   }
 
+  const generation = altitudeCancelGeneration;
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
     const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
@@ -27,13 +32,28 @@ async function handleAltitudeRequest(z, x, y) {
     if (!demResponse || demResponse.status !== 200) {
       demResponse = await handleDemRequest(demKey, z, x, y);
     }
+    if (isAltitudeWorkCancelled(generation)) {
+      return transparentTileResponse();
+    }
     if (!demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
     }
 
     try {
       const demBlob = await demResponse.clone().blob();
-      const altitudeBlob = await buildAltitudeTile(demBlob);
+      if (isAltitudeWorkCancelled(generation)) {
+        return transparentTileResponse();
+      }
+      const altitudeBlob = await buildAltitudeTile(
+        demBlob,
+        z,
+        x,
+        y,
+        () => isAltitudeWorkCancelled(generation),
+      );
+      if (!altitudeBlob || isAltitudeWorkCancelled(generation)) {
+        return transparentTileResponse();
+      }
       const response = new Response(altitudeBlob, {
         status: 200,
         headers: {
@@ -42,7 +62,7 @@ async function handleAltitudeRequest(z, x, y) {
           'X-Tile-Type': 'altitude',
         },
       });
-      altitudeCache.put(cacheKey, response.clone());
+      if (!isAltitudeWorkCancelled(generation)) altitudeCache.put(cacheKey, response.clone());
       return response;
     } catch (err) {
       console.error('[altitude]', z, x, y, err);
@@ -55,6 +75,8 @@ async function handleAltitudeRequest(z, x, y) {
     const response = await work;
     return response.clone();
   } finally {
-    ALTITUDE_INFLIGHT.delete(inflightKey);
+    if (ALTITUDE_INFLIGHT.get(inflightKey) === work) {
+      ALTITUDE_INFLIGHT.delete(inflightKey);
+    }
   }
 }

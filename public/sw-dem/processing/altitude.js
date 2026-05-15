@@ -10,6 +10,64 @@
 // This keeps the SW cache keyed only by (z, x, y, resFactor).
 // ---------------------------------------------------------------------------
 
+// DEM PNG decode is the dominant CPU cost of the altitude overlay. A visible
+// viewport, its speculative prefetch ring and any post-upgrade refetch can all
+// request the same tile in quick succession. Keep a small decoded DEM LRU so
+// repeated altitude builds reuse the Float32 elevations instead of re-running
+// `createImageBitmap` + `getImageData` for the same tile.
+const ALTITUDE_DECODED_DEM_CACHE_MAX = 96;
+const altitudeDecodedDemCache = new Map();
+const altitudeDecodedDemInflight = new Map();
+let altitudeDecodeCacheGeneration = 0;
+
+function altitudeDemDecodeKey(z, x, y) {
+  return `${z}/${x}/${y}`;
+}
+
+function rememberAltitudeDecodedDem(key, elevations, generation) {
+  if (!elevations) return elevations;
+  if (generation !== altitudeDecodeCacheGeneration) return elevations;
+  if (altitudeDecodedDemCache.has(key)) altitudeDecodedDemCache.delete(key);
+  altitudeDecodedDemCache.set(key, elevations);
+  while (altitudeDecodedDemCache.size > ALTITUDE_DECODED_DEM_CACHE_MAX) {
+    const oldest = altitudeDecodedDemCache.keys().next().value;
+    if (oldest === undefined) break;
+    altitudeDecodedDemCache.delete(oldest);
+  }
+  return elevations;
+}
+
+async function decodeAltitudeDemBlob(demBlob, z, x, y) {
+  const key = altitudeDemDecodeKey(z, x, y);
+  if (altitudeDecodedDemCache.has(key)) {
+    const cached = altitudeDecodedDemCache.get(key);
+    altitudeDecodedDemCache.delete(key);
+    altitudeDecodedDemCache.set(key, cached);
+    return cached;
+  }
+  if (altitudeDecodedDemInflight.has(key)) return altitudeDecodedDemInflight.get(key);
+
+  const generation = altitudeDecodeCacheGeneration;
+  const work = decodeTerrainRGBBlob(demBlob)
+    .then((elevations) => rememberAltitudeDecodedDem(key, elevations, generation))
+    .finally(() => altitudeDecodedDemInflight.delete(key));
+  altitudeDecodedDemInflight.set(key, work);
+  return work;
+}
+
+function clearAltitudeProcessingCaches() {
+  altitudeDecodeCacheGeneration++;
+  altitudeDecodedDemCache.clear();
+  altitudeDecodedDemInflight.clear();
+}
+
+function invalidateAltitudeProcessingTile(z, x, y) {
+  altitudeDecodeCacheGeneration++;
+  const key = altitudeDemDecodeKey(z, x, y);
+  altitudeDecodedDemCache.delete(key);
+  altitudeDecodedDemInflight.delete(key);
+}
+
 // ── Altitude-only RGBA PNG ─────────────────────────────────────────────────
 // We reuse Terrain-RGB encoding for the RGB channels so GPU-side decoding can
 // reconstruct meters with a single raster-color-mix. Unlike the DEM terrain
@@ -40,16 +98,17 @@ async function encodeAltitudePng(elevations) {
 }
 
 // ── Full pipeline — DEM blob → altitude overlay PNG ────────────────────────
-async function buildAltitudeTile(demBlob) {
+async function buildAltitudeTile(demBlob, z, x, y, shouldCancel) {
   const t0 = performance.now();
-  const elevations = await decodeTerrainRGBBlob(demBlob);
+  const elevations = await decodeAltitudeDemBlob(demBlob, z, x, y);
   const t1 = performance.now();
+  if (typeof shouldCancel === 'function' && shouldCancel()) return null;
   const blob = await encodeAltitudePng(elevations);
   const t3 = performance.now();
 
   if (DEBUG) {
     console.log(
-      `[altitude] dec=${(t1 - t0).toFixed(0)} enc=${(t3 - t1).toFixed(0)} total=${(t3 - t0).toFixed(0)}ms`,
+      `[altitude] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} enc=${(t3 - t1).toFixed(0)} total=${(t3 - t0).toFixed(0)}ms`,
     );
   }
 
