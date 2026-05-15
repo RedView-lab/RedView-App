@@ -119,6 +119,7 @@ export function ItineraryPanelContainer({
     isMapLoaded,
     itineraries,
     map,
+    routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 4,
   });
 
   useEffect(() => {

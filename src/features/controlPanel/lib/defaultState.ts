@@ -37,6 +37,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   routes: {
     enabled: true,
+    traceWidthPx: 4,
     items: [
       { id: 'route-1', label: 'Itinéraire 1', color: '#c50000', mode: 'default', opacity: 100, visible: true },
       { id: 'route-2', label: 'Variante 2', color: '#ffa630', mode: 'slope', opacity: 100, visible: true },

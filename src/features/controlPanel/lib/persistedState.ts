@@ -52,6 +52,10 @@ export interface ControlPanelContourLinesPersistedState {
   opacity: number;
 }
 
+export interface ControlPanelRoutesPersistedState {
+  traceWidthPx: number;
+}
+
 export type ControlPanelSunlightPersistedState = Omit<
   SunlightState,
   'enabled' | 'sunriseTime' | 'sunsetTime'
@@ -79,6 +83,7 @@ export interface ControlPanelPersistedState {
   lidarTilesHidden?: Record<string, boolean>;
   labelsState?: ControlPanelLabelsPersistedState;
   contourLines?: ControlPanelContourLinesPersistedState;
+  routes?: ControlPanelRoutesPersistedState;
   slopes?: ControlPanelSlopePersistedState;
   altitude?: ControlPanelAltitudePersistedState;
   weather?: WeatherState;
@@ -117,6 +122,9 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
     contourLines: {
       interval: '200m',
       opacity: 100,
+    },
+    routes: {
+      traceWidthPx: 4,
     },
     weather: undefined,
   };

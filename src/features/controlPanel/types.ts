@@ -61,6 +61,13 @@ export interface RouteItem {
   visible: boolean;
 }
 
+export interface RoutesSectionState {
+  enabled: boolean;
+  items: RouteItem[];
+  /** Global route line width in px. */
+  traceWidthPx: number;
+}
+
 export type SlopeResolution = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
 export type SlopeColorization = 'gradient' | 'stepped' | string;
 export type SlopeScale = 'percent' | 'degree' | string;
@@ -211,7 +218,7 @@ export interface ControlPanelState {
   lidarTiles: LidarTile[];
   labels: { enabled: boolean; state: LabelsState };
   contourLines: ContourLinesState;
-  routes: { enabled: boolean; items: RouteItem[] };
+  routes: RoutesSectionState;
   slopes: { enabled: boolean } & SlopesState;
   altitude: { enabled: boolean } & AltitudeState;
   weather: WeatherState;
@@ -242,6 +249,7 @@ export interface ControlPanelHandlers {
   onRouteModeChange?: (id: string, mode: RouteRenderMode) => void;
   onRouteOpacityChange?: (id: string, opacity: number) => void;
   onRouteVisibilityToggle?: (id: string) => void;
+  onRouteTraceWidthChange?: (value: number) => void;
 
   onSlopesEnabledChange?: (enabled: boolean) => void;
   onSlopeResolutionChange?: (value: SlopeResolution) => void;

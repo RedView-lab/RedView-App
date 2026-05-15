@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
+import { Slider } from '../components/Slider';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { IconChevronDown, IconEye, IconRoute } from '../icons';
@@ -9,6 +10,7 @@ import type { ControlPanelHandlers, ControlPanelState, RouteRenderMode } from '.
 interface Props {
   enabled: boolean;
   items: ControlPanelState['routes']['items'];
+  traceWidthPx: number;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onRoutesEnabledChange'];
@@ -16,6 +18,7 @@ interface Props {
   onModeChange: ControlPanelHandlers['onRouteModeChange'];
   onOpacityChange: ControlPanelHandlers['onRouteOpacityChange'];
   onVisibilityToggle: ControlPanelHandlers['onRouteVisibilityToggle'];
+  onTraceWidthChange?: ControlPanelHandlers['onRouteTraceWidthChange'];
 }
 
 const MODE_OPTIONS: { value: RouteRenderMode; label: string }[] = [
@@ -101,6 +104,7 @@ function OpacityPill({ value, onChange }: OpacityPillProps) {
 export function RoutesSection({
   enabled,
   items,
+  traceWidthPx,
   open,
   onOpenChange,
   onEnabledChange,
@@ -108,6 +112,7 @@ export function RoutesSection({
   onModeChange,
   onOpacityChange,
   onVisibilityToggle,
+  onTraceWidthChange,
 }: Props) {
   return (
     <Section
@@ -126,7 +131,7 @@ export function RoutesSection({
               className="rvc-routes__color-picker"
               ariaLabel={`Choisir la couleur de ${route.label}`}
             >
-              <ColorSwatch color={route.color} />
+              <ColorSwatch color={route.color} size={12} />
               <IconChevronDown size={20} />
             </ColorPalettePicker>
             <div className="rvc-routes__label">{route.label}</div>
@@ -155,6 +160,23 @@ export function RoutesSection({
             </div>
           </div>
         ))}
+
+        <div className="rvc-row rvc-row--split rvc-routes__trace-width-row">
+          <span className="rvc-row__label">Épaisseur des tracés</span>
+          <div className="rvc-routes__trace-width-control">
+            <div className="rvc-routes__trace-width-slider-wrap">
+              <Slider
+                value={traceWidthPx}
+                min={1}
+                max={8}
+                step={1}
+                onChange={onTraceWidthChange}
+                width="100%"
+              />
+            </div>
+            <span className="rvc-routes__trace-width-value">{traceWidthPx} px</span>
+          </div>
+        </div>
       </div>
     </Section>
   );

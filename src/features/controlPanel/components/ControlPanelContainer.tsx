@@ -197,9 +197,10 @@ export function ControlPanelContainer({
     setRoutesEnabled(anyItineraryVisible);
   }, [anyItineraryVisible]);
 
-  const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
   const projectControlPanel =
     projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
+  const routesTraceWidthPx = projectControlPanel.routes?.traceWidthPx ?? DEFAULT_CONTROL_PANEL_STATE.routes.traceWidthPx;
+  const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
   const handleSectionOpenChange = useCallback(
     (section: ControlPanelSectionKey, open: boolean) => {
@@ -230,7 +231,7 @@ export function ControlPanelContainer({
       basemaps: buildBasemapList(activeBasemapId),
       lidarTiles,
       contourLines: terrainState.slices.contourLines,
-      routes: { enabled: routesEnabled, items: routeItems },
+      routes: { enabled: routesEnabled, items: routeItems, traceWidthPx: routesTraceWidthPx },
       labels: overlayState.slices.labels,
       slopes: terrainState.slices.slopes,
       altitude: terrainState.slices.altitude,
@@ -248,6 +249,7 @@ export function ControlPanelContainer({
       overlayState.slices.weather,
       overlayState.slices.wind,
       routeItems,
+      routesTraceWidthPx,
       routesEnabled,
       terrainState.slices.contourLines,
       terrainState.slices.altitude,
@@ -348,6 +350,13 @@ export function ControlPanelContainer({
       }}
       onRouteOpacityChange={(id, opacity) => {
         projectStore?.setItineraryOpacity(id, opacity);
+      }}
+      onRouteTraceWidthChange={(value) => {
+        updateProjectControlPanel((draft) => {
+          draft.routes = {
+            traceWidthPx: Math.max(1, Math.min(8, Math.round(value))),
+          };
+        });
       }}
       onRouteVisibilityToggle={(id) => {
         if (!projectStore) return;

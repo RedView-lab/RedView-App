@@ -72,6 +72,20 @@ export interface RouteLayerOptions {
   opacity01: number;
   /** Hide the layer without removing it. */
   visible: boolean;
+  /** Main trace width in px. */
+  traceWidthPx?: number;
+}
+
+function normalizeTraceWidthPx(value: number | null | undefined): number {
+  return Math.max(1, Math.min(12, Math.round(value ?? 4)));
+}
+
+function traceGlowWidthPx(traceWidthPx: number): number {
+  return Math.max(traceWidthPx + 6, traceWidthPx * 2.2);
+}
+
+function traceBorderWidthPx(traceWidthPx: number): number {
+  return Math.max(1, Math.min(2, traceWidthPx * 0.25));
 }
 
 function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
@@ -154,6 +168,9 @@ export function upsertRouteLayer(
   const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
+  const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
+  const glowWidthPx = traceGlowWidthPx(traceWidthPx);
+  const borderWidthPx = traceBorderWidthPx(traceWidthPx);
 
   const existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
@@ -192,7 +209,7 @@ export function upsertRouteLayer(
       },
       paint: {
         'line-color': opts.color,
-        'line-width': 10,
+        'line-width': glowWidthPx,
         'line-opacity': 0.4 * opacity,
         'line-blur': 4,
         'line-emissive-strength': 1,
@@ -212,10 +229,10 @@ export function upsertRouteLayer(
       },
       paint: {
         'line-color': opts.color,
-        'line-width': 4,
+        'line-width': traceWidthPx,
         'line-opacity': opacity,
         'line-emissive-strength': 1,
-        'line-border-width': 1,
+        'line-border-width': borderWidthPx,
         'line-border-color': 'rgba(255,255,255,0.6)',
         'line-occlusion-opacity': 0,
       },
@@ -227,12 +244,15 @@ export function upsertRouteLayer(
   try {
     if (map.getLayer(glowId)) {
       setPaintPropertyIfChanged(map, glowId, 'line-color', opts.color);
+      setPaintPropertyIfChanged(map, glowId, 'line-width', glowWidthPx);
       setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0.4 * opacity);
       setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
     }
     if (map.getLayer(lineId)) {
       setPaintPropertyIfChanged(map, lineId, 'line-color', opts.color);
+      setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
+      setPaintPropertyIfChanged(map, lineId, 'line-border-width', borderWidthPx);
       setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
     }
     raiseRouteLayer(map, itineraryId);

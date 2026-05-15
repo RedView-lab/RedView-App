@@ -31,6 +31,7 @@ interface UseItineraryRouteLayerSyncArgs {
   isMapLoaded: boolean;
   itineraries: ItineraryProject['itineraries'];
   map: MapboxMap | null;
+  routeTraceWidthPx?: number;
 }
 
 export function useItineraryRouteLayerSync({
@@ -38,6 +39,7 @@ export function useItineraryRouteLayerSync({
   isMapLoaded,
   itineraries,
   map,
+  routeTraceWidthPx = 4,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const layerSignature = useMemo(() => {
@@ -51,6 +53,7 @@ export function useItineraryRouteLayerSync({
           routeKey,
           it.color,
           it.opacity ?? 100,
+          routeTraceWidthPx,
           it.visible !== false ? 1 : 0,
           it.analysisVisible !== false ? 1 : 0,
           it.routeAudit?.visible ? 1 : 0,
@@ -62,7 +65,7 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-  }, [itineraries]);
+  }, [itineraries, routeTraceWidthPx]);
 
   const replayRouteState = useCallback((): boolean => {
     if (!map || !isMapLoaded || !canAccessStyle(map)) return false;
@@ -78,6 +81,7 @@ export function useItineraryRouteLayerSync({
         upsertRouteLayer(map, it.id, coords, {
           color: it.color,
           opacity01: (it.opacity ?? 100) / 100,
+          traceWidthPx: routeTraceWidthPx,
           visible: routeVisible,
         });
       } catch (error) {
@@ -115,7 +119,7 @@ export function useItineraryRouteLayerSync({
     }
 
     return true;
-  }, [active, isMapLoaded, itineraries, map]);
+  }, [active, isMapLoaded, itineraries, map, routeTraceWidthPx]);
 
   const scheduleReplayRouteState = useCallback(() => {
     if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
