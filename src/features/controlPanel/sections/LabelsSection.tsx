@@ -1,5 +1,6 @@
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
+import { IconAnnotation } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState, LabelKey } from '../types';
 
 interface Props {
@@ -35,6 +36,7 @@ export function LabelsSection({
   return (
     <Section
       title="Étiquettes"
+      icon={<IconAnnotation size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

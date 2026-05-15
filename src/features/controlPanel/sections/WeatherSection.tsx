@@ -6,7 +6,7 @@ import { Checkbox } from '../components/Checkbox';
 import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { Slider } from '../components/Slider';
-import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo } from '../icons';
+import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconInfo, IconWeather } from '../icons';
 import type {
   ControlPanelHandlers,
   WeatherPaletteBand,
@@ -363,6 +363,7 @@ export function WeatherSection({
   return (
     <Section
       title="Météo"
+      icon={<IconWeather size={16} />}
       toggle={{ checked: state.enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

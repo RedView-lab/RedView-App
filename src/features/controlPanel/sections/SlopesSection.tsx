@@ -4,7 +4,7 @@ import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
-import { IconChevronDown, IconEye, IconEyeOff } from '../icons';
+import { IconChevronDown, IconEye, IconEyeOff, IconSlope } from '../icons';
 import type {
   ControlPanelHandlers,
   ControlPanelState,
@@ -300,6 +300,7 @@ export function SlopesSection({
   return (
     <Section
       title="Pentes"
+      icon={<IconSlope size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

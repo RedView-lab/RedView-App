@@ -82,7 +82,7 @@ export function LidarTilesSection({
   return (
     <Section
       title={`Tuiles LIDAR ( ${tiles.length} )`}
-      icon={<IconCube size={12} />}
+      icon={<IconCube size={16} />}
       open={open}
       onOpenChange={onOpenChange}
     >

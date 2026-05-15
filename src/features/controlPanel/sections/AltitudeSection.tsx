@@ -4,7 +4,7 @@ import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
-import { IconChevronDown, IconEye, IconEyeOff } from '../icons';
+import { IconAltitude, IconChevronDown, IconEye, IconEyeOff } from '../icons';
 import type {
   AltitudeBand,
   AltitudeColorization,
@@ -205,6 +205,7 @@ export function AltitudeSection({
   return (
     <Section
       title="Altitude"
+      icon={<IconAltitude size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

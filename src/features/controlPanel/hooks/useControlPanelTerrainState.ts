@@ -15,6 +15,7 @@ import type { AltitudeColorMode, AltitudeScaleSettingKey } from '@/features/alti
 
 import type { OverlayStatusReporter } from '@/features/map3d';
 
+import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
 import type { ControlPanelPersistedState } from '../lib/persistedState';
 import type {
   AltitudeBand,
@@ -89,6 +90,7 @@ interface UseControlPanelTerrainStateArgs {
 }
 
 export interface TerrainHandlers {
+  onContourLinesEnabledChange: (enabled: boolean) => void;
   onAltitudeEnabledChange: (enabled: boolean) => void;
   onAltitudeColorizationChange: (value: AltitudeColorization) => void;
   onAltitudeScaleSettingChange: (value: AltitudeScaleSetting) => void;
@@ -108,7 +110,7 @@ export interface TerrainHandlers {
 }
 
 interface TerrainStateResult {
-  slices: Pick<ControlPanelState, 'slopes' | 'altitude'>;
+  slices: Pick<ControlPanelState, 'contourLines' | 'slopes' | 'altitude'>;
   handlers: TerrainHandlers;
 }
 
@@ -231,6 +233,9 @@ export function useControlPanelTerrainState({
     const persisted = initialControlPanel.altitude?.breakpoints ?? loadAltitudeBreakpoints();
     return persisted.byCount;
   });
+  const [contourLinesEnabled, setContourLinesEnabled] = useState(
+    () => initialControlPanel.toggles.contourLinesEnabled ?? DEFAULT_CONTROL_PANEL_STATE.contourLines.enabled,
+  );
 
   const persistAltitudeToProject = useCallback(
     (
@@ -322,6 +327,12 @@ export function useControlPanelTerrainState({
     updateProjectControlPanel,
   ]);
 
+  useEffect(() => {
+    updateProjectControlPanel((draft) => {
+      draft.toggles.contourLinesEnabled = contourLinesEnabled;
+    });
+  }, [contourLinesEnabled, updateProjectControlPanel]);
+
   useAltitude(
     isMapLoaded ? map : null,
     isMapLoaded,
@@ -356,13 +367,22 @@ export function useControlPanelTerrainState({
     }),
     [altitudeCategories, altitudeHiddenIds, altitudeState],
   );
+  const contourLinesSlice = useMemo(
+    () => ({ enabled: contourLinesEnabled }),
+    [contourLinesEnabled],
+  );
 
   return {
     slices: {
+      contourLines: contourLinesSlice,
       slopes: slopesSlice,
       altitude: altitudeSlice,
     },
     handlers: {
+      onContourLinesEnabledChange: useCallback(
+        (enabled: boolean) => setContourLinesEnabled(enabled),
+        [],
+      ),
       onAltitudeEnabledChange: useCallback(
         (enabled: boolean) => persistAltitude({ ...altitudeState, enabled }),
         [altitudeState, persistAltitude],

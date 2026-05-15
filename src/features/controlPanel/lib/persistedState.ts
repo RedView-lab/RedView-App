@@ -10,6 +10,7 @@ export type ControlPanelSectionKey =
   | 'basemaps'
   | 'lidarTiles'
   | 'labels'
+  | 'contourLines'
   | 'routes'
   | 'slopes'
   | 'altitude'
@@ -53,6 +54,7 @@ export interface ControlPanelPersistedState {
   basemapId: BasemapId;
   toggles: {
     labelsEnabled: boolean;
+    contourLinesEnabled: boolean;
     slopesEnabled: boolean;
     altitudeEnabled: boolean;
     weatherEnabled: boolean;
@@ -74,6 +76,7 @@ const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
   basemaps: false,
   lidarTiles: false,
   labels: false,
+  contourLines: false,
   routes: false,
   slopes: false,
   altitude: false,
@@ -88,6 +91,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
     basemapId: DEFAULT_BASEMAP_ID,
     toggles: {
       labelsEnabled: false,
+      contourLinesEnabled: false,
       slopesEnabled: false,
       altitudeEnabled: false,
       weatherEnabled: false,

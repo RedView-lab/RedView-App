@@ -3,6 +3,7 @@ import { useMiddleClickAutoscroll } from '@/shared/hooks/useMiddleClickAutoscrol
 import { BasemapsSection } from '../sections/BasemapsSection';
 import { LidarTilesSection } from '../sections/LidarTilesSection';
 import { LabelsSection } from '../sections/LabelsSection';
+import { ContourLinesSection } from '../sections/ContourLinesSection';
 import { RoutesSection } from '../sections/RoutesSection';
 import { SlopesSection } from '../sections/SlopesSection';
 import { AltitudeSection } from '../sections/AltitudeSection';
@@ -35,6 +36,7 @@ export function ControlPanel({
   onLidarTileOpen,
   onLabelsEnabledChange,
   onLabelToggle,
+  onContourLinesEnabledChange,
   onRoutesEnabledChange,
   onRouteColorChange,
   onRouteModeChange,
@@ -126,6 +128,13 @@ export function ControlPanel({
         onOpenChange={(open) => onSectionOpenChange?.('labels', open)}
         onEnabledChange={onLabelsEnabledChange}
         onLabelToggle={onLabelToggle}
+      />
+
+      <ContourLinesSection
+        enabled={state.contourLines.enabled}
+        open={sectionsOpen?.contourLines}
+        onOpenChange={(open) => onSectionOpenChange?.('contourLines', open)}
+        onEnabledChange={onContourLinesEnabledChange}
       />
 
       <RoutesSection

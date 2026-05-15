@@ -6,7 +6,7 @@ import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
 import { Slider } from '../components/Slider';
 import { Toggle } from '../components/Toggle';
-import { IconCalendar, IconClock } from '../icons';
+import { IconCalendar, IconClock, IconWind } from '../icons';
 
 interface Props {
   state: WindPanelState;
@@ -177,6 +177,7 @@ export function WindSection({
   return (
     <Section
       title="Vent"
+      icon={<IconWind size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

@@ -3,7 +3,7 @@ import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
-import { IconEye, IconChevronDown } from '../icons';
+import { IconChevronDown, IconEye, IconRoute } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState, RouteRenderMode } from '../types';
 
 interface Props {
@@ -112,6 +112,7 @@ export function RoutesSection({
   return (
     <Section
       title="Itinéraires"
+      icon={<IconRoute size={16} />}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

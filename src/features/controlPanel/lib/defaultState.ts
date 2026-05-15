@@ -29,6 +29,9 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
       waterBody: false,
     },
   },
+  contourLines: {
+    enabled: false,
+  },
   routes: {
     enabled: true,
     items: [

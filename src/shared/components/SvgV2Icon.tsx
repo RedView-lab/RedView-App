@@ -1,6 +1,7 @@
 import { AssetIcon, type AssetIconProps } from './AssetIcon';
 
 const SVGV2_ICONE_ASSETS = new Set([
+  'annotation.svg',
   'annotation-alert.svg',
   'annotation-check.svg',
   'annotation-dots.svg',
@@ -16,8 +17,10 @@ const SVGV2_ICONE_ASSETS = new Set([
   'checkpoint-end.svg',
   'checkpoint-start.svg',
   'chevron-down.svg',
+  'cloud-sun-02.svg',
   'clock-rewind.svg',
   'compass-03.svg',
+  'courbes-de-niveau.svg',
   'corner-up-left.svg',
   'corner-up-right.svg',
   'copy-04.svg',
@@ -80,7 +83,9 @@ const SVGV2_ICONE_ASSETS = new Set([
   'slash-octagon.svg',
   'sliders-02.svg',
   'sliders-03.svg',
+  'slope.svg',
   'speedometer-03.svg',
+  'spacing-height-01.svg',
   'star-01.svg',
   'switch-horizontal-01.svg',
   'switch-vertical-01.svg',
@@ -93,6 +98,7 @@ const SVGV2_ICONE_ASSETS = new Set([
   'upload-01.svg',
   'upload-03.svg',
   'user-circle.svg',
+  'wind-03.svg',
   'x-circle.svg',
   'x-close.svg',
   'x.svg',

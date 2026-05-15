@@ -6,8 +6,7 @@ import { Select } from '../components/Select';
 import { Toggle } from '../components/Toggle';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
-import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff } from '../icons';
-import { IconSunrise, IconSunset } from '../icons';
+import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconSun, IconSunrise, IconSunset } from '../icons';
 import { CalendarPopover } from '@/features/itineraryPanel/components/calendar';
 import type { ControlPanelHandlers, SunlightState } from '../types';
 
@@ -123,6 +122,7 @@ export function SunlightSection({
   return (
     <Section
       title="Ensoleillement"
+      icon={<IconSun size={16} />}
       toggle={{ checked: state.enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}

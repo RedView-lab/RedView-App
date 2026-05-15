@@ -15,7 +15,7 @@ export function BasemapsSection({ basemaps, open, onOpenChange, onBasemapToggle 
   return (
     <Section
       title="Fonds de carte"
-      icon={<IconMap size={12} />}
+      icon={<IconMap size={16} />}
       noTopBorder
       open={open}
       onOpenChange={onOpenChange}

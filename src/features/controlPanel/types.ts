@@ -201,6 +201,7 @@ export interface ControlPanelState {
   basemaps: Basemap[];
   lidarTiles: LidarTile[];
   labels: { enabled: boolean; state: LabelsState };
+  contourLines: ToggleOnlySection;
   routes: { enabled: boolean; items: RouteItem[] };
   slopes: { enabled: boolean } & SlopesState;
   altitude: { enabled: boolean } & AltitudeState;
@@ -223,6 +224,7 @@ export interface ControlPanelHandlers {
 
   onLabelsEnabledChange?: (enabled: boolean) => void;
   onLabelToggle?: (key: LabelKey, checked: boolean) => void;
+  onContourLinesEnabledChange?: (enabled: boolean) => void;
 
   onRoutesEnabledChange?: (enabled: boolean) => void;
   onRouteColorChange?: (id: string, color: string) => void;

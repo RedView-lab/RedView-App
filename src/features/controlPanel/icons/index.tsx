@@ -2,7 +2,39 @@ import type { AssetIconProps } from '@/shared/components/AssetIcon';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
 export const IconMap = ({ size = 12, ...rest }: AssetIconProps) => (
-  <SvgV2Icon name="map-02.svg" size={size} {...rest} />
+  <SvgV2Icon name="map-01.svg" size={size} {...rest} />
+);
+
+export const IconAnnotation = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="annotation.svg" size={size} {...rest} />
+);
+
+export const IconContourLines = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="courbes-de-niveau.svg" size={size} {...rest} />
+);
+
+export const IconRoute = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="route.svg" size={size} {...rest} />
+);
+
+export const IconSlope = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="slope.svg" size={size} {...rest} />
+);
+
+export const IconAltitude = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="spacing-height-01.svg" size={size} {...rest} />
+);
+
+export const IconWeather = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="cloud-sun-02.svg" size={size} {...rest} />
+);
+
+export const IconWind = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="wind-03.svg" size={size} {...rest} />
+);
+
+export const IconSun = ({ size = 16, ...rest }: AssetIconProps) => (
+  <SvgV2Icon name="sun.svg" size={size} {...rest} />
 );
 
 export const IconChevronDown = ({ size = 16, ...rest }: AssetIconProps) => (

@@ -227,6 +227,7 @@ export function ControlPanelContainer({
       ...DEFAULT_CONTROL_PANEL_STATE,
       basemaps: buildBasemapList(activeBasemapId),
       lidarTiles,
+      contourLines: terrainState.slices.contourLines,
       routes: { enabled: routesEnabled, items: routeItems },
       labels: overlayState.slices.labels,
       slopes: terrainState.slices.slopes,
@@ -246,6 +247,7 @@ export function ControlPanelContainer({
       overlayState.slices.wind,
       routeItems,
       routesEnabled,
+      terrainState.slices.contourLines,
       terrainState.slices.altitude,
       terrainState.slices.slopes,
     ],
@@ -295,6 +297,7 @@ export function ControlPanelContainer({
       }}
       onLabelsEnabledChange={overlayState.handlers.onLabelsEnabledChange}
       onLabelToggle={overlayState.handlers.onLabelToggle}
+      onContourLinesEnabledChange={terrainState.handlers.onContourLinesEnabledChange}
       onSlopesEnabledChange={terrainState.handlers.onSlopesEnabledChange}
       onSlopeResolutionChange={terrainState.handlers.onSlopeResolutionChange}
       onSlopeColorizationChange={terrainState.handlers.onSlopeColorizationChange}
