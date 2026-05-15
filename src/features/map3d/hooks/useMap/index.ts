@@ -34,6 +34,22 @@ function cloneStyleDefinition(style: MapboxStyleDefinition): MapboxStyleDefiniti
   return JSON.parse(JSON.stringify(style)) as MapboxStyleDefinition;
 }
 
+function shouldPrefetchMapboxStyle(styleUrl: string): boolean {
+  const apiUrl = getMapboxStyleApiUrl(styleUrl);
+  if (!apiUrl) return false;
+  // Mapbox Standard / Standard-Satellite are imported styles that can
+  // settle without emitting a usable readiness event after a prefetched
+  // object `setStyle()` call, especially on topo -> satellite switches.
+  // Let Mapbox resolve those natively from the URL string instead.
+  if (
+    styleUrl === 'mapbox://styles/mapbox/standard'
+    || styleUrl === 'mapbox://styles/mapbox/standard-satellite'
+  ) {
+    return false;
+  }
+  return true;
+}
+
 // Prefetch budget per attempt. Kept tight so a slow Mapbox CDN response
 // (cold incognito session, no service-worker cache, no HTTP cache) never
 // blocks the bootstrap longer than this — we fall back to letting Mapbox
@@ -71,7 +87,7 @@ async function fetchMapboxStyleDefinition(styleUrl: string): Promise<MapboxStyle
 }
 
 async function resolveStyleInput(styleUrl: string): Promise<string | MapboxStyleDefinition> {
-  if (!getMapboxStyleApiUrl(styleUrl)) return styleUrl;
+  if (!shouldPrefetchMapboxStyle(styleUrl)) return styleUrl;
   try {
     return await fetchMapboxStyleDefinition(styleUrl);
   } catch (error) {
@@ -129,7 +145,7 @@ export function useMap(
     let cancelled = false;
     const savedVp = initialViewport ?? loadViewport();
     const runtimeProfile = getMapRuntimeProfile();
-    const shouldHydrateInitialStyle = getMapboxStyleApiUrl(basemapConfig.styleUrl) != null;
+    const shouldHydrateInitialStyle = shouldPrefetchMapboxStyle(basemapConfig.styleUrl);
     const map = new mapboxgl.Map({
       container: containerRef.current,
       style: (shouldHydrateInitialStyle
