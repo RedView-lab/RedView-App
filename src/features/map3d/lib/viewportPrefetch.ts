@@ -406,7 +406,7 @@ export function installViewportPrefetch(
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
     const slopeOn = opts.isSlopeActive?.() ?? false;
-    const altitudeOn = opts.isAltitudeActive?.() ?? false;
+    const altitudeOn = false;
     const urls = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,
       /* includeRing */ true,
@@ -494,7 +494,7 @@ export function installViewportPrefetch(
       includeChildren,
       /* includeParent */ true,
       slopeOn,
-      altitudeOn,
+      /* altitudeOn */ false,
     );
     for (const u of extras) urls.push(u);
 

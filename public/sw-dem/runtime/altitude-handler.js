@@ -44,12 +44,15 @@ async function handleAltitudeRequest(z, x, y) {
       if (isAltitudeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
-      const altitudeBlob = await buildAltitudeTile(
-        demBlob,
-        z,
-        x,
-        y,
-        () => isAltitudeWorkCancelled(generation),
+      const altitudeBlob = await scheduleAltitudeBuild(
+        () => buildAltitudeTile(
+          demBlob,
+          z,
+          x,
+          y,
+          () => isAltitudeWorkCancelled(generation),
+        ),
+        generation,
       );
       if (!altitudeBlob || isAltitudeWorkCancelled(generation)) {
         return transparentTileResponse();

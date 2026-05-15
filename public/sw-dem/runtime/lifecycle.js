@@ -18,6 +18,9 @@
 const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
+const ALTITUDE_BUILD_MAX_CONCURRENT = 2;
+let _altitudeBuildActive = 0;
+const _altitudeBuildQueue = [];
 
 // In-flight slope tile dedup: key = `${profile}:${z}/${x}/${y}?${resFactor}` →
 // Promise<Response>. Lets concurrent requests for the same tile share
@@ -51,7 +54,39 @@ function cancelAltitudeWork() {
   altitudeCancelGeneration += 1;
   const altitudeCount = ALTITUDE_INFLIGHT.size;
   ALTITUDE_INFLIGHT.clear();
+  while (_altitudeBuildQueue.length > 0) {
+    const queued = _altitudeBuildQueue.shift();
+    try { queued?.resolve(null); } catch { /* ignore */ }
+  }
   return { altitudeCount };
+}
+
+function pumpAltitudeBuildQueue() {
+  while (_altitudeBuildActive < ALTITUDE_BUILD_MAX_CONCURRENT && _altitudeBuildQueue.length > 0) {
+    const entry = _altitudeBuildQueue.shift();
+    if (!entry) break;
+    if (entry.generation !== altitudeCancelGeneration) {
+      entry.resolve(null);
+      continue;
+    }
+    _altitudeBuildActive += 1;
+    Promise.resolve()
+      .then(() => entry.run())
+      .then((result) => entry.resolve(result))
+      .catch((error) => entry.reject(error))
+      .finally(() => {
+        _altitudeBuildActive = Math.max(0, _altitudeBuildActive - 1);
+        pumpAltitudeBuildQueue();
+      });
+  }
+}
+
+function scheduleAltitudeBuild(run, generation) {
+  if (generation !== altitudeCancelGeneration) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    _altitudeBuildQueue.push({ run, generation, resolve, reject });
+    pumpAltitudeBuildQueue();
+  });
 }
 
 function acquireComposite() {
