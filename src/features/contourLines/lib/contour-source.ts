@@ -18,12 +18,22 @@ export function buildContourFilter(intervalMeters: number): FilterSpecification 
 
 function buildWidthExpression(widthStops: number[]): ExpressionSpecification {
   return [
-    ['interpolate', ['linear'], ['zoom'], 9, widthStops[0], 12, widthStops[1], 14, widthStops[2], 16, widthStops[3]],
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    9,
+    widthStops[0],
+    12,
+    widthStops[1],
+    14,
+    widthStops[2],
+    16,
+    widthStops[3],
   ] as unknown as ExpressionSpecification;
 }
 
-function buildOpacityExpression(opacity: number, scale: number): ExpressionSpecification {
-  return ['literal', opacity * scale] as unknown as ExpressionSpecification;
+function buildOpacityExpression(opacity: number, scale: number): number {
+  return opacity * scale;
 }
 
 export function buildContourSource(): VectorSourceSpecification {
