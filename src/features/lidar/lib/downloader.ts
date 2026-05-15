@@ -6,6 +6,7 @@ import { extractLasFromZip } from './swiss/zipReader';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
+const MAX_INCOMPLETE_DOWNLOAD_RETRIES = 1;
 const RETRY_BASE_DELAY_429_MS = 2000;
 const RETRY_BASE_DELAY_5XX_MS = 1000;
 const INTER_REQUEST_DELAY_MS = 200;
@@ -100,7 +101,7 @@ async function fetchWithRetry(
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
-    console.log(`[Download] ${url} -> HTTP ${response.status}`);
+    console.log(`[Download] Attempt ${attempt + 1} ${url} -> HTTP ${response.status}`);
 
     if (response.status === 404) {
       console.warn(`[Download] 404 for ${url}`);
@@ -199,8 +200,16 @@ async function fetchWithRetry(
     }
 
     if (err?.code === 'ERR_INCOMPLETE_DOWNLOAD') {
-      if (attempt < MAX_RETRIES) {
+      if (attempt < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
+        console.warn(`[Download] Incomplete stream for ${url}; retrying in ${delay}ms (${attempt + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`);
+        onProgress?.({
+          tileCoord: coord,
+          bytesDownloaded: 0,
+          totalBytes: 0,
+          phase: 'downloading',
+          message: `Téléchargement interrompu, nouvelle tentative ${attempt + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
+        });
         await sleep(delay);
         return fetchWithRetry(url, coord, onProgress, attempt + 1);
       }
