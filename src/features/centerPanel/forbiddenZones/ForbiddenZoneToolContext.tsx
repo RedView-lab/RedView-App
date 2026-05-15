@@ -13,11 +13,17 @@ import type { Feature, Polygon } from 'geojson';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import {
+  clearForbiddenZoneDraft,
+  setForbiddenZoneDraft,
+} from '@/features/itineraryPanel/lib/route-layer';
 
 type DraftPoint = { lat: number; lon: number };
 type DraftSnapshot = DraftPoint[];
 
 const DRAW_CONTROL_GROUP_SELECTOR = '.mapbox-gl-draw_polygon';
+const DRAW_HOT_SOURCE_ID = 'mapbox-gl-draw-hot';
+const DRAW_COLD_SOURCE_ID = 'mapbox-gl-draw-cold';
 
 interface ForbiddenZoneToolContextValue {
   armed: boolean;
@@ -48,6 +54,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const drawControlElementRef = useRef<HTMLElement | null>(null);
 
   const draftFeatureIdRef = useRef<string | null>(null);
+  const draftOverlayRef = useRef<DraftSnapshot>([]);
   const suppressDrawSyncRef = useRef(false);
   const draftHistoryRef = useRef<DraftSnapshot[]>([]);
   const draftHistoryIndexRef = useRef(-1);
@@ -87,6 +94,26 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       }
     }
   }, []);
+
+  const clearDraftOverlay = useCallback(() => {
+    draftOverlayRef.current = [];
+    if (!map) return;
+    clearForbiddenZoneDraft(map);
+  }, [map]);
+
+  const syncDraftOverlay = useCallback((points: DraftSnapshot) => {
+    const nextPoints = cloneDraftSnapshot(points);
+    draftOverlayRef.current = nextPoints;
+
+    if (!map) return;
+
+    if (nextPoints.length <= 0) {
+      clearForbiddenZoneDraft(map);
+      return;
+    }
+
+    setForbiddenZoneDraft(map, nextPoints);
+  }, [map]);
 
   const activatePolygonMode = useCallback(() => {
     const draw = drawRef.current;
@@ -145,7 +172,8 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     }
 
     updateDraftStatus(points);
-  }, [activatePolygonMode, armed, updateDraftStatus]);
+    syncDraftOverlay(points);
+  }, [activatePolygonMode, armed, syncDraftOverlay, updateDraftStatus]);
 
   const pushDraftSnapshot = useCallback((points: DraftSnapshot) => {
     const currentIndex = draftHistoryIndexRef.current;
@@ -161,13 +189,15 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const nextIndex = nextHistory.length - 1;
     syncHistoryState(nextHistory, nextIndex);
     updateDraftStatus(points);
-  }, [syncHistoryState, updateDraftStatus]);
+    syncDraftOverlay(points);
+  }, [syncDraftOverlay, syncHistoryState, updateDraftStatus]);
 
   const resetDraftSession = useCallback((keepStatusMessage: boolean) => {
     clearDrawDraft();
+    clearDraftOverlay();
     syncHistoryState([], -1);
     if (!keepStatusMessage) setStatusMessage(null);
-  }, [clearDrawDraft, syncHistoryState]);
+  }, [clearDraftOverlay, clearDrawDraft, syncHistoryState]);
 
   const startDraftSession = useCallback(() => {
     const draw = drawRef.current;
@@ -273,6 +303,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       window.cancelAnimationFrame(frame);
       drawControlElementRef.current = null;
       drawRef.current = null;
+      clearDraftOverlay();
       try {
         map.removeControl(draw);
       } catch {
@@ -284,12 +315,24 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     // and discard any in-progress polygon draft. Control visibility is driven
     // by the separate `setDrawControlVisible(armed)` effect.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, setDrawControlVisible]);
+  }, [clearDraftOverlay, map, setDrawControlVisible]);
 
   useEffect(() => {
     if (!map) return;
     const draw = drawRef.current;
     if (!draw) return;
+
+    const syncDraftOverlayFromDraw = () => {
+      if (suppressDrawSyncRef.current) return;
+
+      const points = getVisibleDraftPoints(map, draw, draftFeatureIdRef.current);
+      if (points.length <= 0) {
+        clearDraftOverlay();
+        return;
+      }
+
+      syncDraftOverlay(points);
+    };
 
     const syncDraftFromDraw = (enterDirectSelect: boolean) => {
       if (suppressDrawSyncRef.current) return;
@@ -336,17 +379,31 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const handleDrawCreate = () => syncDraftFromDraw(true);
     const handleDrawUpdate = () => syncDraftFromDraw(false);
     const handleDrawDelete = () => syncDraftFromDraw(false);
+    const handleDrawRender = () => syncDraftOverlayFromDraw();
+    const handleStyleReload = () => {
+      if (!armed) {
+        clearDraftOverlay();
+        return;
+      }
+      syncDraftOverlayFromDraw();
+    };
 
     map.on('draw.create', handleDrawCreate);
     map.on('draw.update', handleDrawUpdate);
     map.on('draw.delete', handleDrawDelete);
+    map.on('draw.render', handleDrawRender);
+    map.on('styledata', handleStyleReload);
+    map.on('style.load', handleStyleReload);
 
     return () => {
       map.off('draw.create', handleDrawCreate);
       map.off('draw.update', handleDrawUpdate);
       map.off('draw.delete', handleDrawDelete);
+      map.off('draw.render', handleDrawRender);
+      map.off('styledata', handleStyleReload);
+      map.off('style.load', handleStyleReload);
     };
-  }, [activatePolygonMode, armed, map, pushDraftSnapshot]);
+  }, [activatePolygonMode, armed, clearDraftOverlay, map, pushDraftSnapshot, syncDraftOverlay]);
 
   useEffect(() => {
     if (!armed) return;
@@ -420,6 +477,60 @@ function getDraftPointsFromDraw(
   };
 }
 
+function getVisibleDraftPoints(
+  map: MapboxMap,
+  draw: MapboxDraw,
+  preferredFeatureId: string | null,
+): DraftSnapshot {
+  const sourcePoints = getDraftPointsFromDrawSources(map, preferredFeatureId);
+  if (sourcePoints.length > 0) {
+    return sourcePoints;
+  }
+
+  return getDraftPointsFromDraw(draw, preferredFeatureId).points;
+}
+
+function getDraftPointsFromDrawSources(
+  map: MapboxMap,
+  preferredFeatureId: string | null,
+): DraftSnapshot {
+  const polygonFeatures = [DRAW_HOT_SOURCE_ID, DRAW_COLD_SOURCE_ID].flatMap((sourceId) =>
+    getPolygonFeaturesFromDrawSource(map, sourceId),
+  );
+
+  if (polygonFeatures.length === 0) {
+    return [];
+  }
+
+  const activeFeature =
+    polygonFeatures.find((feature) => feature.properties?.active === 'true') ??
+    (preferredFeatureId
+      ? polygonFeatures.find((feature) => coerceFeatureId(feature.id) === preferredFeatureId)
+      : null) ??
+    polygonFeatures[polygonFeatures.length - 1];
+
+  return activeFeature ? polygonFeatureToDraftSnapshot(activeFeature) : [];
+}
+
+function getPolygonFeaturesFromDrawSource(
+  map: MapboxMap,
+  sourceId: string,
+): Array<Feature<Polygon>> {
+  try {
+    const source = map.getSource(sourceId) as
+      | { serialize?: () => { data?: unknown } }
+      | undefined;
+    const data = source?.serialize?.().data;
+    if (!isFeatureCollection(data)) {
+      return [];
+    }
+
+    return data.features.filter(isPolygonFeature);
+  } catch {
+    return [];
+  }
+}
+
 function polygonFeatureToDraftSnapshot(feature: Feature<Polygon>): DraftSnapshot {
   const ring = feature.geometry.coordinates[0] ?? [];
   if (ring.length <= 1) return [];
@@ -430,6 +541,15 @@ function polygonFeatureToDraftSnapshot(feature: Feature<Polygon>): DraftSnapshot
 
 function isPolygonFeature(feature: GeoJSON.Feature): feature is Feature<Polygon> {
   return feature.geometry.type === 'Polygon';
+}
+
+function isFeatureCollection(value: unknown): value is GeoJSON.FeatureCollection {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+
+  const maybeFeatureCollection = value as { type?: unknown; features?: unknown };
+  return maybeFeatureCollection.type === 'FeatureCollection' && Array.isArray(maybeFeatureCollection.features);
 }
 
 function closeRing(coordinates: number[][]): number[][] {

@@ -28,7 +28,11 @@ export const FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID = 'brouter-forbidden-zone
 
 export function canMutateStyle(map: MapboxMap): boolean {
   try {
-    return map.isStyleLoaded() && Boolean(map.getStyle());
+    // Mapbox 3.x can keep isStyleLoaded() false during repeated styledata
+    // churn even though the style object is already usable for addSource /
+    // addLayer / setData. Route replay runs on styledata specifically to
+    // survive those transitions, so use the same lenient gate here.
+    return Boolean(map.getStyle());
   } catch {
     return false;
   }
