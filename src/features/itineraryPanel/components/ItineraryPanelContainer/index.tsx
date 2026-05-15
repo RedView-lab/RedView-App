@@ -15,9 +15,7 @@ import { poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { useProjectStore } from '../../context/ProjectStore';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import {
-  createDefaultItinerary,
   DEFAULT_PROFILES,
-  ITINERARY_COLORS,
   normalizeItineraryRhythmState,
 } from '../../lib/project';
 import { resolveFavoritePoiPauseDurationMin } from '../../sections/timeline/TimelineTimelineView/utilsParts/schedule-stops';
@@ -73,6 +71,7 @@ export function ItineraryPanelContainer({
   const {
     project,
     setProject,
+    addItinerary,
     setItineraryName,
     duplicateItinerary,
     removeItinerary,
@@ -290,26 +289,6 @@ export function ItineraryPanelContainer({
           return copy;
         }),
       }));
-    },
-    [setProject],
-  );
-
-  const addItinerary = useCallback(
-    (overrides: Partial<ReturnType<typeof createDefaultItinerary>> = {}) => {
-      let createdId: string | null = null;
-      setProject((p) => {
-        const idx = p.itineraries.length;
-        const color = ITINERARY_COLORS[idx % ITINERARY_COLORS.length] ?? ITINERARY_COLORS[0];
-        const base = createDefaultItinerary(idx + 1, color);
-        const next = { ...base, ...overrides };
-        createdId = next.id;
-        return {
-          ...p,
-          itineraries: [...p.itineraries, next],
-          activeItineraryId: next.id,
-        };
-      });
-      return createdId;
     },
     [setProject],
   );

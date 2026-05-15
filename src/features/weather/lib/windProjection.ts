@@ -1,30 +1,16 @@
-import type { Map as MapboxMap, ProjectionSpecification } from 'mapbox-gl';
-
-export function getWindProjectionName(map: MapboxMap): string | null {
-  try {
-    return map.getProjection()?.name ?? null;
-  } catch {
-    return null;
-  }
-}
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 export function isWindProjectionSupported(map: MapboxMap): boolean {
-  return getWindProjectionName(map) === 'mercator';
-}
+	try {
+		const projection = (map as MapboxMap & {
+			getProjection?: () => string | { name?: string } | null;
+		}).getProjection?.();
 
-export function ensureWindProjection(map: MapboxMap): ProjectionSpecification | null {
-  const current = map.getProjection();
-  if (current?.name === 'mercator') return null;
-  map.setProjection('mercator');
-  return current ?? null;
-}
+		if (!projection) return true;
 
-export function restoreWindProjection(
-  map: MapboxMap,
-  projection: ProjectionSpecification | null,
-): void {
-  if (!projection) return;
-  const current = map.getProjection();
-  if (current?.name === projection.name) return;
-  map.setProjection(projection);
+		const name = typeof projection === 'string' ? projection : projection.name;
+		return name === 'mercator';
+	} catch {
+		return false;
+	}
 }

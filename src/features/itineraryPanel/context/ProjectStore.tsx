@@ -28,6 +28,7 @@ import { ProjectStoreContext } from './ProjectStore/context';
 import { buildPendingRoutePatchForForbiddenZone } from './ProjectStore/forbiddenZonePatch';
 import { useTraceHistory } from './ProjectStore/useTraceHistory';
 import type {
+  Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
   RouteRenderMode,
@@ -177,6 +178,30 @@ export function ProjectProvider({
       });
     },
     [updateItinerary],
+  );
+
+  const addItinerary = useCallback(
+    (overrides: Partial<Itinerary> = {}) => {
+      let createdId: string | null = null;
+
+      setProject((currentProject) => {
+        const nextIndex = currentProject.itineraries.length;
+        const color =
+          ITINERARY_COLORS[nextIndex % ITINERARY_COLORS.length] ?? ITINERARY_COLORS[0];
+        const base = createDefaultItinerary(nextIndex + 1, color);
+        const next = { ...base, ...overrides };
+        createdId = next.id;
+
+        return {
+          ...currentProject,
+          itineraries: [...currentProject.itineraries, next],
+          activeItineraryId: next.id,
+        };
+      });
+
+      return createdId;
+    },
+    [setProject],
   );
 
   const duplicateItinerary = useCallback(
@@ -593,6 +618,7 @@ export function ProjectProvider({
       canUndoTraceEdit,
       canRedoTraceEdit,
       rollbackPendingTraceAppend,
+      addItinerary,
       updateItinerary,
       setItineraryName,
       setItineraryColor,
@@ -619,6 +645,7 @@ export function ProjectProvider({
       rollbackPendingTraceAppend,
       traceHistoryPastCount,
       traceHistoryFutureCount,
+      addItinerary,
       updateItinerary,
       setItineraryName,
       setItineraryColor,

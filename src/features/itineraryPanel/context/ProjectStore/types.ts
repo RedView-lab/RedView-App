@@ -1,6 +1,7 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import type {
+  Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
   RouteRenderMode,
@@ -21,6 +22,7 @@ export interface ProjectStoreValue {
   canUndoTraceEdit: boolean;
   canRedoTraceEdit: boolean;
   rollbackPendingTraceAppend: (itineraryId: string) => boolean;
+  addItinerary: (overrides?: Partial<Itinerary>) => string | null;
   updateItinerary: (
     id: string,
     mut: (draft: ItineraryProject['itineraries'][number]) => void,

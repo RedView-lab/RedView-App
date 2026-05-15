@@ -82,6 +82,11 @@ export function CenterPanelToolbar() {
     store.clearItineraryRoute(activeItinerary.id);
     setToolbarStatus('Trace supprimée');
   };
+  const handleAddItinerary = () => {
+    if (!store) return;
+    store.addItinerary();
+    setToolbarStatus('Nouvel itinéraire créé');
+  };
   const simplifiableRoute =
     activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
       ? activeItinerary.gpxRoute
@@ -334,7 +339,14 @@ export function CenterPanelToolbar() {
             <IconCursor size={18} />
           </ToolbarIconButton>
 
-          <button className="rvc-center-toolbar__button rvc-center-toolbar__button--accent" type="button" aria-label="Ajouter" title="Ajouter">
+          <button
+            className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"
+            type="button"
+            aria-label="Ajouter"
+            title="Ajouter"
+            onClick={handleAddItinerary}
+            disabled={!store}
+          >
             <IconPlusCircle />
             <span className="rvc-center-toolbar__button-text">Ajouter</span>
             <IconChevronDown size={16} />
