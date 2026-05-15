@@ -56,6 +56,7 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   const draftFeatureIdRef = useRef<string | null>(null);
   const draftOverlayRef = useRef<DraftSnapshot>([]);
   const suppressDrawSyncRef = useRef(false);
+  const styleReplayFrameRef = useRef<number | null>(null);
   const draftHistoryRef = useRef<DraftSnapshot[]>([]);
   const draftHistoryIndexRef = useRef(-1);
   const activeItinerary = store?.project.itineraries.find(
@@ -96,6 +97,10 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
   }, []);
 
   const clearDraftOverlay = useCallback(() => {
+    if (styleReplayFrameRef.current != null) {
+      window.cancelAnimationFrame(styleReplayFrameRef.current);
+      styleReplayFrameRef.current = null;
+    }
     draftOverlayRef.current = [];
     if (!map) return;
     clearForbiddenZoneDraft(map);
@@ -381,11 +386,20 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     const handleDrawDelete = () => syncDraftFromDraw(false);
     const handleDrawRender = () => syncDraftOverlayFromDraw();
     const handleStyleReload = () => {
-      if (!armed) {
-        clearDraftOverlay();
-        return;
+      if (styleReplayFrameRef.current != null) {
+        window.cancelAnimationFrame(styleReplayFrameRef.current);
       }
-      syncDraftOverlayFromDraw();
+
+      styleReplayFrameRef.current = window.requestAnimationFrame(() => {
+        styleReplayFrameRef.current = null;
+
+        if (!armed) {
+          clearDraftOverlay();
+          return;
+        }
+
+        syncDraftOverlayFromDraw();
+      });
     };
 
     map.on('draw.create', handleDrawCreate);
@@ -402,6 +416,10 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       map.off('draw.render', handleDrawRender);
       map.off('styledata', handleStyleReload);
       map.off('style.load', handleStyleReload);
+      if (styleReplayFrameRef.current != null) {
+        window.cancelAnimationFrame(styleReplayFrameRef.current);
+        styleReplayFrameRef.current = null;
+      }
     };
   }, [activatePolygonMode, armed, clearDraftOverlay, map, pushDraftSnapshot, syncDraftOverlay]);
 
