@@ -13,6 +13,7 @@ import {
   ControlPanelContainer,
   DEFAULT_BASEMAP_ID,
   ExporterPanel,
+  type BasemapId,
   getBasemapConfig,
   normalizeBasemapId,
 } from '@/features/controlPanel';
@@ -49,15 +50,16 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [selectedBasemapId, setSelectedBasemapId] = useState(DEFAULT_BASEMAP_ID);
-  const effectiveBasemapId = selectedBasemapId;
+  const [selectedBasemap, setSelectedBasemap] = useState<{
+    projectId: string | null;
+    basemapId: BasemapId;
+  }>({
+    projectId: null,
+    basemapId: DEFAULT_BASEMAP_ID,
+  });
   const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
   const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
   const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
-  const activeBasemapConfig = useMemo(
-    () => getBasemapConfig(effectiveBasemapId),
-    [effectiveBasemapId],
-  );
 
   const prepareProjectClose = useCallback(async () => {
     setMapLoaded(false);
@@ -87,9 +89,29 @@ export default function Dashboard({
     activeProjectInitial?.controlPanel?.basemapId ?? DEFAULT_BASEMAP_ID,
   );
 
+  const effectiveBasemapId =
+    activeProjectId != null && selectedBasemap.projectId !== activeProjectId
+      ? initialBasemapId
+      : selectedBasemap.basemapId;
+
+  const activeBasemapConfig = useMemo(
+    () => getBasemapConfig(effectiveBasemapId),
+    [effectiveBasemapId],
+  );
+
   useEffect(() => {
-    setSelectedBasemapId(initialBasemapId);
+    setSelectedBasemap({
+      projectId: activeProjectId,
+      basemapId: initialBasemapId,
+    });
   }, [activeProjectId, initialBasemapId]);
+
+  const handleBasemapChange = useCallback((id: BasemapId) => {
+    setSelectedBasemap({
+      projectId: activeProjectId,
+      basemapId: normalizeBasemapId(id),
+    });
+  }, [activeProjectId]);
 
   const {
     lidarModeEnabled,
@@ -527,7 +549,7 @@ export default function Dashboard({
                             <ControlPanelContainer
                               map={mapInstance}
                               isMapLoaded={mapLoaded}
-                              onBasemapChange={setSelectedBasemapId}
+                              onBasemapChange={handleBasemapChange}
                               onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
                               onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
                               onWindOverlayStatusChange={handleWindOverlayStatusChange}
