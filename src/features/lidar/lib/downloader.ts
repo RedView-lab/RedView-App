@@ -10,6 +10,10 @@ const RETRY_BASE_DELAY_429_MS = 2000;
 const RETRY_BASE_DELAY_5XX_MS = 1000;
 const INTER_REQUEST_DELAY_MS = 200;
 
+function formatBytesAsMb(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
 let rateLimitUntil = 0;
 
 function sleep(ms: number): Promise<void> {
@@ -165,6 +169,14 @@ async function fetchWithRetry(
       });
     }
 
+    if (contentLength > 0 && bytesDownloaded !== contentLength) {
+      const err = new Error(
+        `Téléchargement incomplet: ${formatBytesAsMb(bytesDownloaded)} reçus sur ${formatBytesAsMb(contentLength)} attendus.`
+      ) as Error & { code?: string };
+      err.code = 'ERR_INCOMPLETE_DOWNLOAD';
+      throw err;
+    }
+
     const totalLength = chunks.reduce((sum, c) => sum + c.byteLength, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -184,6 +196,14 @@ async function fetchWithRetry(
         return fetchWithRetry(url, coord, onProgress, attempt + 1);
       }
       throw new Error('Download timeout after retries');
+    }
+
+    if (err?.code === 'ERR_INCOMPLETE_DOWNLOAD') {
+      if (attempt < MAX_RETRIES) {
+        const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
+        await sleep(delay);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1);
+      }
     }
 
     throw err;

@@ -585,6 +585,8 @@ export function installViewportPrefetch(
     if (sw && sw.controller) {
       try { sw.controller.postMessage({ type: 'CANCEL_STALE_DEM' }); }
       catch { /* SW gone away — fine */ }
+      try { sw.controller.postMessage({ type: 'CANCEL_SLOPE_WORK' }); }
+      catch { /* SW gone away — fine */ }
       try { sw.controller.postMessage({ type: 'CANCEL_ALTITUDE_WORK' }); }
       catch { /* SW gone away — fine */ }
     }
