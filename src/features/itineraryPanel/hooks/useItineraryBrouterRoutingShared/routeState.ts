@@ -46,10 +46,12 @@ export function projectTimelineLocationDistances(
 
   const nextTimeline = timeline.map((row) => {
     if (row.kind === 'start') {
+      const nextLat = row.lat ?? snappedStart?.lat;
+      const nextLon = row.lon ?? snappedStart?.lon;
       if (
         row.distanceKm === 0 &&
-        row.lat === snappedStart?.lat &&
-        row.lon === snappedStart?.lon
+        row.lat === nextLat &&
+        row.lon === nextLon
       ) {
         return row;
       }
@@ -57,16 +59,18 @@ export function projectTimelineLocationDistances(
       return {
         ...row,
         distanceKm: 0,
-        lat: snappedStart?.lat ?? row.lat,
-        lon: snappedStart?.lon ?? row.lon,
+        lat: nextLat,
+        lon: nextLon,
       };
     }
 
     if (row.kind === 'end') {
+      const nextLat = row.lat ?? snappedEnd?.lat;
+      const nextLon = row.lon ?? snappedEnd?.lon;
       if (
         row.distanceKm === totalDistanceKm &&
-        row.lat === snappedEnd?.lat &&
-        row.lon === snappedEnd?.lon
+        row.lat === nextLat &&
+        row.lon === nextLon
       ) {
         return row;
       }
@@ -74,8 +78,8 @@ export function projectTimelineLocationDistances(
       return {
         ...row,
         distanceKm: totalDistanceKm,
-        lat: snappedEnd?.lat ?? row.lat,
-        lon: snappedEnd?.lon ?? row.lon,
+        lat: nextLat,
+        lon: nextLon,
       };
     }
 
