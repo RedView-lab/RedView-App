@@ -116,6 +116,34 @@ function buildSlopeDemCachePath(z, x, y, demProfile) {
     : `/dem-tiles/${z}/${x}/${y}`;
 }
 
+function shouldUseSlopeNeighbourDem(resp, demProfile) {
+  if (!resp || resp.status !== 200) return false;
+
+  const health = (resp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
+  if (health !== 'ok') return false;
+
+  const source = (resp.headers.get('X-DEM-Source') || '').toLowerCase();
+  if (!source) return true;
+
+  if (
+    source.startsWith('aws-emergency')
+    || source.startsWith('mapbox')
+    || source.startsWith('overzoom')
+  ) {
+    return false;
+  }
+
+  // In 1 m terrain mode, only stitch against genuine terrain-grade neighbour
+  // DEMs. Reusing a coarse AWS fallback beside a high-res terrain tile makes
+  // the Horn kernel disagree exactly on the shared border, which shows up as
+  // a visible tile grid.
+  if (demProfile === 'terrain' && source.startsWith('aws-terrarium')) {
+    return false;
+  }
+
+  return true;
+}
+
 async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
@@ -134,7 +162,7 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
       return null;
     }
     const resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
-    if (!resp || resp.status !== 200) {
+    if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
       missingNeighbours.push([nx, ny]);
       return null;
     }

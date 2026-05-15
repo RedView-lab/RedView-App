@@ -92,16 +92,23 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       canvas.style.cursor = '';
     };
 
+    const handleContextMenu = (event: MapMouseEvent) => {
+      event.preventDefault();
+      deactivate();
+    };
+
     applyCursor();
     map.on('mousemove', applyCursor);
     map.on('click', handleClick);
+    map.on('contextmenu', handleContextMenu);
 
     return () => {
       map.off('mousemove', applyCursor);
       map.off('click', handleClick);
+      map.off('contextmenu', handleContextMenu);
       canvas.style.cursor = '';
     };
-  }, [armed, map, routePoints, splitAtPointIndex, store, activeItinerary]);
+  }, [activeItinerary, armed, deactivate, map, routePoints, splitAtPointIndex, store]);
 
   const value = useMemo<RouteSplitToolContextValue>(
     () => ({
