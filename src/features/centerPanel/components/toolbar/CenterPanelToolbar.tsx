@@ -16,9 +16,7 @@ import {
   IconPencilLine,
   IconPlay,
   IconPlusCircle,
-  IconBezier,
   IconRedo,
-  IconReflectVertical,
   IconScissors,
   IconSkip,
   IconSlashOctagon,
@@ -106,10 +104,6 @@ export function CenterPanelToolbar() {
   const canCleanTrace = activeTracePointCount > 2;
   const canReverseTrace = reversibleTracePointCount > 1;
   const canAuditTrace = activeItinerary?.gpxRoute?.source === 'brouter';
-  const canMergeTrace = routeMergeTool?.canMerge ?? false;
-  const mergeStatusMessage = routeMergeTool?.statusMessage ?? null;
-  const mergeArmed = routeMergeTool?.armed ?? false;
-  const mergeLoading = routeMergeTool?.isMerging ?? false;
   const canSplitTrace = routeSplitTool?.canSplit ?? false;
   const splitStatusMessage = routeSplitTool?.statusMessage ?? null;
   const splitArmed = routeSplitTool?.armed ?? false;
@@ -140,7 +134,6 @@ export function CenterPanelToolbar() {
   );
   const canApplySimplification = canSimplifyTrace && simplifyTargetPoints < activeTracePointCount;
   const inlineToolbarStatus = useMemo(() => {
-    if (mergeStatusMessage) return mergeStatusMessage;
     if (splitStatusMessage) return splitStatusMessage;
     if (forbiddenZoneStatusMessage) return forbiddenZoneStatusMessage;
     if (traceStatusMessage) return traceStatusMessage;
@@ -169,7 +162,6 @@ export function CenterPanelToolbar() {
     canCleanTrace,
     forbiddenZoneStatusMessage,
     canSimplifyTrace,
-    mergeStatusMessage,
     simplifyTargetPoints,
     splitStatusMessage,
     traceStatusMessage,
@@ -287,16 +279,6 @@ export function CenterPanelToolbar() {
     setToolbarStatus(null);
   };
 
-  const handleToggleRouteMerge = () => {
-    if (!mergeArmed) {
-      routeSplitTool?.deactivate();
-      traceTool?.deactivate();
-      forbiddenZoneTool?.deactivate();
-    }
-    routeMergeTool?.toggle();
-    setToolbarStatus(null);
-  };
-
   const handleUndoTraceEdit = () => {
     if (forbiddenZoneArmed) {
       if (!canUndoForbiddenZoneDraft) return;
@@ -380,19 +362,6 @@ export function CenterPanelToolbar() {
             active={splitArmed}
           >
             <IconScissors />
-          </ToolbarIconButton>
-
-          <ToolbarIconButton
-            label="Fusion"
-            onClick={handleToggleRouteMerge}
-            disabled={!canMergeTrace || mergeLoading}
-            active={mergeArmed}
-          >
-            <IconReflectVertical />
-          </ToolbarIconButton>
-
-          <ToolbarIconButton label="Courbe de Bézier">
-            <IconBezier />
           </ToolbarIconButton>
 
           <ToolbarIconButton

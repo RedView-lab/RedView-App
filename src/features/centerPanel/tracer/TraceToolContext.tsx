@@ -41,31 +41,38 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
   );
   const startRow = activeItinerary?.timeline.find((row) => row.kind === 'start');
   const endRow = activeItinerary?.timeline.find((row) => row.kind === 'end');
-  const canTrace = Boolean(
-    startRow &&
-    startRow.lat != null &&
-    startRow.lon != null &&
-    endRow &&
-    endRow.lat != null &&
-    endRow.lon != null,
-  );
+  const hasStartPoint = Boolean(startRow && startRow.lat != null && startRow.lon != null);
+  const hasEndPoint = Boolean(endRow && endRow.lat != null && endRow.lon != null);
+  const canTrace = Boolean(store && activeItinerary && startRow && endRow);
+
+  const buildTracePrompt = useCallback(() => {
+    if (!hasStartPoint) return 'Cliquez sur la carte pour placer le départ';
+    if (!hasEndPoint) return 'Cliquez sur la carte pour placer l’arrivée';
+    return 'Cliquez sur la carte pour prolonger le tracé';
+  }, [hasEndPoint, hasStartPoint]);
 
   const deactivate = useCallback(() => {
     setArmed(false);
     setStatusMessage(null);
   }, []);
 
-  const hydrateEndLabel = useCallback(
-    async (itineraryId: string, lon: number, lat: number, fallbackLabel: string) => {
+  const hydratePointLabel = useCallback(
+    async (
+      itineraryId: string,
+      kind: 'start' | 'end',
+      lon: number,
+      lat: number,
+      fallbackLabel: string,
+    ) => {
       try {
         const settlement = await reverseGeocodeSettlement(lon, lat, {
           maxDistanceMeters: 1000,
         });
         const resolvedLabel = settlement?.name?.trim() || fallbackLabel;
         store?.updateItinerary(itineraryId, (itinerary) => {
-          const currentEnd = itinerary.timeline.find((row) => row.kind === 'end');
-          if (!currentEnd || currentEnd.lon !== lon || currentEnd.lat !== lat) return;
-          currentEnd.label = resolvedLabel;
+          const currentRow = itinerary.timeline.find((row) => row.kind === kind);
+          if (!currentRow || currentRow.lon !== lon || currentRow.lat !== lat) return;
+          currentRow.label = resolvedLabel;
         });
       } catch {
         // Keep the GPS fallback label.
@@ -79,6 +86,11 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       if (!store || !activeItinerary) return false;
 
       const fallbackLabel = formatGpsCoordinateLabel(lon, lat);
+      const pointKind: 'start' | 'end' | 'waypoint' = !hasStartPoint
+        ? 'start'
+        : !hasEndPoint
+          ? 'end'
+          : 'waypoint';
       const appended = store.appendTracePoint(activeItinerary.id, {
         lat,
         lon,
@@ -86,27 +98,39 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       });
       if (!appended) return false;
 
-      setArmed(false);
-      setStatusMessage('Point ajouté, recalcul du tracé en cours');
-      void hydrateEndLabel(activeItinerary.id, lon, lat, fallbackLabel);
+      setStatusMessage(
+        pointKind === 'start'
+          ? 'Départ ajouté. Cliquez pour placer l’arrivée'
+          : pointKind === 'end'
+            ? 'Arrivée ajoutée. Cliquez pour prolonger le tracé'
+            : 'Point ajouté, recalcul du tracé en cours',
+      );
+      if (pointKind !== 'waypoint') {
+        void hydratePointLabel(activeItinerary.id, pointKind, lon, lat, fallbackLabel);
+      }
       return true;
     },
-    [activeItinerary, hydrateEndLabel, store],
+    [activeItinerary, hasEndPoint, hasStartPoint, hydratePointLabel, store],
   );
 
   const toggle = useCallback(() => {
     if (!canTrace) return;
     setArmed((current) => {
       const next = !current;
-      setStatusMessage(next ? 'Cliquez sur la carte pour prolonger le tracé' : null);
+      setStatusMessage(next ? buildTracePrompt() : null);
       return next;
     });
-  }, [canTrace]);
+  }, [buildTracePrompt, canTrace]);
 
   useEffect(() => {
     if (canTrace) return;
     setArmed(false);
   }, [canTrace]);
+
+  useEffect(() => {
+    if (!armed) return;
+    setStatusMessage(buildTracePrompt());
+  }, [armed, buildTracePrompt]);
 
   useEffect(() => {
     if (!armed || !map) return;
@@ -118,7 +142,7 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
 
     const handleClick = (event: MapMouseEvent) => {
       if (!appendPointAt(event.lngLat.lng, event.lngLat.lat)) return;
-      canvas.style.cursor = '';
+      canvas.style.cursor = TRACE_CURSOR;
     };
 
     applyCursor();
