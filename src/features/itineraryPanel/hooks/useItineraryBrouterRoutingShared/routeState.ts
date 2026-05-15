@@ -95,19 +95,13 @@ export function projectTimelineLocationDistances(
         : null;
     const projectedDistanceKm =
       snappedWaypoint == null ? null : roundDistanceKm(snappedWaypoint.distanceM);
-    if (
-      row.distanceKm === projectedDistanceKm &&
-      row.lat === snappedWaypoint?.lat &&
-      row.lon === snappedWaypoint?.lon
-    ) {
+    if (row.distanceKm === projectedDistanceKm) {
       return row;
     }
     changed = true;
     return {
       ...row,
       distanceKm: projectedDistanceKm,
-      lat: snappedWaypoint?.lat ?? row.lat,
-      lon: snappedWaypoint?.lon ?? row.lon,
     };
   });
 
