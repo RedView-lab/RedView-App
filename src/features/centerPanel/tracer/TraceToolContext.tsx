@@ -145,16 +145,23 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
       canvas.style.cursor = TRACE_CURSOR;
     };
 
+    const handleContextMenu = (event: MapMouseEvent) => {
+      event.preventDefault();
+      deactivate();
+    };
+
     applyCursor();
     map.on('mousemove', applyCursor);
     map.on('click', handleClick);
+    map.on('contextmenu', handleContextMenu);
 
     return () => {
       map.off('mousemove', applyCursor);
       map.off('click', handleClick);
+      map.off('contextmenu', handleContextMenu);
       canvas.style.cursor = '';
     };
-  }, [appendPointAt, armed, map]);
+  }, [appendPointAt, armed, deactivate, map]);
 
   const value = useMemo<TraceToolContextValue>(
     () => ({

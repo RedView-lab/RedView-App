@@ -1,9 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { usePoi } from '@/features/poi/hooks/usePoi';
-import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
-import { fitMapToRoute } from '@/features/poi/lib/gpx-layer';
 import type {
   PoiCategory as FeaturePoiCategory,
   PoiFeature,
@@ -41,14 +39,6 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
 const DEFAULT_RADIUS_M = 1000;
 const DEFAULT_REFINE_LIMIT_PER_KM = 4;
 const POI_NON_ENTRY_KEYS = new Set(['refineResults', 'refineLimitPerKm']);
-
-function buildRenderedRouteKey(
-  itineraryId: string | null,
-  points: { lat: number; lon: number }[] | null | undefined,
-): string {
-  if (!points || points.length === 0) return itineraryId ? `${itineraryId}:empty` : 'empty';
-  return `${itineraryId ?? 'no-itinerary'}:${buildRouteContentSignature(points)}`;
-}
 
 export interface UseItineraryPoiMapResult {
   loading: boolean;
@@ -116,11 +106,6 @@ export function useItineraryPoiMap(
 
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
-  const fittedRouteKeyRef = useRef<string | null>(null);
-  const gpxRouteKey = useMemo(
-    () => buildRenderedRouteKey(active?.id ?? null, gpxRoute?.points),
-    [active?.id, gpxRoute?.points],
-  );
 
   const { loading, error, poiCount, corridorProgress, searchCorridor } = usePoi(
     map,
@@ -133,26 +118,6 @@ export function useItineraryPoiMap(
     onCorridorComplete,
     persistedPoiFeatures,
   );
-
-  // ── Auto-fit the camera to the active itinerary's GPX track ──────
-  // Rendering of the trace itself is owned by the unified route-layer
-  // pipeline (`useItineraryRouteLayerSync`), which honours the per-
-  // itinerary visibility / opacity / colour. We only care about the
-  // one-shot camera fit here.
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
-    if (!gpxRoute || gpxRoute.points.length < 2) {
-      fittedRouteKeyRef.current = null;
-      return;
-    }
-    if (fittedRouteKeyRef.current === gpxRouteKey) return;
-    try {
-      fitMapToRoute(map, gpxRoute.points);
-      fittedRouteKeyRef.current = gpxRouteKey;
-    } catch {
-      /* map may be tearing down */
-    }
-  }, [map, isMapLoaded, gpxRoute, gpxRouteKey]);
 
   return {
     loading,

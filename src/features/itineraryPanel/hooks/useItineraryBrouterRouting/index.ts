@@ -8,7 +8,6 @@ import {
   isClimbingMode,
 } from '../../lib/brouter';
 import {
-  fitToRoute,
   hasRouteLayer,
   removeRouteLayer,
 } from '../../lib/route-layer';
@@ -388,17 +387,6 @@ export function useItineraryBrouterRouting({
           'm | pts=',
           route.coordinates.length,
         );
-        const shouldAutoFit = !(
-          currentActive?.gpxRoute?.source === 'brouter' &&
-          (currentActive.gpxRoute.points.length ?? 0) >= 2
-        );
-        if (shouldAutoFit) {
-          try {
-            fitToRoute(map, route.coordinates);
-          } catch (error) {
-            console.warn('[BRouter] fitToRoute failed', error);
-          }
-        }
         setProject((project) => applyRecomputedRoute(project, route));
       })
       .catch((error: unknown) => {
