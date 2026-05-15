@@ -10,7 +10,7 @@ import {
 } from 'react';
 import MapboxDraw from '@mapbox/mapbox-gl-draw';
 import type { Feature, Polygon } from 'geojson';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
@@ -75,11 +75,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
   const updateDraftStatus = useCallback((points: DraftPoint[]) => {
     if (points.length <= 0) {
-      setStatusMessage('Mapbox Draw actif: utilisez l’outil polygone, double-cliquez pour fermer');
+      setStatusMessage('Zone interdite: clic droit pour placer le premier sommet');
       return;
     }
 
-    setStatusMessage('Polygone prêt: éditez sommets et segments, recliquez sur Interdire pour enregistrer');
+    setStatusMessage('Polygone prêt: clic droit pour ajouter un sommet, éditez les poignées puis recliquez sur Interdire pour enregistrer');
   }, []);
 
   const setDrawControlVisible = useCallback((visible: boolean) => {
@@ -269,6 +269,20 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
     applyDraftSnapshot(nextSnapshot);
   }, [applyDraftSnapshot, syncHistoryState]);
 
+  const appendDraftPoint = useCallback((lon: number, lat: number) => {
+    const draw = drawRef.current;
+    if (!draw || !map) return;
+
+    const currentPoints =
+      draftOverlayRef.current.length > 0
+        ? cloneDraftSnapshot(draftOverlayRef.current)
+        : getVisibleDraftPoints(map, draw, draftFeatureIdRef.current);
+    const nextPoints = [...currentPoints, { lon, lat }];
+
+    pushDraftSnapshot(nextPoints);
+    applyDraftSnapshot(nextPoints);
+  }, [applyDraftSnapshot, map, pushDraftSnapshot]);
+
   useEffect(() => {
     if (canEdit) return;
     deactivate();
@@ -332,6 +346,10 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
       const points = getVisibleDraftPoints(map, draw, draftFeatureIdRef.current);
       if (points.length <= 0) {
+        if (draftOverlayRef.current.length > 0) {
+          syncDraftOverlay(draftOverlayRef.current);
+          return;
+        }
         clearDraftOverlay();
         return;
       }
@@ -422,6 +440,21 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       }
     };
   }, [activatePolygonMode, armed, clearDraftOverlay, map, pushDraftSnapshot, syncDraftOverlay]);
+
+  useEffect(() => {
+    if (!map || !armed || !canEdit) return;
+
+    const handleContextMenu = (event: MapMouseEvent) => {
+      event.originalEvent.preventDefault();
+      event.originalEvent.stopPropagation();
+      appendDraftPoint(event.lngLat.lng, event.lngLat.lat);
+    };
+
+    map.on('contextmenu', handleContextMenu);
+    return () => {
+      map.off('contextmenu', handleContextMenu);
+    };
+  }, [appendDraftPoint, armed, canEdit, map]);
 
   useEffect(() => {
     if (!armed) return;
