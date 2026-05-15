@@ -90,10 +90,12 @@ function updateContourPaint(map: MapboxMap, opacity: number, intervalMeters: num
   const lineWidth = paints.lineWidth as unknown as DataDrivenPropertyValueSpecification<number>;
   try {
     if (map.getLayer(CONTOUR_CASING_LAYER_ID)) {
+      map.setFilter(CONTOUR_CASING_LAYER_ID, paints.filter);
       map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-opacity', casingOpacity);
       map.setPaintProperty(CONTOUR_CASING_LAYER_ID, 'line-width', casingWidth);
     }
     if (map.getLayer(CONTOUR_LINE_LAYER_ID)) {
+      map.setFilter(CONTOUR_LINE_LAYER_ID, paints.filter);
       map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-opacity', lineOpacity);
       map.setPaintProperty(CONTOUR_LINE_LAYER_ID, 'line-width', lineWidth);
     }
