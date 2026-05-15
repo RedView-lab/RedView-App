@@ -303,6 +303,45 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     await styleLoaded;
     if (isCancelled() || runId !== st.styleBootstrapRunId) return false;
 
+    if (!fns.canMutateStyle() && st.spriteStormBypass) {
+      // A forced sprite-storm bypass can resolve the readiness gate a
+      // fraction too early: Mapbox has started rebuilding the style, but
+      // the first usable sources/layers land a few frames later. If we
+      // bail immediately here, the single-shot bootstrap ends before DEM
+      // source / terrain attach ever run, leaving the world flat until a
+      // manual reload. Give the style a short post-bypass grace window to
+      // publish its first usable content before declaring failure.
+      const bypassUsable = await new Promise<boolean>((resolve) => {
+        let settled = false;
+        let rafId = 0;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+        const finish = (value: boolean) => {
+          if (settled) return;
+          settled = true;
+          if (rafId) cancelAnimationFrame(rafId);
+          if (timeoutId) clearTimeout(timeoutId);
+          resolve(value);
+        };
+        const probe = () => {
+          if (settled) return;
+          if (isCancelled() || runId !== st.styleBootstrapRunId) {
+            finish(false);
+            return;
+          }
+          if (fns.canMutateStyle()) {
+            finish(true);
+            return;
+          }
+          rafId = requestAnimationFrame(probe);
+        };
+        timeoutId = setTimeout(() => finish(fns.canMutateStyle()), 1200);
+        probe();
+      });
+      if (!bypassUsable) {
+        console.warn('[map3d] style still unusable after forced bypass grace window');
+      }
+    }
+
     if (!fns.canMutateStyle()) {
       // Defensive: the event-driven gate above only resolves when
       // `canMutateStyle()` is true or the sprite-storm bypass is

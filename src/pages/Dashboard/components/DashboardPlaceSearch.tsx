@@ -216,12 +216,6 @@ export function DashboardPlaceSearch({
 
       clearPendingSearchTransition(map);
 
-      // Instant teleport. Animated flyTo (1-4 s) made the user wait for the
-      // camera before they could see anything; replaced by jumpTo so the
-      // viewport snaps to the target in a single frame. Tiles paint in as
-      // they arrive — same wall-clock cost, but the user perceives the
-      // teleport as immediate instead of waiting through a flight + staged
-      // satellite settle.
       const { targetZoom, finalPitch } = getSearchCameraProfile(map, basemapConfig, suggestion);
       const center: [number, number] = [suggestion.lon, suggestion.lat];
       const finalCamera = {
@@ -233,12 +227,6 @@ export function DashboardPlaceSearch({
 
       map.stop();
 
-      // Pre-warm the SW DEM/ortho cache for the destination BEFORE the
-      // camera moves. This kicks off ~14 high-priority tile fetches
-      // (3×3 destination bbox + 4 z+1 children + 1 z-1 parent) that race
-      // ahead of the jumpTo, so by the time the camera lands the
-      // foreground LiDAR / IGN tiles are already in CacheStorage.
-      // Aborts any in-flight ambient prefetch from the previous viewport.
       try {
         getViewportPrefetch()?.prewarmDestination(
           suggestion.lon,
@@ -249,9 +237,6 @@ export function DashboardPlaceSearch({
         /* prewarm is best-effort — never block the search teleport */
       }
 
-      // Warm Mapbox's own tile cache (vector base, satellite) the same
-      // way. preloadOnly returns immediately and queues fetches, so the
-      // subsequent jumpTo can paint sooner.
       try {
         map.flyTo({
           ...finalCamera,

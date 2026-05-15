@@ -1,43 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-import {
-  createOverlayStatus,
-  MapView,
-  MapBlurMirror,
-  MapOverlayStatusDock,
-  type OverlayStatusId,
-  type OverlayStatusSnapshot,
-} from '@/features/map3d';
-import {
-  ControlPanelContainer,
-  DEFAULT_BASEMAP_ID,
-  ExporterPanel,
-  type BasemapId,
-  getBasemapConfig,
-  normalizeBasemapId,
-} from '@/features/controlPanel';
-import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
-import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
-import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
-import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
-import { TraceToolProvider } from '@/features/centerPanel/tracer';
-import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
-import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
-import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
-import { MapViewportControls } from '@/features/mapViewportControls';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
-import { DashboardPlaceSearch } from './DashboardPlaceSearch';
-import {
-  CENTER_PANEL_STACK_GAP,
-  CENTER_TOOLBAR_HEIGHT,
-  PANEL_PADDING,
-} from './constants';
-import { getDashboardStyles } from './dashboardStyles';
+import { DashboardEditor } from './components/DashboardEditor';
+import { useDashboardBasemap } from './hooks/useDashboardBasemap';
+import { useDashboardOverlayStatus } from './hooks/useDashboardOverlayStatus';
+import { CENTER_PANEL_STACK_GAP, PANEL_PADDING } from './lib/constants';
+import { getDashboardStyles } from './lib/dashboardStyles';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
-import { formatDisplayName } from './utils';
+import { formatDisplayName } from './lib/utils';
 
 interface DashboardProps {
   email: string;
@@ -50,16 +22,6 @@ export default function Dashboard({
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
-  const [selectedBasemap, setSelectedBasemap] = useState<{
-    projectId: string | null;
-    basemapId: BasemapId;
-  }>({
-    projectId: null,
-    basemapId: DEFAULT_BASEMAP_ID,
-  });
-  const [mapStatus, setMapStatus] = useState<OverlayStatusSnapshot | null>(null);
-  const [overlayStatuses, setOverlayStatuses] = useState<Partial<Record<OverlayStatusId, OverlayStatusSnapshot>>>({});
-  const overlayReloadersRef = useRef<Partial<Record<OverlayStatusId, () => void>>>({});
 
   const prepareProjectClose = useCallback(async () => {
     setMapLoaded(false);
@@ -85,33 +47,26 @@ export default function Dashboard({
     beforeCloseProject: prepareProjectClose,
   });
 
-  const initialBasemapId = normalizeBasemapId(
-    activeProjectInitial?.controlPanel?.basemapId ?? DEFAULT_BASEMAP_ID,
-  );
+  const { activeBasemapConfig, handleBasemapChange } = useDashboardBasemap({
+    activeProjectId,
+    activeProjectInitial,
+  });
 
-  const effectiveBasemapId =
-    activeProjectId != null && selectedBasemap.projectId !== activeProjectId
-      ? initialBasemapId
-      : selectedBasemap.basemapId;
-
-  const activeBasemapConfig = useMemo(
-    () => getBasemapConfig(effectiveBasemapId),
-    [effectiveBasemapId],
-  );
-
-  useEffect(() => {
-    setSelectedBasemap({
-      projectId: activeProjectId,
-      basemapId: initialBasemapId,
-    });
-  }, [activeProjectId, initialBasemapId]);
-
-  const handleBasemapChange = useCallback((id: BasemapId) => {
-    setSelectedBasemap({
-      projectId: activeProjectId,
-      basemapId: normalizeBasemapId(id),
-    });
-  }, [activeProjectId]);
+  const {
+    visibleStatuses,
+    handleOverlayReload,
+    handleMapLoadStatusChange,
+    handleMapReloadChange,
+    handleWeatherOverlayStatusChange,
+    handleWindOverlayStatusChange,
+    handleShadowOverlayStatusChange,
+    handleSlopeOverlayStatusChange,
+    handleAltitudeOverlayStatusChange,
+    handleItineraryRouteStatusChange,
+    handleWeatherOverlayReloadChange,
+    handleWindOverlayReloadChange,
+    handleShadowOverlayReloadChange,
+  } = useDashboardOverlayStatus();
 
   const {
     lidarModeEnabled,
@@ -142,170 +97,10 @@ export default function Dashboard({
     updatePersistedDashboard,
   });
 
-  const handleMapReady = (map: MapboxMap) => {
+  const handleMapReady = useCallback((map: MapboxMap) => {
     setMapInstance(map);
     setMapLoaded(true);
-  };
-
-  const setOverlayStatus = useCallback((id: OverlayStatusId, status: OverlayStatusSnapshot | null) => {
-    setOverlayStatuses((prev) => {
-      if (!status) {
-        if (!(id in prev)) return prev;
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      }
-      const current = prev[id];
-      if (
-        current
-        && current.state === status.state
-        && current.progress === status.progress
-        && current.detail === status.detail
-        && current.reloadable === status.reloadable
-        && current.nonce === status.nonce
-      ) {
-        return prev;
-      }
-      return { ...prev, [id]: status };
-    });
   }, []);
-
-  const setOverlayReloader = useCallback((id: OverlayStatusId, reload: (() => void) | null) => {
-    if (reload) {
-      overlayReloadersRef.current[id] = reload;
-      if (id !== 'map') {
-        setOverlayStatuses((prev) => {
-          const current = prev[id];
-          if (!current || current.reloadable) return prev;
-          return {
-            ...prev,
-            [id]: { ...current, reloadable: true },
-          };
-        });
-      }
-      return;
-    }
-    delete overlayReloadersRef.current[id];
-    if (id !== 'map') {
-      setOverlayStatuses((prev) => {
-        const current = prev[id];
-        if (!current || current.state !== 'ready') return prev;
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-    }
-  }, []);
-
-  const handleMapLoadStatusChange = useCallback((status: OverlayStatusSnapshot | null) => {
-    setMapStatus(status);
-  }, []);
-
-  const handleMapReloadChange = useCallback((reload: (() => void) | null) => {
-    setOverlayReloader('map', reload);
-    setMapStatus((prev) => {
-      if (!reload) {
-        if (!prev) return null;
-        if (!prev.reloadable) return prev;
-        return { ...prev, reloadable: false, updatedAt: Date.now() };
-      }
-
-      if (!prev) {
-        return createOverlayStatus({
-          id: 'map',
-          label: 'Carte',
-          state: 'ready',
-          progress: 100,
-          detail: 'Carte prête',
-          reloadable: true,
-        });
-      }
-
-      if (prev.reloadable) return prev;
-      return { ...prev, reloadable: true, updatedAt: Date.now() };
-    });
-  }, [setOverlayReloader]);
-
-  const handleWeatherOverlayStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('weather', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleWindOverlayStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('wind', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleShadowOverlayStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('shadow', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleSlopeOverlayStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('slope', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleAltitudeOverlayStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('altitude', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleItineraryRouteStatusChange = useCallback(
-    (status: OverlayStatusSnapshot | null) => {
-      setOverlayStatus('itinerary', status);
-    },
-    [setOverlayStatus],
-  );
-
-  const handleWeatherOverlayReloadChange = useCallback(
-    (reload: (() => void) | null) => {
-      setOverlayReloader('weather', reload);
-    },
-    [setOverlayReloader],
-  );
-
-  const handleWindOverlayReloadChange = useCallback(
-    (reload: (() => void) | null) => {
-      setOverlayReloader('wind', reload);
-    },
-    [setOverlayReloader],
-  );
-
-  const handleShadowOverlayReloadChange = useCallback(
-    (reload: (() => void) | null) => {
-      setOverlayReloader('shadow', reload);
-    },
-    [setOverlayReloader],
-  );
-
-  const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'altitude', 'slope', 'weather', 'wind'];
-    const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
-      ...overlayStatuses,
-      ...(mapStatus
-        ? {
-            map: {
-              ...mapStatus,
-              reloadable: mapStatus.reloadable ?? Boolean(overlayReloadersRef.current.map),
-            },
-          }
-        : {}),
-    };
-    return orderedIds
-      .map((id) => snapshots[id])
-      .filter((status): status is OverlayStatusSnapshot => Boolean(status));
-  }, [mapStatus, overlayStatuses]);
 
   const rightDockWidth = isMapFocusMode
     ? 0
@@ -325,10 +120,6 @@ export default function Dashboard({
   const statusDockBottom = layout.centerToolbarVisible
     ? layout.designH - layout.centerToolbarTop + CENTER_PANEL_STACK_GAP
     : 88;
-
-  const handleOverlayReload = useCallback((id: OverlayStatusId) => {
-    overlayReloadersRef.current[id]?.();
-  }, []);
 
   const leftDockWidth = isMapFocusMode || isLeftPanelCollapsed
     ? 0
@@ -378,205 +169,58 @@ export default function Dashboard({
           }}
         >
           {editorOpen ? (
-            <>
-              <MapView
-                onMapReady={handleMapReady}
-                onMapLoadStatusChange={handleMapLoadStatusChange}
-                onMapReloadChange={handleMapReloadChange}
-                lidarSelectionEnabled={lidarModeEnabled}
-                onLidarSelectionDisable={() => setLidarModeEnabled(false)}
-                initialViewport={projectMapViewport}
-                onViewportChange={handleMapViewportChange}
-                basemapConfig={activeBasemapConfig}
-              />
-
-              <MapOverlayStatusDock
-                statuses={visibleStatuses}
-                right={statusDockRight}
-                left={statusDockLeft}
-                bottom={statusDockBottom}
-                align={statusDockLeft == null ? 'end' : 'center'}
-                transform={statusDockLeft == null ? undefined : 'translateX(-50%)'}
-                hidden={!editorOpen}
-                onReload={handleOverlayReload}
-              />
-
-              <div style={styles.mapViewportControlsStyle}>
-                <MapViewportControls
-                  map={mapInstance}
-                  isMapLoaded={mapLoaded}
-                  immersiveMode={isMapFocusMode}
-                  onToggleImmersiveMode={handleToggleMapFocusMode}
-                />
-              </div>
-
-              <div style={styles.leftCollapsedRailStyle}>
-                <button
-                  type="button"
-                  aria-label="Rouvrir le panneau de gauche"
-                  onClick={restoreLeftPanel}
-                  style={{
-                    ...styles.collapsedPanelRailButtonStyle,
-                    transform: 'rotate(180deg)',
-                  }}
-                >
-                  <IconArrowLeft size={18} />
-                </button>
-              </div>
-
-              <div style={styles.rightCollapsedRailStyle}>
-                <button
-                  type="button"
-                  aria-label="Rouvrir le panneau de droite"
-                  onClick={restoreRightPanel}
-                  style={styles.collapsedPanelRailButtonStyle}
-                >
-                  <IconArrowLeft size={18} />
-                </button>
-              </div>
-
-              <div style={styles.centerCollapsedRailStyle}>
-                <button
-                  type="button"
-                  aria-label="Rouvrir le panneau central"
-                  onClick={restoreCenterPanel}
-                  style={styles.centerCollapsedRailButtonStyle}
-                >
-                  <SvgV2Icon name="chevron-down.svg" size={18} />
-                </button>
-              </div>
-
-              <DashboardPlaceSearch
-                map={mapInstance}
-                basemapConfig={activeBasemapConfig}
-                visible={dashboardSearchVisible}
-                left={dashboardSearchLeft}
-                top={PANEL_PADDING}
-              />
-
-              {mapLoaded && leftPanelOpen && (
-                <MapBlurMirror
-                  map={mapInstance}
-                  top={PANEL_PADDING}
-                  left={PANEL_PADDING}
-                  width={leftPanelWidth}
-                  height={Math.max(0, layout.designH - PANEL_PADDING * 2)}
-                  borderRadius={8}
-                />
-              )}
-              {mapLoaded && !isMapFocusMode && !isRightPanelCollapsed && (
-                <MapBlurMirror
-                  map={mapInstance}
-                  top={PANEL_PADDING}
-                  left={Math.max(0, layout.designW - panelWidth - PANEL_PADDING)}
-                  width={panelWidth}
-                  height={Math.max(0, layout.designH - PANEL_PADDING * 2)}
-                  borderRadius={8}
-                />
-              )}
-              {mapLoaded && layout.centerToolbarVisible && (
-                <MapBlurMirror
-                  map={mapInstance}
-                  top={layout.centerToolbarTop}
-                  left={layout.centerToolbarLeft}
-                  width={layout.centerToolbarWidth}
-                  height={CENTER_TOOLBAR_HEIGHT}
-                  borderRadius={8}
-                />
-              )}
-              {mapLoaded && layout.centerPanelVisible && (
-                <MapBlurMirror
-                  map={mapInstance}
-                  top={layout.centerPanelTop}
-                  left={layout.centerPanelLeft}
-                  width={layout.centerPanelWidth}
-                  height={layout.centerPanelHeight}
-                  borderRadius={8}
-                />
-              )}
-
-              <ProjectProvider
-                key={activeProjectId ?? 'no-project'}
-                initialProject={activeProjectInitial ?? undefined}
-                onProjectChange={handleProjectChange}
-              >
-                <RouteSplitToolProvider map={mapInstance}>
-                  <RouteMergeToolProvider>
-                    <TraceToolProvider map={mapInstance}>
-                      <ForbiddenZoneToolProvider map={mapInstance}>
-                      <PredictionProvider>
-                      <div style={styles.leftPanelStyle}>
-                        <div style={styles.leftPanelContentStyle}>
-                          <ItineraryPanel
-                            projectId={activeProjectId}
-                            map={mapInstance}
-                            isMapLoaded={mapLoaded}
-                            onRouteStatusChange={handleItineraryRouteStatusChange}
-                            width={leftPanelWidth}
-                            onResizeStart={handleLeftResizeStart}
-                            isResizing={isLeftResizing}
-                            isReturningToBrowser={isClosingProject}
-                            onBackToHome={handleBackToBrowser}
-                          />
-                        </div>
-                      </div>
-
-                      <AnalysisFlyoverProvider map={mapInstance}>
-                        {layout.centerToolbarVisible ? (
-                          <div style={styles.centerToolbarShellStyle}>
-                            <CenterPanelToolbar />
-                          </div>
-                        ) : null}
-
-                        {layout.centerPanelVisible ? (
-                          <div
-                            aria-hidden="true"
-                            onMouseDown={handleCenterPanelResizeStart}
-                            style={styles.centerResizeHandleStyle}
-                          />
-                        ) : null}
-
-                        {layout.centerToolbarVisible ? (
-                          <div style={styles.centerPanelShellStyle}>
-                            <CenterPanel map={mapInstance} />
-                          </div>
-                        ) : null}
-                      </AnalysisFlyoverProvider>
-
-                      <div style={styles.rightPanelStyle}>
-                        <div style={styles.rightPanelContentStyle}>
-                          <div ref={rightPrimaryPanelHostRef} style={styles.rightPrimaryPanelStyle}>
-                            <ControlPanelContainer
-                              map={mapInstance}
-                              isMapLoaded={mapLoaded}
-                              onBasemapChange={handleBasemapChange}
-                              onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
-                              onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
-                              onWindOverlayStatusChange={handleWindOverlayStatusChange}
-                              onWindOverlayReloadChange={handleWindOverlayReloadChange}
-                              onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
-                              onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
-                              onSlopeOverlayStatusChange={handleSlopeOverlayStatusChange}
-                              onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
-                              lidarDownloadModeActive={lidarModeEnabled}
-                              onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
-                              width={panelWidth}
-                              onResizeStart={handleResizeStart}
-                              isResizing={isResizing}
-                            />
-                          </div>
-                          <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>
-                            <ExporterPanel width={panelWidth} />
-                          </div>
-                        </div>
-                      </div>
-                      </PredictionProvider>
-                      </ForbiddenZoneToolProvider>
-                    </TraceToolProvider>
-                  </RouteMergeToolProvider>
-                </RouteSplitToolProvider>
-              </ProjectProvider>
-            </>
+            <DashboardEditor
+              activeProjectId={activeProjectId}
+              activeProjectInitial={activeProjectInitial}
+              isClosingProject={isClosingProject}
+              mapInstance={mapInstance}
+              mapLoaded={mapLoaded}
+              lidarModeEnabled={lidarModeEnabled}
+              setLidarModeEnabled={setLidarModeEnabled}
+              isMapFocusMode={isMapFocusMode}
+              leftPanelOpen={leftPanelOpen}
+              panelWidth={panelWidth}
+              leftPanelWidth={leftPanelWidth}
+              isRightPanelCollapsed={isRightPanelCollapsed}
+              isResizing={isResizing}
+              isLeftResizing={isLeftResizing}
+              projectMapViewport={projectMapViewport}
+              rightPrimaryPanelHostRef={rightPrimaryPanelHostRef}
+              exporterPanelHostRef={exporterPanelHostRef}
+              layout={layout}
+              styles={styles}
+              activeBasemapConfig={activeBasemapConfig}
+              visibleStatuses={visibleStatuses}
+              statusDockRight={statusDockRight}
+              statusDockLeft={statusDockLeft}
+              statusDockBottom={statusDockBottom}
+              dashboardSearchVisible={dashboardSearchVisible}
+              dashboardSearchLeft={dashboardSearchLeft}
+              onMapReady={handleMapReady}
+              onMapLoadStatusChange={handleMapLoadStatusChange}
+              onMapReloadChange={handleMapReloadChange}
+              onMapViewportChange={handleMapViewportChange}
+              onToggleMapFocusMode={handleToggleMapFocusMode}
+              onRestoreLeftPanel={restoreLeftPanel}
+              onRestoreRightPanel={restoreRightPanel}
+              onRestoreCenterPanel={restoreCenterPanel}
+              onLeftResizeStart={handleLeftResizeStart}
+              onRightResizeStart={handleResizeStart}
+              onCenterResizeStart={handleCenterPanelResizeStart}
+              onProjectChange={handleProjectChange}
+              onBackToBrowser={handleBackToBrowser}
+              onOverlayReload={handleOverlayReload}
+              onBasemapChange={handleBasemapChange}
+              onWeatherOverlayStatusChange={handleWeatherOverlayStatusChange}
+              onWeatherOverlayReloadChange={handleWeatherOverlayReloadChange}
+              onWindOverlayStatusChange={handleWindOverlayStatusChange}
+              onWindOverlayReloadChange={handleWindOverlayReloadChange}
+              onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
+              onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
+              onSlopeOverlayStatusChange={handleSlopeOverlayStatusChange}
+              onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
+              onItineraryRouteStatusChange={handleItineraryRouteStatusChange}
+            />
           ) : null}
 
           <ProjectBrowserOverlay
