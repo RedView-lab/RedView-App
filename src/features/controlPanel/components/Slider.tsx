@@ -11,6 +11,7 @@ interface SliderProps {
   step?: number;
   handleSize?: number;
   trackHeight?: number;
+  disabled?: boolean;
 }
 
 export function Slider({
@@ -23,6 +24,7 @@ export function Slider({
   step = 1,
   handleSize = 16,
   trackHeight = 8,
+  disabled = false,
 }: SliderProps) {
   const [draftValue, setDraftValue] = useState(value);
   const [interacting, setInteracting] = useState(false);
@@ -46,7 +48,7 @@ export function Slider({
   };
 
   return (
-    <div className="rvc-slider" style={{ width }}>
+    <div className={`rvc-slider${disabled ? ' is-disabled' : ''}`} style={{ width }}>
       <div className="rvc-slider__track" style={{ top: trackTop, height: trackHeight }} />
       <div
         className="rvc-slider__fill"
@@ -59,6 +61,7 @@ export function Slider({
       <input
         className="rvc-slider__input"
         type="range"
+        disabled={disabled}
         min={min}
         max={max}
         step={step}

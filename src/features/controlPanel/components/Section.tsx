@@ -6,7 +6,7 @@ interface SectionProps {
   title: string;
   icon?: ReactNode;
   /** If provided, renders an inline toggle switch in the header. */
-  toggle?: { checked: boolean; onChange?: (v: boolean) => void };
+  toggle?: { checked: boolean; onChange?: (v: boolean) => void; disabled?: boolean };
   /** Initial collapsed/expanded state. */
   defaultOpen?: boolean;
   /** Controlled open state. Omit for uncontrolled. */
@@ -62,6 +62,7 @@ export function Section({
           <Toggle
             checked={toggle.checked}
             onChange={toggle.onChange}
+            disabled={toggle.disabled}
             ariaLabel={`Activer ${title}`}
           />
         ) : null}

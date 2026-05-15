@@ -12,6 +12,7 @@ import { buildAltitudeCategories, altitudeBandCountFromSetting, clampAltitudeBre
 import { loadAltitudeBreakpoints, saveAltitudeBreakpoints } from '@/features/altitude/lib/altitude-persist';
 import { useAltitude } from '@/features/altitude/hooks/useAltitude';
 import type { AltitudeColorMode, AltitudeScaleSettingKey } from '@/features/altitude/types';
+import { useContourLines } from '@/features/contourLines/hooks/useContourLines';
 
 import type { OverlayStatusReporter } from '@/features/map3d';
 
@@ -21,6 +22,8 @@ import type {
   AltitudeBand,
   AltitudeColorization,
   AltitudeScaleSetting,
+  BasemapId,
+  ContourIntervalSetting,
   ControlPanelState,
   SlopeBand,
   SlopeColorization,
@@ -43,6 +46,11 @@ function altitudeColorModeToPanel(mode: AltitudeColorMode): AltitudeColorization
 
 function altitudeColorModeFromPanel(colorization: AltitudeColorization): AltitudeColorMode {
   return colorization === 'stepped' ? 'step' : 'gradient';
+}
+
+function contourIntervalMetersFromSetting(setting: ContourIntervalSetting): number {
+  const match = /^(\d+)/.exec(setting);
+  return match ? Number(match[1]) : 200;
 }
 
 function bandCountFromSetting(setting: SlopeScaleSetting): number {
@@ -83,6 +91,7 @@ function buildAltitudeBandsFromDynamic(
 interface UseControlPanelTerrainStateArgs {
   map: MapboxMap | null;
   isMapLoaded: boolean;
+  activeBasemapId: BasemapId;
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
@@ -91,6 +100,8 @@ interface UseControlPanelTerrainStateArgs {
 
 export interface TerrainHandlers {
   onContourLinesEnabledChange: (enabled: boolean) => void;
+  onContourLinesIntervalChange: (value: ContourIntervalSetting) => void;
+  onContourLinesOpacityChange: (value: number) => void;
   onAltitudeEnabledChange: (enabled: boolean) => void;
   onAltitudeColorizationChange: (value: AltitudeColorization) => void;
   onAltitudeScaleSettingChange: (value: AltitudeScaleSetting) => void;
@@ -117,6 +128,7 @@ interface TerrainStateResult {
 export function useControlPanelTerrainState({
   map,
   isMapLoaded,
+  activeBasemapId,
   initialControlPanel,
   updateProjectControlPanel,
   onSlopeOverlayStatusChange,
@@ -236,6 +248,22 @@ export function useControlPanelTerrainState({
   const [contourLinesEnabled, setContourLinesEnabled] = useState(
     () => initialControlPanel.toggles.contourLinesEnabled ?? DEFAULT_CONTROL_PANEL_STATE.contourLines.enabled,
   );
+  const [contourLinesInterval, setContourLinesInterval] = useState<ContourIntervalSetting>(
+    () => initialControlPanel.contourLines?.interval ?? DEFAULT_CONTROL_PANEL_STATE.contourLines.interval,
+  );
+  const [contourLinesOpacity, setContourLinesOpacity] = useState(
+    () => initialControlPanel.contourLines?.opacity ?? DEFAULT_CONTROL_PANEL_STATE.contourLines.opacity,
+  );
+  const contourLinesAvailable = activeBasemapId === 'topographic';
+
+  useContourLines(
+    isMapLoaded ? map : null,
+    isMapLoaded,
+    contourLinesEnabled,
+    Math.max(0, Math.min(1, contourLinesOpacity / 100)),
+    contourIntervalMetersFromSetting(contourLinesInterval),
+    contourLinesAvailable,
+  );
 
   const persistAltitudeToProject = useCallback(
     (
@@ -330,8 +358,12 @@ export function useControlPanelTerrainState({
   useEffect(() => {
     updateProjectControlPanel((draft) => {
       draft.toggles.contourLinesEnabled = contourLinesEnabled;
+      draft.contourLines = {
+        interval: contourLinesInterval,
+        opacity: contourLinesOpacity,
+      };
     });
-  }, [contourLinesEnabled, updateProjectControlPanel]);
+  }, [contourLinesEnabled, contourLinesInterval, contourLinesOpacity, updateProjectControlPanel]);
 
   useAltitude(
     isMapLoaded ? map : null,
@@ -368,8 +400,13 @@ export function useControlPanelTerrainState({
     [altitudeCategories, altitudeHiddenIds, altitudeState],
   );
   const contourLinesSlice = useMemo(
-    () => ({ enabled: contourLinesEnabled }),
-    [contourLinesEnabled],
+    () => ({
+      enabled: contourLinesEnabled,
+      interval: contourLinesInterval,
+      opacity: contourLinesOpacity,
+      available: contourLinesAvailable,
+    }),
+    [contourLinesAvailable, contourLinesEnabled, contourLinesInterval, contourLinesOpacity],
   );
 
   return {
@@ -381,6 +418,14 @@ export function useControlPanelTerrainState({
     handlers: {
       onContourLinesEnabledChange: useCallback(
         (enabled: boolean) => setContourLinesEnabled(enabled),
+        [],
+      ),
+      onContourLinesIntervalChange: useCallback(
+        (value: ContourIntervalSetting) => setContourLinesInterval(value),
+        [],
+      ),
+      onContourLinesOpacityChange: useCallback(
+        (value: number) => setContourLinesOpacity(Math.max(0, Math.min(100, Math.round(value)))),
         [],
       ),
       onAltitudeEnabledChange: useCallback(

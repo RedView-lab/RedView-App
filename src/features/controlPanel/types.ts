@@ -68,6 +68,7 @@ export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 
 
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
+export type ContourIntervalSetting = '20m' | '50m' | '100m' | '200m' | string;
 
 export interface SlopeBand {
   id: string;
@@ -167,6 +168,14 @@ export interface ToggleOnlySection {
   enabled: boolean;
 }
 
+export interface ContourLinesState extends ToggleOnlySection {
+  interval: ContourIntervalSetting;
+  /** 0..100 */
+  opacity: number;
+  /** True when the active basemap supports the contour overlay UX. */
+  available: boolean;
+}
+
 export interface WindPanelState extends ToggleOnlySection {
   date: string;
   time: string;
@@ -201,7 +210,7 @@ export interface ControlPanelState {
   basemaps: Basemap[];
   lidarTiles: LidarTile[];
   labels: { enabled: boolean; state: LabelsState };
-  contourLines: ToggleOnlySection;
+  contourLines: ContourLinesState;
   routes: { enabled: boolean; items: RouteItem[] };
   slopes: { enabled: boolean } & SlopesState;
   altitude: { enabled: boolean } & AltitudeState;
@@ -225,6 +234,8 @@ export interface ControlPanelHandlers {
   onLabelsEnabledChange?: (enabled: boolean) => void;
   onLabelToggle?: (key: LabelKey, checked: boolean) => void;
   onContourLinesEnabledChange?: (enabled: boolean) => void;
+  onContourLinesIntervalChange?: (value: ContourIntervalSetting) => void;
+  onContourLinesOpacityChange?: (value: number) => void;
 
   onRoutesEnabledChange?: (enabled: boolean) => void;
   onRouteColorChange?: (id: string, color: string) => void;

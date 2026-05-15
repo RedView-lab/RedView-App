@@ -18,6 +18,7 @@ interface SelectProps<T extends string = string> {
   startAdornment?: ReactNode;
   /** Optional class variant. */
   variant?: 'default' | 'solid';
+  disabled?: boolean;
 }
 
 /** Custom dropdown styled per Figma node 1792:73224. */
@@ -29,6 +30,7 @@ export function Select<T extends string = string>({
   className,
   startAdornment,
   variant = 'default',
+  disabled = false,
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -51,6 +53,11 @@ export function Select<T extends string = string>({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  useEffect(() => {
+    if (!disabled) return;
+    setOpen(false);
+  }, [disabled]);
 
   useLayoutEffect(() => {
     if (!open || !ref.current) return;
@@ -75,7 +82,7 @@ export function Select<T extends string = string>({
     });
   }, [open, options.length]);
 
-  const dropdown = open && dropPos
+  const dropdown = open && !disabled && dropPos
     ? createPortal(
         <div
           className="rvc-select__dropdown"
@@ -118,9 +125,13 @@ export function Select<T extends string = string>({
     <>
       <div
         ref={ref}
-        className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}${className ? ` ${className}` : ''}`}
+        className={`rvc-select rvc-select--${variant}${open ? ' is-open' : ''}${disabled ? ' is-disabled' : ''}${className ? ` ${className}` : ''}`}
         style={width !== undefined ? { width } : undefined}
-        onClick={() => setOpen((v) => !v)}
+        aria-disabled={disabled}
+        onClick={() => {
+          if (disabled) return;
+          setOpen((v) => !v);
+        }}
       >
         {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
         <span className="rvc-select__value">

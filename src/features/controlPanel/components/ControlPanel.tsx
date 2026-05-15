@@ -37,6 +37,8 @@ export function ControlPanel({
   onLabelsEnabledChange,
   onLabelToggle,
   onContourLinesEnabledChange,
+  onContourLinesIntervalChange,
+  onContourLinesOpacityChange,
   onRoutesEnabledChange,
   onRouteColorChange,
   onRouteModeChange,
@@ -132,9 +134,14 @@ export function ControlPanel({
 
       <ContourLinesSection
         enabled={state.contourLines.enabled}
+        interval={state.contourLines.interval}
+        opacity={state.contourLines.opacity}
+        available={state.contourLines.available}
         open={sectionsOpen?.contourLines}
         onOpenChange={(open) => onSectionOpenChange?.('contourLines', open)}
         onEnabledChange={onContourLinesEnabledChange}
+        onIntervalChange={onContourLinesIntervalChange}
+        onOpacityChange={onContourLinesOpacityChange}
       />
 
       <RoutesSection

@@ -90,9 +90,14 @@ export function ControlPanelContainer({
     [projectStore],
   );
 
+  const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>(
+    () => normalizeBasemapId(initialControlPanel.basemapId),
+  );
+
   const terrainState = useControlPanelTerrainState({
     map,
     isMapLoaded,
+    activeBasemapId,
     initialControlPanel,
     updateProjectControlPanel,
     onSlopeOverlayStatusChange,
@@ -110,9 +115,6 @@ export function ControlPanelContainer({
     onShadowOverlayStatusChange,
     onShadowOverlayReloadChange,
   });
-  const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>(
-    () => normalizeBasemapId(initialControlPanel.basemapId),
-  );
 
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
   const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>(
@@ -298,6 +300,8 @@ export function ControlPanelContainer({
       onLabelsEnabledChange={overlayState.handlers.onLabelsEnabledChange}
       onLabelToggle={overlayState.handlers.onLabelToggle}
       onContourLinesEnabledChange={terrainState.handlers.onContourLinesEnabledChange}
+      onContourLinesIntervalChange={terrainState.handlers.onContourLinesIntervalChange}
+      onContourLinesOpacityChange={terrainState.handlers.onContourLinesOpacityChange}
       onSlopesEnabledChange={terrainState.handlers.onSlopesEnabledChange}
       onSlopeResolutionChange={terrainState.handlers.onSlopeResolutionChange}
       onSlopeColorizationChange={terrainState.handlers.onSlopeColorizationChange}

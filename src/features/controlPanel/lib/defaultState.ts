@@ -31,6 +31,9 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   contourLines: {
     enabled: false,
+    interval: '200m',
+    opacity: 100,
+    available: true,
   },
   routes: {
     enabled: true,

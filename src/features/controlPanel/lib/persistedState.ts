@@ -4,7 +4,15 @@ import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
 import type { SlopeState } from '@/features/slope/types';
 import { DEFAULT_BASEMAP_ID } from './basemaps';
-import type { BasemapId, SlopeScale, SlopeScaleSetting, SunlightState, WeatherState, WindPanelState } from '../types';
+import type {
+  BasemapId,
+  ContourIntervalSetting,
+  SlopeScale,
+  SlopeScaleSetting,
+  SunlightState,
+  WeatherState,
+  WindPanelState,
+} from '../types';
 
 export type ControlPanelSectionKey =
   | 'basemaps'
@@ -39,6 +47,11 @@ export interface ControlPanelAltitudePersistedState {
   breakpoints: PersistedAltitudeBreakpoints;
 }
 
+export interface ControlPanelContourLinesPersistedState {
+  interval: ContourIntervalSetting;
+  opacity: number;
+}
+
 export type ControlPanelSunlightPersistedState = Omit<
   SunlightState,
   'enabled' | 'sunriseTime' | 'sunsetTime'
@@ -65,6 +78,7 @@ export interface ControlPanelPersistedState {
   sunlightMapExpanded: boolean;
   lidarTilesHidden?: Record<string, boolean>;
   labelsState?: ControlPanelLabelsPersistedState;
+  contourLines?: ControlPanelContourLinesPersistedState;
   slopes?: ControlPanelSlopePersistedState;
   altitude?: ControlPanelAltitudePersistedState;
   weather?: WeatherState;
@@ -100,6 +114,10 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       sunlightEnabled: false,
     },
     sunlightMapExpanded: false,
+    contourLines: {
+      interval: '200m',
+      opacity: 100,
+    },
     weather: undefined,
   };
 }

@@ -15,6 +15,11 @@
 
 .rvc-toggle.is-on { background: var(--rvc-red); }
 
+.rvc-toggle.is-disabled {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+
 .rvc-toggle__knob {
   position: absolute;
   top: 0;
@@ -99,6 +104,11 @@
   z-index: 100;
 }
 
+.rvc-select.is-disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
 .rvc-select__adornment { display: inline-flex; flex-shrink: 0; }
 
 .rvc-select__value {
@@ -177,6 +187,10 @@
   flex-shrink: 0;
 }
 
+.rvc-slider.is-disabled {
+  opacity: 0.48;
+}
+
 .rvc-slider__track {
   position: absolute;
   left: 0;
@@ -214,6 +228,10 @@
   opacity: 0;
   cursor: pointer;
   margin: 0;
+}
+
+.rvc-slider.is-disabled .rvc-slider__input {
+  cursor: not-allowed;
 }
 
 .rvc-icon-btn {
