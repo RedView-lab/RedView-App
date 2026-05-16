@@ -6,7 +6,7 @@ import { extractLasFromZip } from './swiss/zipReader';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
-const MAX_INCOMPLETE_DOWNLOAD_RETRIES = 1;
+const MAX_INCOMPLETE_DOWNLOAD_RETRIES = 3;
 const RETRY_BASE_DELAY_429_MS = 2000;
 const RETRY_BASE_DELAY_5XX_MS = 1000;
 const INTER_REQUEST_DELAY_MS = 200;
@@ -14,6 +14,12 @@ const INTER_REQUEST_DELAY_MS = 200;
 type DownloadFailure = Error & {
   status?: number;
   code?: string;
+};
+
+type ResumeState = {
+  chunks: Uint8Array[];
+  bytesDownloaded: number;
+  totalBytes: number;
 };
 
 function formatBytesAsMb(bytes: number): string {
@@ -54,6 +60,28 @@ async function waitForRateLimit(): Promise<void> {
 function setRateLimit(delayMs: number): void {
   const until = Date.now() + delayMs;
   if (until > rateLimitUntil) rateLimitUntil = until;
+}
+
+function parseContentRange(headerValue: string | null): { start: number; end: number; total: number } | null {
+  if (!headerValue) return null;
+  const match = headerValue.match(/^bytes\s+(\d+)-(\d+)\/(\d+)$/i);
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = Number(match[3]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !Number.isFinite(total)) return null;
+  return { start, end, total };
+}
+
+function mergeChunks(chunks: Uint8Array[]): ArrayBuffer {
+  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result.buffer;
 }
 
 export async function downloadTile(
@@ -122,16 +150,27 @@ async function fetchWithRetry(
   url: string,
   coord: TileCoord,
   onProgress?: (progress: DownloadProgress) => void,
-  attempt = 0
+  attempt = 0,
+  incompleteRetryCount = 0,
+  resumeState?: ResumeState,
 ): Promise<ArrayBuffer | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, { signal: controller.signal });
+    const requestedResumeBytes = resumeState?.bytesDownloaded ?? 0;
+    const requestHeaders = requestedResumeBytes > 0
+      ? { Range: `bytes=${requestedResumeBytes}-` }
+      : undefined;
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: requestHeaders,
+    });
     clearTimeout(timeout);
 
-    console.log(`[Download] Attempt ${attempt + 1} ${url} -> HTTP ${response.status}`);
+    console.log(
+      `[Download] Attempt ${attempt + 1}${requestedResumeBytes > 0 ? ` (resume @ ${formatBytesAsMb(requestedResumeBytes)})` : ''} ${url} -> HTTP ${response.status}`,
+    );
 
     if (response.status === 404) {
       console.warn(`[Download] 404 for ${url}`);
@@ -176,11 +215,42 @@ async function fetchWithRetry(
     }
 
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+    const contentRange = parseContentRange(response.headers.get('content-range'));
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
 
-    const chunks: Uint8Array[] = [];
-    let bytesDownloaded = 0;
+    let chunks = resumeState?.chunks ? [...resumeState.chunks] : [];
+    let bytesDownloaded = resumeState?.bytesDownloaded ?? 0;
+    let totalBytes = resumeState?.totalBytes ?? 0;
+
+    if (response.status === 206 && contentRange) {
+      if (requestedResumeBytes > 0 && contentRange.start !== requestedResumeBytes) {
+        console.warn(
+          `[Download] Resume offset mismatch for ${url} (wanted ${requestedResumeBytes}, got ${contentRange.start}); restarting full download`,
+        );
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1);
+      }
+      totalBytes = contentRange.total;
+    } else {
+      totalBytes = contentLength;
+      if (requestedResumeBytes > 0) {
+        console.warn(`[Download] Range resume ignored for ${url}; restarting full download`);
+        chunks = [];
+        bytesDownloaded = 0;
+      }
+    }
+
+    if (bytesDownloaded > 0) {
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded,
+        totalBytes,
+        phase: 'downloading',
+        message: totalBytes > 0
+          ? `Reprise du téléchargement ${formatBytesAsMb(bytesDownloaded)} / ${formatBytesAsMb(totalBytes)}`
+          : `Reprise du téléchargement ${formatBytesAsMb(bytesDownloaded)}`,
+      });
+    }
 
     while (true) {
       const { done, value } = await reader.read();
@@ -192,31 +262,28 @@ async function fetchWithRetry(
       onProgress?.({
         tileCoord: coord,
         bytesDownloaded,
-        totalBytes: contentLength,
+        totalBytes,
         phase: 'downloading',
-        message: contentLength > 0
-          ? `Téléchargement ${(bytesDownloaded / 1024 / 1024).toFixed(1)} / ${(contentLength / 1024 / 1024).toFixed(1)} MB`
+        message: totalBytes > 0
+          ? `Téléchargement ${(bytesDownloaded / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`
           : `Téléchargement ${(bytesDownloaded / 1024 / 1024).toFixed(1)} MB`,
       });
     }
 
-    if (contentLength > 0 && bytesDownloaded !== contentLength) {
+    if (totalBytes > 0 && bytesDownloaded !== totalBytes) {
       const err = new Error(
-        `Téléchargement incomplet: ${formatBytesAsMb(bytesDownloaded)} reçus sur ${formatBytesAsMb(contentLength)} attendus.`
-      ) as Error & { code?: string };
+        `Téléchargement incomplet: ${formatBytesAsMb(bytesDownloaded)} reçus sur ${formatBytesAsMb(totalBytes)} attendus.`
+      ) as Error & { code?: string; resumeState?: ResumeState };
       err.code = 'ERR_INCOMPLETE_DOWNLOAD';
+      err.resumeState = {
+        chunks,
+        bytesDownloaded,
+        totalBytes,
+      };
       throw err;
     }
 
-    const totalLength = chunks.reduce((sum, c) => sum + c.byteLength, 0);
-    const result = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of chunks) {
-      result.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-
-    return result.buffer;
+    return mergeChunks(chunks);
   } catch (err: any) {
     clearTimeout(timeout);
 
@@ -230,18 +297,24 @@ async function fetchWithRetry(
     }
 
     if (err?.code === 'ERR_INCOMPLETE_DOWNLOAD') {
-      if (attempt < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
-        const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
-        console.warn(`[Download] Incomplete stream for ${url}; retrying in ${delay}ms (${attempt + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`);
+      if (incompleteRetryCount < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
+        const delay = Math.max(1500, RETRY_BASE_DELAY_5XX_MS * Math.pow(2, incompleteRetryCount));
+        const nextResumeState = err.resumeState as ResumeState | undefined;
+        const willResume = (nextResumeState?.bytesDownloaded ?? 0) > 0;
+        console.warn(
+          `[Download] Incomplete stream for ${url}; ${willResume ? `resuming from ${formatBytesAsMb(nextResumeState!.bytesDownloaded)}` : 'retrying from zero'} in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,
+        );
         onProgress?.({
           tileCoord: coord,
-          bytesDownloaded: 0,
-          totalBytes: 0,
+          bytesDownloaded: nextResumeState?.bytesDownloaded ?? 0,
+          totalBytes: nextResumeState?.totalBytes ?? 0,
           phase: 'downloading',
-          message: `Téléchargement interrompu, nouvelle tentative ${attempt + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
+          message: willResume
+            ? `Téléchargement interrompu, reprise ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`
+            : `Téléchargement interrompu, nouvelle tentative ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
         });
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState);
       }
     }
 
