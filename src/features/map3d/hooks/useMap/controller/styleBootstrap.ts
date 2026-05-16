@@ -514,6 +514,46 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     // acting only when the system has settled.
     fns.startTerrainHeartbeat();
 
+    // ── Import-override guard ─────────────────────────────────────────
+    // Mapbox Standard / Standard-Satellite are imported v3 styles. Their
+    // imports ("basemap" fragment) carry their own terrain spec bound to
+    // the builtin `mapbox-dem` source. When the import resolves AFTER our
+    // `applyUnifiedTerrain` (which happens during initial bootstrap), the
+    // import's terrain silently overwrites ours and the world stays flat
+    // until the 12 s heartbeat catches it (~24 s with the failure
+    // threshold). Visible bug: in Standard-Satellite the orthophotos load
+    // but no 3D relief, while legacy outdoors-v12 (no imports) works
+    // immediately. Re-apply at 300 / 1000 / 2500 / 5000 ms covers the
+    // entire import-load window without waiting on the heartbeat. We also
+    // listen once for `style.import.load` if Mapbox emits it.
+    const importGuardTimers: ReturnType<typeof setTimeout>[] = [];
+    const importGuardCleanup: (() => void)[] = [];
+    const verifyAndReapplyTerrain = () => {
+      if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+      if (!map.getSource(unifiedDEMSource.id)) return;
+      if (fns.isUnifiedTerrainActive()) return;
+      console.warn('[map3d] import-override guard: terrain unbound, re-applying');
+      fns.applyUnifiedTerrain();
+    };
+    for (const delay of [300, 1000, 2500, 5000]) {
+      importGuardTimers.push(setTimeout(verifyAndReapplyTerrain, delay));
+    }
+    try {
+      const mapWithEvents = map as unknown as {
+        on?: (ev: string, fn: () => void) => void;
+        off?: (ev: string, fn: () => void) => void;
+      };
+      const onImportLoad = () => verifyAndReapplyTerrain();
+      mapWithEvents.on?.('style.import.load', onImportLoad);
+      importGuardCleanup.push(() => mapWithEvents.off?.('style.import.load', onImportLoad));
+    } catch { /* event name may not exist on this Mapbox version */ }
+    const priorDispose = st.disposeStyleRecovery;
+    st.disposeStyleRecovery = () => {
+      priorDispose?.();
+      for (const t of importGuardTimers) clearTimeout(t);
+      for (const c of importGuardCleanup) { try { c(); } catch { /* noop */ } }
+    };
+
     let orthoAdded = false;
     const finishStyleBootstrapWhenReady = async () => {
       if (isCancelled() || runId !== st.styleBootstrapRunId || orthoAdded) return;
