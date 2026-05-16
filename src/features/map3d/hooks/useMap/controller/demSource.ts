@@ -56,6 +56,24 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.detachManagedTerrain = () => {
+    // Skip the detach entirely when no managed terrain was ever attached
+    // AND Mapbox has no terrain bound either. Calling `setTerrain(null)`
+    // on a freshly constructed map — before Mapbox has finished hydrating
+    // an imported v3 style (Standard / Standard-Satellite) — can cancel
+    // the imported style's own terrain spec and stall the whole style
+    // readiness chain (no style.load / styledata / sourcedata fires,
+    // bootstrap awaits forever, ZERO [map3d] logs). Visible bug: opening
+    // a project in Standard-Satellite leaves the map permanently flat
+    // with no relief and no bootstrap activity in the console.
+    if (!terrainRef.current) {
+      let mapboxTerrain: unknown = null;
+      try {
+        mapboxTerrain = map.getTerrain();
+      } catch {
+        return;
+      }
+      if (mapboxTerrain == null) return;
+    }
     try {
       terrainRef.current?.destroy();
     } catch {
