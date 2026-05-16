@@ -56,30 +56,33 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.detachManagedTerrain = () => {
-    // Skip the detach entirely when no managed terrain was ever attached
-    // AND Mapbox has no terrain bound either. Calling `setTerrain(null)`
-    // on a freshly constructed map — before Mapbox has finished hydrating
-    // an imported v3 style (Standard / Standard-Satellite) — can cancel
-    // the imported style's own terrain spec and stall the whole style
-    // readiness chain (no style.load / styledata / sourcedata fires,
-    // bootstrap awaits forever, ZERO [map3d] logs). Visible bug: opening
-    // a project in Standard-Satellite leaves the map permanently flat
-    // with no relief and no bootstrap activity in the console.
-    if (!terrainRef.current) {
-      let mapboxTerrain: unknown = null;
-      try {
-        mapboxTerrain = map.getTerrain();
-      } catch {
-        return;
-      }
-      if (mapboxTerrain == null) return;
-    }
+    // Only tear down terrain when the active terrain source is one of the
+    // managed DEM sources we own. Imported Mapbox Standard / Standard-
+    // Satellite styles can temporarily publish their own builtin terrain
+    // (`mapbox-dem`) during initial hydration; clearing that here before the
+    // unified DEM bootstrap runs can suppress the whole readiness chain and
+    // leave the globe permanently flat with zero `[map3d]` / `[sw-dem]`
+    // activity. If our ref is stale but the active terrain is not managed,
+    // drop the ref without mutating the style.
+    let activeTerrainSource: string | null = null;
     try {
-      terrainRef.current?.destroy();
+      activeTerrainSource = map.getTerrain()?.source ?? null;
     } catch {
-      /* terrain teardown must stay best-effort during style rebuilds */
+      return;
+    }
+    const hasManagedTerrainActive = activeTerrainSource === unifiedDEMSource.id
+      || activeTerrainSource === awsFallbackDEMSource.id;
+    if (!terrainRef.current && !hasManagedTerrainActive) return;
+
+    if (terrainRef.current && hasManagedTerrainActive) {
+      try {
+        terrainRef.current.destroy();
+      } catch {
+        /* terrain teardown must stay best-effort during style rebuilds */
+      }
     }
     terrainRef.current = null;
+    if (!hasManagedTerrainActive) return;
     try {
       map.setTerrain(null);
     } catch {
