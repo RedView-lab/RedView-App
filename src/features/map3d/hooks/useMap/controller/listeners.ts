@@ -16,6 +16,7 @@ export function attachListeners(ctx: Ctx): void {
   const { map, isCancelled } = ctx;
   const fns = ctx.fns;
   const st = ctx.state;
+  let styleDataTerrainRepairTimer: ReturnType<typeof setTimeout> | null = null;
 
   const repairManagedTerrain = (): boolean => {
     const managedSourceId = fns.getManagedTerrainSourceId();
@@ -110,6 +111,25 @@ export function attachListeners(ctx: Ctx): void {
     fns.finishDemActivity('Carte prête');
   };
 
+  // Anti-flat: Standard / Standard-Satellite can emit additional
+  // `styledata` bursts after DEM source attach, and those imported-style
+  // updates may silently overwrite the active terrain source back away from
+  // `unified-dem` while `isStyleLoaded()` is still false. React immediately
+  // on the next macrotask instead of waiting for `idle` / heartbeat.
+  const onStyleDataTerrainCheck = () => {
+    if (isCancelled()) return;
+    if (styleDataTerrainRepairTimer) return;
+    styleDataTerrainRepairTimer = setTimeout(() => {
+      styleDataTerrainRepairTimer = null;
+      if (isCancelled()) return;
+      const managedSourceId = fns.getManagedTerrainSourceId();
+      if (managedSourceId !== unifiedDEMSource.id) return;
+      if (fns.isUnifiedTerrainActive()) return;
+      console.warn('[map3d] styledata: unified-dem present but terrain unbound; re-attaching');
+      repairManagedTerrain();
+    }, 0);
+  };
+
   // Anti-flat: verify terrain binding after every zoom operation.
   // Mapbox GL v3 occasionally drops terrain silently during zoom
   // transitions (when the tile pyramid crosses z-level boundaries).
@@ -200,6 +220,7 @@ export function attachListeners(ctx: Ctx): void {
     map.on('zoomend', onZoomEndTerrainCheck);
     map.on('movestart', onMovestart);
     map.on('idle', onMapIdle);
+    map.on('styledata', onStyleDataTerrainCheck);
     map.on('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
     // Strava-style speculative prefetch: warm the 1-tile ring outside the
@@ -248,8 +269,13 @@ export function attachListeners(ctx: Ctx): void {
     map.off('zoomend', onZoomEndTerrainCheck);
     map.off('movestart', onMovestart);
     map.off('idle', onMapIdle);
+    map.off('styledata', onStyleDataTerrainCheck);
     map.off('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.removeEventListener('message', onServiceWorkerMessage);
+    if (styleDataTerrainRepairTimer) {
+      clearTimeout(styleDataTerrainRepairTimer);
+      styleDataTerrainRepairTimer = null;
+    }
     st.disposeViewportPrefetch?.();
     st.disposeViewportPrefetch = null;
     st.trackingListenersBound = false;
@@ -283,6 +309,10 @@ export function attachListeners(ctx: Ctx): void {
     if (st.setTilesVerifyTimer) {
       clearTimeout(st.setTilesVerifyTimer);
       st.setTilesVerifyTimer = null;
+    }
+    if (styleDataTerrainRepairTimer) {
+      clearTimeout(styleDataTerrainRepairTimer);
+      styleDataTerrainRepairTimer = null;
     }
     st.reloadInProgress = false;
     st.reloadStyleEscalations = 0;
