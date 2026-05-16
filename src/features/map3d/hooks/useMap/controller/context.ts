@@ -45,7 +45,7 @@ export const STYLE_READINESS_FORCE_BYPASS_MS = 3500;
 // Anti-flat reinforcement constants. Picked low enough to detect a
 // flat-state regression quickly but high enough to leave Mapbox time to
 // settle a freshly attached terrain graph between checks.
-export const TERRAIN_HEARTBEAT_INTERVAL_MS = 5000;
+export const TERRAIN_HEARTBEAT_INTERVAL_MS = 12000;
 export const TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD = 2;
 export const DEM_SETTILE_VERIFY_MS = 3500;
 

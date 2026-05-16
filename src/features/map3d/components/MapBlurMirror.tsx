@@ -69,10 +69,21 @@ export default function MapBlurMirror({
 
     const ACTIVE_FRAME_MS = 1000 / 30;
     const IDLE_FRAME_MS = 1000 / 12;
+    // After moveend we let a few "settling" frames render (terrain/ortho fade
+    // in, fog updates, last tile pops), then we STOP subscribing to render.
+    // Mapbox keeps firing `render` while terrain/fog/ortho refresh in the
+    // background even when the camera is fully still — without this gate
+    // every background tile load would re-trigger a full canvas blit + the
+    // expensive blur(30px) compositor pass on every mounted mirror (up to 4
+    // simultaneously). After the settle window we simply trust the last
+    // frame; on the next user gesture (movestart) we re-engage.
+    const SETTLE_AFTER_MOVE_MS = 700;
 
     let raf = 0;
     let timer = 0;
+    let settleTimer = 0;
     let lastDrawAt = 0;
+    let renderSubscribed = false;
     let isVisible = document.visibilityState !== 'hidden';
     let cachedTargetRect: DOMRect | null = null;
     let cachedSourceRect: DOMRect | null = null;
@@ -193,6 +204,15 @@ export default function MapBlurMirror({
 
     requestRedrawRef.current = () => {
       invalidateRects();
+      // External geometry change (panel resize, window resize, layout shift):
+      // re-engage the render listener for one settle window so we catch any
+      // tile/fog updates that land while the rect is in motion.
+      clearSettleTimer();
+      subscribeRender();
+      settleTimer = window.setTimeout(() => {
+        settleTimer = 0;
+        unsubscribeRender();
+      }, SETTLE_AFTER_MOVE_MS);
       schedule(true);
     };
 
@@ -200,10 +220,31 @@ export default function MapBlurMirror({
       schedule();
     };
 
+    const subscribeRender = () => {
+      if (renderSubscribed) return;
+      map.on('render', onMapRender);
+      renderSubscribed = true;
+    };
+
+    const unsubscribeRender = () => {
+      if (!renderSubscribed) return;
+      map.off('render', onMapRender);
+      renderSubscribed = false;
+    };
+
+    const clearSettleTimer = () => {
+      if (settleTimer !== 0) {
+        clearTimeout(settleTimer);
+        settleTimer = 0;
+      }
+    };
+
     const onMoveStart = () => {
       movingRef.current = true;
       applyPresentation();
       cachedTargetRect = null;
+      clearSettleTimer();
+      subscribeRender();
       schedule(true);
     };
 
@@ -212,52 +253,68 @@ export default function MapBlurMirror({
       applyPresentation();
       cachedTargetRect = null;
       schedule(true);
+      // Let the map settle (terrain/ortho/fog finish their last paints),
+      // then unsubscribe from render to stop burning CPU on background
+      // tile loads while the user isn't touching the camera.
+      clearSettleTimer();
+      settleTimer = window.setTimeout(() => {
+        settleTimer = 0;
+        unsubscribeRender();
+      }, SETTLE_AFTER_MOVE_MS);
     };
 
     const onVisibility = () => {
       isVisible = document.visibilityState !== 'hidden';
       if (!isVisible) {
+        clearSettleTimer();
+        unsubscribeRender();
         clearScheduledDraw();
         return;
       }
-      schedule(true);
+      requestRedrawRef.current?.();
     };
 
     const targetObserver = new ResizeObserver(() => {
-      cachedTargetRect = null;
-      schedule(true);
+      requestRedrawRef.current?.();
     });
     targetObserver.observe(canvas);
 
     const sourceObserver = new ResizeObserver(() => {
-      cachedSourceRect = null;
-      schedule(true);
+      requestRedrawRef.current?.();
     });
     sourceObserver.observe(sourceCanvas);
 
-    // Initial paint + keep redrawing while the map renders.
-    map.on('render', onMapRender);
+    // Initial paint + keep redrawing while the camera moves. Render
+    // subscription auto-disengages SETTLE_AFTER_MOVE_MS after each moveend
+    // (see onMoveEnd) so we don't blit on every background tile load.
+    subscribeRender();
     map.on('movestart', onMoveStart);
     map.on('moveend', onMoveEnd);
     schedule(true);
+    // Auto-settle the very first paint so we don't keep blitting forever
+    // if the user never moves the camera (carte libre idle case).
+    settleTimer = window.setTimeout(() => {
+      settleTimer = 0;
+      unsubscribeRender();
+    }, SETTLE_AFTER_MOVE_MS);
 
     // Also redraw when the window resizes (panel rect may move).
     const onResize = () => {
-      invalidateRects();
-      schedule(true);
+      requestRedrawRef.current?.();
     };
     window.addEventListener('resize', onResize);
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       requestRedrawRef.current = null;
-      map.off('render', onMapRender);
+      unsubscribeRender();
       map.off('movestart', onMoveStart);
       map.off('moveend', onMoveEnd);
       window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
       targetObserver.disconnect();
       sourceObserver.disconnect();
+      clearSettleTimer();
       clearScheduledDraw();
     };
   }, [blur, map, saturate]);
