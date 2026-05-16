@@ -1,6 +1,6 @@
 import type { TileCoord, DownloadProgress } from '../types';
 import { resolveDownloadUrls, cacheDownloadUrl } from './wfsClient';
-import { saveTile, hasTile, loadTile } from './storage';
+import { saveTile, hasTile, loadTile, hasValidLasSignature } from './storage';
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
 import { extractLasFromZip } from './swiss/zipReader';
 
@@ -82,6 +82,16 @@ function mergeChunks(chunks: Uint8Array[]): ArrayBuffer {
     offset += chunk.byteLength;
   }
   return result.buffer;
+}
+
+function invalidLasSignatureError(buffer: ArrayBuffer): DownloadFailure {
+  const bytes = new Uint8Array(buffer.slice(0, Math.min(4, buffer.byteLength)));
+  const preview = Array.from(bytes)
+    .map((value) => String.fromCharCode(value >= 32 && value <= 126 ? value : 0xFFFD))
+    .join('');
+  const err = new Error(`Signature LAS/COPC invalide: ${preview || 'vide'}`) as DownloadFailure;
+  err.code = 'ERR_INVALID_LAS_SIGNATURE';
+  return err;
 }
 
 export async function downloadTile(
@@ -283,7 +293,20 @@ async function fetchWithRetry(
       throw err;
     }
 
-    return mergeChunks(chunks);
+    const merged = mergeChunks(chunks);
+    if (!hasValidLasSignature(merged)) {
+      if (requestedResumeBytes > 0 && incompleteRetryCount < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
+        const delay = Math.max(1500, RETRY_BASE_DELAY_5XX_MS * Math.pow(2, incompleteRetryCount));
+        console.warn(
+          `[Download] Resumed buffer for ${url} has invalid LAS signature; restarting full download in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,
+        );
+        await sleep(delay);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined);
+      }
+      throw invalidLasSignatureError(merged);
+    }
+
+    return merged;
   } catch (err: any) {
     clearTimeout(timeout);
 

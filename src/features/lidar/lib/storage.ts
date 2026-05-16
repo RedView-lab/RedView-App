@@ -29,7 +29,19 @@ function tileKey(coord: TileCoord): string {
   return `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`;
 }
 
+export function hasValidLasSignature(data: ArrayBuffer): boolean {
+  if (data.byteLength < 4) return false;
+  try {
+    return new DataView(data).getUint32(0, false) === 0x4C415346;
+  } catch {
+    return false;
+  }
+}
+
 export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<void> {
+  if (!hasValidLasSignature(data)) {
+    throw new Error('Tuile LiDAR corrompue: signature LAS/COPC invalide.');
+  }
   const dir = await getLidarDir();
   const fileName = tileKey(coord);
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
@@ -44,7 +56,13 @@ export async function loadTile(coord: TileCoord): Promise<ArrayBuffer | null> {
     const fileName = tileKey(coord);
     const fileHandle = await dir.getFileHandle(fileName);
     const file = await fileHandle.getFile();
-    return file.arrayBuffer();
+    const data = await file.arrayBuffer();
+    if (!hasValidLasSignature(data)) {
+      console.warn(`[LiDAR storage] Invalid LAS signature in cached tile ${fileName}; deleting corrupted cache entry.`);
+      await deleteTile(coord);
+      return null;
+    }
+    return data;
   } catch {
     return null;
   }
