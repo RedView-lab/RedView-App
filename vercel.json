@@ -53,15 +53,27 @@
       ]
     },
     {
+      "source": "/viewer",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
+      "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" }
+      ]
+    },
+    {
       "source": "/index.html",
       "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=3600, stale-while-revalidate=86400" }
+        { "key": "Cache-Control", "value": "no-store" }
       ]
     },
     {
       "source": "/viewer.html",
       "headers": [
-        { "key": "Cache-Control", "value": "public, s-maxage=3600, stale-while-revalidate=86400" }
+        { "key": "Cache-Control", "value": "no-store" }
       ]
     }
   ]
