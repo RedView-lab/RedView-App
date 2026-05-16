@@ -91,9 +91,9 @@ export function attachListeners(ctx: Ctx): void {
     // isn't bound, re-attach immediately.
     if (fns.canMutateStyle()) {
       const managedSourceId = fns.getManagedTerrainSourceId();
-      if (managedSourceId && !fns.isManagedTerrainActive()) {
+      if (managedSourceId && !fns.isManagedTerrainRenderable()) {
         console.warn(
-          `[map3d] idle: terrain detached from ${managedSourceId}; re-attaching`,
+          `[map3d] idle: terrain detached or non-renderable from ${managedSourceId}; re-attaching`,
         );
         if (!repairManagedTerrain() && managedSourceId === unifiedDEMSource.id) {
         // Re-attach refused — escalate to forceful rebuild via the
@@ -138,8 +138,8 @@ export function attachListeners(ctx: Ctx): void {
     if (!st.demTrackingEnabled || isCancelled()) return;
     if (!fns.canMutateStyle()) return;
     const managedSourceId = fns.getManagedTerrainSourceId();
-    if (managedSourceId && !fns.isManagedTerrainActive()) {
-      console.warn(`[map3d] zoomend: terrain detached from ${managedSourceId}; re-attaching`);
+    if (managedSourceId && !fns.isManagedTerrainRenderable()) {
+      console.warn(`[map3d] zoomend: terrain detached or non-renderable from ${managedSourceId}; re-attaching`);
       repairManagedTerrain();
     }
     if (managedSourceId === unifiedDEMSource.id) {

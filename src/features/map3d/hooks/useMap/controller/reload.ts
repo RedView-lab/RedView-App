@@ -45,7 +45,7 @@ export function attachReload(ctx: Ctx): void {
       // If terrain is still not the unified DEM, escalate: do a full
       // setStyle re-apply (limited to 2 attempts) so the style.load
       // recovery handler rebuilds DEM + terrain from scratch.
-      if (!fns.isUnifiedTerrainActive() || !map.getSource(unifiedDEMSource.id)) {
+      if (!fns.isUnifiedTerrainActive() || !fns.isManagedTerrainRenderable() || !map.getSource(unifiedDEMSource.id)) {
         if (st.reloadStyleEscalations >= 2) {
           console.warn('[map3d] reload escalation exhausted; map may stay flat');
           fns.reportStatus('error', 0, 'Relief 3D indisponible');

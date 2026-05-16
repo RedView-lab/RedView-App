@@ -58,13 +58,13 @@ export function attachStatus(ctx: Ctx): void {
     // flat 2D state. Auto-trigger a reload instead of falsely
     // reporting 100% — that's what made the manual reload button feel
     // useless ("ça met 100% mais tout reste plat").
-    if (!fns.isManagedTerrainActive() && fns.getManagedTerrainSourceId()) {
+    if (!fns.isManagedTerrainRenderable() && fns.getManagedTerrainSourceId()) {
       // A terrain source exists but the renderer lost its binding.
       // Re-attach in place before claiming success.
       fns.applyManagedTerrain();
     }
     if (
-      !fns.isManagedTerrainActive()
+      !fns.isManagedTerrainRenderable()
       && navigator.serviceWorker?.controller
       && fns.canMutateStyle()
       && !st.reloadInProgress

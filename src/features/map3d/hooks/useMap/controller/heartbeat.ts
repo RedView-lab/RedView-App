@@ -49,6 +49,7 @@ export function attachHeartbeat(ctx: Ctx): void {
       const sourcePresent = !!map.getSource(unifiedDEMSource.id);
       const awsFallbackPresent = !!map.getSource(awsFallbackDEMSource.id);
       const terrainBound = fns.isUnifiedTerrainActive();
+      const terrainRenderable = fns.isManagedTerrainRenderable();
 
       // AWS fallback terrain is active — this is the expected state
       // when the SW never claimed. The terrain is real (~30 m AWS
@@ -69,7 +70,7 @@ export function attachHeartbeat(ctx: Ctx): void {
         } catch { /* fallback re-attach failed */ }
       }
 
-      if (sourcePresent && terrainBound) {
+      if (sourcePresent && terrainBound && terrainRenderable) {
         st.heartbeatFailures = 0;
         return;
       }
@@ -77,7 +78,13 @@ export function attachHeartbeat(ctx: Ctx): void {
       st.heartbeatFailures += 1;
       console.warn(
         '[map3d] heartbeat: flat state detected',
-        { sourcePresent, awsFallbackPresent, terrainBound, failures: st.heartbeatFailures },
+        {
+          sourcePresent,
+          awsFallbackPresent,
+          terrainBound,
+          terrainRenderable,
+          failures: st.heartbeatFailures,
+        },
       );
 
       // Soft fix first: re-attach if the source is still there.

@@ -125,6 +125,7 @@ export interface ControllerFns {
   getManagedTerrainSourceId: () => string | null;
   isUnifiedTerrainActive: () => boolean;
   isManagedTerrainActive: () => boolean;
+  isManagedTerrainRenderable: () => boolean;
   allTilesLoaded: () => boolean;
   isTrackedSource: (sourceId: string | undefined | null) => boolean;
   buildTileKey: (event: MapSourceDataEvent) => string | null;
@@ -268,6 +269,51 @@ export function attachHelpers(ctx: Ctx): void {
       const expectedSourceId = fns.getManagedTerrainSourceId();
       if (!expectedSourceId) return false;
       return map.getTerrain()?.source === expectedSourceId;
+    } catch {
+      return false;
+    }
+  };
+
+  fns.isManagedTerrainRenderable = () => {
+    try {
+      const expectedSourceId = fns.getManagedTerrainSourceId();
+      if (!expectedSourceId) return false;
+      if (map.getTerrain()?.source !== expectedSourceId) return false;
+      if (map.isMoving()) return true;
+
+      let sourceLoaded = false;
+      try {
+        sourceLoaded = map.isSourceLoaded(expectedSourceId);
+      } catch {
+        sourceLoaded = false;
+      }
+      if (!sourceLoaded) return true;
+
+      const queryTerrainElevation = (map as unknown as {
+        queryTerrainElevation?: (
+          lngLat: [number, number],
+          options?: { exaggerated?: boolean },
+        ) => number | null | undefined;
+      }).queryTerrainElevation;
+      if (typeof queryTerrainElevation !== 'function') return true;
+
+      const center = map.getCenter();
+      const sampleOffsets = [
+        [0, 0],
+        [0.0012, 0],
+        [-0.0012, 0],
+        [0, 0.0012],
+        [0, -0.0012],
+      ] as const;
+
+      return sampleOffsets.some(([lngOffset, latOffset]) => {
+        const elevation = queryTerrainElevation.call(
+          map,
+          [center.lng + lngOffset, center.lat + latOffset],
+          { exaggerated: false },
+        );
+        return Number.isFinite(elevation);
+      });
     } catch {
       return false;
     }
