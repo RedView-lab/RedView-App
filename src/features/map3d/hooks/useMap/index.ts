@@ -302,6 +302,24 @@ export function useMap(
           if (!cancelled) setIsLoaded(true);
           return;
         }
+      } else {
+        // Non-prefetched basemaps (Standard / Standard-Satellite) are passed
+        // straight to the Mapbox constructor, so they never go through the
+        // `setStyle()` + `prepareStyleChange()` flow above. Without an
+        // explicit prepareStyleChange call, the bootstrap state machine
+        // starts with stale defaults: no progress event is emitted ("Fond
+        // de carte" at 18%), the sprite-storm bypass flag is not primed,
+        // DEM tracking is not cleared, and any leftover managed-terrain /
+        // AWS-fallback handles from a prior controller live on into the
+        // satellite session. Visible regression: opening a project in
+        // Standard-Satellite leaves the world flat with NO `[map3d]
+        // styledata: …sprite-storm bypass`, NO `[weather-overlay] forcing
+        // style usability fallback`, and NO `[sw-dem]` tile processing —
+        // exactly the symptoms a user reported. Switching to topo at
+        // runtime works because the basemap-switch path always calls
+        // prepareStyleChange. Calling it here makes the satellite initial
+        // load symmetric with the topo path.
+        lifecycle.prepareStyleChange('Fond de carte');
       }
 
       armInitialReveal();
