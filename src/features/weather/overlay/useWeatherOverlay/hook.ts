@@ -51,6 +51,8 @@ import {
   type ViewportBounds,
 } from './helpers';
 
+const MIN_FALLBACK_STYLE_SOURCE_COUNT = 5;
+const MIN_FALLBACK_STYLE_LAYER_COUNT = 24;
 export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -159,7 +161,10 @@ export function useWeatherOverlay(
     const promoteStyleFallbackIfUsable = (trigger: string): boolean => {
       if (styleFallbackUsableRef.current) return true;
       const health = readStyleHealth(map);
-      if (!health.hasStyle || health.sourceCount === 0) return false;
+      if (!health.hasStyle) return false;
+      const hasEnoughStyleContent = health.sourceCount >= MIN_FALLBACK_STYLE_SOURCE_COUNT
+        || health.layerCount >= MIN_FALLBACK_STYLE_LAYER_COUNT;
+      if (!hasEnoughStyleContent) return false;
       styleFallbackUsableRef.current = true;
       logWeatherOverlay('forcing style usability fallback', {
         trigger,
