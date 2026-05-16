@@ -376,15 +376,29 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.detachAwsFallbackTerrain = () => {
+    let hasAwsSource = false;
+    let activeTerrainSource: string | null = null;
     try {
-      terrainRef.current?.destroy();
-    } catch { /* best-effort */ }
-    terrainRef.current = null;
-    try {
-      map.setTerrain(null);
+      hasAwsSource = !!map.getSource(awsFallbackDEMSource.id);
     } catch { /* best-effort */ }
     try {
-      if (map.getSource(awsFallbackDEMSource.id)) {
+      activeTerrainSource = map.getTerrain()?.source ?? null;
+    } catch { /* best-effort */ }
+
+    if (!hasAwsSource && activeTerrainSource !== awsFallbackDEMSource.id) return;
+
+    if (activeTerrainSource === awsFallbackDEMSource.id) {
+      try {
+        terrainRef.current?.destroy();
+      } catch { /* best-effort */ }
+      terrainRef.current = null;
+      try {
+        map.setTerrain(null);
+      } catch { /* best-effort */ }
+    }
+
+    try {
+      if (hasAwsSource) {
         map.removeSource(awsFallbackDEMSource.id);
         console.log('[map3d] AWS fallback DEM source removed');
       }
