@@ -4,6 +4,7 @@ import { TerrainManager } from '../../../lib/terrain';
 import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
 import { DEM_SETTILE_VERIFY_MS, STYLE_LOAD_WATCHDOG_MS } from './context';
+import { getStyleContentStats } from './styleContent';
 
 /**
  * DEM source + terrain attachment lifecycle.
@@ -25,6 +26,25 @@ export function attachDemSource(ctx: Ctx): void {
   const st = ctx.state;
   const terrainRecoveryRetryMs = 120;
   const maxTerrainRecoveryAttempts = Math.ceil((STYLE_LOAD_WATCHDOG_MS + 1000) / terrainRecoveryRetryMs);
+
+  const canMutateTerrainStyle = (): boolean => {
+    if (fns.canMutateStyle()) return true;
+    try {
+      const style = map.getStyle();
+      const stats = getStyleContentStats(style);
+      if (!stats.hasContent) return false;
+      if (!st.spriteStormBypass) {
+        console.warn(
+          '[map3d] terrain style usable while isStyleLoaded() is false — enabling sprite-storm bypass',
+          { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
+        );
+        st.spriteStormBypass = true;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   fns.applyManagedTerrain = () => {
     if (map.getSource(unifiedDEMSource.id)) {
@@ -91,7 +111,7 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.refreshDemSource = (options: { forceRebuild?: boolean } = {}): boolean => {
-    if (!fns.canMutateStyle()) return false;
+    if (!canMutateTerrainStyle()) return false;
     if (!navigator.serviceWorker?.controller) {
       console.warn('[map3d] DEM source refresh skipped: no active service worker controller');
       return false;
@@ -194,7 +214,7 @@ export function attachDemSource(ctx: Ctx): void {
     st.setTilesVerifyTimer = setTimeout(() => {
       st.setTilesVerifyTimer = null;
       if (isCancelled()) return;
-      if (!fns.canMutateStyle()) return;
+      if (!canMutateTerrainStyle()) return;
       if (!map.getSource(unifiedDEMSource.id)) return;
       // If terrain isn't actually bound to unified-dem after setTiles,
       // force a clean rebuild — that's the symptom the user reports
@@ -343,7 +363,7 @@ export function attachDemSource(ctx: Ctx): void {
   // encoding. Mapbox GL v3 handles the decode on the GPU — no SW
   // pipeline, no re-encoding, no overzoom logic. ~30 m global terrain.
   fns.attachAwsFallbackTerrain = () => {
-    if (!fns.canMutateStyle()) return;
+    if (!canMutateTerrainStyle()) return;
     // Don't attach if the unified-dem source is already present
     // (SW path took over).
     if (map.getSource(unifiedDEMSource.id)) return;
