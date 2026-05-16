@@ -584,11 +584,12 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         applyStyleDecorators();
         orthoAdded = false;
 
-        try {
-          map.setTerrain(null);
-        } catch {
-          /* terrain may already have been dropped by the style reload */
-        }
+        // Only clear terrain when it is one of the managed DEM sources we
+        // own. Standard / Standard-Satellite can still be hydrating their
+        // imported builtin `mapbox-dem` terrain at this point; clearing it
+        // unconditionally reintroduces the initial flat-world race before
+        // unified-dem has fully rebound.
+        fns.detachManagedTerrain();
 
         // Anti-flat: setStyle({diff:false}) drops sources, but if the
         // style was reloaded with diff=true (rare path) the source can
