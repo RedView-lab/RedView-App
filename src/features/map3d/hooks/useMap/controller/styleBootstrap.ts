@@ -521,31 +521,82 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     // `applyUnifiedTerrain` (which happens during initial bootstrap), the
     // import's terrain silently overwrites ours and the world stays flat
     // until the 12 s heartbeat catches it (~24 s with the failure
-    // threshold). Visible bug: in Standard-Satellite the orthophotos load
-    // but no 3D relief, while legacy outdoors-v12 (no imports) works
-    // immediately. Re-apply at 300 / 1000 / 2500 / 5000 ms covers the
-    // entire import-load window without waiting on the heartbeat. We also
-    // listen once for `style.import.load` if Mapbox emits it.
+    // threshold).
+    //
+    // Standard-Satellite expands its import in TWO stages: Stage 1
+    // (~50-300 ms) publishes a partial layer set (~10-15 top-level
+    // layers, sometimes only `imports[].data` populated); Stage 2 (often
+    // 500 ms - 5 s+, occasionally still settling at 8-10 s on cold-cache
+    // Firefox) attaches the actual terrain spec and the satellite raster
+    // sources. A topo → satellite RUNTIME switch is the worst case
+    // because the previous topo style had already given us a working
+    // `unified-dem` terrain binding, so Stage 2's late hijack flips us
+    // from 3D to flat after the user already sees imagery.
+    //
+    // Strategy: re-verify terrain binding aggressively for the entire
+    // import-settling window (up to IMPORT_GUARD_WATCH_MS), not just at
+    // four fixed timestamps. Re-add the `unified-dem` source if Mapbox
+    // dropped it during the diff:false setStyle, and re-bind terrain
+    // every time `style.load` / `style.import.load` fires (these can
+    // fire late on satellite, well after our initial bootstrap).
+    const IMPORT_GUARD_WATCH_MS = 15000;
+    const IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
     const importGuardTimers: ReturnType<typeof setTimeout>[] = [];
     const importGuardCleanup: (() => void)[] = [];
-    const verifyAndReapplyTerrain = () => {
+    const importGuardStartedAt = Date.now();
+    const verifyAndReapplyTerrain = (origin: string) => {
       if (isCancelled() || runId !== st.styleBootstrapRunId) return;
-      if (!map.getSource(unifiedDEMSource.id)) return;
-      if (fns.isUnifiedTerrainActive()) return;
-      console.warn('[map3d] import-override guard: terrain unbound, re-applying');
+      // If Mapbox dropped our unified-dem source during the diff:false
+      // setStyle and our recovery never re-added it, do that now — the
+      // import-guard window is the last line of defense before the
+      // 12 s heartbeat catches a flat world.
+      if (!map.getSource(unifiedDEMSource.id)) {
+        try {
+          if (!fns.refreshDemSource()) return;
+        } catch {
+          return;
+        }
+      }
+      if (fns.isUnifiedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+      console.warn(`[map3d] import-override guard (${origin}): terrain unbound, re-applying`);
       fns.applyUnifiedTerrain();
     };
-    for (const delay of [300, 1000, 2500, 5000]) {
-      importGuardTimers.push(setTimeout(verifyAndReapplyTerrain, delay));
+    // Front-load three quick probes for Stage-1 expansion, then a
+    // periodic probe every IMPORT_GUARD_PROBE_INTERVAL_MS until the
+    // watch window closes. The periodic probe is cheap (it short-
+    // circuits as soon as terrain is bound and renderable) and catches
+    // any Stage-2 hijack the fixed-timer schedule used to miss.
+    for (const delay of [200, 600, 1500]) {
+      importGuardTimers.push(setTimeout(() => verifyAndReapplyTerrain(`t+${delay}`), delay));
     }
+    const periodicProbe = setInterval(() => {
+      if (isCancelled() || runId !== st.styleBootstrapRunId) {
+        clearInterval(periodicProbe);
+        return;
+      }
+      if (Date.now() - importGuardStartedAt > IMPORT_GUARD_WATCH_MS) {
+        clearInterval(periodicProbe);
+        return;
+      }
+      verifyAndReapplyTerrain('periodic');
+    }, IMPORT_GUARD_PROBE_INTERVAL_MS);
+    importGuardCleanup.push(() => clearInterval(periodicProbe));
     try {
       const mapWithEvents = map as unknown as {
         on?: (ev: string, fn: () => void) => void;
         off?: (ev: string, fn: () => void) => void;
       };
-      const onImportLoad = () => verifyAndReapplyTerrain();
+      // Persistent (not `.once`) so every late import-load — Stage 2,
+      // Stage 3, satellite raster re-hydrate — triggers a re-verify.
+      const onImportLoad = () => verifyAndReapplyTerrain('style.import.load');
       mapWithEvents.on?.('style.import.load', onImportLoad);
       importGuardCleanup.push(() => mapWithEvents.off?.('style.import.load', onImportLoad));
+      // Late `style.load` also indicates the import finished settling and
+      // is a strong signal Mapbox may have just (re)applied its builtin
+      // terrain spec — re-bind ours immediately.
+      const onLateStyleLoad = () => verifyAndReapplyTerrain('style.load');
+      mapWithEvents.on?.('style.load', onLateStyleLoad);
+      importGuardCleanup.push(() => mapWithEvents.off?.('style.load', onLateStyleLoad));
     } catch { /* event name may not exist on this Mapbox version */ }
     const priorDispose = st.disposeStyleRecovery;
     st.disposeStyleRecovery = () => {
