@@ -212,19 +212,30 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
       south: Boolean(nS),
       west: Boolean(nW),
     },
+    neighbourElevations: {
+      north: nN,
+      east: nE,
+      south: nS,
+      west: nW,
+    },
   };
 }
 
 // ── Horn's method on the padded buffer ────────────────────────────────
 // Inner loop has no clamping branches — the pad row/column already covers
 // the edge case. Branches-free makes the JIT produce tight SIMD-friendly code.
+function computeHornSlope(a, b, c, d, f, g, h, i, inv8x, inv8y) {
+  const dzDx = ((c + 2 * f + i) - (a + 2 * d + g)) * inv8x;
+  const dzDy = ((g + 2 * h + i) - (a + 2 * b + c)) * inv8y;
+  return Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)) * (180 / Math.PI);
+}
+
 function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
   const slopes = new Float32Array(S * S);
   const inv8x = 1 / (8 * cellSizeX);
   const inv8y = 1 / (8 * cellSizeY);
-  const RAD2DEG = 180 / Math.PI;
 
   for (let row = 0; row < S; row++) {
     const r0 = row * P;         // pad row (row-1 of 3×3)
@@ -241,11 +252,119 @@ function computeSlopesFromPadded(pad, cellSizeX, cellSizeY) {
       const h = pad[r2 + col + 1];
       const i = pad[r2 + col + 2];
 
-      const dzDx = ((c + 2 * f + i) - (a + 2 * d + g)) * inv8x;
-      const dzDy = ((g + 2 * h + i) - (a + 2 * b + c)) * inv8y;
-      slopes[outRow + col] = Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)) * RAD2DEG;
+      slopes[outRow + col] = computeHornSlope(a, b, c, d, f, g, h, i, inv8x, inv8y);
     }
   }
+  return slopes;
+}
+
+function clampIndex(value, max) {
+  if (value <= 0) return 0;
+  if (value >= max) return max;
+  return value;
+}
+
+function sampleTile(elevations, row, col) {
+  const S = DEM_TILE_SIZE;
+  if (!elevations) return NaN;
+  const rr = clampIndex(row, S - 1);
+  const cc = clampIndex(col, S - 1);
+  return elevations[rr * S + cc];
+}
+
+// Adjacent raster tiles do not overlap on the GPU. Even with neighbour-aware
+// Horn padding, the last column of tile A and the first column of tile B still
+// represent two different kernel centres, which can leave a 1 px visual seam
+// on very high-frequency surface DEMs. Harmonize the shared border by assigning
+// both sides the same averaged value; because the formula is symmetric, each
+// tile computes the identical seam pixel independently.
+function harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY) {
+  if (!neighbourElevations) return slopes;
+
+  const S = DEM_TILE_SIZE;
+  const inv8x = 1 / (8 * cellSizeX);
+  const inv8y = 1 / (8 * cellSizeY);
+
+  if (neighbourElevations.north) {
+    const north = neighbourElevations.north;
+    for (let col = 0; col < S; col++) {
+      const paired = computeHornSlope(
+        sampleTile(north, S - 2, col - 1),
+        sampleTile(north, S - 2, col),
+        sampleTile(north, S - 2, col + 1),
+        sampleTile(north, S - 1, col - 1),
+        sampleTile(north, S - 1, col + 1),
+        sampleTile(ownElev, 0, col - 1),
+        sampleTile(ownElev, 0, col),
+        sampleTile(ownElev, 0, col + 1),
+        inv8x,
+        inv8y,
+      );
+      slopes[col] = (slopes[col] + paired) * 0.5;
+    }
+  }
+
+  if (neighbourElevations.south) {
+    const south = neighbourElevations.south;
+    const ownRow = (S - 1) * S;
+    for (let col = 0; col < S; col++) {
+      const idx = ownRow + col;
+      const paired = computeHornSlope(
+        sampleTile(ownElev, S - 1, col - 1),
+        sampleTile(ownElev, S - 1, col),
+        sampleTile(ownElev, S - 1, col + 1),
+        sampleTile(south, 0, col - 1),
+        sampleTile(south, 0, col + 1),
+        sampleTile(south, 1, col - 1),
+        sampleTile(south, 1, col),
+        sampleTile(south, 1, col + 1),
+        inv8x,
+        inv8y,
+      );
+      slopes[idx] = (slopes[idx] + paired) * 0.5;
+    }
+  }
+
+  if (neighbourElevations.west) {
+    const west = neighbourElevations.west;
+    for (let row = 0; row < S; row++) {
+      const idx = row * S;
+      const paired = computeHornSlope(
+        sampleTile(west, row - 1, S - 2),
+        sampleTile(west, row - 1, S - 1),
+        sampleTile(ownElev, row - 1, 0),
+        sampleTile(west, row, S - 2),
+        sampleTile(ownElev, row, 0),
+        sampleTile(west, row + 1, S - 2),
+        sampleTile(west, row + 1, S - 1),
+        sampleTile(ownElev, row + 1, 0),
+        inv8x,
+        inv8y,
+      );
+      slopes[idx] = (slopes[idx] + paired) * 0.5;
+    }
+  }
+
+  if (neighbourElevations.east) {
+    const east = neighbourElevations.east;
+    for (let row = 0; row < S; row++) {
+      const idx = row * S + (S - 1);
+      const paired = computeHornSlope(
+        sampleTile(ownElev, row - 1, S - 1),
+        sampleTile(east, row - 1, 0),
+        sampleTile(east, row - 1, 1),
+        sampleTile(ownElev, row, S - 1),
+        sampleTile(east, row, 1),
+        sampleTile(ownElev, row + 1, S - 1),
+        sampleTile(east, row + 1, 0),
+        sampleTile(east, row + 1, 1),
+        inv8x,
+        inv8y,
+      );
+      slopes[idx] = (slopes[idx] + paired) * 0.5;
+    }
+  }
+
   return slopes;
 }
 
@@ -342,9 +461,10 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const { pad, missingNeighbours, edgeNeighbours } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
+  const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
   let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
+  slopes = harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY);
   if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
   const t3 = performance.now();
   const blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);

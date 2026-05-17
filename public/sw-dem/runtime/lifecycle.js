@@ -18,6 +18,9 @@
 const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
+const SLOPE_BUILD_MAX_CONCURRENT = 2;
+let _slopeBuildActive = 0;
+const _slopeBuildQueue = [];
 const ALTITUDE_BUILD_MAX_CONCURRENT = 2;
 let _altitudeBuildActive = 0;
 const _altitudeBuildQueue = [];
@@ -46,6 +49,10 @@ function cancelSlopeWork() {
   slopeCancelGeneration += 1;
   const slopeCount = SLOPE_INFLIGHT.size;
   SLOPE_INFLIGHT.clear();
+  while (_slopeBuildQueue.length > 0) {
+    const queued = _slopeBuildQueue.shift();
+    try { queued?.resolve(null); } catch { /* ignore */ }
+  }
   try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
   return { slopeCount };
 }
@@ -79,6 +86,34 @@ function pumpAltitudeBuildQueue() {
         pumpAltitudeBuildQueue();
       });
   }
+}
+
+function pumpSlopeBuildQueue() {
+  while (_slopeBuildActive < SLOPE_BUILD_MAX_CONCURRENT && _slopeBuildQueue.length > 0) {
+    const entry = _slopeBuildQueue.shift();
+    if (!entry) break;
+    if (entry.generation !== slopeCancelGeneration) {
+      entry.resolve(null);
+      continue;
+    }
+    _slopeBuildActive += 1;
+    Promise.resolve()
+      .then(() => entry.run())
+      .then((result) => entry.resolve(result))
+      .catch((error) => entry.reject(error))
+      .finally(() => {
+        _slopeBuildActive = Math.max(0, _slopeBuildActive - 1);
+        pumpSlopeBuildQueue();
+      });
+  }
+}
+
+function scheduleSlopeBuild(run, generation) {
+  if (generation !== slopeCancelGeneration) return Promise.resolve(null);
+  return new Promise((resolve, reject) => {
+    _slopeBuildQueue.push({ run, generation, resolve, reject });
+    pumpSlopeBuildQueue();
+  });
 }
 
 function scheduleAltitudeBuild(run, generation) {

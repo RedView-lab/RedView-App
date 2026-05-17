@@ -405,7 +405,7 @@ export function installViewportPrefetch(
     lastFiredAt = performance.now();
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
-    const slopeOn = opts.isSlopeActive?.() ?? false;
+    const slopeOn = false;
     const altitudeOn = false;
     const urls = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,
@@ -485,7 +485,9 @@ export function installViewportPrefetch(
 
     // 2. z+1 children + z-1 parent for instant zoom transitions after
     //    arrival. Reuse buildUrls with ring disabled (already covered by
-    //    the destination bbox itself).
+    //    the destination bbox itself). Keep slope disabled here: speculative
+    //    offscreen slope tiles were saturating the SW and delaying visible
+    //    DEM/ortho when the 0.40 m overlay was active.
     const extras = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor,
       /* tilted */ false,
@@ -493,7 +495,7 @@ export function installViewportPrefetch(
       /* includeRing */ false,
       includeChildren,
       /* includeParent */ true,
-      slopeOn,
+      /* slopeOn */ false,
       /* altitudeOn */ false,
     );
     for (const u of extras) urls.push(u);

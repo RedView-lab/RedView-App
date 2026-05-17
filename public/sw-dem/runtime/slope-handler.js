@@ -147,7 +147,16 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
 
     try {
       const demBlob = await demResponse.clone().blob();
-      const slopeResult = await buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile);
+      if (isSlopeWorkCancelled(generation)) {
+        return transparentTileResponse();
+      }
+      const slopeResult = await scheduleSlopeBuild(
+        () => buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile),
+        generation,
+      );
+      if (!slopeResult || isSlopeWorkCancelled(generation)) {
+        return transparentTileResponse();
+      }
       if (isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
