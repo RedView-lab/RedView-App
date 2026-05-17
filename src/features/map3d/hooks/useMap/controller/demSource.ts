@@ -34,8 +34,14 @@ export function attachDemSource(ctx: Ctx): void {
       const stats = getStyleContentStats(style);
       if (!stats.hasContent) return false;
       if (!st.spriteStormBypass) {
+        // Use the canonical `[map3d] <origin>: style has content while
+        // isStyleLoaded() is false — enabling sprite-storm bypass` log
+        // format so satellite cold-start diagnostics stay consistent
+        // with the styleBootstrap probe / styledata / idle / force-
+        // bypass paths. Differentiating origin (`terrain-eager`) lets
+        // us tell which code path won the race.
         console.warn(
-          '[map3d] terrain style usable while isStyleLoaded() is false — enabling sprite-storm bypass',
+          '[map3d] terrain-eager: style has content while isStyleLoaded() is false — enabling sprite-storm bypass',
           { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
         );
         st.spriteStormBypass = true;

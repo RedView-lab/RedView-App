@@ -146,11 +146,24 @@ export function useMap(
     const savedVp = initialViewport ?? loadViewport();
     const runtimeProfile = getMapRuntimeProfile();
     const shouldHydrateInitialStyle = shouldPrefetchMapboxStyle(basemapConfig.styleUrl);
+    // Always construct with the empty bootstrap shell. The real basemap
+    // style (prefetched JSON for topo, URL string for Standard /
+    // Standard-Satellite) is applied via `map.setStyle(...)` below, AFTER
+    // the lifecycle controller exists and `bootstrapCurrentStyle()` has
+    // attached its readiness listeners. Passing the satellite URL
+    // directly to the constructor used to start Mapbox's internal style
+    // fetch at T=0 and — with a warm browser cache — fire
+    // `style.load`/`styledata`/`sourcedata` BEFORE our listeners were
+    // attached (they only register inside the async
+    // `attemptInitBootstrap()` chain). The race left `spriteStormBypass`
+    // unprimed, the unified-DEM lost the terrain slot to the satellite
+    // import's builtin `mapbox-dem`, and the map rendered flat with no
+    // `[map3d] styledata: … sprite-storm bypass` log ever appearing.
+    // Forcing every basemap through the same shell + `setStyle()` path
+    // guarantees listeners are armed before Mapbox can emit anything.
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      style: (shouldHydrateInitialStyle
-        ? createEmptyBootstrapStyle()
-        : basemapConfig.styleUrl) as ConstructorParameters<typeof mapboxgl.Map>[0]['style'],
+      style: createEmptyBootstrapStyle() as ConstructorParameters<typeof mapboxgl.Map>[0]['style'],
       center: savedVp?.center ?? DEFAULT_VIEW.center,
       zoom: savedVp?.zoom ?? DEFAULT_VIEW.zoom,
       pitch: savedVp?.pitch ?? DEFAULT_VIEW.pitch,
@@ -277,53 +290,44 @@ export function useMap(
     };
 
     const startInitialStyleAndBootstrap = async (): Promise<void> => {
+      // Arm recovery BEFORE we touch anything async so a stalled fetch
+      // (prefetch HTTP for topo, native Mapbox style resolution for
+      // satellite) can never strand the map on the empty bootstrap shell.
+      armStuckShellWatchdog();
+      let styleInput: string | MapboxStyleDefinition;
       if (shouldHydrateInitialStyle) {
-        // Arm recovery BEFORE the async prefetch so a stalled/cancelled
-        // hydration can never strand the map on the empty bootstrap shell.
-        armStuckShellWatchdog();
         // resolveStyleInput now never throws — it falls back to the URL
         // string on any prefetch failure (timeout, network, parse).
-        const styleInput = await resolveStyleInput(basemapConfig.styleUrl);
+        styleInput = await resolveStyleInput(basemapConfig.styleUrl);
         if (cancelled) return;
-        lifecycle.prepareStyleChange('Fond de carte');
-        try {
-          map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
-            diff: false,
-            localFontFamily: null,
-            localIdeographFontFamily: 'sans-serif',
-          });
-        } catch (error) {
-          console.error('[map3d] initial setStyle failed', error);
-          lifecycle.reportStatus(
-            'error',
-            0,
-            error instanceof Error ? error.message : 'Chargement du fond de carte impossible',
-          );
-          if (!cancelled) setIsLoaded(true);
-          return;
-        }
       } else {
-        // Non-prefetched basemaps (Standard / Standard-Satellite) are passed
-        // straight to the Mapbox constructor, so they never go through the
-        // `setStyle()` + `prepareStyleChange()` flow above. Without an
-        // explicit prepareStyleChange call, the bootstrap state machine
-        // starts with stale defaults: no progress event is emitted ("Fond
-        // de carte" at 18%), the sprite-storm bypass flag is not primed,
-        // DEM tracking is not cleared, and any leftover managed-terrain /
-        // AWS-fallback handles from a prior controller live on into the
-        // satellite session. Visible regression: opening a project in
-        // Standard-Satellite leaves the world flat with NO `[map3d]
-        // styledata: …sprite-storm bypass`, NO `[weather-overlay] forcing
-        // style usability fallback`, and NO `[sw-dem]` tile processing —
-        // exactly the symptoms a user reported. Switching to topo at
-        // runtime works because the basemap-switch path always calls
-        // prepareStyleChange. Calling it here makes the satellite initial
-        // load symmetric with the topo path.
-        lifecycle.prepareStyleChange('Fond de carte');
+        // Non-prefetched basemaps (Mapbox Standard / Standard-Satellite)
+        // are passed as a URL string to `setStyle()`; Mapbox resolves
+        // them natively without an extra HTTP round-trip. The setStyle
+        // call still goes through the same `prepareStyleChange()` +
+        // listener-attach sequence as the prefetched path, so satellite
+        // cold-start no longer races Mapbox's internal style events.
+        styleInput = basemapConfig.styleUrl;
+      }
+      lifecycle.prepareStyleChange('Fond de carte');
+      try {
+        map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
+          diff: false,
+          localFontFamily: null,
+          localIdeographFontFamily: 'sans-serif',
+        });
+      } catch (error) {
+        console.error('[map3d] initial setStyle failed', error);
+        lifecycle.reportStatus(
+          'error',
+          0,
+          error instanceof Error ? error.message : 'Chargement du fond de carte impossible',
+        );
+        if (!cancelled) setIsLoaded(true);
+        return;
       }
 
       armInitialReveal();
-      if (!shouldHydrateInitialStyle) armStuckShellWatchdog();
       void attemptInitBootstrap();
     };
 
