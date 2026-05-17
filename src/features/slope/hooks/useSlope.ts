@@ -120,6 +120,50 @@ function cancelSlopeWorkerPressure() {
   }
 }
 
+function canStartSlopeWork(map: MapboxMap): boolean {
+  try {
+    const terrain = map.getTerrain();
+    const terrainSourceId = terrain?.source;
+    if (!terrainSourceId) return false;
+
+    let sourceLoaded = false;
+    try {
+      sourceLoaded = map.isSourceLoaded(terrainSourceId);
+    } catch {
+      sourceLoaded = false;
+    }
+    if (!sourceLoaded) return false;
+
+    const queryTerrainElevation = (map as unknown as {
+      queryTerrainElevation?: (
+        lngLat: [number, number],
+        options?: { exaggerated?: boolean },
+      ) => number | null | undefined;
+    }).queryTerrainElevation;
+    if (typeof queryTerrainElevation !== 'function') return true;
+
+    const center = map.getCenter();
+    const sampleOffsets = [
+      [0, 0],
+      [0.0012, 0],
+      [-0.0012, 0],
+      [0, 0.0012],
+      [0, -0.0012],
+    ] as const;
+
+    return sampleOffsets.some(([lngOffset, latOffset]) => {
+      const elevation = queryTerrainElevation.call(
+        map,
+        [center.lng + lngOffset, center.lat + latOffset],
+        { exaggerated: false },
+      );
+      return Number.isFinite(elevation);
+    });
+  } catch {
+    return false;
+  }
+}
+
 // ── Hook ──────────────────────────────────────────────────────────────
 //
 // Update model — designed for instant UX on rapid toggling:
@@ -229,6 +273,7 @@ export function useSlope(
 
     const tryMount = () => {
       if (mountedRef.current || !enabledRef.current) return;
+      if (!canStartSlopeWork(map)) return;
       const mounted = addSlopeLayer(
         map,
         opacityRef.current,
@@ -246,9 +291,11 @@ export function useSlope(
 
     tryMount();
     map.on('styledata', tryMount);
+    map.on('sourcedata', tryMount);
     map.on('idle', tryMount);
     return () => {
       map.off('styledata', tryMount);
+      map.off('sourcedata', tryMount);
       map.off('idle', tryMount);
     };
   }, [map, isMapLoaded, enabled]);
