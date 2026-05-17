@@ -411,6 +411,8 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     if (!swOk) {
+      const LATE_SW_UPGRADE_WATCH_MS = 20000;
+      const LATE_SW_UPGRADE_RETRY_MS = 750;
       const reason = swRegistered
         ? 'SW controller not yet claimed (install/activate race)'
         : 'SW unavailable';
@@ -449,6 +451,52 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         fns.finishDemActivity('Carte prête (relief 30 m)');
       }, 8000);
 
+      let lateSwUpgradeTimer: ReturnType<typeof setTimeout> | null = null;
+      const lateSwUpgradeStartedAt = Date.now();
+      const clearLateSwUpgradeTimer = () => {
+        if (lateSwUpgradeTimer) {
+          clearTimeout(lateSwUpgradeTimer);
+          lateSwUpgradeTimer = null;
+        }
+      };
+      const scheduleLateSwUpgradeRetry = () => {
+        if (lateSwUpgradeTimer) return;
+        lateSwUpgradeTimer = setTimeout(() => {
+          lateSwUpgradeTimer = null;
+          void tryLateSwUpgrade('retry');
+        }, LATE_SW_UPGRADE_RETRY_MS);
+      };
+      const tryLateSwUpgrade = async (origin: string): Promise<void> => {
+        if (isCancelled()) return;
+        if (runId !== st.styleBootstrapRunId) return;
+        if (!navigator.serviceWorker?.controller) return;
+        if (map.getSource(unifiedDEMSource.id)) return;
+
+        if (!fns.canMutateStyle()) {
+          if (Date.now() - lateSwUpgradeStartedAt > LATE_SW_UPGRADE_WATCH_MS) {
+            console.warn(`[map3d] Late SW recovery gave up waiting for mutable style (${origin})`);
+            return;
+          }
+          scheduleLateSwUpgradeRetry();
+          return;
+        }
+
+        console.log(`[map3d] Late SW recovery (${origin}): upgrading from AWS fallback to full DEM pipeline`);
+        clearLateSwUpgradeTimer();
+        fns.reportStatus('loading', 50, 'Récupération relief HD');
+        fns.detachAwsFallbackTerrain();
+        if (st.finishOnIdle) {
+          map.off('idle', st.finishOnIdle);
+          st.finishOnIdle = null;
+        }
+        void fns.bootstrapCurrentStyle();
+      };
+      const priorDispose = st.disposeStyleRecovery;
+      st.disposeStyleRecovery = () => {
+        priorDispose?.();
+        clearLateSwUpgradeTimer();
+      };
+
       // ── Late-SW recovery ──────────────────────────────────────────
       // The SW didn't claim within 2.5 s, but it may still be installing.
       // Wait for it in the background: if it appears within ~20 s,
@@ -456,22 +504,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       // bootstrap with IGN LiDAR HD.
       void swLateReady.then((lateOk) => {
         if (!lateOk) return;
-        if (isCancelled()) return;
-        if (runId !== st.styleBootstrapRunId) return;
-        // Only upgrade if the unified-dem source hasn't been attached
-        // yet by another path.
-        if (map.getSource(unifiedDEMSource.id)) return;
-        if (!fns.canMutateStyle()) return;
-
-        console.log('[map3d] Late SW recovery: upgrading from AWS fallback to full DEM pipeline');
-        fns.reportStatus('loading', 50, 'Récupération relief HD');
-        // Remove the AWS fallback source/terrain before re-bootstrapping
-        fns.detachAwsFallbackTerrain();
-        if (st.finishOnIdle) {
-          map.off('idle', st.finishOnIdle);
-          st.finishOnIdle = null;
-        }
-        void fns.bootstrapCurrentStyle();
+        void tryLateSwUpgrade('swLateReady');
       });
 
       return true;
