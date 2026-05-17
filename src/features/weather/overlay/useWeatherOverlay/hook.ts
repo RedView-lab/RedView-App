@@ -51,8 +51,6 @@ import {
   type ViewportBounds,
 } from './helpers';
 
-const MIN_FALLBACK_STYLE_SOURCE_COUNT = 5;
-const MIN_FALLBACK_STYLE_LAYER_COUNT = 24;
 export function useWeatherOverlay(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -162,8 +160,12 @@ export function useWeatherOverlay(
       if (styleFallbackUsableRef.current) return true;
       const health = readStyleHealth(map);
       if (!health.hasStyle) return false;
-      const hasEnoughStyleContent = health.sourceCount >= MIN_FALLBACK_STYLE_SOURCE_COUNT
-        || health.layerCount >= MIN_FALLBACK_STYLE_LAYER_COUNT;
+      // Imported Mapbox v3 styles can stay at 3 sources for a long time while
+      // already being fully usable for overlay mutations. Waiting for the old
+      // 5-source / 24-layer threshold strands satellite behind a false negative.
+      const hasEnoughStyleContent = health.sourceCount > 0
+        || health.layerCount > 0
+        || health.hasImportContent;
       if (!hasEnoughStyleContent) return false;
       styleFallbackUsableRef.current = true;
       logWeatherOverlay('forcing style usability fallback', {
@@ -171,6 +173,8 @@ export function useWeatherOverlay(
         isStyleLoaded: health.isStyleLoaded,
         sourceCount: health.sourceCount,
         layerCount: health.layerCount,
+        importCount: health.importCount,
+        hasImportContent: health.hasImportContent,
       });
       return true;
     };

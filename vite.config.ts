@@ -2,8 +2,18 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+const redviewBuildId = (
+  process.env.VERCEL_GIT_COMMIT_SHA
+  || process.env.GITHUB_SHA
+  || process.env.npm_package_version
+  || 'dev'
+).slice(0, 12)
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __REDVIEW_BUILD_ID__: JSON.stringify(redviewBuildId),
+  },
   plugins: [react()],
   resolve: {
     alias: {

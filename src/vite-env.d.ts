@@ -1,0 +1,1 @@
+declare const __REDVIEW_BUILD_ID__: string;

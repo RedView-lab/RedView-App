@@ -32,6 +32,8 @@ export interface StyleHealth {
   isStyleLoaded: boolean;
   sourceCount: number;
   layerCount: number;
+  importCount: number;
+  hasImportContent: boolean;
 }
 
 export function getViewportBounds(map: MapboxMap): ViewportBounds {
@@ -158,11 +160,16 @@ export function styleSyncProgress(reason: RefreshReason): number {
 export function readStyleHealth(map: MapboxMap): StyleHealth {
   try {
     const style = map.getStyle();
+    const imports = (style as { imports?: Array<{ data?: unknown }> } | null | undefined)?.imports;
+    const hasImportContent = Array.isArray(imports)
+      && imports.some((entry) => entry && entry.data != null);
     return {
       hasStyle: Boolean(style),
       isStyleLoaded: map.isStyleLoaded(),
       sourceCount: Object.keys(style?.sources ?? {}).length,
       layerCount: Array.isArray(style?.layers) ? style.layers.length : 0,
+      importCount: Array.isArray(imports) ? imports.length : 0,
+      hasImportContent,
     };
   } catch {
     return {
@@ -170,6 +177,8 @@ export function readStyleHealth(map: MapboxMap): StyleHealth {
       isStyleLoaded: false,
       sourceCount: 0,
       layerCount: 0,
+      importCount: 0,
+      hasImportContent: false,
     };
   }
 }
