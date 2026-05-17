@@ -618,6 +618,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     // fire late on satellite, well after our initial bootstrap).
     const IMPORT_GUARD_WATCH_MS = 15000;
     const IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
+    const FORCE_3D_ESCALATION_MS = 7000;
     const importGuardTimers: ReturnType<typeof setTimeout>[] = [];
     const importGuardCleanup: (() => void)[] = [];
     const importGuardStartedAt = Date.now();
@@ -675,9 +676,43 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       mapWithEvents.on?.('style.load', onLateStyleLoad);
       importGuardCleanup.push(() => mapWithEvents.off?.('style.load', onLateStyleLoad));
     } catch { /* event name may not exist on this Mapbox version */ }
+    const force3dEscalationTimer = setTimeout(() => {
+      if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+      if (fns.isUnifiedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+
+      console.warn(
+        `[map3d] force-3d escalation: terrain still not renderable after ${FORCE_3D_ESCALATION_MS} ms — forcing rebuild`,
+      );
+
+      if (!fns.canMutateStyle()) {
+        fns.scheduleTerrainRecovery();
+        return;
+      }
+
+      let rebuilt = false;
+      try {
+        rebuilt = fns.refreshDemSource({ forceRebuild: true });
+      } catch {
+        rebuilt = false;
+      }
+      if (rebuilt) {
+        fns.applyUnifiedTerrain();
+      }
+
+      if (fns.isUnifiedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+
+      if (navigator.serviceWorker?.controller) {
+        st.demReloadCoolingUntil = 0;
+        fns.reloadMapElevation();
+        return;
+      }
+
+      fns.scheduleTerrainRecovery();
+    }, FORCE_3D_ESCALATION_MS);
     const priorDispose = st.disposeStyleRecovery;
     st.disposeStyleRecovery = () => {
       priorDispose?.();
+      clearTimeout(force3dEscalationTimer);
       for (const t of importGuardTimers) clearTimeout(t);
       for (const c of importGuardCleanup) { try { c(); } catch { /* noop */ } }
     };
