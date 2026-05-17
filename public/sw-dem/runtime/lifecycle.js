@@ -18,7 +18,8 @@
 const COMPOSITE_MAX_CONCURRENT = 6;
 let _compositeActive = 0;
 const _compositeQueue = [];
-const SLOPE_BUILD_MAX_CONCURRENT = 2;
+const SLOPE_BUILD_BUSY_CONCURRENT = 2;
+const SLOPE_BUILD_WARM_CONCURRENT = 4;
 let _slopeBuildActive = 0;
 const _slopeBuildQueue = [];
 const ALTITUDE_BUILD_MAX_CONCURRENT = 2;
@@ -44,6 +45,21 @@ let altitudeCancelGeneration = 0;
 // slope responses miss the Mapbox tile-load deadline and never fire
 // `sourcedata`. Coalescing collapses the 5×-fan-out back to 1 per tile.
 const DEM_INFLIGHT = new Map();
+
+function detectSlopeBuildIdleConcurrency() {
+  const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
+  if (!Number.isFinite(hc) || hc <= 0) return 6;
+  return Math.max(4, Math.min(12, Math.round(hc * 0.75)));
+}
+
+const SLOPE_BUILD_IDLE_CONCURRENT = detectSlopeBuildIdleConcurrency();
+
+function currentSlopeBuildConcurrency() {
+  const demPressure = DEM_INFLIGHT.size;
+  if (demPressure >= 24) return SLOPE_BUILD_BUSY_CONCURRENT;
+  if (demPressure >= 8) return Math.min(SLOPE_BUILD_IDLE_CONCURRENT, SLOPE_BUILD_WARM_CONCURRENT);
+  return SLOPE_BUILD_IDLE_CONCURRENT;
+}
 
 function cancelSlopeWork() {
   slopeCancelGeneration += 1;
@@ -89,7 +105,7 @@ function pumpAltitudeBuildQueue() {
 }
 
 function pumpSlopeBuildQueue() {
-  while (_slopeBuildActive < SLOPE_BUILD_MAX_CONCURRENT && _slopeBuildQueue.length > 0) {
+  while (_slopeBuildActive < currentSlopeBuildConcurrency() && _slopeBuildQueue.length > 0) {
     const entry = _slopeBuildQueue.shift();
     if (!entry) break;
     if (entry.generation !== slopeCancelGeneration) {

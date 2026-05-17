@@ -429,6 +429,8 @@ export function useSlope(
       // We re-arm on every load/loaded event so the timer naturally
       // tracks the most recent activity.
       const STAGNATION_MS = 8000;
+      const HARD_STAGNATION_MS = 35000;
+      const READY_STRAGGLER_THRESHOLD = 8;
       watchdog = setTimeout(() => {
         watchdog = null;
         if (requested.size === 0) return;
@@ -438,12 +440,19 @@ export function useSlope(
         }
         const sinceProgress = Date.now() - lastProgressMs;
         if (sinceProgress >= STAGNATION_MS) {
-          // Force-complete on stagnation. The remaining tiles either
-          // 204'd (no DEM coverage) or hit a transient SW pipeline
-          // hiccup; either way we don't want to lie about progress
-          // forever. Mapbox will quietly retry on the next pan/zoom.
           const stragglers = requested.size - loaded.size;
-          emit('ready', 100, `Pentes prêtes (${stragglers} en attente)`);
+          if (stragglers <= READY_STRAGGLER_THRESHOLD || sinceProgress >= HARD_STAGNATION_MS) {
+            // Small tails are usually retries / no-data pockets. Large tails
+            // stay in `loading` much longer so the user doesn't see a fake
+            // "ready" while the queue is still draining.
+            emit('ready', 100, `Pentes prêtes (${stragglers} en attente)`);
+            return;
+          }
+          const total = requested.size;
+          const done = loaded.size;
+          const pct = Math.max(1, Math.min(99, Math.round((done / Math.max(total, 1)) * 100)));
+          emit('loading', pct, `Tuiles ${done}/${total} (${stragglers} en traitement)`);
+          armWatchdog();
           return;
         }
         // Still progressing — re-arm and keep showing the latest %.
