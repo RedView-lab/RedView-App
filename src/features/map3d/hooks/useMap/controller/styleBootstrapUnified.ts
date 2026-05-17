@@ -58,7 +58,9 @@ export function bootstrapUnifiedDem({
         return;
       }
     }
-    if (fns.isUnifiedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+    const terrainBound = fns.isUnifiedTerrainActive();
+    if (terrainBound && fns.isManagedTerrainRenderable()) return;
+    if (terrainBound) return;
     console.warn(`[map3d] import-override guard (${origin}): terrain unbound, re-applying`);
     fns.applyUnifiedTerrain();
   };
