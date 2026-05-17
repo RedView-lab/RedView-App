@@ -348,6 +348,7 @@ export function useSlope(
 
     const resumeSlope = () => {
       if (!enabledRef.current) return;
+      if (map.isMoving()) return;
       if (!canStartSlopeWork(map)) return;
       visibilityDeferredRef.current = false;
       if (mountedRef.current) {
@@ -359,10 +360,18 @@ export function useSlope(
     suppressSlope();
     map.on('movestart', suppressSlope);
     map.on('zoomstart', suppressSlope);
+    map.on('moveend', resumeSlope);
+    map.on('zoomend', resumeSlope);
+    map.on('sourcedata', resumeSlope);
+    map.on('styledata', resumeSlope);
     map.on('idle', resumeSlope);
     return () => {
       map.off('movestart', suppressSlope);
       map.off('zoomstart', suppressSlope);
+      map.off('moveend', resumeSlope);
+      map.off('zoomend', resumeSlope);
+      map.off('sourcedata', resumeSlope);
+      map.off('styledata', resumeSlope);
       map.off('idle', resumeSlope);
     };
   }, [map, isMapLoaded, enabled]);
@@ -528,6 +537,20 @@ export function useSlope(
       const total = requested.size;
       const done = loaded.size;
       if (total === 0) {
+        if (visibilityDeferredRef.current || !canStartSlopeWork(map)) {
+          emit('loading', 5, 'En attente du relief');
+          return;
+        }
+        let sourceLoaded = false;
+        try {
+          sourceLoaded = map.isSourceLoaded(SLOPE_SOURCE_ID);
+        } catch {
+          sourceLoaded = false;
+        }
+        if (mountedRef.current && sourceLoaded) {
+          emit('ready', 100, 'Pentes prêtes');
+          return;
+        }
         emit('loading', 5, 'En attente de tuiles');
         return;
       }
@@ -556,7 +579,11 @@ export function useSlope(
       const READY_STRAGGLER_THRESHOLD = 8;
       watchdog = setTimeout(() => {
         watchdog = null;
-        if (requested.size === 0) return;
+        if (requested.size === 0) {
+          publishProgress();
+          armWatchdog();
+          return;
+        }
         if (loaded.size >= requested.size) {
           emit('ready', 100, 'Pentes prêtes');
           return;
@@ -640,6 +667,14 @@ export function useSlope(
     map.on('sourcedata', onLoaded);
     map.on('dataabort', onError);
 
+    const onIdle = () => {
+      if (requested.size !== 0) return;
+      publishProgress();
+      armWatchdog();
+    };
+
+    map.on('idle', onIdle);
+
     // Seed initial state so the user sees a pill immediately on enable.
     emit('loading', 5, 'Préparation des pentes');
     armWatchdog();
@@ -648,6 +683,7 @@ export function useSlope(
       map.off('sourcedataloading', onLoading);
       map.off('sourcedata', onLoaded);
       map.off('dataabort', onError);
+      map.off('idle', onIdle);
       if (settleTimer) clearTimeout(settleTimer);
       if (watchdog) clearTimeout(watchdog);
       onLoadStatusChangeRef.current?.(null);
