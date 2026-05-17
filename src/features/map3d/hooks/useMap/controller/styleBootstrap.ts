@@ -71,6 +71,13 @@ export function attachStyleBootstrap(ctx: Ctx): void {
 
   fns.bootstrapCurrentStyle = async (): Promise<boolean> => {
     const runId = ++st.styleBootstrapRunId;
+    console.info('[map3d] bootstrapCurrentStyle:start', {
+      runId,
+      visualFamily: getActiveVisualFamily(),
+      terrainContract: getActiveTerrainContract(),
+      hasSwController: !!navigator.serviceWorker?.controller,
+      spriteStormBypass: st.spriteStormBypass,
+    });
     const applyStyleDecorators = () => {
       try {
         map.setFog(fogConfig);
@@ -416,6 +423,12 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       const FORCE_HD_UPGRADE_MS = 7000;
       const FALLBACK_IMPORT_GUARD_WATCH_MS = 15000;
       const FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
+      console.info('[map3d] bootstrapCurrentStyle:branch', {
+        runId,
+        branch: 'aws-fallback',
+        swRegistered,
+        hasSwController: !!navigator.serviceWorker?.controller,
+      });
       const reason = swRegistered
         ? 'SW controller not yet claimed (install/activate race)'
         : 'SW unavailable';
@@ -579,6 +592,11 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     }
 
     fns.ensureTrackingListeners();
+    console.info('[map3d] bootstrapCurrentStyle:branch', {
+      runId,
+      branch: 'unified-dem',
+      hasSwController: !!navigator.serviceWorker?.controller,
+    });
 
     // Anti-flat: do NOT call detachManagedTerrain() here. refreshDemSource
     // (in the forceRebuild path) already detaches terrain *just before*
