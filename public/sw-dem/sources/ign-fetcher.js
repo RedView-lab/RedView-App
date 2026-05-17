@@ -6,7 +6,9 @@
 const ignTileCache = new Map();
 const ignInflight = new Map(); // Deduplication: in-progress fetches by key
 let activeIGN = 0;
-const ignQueue = [];
+let activeIGNBackground = 0;
+const ignForegroundQueue = [];
+const ignBackgroundQueue = [];
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
 // Purpose tagging — lets CANCEL_SLOPE_WORK abort ONLY the IGN fetches that
@@ -17,6 +19,61 @@ let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 // tag is only set inside getTerrainWmsTile / queued terrain WMS work — both
 // of which exist solely to feed the 1 m slope pipeline.
 const PURPOSE_SLOPE_TERRAIN = 'slope-terrain';
+
+function isIGNBackgroundPurpose(purpose) {
+  return purpose === PURPOSE_SLOPE_TERRAIN;
+}
+
+function totalIGNQueueLength() {
+  return ignForegroundQueue.length + ignBackgroundQueue.length;
+}
+
+function currentIGNBackgroundConcurrency() {
+  if (ignForegroundQueue.length === 0) return IGN_CONCURRENCY;
+  return Math.max(4, Math.min(12, Math.floor(IGN_CONCURRENCY * 0.25)));
+}
+
+function pushIGNEntry(entry) {
+  if (isIGNBackgroundPurpose(entry.purpose)) {
+    ignBackgroundQueue.push(entry);
+    return;
+  }
+  ignForegroundQueue.push(entry);
+}
+
+function popNextIGNEntry() {
+  if (ignForegroundQueue.length > 0) {
+    return { entry: ignForegroundQueue.pop(), background: false };
+  }
+  if (ignBackgroundQueue.length === 0) return null;
+  if (activeIGNBackground >= currentIGNBackgroundConcurrency()) return null;
+  return { entry: ignBackgroundQueue.pop(), background: true };
+}
+
+function pruneOldestIGNEntry() {
+  if (totalIGNQueueLength() === 0) return null;
+
+  let targetQueue = null;
+  let targetIdx = -1;
+  let oldestTs = Infinity;
+
+  const considerQueue = (queue) => {
+    for (let i = 0; i < queue.length; i++) {
+      if (queue[i].ts < oldestTs) {
+        oldestTs = queue[i].ts;
+        targetIdx = i;
+        targetQueue = queue;
+      }
+    }
+  };
+
+  // Prefer pruning background work first when timestamps are comparable,
+  // but still honour global oldest-age semantics when foreground really is stale.
+  considerQueue(ignBackgroundQueue);
+  considerQueue(ignForegroundQueue);
+  if (!targetQueue || targetIdx < 0) return null;
+  return targetQueue.splice(targetIdx, 1)[0] || null;
+}
 
 function evict(cache, max) {
   if (cache.size <= max) return;
@@ -30,39 +87,40 @@ function evict(cache, max) {
 
 function scheduleIGN(fn, purpose) {
   return new Promise((resolve, reject) => {
-    ignQueue.push({ fn, resolve, reject, ts: performance.now(), purpose: purpose || null });
+    pushIGNEntry({ fn, resolve, reject, ts: performance.now(), purpose: purpose || null });
     // When the queue overflows, drop the OLDEST entries by enqueue timestamp
     // (tiles requested during an earlier pan gesture) instead of the head.
     // Ensures the current viewport survives rapid panning.
     let pruned = 0;
-    while (ignQueue.length > IGN_QUEUE_MAX) {
-      let oldestIdx = 0;
-      let oldestTs = ignQueue[0].ts;
-      for (let i = 1; i < ignQueue.length; i++) {
-        if (ignQueue[i].ts < oldestTs) { oldestTs = ignQueue[i].ts; oldestIdx = i; }
-      }
-      const stale = ignQueue.splice(oldestIdx, 1)[0];
+    while (totalIGNQueueLength() > IGN_QUEUE_MAX) {
+      const stale = pruneOldestIGNEntry();
+      if (!stale) break;
       stale.resolve(PRUNED_SENTINEL);
       pruned++;
     }
     if (pruned > 0) {
       ignPrunedTotal += pruned;
-      if (DEBUG) console.warn(`[sw-dem][queue] pruned ${pruned} stale (queue=${ignQueue.length}, lifetime=${ignPrunedTotal})`);
+      if (DEBUG) console.warn(`[sw-dem][queue] pruned ${pruned} stale (queue=${totalIGNQueueLength()}, lifetime=${ignPrunedTotal})`);
     }
     drainIGN();
   });
 }
 
 function drainIGN() {
-  while (activeIGN < IGN_CONCURRENCY && ignQueue.length > 0) {
+  while (activeIGN < IGN_CONCURRENCY && totalIGNQueueLength() > 0) {
     // LIFO: pop newest item — prioritise current-viewport tiles over stale ones
-    const { fn, resolve, reject } = ignQueue.pop();
+    const next = popNextIGNEntry();
+    if (!next?.entry) break;
+    const { entry, background } = next;
+    const { fn, resolve, reject } = entry;
     activeIGN++;
+    if (background) activeIGNBackground++;
     fn()
       .then(resolve)
       .catch(reject)
       .finally(() => {
         activeIGN--;
+        if (background) activeIGNBackground = Math.max(0, activeIGNBackground - 1);
         drainIGN();
       });
   }
@@ -81,12 +139,16 @@ function drainIGN() {
 //
 // Returns the number of pruned entries for diagnostics.
 function flushIGNQueue() {
-  if (ignQueue.length === 0) return 0;
-  const pruned = ignQueue.length;
+  const pruned = totalIGNQueueLength();
+  if (pruned === 0) return 0;
   // Resolve in reverse insertion order so promise chains unwind LIFO
   // (matches the normal scheduler popping order).
-  while (ignQueue.length > 0) {
-    const stale = ignQueue.pop();
+  while (ignForegroundQueue.length > 0) {
+    const stale = ignForegroundQueue.pop();
+    stale.resolve(PRUNED_SENTINEL);
+  }
+  while (ignBackgroundQueue.length > 0) {
+    const stale = ignBackgroundQueue.pop();
     stale.resolve(PRUNED_SENTINEL);
   }
   ignPrunedTotal += pruned;
@@ -111,6 +173,7 @@ const ignActiveControllersByPurpose = new Map();
 
 function ignFetchInit(extra) {
   const purpose = extra && typeof extra === 'object' ? extra.purpose || null : null;
+  const priority = isIGNBackgroundPurpose(purpose) ? 'low' : 'high';
   // Strip the SW-internal `purpose` field before forwarding to fetch init —
   // it isn't a valid RequestInit option and would be ignored, but keeping it
   // out of the spread avoids future linter/typing surprises.
@@ -139,7 +202,7 @@ function ignFetchInit(extra) {
   return {
     controller,
     cleanup,
-    init: { signal: controller.signal, priority: 'high', ...fetchExtra },
+    init: { signal: controller.signal, priority, ...fetchExtra },
   };
 }
 
@@ -164,11 +227,13 @@ function cancelInFlightIGN() {
 // drainIGN — pruned items resolve with PRUNED_SENTINEL so their callers
 // see a normal `null` return.
 function flushIGNQueueByPurpose(purpose) {
-  if (!purpose || ignQueue.length === 0) return 0;
+  if (!purpose || totalIGNQueueLength() === 0) return 0;
+  const targetQueue = isIGNBackgroundPurpose(purpose) ? ignBackgroundQueue : ignForegroundQueue;
+  if (targetQueue.length === 0) return 0;
   let pruned = 0;
-  for (let i = ignQueue.length - 1; i >= 0; i--) {
-    if (ignQueue[i].purpose === purpose) {
-      const stale = ignQueue.splice(i, 1)[0];
+  for (let i = targetQueue.length - 1; i >= 0; i--) {
+    if (targetQueue[i].purpose === purpose) {
+      const stale = targetQueue.splice(i, 1)[0];
       stale.resolve(PRUNED_SENTINEL);
       pruned++;
     }
