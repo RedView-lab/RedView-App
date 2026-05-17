@@ -217,14 +217,22 @@ export function useMap(
       setIsLoaded(true);
     };
     let revealFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const revealSignals = ['style.load', 'styledata', 'idle'] as const;
     const armInitialReveal = () => {
-      map.once('load', revealMap);
-      map.once('idle', revealMap);
-      // Hard fallback: if neither `load` nor `idle` fired within 8s, the
-      // map is almost certainly already rendering tiles (Mapbox keeps
-      // those events suppressed when sprite/image errors loop). Reveal
-      // anyway so the user isn't stuck behind the overlay forever.
+      for (const eventName of revealSignals) map.on(eventName, revealMap);
+      // Hard fallback: if no usable style signal reaches us within 8s,
+      // the map is almost certainly already rendering tiles (Mapbox can
+      // suppress `style.load` / `idle` under sprite-image rejection
+      // storms). Reveal anyway so the user isn't stuck behind the
+      // overlay forever.
       revealFallbackTimer = setTimeout(revealMap, 8000);
+    };
+    const disarmInitialReveal = () => {
+      for (const eventName of revealSignals) map.off(eventName, revealMap);
+      if (revealFallbackTimer) {
+        clearTimeout(revealFallbackTimer);
+        revealFallbackTimer = null;
+      }
     };
 
     // Single-shot bootstrap. The bootstrap promise now waits on real
@@ -310,6 +318,7 @@ export function useMap(
         styleInput = basemapConfig.styleUrl;
       }
       lifecycle.prepareStyleChange('Fond de carte');
+      armInitialReveal();
       try {
         map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
           diff: false,
@@ -327,7 +336,6 @@ export function useMap(
         return;
       }
 
-      armInitialReveal();
       void attemptInitBootstrap();
     };
 
@@ -381,10 +389,8 @@ export function useMap(
 
     return () => {
       cancelled = true;
-      if (revealFallbackTimer) clearTimeout(revealFallbackTimer);
+      disarmInitialReveal();
       if (stuckShellTimer) clearTimeout(stuckShellTimer);
-      map.off('load', revealMap);
-      map.off('idle', revealMap);
       lifecycle.cleanup();
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {
@@ -435,6 +441,18 @@ export function useMap(
       setIsLoaded(true);
     };
     let switchFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const switchRevealSignals = ['style.load', 'styledata', 'idle'] as const;
+    const armSwitchReveal = () => {
+      for (const eventName of switchRevealSignals) map.on(eventName, revealAfterSwitch);
+      switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
+    };
+    const disarmSwitchReveal = () => {
+      for (const eventName of switchRevealSignals) map.off(eventName, revealAfterSwitch);
+      if (switchFallbackTimer) {
+        clearTimeout(switchFallbackTimer);
+        switchFallbackTimer = null;
+      }
+    };
 
     // Single-shot bootstrap. The bootstrap promise itself now waits on
     // real Mapbox readiness signals (style.load / styledata-with-content
@@ -483,6 +501,7 @@ export function useMap(
       activeBasemapConfigRef.current = basemapConfig;
       setIsLoaded(false);
       prepareStyleChange('Fond de carte');
+      armSwitchReveal();
 
       try {
         map.setStyle(styleInput as Parameters<typeof map.setStyle>[0], {
@@ -503,13 +522,6 @@ export function useMap(
         return;
       }
 
-      // Reveal as soon as the new style yields any rendered output, with
-      // a hard 8s fallback. Same rationale as the initial-mount path: the
-      // bootstrap promise can stall under sprite/image error storms.
-      map.once('load', revealAfterSwitch);
-      map.once('idle', revealAfterSwitch);
-      switchFallbackTimer = setTimeout(revealAfterSwitch, 8000);
-
       void attemptBootstrap();
     };
 
@@ -517,9 +529,7 @@ export function useMap(
 
     return () => {
       switchCancelled = true;
-      if (switchFallbackTimer) clearTimeout(switchFallbackTimer);
-      map.off('load', revealAfterSwitch);
-      map.off('idle', revealAfterSwitch);
+      disarmSwitchReveal();
     };
   }, [basemapConfig]);
 
