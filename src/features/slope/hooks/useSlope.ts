@@ -244,6 +244,7 @@ export function useSlope(
   // sources/layers on style swap). NOT in sync with `enabled` — we keep
   // the layer mounted across enable/disable toggles and use visibility.
   const mountedRef = useRef(false);
+  const visibilityDeferredRef = useRef(enabled);
   // Last source key we mounted with — used to detect real data-affecting
   // changes (DEM profile / sampling factor).
   const mountedSourceKeyRef = useRef<string | null>(null);
@@ -266,7 +267,8 @@ export function useSlope(
     if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
-  }, [map, isMapLoaded, enabled]);
+    setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
+  }, [map, isMapLoaded, enabled, sourceKey]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled || mountedRef.current) return;
@@ -285,7 +287,7 @@ export function useSlope(
       if (!mounted) return;
       mountedRef.current = true;
       mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
-      setSlopeVisibility(map, true);
+      setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
       map.triggerRepaint();
     };
 
@@ -306,6 +308,7 @@ export function useSlope(
     if (mountedSourceKeyRef.current === sourceKey) return;
     removeSlopeLayer(map);
     mountedRef.current = false;
+    visibilityDeferredRef.current = enabledRef.current;
     const mounted = addSlopeLayer(
       map,
       opacityRef.current,
@@ -317,14 +320,51 @@ export function useSlope(
     if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = sourceKey;
-    // Re-apply visibility in case the layer is currently disabled.
-    setSlopeVisibility(map, enabledRef.current);
+    setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
   }, [map, isMapLoaded, sourceKey, sourceOptions]);
 
   // ── 2. Visibility flip → instant on rapid toggles ────────────────────
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
-    setSlopeVisibility(map, enabled);
+    setSlopeVisibility(map, enabled && !visibilityDeferredRef.current);
+  }, [map, isMapLoaded, enabled]);
+
+  // ── 2a. Terrain/texture first, slope second ─────────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    if (!enabled) {
+      visibilityDeferredRef.current = false;
+      if (mountedRef.current) setSlopeVisibility(map, false);
+      return;
+    }
+
+    const suppressSlope = () => {
+      if (!enabledRef.current) return;
+      visibilityDeferredRef.current = true;
+      if (mountedRef.current) setSlopeVisibility(map, false);
+      cancelSlopeWorkerPressure();
+    };
+
+    const resumeSlope = () => {
+      if (!enabledRef.current) return;
+      if (!canStartSlopeWork(map)) return;
+      visibilityDeferredRef.current = false;
+      if (mountedRef.current) {
+        setSlopeVisibility(map, true);
+        map.triggerRepaint();
+      }
+    };
+
+    suppressSlope();
+    map.on('movestart', suppressSlope);
+    map.on('zoomstart', suppressSlope);
+    map.on('idle', resumeSlope);
+    return () => {
+      map.off('movestart', suppressSlope);
+      map.off('zoomstart', suppressSlope);
+      map.off('idle', resumeSlope);
+    };
   }, [map, isMapLoaded, enabled]);
 
   // ── 2b. Disable cleanup for the heavy 1 m terrain slope pipeline ─────
@@ -334,6 +374,7 @@ export function useSlope(
     if (!map || !isMapLoaded) return;
     if (enabled || !wasEnabled) return;
 
+    visibilityDeferredRef.current = false;
     cancelSlopeWorkerPressure();
 
     // The 1 m terrain profile fans out through the slow RGE ALTI/DEM path.
@@ -395,6 +436,7 @@ export function useSlope(
       // Defer to the next tick so style.load completes before we touch it.
       setTimeout(() => {
         if (!enabledRef.current) return;
+        visibilityDeferredRef.current = true;
         const mounted = addSlopeLayer(
           map,
           opacityRef.current,
@@ -406,6 +448,7 @@ export function useSlope(
         if (!mounted) return;
         mountedRef.current = true;
         mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
+        setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
       }, 0);
     };
 
