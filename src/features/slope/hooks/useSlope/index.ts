@@ -1,0 +1,1 @@
+export { useSlope } from './hook';

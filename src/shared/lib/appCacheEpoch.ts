@@ -1,4 +1,4 @@
-const APP_CACHE_FIX_EPOCH = '2026-05-17-slope-shared-border-perf-2';
+const APP_CACHE_FIX_EPOCH = '2026-05-17-slope-visible-priority-1';
 
 export const APP_BUILD_ID = __REDVIEW_BUILD_ID__;
 export const APP_CACHE_EPOCH = `${__REDVIEW_BUILD_ID__}:${APP_CACHE_FIX_EPOCH}`;

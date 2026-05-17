@@ -226,6 +226,14 @@ async function fetchWithRetry(
 
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
     const contentRange = parseContentRange(response.headers.get('content-range'));
+    const effectiveContentRange = contentRange
+      ?? (response.status === 206 && requestedResumeBytes > 0 && contentLength > 0
+        ? {
+            start: requestedResumeBytes,
+            end: requestedResumeBytes + contentLength - 1,
+            total: requestedResumeBytes + contentLength,
+          }
+        : null);
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
 
@@ -233,14 +241,14 @@ async function fetchWithRetry(
     let bytesDownloaded = resumeState?.bytesDownloaded ?? 0;
     let totalBytes = resumeState?.totalBytes ?? 0;
 
-    if (response.status === 206 && contentRange) {
-      if (requestedResumeBytes > 0 && contentRange.start !== requestedResumeBytes) {
+    if (response.status === 206 && effectiveContentRange) {
+      if (requestedResumeBytes > 0 && effectiveContentRange.start !== requestedResumeBytes) {
         console.warn(
-          `[Download] Resume offset mismatch for ${url} (wanted ${requestedResumeBytes}, got ${contentRange.start}); restarting full download`,
+          `[Download] Resume offset mismatch for ${url} (wanted ${requestedResumeBytes}, got ${effectiveContentRange.start}); restarting full download`,
         );
         return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1);
       }
-      totalBytes = contentRange.total;
+      totalBytes = effectiveContentRange.total;
     } else {
       totalBytes = contentLength;
       if (requestedResumeBytes > 0) {
