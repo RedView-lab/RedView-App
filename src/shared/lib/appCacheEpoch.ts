@@ -1,5 +1,6 @@
 const APP_CACHE_FIX_EPOCH = '2026-05-17-cache-fixes-1';
 
+export const APP_BUILD_ID = __REDVIEW_BUILD_ID__;
 export const APP_CACHE_EPOCH = `${__REDVIEW_BUILD_ID__}:${APP_CACHE_FIX_EPOCH}`;
 export const APP_CACHE_EPOCH_STORAGE_KEY = 'redview:app-cache-epoch';
 
