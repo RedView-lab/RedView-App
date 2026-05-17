@@ -24,6 +24,7 @@ export class TerrainManager {
         source: this.sourceId,
         exaggeration: this.exaggeration,
       });
+      this.map.triggerRepaint();
       this.applied = true;
     } catch (error) {
       // setTerrain can throw during sprite storms, stale style graphs,

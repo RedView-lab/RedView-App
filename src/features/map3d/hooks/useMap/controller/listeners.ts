@@ -124,8 +124,12 @@ export function attachListeners(ctx: Ctx): void {
       if (isCancelled()) return;
       const managedSourceId = fns.getManagedTerrainSourceId();
       if (managedSourceId !== unifiedDEMSource.id) return;
-      if (fns.isUnifiedTerrainActive()) return;
-      console.warn('[map3d] styledata: unified-dem present but terrain unbound; re-attaching');
+      const terrainBound = fns.isUnifiedTerrainActive();
+      const terrainRenderable = fns.isManagedTerrainRenderable();
+      if (terrainBound && terrainRenderable) return;
+      console.warn(
+        `[map3d] styledata: unified-dem present but terrain ${terrainBound ? 'non-renderable' : 'unbound'}; re-attaching`,
+      );
       repairManagedTerrain();
     }, 0);
   };

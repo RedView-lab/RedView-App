@@ -54,7 +54,7 @@ function addSlopeLayer(
   categories: SlopeCategory[],
   hiddenIds: Set<string>,
   sourceOptions: SlopeTileSourceOptions,
-) {
+): boolean {
   try {
     if (!map.getSource(SLOPE_SOURCE_ID)) {
       map.addSource(SLOPE_SOURCE_ID, buildSlopeTileSource(sourceOptions));
@@ -64,8 +64,9 @@ function addSlopeLayer(
       map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
     }
   } catch {
-    /* style may be transitioning — safe to ignore */
+    return false;
   }
+  return Boolean(map.getSource(SLOPE_SOURCE_ID) && map.getLayer(SLOPE_LAYER_ID));
 }
 
 function removeSlopeLayer(map: MapboxMap) {
@@ -210,7 +211,7 @@ export function useSlope(
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
     if (mountedRef.current) return;
-    addSlopeLayer(
+    const mounted = addSlopeLayer(
       map,
       opacityRef.current,
       colorModeRef.current,
@@ -218,8 +219,38 @@ export function useSlope(
       hiddenIdsRef.current,
       sourceOptionsRef.current,
     );
+    if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
+  }, [map, isMapLoaded, enabled]);
+
+  useEffect(() => {
+    if (!map || !isMapLoaded || !enabled || mountedRef.current) return;
+
+    const tryMount = () => {
+      if (mountedRef.current || !enabledRef.current) return;
+      const mounted = addSlopeLayer(
+        map,
+        opacityRef.current,
+        colorModeRef.current,
+        categoriesRef.current ?? [],
+        hiddenIdsRef.current,
+        sourceOptionsRef.current,
+      );
+      if (!mounted) return;
+      mountedRef.current = true;
+      mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
+      setSlopeVisibility(map, true);
+      map.triggerRepaint();
+    };
+
+    tryMount();
+    map.on('styledata', tryMount);
+    map.on('idle', tryMount);
+    return () => {
+      map.off('styledata', tryMount);
+      map.off('idle', tryMount);
+    };
   }, [map, isMapLoaded, enabled]);
 
   // ── 1b. Rebuild source on DEM-profile / sampling change ───────────────
@@ -228,7 +259,7 @@ export function useSlope(
     if (mountedSourceKeyRef.current === sourceKey) return;
     removeSlopeLayer(map);
     mountedRef.current = false;
-    addSlopeLayer(
+    const mounted = addSlopeLayer(
       map,
       opacityRef.current,
       colorModeRef.current,
@@ -236,6 +267,7 @@ export function useSlope(
       hiddenIdsRef.current,
       sourceOptions,
     );
+    if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = sourceKey;
     // Re-apply visibility in case the layer is currently disabled.
@@ -316,7 +348,7 @@ export function useSlope(
       // Defer to the next tick so style.load completes before we touch it.
       setTimeout(() => {
         if (!enabledRef.current) return;
-        addSlopeLayer(
+        const mounted = addSlopeLayer(
           map,
           opacityRef.current,
           colorModeRef.current,
@@ -324,6 +356,7 @@ export function useSlope(
           hiddenIdsRef.current,
           sourceOptionsRef.current,
         );
+        if (!mounted) return;
         mountedRef.current = true;
         mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
       }, 0);
