@@ -1,4 +1,4 @@
-import { unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import { swReady, swLateReady, awaitController } from '../serviceWorker';
 import {
@@ -413,6 +413,8 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     if (!swOk) {
       const LATE_SW_UPGRADE_WATCH_MS = 20000;
       const LATE_SW_UPGRADE_RETRY_MS = 750;
+      const FALLBACK_IMPORT_GUARD_WATCH_MS = 15000;
+      const FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
       const reason = swRegistered
         ? 'SW controller not yet claimed (install/activate race)'
         : 'SW unavailable';
@@ -434,6 +436,44 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         console.warn('[map3d] AWS fallback terrain did not attach cleanly');
         return false;
       }
+
+      const fallbackImportGuardTimers: ReturnType<typeof setTimeout>[] = [];
+      const fallbackImportGuardCleanup: (() => void)[] = [];
+      const fallbackImportGuardStartedAt = Date.now();
+      const verifyAndReapplyFallbackTerrain = (origin: string) => {
+        if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+        if (!map.getSource(awsFallbackDEMSource.id)) return;
+        if (fns.isManagedTerrainRenderable() && fns.getManagedTerrainSourceId() === awsFallbackDEMSource.id) return;
+        console.warn(`[map3d] fallback import-override guard (${origin}): terrain unbound, re-applying AWS fallback`);
+        fns.attachAwsFallbackTerrain();
+      };
+      for (const delay of [200, 600, 1500]) {
+        fallbackImportGuardTimers.push(setTimeout(() => verifyAndReapplyFallbackTerrain(`t+${delay}`), delay));
+      }
+      const fallbackPeriodicProbe = setInterval(() => {
+        if (isCancelled() || runId !== st.styleBootstrapRunId) {
+          clearInterval(fallbackPeriodicProbe);
+          return;
+        }
+        if (Date.now() - fallbackImportGuardStartedAt > FALLBACK_IMPORT_GUARD_WATCH_MS) {
+          clearInterval(fallbackPeriodicProbe);
+          return;
+        }
+        verifyAndReapplyFallbackTerrain('periodic');
+      }, FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS);
+      fallbackImportGuardCleanup.push(() => clearInterval(fallbackPeriodicProbe));
+      try {
+        const mapWithEvents = map as unknown as {
+          on?: (ev: string, fn: () => void) => void;
+          off?: (ev: string, fn: () => void) => void;
+        };
+        const onImportLoad = () => verifyAndReapplyFallbackTerrain('style.import.load');
+        const onLateStyleLoad = () => verifyAndReapplyFallbackTerrain('style.load');
+        mapWithEvents.on?.('style.import.load', onImportLoad);
+        mapWithEvents.on?.('style.load', onLateStyleLoad);
+        fallbackImportGuardCleanup.push(() => mapWithEvents.off?.('style.import.load', onImportLoad));
+        fallbackImportGuardCleanup.push(() => mapWithEvents.off?.('style.load', onLateStyleLoad));
+      } catch { /* event name may not exist on this Mapbox version */ }
 
       fns.reportStatus('loading', 80, 'Tuiles satellites');
       st.finishOnIdle = () => {
@@ -495,6 +535,10 @@ export function attachStyleBootstrap(ctx: Ctx): void {
       st.disposeStyleRecovery = () => {
         priorDispose?.();
         clearLateSwUpgradeTimer();
+        for (const timer of fallbackImportGuardTimers) clearTimeout(timer);
+        for (const cleanup of fallbackImportGuardCleanup) {
+          try { cleanup(); } catch { /* noop */ }
+        }
       };
 
       // ── Late-SW recovery ──────────────────────────────────────────
