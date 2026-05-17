@@ -413,6 +413,7 @@ export function attachStyleBootstrap(ctx: Ctx): void {
     if (!swOk) {
       const LATE_SW_UPGRADE_WATCH_MS = 20000;
       const LATE_SW_UPGRADE_RETRY_MS = 750;
+      const FORCE_HD_UPGRADE_MS = 7000;
       const FALLBACK_IMPORT_GUARD_WATCH_MS = 15000;
       const FALLBACK_IMPORT_GUARD_PROBE_INTERVAL_MS = 750;
       const reason = swRegistered
@@ -531,10 +532,33 @@ export function attachStyleBootstrap(ctx: Ctx): void {
         }
         void fns.bootstrapCurrentStyle();
       };
+      const forceHdUpgradeTimer = setTimeout(() => {
+        if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+        if (map.getSource(unifiedDEMSource.id)) return;
+
+        console.warn(
+          `[map3d] force-hd escalation: still on AWS fallback after ${FORCE_HD_UPGRADE_MS} ms — forcing SW upgrade check`,
+        );
+
+        void (async () => {
+          if (!navigator.serviceWorker?.controller) {
+            const claimed = await awaitController(2500);
+            if (!claimed || isCancelled() || runId !== st.styleBootstrapRunId) {
+              if (!fns.isManagedTerrainRenderable()) {
+                fns.attachAwsFallbackTerrain();
+              }
+              return;
+            }
+          }
+
+          await tryLateSwUpgrade('force-hd-escalation');
+        })();
+      }, FORCE_HD_UPGRADE_MS);
       const priorDispose = st.disposeStyleRecovery;
       st.disposeStyleRecovery = () => {
         priorDispose?.();
         clearLateSwUpgradeTimer();
+        clearTimeout(forceHdUpgradeTimer);
         for (const timer of fallbackImportGuardTimers) clearTimeout(timer);
         for (const cleanup of fallbackImportGuardCleanup) {
           try { cleanup(); } catch { /* noop */ }
