@@ -225,14 +225,18 @@ self.addEventListener('message', (e) => {
     const cancelled = cancelSlopeWork();
     // Free terrain-WMS IGN slots immediately so the basemap (default
     // DEM profile) doesn't have to wait up to IGN_FETCH_TIMEOUT_MS for
-    // the slope-driven backlog to drain. Safe today because the basemap
-    // is hard-coded to demProfile='default' and the 'slope-terrain'
-    // purpose tag is only ever set by getTerrainWmsTile, which is
-    // exclusive to the 1 m slope pipeline.
+    // the slope-driven backlog to drain. Both purpose tags are exclusive
+    // to the 1 m slope pipeline.
     let queuedTerrain = 0;
     let inflightTerrain = 0;
-    try { queuedTerrain = typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
-    try { inflightTerrain = typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-terrain') : 0; } catch { /* ignore */ }
+    try {
+      queuedTerrain += typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-visible') : 0;
+      queuedTerrain += typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-warm') : 0;
+    } catch { /* ignore */ }
+    try {
+      inflightTerrain += typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-visible') : 0;
+      inflightTerrain += typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-warm') : 0;
+    } catch { /* ignore */ }
     // Drop in-flight DEM dedup entries scoped to the terrain profile.
     // Those entries are consumed exclusively by the slope pipeline (the
     // basemap uses demProfile='default'), so once the user disables

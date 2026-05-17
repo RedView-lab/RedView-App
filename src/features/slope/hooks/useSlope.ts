@@ -329,7 +329,7 @@ export function useSlope(
     setSlopeVisibility(map, enabled && !visibilityDeferredRef.current);
   }, [map, isMapLoaded, enabled]);
 
-  // ── 2a. Terrain/texture first, slope second ─────────────────────────
+  // ── 2a. Initial terrain gate before showing slope ───────────────────
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
@@ -339,12 +339,8 @@ export function useSlope(
       return;
     }
 
-    const suppressSlope = () => {
-      if (!enabledRef.current) return;
-      visibilityDeferredRef.current = true;
-      if (mountedRef.current) setSlopeVisibility(map, false);
-      cancelSlopeWorkerPressure();
-    };
+    visibilityDeferredRef.current = true;
+    if (mountedRef.current) setSlopeVisibility(map, false);
 
     const resumeSlope = () => {
       if (!enabledRef.current) return;
@@ -357,17 +353,12 @@ export function useSlope(
       }
     };
 
-    suppressSlope();
-    map.on('movestart', suppressSlope);
-    map.on('zoomstart', suppressSlope);
     map.on('moveend', resumeSlope);
     map.on('zoomend', resumeSlope);
     map.on('sourcedata', resumeSlope);
     map.on('styledata', resumeSlope);
     map.on('idle', resumeSlope);
     return () => {
-      map.off('movestart', suppressSlope);
-      map.off('zoomstart', suppressSlope);
       map.off('moveend', resumeSlope);
       map.off('zoomend', resumeSlope);
       map.off('sourcedata', resumeSlope);

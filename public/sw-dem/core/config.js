@@ -116,7 +116,7 @@ const ORTHO_TILE_SIZE = 256;
 // (terrain-profile prefetch, decoded DEM LRU, deferred neighbour seam-heal,
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
-const MAP_CACHE_EPOCH = '2026-05-17-slope-shared-border-perf-2';
+const MAP_CACHE_EPOCH = '2026-05-17-slope-visible-priority-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

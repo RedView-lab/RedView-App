@@ -25,9 +25,18 @@
 // ---------------------------------------------------------------------------
 
 const SLOPE_NEIGHBOUR_WARM_DELAY_MS = 120;
+const SLOPE_REQUEST_PURPOSE_VISIBLE = 'slope-visible';
+const SLOPE_REQUEST_PURPOSE_WARM = 'slope-warm';
 
 function isSlopeWorkCancelled(generation) {
   return generation !== slopeCancelGeneration;
+}
+
+function buildSlopeDemRequest(z, x, y, demProfile, purpose) {
+  const params = new URLSearchParams();
+  if (demProfile === 'terrain') params.set('rv-dem-profile', 'terrain');
+  if (purpose) params.set('rv-purpose', purpose);
+  return new Request(`/dem-tiles/${z}/${x}/${y}${params.size ? `?${params.toString()}` : ''}`);
 }
 
 function slopeNeighbourWarmList(z, neighbours) {
@@ -57,7 +66,14 @@ function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours, g
       const nKey = buildDemCacheKey(z, nx, ny, demProfile);
       return demCache.match(nKey).then((existingDem) => {
         if (existingDem && existingDem.status === 200) return true;
-        return handleDemRequest(nKey, z, nx, ny, undefined, demProfile)
+        return handleDemRequest(
+          buildSlopeDemRequest(z, nx, ny, demProfile, SLOPE_REQUEST_PURPOSE_WARM),
+          z,
+          nx,
+          ny,
+          undefined,
+          demProfile,
+        )
           .then((resp) => Boolean(resp && resp.status === 200))
           .catch(() => false);
       }).catch(() => false);
@@ -112,7 +128,14 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     const demKey = buildDemCacheKey(z, x, y, demProfile);
     let demResponse = await demCache.match(demKey);
     if (!demResponse || demResponse.status !== 200) {
-      demResponse = await handleDemRequest(demKey, z, x, y, undefined, demProfile);
+      demResponse = await handleDemRequest(
+        buildSlopeDemRequest(z, x, y, demProfile, SLOPE_REQUEST_PURPOSE_VISIBLE),
+        z,
+        x,
+        y,
+        undefined,
+        demProfile,
+      );
     }
     if (isSlopeWorkCancelled(generation)) {
       return transparentTileResponse();

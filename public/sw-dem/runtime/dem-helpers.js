@@ -71,6 +71,14 @@ function resolveDemProfileFromRequest(request) {
   }
 }
 
+function resolveDemRequestPurposeFromRequest(request) {
+  try {
+    return new URL(request.url, self.location.origin).searchParams.get('rv-purpose') || null;
+  } catch {
+    return null;
+  }
+}
+
 function buildDemCacheKey(z, x, y, demProfile) {
   const profileQuery = demProfile === 'terrain' ? '?rv-dem-profile=terrain' : '';
   return new Request(`/dem-tiles/${z}/${x}/${y}${profileQuery}`);

@@ -96,7 +96,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       if (tileClass === 'outside') return;
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
-      const terrainRebuilder = () => buildIGNTerrainTile(z, x, y)
+      const terrainRebuilder = () => buildIGNTerrainTile(z, x, y, { purpose: 'slope-warm' })
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite'));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite'));

@@ -18,6 +18,7 @@
 
 async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   const t0 = performance.now();
+  const requestPurpose = resolveDemRequestPurposeFromRequest(_request);
   const inLiDARRiskRegion = isExpertFallbackRiskTile(z, x, y);
   const cache = await caches.open(CACHE_NAME);
   const cacheKey = buildDemCacheKey(z, x, y, demProfile);
@@ -318,7 +319,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
 
     // 3a. Verified terrain path for slope math.
     if (!pngBlob && tileTrulyTouchesFrance && useFranceTerrainOnly) {
-      const terrainResult = await buildIGNTerrainTile(z, x, y);
+      const terrainResult = await buildIGNTerrainTile(z, x, y, { purpose: requestPurpose });
       if (terrainResult?.elevations) {
         franceHadSomeData = true;
         await acquireComposite();

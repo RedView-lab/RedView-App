@@ -11,17 +11,15 @@ const ignForegroundQueue = [];
 const ignBackgroundQueue = [];
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
-// Purpose tagging — lets CANCEL_SLOPE_WORK abort ONLY the IGN fetches that
-// were spawned to satisfy a slope-tile request (purpose 'slope-terrain'),
-// without touching basemap-driven IGN fetches. Safe today because the
-// basemap is hard-coded to the 'default' DEM profile (see
-// useMap/controller/context.ts getActiveDemProfile) and the 'slope-terrain'
-// tag is only set inside getTerrainWmsTile / queued terrain WMS work — both
-// of which exist solely to feed the 1 m slope pipeline.
-const PURPOSE_SLOPE_TERRAIN = 'slope-terrain';
+// Purpose tagging — separates visible 1 m slope fetches from background
+// seam-heal / recache work so first-paint slope tiles do not wait behind
+// opportunistic warmups. Both tags remain slope-only, so cancellation can
+// abort them without touching basemap-driven IGN traffic.
+const PURPOSE_SLOPE_VISIBLE = 'slope-visible';
+const PURPOSE_SLOPE_WARM = 'slope-warm';
 
 function isIGNBackgroundPurpose(purpose) {
-  return purpose === PURPOSE_SLOPE_TERRAIN;
+  return purpose === PURPOSE_SLOPE_WARM;
 }
 
 function totalIGNQueueLength() {
@@ -545,7 +543,7 @@ function cacheTerrainWmsNull(key, errorType) {
   terrainWmsTileCache.set(key, { _null: true, ts: Date.now(), ttl, errorType });
 }
 
-async function getTerrainWmsTile(mercZ, mercX, mercY) {
+async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VISIBLE) {
   const supersample = terrainWmsSupersampleFactor(mercZ);
   const key = `wms/${mercZ}/${mercX}/${mercY}@${supersample}x`;
   const cached = getCachedTerrainWms(key);
@@ -558,7 +556,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
     if (cached2.hit) return cached2.data;
 
     const url = buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample);
-    const { controller, cleanup, init } = ignFetchInit({ purpose: PURPOSE_SLOPE_TERRAIN });
+    const { controller, cleanup, init } = ignFetchInit({ purpose });
     try {
       const res = await fetch(url, init);
       if (!res.ok) {
@@ -605,7 +603,7 @@ async function getTerrainWmsTile(mercZ, mercX, mercY) {
     } finally {
       cleanup();
     }
-  }, PURPOSE_SLOPE_TERRAIN).then((result) => {
+  }, purpose).then((result) => {
     if (result === PRUNED_SENTINEL) return null;
     return result;
   }).finally(() => {

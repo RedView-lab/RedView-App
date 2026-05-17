@@ -566,9 +566,10 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
 // `demProfile=terrain` mode. It returns a 256x256 BIL32 raster for the exact
 // Mercator tile bbox, avoiding the WMTS z14 clamp of the legacy HIGHRES path.
 // ---------------------------------------------------------------------------
-async function buildIGNTerrainTile(mercZ, mercX, mercY) {
+async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
   const t0 = performance.now();
-  const rawElevations = await getTerrainWmsTile(mercZ, mercX, mercY);
+  const terrainPurpose = options?.purpose;
+  const rawElevations = await getTerrainWmsTile(mercZ, mercX, mercY, terrainPurpose);
   if (!rawElevations || rawElevations.length !== DEM_TILE_SIZE * DEM_TILE_SIZE) {
     return null;
   }
