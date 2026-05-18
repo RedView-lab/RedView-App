@@ -175,9 +175,10 @@ function PaymentMethodTile({
   return (
     <button
       type="button"
-      className={`rvpb-billing-page__method-tile${selected ? ' rvpb-billing-page__method-tile--selected' : ''}`}
+      className={`rvpb-billing-page__method-tile rvpb-billing-page__method-tile--${method.replace('_', '-')}${selected ? ' rvpb-billing-page__method-tile--selected' : ''}`}
       onClick={() => onSelect(method)}
-      aria-pressed={selected}
+      role="radio"
+      aria-checked={selected}
     >
       <span className="rvpb-billing-page__method-radio" aria-hidden="true">
         <span className="rvpb-billing-page__method-radio-dot" />
