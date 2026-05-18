@@ -5,14 +5,14 @@ import {
   LANDING_URL,
   resolveActivePlanId,
   SUBSCRIPTION_PLANS,
-} from '../lib';
+} from '../../lib';
 import { SubscriptionPlanCard } from './SubscriptionPlanCard';
 import type {
   BillingContactPreference,
   PaymentMethodSummary,
   SubscriptionPlanId,
   SubscriptionState,
-} from '../types';
+} from '../../types';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 

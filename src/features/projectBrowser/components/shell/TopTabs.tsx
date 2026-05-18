@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-import type { OverlayTab } from '../types';
+import type { OverlayTab } from '../../types';
 
 type TopTabsProps = {
   activeTab: OverlayTab;

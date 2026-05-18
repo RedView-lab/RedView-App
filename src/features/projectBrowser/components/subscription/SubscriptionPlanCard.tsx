@@ -1,7 +1,7 @@
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-import { logBillingUi } from '../lib';
-import type { SubscriptionPlanId, SubscriptionPlan } from '../types';
+import { logBillingUi } from '../../lib';
+import type { SubscriptionPlanId, SubscriptionPlan } from '../../types';
 
 type SubscriptionPlanCardProps = {
   plan: SubscriptionPlan;

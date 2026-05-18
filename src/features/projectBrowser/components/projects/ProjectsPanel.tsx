@@ -10,7 +10,7 @@ import {
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
-import { buildFolderPathLabel, collectFolderDescendantIds } from '../lib';
+import { buildFolderPathLabel, collectFolderDescendantIds } from '../../lib';
 import { BrowserBreadcrumb } from './BrowserBreadcrumb';
 import { FolderCard } from './FolderCard';
 import { ProjectBrowserCardMenu } from './ProjectBrowserCardMenu';

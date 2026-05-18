@@ -12,9 +12,9 @@ import {
 } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
-import { ACCOUNT_COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '../../account/lib/options';
-import { logBillingUi, logBillingUiError } from '../../lib';
-import type { SubscriptionPlanId } from '../../types';
+import { ACCOUNT_COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '../../../account/lib/options';
+import { logBillingUi, logBillingUiError } from '../../../lib';
+import type { SubscriptionPlanId } from '../../../types';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
@@ -44,7 +44,7 @@ const stripeCardElementStyle = {
     fontSize: '16px',
     fontSmoothing: 'antialiased',
     '::placeholder': {
-      color: 'rgba(255, 255, 255, 0.48)',
+      color: 'rgba(255, 255, 255, 0)',
     },
     iconColor: 'rgba(255, 255, 255, 0.88)',
   },
@@ -147,6 +147,15 @@ function CardMethodIcon() {
   );
 }
 
+function MastercardPreviewIcon() {
+  return (
+    <span className="rvpb-billing-page__card-preview-brand" aria-hidden="true">
+      <span className="rvpb-billing-page__card-preview-brand-circle rvpb-billing-page__card-preview-brand-circle--left" />
+      <span className="rvpb-billing-page__card-preview-brand-circle rvpb-billing-page__card-preview-brand-circle--right" />
+    </span>
+  );
+}
+
 function ChevronDownIcon() {
   return (
     <svg viewBox="0 0 20 20" aria-hidden="true" className="rvpb-billing-page__chevron-svg">
@@ -223,6 +232,9 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
+  const [isCardNumberEmpty, setIsCardNumberEmpty] = useState(true);
+  const [isCardCvcEmpty, setIsCardCvcEmpty] = useState(true);
+  const [isCardExpiryEmpty, setIsCardExpiryEmpty] = useState(true);
   const paymentMethods: BillingPaymentMethod[] =
     flow.mode === 'subscription' ? ['card', 'amazon_pay'] : ['card'];
   const selectedCountryOption =
@@ -231,6 +243,9 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
   useEffect(() => {
     setSelectedMethod('card');
+    setIsCardNumberEmpty(true);
+    setIsCardCvcEmpty(true);
+    setIsCardExpiryEmpty(true);
   }, [flow.mode]);
 
   useEffect(() => {
@@ -442,13 +457,22 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       <span className="rvpb-billing-page__field-label">
                         Numéro de carte <span className="rvpb-billing-page__field-required">*</span>
                       </span>
-                      <span className="rvpb-billing-page__stripe-input">
-                        <CardNumberElement
-                          options={{
-                            showIcon: true,
-                            style: stripeCardElementStyle,
-                          }}
-                        />
+                      <span
+                        className={`rvpb-billing-page__stripe-shell${isCardNumberEmpty ? '' : ' rvpb-billing-page__stripe-shell--filled'}`}
+                      >
+                        <span className="rvpb-billing-page__stripe-input">
+                          <CardNumberElement
+                            onChange={(event) => setIsCardNumberEmpty(event.empty)}
+                            options={{
+                              showIcon: false,
+                              style: stripeCardElementStyle,
+                            }}
+                          />
+                        </span>
+                        <span className="rvpb-billing-page__stripe-preview rvpb-billing-page__stripe-preview--card" aria-hidden="true">
+                          <MastercardPreviewIcon />
+                          <span className="rvpb-billing-page__stripe-preview-text">1234 1234 1234 1234</span>
+                        </span>
                       </span>
                     </label>
 
@@ -456,12 +480,20 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       <span className="rvpb-billing-page__field-label">
                         CVV <span className="rvpb-billing-page__field-required">*</span>
                       </span>
-                      <span className="rvpb-billing-page__stripe-input">
-                        <CardCvcElement
-                          options={{
-                            style: stripeCardElementStyle,
-                          }}
-                        />
+                      <span
+                        className={`rvpb-billing-page__stripe-shell${isCardCvcEmpty ? '' : ' rvpb-billing-page__stripe-shell--filled'}`}
+                      >
+                        <span className="rvpb-billing-page__stripe-input">
+                          <CardCvcElement
+                            onChange={(event) => setIsCardCvcEmpty(event.empty)}
+                            options={{
+                              style: stripeCardElementStyle,
+                            }}
+                          />
+                        </span>
+                        <span className="rvpb-billing-page__stripe-preview" aria-hidden="true">
+                          <span className="rvpb-billing-page__stripe-preview-text">•••</span>
+                        </span>
                       </span>
                     </label>
                   </div>
@@ -486,12 +518,20 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       <span className="rvpb-billing-page__field-label">
                         Expiry <span className="rvpb-billing-page__field-required">*</span>
                       </span>
-                      <span className="rvpb-billing-page__stripe-input">
-                        <CardExpiryElement
-                          options={{
-                            style: stripeCardElementStyle,
-                          }}
-                        />
+                      <span
+                        className={`rvpb-billing-page__stripe-shell${isCardExpiryEmpty ? '' : ' rvpb-billing-page__stripe-shell--filled'}`}
+                      >
+                        <span className="rvpb-billing-page__stripe-input">
+                          <CardExpiryElement
+                            onChange={(event) => setIsCardExpiryEmpty(event.empty)}
+                            options={{
+                              style: stripeCardElementStyle,
+                            }}
+                          />
+                        </span>
+                        <span className="rvpb-billing-page__stripe-preview" aria-hidden="true">
+                          <span className="rvpb-billing-page__stripe-preview-text">06 / 2025</span>
+                        </span>
                       </span>
                     </label>
                   </div>
@@ -501,9 +541,6 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       Country <span className="rvpb-billing-page__field-required">*</span>
                     </span>
                     <span className="rvpb-billing-page__select-wrap">
-                      <span className="rvpb-billing-page__select-flag" aria-hidden="true">
-                        {flagEmojiFromCode(selectedCountryOption.flagCode)}
-                      </span>
                       <select
                         className="rvpb-billing-page__select-input"
                         value={countryCode}
@@ -517,6 +554,12 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                           </option>
                         ))}
                       </select>
+                      <span className="rvpb-billing-page__select-display" aria-hidden="true">
+                        <span className="rvpb-billing-page__select-flag">
+                          {flagEmojiFromCode(selectedCountryOption.flagCode)}
+                        </span>
+                        <span className="rvpb-billing-page__select-label">{selectedCountryOption.label}</span>
+                      </span>
                       <span className="rvpb-billing-page__chevron" aria-hidden="true">
                         <ChevronDownIcon />
                       </span>

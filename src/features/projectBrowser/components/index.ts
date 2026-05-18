@@ -3,10 +3,7 @@ export type {
   BillingModalCompletion,
   BillingModalState,
 } from '../billing/components/BillingActionModal';
-export { PlaceholderPanel } from './PlaceholderPanel';
-export { ProjectBrowserOverlay } from './ProjectBrowserOverlay';
-export { ProjectCard } from './ProjectCard';
-export { ProjectsPanel } from './ProjectsPanel';
-export { SubscriptionPanel } from './SubscriptionPanel';
-export { SubscriptionPlanCard } from './SubscriptionPlanCard';
-export { TopTabs } from './TopTabs';
+export { PlaceholderPanel } from './shared';
+export { ProjectBrowserOverlay, TopTabs } from './shell';
+export { ProjectCard, ProjectsPanel } from './projects';
+export { SubscriptionPanel, SubscriptionPlanCard } from './subscription';

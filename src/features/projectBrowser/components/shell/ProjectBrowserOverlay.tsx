@@ -10,23 +10,23 @@ import {
   loadAccountProfile,
   signOutAccount,
   type AccountProfile,
-} from '../account';
-import { SettingsPanel } from '../settings';
-import { ProjectsPanel } from './ProjectsPanel';
+} from '../../account';
+import { SettingsPanel } from '../../settings';
+import { ProjectsPanel } from '../projects';
 import {
   BillingActionModal,
   type BillingModalCompletion,
   type BillingModalState,
-} from '../billing/components/BillingActionModal';
-import { logBillingUi, logBillingUiError } from '../lib';
-import { SubscriptionPanel } from './SubscriptionPanel';
+} from '../../billing/components/BillingActionModal';
+import { logBillingUi, logBillingUiError } from '../../lib';
+import { SubscriptionPanel } from '../subscription';
 import {
   accountTierLabel,
   hasPaidSubscription,
   readBillingContactPreference,
   resolveActivePlanId,
   writeBillingContactPreference,
-} from '../lib';
+} from '../../lib';
 import {
   applyPaymentMethodSetup,
   cancelManagedSubscription,
@@ -38,7 +38,7 @@ import {
   resumeManagedSubscription,
   syncManagedSubscription,
   type BillingOverviewResponse,
-} from '../lib';
+} from '../../lib';
 import { TopTabs } from './TopTabs';
 import type {
   BillingContactPreference,
@@ -47,10 +47,10 @@ import type {
   OverlayTab,
   SubscriptionPlanId,
   SubscriptionState,
-} from '../types';
-import { useProjectBrowserProjects } from '../hooks/useProjectBrowserProjects';
+} from '../../types';
+import { useProjectBrowserProjects } from '../../hooks/useProjectBrowserProjects';
 
-import '../styles/index.css';
+import '../../styles/index.css';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 

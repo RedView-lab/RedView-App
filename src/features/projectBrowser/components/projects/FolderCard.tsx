@@ -8,7 +8,7 @@ import {
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectFolderSummary } from '@/shared/utils/projects';
 
-import { formatSavedAt, formatSize, privacyLabel } from '../lib';
+import { formatSavedAt, formatSize, privacyLabel } from '../../lib';
 
 type FolderCardProps = {
   folder: ProjectFolderSummary;

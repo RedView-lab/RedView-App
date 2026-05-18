@@ -1,6 +1,6 @@
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 
-import { LANDING_URL } from '../lib';
+import { LANDING_URL } from '../../lib';
 
 type PlaceholderPanelProps = {
   title: string;
