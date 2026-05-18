@@ -1,19 +1,24 @@
+body.rvpb-billing-page-open {
+  overflow: hidden;
+}
+
 .rvpb-billing-page {
   position: fixed;
   inset: 0;
-  z-index: 120;
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
+  z-index: 160;
   overflow-y: auto;
-  padding: 80px 40px 48px;
-  background: rgba(0, 0, 0, 0.92);
-  backdrop-filter: blur(18px);
   color: #fff;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%),
+    #000;
 }
 
 .rvpb-billing-page__chrome {
-  width: min(100%, 480px);
+  min-height: 100dvh;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 80px 80px;
   display: flex;
   flex-direction: column;
   color: #fff;
@@ -21,7 +26,9 @@
 }
 
 .rvpb-billing-page__header {
-  display: none;
+  display: flex;
+  align-items: center;
+  min-height: 72px;
 }
 
 .rvpb-billing-page__brand {
@@ -31,18 +38,19 @@
 
 .rvpb-billing-page__brand-image {
   display: block;
-  width: clamp(102px, 9vw, 125px);
+  width: 125px;
   height: auto;
 }
 
 .rvpb-billing-page__main {
-  width: 100%;
-  margin: 0;
-  padding: 0;
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 80px 32px 0;
 }
 
 .rvpb-billing-page__content {
-  width: 100%;
+  width: min(100%, 480px);
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -50,14 +58,14 @@
 }
 
 .rvpb-billing-page__content--compact {
-  min-width: 0;
+  justify-content: center;
 }
 
 .rvpb-billing-page__intro {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  text-align: left;
+  text-align: center;
 }
 
 .rvpb-billing-page__intro h2 {
@@ -67,12 +75,11 @@
   line-height: 38px;
   font-weight: 600;
   letter-spacing: 0;
-  text-align: left;
 }
 
 .rvpb-billing-page__intro p {
   margin: 0;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.92);
   font-size: 15px;
   line-height: 20px;
 }
@@ -83,11 +90,12 @@
   gap: 2px;
   color: #fff;
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 20px;
   font-weight: 600;
 }
 
-.rvpb-billing-page__section-label-mark {
+.rvpb-billing-page__section-label-mark,
+.rvpb-billing-page__field-required {
   color: #7f56d9;
 }
 
@@ -98,7 +106,7 @@
 .rvpb-billing-page__form {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
 }
 
 .rvpb-billing-page__method-group {
@@ -110,37 +118,38 @@
   gap: 14px;
 }
 
-.rvpb-billing-page__method-group legend {
+.rvpb-billing-page__method-group legend,
+.rvpb-billing-page__field-label {
   margin: 0;
   padding: 0;
   color: #fff;
   font-size: 15px;
-  line-height: 1.4;
+  line-height: 20px;
   font-weight: 600;
 }
 
 .rvpb-billing-page__method-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
 }
 
 .rvpb-billing-page__method-tile {
   appearance: none;
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.04);
   backdrop-filter: blur(60px);
-  border-radius: 8px;
-  min-height: 92px;
-  padding: 12px 16px;
   display: grid;
-  grid-template-columns: 16px 1fr;
-  grid-template-rows: auto 1fr;
-  column-gap: 8px;
-  row-gap: 8px;
-  cursor: pointer;
+  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 8px;
+  align-items: start;
   color: #fff;
   text-align: left;
+  cursor: pointer;
   transition:
     border-color 120ms ease,
     background-color 120ms ease,
@@ -148,23 +157,24 @@
 }
 
 .rvpb-billing-page__method-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
   border-color: rgba(255, 255, 255, 0.28);
 }
 
 .rvpb-billing-page__method-tile--selected {
   border-color: #890000;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(137, 0, 0, 0.2);
 }
 
 .rvpb-billing-page__method-radio {
   width: 16px;
   height: 16px;
+  margin-top: 2px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.92);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-top: 2px;
 }
 
 .rvpb-billing-page__method-radio-dot {
@@ -174,11 +184,12 @@
   background: transparent;
 }
 
-.rvpb-billing-page__method-tile--selected .rvpb-billing-page__method-radio-dot {
-  background: transparent;
+.rvpb-billing-page__method-tile--selected .rvpb-billing-page__method-radio {
+  border-color: #fff;
 }
 
 .rvpb-billing-page__method-title {
+  min-width: 0;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
@@ -194,19 +205,17 @@
   height: 40px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  color: #fff;
 }
 
 .rvpb-billing-page__method-icon--amazon {
   background: #fff;
   color: #1f242f;
-  font-size: 16px;
-  font-weight: 600;
-  line-height: 1;
 }
 
-.rvpb-billing-page__method-tile--card .rvpb-billing-page__method-icon {
-  background: rgba(255, 255, 255, 0.08);
+.rvpb-billing-page__method-icon--klarna {
+  background: #ffb3c7;
+  color: #1d1116;
 }
 
 .rvpb-billing-page__method-icon-svg {
@@ -234,6 +243,13 @@
   background: #ff9900;
 }
 
+.rvpb-billing-page__klarna-wordmark {
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
 .rvpb-billing-page__custom-card-fields {
   display: flex;
   flex-direction: column;
@@ -255,17 +271,6 @@
 
 .rvpb-billing-page__field--full {
   width: 100%;
-}
-
-.rvpb-billing-page__field-label {
-  color: #fff;
-  font-size: 15px;
-  line-height: 1.4;
-  font-weight: 600;
-}
-
-.rvpb-billing-page__field-required {
-  color: #7f56d9;
 }
 
 .rvpb-billing-page__stripe-input,
@@ -308,8 +313,8 @@
 .rvpb-billing-page__select-input:focus,
 .rvpb-billing-page__stripe-input:focus-within,
 .rvpb-billing-page__select-wrap:focus-within {
-  box-shadow: 0 0 0 1px rgba(137, 0, 0, 0.65);
   border-color: rgba(137, 0, 0, 0.9);
+  box-shadow: 0 0 0 1px rgba(137, 0, 0, 0.65);
 }
 
 .rvpb-billing-page__select-wrap {
@@ -319,6 +324,12 @@
   gap: 8px;
   overflow: hidden;
   padding: 0 12px;
+}
+
+.rvpb-billing-page__select-flag {
+  flex: 0 0 auto;
+  font-size: 16px;
+  line-height: 1;
 }
 
 .rvpb-billing-page__select-input {
@@ -344,7 +355,8 @@
 .rvpb-billing-page__wallet-panel .Block,
 .rvpb-billing-page__wallet-panel .Input,
 .rvpb-billing-page__wallet-panel .PickerItem,
-.rvpb-billing-page__wallet-panel .Dropdown {
+.rvpb-billing-page__wallet-panel .Dropdown,
+.rvpb-billing-page__wallet-panel .Tab {
   border-radius: 8px;
 }
 
@@ -378,17 +390,6 @@
   border-color: rgba(255, 255, 255, 0.28);
 }
 
-.rvpb-billing-page__method-group .Block {
-  border-radius: 8px;
-}
-
-.rvpb-billing-page__method-group .Input,
-.rvpb-billing-page__method-group .Block,
-.rvpb-billing-page__method-group .PickerItem,
-.rvpb-billing-page__method-group .Dropdown {
-  border-radius: 8px;
-}
-
 .rvpb-billing-page__method-group .Label {
   margin-bottom: 6px;
 }
@@ -413,14 +414,15 @@
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
+  padding-top: 8px;
 }
 
 .rvpb-billing-page__button {
   appearance: none;
-  border: 0;
-  border-radius: 8px;
   min-height: 41px;
   padding: 10px 14px;
+  border: 0;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -460,24 +462,33 @@
   background: #a10000;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 900px) {
   .rvpb-billing-page__chrome {
-    width: 100%;
+    padding: 24px 24px 40px;
   }
 
-  .rvpb-billing-page {
+  .rvpb-billing-page__main {
+    padding: 48px 0 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .rvpb-billing-page__chrome {
     padding: 24px 16px 32px;
+  }
+
+  .rvpb-billing-page__main {
+    padding-top: 36px;
   }
 
   .rvpb-billing-page__content {
     width: 100%;
-    min-width: 0;
     gap: 28px;
   }
 
   .rvpb-billing-page__method-grid,
   .rvpb-billing-page__field-row {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr !important;
   }
 
   .rvpb-billing-page__method-tile {

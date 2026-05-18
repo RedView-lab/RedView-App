@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import {
   CardCvcElement,
@@ -31,7 +32,7 @@ export type BillingModalCompletion =
   | { mode: 'subscription'; subscriptionId: string }
   | { mode: 'payment-method'; setupIntentId: string };
 
-type BillingPaymentMethod = 'card' | 'amazon_pay';
+type BillingPaymentMethod = 'card' | 'amazon_pay' | 'klarna';
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
@@ -161,6 +162,10 @@ function ChevronDownIcon() {
   );
 }
 
+function KlarnaMethodIcon() {
+  return <span className="rvpb-billing-page__klarna-wordmark">K</span>;
+}
+
 function PaymentMethodTile({
   method,
   selected,
@@ -170,7 +175,8 @@ function PaymentMethodTile({
   selected: boolean;
   onSelect: (method: BillingPaymentMethod) => void;
 }) {
-  const title = method === 'card' ? 'Carte Bancaire' : 'Amazon Pay';
+  const title =
+    method === 'card' ? 'Carte Bancaire' : method === 'amazon_pay' ? 'Amazon Pay' : 'Klarna';
 
   return (
     <button
@@ -185,10 +191,16 @@ function PaymentMethodTile({
       </span>
       <span className="rvpb-billing-page__method-title">{title}</span>
       <span
-        className={`rvpb-billing-page__method-icon${method === 'amazon_pay' ? ' rvpb-billing-page__method-icon--amazon' : ''}`}
+        className={`rvpb-billing-page__method-icon${method === 'amazon_pay' ? ' rvpb-billing-page__method-icon--amazon' : ''}${method === 'klarna' ? ' rvpb-billing-page__method-icon--klarna' : ''}`}
         aria-hidden="true"
       >
-        {method === 'card' ? <CardMethodIcon /> : <span className="rvpb-billing-page__amazon-pay-wordmark">pay</span>}
+        {method === 'card' ? (
+          <CardMethodIcon />
+        ) : method === 'amazon_pay' ? (
+          <span className="rvpb-billing-page__amazon-pay-wordmark">pay</span>
+        ) : (
+          <KlarnaMethodIcon />
+        )}
       </span>
     </button>
   );
@@ -214,14 +226,19 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paymentMethodLegendId = useId();
+  const paymentPageTitleId = useId();
   const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
+  const paymentMethods: BillingPaymentMethod[] =
+    flow.mode === 'subscription' ? ['card', 'amazon_pay', 'klarna'] : ['card'];
+  const selectedCountryOption =
+    ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode) ?? ACCOUNT_COUNTRY_OPTIONS[0];
+  const paymentMethodOrder =
+    selectedMethod === 'klarna' ? ['klarna', 'amazon_pay', 'card'] : ['amazon_pay', 'klarna', 'card'];
 
   useEffect(() => {
-    if (flow.mode === 'payment-method') {
-      setSelectedMethod('card');
-    }
+    setSelectedMethod('card');
   }, [flow.mode]);
 
   useEffect(() => {
@@ -259,7 +276,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
     });
 
     try {
-      if (selectedMethod === 'amazon_pay') {
+      if (selectedMethod !== 'card') {
         const submitResult = await elements.submit();
         if (submitResult.error) {
           throw new Error(submitResult.error.message);
@@ -384,7 +401,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   };
 
   return (
-    <div className="rvpb-billing-page" role="dialog" aria-modal="true" aria-label={flow.title}>
+    <section className="rvpb-billing-page" aria-labelledby={paymentPageTitleId}>
       <div className="rvpb-billing-page__chrome">
         <header className="rvpb-billing-page__header">
           <RedViewWordmark />
@@ -393,7 +410,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         <main className="rvpb-billing-page__main">
           <section className="rvpb-billing-page__content">
             <div className="rvpb-billing-page__intro">
-              <h2>{flow.title}</h2>
+              <h2 id={paymentPageTitleId}>{flow.title}</h2>
               <p>{flow.description}</p>
             </div>
 
@@ -406,19 +423,18 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
             <form className="rvpb-billing-page__form" onSubmit={handleSubmit}>
               <fieldset className="rvpb-billing-page__method-group" aria-labelledby={paymentMethodLegendId}>
                 <legend id={paymentMethodLegendId}>Votre mode de paiement :</legend>
-                <div className="rvpb-billing-page__method-grid">
-                  <PaymentMethodTile
-                    method="card"
-                    selected={selectedMethod === 'card'}
-                    onSelect={setSelectedMethod}
-                  />
-                  {flow.mode === 'subscription' ? (
+                <div
+                  className="rvpb-billing-page__method-grid"
+                  style={{ gridTemplateColumns: `repeat(${paymentMethods.length}, minmax(0, 1fr))` }}
+                >
+                  {paymentMethods.map((method) => (
                     <PaymentMethodTile
-                      method="amazon_pay"
-                      selected={selectedMethod === 'amazon_pay'}
+                      key={method}
+                      method={method}
+                      selected={selectedMethod === method}
                       onSelect={setSelectedMethod}
                     />
-                  ) : null}
+                  ))}
                 </div>
               </fieldset>
 
@@ -493,6 +509,9 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       Country <span className="rvpb-billing-page__field-required">*</span>
                     </span>
                     <span className="rvpb-billing-page__select-wrap">
+                      <span className="rvpb-billing-page__select-flag" aria-hidden="true">
+                        {flagEmojiFromCode(selectedCountryOption.flagCode)}
+                      </span>
                       <select
                         className="rvpb-billing-page__select-input"
                         value={countryCode}
@@ -502,7 +521,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       >
                         {ACCOUNT_COUNTRY_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
-                            {`${flagEmojiFromCode(option.flagCode)} ${option.label}`}
+                            {option.label}
                           </option>
                         ))}
                       </select>
@@ -521,7 +540,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                         defaultCollapsed: false,
                       },
                       business: { name: 'RedView' },
-                      paymentMethodOrder: ['amazon_pay', 'card'],
+                      paymentMethodOrder,
                       terms: { card: 'never' },
                       fields: {
                         billingDetails: {
@@ -568,7 +587,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
           </section>
         </main>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -583,14 +602,23 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
     });
   }, [flow]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+
+    document.body.classList.add('rvpb-billing-page-open');
+    return () => {
+      document.body.classList.remove('rvpb-billing-page-open');
+    };
+  }, []);
+
   if (!stripePromise) {
     logBillingUi('billing-page-stripe-unavailable', {
       mode: flow.mode,
       hasPublishableKey: Boolean(publishableKey),
     });
 
-    return (
-      <div className="rvpb-billing-page" role="dialog" aria-modal="true" aria-label="Stripe indisponible">
+    const fallbackPage = (
+      <section className="rvpb-billing-page" aria-label="Stripe indisponible">
         <div className="rvpb-billing-page__chrome">
           <header className="rvpb-billing-page__header">
             <RedViewWordmark />
@@ -613,11 +641,13 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
             </section>
           </main>
         </div>
-      </div>
+      </section>
     );
+
+    return typeof document === 'undefined' ? fallbackPage : createPortal(fallbackPage, document.body);
   }
 
-  return (
+  const billingPage = (
     <Elements
       stripe={stripePromise}
       options={{
@@ -628,4 +658,6 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
       <BillingActionForm flow={flow} onClose={onClose} onComplete={onComplete} />
     </Elements>
   );
+
+  return typeof document === 'undefined' ? billingPage : createPortal(billingPage, document.body);
 }
