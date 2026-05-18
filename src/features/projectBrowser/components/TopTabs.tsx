@@ -17,22 +17,22 @@ const TABS: Array<{
   {
     id: 'projects',
     label: 'Projets',
-    icon: <SvgV2Icon name="route.svg" size={16} />,
+    icon: <SvgV2Icon name="route.svg" size={20} />,
   },
   {
     id: 'account',
     label: 'Compte',
-    icon: <SvgV2Icon name="user-circle.svg" size={16} />,
+    icon: <SvgV2Icon name="user-circle.svg" size={20} />,
   },
   {
     id: 'subscription',
     label: 'Abonnement',
-    icon: <SvgV2Icon name="credit-card-02.svg" size={16} />,
+    icon: <SvgV2Icon name="credit-card-02.svg" size={20} />,
   },
   {
     id: 'settings',
     label: 'Réglages',
-    icon: <SvgV2Icon name="settings-01.svg" size={16} />,
+    icon: <SvgV2Icon name="settings-01.svg" size={20} />,
   },
 ];
 

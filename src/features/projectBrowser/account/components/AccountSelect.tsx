@@ -172,7 +172,7 @@ export function AccountSelect({
         {renderValuePrefix ? renderValuePrefix(selectedOption) : null}
         <span className="rvpb-account-select-value">{selectedOption?.label ?? value}</span>
         <span className="rvpb-account-select-icon" aria-hidden="true">
-          <SvgV2Icon name="chevron-down.svg" size={16} />
+          <SvgV2Icon name="chevron-down.svg" size={20} />
         </span>
       </button>
 

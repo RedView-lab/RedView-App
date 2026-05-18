@@ -3,9 +3,9 @@
   inset: 0;
   z-index: 60;
   display: flex;
-  padding: 64px 160px;
+  padding: 40px 80px 80px;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.12) 100%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%),
     linear-gradient(90deg, #000 0%, #000 100%);
 }
 
@@ -60,6 +60,17 @@
   font-weight: 500;
 }
 
+.rvpb-user__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rvpb-user__meta-icon {
+  opacity: 0.4;
+}
+
 .rvpb-user__badge,
 .rvpb-card__badge {
   display: inline-flex;
@@ -70,9 +81,9 @@
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.24);
   color: #fff;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .rvpb-header__actions,
@@ -154,19 +165,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 7px 12px;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 24px;
   border-radius: 6px;
   background: transparent;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.33;
 }
 
 .rvpb-top-tabs__item.is-active,
 .rvpb-view-toggle__item.is-active {
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rvpb-toolbar {

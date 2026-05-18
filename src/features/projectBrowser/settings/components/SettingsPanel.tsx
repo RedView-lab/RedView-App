@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import { AccountSelect, type AccountSelectOption } from '../../account/components/AccountSelect';
 import { LANDING_URL } from '../../lib';
@@ -18,6 +18,8 @@ type SettingsSelectProps = {
   value: string;
   options: readonly AccountSelectOption[];
   onChange: (value: string) => void;
+  renderValuePrefix?: (option: AccountSelectOption | undefined) => ReactNode;
+  renderOptionPrefix?: (option: AccountSelectOption) => ReactNode;
 };
 
 type DisplayOption = {
@@ -32,10 +34,20 @@ const LANGUAGE_OPTIONS = ['English (US)', 'Français'] as const;
 const UNIT_OPTIONS = ['Mètre', 'Pieds'] as const;
 const MAP_PRESET_OPTIONS = ['Jour (nuit couché de soleil)', 'Nuit'] as const;
 
-const LANGUAGE_SELECT_OPTIONS: AccountSelectOption[] = LANGUAGE_OPTIONS.map((option) => ({
-  value: option,
-  label: option,
-}));
+const LANGUAGE_SELECT_OPTIONS: AccountSelectOption[] = [
+  {
+    value: 'English (US)',
+    label: 'English (US)',
+    flag: '/landing/svg/US.svg',
+    flagCode: 'US',
+  },
+  {
+    value: 'Français',
+    label: 'Français',
+    flag: '/landing/svg/FR.svg',
+    flagCode: 'FR',
+  },
+];
 
 const UNIT_SELECT_OPTIONS: AccountSelectOption[] = UNIT_OPTIONS.map((option) => ({
   value: option,
@@ -116,7 +128,29 @@ function PlayCircleIcon() {
   );
 }
 
-function SettingsSelect({ label, value, options, onChange }: SettingsSelectProps) {
+function renderFlag(option: AccountSelectOption | undefined) {
+  if (!option?.flag) return null;
+
+  return (
+    <span className="rvpb-account-flag" aria-hidden="true">
+      <img
+        className="rvpb-account-flag__image"
+        src={option.flag}
+        alt=""
+        loading="lazy"
+      />
+    </span>
+  );
+}
+
+function SettingsSelect({
+  label,
+  value,
+  options,
+  onChange,
+  renderValuePrefix,
+  renderOptionPrefix,
+}: SettingsSelectProps) {
   return (
     <div className="rvpb-settings-select">
       <AccountSelect
@@ -124,6 +158,8 @@ function SettingsSelect({ label, value, options, onChange }: SettingsSelectProps
         value={value}
         options={options}
         onChange={onChange}
+        renderValuePrefix={renderValuePrefix}
+        renderOptionPrefix={renderOptionPrefix}
       />
     </div>
   );
@@ -154,6 +190,8 @@ export function SettingsPanel() {
             value={settings.language}
             options={LANGUAGE_SELECT_OPTIONS}
             onChange={(language) => setSettings((current) => ({ ...current, language }))}
+            renderValuePrefix={renderFlag}
+            renderOptionPrefix={renderFlag}
           />
         </div>
       </div>

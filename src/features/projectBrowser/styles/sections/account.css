@@ -59,6 +59,8 @@
   border: 1px solid rgba(213, 215, 218, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font: inherit;
   box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
 }
 

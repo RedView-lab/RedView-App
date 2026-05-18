@@ -469,12 +469,15 @@ export function ProjectBrowserOverlay({
               <span className="rvpb-user__badge">
                 {accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}
               </span>
-              <span>{headerMetaLabel}</span>
+              <span className="rvpb-user__meta-item">
+                <SvgV2Icon className="rvpb-user__meta-icon" name="save-01.svg" size={14} />
+                <span>{headerMetaLabel}</span>
+              </span>
             </div>
           </div>
 
           <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
-            <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
+            <SvgV2Icon name="switch-horizontal-01.svg" size={20} />
             <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
           </button>
         </header>

@@ -74,8 +74,12 @@
 
 .rvpb-settings-select .rvpb-account-select-shell {
   min-height: 40px;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 24px;
+}
+
+.rvpb-settings-select .rvpb-account-select-value {
+  font-weight: 400;
 }
 
 .rvpb-settings-select .rvpb-account-select-menu {
@@ -107,6 +111,7 @@
   position: relative;
   display: block;
   width: 200px;
+  height: 132px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(213, 215, 218, 0.16);
@@ -131,18 +136,29 @@
 .rvpb-settings-display-card__preview img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
 }
 
 .rvpb-settings-display-card__marker {
   position: absolute;
   left: 8px;
   bottom: 8px;
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 999px;
   background: #7f56d9;
-  box-shadow: 0 0 0 4px rgba(127, 86, 217, 0.18);
+}
+
+.rvpb-settings-display-card__marker::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #fff;
 }
 
 .rvpb-settings-display-card__label {
@@ -191,24 +207,25 @@
 
 .rvpb-settings-feedback {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
 }
 
 .rvpb-settings-feedback__title-card,
 .rvpb-settings-feedback__body-card {
-  min-height: 204px;
-  padding: 18px 16px;
-  border-radius: 6px;
+  min-height: 384px;
+  padding: 12px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(60px);
 }
 
 .rvpb-settings-feedback__title-card h2 {
   margin: 0;
-  max-width: 9ch;
-  font-size: clamp(38px, 4.5vw, 56px);
-  font-weight: 500;
-  line-height: 0.95;
+  max-width: 440px;
+  font-size: 60px;
+  font-weight: 400;
+  line-height: 1;
   letter-spacing: -0.03em;
 }
 
@@ -217,30 +234,30 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
-  gap: 20px;
+  gap: 40px;
 }
 
 .rvpb-settings-feedback__body-card p {
   margin: 0;
-  max-width: 40ch;
+  max-width: 436px;
   color: rgba(255, 255, 255, 0.92);
-  font-size: 16px;
-  line-height: 1.45;
+  font-size: 19px;
+  line-height: 1.26;
 }
 
 .rvpb-settings-feedback__chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 9px 10px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
   text-decoration: none;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.25;
   transition:
     background-color 160ms ease,
     transform 160ms ease;
@@ -259,8 +276,8 @@
 }
 
 .rvpb-settings-feedback__chip-icon {
-  width: 16px;
-  height: 16px;
+  width: 20px;
+  height: 20px;
   flex: 0 0 auto;
 }
 
