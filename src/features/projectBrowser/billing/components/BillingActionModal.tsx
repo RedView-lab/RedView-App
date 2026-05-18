@@ -32,7 +32,7 @@ export type BillingModalCompletion =
   | { mode: 'subscription'; subscriptionId: string }
   | { mode: 'payment-method'; setupIntentId: string };
 
-type BillingPaymentMethod = 'card' | 'amazon_pay' | 'klarna';
+type BillingPaymentMethod = 'card' | 'amazon_pay';
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
@@ -162,10 +162,6 @@ function ChevronDownIcon() {
   );
 }
 
-function KlarnaMethodIcon() {
-  return <span className="rvpb-billing-page__klarna-wordmark">K</span>;
-}
-
 function PaymentMethodTile({
   method,
   selected,
@@ -175,8 +171,7 @@ function PaymentMethodTile({
   selected: boolean;
   onSelect: (method: BillingPaymentMethod) => void;
 }) {
-  const title =
-    method === 'card' ? 'Carte Bancaire' : method === 'amazon_pay' ? 'Amazon Pay' : 'Klarna';
+  const title = method === 'card' ? 'Carte Bancaire' : 'Amazon Pay';
 
   return (
     <button
@@ -191,15 +186,13 @@ function PaymentMethodTile({
       </span>
       <span className="rvpb-billing-page__method-title">{title}</span>
       <span
-        className={`rvpb-billing-page__method-icon${method === 'amazon_pay' ? ' rvpb-billing-page__method-icon--amazon' : ''}${method === 'klarna' ? ' rvpb-billing-page__method-icon--klarna' : ''}`}
+        className={`rvpb-billing-page__method-icon${method === 'amazon_pay' ? ' rvpb-billing-page__method-icon--amazon' : ''}`}
         aria-hidden="true"
       >
         {method === 'card' ? (
           <CardMethodIcon />
-        ) : method === 'amazon_pay' ? (
-          <span className="rvpb-billing-page__amazon-pay-wordmark">pay</span>
         ) : (
-          <KlarnaMethodIcon />
+          <span className="rvpb-billing-page__amazon-pay-wordmark">pay</span>
         )}
       </span>
     </button>
@@ -231,11 +224,10 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
   const paymentMethods: BillingPaymentMethod[] =
-    flow.mode === 'subscription' ? ['card', 'amazon_pay', 'klarna'] : ['card'];
+    flow.mode === 'subscription' ? ['card', 'amazon_pay'] : ['card'];
   const selectedCountryOption =
     ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode) ?? ACCOUNT_COUNTRY_OPTIONS[0];
-  const paymentMethodOrder =
-    selectedMethod === 'klarna' ? ['klarna', 'amazon_pay', 'card'] : ['amazon_pay', 'klarna', 'card'];
+  const paymentMethodOrder = ['amazon_pay', 'card'];
 
   useEffect(() => {
     setSelectedMethod('card');
