@@ -163,12 +163,25 @@
   left: 0;
   z-index: 12;
   width: 100%;
-  overflow: hidden;
+  max-height: min(320px, calc(100vh - 160px));
+  overflow-x: hidden;
+  overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
   background: rgba(23, 23, 23, 0.96);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(24px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.rvpb-account-select-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.rvpb-account-select-menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .rvpb-account-select-option {

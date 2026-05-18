@@ -45,6 +45,7 @@ export function AccountSelect({
     (index: number) => {
       const nextIndex = Math.min(Math.max(index, 0), options.length - 1);
       optionRefs.current[nextIndex]?.focus();
+      optionRefs.current[nextIndex]?.scrollIntoView({ block: 'nearest' });
     },
     [options.length],
   );

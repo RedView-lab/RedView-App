@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { useAppI18n } from '@/shared/i18n';
+
 import {
   DEFAULT_COUNTRY,
   DEFAULT_LEVEL,
@@ -76,6 +78,7 @@ export function AccountPanel({
   const [practiceSaving, setPracticeSaving] = useState(false);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
+  const { t } = useAppI18n();
   const syncedPracticeRef = useRef(serializePracticeForm(createPracticeForm(profile)));
   const mountedRef = useRef(true);
 
@@ -120,8 +123,8 @@ export function AccountPanel({
               tone: 'error',
               message:
                 nextError instanceof Error
-                  ? nextError.message
-                  : 'Impossible d’enregistrer les informations de pratique.',
+                  ? t(nextError.message)
+                  : t('Impossible d’enregistrer les informations de pratique.'),
             });
           }
         } finally {
@@ -149,13 +152,13 @@ export function AccountPanel({
       });
       setNotice({
         tone: 'success',
-        message: 'Coordonnees enregistrees.',
+        message: t('Coordonnees enregistrees.'),
       });
     } catch (nextError) {
       setNotice({
         tone: 'error',
         message:
-          nextError instanceof Error ? nextError.message : 'Impossible d’enregistrer le compte.',
+          nextError instanceof Error ? t(nextError.message) : t('Impossible d’enregistrer le compte.'),
       });
     } finally {
       setIdentitySaving(false);
@@ -170,15 +173,15 @@ export function AccountPanel({
       setPassword('');
       setNotice({
         tone: 'success',
-        message: 'Mot de passe mis a jour.',
+        message: t('Mot de passe mis a jour.'),
       });
     } catch (nextError) {
       setNotice({
         tone: 'error',
         message:
           nextError instanceof Error
-            ? nextError.message
-            : 'Impossible de mettre a jour le mot de passe.',
+            ? t(nextError.message)
+            : t('Impossible de mettre a jour le mot de passe.'),
       });
     } finally {
       setPasswordSaving(false);
@@ -187,17 +190,17 @@ export function AccountPanel({
 
   if (isLoading) {
     return (
-      <section className="rvpb-account-panel" aria-label="Compte">
-        <div className="rvpb-empty">Chargement du compte...</div>
+      <section className="rvpb-account-panel" aria-label={t('Compte')}>
+        <div className="rvpb-empty">{t('Chargement du compte...')}</div>
       </section>
     );
   }
 
   if (error) {
     return (
-      <section className="rvpb-account-panel" aria-label="Compte">
+      <section className="rvpb-account-panel" aria-label={t('Compte')}>
         <div className="rvpb-error" role="alert">
-          {error}
+          {t(error)}
         </div>
       </section>
     );
@@ -205,14 +208,14 @@ export function AccountPanel({
 
   if (!profile) {
     return (
-      <section className="rvpb-account-panel" aria-label="Compte">
-        <div className="rvpb-empty">Aucune information de compte disponible.</div>
+      <section className="rvpb-account-panel" aria-label={t('Compte')}>
+        <div className="rvpb-empty">{t('Aucune information de compte disponible.')}</div>
       </section>
     );
   }
 
   return (
-    <section className="rvpb-account-panel" aria-label={`Compte ${profileDisplayName}`}>
+    <section className="rvpb-account-panel" aria-label={`${t('Compte')} ${profileDisplayName}`}>
       {notice ? (
         <div className={`rvpb-account-notice is-${notice.tone}`} role={notice.tone === 'error' ? 'alert' : 'status'}>
           {notice.message}

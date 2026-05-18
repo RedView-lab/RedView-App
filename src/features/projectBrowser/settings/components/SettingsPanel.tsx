@@ -1,14 +1,23 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import {
+  APP_LOCALE_OPTIONS,
+  PROJECT_BROWSER_SETTINGS_STORAGE_KEY,
+  resolveAppLocale,
+  type AppLocale,
+  useAppI18n,
+} from '@/shared/i18n';
 import { AccountSelect, type AccountSelectOption } from '../../account/components/AccountSelect';
 import { LANDING_URL } from '../../lib';
 
 type DisplayMode = 'system' | 'light' | 'dark';
+type UnitSetting = 'metric' | 'imperial';
+type MapPresetSetting = 'day' | 'night';
 
 type SettingsState = {
-  language: string;
-  unit: string;
-  mapPreset: string;
+  language: AppLocale;
+  unit: UnitSetting;
+  mapPreset: MapPresetSetting;
   displayMode: DisplayMode;
   communityPromptEnabled: boolean;
 };
@@ -28,94 +37,78 @@ type DisplayOption = {
   imageSrc: string;
 };
 
-const STORAGE_KEY = 'redview:project-browser-settings:v1';
-
-const LANGUAGE_OPTIONS = ['English (US)', 'Français'] as const;
-const UNIT_OPTIONS = ['Mètre', 'Pieds'] as const;
-const MAP_PRESET_OPTIONS = ['Jour (nuit couché de soleil)', 'Nuit'] as const;
-
-const LANGUAGE_SELECT_OPTIONS: AccountSelectOption[] = [
+const DISPLAY_OPTION_ASSETS = [
   {
-    value: 'English (US)',
-    label: 'English (US)',
-    flag: '/landing/svg/US.svg',
-    flagCode: 'US',
-  },
-  {
-    value: 'Français',
-    label: 'Français',
-    flag: '/landing/svg/FR.svg',
-    flagCode: 'FR',
-  },
-];
-
-const UNIT_SELECT_OPTIONS: AccountSelectOption[] = UNIT_OPTIONS.map((option) => ({
-  value: option,
-  label: option,
-}));
-
-const MAP_PRESET_SELECT_OPTIONS: AccountSelectOption[] = MAP_PRESET_OPTIONS.map((option) => ({
-  value: option,
-  label: option,
-}));
-
-const DISPLAY_OPTIONS: DisplayOption[] = [
-  {
-    id: 'system',
-    label: 'System preference',
+    id: 'system' as const,
     imageSrc: '/project-browser/settings/display-system.png',
   },
   {
-    id: 'light',
-    label: 'Light mode',
+    id: 'light' as const,
     imageSrc: '/project-browser/settings/display-light.png',
   },
   {
-    id: 'dark',
-    label: 'Dark mode',
+    id: 'dark' as const,
     imageSrc: '/project-browser/settings/display-dark.png',
   },
 ];
 
-const DEFAULT_SETTINGS: SettingsState = {
-  language: LANGUAGE_OPTIONS[0],
-  unit: UNIT_OPTIONS[0],
-  mapPreset: MAP_PRESET_OPTIONS[0],
-  displayMode: 'system',
-  communityPromptEnabled: true,
-};
+function createDefaultSettings(language: AppLocale): SettingsState {
+  return {
+    language,
+    unit: 'metric',
+    mapPreset: 'day',
+    displayMode: 'system',
+    communityPromptEnabled: true,
+  };
+}
+
+function isUnitSetting(value: unknown): value is UnitSetting {
+  return value === 'metric' || value === 'imperial';
+}
+
+function isMapPresetSetting(value: unknown): value is MapPresetSetting {
+  return value === 'day' || value === 'night';
+}
 
 function isDisplayMode(value: unknown): value is DisplayMode {
   return value === 'system' || value === 'light' || value === 'dark';
 }
 
-function readStoredSettings(): SettingsState {
-  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+function resolveStoredUnit(value: unknown): UnitSetting {
+  if (value === 'Pieds' || value === 'imperial') return 'imperial';
+  return 'metric';
+}
+
+function resolveStoredMapPreset(value: unknown): MapPresetSetting {
+  if (value === 'Nuit' || value === 'night') return 'night';
+  return 'day';
+}
+
+function readStoredSettings(fallbackLanguage: AppLocale): SettingsState {
+  const defaults = createDefaultSettings(fallbackLanguage);
+
+  if (typeof window === 'undefined') {
+    return defaults;
+  }
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    const raw = window.localStorage.getItem(PROJECT_BROWSER_SETTINGS_STORAGE_KEY);
+    if (!raw) return defaults;
 
     const parsed = JSON.parse(raw) as Partial<SettingsState>;
 
     return {
-      language: LANGUAGE_OPTIONS.includes(parsed.language as (typeof LANGUAGE_OPTIONS)[number])
-        ? parsed.language!
-        : DEFAULT_SETTINGS.language,
-      unit: UNIT_OPTIONS.includes(parsed.unit as (typeof UNIT_OPTIONS)[number])
-        ? parsed.unit!
-        : DEFAULT_SETTINGS.unit,
-      mapPreset: MAP_PRESET_OPTIONS.includes(parsed.mapPreset as (typeof MAP_PRESET_OPTIONS)[number])
-        ? parsed.mapPreset!
-        : DEFAULT_SETTINGS.mapPreset,
-      displayMode: isDisplayMode(parsed.displayMode) ? parsed.displayMode : DEFAULT_SETTINGS.displayMode,
+      language: resolveAppLocale(parsed.language ?? fallbackLanguage),
+      unit: isUnitSetting(parsed.unit) ? parsed.unit : resolveStoredUnit(parsed.unit),
+      mapPreset: isMapPresetSetting(parsed.mapPreset) ? parsed.mapPreset : resolveStoredMapPreset(parsed.mapPreset),
+      displayMode: isDisplayMode(parsed.displayMode) ? parsed.displayMode : defaults.displayMode,
       communityPromptEnabled:
         typeof parsed.communityPromptEnabled === 'boolean'
           ? parsed.communityPromptEnabled
-          : DEFAULT_SETTINGS.communityPromptEnabled,
+          : defaults.communityPromptEnabled,
     };
   } catch {
-    return DEFAULT_SETTINGS;
+    return defaults;
   }
 }
 
@@ -170,26 +163,65 @@ function buildFeedbackHref() {
 }
 
 export function SettingsPanel() {
-  const [settings, setSettings] = useState<SettingsState>(readStoredSettings);
+  const { locale, setLocale, t } = useAppI18n();
+  const [settings, setSettings] = useState<SettingsState>(() => readStoredSettings(locale));
+
+  const languageSelectOptions = useMemo<AccountSelectOption[]>(
+    () => APP_LOCALE_OPTIONS.map((option) => ({ ...option })),
+    [],
+  );
+  const unitSelectOptions = useMemo<AccountSelectOption[]>(
+    () => [
+      { value: 'metric', label: t('Mètre') },
+      { value: 'imperial', label: t('Pieds') },
+    ],
+    [t],
+  );
+  const mapPresetSelectOptions = useMemo<AccountSelectOption[]>(
+    () => [
+      { value: 'day', label: t('Jour (nuit couché de soleil)') },
+      { value: 'night', label: t('Nuit') },
+    ],
+    [t],
+  );
+  const displayOptions = useMemo<DisplayOption[]>(
+    () => [
+      { ...DISPLAY_OPTION_ASSETS[0], label: t('System preference') },
+      { ...DISPLAY_OPTION_ASSETS[1], label: t('Light mode') },
+      { ...DISPLAY_OPTION_ASSETS[2], label: t('Dark mode') },
+    ],
+    [t],
+  );
+  const feedbackDescription = t(
+    "RedView s'appuie sur de nombreuses rencontres, discussions et observations réalisées avec la communauté cycliste. Si vous voulez contribuer au développement de l'outil, vous pouvez utiliser notre questionnaire de feedback ci-dessous.",
+  );
+
+  useEffect(() => {
+    setSettings((current) => (current.language === locale ? current : { ...current, language: locale }));
+  }, [locale]);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      window.localStorage.setItem(PROJECT_BROWSER_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
     } catch {
       // Best effort only.
     }
   }, [settings]);
 
   return (
-    <section className="rvpb-settings-panel" aria-label="Réglages globaux">
+    <section className="rvpb-settings-panel" aria-label={t('Réglages globaux')}>
       <div className="rvpb-settings-row">
-        <div className="rvpb-settings-row__label">Langue</div>
+        <div className="rvpb-settings-row__label">{t('Langue')}</div>
         <div className="rvpb-settings-row__control">
           <SettingsSelect
-            label="Langue"
+            label={t('Langue')}
             value={settings.language}
-            options={LANGUAGE_SELECT_OPTIONS}
-            onChange={(language) => setSettings((current) => ({ ...current, language }))}
+            options={languageSelectOptions}
+            onChange={(language) => {
+              const nextLocale = resolveAppLocale(language);
+              setSettings((current) => ({ ...current, language: nextLocale }));
+              setLocale(nextLocale);
+            }}
             renderValuePrefix={renderFlag}
             renderOptionPrefix={renderFlag}
           />
@@ -197,25 +229,35 @@ export function SettingsPanel() {
       </div>
 
       <div className="rvpb-settings-row">
-        <div className="rvpb-settings-row__label">Unité de mesure</div>
+        <div className="rvpb-settings-row__label">{t('Unité de mesure')}</div>
         <div className="rvpb-settings-row__control">
           <SettingsSelect
-            label="Unité de mesure"
+            label={t('Unité de mesure')}
             value={settings.unit}
-            options={UNIT_SELECT_OPTIONS}
-            onChange={(unit) => setSettings((current) => ({ ...current, unit }))}
+            options={unitSelectOptions}
+            onChange={(unit) =>
+              setSettings((current) => ({
+                ...current,
+                unit: unit === 'imperial' ? 'imperial' : 'metric',
+              }))
+            }
           />
         </div>
       </div>
 
       <div className="rvpb-settings-row">
-        <div className="rvpb-settings-row__label">Paramètre de carte</div>
+        <div className="rvpb-settings-row__label">{t('Paramètre de carte')}</div>
         <div className="rvpb-settings-row__control">
           <SettingsSelect
-            label="Paramètre de carte"
+            label={t('Paramètre de carte')}
             value={settings.mapPreset}
-            options={MAP_PRESET_SELECT_OPTIONS}
-            onChange={(mapPreset) => setSettings((current) => ({ ...current, mapPreset }))}
+            options={mapPresetSelectOptions}
+            onChange={(mapPreset) =>
+              setSettings((current) => ({
+                ...current,
+                mapPreset: mapPreset === 'night' ? 'night' : 'day',
+              }))
+            }
           />
         </div>
       </div>
@@ -223,9 +265,9 @@ export function SettingsPanel() {
       <div className="rvpb-divider" />
 
       <div className="rvpb-settings-row rvpb-settings-row--display">
-        <div className="rvpb-settings-row__label">Préférence d’affichage</div>
-        <div className="rvpb-settings-display-options" role="radiogroup" aria-label="Préférence d’affichage">
-          {DISPLAY_OPTIONS.map((option) => {
+        <div className="rvpb-settings-row__label">{t('Préférence d’affichage')}</div>
+        <div className="rvpb-settings-display-options" role="radiogroup" aria-label={t('Préférence d’affichage')}>
+          {displayOptions.map((option) => {
             const isSelected = settings.displayMode === option.id;
 
             return (
@@ -249,14 +291,14 @@ export function SettingsPanel() {
       </div>
 
       <div className="rvpb-settings-row rvpb-settings-row--toggle">
-        <div className="rvpb-settings-row__label">Réglage</div>
+        <div className="rvpb-settings-row__label">{t('Réglage')}</div>
         <div className="rvpb-settings-row__control">
           <button
             type="button"
             className={`rvpb-settings-switch${settings.communityPromptEnabled ? ' is-on' : ''}`}
             role="switch"
             aria-checked={settings.communityPromptEnabled}
-            aria-label="Activer le réglage"
+            aria-label={t('Activer le réglage')}
             onClick={() =>
               setSettings((current) => ({
                 ...current,
@@ -271,15 +313,11 @@ export function SettingsPanel() {
 
       <div className="rvpb-settings-feedback">
         <article className="rvpb-settings-feedback__title-card">
-          <h2>Construit avec et pour la communauté</h2>
+          <h2>{t('Construit avec et pour la communauté')}</h2>
         </article>
 
         <article className="rvpb-settings-feedback__body-card">
-          <p>
-            RedView s&apos;appuie sur de nombreuses rencontres, discussions et observations réalisées
-            avec la communauté cycliste. Si vous voulez contribuer au développement de l&apos;outil,
-            vous pouvez utiliser notre questionnaire de feedback ci-dessous.
-          </p>
+          <p>{feedbackDescription}</p>
 
           <a
             className="rvpb-settings-feedback__chip"
@@ -288,7 +326,7 @@ export function SettingsPanel() {
             target="_blank"
           >
             <PlayCircleIcon />
-            <span>Notre questionnaire de feedback</span>
+            <span>{t('Notre questionnaire de feedback')}</span>
           </a>
         </article>
       </div>

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
+import { useAppI18n } from './shared/i18n'
 import './index.css'
 
 const Dashboard = lazy(() => import('./pages/Dashboard'))
@@ -151,6 +152,7 @@ function resolveInitialSupabaseSession(): Promise<BootstrapSession> {
 }
 
 function App() {
+  const { t } = useAppI18n()
   const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredSupabaseSession())
   const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
   const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
@@ -340,12 +342,12 @@ function App() {
   }, [authStatus, session?.user?.id])
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
-    return <BootstrapScreen label="Loading..." />
+    return <BootstrapScreen label={t('Loading...')} />
   }
 
   if (!session) {
     window.location.href = `${landingUrl}/auth/login`
-    return <BootstrapScreen label="Redirecting..." />
+    return <BootstrapScreen label={t('Redirecting...')} />
   }
 
   if (!isSubscribed) {
@@ -353,7 +355,7 @@ function App() {
   }
 
   return (
-    <Suspense fallback={<BootstrapScreen label="Loading dashboard..." />}>
+    <Suspense fallback={<BootstrapScreen label={t('Loading dashboard...')} />}>
       <Dashboard
         email={session.user.email || 'unknown'}
         initialProjectId={initialProjectId}

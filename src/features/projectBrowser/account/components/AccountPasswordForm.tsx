@@ -1,4 +1,5 @@
 import { AccountSection } from './AccountSection';
+import { useAppI18n } from '@/shared/i18n';
 
 type AccountPasswordFormProps = {
   value: string;
@@ -8,14 +9,16 @@ type AccountPasswordFormProps = {
 };
 
 export function AccountPasswordForm({ value, isSaving, onChange, onSave }: AccountPasswordFormProps) {
+  const { t } = useAppI18n();
+
   return (
-    <AccountSection title="Mot de passe">
+    <AccountSection title={t('Mot de passe')}>
       <div className="rvpb-account-password-row">
-        <div className="rvpb-account-password-label">Current password *</div>
+        <div className="rvpb-account-password-label">{t('Current password *')}</div>
 
         <div className="rvpb-account-password-form">
           <label className="rvpb-account-field">
-            <span className="rvpb-sr-only">Current password</span>
+            <span className="rvpb-sr-only">{t('Current password')}</span>
             <span className="rvpb-account-input-shell">
               <input
                 type="password"
@@ -33,7 +36,7 @@ export function AccountPasswordForm({ value, isSaving, onChange, onSave }: Accou
               onClick={onSave}
               disabled={isSaving || value.trim().length < 8}
             >
-              {isSaving ? 'Mise a jour...' : 'Changer le mot de passe'}
+              {isSaving ? t('Mise a jour...') : t('Changer le mot de passe')}
             </button>
           </div>
         </div>
