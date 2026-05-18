@@ -233,6 +233,7 @@ export async function createManagedSubscription(
     items: [{ price: priceId }],
     payment_behavior: 'default_incomplete',
     payment_settings: {
+      payment_method_types: ['card', 'amazon_pay'],
       save_default_payment_method: 'on_subscription',
     },
     expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
@@ -279,6 +280,7 @@ export async function changeManagedSubscriptionPlan(
     ],
     payment_behavior: 'default_incomplete',
     payment_settings: {
+      payment_method_types: ['card', 'amazon_pay'],
       save_default_payment_method: 'on_subscription',
     },
     proration_behavior: 'always_invoice',

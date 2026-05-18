@@ -24,17 +24,19 @@ export type BillingModalCompletion =
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+const subscriptionPaymentMethodOrder = ['card', 'amazon_pay'];
+const cardOnlyPaymentMethodOrder = ['card'];
 
 const appearance = {
   theme: 'night' as const,
-  labels: 'floating' as const,
+  labels: 'above' as const,
   variables: {
     colorPrimary: '#890000',
-    colorBackground: 'rgba(255,255,255,0.08)',
+    colorBackground: 'rgba(255,255,255,0.04)',
     colorText: '#ffffff',
     colorDanger: '#ff8e8e',
-    colorTextPlaceholder: 'rgba(255, 255, 255, 0.5)',
-    colorTextSecondary: 'rgba(255, 255, 255, 0.78)',
+    colorTextPlaceholder: 'rgba(255, 255, 255, 0.48)',
+    colorTextSecondary: 'rgba(255, 255, 255, 0.72)',
     colorIcon: 'rgba(255, 255, 255, 0.82)',
     colorSuccess: '#34d399',
     borderRadius: '8px',
@@ -52,13 +54,22 @@ const appearance = {
       border: '1px solid rgba(255,255,255,0.16)',
       color: '#ffffff',
       boxShadow: 'none',
+      minHeight: '90px',
+      padding: '12px 16px',
     },
     '.Tab:hover': {
       color: '#ffffff',
+      backgroundColor: 'rgba(255,255,255,0.04)',
     },
     '.Tab--selected': {
-      backgroundColor: 'rgba(137,0,0,0.9)',
-      borderColor: 'rgba(137,0,0,1)',
+      backgroundColor: 'rgba(255,255,255,0.04)',
+      borderColor: 'rgba(255,255,255,0.28)',
+      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
+    },
+    '.TabLabel': {
+      color: '#ffffff',
+      fontWeight: '500',
+      fontSize: '14px',
     },
     '.Input, .Block, .CodeInput': {
       backgroundColor: 'rgba(255,255,255,0.08)',
@@ -94,10 +105,13 @@ type BillingActionFormProps = BillingActionModalProps;
 function RedViewWordmark() {
   return (
     <div className="rvpb-billing-page__brand" aria-label="RedView">
-      <span className="rvpb-billing-page__brand-text">redview</span>
-      <span className="rvpb-billing-page__brand-mark" aria-hidden="true">
-        <span className="rvpb-billing-page__brand-mark-dot" />
-      </span>
+      <img
+        className="rvpb-billing-page__brand-image"
+        src="/landing/icons/redview-logo.svg"
+        alt="RedView"
+        width={125}
+        height={24}
+      />
     </div>
   );
 }
@@ -108,6 +122,8 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paymentMethodLegendId = useId();
+  const paymentMethodOrder =
+    flow.mode === 'subscription' ? subscriptionPaymentMethodOrder : cardOnlyPaymentMethodOrder;
 
   useEffect(() => {
     logBillingUi('billing-page-form-state', {
@@ -229,6 +245,11 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
             ) : null}
 
             <form className="rvpb-billing-page__form" onSubmit={handleSubmit}>
+              <div className="rvpb-billing-page__section-label" aria-hidden="true">
+                <span>Card details</span>
+                <span className="rvpb-billing-page__section-label-mark">*</span>
+              </div>
+
               <fieldset className="rvpb-billing-page__method-group" aria-labelledby={paymentMethodLegendId}>
                 <legend id={paymentMethodLegendId}>Votre mode de paiement :</legend>
                 <PaymentElement
@@ -238,6 +259,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       defaultCollapsed: false,
                     },
                     business: { name: 'RedView' },
+                    paymentMethodOrder: [...paymentMethodOrder],
                     terms: { card: 'never' },
                     fields: {
                       billingDetails: {

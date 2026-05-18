@@ -12,9 +12,7 @@ export async function createPaymentMethodSetupIntent(
   const setupIntent = await getStripeServer().setupIntents.create({
     customer: stripeCustomerId,
     usage: 'off_session',
-    automatic_payment_methods: {
-      enabled: true,
-    },
+    payment_method_types: ['card'],
     metadata: {
       user_id: userId,
     },

@@ -29,53 +29,29 @@
 .rvpb-billing-page__brand {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
 }
 
-.rvpb-billing-page__brand-text {
-  font-size: 31px;
-  line-height: 1;
-  font-weight: 700;
-  letter-spacing: -0.06em;
-  text-transform: lowercase;
-}
-
-.rvpb-billing-page__brand-mark {
-  position: relative;
-  width: 23px;
-  height: 23px;
-  border-radius: 50% 50% 50% 0;
-  transform: rotate(45deg);
-  background: #fff;
-  flex: 0 0 auto;
-}
-
-.rvpb-billing-page__brand-mark-dot {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #0a0a0a;
-  transform: translate(-50%, -50%) rotate(-45deg);
+.rvpb-billing-page__brand-image {
+  display: block;
+  width: clamp(102px, 9vw, 125px);
+  height: auto;
 }
 
 .rvpb-billing-page__main {
   width: 100%;
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
-  padding: 80px 32px 0;
+  padding: 56px 32px 0;
   display: flex;
   justify-content: center;
 }
 
 .rvpb-billing-page__content {
-  width: min(100%, 480px);
+  width: min(100%, 512px);
   min-width: 400px;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
 }
 
 .rvpb-billing-page__content--compact {
@@ -86,6 +62,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  text-align: center;
 }
 
 .rvpb-billing-page__intro h2 {
@@ -102,6 +79,20 @@
   color: #fff;
   font-size: 15px;
   line-height: 1.45;
+}
+
+.rvpb-billing-page__section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.rvpb-billing-page__section-label-mark {
+  color: #7f56d9;
 }
 
 .rvpb-billing-page__error {
@@ -137,8 +128,14 @@
   width: 100%;
 }
 
+.rvpb-billing-page__method-group .Tabs {
+  gap: 12px;
+}
+
 .rvpb-billing-page__method-group .Tab {
-  min-height: 82px;
+  min-height: 90px;
+  align-items: flex-start;
+  justify-content: flex-start;
 }
 
 .rvpb-billing-page__method-group .TabLabel {
@@ -148,7 +145,12 @@
 }
 
 .rvpb-billing-page__method-group .TabIcon {
-  transform: scale(1.05);
+  transform: none;
+}
+
+.rvpb-billing-page__method-group .Tab--selected {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .rvpb-billing-page__method-group .Block {
@@ -176,8 +178,8 @@
 
 .rvpb-billing-page__legal {
   margin: 0;
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 15px;
   line-height: 1.42;
 }
 
@@ -251,7 +253,6 @@
   .rvpb-billing-page__intro h2 {
     font-size: 28px;
     line-height: 34px;
-    text-align: left;
   }
 
   .rvpb-billing-page__actions {

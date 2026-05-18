@@ -322,7 +322,7 @@ export function ProjectBrowserOverlay({
               : 'Finaliser votre abonnement',
             description: hasPaidSubscription(subscriptionState.snapshot)
               ? 'Validez ici le paiement ou le prorata éventuel sans quitter RedView.'
-              : 'Saisissez votre moyen de paiement Stripe directement dans RedView pour activer cette offre.',
+              : 'Choisissez votre mode de paiement pour vous abonner.',
             submitLabel: hasPaidSubscription(subscriptionState.snapshot)
               ? 'Confirmer le changement'
               : 'Activer l’abonnement',
