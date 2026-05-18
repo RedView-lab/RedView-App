@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
-
+import { AccountSelect, type AccountSelectOption } from '../../account/components/AccountSelect';
 import { LANDING_URL } from '../../lib';
 
 type DisplayMode = 'system' | 'light' | 'dark';
@@ -17,7 +16,7 @@ type SettingsState = {
 type SettingsSelectProps = {
   label: string;
   value: string;
-  options: readonly string[];
+  options: readonly AccountSelectOption[];
   onChange: (value: string) => void;
 };
 
@@ -32,6 +31,21 @@ const STORAGE_KEY = 'redview:project-browser-settings:v1';
 const LANGUAGE_OPTIONS = ['English (US)', 'Français'] as const;
 const UNIT_OPTIONS = ['Mètre', 'Pieds'] as const;
 const MAP_PRESET_OPTIONS = ['Jour (nuit couché de soleil)', 'Nuit'] as const;
+
+const LANGUAGE_SELECT_OPTIONS: AccountSelectOption[] = LANGUAGE_OPTIONS.map((option) => ({
+  value: option,
+  label: option,
+}));
+
+const UNIT_SELECT_OPTIONS: AccountSelectOption[] = UNIT_OPTIONS.map((option) => ({
+  value: option,
+  label: option,
+}));
+
+const MAP_PRESET_SELECT_OPTIONS: AccountSelectOption[] = MAP_PRESET_OPTIONS.map((option) => ({
+  value: option,
+  label: option,
+}));
 
 const DISPLAY_OPTIONS: DisplayOption[] = [
   {
@@ -104,18 +118,14 @@ function PlayCircleIcon() {
 
 function SettingsSelect({ label, value, options, onChange }: SettingsSelectProps) {
   return (
-    <label className="rvpb-settings-select" aria-label={label}>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-      <span className="rvpb-settings-select__chevron" aria-hidden="true">
-        <SvgV2Icon name="chevron-down.svg" size={16} />
-      </span>
-    </label>
+    <div className="rvpb-settings-select">
+      <AccountSelect
+        ariaLabel={label}
+        value={value}
+        options={options}
+        onChange={onChange}
+      />
+    </div>
   );
 }
 
@@ -142,7 +152,7 @@ export function SettingsPanel() {
           <SettingsSelect
             label="Langue"
             value={settings.language}
-            options={LANGUAGE_OPTIONS}
+            options={LANGUAGE_SELECT_OPTIONS}
             onChange={(language) => setSettings((current) => ({ ...current, language }))}
           />
         </div>
@@ -154,7 +164,7 @@ export function SettingsPanel() {
           <SettingsSelect
             label="Unité de mesure"
             value={settings.unit}
-            options={UNIT_OPTIONS}
+            options={UNIT_SELECT_OPTIONS}
             onChange={(unit) => setSettings((current) => ({ ...current, unit }))}
           />
         </div>
@@ -166,7 +176,7 @@ export function SettingsPanel() {
           <SettingsSelect
             label="Paramètre de carte"
             value={settings.mapPreset}
-            options={MAP_PRESET_OPTIONS}
+            options={MAP_PRESET_SELECT_OPTIONS}
             onChange={(mapPreset) => setSettings((current) => ({ ...current, mapPreset }))}
           />
         </div>

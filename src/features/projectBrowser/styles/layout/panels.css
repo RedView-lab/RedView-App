@@ -52,50 +52,34 @@
 }
 
 .rvpb-settings-select {
-  position: relative;
   display: inline-flex;
   width: 100%;
   max-width: 200px;
 }
 
-.rvpb-settings-select select {
-  appearance: none;
+.rvpb-settings-select .rvpb-account-select,
+.rvpb-settings-select .rvpb-account-select-trigger,
+.rvpb-settings-select .rvpb-account-select-menu {
   width: 100%;
-  min-height: 40px;
-  padding: 8px 36px 8px 12px;
-  border: 1px solid rgba(213, 215, 218, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 1px 2px rgba(10, 13, 18, 0.05);
+}
+
+.rvpb-settings-select .rvpb-account-select-shell,
+.rvpb-settings-select .rvpb-account-select-option,
+.rvpb-settings-select .rvpb-account-select-value,
+.rvpb-settings-select .rvpb-account-select-option-label,
+.rvpb-settings-row__label,
+.rvpb-settings-display-card__label {
   color: #fff;
-  font: inherit;
+}
+
+.rvpb-settings-select .rvpb-account-select-shell {
+  min-height: 40px;
   font-size: 14px;
   line-height: 24px;
-  outline: none;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
 }
 
-.rvpb-settings-select select:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.rvpb-settings-select select:focus-visible {
-  border-color: rgba(255, 255, 255, 0.28);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.06);
-}
-
-.rvpb-settings-select__chevron {
-  position: absolute;
-  top: 0;
-  right: 12px;
-  bottom: 0;
-  display: inline-flex;
-  align-items: center;
-  pointer-events: none;
-  color: rgba(255, 255, 255, 0.64);
+.rvpb-settings-select .rvpb-account-select-menu {
+  z-index: 20;
 }
 
 .rvpb-settings-display-options {
