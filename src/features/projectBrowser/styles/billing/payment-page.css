@@ -1,0 +1,265 @@
+.rvpb-billing-page {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%),
+    linear-gradient(90deg, #000 0%, #000 100%);
+  color: #fff;
+}
+
+.rvpb-billing-page__chrome {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 40px 80px 80px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 34%),
+    radial-gradient(circle at bottom center, rgba(255, 255, 255, 0.03), transparent 42%);
+  backdrop-filter: blur(16px);
+}
+
+.rvpb-billing-page__header {
+  display: flex;
+  align-items: center;
+  min-height: 72px;
+}
+
+.rvpb-billing-page__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rvpb-billing-page__brand-text {
+  font-size: 31px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  text-transform: lowercase;
+}
+
+.rvpb-billing-page__brand-mark {
+  position: relative;
+  width: 23px;
+  height: 23px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(45deg);
+  background: #fff;
+  flex: 0 0 auto;
+}
+
+.rvpb-billing-page__brand-mark-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #0a0a0a;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.rvpb-billing-page__main {
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 80px 32px 0;
+  display: flex;
+  justify-content: center;
+}
+
+.rvpb-billing-page__content {
+  width: min(100%, 480px);
+  min-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.rvpb-billing-page__content--compact {
+  min-width: 0;
+}
+
+.rvpb-billing-page__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rvpb-billing-page__intro h2 {
+  margin: 0;
+  color: #fff;
+  font-size: 30px;
+  line-height: 38px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.rvpb-billing-page__intro p {
+  margin: 0;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.rvpb-billing-page__error {
+  margin: 0;
+}
+
+.rvpb-billing-page__form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rvpb-billing-page__method-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rvpb-billing-page__method-group legend {
+  margin: 0;
+  padding: 0;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.rvpb-billing-page__method-group .StripeElement,
+.rvpb-billing-page__method-group .__PrivateStripeElement {
+  width: 100%;
+}
+
+.rvpb-billing-page__method-group .Tab {
+  min-height: 82px;
+}
+
+.rvpb-billing-page__method-group .TabLabel {
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.rvpb-billing-page__method-group .TabIcon {
+  transform: scale(1.05);
+}
+
+.rvpb-billing-page__method-group .Block {
+  border-radius: 8px;
+}
+
+.rvpb-billing-page__method-group .Input,
+.rvpb-billing-page__method-group .Block,
+.rvpb-billing-page__method-group .PickerItem,
+.rvpb-billing-page__method-group .Dropdown {
+  border-radius: 8px;
+}
+
+.rvpb-billing-page__method-group .Label {
+  margin-bottom: 6px;
+}
+
+.rvpb-billing-page__method-group .Text {
+  font-size: 15px;
+}
+
+.rvpb-billing-page__method-group .Input::placeholder {
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.rvpb-billing-page__legal {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  line-height: 1.42;
+}
+
+.rvpb-billing-page__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.rvpb-billing-page__button {
+  appearance: none;
+  border: 0;
+  border-radius: 8px;
+  min-height: 41px;
+  padding: 10px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  color: #fff;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
+}
+
+.rvpb-billing-page__button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.rvpb-billing-page__button:disabled {
+  opacity: 0.58;
+  cursor: default;
+}
+
+.rvpb-billing-page__button--ghost {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvpb-billing-page__button--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rvpb-billing-page__button--primary {
+  background: #890000;
+}
+
+.rvpb-billing-page__button--primary:hover:not(:disabled) {
+  background: #a10000;
+}
+
+@media (max-width: 768px) {
+  .rvpb-billing-page__chrome {
+    padding: 20px 16px 32px;
+  }
+
+  .rvpb-billing-page__main {
+    padding: 40px 0 0;
+  }
+
+  .rvpb-billing-page__content {
+    width: 100%;
+    min-width: 0;
+    gap: 24px;
+  }
+
+  .rvpb-billing-page__intro h2 {
+    font-size: 28px;
+    line-height: 34px;
+    text-align: left;
+  }
+
+  .rvpb-billing-page__actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .rvpb-billing-page__button {
+    width: 100%;
+  }
+}

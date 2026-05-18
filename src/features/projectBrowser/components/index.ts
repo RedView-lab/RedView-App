@@ -1,8 +1,8 @@
-export { BillingActionModal } from './BillingActionModal';
+export { BillingActionModal } from '../billing/components/BillingActionModal';
 export type {
   BillingModalCompletion,
   BillingModalState,
-} from './BillingActionModal';
+} from '../billing/components/BillingActionModal';
 export { PlaceholderPanel } from './PlaceholderPanel';
 export { ProjectBrowserOverlay } from './ProjectBrowserOverlay';
 export { ProjectCard } from './ProjectCard';

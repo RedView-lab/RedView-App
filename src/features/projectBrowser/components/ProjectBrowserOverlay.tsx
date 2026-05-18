@@ -17,7 +17,7 @@ import {
   BillingActionModal,
   type BillingModalCompletion,
   type BillingModalState,
-} from './BillingActionModal';
+} from '../billing/components/BillingActionModal';
 import { logBillingUi, logBillingUiError } from '../lib';
 import { SubscriptionPanel } from './SubscriptionPanel';
 import {
