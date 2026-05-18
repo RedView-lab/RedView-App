@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
+import { translateAppText } from '@/shared/i18n';
 import {
   createProjectFolder,
   createProject,
@@ -100,7 +101,7 @@ export function useProjectBrowserProjects({
         setThumbnails({});
       }
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : 'Impossible de charger les projets.';
+      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de charger les projets.');
       setError(message);
     } finally {
       setLoading(false);
@@ -131,7 +132,7 @@ export function useProjectBrowserProjects({
       ]);
       onOpenProject(row.id);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : 'Échec de la création du projet.';
+      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la création du projet.');
       setError(message);
       showToast(message, 'error');
     } finally {
@@ -147,7 +148,7 @@ export function useProjectBrowserProjects({
       const folder = await createProjectFolder(undefined, currentFolderId);
       setFolders((prev) => [folder, ...prev]);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : 'Échec de la création du dossier.';
+      const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la création du dossier.');
       setError(message);
       showToast(message, 'error');
     } finally {
@@ -168,7 +169,7 @@ export function useProjectBrowserProjects({
           ),
         );
       } catch (nextError) {
-        const message = nextError instanceof Error ? nextError.message : 'Échec du renommage.';
+        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec du renommage.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -193,7 +194,7 @@ export function useProjectBrowserProjects({
           return next;
         });
       } catch (nextError) {
-        const message = nextError instanceof Error ? nextError.message : 'Échec de la suppression.';
+        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la suppression.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -217,7 +218,7 @@ export function useProjectBrowserProjects({
         );
       } catch (nextError) {
         const message =
-          nextError instanceof Error ? nextError.message : 'Échec du renommage du dossier.';
+          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec du renommage du dossier.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -236,7 +237,7 @@ export function useProjectBrowserProjects({
         setCurrentFolderId((prev) => (prev === id ? null : prev));
       } catch (nextError) {
         const message =
-          nextError instanceof Error ? nextError.message : 'Échec de la suppression du dossier.';
+          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Échec de la suppression du dossier.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -267,10 +268,10 @@ export function useProjectBrowserProjects({
               : project,
           ),
         );
-        showToast(folderId ? 'Projet déplacé dans le dossier.' : 'Projet déplacé à la racine.');
+        showToast(translateAppText(folderId ? 'Projet déplacé dans le dossier.' : 'Projet déplacé à la racine.'));
       } catch (nextError) {
         const message =
-          nextError instanceof Error ? nextError.message : 'Impossible de déplacer ce projet.';
+          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de déplacer ce projet.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -294,10 +295,10 @@ export function useProjectBrowserProjects({
           ),
         );
         setCurrentFolderId((prev) => (prev === folderId && parentFolderId === folderId ? null : prev));
-        showToast(parentFolderId ? 'Dossier déplacé.' : 'Dossier déplacé à la racine.');
+        showToast(translateAppText(parentFolderId ? 'Dossier déplacé.' : 'Dossier déplacé à la racine.'));
       } catch (nextError) {
         const message =
-          nextError instanceof Error ? nextError.message : 'Impossible de déplacer ce dossier.';
+          nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de déplacer ce dossier.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -314,7 +315,7 @@ export function useProjectBrowserProjects({
       let duplicateProjectId: string | null = null;
       try {
         const source = await getProject(projectId);
-        if (!source) throw new Error('Projet introuvable.');
+        if (!source) throw new Error(translateAppText('Projet introuvable.'));
 
         const siblingNames = projects
           .filter((project) => project.folderId === source.folder_id)
@@ -366,7 +367,7 @@ export function useProjectBrowserProjects({
             [row.id]: nextThumbnailUrls[row.id] ?? null,
           }));
         }
-        showToast(`Projet dupliqué: ${duplicateName}`);
+        showToast(translateAppText('Projet dupliqué: {{name}}', { name: duplicateName }));
       } catch (nextError) {
         if (duplicateProjectId) {
           try {
@@ -379,7 +380,7 @@ export function useProjectBrowserProjects({
             deleteProjectThumbnail(duplicateProjectId),
           ]);
         }
-        const message = nextError instanceof Error ? nextError.message : 'Impossible de dupliquer ce projet.';
+        const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de dupliquer ce projet.');
         setError(message);
         showToast(message, 'error');
       } finally {
@@ -392,8 +393,8 @@ export function useProjectBrowserProjects({
   const handleDragStart = useCallback((item: { type: 'project' | 'folder'; id: string }, x = 0, y = 0) => {
     const label =
       item.type === 'project'
-        ? projects.find((project) => project.id === item.id)?.name ?? 'Projet'
-        : folders.find((folder) => folder.id === item.id)?.name ?? 'Dossier';
+        ? projects.find((project) => project.id === item.id)?.name ?? translateAppText('Projet')
+        : folders.find((folder) => folder.id === item.id)?.name ?? translateAppText('Dossier');
     setDraggedItem(item);
     setDropTarget(null);
     setDragPreview({ type: item.type, label, x, y });

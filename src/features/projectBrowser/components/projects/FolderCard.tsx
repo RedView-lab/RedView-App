@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 import {
   IconArrowLeft,
   IconFolder,
@@ -46,6 +47,7 @@ export function FolderCard({
   onDragLeaveTarget,
   onDropIntoFolder,
 }: FolderCardProps) {
+  const { t } = useAppI18n();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(folder.name);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -125,7 +127,7 @@ export function FolderCard({
               }}
             />
           ) : (
-            <h3 onDoubleClick={() => setRenaming(true)} title="Double-cliquer pour renommer">
+            <h3 onDoubleClick={() => setRenaming(true)} title={t('Double-cliquer pour renommer')}>
               {folder.name}
             </h3>
           )}
@@ -145,7 +147,7 @@ export function FolderCard({
             ref={menuButtonRef}
             type="button"
             className="rvpb-icon-button rvpb-card__menu-button"
-            aria-label="Actions du dossier"
+            aria-label={t('Actions du dossier')}
             disabled={busy}
             onClick={() => {
               if (!menuButtonRef.current) return;
@@ -157,7 +159,7 @@ export function FolderCard({
           <button
             type="button"
             className="rvpb-card__open"
-            aria-label={`Ouvrir le dossier ${folder.name}`}
+            aria-label={t('Ouvrir le dossier {{name}}', { name: folder.name })}
             disabled={busy}
             onClick={() => onOpen(folder.id)}
           >
@@ -171,7 +173,7 @@ export function FolderCard({
         className="rvpb-card__preview rvpb-folder-card__preview"
         onClick={() => onOpen(folder.id)}
         disabled={busy}
-        aria-label={`Entrer dans le dossier ${folder.name}`}
+        aria-label={t('Entrer dans le dossier {{name}}', { name: folder.name })}
       >
         <div className="rvpb-card__preview-placeholder rvpb-folder-card__placeholder" aria-hidden="true">
           <IconFolder size={40} />

@@ -1,3 +1,4 @@
+import { translateAppText } from '@/shared/i18n';
 import { formatShortDate } from '../formatting';
 import type {
   BillingContactPreference,
@@ -203,8 +204,8 @@ export function hasPaidSubscription(snapshot: SubscriptionSnapshot | null): bool
 }
 
 export function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoading: boolean): string {
-  if (isLoading) return 'Compte';
-  return hasPaidSubscription(snapshot) ? 'Premium' : 'Demo';
+  if (isLoading) return translateAppText('Compte');
+  return hasPaidSubscription(snapshot) ? translateAppText('Premium') : translateAppText('Démo');
 }
 
 export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
@@ -219,24 +220,28 @@ export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): Subs
 
 export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot || isDemoPlan(snapshot)) {
-    return 'Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.';
+    return translateAppText('Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.');
   }
 
   if (snapshot.cancelAtPeriodEnd) {
-    return `Votre abonnement se terminera le ${formatShortDate(snapshot.currentPeriodEnd)}.`;
+    return translateAppText('Votre abonnement se terminera le {{date}}.', {
+      date: formatShortDate(snapshot.currentPeriodEnd),
+    });
   }
 
   if (snapshot.currentPeriodEnd) {
-    return `Votre abonnement se renouvelle automatiquement le ${formatShortDate(snapshot.currentPeriodEnd)}.`;
+    return translateAppText('Votre abonnement se renouvelle automatiquement le {{date}}.', {
+      date: formatShortDate(snapshot.currentPeriodEnd),
+    });
   }
 
-  return 'Votre abonnement RedView Pro est actif.';
+  return translateAppText('Votre abonnement RedView Pro est actif.');
 }
 
 export function statusLabel(snapshot: SubscriptionSnapshot | null): string {
-  if (!snapshot?.status) return 'Statut indisponible';
-  if (snapshot.status === 'demo') return 'Démo';
-  if (snapshot.status === 'active') return 'Actif';
-  if (snapshot.status === 'trialing') return 'Essai';
+  if (!snapshot?.status) return translateAppText('Statut indisponible');
+  if (snapshot.status === 'demo') return translateAppText('Démo');
+  if (snapshot.status === 'active') return translateAppText('Actif');
+  if (snapshot.status === 'trialing') return translateAppText('Essai');
   return snapshot.status;
 }

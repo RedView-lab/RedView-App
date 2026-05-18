@@ -1,4 +1,5 @@
 import { getSupabaseAccessToken } from '@/shared/services/supabase';
+import { translateAppText } from '@/shared/i18n';
 
 import { logBillingUi, logBillingUiError } from './debug';
 import type {
@@ -44,7 +45,7 @@ async function getAccessToken(): Promise<string> {
   const token = await getSupabaseAccessToken();
 
   if (!token) {
-    throw new Error('Session expirée. Reconnectez-vous pour gérer votre abonnement.');
+    throw new Error(translateAppText('Session expirée. Reconnectez-vous pour gérer votre abonnement.'));
   }
 
   return token;
@@ -79,7 +80,9 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const error = new Error(
-      typeof data.error === 'string' ? data.error : 'La requête de facturation a échoué.',
+      typeof data.error === 'string'
+        ? translateAppText(data.error)
+        : translateAppText('La requête de facturation a échoué.'),
     );
     logBillingUiError('api-request-failed', error, {
       path,

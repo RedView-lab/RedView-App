@@ -1,4 +1,5 @@
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
+import { translateAppText } from '@/shared/i18n';
 
 export function buildFolderBreadcrumbs(
   folders: ProjectFolderSummary[],
@@ -71,5 +72,5 @@ export function buildFolderPathLabel(
   folderId: string,
 ): string {
   const breadcrumb = buildFolderBreadcrumbs(folders, folderId);
-  return ['Projets', ...breadcrumb.map((folder) => folder.name)].join(' / ');
+  return [translateAppText('Projets'), ...breadcrumb.map((folder) => folder.name)].join(' / ');
 }

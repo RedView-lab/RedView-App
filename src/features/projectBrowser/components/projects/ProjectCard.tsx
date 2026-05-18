@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 import {
   IconArrowLeft,
   IconSave,
@@ -38,6 +39,7 @@ export function ProjectCard({
   onDragMove,
   onDragEnd,
 }: ProjectCardProps) {
+  const { t } = useAppI18n();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
   const [previewSrc, setPreviewSrc] = useState(thumbnailUrl ?? PROJECT_BROWSER_PREVIEW_URL);
@@ -117,7 +119,7 @@ export function ProjectCard({
               }}
             />
           ) : (
-            <h3 onDoubleClick={() => setRenaming(true)} title="Double-cliquer pour renommer">
+            <h3 onDoubleClick={() => setRenaming(true)} title={t('Double-cliquer pour renommer')}>
               {project.name}
             </h3>
           )}
@@ -136,7 +138,7 @@ export function ProjectCard({
             ref={menuButtonRef}
             type="button"
             className="rvpb-icon-button rvpb-card__menu-button"
-            aria-label="Actions du projet"
+            aria-label={t('Actions du projet')}
             disabled={busy}
             onClick={() => {
               if (!menuButtonRef.current) return;
@@ -148,7 +150,7 @@ export function ProjectCard({
           <button
             type="button"
             className="rvpb-card__open"
-            aria-label={`Ouvrir ${project.name}`}
+            aria-label={t('Ouvrir {{name}}', { name: project.name })}
             disabled={busy}
             onClick={() => onOpen(project.id)}
           >
@@ -162,12 +164,12 @@ export function ProjectCard({
         className="rvpb-card__preview"
         onClick={() => onOpen(project.id)}
         disabled={busy}
-        aria-label={`Entrer dans ${project.name}`}
+        aria-label={t('Entrer dans {{name}}', { name: project.name })}
       >
         {!previewUnavailable ? (
           <img
             src={previewSrc}
-            alt="Aperçu de projet"
+            alt={t('Aperçu de projet')}
             loading="lazy"
             onError={() => {
               if (previewSrc !== PROJECT_BROWSER_PREVIEW_URL) {

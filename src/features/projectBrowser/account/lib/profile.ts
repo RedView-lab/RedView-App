@@ -1,4 +1,5 @@
 import { getSupabaseUser, supabase } from '@/shared/services/supabase';
+import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 
 import {
   DEFAULT_COUNTRY,
@@ -79,27 +80,33 @@ export function formatAccountDisplayName(profile: Pick<AccountProfile, 'firstNam
 }
 
 export function formatLastConnection(lastSignInAt: string | null) {
-  if (!lastSignInAt) return 'Derniere connection indisponible';
+  if (!lastSignInAt) return translateAppText('Dernière connexion indisponible');
 
   const date = new Date(lastSignInAt);
-  if (Number.isNaN(date.getTime())) return 'Derniere connection indisponible';
+  if (Number.isNaN(date.getTime())) return translateAppText('Dernière connexion indisponible');
 
-  const day = new Intl.DateTimeFormat('fr-FR', {
+  const locale = readDocumentAppLocale();
+  const formatterLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
+  const day = new Intl.DateTimeFormat(formatterLocale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
   }).format(date);
-  const time = new Intl.DateTimeFormat('fr-FR', {
+  const time = new Intl.DateTimeFormat(formatterLocale, {
     hour: '2-digit',
     minute: '2-digit',
+    hour12: locale !== 'fr',
   }).format(date);
 
-  return `Derniere connection le ${day} a ${time}`;
+  return translateAppText('Dernière connexion le {{date}} à {{time}}', {
+    date: day,
+    time,
+  });
 }
 
 export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayName: string): Promise<AccountProfile> {
   const user = await getSupabaseUser();
-  if (!user) throw new Error('Session utilisateur introuvable.');
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
   const metadata = readMetadata(user);
   const email = readString(user.email, fallbackEmail);
@@ -117,7 +124,7 @@ export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayN
 
 export async function saveAccountIdentity(form: AccountIdentityForm) {
   const user = await getSupabaseUser();
-  if (!user) throw new Error('Session utilisateur introuvable.');
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
   const metadata = readMetadata(user);
   const { data, error } = await supabase.auth.updateUser({
@@ -135,7 +142,7 @@ export async function saveAccountIdentity(form: AccountIdentityForm) {
 
 export async function saveAccountPractice(form: AccountPracticeForm) {
   const user = await getSupabaseUser();
-  if (!user) throw new Error('Session utilisateur introuvable.');
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
   const metadata = readMetadata(user);
   const { data, error } = await supabase.auth.updateUser({

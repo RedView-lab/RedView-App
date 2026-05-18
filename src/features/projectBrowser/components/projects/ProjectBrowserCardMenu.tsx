@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
 type MenuDestination = {
@@ -34,9 +35,11 @@ export function ProjectBrowserCardMenu({
   onDuplicate,
   onDelete,
 }: ProjectBrowserCardMenuProps) {
+  const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuStyle, setMenuStyle] = useState<{ top: number; left: number } | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
+  const isFolderMenu = title === 'Actions du dossier';
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -83,11 +86,11 @@ export function ProjectBrowserCardMenu({
       ref={menuRef}
       className="rvpb-card-menu"
       role="menu"
-      aria-label={title}
+      aria-label={t(title)}
       style={{ top: menuStyle.top, left: menuStyle.left, width: MENU_WIDTH }}
     >
       <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onRename}>
-        <span>{title === 'Actions du dossier' ? 'Renommer le dossier' : 'Renommer le projet'}</span>
+        <span>{isFolderMenu ? t('Renommer le dossier') : t('Renommer le projet')}</span>
         <SvgV2Icon name="edit-05.svg" size={16} />
       </button>
 
@@ -98,12 +101,12 @@ export function ProjectBrowserCardMenu({
         aria-expanded={moveOpen}
         onClick={() => setMoveOpen((prev) => !prev)}
       >
-        <span>Déplacer vers…</span>
+        <span>{t('Déplacer vers…')}</span>
         <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
       </button>
 
       {moveOpen ? (
-        <div className="rvpb-card-menu__move-list" role="group" aria-label="Destinations disponibles">
+        <div className="rvpb-card-menu__move-list" role="group" aria-label={t('Destinations disponibles')}>
           {destinations.map((destination) => (
             <button
               key={destination.id ?? '__root__'}
@@ -123,7 +126,7 @@ export function ProjectBrowserCardMenu({
 
       {onDuplicate ? (
         <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onDuplicate}>
-          <span>Dupliquer le projet</span>
+          <span>{t('Dupliquer le projet')}</span>
           <IconCopy04 size={16} />
         </button>
       ) : null}
@@ -134,7 +137,7 @@ export function ProjectBrowserCardMenu({
         role="menuitem"
         onClick={onDelete}
       >
-        <span>{title === 'Actions du dossier' ? 'Supprimer le dossier' : 'Supprimer le projet'}</span>
+        <span>{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer le projet')}</span>
         <IconTrash size={14} />
       </button>
     </div>,

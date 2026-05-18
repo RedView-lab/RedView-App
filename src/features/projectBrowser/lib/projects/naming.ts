@@ -1,7 +1,9 @@
+import { translateAppText } from '@/shared/i18n';
+
 export function buildCopiedName(baseName: string, siblingNames: string[]): string {
-  const trimmedBaseName = baseName.trim() || 'Sans nom';
+  const trimmedBaseName = baseName.trim() || translateAppText('Sans nom');
   const normalizedSiblingNames = new Set(siblingNames.map((name) => name.trim().toLowerCase()));
-  const baseCopyName = `${trimmedBaseName} copie`;
+  const baseCopyName = `${trimmedBaseName} ${translateAppText('copie')}`;
 
   if (!normalizedSiblingNames.has(baseCopyName.toLowerCase())) {
     return baseCopyName;

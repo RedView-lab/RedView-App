@@ -12,6 +12,7 @@ import {
 } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
+import { useAppI18n } from '@/shared/i18n';
 import { ACCOUNT_COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '../../../account/lib/options';
 import { logBillingUi, logBillingUiError } from '../../../lib';
 import type { SubscriptionPlanId } from '../../../types';
@@ -184,7 +185,8 @@ function PaymentMethodTile({
   selected: boolean;
   onSelect: (method: BillingPaymentMethod) => void;
 }) {
-  const title = method === 'card' ? 'Carte Bancaire' : 'Amazon Pay';
+  const { t } = useAppI18n();
+  const title = method === 'card' ? t('Carte Bancaire') : t('Amazon Pay');
 
   return (
     <button
@@ -227,6 +229,7 @@ function RedViewWordmark() {
 }
 
 function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps) {
+  const { t } = useAppI18n();
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -304,7 +307,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         }
 
         if (!flow.subscriptionId) {
-          throw new Error('Aucun abonnement Stripe à synchroniser après confirmation.');
+          throw new Error(t('Aucun abonnement Stripe à synchroniser après confirmation.'));
         }
 
         await onComplete({
@@ -315,12 +318,12 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
       }
 
       if (!cardholderName.trim()) {
-        throw new Error('Saisissez le nom du titulaire de la carte.');
+        throw new Error(t('Saisissez le nom du titulaire de la carte.'));
       }
 
       const cardNumberElement = elements.getElement(CardNumberElement);
       if (!cardNumberElement) {
-        throw new Error('Le champ de carte Stripe est introuvable.');
+        throw new Error(t('Le champ de carte Stripe est introuvable.'));
       }
 
       if (flow.mode === 'payment-method') {
@@ -349,7 +352,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
         const setupIntentId = result.setupIntent?.id;
         if (!setupIntentId) {
-          throw new Error('Stripe n’a pas renvoyé de SetupIntent exploitable.');
+          throw new Error(t('Stripe n’a pas renvoyé de SetupIntent exploitable.'));
         }
 
         await onComplete({ mode: 'payment-method', setupIntentId });
@@ -380,7 +383,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
       }
 
       if (!flow.subscriptionId) {
-        throw new Error('Aucun abonnement Stripe à synchroniser après confirmation.');
+        throw new Error(t('Aucun abonnement Stripe à synchroniser après confirmation.'));
       }
 
       await onComplete({
@@ -395,8 +398,8 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
       });
       setError(
         nextError instanceof Error
-          ? nextError.message
-          : 'La confirmation Stripe a échoué.',
+          ? t(nextError.message)
+          : t('La confirmation Stripe a échoué.'),
       );
       setSubmitting(false);
       return;
@@ -415,8 +418,8 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         <main className="rvpb-billing-page__main">
           <section className="rvpb-billing-page__content">
             <div className="rvpb-billing-page__intro">
-              <h2 id={paymentPageTitleId}>{flow.title}</h2>
-              <p>{flow.description}</p>
+              <h2 id={paymentPageTitleId}>{t(flow.title)}</h2>
+              <p>{t(flow.description)}</p>
             </div>
 
             {error ? (
@@ -427,7 +430,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
             <form className="rvpb-billing-page__form" onSubmit={handleSubmit}>
               <fieldset className="rvpb-billing-page__method-group" aria-labelledby={paymentMethodLegendId}>
-                <legend id={paymentMethodLegendId}>Votre mode de paiement :</legend>
+                <legend id={paymentMethodLegendId}>{t('Votre mode de paiement :')}</legend>
                 <div
                   className="rvpb-billing-page__method-grid"
                   style={{ gridTemplateColumns: `repeat(${paymentMethods.length}, minmax(0, 1fr))` }}
@@ -444,7 +447,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
               </fieldset>
 
               <div className="rvpb-billing-page__section-label" aria-hidden="true">
-                <span>Card details</span>
+                <span>{t('Card details')}</span>
                 <span className="rvpb-billing-page__section-label-mark">*</span>
               </div>
 
@@ -453,7 +456,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                   <div className="rvpb-billing-page__field-row">
                     <label className="rvpb-billing-page__field rvpb-billing-page__field--wide">
                       <span className="rvpb-billing-page__field-label">
-                        Numéro de carte <span className="rvpb-billing-page__field-required">*</span>
+                        {t('Numéro de carte')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
                         <span className="rvpb-billing-page__stripe-input">
@@ -470,13 +473,13 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
                     <label className="rvpb-billing-page__field rvpb-billing-page__field--narrow">
                       <span className="rvpb-billing-page__field-label">
-                        CVV <span className="rvpb-billing-page__field-required">*</span>
+                        {t('CVV')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
                         <span className="rvpb-billing-page__stripe-input">
                           <CardCvcElement
                             options={{
-                              placeholder: 'CVV',
+                              placeholder: t('CVV'),
                               style: stripeCardElementStyle,
                             }}
                           />
@@ -488,7 +491,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                   <div className="rvpb-billing-page__field-row">
                     <label className="rvpb-billing-page__field rvpb-billing-page__field--wide">
                       <span className="rvpb-billing-page__field-label">
-                        Name on card <span className="rvpb-billing-page__field-required">*</span>
+                        {t('Name on card')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <input
                         type="text"
@@ -503,7 +506,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
                     <label className="rvpb-billing-page__field rvpb-billing-page__field--narrow">
                       <span className="rvpb-billing-page__field-label">
-                        Expiry <span className="rvpb-billing-page__field-required">*</span>
+                        {t('Expiry')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
                         <span className="rvpb-billing-page__stripe-input">
@@ -520,7 +523,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
                   <label className="rvpb-billing-page__field rvpb-billing-page__field--full">
                     <span className="rvpb-billing-page__field-label">
-                      Country <span className="rvpb-billing-page__field-required">*</span>
+                      {t('Country')} <span className="rvpb-billing-page__field-required">*</span>
                     </span>
                     <span className="rvpb-billing-page__select-wrap">
                       <select
@@ -580,7 +583,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
               )}
 
               <p className="rvpb-billing-page__legal">
-                En fournissant vos informations de carte bancaire, vous autorisez RedView à débiter votre carte pour les paiements futurs conformément à ses conditions. Les données de votre carte sont traitées par Stripe, RedView n’enregistre jamais le PAN complet.
+                {t('En fournissant vos informations de carte bancaire, vous autorisez RedView à débiter votre carte pour les paiements futurs conformément à ses conditions. Les données de votre carte sont traitées par Stripe, RedView n’enregistre jamais le PAN complet.')}
               </p>
 
               <div className="rvpb-billing-page__actions">
@@ -590,14 +593,14 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                   onClick={onClose}
                   disabled={submitting}
                 >
-                  Annuler
+                  {t('Annuler')}
                 </button>
                 <button
                   type="submit"
                   className="rvpb-billing-page__button rvpb-billing-page__button--primary"
                   disabled={submitting}
                 >
-                  {submitting ? 'Confirmation…' : flow.submitLabel}
+                  {submitting ? t('Confirmation…') : t(flow.submitLabel)}
                 </button>
               </div>
             </form>
@@ -609,6 +612,8 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 }
 
 export function BillingActionModal({ flow, onClose, onComplete }: BillingActionModalProps) {
+  const { t } = useAppI18n();
+
   useEffect(() => {
     logBillingUi('billing-page-render', {
       mode: flow.mode,
@@ -635,7 +640,7 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
     });
 
     const fallbackPage = (
-      <section className="rvpb-billing-page" aria-label="Stripe indisponible">
+      <section className="rvpb-billing-page" aria-label={t('Stripe indisponible')}>
         <div className="rvpb-billing-page__chrome">
           <header className="rvpb-billing-page__header">
             <RedViewWordmark />
@@ -643,8 +648,8 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
           <main className="rvpb-billing-page__main">
             <section className="rvpb-billing-page__content rvpb-billing-page__content--compact">
               <div className="rvpb-billing-page__intro">
-                <h2>Configuration Stripe incomplète</h2>
-                <p>Ajoutez VITE_STRIPE_PUBLISHABLE_KEY côté app pour activer la page de paiement intégrée.</p>
+                <h2>{t('Configuration Stripe incomplète')}</h2>
+                <p>{t('Ajoutez VITE_STRIPE_PUBLISHABLE_KEY côté app pour activer la page de paiement intégrée.')}</p>
               </div>
               <div className="rvpb-billing-page__actions">
                 <button
@@ -652,7 +657,7 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
                   className="rvpb-billing-page__button rvpb-billing-page__button--ghost"
                   onClick={onClose}
                 >
-                  Annuler
+                  {t('Annuler')}
                 </button>
               </div>
             </section>

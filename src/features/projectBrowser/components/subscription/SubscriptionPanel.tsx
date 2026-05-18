@@ -1,4 +1,5 @@
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 
 import {
   isDemoPlan,
@@ -47,6 +48,7 @@ export function SubscriptionPanel({
   onToggleManagedSubscription,
   onManagePaymentMethod,
 }: SubscriptionPanelProps) {
+  const { t } = useAppI18n();
   const showDemoUpsell = isDemoPlan(subscriptionState.snapshot);
   const selectedPlan =
     SUBSCRIPTION_PLANS.find((plan) => plan.id === selectedPlanId) ?? SUBSCRIPTION_PLANS[2];
@@ -54,19 +56,24 @@ export function SubscriptionPanel({
   const hasManagedSubscription = !showDemoUpsell;
   const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
   const paymentMethodLabel = paymentMethod
-    ? `${paymentMethod.brand.toUpperCase()} se terminant par ${paymentMethod.last4}`
+    ? t('{{brand}} se terminant par {{last4}}', {
+        brand: paymentMethod.brand.toUpperCase(),
+        last4: paymentMethod.last4,
+      })
     : hasManagedSubscription
-      ? 'Aucun moyen de paiement par défaut'
-      : 'Plan Demo sans paiement';
+      ? t('Aucun moyen de paiement par défaut')
+      : t('Plan Demo sans paiement');
   const paymentMethodHelper = paymentMethod
-    ? `Expire ${String(paymentMethod.expMonth).padStart(2, '0')}/${paymentMethod.expYear}.`
+    ? t('Expire {{date}}.', {
+        date: `${String(paymentMethod.expMonth).padStart(2, '0')}/${paymentMethod.expYear}`,
+      })
     : hasManagedSubscription
-      ? 'Ajoutez ou remplacez votre carte directement dans RedView App.'
-      : 'Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.';
+      ? t('Ajoutez ou remplacez votre carte directement dans RedView App.')
+      : t('Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.');
   const panelError = billingActionError ?? subscriptionState.error;
 
   return (
-    <section className="rvpb-subscription-panel" aria-label="Gestion de l’abonnement">
+    <section className="rvpb-subscription-panel" aria-label={t('Gestion de l’abonnement')}>
       {panelError ? (
         <div className="rvpb-error" role="alert">
           {panelError}
@@ -75,14 +82,13 @@ export function SubscriptionPanel({
 
       <div className={`rvpb-subscription-layout${showDemoUpsell ? ' has-demo-upsell' : ''}`}>
         {showDemoUpsell ? (
-          <aside className="rvpb-demo-upsell" aria-label="Découvrir les offres payantes">
+          <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
             <p>
-              Vous êtes sur une démo réduite de RedView. Pour activer l’interface,
-              choisissez votre abonnement:
+              {t('Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:')}
             </p>
             <a className="rvpb-demo-upsell__cta" href={offersUrl}>
               <SvgV2Icon name="feedback-play.svg" size={20} />
-              <span>Découvrir les offres</span>
+              <span>{t('Découvrir les offres')}</span>
             </a>
           </aside>
         ) : null}
@@ -90,8 +96,8 @@ export function SubscriptionPanel({
         <div className="rvpb-subscription-layout__main">
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
-              <h2>Abonnements</h2>
-              <p>Découvrez nos offres d’abonnement.</p>
+              <h2>{t('Abonnements')}</h2>
+              <p>{t('Découvrez nos offres d’abonnement.')}</p>
             </div>
 
             <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
@@ -137,7 +143,7 @@ export function SubscriptionPanel({
 
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
-              <h2>Informations de paiement</h2>
+              <h2>{t('Informations de paiement')}</h2>
             </div>
 
             <div className="rvpb-subscription-section__content">
@@ -156,10 +162,10 @@ export function SubscriptionPanel({
                       disabled={billingActionBusy}
                     >
                       {showDemoUpsell
-                        ? 'Choisir une offre payante'
+                          ? t('Choisir une offre payante')
                         : paymentMethod
-                          ? 'Remplacer mon moyen de paiement'
-                          : 'Ajouter un moyen de paiement'}
+                            ? t('Remplacer mon moyen de paiement')
+                            : t('Ajouter un moyen de paiement')}
                     </button>
                   </div>
                 </div>
@@ -174,10 +180,10 @@ export function SubscriptionPanel({
                 <SvgV2Icon name="plus.svg" size={16} />
                 <span>
                   {showDemoUpsell
-                    ? 'Passer à une offre payante'
+                    ? t('Passer à une offre payante')
                     : paymentMethod
-                      ? 'Remplacer le moyen de paiement'
-                      : 'Ajouter un moyen de paiement'}
+                      ? t('Remplacer le moyen de paiement')
+                      : t('Ajouter un moyen de paiement')}
                 </span>
               </button>
             </div>
@@ -187,7 +193,7 @@ export function SubscriptionPanel({
 
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
-              <h2>E-mail de contact</h2>
+              <h2>{t('E-mail de contact')}</h2>
             </div>
 
             <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
@@ -207,8 +213,8 @@ export function SubscriptionPanel({
                 />
                 <span className="rvpb-radio-faux" aria-hidden="true" />
                 <span className="rvpb-contact-option__copy">
-                  <strong>Envoyer sur mon e-mail de compte</strong>
-                  <span>{accountEmail || 'Adresse indisponible'}</span>
+                  <strong>{t('Envoyer sur mon e-mail de compte')}</strong>
+                  <span>{accountEmail || t('Adresse indisponible')}</span>
                 </span>
               </label>
 
@@ -227,7 +233,7 @@ export function SubscriptionPanel({
                   />
                   <span className="rvpb-radio-faux" aria-hidden="true" />
                   <span className="rvpb-contact-option__copy">
-                    <strong>Envoyer sur un e-mail alternatif</strong>
+                    <strong>{t('Envoyer sur un e-mail alternatif')}</strong>
                   </span>
                 </label>
 
@@ -238,7 +244,7 @@ export function SubscriptionPanel({
                   <input
                     type="email"
                     value={contactPreference.alternativeEmail}
-                    placeholder="billing@votre-domaine.com"
+                    placeholder={t('billing@votre-domaine.com')}
                     onChange={(event) =>
                       setContactPreference({
                         mode: 'alternative',

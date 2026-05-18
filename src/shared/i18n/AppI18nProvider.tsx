@@ -9,17 +9,19 @@ import {
 
 import {
   createAppTranslationBundle,
+  interpolateAppTranslation,
   readStoredAppLocale,
   resolveAppLocale,
   writeStoredAppLocale,
   type AppLocale,
   type AppTranslationBundle,
+  type AppTranslationVars,
 } from './config';
 
 type AppI18nContextValue = {
   locale: AppLocale;
   setLocale: (nextLocale: AppLocale) => void;
-  t: (text: string) => string;
+  t: (text: string, vars?: AppTranslationVars) => string;
   bundle: AppTranslationBundle;
 };
 
@@ -36,7 +38,7 @@ function canonicalizeText(text: string): string {
     .trim();
 }
 
-function translateString(text: string, lookup: Map<string, string>): string {
+function translateString(text: string, lookup: Map<string, string>, vars?: AppTranslationVars): string {
   const normalized = canonicalizeText(text);
   if (!normalized) {
     return text;
@@ -44,12 +46,12 @@ function translateString(text: string, lookup: Map<string, string>): string {
 
   const translated = lookup.get(normalized);
   if (!translated) {
-    return text;
+    return interpolateAppTranslation(text, vars);
   }
 
   const leadingWhitespace = text.match(/^\s*/)?.[0] ?? '';
   const trailingWhitespace = text.match(/\s*$/)?.[0] ?? '';
-  return `${leadingWhitespace}${translated}${trailingWhitespace}`;
+  return `${leadingWhitespace}${interpolateAppTranslation(translated, vars)}${trailingWhitespace}`;
 }
 
 function translateSubtree(root: ParentNode, lookup: Map<string, string>): void {
@@ -202,7 +204,7 @@ export function AppI18nProvider({ children }: { children: ReactNode }) {
     () => ({
       locale,
       setLocale: setLocaleState,
-      t: (text: string) => translateString(text, translationLookup),
+      t: (text: string, vars?: AppTranslationVars) => translateString(text, translationLookup, vars),
       bundle,
     }),
     [bundle, locale, translationLookup],

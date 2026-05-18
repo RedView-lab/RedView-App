@@ -1,4 +1,5 @@
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 
 import { LANDING_URL } from '../../lib';
 
@@ -8,6 +9,8 @@ type PlaceholderPanelProps = {
 };
 
 export function PlaceholderPanel({ title, description }: PlaceholderPanelProps) {
+  const { t } = useAppI18n();
+
   return (
     <section className="rvpb-panel-placeholder" aria-label={title}>
       <div>
@@ -17,7 +20,7 @@ export function PlaceholderPanel({ title, description }: PlaceholderPanelProps) 
         <h2>{title}</h2>
         <p>{description}</p>
         <a href={`${LANDING_URL}/pricing`} className="rvpb-panel-placeholder__link">
-          Ouvrir RedView Web
+          {t('Ouvrir RedView Web')}
         </a>
       </div>
     </section>

@@ -8,6 +8,7 @@ import {
   IconPlusCircle,
   IconSearch,
 } from '@/features/itineraryPanel/components/icons';
+import { useAppI18n } from '@/shared/i18n';
 import type { ProjectFolderSummary, ProjectSummary } from '@/shared/utils/projects';
 
 import { buildFolderPathLabel, collectFolderDescendantIds } from '../../lib';
@@ -122,6 +123,7 @@ export function ProjectsPanel({
   handleDropIntoFolder,
   handleDropToRoot,
 }: ProjectsPanelProps) {
+  const { t } = useAppI18n();
   const visibleCount = visibleFolders.length + visibleProjects.length;
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [menuState, setMenuState] = useState<MenuState>(null);
@@ -157,7 +159,7 @@ export function ProjectsPanel({
     : [
         {
           id: null,
-          label: 'Racine / Projets',
+          label: t('Racine / Projets'),
           disabled:
             menuState.kind === 'project'
               ? activeProject?.folderId == null
@@ -178,26 +180,28 @@ export function ProjectsPanel({
       ];
 
   const requestRenameProject = async (project: ProjectSummary) => {
-    const nextName = window.prompt('Nouveau nom du projet', project.name)?.trim();
+    const nextName = window.prompt(t('Nouveau nom du projet'), project.name)?.trim();
     if (!nextName || nextName === project.name) return;
     await handleRenameProject(project.id, nextName);
   };
 
   const requestRenameFolder = async (folder: ProjectFolderSummary) => {
-    const nextName = window.prompt('Nouveau nom du dossier', folder.name)?.trim();
+    const nextName = window.prompt(t('Nouveau nom du dossier'), folder.name)?.trim();
     if (!nextName || nextName === folder.name) return;
     await handleRenameFolder(folder.id, nextName);
   };
 
   const confirmDeleteProject = async (project: ProjectSummary) => {
-    const ok = window.confirm(`Supprimer définitivement « ${project.name} » ?`);
+    const ok = window.confirm(t('Supprimer définitivement « {{name}} » ?', { name: project.name }));
     if (!ok) return;
     await handleDeleteProject(project.id);
   };
 
   const confirmDeleteFolder = async (folder: ProjectFolderSummary) => {
     const ok = window.confirm(
-      `Supprimer définitivement le dossier « ${folder.name} » ? Il doit être vide avant suppression.`,
+      t('Supprimer définitivement le dossier « {{name}} » ? Il doit être vide avant suppression.', {
+        name: folder.name,
+      }),
     );
     if (!ok) return;
     await handleDeleteFolder(folder.id);
@@ -218,14 +222,14 @@ export function ProjectsPanel({
         </div>
 
         <div className="rvpb-toolbar__actions">
-          <div className="rvpb-view-toggle" role="tablist" aria-label="Affichage des projets">
+          <div className="rvpb-view-toggle" role="tablist" aria-label={t('Affichage des projets')}>
             <button
               type="button"
               className={`rvpb-view-toggle__item${view === 'grid' ? ' is-active' : ''}`}
               aria-pressed={view === 'grid'}
               onClick={() => setView('grid')}
             >
-              <span>Grille</span>
+              <span>{t('Grille')}</span>
               <IconLayoutGrid size={12} />
             </button>
             <button
@@ -234,7 +238,7 @@ export function ProjectsPanel({
               aria-pressed={view === 'list'}
               onClick={() => setView('list')}
             >
-              <span>Liste</span>
+              <span>{t('Liste')}</span>
               <IconList size={16} />
             </button>
           </div>
@@ -243,7 +247,7 @@ export function ProjectsPanel({
             <input
               className="rvpb-search-input"
               autoFocus
-              placeholder="Rechercher…"
+              placeholder={t('Rechercher…')}
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               onBlur={() => {
@@ -254,7 +258,7 @@ export function ProjectsPanel({
             <button
               type="button"
               className="rvpb-square-button"
-              aria-label="Rechercher un projet"
+              aria-label={t('Rechercher un projet')}
               onClick={() => setShowSearch(true)}
             >
               <IconSearch size={18} />
@@ -263,7 +267,7 @@ export function ProjectsPanel({
           <button
             type="button"
             className="rvpb-square-button"
-            aria-label="Créer un dossier"
+            aria-label={t('Créer un dossier')}
             onClick={handleCreateFolder}
             disabled={creatingFolder}
           >
@@ -281,13 +285,13 @@ export function ProjectsPanel({
             >
               <IconPlusCircle size={20} />
               <span>
-                {creatingProject ? 'Création…' : creatingFolder ? 'Création…' : 'Créer un projet'}
+                {creatingProject || creatingFolder ? t('Création…') : t('Créer un projet')}
               </span>
               <IconChevronDown size={16} />
             </button>
 
             {createMenuOpen ? (
-              <div className="rvpb-create-menu__dropdown" role="menu" aria-label="Créer un élément">
+              <div className="rvpb-create-menu__dropdown" role="menu" aria-label={t('Créer un élément')}>
                 <button
                   type="button"
                   className="rvpb-create-menu__item"
@@ -298,7 +302,7 @@ export function ProjectsPanel({
                   }}
                 >
                   <IconPlusCircle size={18} />
-                  <span>Créer un projet ici</span>
+                  <span>{t('Créer un projet ici')}</span>
                 </button>
                 <button
                   type="button"
@@ -310,7 +314,7 @@ export function ProjectsPanel({
                   }}
                 >
                   <IconFolderPlus size={18} />
-                  <span>Créer un dossier ici</span>
+                  <span>{t('Créer un dossier ici')}</span>
                 </button>
               </div>
             ) : null}
@@ -326,17 +330,17 @@ export function ProjectsPanel({
 
       <section
         className={`rvpb-grid-shell${view === 'list' ? ' is-list' : ''}`}
-        aria-label={currentFolderId ? 'Contenu du dossier courant' : 'Liste des projets'}
+        aria-label={currentFolderId ? t('Contenu du dossier courant') : t('Liste des projets')}
       >
         {loading && visibleCount === 0 ? (
-          <div className="rvpb-empty">Chargement…</div>
+          <div className="rvpb-empty">{t('Chargement…')}</div>
         ) : visibleCount === 0 ? (
           <div className="rvpb-empty">
             {q
-              ? 'Aucun dossier ou projet ne correspond à votre recherche.'
+              ? t('Aucun dossier ou projet ne correspond à votre recherche.')
               : currentFolderId
-                ? 'Ce dossier est vide. Créez un sous-dossier ou un projet pour commencer.'
-                : 'Vous n’avez pas encore de projet. Créez un dossier ou un projet pour commencer.'}
+                ? t('Ce dossier est vide. Créez un sous-dossier ou un projet pour commencer.')
+                : t('Vous n’avez pas encore de projet. Créez un dossier ou un projet pour commencer.')}
           </div>
         ) : (
           <>

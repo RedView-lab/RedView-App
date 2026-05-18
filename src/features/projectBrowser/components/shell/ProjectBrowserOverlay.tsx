@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 import { readStoredSupabaseSession } from '@/shared/services/supabase';
 
 import {
@@ -61,6 +62,7 @@ export function ProjectBrowserOverlay({
   onRequestClose,
   canClose = true,
 }: ProjectBrowserOverlayProps) {
+  const { t } = useAppI18n();
   const storedSession = readStoredSupabaseSession();
   const userId = storedSession?.user.id ?? null;
   const accountEmail = storedSession?.user.email ?? '';
@@ -149,19 +151,19 @@ export function ProjectBrowserOverlay({
       return;
     }
 
-    setContactStatusMessage('Enregistrement de votre e-mail de facturation…');
+    setContactStatusMessage(t('Enregistrement de votre e-mail de facturation…'));
     const timeout = window.setTimeout(() => {
       void persistBillingContactPreference(contactPreference)
         .then((nextPreference) => {
           syncedContactPreferenceRef.current = JSON.stringify(nextPreference);
           setContactPreference(nextPreference);
-          setContactStatusMessage('E-mail de facturation enregistré.');
+          setContactStatusMessage(t('E-mail de facturation enregistré.'));
         })
         .catch((nextError) => {
           setContactStatusMessage(
             nextError instanceof Error
-              ? nextError.message
-              : 'Impossible d’enregistrer l’e-mail de facturation.',
+              ? t(nextError.message)
+              : t('Impossible d’enregistrer l’e-mail de facturation.'),
           );
         });
     }, 450);
@@ -169,7 +171,7 @@ export function ProjectBrowserOverlay({
     return () => {
       window.clearTimeout(timeout);
     };
-  }, [contactPreference, open, userId]);
+  }, [contactPreference, open, t, userId]);
 
   const applyBillingOverview = useCallback((overview: BillingOverviewResponse) => {
     setSubscriptionState({
@@ -214,8 +216,8 @@ export function ProjectBrowserOverlay({
           isLoading: false,
           error:
             nextError instanceof Error
-              ? nextError.message
-              : 'Impossible de charger les informations d’abonnement.',
+              ? t(nextError.message)
+              : t('Impossible de charger les informations d’abonnement.'),
           snapshot: null,
         });
         setPaymentMethod(null);
@@ -225,7 +227,7 @@ export function ProjectBrowserOverlay({
     return () => {
       cancelled = true;
     };
-  }, [applyBillingOverview, open, userId]);
+  }, [applyBillingOverview, open, t, userId]);
 
   useEffect(() => {
     if (!open) return;
@@ -245,8 +247,8 @@ export function ProjectBrowserOverlay({
         setAccountLoading(false);
         setAccountError(
           nextError instanceof Error
-            ? nextError.message
-            : 'Impossible de charger les informations du compte.',
+            ? t(nextError.message)
+            : t('Impossible de charger les informations du compte.'),
         );
       }
     })();
@@ -254,7 +256,7 @@ export function ProjectBrowserOverlay({
     return () => {
       cancelled = true;
     };
-  }, [open, accountEmail, displayName]);
+  }, [open, accountEmail, displayName, t]);
 
   useEffect(() => {
     if (!open) return;
@@ -275,11 +277,11 @@ export function ProjectBrowserOverlay({
     } catch (nextError) {
       console.warn('[ProjectBrowserOverlay] Failed to sign out', nextError);
       setAccountError(
-        nextError instanceof Error ? nextError.message : 'Impossible de se déconnecter.',
+        nextError instanceof Error ? t(nextError.message) : t('Impossible de se déconnecter.'),
       );
       setIsSigningOut(false);
     }
-  }, [isSigningOut]);
+  }, [isSigningOut, t]);
 
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId) => {
@@ -341,14 +343,14 @@ export function ProjectBrowserOverlay({
         });
         setBillingActionError(
           nextError instanceof Error
-            ? nextError.message
-            : 'Impossible de lancer cette action de facturation.',
+            ? t(nextError.message)
+            : t('Impossible de lancer cette action de facturation.'),
         );
       } finally {
         setBillingActionBusy(false);
       }
     },
-    [refreshBillingOverview, subscriptionState.snapshot],
+    [refreshBillingOverview, subscriptionState.snapshot, t],
   );
 
   const handleManagedSubscriptionToggle = useCallback(async () => {
@@ -370,13 +372,13 @@ export function ProjectBrowserOverlay({
     } catch (nextError) {
       setBillingActionError(
         nextError instanceof Error
-          ? nextError.message
-          : 'Impossible de mettre à jour le renouvellement automatique.',
+          ? t(nextError.message)
+          : t('Impossible de mettre à jour le renouvellement automatique.'),
       );
     } finally {
       setBillingActionBusy(false);
     }
-  }, [refreshBillingOverview, subscriptionState.snapshot]);
+  }, [refreshBillingOverview, subscriptionState.snapshot, t]);
 
   const handlePaymentMethodAction = useCallback(async () => {
     if (!hasPaidSubscription(subscriptionState.snapshot)) {
@@ -406,13 +408,13 @@ export function ProjectBrowserOverlay({
         logBillingUiError('handle-payment-method-error', nextError);
       setBillingActionError(
         nextError instanceof Error
-          ? nextError.message
-          : 'Impossible d’ouvrir le formulaire de carte.',
+          ? t(nextError.message)
+          : t('Impossible d’ouvrir le formulaire de carte.'),
       );
     } finally {
       setBillingActionBusy(false);
     }
-  }, [handlePlanSelection, selectedPlanId, subscriptionState.snapshot]);
+  }, [handlePlanSelection, selectedPlanId, subscriptionState.snapshot, t]);
 
   const handleBillingModalComplete = useCallback(
     async (completion: BillingModalCompletion) => {
@@ -449,9 +451,9 @@ export function ProjectBrowserOverlay({
 
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)
-    : displayName || 'Utilisateur';
+    : displayName || t('Utilisateur');
   const headerMetaLabel = accountLoading
-    ? 'Chargement du compte...'
+    ? t('Chargement du compte...')
     : formatLastConnection(accountProfile?.lastSignInAt ?? null);
 
   return (
@@ -459,7 +461,7 @@ export function ProjectBrowserOverlay({
       className="rvpb-overlay"
       role="dialog"
       aria-modal="true"
-      aria-label="Sélecteur de projet principal"
+      aria-label={t('Sélecteur de projet principal')}
     >
       <div className={`rvpb-shell${activeTab === 'account' ? ' is-account-tab' : ''}`}>
         <header className="rvpb-header">
@@ -478,7 +480,7 @@ export function ProjectBrowserOverlay({
 
           <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
             <SvgV2Icon name="switch-horizontal-01.svg" size={20} />
-            <span>{isSigningOut ? 'Déconnexion...' : 'Se déconnecter'}</span>
+            <span>{isSigningOut ? t('Déconnexion...') : t('Se déconnecter')}</span>
           </button>
         </header>
 

@@ -1,4 +1,5 @@
 import type { ProjectFolderSummary } from '@/shared/utils/projects';
+import { useAppI18n } from '@/shared/i18n';
 
 type BrowserBreadcrumbProps = {
   breadcrumbs: ProjectFolderSummary[];
@@ -17,8 +18,10 @@ export function BrowserBreadcrumb({
   onDragEnterRoot,
   onDragLeaveRoot,
 }: BrowserBreadcrumbProps) {
+  const { t } = useAppI18n();
+
   return (
-    <nav className="rvpb-breadcrumb" aria-label="Chemin du dossier courant">
+    <nav className="rvpb-breadcrumb" aria-label={t('Chemin du dossier courant')}>
       <button
         type="button"
         className={`rvpb-breadcrumb__item${breadcrumbs.length === 0 ? ' is-current' : ''}${rootDropActive ? ' is-drop-target' : ''}`}
@@ -31,7 +34,7 @@ export function BrowserBreadcrumb({
           onDropToRoot?.();
         }}
       >
-        Projets
+        {t('Projets')}
       </button>
 
       {breadcrumbs.map((folder, index) => {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 
 import type { OverlayTab } from '../../types';
 
@@ -37,8 +38,10 @@ const TABS: Array<{
 ];
 
 export function TopTabs({ activeTab, onChange }: TopTabsProps) {
+  const { t } = useAppI18n();
+
   return (
-    <nav className="rvpb-top-tabs" aria-label="Navigation principale du menu projet">
+    <nav className="rvpb-top-tabs" aria-label={t('Navigation principale du menu projet')}>
       {TABS.map((tab) => (
         <button
           key={tab.id}
@@ -47,7 +50,7 @@ export function TopTabs({ activeTab, onChange }: TopTabsProps) {
           onClick={() => onChange(tab.id)}
         >
           {tab.icon}
-          <span>{tab.label}</span>
+          <span>{t(tab.label)}</span>
         </button>
       ))}
     </nav>

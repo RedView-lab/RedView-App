@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { useAppI18n } from '@/shared/i18n';
 
 import { logBillingUi } from '../../lib';
 import type { SubscriptionPlanId, SubscriptionPlan } from '../../types';
@@ -26,6 +27,7 @@ export function SubscriptionPlanCard({
   ctaDisabled = false,
   onCtaClick,
 }: SubscriptionPlanCardProps) {
+  const { t } = useAppI18n();
   const [openBadgeId, setOpenBadgeId] = useState<string | null>(null);
   const hasMetadata = plan.tags.length > 0 || plan.iconBadges.length > 0;
 
@@ -58,10 +60,10 @@ export function SubscriptionPlanCard({
           <span className={`rvpb-radio${selected ? ' is-selected' : ''}`} aria-hidden="true" />
           <div className="rvpb-subscription-card__copy">
             <div className="rvpb-subscription-card__title-row">
-              <strong>{plan.name}</strong>
-              <span>{plan.priceLabel}</span>
+              <strong>{t(plan.name)}</strong>
+              <span>{t(plan.priceLabel)}</span>
             </div>
-            {plan.description ? <p className="rvpb-subscription-card__description">{plan.description}</p> : null}
+            {plan.description ? <p className="rvpb-subscription-card__description">{t(plan.description)}</p> : null}
           </div>
         </div>
       </div>
@@ -70,7 +72,7 @@ export function SubscriptionPlanCard({
         <div className="rvpb-subscription-card__chips">
           {plan.tags.map((tag) => (
             <span key={tag} className="rvpb-chip">
-              {tag}
+              {t(tag)}
             </span>
           ))}
           {plan.iconBadges.map((badge) => {
@@ -86,7 +88,7 @@ export function SubscriptionPlanCard({
                 <button
                   type="button"
                   className={`rvpb-icon-chip is-${badge.tone}`}
-                  aria-label={badge.label}
+                  aria-label={t(badge.label)}
                   aria-expanded={isOpen}
                   onClick={(event) => {
                     event.preventDefault();
@@ -108,7 +110,7 @@ export function SubscriptionPlanCard({
                   {badge.featureItems.map((item) => (
                     <span key={`${badge.id}-${item.label}`} className="rvpb-feature-popover__item">
                       <SvgV2Icon name={item.icon} size={20} />
-                      <span>{item.label}</span>
+                      <span>{t(item.label)}</span>
                     </span>
                   ))}
                 </span>
@@ -139,7 +141,7 @@ export function SubscriptionPlanCard({
               void onCtaClick?.();
             }}
           >
-            {ctaLabel}
+            {t(ctaLabel)}
           </button>
         </div>
       ) : null}
