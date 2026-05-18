@@ -210,11 +210,30 @@
   line-height: 1;
 }
 
+.rvpb-icon-chip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
 .rvpb-icon-chip {
+  appearance: none;
   min-width: 36px;
   min-height: 32px;
   padding: 0 8px;
+  border: 0;
   border-radius: 8px;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    filter 120ms ease;
+}
+
+.rvpb-icon-chip:hover,
+.rvpb-icon-chip:focus-visible,
+.rvpb-icon-chip-wrap.is-open .rvpb-icon-chip {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+  outline: none;
 }
 
 .rvpb-icon-chip.is-gold {
@@ -247,6 +266,73 @@
 
 .rvpb-icon-chip.is-gray {
   background: rgba(102, 102, 102, 0.6);
+}
+
+.rvpb-feature-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 10px);
+  z-index: 2;
+  display: flex;
+  min-width: 280px;
+  max-width: min(320px, calc(100vw - 48px));
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.1) 100%),
+    linear-gradient(90deg, rgba(63, 151, 234, 0.4) 0%, rgba(63, 151, 234, 0.4) 100%);
+  backdrop-filter: blur(60px);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.rvpb-icon-chip-wrap.is-open .rvpb-feature-popover,
+.rvpb-icon-chip-wrap:hover .rvpb-feature-popover,
+.rvpb-icon-chip-wrap:focus-within .rvpb-feature-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+
+.rvpb-feature-popover__item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.rvpb-feature-popover__item span:last-child {
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .rvpb-feature-popover {
+    left: 0;
+    transform: translate(0, 4px);
+  }
+
+  .rvpb-icon-chip-wrap.is-open .rvpb-feature-popover,
+  .rvpb-icon-chip-wrap:hover .rvpb-feature-popover,
+  .rvpb-icon-chip-wrap:focus-within .rvpb-feature-popover {
+    transform: translate(0, 0);
+  }
 }
 
 .rvpb-subscription-card__description {

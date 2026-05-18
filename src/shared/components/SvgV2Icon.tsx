@@ -99,6 +99,7 @@ const SVGV2_ICONE_ASSETS = new Set([
   'sun.svg',
   'sunrise.svg',
   'sunset.svg',
+  'snowflake.svg',
   'tool-02-1.svg',
   'tool-02.svg',
   'trash-03.svg',

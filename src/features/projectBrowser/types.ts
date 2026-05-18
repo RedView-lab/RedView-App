@@ -41,8 +41,14 @@ export type SubscriptionPlan = {
   priceLabel: string;
   tags: string[];
   iconBadges: Array<{
+    id: string;
+    label: string;
     icon: string;
     tone: 'gold' | 'brown' | 'blue' | 'teal' | 'green' | 'purple' | 'black' | 'gray';
+    featureItems: Array<{
+      icon: string;
+      label: string;
+    }>;
   }>;
   description: string;
 };
