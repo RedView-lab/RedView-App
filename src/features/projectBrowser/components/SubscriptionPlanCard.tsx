@@ -12,7 +12,6 @@ type SubscriptionPlanCardProps = {
   ctaTone?: 'danger' | 'neutral';
   ctaDisabled?: boolean;
   onCtaClick?: () => void | Promise<void>;
-  ctaHelper?: string;
 };
 
 export function SubscriptionPlanCard({
@@ -24,10 +23,11 @@ export function SubscriptionPlanCard({
   ctaTone = 'neutral',
   ctaDisabled = false,
   onCtaClick,
-  ctaHelper,
 }: SubscriptionPlanCardProps) {
+  const hasMetadata = plan.tags.length > 0 || plan.iconBadges.length > 0;
+
   return (
-    <article className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}`}>
+    <article className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}`}>
       <button
         type="button"
         className="rvpb-subscription-card__select"
@@ -48,19 +48,21 @@ export function SubscriptionPlanCard({
               <strong>{plan.name}</strong>
               <span>{plan.priceLabel}</span>
             </div>
-            <div className="rvpb-subscription-card__chips">
-              {plan.tags.map((tag) => (
-                <span key={tag} className="rvpb-chip">
-                  {tag}
-                </span>
-              ))}
-              {plan.iconBadges.map((badge) => (
-                <span key={`${plan.id}-${badge.icon}`} className={`rvpb-icon-chip is-${badge.tone}`}>
-                  <SvgV2Icon name={badge.icon} size={14} />
-                </span>
-              ))}
-            </div>
-            <p className="rvpb-subscription-card__description">{plan.description}</p>
+            {hasMetadata ? (
+              <div className="rvpb-subscription-card__chips">
+                {plan.tags.map((tag) => (
+                  <span key={tag} className="rvpb-chip">
+                    {tag}
+                  </span>
+                ))}
+                {plan.iconBadges.map((badge) => (
+                  <span key={`${plan.id}-${badge.icon}`} className={`rvpb-icon-chip is-${badge.tone}`}>
+                    <SvgV2Icon name={badge.icon} size={20} />
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {plan.description ? <p className="rvpb-subscription-card__description">{plan.description}</p> : null}
           </div>
         </div>
       </button>
@@ -88,7 +90,6 @@ export function SubscriptionPlanCard({
           >
             {ctaLabel}
           </button>
-          {ctaHelper ? <span className="rvpb-inline-note">{ctaHelper}</span> : null}
         </div>
       ) : null}
     </article>

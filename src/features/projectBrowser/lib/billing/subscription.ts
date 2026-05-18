@@ -17,22 +17,24 @@ const PLAN_PRICE_IDS: Partial<Record<SubscriptionPlanId, string>> = {
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'demo',
-    name: 'Demo',
+    name: 'Démo',
     priceLabel: 'Gratuit',
-    tags: ['Compte par défaut'],
-    iconBadges: [{ icon: 'layers-three-02.svg', tone: 'blue' }],
-    description: 'Point d’entrée gratuit pour consulter vos projets et préparer la suite avant un upgrade.',
+    tags: [],
+    iconBadges: [],
+    description: '',
   },
   {
     id: 'explorer',
     name: 'Abonnement Explorer',
     priceLabel: '9.99€/mois',
-    tags: ['Sans engagement', '-25%'],
+    tags: [],
     iconBadges: [
-      { icon: 'currency-euro.svg', tone: 'gold' },
-      { icon: 'layers-three-02.svg', tone: 'blue' },
+      { icon: 'diamond.svg', tone: 'gold' },
+      { icon: 'multi-layer.svg', tone: 'brown' },
+      { icon: 'weather.svg', tone: 'blue' },
+      { icon: 'folder.svg', tone: 'gray' },
     ],
-    description: 'Accès léger pour consulter vos projets et préparer vos prochaines sorties.',
+    description: '',
   },
   {
     id: 'proCommit',
@@ -40,25 +42,33 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     priceLabel: '14.99€/mois',
     tags: ['Engagement de 6 mois', '-25%'],
     iconBadges: [
-      { icon: 'currency-euro.svg', tone: 'gold' },
-      { icon: 'layers-three-02.svg', tone: 'blue' },
-      { icon: 'marker-pin-04.svg', tone: 'green' },
-      { icon: 'clock-rewind.svg', tone: 'gray' },
+      { icon: 'diamond.svg', tone: 'gold' },
+      { icon: 'multi-layer.svg', tone: 'brown' },
+      { icon: 'weather.svg', tone: 'blue' },
+      { icon: 'itinerary.svg', tone: 'teal' },
+      { icon: 'line-chart.svg', tone: 'green' },
+      { icon: 'poi-pin.svg', tone: 'purple' },
+      { icon: 'stopwatch.svg', tone: 'black' },
+      { icon: 'folder.svg', tone: 'gray' },
     ],
-    description: 'Le meilleur tarif pour un usage terrain intensif avec engagement.',
+    description: '',
   },
   {
     id: 'proMonthly',
     name: 'Abonnement Pro',
     priceLabel: '19.99€/mois',
-    tags: ['Sans engagement', '-25%'],
+    tags: ['Sans engagement'],
     iconBadges: [
-      { icon: 'currency-euro.svg', tone: 'gold' },
-      { icon: 'layers-three-02.svg', tone: 'blue' },
-      { icon: 'marker-pin-04.svg', tone: 'green' },
-      { icon: 'clock-rewind.svg', tone: 'gray' },
+      { icon: 'diamond.svg', tone: 'gold' },
+      { icon: 'multi-layer.svg', tone: 'brown' },
+      { icon: 'weather.svg', tone: 'blue' },
+      { icon: 'itinerary.svg', tone: 'teal' },
+      { icon: 'line-chart.svg', tone: 'green' },
+      { icon: 'poi-pin.svg', tone: 'purple' },
+      { icon: 'stopwatch.svg', tone: 'black' },
+      { icon: 'folder.svg', tone: 'gray' },
     ],
-    description: 'Toute la stack RedView Pro avec une sortie possible à tout moment.',
+    description: '',
   },
 ];
 
@@ -148,7 +158,7 @@ export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null)
 
 export function statusLabel(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot?.status) return 'Statut indisponible';
-  if (snapshot.status === 'demo') return 'Demo';
+  if (snapshot.status === 'demo') return 'Démo';
   if (snapshot.status === 'active') return 'Actif';
   if (snapshot.status === 'trialing') return 'Essai';
   return snapshot.status;

@@ -1,3 +1,56 @@
+.rvpb-subscription-layout {
+  display: grid;
+  gap: 12px;
+}
+
+.rvpb-subscription-layout.has-demo-upsell {
+  grid-template-columns: 238px minmax(0, 1fr);
+  align-items: start;
+}
+
+.rvpb-subscription-layout__main {
+  min-width: 0;
+}
+
+.rvpb-demo-upsell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 238px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(24px);
+}
+
+.rvpb-demo-upsell p {
+  margin: 0;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.rvpb-demo-upsell__cta {
+  display: inline-flex;
+  width: 100%;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  background: #890000;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.rvpb-demo-upsell__cta span {
+  min-width: 0;
+}
+
 .rvpb-subscription-section {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 640px);
@@ -40,7 +93,7 @@
 .rvpb-subscription-card {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
   padding: 16px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
@@ -67,23 +120,32 @@
 }
 
 .rvpb-subscription-card:hover {
-  border-color: rgba(255, 255, 255, 0.28);
+  border-color: rgba(255, 255, 255, 0.22);
   transform: translateY(-1px);
 }
 
 .rvpb-subscription-card.is-selected {
-  border-color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.16);
 }
 
 .rvpb-subscription-card.is-active {
-  border-color: rgba(137, 0, 0, 0.5);
-  background: rgba(15, 15, 15, 0.74);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.rvpb-subscription-card.is-demo {
+  gap: 0;
+  border: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.rvpb-subscription-card.is-demo:hover {
+  border-color: transparent;
 }
 
 .rvpb-subscription-card__top {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
 
 .rvpb-radio,
@@ -109,23 +171,23 @@
   flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
 .rvpb-subscription-card__title-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.64);
   font-size: 14px;
-  line-height: 1.4;
+  line-height: 1.4286;
 }
 
 .rvpb-subscription-card__title-row strong {
   color: #fff;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .rvpb-subscription-card__chips {
@@ -149,22 +211,38 @@
 }
 
 .rvpb-icon-chip {
-  width: 32px;
+  min-width: 36px;
   min-height: 32px;
-  padding: 0;
+  padding: 0 8px;
   border-radius: 8px;
 }
 
 .rvpb-icon-chip.is-gold {
-  background: rgba(227, 199, 56, 0.52);
+  background: rgba(182, 123, 40, 0.6);
+}
+
+.rvpb-icon-chip.is-brown {
+  background: rgba(141, 84, 45, 0.6);
 }
 
 .rvpb-icon-chip.is-blue {
-  background: rgba(100, 199, 241, 0.4);
+  background: rgba(63, 151, 234, 0.4);
+}
+
+.rvpb-icon-chip.is-teal {
+  background: rgba(25, 116, 111, 0.5);
 }
 
 .rvpb-icon-chip.is-green {
-  background: rgba(94, 152, 102, 0.6);
+  background: rgba(63, 86, 55, 0.6);
+}
+
+.rvpb-icon-chip.is-purple {
+  background: rgba(83, 56, 158, 0.6);
+}
+
+.rvpb-icon-chip.is-black {
+  background: rgba(18, 18, 18, 0.6);
 }
 
 .rvpb-icon-chip.is-gray {

@@ -42,7 +42,7 @@ export type SubscriptionPlan = {
   tags: string[];
   iconBadges: Array<{
     icon: string;
-    tone: 'gold' | 'blue' | 'green' | 'gray';
+    tone: 'gold' | 'brown' | 'blue' | 'teal' | 'green' | 'purple' | 'black' | 'gray';
   }>;
   description: string;
 };

@@ -9,6 +9,14 @@
     padding: 32px;
   }
 
+  .rvpb-subscription-layout.has-demo-upsell {
+    grid-template-columns: 1fr;
+  }
+
+  .rvpb-demo-upsell {
+    max-width: none;
+  }
+
   .rvpb-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -31,6 +39,10 @@
 }
 
 @media (max-width: 768px) {
+  .rvpb-overlay {
+    padding: 12px;
+  }
+
   .rvpb-billing-modal {
     padding: 16px;
   }
@@ -76,6 +88,20 @@
   .rvpb-account-password-row {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .rvpb-subscription-panel {
+    padding-top: 12px;
+  }
+
+  .rvpb-subscription-layout,
+  .rvpb-subscription-layout__main {
+    gap: 12px;
+  }
+
+  .rvpb-demo-upsell {
+    max-width: none;
+    margin: 0;
   }
 
   .rvpb-settings-display-options {
