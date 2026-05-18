@@ -59,12 +59,12 @@ const appearance = {
   labels: 'above' as const,
   variables: {
     colorPrimary: '#890000',
-    colorBackground: 'rgba(255,255,255,0.04)',
+    colorBackground: '#141414',
     colorText: '#ffffff',
     colorDanger: '#ff8e8e',
-    colorTextPlaceholder: 'rgba(255, 255, 255, 0.48)',
-    colorTextSecondary: 'rgba(255, 255, 255, 0.72)',
-    colorIcon: 'rgba(255, 255, 255, 0.82)',
+    colorTextPlaceholder: '#8c8c8c',
+    colorTextSecondary: '#c7c7c7',
+    colorIcon: '#d1d1d1',
     colorSuccess: '#34d399',
     borderRadius: '8px',
     spacingUnit: '4px',
@@ -81,7 +81,6 @@ const appearance = {
       border: '1px solid rgba(255,255,255,0.16)',
       color: '#ffffff',
       boxShadow: 'none',
-      minHeight: '90px',
       padding: '12px 16px',
     },
     '.Tab:hover': {
@@ -98,12 +97,26 @@ const appearance = {
       fontWeight: '500',
       fontSize: '14px',
     },
-    '.Input, .Block, .CodeInput': {
+    '.Input': {
       backgroundColor: 'rgba(255,255,255,0.08)',
       border: '1px solid rgba(213,215,218,0.16)',
       boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
     },
-    '.Input:focus, .Block:focus, .CodeInput:focus': {
+    '.Block': {
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(213,215,218,0.16)',
+      boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
+    },
+    '.CodeInput': {
+      backgroundColor: 'rgba(255,255,255,0.08)',
+      border: '1px solid rgba(213,215,218,0.16)',
+      boxShadow: '0 1px 2px rgba(10,13,18,0.05)',
+    },
+    '.Input:focus': {
+      borderColor: 'rgba(137,0,0,0.9)',
+      boxShadow: '0 0 0 1px rgba(137,0,0,0.65)',
+    },
+    '.CodeInput:focus': {
       borderColor: 'rgba(137,0,0,0.9)',
       boxShadow: '0 0 0 1px rgba(137,0,0,0.65)',
     },
@@ -446,6 +459,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                         <span className="rvpb-billing-page__stripe-input">
                           <CardNumberElement
                             options={{
+                              disableLink: true,
                               showIcon: true,
                               style: stripeCardElementStyle,
                             }}
