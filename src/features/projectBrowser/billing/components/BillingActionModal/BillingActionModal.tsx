@@ -35,6 +35,7 @@ export type BillingModalCompletion =
 type BillingPaymentMethod = 'card' | 'amazon_pay';
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
+const amazonPayEnabled = import.meta.env.VITE_STRIPE_ENABLE_AMAZON_PAY?.trim().toLowerCase() === 'true';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
 
 const stripeCardElementStyle = {
@@ -237,14 +238,20 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
   const paymentMethods: BillingPaymentMethod[] =
-    flow.mode === 'subscription' ? ['card', 'amazon_pay'] : ['card'];
+    flow.mode === 'subscription' && amazonPayEnabled ? ['card', 'amazon_pay'] : ['card'];
   const selectedCountryOption =
     ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode) ?? ACCOUNT_COUNTRY_OPTIONS[0];
-  const paymentMethodOrder = ['amazon_pay', 'card'];
+  const paymentMethodOrder = amazonPayEnabled ? ['amazon_pay', 'card'] : ['card'];
 
   useEffect(() => {
     setSelectedMethod('card');
   }, [flow.mode]);
+
+  useEffect(() => {
+    if (!paymentMethods.includes(selectedMethod)) {
+      setSelectedMethod('card');
+    }
+  }, [paymentMethods, selectedMethod]);
 
   useEffect(() => {
     setError(null);
@@ -449,7 +456,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
               </div>
 
               {selectedMethod === 'card' ? (
-                <div className="rvpb-billing-page__custom-card-fields">
+                <div className="rvpb-billing-page__custom-card-fields" onMouseDown={() => setSelectedMethod('card')}>
                   <div className="rvpb-billing-page__field-row">
                     <label className="rvpb-billing-page__field rvpb-billing-page__field--wide">
                       <span className="rvpb-billing-page__field-label">
