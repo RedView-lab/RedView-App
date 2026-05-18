@@ -274,72 +274,13 @@ body.rvpb-billing-page-open {
 .rvpb-billing-page__stripe-input {
   display: flex;
   align-items: center;
+  width: 100%;
   padding: 8px 12px;
 }
 
 .rvpb-billing-page__stripe-shell {
   position: relative;
   display: block;
-}
-
-.rvpb-billing-page__stripe-preview {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  color: #fff;
-  pointer-events: none;
-  transition: opacity 120ms ease;
-}
-
-.rvpb-billing-page__stripe-preview--card {
-  gap: 14px;
-}
-
-.rvpb-billing-page__stripe-shell--filled .rvpb-billing-page__stripe-preview,
-.rvpb-billing-page__stripe-shell:focus-within .rvpb-billing-page__stripe-preview {
-  opacity: 0;
-}
-
-.rvpb-billing-page__stripe-preview-text {
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-  letter-spacing: 0;
-  white-space: nowrap;
-}
-
-.rvpb-billing-page__card-preview-brand {
-  position: relative;
-  flex: 0 0 auto;
-  width: 34px;
-  height: 24px;
-  border-radius: 4px;
-  border: 1px solid #e9eaeb;
-  background: #fff;
-}
-
-.rvpb-billing-page__card-preview-brand-circle {
-  position: absolute;
-  top: 50%;
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  transform: translateY(-50%);
-}
-
-.rvpb-billing-page__card-preview-brand-circle--left {
-  left: 6px;
-  background: #eb001b;
-}
-
-.rvpb-billing-page__card-preview-brand-circle--right {
-  right: 6px;
-  background: #f79e1b;
-  mix-blend-mode: multiply;
 }
 
 .rvpb-billing-page__text-input,
@@ -448,6 +389,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__method-group .StripeElement,
 .rvpb-billing-page__method-group .__PrivateStripeElement {
+  display: block;
   width: 100%;
 }
 
