@@ -219,8 +219,9 @@
 }
 
 .rvpb-icon-chip-wrap {
-  --rvpb-feature-popover-accent: rgba(63, 151, 234, 0.4);
-  --rvpb-feature-popover-shadow: rgba(63, 151, 234, 0.22);
+  --rvpb-feature-popover-bg: #3d5f82;
+  --rvpb-feature-popover-row-bg: #4b6b8c;
+  --rvpb-feature-popover-border: rgba(154, 184, 214, 0.38);
   position: relative;
   display: inline-flex;
   z-index: 0;
@@ -286,43 +287,51 @@
 }
 
 .rvpb-icon-chip-wrap.is-gold {
-  --rvpb-feature-popover-accent: rgba(182, 123, 40, 0.6);
-  --rvpb-feature-popover-shadow: rgba(182, 123, 40, 0.24);
+  --rvpb-feature-popover-bg: #7e5921;
+  --rvpb-feature-popover-row-bg: #8f6830;
+  --rvpb-feature-popover-border: rgba(221, 189, 134, 0.34);
 }
 
 .rvpb-icon-chip-wrap.is-brown {
-  --rvpb-feature-popover-accent: rgba(141, 84, 45, 0.6);
-  --rvpb-feature-popover-shadow: rgba(141, 84, 45, 0.22);
+  --rvpb-feature-popover-bg: #6d4429;
+  --rvpb-feature-popover-row-bg: #7f5437;
+  --rvpb-feature-popover-border: rgba(210, 175, 150, 0.3);
 }
 
 .rvpb-icon-chip-wrap.is-blue {
-  --rvpb-feature-popover-accent: rgba(63, 151, 234, 0.4);
-  --rvpb-feature-popover-shadow: rgba(63, 151, 234, 0.22);
+  --rvpb-feature-popover-bg: #3d5f82;
+  --rvpb-feature-popover-row-bg: #4b6b8c;
+  --rvpb-feature-popover-border: rgba(154, 184, 214, 0.38);
 }
 
 .rvpb-icon-chip-wrap.is-teal {
-  --rvpb-feature-popover-accent: rgba(25, 116, 111, 0.5);
-  --rvpb-feature-popover-shadow: rgba(25, 116, 111, 0.22);
+  --rvpb-feature-popover-bg: #1f5d59;
+  --rvpb-feature-popover-row-bg: #2c6f6a;
+  --rvpb-feature-popover-border: rgba(138, 196, 189, 0.32);
 }
 
 .rvpb-icon-chip-wrap.is-green {
-  --rvpb-feature-popover-accent: rgba(63, 86, 55, 0.6);
-  --rvpb-feature-popover-shadow: rgba(63, 86, 55, 0.22);
+  --rvpb-feature-popover-bg: #455e3c;
+  --rvpb-feature-popover-row-bg: #54704a;
+  --rvpb-feature-popover-border: rgba(166, 193, 154, 0.28);
 }
 
 .rvpb-icon-chip-wrap.is-purple {
-  --rvpb-feature-popover-accent: rgba(83, 56, 158, 0.6);
-  --rvpb-feature-popover-shadow: rgba(83, 56, 158, 0.22);
+  --rvpb-feature-popover-bg: #543a89;
+  --rvpb-feature-popover-row-bg: #654b9b;
+  --rvpb-feature-popover-border: rgba(182, 163, 228, 0.3);
 }
 
 .rvpb-icon-chip-wrap.is-black {
-  --rvpb-feature-popover-accent: rgba(18, 18, 18, 0.82);
-  --rvpb-feature-popover-shadow: rgba(18, 18, 18, 0.28);
+  --rvpb-feature-popover-bg: #242424;
+  --rvpb-feature-popover-row-bg: #313131;
+  --rvpb-feature-popover-border: rgba(255, 255, 255, 0.18);
 }
 
 .rvpb-icon-chip-wrap.is-gray {
-  --rvpb-feature-popover-accent: rgba(102, 102, 102, 0.6);
-  --rvpb-feature-popover-shadow: rgba(102, 102, 102, 0.22);
+  --rvpb-feature-popover-bg: #5a5a5a;
+  --rvpb-feature-popover-row-bg: #686868;
+  --rvpb-feature-popover-border: rgba(255, 255, 255, 0.2);
 }
 
 .rvpb-feature-popover {
@@ -336,37 +345,18 @@
   flex-direction: column;
   gap: 4px;
   padding: 4px;
-  overflow: hidden;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.05) 100%),
-    linear-gradient(135deg, var(--rvpb-feature-popover-accent) 0%, rgba(255, 255, 255, 0) 100%),
-    rgba(17, 20, 24, 0.78);
-  -webkit-backdrop-filter: blur(24px) saturate(150%) contrast(112%);
-  backdrop-filter: blur(24px) saturate(150%) contrast(112%);
+  border: 1px solid var(--rvpb-feature-popover-border);
+  background: var(--rvpb-feature-popover-bg);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.04),
-    0 18px 32px rgba(0, 0, 0, 0.3),
-    0 8px 18px var(--rvpb-feature-popover-shadow),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
+    0 12px 24px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);
   transition:
     opacity 140ms ease,
     transform 140ms ease;
-}
-
-.rvpb-feature-popover::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0) 46%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0) 52%);
-  pointer-events: none;
 }
 
 .rvpb-icon-chip-wrap.is-open .rvpb-feature-popover,
@@ -378,7 +368,6 @@
 }
 
 .rvpb-feature-popover__item {
-  position: relative;
   display: grid;
   grid-template-columns: 20px minmax(0, 1fr);
   align-items: center;
@@ -386,11 +375,7 @@
   min-height: 32px;
   padding: 0 8px;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.06) 100%),
-    rgba(255, 255, 255, 0.08);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: var(--rvpb-feature-popover-row-bg);
   color: #fff;
   font-size: 16px;
   font-weight: 500;
