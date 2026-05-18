@@ -1,8 +1,17 @@
 import { useEffect, useId, useState } from 'react';
 
-import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import {
+  CardCvcElement,
+  CardExpiryElement,
+  CardNumberElement,
+  Elements,
+  PaymentElement,
+  useElements,
+  useStripe,
+} from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
+import { ACCOUNT_COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '../../account/lib/options';
 import { logBillingUi, logBillingUiError } from '../../lib';
 import type { SubscriptionPlanId } from '../../types';
 
@@ -22,10 +31,27 @@ export type BillingModalCompletion =
   | { mode: 'subscription'; subscriptionId: string }
   | { mode: 'payment-method'; setupIntentId: string };
 
+type BillingPaymentMethod = 'card' | 'amazon_pay';
+
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
-const subscriptionPaymentMethodOrder = ['card', 'amazon_pay'];
-const cardOnlyPaymentMethodOrder = ['card'];
+
+const stripeCardElementStyle = {
+  base: {
+    color: '#ffffff',
+    fontFamily: 'Rethink Sans, system-ui, sans-serif',
+    fontSize: '16px',
+    fontSmoothing: 'antialiased',
+    '::placeholder': {
+      color: 'rgba(255, 255, 255, 0.48)',
+    },
+    iconColor: 'rgba(255, 255, 255, 0.88)',
+  },
+  invalid: {
+    color: '#ffb4b4',
+    iconColor: '#ffb4b4',
+  },
+};
 
 const appearance = {
   theme: 'night' as const,
@@ -102,6 +128,71 @@ type BillingActionModalProps = {
 
 type BillingActionFormProps = BillingActionModalProps;
 
+function flagEmojiFromCode(code: string): string {
+  return code
+    .toUpperCase()
+    .split('')
+    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
+    .join('');
+}
+
+function CardMethodIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="rvpb-billing-page__method-icon-svg">
+      <rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 10.5H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7 15H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="rvpb-billing-page__chevron-svg">
+      <path
+        d="M5 7.5L10 12.5L15 7.5"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.75"
+      />
+    </svg>
+  );
+}
+
+function PaymentMethodTile({
+  method,
+  selected,
+  onSelect,
+}: {
+  method: BillingPaymentMethod;
+  selected: boolean;
+  onSelect: (method: BillingPaymentMethod) => void;
+}) {
+  const title = method === 'card' ? 'Carte Bancaire' : 'Amazon Pay';
+
+  return (
+    <button
+      type="button"
+      className={`rvpb-billing-page__method-tile${selected ? ' rvpb-billing-page__method-tile--selected' : ''}`}
+      onClick={() => onSelect(method)}
+      aria-pressed={selected}
+    >
+      <span className="rvpb-billing-page__method-radio" aria-hidden="true">
+        <span className="rvpb-billing-page__method-radio-dot" />
+      </span>
+      <span className="rvpb-billing-page__method-title">{title}</span>
+      <span
+        className={`rvpb-billing-page__method-icon${method === 'amazon_pay' ? ' rvpb-billing-page__method-icon--amazon' : ''}`}
+        aria-hidden="true"
+      >
+        {method === 'card' ? <CardMethodIcon /> : <span className="rvpb-billing-page__amazon-pay-wordmark">pay</span>}
+      </span>
+    </button>
+  );
+}
+
 function RedViewWordmark() {
   return (
     <div className="rvpb-billing-page__brand" aria-label="RedView">
@@ -122,8 +213,19 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const paymentMethodLegendId = useId();
-  const paymentMethodOrder =
-    flow.mode === 'subscription' ? subscriptionPaymentMethodOrder : cardOnlyPaymentMethodOrder;
+  const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
+  const [cardholderName, setCardholderName] = useState('');
+  const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
+
+  useEffect(() => {
+    if (flow.mode === 'payment-method') {
+      setSelectedMethod('card');
+    }
+  }, [flow.mode]);
+
+  useEffect(() => {
+    setError(null);
+  }, [selectedMethod]);
 
   useEffect(() => {
     logBillingUi('billing-page-form-state', {
@@ -131,8 +233,9 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
       hasStripe: Boolean(stripe),
       hasElements: Boolean(elements),
       hasSubscriptionId: Boolean(flow.subscriptionId),
+      selectedMethod,
     });
-  }, [elements, flow.mode, flow.subscriptionId, stripe]);
+  }, [elements, flow.mode, flow.subscriptionId, selectedMethod, stripe]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -151,24 +254,70 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
     logBillingUi('billing-page-submit-start', {
       mode: flow.mode,
       hasSubscriptionId: Boolean(flow.subscriptionId),
+      selectedMethod,
     });
 
     try {
-      const submitResult = await elements.submit();
-      if (submitResult.error) {
-        throw new Error(submitResult.error.message);
+      if (selectedMethod === 'amazon_pay') {
+        const submitResult = await elements.submit();
+        if (submitResult.error) {
+          throw new Error(submitResult.error.message);
+        }
+
+        const result = await stripe.confirmPayment({
+          elements,
+          redirect: 'if_required',
+        });
+
+        logBillingUi('billing-page-confirm-payment-result', {
+          hasError: Boolean(result.error),
+          paymentIntentId: result.paymentIntent?.id ?? null,
+          paymentIntentStatus: result.paymentIntent?.status ?? null,
+          selectedMethod,
+        });
+
+        if (result.error) {
+          throw new Error(result.error.message);
+        }
+
+        if (!flow.subscriptionId) {
+          throw new Error('Aucun abonnement Stripe à synchroniser après confirmation.');
+        }
+
+        await onComplete({
+          mode: 'subscription',
+          subscriptionId: flow.subscriptionId,
+        });
+        return;
+      }
+
+      if (!cardholderName.trim()) {
+        throw new Error('Saisissez le nom du titulaire de la carte.');
+      }
+
+      const cardNumberElement = elements.getElement(CardNumberElement);
+      if (!cardNumberElement) {
+        throw new Error('Le champ de carte Stripe est introuvable.');
       }
 
       if (flow.mode === 'payment-method') {
-        const result = await stripe.confirmSetup({
-          elements,
-          redirect: 'if_required',
+        const result = await stripe.confirmCardSetup(flow.clientSecret, {
+          payment_method: {
+            card: cardNumberElement,
+            billing_details: {
+              name: cardholderName.trim(),
+              address: {
+                country: countryCode,
+              },
+            },
+          },
         });
 
         logBillingUi('billing-page-confirm-setup-result', {
           hasError: Boolean(result.error),
           setupIntentId: result.setupIntent?.id ?? null,
           setupIntentStatus: result.setupIntent?.status ?? null,
+          selectedMethod,
         });
 
         if (result.error) {
@@ -184,15 +333,23 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
         return;
       }
 
-      const result = await stripe.confirmPayment({
-        elements,
-        redirect: 'if_required',
+      const result = await stripe.confirmCardPayment(flow.clientSecret, {
+        payment_method: {
+          card: cardNumberElement,
+          billing_details: {
+            name: cardholderName.trim(),
+            address: {
+              country: countryCode,
+            },
+          },
+        },
       });
 
       logBillingUi('billing-page-confirm-payment-result', {
         hasError: Boolean(result.error),
         paymentIntentId: result.paymentIntent?.id ?? null,
         paymentIntentStatus: result.paymentIntent?.status ?? null,
+        selectedMethod,
       });
 
       if (result.error) {
@@ -211,6 +368,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
       logBillingUiError('billing-page-submit-error', nextError, {
         mode: flow.mode,
         hasSubscriptionId: Boolean(flow.subscriptionId),
+        selectedMethod,
       });
       setError(
         nextError instanceof Error
@@ -245,40 +403,144 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
             ) : null}
 
             <form className="rvpb-billing-page__form" onSubmit={handleSubmit}>
+              <fieldset className="rvpb-billing-page__method-group" aria-labelledby={paymentMethodLegendId}>
+                <legend id={paymentMethodLegendId}>Votre mode de paiement :</legend>
+                <div className="rvpb-billing-page__method-grid">
+                  <PaymentMethodTile
+                    method="card"
+                    selected={selectedMethod === 'card'}
+                    onSelect={setSelectedMethod}
+                  />
+                  {flow.mode === 'subscription' ? (
+                    <PaymentMethodTile
+                      method="amazon_pay"
+                      selected={selectedMethod === 'amazon_pay'}
+                      onSelect={setSelectedMethod}
+                    />
+                  ) : null}
+                </div>
+              </fieldset>
+
               <div className="rvpb-billing-page__section-label" aria-hidden="true">
                 <span>Card details</span>
                 <span className="rvpb-billing-page__section-label-mark">*</span>
               </div>
 
-              <fieldset className="rvpb-billing-page__method-group" aria-labelledby={paymentMethodLegendId}>
-                <legend id={paymentMethodLegendId}>Votre mode de paiement :</legend>
-                <PaymentElement
-                  options={{
-                    layout: {
-                      type: 'tabs',
-                      defaultCollapsed: false,
-                    },
-                    business: { name: 'RedView' },
-                    paymentMethodOrder: [...paymentMethodOrder],
-                    terms: { card: 'never' },
-                    fields: {
-                      billingDetails: {
-                        name: 'auto',
-                        email: 'never',
-                        phone: 'never',
-                        address: {
-                          country: 'auto',
-                          postalCode: 'never',
-                          line1: 'never',
-                          line2: 'never',
-                          city: 'never',
-                          state: 'never',
+              {selectedMethod === 'card' ? (
+                <div className="rvpb-billing-page__custom-card-fields">
+                  <div className="rvpb-billing-page__field-row">
+                    <label className="rvpb-billing-page__field rvpb-billing-page__field--wide">
+                      <span className="rvpb-billing-page__field-label">
+                        Numéro de carte <span className="rvpb-billing-page__field-required">*</span>
+                      </span>
+                      <span className="rvpb-billing-page__stripe-input">
+                        <CardNumberElement
+                          options={{
+                            showIcon: true,
+                            style: stripeCardElementStyle,
+                          }}
+                        />
+                      </span>
+                    </label>
+
+                    <label className="rvpb-billing-page__field rvpb-billing-page__field--narrow">
+                      <span className="rvpb-billing-page__field-label">
+                        CVV <span className="rvpb-billing-page__field-required">*</span>
+                      </span>
+                      <span className="rvpb-billing-page__stripe-input">
+                        <CardCvcElement
+                          options={{
+                            style: stripeCardElementStyle,
+                          }}
+                        />
+                      </span>
+                    </label>
+                  </div>
+
+                  <div className="rvpb-billing-page__field-row">
+                    <label className="rvpb-billing-page__field rvpb-billing-page__field--wide">
+                      <span className="rvpb-billing-page__field-label">
+                        Name on card <span className="rvpb-billing-page__field-required">*</span>
+                      </span>
+                      <input
+                        type="text"
+                        className="rvpb-billing-page__text-input"
+                        value={cardholderName}
+                        onChange={(event) => setCardholderName(event.target.value)}
+                        placeholder="Olivia Rhye"
+                        autoComplete="cc-name"
+                        disabled={submitting}
+                      />
+                    </label>
+
+                    <label className="rvpb-billing-page__field rvpb-billing-page__field--narrow">
+                      <span className="rvpb-billing-page__field-label">
+                        Expiry <span className="rvpb-billing-page__field-required">*</span>
+                      </span>
+                      <span className="rvpb-billing-page__stripe-input">
+                        <CardExpiryElement
+                          options={{
+                            style: stripeCardElementStyle,
+                          }}
+                        />
+                      </span>
+                    </label>
+                  </div>
+
+                  <label className="rvpb-billing-page__field rvpb-billing-page__field--full">
+                    <span className="rvpb-billing-page__field-label">
+                      Country <span className="rvpb-billing-page__field-required">*</span>
+                    </span>
+                    <span className="rvpb-billing-page__select-wrap">
+                      <select
+                        className="rvpb-billing-page__select-input"
+                        value={countryCode}
+                        onChange={(event) => setCountryCode(event.target.value)}
+                        disabled={submitting}
+                        autoComplete="country"
+                      >
+                        {ACCOUNT_COUNTRY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {`${flagEmojiFromCode(option.flagCode)} ${option.label}`}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="rvpb-billing-page__chevron" aria-hidden="true">
+                        <ChevronDownIcon />
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              ) : (
+                <div className="rvpb-billing-page__wallet-panel">
+                  <PaymentElement
+                    options={{
+                      layout: {
+                        type: 'accordion',
+                        defaultCollapsed: false,
+                      },
+                      business: { name: 'RedView' },
+                      paymentMethodOrder: ['amazon_pay', 'card'],
+                      terms: { card: 'never' },
+                      fields: {
+                        billingDetails: {
+                          name: 'auto',
+                          email: 'never',
+                          phone: 'never',
+                          address: {
+                            country: 'auto',
+                            postalCode: 'never',
+                            line1: 'never',
+                            line2: 'never',
+                            city: 'never',
+                            state: 'never',
+                          },
                         },
                       },
-                    },
-                  }}
-                />
-              </fieldset>
+                    }}
+                  />
+                </div>
+              )}
 
               <p className="rvpb-billing-page__legal">
                 En fournissant vos informations de carte bancaire, vous autorisez RedView à débiter votre carte pour les paiements futurs conformément à ses conditions. Les données de votre carte sont traitées par Stripe, RedView n’enregistre jamais le PAN complet.
