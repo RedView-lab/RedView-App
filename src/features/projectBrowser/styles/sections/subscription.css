@@ -91,6 +91,8 @@
 }
 
 .rvpb-subscription-card {
+  position: relative;
+  z-index: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -122,6 +124,12 @@
 .rvpb-subscription-card:hover {
   border-color: rgba(255, 255, 255, 0.22);
   transform: translateY(-1px);
+}
+
+.rvpb-subscription-card:hover,
+.rvpb-subscription-card:focus-within,
+.rvpb-subscription-card.has-open-popover {
+  z-index: 12;
 }
 
 .rvpb-subscription-card.is-selected {
@@ -211,8 +219,17 @@
 }
 
 .rvpb-icon-chip-wrap {
+  --rvpb-feature-popover-accent: rgba(63, 151, 234, 0.4);
+  --rvpb-feature-popover-shadow: rgba(63, 151, 234, 0.22);
   position: relative;
   display: inline-flex;
+  z-index: 0;
+}
+
+.rvpb-icon-chip-wrap:hover,
+.rvpb-icon-chip-wrap:focus-within,
+.rvpb-icon-chip-wrap.is-open {
+  z-index: 2;
 }
 
 .rvpb-icon-chip {
@@ -268,11 +285,51 @@
   background: rgba(102, 102, 102, 0.6);
 }
 
+.rvpb-icon-chip-wrap.is-gold {
+  --rvpb-feature-popover-accent: rgba(182, 123, 40, 0.6);
+  --rvpb-feature-popover-shadow: rgba(182, 123, 40, 0.24);
+}
+
+.rvpb-icon-chip-wrap.is-brown {
+  --rvpb-feature-popover-accent: rgba(141, 84, 45, 0.6);
+  --rvpb-feature-popover-shadow: rgba(141, 84, 45, 0.22);
+}
+
+.rvpb-icon-chip-wrap.is-blue {
+  --rvpb-feature-popover-accent: rgba(63, 151, 234, 0.4);
+  --rvpb-feature-popover-shadow: rgba(63, 151, 234, 0.22);
+}
+
+.rvpb-icon-chip-wrap.is-teal {
+  --rvpb-feature-popover-accent: rgba(25, 116, 111, 0.5);
+  --rvpb-feature-popover-shadow: rgba(25, 116, 111, 0.22);
+}
+
+.rvpb-icon-chip-wrap.is-green {
+  --rvpb-feature-popover-accent: rgba(63, 86, 55, 0.6);
+  --rvpb-feature-popover-shadow: rgba(63, 86, 55, 0.22);
+}
+
+.rvpb-icon-chip-wrap.is-purple {
+  --rvpb-feature-popover-accent: rgba(83, 56, 158, 0.6);
+  --rvpb-feature-popover-shadow: rgba(83, 56, 158, 0.22);
+}
+
+.rvpb-icon-chip-wrap.is-black {
+  --rvpb-feature-popover-accent: rgba(18, 18, 18, 0.82);
+  --rvpb-feature-popover-shadow: rgba(18, 18, 18, 0.28);
+}
+
+.rvpb-icon-chip-wrap.is-gray {
+  --rvpb-feature-popover-accent: rgba(102, 102, 102, 0.6);
+  --rvpb-feature-popover-shadow: rgba(102, 102, 102, 0.22);
+}
+
 .rvpb-feature-popover {
   position: absolute;
   left: 50%;
   top: calc(100% + 10px);
-  z-index: 2;
+  z-index: 20;
   display: flex;
   min-width: 280px;
   max-width: min(320px, calc(100vw - 48px));
@@ -282,9 +339,11 @@
   border-radius: 8px;
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0%, rgba(0, 0, 0, 0.1) 100%),
-    linear-gradient(90deg, rgba(63, 151, 234, 0.4) 0%, rgba(63, 151, 234, 0.4) 100%);
+    linear-gradient(90deg, var(--rvpb-feature-popover-accent) 0%, var(--rvpb-feature-popover-accent) 100%);
   backdrop-filter: blur(60px);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
+  box-shadow:
+    0 18px 32px rgba(0, 0, 0, 0.26),
+    0 0 0 1px var(--rvpb-feature-popover-shadow);
   opacity: 0;
   pointer-events: none;
   transform: translate(-50%, 4px);

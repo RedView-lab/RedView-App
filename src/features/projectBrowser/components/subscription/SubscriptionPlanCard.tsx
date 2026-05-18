@@ -39,7 +39,9 @@ export function SubscriptionPlanCard({
   };
 
   return (
-    <article className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}`}>
+    <article
+      className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}${openBadgeId ? ' has-open-popover' : ''}`}
+    >
       <div
         className="rvpb-subscription-card__select"
         onClick={selectPlan}
@@ -77,7 +79,7 @@ export function SubscriptionPlanCard({
             return (
               <span
                 key={`${plan.id}-${badge.id}`}
-                className={`rvpb-icon-chip-wrap${isOpen ? ' is-open' : ''}`}
+                className={`rvpb-icon-chip-wrap is-${badge.tone}${isOpen ? ' is-open' : ''}`}
                 onMouseEnter={() => setOpenBadgeId(badge.id)}
                 onMouseLeave={() => setOpenBadgeId((current) => (current === badge.id ? null : current))}
               >
