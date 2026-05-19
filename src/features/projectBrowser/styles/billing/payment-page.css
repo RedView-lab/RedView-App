@@ -263,7 +263,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__stripe-input,
 .rvpb-billing-page__text-input,
-.rvpb-billing-page__select-wrap {
+.rvpb-billing-page__country-select .rvpb-account-select-shell {
   min-height: 40px;
   border-radius: 8px;
   border: 1px solid rgba(213, 215, 218, 0.16);
@@ -295,8 +295,7 @@ body.rvpb-billing-page-open {
   display: block;
 }
 
-.rvpb-billing-page__text-input,
-.rvpb-billing-page__select-input {
+.rvpb-billing-page__text-input {
   width: 100%;
   border: 0;
   outline: 0;
@@ -334,66 +333,19 @@ body.rvpb-billing-page-open {
 }
 
 .rvpb-billing-page__text-input:focus,
-.rvpb-billing-page__select-input:focus,
 .rvpb-billing-page__stripe-input:focus-within,
-.rvpb-billing-page__select-wrap:focus-within {
+.rvpb-billing-page__country-select .rvpb-account-select-shell:focus-within,
+.rvpb-billing-page__country-select .rvpb-account-select.is-open .rvpb-account-select-trigger {
   border-color: rgba(137, 0, 0, 0.9);
   box-shadow: 0 0 0 1px rgba(137, 0, 0, 0.65);
 }
 
-.rvpb-billing-page__select-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  padding: 0 12px;
+.rvpb-billing-page__country-select .rvpb-account-select {
+  width: 100%;
 }
 
-.rvpb-billing-page__select-display {
-  position: absolute;
-  inset: 0 40px 0 12px;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.rvpb-billing-page__select-flag {
-  flex: 0 0 auto;
-  font-size: 20px;
-  line-height: 1;
-}
-
-.rvpb-billing-page__select-label {
-  min-width: 0;
-  color: #fff;
-  font-size: 16px;
-  line-height: 24px;
-  white-space: nowrap;
-}
-
-.rvpb-billing-page__select-input {
-  appearance: none;
-  padding: 8px 28px 8px 0;
-  color: transparent;
-  text-shadow: none;
-  position: relative;
-  z-index: 2;
-}
-
-.rvpb-billing-page__select-input option {
-  color: #111;
-}
-
-.rvpb-billing-page__chevron {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: rgba(255, 255, 255, 0.72);
+.rvpb-billing-page__country-select .rvpb-account-select-menu {
+  z-index: 24;
 }
 
 .rvpb-billing-page__chevron-svg {

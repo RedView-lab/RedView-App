@@ -74,6 +74,11 @@
   text-align: left;
 }
 
+.rvpb-account-select.is-disabled .rvpb-account-select-trigger {
+  cursor: not-allowed;
+  opacity: 0.68;
+}
+
 .rvpb-account-select.is-open .rvpb-account-select-trigger {
   border-color: rgba(255, 255, 255, 0.28);
   background: rgba(255, 255, 255, 0.1);

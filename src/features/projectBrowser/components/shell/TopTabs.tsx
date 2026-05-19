@@ -33,7 +33,7 @@ const TABS: Array<{
   {
     id: 'settings',
     label: 'Réglages',
-    icon: <SvgV2Icon name="settings-01.svg" size={20} />,
+    icon: <SvgV2Icon name="settings-02.svg" size={20} />,
   },
 ];
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import {
@@ -13,7 +13,8 @@ import {
 import { loadStripe } from '@stripe/stripe-js';
 
 import { useAppI18n } from '@/shared/i18n';
-import { ACCOUNT_COUNTRY_OPTIONS, DEFAULT_COUNTRY } from '../../../account/lib/options';
+import { AccountSelect, type AccountSelectOption } from '../../../account/components';
+import { buildAccountCountryOptions, DEFAULT_COUNTRY } from '../../../account/lib/options';
 import { logBillingUi, logBillingUiError } from '../../../lib';
 import type { SubscriptionPlanId } from '../../../types';
 
@@ -37,6 +38,28 @@ type BillingPaymentMethod = 'card' | 'amazon_pay';
 
 const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY?.trim() ?? '';
 const stripePromise = publishableKey ? loadStripe(publishableKey) : null;
+const COUNTRY_FLAG_BASE_PATH = '/landing/svg';
+
+function findCountryOption(countryCode: string, options: readonly AccountSelectOption[]) {
+  return options.find((option) => option.value === countryCode);
+}
+
+function CountryFlag({ option }: { option?: AccountSelectOption }) {
+  if (!option?.flagCode) {
+    return <span className="rvpb-account-flag rvpb-account-flag--fallback" aria-hidden="true" />;
+  }
+
+  return (
+    <span className="rvpb-account-flag" aria-hidden="true">
+      <img
+        className="rvpb-account-flag__image"
+        src={`${COUNTRY_FLAG_BASE_PATH}/${option.flagCode}.svg`}
+        alt=""
+        loading="lazy"
+      />
+    </span>
+  );
+}
 
 const stripeCardElementStyle = {
   base: {
@@ -146,35 +169,12 @@ type BillingActionFormProps = BillingActionModalProps & {
   onSelectedMethodChange: (method: BillingPaymentMethod) => void;
 };
 
-function flagEmojiFromCode(code: string): string {
-  return code
-    .toUpperCase()
-    .split('')
-    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-    .join('');
-}
-
 function CardMethodIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" className="rvpb-billing-page__method-icon-svg">
       <rect x="3" y="5" width="18" height="14" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.8" />
       <path d="M3 10.5H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       <path d="M7 15H12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="rvpb-billing-page__chevron-svg">
-      <path
-        d="M5 7.5L10 12.5L15 7.5"
-        fill="none"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.75"
-      />
     </svg>
   );
 }
@@ -238,7 +238,7 @@ function BillingActionForm({
   selectedMethod,
   onSelectedMethodChange,
 }: BillingActionFormProps) {
-  const { t } = useAppI18n();
+  const { locale, t } = useAppI18n();
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -248,10 +248,11 @@ function BillingActionForm({
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const countryOptions = useMemo(() => buildAccountCountryOptions(locale), [locale]);
   const paymentMethods: BillingPaymentMethod[] =
     flow.mode === 'subscription' ? ['card', 'amazon_pay'] : ['card'];
   const selectedCountryOption =
-    ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode) ?? ACCOUNT_COUNTRY_OPTIONS[0];
+    findCountryOption(countryCode, countryOptions) ?? countryOptions[0];
   const paymentMethodOrder = ['amazon_pay', 'card'];
 
   useEffect(() => {
@@ -544,30 +545,19 @@ function BillingActionForm({
                     <span className="rvpb-billing-page__field-label">
                       {t('Country')} <span className="rvpb-billing-page__field-required">*</span>
                     </span>
-                    <span className="rvpb-billing-page__select-wrap">
-                      <select
-                        className="rvpb-billing-page__select-input"
+                    <div className="rvpb-billing-page__country-select">
+                      <AccountSelect
                         value={countryCode}
-                        onChange={(event) => setCountryCode(event.target.value)}
+                        options={countryOptions}
+                        ariaLabel={t('Country')}
                         disabled={submitting}
-                        autoComplete="country"
-                      >
-                        {ACCOUNT_COUNTRY_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="rvpb-billing-page__select-display" aria-hidden="true">
-                        <span className="rvpb-billing-page__select-flag">
-                          {flagEmojiFromCode(selectedCountryOption.flagCode)}
-                        </span>
-                        <span className="rvpb-billing-page__select-label">{selectedCountryOption.label}</span>
-                      </span>
-                      <span className="rvpb-billing-page__chevron" aria-hidden="true">
-                        <ChevronDownIcon />
-                      </span>
-                    </span>
+                        renderValuePrefix={(option: AccountSelectOption | undefined) => (
+                          <CountryFlag option={option ?? selectedCountryOption} />
+                        )}
+                        renderOptionPrefix={(option: AccountSelectOption) => <CountryFlag option={option} />}
+                        onChange={(nextCountryCode: string) => setCountryCode(nextCountryCode)}
+                      />
+                    </div>
                   </label>
                 </div>
               ) : (
@@ -644,13 +634,9 @@ function BillingActionForm({
   );
 }
 
-export function BillingActionModal({ flow, onClose, onComplete }: BillingActionModalProps) {
+function BillingActionModalContent({ flow, onClose, onComplete }: BillingActionModalProps) {
   const { t } = useAppI18n();
   const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
-
-  useEffect(() => {
-    setSelectedMethod('card');
-  }, [flow.clientSecret, flow.mode]);
 
   useEffect(() => {
     logBillingUi('billing-page-render', {
@@ -727,4 +713,15 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
   );
 
   return typeof document === 'undefined' ? billingPage : createPortal(billingPage, document.body);
+}
+
+export function BillingActionModal({ flow, onClose, onComplete }: BillingActionModalProps) {
+  return (
+    <BillingActionModalContent
+      key={`${flow.mode}:${flow.clientSecret}`}
+      flow={flow}
+      onClose={onClose}
+      onComplete={onComplete}
+    />
+  );
 }

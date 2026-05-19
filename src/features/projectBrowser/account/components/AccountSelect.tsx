@@ -16,6 +16,7 @@ type AccountSelectProps = {
   ariaLabel?: string;
   renderValuePrefix?: (option: AccountSelectOption | undefined) => ReactNode;
   renderOptionPrefix?: (option: AccountSelectOption) => ReactNode;
+  disabled?: boolean;
 };
 
 export function AccountSelect({
@@ -25,12 +26,14 @@ export function AccountSelect({
   ariaLabel,
   renderValuePrefix,
   renderOptionPrefix,
+  disabled = false,
 }: AccountSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const listboxId = useId();
+  const menuVisible = isOpen && !disabled;
 
   const selectedOption = useMemo(
     () => options.find((option) => option.value === value) ?? options[0],
@@ -63,7 +66,7 @@ export function AccountSelect({
   };
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!menuVisible) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -83,17 +86,21 @@ export function AccountSelect({
       window.removeEventListener('pointerdown', handlePointerDown);
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isOpen]);
+  }, [menuVisible]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!menuVisible) return;
 
     requestAnimationFrame(() => {
       focusOptionAt(selectedIndex);
     });
-  }, [focusOptionAt, isOpen, selectedIndex]);
+  }, [focusOptionAt, menuVisible, selectedIndex]);
 
   const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (disabled) {
+      return;
+    }
+
     switch (event.key) {
       case 'ArrowDown':
       case 'Enter':
@@ -151,17 +158,22 @@ export function AccountSelect({
   };
 
   return (
-    <div ref={rootRef} className={`rvpb-account-select${isOpen ? ' is-open' : ''}`}>
+    <div ref={rootRef} className={`rvpb-account-select${menuVisible ? ' is-open' : ''}${disabled ? ' is-disabled' : ''}`}>
       <button
         ref={triggerRef}
         type="button"
         className="rvpb-account-select-trigger rvpb-account-select-shell"
         aria-haspopup="listbox"
-        aria-expanded={isOpen}
+        aria-expanded={menuVisible}
         aria-controls={listboxId}
         aria-label={ariaLabel}
+        disabled={disabled}
         onClick={() => {
-          if (isOpen) {
+          if (disabled) {
+            return;
+          }
+
+          if (menuVisible) {
             setIsOpen(false);
             return;
           }
@@ -177,7 +189,7 @@ export function AccountSelect({
         </span>
       </button>
 
-      {isOpen ? (
+      {menuVisible ? (
         <div id={listboxId} className="rvpb-account-select-menu" role="listbox">
           {options.map((option, index) => {
             const isSelected = option.value === value;

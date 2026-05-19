@@ -1,26 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import { readStoredSupabaseSession } from '@/shared/services/supabase';
 
 import {
-  AccountPanel,
   formatAccountDisplayName,
   formatLastConnection,
   loadAccountProfile,
   signOutAccount,
   type AccountProfile,
-} from '../../account';
-import { SettingsPanel } from '../../settings';
-import { ProjectsPanel } from '../projects';
-import {
-  BillingActionModal,
-  type BillingModalCompletion,
-  type BillingModalState,
-} from '../../billing/components/BillingActionModal/BillingActionModal';
-import { logBillingUi, logBillingUiError } from '../../lib';
-import { SubscriptionPanel } from '../subscription';
+} from '../../../account';
 import {
   accountTierLabel,
   hasPaidSubscription,
@@ -29,7 +18,7 @@ import {
   readBillingContactPreference,
   resolveActivePlanId,
   writeBillingContactPreference,
-} from '../../lib';
+} from '../../../lib';
 import {
   applyPaymentMethodSetup,
   cancelManagedSubscription,
@@ -42,8 +31,8 @@ import {
   setDefaultBillingPaymentMethod,
   syncManagedSubscription,
   type BillingOverviewResponse,
-} from '../../lib';
-import { TopTabs } from './TopTabs';
+} from '../../../lib';
+import { logBillingUi, logBillingUiError } from '../../../lib';
 import type {
   BillingContactPreference,
   PaymentMethodSummary,
@@ -51,10 +40,12 @@ import type {
   OverlayTab,
   SubscriptionPlanId,
   SubscriptionState,
-} from '../../types';
-import { useProjectBrowserProjects } from '../../hooks/useProjectBrowserProjects';
-
-import '../../styles/index.css';
+} from '../../../types';
+import { useProjectBrowserProjects } from '../../../hooks/useProjectBrowserProjects';
+import type {
+  BillingModalCompletion,
+  BillingModalState,
+} from '../../../billing/components/BillingActionModal/BillingActionModal';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
@@ -91,7 +82,7 @@ function writeStoredActiveTab(userId: string | null, tab: OverlayTab): void {
   }
 }
 
-export function ProjectBrowserOverlay({
+export function useProjectBrowserOverlayState({
   open,
   displayName,
   onOpenProject,
@@ -124,48 +115,8 @@ export function ProjectBrowserOverlay({
   const [contactStatusMessage, setContactStatusMessage] = useState<string | null>(null);
   const syncedContactPreferenceRef = useRef<string | null>(null);
   const contactHydratedRef = useRef(false);
-  const {
-    folders,
-    thumbnails,
-    loading,
-    error,
-    busyIds,
-    creatingProject,
-    creatingFolder,
-    search,
-    setSearch,
-    view,
-    setView,
-    showSearch,
-    setShowSearch,
-    currentFolderId,
-    breadcrumbs,
-    draggedItem,
-    dropTarget,
-    dragPreview,
-    toast,
-    handleCreateProject,
-    handleCreateFolder,
-    handleRenameProject,
-    handleDeleteProject,
-    handleRenameFolder,
-    handleDeleteFolder,
-    handleDuplicateProject,
-    handleMoveProject,
-    handleMoveFolder,
-    handleOpenFolder,
-    handleNavigateToFolder,
-    handleDragStart,
-    handleDragMove,
-    handleDragEnd,
-    handleDragEnterTarget,
-    handleDragLeaveTarget,
-    handleDropIntoFolder,
-    handleDropToRoot,
-    q,
-    visibleFolders,
-    visibleProjects,
-  } = useProjectBrowserProjects({
+  const hasManualPlanSelectionRef = useRef(false);
+  const projects = useProjectBrowserProjects({
     open,
     onOpenProject,
   });
@@ -182,7 +133,14 @@ export function ProjectBrowserOverlay({
     setContactPreference(readBillingContactPreference(userId));
     syncedContactPreferenceRef.current = null;
     contactHydratedRef.current = false;
+    hasManualPlanSelectionRef.current = false;
   }, [userId]);
+
+  useEffect(() => {
+    if (open) {
+      hasManualPlanSelectionRef.current = false;
+    }
+  }, [open]);
 
   useEffect(() => {
     writeBillingContactPreference(userId, contactPreference);
@@ -219,12 +177,14 @@ export function ProjectBrowserOverlay({
   }, [contactPreference, open, t, userId]);
 
   const applyBillingOverview = useCallback((overview: BillingOverviewResponse) => {
+    const activePlanId = resolveActivePlanId(overview.subscription);
+
     setSubscriptionState({
       isLoading: false,
       error: null,
       snapshot: overview.subscription,
     });
-    setSelectedPlanId(resolveActivePlanId(overview.subscription));
+    setSelectedPlanId((current) => (hasManualPlanSelectionRef.current ? current : activePlanId));
     setPaymentMethod(overview.paymentMethod);
     setPaymentMethods(overview.paymentMethods);
     setContactPreference(overview.contactPreference);
@@ -232,6 +192,11 @@ export function ProjectBrowserOverlay({
     contactHydratedRef.current = true;
     setContactStatusMessage(null);
     setBillingActionError(null);
+  }, []);
+
+  const handleSelectedPlanIdChange = useCallback((planId: SubscriptionPlanId) => {
+    hasManualPlanSelectionRef.current = true;
+    setSelectedPlanId(planId);
   }, []);
 
   const refreshBillingOverview = useCallback(async () => {
@@ -440,9 +405,9 @@ export function ProjectBrowserOverlay({
 
     try {
       const result = await createPaymentMethodSetupIntent();
-        logBillingUi('handle-payment-method-result', {
-          hasClientSecret: Boolean(result.clientSecret),
-        });
+      logBillingUi('handle-payment-method-result', {
+        hasClientSecret: Boolean(result.clientSecret),
+      });
       setBillingModal({
         mode: 'payment-method',
         clientSecret: result.clientSecret,
@@ -452,7 +417,7 @@ export function ProjectBrowserOverlay({
         submitLabel: 'Enregistrer cette carte',
       });
     } catch (nextError) {
-        logBillingUiError('handle-payment-method-error', nextError);
+      logBillingUiError('handle-payment-method-error', nextError);
       setBillingActionError(
         nextError instanceof Error
           ? t(nextError.message)
@@ -465,15 +430,18 @@ export function ProjectBrowserOverlay({
 
   const handleBillingModalComplete = useCallback(
     async (completion: BillingModalCompletion) => {
-      logBillingUi('billing-modal-complete', completion.mode === 'payment-method'
-        ? {
-            mode: completion.mode,
-            setupIntentId: completion.setupIntentId,
-          }
-        : {
-            mode: completion.mode,
-            subscriptionId: completion.subscriptionId,
-          });
+      logBillingUi(
+        'billing-modal-complete',
+        completion.mode === 'payment-method'
+          ? {
+              mode: completion.mode,
+              setupIntentId: completion.setupIntentId,
+            }
+          : {
+              mode: completion.mode,
+              subscriptionId: completion.subscriptionId,
+            },
+      );
 
       if (completion.mode === 'payment-method') {
         const overview = await applyPaymentMethodSetup(completion.setupIntentId);
@@ -515,172 +483,88 @@ export function ProjectBrowserOverlay({
     setBillingModal(null);
   }, []);
 
-  if (!open) return null;
-
   const accountDisplayName = accountProfile
     ? formatAccountDisplayName(accountProfile, displayName)
     : displayName || t('Utilisateur');
   const headerMetaLabel = accountLoading
     ? t('Chargement du compte...')
     : formatLastConnection(accountProfile?.lastSignInAt ?? null);
+  const tierLabel = accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading);
   const showDemoRail = Boolean(subscriptionState.snapshot) && isDemoPlan(subscriptionState.snapshot);
   const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
 
-  return (
-    <div
-      className="rvpb-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('Sélecteur de projet principal')}
-    >
-      <div className={`rvpb-shell${activeTab === 'account' ? ' is-account-tab' : ''}${showDemoRail ? ' has-demo-rail' : ''}`}>
-        {showDemoRail ? (
-          <aside className="rvpb-demo-rail" aria-label={t('Informations du plan Demo')}>
-            <div className="rvpb-demo-rail__brand" aria-label="RedView">
-              <img
-                className="rvpb-demo-rail__brand-image"
-                src="/landing/icons/redview-logo.svg"
-                alt="RedView"
-                width={125}
-                height={24}
-              />
-            </div>
-
-            <div className="rvpb-demo-rail__panel-wrap">
-              <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
-                <p>
-                  {t('Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:')}
-                </p>
-                <a className="rvpb-demo-upsell__cta" href={offersUrl}>
-                  <SvgV2Icon name="feedback-play.svg" size={20} />
-                  <span>{t('Découvrir les offres')}</span>
-                </a>
-              </aside>
-            </div>
-          </aside>
-        ) : null}
-
-        <div className="rvpb-shell__main">
-        <header className="rvpb-header">
-          <div className="rvpb-user">
-              <div className="rvpb-user__identity">
-                <div className="rvpb-user__name">{accountDisplayName}</div>
-                <div className="rvpb-user__meta">
-                  <span className="rvpb-user__badge">
-                    {accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}
-                  </span>
-                  <span className="rvpb-user__meta-item">
-                    <SvgV2Icon className="rvpb-user__meta-icon" name="save-01.svg" size={14} />
-                    <span>{headerMetaLabel}</span>
-                  </span>
-                </div>
-            </div>
-          </div>
-
-          <button type="button" className="rvpb-logout-button" onClick={() => void handleSignOut()}>
-            <SvgV2Icon name="switch-horizontal-01.svg" size={20} />
-            <span>{isSigningOut ? t('Déconnexion...') : t('Se déconnecter')}</span>
-          </button>
-        </header>
-
-        <div className="rvpb-divider" />
-
-        <TopTabs activeTab={activeTab} onChange={setActiveTab} />
-
-        <div className="rvpb-divider" />
-
-        {activeTab === 'projects' ? (
-          <ProjectsPanel
-            folders={folders}
-            view={view}
-            setView={setView}
-            showSearch={showSearch}
-            setShowSearch={setShowSearch}
-            search={search}
-            setSearch={setSearch}
-            handleCreateProject={handleCreateProject}
-            handleCreateFolder={handleCreateFolder}
-            creatingProject={creatingProject}
-            creatingFolder={creatingFolder}
-            error={error}
-            loading={loading}
-            q={q}
-            currentFolderId={currentFolderId}
-            breadcrumbs={breadcrumbs}
-            visibleFolders={visibleFolders}
-            visibleProjects={visibleProjects}
-            thumbnails={thumbnails}
-            busyIds={busyIds}
-            draggedItem={draggedItem}
-            dropTarget={dropTarget}
-            dragPreview={dragPreview}
-            toast={toast}
-            onOpenProject={onOpenProject}
-            onOpenFolder={handleOpenFolder}
-            onNavigateToFolder={handleNavigateToFolder}
-            handleRenameProject={handleRenameProject}
-            handleDeleteProject={handleDeleteProject}
-            handleRenameFolder={handleRenameFolder}
-            handleDeleteFolder={handleDeleteFolder}
-            handleDuplicateProject={handleDuplicateProject}
-            handleMoveProject={handleMoveProject}
-            handleMoveFolder={handleMoveFolder}
-            handleDragStart={handleDragStart}
-            handleDragMove={handleDragMove}
-            handleDragEnd={handleDragEnd}
-            handleDragEnterTarget={handleDragEnterTarget}
-            handleDragLeaveTarget={handleDragLeaveTarget}
-            handleDropIntoFolder={handleDropIntoFolder}
-            handleDropToRoot={handleDropToRoot}
-          />
-        ) : null}
-
-        {activeTab === 'subscription' ? (
-          <SubscriptionPanel
-            subscriptionState={subscriptionState}
-            selectedPlanId={selectedPlanId}
-            setSelectedPlanId={setSelectedPlanId}
-            contactPreference={contactPreference}
-            setContactPreference={setContactPreference}
-            accountEmail={accountEmail}
-            paymentMethod={paymentMethod}
-            paymentMethods={paymentMethods}
-            billingActionBusy={billingActionBusy}
-            billingActionError={billingActionError}
-            contactStatusMessage={contactStatusMessage}
-            onSelectPlan={handlePlanSelection}
-            onToggleManagedSubscription={handleManagedSubscriptionToggle}
-            onManagePaymentMethod={handlePaymentMethodAction}
-            onSetDefaultPaymentMethod={handleSetDefaultPaymentMethod}
-          />
-        ) : null}
-
-        {activeTab === 'account' ? (
-          <AccountPanel
-            profile={accountProfile}
-            isLoading={accountLoading}
-            error={accountError}
-            fallbackDisplayName={displayName}
-            onProfileUpdated={(nextProfile) => {
-              setAccountProfile(nextProfile);
-              setAccountError(null);
-            }}
-          />
-        ) : null}
-
-        {activeTab === 'settings' ? (
-          <SettingsPanel />
-        ) : null}
-        </div>
-
-        {billingModal ? (
-          <BillingActionModal
-            flow={billingModal}
-            onClose={closeBillingModal}
-            onComplete={handleBillingModalComplete}
-          />
-        ) : null}
-      </div>
-    </div>
-  );
+  return {
+    accountDisplayName,
+    accountEmail,
+    accountError,
+    accountLoading,
+    accountProfile,
+    activeTab,
+    billingActionBusy,
+    billingActionError,
+    billingModal,
+    breadcrumbs: projects.breadcrumbs,
+    busyIds: projects.busyIds,
+    contactPreference,
+    contactStatusMessage,
+    creatingFolder: projects.creatingFolder,
+    creatingProject: projects.creatingProject,
+    currentFolderId: projects.currentFolderId,
+    dragPreview: projects.dragPreview,
+    draggedItem: projects.draggedItem,
+    dropTarget: projects.dropTarget,
+    error: projects.error,
+    folders: projects.folders,
+    handleBillingModalComplete,
+    handleCreateFolder: projects.handleCreateFolder,
+    handleCreateProject: projects.handleCreateProject,
+    handleDeleteFolder: projects.handleDeleteFolder,
+    handleDeleteProject: projects.handleDeleteProject,
+    handleDragEnd: projects.handleDragEnd,
+    handleDragEnterTarget: projects.handleDragEnterTarget,
+    handleDragLeaveTarget: projects.handleDragLeaveTarget,
+    handleDragMove: projects.handleDragMove,
+    handleDragStart: projects.handleDragStart,
+    handleDropIntoFolder: projects.handleDropIntoFolder,
+    handleDropToRoot: projects.handleDropToRoot,
+    handleDuplicateProject: projects.handleDuplicateProject,
+    handleManagedSubscriptionToggle,
+    handleMoveFolder: projects.handleMoveFolder,
+    handleMoveProject: projects.handleMoveProject,
+    handleNavigateToFolder: projects.handleNavigateToFolder,
+    handleOpenFolder: projects.handleOpenFolder,
+    handlePaymentMethodAction,
+    handlePlanSelection,
+    handleRenameFolder: projects.handleRenameFolder,
+    handleRenameProject: projects.handleRenameProject,
+    handleSetDefaultPaymentMethod,
+    handleSignOut,
+    headerMetaLabel,
+    isSigningOut,
+    loading: projects.loading,
+    offersUrl,
+    paymentMethod,
+    paymentMethods,
+    q: projects.q,
+    search: projects.search,
+    selectedPlanId,
+    setActiveTab,
+    setAccountError,
+    setAccountProfile,
+    setContactPreference,
+    setSearch: projects.setSearch,
+    setSelectedPlanId: handleSelectedPlanIdChange,
+    setShowSearch: projects.setShowSearch,
+    setView: projects.setView,
+    showDemoRail,
+    showSearch: projects.showSearch,
+    subscriptionState,
+    thumbnails: projects.thumbnails,
+    tierLabel,
+    toast: projects.toast,
+    view: projects.view,
+    visibleFolders: projects.visibleFolders,
+    visibleProjects: projects.visibleProjects,
+    closeBillingModal,
+  };
 }
