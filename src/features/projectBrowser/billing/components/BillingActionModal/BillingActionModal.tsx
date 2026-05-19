@@ -711,16 +711,10 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
     <Elements
       key={`${flow.mode}:${flow.clientSecret}:${selectedMethod}`}
       stripe={stripePromise}
-      options={
-        selectedMethod === 'card'
-          ? {
-              appearance,
-            }
-          : {
-              clientSecret: flow.clientSecret,
-              appearance,
-            }
-      }
+      options={{
+        clientSecret: flow.clientSecret,
+        appearance,
+      }}
     >
       <BillingActionForm
         flow={flow}
