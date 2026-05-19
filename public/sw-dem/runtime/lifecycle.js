@@ -281,6 +281,17 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('message', (e) => {
+  // DEM ↔ Ortho pairing toggle. Set by listeners.ts when the satellite
+  // basemap is mounted / removed. See router.js > maybeKickOrtho for
+  // the rationale. Idempotent.
+  if (e.data?.type === 'SET_PAIR_ORTHO_WITH_DEM') {
+    try {
+      if (typeof setPairOrthoWithDem === 'function') {
+        setPairOrthoWithDem(Boolean(e.data.enabled));
+      }
+    } catch { /* ignore */ }
+    return;
+  }
   if (e.data?.type === 'PURGE_MAP_CACHES') {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }

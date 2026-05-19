@@ -507,6 +507,31 @@ export class LodManager {
     const nodes = this.visibleNodes;
     const n = nodes.length;
     const effectiveBudget = this.getEffectivePointBudget();
+
+    // ── FAST PATH (CloudCompare-grade fidelity when there's headroom) ──
+    // collectVisible already pruned via frustum + screen-size + voxel LOD,
+    // so `this.visiblePointCount` is the raw count of points the user is
+    // actually looking at. If that fits under the effective budget, render
+    // every point at full density — no tier demotion, no budget thinning.
+    // Previously applyQualityTiers ran unconditionally and silently lost
+    // 30-70 % of points when zooming in (deep-tree leaves got demoted to
+    // tier 2/3 because their projected screen size is small individually,
+    // even though they collectively make up the close-up detail).
+    const rawCount = this.visiblePointCount;
+    if (rawCount <= effectiveBudget) {
+      for (let i = 0; i < n; i++) {
+        const node = nodes[i];
+        node.qualityTier = 0;
+        node.qualityScale = 1.0;
+        node.density = Math.max(MIN_DENSITY, node.fadeAlpha);
+      }
+      this.density = 1.0;
+      this.visiblePointCount = rawCount;
+      this.stats.qualityScale = 1.0;
+      this.stats.motionPressure = this.motionPressure;
+      return;
+    }
+
     const qualityAdjustedPointCount = this.applyQualityTiers(effectiveBudget);
 
     if (qualityAdjustedPointCount <= effectiveBudget) {
@@ -661,11 +686,16 @@ export class LodManager {
   }
 
   private selectQualityTier(screenSize: number, budgetPressure: number): number {
+    // Base tier from screen size: only kick in when over-budget. The
+    // fast-path in enforceBudget() handles the unstressed case at full
+    // density, so this code only runs when we genuinely need to cut.
+    // Thresholds softened (was <95→t2 / <150→t1 / <72→+1) so that close-up
+    // deep-tree leaves keep more density even under mild pressure.
     let tier = 0;
-    if (screenSize < 95) tier = 2;
-    else if (screenSize < 150) tier = 1;
+    if (screenSize < 55) tier = 2;
+    else if (screenSize < 110) tier = 1;
 
-    if (screenSize < 72) tier += 1;
+    if (screenSize < 40) tier += 1;
     if (this.motionPressure > 0.18) tier += 1;
     if (this.motionPressure > 0.55) tier += 1;
     if (this.framePressure > 1.04) tier += 1;

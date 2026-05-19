@@ -67,6 +67,12 @@ import type { Map as MapboxMap, Point as MapboxPoint } from 'mapbox-gl';
 const PREFETCH_MIN_ZOOM = 10;
 const PREFETCH_MAX_ZOOM = 17;
 const PREFETCH_RING = 1;
+// Tilted (3D mountain) views need a wider ring: the visible terrain
+// mesh frustum can extend 2-3 tiles past the orthogonal bbox at pitch
+// 60°+, so PREFETCH_RING=1 left the horizon tiles unwarmed and the user
+// saw cropped mesh edges. Two-tile ring covers the typical pitched
+// frustum without significantly inflating per-cycle URL count.
+const PREFETCH_RING_TILTED = 2;
 const PREFETCH_MAX_PER_CYCLE = 48;
 const PREFETCH_THROTTLE_MS = 600;
 // Wait this long AFTER `idle` before firing. `idle` already implies sources
@@ -305,11 +311,16 @@ export function installViewportPrefetch(
       if (altitudeOn) urls.push(`/altitude-tiles/${z}/${x}/${y}?pf=1`);
     };
 
-    if (includeRing && !tilted) {
-      const rxMin = Math.max(0, bboxXMin - PREFETCH_RING);
-      const rxMax = Math.min(cap, bboxXMax + PREFETCH_RING);
-      const ryMin = Math.max(0, bboxYMin - PREFETCH_RING);
-      const ryMax = Math.min(cap, bboxYMax + PREFETCH_RING);
+    if (includeRing) {
+      // Tilted (pitch > 25°) views need a wider ring to cover the
+      // frustum that extends past the orthogonal bbox toward the
+      // horizon. Two-tile ring keeps the mountain mesh edges populated
+      // so the user doesn't see cropped terrain at the screen border.
+      const ring = tilted ? PREFETCH_RING_TILTED : PREFETCH_RING;
+      const rxMin = Math.max(0, bboxXMin - ring);
+      const rxMax = Math.min(cap, bboxXMax + ring);
+      const ryMin = Math.max(0, bboxYMin - ring);
+      const ryMax = Math.min(cap, bboxYMax + ring);
       for (let x = rxMin; x <= rxMax; x++) {
         for (let y = ryMin; y <= ryMax; y++) {
           if (x >= bboxXMin && x <= bboxXMax && y >= bboxYMin && y <= bboxYMax) continue;
@@ -602,6 +613,25 @@ export function installViewportPrefetch(
   // entered the LIFO queue first and got popped first → "background loads
   // ultra-fast, foreground stays low-quality forever".
   map.on('idle', schedule);
+
+  // Also fire shortly after every style.load — `idle` waits for every
+  // source to finish loading, which on a cold start can take 2-4 s on
+  // a 3D tilted Alps view (large DEM+ortho burst). Without this hook
+  // the ambient prefetch wouldn't kick in until that burst settles, so
+  // the screen-edge ring tiles weren't even queued until well past the
+  // user's first impression. Firing on style.load with a tiny delay
+  // lets us race the ring tiles INTO the same H2 multiplexer window
+  // as the visible bbox, so by the time Mapbox finishes the centre
+  // tiles the edges are already nearly ready.
+  const onStyleLoad = (): void => {
+    if (disposed) return;
+    if (scheduled != null) return;
+    // 80 ms gives Mapbox enough time to mount terrain + raster sources
+    // so their tile templates are queryable (slope query helper reads
+    // `map.getStyle().sources['slope-tiles']`).
+    scheduled = setTimeout(fire, 80);
+  };
+  map.on('style.load', onStyleLoad);
 
   // ── User-gesture cancellation ────────────────────────────────────────
   //

@@ -26,6 +26,38 @@ function isPrefetchRequest(url) {
   return url.searchParams.get('pf') === '1';
 }
 
+// ── DEM ↔ Ortho pairing ──────────────────────────────────────────────
+// Mapbox's source pipeline issues DEM (terrain) tile requests BEFORE
+// raster ortho requests for the same screen footprint: the terrain
+// source is required for vertex positions, so it gets queued first.
+// On a cold start the user sees the mesh sharpen with grey/low-res
+// texture, then ortho fills in 200-800 ms later — the classic "DEM
+// d'abord puis ortho" perception. With this pairing flag enabled
+// (set by listeners.ts when the satellite basemap is active), the
+// instant the SW sees a real (non-prefetch) /dem-tiles request, it
+// immediately fires the matching /ortho-tiles request in background
+// at high priority. Both pipelines start in lock-step; the H2
+// multiplexer on data.geopf.fr serves them in parallel. By the time
+// Mapbox's own ortho fetch arrives a few hundred ms later, the SW
+// either has the response already in CacheStorage (instant) or the
+// in-flight dedup map (`orthoInflight`) returns the same Promise.
+// Cost when disabled: zero (the flag short-circuits the branch).
+let pairOrthoWithDem = false;
+
+function setPairOrthoWithDem(enabled) {
+  pairOrthoWithDem = Boolean(enabled);
+}
+
+function maybeKickOrtho(url, z, x, y) {
+  if (!pairOrthoWithDem) return;
+  if (isPrefetchRequest(url)) return; // pf=1 is already speculative — don't double
+  if (typeof handleOrthoRequest !== 'function') return;
+  // Fire-and-forget. Result lands in ORTHO_CACHE_NAME so Mapbox's
+  // subsequent natural fetch is a straight cache hit. Errors swallowed:
+  // negative caching is already wired inside handleOrthoRequest.
+  try { handleOrthoRequest(z, x, y).catch(() => {}); } catch { /* ignore */ }
+}
+
 function noTileResponseRouter(reason) {
   return new Response(null, {
     status: 204,
@@ -44,11 +76,15 @@ self.addEventListener('fetch', (event) => {
 
   const demMatch = url.pathname.match(/^\/dem-tiles\/(\d+)\/(\d+)\/(\d+)$/);
   if (demMatch) {
+    const dz = parseInt(demMatch[1], 10);
+    const dx = parseInt(demMatch[2], 10);
+    const dy = parseInt(demMatch[3], 10);
+    maybeKickOrtho(url, dz, dx, dy);
     event.respondWith(handleDemRequest(
       event.request,
-      parseInt(demMatch[1], 10),
-      parseInt(demMatch[2], 10),
-      parseInt(demMatch[3], 10),
+      dz,
+      dx,
+      dy,
       undefined,
       resolveDemProfile(url),
     ));

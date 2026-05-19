@@ -304,9 +304,15 @@ const orthoInflight = new Map();
 
 // In-memory negative cache for failed ortho tiles { key → { ts, ttl } }
 const orthoNegCache = new Map();
-// Shorter transient TTL than before (was 30 s): a single timeout used to
-// freeze a tile through an entire gesture, leaving the map blurry too long.
-const ORTHO_NEG_TTL_TRANSIENT = 8_000;   // 8s  — timeout, 5xx, network
+// Shorter transient TTL than before (was 30 s, then 8 s): a single
+// timeout used to freeze a tile through an entire gesture, leaving the
+// map blurry too long. At 8 s the screen-edge tiles that race against
+// Mapbox's per-tile load order (centre-out) frequently got pruned during
+// fast pan and then sat negative-cached past the user's "did it ever
+// load?" patience threshold. 3 s lets Mapbox's `raster-fade-duration`
+// (default 300 ms) absorb the gap cleanly: a tile that failed once and
+// is needed for the next paint is re-fetched almost immediately.
+const ORTHO_NEG_TTL_TRANSIENT = 3_000;   // 3s  — timeout, 5xx, network
 const ORTHO_NEG_TTL_PERMANENT = 3600_000; // 1h — 404
 
 function orthoNegGet(key) {

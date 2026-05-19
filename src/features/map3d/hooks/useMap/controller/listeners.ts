@@ -274,6 +274,39 @@ export function attachListeners(ctx: Ctx): void {
       });
       st.disposeViewportPrefetch = handle.dispose;
     }
+    // ── DEM ↔ Ortho pairing flag (SW-side speed-up) ──────────────────
+    // When the satellite basemap is active, instruct the SW to pair
+    // every /dem-tiles request with an immediate /ortho-tiles
+    // background fetch. Eliminates the perceived "DEM first, ortho
+    // 200-800 ms later" gap on cold viewport loads. The SW gates
+    // everything behind this flag so we do NOT waste IGN ortho fetches
+    // when the user is on a non-satellite basemap (topo, plan IGN).
+    if (!st.disposeOrthoPairingSync) {
+      let lastOrthoPairingFlag: boolean | null = null;
+      const syncOrthoPairing = (): void => {
+        const enabled = Boolean(map.getSource(ignOrthoSource.id));
+        if (enabled === lastOrthoPairingFlag) return;
+        lastOrthoPairingFlag = enabled;
+        try {
+          navigator.serviceWorker?.controller?.postMessage({
+            type: 'SET_PAIR_ORTHO_WITH_DEM',
+            enabled,
+          });
+        } catch { /* best-effort */ }
+      };
+      map.on('styledata', syncOrthoPairing);
+      syncOrthoPairing(); // fire once now in case source already mounted
+      st.disposeOrthoPairingSync = () => {
+        try { map.off('styledata', syncOrthoPairing); } catch { /* ignore */ }
+        // Tell SW to stop pairing on teardown.
+        try {
+          navigator.serviceWorker?.controller?.postMessage({
+            type: 'SET_PAIR_ORTHO_WITH_DEM',
+            enabled: false,
+          });
+        } catch { /* best-effort */ }
+      };
+    }
     st.trackingListenersBound = true;
   };
 
@@ -297,6 +330,8 @@ export function attachListeners(ctx: Ctx): void {
     }
     st.disposeViewportPrefetch?.();
     st.disposeViewportPrefetch = null;
+    st.disposeOrthoPairingSync?.();
+    st.disposeOrthoPairingSync = null;
     st.trackingListenersBound = false;
   };
 
