@@ -31,9 +31,14 @@ export function SubscriptionPlanCard({
   const [openBadgeId, setOpenBadgeId] = useState<string | null>(null);
   const hasMetadata = plan.tags.length > 0 || plan.iconBadges.length > 0;
 
-  const isInteractiveTarget = (target: EventTarget | null) =>
-    target instanceof HTMLElement &&
-    Boolean(target.closest('button, a, input, select, textarea, [role="button"]'));
+  const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: EventTarget | null) => {
+    if (!(target instanceof HTMLElement) || !(currentTarget instanceof HTMLElement)) {
+      return false;
+    }
+
+    const interactiveTarget = target.closest('button, a, input, select, textarea, [role="button"]');
+    return interactiveTarget !== null && interactiveTarget !== currentTarget;
+  };
 
   const selectPlan = () => {
     logBillingUi('select-plan-card', {
@@ -48,13 +53,13 @@ export function SubscriptionPlanCard({
     <article
       className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}${openBadgeId ? ' has-open-popover' : ''}`}
       onClick={(event) => {
-        if (isInteractiveTarget(event.target)) {
+        if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
           return;
         }
         selectPlan();
       }}
       onKeyDown={(event) => {
-        if (isInteractiveTarget(event.target) || (event.key !== 'Enter' && event.key !== ' ')) {
+        if (isNestedInteractiveTarget(event.target, event.currentTarget) || (event.key !== 'Enter' && event.key !== ' ')) {
           return;
         }
         event.preventDefault();
