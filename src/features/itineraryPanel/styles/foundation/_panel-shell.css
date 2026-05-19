@@ -4,8 +4,7 @@
   --rvi-red: #890000;
   --rvi-red-border: #700000;
   --rvi-red-accent: #c50000;
-  /* Glassmorphism: darker base for stronger contrast over the map. */
-  --rvi-bg: rgba(10, 10, 12, 0.72);
+  --rvi-bg: rgba(15, 15, 15, 0.74);
   --rvi-bg-chip: rgba(255, 255, 255, 0.08);
   --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
   --rvi-bg-row: rgba(28, 28, 28, 0.55);
@@ -26,15 +25,9 @@
   min-height: 100%;
   max-height: 100%;
   padding: 12px;
-  /* Translucent base + strong backdrop blur for proper glassmorphism.
-     The previous (0.74) alpha was effectively opaque, so no blur was
-     visible behind the panel. Combined with `saturate()` to bring back
-     the colour the blur tends to wash out. */
   background: var(--rvi-bg);
-  /* Strong frosted-glass: heavy blur + saturate to keep colour vibrant,
-     inset highlight + outer shadow to sell the glass edge. */
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
 
   /* DO NOT add `transform`, `will-change`, `filter` or `isolation` here.
      Mapbox already promotes its WebGL canvas to its own GPU layer; if this
@@ -43,10 +36,8 @@
      the page background (transparent -> looks opaque). `backdrop-filter`
      itself triggers the layer promotion it needs. */
 
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 8px 32px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   border-radius: var(--rvi-radius);
   color: var(--rvi-text);
   font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;

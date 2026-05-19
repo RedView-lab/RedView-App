@@ -294,6 +294,8 @@ export function DashboardEditor({
           left={PANEL_PADDING}
           width={leftPanelWidth}
           height={Math.max(0, layout.designH - PANEL_PADDING * 2)}
+          blur={24}
+          saturate={1.05}
           borderRadius={8}
         />
       )}
@@ -314,6 +316,8 @@ export function DashboardEditor({
           left={layout.centerToolbarLeft}
           width={layout.centerToolbarWidth}
           height={CENTER_TOOLBAR_HEIGHT}
+          blur={24}
+          saturate={1.05}
           borderRadius={8}
         />
       )}

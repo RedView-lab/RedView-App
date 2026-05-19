@@ -60,13 +60,13 @@ export function getDashboardLayout({
   const leftPanelReservedWidth = isMapFocusMode || isLeftPanelCollapsed
     ? 0
     : leftPanelWidth + PANEL_PADDING * 2;
-  const centerPanelBaseRegionLeft = leftPanelReservedWidth + PANEL_PADDING;
+  const centerPanelBaseRegionLeft = leftPanelReservedWidth;
   const rightPanelReservedWidth = isMapFocusMode || isRightPanelCollapsed
     ? 0
     : panelWidth + PANEL_PADDING * 2;
-  const centerPanelBaseRegionRight = rightPanelReservedWidth + PANEL_PADDING;
-  const centerPanelRegionLeft = leftPanelReservedWidth + PANEL_PADDING;
-  const centerPanelRegionRight = rightPanelReservedWidth + PANEL_PADDING;
+  const centerPanelBaseRegionRight = rightPanelReservedWidth;
+  const centerPanelRegionLeft = leftPanelReservedWidth;
+  const centerPanelRegionRight = rightPanelReservedWidth;
 
   const centerToolbarWidth = Math.max(
     0,
