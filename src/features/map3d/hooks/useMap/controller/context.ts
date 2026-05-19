@@ -4,8 +4,9 @@ import type {
   Map as MapboxMap,
   MapSourceDataEvent,
 } from 'mapbox-gl';
-import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, awsFastDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import {
   type OverlayReloadRegistrar,
   type OverlayStatusReporter,
@@ -263,8 +264,13 @@ export function attachHelpers(ctx: Ctx): void {
 
   fns.getManagedTerrainSourceId = () => {
     try {
+      if (getActiveDem3dQuality() === 'fast-30m') {
+        if (map.getSource(awsFastDEMSource.id)) return awsFastDEMSource.id;
+        if (map.getSource(awsFallbackDEMSource.id)) return awsFallbackDEMSource.id;
+      }
       if (map.getSource(unifiedDEMSource.id)) return unifiedDEMSource.id;
       if (map.getSource(awsFallbackDEMSource.id)) return awsFallbackDEMSource.id;
+      if (map.getSource(awsFastDEMSource.id)) return awsFastDEMSource.id;
     } catch {
       return null;
     }

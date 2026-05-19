@@ -1,4 +1,5 @@
 import { awsFallbackDEMSource, unifiedDEMSource } from '../../../lib/sources';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { awaitController, swLateReady } from '../serviceWorker';
 import type { Ctx } from './context';
 
@@ -52,6 +53,12 @@ export function bootstrapAwsFallback({
 
   const verifyAndReapplyFallbackTerrain = (origin: string) => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      if (fns.isManagedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+      console.warn(`[map3d] fallback import-override guard (${origin}): fast 30 m terrain unbound, re-applying`);
+      fns.applyFastDemTerrain();
+      return;
+    }
     if (!map.getSource(awsFallbackDEMSource.id)) return;
     if (fns.isManagedTerrainRenderable() && fns.getManagedTerrainSourceId() === awsFallbackDEMSource.id) return;
     console.warn(`[map3d] fallback import-override guard (${origin}): terrain unbound, re-applying AWS fallback`);

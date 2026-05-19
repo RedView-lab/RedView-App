@@ -111,7 +111,8 @@ export function attachDemSource(ctx: Ctx): void {
       return;
     }
     const hasManagedTerrainActive = activeTerrainSource === unifiedDEMSource.id
-      || activeTerrainSource === awsFallbackDEMSource.id;
+      || activeTerrainSource === awsFallbackDEMSource.id
+      || activeTerrainSource === awsFastDEMSource.id;
     if (!terrainRef.current && !hasManagedTerrainActive) return;
 
     if (terrainRef.current && hasManagedTerrainActive) {
@@ -234,6 +235,7 @@ export function attachDemSource(ctx: Ctx): void {
     st.setTilesVerifyTimer = setTimeout(() => {
       st.setTilesVerifyTimer = null;
       if (isCancelled()) return;
+      if (getActiveDem3dQuality() === 'fast-30m') return;
       if (!canMutateTerrainStyle()) return;
       if (!map.getSource(unifiedDEMSource.id)) return;
       // If terrain isn't actually bound to unified-dem after setTiles,
@@ -270,6 +272,10 @@ export function attachDemSource(ctx: Ctx): void {
     // would race the rebuild.
     const runRecovery = (attempt: number) => {
       st.terrainRecoveryTimer = null;
+      if (getActiveDem3dQuality() === 'fast-30m') {
+        fns.applyFastDemTerrain();
+        return;
+      }
       const canRecoverDuringImportedStyleSettling = () => {
         try {
           const style = map.getStyle();
@@ -318,11 +324,11 @@ export function attachDemSource(ctx: Ctx): void {
       }
 
       fns.refreshTrackedSourceIds();
-      if (!fns.isUnifiedTerrainActive()) {
+      if (!fns.isManagedTerrainActive()) {
         fns.applyUnifiedTerrain();
         // If re-attach didn't take, the source is probably stale. Force
         // a rebuild rather than leaving the map flat.
-        if (!fns.isUnifiedTerrainActive()) {
+        if (!fns.isManagedTerrainActive()) {
           console.warn('[map3d] terrain re-attach failed; forcing source rebuild');
           fns.refreshDemSource({ forceRebuild: true });
         }

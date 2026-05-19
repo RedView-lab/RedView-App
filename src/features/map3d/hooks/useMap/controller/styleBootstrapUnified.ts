@@ -1,4 +1,5 @@
 import { unifiedDEMSource } from '../../../lib/sources';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { waitForMapIdleOrTimeout } from '../runtimeProfile';
 import type { Ctx } from './context';
 
@@ -51,6 +52,12 @@ export function bootstrapUnifiedDem({
 
   const verifyAndReapplyTerrain = (origin: string) => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      if (fns.isManagedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+      console.warn(`[map3d] import-override guard (${origin}): fast 30 m terrain unbound, re-applying`);
+      fns.applyFastDemTerrain();
+      return;
+    }
     if (!map.getSource(unifiedDEMSource.id)) {
       try {
         if (!fns.refreshDemSource()) return;
@@ -99,6 +106,11 @@ export function bootstrapUnifiedDem({
 
   const force3dEscalationTimer = setTimeout(() => {
     if (isCancelled() || runId !== st.styleBootstrapRunId) return;
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      if (fns.isManagedTerrainActive() && fns.isManagedTerrainRenderable()) return;
+      fns.applyFastDemTerrain();
+      return;
+    }
     if (fns.isUnifiedTerrainActive() && fns.isManagedTerrainRenderable()) return;
 
     console.warn(

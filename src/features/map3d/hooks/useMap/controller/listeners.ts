@@ -1,5 +1,6 @@
 import type { ErrorEvent as MapboxErrorEvent, MapSourceDataEvent } from 'mapbox-gl';
-import { awsFallbackDEMSource, ignOrthoSource, unifiedDEMSource } from '../../../lib/sources';
+import { awsFallbackDEMSource, awsFastDEMSource, ignOrthoSource, unifiedDEMSource } from '../../../lib/sources';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
 
@@ -21,6 +22,9 @@ export function attachListeners(ctx: Ctx): void {
   const repairManagedTerrain = (): boolean => {
     const managedSourceId = fns.getManagedTerrainSourceId();
     if (!managedSourceId) return false;
+    if (managedSourceId === awsFastDEMSource.id) {
+      return fns.applyFastDemTerrain();
+    }
     if (managedSourceId === unifiedDEMSource.id) {
       return fns.applyUnifiedTerrain();
     }
@@ -78,6 +82,8 @@ export function attachListeners(ctx: Ctx): void {
     // controller finally appeared, upgrade the AWS/plain fallback path
     // immediately from idle — the earliest safe point to mutate style.
     if (
+      getActiveDem3dQuality() !== 'fast-30m'
+      &&
       fns.canMutateStyle()
       && !map.getSource(unifiedDEMSource.id)
       && navigator.serviceWorker?.controller
@@ -129,13 +135,13 @@ export function attachListeners(ctx: Ctx): void {
       styleDataTerrainRepairTimer = null;
       if (isCancelled()) return;
       const managedSourceId = fns.getManagedTerrainSourceId();
-      if (managedSourceId !== unifiedDEMSource.id) return;
-      const terrainBound = fns.isUnifiedTerrainActive();
+      if (!managedSourceId) return;
+      const terrainBound = fns.isManagedTerrainActive();
       const terrainRenderable = fns.isManagedTerrainRenderable();
       if (terrainBound && terrainRenderable) return;
       if (terrainBound) return;
       console.warn(
-        `[map3d] styledata: unified-dem present but terrain ${terrainBound ? 'non-renderable' : 'unbound'}; re-attaching`,
+        `[map3d] styledata: ${managedSourceId} present but terrain ${terrainBound ? 'non-renderable' : 'unbound'}; re-attaching`,
       );
       repairManagedTerrain();
     }, 0);
