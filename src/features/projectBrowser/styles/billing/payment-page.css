@@ -322,6 +322,17 @@ body.rvpb-billing-page-open {
   opacity: 1;
 }
 
+.rvpb-billing-page__text-input:-webkit-autofill,
+.rvpb-billing-page__text-input:-webkit-autofill:hover,
+.rvpb-billing-page__text-input:-webkit-autofill:focus,
+.rvpb-billing-page__text-input:-webkit-autofill:active {
+  -webkit-text-fill-color: #fff;
+  -webkit-box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+  box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.08) inset;
+  caret-color: #fff;
+  transition: background-color 100000s ease-in-out 0s;
+}
+
 .rvpb-billing-page__text-input:focus,
 .rvpb-billing-page__select-input:focus,
 .rvpb-billing-page__stripe-input:focus-within,

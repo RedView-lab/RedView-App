@@ -76,10 +76,15 @@ export function SubscriptionPanel({
 }: SubscriptionPanelProps) {
   const { t } = useAppI18n();
   const showDemoUpsell = isDemoPlan(subscriptionState.snapshot);
-  const selectedPlan =
-    SUBSCRIPTION_PLANS.find((plan) => plan.id === selectedPlanId) ?? SUBSCRIPTION_PLANS[2];
   const activePlanId = resolveActivePlanId(subscriptionState.snapshot);
   const hasManagedSubscription = !showDemoUpsell;
+  const visiblePlans = hasManagedSubscription
+    ? SUBSCRIPTION_PLANS.filter((plan) => plan.id !== 'demo')
+    : SUBSCRIPTION_PLANS;
+  const effectiveSelectedPlanId: SubscriptionPlanId =
+    hasManagedSubscription && selectedPlanId === 'demo' ? activePlanId : selectedPlanId;
+  const selectedPlan =
+    SUBSCRIPTION_PLANS.find((plan) => plan.id === effectiveSelectedPlanId) ?? SUBSCRIPTION_PLANS[2];
   const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
   const savedPaymentMethods = paymentMethods.length > 0 ? paymentMethods : paymentMethod ? [paymentMethod] : [];
   const paymentMethodLabel = paymentMethod
@@ -98,6 +103,45 @@ export function SubscriptionPanel({
       ? t('Ajoutez ou remplacez votre carte directement dans RedView App.')
       : t('Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.');
   const panelError = billingActionError ?? subscriptionState.error;
+  const subscriptionOffersContent = (
+    <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
+      {visiblePlans.map((plan) => {
+        const isActivePlan = activePlanId === plan.id;
+        const isSelectedPlan = selectedPlan.id === plan.id;
+        const isDemoSelection = plan.id === 'demo';
+
+        return (
+          <SubscriptionPlanCard
+            key={plan.id}
+            plan={plan}
+            selected={isSelectedPlan}
+            active={Boolean(isActivePlan)}
+            onSelect={setSelectedPlanId}
+            ctaLabel={
+              isActivePlan && !isDemoSelection
+                ? subscriptionState.snapshot?.cancelAtPeriodEnd
+                  ? 'Reprendre'
+                  : 'Interrompre'
+                : isSelectedPlan && !isDemoSelection
+                  ? hasManagedSubscription
+                    ? 'Basculer sur cette offre'
+                    : 'Choisir cette offre'
+                  : undefined
+            }
+            ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
+            ctaDisabled={billingActionBusy}
+            onCtaClick={
+              isDemoSelection
+                ? undefined
+                : isActivePlan
+                  ? onToggleManagedSubscription
+                  : () => onSelectPlan(plan.id as ManagedPlanId)
+            }
+          />
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className="rvpb-subscription-panel" aria-label={t('Gestion de l’abonnement')}>
@@ -121,50 +165,20 @@ export function SubscriptionPanel({
         ) : null}
 
         <div className="rvpb-subscription-layout__main">
-          <div className="rvpb-subscription-section">
-            <div className="rvpb-subscription-section__label">
-              <h2>{t('Abonnements')}</h2>
-              <p>{t('Découvrez nos offres d’abonnement.')}</p>
+          {showDemoUpsell ? (
+            <div className="rvpb-subscription-section rvpb-subscription-section--demo-offers">
+              {subscriptionOffersContent}
             </div>
+          ) : (
+            <div className="rvpb-subscription-section">
+              <div className="rvpb-subscription-section__label">
+                <h2>{t('Abonnements')}</h2>
+                <p>{t('Découvrez nos offres d’abonnement.')}</p>
+              </div>
 
-            <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
-              {SUBSCRIPTION_PLANS.map((plan) => {
-                const isActivePlan = activePlanId === plan.id;
-                const isSelectedPlan = selectedPlan.id === plan.id;
-                const isDemoSelection = plan.id === 'demo';
-
-                return (
-                  <SubscriptionPlanCard
-                    key={plan.id}
-                    plan={plan}
-                    selected={isSelectedPlan}
-                    active={Boolean(isActivePlan)}
-                    onSelect={setSelectedPlanId}
-                    ctaLabel={
-                      isActivePlan && !isDemoSelection
-                        ? subscriptionState.snapshot?.cancelAtPeriodEnd
-                          ? 'Reprendre'
-                          : 'Interrompre'
-                        : isSelectedPlan && !isDemoSelection
-                          ? hasManagedSubscription
-                            ? 'Basculer sur cette offre'
-                            : 'Choisir cette offre'
-                          : undefined
-                    }
-                    ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
-                    ctaDisabled={billingActionBusy}
-                    onCtaClick={
-                      isDemoSelection
-                        ? undefined
-                        : isActivePlan
-                          ? onToggleManagedSubscription
-                          : () => onSelectPlan(plan.id as ManagedPlanId)
-                    }
-                  />
-                );
-              })}
+              {subscriptionOffersContent}
             </div>
-          </div>
+          )}
 
           <div className="rvpb-divider" />
 

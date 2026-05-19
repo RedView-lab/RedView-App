@@ -4,7 +4,7 @@
 }
 
 .rvpb-subscription-layout.has-demo-upsell {
-  grid-template-columns: 238px minmax(0, 1fr);
+  grid-template-columns: 330px minmax(0, 1fr);
   align-items: start;
 }
 
@@ -17,7 +17,7 @@
   flex-direction: column;
   gap: 12px;
   width: 100%;
-  max-width: 238px;
+  max-width: 330px;
   padding: 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.6);
@@ -57,6 +57,12 @@
   gap: 24px 32px;
   align-items: start;
   padding: 16px 0;
+}
+
+.rvpb-subscription-section--demo-offers {
+  grid-template-columns: minmax(0, 640px);
+  gap: 12px;
+  padding: 0;
 }
 
 .rvpb-subscription-section__label {
