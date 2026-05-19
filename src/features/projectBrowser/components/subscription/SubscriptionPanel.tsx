@@ -151,11 +151,6 @@ export function SubscriptionPanel({
 
       <div className="rvpb-subscription-layout">
         <div className="rvpb-subscription-layout__main">
-          {showDemoUpsell ? (
-            <div className="rvpb-subscription-section rvpb-subscription-section--demo-offers">
-              {subscriptionOffersContent}
-            </div>
-          ) : (
             <div className="rvpb-subscription-section">
               <div className="rvpb-subscription-section__label">
                 <h2>{t('Abonnements')}</h2>
@@ -164,7 +159,6 @@ export function SubscriptionPanel({
 
               {subscriptionOffersContent}
             </div>
-          )}
 
           <div className="rvpb-divider" />
 

@@ -83,11 +83,19 @@
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
-  flex-direction: column;
-  gap: 2px;
+}
+
+.rvpb-user__identity {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .rvpb-user__name {
+  flex: 0 0 auto;
   font-size: 24px;
   font-weight: 700;
   line-height: 1.2;
@@ -95,6 +103,8 @@
 
 .rvpb-user__meta {
   display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;

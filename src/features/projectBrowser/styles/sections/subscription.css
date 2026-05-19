@@ -58,16 +58,10 @@
 
 .rvpb-subscription-section {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 640px);
+  grid-template-columns: minmax(200px, 280px) minmax(0, 640px);
   gap: 24px 32px;
   align-items: start;
   padding: 16px 0;
-}
-
-.rvpb-subscription-section--demo-offers {
-  grid-template-columns: minmax(0, 640px);
-  gap: 12px;
-  padding: 0;
 }
 
 .rvpb-subscription-section__label {
@@ -85,9 +79,9 @@
 
 .rvpb-subscription-section__label p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 14px;
-  line-height: 1.45;
+  color: #fff;
+  font-size: 15px;
+  line-height: normal;
 }
 
 .rvpb-subscription-section__content {

@@ -563,15 +563,17 @@ export function ProjectBrowserOverlay({
         <div className="rvpb-shell__main">
         <header className="rvpb-header">
           <div className="rvpb-user">
-            <div className="rvpb-user__name">{accountDisplayName}</div>
-            <div className="rvpb-user__meta">
-              <span className="rvpb-user__badge">
-                {accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}
-              </span>
-              <span className="rvpb-user__meta-item">
-                <SvgV2Icon className="rvpb-user__meta-icon" name="save-01.svg" size={14} />
-                <span>{headerMetaLabel}</span>
-              </span>
+              <div className="rvpb-user__identity">
+                <div className="rvpb-user__name">{accountDisplayName}</div>
+                <div className="rvpb-user__meta">
+                  <span className="rvpb-user__badge">
+                    {accountTierLabel(subscriptionState.snapshot, subscriptionState.isLoading)}
+                  </span>
+                  <span className="rvpb-user__meta-item">
+                    <SvgV2Icon className="rvpb-user__meta-icon" name="save-01.svg" size={14} />
+                    <span>{headerMetaLabel}</span>
+                  </span>
+                </div>
             </div>
           </div>
 
