@@ -278,6 +278,18 @@ body.rvpb-billing-page-open {
   padding: 8px 12px;
 }
 
+.rvpb-billing-page__stripe-input .StripeElement,
+.rvpb-billing-page__stripe-input .__PrivateStripeElement {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rvpb-billing-page__stripe-input .__PrivateStripeElement > iframe {
+  width: 100% !important;
+}
+
 .rvpb-billing-page__stripe-shell {
   position: relative;
   display: block;

@@ -478,7 +478,7 @@ function BillingActionForm({
                         {t('Numéro de carte')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
-                        <span className="rvpb-billing-page__stripe-input">
+                        <div className="rvpb-billing-page__stripe-input">
                           <CardNumberElement
                             options={{
                               disableLink: true,
@@ -486,7 +486,7 @@ function BillingActionForm({
                               style: stripeCardElementStyle,
                             }}
                           />
-                        </span>
+                        </div>
                       </span>
                     </label>
 
@@ -495,14 +495,14 @@ function BillingActionForm({
                         {t('CVV')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
-                        <span className="rvpb-billing-page__stripe-input">
+                        <div className="rvpb-billing-page__stripe-input">
                           <CardCvcElement
                             options={{
                               placeholder: t('CVV'),
                               style: stripeCardElementStyle,
                             }}
                           />
-                        </span>
+                        </div>
                       </span>
                     </label>
                   </div>
@@ -528,14 +528,14 @@ function BillingActionForm({
                         {t('Expiry')} <span className="rvpb-billing-page__field-required">*</span>
                       </span>
                       <span className="rvpb-billing-page__stripe-shell">
-                        <span className="rvpb-billing-page__stripe-input">
+                        <div className="rvpb-billing-page__stripe-input">
                           <CardExpiryElement
                             options={{
                               placeholder: 'MM / YY',
                               style: stripeCardElementStyle,
                             }}
                           />
-                        </span>
+                        </div>
                       </span>
                     </label>
                   </div>
