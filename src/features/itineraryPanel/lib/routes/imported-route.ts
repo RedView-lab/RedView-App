@@ -1,4 +1,5 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
+import { translateAppText } from '@/shared/i18n';
 
 import { formatGpsCoordinateLabel } from '../geocoding';
 import { computeRouteElevationMetrics, extractRouteProfileFromPoints } from '../route-metrics';
@@ -91,8 +92,8 @@ export function createImportedTimeline(
   const endPoint = points[points.length - 1] ?? startPoint;
   if (!startPoint || !endPoint) {
     return [
-      { id: 'start', kind: 'start', label: 'Rechercher un lieu', distanceKm: 0 },
-      { id: 'end', kind: 'end', label: 'Rechercher un lieu', distanceKm: null },
+      { id: 'start', kind: 'start', label: translateAppText('Rechercher un lieu'), distanceKm: 0 },
+      { id: 'end', kind: 'end', label: translateAppText('Rechercher un lieu'), distanceKm: null },
     ];
   }
 

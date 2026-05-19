@@ -36,6 +36,7 @@ import {
   IconUtensils,
   IconWaypointDot,
 } from '../../components/icons';
+import { translateAppText } from '@/shared/i18n';
 import type { PoiCategory, TimelineItemKind } from '../../types';
 import { PROVIDED_POI_SVG } from '@/features/poi/lib/providedPoiSvg';
 
@@ -50,13 +51,13 @@ interface KindBadgeProps {
 /** French labels for the timeline type column. */
 export function kindLabel(kind: TimelineItemKind, poiCategory?: PoiCategory): string {
   switch (kind) {
-    case 'start':       return 'Départ';
-    case 'end':         return 'Arrivée';
-    case 'waypoint':    return 'Waypoint';
+    case 'start':       return translateAppText('Départ');
+    case 'end':         return translateAppText('Arrivée');
+    case 'waypoint':    return translateAppText('Waypoint');
     case 'water':       return 'POI';
     case 'supermarket': return 'POI';
     case 'poi':         return poiCategory ? poiLabel(poiCategory) : 'POI';
-    case 'pause':       return 'Pause';
+    case 'pause':       return translateAppText('Pause');
     default:            return '';
   }
 }
@@ -115,19 +116,19 @@ const PROVIDED_TIMELINE_BADGE_URLS: Partial<Record<PoiCategory, string>> = {
 /** POI label (FR). */
 export function poiLabel(category: PoiCategory): string {
   switch (category) {
-    case 'fountains':    return 'Eau';
-    case 'toilets':      return 'Toilettes';
-    case 'supermarkets': return 'Supermarché';
-    case 'gasStations':  return 'Carburant';
-    case 'bakeries':     return 'Boulangerie';
-    case 'fastFood':     return 'Fast-food';
-    case 'cafes':        return 'Café';
-    case 'bars':         return 'Bar';
-    case 'restaurants':  return 'Restaurant';
-    case 'bikeShops':    return 'Vélo';
-    case 'hotels':       return 'Hôtel';
-    case 'refuges':      return 'Refuge';
-    case 'passes':       return 'Col';
+    case 'fountains':    return translateAppText('Eau');
+    case 'toilets':      return translateAppText('Toilettes');
+    case 'supermarkets': return translateAppText('Supermarché');
+    case 'gasStations':  return translateAppText('Carburant');
+    case 'bakeries':     return translateAppText('Boulangerie');
+    case 'fastFood':     return translateAppText('Fast-food');
+    case 'cafes':        return translateAppText('Café');
+    case 'bars':         return translateAppText('Bar');
+    case 'restaurants':  return translateAppText('Restaurant');
+    case 'bikeShops':    return translateAppText('Vélo');
+    case 'hotels':       return translateAppText('Hôtel');
+    case 'refuges':      return translateAppText('Refuge');
+    case 'passes':       return translateAppText('Col');
   }
 }
 

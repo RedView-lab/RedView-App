@@ -1,4 +1,5 @@
 import { Section } from '../components/Section';
+import { useAppI18n } from '@/shared/i18n';
 import { VisibilityButton } from '../components/VisibilityButton';
 import { IconMap } from '../icons';
 import type { ControlPanelHandlers, ControlPanelState } from '../types';
@@ -12,6 +13,8 @@ interface Props {
 }
 
 export function BasemapsSection({ basemaps, open, onOpenChange, onBasemapToggle }: Props) {
+  const { t } = useAppI18n();
+
   return (
     <Section
       title="Fonds de carte"
@@ -33,7 +36,7 @@ export function BasemapsSection({ basemaps, open, onOpenChange, onBasemapToggle 
             />
             <div className={`rvc-basemaps__label${bm.active ? '' : ' is-dim'}`}>
               <IconMap size={12} />
-              <span>{bm.label}</span>
+              <span>{t(bm.label)}</span>
             </div>
           </div>
         ))}

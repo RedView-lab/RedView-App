@@ -6,6 +6,7 @@ import type {
   RouteProfile,
   TimelineItem,
 } from '../../types';
+import { translateAppText } from '@/shared/i18n';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
 import { createDefaultExpertState } from '../../expert/defaults';
 
@@ -32,23 +33,23 @@ export const ITINERARY_COLORS = [
 ] as const;
 
 export const DEFAULT_PROFILES: RouteProfile[] = [
-  { id: 'gravel-default', name: 'Gravel (défaut)', isDefault: true },
-  { id: 'road', name: 'Route' },
-  { id: 'mtb', name: 'VTT' },
-  { id: 'touring', name: 'Touring' },
-  { id: 'custom', name: 'Personnalisé' },
+  { id: 'gravel-default', name: translateAppText('Gravel (défaut)'), isDefault: true },
+  { id: 'road', name: translateAppText('Route') },
+  { id: 'mtb', name: translateAppText('VTT') },
+  { id: 'touring', name: translateAppText('Touring') },
+  { id: 'custom', name: translateAppText('Personnalisé') },
 ];
 
 const DEFAULT_TIMELINE_START: TimelineItem = {
   id: 'start',
   kind: 'start',
-  label: 'Rechercher un lieu',
+  label: translateAppText('Rechercher un lieu'),
   distanceKm: 0,
 };
 const DEFAULT_TIMELINE_END: TimelineItem = {
   id: 'end',
   kind: 'end',
-  label: 'Rechercher un lieu',
+  label: translateAppText('Rechercher un lieu'),
   distanceKm: null,
 };
 
@@ -118,7 +119,7 @@ export function createDefaultItinerary(
 ): Itinerary {
   return {
     id: `it-${Date.now()}-${index}`,
-    name: `Itinéraire ${index}`,
+    name: translateAppText('Itinéraire {{index}}', { index }),
     color,
     profileId: 'gravel-default',
     priorities: {
@@ -186,7 +187,7 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
 export function createDefaultProject(): ItineraryProject {
   const it = createDefaultItinerary(1);
   return {
-    name: 'Nouveau projet',
+    name: translateAppText('Nouveau projet'),
     savedAt: null,
     sizeBytes: null,
     privacy: 'private',

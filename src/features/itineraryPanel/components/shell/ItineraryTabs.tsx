@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { useAppI18n } from '@/shared/i18n';
 import { IconEye, IconPlusCircle, IconTrash } from '../icons';
 import type { Itinerary } from '../../types';
 
@@ -30,6 +31,7 @@ export function ItineraryTabs({
   onRemove,
   onRename,
 }: ItineraryTabsProps) {
+  const { t } = useAppI18n();
   const canRemove = itineraries.length > 1 && Boolean(onRemove);
   const canRename = Boolean(onRename);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export function ItineraryTabs({
   const cancel = () => setEditingId(null);
 
   return (
-    <nav className="rvi-itins" aria-label="Itinéraires">
+    <nav className="rvi-itins" aria-label={t('Itinéraires')}>
       {itineraries.map((it) => {
         const isActive = it.id === activeId;
         const isEditing = editingId === it.id;
@@ -105,18 +107,18 @@ export function ItineraryTabs({
                       cancel();
                     }
                   }}
-                  aria-label={`Renommer ${it.name}`}
+                  aria-label={t('Renommer {{name}}', { name: it.name })}
                 />
               ) : (
                 <span
                   className="rvi-itin__label"
-                  title={canRename ? 'Cliquer à nouveau pour renommer' : it.name}
+                  title={canRename ? t('Cliquer à nouveau pour renommer') : it.name}
                 >
                   {it.name}
                 </span>
               )}
               {it.gpxRoute ? (
-                <span className="rvi-itin__badge" title="Itinéraire chargé depuis un GPX">
+                <span className="rvi-itin__badge" title={t('Itinéraire chargé depuis un GPX')}>
                   GPX
                 </span>
               ) : null}
@@ -125,7 +127,7 @@ export function ItineraryTabs({
               <button
                 type="button"
                 className="rvi-itin__remove"
-                aria-label={`Supprimer ${it.name}`}
+                aria-label={t('Supprimer {{name}}', { name: it.name })}
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove?.(it.id);
@@ -144,7 +146,7 @@ export function ItineraryTabs({
         onClick={onAdd}
       >
         <IconPlusCircle size={12} />
-        <span className="rvi-itin__label">Nouvel itinéraire</span>
+        <span className="rvi-itin__label">{t('Nouvel itinéraire')}</span>
       </button>
     </nav>
   );

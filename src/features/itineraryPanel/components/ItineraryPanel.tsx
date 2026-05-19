@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { useAppI18n } from '@/shared/i18n';
 import { useMiddleClickAutoscroll } from '@/shared/hooks/useMiddleClickAutoscroll';
 import {
   ItineraryPanelModeContent,
@@ -18,6 +19,7 @@ function resolveVisiblePanelMode(mode: PanelMode): Exclude<PanelMode, 'nutrition
 }
 
 export function ItineraryPanel(props: ItineraryPanelProps) {
+  const { t } = useAppI18n();
   const { scrollRef, isAutoscrolling } = useMiddleClickAutoscroll<HTMLDivElement>();
   const [timelineFullscreen, setTimelineFullscreen] = useState(false);
   const {
@@ -165,7 +167,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           className="rvi-panel rvi-panel--timeline-fullscreen"
           role="dialog"
           aria-modal
-          aria-label="Timeline en plein écran"
+          aria-label={t('Timeline en plein écran')}
         >
           <MapCanvasGlassBackdrop
             blur={38}
@@ -183,7 +185,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     <aside
       className={`rvi-panel${isResizing ? ' is-resizing' : ''}`}
       style={style}
-      aria-label="Panneau d'itinéraire"
+      aria-label={t('Panneau d’itinéraire')}
     >
       <PanelHeader
         title={project.name}
@@ -257,7 +259,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         <div
           role="separator"
           aria-orientation="vertical"
-          aria-label="Redimensionner le panneau"
+          aria-label={t('Redimensionner le panneau')}
           className={`rvi-panel__resize-handle${isResizing ? ' is-dragging' : ''}`}
           onMouseDown={onResizeStart}
         />

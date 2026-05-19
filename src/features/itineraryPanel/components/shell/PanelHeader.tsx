@@ -5,6 +5,7 @@ import {
   IconDownload,
   IconShare,
 } from '../icons';
+import { useAppI18n } from '@/shared/i18n';
 
 interface PanelHeaderProps {
   title: string;
@@ -19,19 +20,25 @@ interface PanelHeaderProps {
   onShare?: () => void;
 }
 
-function formatSavedAt(iso: string): string {
+function formatSavedAt(iso: string, locale: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(
-    2,
-  )} à ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: locale === 'fr' ? '2-digit' : 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: locale !== 'fr',
+  }).format(d);
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}o`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}ko`;
-  return `${Math.round(bytes / (1024 * 1024))}mo`;
+function formatSize(bytes: number, locale: string): string {
+  if (bytes < 1024) return locale === 'fr' ? `${bytes}o` : `${bytes} B`;
+  if (bytes < 1024 * 1024) {
+    return locale === 'fr' ? `${Math.round(bytes / 1024)}ko` : `${Math.round(bytes / 1024)} KB`;
+  }
+  return locale === 'fr' ? `${Math.round(bytes / (1024 * 1024))}mo` : `${Math.round(bytes / (1024 * 1024))} MB`;
 }
 
 export function PanelHeader({
@@ -46,7 +53,8 @@ export function PanelHeader({
   onDownload,
   onShare,
 }: PanelHeaderProps) {
-  const privacyLabel = privacy === 'private' ? 'Privé' : 'Public';
+  const { locale, t } = useAppI18n();
+  const privacyLabel = privacy === 'private' ? t('Privé') : t('Public');
   return (
     <header className="rvi-header">
       <div className="rvi-header__title-group">
@@ -58,8 +66,8 @@ export function PanelHeader({
             onBack?.();
           }}
           disabled={!onBack || backDisabled}
-          aria-label={backDisabled ? 'Retour au gestionnaire en cours' : 'Retour au gestionnaire de projet'}
-          title={backDisabled ? 'Retour au gestionnaire en cours' : 'Retour au gestionnaire de projet'}
+          aria-label={backDisabled ? t('Retour au gestionnaire en cours') : t('Retour au gestionnaire de projet')}
+          title={backDisabled ? t('Retour au gestionnaire en cours') : t('Retour au gestionnaire de projet')}
         >
           <IconClose size={18} />
         </button>
@@ -68,24 +76,24 @@ export function PanelHeader({
             className="rvi-header__title"
             value={title}
             onChange={(e) => onRename?.(e.target.value)}
-            placeholder="Nouveau projet"
-            aria-label="Nom du projet"
+            placeholder={t('Nouveau projet')}
+            aria-label={t('Nom du projet')}
           />
           <div className="rvi-header__meta">
             <span className="rvi-header__badge">{privacyLabel}</span>
             {savedAt ? (
               <span className="rvi-header__saved">
                 <IconSave size={14} />
-                <span>{formatSavedAt(savedAt)}</span>
+                <span>{formatSavedAt(savedAt, locale)}</span>
               </span>
             ) : (
-              <span className="rvi-header__saved" title="Projet non enregistré">
+              <span className="rvi-header__saved" title={t('Projet non enregistré')}>
                 <IconSave size={14} />
-                <span>Non enregistré</span>
+                <span>{t('Non enregistré')}</span>
               </span>
             )}
             {sizeBytes !== null ? (
-              <span className="rvi-header__size">{formatSize(sizeBytes)}</span>
+              <span className="rvi-header__size">{formatSize(sizeBytes, locale)}</span>
             ) : null}
           </div>
         </div>
@@ -95,7 +103,7 @@ export function PanelHeader({
           type="button"
           className="rvi-iconbtn"
           onClick={onSettings}
-          aria-label="Paramètres du projet"
+          aria-label={t('Paramètres du projet')}
         >
           <IconSettingsCog size={16} />
         </button>
@@ -103,7 +111,7 @@ export function PanelHeader({
           type="button"
           className="rvi-iconbtn"
           onClick={onDownload}
-          aria-label="Télécharger"
+          aria-label={t('Télécharger')}
           aria-disabled={!savedAt}
         >
           <IconDownload size={16} />
@@ -112,7 +120,7 @@ export function PanelHeader({
           type="button"
           className="rvi-iconbtn"
           onClick={onShare}
-          aria-label="Partager"
+          aria-label={t('Partager')}
           aria-disabled={!savedAt}
         >
           <IconShare size={16} />

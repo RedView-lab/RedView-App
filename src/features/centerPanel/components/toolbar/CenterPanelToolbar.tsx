@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useAppI18n } from '@/shared/i18n';
 import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
@@ -34,6 +35,7 @@ import {
 } from './utils';
 
 export function CenterPanelToolbar() {
+  const { locale, t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
   const routeSplitTool = useRouteSplitToolOptional();
@@ -58,6 +60,7 @@ export function CenterPanelToolbar() {
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
+  const searchPlaceholder = t('Rechercher un lieu');
   const canDeleteActiveRoute = Boolean(
     activeItinerary && (
       (activeItinerary.gpxRoute?.points.length ?? 0) > 0 ||
@@ -67,8 +70,8 @@ export function CenterPanelToolbar() {
         item.kind === 'poi' ||
         item.lat != null ||
         item.lon != null ||
-        (item.kind === 'start' && item.label !== 'Rechercher un lieu') ||
-        (item.kind === 'end' && item.label !== 'Rechercher un lieu'),
+        (item.kind === 'start' && item.label !== searchPlaceholder && item.label !== 'Rechercher un lieu') ||
+        (item.kind === 'end' && item.label !== searchPlaceholder && item.label !== 'Rechercher un lieu'),
       ) ||
       activeItinerary.metrics ||
       activeItinerary.poiFeatures?.length ||
@@ -78,12 +81,12 @@ export function CenterPanelToolbar() {
   const handleDeleteActiveRoute = () => {
     if (!store || !activeItinerary) return;
     store.clearItineraryRoute(activeItinerary.id);
-    setToolbarStatus('Trace supprimée');
+    setToolbarStatus(t('Trace supprimée'));
   };
   const handleAddItinerary = () => {
     if (!store) return;
     store.addItinerary();
-    setToolbarStatus('Nouvel itinéraire créé');
+    setToolbarStatus(t('Nouvel itinéraire créé'));
   };
   const simplifiableRoute =
     activeItinerary?.gpxRoute && activeItinerary.gpxRoute.source !== 'brouter'
@@ -142,16 +145,22 @@ export function CenterPanelToolbar() {
     if (activeSubtool === 'simplify' && canSimplifyTrace) {
       const reduciblePoints = Math.max(0, activeTracePointCount - simplifyTargetPoints);
       return reduciblePoints > 0
-        ? `Réduction possible: ${reduciblePoints.toLocaleString('fr-FR')} point${reduciblePoints > 1 ? 's' : ''} en moins`
-        : 'Trace déjà assez légère';
+        ? t(
+            reduciblePoints > 1 ? 'Réduction possible: {{count}} points en moins' : 'Réduction possible: {{count}} point en moins',
+            { count: reduciblePoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
+          )
+        : t('Trace déjà assez légère');
     }
     if (canAuditTrace) {
       return auditFindings.length > 0
-        ? `${auditFindings.length} passage${auditFindings.length > 1 ? 's' : ''} trop raide${auditFindings.length > 1 ? 's' : ''} détecté${auditFindings.length > 1 ? 's' : ''}`
-        : 'Aucun passage trop raide détecté';
+        ? t(
+            auditFindings.length > 1 ? '{{count}} passages trop raides détectés' : '{{count}} passage trop raide détecté',
+            { count: auditFindings.length.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
+          )
+        : t('Aucun passage trop raide détecté');
     }
     if (canCleanTrace) {
-      return 'Nettoyage de trace disponible';
+      return t('Nettoyage de trace disponible');
     }
     return null;
   }, [
@@ -201,37 +210,41 @@ export function CenterPanelToolbar() {
   const handleApplySimplification = () => {
     if (!store || !activeItinerary || !canApplySimplification) return;
     store.simplifyItineraryGpx(activeItinerary.id, simplifyPointsPerKm);
-    setToolbarStatus(`Trace réduite à ${simplifyPointsPerKm.toLocaleString('fr-FR')} pts/km`);
+    setToolbarStatus(
+      t('Trace réduite à {{value}} pts/km', {
+        value: simplifyPointsPerKm.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US'),
+      }),
+    );
   };
 
   const handleCleanTrace = () => {
     if (!store || !activeItinerary || !canCleanTrace || !simplifiableRoute) return;
     const cleanedPoints = cleanGpxGlitches(simplifiableRoute.points);
     if (routePointsEqual(cleanedPoints, simplifiableRoute.points)) {
-      setToolbarStatus('Aucune aberration détectée');
+      setToolbarStatus(t('Aucune aberration détectée'));
       return;
     }
     store.cleanItineraryGpxGlitches(activeItinerary.id);
-    setToolbarStatus('Trace nettoyée');
+    setToolbarStatus(t('Trace nettoyée'));
   };
 
   const handleReverseTrace = () => {
     if (!store || !activeItinerary || !canReverseTrace) return;
     const reversed = store.reverseItineraryGpx(activeItinerary.id);
-    setToolbarStatus(reversed ? 'Sens du GPX inversé' : 'Inversion indisponible pour cette trace');
+    setToolbarStatus(reversed ? t('Sens du GPX inversé') : t('Inversion indisponible pour cette trace'));
   };
 
   const handleToggleRouteAudit = () => {
     if (!store || !activeItinerary || !canAuditTrace) return;
     if (!activeItinerary.routeAudit) {
-      setToolbarStatus('Audit indisponible pour cette trace');
+      setToolbarStatus(t('Audit indisponible pour cette trace'));
       return;
     }
     if (auditFindings.length === 0) {
       store.updateItinerary(activeItinerary.id, (it) => {
         if (it.routeAudit) it.routeAudit.visible = false;
       });
-      setToolbarStatus('Aucune galère détectée');
+      setToolbarStatus(t('Aucune galère détectée'));
       return;
     }
     const nextVisible = !auditVisible;
@@ -244,8 +257,11 @@ export function CenterPanelToolbar() {
     });
     setToolbarStatus(
       nextVisible
-        ? `${auditFindings.length} portion${auditFindings.length > 1 ? 's' : ''} à vérifier`
-        : 'Audit masqué',
+        ? t(
+            auditFindings.length > 1 ? '{{count}} portions à vérifier' : '{{count}} portion à vérifier',
+            { count: auditFindings.length.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') },
+          )
+        : t('Audit masqué'),
     );
   };
 
@@ -304,9 +320,9 @@ export function CenterPanelToolbar() {
   };
 
   return (
-    <section className="rvc-center-toolbar" aria-label="Barre d'outils centrale">
+    <section className="rvc-center-toolbar" aria-label={t("Barre d'outils centrale")}>
       <div className="rvc-center-toolbar__viewport">
-        <div className="rvc-center-toolbar__track" role="toolbar" aria-label="Outils d'édition du parcours">
+        <div className="rvc-center-toolbar__track" role="toolbar" aria-label={t("Outils d'édition du parcours")}>
           <ToolbarIconButton label="Annuler" onClick={handleUndoTraceEdit} disabled={!canUndoTraceEdit}>
             <IconUndo />
           </ToolbarIconButton>
@@ -423,12 +439,12 @@ export function CenterPanelToolbar() {
 
           <div className="rvc-center-toolbar__spacer" aria-hidden="true" />
 
-          <div className="rvc-center-toolbar__playback" aria-label="Lecture du parcours">
+          <div className="rvc-center-toolbar__playback" aria-label={t('Lecture du parcours')}>
             <button
               className="rvc-center-toolbar__button"
               type="button"
-              aria-label="Ralentir le flyover"
-              title="Ralentir le flyover"
+              aria-label={t('Ralentir le flyover')}
+              title={t('Ralentir le flyover')}
               onClick={slowDown}
               disabled={!canPlay || !canSlowDown}
             >
@@ -442,8 +458,8 @@ export function CenterPanelToolbar() {
                   : 'rvc-center-toolbar__button rvc-center-toolbar__button--play'
               }
               type="button"
-              aria-label={isPlaying ? 'Mettre en pause le flyover' : 'Lancer le flyover'}
-              title={isPlaying ? 'Mettre en pause le flyover' : 'Lancer le flyover'}
+              aria-label={isPlaying ? t('Mettre en pause le flyover') : t('Lancer le flyover')}
+              title={isPlaying ? t('Mettre en pause le flyover') : t('Lancer le flyover')}
               aria-pressed={isPlaying}
               onClick={togglePlayback}
               disabled={!canPlay}
@@ -454,8 +470,8 @@ export function CenterPanelToolbar() {
             <button
               className="rvc-center-toolbar__button"
               type="button"
-              aria-label="Accélérer le flyover"
-              title="Accélérer le flyover"
+              aria-label={t('Accélérer le flyover')}
+              title={t('Accélérer le flyover')}
               onClick={speedUp}
               disabled={!canPlay || !canSpeedUp}
             >
@@ -465,15 +481,15 @@ export function CenterPanelToolbar() {
             <button
               className="rvc-center-toolbar__button"
               type="button"
-              aria-label="Revenir au début du flyover"
-              title="Revenir au début du flyover"
+              aria-label={t('Revenir au début du flyover')}
+              title={t('Revenir au début du flyover')}
               onClick={resetPlayback}
               disabled={!canPlay}
             >
               <IconClockRewind />
             </button>
 
-            <div className="rvc-center-toolbar__metrics" aria-label="Résumé de lecture">
+            <div className="rvc-center-toolbar__metrics" aria-label={t('Résumé de lecture')}>
               <span>{distanceLabel}</span>
               <span>{timeLabel}</span>
             </div>
@@ -482,21 +498,21 @@ export function CenterPanelToolbar() {
       </div>
 
       {toolsExpanded && activeSubtool === 'simplify' ? (
-        <div className="rvc-center-toolbar__tool-panel" role="group" aria-label="Réduction de points GPX">
+        <div className="rvc-center-toolbar__tool-panel" role="group" aria-label={t('Réduction de points GPX')}>
           <div className="rvc-center-toolbar__tool-panel-head">
-            <span className="rvc-center-toolbar__tool-title">Simplification intelligente</span>
+            <span className="rvc-center-toolbar__tool-title">{t('Simplification intelligente')}</span>
             <span className="rvc-center-toolbar__tool-stats">
-              {simplifyTargetPoints.toLocaleString('fr-FR')} / {activeTracePointCount.toLocaleString('fr-FR')} pts
+              {simplifyTargetPoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} / {activeTracePointCount.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} pts
             </span>
           </div>
 
           <div className="rvc-center-toolbar__tool-hint">
-            <span>Detaillé courant: {Math.round(currentPointsPerKm).toLocaleString('fr-FR')} pts/km</span>
-            <span>Repères utiles: détaillé 40-80 pts/km, léger 15-30 pts/km</span>
+            <span>{t('Detaillé courant: {{value}} pts/km', { value: Math.round(currentPointsPerKm).toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US') })}</span>
+            <span>{t('Repères utiles: détaillé 40-80 pts/km, léger 15-30 pts/km')}</span>
           </div>
 
           <div className="rvc-center-toolbar__tool-panel-row">
-            <span className="rvc-center-toolbar__tool-caption">Densité cible</span>
+            <span className="rvc-center-toolbar__tool-caption">{t('Densité cible')}</span>
             <div className="rvc-center-toolbar__tool-slider-shell">
               <Slider
                 value={simplifyPointsPerKm}
@@ -514,8 +530,8 @@ export function CenterPanelToolbar() {
           <div className="rvc-center-toolbar__tool-panel-actions">
             <span className="rvc-center-toolbar__tool-caption">
               {activeTraceDistanceKm > 0
-                ? `${activeTraceDistanceKm.toFixed(1).replace('.', ',')} km -> ${simplifyTargetPoints.toLocaleString('fr-FR')} pts`
-                : 'Distance indisponible'}
+                ? `${activeTraceDistanceKm.toFixed(1).replace(locale === 'fr' ? '.' : ',', locale === 'fr' ? ',' : '.')} km -> ${simplifyTargetPoints.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US')} pts`
+                : t('Distance indisponible')}
             </span>
             <button
               className="rvc-center-toolbar__button rvc-center-toolbar__button--accent"
@@ -523,7 +539,7 @@ export function CenterPanelToolbar() {
               onClick={handleApplySimplification}
               disabled={!canApplySimplification}
             >
-              Réduire
+              {t('Réduire')}
             </button>
           </div>
         </div>

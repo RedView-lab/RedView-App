@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { useAppI18n } from '@/shared/i18n';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import type { Itinerary } from '@/features/itineraryPanel';
 import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
@@ -29,6 +30,7 @@ export function SummaryActionMenu({
   onDuplicate,
   onDelete,
 }: SummaryActionMenuProps) {
+  const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const firstActionRef = useRef<HTMLButtonElement | null>(null);
   const [menuStyle, setMenuStyle] = useState<{
@@ -104,7 +106,7 @@ export function SummaryActionMenu({
       ref={menuRef}
       className="rvc-center-summary__menu"
       role="menu"
-      aria-label={`Actions pour ${itinerary.name}`}
+      aria-label={t('Actions pour {{name}}', { name: itinerary.name })}
       style={{
         top: menuStyle.top,
         left: menuStyle.left,
@@ -124,7 +126,7 @@ export function SummaryActionMenu({
         role="menuitem"
         onClick={onStartRename}
       >
-        <span className="rvc-center-summary__menu-label">Renommer la trace</span>
+        <span className="rvc-center-summary__menu-label">{t('Renommer la trace')}</span>
         <span className="rvc-center-summary__menu-icon" aria-hidden>
           <SvgV2Icon name="edit-05.svg" size={16} />
         </span>
@@ -135,7 +137,7 @@ export function SummaryActionMenu({
         role="menuitem"
         onClick={onDuplicate}
       >
-        <span className="rvc-center-summary__menu-label">Dupliquer la trace</span>
+        <span className="rvc-center-summary__menu-label">{t('Dupliquer la trace')}</span>
         <span className="rvc-center-summary__menu-icon" aria-hidden>
           <IconCopy04 size={16} />
         </span>
@@ -147,7 +149,7 @@ export function SummaryActionMenu({
         onClick={onDelete}
         disabled={!canDelete}
       >
-        <span className="rvc-center-summary__menu-label">Supprimer la trace</span>
+        <span className="rvc-center-summary__menu-label">{t('Supprimer la trace')}</span>
         <span className="rvc-center-summary__menu-icon" aria-hidden>
           <IconTrash size={14} />
         </span>

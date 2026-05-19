@@ -1,4 +1,5 @@
 import { IconCheck } from '../icons';
+import { useAppI18n } from '@/shared/i18n';
 
 interface CheckboxProps {
   checked: boolean;
@@ -8,6 +9,8 @@ interface CheckboxProps {
 }
 
 export function Checkbox({ checked, onChange, label, id }: CheckboxProps) {
+  const { t } = useAppI18n();
+
   return (
     <label className="rvc-cp-checkbox" htmlFor={id}>
       <span className={`rvc-cp-checkbox__box${checked ? ' is-checked' : ''}`}>
@@ -20,7 +23,7 @@ export function Checkbox({ checked, onChange, label, id }: CheckboxProps) {
         onChange={(e) => onChange?.(e.target.checked)}
         className="rvc-cp-checkbox__input"
       />
-      {label ? <span className="rvc-cp-checkbox__label">{label}</span> : null}
+      {label ? <span className="rvc-cp-checkbox__label">{t(label)}</span> : null}
     </label>
   );
 }

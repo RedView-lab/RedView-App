@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import type { PanelMode } from '../../types';
 import {
   IconRoute,
@@ -18,8 +19,10 @@ const TABS: { id: PanelMode; label: string; Icon: ComponentType<{ size?: number 
 ];
 
 export function ModeTabs({ active, onChange }: ModeTabsProps) {
+  const { t } = useAppI18n();
+
   return (
-    <nav className="rvi-modes" aria-label="Mode d'édition">
+    <nav className="rvi-modes" aria-label={t("Mode d'édition")}>
       {TABS.map(({ id, label, Icon }) => (
         <button
           key={id}
@@ -30,7 +33,7 @@ export function ModeTabs({ active, onChange }: ModeTabsProps) {
           <span className="rvi-mode__icon">
             <Icon size={16} />
           </span>
-          {label}
+          {t(label)}
         </button>
       ))}
     </nav>

@@ -4,6 +4,7 @@ import type {
   TimelineAddItemKind,
   TimelineItem,
 } from '../../types';
+import { translateAppText } from '@/shared/i18n';
 
 function isRoutableTimelineRow(
   row: TimelineItem | null | undefined,
@@ -219,7 +220,7 @@ function createBlankEndpoint(
   return {
     id: id ?? `${kind}-${Date.now()}`,
     kind,
-    label: 'Rechercher un lieu',
+    label: translateAppText('Rechercher un lieu'),
     distanceKm: kind === 'start' ? 0 : null,
   };
 }
@@ -232,14 +233,14 @@ function createTimelineItem(kind: TimelineAddItemKind): TimelineItem | null {
       return {
         id: `step-${now}`,
         kind: 'waypoint',
-        label: 'Rechercher un lieu',
+        label: translateAppText('Rechercher un lieu'),
         distanceKm: null,
       };
     case 'waypoint':
       return {
         id: `wp-${now}`,
         kind: 'waypoint',
-        label: 'Nouveau point',
+        label: translateAppText('Nouveau point'),
         distanceKm: null,
       };
     case 'poi':
@@ -253,7 +254,7 @@ function createTimelineItem(kind: TimelineAddItemKind): TimelineItem | null {
       return {
         id: `pause-${now}`,
         kind: 'pause',
-        label: 'Pause',
+        label: translateAppText('Pause'),
         distanceKm: null,
         durationMin: 15,
       };

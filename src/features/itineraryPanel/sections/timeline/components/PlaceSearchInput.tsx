@@ -22,6 +22,7 @@ import {
   geocodePlaces,
   type GeocodeSuggestion,
 } from '../../../lib/geocoding';
+import { useAppI18n } from '@/shared/i18n';
 
 interface PlaceSearchInputProps {
   value: string;
@@ -44,13 +45,15 @@ export function PlaceSearchInput({
   value,
   onPick,
   onChangeText,
-  placeholder = 'Rechercher un lieu',
+  placeholder,
   proximity,
   countries = 'fr',
   debounceMs = 250,
   autoFocus,
   className,
 }: PlaceSearchInputProps) {
+  const { t } = useAppI18n();
+  const resolvedPlaceholder = placeholder ?? t('Rechercher un lieu');
   const [text, setText] = useState(value);
   const [suggestions, setSuggestions] = useState<GeocodeSuggestion[]>([]);
   const [open, setOpen] = useState(false);
@@ -109,7 +112,7 @@ export function PlaceSearchInput({
           if ((e as { name?: string }).name === 'AbortError') return;
           setSuggestions([]);
           setError(
-            e instanceof Error ? e.message : 'Erreur de recherche',
+            e instanceof Error ? t(e.message) : t('Erreur de recherche'),
           );
         })
         .finally(() => setLoading(false));
@@ -230,7 +233,7 @@ export function PlaceSearchInput({
         type="text"
         className="rvi-place-search__input"
         value={text}
-        placeholder={placeholder}
+          placeholder={resolvedPlaceholder}
         autoFocus={autoFocus}
         onChange={(e) => {
           setText(e.target.value);

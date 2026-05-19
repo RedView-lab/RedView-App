@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { IconChevronDown } from '../icons';
 import { Toggle } from './Toggle';
 
@@ -27,9 +28,11 @@ export function Section({
   children,
   noTopBorder,
 }: SectionProps) {
+  const { t } = useAppI18n();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const isOpen = open ?? uncontrolledOpen;
   const [fullyOpen, setFullyOpen] = useState(isOpen);
+  const translatedTitle = t(title);
 
   useEffect(() => {
     if (isOpen) {
@@ -56,21 +59,21 @@ export function Section({
           onClick={toggleOpen}
           aria-expanded={isOpen}
         >
-          {title}
+          {translatedTitle}
         </button>
         {toggle ? (
           <Toggle
             checked={toggle.checked}
             onChange={toggle.onChange}
             disabled={toggle.disabled}
-            ariaLabel={`Activer ${title}`}
+            ariaLabel={t('Activer {{title}}', { title: translatedTitle })}
           />
         ) : null}
         <button
           type="button"
           className={`rvc-section__chevron${isOpen ? ' is-open' : ''}`}
           onClick={toggleOpen}
-          aria-label={isOpen ? 'Réduire' : 'Développer'}
+          aria-label={isOpen ? t('Réduire') : t('Développer')}
         >
           <IconChevronDown size={16} />
         </button>

@@ -45,6 +45,7 @@ import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
 } from '@/features/itineraryPanel';
+import { useAppI18n } from '@/shared/i18n';
 import {
   buildItineraryVisualNodes,
   getItineraryStartDistanceKm,
@@ -56,6 +57,7 @@ import type {
 } from '@/features/itineraryPanel/types';
 
 export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
+  const { t } = useAppI18n();
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
   const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
@@ -444,7 +446,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   const dayNightWarning =
     (filters.jourNuit || showDayNightRequirementHint) && !dayNightStartReady
-      ? 'Renseigne une date et une heure de départ pour activer Jour/nuit.'
+      ? t('Renseigne une date et une heure de départ pour activer Jour/nuit.')
       : null;
 
   const handleChartClick = (xValue: number) => {
@@ -504,12 +506,12 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     <section
       ref={rootRef}
       className="rvc-center-analysis"
-      aria-label="Analyse du parcours"
+      aria-label={t('Analyse du parcours')}
     >
       <div className="rvc-center-analysis__toolbar">
-        <div className="rvc-center-analysis__label">Analyse</div>
+        <div className="rvc-center-analysis__label">{t('Analyse')}</div>
 
-        <div className="rvc-center-analysis__segmented" role="tablist" aria-label="Mode d'analyse">
+        <div className="rvc-center-analysis__segmented" role="tablist" aria-label={t("Mode d'analyse")}>
           <button
             className={
               xMode === 'distance'
@@ -519,7 +521,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
             type="button"
             onClick={() => setXMode('distance')}
           >
-            Distance
+            {t('Distance')}
           </button>
           <button
             className={
@@ -530,7 +532,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
             type="button"
             onClick={() => setXMode('temps')}
           >
-            Temps
+            {t('Temps')}
           </button>
           <button
             className={
@@ -541,19 +543,19 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
             type="button"
             onClick={() => setXMode('heure')}
           >
-            Heures
+            {t('Heures')}
           </button>
         </div>
 
         <div className="rvc-center-analysis__detail">
-          <span className="rvc-center-analysis__minor-label">Détail</span>
-          <div className="rvc-center-analysis__detail-buttons" role="group" aria-label="Zoom du graphique">
+          <span className="rvc-center-analysis__minor-label">{t('Détail')}</span>
+          <div className="rvc-center-analysis__detail-buttons" role="group" aria-label={t('Zoom du graphique')}>
             <button
               type="button"
               className="rvc-center-analysis__detail-button"
               onClick={() => adjustDetailZoom(-DETAIL_ZOOM_STEP)}
               disabled={detailZoom <= 0.001}
-              aria-label="Dézoomer le graphique"
+              aria-label={t('Dézoomer le graphique')}
             >
               -
             </button>
@@ -562,7 +564,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
               className="rvc-center-analysis__detail-button"
               onClick={() => adjustDetailZoom(DETAIL_ZOOM_STEP)}
               disabled={detailZoom >= 0.999}
-              aria-label="Zoomer le graphique"
+              aria-label={t('Zoomer le graphique')}
             >
               +
             </button>
@@ -589,7 +591,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
         <div className="rvc-center-analysis__separator" aria-hidden="true" />
 
-        <div className="rvc-center-analysis__filters" aria-label="Filtres">
+        <div className="rvc-center-analysis__filters" aria-label={t('Filtres')}>
           {filterDefs.map(({ key, label }) => {
             const checked = filters[key];
             return (
@@ -606,13 +608,13 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
                   className="rvc-center-analysis__filter-input"
                   checked={checked}
                   onChange={() => toggleFilter(key)}
-                  aria-label={label}
+                  aria-label={t(label)}
                 />
                 <span className="rvc-center-analysis__checkbox" aria-hidden="true">
                   {checked ? <IconCheck size={10} /> : null}
                 </span>
-                <span className="rvc-center-analysis__filter-label" title={label}>
-                  {label}
+                <span className="rvc-center-analysis__filter-label" title={t(label)}>
+                  {t(label)}
                 </span>
               </label>
             );
@@ -626,7 +628,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         </div>
       ) : null}
 
-      <div className="rvc-center-analysis__results" aria-label="Graphique d'analyse">
+      <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
         <AnalysisChart
           series={series}
           backdropProfiles={altitudeBackdropProfiles}

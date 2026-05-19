@@ -1,6 +1,7 @@
 import { type ReactNode, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { useAppI18n } from '@/shared/i18n';
 import { IconChevronDown, IconCheck } from '../icons';
 
 interface SelectOption<T extends string = string> {
@@ -32,6 +33,7 @@ export function Select<T extends string = string>({
   variant = 'default',
   disabled = false,
 }: SelectProps<T>) {
+  const { t } = useAppI18n();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const [dropPos, setDropPos] = useState<{
@@ -112,7 +114,7 @@ export function Select<T extends string = string>({
                 setOpen(false);
               }}
             >
-              <span className="rvc-select__option-label">{o.label}</span>
+              <span className="rvc-select__option-label">{t(o.label)}</span>
               {o.value === value && <IconCheck size={16} className="rvc-select__option-check" />}
             </div>
           ))}
@@ -135,7 +137,7 @@ export function Select<T extends string = string>({
       >
         {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
         <span className="rvc-select__value">
-          {options.find((o) => o.value === value)?.label ?? value}
+          {t(options.find((o) => o.value === value)?.label ?? value)}
         </span>
         <IconChevronDown size={20} className="rvc-select__chevron" />
       </div>

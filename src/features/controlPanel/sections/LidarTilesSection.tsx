@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { IconCube, IconExpand, IconExternalLink, IconTrash } from '../icons';
 import type { DownloadProgress } from '@/features/lidar/types';
@@ -30,6 +31,7 @@ export function LidarTilesSection({
   onTileRename,
   onDownload,
 }: Props) {
+  const { t } = useAppI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -66,22 +68,22 @@ export function LidarTilesSection({
       : formatMegabytes(progress.bytesDownloaded);
   const buttonLabel = progress
     ? progressText
-      ? `Téléchargement ${progressText}`
-      : progress.message ?? 'Téléchargement en cours'
+      ? t('Téléchargement {{progress}}', { progress: progressText })
+      : progress.message ?? t('Téléchargement en cours')
     : downloadModeActive
-      ? 'Clique sur la carte pour choisir une tuile'
-      : 'Télécharger une tuile LIDAR';
+      ? t('Clique sur la carte pour choisir une tuile')
+      : t('Télécharger une tuile LIDAR');
   const buttonMeta = progress
-    ? progress.message ?? 'Téléchargement en cours'
+    ? progress.message ?? t('Téléchargement en cours')
     : error
       ? error
       : downloadModeActive
-        ? 'Mode sélection actif'
-        : 'Active le mode puis clique sur la carte';
+        ? t('Mode sélection actif')
+        : t('Active le mode puis clique sur la carte');
 
   return (
     <Section
-      title={`Tuiles LIDAR ( ${tiles.length} )`}
+      title={t('Tuiles LIDAR ( {{count}} )', { count: tiles.length })}
       icon={<IconCube size={16} />}
       open={open}
       onOpenChange={onOpenChange}
@@ -119,7 +121,7 @@ export function LidarTilesSection({
                         : 'rvc-lidar__label-text'
                     }
                     onClick={() => startEdit(tile.id, tile.label)}
-                    title={onTileRename ? 'Cliquer pour renommer' : tile.label}
+                    title={onTileRename ? t('Cliquer pour renommer') : tile.label}
                   >
                     {tile.label}
                   </span>
@@ -130,8 +132,8 @@ export function LidarTilesSection({
                   type="button"
                   className="rvc-lidar__action-btn"
                   onClick={() => onTileOpen?.(tile.id)}
-                  aria-label="Ouvrir dans le viewer 3D"
-                  title="Ouvrir dans le viewer 3D LIDAR"
+                  aria-label={t('Ouvrir dans le viewer 3D')}
+                  title={t('Ouvrir dans le viewer 3D LIDAR')}
                 >
                   <IconExternalLink size={14} />
                 </button>
@@ -139,8 +141,8 @@ export function LidarTilesSection({
                   type="button"
                   className="rvc-lidar__action-btn"
                   onClick={() => onTileDelete?.(tile.id)}
-                  aria-label="Supprimer la tuile"
-                  title="Supprimer la tuile"
+                  aria-label={t('Supprimer la tuile')}
+                  title={t('Supprimer la tuile')}
                 >
                   <IconTrash size={15} />
                 </button>

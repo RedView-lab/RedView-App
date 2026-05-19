@@ -1,4 +1,5 @@
 import type { ControlPanelState } from '../types';
+import { translateAppText } from '@/shared/i18n';
 import { buildBasemapList, DEFAULT_BASEMAP_ID } from './basemaps';
 import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
@@ -12,10 +13,10 @@ const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
 export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   basemaps: buildBasemapList(DEFAULT_BASEMAP_ID),
   lidarTiles: [
-    { id: 'tile-1', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-2', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-3', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
-    { id: 'tile-4', label: 'Tuile 1 (LIDAR) (2102mo) (2026 IGN)', sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
+    { id: 'tile-1', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 1, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
+    { id: 'tile-2', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 2, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
+    { id: 'tile-3', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 3, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
+    { id: 'tile-4', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 4, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
   ],
   labels: {
     enabled: true,
@@ -39,8 +40,8 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     enabled: true,
     traceWidthPx: 4,
     items: [
-      { id: 'route-1', label: 'Itinéraire 1', color: '#c50000', mode: 'default', opacity: 100, visible: true },
-      { id: 'route-2', label: 'Variante 2', color: '#ffa630', mode: 'slope', opacity: 100, visible: true },
+      { id: 'route-1', label: translateAppText('Itinéraire {{index}}', { index: 1 }), color: '#c50000', mode: 'default', opacity: 100, visible: true },
+      { id: 'route-2', label: translateAppText('Variante 2'), color: '#ffa630', mode: 'slope', opacity: 100, visible: true },
       { id: 'route-3', label: 'GPX Jerem', color: '#ffcd57', mode: 'speedEst', opacity: 100, visible: true },
     ],
   },

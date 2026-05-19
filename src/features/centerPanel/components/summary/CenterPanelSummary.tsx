@@ -3,6 +3,7 @@ import {
   useState,
   useMemo,
 } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
 import {
   useProjectStoreOptional,
@@ -23,6 +24,7 @@ import {
 import type { InlineRenameState } from './types';
 
 export function CenterPanelSummary() {
+  const { t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
   const itineraries = store?.project.itineraries ?? [];
@@ -125,17 +127,17 @@ export function CenterPanelSummary() {
   };
 
   return (
-    <section className="rvc-center-summary" aria-label="Synthèse d'itinéraire">
+    <section className="rvc-center-summary" aria-label={t("Synthèse d'itinéraire")}>
       <div className="rvc-center-summary__row rvc-center-summary__row--header">
-        <div className="rvc-center-summary__title">Synthèse</div>
+        <div className="rvc-center-summary__title">{t('Synthèse')}</div>
         <div className="rvc-center-summary__metrics" aria-hidden="true">
           {HEADER_CELLS.map((cell) => (
             <div
               key={cell}
               className="rvc-center-summary__metric rvc-center-summary__metric--header"
-              title={cell}
+              title={t(cell)}
             >
-              {cell}
+              {t(cell)}
             </div>
           ))}
         </div>

@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react';
 
 import { exportItineraryFile, exportRoadbookExcel, type ItineraryExportFormat } from '@/features/exporter';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { useAppI18n } from '@/shared/i18n';
 
 import { Checkbox } from './Checkbox';
 import { Select } from './Select';
@@ -44,6 +45,7 @@ const INITIAL_ROWS: ExportRow[] = [
 ];
 
 export function ExporterPanel({ width }: ExporterPanelProps) {
+  const { t } = useAppI18n();
   const store = useProjectStoreOptional();
   const [open, setOpen] = useState(true);
   const [rows, setRows] = useState(INITIAL_ROWS);
@@ -75,19 +77,19 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
     const itineraryRow = rows.find((row) => row.id === 'itineraries' && row.checked && !row.disabled);
     const roadbookRow = rows.find((row) => row.id === 'sheet' && row.checked && !row.disabled);
     if (!itineraryRow && !roadbookRow) {
-      setStatus({ tone: 'error', message: 'Activez au moins un export avant de lancer le telechargement.' });
+      setStatus({ tone: 'error', message: t('Activez au moins un export avant de lancer le téléchargement.') });
       return;
     }
     if (!activeItinerary) {
-      setStatus({ tone: 'error', message: 'Aucun itineraire actif a exporter.' });
+      setStatus({ tone: 'error', message: t('Aucun itinéraire actif à exporter.') });
       return;
     }
     if (itineraryRow && itineraryRow.format !== 'gpx' && itineraryRow.format !== 'fit') {
-      setStatus({ tone: 'error', message: 'Le format selectionne n\'est pas encore pris en charge pour l\'itineraire.' });
+      setStatus({ tone: 'error', message: t("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.") });
       return;
     }
     if (roadbookRow && roadbookRow.format !== 'excel') {
-      setStatus({ tone: 'error', message: 'La feuille de route est uniquement disponible en export Excel.' });
+      setStatus({ tone: 'error', message: t('La feuille de route est uniquement disponible en export Excel.') });
       return;
     }
 
@@ -107,13 +109,18 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
 
       setStatus({
         tone: 'success',
-        message: `${exportedFiles.join(' + ')} exporte depuis l\'itineraire actif.`,
+        message: t(
+          exportedFiles.length > 1
+            ? "{{files}} exportés depuis l'itinéraire actif."
+            : "{{files}} exporté depuis l'itinéraire actif.",
+          { files: exportedFiles.join(' + ') },
+        ),
       });
     } catch (error) {
       console.error('[exporter] failed to export itinerary', error);
       setStatus({
         tone: 'error',
-        message: error instanceof Error ? error.message : 'Impossible d\'exporter l\'itineraire actif.',
+        message: error instanceof Error ? t(error.message) : t("Impossible d'exporter l'itinéraire actif."),
       });
     } finally {
       setIsExporting(false);
@@ -124,7 +131,7 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
     <aside
       className={`rvc-panel rvc-exporter-panel${open ? ' is-open' : ' is-collapsed'}`}
       style={style}
-      aria-label="Panneau d'export"
+      aria-label={t("Panneau d'export")}
     >
       <div className="rvc-exporter-panel__content">
         <header className="rvc-exporter-panel__header">
@@ -137,13 +144,13 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
             onClick={() => setOpen((current) => !current)}
             aria-expanded={open}
           >
-            <span className="rvc-exporter-panel__title">Exporter</span>
+            <span className="rvc-exporter-panel__title">{t('Exporter')}</span>
           </button>
           <button
             type="button"
             className={`rvc-exporter-panel__chevron${open ? ' is-open' : ''}`}
             onClick={() => setOpen((current) => !current)}
-            aria-label={open ? 'Réduire le module exporter' : 'Développer le module exporter'}
+            aria-label={open ? t('Réduire le module exporter') : t('Développer le module exporter')}
             aria-expanded={open}
           >
             <IconChevronDown size={16} />
@@ -187,7 +194,7 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
               disabled={isExporting}
             >
               <IconDownload01 size={18} />
-              <span>{isExporting ? 'Export...' : 'Exporter'}</span>
+              <span>{isExporting ? t('Export...') : t('Exporter')}</span>
             </button>
 
             {status ? (

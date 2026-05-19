@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 
 import { Collapse } from '@/features/itineraryPanel/components/shell';
 import { usePredictionStoreOptional } from '@/features/itineraryPanel';
@@ -49,6 +50,7 @@ export function SummaryRow({
   onSelectForMerge,
   onOpenMenu,
 }: SummaryRowProps) {
+  const { t } = useAppI18n();
   const { itinerary, depth, startDistanceKm } = node;
   const predictionStore = usePredictionStoreOptional();
   const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
@@ -79,7 +81,7 @@ export function SummaryRow({
       style={rowStyle}
       title={
         depth > 0
-          ? `${itinerary.name} commence à ${startDistanceKm.toFixed(1)} km`
+          ? t('{{name}} commence à {{distance}} km', { name: itinerary.name, distance: startDistanceKm.toFixed(1) })
           : itinerary.name
       }
       onClick={mergeArmed && mergeSelectable ? () => onSelectForMerge?.(itinerary.id) : undefined}
@@ -101,9 +103,9 @@ export function SummaryRow({
           <button
             type="button"
             className="rvc-center-summary__tree-toggle"
-            aria-label={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
+            aria-label={expanded ? t('Replier les traces filles') : t('Déplier les traces filles')}
             aria-expanded={expanded}
-            title={expanded ? 'Replier les traces filles' : 'Déplier les traces filles'}
+            title={expanded ? t('Replier les traces filles') : t('Déplier les traces filles')}
             onClick={(event) => {
               event.stopPropagation();
               onToggleExpanded?.(itinerary.id);
@@ -122,8 +124,8 @@ export function SummaryRow({
             onToggleAnalysisVisibility?.(itinerary.id, !analysisVisible);
           }}
           aria-pressed={analysisVisible}
-          aria-label={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
-          title={analysisVisible ? 'Masquer le graphique' : 'Afficher le graphique'}
+          aria-label={analysisVisible ? t('Masquer le graphique') : t('Afficher le graphique')}
+          title={analysisVisible ? t('Masquer le graphique') : t('Afficher le graphique')}
           data-visible={analysisVisible ? 'true' : 'false'}
         >
           <IconEye size={14} />
@@ -148,13 +150,13 @@ export function SummaryRow({
                 onCancelRename?.();
               }
             }}
-            aria-label={`Nouveau nom pour ${itinerary.name}`}
+            aria-label={t('Nouveau nom pour {{name}}', { name: itinerary.name })}
             autoFocus
           />
         ) : (
           <span
             className="rvc-center-summary__name"
-            title={`${itinerary.name} · Double-cliquez pour renommer`}
+            title={t('{{name}} · Double-cliquez pour renommer', { name: itinerary.name })}
             onDoubleClick={(event) => {
               event.stopPropagation();
               onStartRename?.(itinerary);
@@ -169,7 +171,7 @@ export function SummaryRow({
           <div
             key={`${itinerary.id}-${index}`}
             className="rvc-center-summary__metric"
-            title={`${HEADER_CELLS[index]}: ${cell}`}
+            title={`${t(HEADER_CELLS[index] ?? '')}: ${cell}`}
           >
             {cell}
           </div>
@@ -178,7 +180,7 @@ export function SummaryRow({
       <button
         className="rvc-center-summary__ghost-button"
         type="button"
-        aria-label={`Plus d'options pour ${itinerary.name}`}
+        aria-label={t("Plus d'options pour {{name}}", { name: itinerary.name })}
         onClick={(event) => {
           event.stopPropagation();
           onOpenMenu?.(itinerary, event.currentTarget);
@@ -191,6 +193,8 @@ export function SummaryRow({
 }
 
 export function EmptyRow() {
+  const { t } = useAppI18n();
+
   return (
     <div className="rvc-center-summary__row rvc-center-summary__row--item">
       <div className="rvc-center-summary__route" style={{ opacity: 0.5 }}>
@@ -202,7 +206,7 @@ export function EmptyRow() {
           aria-hidden="true"
           style={{ background: 'rgba(255,255,255,0.18)' }}
         />
-        <span className="rvc-center-summary__name">Aucun itinéraire</span>
+        <span className="rvc-center-summary__name">{t('Aucun itinéraire')}</span>
       </div>
       <div className="rvc-center-summary__metrics">
         {EMPTY_VALUES.map((cell, index) => (
@@ -211,7 +215,7 @@ export function EmptyRow() {
           </div>
         ))}
       </div>
-      <button className="rvc-center-summary__ghost-button" type="button" aria-label="Plus d'options" disabled>
+      <button className="rvc-center-summary__ghost-button" type="button" aria-label={t("Plus d'options")} disabled>
         <IconDotsVertical size={16} />
       </button>
     </div>
