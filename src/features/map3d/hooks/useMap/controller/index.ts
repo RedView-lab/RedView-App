@@ -65,6 +65,7 @@ export function createMapLifecycleController(
     reloadMapElevation: ctx.fns.reloadMapElevation,
     prepareStyleChange: ctx.fns.prepareStyleChange,
     bootstrapCurrentStyle: ctx.fns.bootstrapCurrentStyle,
+    setDem3dQuality: ctx.fns.setDem3dQuality,
     cleanup,
   };
 }

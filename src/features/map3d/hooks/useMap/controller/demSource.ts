@@ -1,10 +1,11 @@
 import type { MapSourceDataEvent } from 'mapbox-gl';
-import { unifiedDEMSource, awsFallbackDEMSource } from '../../../lib/sources';
+import { unifiedDEMSource, awsFallbackDEMSource, awsFastDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
 import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
 import { DEM_SETTILE_VERIFY_MS, STYLE_LOAD_WATCHDOG_MS } from './context';
 import { getStyleContentStats } from './styleContent';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 
 /**
  * DEM source + terrain attachment lifecycle.
@@ -53,6 +54,12 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.applyManagedTerrain = () => {
+    // Fast 30 m mode short-circuits the unified-DEM pipeline. AWS
+    // Terrarium is decoded natively on the GPU — no SW dependency,
+    // no IGN — so any environment can switch to it instantly.
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      return fns.applyFastDemTerrain();
+    }
     if (map.getSource(unifiedDEMSource.id)) {
       return fns.applyUnifiedTerrain();
     }
@@ -434,5 +441,92 @@ export function attachDemSource(ctx: Ctx): void {
     } catch (error) {
       console.warn('[map3d] AWS fallback DEM source remove failed', error);
     }
+  };
+
+  // ── Fast 30 m mode (AWS Terrarium direct, no SW) ──────────────────
+  // Identical AWS Open Data Terrarium pipeline as the fallback but
+  // attached under its own source id `aws-fast-dem` so it can coexist
+  // with the unified SW source without conflict — letting us swap back
+  // and forth between HD and Fast quality instantly. The browser HTTP
+  // cache + Mapbox per-source tile cache make every subsequent swap
+  // free of any visible lag.
+  fns.applyFastDemTerrain = () => {
+    if (!canMutateTerrainStyle()) return false;
+    const sourceAlreadyPresent = !!map.getSource(awsFastDEMSource.id);
+    if (!sourceAlreadyPresent) {
+      try {
+        map.addSource(awsFastDEMSource.id, {
+          type: 'raster-dem',
+          tiles: awsFastDEMSource.tiles,
+          tileSize: awsFastDEMSource.tileSize,
+          encoding: awsFastDEMSource.encoding,
+          minzoom: awsFastDEMSource.minzoom,
+          maxzoom: awsFastDEMSource.maxzoom,
+        });
+      } catch (error) {
+        console.warn('[map3d] AWS fast DEM source attach failed', error);
+        return false;
+      }
+    }
+
+    try {
+      // Replace any existing TerrainManager binding (which may target
+      // unified-dem or aws-fallback-dem) with a fresh one pointing at
+      // the fast source. TerrainManager.init() issues setTerrain which
+      // Mapbox treats as a hot-swap — no flat frame in between.
+      if (terrainRef.current) {
+        try { terrainRef.current.destroy(); } catch { /* best-effort */ }
+      }
+      terrainRef.current = new TerrainManager(map, awsFastDEMSource.id);
+      terrainRef.current.init();
+      console.log(
+        sourceAlreadyPresent
+          ? '[map3d] fast 30 m terrain re-bound'
+          : '[map3d] fast 30 m terrain attached',
+      );
+      return true;
+    } catch (error) {
+      console.warn('[map3d] fast 30 m terrain apply failed', error);
+      return false;
+    }
+  };
+
+  // Quality switch entry point. Idempotent — safe to call repeatedly
+  // with the same value (no-ops if the desired terrain is already
+  // bound). Designed for zero-flicker user-facing toggling.
+  fns.setDem3dQuality = (quality) => {
+    if (quality === 'fast-30m') {
+      fns.applyFastDemTerrain();
+      return;
+    }
+    // 'hd' → return to the unified SW pipeline. Don't tear down the
+    // fast source — keep it resident so the next switch back is
+    // also instant.
+    if (map.getSource(unifiedDEMSource.id)) {
+      // Re-bind TerrainManager to the unified source.
+      try {
+        if (terrainRef.current) {
+          try { terrainRef.current.destroy(); } catch { /* best-effort */ }
+          terrainRef.current = null;
+        }
+      } catch { /* best-effort */ }
+      fns.applyUnifiedTerrain();
+      console.log('[map3d] HD terrain re-bound (unified DEM)');
+      return;
+    }
+    // Unified source missing — fall back to AWS fallback (or, if even
+    // that's missing, leave the fast source bound rather than going
+    // flat). The bootstrap will eventually attach unified-dem.
+    if (map.getSource(awsFallbackDEMSource.id)) {
+      try {
+        if (terrainRef.current) {
+          try { terrainRef.current.destroy(); } catch { /* best-effort */ }
+          terrainRef.current = null;
+        }
+      } catch { /* best-effort */ }
+      fns.attachAwsFallbackTerrain();
+      console.log('[map3d] HD terrain unavailable — bound to AWS fallback while bootstrap runs');
+    }
+    // Else: nothing to do; bootstrap will route via applyManagedTerrain.
   };
 }

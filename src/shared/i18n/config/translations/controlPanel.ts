@@ -7,6 +7,7 @@ export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Satellite', en: 'Satellite' },
   { fr: 'Qualité 3D', en: '3D quality' },
   { fr: '0.40 m (Lent)', en: '0.40 m (Slow)' },
+  { fr: '30 m (Rapide)', en: '30 m (Fast)' },
   { fr: 'Étiquettes', en: 'Labels' },
   { fr: 'Courbes de niveau', en: 'Contour lines' },
   { fr: 'Disponible uniquement avec le fond Topographique.', en: 'Available only with the Topographic basemap.' },

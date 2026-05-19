@@ -61,3 +61,21 @@ export const awsFallbackDEMSource = {
   minzoom: 4,
   maxzoom: 14,  // AWS Terrarium native max is z14
 };
+
+/**
+ * AWS Open Data Terrarium "fast" mode — opt-in via the 3D quality selector
+ * ("30 m (Rapide)"). Identical raster-dem pipeline as awsFallbackDEMSource
+ * but registered under its own source id so it can coexist with the unified
+ * SW pipeline. Lets the user instantly swap to a global, GPU-decoded DEM
+ * that does NOT depend on the Service Worker or IGN — perfectly smooth
+ * transitions, no tile-build latency, lower bandwidth than IGN LiDAR.
+ */
+export const awsFastDEMSource = {
+  id: 'aws-fast-dem',
+  type: 'raster-dem' as const,
+  tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+  tileSize: 256,
+  encoding: 'terrarium' as const,
+  minzoom: 4,
+  maxzoom: 14,
+};

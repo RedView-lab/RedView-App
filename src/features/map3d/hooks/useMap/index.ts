@@ -12,6 +12,10 @@ import { createMapLifecycleController } from './controller';
 import { styleHasUsableContent } from './controller/styleContent';
 import { getMapRuntimeProfile } from './runtimeProfile';
 import type { UseMapOptions } from './types';
+import {
+  getActiveDem3dQuality,
+  subscribeDem3dQuality,
+} from '../../lib/dem3dQualityBus';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -194,6 +198,20 @@ export function useMap(
     lifecycle.reportStatus('loading', 6, 'Initialisation');
     lifecycle.reportStatus('loading', 14, 'Moteur 3D');
     registerReloadRef.current?.(lifecycle.reloadMapElevation);
+
+    // 3D quality bus: keep the lifecycle in sync with whatever the
+    // ControlPanel selector publishes. Apply the current value once
+    // (so a session that re-mounted with fast-30m already selected
+    // re-binds the AWS source instead of the unified one), then
+    // subscribe for live changes.
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      try { lifecycle.setDem3dQuality('fast-30m'); } catch { /* best-effort */ }
+    }
+    const unsubscribeDem3dQuality = subscribeDem3dQuality((q) => {
+      try { lifecycle.setDem3dQuality(q); } catch (err) {
+        console.warn('[map3d] setDem3dQuality failed', err);
+      }
+    });
 
     prepareStyleChangeRef.current = lifecycle.prepareStyleChange;
     bootstrapStyleRef.current = lifecycle.bootstrapCurrentStyle;
@@ -391,6 +409,7 @@ export function useMap(
       cancelled = true;
       disarmInitialReveal();
       if (stuckShellTimer) clearTimeout(stuckShellTimer);
+      unsubscribeDem3dQuality();
       lifecycle.cleanup();
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {

@@ -68,6 +68,7 @@ export interface MapLifecycleController {
   reloadMapElevation: () => void;
   prepareStyleChange: (detail?: string) => void;
   bootstrapCurrentStyle: () => Promise<boolean>;
+  setDem3dQuality: (quality: 'hd' | 'fast-30m') => void;
   cleanup: () => void;
 }
 
@@ -155,6 +156,10 @@ export interface ControllerFns {
   armTerrainBootstrap: (onReady: () => void) => void;
   attachAwsFallbackTerrain: () => void;
   detachAwsFallbackTerrain: () => void;
+
+  // 3D quality switch (HD unified DEM ↔ fast AWS Terrarium ~30 m)
+  applyFastDemTerrain: () => boolean;
+  setDem3dQuality: (quality: 'hd' | 'fast-30m') => void;
 
   // reload
   performReloadOnce: () => boolean;

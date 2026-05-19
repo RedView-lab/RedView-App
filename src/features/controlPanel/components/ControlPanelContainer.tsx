@@ -23,6 +23,10 @@ import {
 import type { BasemapId, ControlPanelState } from '../types';
 import { useControlPanelOverlayState } from '../hooks/useControlPanelOverlayState';
 import { useControlPanelTerrainState } from '../hooks/useControlPanelTerrainState';
+import {
+  normalizeDem3dQuality,
+  setActiveDem3dQuality,
+} from '@/features/map3d/lib/dem3dQualityBus';
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
@@ -264,6 +268,17 @@ export function ControlPanelContainer({
     ],
   );
 
+  // Keep the map3d quality bus in sync with the persisted project
+  // state. Runs on mount, project switch, and any external mutation
+  // (e.g. project hydration) so the lifecycle controller always sees
+  // the correct DEM quality even when the user never touched the
+  // selector this session.
+  useEffect(() => {
+    setActiveDem3dQuality(
+      normalizeDem3dQuality(projectControlPanel.basemap3dQuality),
+    );
+  }, [projectControlPanel.basemap3dQuality]);
+
   return (
     <ControlPanel
       state={state}
@@ -359,6 +374,12 @@ export function ControlPanelContainer({
         projectStore?.setItineraryOpacity(id, opacity);
       }}
         onBasemap3dQualityChange={(value) => {
+          // Publish to the map3d quality bus FIRST so the lifecycle
+          // controller swaps the bound DEM source synchronously on the
+          // same tick the persisted state updates. This keeps the
+          // selector value and the actual terrain perfectly in sync
+          // with no perceivable flicker.
+          setActiveDem3dQuality(value);
           updateProjectControlPanel((draft) => {
             draft.basemap3dQuality = value;
           });

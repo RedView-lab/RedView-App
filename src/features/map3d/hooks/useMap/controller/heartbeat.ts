@@ -1,9 +1,10 @@
-import { unifiedDEMSource, awsFallbackDEMSource } from '../../../lib/sources';
+import { unifiedDEMSource, awsFallbackDEMSource, awsFastDEMSource } from '../../../lib/sources';
 import {
   TERRAIN_HEARTBEAT_INTERVAL_MS,
   TERRAIN_HEARTBEAT_FAILURES_BEFORE_RELOAD,
   type Ctx,
 } from './context';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 
 /**
  * Anti-flat heartbeat. Once the bootstrap has reported "ready" at least
@@ -41,6 +42,24 @@ export function attachHeartbeat(ctx: Ctx): void {
       // handle their own verification.
       if (st.reloadInProgress) return;
       if (!fns.canMutateStyle()) return;
+      // Fast 30 m mode owns the terrain binding directly. The aws-fast-dem
+      // source is rock-stable (AWS S3), so we only verify it is still
+      // bound and re-attach on the rare detach. No reload escalation.
+      if (getActiveDem3dQuality() === 'fast-30m') {
+        try {
+          const currentTerrain = map.getTerrain();
+          if (currentTerrain?.source === awsFastDEMSource.id) {
+            st.heartbeatFailures = 0;
+            return;
+          }
+        } catch { /* terrain query failed */ }
+        // Silent detach — re-bind.
+        try {
+          fns.applyFastDemTerrain();
+          st.heartbeatFailures = 0;
+        } catch { /* best-effort */ }
+        return;
+      }
       // Allow self-heal even before the first "ready" report if the
       // heartbeat has been ticking for a while (>15s = 3 ticks). This
       // covers bootstraps that stall and never call finishDemActivity.

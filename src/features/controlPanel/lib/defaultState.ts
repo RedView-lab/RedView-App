@@ -14,7 +14,10 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   basemaps: buildBasemapList(DEFAULT_BASEMAP_ID),
   basemap3dQuality: {
     value: 'slow-040',
-    options: [{ value: 'slow-040', label: '0.40 m (Lent)' }],
+    options: [
+      { value: 'slow-040', label: '0.40 m (Lent)' },
+      { value: 'fast-30m', label: '30 m (Rapide)' },
+    ],
   },
   lidarTiles: [
     { id: 'tile-1', label: translateAppText('Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)', { index: 1, size: 2102, year: 2026 }), sizeMb: 2102, year: 2026, source: 'LIDAR', visible: true },
