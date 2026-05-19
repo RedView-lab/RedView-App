@@ -59,13 +59,13 @@ async function getPaymentMethodSummary(
   }
 
   let paymentMethod = null as Stripe.PaymentMethod | null;
-  const defaultPaymentMethod = customer.invoice_settings.default_payment_method;
+  const customerDefaultPaymentMethod = customer.invoice_settings.default_payment_method;
 
-  if (defaultPaymentMethod) {
+  if (customerDefaultPaymentMethod) {
     paymentMethod =
-      typeof defaultPaymentMethod === 'string'
-        ? await getStripeServer().paymentMethods.retrieve(defaultPaymentMethod)
-        : defaultPaymentMethod;
+      typeof customerDefaultPaymentMethod === 'string'
+        ? await getStripeServer().paymentMethods.retrieve(customerDefaultPaymentMethod)
+        : customerDefaultPaymentMethod;
   }
 
   if (!paymentMethod) {
@@ -131,11 +131,12 @@ async function getPaymentMethodSummary(
     };
   }
 
-  const defaultPaymentMethod = paymentMethods.find((entry) => entry.isDefault) ?? paymentMethods[0] ?? null;
+  const resolvedDefaultPaymentMethod =
+    paymentMethods.find((entry) => entry.isDefault) ?? paymentMethods[0] ?? null;
 
   return {
     customerEmail: customer.email ?? null,
-    paymentMethod: defaultPaymentMethod,
+    paymentMethod: resolvedDefaultPaymentMethod,
     paymentMethods,
   };
 }
@@ -153,6 +154,7 @@ export async function buildBillingOverview(userId: string) {
     contactPreference: toContactPreference(customerRow),
     customerEmail: payment.customerEmail,
     paymentMethod: payment.paymentMethod,
+    paymentMethods: payment.paymentMethods,
   };
 }
 
