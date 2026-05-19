@@ -7,6 +7,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { useAppI18n } from '@/shared/i18n';
 import type { TimelineAddItemKind } from '../../types';
 
 interface TimelineKindMenuStyle {
@@ -74,6 +75,7 @@ export function TimelineKindMenu({
   onSelect,
   onClose,
 }: TimelineKindMenuProps) {
+  const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuStyle, setMenuStyle] = useState<TimelineKindMenuStyle | null>(null);
 
@@ -128,7 +130,7 @@ export function TimelineKindMenu({
       ref={menuRef}
       className="rvi-tl-kind-menu"
       role="menu"
-      aria-label="Ajouter un élément"
+      aria-label={t('Ajouter un élément')}
       style={{
         top: menuStyle.top,
         left: menuStyle.left,
@@ -159,7 +161,7 @@ export function TimelineKindMenu({
           <span className="rvi-tl-kind-menu__icon" aria-hidden>
             {option.icon}
           </span>
-          <span className="rvi-tl-kind-menu__label">{option.label}</span>
+          <span className="rvi-tl-kind-menu__label">{t(option.label)}</span>
         </button>
       ))}
     </div>,

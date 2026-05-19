@@ -1,3 +1,5 @@
+import { useAppI18n } from '@/shared/i18n';
+
 interface LabeledSliderProps {
   label: string;
   /** Current value in [min, max]. */
@@ -17,11 +19,12 @@ export function LabeledSlider({
   max = 100,
   step = 1,
 }: LabeledSliderProps) {
+  const { t } = useAppI18n();
   const pct = ((value - min) / (max - min)) * 100;
   return (
     <div className="rvi-sfield">
-      <span className="rvi-sfield__label" title={label}>
-        {label}
+      <span className="rvi-sfield__label" title={t(label)}>
+        {t(label)}
       </span>
       <div className="rvi-sfield__control">
         <span className="rvi-sfield__sign">-</span>
@@ -37,7 +40,7 @@ export function LabeledSlider({
             step={step}
             value={value}
             onChange={(e) => onChange?.(Number(e.target.value))}
-            aria-label={label}
+            aria-label={t(label)}
           />
         </div>
         <span className="rvi-sfield__sign">+</span>

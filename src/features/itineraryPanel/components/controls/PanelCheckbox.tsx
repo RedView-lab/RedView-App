@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { IconCheck } from '../icons';
 
 interface CheckboxProps {
@@ -38,11 +39,13 @@ export function CheckboxField({
   label,
   trailing,
 }: CheckboxFieldProps) {
+  const { t } = useAppI18n();
+
   return (
     <div className="rvi-cfield">
-      <PanelCheckbox checked={checked} onChange={onToggle} ariaLabel={label} />
-      <span className="rvi-cfield__label" title={label}>
-        {label}
+      <PanelCheckbox checked={checked} onChange={onToggle} ariaLabel={t(label)} />
+      <span className="rvi-cfield__label" title={t(label)}>
+        {t(label)}
       </span>
       {trailing}
     </div>

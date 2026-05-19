@@ -5,6 +5,7 @@ import {
   IconPlus,
   IconStar,
 } from '../../components/icons';
+import { useAppI18n } from '@/shared/i18n';
 import { KindBadge } from './KindBadge';
 import type { TimelineFilterState } from './TimelineFilters';
 
@@ -71,24 +72,25 @@ export function TimelineEditPanel({
   onChangeMarkerStepKm,
   onChangeZoomLevel,
 }: TimelineEditPanelProps) {
+  const { t } = useAppI18n();
   const toggleFilter = (key: keyof TimelineFilterState) => {
     onChangeFilters?.({ ...filters, [key]: !filters[key] });
   };
 
   return (
-    <section className="rvi-tl-edit" aria-label="Paramètres de la timeline">
+    <section className="rvi-tl-edit" aria-label={t('Paramètres de la timeline')}>
       <div className="rvi-tl-edit__controls">
         <label className="rvi-tl-edit__field">
-          <span className="rvi-tl-edit__field-label">Échelle</span>
+          <span className="rvi-tl-edit__field-label">{t('Échelle')}</span>
           <span className="rvi-tl-edit__select-wrap">
             <select
               className="rvi-tl-edit__select"
               defaultValue={SCALE_OPTIONS[0]}
-              aria-label="Échelle de la timeline"
+              aria-label={t('Échelle de la timeline')}
             >
               {SCALE_OPTIONS.map((option) => (
                 <option key={option} value={option}>
-                  {option}
+                  {t(option)}
                 </option>
               ))}
             </select>
@@ -97,13 +99,13 @@ export function TimelineEditPanel({
         </label>
 
         <label className="rvi-tl-edit__field">
-          <span className="rvi-tl-edit__field-label">Repère</span>
+          <span className="rvi-tl-edit__field-label">{t('Repère')}</span>
           <span className="rvi-tl-edit__select-wrap">
             <select
               className="rvi-tl-edit__select"
               value={markerStepKm}
               onChange={(event) => onChangeMarkerStepKm?.(Number(event.target.value))}
-              aria-label="Repère kilométrique"
+              aria-label={t('Repère kilométrique')}
             >
               {MARKER_STEP_OPTIONS.map((option) => (
                 <option key={option} value={option}>
@@ -115,15 +117,15 @@ export function TimelineEditPanel({
           </span>
         </label>
 
-        <div className="rvi-tl-edit__zoom" aria-label="Zoom de la timeline">
-          <span className="rvi-tl-edit__field-label">Zoom</span>
+        <div className="rvi-tl-edit__zoom" aria-label={t('Zoom de la timeline')}>
+          <span className="rvi-tl-edit__field-label">{t('Zoom')}</span>
           <div className="rvi-tl-edit__zoom-actions">
             <button
               type="button"
               className="rvi-tl-edit__zoom-btn"
               onClick={() => onChangeZoomLevel?.(clampZoom(zoomLevel - ZOOM_STEP))}
               disabled={zoomLevel <= ZOOM_MIN}
-              aria-label="Réduire le zoom"
+              aria-label={t('Réduire le zoom')}
             >
               <IconMinus size={14} />
             </button>
@@ -132,7 +134,7 @@ export function TimelineEditPanel({
               className="rvi-tl-edit__zoom-btn"
               onClick={() => onChangeZoomLevel?.(clampZoom(zoomLevel + ZOOM_STEP))}
               disabled={zoomLevel >= ZOOM_MAX}
-              aria-label="Augmenter le zoom"
+              aria-label={t('Augmenter le zoom')}
             >
               <IconPlus size={14} />
             </button>
@@ -140,7 +142,7 @@ export function TimelineEditPanel({
         </div>
       </div>
 
-      <div className="rvi-tl-edit__chips" role="group" aria-label="Filtres de la timeline">
+      <div className="rvi-tl-edit__chips" role="group" aria-label={t('Filtres de la timeline')}>
         {FILTER_CHIPS.map((chip) => {
           const active = filters[chip.key];
           return (
@@ -154,7 +156,7 @@ export function TimelineEditPanel({
               <span className="rvi-tl-edit__chip-check" aria-hidden>
                 {active ? <IconCheck size={10} /> : null}
               </span>
-              <span className="rvi-tl-edit__chip-label">{chip.label}</span>
+              <span className="rvi-tl-edit__chip-label">{t(chip.label)}</span>
               <span className="rvi-tl-edit__chip-icon" aria-hidden>
                 {chip.renderIcon()}
               </span>

@@ -7,6 +7,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
+import { useAppI18n } from '@/shared/i18n';
 import type {
   PoiCategory,
   RhythmState,
@@ -87,6 +88,7 @@ export function TimelinePanel({
   onSelectPlace,
   onSelectionChange,
 }: TimelinePanelProps) {
+  const { t } = useAppI18n();
   // Selection is local UI state; parent is notified via onSelectionChange.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null);
@@ -178,32 +180,32 @@ export function TimelinePanel({
   const addMenuOptions: TimelineKindMenuOption[] = [
     {
       value: 'step',
-      label: 'Étape',
+      label: t('Étape'),
       icon: <span className="rvi-tl-kind-menu__step-dot" />,
     },
     {
       value: 'waypoint',
-      label: 'Waypoint',
+      label: t('Waypoint'),
       icon: <KindBadge kind="waypoint" />,
     },
     {
       value: 'poi',
-      label: 'POI',
+      label: t('POI'),
       icon: <KindBadge kind="poi" />,
     },
     {
       value: 'pause',
-      label: 'Pause',
+      label: t('Pause'),
       icon: <KindBadge kind="pause" />,
     },
     {
       value: 'start',
-      label: 'Départ',
+      label: t('Départ'),
       icon: <KindBadge kind="start" />,
     },
     {
       value: 'end',
-      label: 'Destination',
+      label: t('Destination'),
       icon: <KindBadge kind="end" />,
     },
   ];
@@ -211,7 +213,7 @@ export function TimelinePanel({
   return (
     <section
       className={`rvi-timeline rvi-timeline--${view}${isFullscreen ? ' rvi-timeline--fullscreen' : ''}`}
-      aria-label="Feuille de route"
+      aria-label={t('Feuille de route')}
     >
       <TimelineHeader
         view={view}

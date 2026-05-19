@@ -10,6 +10,7 @@ import {
 import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { translateAppText } from '@/shared/i18n';
 
 const SPLIT_CURSOR = 'url("/svgv2/icone/scissors.svg") 4 4, crosshair';
 const MAX_ROUTE_CLICK_DISTANCE_PX = 20;
@@ -53,7 +54,7 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
       if (!result) return false;
 
       setArmed(false);
-      setStatusMessage(`Trace découpée: ${result.createdItineraryName}`);
+      setStatusMessage(translateAppText('Trace découpée: {{name}}', { name: result.createdItineraryName }));
       return true;
     },
     [activeItinerary, routePoints, store],
@@ -63,7 +64,7 @@ export function RouteSplitToolProvider({ children, map }: RouteSplitToolProvider
     if (!canSplit) return;
     setArmed((current) => {
       const next = !current;
-      setStatusMessage(next ? 'Cliquez sur la trace pour la découper' : null);
+      setStatusMessage(next ? translateAppText('Cliquez sur la trace pour la découper') : null);
       return next;
     });
   }, [canSplit]);

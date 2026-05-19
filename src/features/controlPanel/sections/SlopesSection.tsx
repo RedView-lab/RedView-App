@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
@@ -99,6 +100,7 @@ function InlineNumericInput({
   onCommit,
   className,
 }: InlineNumericInputProps) {
+  const { t } = useAppI18n();
   const [editing, setEditing] = useState(false);
   const isPercent = unit === 'percent';
 
@@ -162,7 +164,7 @@ function InlineNumericInput({
           setDraft(String(display));
           setEditing(true);
         }}
-        title={isPercent ? 'Cliquer pour modifier le pourcentage' : "Cliquer pour modifier l'angle"}
+        title={isPercent ? t('Cliquer pour modifier le pourcentage') : t("Cliquer pour modifier l'angle")}
       >
         {display}{suffix}
       </button>
@@ -184,7 +186,7 @@ function InlineNumericInput({
       onBlur={commit}
       onKeyDown={handleKeyDown}
       maxLength={maxLength}
-      aria-label={isPercent ? 'Pourcentage de pente' : 'Angle en degrés'}
+      aria-label={isPercent ? t('Pourcentage de pente') : t('Angle en degrés')}
     />
   );
 }
@@ -212,6 +214,7 @@ function BandRow({
   onVisibilityToggle,
   onBreakpointChange,
 }: BandRowProps) {
+  const { t } = useAppI18n();
   const handleMinCommit = useCallback(
     (deg: number) => onBreakpointChange?.(bandIndex, 'min', deg),
     [bandIndex, onBreakpointChange],
@@ -240,7 +243,7 @@ function BandRow({
         type="button"
         className="rvc-icon-btn rvc-icon-btn--ghost rvc-slopes__band-eye"
         onClick={() => onVisibilityToggle?.(band.id)}
-        aria-label={band.visible ? 'Masquer la bande' : 'Afficher la bande'}
+        aria-label={band.visible ? t('Masquer la bande') : t('Afficher la bande')}
       >
         {band.visible ? <IconEye size={10} /> : <IconEyeOff size={10} />}
       </button>
@@ -268,7 +271,7 @@ function BandRow({
         color={band.color}
         onChange={(color) => onColorChange?.(band.id, color)}
         className="rvc-slopes__color-chip"
-        ariaLabel={`Choisir la couleur de la bande ${category || band.label || band.id}`}
+        ariaLabel={t('Choisir la couleur de {{name}}', { name: category || band.label || band.id })}
       >
         <ColorSwatch color={band.color} size={12} />
         <span className="rvc-slopes__color-hex">{hexLabel(band.color)}</span>
@@ -295,6 +298,7 @@ export function SlopesSection({
   onBandVisibilityToggle,
   onBandBreakpointChange,
 }: Props) {
+  const { t } = useAppI18n();
   const visibleBands = state.bands;
 
   return (
@@ -306,7 +310,7 @@ export function SlopesSection({
       onOpenChange={onOpenChange}
     >
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Résolution</span>
+        <span className="rvc-row__label">{t('Résolution')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.resolution}
@@ -316,7 +320,7 @@ export function SlopesSection({
       </div>
 
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Type de colorisation</span>
+        <span className="rvc-row__label">{t('Type de colorisation')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.colorization}
@@ -326,7 +330,7 @@ export function SlopesSection({
       </div>
 
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Échelle</span>
+        <span className="rvc-row__label">{t('Échelle')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.scale}
@@ -336,7 +340,7 @@ export function SlopesSection({
       </div>
 
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Réglage échelle</span>
+        <span className="rvc-row__label">{t('Réglage échelle')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.scaleSetting}
@@ -346,7 +350,7 @@ export function SlopesSection({
       </div>
 
       <div className="rvc-row rvc-row--split rvc-slopes__opacity-row">
-        <span className="rvc-row__label">Opacité</span>
+        <span className="rvc-row__label">{t('Opacité')}</span>
         <div className="rvc-slopes__opacity-control">
           <span className="rvc-row__value-sm">{state.opacity} %</span>
           <Slider value={state.opacity} onChange={onOpacityChange} />

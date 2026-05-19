@@ -1,4 +1,5 @@
 import { IconMinus } from '../../../components/icons';
+import { useAppI18n } from '@/shared/i18n';
 import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
 import type { PauseIntervalRow } from '../../../types';
 
@@ -20,6 +21,7 @@ interface PauseIntervalListProps {
  * routing engine should consider these pauses.
  */
 export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
+  const { t } = useAppI18n();
   if (rows.length === 0) return null;
 
   const update = (id: string, patch: Partial<PauseIntervalRow>) => {
@@ -36,7 +38,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
           <div className="rvi-pause-row__name">{row.label}</div>
 
           <div className="rvi-pause-row__field">
-            <span className="rvi-pause-row__field-label">Durée</span>
+            <span className="rvi-pause-row__field-label">{t('Durée')}</span>
             <div className="rvi-pause-chip">
               <input
                 className="rvi-pause-chip__native"
@@ -51,13 +53,13 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
                     ),
                   })
                 }
-                aria-label={`Durée de ${row.label}`}
+                aria-label={t('Durée de {{label}}', { label: row.label })}
               />
             </div>
           </div>
 
           <div className="rvi-pause-row__field">
-            <span className="rvi-pause-row__field-label">Interval</span>
+            <span className="rvi-pause-row__field-label">{t('Interval')}</span>
             <div className="rvi-pause-chip">
               <input
                 className="rvi-pause-chip__native"
@@ -72,7 +74,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
                     ),
                   })
                 }
-                aria-label={`Interval de ${row.label}`}
+                aria-label={t('Interval de {{label}}', { label: row.label })}
               />
             </div>
           </div>
@@ -80,7 +82,7 @@ export function PauseIntervalList({ rows, onChange }: PauseIntervalListProps) {
           <button
             type="button"
             className="rvi-pause-row__remove"
-            aria-label={`Supprimer ${row.label}`}
+            aria-label={t('Supprimer {{label}}', { label: row.label })}
             onClick={() => remove(row.id)}
           >
             <IconMinus size={20} />

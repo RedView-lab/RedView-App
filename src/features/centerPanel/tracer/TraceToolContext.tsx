@@ -14,6 +14,7 @@ import {
   formatGpsCoordinateLabel,
   reverseGeocodeSettlement,
 } from '@/features/itineraryPanel/lib/geocoding';
+import { translateAppText } from '@/shared/i18n';
 
 const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 
@@ -46,9 +47,9 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
   const canTrace = Boolean(store && activeItinerary && startRow && endRow);
 
   const buildTracePrompt = useCallback(() => {
-    if (!hasStartPoint) return 'Cliquez sur la carte pour placer le départ';
-    if (!hasEndPoint) return 'Cliquez sur la carte pour placer l’arrivée';
-    return 'Cliquez sur la carte pour prolonger le tracé';
+    if (!hasStartPoint) return translateAppText('Cliquez sur la carte pour placer le départ');
+    if (!hasEndPoint) return translateAppText('Cliquez sur la carte pour placer l’arrivée');
+    return translateAppText('Cliquez sur la carte pour prolonger le tracé');
   }, [hasEndPoint, hasStartPoint]);
 
   const deactivate = useCallback(() => {
@@ -100,10 +101,10 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
 
       setStatusMessage(
         pointKind === 'start'
-          ? 'Départ ajouté. Cliquez pour placer l’arrivée'
+          ? translateAppText('Départ ajouté. Cliquez pour placer l’arrivée')
           : pointKind === 'end'
-            ? 'Arrivée ajoutée. Cliquez pour prolonger le tracé'
-            : 'Point ajouté, recalcul du tracé en cours',
+            ? translateAppText('Arrivée ajoutée. Cliquez pour prolonger le tracé')
+            : translateAppText('Point ajouté, recalcul du tracé en cours'),
       );
       if (pointKind !== 'waypoint') {
         void hydratePointLabel(activeItinerary.id, pointKind, lon, lat, fallbackLabel);

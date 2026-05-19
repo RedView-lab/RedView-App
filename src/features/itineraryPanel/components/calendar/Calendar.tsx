@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { IconChevronLeft, IconChevronRight } from './icons';
 import { useMonthMatrix } from './useMonthMatrix';
 import {
-  WEEKDAY_LABELS,
   addMonths,
-  formatLongFr,
-  formatMonthEn,
   isSameDay,
   parseISO,
   startOfToday,
@@ -36,10 +34,24 @@ export interface CalendarProps {
 }
 
 export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
+  const { locale, t } = useAppI18n();
   const selected = parseISO(value);
   const today = startOfToday();
   const initialView = selected ?? today;
   const [viewMonth, setViewMonth] = useState<Date>(initialView);
+
+  const weekdayLabels = locale === 'fr'
+    ? ['Lu', 'Ma', 'Me', 'Je', 'Ve', 'Sa', 'Di']
+    : ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+  const formatLongLabel = (date: Date) => new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+  const formatMonthLabel = (date: Date) => new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
 
   // Re-sync the visible month if the parent changes the selection externally.
   useEffect(() => {
@@ -56,26 +68,26 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
   const cells = useMonthMatrix(viewMonth);
   const markedSet = new Set(markedDates ?? []);
   const longLabel = selected
-    ? formatLongFr(selected)
-    : formatLongFr(today);
+    ? formatLongLabel(selected)
+    : formatLongLabel(today);
 
   return (
-    <div className="rvi-calendar" role="dialog" aria-label="Sélection de date">
+    <div className="rvi-calendar" role="dialog" aria-label={t('Sélection de date')}>
       {/* Header — month nav */}
       <div className="rvi-calendar__month">
         <button
           type="button"
           className="rvi-calendar__navbtn"
-          aria-label="Mois précédent"
+          aria-label={t('Mois précédent')}
           onClick={() => setViewMonth((m) => addMonths(m, -1))}
         >
           <IconChevronLeft size={20} />
         </button>
-        <span className="rvi-calendar__title">{formatMonthEn(viewMonth)}</span>
+        <span className="rvi-calendar__title">{formatMonthLabel(viewMonth)}</span>
         <button
           type="button"
           className="rvi-calendar__navbtn"
-          aria-label="Mois suivant"
+          aria-label={t('Mois suivant')}
           onClick={() => setViewMonth((m) => addMonths(m, 1))}
         >
           <IconChevronRight size={20} />
@@ -95,13 +107,13 @@ export function Calendar({ value, onSelect, markedDates }: CalendarProps) {
             onSelect(toISO(today));
           }}
         >
-          Today
+          {t("Aujourd'hui")}
         </button>
       </div>
 
       {/* Dates grid */}
       <div className="rvi-calendar__dates" role="grid">
-        {WEEKDAY_LABELS.map((label) => (
+        {weekdayLabels.map((label) => (
           <div key={label} className="rvi-calendar__cell rvi-calendar__cell--head">
             <span className="rvi-calendar__weekday">{label}</span>
           </div>

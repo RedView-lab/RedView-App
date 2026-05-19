@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
@@ -42,6 +43,7 @@ function InlineAltitudeInput({
   onCommit,
   className,
 }: InlineAltitudeInputProps) {
+  const { t } = useAppI18n();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(valueMeters));
   const inputRef = useRef<HTMLInputElement>(null);
@@ -87,7 +89,7 @@ function InlineAltitudeInput({
           setDraft(String(valueMeters));
           setEditing(true);
         }}
-        title="Cliquer pour modifier l'altitude"
+        title={t("Cliquer pour modifier l'altitude")}
       >
         {valueMeters} m
       </button>
@@ -105,7 +107,7 @@ function InlineAltitudeInput({
       onBlur={commit}
       onKeyDown={handleKeyDown}
       maxLength={4}
-      aria-label="Altitude en mètres"
+      aria-label={t('Altitude en mètres')}
     />
   );
 }
@@ -127,6 +129,7 @@ function AltitudeBandRow({
   onColorChange: (color: string) => void;
   onBreakpointChange?: (bandIndex: number, field: 'min' | 'max', valueMeters: number) => void;
 }) {
+  const { t } = useAppI18n();
   const handleMinCommit = useCallback(
     (meters: number) => onBreakpointChange?.(bandIndex, 'min', meters),
     [bandIndex, onBreakpointChange],
@@ -142,7 +145,7 @@ function AltitudeBandRow({
         type="button"
         className="rvc-icon-btn rvc-icon-btn--ghost rvc-altitude__band-eye"
         onClick={onToggleVisibility}
-        aria-label={band.visible ? 'Masquer le niveau' : 'Afficher le niveau'}
+        aria-label={band.visible ? t('Masquer le niveau') : t('Afficher le niveau')}
       >
         {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
       </button>
@@ -165,7 +168,7 @@ function AltitudeBandRow({
         color={band.color}
         onChange={onColorChange}
         className="rvc-altitude__color-chip"
-        ariaLabel={`Choisir la couleur du niveau ${band.label}`}
+        ariaLabel={t('Choisir la couleur du niveau {{name}}', { name: band.label })}
       >
         <ColorSwatch color={band.color} size={12} />
         <span className="rvc-altitude__color-hex">{hexLabel(band.color)}</span>
@@ -202,6 +205,7 @@ export function AltitudeSection({
   onBandVisibilityToggle,
   onBandBreakpointChange,
 }: AltitudeSectionProps) {
+  const { t } = useAppI18n();
   return (
     <Section
       title="Altitude"
@@ -211,7 +215,7 @@ export function AltitudeSection({
       onOpenChange={onOpenChange}
     >
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Type de colorisation</span>
+        <span className="rvc-row__label">{t('Type de colorisation')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.colorization}
@@ -221,7 +225,7 @@ export function AltitudeSection({
       </div>
 
       <div className="rvc-row rvc-row--split rvc-altitude__opacity-row">
-        <span className="rvc-row__label">Opacité</span>
+        <span className="rvc-row__label">{t('Opacité')}</span>
         <div className="rvc-altitude__opacity-control">
           <div className="rvc-altitude__opacity-slider-wrap">
             <Slider value={state.opacity} onChange={onOpacityChange} width="100%" />
@@ -231,7 +235,7 @@ export function AltitudeSection({
       </div>
 
       <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">Échelle</span>
+        <span className="rvc-row__label">{t('Échelle')}</span>
         <Select
           width="var(--rvc-panel-select-md)"
           value={state.scaleSetting}

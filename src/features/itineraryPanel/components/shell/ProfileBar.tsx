@@ -1,4 +1,5 @@
 import { PanelSelect } from '../controls';
+import { useAppI18n } from '@/shared/i18n';
 import {
   IconCornerUpLeft,
   IconCornerUpRight,
@@ -28,6 +29,7 @@ export function ProfileBar({
   canRedo,
   onSave,
 }: ProfileBarProps) {
+  const { t } = useAppI18n();
   return (
     <div className="rvi-profile">
       <div className="rvi-profile__select">
@@ -36,14 +38,14 @@ export function ProfileBar({
           value={activeProfileId}
           options={profiles.map((p) => ({ value: p.id, label: p.name }))}
           onChange={onChange}
-          ariaLabel="Profil de routage"
+          ariaLabel={t('Profil de routage')}
         />
       </div>
       <button
         type="button"
         className="rvi-ghostbtn"
         onClick={onUndo}
-        aria-label="Annuler"
+        aria-label={t('Annuler')}
         aria-disabled={!canUndo}
       >
         <IconCornerUpLeft size={16} />
@@ -52,7 +54,7 @@ export function ProfileBar({
         type="button"
         className="rvi-ghostbtn"
         onClick={onRedo}
-        aria-label="Rétablir"
+        aria-label={t('Rétablir')}
         aria-disabled={!canRedo}
       >
         <IconCornerUpRight size={16} />
@@ -61,7 +63,7 @@ export function ProfileBar({
         type="button"
         className="rvi-redbtn"
         onClick={onSave}
-        aria-label="Enregistrer le profil"
+        aria-label={t('Enregistrer le profil')}
       >
         <IconSave size={16} />
         <IconChevronDown size={14} />

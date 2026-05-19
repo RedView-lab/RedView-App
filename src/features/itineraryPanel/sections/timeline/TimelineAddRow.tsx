@@ -1,4 +1,5 @@
 import type { MouseEventHandler } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 
 /**
  * "Ajouter un élément" split-button row — ends the sheet view.
@@ -14,6 +15,7 @@ interface TimelineAddRowProps {
 }
 
 export function TimelineAddRow({ onAdd, onOpenKindMenu }: TimelineAddRowProps) {
+  const { t } = useAppI18n();
   const openKindMenu = onOpenKindMenu ?? onAdd;
 
   return (
@@ -22,18 +24,18 @@ export function TimelineAddRow({ onAdd, onOpenKindMenu }: TimelineAddRowProps) {
         type="button"
         className="rvi-tl-add__main"
         onClick={openKindMenu}
-        aria-label="Ajouter un élément"
+        aria-label={t('Ajouter un élément')}
       >
         <span className="rvi-tl-add__badge" aria-hidden>
           <IconPlusCircle size={16} />
         </span>
-        <span className="rvi-tl-add__label">Ajouter un élément</span>
+        <span className="rvi-tl-add__label">{t('Ajouter un élément')}</span>
       </button>
       <button
         type="button"
         className="rvi-tl-add__chevron"
         onClick={openKindMenu}
-        aria-label="Choisir le type d'élément"
+        aria-label={t("Choisir le type d'élément")}
       >
         <IconChevronDown size={14} />
       </button>

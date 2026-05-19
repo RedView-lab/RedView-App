@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FORECAST_MAX_DAY_OFFSET, getForecastDateForOffset, getForecastMaxMinutesForDate, getForecastMinMinutesForDate, getForecastOffsetForDate, getForecastBaseDate, minutesToTime, timeToMinutes } from '@/features/weather/lib/forecastTime';
 import { snapWindMinutes } from '@/features/weather/lib/windSelection';
+import { useAppI18n } from '@/shared/i18n';
 import type { WindPanelState } from '../types';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { Section } from '../components/Section';
@@ -48,10 +49,13 @@ function formatDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function formatDateShort(value: string): string {
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day) return value;
-  return `${pad2(day)}.${pad2(month)}`;
+function formatDateShort(value: string, locale: string): string {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(date);
 }
 
 function minutesFromTimeString(value: string): number {
@@ -132,6 +136,7 @@ export function WindSection({
   onEnabledChange,
   onDateChange,
 }: Props) {
+  const { locale, t } = useAppI18n();
   const now = new Date();
   const startDateKey = formatDateKey(getForecastBaseDate(now));
   const endDateKey = getForecastDateForOffset(FORECAST_MAX_DAY_OFFSET, now);
@@ -146,7 +151,7 @@ export function WindSection({
   const selectedDate = state.date;
   const selectedMinutes = timeToMinutes(state.time);
   const isToday = selectedDate === startDateKey;
-  const dateLabel = isToday ? 'Aujourd’hui' : formatDateShort(selectedDate);
+  const dateLabel = isToday ? t("Aujourd'hui") : formatDateShort(selectedDate, locale);
   const minSelectableMinutes = getForecastMinMinutesForDate(selectedDate, now);
   const maxSelectableMinutes = getForecastMaxMinutesForDate(selectedDate);
   const timeLabel = minutesToTime(selectedMinutes);
@@ -184,7 +189,7 @@ export function WindSection({
     >
       <div className="rvc-wind" aria-hidden={!enabled} data-disabled={!enabled}>
         <div className="rvc-wind__slider-row">
-          <span className="rvc-wind__bound">{formatDateShort(startDateKey)}</span>
+          <span className="rvc-wind__bound">{formatDateShort(startDateKey, locale)}</span>
           <Slider
             width="100%"
             min={0}
@@ -195,7 +200,7 @@ export function WindSection({
             handleSize={22}
             trackHeight={10}
           />
-          <span className="rvc-wind__bound">{formatDateShort(endDateKey)}</span>
+          <span className="rvc-wind__bound">{formatDateShort(endDateKey, locale)}</span>
           <label className="rvc-wind__picker-chip rvc-wind__picker-chip--date">
             <IconCalendar size={12} className="rvc-wind__picker-icon" aria-hidden />
             <span className="rvc-wind__picker-value">{dateLabel}</span>
@@ -206,7 +211,7 @@ export function WindSection({
               min={startDateKey}
               max={endDateKey}
               onChange={(event) => updateDateFromInput(event.target.value)}
-              aria-label="Sélectionner la date du vent"
+              aria-label={t('Sélectionner la date du vent')}
             />
           </label>
         </div>
@@ -239,25 +244,25 @@ export function WindSection({
               min={minutesToTime(minSelectableMinutes)}
               max={minutesToTime(maxSelectableMinutes)}
               onChange={(event) => updateTimeFromMinutes(minutesFromTimeString(event.target.value))}
-              aria-label="Sélectionner l'heure du vent"
+              aria-label={t("Sélectionner l'heure du vent")}
             />
           </label>
         </div>
 
         <div className="rvc-wind__toggles">
           <WindToggleRow
-            label="Particules"
+            label={t('Particules')}
             checked={particlesEnabled}
             onChange={(checked) => onDateChange?.({ particlesEnabled: checked })}
           />
           <WindToggleRow
-            label="Overlay terrain"
+            label={t('Overlay terrain')}
             checked={terrainOverlayEnabled}
             onChange={(checked) => onDateChange?.({ terrainOverlayEnabled: checked })}
           />
         </div>
 
-        <span className="rvc-wind__scale-label">Échelle</span>
+        <span className="rvc-wind__scale-label">{t('Échelle')}</span>
 
         <div className="rvc-wind__bands">
           {bands.map((band) => (

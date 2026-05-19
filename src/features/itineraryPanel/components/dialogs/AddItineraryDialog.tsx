@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { useAppI18n } from '@/shared/i18n';
 import { IconCopy04, IconPlus, IconUploadCircle } from '../icons';
 
 const MENU_WIDTH = 270;
@@ -28,6 +29,7 @@ export function AddItineraryDialog({
   const menuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const firstActionRef = useRef<HTMLButtonElement>(null);
+  const { t } = useAppI18n();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuStyle, setMenuStyle] = useState<{
@@ -112,7 +114,7 @@ export function AddItineraryDialog({
     e.target.value = '';
     if (!file) return;
     if (!file.name.toLowerCase().endsWith('.gpx')) {
-      setError('Veuillez sélectionner un fichier .gpx');
+      setError(t('Veuillez sélectionner un fichier .gpx'));
       return;
     }
     setError(null);
@@ -121,7 +123,7 @@ export function AddItineraryDialog({
       await onPickGpx(file);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Impossible de lire ce GPX');
+      setError(err instanceof Error ? t(err.message) : t('Impossible de lire ce GPX'));
     } finally {
       setLoading(false);
     }
@@ -148,7 +150,7 @@ export function AddItineraryDialog({
         ref={menuRef}
         className="rvi-add-itin-menu"
         role="menu"
-        aria-label="Créer un itinéraire"
+        aria-label={t('Créer un itinéraire')}
         style={{
           top: menuStyle.top,
           left: menuStyle.left,
@@ -168,7 +170,7 @@ export function AddItineraryDialog({
           onClick={handleScratch}
           disabled={loading}
         >
-          <span className="rvi-add-itin-menu__label">Créer un nouvel itinéraire</span>
+          <span className="rvi-add-itin-menu__label">{t('Créer un nouvel itinéraire')}</span>
           <span className="rvi-add-itin-menu__icon" aria-hidden>
             <IconPlus size={16} />
           </span>
@@ -182,7 +184,7 @@ export function AddItineraryDialog({
           disabled={loading || !onPickDuplicate}
         >
           <span className="rvi-add-itin-menu__label">
-            Dupliquer à partir de l’itinéraire sélectionné
+            {t('Dupliquer à partir de l’itinéraire sélectionné')}
           </span>
           <span className="rvi-add-itin-menu__icon" aria-hidden>
             <IconCopy04 size={16} />
@@ -200,7 +202,7 @@ export function AddItineraryDialog({
           disabled={loading}
         >
           <span className="rvi-add-itin-menu__label">
-            {loading ? 'Lecture du GPX…' : 'Uploader un fichier gpx'}
+            {loading ? t('Lecture du GPX…') : t('Uploader un fichier gpx')}
           </span>
           <span className="rvi-add-itin-menu__icon" aria-hidden>
             <IconUploadCircle size={16} />

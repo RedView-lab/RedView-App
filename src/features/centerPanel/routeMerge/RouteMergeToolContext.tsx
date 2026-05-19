@@ -27,6 +27,7 @@ import {
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
 } from '@/features/itineraryPanel/lib/route-metrics';
+import { translateAppText } from '@/shared/i18n';
 
 interface RouteMergeToolContextValue {
   armed: boolean;
@@ -197,23 +198,23 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
       const source = store.project.itineraries.find((itinerary) => itinerary.id === sourceId);
       const target = store.project.itineraries.find((itinerary) => itinerary.id === targetId);
       if (!source || !target) {
-        setStatusMessage('Fusion impossible: trace introuvable.');
+        setStatusMessage(translateAppText('Fusion impossible: trace introuvable.'));
         return false;
       }
       if ((source.gpxRoute?.points.length ?? 0) < 2 || (target.gpxRoute?.points.length ?? 0) < 2) {
-        setStatusMessage('Fusion impossible: il faut deux traces calculées.');
+        setStatusMessage(translateAppText('Fusion impossible: il faut deux traces calculées.'));
         return false;
       }
       const sourceRoute = source.gpxRoute;
       const targetRoute = target.gpxRoute;
       if (!sourceRoute || !targetRoute) {
-        setStatusMessage('Fusion impossible: trace source ou cible invalide.');
+        setStatusMessage(translateAppText('Fusion impossible: trace source ou cible invalide.'));
         return false;
       }
 
       setSelectedIds([sourceId, targetId]);
       setIsMerging(true);
-      setStatusMessage('Fusion en cours...');
+      setStatusMessage(translateAppText('Fusion en cours...'));
 
       try {
         let connector: MergeItineraryConnectorSegment | undefined;
@@ -223,12 +224,12 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
           const sourceEnd = sourceRoute.points[sourceRoute.points.length - 1];
           const targetStart = targetRoute.points[0];
           if (!sourceEnd || !targetStart) {
-            throw new Error('Fusion impossible: extrémités de trace invalides.');
+            throw new Error(translateAppText('Fusion impossible: extrémités de trace invalides.'));
           }
 
           const bounds = checkRouteWithinFrance([sourceEnd, targetStart]);
           if (!bounds.ok) {
-            throw new Error(bounds.reason ?? 'Le raccord de fusion sort de la zone autorisée.');
+            throw new Error(translateAppText(bounds.reason ?? 'Le raccord de fusion sort de la zone autorisée.'));
           }
 
           const polygons = formatForbiddenZonePolygons([
@@ -250,7 +251,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
         const usedConnector = resultBox?.connectorUsed === true;
 
         if (!resultBox) {
-          throw new Error('Fusion impossible avec les traces sélectionnées.');
+          throw new Error(translateAppText('Fusion impossible avec les traces sélectionnées.'));
         }
 
         setArmed(false);
@@ -258,17 +259,17 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
         setStatusMessage(
           usedConnector
             ? connectorDroppedPolygons
-              ? 'Fusion créée avec raccord BRouter simplifié entre les deux traces.'
+              ? translateAppText('Fusion créée avec raccord BRouter simplifié entre les deux traces.')
               : connectorUsedFallbackProfile
-                ? 'Fusion créée avec raccord BRouter allégé entre les deux traces.'
-                : 'Fusion créée avec raccord BRouter entre les deux traces.'
-            : 'Fusion créée.',
+                ? translateAppText('Fusion créée avec raccord BRouter allégé entre les deux traces.')
+                : translateAppText('Fusion créée avec raccord BRouter entre les deux traces.')
+            : translateAppText('Fusion créée.'),
         );
         return true;
       } catch (error) {
         console.error('[Route merge fail]', error);
         setSelectedIds([sourceId]);
-        setStatusMessage(error instanceof Error ? error.message : 'Erreur pendant la fusion.');
+        setStatusMessage(error instanceof Error ? translateAppText(error.message) : translateAppText('Erreur pendant la fusion.'));
         return false;
       } finally {
         setIsMerging(false);
@@ -283,7 +284,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
 
       if (selectedIds.length === 0) {
         setSelectedIds([id]);
-        setStatusMessage('Trace source sélectionnée. Choisissez la trace à ajouter.');
+        setStatusMessage(translateAppText('Trace source sélectionnée. Choisissez la trace à ajouter.'));
         store.setProject((project) =>
           project.activeItineraryId === id ? project : { ...project, activeItineraryId: id },
         );
@@ -292,7 +293,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
 
       if (selectedIds.length === 1 && selectedIds[0] === id) {
         setSelectedIds([]);
-        setStatusMessage('Sélectionnez le tracé source puis le tracé à fusionner.');
+        setStatusMessage(translateAppText('Sélectionnez le tracé source puis le tracé à fusionner.'));
         return;
       }
 
@@ -308,7 +309,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
     setArmed((current) => {
       const next = !current;
       setSelectedIds([]);
-      setStatusMessage(next ? 'Sélectionnez le tracé source puis le tracé à fusionner.' : null);
+      setStatusMessage(next ? translateAppText('Sélectionnez le tracé source puis le tracé à fusionner.') : null);
       return next;
     });
   }, [canMerge, isMerging]);

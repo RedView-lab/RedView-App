@@ -8,6 +8,7 @@
  * state flows through parent-provided callbacks.
  */
 import type { MouseEventHandler } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import type { TimelineItem } from '../../types';
 import { TimelineAddRow } from './TimelineAddRow';
 import { TimelineRow } from './TimelineRow';
@@ -38,15 +39,16 @@ export function TimelineSheetView({
   onOpenKindMenu,
   onSelectPlace,
 }: TimelineSheetViewProps) {
+  const { t } = useAppI18n();
   return (
-    <div className="rvi-tl-list" role="list" aria-label="Liste des étapes">
+    <div className="rvi-tl-list" role="list" aria-label={t('Liste des étapes')}>
       <div className="rvi-tl-list__header" role="presentation">
         <span className="rvi-tl-list__col-check" aria-hidden>
           <span className="rvi-tl-list__col-checkbox" />
         </span>
-        <span className="rvi-tl-list__col-type">Type</span>
+        <span className="rvi-tl-list__col-type">{t('Type')}</span>
         <span className="rvi-tl-list__col-flex" />
-        <span className="rvi-tl-list__col-distance">Distance</span>
+        <span className="rvi-tl-list__col-distance">{t('Distance')}</span>
         <span className="rvi-tl-list__col-actions" aria-hidden />
       </div>
 

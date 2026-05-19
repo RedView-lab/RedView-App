@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { useAppI18n } from '@/shared/i18n';
 import {
   createOverlayStatus,
   type OverlayStatusReporter,
@@ -85,6 +86,7 @@ export function ItineraryPanelContainer({
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(null);
+  const { t } = useAppI18n();
 
   const active = useMemo(
     () => project.itineraries.find((i) => i.id === project.activeItineraryId) ?? null,
@@ -156,10 +158,10 @@ export function ItineraryPanelContainer({
     if (routeLoading) {
       onRouteStatusChange(createOverlayStatus({
         id: 'itinerary',
-        label: 'Itinéraire',
+        label: t('Itinéraire'),
         state: 'loading',
         progress: 0,
-        detail: 'Calcul du tracé en cours',
+        detail: t('Calcul du tracé en cours'),
         nonce: routeRequestNonce,
         reloadable: false,
       }));
@@ -384,9 +386,9 @@ export function ItineraryPanelContainer({
 
   const poiLoadDisabled = !hasGpxRoute || !hasEnabledCategories;
   const poiLoadDisabledReason = !hasGpxRoute
-    ? 'Importez un fichier GPX pour rechercher les POI le long du parcours.'
+    ? t('Importez un fichier GPX pour rechercher les POI le long du parcours.')
     : !hasEnabledCategories
-      ? 'Activez au moins une catégorie ci-dessus.'
+      ? t('Activez au moins une catégorie ci-dessus.')
       : null;
 
   const panel = (

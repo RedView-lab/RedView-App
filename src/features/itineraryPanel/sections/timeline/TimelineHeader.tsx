@@ -5,6 +5,7 @@
  * Right: settings, split "add" button, fullscreen toggle.
  */
 import type { MouseEventHandler } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { IconMaximize } from '@/features/mapViewportControls/components/MapViewportControlIcons';
 import {
   IconChevronDown,
@@ -36,11 +37,12 @@ export function TimelineHeader({
   onAdd,
   onOpenKindMenu,
 }: TimelineHeaderProps) {
+  const { t } = useAppI18n();
   const openKindMenu = onOpenKindMenu ?? onAdd;
 
   return (
     <div className="rvi-tl-head">
-      <div className="rvi-tl-tabs" role="tablist" aria-label="Vue de la feuille de route">
+      <div className="rvi-tl-tabs" role="tablist" aria-label={t('Vue de la feuille de route')}>
         <button
           type="button"
           role="tab"
@@ -48,7 +50,7 @@ export function TimelineHeader({
           className={`rvi-tl-tabs__btn${view === 'sheet' ? ' is-active' : ''}`}
           onClick={() => onChangeView?.('sheet')}
         >
-          <span className="rvi-tl-tabs__label">Feuille de route</span>
+          <span className="rvi-tl-tabs__label">{t('Feuille de route')}</span>
           <IconLayoutGrid size={12} />
         </button>
         <button
@@ -58,7 +60,7 @@ export function TimelineHeader({
           className={`rvi-tl-tabs__btn${view === 'timeline' ? ' is-active' : ''}`}
           onClick={() => onChangeView?.('timeline')}
         >
-          <span className="rvi-tl-tabs__label">Timeline</span>
+          <span className="rvi-tl-tabs__label">{t('Timeline')}</span>
           <IconClockFastForward size={12} />
         </button>
       </div>
@@ -67,7 +69,7 @@ export function TimelineHeader({
         type="button"
         className={`rvi-tl-tool${settingsActive ? ' is-active' : ''}`}
         onClick={onOpenSettings}
-        aria-label="Paramètres de la feuille de route"
+        aria-label={t('Paramètres de la feuille de route')}
         aria-pressed={settingsActive}
       >
         <IconSettings04 size={16} />
@@ -78,7 +80,7 @@ export function TimelineHeader({
           type="button"
           className="rvi-tl-add-split__main"
           onClick={openKindMenu}
-          aria-label="Ajouter un élément"
+          aria-label={t('Ajouter un élément')}
         >
           <IconPlusCircleFilled size={16} />
         </button>
@@ -86,7 +88,7 @@ export function TimelineHeader({
           type="button"
           className="rvi-tl-add-split__chevron"
           onClick={openKindMenu}
-          aria-label="Choisir le type d'élément à ajouter"
+          aria-label={t("Choisir le type d'élément à ajouter")}
         >
           <IconChevronDown size={14} />
         </button>
@@ -96,7 +98,7 @@ export function TimelineHeader({
         type="button"
         className={`rvi-tl-tool${fullscreenActive ? ' is-active' : ''}`}
         onClick={onToggleFullscreen}
-        aria-label={fullscreenActive ? 'Quitter le plein écran' : 'Ouvrir en plein écran'}
+        aria-label={fullscreenActive ? t('Quitter le plein écran') : t('Ouvrir en plein écran')}
         aria-pressed={fullscreenActive}
       >
         <IconMaximize size={16} />

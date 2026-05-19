@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { useAppI18n } from '@/shared/i18n';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { IconChevronDown, IconCheck } from '../icons';
 
@@ -32,6 +33,7 @@ export function PanelSelect<T extends string = string>({
   startAdornment,
   ariaLabel,
 }: PanelSelectProps<T>) {
+  const { t } = useAppI18n();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const [dropPos, setDropPos] = useState<{
@@ -44,7 +46,7 @@ export function PanelSelect<T extends string = string>({
     fontWeight: string;
     lineHeight: string;
   } | null>(null);
-  const label = options.find((o) => o.value === value)?.label ?? value;
+  const label = t(options.find((o) => o.value === value)?.label ?? value);
 
   useEffect(() => {
     if (!open) return;
@@ -94,7 +96,7 @@ export function PanelSelect<T extends string = string>({
           <div
             className="rvi-select__menu"
             role="listbox"
-            aria-label={ariaLabel}
+            aria-label={ariaLabel ? t(ariaLabel) : undefined}
             style={{
               top: dropPos.top,
               left: dropPos.left,
@@ -123,7 +125,7 @@ export function PanelSelect<T extends string = string>({
                     setOpen(false);
                   }}
                 >
-                  <span className="rvi-select__option-label">{o.label}</span>
+                  <span className="rvi-select__option-label">{t(o.label)}</span>
                   {selected && <IconCheck size={16} className="rvi-select__option-check" />}
                 </div>
               );
@@ -145,7 +147,7 @@ export function PanelSelect<T extends string = string>({
         <button
           type="button"
           className="rvi-select__trigger"
-          aria-label={ariaLabel}
+          aria-label={ariaLabel ? t(ariaLabel) : undefined}
           aria-haspopup="listbox"
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}

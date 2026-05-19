@@ -14,6 +14,7 @@
  *     `uploadCustomProfile()` endpoint for full control.
  */
 import { useEffect, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { ALL_PARAMETERS } from './parameters';
 import { PARAMETER_GROUPS, type ExpertProfileState, type ParameterValue } from './types';
 import { ParamGroup } from './components/ParamGroup';
@@ -34,6 +35,7 @@ export function ExpertProfileEditor({
   onChange,
   onClose,
 }: ExpertProfileEditorProps) {
+  const { t } = useAppI18n();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -105,19 +107,17 @@ export function ExpertProfileEditor({
         <header className="rvi-dialog__head">
           <div>
             <h2 id="rvi-expert-title" className="rvi-dialog__title">
-              Mode Expert — profil BRouter sur-mesure
+              {t('Mode Expert — profil BRouter sur-mesure')}
             </h2>
             <p className="rvi-expert-sub">
-              Ajustez chaque paramètre du moteur de routage. Tout reste local
-              à votre navigateur ; les changements s’appliquent au prochain
-              calcul d’itinéraire.
+              {t('Ajustez chaque paramètre du moteur de routage. Tout reste local à votre navigateur ; les changements s’appliquent au prochain calcul d’itinéraire.')}
             </p>
           </div>
           <button
             type="button"
             className="rvi-dialog__close"
             onClick={onClose}
-            aria-label="Fermer"
+            aria-label={t('Fermer')}
           >
             <IconClose size={14} />
           </button>
@@ -130,10 +130,10 @@ export function ExpertProfileEditor({
               checked={state.enabled}
               onChange={toggleEnabled}
             />
-            <span>Activer Mode Expert</span>
+            <span>{t('Activer Mode Expert')}</span>
             {state.enabled ? (
               <span className="rvi-expert-toolbar__badge">
-                {changedCount} modif{changedCount > 1 ? 's' : ''}
+                {changedCount === 1 ? t('{{count}} modif', { count: changedCount }) : t('{{count}} modifs', { count: changedCount })}
               </span>
             ) : null}
           </label>
@@ -144,7 +144,7 @@ export function ExpertProfileEditor({
               checked={showAdvanced}
               onChange={(e) => setShowAdvanced(e.target.checked)}
             />
-            <span>Afficher tous les paramètres</span>
+            <span>{t('Afficher tous les paramètres')}</span>
           </label>
 
           <button
@@ -153,7 +153,7 @@ export function ExpertProfileEditor({
             onClick={resetAll}
             disabled={changedCount === 0}
           >
-            Tout réinitialiser
+            {t('Tout réinitialiser')}
           </button>
 
           <button
@@ -161,7 +161,7 @@ export function ExpertProfileEditor({
             className="rvi-expert-toolbar__btn"
             onClick={() => setShowPreview((v) => !v)}
           >
-            {showPreview ? 'Masquer BRF' : 'Voir BRF'}
+            {showPreview ? t('Masquer BRF') : t('Voir BRF')}
           </button>
         </div>
 
@@ -189,16 +189,14 @@ export function ExpertProfileEditor({
 
         <footer className="rvi-expert-footer">
           <span className="rvi-expert-footer__hint">
-            Astuce : tout est calculé côté client. Vos profils ne quittent
-            jamais votre navigateur, sauf si vous cliquez sur « Téléverser »
-            (à venir) pour les utiliser sur d’autres appareils.
+            {t('Astuce : tout est calculé côté client. Vos profils ne quittent jamais votre navigateur, sauf si vous cliquez sur « Téléverser » (à venir) pour les utiliser sur d’autres appareils.')}
           </span>
           <button
             type="button"
             className="rvi-expert-footer__close"
             onClick={onClose}
           >
-            Fermer
+            {t('Fermer')}
           </button>
         </footer>
       </div>

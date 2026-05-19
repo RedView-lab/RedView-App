@@ -1,4 +1,5 @@
 import { Fragment, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { PoiBadge } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import { IconMoon, IconSun } from '../../CenterPanelIcons';
 import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
@@ -79,6 +80,7 @@ export function AnalysisChartLayout({
   showSeriesRows,
   visibleSeries,
 }: AnalysisChartLayoutProps) {
+  const { t } = useAppI18n();
   return (
     <div className="rvchart" style={style}>
       <div className="rvchart__plot">
@@ -175,8 +177,8 @@ export function AnalysisChartLayout({
                     type="button"
                     className="rvchart__poi-cluster"
                     style={{ left: `${group.xRatio * 100}%`, top: `${group.yRatio * 100}%` }}
-                    title={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
-                    aria-label={`${group.count} POI regroupés. Cliquer pour zoomer sur cette zone.`}
+                    title={t('{{count}} POI regroupés. Cliquer pour zoomer sur cette zone.', { count: group.count })}
+                    aria-label={t('{{count}} POI regroupés. Cliquer pour zoomer sur cette zone.', { count: group.count })}
                     onClick={(event) => {
                       event.stopPropagation();
                       onPoiClusterClick(group);
@@ -281,7 +283,7 @@ export function AnalysisChartLayout({
         <div />
       </div>
 
-      <div className="rvchart__viewport" aria-label="Déplacement horizontal du graphique">
+      <div className="rvchart__viewport" aria-label={t('Déplacement horizontal du graphique')}>
         <div />
         <div className="rvchart__viewport-track">
           <div
@@ -300,7 +302,7 @@ export function AnalysisChartLayout({
             value={Math.round(normalizedDetailOffset * 1000)}
             onChange={(event) => onDetailOffsetChange?.(Number(event.target.value) / 1000)}
             disabled={visibleFraction >= 0.999}
-            aria-label="Déplacer la zone visible du graphique"
+            aria-label={t('Déplacer la zone visible du graphique')}
           />
         </div>
         <div />

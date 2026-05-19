@@ -1,4 +1,5 @@
 ﻿import { CheckboxField, ToggleRow } from '../components/controls';
+import { useAppI18n } from '@/shared/i18n';
 import {
   IconChevronDown,
   IconDownloadCircle,
@@ -99,6 +100,7 @@ export function PoiSection({
   disabled = false,
   disabledReason = null,
 }: PoiSectionProps) {
+  const { t } = useAppI18n();
   const buttonDisabled = disabled || loading;
   const pct =
     progress !== null && Number.isFinite(progress)
@@ -106,11 +108,11 @@ export function PoiSection({
       : null;
   const buttonLabel = loading
     ? pct !== null
-      ? `Recherche… ${pct}%`
-      : 'Recherche…'
+      ? t('Recherche… {{pct}}%', { pct })
+      : t('Recherche…')
     : poiCount > 0
-      ? `Recharger (${poiCount})`
-      : 'Rechercher';
+      ? t('Recharger ({{count}})', { count: poiCount })
+      : t('Rechercher');
 
   return (
     <div className="rvi-params">
@@ -138,7 +140,7 @@ export function PoiSection({
                     onChange={(dist) =>
                       onChangeEntry?.(cell.key, { ...entry, distanceM: dist })
                     }
-                    ariaLabel={`Distance ${cell.label}`}
+                    ariaLabel={t('Distance {{label}}', { label: t(cell.label) })}
                   />
                 }
               />
@@ -152,7 +154,7 @@ export function PoiSection({
           <ToggleRow
             checked={poi.refineResults}
             onChange={onChangeRefine}
-            label="Affiner les résultats (beta)"
+            label={t('Affiner les résultats (beta)')}
           />
         </div>
         <button
@@ -161,7 +163,7 @@ export function PoiSection({
           onClick={onOpenCategories}
         >
           <IconPlusCircle size={16} />
-          <span className="rvi-categories-btn__label">Catégories</span>
+          <span className="rvi-categories-btn__label">{t('Catégories')}</span>
           <IconChevronDown size={14} className="rvi-categories-btn__chevron" />
         </button>
       </div>

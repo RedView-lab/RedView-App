@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
@@ -38,6 +39,7 @@ interface OpacityPillProps {
  * 0–100 and rounded to integers.
  */
 function OpacityPill({ value, onChange }: OpacityPillProps) {
+  const { t } = useAppI18n();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -82,7 +84,7 @@ function OpacityPill({ value, onChange }: OpacityPillProps) {
             }
           }}
           className="rvc-routes__opacity-input"
-          aria-label="Opacité"
+          aria-label={t('Opacité')}
         />
         <span>%</span>
       </span>
@@ -94,7 +96,7 @@ function OpacityPill({ value, onChange }: OpacityPillProps) {
       type="button"
       className="rvc-routes__opacity"
       onClick={() => setEditing(true)}
-      title="Cliquer pour éditer l’opacité"
+      title={t('Cliquer pour éditer l’opacité')}
     >
       <span>{value} %</span>
     </button>
@@ -114,6 +116,8 @@ export function RoutesSection({
   onVisibilityToggle,
   onTraceWidthChange,
 }: Props) {
+  const { t } = useAppI18n();
+
   return (
     <Section
       title="Itinéraires"
@@ -129,7 +133,7 @@ export function RoutesSection({
               color={route.color}
               onChange={(nextColor) => onColorChange?.(route.id, nextColor)}
               className="rvc-routes__color-picker"
-              ariaLabel={`Choisir la couleur de ${route.label}`}
+              ariaLabel={t('Choisir la couleur de {{name}}', { name: route.label })}
             >
               <ColorSwatch color={route.color} size={12} />
               <IconChevronDown size={20} />
@@ -148,8 +152,8 @@ export function RoutesSection({
                 className="rvc-routes__eye"
                 onClick={() => onVisibilityToggle?.(route.id)}
                 aria-pressed={route.visible}
-                aria-label={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
-                title={route.visible ? 'Masquer la trace' : 'Afficher la trace'}
+                aria-label={route.visible ? t('Masquer la trace') : t('Afficher la trace')}
+                title={route.visible ? t('Masquer la trace') : t('Afficher la trace')}
               >
                 <IconEye size={14} />
               </button>
@@ -162,7 +166,7 @@ export function RoutesSection({
         ))}
 
         <div className="rvc-row rvc-row--split rvc-routes__trace-width-row">
-          <span className="rvc-row__label">Épaisseur des tracés</span>
+          <span className="rvc-row__label">{t('Épaisseur des tracés')}</span>
           <div className="rvc-routes__trace-width-control">
             <div className="rvc-routes__trace-width-slider-wrap">
               <Slider

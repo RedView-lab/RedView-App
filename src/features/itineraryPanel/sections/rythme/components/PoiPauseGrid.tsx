@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { PanelCheckbox } from '../../../components/controls';
 import { formatPauseDurationInput, parsePauseDurationInput } from '../../../lib/schedule';
 import type { PoiCategory } from '../../../types';
@@ -40,6 +41,7 @@ const ROWS: ReadonlyArray<[PoiCategory, string, number]> = [
 ];
 
 export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {
+  const { t } = useAppI18n();
   const setDuration = (key: PoiCategory, min: number | null) => {
     onChange({ ...durations, [key]: min });
   };
@@ -54,7 +56,7 @@ export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {
             return (
               <PoiPauseCell
                 key={key}
-                label={label}
+                translatedLabel={t(label)}
                 checked={checked}
                 value={value}
                 onToggle={(v) => setDuration(key, v ? value ?? fallback : null)}
@@ -69,7 +71,7 @@ export function PoiPauseGrid({ durations, onChange }: PoiPauseGridProps) {
 }
 
 interface CellProps {
-  label: string;
+  translatedLabel: string;
   checked: boolean;
   value: number | null;
   onToggle: (v: boolean) => void;
@@ -77,12 +79,13 @@ interface CellProps {
 }
 
 function PoiPauseCell({
-  label,
+  translatedLabel,
   checked,
   value,
   onToggle,
   onValueChange,
 }: CellProps) {
+  const { t } = useAppI18n();
   const displayed = checked && value !== null ? formatPauseDurationInput(value) : '-';
   const [draft, setDraft] = useState(displayed);
 
@@ -102,9 +105,9 @@ function PoiPauseCell({
 
   return (
     <div className={`rvi-poipause-cell${checked ? '' : ' is-off'}`}>
-      <PanelCheckbox checked={checked} onChange={onToggle} ariaLabel={label} />
-      <span className="rvi-poipause-cell__label" title={label}>
-        {label}
+      <PanelCheckbox checked={checked} onChange={onToggle} ariaLabel={translatedLabel} />
+      <span className="rvi-poipause-cell__label" title={translatedLabel}>
+        {translatedLabel}
       </span>
       <div className="rvi-poipause-cell__chip">
         <input
@@ -130,7 +133,7 @@ function PoiPauseCell({
               e.currentTarget.blur();
             }
           }}
-          aria-label={`Durée de pause — ${label}`}
+          aria-label={t('Durée de pause — {{label}}', { label: translatedLabel })}
         />
       </div>
     </div>

@@ -17,6 +17,7 @@ import {
   clearForbiddenZoneDraft,
   setForbiddenZoneDraft,
 } from '@/features/itineraryPanel/lib/route-layer';
+import { translateAppText } from '@/shared/i18n';
 
 type DraftPoint = { lat: number; lon: number };
 type DraftSnapshot = DraftPoint[];
@@ -75,11 +76,11 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
 
   const updateDraftStatus = useCallback((points: DraftPoint[]) => {
     if (points.length <= 0) {
-      setStatusMessage('Zone interdite: clic droit pour placer le premier sommet');
+      setStatusMessage(translateAppText('Zone interdite: clic droit pour placer le premier sommet'));
       return;
     }
 
-    setStatusMessage('Polygone prêt: clic droit pour ajouter un sommet, éditez les poignées puis recliquez sur Interdire pour enregistrer');
+    setStatusMessage(translateAppText('Polygone prêt: clic droit pour ajouter un sommet, éditez les poignées puis recliquez sur Interdire pour enregistrer'));
   }, []);
 
   const setDrawControlVisible = useCallback((visible: boolean) => {
@@ -234,10 +235,10 @@ export function ForbiddenZoneToolProvider({ children, map }: ForbiddenZoneToolPr
       if (points.length >= 3 && store && activeItinerary) {
         const created = store.addForbiddenZone(activeItinerary.id, points);
         if (!created) {
-          setStatusMessage('Impossible d’enregistrer la zone interdite');
+          setStatusMessage(translateAppText('Impossible d’enregistrer la zone interdite'));
           return;
         }
-        setStatusMessage('Zone interdite enregistrée');
+        setStatusMessage(translateAppText('Zone interdite enregistrée'));
       } else {
         setStatusMessage(null);
       }

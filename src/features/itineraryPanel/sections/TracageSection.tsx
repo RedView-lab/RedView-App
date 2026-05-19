@@ -1,3 +1,4 @@
+import { useAppI18n } from '@/shared/i18n';
 import { CheckboxField, LabeledInput, LabeledSelect, LabeledSlider } from '../components/controls';
 import type { PrioritiesState, RoadTypesState } from '../types';
 
@@ -26,11 +27,13 @@ export function TracageSection({
   onChangePriority,
   onChangeRoadType,
 }: TracageSectionProps) {
+  const { t } = useAppI18n();
+
   return (
     <div className="rvi-params">
       <div className="rvi-divider" />
 
-      <h3 className="rvi-section-title">Priorités</h3>
+      <h3 className="rvi-section-title">{t('Priorités')}</h3>
       <div className="rvi-priorities">
         <div className="rvi-priorities__col">
           <LabeledSlider
@@ -60,7 +63,7 @@ export function TracageSection({
 
       <div className="rvi-divider" />
 
-      <h3 className="rvi-section-title">Types de route</h3>
+      <h3 className="rvi-section-title">{t('Types de route')}</h3>
 
       <div className="rvi-row">
         <LabeledSelect

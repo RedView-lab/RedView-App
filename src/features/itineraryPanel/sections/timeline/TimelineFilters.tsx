@@ -10,6 +10,7 @@
  */
 import { KindBadge } from './KindBadge';
 import { IconStar } from '../../components/icons';
+import { useAppI18n } from '@/shared/i18n';
 
 export interface TimelineFilterState {
   etape: boolean;
@@ -48,13 +49,14 @@ export function TimelineFilters({
   value = DEFAULT_TIMELINE_FILTER,
   onChange,
 }: TimelineFiltersProps) {
+  const { t } = useAppI18n();
   const toggle = (key: keyof TimelineFilterState) => {
     onChange?.({ ...value, [key]: !value[key] });
   };
 
   return (
-    <div className="rvi-tl-filters" aria-label="Filtres de la feuille de route">
-      <span className="rvi-tl-filters__label">Filtres</span>
+    <div className="rvi-tl-filters" aria-label={t('Filtres de la feuille de route')}>
+      <span className="rvi-tl-filters__label">{t('Filtres')}</span>
       <div className="rvi-tl-filters__chips">
         {CHIPS.map((chip) => {
           const active = value[chip.key];
@@ -79,7 +81,7 @@ export function TimelineFilters({
                 onChange={() => toggle(chip.key)}
               />
               <span className="rvi-tl-chip__check" aria-hidden />
-              <span className="rvi-tl-chip__label">{chip.label}</span>
+              <span className="rvi-tl-chip__label">{t(chip.label)}</span>
               <span className="rvi-tl-chip__badge">{badge}</span>
             </label>
           );

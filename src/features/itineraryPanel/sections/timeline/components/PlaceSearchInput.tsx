@@ -295,7 +295,7 @@ export function PlaceSearchInput({
               >
                 {loading && (
                   <div className="rvi-place-search__hint" role="presentation">
-                    Recherche…
+                    {t('Recherche…')}
                   </div>
                 )}
                 {!loading && error && (
@@ -304,7 +304,7 @@ export function PlaceSearchInput({
                   </div>
                 )}
                 {!loading && !error && suggestions.length === 0 && (
-                  <div className="rvi-place-search__hint">Aucun résultat</div>
+                  <div className="rvi-place-search__hint">{t('Aucun résultat')}</div>
                 )}
                 {!loading &&
                   suggestions.map((s, i) => (

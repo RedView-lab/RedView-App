@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { AssetIcon } from '@/shared/components/AssetIcon';
 import type { LabelsPanelProps, LabelCategory } from '../types';
 import { LABEL_CATEGORIES } from '../lib/label-config';
@@ -8,6 +9,7 @@ import { useLabels } from '../hooks/useLabels';
 // ── Component ─────────────────────────────────────────────────────────
 
 export function LabelsPanel({ map, isMapLoaded }: LabelsPanelProps) {
+  const { t } = useAppI18n();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState(() => loadLabelState());
 
@@ -33,7 +35,7 @@ export function LabelsPanel({ map, isMapLoaded }: LabelsPanelProps) {
           ...toggleBtnStyle,
           ...(open ? toggleBtnActiveStyle : {}),
         }}
-        title="Étiquettes"
+        title={t('Étiquettes')}
       >
         <AssetIcon src="/svgv2/icone/mark.svg" size={15} />
       </button>
@@ -42,7 +44,7 @@ export function LabelsPanel({ map, isMapLoaded }: LabelsPanelProps) {
       {open && (
         <div style={panelStyle}>
           <div style={headerRowStyle}>
-            <span style={headerStyle}>Étiquettes</span>
+            <span style={headerStyle}>{t('Étiquettes')}</span>
             <ToggleAllButton state={state} setState={setState} />
           </div>
 
@@ -55,7 +57,7 @@ export function LabelsPanel({ map, isMapLoaded }: LabelsPanelProps) {
                   onChange={() => toggle(cat.id)}
                   style={checkboxStyle}
                 />
-                <span style={labelTextStyle}>{cat.label}</span>
+                <span style={labelTextStyle}>{t(cat.label)}</span>
               </label>
             ))}
           </div>
@@ -74,6 +76,7 @@ function ToggleAllButton({
   state: Record<LabelCategory, boolean>;
   setState: React.Dispatch<React.SetStateAction<Record<LabelCategory, boolean>>>;
 }) {
+  const { t } = useAppI18n();
   const allEnabled = LABEL_CATEGORIES.every((c) => state[c.id]);
 
   const handleClick = () => {
@@ -85,8 +88,8 @@ function ToggleAllButton({
   };
 
   return (
-    <button onClick={handleClick} style={toggleAllStyle} title={allEnabled ? 'Tout masquer' : 'Tout afficher'}>
-      {allEnabled ? 'Tout masquer' : 'Tout afficher'}
+    <button onClick={handleClick} style={toggleAllStyle} title={allEnabled ? t('Tout masquer') : t('Tout afficher')}>
+      {allEnabled ? t('Tout masquer') : t('Tout afficher')}
     </button>
   );
 }

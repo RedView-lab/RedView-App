@@ -1,6 +1,7 @@
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
+import { useAppI18n } from '@/shared/i18n';
 import { IconContourLines } from '../icons';
 import type { ControlPanelHandlers, ContourIntervalSetting } from '../types';
 
@@ -34,6 +35,8 @@ export function ContourLinesSection({
   onIntervalChange,
   onOpacityChange,
 }: Props) {
+  const { t } = useAppI18n();
+
   return (
     <Section
       title="Courbes de niveau"
@@ -45,12 +48,12 @@ export function ContourLinesSection({
       <div className={`rvc-contour-lines${available ? '' : ' is-unavailable'}`}>
         {!available ? (
           <p className="rvc-contour-lines__hint">
-            Disponible uniquement avec le fond Topographique.
+            {t('Disponible uniquement avec le fond Topographique.')}
           </p>
         ) : null}
 
         <div className="rvc-row rvc-row--split">
-          <span className="rvc-row__label">Courbes de niveau</span>
+          <span className="rvc-row__label">{t('Courbes de niveau')}</span>
           <Select
             width={140}
             value={interval}
@@ -62,7 +65,7 @@ export function ContourLinesSection({
         </div>
 
         <div className="rvc-row rvc-row--split rvc-contour-lines__opacity-row">
-          <span className="rvc-row__label">Opacité</span>
+          <span className="rvc-row__label">{t('Opacité')}</span>
           <div className="rvc-contour-lines__opacity-control">
             <div className="rvc-contour-lines__opacity-slider-wrap">
               <Slider

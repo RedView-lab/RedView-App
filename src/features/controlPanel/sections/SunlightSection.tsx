@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
 import { Slider } from '../components/Slider';
@@ -43,10 +44,14 @@ const DEFAULT_SUNLIGHT_BANDS: SunlightBand[] = [
 /**
  * Converts ISO YYYY-MM-DD to display DD/MM/YY.
  */
-function formatDateShort(iso: string): string {
-  if (!iso || iso.length < 10) return iso;
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y.slice(2)}`;
+function formatDateShort(iso: string, locale: string): string {
+  const value = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return iso;
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: locale === 'fr' ? '2-digit' : 'numeric',
+  }).format(value);
 }
 
 function formatHexLabel(color: string): string {
@@ -62,6 +67,7 @@ export function SunlightSection({
   onEnabledChange,
   onChange,
 }: Props) {
+  const { locale, t } = useAppI18n();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
@@ -135,7 +141,7 @@ export function SunlightSection({
               checked={state.customDateEnabled}
               onChange={(checked) => onChange?.({ customDateEnabled: checked })}
             />
-            <span className="rvc-sunlight__option-label">Choisir une date personnalisée</span>
+            <span className="rvc-sunlight__option-label">{t('Choisir une date personnalisée')}</span>
             {state.customDateEnabled && (
               <div
                 ref={calendarAnchorRef}
@@ -143,7 +149,7 @@ export function SunlightSection({
                 onClick={() => setCalendarOpen((value) => !value)}
               >
                 <IconCalendar size={12} />
-                <span>{formatDateShort(state.date)}</span>
+                <span>{formatDateShort(state.date, locale)}</span>
               </div>
             )}
           </div>
@@ -196,7 +202,7 @@ export function SunlightSection({
 
         {state.shadowEnabled ? (
           <div className="rvc-sunlight__opacity-row">
-            <span className="rvc-sunlight__row-label">Opacité des ombres</span>
+            <span className="rvc-sunlight__row-label">{t('Opacité des ombres')}</span>
             <div className="rvc-sunlight__opacity-control">
               <div className="rvc-sunlight__opacity-slider-wrap">
                 <Slider
@@ -216,12 +222,12 @@ export function SunlightSection({
         <div className="rvc-sunlight__sun-row">
           <div className="rvc-sunlight__sun-item">
             <IconSunrise size={16} className="rvc-sunlight__sun-icon" />
-            <div className="rvc-sunlight__sun-label">Lever</div>
+            <div className="rvc-sunlight__sun-label">{t('Lever')}</div>
             <div className="rvc-sunlight__sun-value">{state.sunriseTime}</div>
           </div>
           <div className="rvc-sunlight__sun-item">
             <IconSunset size={16} className="rvc-sunlight__sun-icon" />
-            <div className="rvc-sunlight__sun-label">Coucher</div>
+            <div className="rvc-sunlight__sun-label">{t('Coucher')}</div>
             <div className="rvc-sunlight__sun-value">{state.sunsetTime}</div>
           </div>
         </div>
@@ -230,7 +236,7 @@ export function SunlightSection({
           <Toggle
             checked={state.shadowEnabled}
             onChange={(checked) => onChange?.({ shadowEnabled: checked })}
-            ariaLabel="Afficher la carte d'ensoleillement"
+            ariaLabel={t("Afficher la carte d'ensoleillement")}
           />
           <button
             type="button"
@@ -238,13 +244,13 @@ export function SunlightSection({
             onClick={() => onMapExpandedChange?.(!mapExpanded)}
             aria-expanded={mapExpanded}
           >
-            <span className="rvc-sunlight__toggle-text">Afficher la carte d’ensoleillement</span>
+            <span className="rvc-sunlight__toggle-text">{t("Afficher la carte d'ensoleillement")}</span>
           </button>
           <button
             type="button"
             className={`rvc-sunlight__toggle-chevron${mapExpanded ? ' is-open' : ''}`}
             onClick={() => onMapExpandedChange?.(!mapExpanded)}
-            aria-label={mapExpanded ? 'Réduire la carte d’ensoleillement' : 'Développer la carte d’ensoleillement'}
+            aria-label={mapExpanded ? t("Réduire la carte d'ensoleillement") : t("Développer la carte d'ensoleillement")}
           >
             <IconChevronDown size={16} />
           </button>
@@ -253,7 +259,7 @@ export function SunlightSection({
         {state.shadowEnabled && mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
             <div className="rvc-sunlight__row rvc-sunlight__row--split">
-              <span className="rvc-sunlight__row-label">Échelle</span>
+              <span className="rvc-sunlight__row-label">{t('Échelle')}</span>
               <Select
                 width="var(--rvc-panel-select-md)"
                 value={scaleSetting}
@@ -298,9 +304,9 @@ export function SunlightSection({
           <Toggle
             checked={trajectoryEnabled}
             onChange={setTrajectoryEnabled}
-            ariaLabel="Afficher la trajectoire"
+            ariaLabel={t('Afficher la trajectoire')}
           />
-          <span className="rvc-sunlight__toggle-text">Afficher la trajectoire</span>
+          <span className="rvc-sunlight__toggle-text">{t('Afficher la trajectoire')}</span>
         </div>
       </div>
     </Section>

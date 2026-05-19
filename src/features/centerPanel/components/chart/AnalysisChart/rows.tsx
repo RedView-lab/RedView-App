@@ -1,4 +1,5 @@
 import { Fragment, useMemo } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { IconChevronDown } from '../../CenterPanelIcons';
 import {
   formatAxisValue,
@@ -64,11 +65,17 @@ export function EmptySeriesRow({
   axis1: AxisMetricId;
   axis2: AxisMetricId;
 }) {
+  const { t } = useAppI18n();
   const message = (() => {
     const a1Ok = metricIsAvailable(axis1);
     const a2Ok = metricIsAvailable(axis2);
-    if (!a1Ok && !a2Ok) return `${axis1} et ${axis2} ne sont pas encore disponibles.`;
-    return 'Aucune prédiction calculée — lancez « Calculer ».';
+    if (!a1Ok && !a2Ok) {
+      return t('{{axis1}} et {{axis2}} ne sont pas encore disponibles.', {
+        axis1: t(axis1),
+        axis2: t(axis2),
+      });
+    }
+    return t('Aucune prédiction calculée — lancez « Calculer ».');
   })();
 
   return (

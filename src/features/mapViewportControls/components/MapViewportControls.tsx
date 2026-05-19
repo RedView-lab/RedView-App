@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import {
   IconCompass,
@@ -31,6 +32,7 @@ export function MapViewportControls({
   immersiveMode,
   onToggleImmersiveMode,
 }: MapViewportControlsProps) {
+  const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
 
@@ -107,13 +109,13 @@ export function MapViewportControls({
   };
 
   return (
-    <aside className="rvmvc-map-tools" aria-label="Contrôles de la vue carte" data-node-id="1765:66284">
+    <aside className="rvmvc-map-tools" aria-label={t('Contrôles de la vue carte')} data-node-id="1765:66284">
       <button
         type="button"
         className={`rvmvc-map-tools__button${immersiveMode ? ' is-active' : ''}`}
-        aria-label="Activer ou quitter le mode plein écran"
+        aria-label={t('Activer ou quitter le mode plein écran')}
         aria-pressed={immersiveMode}
-        title="Plein écran"
+        title={t('Plein écran')}
         onClick={onToggleImmersiveMode}
       >
         <IconMaximize size={18} />
@@ -122,8 +124,8 @@ export function MapViewportControls({
       <button
         type="button"
         className="rvmvc-map-tools__button"
-        aria-label="Recentrer la boussole vers le nord"
-        title="Nord"
+        aria-label={t('Recentrer la boussole vers le nord')}
+        title={t('Nord')}
         onClick={handleResetNorth}
         disabled={disabled}
       >
@@ -133,8 +135,8 @@ export function MapViewportControls({
       <button
         type="button"
         className="rvmvc-map-tools__button rvmvc-map-tools__button--compact"
-        aria-label="Zoomer"
-        title="Zoomer"
+        aria-label={t('Zoomer')}
+        title={t('Zoomer')}
         onClick={handleZoomIn}
         disabled={disabled}
       >
@@ -144,8 +146,8 @@ export function MapViewportControls({
       <button
         type="button"
         className="rvmvc-map-tools__button rvmvc-map-tools__button--compact"
-        aria-label="Dézoomer"
-        title="Dézoomer"
+        aria-label={t('Dézoomer')}
+        title={t('Dézoomer')}
         onClick={handleZoomOut}
         disabled={disabled}
       >
@@ -155,9 +157,9 @@ export function MapViewportControls({
       <button
         type="button"
         className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
-        aria-label={is3DView ? 'Passer en vue 2D' : 'Passer en vue 3D'}
+        aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
         aria-pressed={is3DView}
-        title={is3DView ? 'Passer en 2D' : 'Passer en 3D'}
+        title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
         onClick={handleToggleDimension}
         disabled={disabled}
       >

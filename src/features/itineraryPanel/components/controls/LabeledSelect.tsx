@@ -1,3 +1,4 @@
+import { useAppI18n } from '@/shared/i18n';
 import { PanelSelect } from './PanelSelect';
 import type { RoadPreference } from '../../types';
 
@@ -16,16 +17,18 @@ interface LabeledSelectProps {
 
 /** Two-column row: label on the left, narrow dropdown on the right. */
 export function LabeledSelect({ label, value, onChange }: LabeledSelectProps) {
+  const { t } = useAppI18n();
+
   return (
     <div className="rvi-lfield">
-      <span className="rvi-lfield__label" title={label}>
-        {label}
+      <span className="rvi-lfield__label" title={t(label)}>
+        {t(label)}
       </span>
       <PanelSelect<RoadPreference>
         value={value}
         options={ROAD_PREF_OPTIONS}
         onChange={onChange}
-        ariaLabel={label}
+        ariaLabel={t(label)}
       />
     </div>
   );
@@ -49,10 +52,12 @@ export function LabeledInput({
   type = 'text',
   suffix,
 }: LabeledInputProps) {
+  const { t } = useAppI18n();
+
   return (
     <div className="rvi-lfield">
-      <span className="rvi-lfield__label" title={label}>
-        {label}
+      <span className="rvi-lfield__label" title={t(label)}>
+        {t(label)}
       </span>
       <div className="rvi-input">
         <input
@@ -60,8 +65,8 @@ export function LabeledInput({
           type={type}
           value={value}
           onChange={(e) => onChange?.(e.target.value)}
-          placeholder={placeholder}
-          aria-label={label}
+          placeholder={placeholder ? t(placeholder) : undefined}
+          aria-label={t(label)}
         />
         {suffix ? <span style={{ fontSize: 12, opacity: 0.64 }}>{suffix}</span> : null}
       </div>

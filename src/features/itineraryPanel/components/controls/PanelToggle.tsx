@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 
 interface ToggleProps {
   checked: boolean;
@@ -45,17 +46,19 @@ export function ToggleRow({
   trailing,
   trailingTight = false,
 }: ToggleRowProps) {
+  const { t } = useAppI18n();
+
   return (
     <div
       className={`rvi-toggle-row${trailingTight ? ' rvi-toggle-row--tighttrail' : ''}`}
     >
-      <PanelToggle checked={checked} onChange={onChange} ariaLabel={label} />
+      <PanelToggle checked={checked} onChange={onChange} ariaLabel={t(label)} />
       <button
         type="button"
         className="rvi-toggle-row__text"
         onClick={() => onChange?.(!checked)}
       >
-        {label}
+        {t(label)}
       </button>
       {trailing ? <span className="rvi-toggle-row__trailing">{trailing}</span> : null}
     </div>

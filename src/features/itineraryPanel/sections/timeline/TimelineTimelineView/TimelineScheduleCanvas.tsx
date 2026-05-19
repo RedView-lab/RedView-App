@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import {
   IconEye,
   IconStar,
@@ -117,6 +118,7 @@ export function TimelineScheduleCanvas({
   resolveColumnPlacement,
   resolveNowLinePlacement,
 }: TimelineScheduleCanvasProps) {
+  const { t } = useAppI18n();
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const pauseDurationInputRef = useRef<HTMLInputElement | null>(null);
   const [dragState, setDragState] = useState<PauseDragState | null>(null);
@@ -538,7 +540,7 @@ export function TimelineScheduleCanvas({
                             height: pause.heightPx,
                           }}
                           title={canEditFavoritePoiPause
-                            ? `${formatPauseDuration(pause.durationMin)} · cliquer pour modifier`
+                            ? t('{{duration}} · cliquer pour modifier', { duration: formatPauseDuration(pause.durationMin) })
                             : formatPauseDuration(pause.durationMin)}
                         >
                           <span
@@ -572,7 +574,7 @@ export function TimelineScheduleCanvas({
                                   cancelPauseDurationEdit();
                                 }
                               }}
-                              aria-label="Modifier la durée de la pause"
+                              aria-label={t('Modifier la durée de la pause')}
                             />
                           ) : (
                             <span
@@ -612,7 +614,7 @@ export function TimelineScheduleCanvas({
                     stopEventPropagation(actionEvent);
                     onToggleVisibility?.(event.item.id, !visible);
                   }}
-                  aria-label={visible ? 'Masquer' : 'Afficher'}
+                  aria-label={visible ? t('Masquer') : t('Afficher')}
                   aria-pressed={visible}
                 >
                   <IconEye size={12} />
@@ -625,7 +627,7 @@ export function TimelineScheduleCanvas({
                     if (isFavoriteLocked) return;
                     onToggleFavorite?.(event.item.id, !event.item.favorite);
                   }}
-                  aria-label={isFavoriteLocked ? 'Favori verrouille par pause automatique' : 'Favori'}
+                  aria-label={isFavoriteLocked ? t('Favori verrouille par pause automatique') : t('Favori')}
                   aria-pressed={!!event.item.favorite}
                   disabled={isFavoriteLocked}
                 >
@@ -638,7 +640,7 @@ export function TimelineScheduleCanvas({
                     stopEventPropagation(actionEvent);
                     onRemove?.(event.item.id);
                   }}
-                  aria-label="Supprimer"
+                  aria-label={t('Supprimer')}
                 >
                   <IconTrash size={12} />
                 </button>
@@ -704,7 +706,7 @@ export function TimelineScheduleCanvas({
                       canEditStandalonePause ? 'is-editable' : '',
                     ].filter(Boolean).join(' ')}
                     title={canEditStandalonePause
-                      ? `${formatPauseDuration(pause.durationMin)} · cliquer pour modifier`
+                      ? t('{{duration}} · cliquer pour modifier', { duration: formatPauseDuration(pause.durationMin) })
                       : formatPauseDuration(pause.durationMin)}
                     onPointerDown={canEditStandalonePause ? (pointerEvent) => {
                       pointerEvent.stopPropagation();
@@ -735,7 +737,7 @@ export function TimelineScheduleCanvas({
                             cancelPauseDurationEdit();
                           }
                         }}
-                        aria-label="Modifier la durée de la pause"
+                          aria-label={t('Modifier la durée de la pause')}
                       />
                     ) : (
                       <span>{formatPauseDuration(pause.durationMin)}</span>

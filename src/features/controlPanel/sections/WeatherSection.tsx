@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { Section } from '../components/Section';
@@ -61,9 +62,6 @@ const TREND_LAYER_ORDER: WeatherLayerKey[] = [
 
 const FORECAST_HIDDEN_LAYER_KEYS = new Set<WeatherLayerKey>(['wind', 'sunshine']);
 
-const MONTH_LABELS_SHORT = ['Jan.', 'Fev.', 'Mar.', 'Avr.', 'Mai', 'Juin', 'Juil.', 'Aout', 'Sep.', 'Oct.', 'Nov.', 'Dec.'] as const;
-const MONTH_LABELS_LONG = ['Janvier', 'Fevrier', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Aout', 'Septembre', 'Octobre', 'Novembre', 'Decembre'] as const;
-
 const LAYER_LABEL: Record<WeatherLayerKey, string> = {
   temperature: 'Température (°)',
   feelsLike: 'Température ressentie (°)',
@@ -98,18 +96,6 @@ const MODE_OPTIONS_BY_LAYER: Partial<Record<WeatherLayerKey, { value: WeatherRen
   humidity: GRADIENT_FILL_OPTIONS,
 };
 
-const FRENCH_DAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'];
-
-function getForecastDayLabels(): string[] {
-  const todayIso = formatLocalDateIso(new Date());
-  return Array.from({ length: FORECAST_MAX_DAY_OFFSET + 1 }, (_, offset) => {
-    const dateIso = getForecastDateForOffset(offset);
-    if (dateIso === todayIso) return "Aujourd'hui";
-    const date = new Date(`${dateIso}T00:00:00`);
-    return FRENCH_DAYS[date.getDay()] ?? FRENCH_DAYS[0];
-  });
-}
-
 function getMonthIndexFromIso(iso: string): number {
   const value = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(value.getTime())) return 0;
@@ -128,10 +114,6 @@ function formatMonthInputValue(iso: string): string {
   if (Number.isNaN(value.getTime())) return '';
   const month = String(value.getMonth() + 1).padStart(2, '0');
   return `${value.getFullYear()}-${month}`;
-}
-
-function getMonthLabel(iso: string): string {
-  return MONTH_LABELS_LONG[getMonthIndexFromIso(iso)] ?? MONTH_LABELS_LONG[0];
 }
 
 function getModeOptions(key: WeatherLayerKey): { value: WeatherRenderMode; label: string }[] {
@@ -169,6 +151,7 @@ function InlineWeatherNumericInput({
   editable,
   onCommit,
 }: InlineWeatherNumericInputProps) {
+  const { t } = useAppI18n();
   const spec = weatherPaletteMetricSpec(layerKey);
   const decimals = spec?.decimals ?? 0;
   const minLimit = spec?.minLimit;
@@ -223,7 +206,7 @@ function InlineWeatherNumericInput({
           setDraft(display);
           setEditing(true);
         }}
-          title={`Cliquer pour modifier la valeur ${suffix.trim()}`}
+          title={t('Cliquer pour modifier la valeur {{unit}}', { unit: suffix.trim() })}
       >
           {display}{suffix}
       </button>
@@ -243,7 +226,7 @@ function InlineWeatherNumericInput({
       }}
       onBlur={commit}
       onKeyDown={handleKeyDown}
-      aria-label={`Valeur ${unit}`}
+      aria-label={t('Valeur {{unit}}', { unit })}
     />
   );
 }
@@ -265,6 +248,7 @@ function WeatherPaletteRow({
   onVisibilityToggle?: ControlPanelHandlers['onWeatherPaletteBandVisibilityToggle'];
   onBreakpointChange?: ControlPanelHandlers['onWeatherPaletteBandBreakpointChange'];
 }) {
+  const { t } = useAppI18n();
   const spec = weatherPaletteMetricSpec(layerKey);
   if (!spec) return null;
 
@@ -279,7 +263,7 @@ function WeatherPaletteRow({
         type="button"
         className="rvc-icon-btn rvc-icon-btn--ghost rvc-altitude__band-eye rvc-weather__band-eye"
         onClick={() => onVisibilityToggle?.(layerKey, band.id)}
-        aria-label={band.visible ? 'Masquer la bande météo' : 'Afficher la bande météo'}
+        aria-label={band.visible ? t('Masquer la bande météo') : t('Afficher la bande météo')}
       >
         {band.visible ? <IconEye size={12} /> : <IconEyeOff size={12} />}
       </button>
@@ -304,7 +288,7 @@ function WeatherPaletteRow({
         color={band.color}
         onChange={(color) => onColorChange?.(layerKey, band.id, color)}
         className="rvc-altitude__color-chip"
-        ariaLabel={`Choisir la couleur ${formatWeatherPaletteBandLabel(layerKey, band, bandIndex, totalBands)}`}
+        ariaLabel={t('Choisir la couleur de {{name}}', { name: formatWeatherPaletteBandLabel(layerKey, band, bandIndex, totalBands) })}
       >
         <ColorSwatch color={band.color} size={12} />
         <span className="rvc-altitude__color-hex">{hexLabel(band.color)}</span>
@@ -330,6 +314,8 @@ export function WeatherSection({
   onPaletteBandBreakpointChange,
   onAddAlert,
 }: Props) {
+  const { locale, t } = useAppI18n();
+  const dateLocale = locale === 'fr' ? 'fr-FR' : 'en-US';
   const handleTimeSliderChange = (val: number) => {
     onDateChange?.({ time: minutesToTime(val) });
   };
@@ -338,11 +324,26 @@ export function WeatherSection({
   const h = timeParts[0] || '00';
   const m = timeParts[1] || '00';
 
-  const dayLabels = getForecastDayLabels();
+  const monthShortLabels = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(dateLocale, { month: 'short' });
+    return Array.from({ length: 12 }, (_, index) => formatter.format(new Date(2026, index, 1)));
+  }, [dateLocale]);
+  const dayLabels = useMemo(() => {
+    const todayIso = formatLocalDateIso(new Date());
+    const formatter = new Intl.DateTimeFormat(dateLocale, { weekday: 'short' });
+    return Array.from({ length: FORECAST_MAX_DAY_OFFSET + 1 }, (_, offset) => {
+      const dateIso = getForecastDateForOffset(offset);
+      if (dateIso === todayIso) return t("Aujourd'hui");
+      return formatter.format(new Date(`${dateIso}T00:00:00`));
+    });
+  }, [dateLocale, t]);
   const isForecast = state.tab === 'forecast';
   const forecastDay = getForecastOffsetForDate(state.date);
   const trendMonth = getMonthIndexFromIso(state.date);
-  const trendMonthLabel = getMonthLabel(state.date);
+  const trendMonthLabel = useMemo(
+    () => new Intl.DateTimeFormat(dateLocale, { month: 'long' }).format(new Date(`${state.date}T00:00:00`)),
+    [dateLocale, state.date],
+  );
   const trendMonthValue = formatMonthInputValue(state.date);
   const forecastMinMinutes = getForecastMinMinutesForDate(state.date);
   const forecastMaxMinutes = getForecastMaxMinutesForDate(state.date);
@@ -377,7 +378,7 @@ export function WeatherSection({
             className={`rvc-weather__tab${state.tab === tab.value ? ' is-active' : ''}`}
             onClick={() => onTabChange?.(tab.value)}
           >
-            {tab.label}
+            {t(tab.label)}
           </button>
         ))}
       </div>
@@ -444,7 +445,7 @@ export function WeatherSection({
         </>
       ) : (
         <div className="rvc-weather__month-row">
-          <span className="rvc-weather__month-bound">{MONTH_LABELS_SHORT[0]}</span>
+          <span className="rvc-weather__month-bound">{monthShortLabels[0]}</span>
           <div className="rvc-weather__month-slider">
             <Slider
               min={0}
@@ -454,7 +455,7 @@ export function WeatherSection({
               width="100%"
             />
           </div>
-          <span className="rvc-weather__month-bound">{MONTH_LABELS_SHORT[11]}</span>
+          <span className="rvc-weather__month-bound">{monthShortLabels[11]}</span>
           <label className="rvc-weather__month-chip">
             <IconCalendar size={12} />
             <span className="rvc-weather__month-chip-label">{trendMonthLabel}</span>
@@ -490,7 +491,7 @@ export function WeatherSection({
                   checked={layer.enabled}
                   onChange={(v) => onLayerToggle?.(layer.key, v)}
                 />
-                <span className="rvc-weather__layer-label">{LAYER_LABEL[layer.key]}</span>
+                <span className="rvc-weather__layer-label">{t(LAYER_LABEL[layer.key])}</span>
                 <Select
                   width={104}
                   value={selectedMode}
@@ -503,7 +504,7 @@ export function WeatherSection({
               {paletteVisible && palette ? (
                 <div className="rvc-weather__palette-block">
                   <div className="rvc-row rvc-row--split rvc-altitude__opacity-row">
-                    <span className="rvc-row__label">Opacité</span>
+                    <span className="rvc-row__label">{t('Opacité')}</span>
                     <div className="rvc-altitude__opacity-control">
                       <div className="rvc-altitude__opacity-slider-wrap">
                         <Slider
@@ -517,7 +518,7 @@ export function WeatherSection({
                   </div>
 
                   <div className="rvc-row rvc-row--split">
-                    <span className="rvc-row__label">Échelle</span>
+                    <span className="rvc-row__label">{t('Échelle')}</span>
                     <Select
                       width={140}
                       value={palette.scaleSetting}
@@ -550,7 +551,7 @@ export function WeatherSection({
       {/* Add alert toggle */}
       <div className="rvc-weather__add-alert">
         <Toggle checked={false} onChange={onAddAlert} />
-        <span className="rvc-weather__add-alert-text">Ajouter des alertes</span>
+        <span className="rvc-weather__add-alert-text">{t('Ajouter des alertes')}</span>
         <IconInfo size={16} />
       </div>
     </Section>

@@ -4,6 +4,7 @@
  * advanced experiments, or upload it through the panel ("Téléverser").
  */
 import { useMemo, useState } from 'react';
+import { useAppI18n } from '@/shared/i18n';
 import type { ExpertProfileState } from '../types';
 import { generateBrfFromExpertState } from '../../lib/brouter/profiles/profile-template';
 
@@ -12,6 +13,7 @@ interface BrfPreviewProps {
 }
 
 export function BrfPreview({ state }: BrfPreviewProps) {
+  const { t } = useAppI18n();
   const brf = useMemo(() => generateBrfFromExpertState(state), [state]);
   const [copied, setCopied] = useState(false);
 
@@ -28,20 +30,20 @@ export function BrfPreview({ state }: BrfPreviewProps) {
   return (
     <div className="rvi-expert-preview">
       <div className="rvi-expert-preview__head">
-        <h4 className="rvi-expert-preview__title">Profil BRF généré</h4>
+        <h4 className="rvi-expert-preview__title">{t('Profil BRF généré')}</h4>
         <button
           type="button"
           className="rvi-expert-preview__copy"
           onClick={handleCopy}
         >
-          {copied ? 'Copié ✓' : 'Copier'}
+          {copied ? t('Copié ✓') : t('Copier')}
         </button>
       </div>
       <pre className="rvi-expert-preview__code">
         <code>{brf}</code>
       </pre>
       <p className="rvi-expert-preview__hint">
-        Compatible avec{' '}
+        {t('Compatible avec')}{' '}
         <a
           href="https://brouter.de/brouter-web"
           target="_blank"
@@ -49,8 +51,7 @@ export function BrfPreview({ state }: BrfPreviewProps) {
         >
           BRouter-Web
         </a>{' '}
-        pour des tests avancés. Ce code est généré localement, dans votre
-        navigateur uniquement.
+        {t('pour des tests avancés. Ce code est généré localement, dans votre navigateur uniquement.')}
       </p>
     </div>
   );

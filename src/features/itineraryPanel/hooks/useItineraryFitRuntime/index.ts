@@ -28,6 +28,7 @@ import {
 } from './files';
 import { hydratePersistedFitRuntime } from './hydration';
 import { buildFitStatusText, buildUploadFitLabel } from './labels';
+import { translateAppText } from '@/shared/i18n';
 import {
   createEmptyFitRuntime,
   type ItineraryFitRuntime,
@@ -105,7 +106,7 @@ export function useItineraryFitRuntime({
 
   const calculateLabel = useMemo(() => {
     if (fitStatusText) return fitStatusText;
-    return 'Calculer';
+    return translateAppText('Calculer');
   }, [fitStatusText]);
 
   const calculateDisabled = activeFitRuntime?.status === 'running';
@@ -217,8 +218,8 @@ export function useItineraryFitRuntime({
             status: 'error',
             error:
               error instanceof Error
-                ? error.message
-                : 'Impossible de recharger les fichiers FIT du projet.',
+                ? translateAppText(error.message)
+                : translateAppText('Impossible de recharger les fichiers FIT du projet.'),
             updatedAt: new Date().toISOString(),
             persistedUploadSignature,
           };
@@ -249,7 +250,7 @@ export function useItineraryFitRuntime({
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
           status: 'error',
-          error: 'Aucun fichier FIT valide sélectionné.',
+          error: translateAppText('Aucun fichier FIT valide sélectionné.'),
           updatedAt: new Date().toISOString(),
         }));
         return;
@@ -275,7 +276,7 @@ export function useItineraryFitRuntime({
         updateFitRuntime(itineraryId, (current) => ({
           ...current,
           status: 'error',
-          error: 'Projet Supabase introuvable pour sauvegarder les FIT.',
+          error: translateAppText('Projet Supabase introuvable pour sauvegarder les FIT.'),
           updatedAt: new Date().toISOString(),
         }));
         return;
@@ -314,8 +315,8 @@ export function useItineraryFitRuntime({
             status: 'error',
             error:
               error instanceof Error
-                ? error.message
-                : 'Impossible de sauvegarder les fichiers FIT dans le bucket du projet.',
+                ? translateAppText(error.message)
+                : translateAppText('Impossible de sauvegarder les fichiers FIT dans le bucket du projet.'),
             updatedAt: new Date().toISOString(),
           }));
         });
@@ -332,7 +333,7 @@ export function useItineraryFitRuntime({
       updateFitRuntime(itinerary.id, (current) => ({
         ...current,
         status: 'error',
-        error: 'Chargez au moins un fichier FIT avant de calculer.',
+        error: translateAppText('Chargez au moins un fichier FIT avant de calculer.'),
         updatedAt: new Date().toISOString(),
       }));
       return;
@@ -342,7 +343,7 @@ export function useItineraryFitRuntime({
       updateFitRuntime(itinerary.id, (current) => ({
         ...current,
         status: 'error',
-        error: 'L’itinéraire actif n’a pas encore de trace GPX exploitable.',
+        error: translateAppText('L’itinéraire actif n’a pas encore de trace GPX exploitable.'),
         updatedAt: new Date().toISOString(),
       }));
       return;
@@ -354,8 +355,8 @@ export function useItineraryFitRuntime({
         status: 'error',
         error:
           itinerary.gpxRoute?.source === 'brouter'
-            ? 'Le profil altimetrique du trace BRouter n\'est pas encore pret. Relancez le calcul quand le trace est charge.'
-            : 'Le GPX actif ne contient pas assez d\'altitudes exploitables pour la prediction.',
+            ? translateAppText('Le profil altimetrique du trace BRouter n\'est pas encore pret. Relancez le calcul quand le trace est charge.')
+            : translateAppText('Le GPX actif ne contient pas assez d\'altitudes exploitables pour la prediction.'),
         updatedAt: new Date().toISOString(),
       }));
       return;
@@ -366,7 +367,7 @@ export function useItineraryFitRuntime({
       updateFitRuntime(itinerary.id, (current) => ({
         ...current,
         status: 'error',
-        error: 'Le moteur de prediction FIT n’est pas prêt.',
+        error: translateAppText('Le moteur de prediction FIT n’est pas prêt.'),
         updatedAt: new Date().toISOString(),
       }));
       return;
@@ -441,8 +442,8 @@ export function useItineraryFitRuntime({
           status: 'error',
           error:
             error instanceof Error
-              ? error.message
-              : 'Erreur inconnue pendant la prediction FIT.',
+              ? translateAppText(error.message)
+              : translateAppText('Erreur inconnue pendant la prediction FIT.'),
           updatedAt: new Date().toISOString(),
         }));
         predictionStore?.setPrediction(itineraryId, null);

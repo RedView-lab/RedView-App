@@ -11,7 +11,7 @@ import type { LabelCategoryDef } from '../types';
 export const LABEL_CATEGORIES: LabelCategoryDef[] = [
   {
     id: 'poi',
-    label: 'POI Labels',
+    label: 'POI',
     defaultEnabled: true,
     mapping: {
       type: 'mixed',

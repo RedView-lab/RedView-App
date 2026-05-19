@@ -10,6 +10,7 @@
  * section so the panel stays visually consistent.
  */
 import type { ParameterDefinition, ParameterValue } from '../types';
+import { useAppI18n } from '@/shared/i18n';
 
 interface ParamRowProps {
   param: ParameterDefinition;
@@ -19,6 +20,7 @@ interface ParamRowProps {
 }
 
 export function ParamRow({ param, value, onChange, onReset }: ParamRowProps) {
+  const { t } = useAppI18n();
   const isDefault =
     typeof value === 'number' && typeof param.default === 'number'
       ? Math.abs(value - param.default) < 1e-6
@@ -27,17 +29,17 @@ export function ParamRow({ param, value, onChange, onReset }: ParamRowProps) {
   return (
     <div className="rvi-expert-row">
       <div className="rvi-expert-row__head">
-        <label className="rvi-expert-row__label" title={param.hint ?? param.label}>
-          {param.label}
-          {param.advanced ? <span className="rvi-expert-row__adv">avancé</span> : null}
+        <label className="rvi-expert-row__label" title={param.hint ? t(param.hint) : t(param.label)}>
+          {t(param.label)}
+          {param.advanced ? <span className="rvi-expert-row__adv">{t('avancé')}</span> : null}
         </label>
         {!isDefault ? (
           <button
             type="button"
             className="rvi-expert-row__reset"
             onClick={onReset}
-            title="Réinitialiser au défaut"
-            aria-label={`Réinitialiser ${param.label}`}
+            title={t('Réinitialiser au défaut')}
+            aria-label={t('Réinitialiser {{label}}', { label: t(param.label) })}
           >
             ⟲
           </button>
@@ -49,7 +51,7 @@ export function ParamRow({ param, value, onChange, onReset }: ParamRowProps) {
           <BoolInput
             checked={Boolean(value)}
             onChange={(v) => onChange(v)}
-            ariaLabel={param.label}
+            ariaLabel={t(param.label)}
           />
         ) : null}
 
@@ -61,7 +63,7 @@ export function ParamRow({ param, value, onChange, onReset }: ParamRowProps) {
             step={param.step ?? 1}
             unit={param.unit}
             onChange={(v) => onChange(v)}
-            ariaLabel={param.label}
+            ariaLabel={t(param.label)}
           />
         ) : null}
 
@@ -72,12 +74,12 @@ export function ParamRow({ param, value, onChange, onReset }: ParamRowProps) {
             onChange={(v) =>
               onChange(/^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v)
             }
-            ariaLabel={param.label}
+            ariaLabel={t(param.label)}
           />
         ) : null}
       </div>
 
-      {param.hint ? <p className="rvi-expert-row__hint">{param.hint}</p> : null}
+      {param.hint ? <p className="rvi-expert-row__hint">{t(param.hint)}</p> : null}
     </div>
   );
 }
@@ -165,6 +167,7 @@ function EnumInput({
   onChange: (v: string) => void;
   ariaLabel: string;
 }) {
+  const { t } = useAppI18n();
   return (
     <select
       className="rvi-expert-select"
@@ -174,7 +177,7 @@ function EnumInput({
     >
       {choices.map((c) => (
         <option key={String(c.value)} value={String(c.value)}>
-          {c.label}
+          {t(c.label)}
         </option>
       ))}
     </select>

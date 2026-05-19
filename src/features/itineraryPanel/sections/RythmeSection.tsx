@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
+import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
 import { Collapse } from '../components/shell';
 import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
@@ -51,9 +52,11 @@ function ChipInput({
 function TimeChipInput({
   displayTime,
   onChange,
+  ariaLabel,
 }: {
   displayTime: string;
   onChange?: (value: string | null) => void;
+  ariaLabel: string;
 }) {
   const [hours = '--', minutes = '--'] = displayTime.split(':');
 
@@ -74,7 +77,7 @@ function TimeChipInput({
         value={displayTime}
         onChange={(event) => onChange?.(event.target.value || null)}
         className="rvi-time-input__native"
-        aria-label="Heure de départ"
+        aria-label={ariaLabel}
       />
     </div>
   );
@@ -95,6 +98,7 @@ export function RythmeSection({
   calculateLabel,
   calculateDisabled,
 }: RythmeSectionProps) {
+  const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
@@ -129,7 +133,7 @@ export function RythmeSection({
       {/* Départ / Heure */}
       <div className="rvi-row">
         <div className="rvi-lfield">
-          <span className="rvi-lfield__label">Départ :</span>
+          <span className="rvi-lfield__label">{t('Départ :')}</span>
           <button
             type="button"
             ref={dateChipRef}
@@ -137,13 +141,13 @@ export function RythmeSection({
             onClick={() => setCalendarOpen((v) => !v)}
             aria-haspopup="dialog"
             aria-expanded={calendarOpen}
-            aria-label="Date de départ"
+            aria-label={t('Date de départ')}
           >
             <span className="rvi-datechip__icon">
               <IconCalendar size={12} />
             </span>
             <span>
-              {rhythm.startDate ? formatDateFr(rhythm.startDate) : '--/--/--'}
+              {rhythm.startDate ? formatDateForLocale(rhythm.startDate, locale) : '--/--/--'}
             </span>
           </button>
           <CalendarPopover
@@ -155,9 +159,10 @@ export function RythmeSection({
           />
         </div>
         <div className="rvi-lfield">
-          <span className="rvi-lfield__label">Heure :</span>
+          <span className="rvi-lfield__label">{t('Heure :')}</span>
           <TimeChipInput
             displayTime={displayTime}
+            ariaLabel={t('Heure de départ')}
             onChange={(nextValue) => {
               setIsScrubbingTime(false);
               setTimeDraftMinutes(getMinutesFromTime(nextValue || '00:00'));
@@ -193,12 +198,12 @@ export function RythmeSection({
               type="button"
               className="rvi-uploadchip"
               onClick={onUploadFit}
-              aria-label="Uploader un fichier .fit"
+              aria-label={t('Uploader un fichier .fit')}
             >
               <span className="rvi-uploadchip__icon">
                 <IconUpload size={8} />
               </span>
-              <span className="rvi-uploadchip__text">{uploadFitLabel ?? 'Upload .fit'}</span>
+              <span className="rvi-uploadchip__text">{uploadFitLabel ?? t('Upload .fit')}</span>
             </button>
           }
         />
@@ -214,7 +219,7 @@ export function RythmeSection({
                 const n = parseInt(v, 10);
                 onChange?.('ftp', Number.isFinite(n) ? n : null);
               }}
-              ariaLabel="FTP"
+              ariaLabel={t('FTP')}
             />
           }
         />
@@ -236,7 +241,7 @@ export function RythmeSection({
                 const n = parseInt(v, 10);
                 onChange?.('systemWeightKg', Number.isFinite(n) ? n : null);
               }}
-              ariaLabel="Poids système"
+              ariaLabel={t('Poids système')}
             />
           }
         />
@@ -252,7 +257,7 @@ export function RythmeSection({
                 const n = parseInt(v, 10);
                 onChange?.('tiresMm', Number.isFinite(n) ? n : null);
               }}
-              ariaLabel="Pneus"
+              ariaLabel={t('Pneus')}
             />
           }
         />
@@ -272,7 +277,7 @@ export function RythmeSection({
                 const n = parseInt(v, 10);
                 if (Number.isFinite(n)) onChange?.('weatherWeight', n);
               }}
-              ariaLabel="Poids météo"
+              ariaLabel={t('Poids météo')}
             />
           }
         />
@@ -288,7 +293,7 @@ export function RythmeSection({
                 const n = parseInt(v, 10);
                 if (Number.isFinite(n)) onChange?.('surfacesWeight', n);
               }}
-              ariaLabel="Poids surfaces"
+              ariaLabel={t('Poids surfaces')}
             />
           }
         />
@@ -296,11 +301,11 @@ export function RythmeSection({
 
       <div className="rvi-row">
         <div className="rvi-lfield">
-          <span className="rvi-lfield__label">Sexe :</span>
+          <span className="rvi-lfield__label">{t('Sexe :')}</span>
           <PanelSelect<RhythmGender>
             value={rhythm.gender ?? 'default'}
             onChange={(value) => onChange?.('gender', value)}
-            ariaLabel="Sexe pour la prédiction"
+            ariaLabel={t('Sexe pour la prédiction')}
             options={GENDER_OPTIONS}
           />
         </div>
@@ -339,7 +344,7 @@ export function RythmeSection({
           <button
             type="button"
             className="rvi-iconbtn"
-            aria-label="Ajouter une pause"
+            aria-label={t('Ajouter une pause')}
             onClick={(e) => {
               e.stopPropagation();
               if (!rhythm.pauseEveryIntervalEnabled) {
@@ -375,17 +380,20 @@ export function RythmeSection({
         disabled={calculateDisabled}
       >
         <IconRepeat size={16} />
-        <span>{calculateLabel ?? 'Calculer'}</span>
+        <span>{calculateLabel ?? t('Calculer')}</span>
       </button>
     </div>
   );
 }
 
-function formatDateFr(iso: string): string {
+function formatDateForLocale(iso: string, locale: 'fr' | 'en'): string {
   const d = new Date(iso + 'T00:00:00');
   if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${String(d.getFullYear()).slice(2)}`;
+  return new Intl.DateTimeFormat(locale === 'fr' ? 'fr-FR' : 'en-US', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+  }).format(d);
 }
 
 function getMinutesFromTime(timeStr: string): number {
@@ -403,7 +411,7 @@ function formatMinutes(value: number): string {
 function createPauseRow(index: number): PauseIntervalRow {
   return {
     id: `pause-${Date.now()}-${index}`,
-    label: `Pause ${index}`,
+    label: `${translateAppText('Pause', undefined, readDocumentAppLocale())} ${index}`,
     durationMin: 5,
     intervalMin: 60,
   };
@@ -411,5 +419,6 @@ function createPauseRow(index: number): PauseIntervalRow {
 
 /** Re-numbers rows after add/remove so labels stay sequential. */
 function relabel(rows: PauseIntervalRow[]): PauseIntervalRow[] {
-  return rows.map((r, i) => ({ ...r, label: `Pause ${i + 1}` }));
+  const pauseLabel = translateAppText('Pause', undefined, readDocumentAppLocale());
+  return rows.map((r, i) => ({ ...r, label: `${pauseLabel} ${i + 1}` }));
 }
