@@ -9,6 +9,20 @@
     padding: 32px;
   }
 
+  .rvpb-shell.has-demo-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .rvpb-demo-rail {
+    width: 100%;
+    min-width: 0;
+    gap: 12px;
+  }
+
+  .rvpb-demo-rail__panel-wrap {
+    padding-right: 0;
+  }
+
   .rvpb-subscription-layout.has-demo-upsell {
     grid-template-columns: 1fr;
   }

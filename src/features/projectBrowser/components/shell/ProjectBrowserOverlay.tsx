@@ -24,6 +24,8 @@ import { SubscriptionPanel } from '../subscription';
 import {
   accountTierLabel,
   hasPaidSubscription,
+  isDemoPlan,
+  LANDING_URL,
   readBillingContactPreference,
   resolveActivePlanId,
   writeBillingContactPreference,
@@ -521,6 +523,8 @@ export function ProjectBrowserOverlay({
   const headerMetaLabel = accountLoading
     ? t('Chargement du compte...')
     : formatLastConnection(accountProfile?.lastSignInAt ?? null);
+  const showDemoRail = Boolean(subscriptionState.snapshot) && isDemoPlan(subscriptionState.snapshot);
+  const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
 
   return (
     <div
@@ -529,7 +533,34 @@ export function ProjectBrowserOverlay({
       aria-modal="true"
       aria-label={t('Sélecteur de projet principal')}
     >
-      <div className={`rvpb-shell${activeTab === 'account' ? ' is-account-tab' : ''}`}>
+      <div className={`rvpb-shell${activeTab === 'account' ? ' is-account-tab' : ''}${showDemoRail ? ' has-demo-rail' : ''}`}>
+        {showDemoRail ? (
+          <aside className="rvpb-demo-rail" aria-label={t('Informations du plan Demo')}>
+            <div className="rvpb-demo-rail__brand" aria-label="RedView">
+              <img
+                className="rvpb-demo-rail__brand-image"
+                src="/landing/icons/redview-logo.svg"
+                alt="RedView"
+                width={125}
+                height={24}
+              />
+            </div>
+
+            <div className="rvpb-demo-rail__panel-wrap">
+              <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
+                <p>
+                  {t('Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:')}
+                </p>
+                <a className="rvpb-demo-upsell__cta" href={offersUrl}>
+                  <SvgV2Icon name="feedback-play.svg" size={20} />
+                  <span>{t('Découvrir les offres')}</span>
+                </a>
+              </aside>
+            </div>
+          </aside>
+        ) : null}
+
+        <div className="rvpb-shell__main">
         <header className="rvpb-header">
           <div className="rvpb-user">
             <div className="rvpb-user__name">{accountDisplayName}</div>
@@ -638,6 +669,7 @@ export function ProjectBrowserOverlay({
         {activeTab === 'settings' ? (
           <SettingsPanel />
         ) : null}
+        </div>
 
         {billingModal ? (
           <BillingActionModal

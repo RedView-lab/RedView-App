@@ -20,6 +20,49 @@
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
+.rvpb-shell.has-demo-rail {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.rvpb-shell__main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rvpb-demo-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 250px;
+  min-width: 250px;
+  min-height: 0;
+}
+
+.rvpb-demo-rail__brand {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 12px 0;
+}
+
+.rvpb-demo-rail__brand-image {
+  display: block;
+  width: 125px;
+  height: 24px;
+}
+
+.rvpb-demo-rail__panel-wrap {
+  width: 100%;
+  padding-right: 12px;
+  box-sizing: border-box;
+}
+
 .rvpb-shell.is-account-tab .rvpb-user__name {
   font-size: 24px;
 }

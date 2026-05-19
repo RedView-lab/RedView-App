@@ -3,7 +3,6 @@ import { useAppI18n } from '@/shared/i18n';
 
 import {
   isDemoPlan,
-  LANDING_URL,
   resolveActivePlanId,
   SUBSCRIPTION_PLANS,
 } from '../../lib';
@@ -85,7 +84,6 @@ export function SubscriptionPanel({
     hasManagedSubscription && selectedPlanId === 'demo' ? activePlanId : selectedPlanId;
   const selectedPlan =
     SUBSCRIPTION_PLANS.find((plan) => plan.id === effectiveSelectedPlanId) ?? SUBSCRIPTION_PLANS[2];
-  const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
   const savedPaymentMethods = paymentMethods.length > 0 ? paymentMethods : paymentMethod ? [paymentMethod] : [];
   const paymentMethodLabel = paymentMethod
     ? t('{{brand}} se terminant par {{last4}}', {
@@ -151,19 +149,7 @@ export function SubscriptionPanel({
         </div>
       ) : null}
 
-      <div className={`rvpb-subscription-layout${showDemoUpsell ? ' has-demo-upsell' : ''}`}>
-        {showDemoUpsell ? (
-          <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
-            <p>
-              {t('Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:')}
-            </p>
-            <a className="rvpb-demo-upsell__cta" href={offersUrl}>
-              <SvgV2Icon name="feedback-play.svg" size={20} />
-              <span>{t('Découvrir les offres')}</span>
-            </a>
-          </aside>
-        ) : null}
-
+      <div className="rvpb-subscription-layout">
         <div className="rvpb-subscription-layout__main">
           {showDemoUpsell ? (
             <div className="rvpb-subscription-section rvpb-subscription-section--demo-offers">
