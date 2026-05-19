@@ -437,6 +437,27 @@ body.rvpb-billing-page-open {
   line-height: 20px;
 }
 
+.rvpb-billing-page__consent {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  color: rgba(255, 255, 255, 0.92);
+  cursor: pointer;
+}
+
+.rvpb-billing-page__consent input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: #890000;
+}
+
+.rvpb-billing-page__consent-copy {
+  font-size: 14px;
+  line-height: 20px;
+}
+
 .rvpb-billing-page__actions {
   display: flex;
   align-items: center;

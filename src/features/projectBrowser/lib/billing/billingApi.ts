@@ -14,6 +14,7 @@ type BillingOverviewResponse = {
   contactPreference: BillingContactPreference;
   customerEmail: string | null;
   paymentMethod: PaymentMethodSummary | null;
+  paymentMethods: PaymentMethodSummary[];
 };
 
 export type SubscriptionActionResponse = {
@@ -164,6 +165,15 @@ export async function applyPaymentMethodSetup(
   return apiRequest<BillingOverviewResponse>('/api/billing/payment-method', {
     method: 'POST',
     body: JSON.stringify({ setupIntentId }),
+  });
+}
+
+export async function setDefaultBillingPaymentMethod(
+  paymentMethodId: string,
+): Promise<BillingOverviewResponse> {
+  return apiRequest<BillingOverviewResponse>('/api/billing/payment-method', {
+    method: 'POST',
+    body: JSON.stringify({ paymentMethodId }),
   });
 }
 

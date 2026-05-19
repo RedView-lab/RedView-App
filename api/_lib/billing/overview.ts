@@ -29,9 +29,13 @@ function toContactPreference(row: CustomerRow | null): BillingContactPreference 
 
 async function getPaymentMethodSummary(
   stripeCustomerId: string | null,
-): Promise<{ customerEmail: string | null; paymentMethod: PaymentMethodSummary | null }> {
+): Promise<{
+  customerEmail: string | null;
+  paymentMethod: PaymentMethodSummary | null;
+  paymentMethods: PaymentMethodSummary[];
+}> {
   if (!stripeCustomerId) {
-    return { customerEmail: null, paymentMethod: null };
+    return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
   }
 
   let customer: Stripe.Customer | Stripe.DeletedCustomer;
@@ -42,7 +46,7 @@ async function getPaymentMethodSummary(
   } catch {
     const validatedCustomerId = await getValidatedStripeCustomerId(stripeCustomerId);
     if (!validatedCustomerId) {
-      return { customerEmail: null, paymentMethod: null };
+      return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
     }
 
     customer = await getStripeServer().customers.retrieve(validatedCustomerId, {
@@ -51,7 +55,7 @@ async function getPaymentMethodSummary(
   }
 
   if (!isStripeCustomer(customer)) {
-    return { customerEmail: null, paymentMethod: null };
+    return { customerEmail: null, paymentMethod: null, paymentMethods: [] };
   }
 
   let paymentMethod = null as Stripe.PaymentMethod | null;
@@ -85,21 +89,54 @@ async function getPaymentMethodSummary(
     }
   }
 
-  if (!paymentMethod || paymentMethod.type !== 'card' || !paymentMethod.card) {
+  const savedPaymentMethods = await getStripeServer().paymentMethods.list({
+    customer: customer.id,
+    type: 'card',
+    limit: 10,
+  });
+
+  const cardPaymentMethods = savedPaymentMethods.data.filter(
+    (entry): entry is Stripe.PaymentMethod & { card: NonNullable<Stripe.PaymentMethod['card']> } =>
+      entry.type === 'card' && entry.card !== null,
+  );
+
+  if (
+    paymentMethod &&
+    paymentMethod.type === 'card' &&
+    paymentMethod.card &&
+    !cardPaymentMethods.some((entry) => entry.id === paymentMethod.id)
+  ) {
+    cardPaymentMethods.unshift(paymentMethod as Stripe.PaymentMethod & {
+      card: NonNullable<Stripe.PaymentMethod['card']>;
+    });
+  }
+
+  const defaultPaymentMethodId = paymentMethod?.id ?? null;
+  const paymentMethods = cardPaymentMethods
+    .map<PaymentMethodSummary>((entry) => ({
+      id: entry.id,
+      brand: entry.card.brand,
+      last4: entry.card.last4,
+      expMonth: entry.card.exp_month,
+      expYear: entry.card.exp_year,
+      isDefault: entry.id === defaultPaymentMethodId,
+    }))
+    .sort((left, right) => Number(right.isDefault) - Number(left.isDefault));
+
+  if (paymentMethods.length === 0) {
     return {
       customerEmail: customer.email ?? null,
       paymentMethod: null,
+      paymentMethods: [],
     };
   }
 
+  const defaultPaymentMethod = paymentMethods.find((entry) => entry.isDefault) ?? paymentMethods[0] ?? null;
+
   return {
     customerEmail: customer.email ?? null,
-    paymentMethod: {
-      brand: paymentMethod.card.brand,
-      last4: paymentMethod.card.last4,
-      expMonth: paymentMethod.card.exp_month,
-      expYear: paymentMethod.card.exp_year,
-    },
+    paymentMethod: defaultPaymentMethod,
+    paymentMethods,
   };
 }
 

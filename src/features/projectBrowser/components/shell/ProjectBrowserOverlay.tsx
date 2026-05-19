@@ -37,6 +37,7 @@ import {
   fetchBillingOverview,
   persistBillingContactPreference,
   resumeManagedSubscription,
+  setDefaultBillingPaymentMethod,
   syncManagedSubscription,
   type BillingOverviewResponse,
 } from '../../lib';
@@ -114,6 +115,7 @@ export function ProjectBrowserOverlay({
     readBillingContactPreference(userId),
   );
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodSummary | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodSummary[]>([]);
   const [billingActionBusy, setBillingActionBusy] = useState(false);
   const [billingActionError, setBillingActionError] = useState<string | null>(null);
   const [billingModal, setBillingModal] = useState<BillingModalState | null>(null);
@@ -222,6 +224,7 @@ export function ProjectBrowserOverlay({
     });
     setSelectedPlanId(resolveActivePlanId(overview.subscription));
     setPaymentMethod(overview.paymentMethod);
+    setPaymentMethods(overview.paymentMethods);
     setContactPreference(overview.contactPreference);
     syncedContactPreferenceRef.current = JSON.stringify(overview.contactPreference);
     contactHydratedRef.current = true;
@@ -262,6 +265,7 @@ export function ProjectBrowserOverlay({
           snapshot: null,
         });
         setPaymentMethod(null);
+        setPaymentMethods([]);
       }
     })();
 
@@ -483,6 +487,27 @@ export function ProjectBrowserOverlay({
     [applyBillingOverview, refreshBillingOverview],
   );
 
+  const handleSetDefaultPaymentMethod = useCallback(
+    async (paymentMethodId: string) => {
+      setBillingActionBusy(true);
+      setBillingActionError(null);
+
+      try {
+        const overview = await setDefaultBillingPaymentMethod(paymentMethodId);
+        applyBillingOverview(overview);
+      } catch (nextError) {
+        setBillingActionError(
+          nextError instanceof Error
+            ? t(nextError.message)
+            : t('Impossible de définir ce moyen de paiement par défaut.'),
+        );
+      } finally {
+        setBillingActionBusy(false);
+      }
+    },
+    [applyBillingOverview, t],
+  );
+
   const closeBillingModal = useCallback(() => {
     logBillingUi('billing-modal-close');
     setBillingModal(null);
@@ -586,12 +611,14 @@ export function ProjectBrowserOverlay({
             setContactPreference={setContactPreference}
             accountEmail={accountEmail}
             paymentMethod={paymentMethod}
+            paymentMethods={paymentMethods}
             billingActionBusy={billingActionBusy}
             billingActionError={billingActionError}
             contactStatusMessage={contactStatusMessage}
             onSelectPlan={handlePlanSelection}
             onToggleManagedSubscription={handleManagedSubscriptionToggle}
             onManagePaymentMethod={handlePaymentMethodAction}
+            onSetDefaultPaymentMethod={handleSetDefaultPaymentMethod}
           />
         ) : null}
 

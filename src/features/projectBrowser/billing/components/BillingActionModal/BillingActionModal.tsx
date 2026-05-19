@@ -239,6 +239,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
+  const [consentAccepted, setConsentAccepted] = useState(false);
   const paymentMethods: BillingPaymentMethod[] =
     flow.mode === 'subscription' ? ['card', 'amazon_pay'] : ['card'];
   const selectedCountryOption =
@@ -248,6 +249,10 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   useEffect(() => {
     setSelectedMethod('card');
   }, [flow.mode]);
+
+  useEffect(() => {
+    setConsentAccepted(false);
+  }, [flow.clientSecret, flow.mode]);
 
   useEffect(() => {
     setError(null);
@@ -265,6 +270,16 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!consentAccepted) {
+      setError(
+        t(
+          'Confirmez que RedView peut enregistrer ce moyen de paiement pour les renouvellements et ajustements futurs de votre abonnement.',
+        ),
+      );
+      return;
+    }
+
     if (!stripe || !elements) {
       logBillingUi('billing-page-submit-blocked', {
         mode: flow.mode,
@@ -585,6 +600,20 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
               <p className="rvpb-billing-page__legal">
                 {t('En fournissant vos informations de carte bancaire, vous autorisez RedView à débiter votre carte pour les paiements futurs conformément à ses conditions. Les données de votre carte sont traitées par Stripe, RedView n’enregistre jamais le PAN complet.')}
               </p>
+
+              <label className="rvpb-billing-page__consent">
+                <input
+                  type="checkbox"
+                  checked={consentAccepted}
+                  onChange={(event) => setConsentAccepted(event.target.checked)}
+                  disabled={submitting}
+                />
+                <span className="rvpb-billing-page__consent-copy">
+                  {flow.mode === 'subscription'
+                    ? t('J’autorise RedView à enregistrer cette carte comme moyen de paiement par défaut pour les renouvellements récurrents, les proratas et les ajustements de mon abonnement.')
+                    : t('J’autorise RedView à enregistrer cette carte comme moyen de paiement par défaut pour mes prochains renouvellements et ajustements d’abonnement.')}
+                </span>
+              </label>
 
               <div className="rvpb-billing-page__actions">
                 <button

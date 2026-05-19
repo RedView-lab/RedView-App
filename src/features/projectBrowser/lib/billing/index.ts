@@ -7,6 +7,7 @@ export {
   fetchBillingOverview,
   persistBillingContactPreference,
   resumeManagedSubscription,
+  setDefaultBillingPaymentMethod,
   syncManagedSubscription,
 } from './billingApi';
 export type { BillingOverviewResponse } from './billingApi';

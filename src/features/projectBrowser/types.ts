@@ -24,10 +24,12 @@ export type SubscriptionState = {
 };
 
 export type PaymentMethodSummary = {
+  id: string;
   brand: string;
   last4: string;
   expMonth: number;
   expYear: number;
+  isDefault: boolean;
 };
 
 export type BillingContactPreference = {

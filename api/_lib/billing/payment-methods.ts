@@ -67,3 +67,37 @@ export async function applySetupIntentPaymentMethod(userId: string, setupIntentI
 
   return buildBillingOverview(userId);
 }
+
+export async function setDefaultPaymentMethod(userId: string, paymentMethodId: string) {
+  const stripeCustomerId = await getStripeCustomerId(userId);
+  if (!stripeCustomerId) {
+    throw new Error('No Stripe customer found for this account.');
+  }
+
+  const paymentMethod = await getStripeServer().paymentMethods.retrieve(paymentMethodId);
+  const paymentMethodCustomer =
+    typeof paymentMethod.customer === 'string' ? paymentMethod.customer : paymentMethod.customer?.id ?? null;
+
+  if (paymentMethodCustomer !== stripeCustomerId) {
+    throw new Error('This payment method does not belong to the current user.');
+  }
+
+  if (paymentMethod.type !== 'card') {
+    throw new Error('Only card payment methods can be set as default.');
+  }
+
+  await getStripeServer().customers.update(stripeCustomerId, {
+    invoice_settings: {
+      default_payment_method: paymentMethodId,
+    },
+  });
+
+  const currentSubscription = await getCurrentManagedStripeSubscription(userId);
+  if (currentSubscription) {
+    await getStripeServer().subscriptions.update(currentSubscription.id, {
+      default_payment_method: paymentMethodId,
+    });
+  }
+
+  return buildBillingOverview(userId);
+}

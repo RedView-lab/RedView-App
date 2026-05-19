@@ -25,13 +25,37 @@ type SubscriptionPanelProps = {
   setContactPreference: React.Dispatch<React.SetStateAction<BillingContactPreference>>;
   accountEmail: string;
   paymentMethod: PaymentMethodSummary | null;
+  paymentMethods: PaymentMethodSummary[];
   billingActionBusy: boolean;
   billingActionError: string | null;
   contactStatusMessage: string | null;
   onSelectPlan: (planId: ManagedPlanId) => void;
   onToggleManagedSubscription: () => void;
   onManagePaymentMethod: () => void;
+  onSetDefaultPaymentMethod: (paymentMethodId: string) => void;
 };
+
+function formatDisplayedPaymentBrand(brand: string): string {
+  const normalized = brand.trim().toLowerCase();
+
+  if (normalized === 'visa') return 'VISA';
+  if (normalized === 'mastercard') return 'Mastercard';
+  if (normalized === 'american express' || normalized === 'amex') return 'AMEX';
+  if (normalized === 'cartes bancaires') return 'CB';
+  if (!normalized) return 'CARD';
+
+  return normalized.replace(/_/g, ' ').toUpperCase();
+}
+
+function paymentBrandTone(brand: string): 'visa' | 'mastercard' | 'amex' | 'generic' {
+  const normalized = brand.trim().toLowerCase();
+
+  if (normalized === 'visa') return 'visa';
+  if (normalized === 'mastercard') return 'mastercard';
+  if (normalized === 'american express' || normalized === 'amex') return 'amex';
+
+  return 'generic';
+}
 
 export function SubscriptionPanel({
   subscriptionState,
@@ -41,12 +65,14 @@ export function SubscriptionPanel({
   setContactPreference,
   accountEmail,
   paymentMethod,
+  paymentMethods,
   billingActionBusy,
   billingActionError,
   contactStatusMessage,
   onSelectPlan,
   onToggleManagedSubscription,
   onManagePaymentMethod,
+  onSetDefaultPaymentMethod,
 }: SubscriptionPanelProps) {
   const { t } = useAppI18n();
   const showDemoUpsell = isDemoPlan(subscriptionState.snapshot);
@@ -55,9 +81,10 @@ export function SubscriptionPanel({
   const activePlanId = resolveActivePlanId(subscriptionState.snapshot);
   const hasManagedSubscription = !showDemoUpsell;
   const offersUrl = `${LANDING_URL.replace(/\/$/, '')}/#offres`;
+  const savedPaymentMethods = paymentMethods.length > 0 ? paymentMethods : paymentMethod ? [paymentMethod] : [];
   const paymentMethodLabel = paymentMethod
     ? t('{{brand}} se terminant par {{last4}}', {
-        brand: paymentMethod.brand.toUpperCase(),
+        brand: formatDisplayedPaymentBrand(paymentMethod.brand),
         last4: paymentMethod.last4,
       })
     : hasManagedSubscription
@@ -147,29 +174,93 @@ export function SubscriptionPanel({
             </div>
 
             <div className="rvpb-subscription-section__content">
-              <div className="rvpb-payment-card">
-                <div className="rvpb-payment-card__icon">
-                  <SvgV2Icon name="credit-card-02.svg" size={18} />
-                </div>
-                <div className="rvpb-payment-card__copy">
-                  <strong>{paymentMethodLabel}</strong>
-                  <span>{paymentMethodHelper}</span>
-                  <div className="rvpb-link-row">
-                    <button
-                      type="button"
-                      className="rvpb-text-link"
-                      onClick={onManagePaymentMethod}
-                      disabled={billingActionBusy}
+              <div className="rvpb-payment-methods">
+                {savedPaymentMethods.length > 0 ? (
+                  savedPaymentMethods.map((method) => (
+                    <div
+                      key={method.id}
+                      className={`rvpb-payment-card${method.isDefault ? ' is-default' : ''}`}
                     >
-                      {showDemoUpsell
-                          ? t('Choisir une offre payante')
-                        : paymentMethod
-                            ? t('Remplacer mon moyen de paiement')
-                            : t('Ajouter un moyen de paiement')}
-                    </button>
+                      <div className={`rvpb-payment-card__icon rvpb-payment-card__icon--${paymentBrandTone(method.brand)}`}>
+                        <span className="rvpb-payment-card__brand-mark">
+                          {formatDisplayedPaymentBrand(method.brand)}
+                        </span>
+                      </div>
+
+                      <div className="rvpb-payment-card__copy">
+                        <div className="rvpb-payment-card__headline">
+                          <strong>
+                            {t('{{brand}} se terminant par {{last4}}', {
+                              brand: formatDisplayedPaymentBrand(method.brand),
+                              last4: method.last4,
+                            })}
+                          </strong>
+                          {method.isDefault ? (
+                            <span className="rvpb-payment-card__badge">{t('Par défaut')}</span>
+                          ) : null}
+                        </div>
+
+                        <span>
+                          {t('Expire {{date}}.', {
+                            date: `${String(method.expMonth).padStart(2, '0')}/${method.expYear}`,
+                          })}
+                        </span>
+
+                        <div className="rvpb-link-row">
+                          {!method.isDefault ? (
+                            <button
+                              type="button"
+                              className="rvpb-text-link"
+                              onClick={() => onSetDefaultPaymentMethod(method.id)}
+                              disabled={billingActionBusy}
+                            >
+                              {t('Définir par défaut')}
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            className="rvpb-text-link"
+                            onClick={onManagePaymentMethod}
+                            disabled={billingActionBusy}
+                          >
+                            {t('Modifier')}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rvpb-payment-card">
+                    <div className="rvpb-payment-card__icon rvpb-payment-card__icon--generic">
+                      <SvgV2Icon name="credit-card-02.svg" size={18} />
+                    </div>
+                    <div className="rvpb-payment-card__copy">
+                      <strong>{paymentMethodLabel}</strong>
+                      <span>{paymentMethodHelper}</span>
+                      <div className="rvpb-link-row">
+                        <button
+                          type="button"
+                          className="rvpb-text-link"
+                          onClick={onManagePaymentMethod}
+                          disabled={billingActionBusy}
+                        >
+                          {showDemoUpsell
+                            ? t('Choisir une offre payante')
+                            : paymentMethod
+                              ? t('Remplacer mon moyen de paiement')
+                              : t('Ajouter un moyen de paiement')}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
+
+              <p className="rvpb-inline-note">
+                {hasManagedSubscription
+                  ? t('Toute carte confirmée pendant la souscription ou via le formulaire Stripe apparaît ici automatiquement et peut devenir votre carte par défaut.')
+                  : t('Quand vous passez à une offre payante, la carte validée pendant la souscription sera enregistrée ici automatiquement.')}
+              </p>
 
               <button
                 type="button"
@@ -181,8 +272,8 @@ export function SubscriptionPanel({
                 <span>
                   {showDemoUpsell
                     ? t('Passer à une offre payante')
-                    : paymentMethod
-                      ? t('Remplacer le moyen de paiement')
+                    : savedPaymentMethods.length > 0
+                      ? t('Ajouter une nouvelle carte')
                       : t('Ajouter un moyen de paiement')}
                 </span>
               </button>

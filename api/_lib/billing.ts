@@ -36,4 +36,5 @@ export {
 export {
   applySetupIntentPaymentMethod,
   createPaymentMethodSetupIntent,
+  setDefaultPaymentMethod,
 } from './billing/payment-methods.js';
