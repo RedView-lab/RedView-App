@@ -14,7 +14,16 @@ function serializeError(error: unknown): Record<string, unknown> {
   };
 }
 
-export function logBillingUi(event: string, payload: BillingDebugPayload = {}) {
+export function logBillingUi(
+  event: string,
+  payload: BillingDebugPayload = {},
+  summary?: string,
+) {
+  if (summary) {
+    console.info('[billing-ui]', event, summary, payload);
+    return;
+  }
+
   console.info('[billing-ui]', event, payload);
 }
 
@@ -22,9 +31,17 @@ export function logBillingUiError(
   event: string,
   error: unknown,
   payload: BillingDebugPayload = {},
+  summary?: string,
 ) {
-  console.error('[billing-ui]', event, {
+  const serialized = {
     ...payload,
     error: serializeError(error),
-  });
+  };
+
+  if (summary) {
+    console.error('[billing-ui]', event, summary, serialized);
+    return;
+  }
+
+  console.error('[billing-ui]', event, serialized);
 }

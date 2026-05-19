@@ -71,26 +71,30 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const responseSummary = `${init?.method ?? 'GET'} ${path} -> ${response.status}${typeof data.error === 'string' ? ` ${data.error}` : ''}`;
   logBillingUi('api-request-response', {
     path,
     method: init?.method ?? 'GET',
     status: response.status,
     ok: response.ok,
     ...summarizeResponse(data),
-  });
+  }, responseSummary);
 
   if (!response.ok) {
-    const error = new Error(
+    const errorMessage =
       typeof data.error === 'string'
         ? translateAppText(data.error)
-        : translateAppText('La requête de facturation a échoué.'),
+        : translateAppText('La requête de facturation a échoué.');
+    const error = new Error(
+      errorMessage,
     );
+    const errorSummary = `${init?.method ?? 'GET'} ${path} -> ${response.status} ${errorMessage}`;
     logBillingUiError('api-request-failed', error, {
       path,
       method: init?.method ?? 'GET',
       status: response.status,
       ...summarizeResponse(data),
-    });
+    }, errorSummary);
     throw error;
   }
 
