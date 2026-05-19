@@ -9,6 +9,11 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 
 type BootstrapStatus = 'loading' | 'ready'
 
+type SubscriptionAccessState = {
+  hasAccess: boolean
+  status: string | null
+}
+
 const AUTH_BOOT_TIMEOUT_MS = 8000
 // Cold-start of supabase-js + a possible token refresh + the first PostgREST round trip
 // can comfortably exceed 4s on a fresh tab. Give it a generous budget; the cached
@@ -56,7 +61,8 @@ async function awaitSupabaseAuth<T>(promise: PromiseLike<T>, label: string): Pro
 }
 
 type CachedSubscriptionSnapshot = {
-  isSubscribed: boolean
+  hasAccess: boolean
+  status: string | null
   cachedAt: number
 }
 
@@ -76,15 +82,22 @@ function BootstrapScreen({ label }: { label: string }) {
   )
 }
 
-function readCachedSubscription(userId: string | null | undefined): boolean | null {
+function readCachedSubscription(userId: string | null | undefined): SubscriptionAccessState | null {
   if (!userId) return null
 
   try {
     const raw = window.localStorage.getItem(getSubscriptionCacheKey(userId))
     if (!raw) return null
 
-    const parsed = JSON.parse(raw) as Partial<CachedSubscriptionSnapshot>
-    if (typeof parsed.cachedAt !== 'number' || typeof parsed.isSubscribed !== 'boolean') {
+    const parsed = JSON.parse(raw) as Partial<CachedSubscriptionSnapshot> & { isSubscribed?: boolean }
+    const hasAccess =
+      typeof parsed.hasAccess === 'boolean'
+        ? parsed.hasAccess
+        : typeof parsed.isSubscribed === 'boolean'
+          ? parsed.isSubscribed
+          : null
+
+    if (typeof parsed.cachedAt !== 'number' || hasAccess == null) {
       window.localStorage.removeItem(getSubscriptionCacheKey(userId))
       return null
     }
@@ -94,16 +107,20 @@ function readCachedSubscription(userId: string | null | undefined): boolean | nu
       return null
     }
 
-    return parsed.isSubscribed
+    return {
+      hasAccess,
+      status: typeof parsed.status === 'string' ? parsed.status : null,
+    }
   } catch {
     return null
   }
 }
 
-function writeCachedSubscription(userId: string, isSubscribed: boolean): void {
+function writeCachedSubscription(userId: string, subscription: SubscriptionAccessState): void {
   try {
     const payload: CachedSubscriptionSnapshot = {
-      isSubscribed,
+      hasAccess: subscription.hasAccess,
+      status: subscription.status,
       cachedAt: Date.now(),
     }
     window.localStorage.setItem(getSubscriptionCacheKey(userId), JSON.stringify(payload))
@@ -159,14 +176,15 @@ function App() {
     const storedSession = readStoredSupabaseSession()
     return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
   })
-  const [isSubscribed, setIsSubscribed] = useState(() => {
+  const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccessState>(() => {
     const storedSession = readStoredSupabaseSession()
-    return readCachedSubscription(storedSession?.user.id) ?? false
+    return readCachedSubscription(storedSession?.user.id) ?? { hasAccess: false, status: null }
   })
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const initialProjectId = readProjectIdFromPath(pathname)
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
+  const offersUrl = `${landingUrl.replace(/\/$/, '')}/#offres`
 
   useEffect(() => {
     const syncPathname = () => {
@@ -224,20 +242,23 @@ function App() {
     }
 
     if (!session?.user?.id) {
-      setIsSubscribed(false)
+      setSubscriptionAccess({ hasAccess: false, status: null })
       setSubscriptionStatus('ready')
       return
     }
 
     const cachedSubscription = readCachedSubscription(session.user.id)
     if (cachedSubscription != null) {
-      setIsSubscribed(cachedSubscription)
+      setSubscriptionAccess(cachedSubscription)
       setSubscriptionStatus('ready')
     } else {
       setSubscriptionStatus('loading')
     }
 
-    const fetchSubscriptionStatus = async (userId: string, timeoutMs: number): Promise<boolean> => {
+    const fetchSubscriptionStatus = async (
+      userId: string,
+      timeoutMs: number,
+    ): Promise<SubscriptionAccessState> => {
       activeSubscriptionAbortController?.abort()
       const abortController = new AbortController()
       activeSubscriptionAbortController = abortController
@@ -256,7 +277,10 @@ function App() {
 
         if (error) throw error
 
-        return hasAppAccess(data)
+        return {
+          hasAccess: hasAppAccess(data),
+          status: typeof data?.status === 'string' ? data.status : null,
+        }
       } finally {
         if (activeSubscriptionAbortController === abortController) {
           activeSubscriptionAbortController = null
@@ -272,7 +296,7 @@ function App() {
         console.warn('[app] Failed to clear Supabase session after subscription bootstrap failure', signOutError)
       } finally {
         if (!cancelled) {
-          setIsSubscribed(false)
+          setSubscriptionAccess({ hasAccess: false, status: null })
           setSession(null)
         }
       }
@@ -280,18 +304,21 @@ function App() {
 
     const resolveSubscription = async () => {
       try {
-        const nextIsSubscribed = await fetchSubscriptionStatus(session.user.id, SUBSCRIPTION_BOOT_TIMEOUT_MS)
+        const nextSubscription = await fetchSubscriptionStatus(
+          session.user.id,
+          SUBSCRIPTION_BOOT_TIMEOUT_MS,
+        )
         if (cancelled) return
 
-        setIsSubscribed(nextIsSubscribed)
-        writeCachedSubscription(session.user.id, nextIsSubscribed)
+        setSubscriptionAccess(nextSubscription)
+        writeCachedSubscription(session.user.id, nextSubscription)
       } catch (error) {
         if (cancelled) return
 
-        const fallbackIsSubscribed = readCachedSubscription(session.user.id)
-        if (fallbackIsSubscribed != null) {
+        const fallbackSubscription = readCachedSubscription(session.user.id)
+        if (fallbackSubscription != null) {
           console.warn('[app] Subscription bootstrap timed out, using cached subscription state', error)
-          setIsSubscribed(fallbackIsSubscribed)
+          setSubscriptionAccess(fallbackSubscription)
           return
         }
 
@@ -314,14 +341,14 @@ function App() {
 
           setSession(refreshedSession)
 
-          const nextIsSubscribed = await fetchSubscriptionStatus(
+          const nextSubscription = await fetchSubscriptionStatus(
             refreshedSession.user.id,
             SUBSCRIPTION_RETRY_TIMEOUT_MS,
           )
           if (cancelled) return
 
-          setIsSubscribed(nextIsSubscribed)
-          writeCachedSubscription(refreshedSession.user.id, nextIsSubscribed)
+          setSubscriptionAccess(nextSubscription)
+          writeCachedSubscription(refreshedSession.user.id, nextSubscription)
         } catch (recoveryError) {
           if (cancelled) return
           console.error('[app] Subscription bootstrap failed after refresh, redirecting to login', recoveryError)
@@ -350,7 +377,7 @@ function App() {
     return <BootstrapScreen label={t('Redirecting...')} />
   }
 
-  if (!isSubscribed) {
+  if (!subscriptionAccess.hasAccess) {
     return <PayWall />
   }
 
@@ -359,6 +386,8 @@ function App() {
       <Dashboard
         email={session.user.email || 'unknown'}
         initialProjectId={initialProjectId}
+        isDemoAccount={subscriptionAccess.status === 'demo'}
+        offersUrl={offersUrl}
       />
     </Suspense>
   )

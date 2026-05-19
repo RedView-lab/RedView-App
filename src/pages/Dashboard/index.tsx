@@ -14,11 +14,15 @@ import { formatDisplayName } from './lib/utils';
 interface DashboardProps {
   email: string;
   initialProjectId?: string | null;
+  isDemoAccount: boolean;
+  offersUrl: string;
 }
 
 export default function Dashboard({
   email,
   initialProjectId,
+  isDemoAccount,
+  offersUrl,
 }: DashboardProps) {
   const [mapInstance, setMapInstance] = useState<MapboxMap | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
@@ -172,6 +176,8 @@ export default function Dashboard({
             <DashboardEditor
               activeProjectId={activeProjectId}
               activeProjectInitial={activeProjectInitial}
+              isDemoAccount={isDemoAccount}
+              offersUrl={offersUrl}
               isClosingProject={isClosingProject}
               mapInstance={mapInstance}
               mapLoaded={mapLoaded}
