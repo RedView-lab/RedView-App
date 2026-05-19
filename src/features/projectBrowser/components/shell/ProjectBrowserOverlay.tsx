@@ -55,6 +55,39 @@ import '../../styles/index.css';
 
 type ManagedPlanId = Exclude<SubscriptionPlanId, 'demo'>;
 
+const PROJECT_BROWSER_ACTIVE_TAB_STORAGE_KEY = 'redview:project-browser:active-tab';
+
+function getProjectBrowserActiveTabStorageKey(userId: string | null): string {
+  return userId
+    ? `${PROJECT_BROWSER_ACTIVE_TAB_STORAGE_KEY}:${userId}`
+    : PROJECT_BROWSER_ACTIVE_TAB_STORAGE_KEY;
+}
+
+function readStoredActiveTab(userId: string | null): OverlayTab | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(getProjectBrowserActiveTabStorageKey(userId));
+    if (raw === 'projects' || raw === 'account' || raw === 'subscription' || raw === 'settings') {
+      return raw;
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+
+  return null;
+}
+
+function writeStoredActiveTab(userId: string | null, tab: OverlayTab): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.sessionStorage.setItem(getProjectBrowserActiveTabStorageKey(userId), tab);
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
 export function ProjectBrowserOverlay({
   open,
   displayName,
@@ -66,7 +99,7 @@ export function ProjectBrowserOverlay({
   const storedSession = readStoredSupabaseSession();
   const userId = storedSession?.user.id ?? null;
   const accountEmail = storedSession?.user.email ?? '';
-  const [activeTab, setActiveTab] = useState<OverlayTab>('projects');
+  const [activeTab, setActiveTab] = useState<OverlayTab>(() => readStoredActiveTab(userId) ?? 'projects');
   const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
     isLoading: false,
     error: null,
@@ -132,6 +165,14 @@ export function ProjectBrowserOverlay({
     open,
     onOpenProject,
   });
+
+  useEffect(() => {
+    setActiveTab(readStoredActiveTab(userId) ?? 'projects');
+  }, [userId]);
+
+  useEffect(() => {
+    writeStoredActiveTab(userId, activeTab);
+  }, [activeTab, userId]);
 
   useEffect(() => {
     setContactPreference(readBillingContactPreference(userId));
