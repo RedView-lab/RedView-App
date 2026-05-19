@@ -19,17 +19,17 @@ interface BasemapOption extends BasemapRenderConfig {}
 // GL JS map usage it already has, without introducing custom Styles API churn.
 export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
-    id: 'satellite',
-    label: 'Satellite',
-    styleUrl: 'mapbox://styles/mapbox/standard-satellite',
+    id: 'standard',
+    label: 'Standard (clair)',
+    styleUrl: 'mapbox://styles/mapbox/standard',
     visualFamily: 'mapbox-standard-v3',
     terrainContract: 'unified-dem-v1',
     lightPreset: 'day',
   },
   {
-    id: 'streets',
-    label: 'Streets',
-    styleUrl: 'mapbox://styles/mapbox/streets-v12',
+    id: 'dark',
+    label: 'Standard (sombre)',
+    styleUrl: 'mapbox://styles/mapbox/dark-v11',
     visualFamily: 'mapbox-classic-v12',
     terrainContract: 'unified-dem-v1',
   },
@@ -41,33 +41,21 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
     terrainContract: 'unified-dem-v1',
   },
   {
-    id: 'standard',
-    label: 'Standard / 3D',
-    styleUrl: 'mapbox://styles/mapbox/standard',
+    id: 'satellite',
+    label: 'Satellite',
+    styleUrl: 'mapbox://styles/mapbox/standard-satellite',
     visualFamily: 'mapbox-standard-v3',
     terrainContract: 'unified-dem-v1',
-    lightPreset: 'dusk',
-  },
-  {
-    id: 'light',
-    label: 'Light',
-    styleUrl: 'mapbox://styles/mapbox/light-v11',
-    visualFamily: 'mapbox-classic-v12',
-    terrainContract: 'unified-dem-v1',
-  },
-  {
-    id: 'dark',
-    label: 'Dark',
-    styleUrl: 'mapbox://styles/mapbox/dark-v11',
-    visualFamily: 'mapbox-classic-v12',
-    terrainContract: 'unified-dem-v1',
+    lightPreset: 'day',
   },
 ] as const;
 
-export const DEFAULT_BASEMAP_ID: BasemapId = 'topographic';
+export const DEFAULT_BASEMAP_ID: BasemapId = 'standard';
 
 const LEGACY_BASEMAP_ALIASES: Record<string, BasemapId> = {
-  osm: 'streets',
+  light: 'standard',
+  streets: 'standard',
+  osm: 'standard',
 };
 
 export function normalizeBasemapId(id: BasemapId | null | undefined): BasemapId {

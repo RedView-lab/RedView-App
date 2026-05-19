@@ -229,6 +229,12 @@ export function ControlPanelContainer({
     () => ({
       ...DEFAULT_CONTROL_PANEL_STATE,
       basemaps: buildBasemapList(activeBasemapId),
+      basemap3dQuality: {
+        ...DEFAULT_CONTROL_PANEL_STATE.basemap3dQuality,
+        value:
+          projectControlPanel.basemap3dQuality
+          ?? DEFAULT_CONTROL_PANEL_STATE.basemap3dQuality.value,
+      },
       lidarTiles,
       contourLines: terrainState.slices.contourLines,
       routes: { enabled: routesEnabled, items: routeItems, traceWidthPx: routesTraceWidthPx },
@@ -248,6 +254,7 @@ export function ControlPanelContainer({
       overlayState.slices.sunlight,
       overlayState.slices.weather,
       overlayState.slices.wind,
+      projectControlPanel.basemap3dQuality,
       routeItems,
       routesTraceWidthPx,
       routesEnabled,
@@ -351,6 +358,11 @@ export function ControlPanelContainer({
       onRouteOpacityChange={(id, opacity) => {
         projectStore?.setItineraryOpacity(id, opacity);
       }}
+        onBasemap3dQualityChange={(value) => {
+          updateProjectControlPanel((draft) => {
+            draft.basemap3dQuality = value;
+          });
+        }}
       onRouteTraceWidthChange={(value) => {
         updateProjectControlPanel((draft) => {
           draft.routes = {

@@ -6,6 +6,7 @@ import type { SlopeState } from '@/features/slope/types';
 import { DEFAULT_BASEMAP_ID } from './basemaps';
 import type {
   BasemapId,
+  Basemap3dQualityId,
   ContourIntervalSetting,
   SlopeScale,
   SlopeScaleSetting,
@@ -69,6 +70,7 @@ export type ControlPanelWindPersistedState = Pick<
 export interface ControlPanelPersistedState {
   sectionsOpen: ControlPanelSectionsOpenState;
   basemapId: BasemapId;
+  basemap3dQuality: Basemap3dQualityId;
   toggles: {
     labelsEnabled: boolean;
     contourLinesEnabled: boolean;
@@ -108,6 +110,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
     basemapId: DEFAULT_BASEMAP_ID,
+    basemap3dQuality: 'slow-040',
     toggles: {
       labelsEnabled: false,
       contourLinesEnabled: false,

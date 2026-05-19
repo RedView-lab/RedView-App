@@ -2,6 +2,11 @@ import type { AppTranslationPair } from '../types';
 
 export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Fonds de carte', en: 'Basemaps' },
+  { fr: 'Standard (clair)', en: 'Standard (light)' },
+  { fr: 'Standard (sombre)', en: 'Standard (dark)' },
+  { fr: 'Satellite', en: 'Satellite' },
+  { fr: 'Qualité 3D', en: '3D quality' },
+  { fr: '0.40 m (Lent)', en: '0.40 m (Slow)' },
   { fr: 'Étiquettes', en: 'Labels' },
   { fr: 'Courbes de niveau', en: 'Contour lines' },
   { fr: 'Disponible uniquement avec le fond Topographique.', en: 'Available only with the Topographic basemap.' },

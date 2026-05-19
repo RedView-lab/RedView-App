@@ -28,6 +28,18 @@ export interface Basemap {
   active?: boolean;
 }
 
+export type Basemap3dQualityId = 'slow-040' | string;
+
+export interface Basemap3dQualityOption {
+  value: Basemap3dQualityId;
+  label: string;
+}
+
+export interface Basemap3dQualityControl {
+  value: Basemap3dQualityId;
+  options: Basemap3dQualityOption[];
+}
+
 export interface LidarTile {
   id: string;
   /** e.g. "Tuile 1 (LIDAR) (2102mo) (2026 IGN)" */
@@ -215,6 +227,7 @@ export interface SunlightState {
 
 export interface ControlPanelState {
   basemaps: Basemap[];
+  basemap3dQuality: Basemap3dQualityControl;
   lidarTiles: LidarTile[];
   labels: { enabled: boolean; state: LabelsState };
   contourLines: ContourLinesState;
@@ -229,6 +242,7 @@ export interface ControlPanelState {
 
 export interface ControlPanelHandlers {
   onBasemapToggle?: (id: BasemapId) => void;
+  onBasemap3dQualityChange?: (value: Basemap3dQualityId) => void;
   onBasemapAdd?: () => void;
 
   onLidarTileToggle?: (id: string) => void;
