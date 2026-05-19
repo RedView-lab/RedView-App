@@ -129,19 +129,62 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
       .filter((status): status is OverlayStatusSnapshot => Boolean(status));
   }, [mapStatus, overlayStatuses]);
 
+  // IMPORTANT: keep these handler identities stable across renders. Several
+  // overlay hooks (useWind, useWeatherOverlay…) include the reporter/reload
+  // callbacks in their effect dependencies, so a fresh arrow function on
+  // every Dashboard render retriggers their main effects in a loop —
+  // aborting in-flight fetches and producing the "[wind] fetch start" spam
+  // / weather overlay stuck-at-28% symptom.
+  const handleWeatherOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('weather', status),
+    [setOverlayStatus],
+  );
+  const handleWindOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('wind', status),
+    [setOverlayStatus],
+  );
+  const handleShadowOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('shadow', status),
+    [setOverlayStatus],
+  );
+  const handleSlopeOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('slope', status),
+    [setOverlayStatus],
+  );
+  const handleAltitudeOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('altitude', status),
+    [setOverlayStatus],
+  );
+  const handleItineraryRouteStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('itinerary', status),
+    [setOverlayStatus],
+  );
+  const handleWeatherOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => setOverlayReloader('weather', reload),
+    [setOverlayReloader],
+  );
+  const handleWindOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => setOverlayReloader('wind', reload),
+    [setOverlayReloader],
+  );
+  const handleShadowOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => setOverlayReloader('shadow', reload),
+    [setOverlayReloader],
+  );
+
   return {
     visibleStatuses,
     handleOverlayReload,
     handleMapLoadStatusChange,
     handleMapReloadChange,
-    handleWeatherOverlayStatusChange: (status) => setOverlayStatus('weather', status),
-    handleWindOverlayStatusChange: (status) => setOverlayStatus('wind', status),
-    handleShadowOverlayStatusChange: (status) => setOverlayStatus('shadow', status),
-    handleSlopeOverlayStatusChange: (status) => setOverlayStatus('slope', status),
-    handleAltitudeOverlayStatusChange: (status) => setOverlayStatus('altitude', status),
-    handleItineraryRouteStatusChange: (status) => setOverlayStatus('itinerary', status),
-    handleWeatherOverlayReloadChange: (reload) => setOverlayReloader('weather', reload),
-    handleWindOverlayReloadChange: (reload) => setOverlayReloader('wind', reload),
-    handleShadowOverlayReloadChange: (reload) => setOverlayReloader('shadow', reload),
+    handleWeatherOverlayStatusChange,
+    handleWindOverlayStatusChange,
+    handleShadowOverlayStatusChange,
+    handleSlopeOverlayStatusChange,
+    handleAltitudeOverlayStatusChange,
+    handleItineraryRouteStatusChange,
+    handleWeatherOverlayReloadChange,
+    handleWindOverlayReloadChange,
+    handleShadowOverlayReloadChange,
   };
 }
