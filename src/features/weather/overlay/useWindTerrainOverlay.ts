@@ -3,7 +3,7 @@ import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
 import type { WindGridDefinition, WindPoint, WindTimeSelection } from '../types';
 import { computeWindGrid } from '../lib/wind-grid';
 import { fetchWindGridData } from '../lib/open-meteo';
-import { isWindProjectionSupported } from '../lib/windProjection';
+import { getWindOverlayProjection, isWindProjectionSupported } from '../lib/windProjection';
 import { getOverlayRenderSize } from './renderSize';
 import { windSelectionKey } from '../lib/windSelection';
 
@@ -232,9 +232,9 @@ export function useWindTerrainOverlay(
       }
     };
 
-    const projectionSupported = () => {
+    const projectionSupported = (boundsRef?: { west: number; east: number; south: number; north: number }) => {
       try {
-        return isWindProjectionSupported(map);
+        return isWindProjectionSupported(map, boundsRef);
       } catch {
         return false;
       }
@@ -303,7 +303,7 @@ export function useWindTerrainOverlay(
         return;
       }
       if (!canMutateStyle()) return;
-      if (!projectionSupported()) {
+      if (!projectionSupported(dataset.grid.bounds)) {
         clearOverlay();
         return;
       }
@@ -336,7 +336,10 @@ export function useWindTerrainOverlay(
     const refresh = async (reason: RefreshReason) => {
       if (!canMutateStyle()) return;
 
-      if (!projectionSupported()) {
+      // Note: don't reject on projection here — we don't have bounds yet.
+      // The dataset-aware guard inside renderFromData will reject if the
+      // computed grid bounds are unsafe for the current projection.
+      if (getWindOverlayProjection(map) === 'other') {
         clearOverlay();
         return;
       }
@@ -420,13 +423,13 @@ export function useWindTerrainOverlay(
     const onZoomEnd = () => scheduleRefresh('normal');
     const onStyleData = () => {
       if (!canMutateStyle()) return;
-      if (!projectionSupported()) {
+      if (getWindOverlayProjection(map) === 'other') {
         clearOverlay();
       }
     };
     const onStyleLoad = () => {
       if (!canMutateStyle()) return;
-      if (!projectionSupported()) {
+      if (getWindOverlayProjection(map) === 'other') {
         clearOverlay();
         return;
       }

@@ -203,12 +203,16 @@ function maxPointsForZoom(
       const hardCap = zoom <= 4.5 ? 49_152 : zoom <= 6.5 ? 32_768 : zoom <= 8.5 ? 12_288 : 4_096;
       return Math.min(hardCap, Math.max(Math.round(base * metricBoost), rainScreenBudget));
     }
-    const base = zoom <= 4.5 ? 6_144 : zoom <= 6.5 ? 4_096 : zoom <= 8.5 ? 2_560 : 1_536;
-    const hardCap = zoom <= 4.5 ? 12_288 : zoom <= 6.5 ? 8_192 : zoom <= 8.5 ? 5_120 : 3_072;
+    // Bumped non-rain forecast budgets so temperature / cloud cover /
+    // multi-metric stacks can actually fetch the denser grids that the
+    // detailProfile asks for. Previously the hard cap of 8 192 at z6.5
+    // throttled temperature back to ~24 km cells across France.
+    const base = zoom <= 4.5 ? 9_216 : zoom <= 6.5 ? 7_168 : zoom <= 8.5 ? 4_608 : 2_560;
+    const hardCap = zoom <= 4.5 ? 18_432 : zoom <= 6.5 ? 14_336 : zoom <= 8.5 ? 8_192 : 5_120;
     return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
   }
-  const base = zoom <= 4.5 ? 224 : zoom <= 6.5 ? 180 : 140;
-  const hardCap = zoom <= 4.5 ? 640 : zoom <= 6.5 ? 512 : 384;
+  const base = zoom <= 4.5 ? 320 : zoom <= 6.5 ? 256 : 200;
+  const hardCap = zoom <= 4.5 ? 896 : zoom <= 6.5 ? 720 : 512;
   return Math.min(hardCap, Math.max(Math.round(base * metricBoost), screenBudget));
 }
 
