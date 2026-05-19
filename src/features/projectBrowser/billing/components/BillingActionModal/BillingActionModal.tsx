@@ -141,7 +141,10 @@ type BillingActionModalProps = {
   onComplete: (completion: BillingModalCompletion) => Promise<void>;
 };
 
-type BillingActionFormProps = BillingActionModalProps;
+type BillingActionFormProps = BillingActionModalProps & {
+  selectedMethod: BillingPaymentMethod;
+  onSelectedMethodChange: (method: BillingPaymentMethod) => void;
+};
 
 function flagEmojiFromCode(code: string): string {
   return code
@@ -228,7 +231,13 @@ function RedViewWordmark() {
   );
 }
 
-function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps) {
+function BillingActionForm({
+  flow,
+  onClose,
+  onComplete,
+  selectedMethod,
+  onSelectedMethodChange,
+}: BillingActionFormProps) {
   const { t } = useAppI18n();
   const stripe = useStripe();
   const elements = useElements();
@@ -236,7 +245,6 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const [error, setError] = useState<string | null>(null);
   const paymentMethodLegendId = useId();
   const paymentPageTitleId = useId();
-  const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
   const [cardholderName, setCardholderName] = useState('');
   const [countryCode, setCountryCode] = useState<string>(DEFAULT_COUNTRY);
   const [consentAccepted, setConsentAccepted] = useState(false);
@@ -245,10 +253,6 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
   const selectedCountryOption =
     ACCOUNT_COUNTRY_OPTIONS.find((option) => option.value === countryCode) ?? ACCOUNT_COUNTRY_OPTIONS[0];
   const paymentMethodOrder = ['amazon_pay', 'card'];
-
-  useEffect(() => {
-    setSelectedMethod('card');
-  }, [flow.mode]);
 
   useEffect(() => {
     setConsentAccepted(false);
@@ -455,7 +459,7 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
                       key={method}
                       method={method}
                       selected={selectedMethod === method}
-                      onSelect={setSelectedMethod}
+                      onSelect={onSelectedMethodChange}
                     />
                   ))}
                 </div>
@@ -642,6 +646,11 @@ function BillingActionForm({ flow, onClose, onComplete }: BillingActionFormProps
 
 export function BillingActionModal({ flow, onClose, onComplete }: BillingActionModalProps) {
   const { t } = useAppI18n();
+  const [selectedMethod, setSelectedMethod] = useState<BillingPaymentMethod>('card');
+
+  useEffect(() => {
+    setSelectedMethod('card');
+  }, [flow.clientSecret, flow.mode]);
 
   useEffect(() => {
     logBillingUi('billing-page-render', {
@@ -700,13 +709,26 @@ export function BillingActionModal({ flow, onClose, onComplete }: BillingActionM
 
   const billingPage = (
     <Elements
+      key={`${flow.mode}:${flow.clientSecret}:${selectedMethod}`}
       stripe={stripePromise}
-      options={{
-        clientSecret: flow.clientSecret,
-        appearance,
-      }}
+      options={
+        selectedMethod === 'card'
+          ? {
+              appearance,
+            }
+          : {
+              clientSecret: flow.clientSecret,
+              appearance,
+            }
+      }
     >
-      <BillingActionForm flow={flow} onClose={onClose} onComplete={onComplete} />
+      <BillingActionForm
+        flow={flow}
+        onClose={onClose}
+        onComplete={onComplete}
+        selectedMethod={selectedMethod}
+        onSelectedMethodChange={setSelectedMethod}
+      />
     </Elements>
   );
 
