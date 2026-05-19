@@ -26,8 +26,8 @@
   max-height: 100%;
   padding: 12px;
   background: var(--rvi-bg);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 
   /* DO NOT add `transform`, `will-change`, `filter` or `isolation` here.
      Mapbox already promotes its WebGL canvas to its own GPU layer; if this
