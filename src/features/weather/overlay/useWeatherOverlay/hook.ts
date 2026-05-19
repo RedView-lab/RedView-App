@@ -309,6 +309,40 @@ export function useWeatherOverlay(
       publishStatus(null);
     };
 
+    // When the overlay is fully disabled we don't just hide the layers — we
+      // tear down the image sources too. Leftover image sources keep paying
+      // GPU/style-update cost on every moveend/zoomend (especially on globe
+      // projection) and were a contributor to the "map devient megalent après
+      // utilisation des overlays" symptom.
+    const removeAll = () => {
+      abortRef.current?.abort();
+      generationRef.current += 1;
+      if (debounceRef.current) {
+        window.clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      clearStyleRecoveryTimers();
+      for (const key of SUPPORTED_KEYS) {
+        try {
+          if (map.getLayer(layerId(key))) map.removeLayer(layerId(key));
+          if (map.getSource(sourceId(key))) map.removeSource(sourceId(key));
+        } catch {
+          /* no-op */
+        }
+      }
+      for (const rendered of Object.values(renderedRef.current)) {
+        if (rendered?.url.startsWith('blob:')) {
+          window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
+        }
+      }
+      renderedRef.current = {};
+      dataRef.current = null;
+      lastViewportRef.current = null;
+      lastFetchTimeRef.current = 0;
+      styleFallbackUsableRef.current = false;
+      publishStatus(null);
+    };
+
     const ensureLayer = (
       key: WeatherOverlayMetric,
       mode: WeatherOverlayMode,
@@ -450,6 +484,16 @@ export function useWeatherOverlay(
     };
 
     const refresh = async (reason: RefreshReason) => {
+      // Fast bail when overlay is disabled or empty: avoids spammy
+      // style-fallback logs and unnecessary canMutateStyle/promote work
+      // on every moveend/zoomend after the user turns weather off.
+      const earlyState = stateRef.current;
+      const earlyActive = activeRenderableLayers(earlyState);
+      if (!earlyState.enabled || earlyActive.length === 0) {
+        hideAll();
+        return;
+      }
+
       if (!canMutateStyle()) {
         armStyleRecovery(reason, 'refresh-precheck');
         return;
@@ -594,6 +638,17 @@ export function useWeatherOverlay(
     };
 
     const scheduleRefresh = (reason: RefreshReason) => {
+      // Don't even debounce work when overlay is disabled — keeps moveend /
+      // zoomend cheap so the base map regains its tile budget after the user
+      // turns weather off.
+      const currentState = stateRef.current;
+      if (!currentState.enabled || activeRenderableLayers(currentState).length === 0) {
+        if (debounceRef.current) {
+          window.clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
+        return;
+      }
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       if (reason !== 'normal') {
         debounceRef.current = null;
@@ -643,7 +698,7 @@ export function useWeatherOverlay(
       scheduleRefresh('force');
     };
 
-    hideAllRef.current = hideAll;
+    hideAllRef.current = removeAll;
     scheduleRefreshRef.current = scheduleRefresh;
 
     map.on('moveend', onMoveEnd);

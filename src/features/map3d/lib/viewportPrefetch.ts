@@ -189,6 +189,26 @@ export function installViewportPrefetch(
   // treat it as a discontinuity and abort the previous batch.
   let lastCentreTile: { x: number; y: number; z: number } | null = null;
 
+  // ── Velocity-biased predictive prefetch ────────────────────────────────
+  // Inspired by Strava's "tiles arrive before you look at them" pan UX.
+  // Between two consecutive ambient cycles we compute the centre-tile
+  // delta (dx,dy) — when the user is actively panning, this gives a
+  // motion direction vector we can extrapolate into the future. We then
+  // queue up to PREDICTIVE_LEAD_TILES tiles in the dominant direction
+  // at the current zoom (and the most useful z+1 children) so they
+  // start fetching BEFORE the user pans onto them.
+  //
+  // Guarded against:
+  //   * Teleports — `dz>=2 || |dx|+|dy|>TELEPORT_TILE_DELTA` resets the
+  //     vector so we don't shoot prefetches at a stale heading.
+  //   * Stationary user — `|dx|+|dy|<1` skips the predictive add (zero
+  //     vector would just duplicate the centre tile).
+  //   * Diagonal pans — we extrapolate along the dominant axis only;
+  //     this keeps the wedge tight and avoids saturating the prefetch
+  //     budget with 4-quadrant fan-out.
+  const PREDICTIVE_LEAD_TILES = 3;
+  let lastVelocityTile: { dx: number; dy: number } | null = null;
+
   // Project a screen pixel back to (lng, lat). Wrapped in try/catch because
   // Mapbox `unproject` can throw during style transitions (style not ready
   // yet, transform out of date). On failure we just fall back to centre.
@@ -388,15 +408,28 @@ export function installViewportPrefetch(
     // a now-irrelevant region. Abort it so its in-flight streams stop
     // competing with the new destination.
     const centreTile = lngLatToTile(anchor.lng, anchor.lat, z);
-    if (lastCentreTile && activeAbort) {
-      const dx = Math.abs(centreTile.x - lastCentreTile.x);
-      const dy = Math.abs(centreTile.y - lastCentreTile.y);
+    let velocity: { dx: number; dy: number } | null = null;
+    if (lastCentreTile) {
+      const dxSigned = centreTile.x - lastCentreTile.x;
+      const dySigned = centreTile.y - lastCentreTile.y;
+      const dx = Math.abs(dxSigned);
+      const dy = Math.abs(dySigned);
       const dz = Math.abs(z - lastCentreTile.z);
       if (dz >= 2 || dx + dy > TELEPORT_TILE_DELTA) {
-        activeAbort.abort();
-        activeAbort = null;
+        if (activeAbort) {
+          activeAbort.abort();
+          activeAbort = null;
+        }
+        lastVelocityTile = null; // teleport invalidates motion vector
+      } else if (lastCentreTile.z === z && (dx + dy) >= 1) {
+        velocity = { dx: dxSigned, dy: dySigned };
       }
     }
+    // Smooth one cycle of memory: if the user briefly pauses between
+    // pan strokes we keep the prior heading active rather than dropping
+    // back to symmetric prefetch.
+    if (!velocity && lastVelocityTile) velocity = lastVelocityTile;
+    lastVelocityTile = velocity;
     lastCentreTile = { x: centreTile.x, y: centreTile.y, z };
 
     const sig = `${z}:${xMin},${yMin},${xMax},${yMax}:p${tilted ? 1 : 0}:a${anchor.lng.toFixed(3)},${anchor.lat.toFixed(3)}`;
@@ -415,6 +448,40 @@ export function installViewportPrefetch(
       slopeOn,
       altitudeOn,
     );
+
+    // ── Velocity-biased predictive wedge ────────────────────────────────
+    // Extrapolate the pan direction one ambient cycle into the future.
+    // We push tiles along the DOMINANT axis only (cheap, tight wedge);
+    // the symmetric 1-tile ring already covers diagonal slop.
+    //
+    // Inserted at the END of `urls`: the URL cap inside dispatchBatch
+    // (PREFETCH_MAX_PER_CYCLE=48) will drop predictive tiles first if
+    // the visible bbox is already large enough to fill the budget —
+    // exactly what we want. Predictive prefetch is opportunistic, not
+    // a contract.
+    if (velocity) {
+      const cap = (1 << z) - 1;
+      const dominantX = Math.abs(velocity.dx) >= Math.abs(velocity.dy);
+      const stepX = dominantX ? Math.sign(velocity.dx) : 0;
+      const stepY = dominantX ? 0 : Math.sign(velocity.dy);
+      if (stepX !== 0 || stepY !== 0) {
+        for (let i = 1; i <= PREDICTIVE_LEAD_TILES; i++) {
+          // Walk the leading edge of the visible bbox in motion direction.
+          // (xMin..xMax)/(yMin..yMax) is the current visible-tile bbox;
+          // adding i*step lands us i tiles INTO the unseen area.
+          const lx0 = stepX > 0 ? xMax + i : (stepX < 0 ? xMin - i : xMin);
+          const lx1 = stepX !== 0 ? lx0 : xMax;
+          const ly0 = stepY > 0 ? yMax + i : (stepY < 0 ? yMin - i : yMin);
+          const ly1 = stepY !== 0 ? ly0 : yMax;
+          for (let lx = Math.max(0, Math.min(cap, lx0)); lx <= Math.max(0, Math.min(cap, lx1)); lx++) {
+            for (let ly = Math.max(0, Math.min(cap, ly0)); ly <= Math.max(0, Math.min(cap, ly1)); ly++) {
+              urls.push(`/dem-tiles/${z}/${lx}/${ly}?pf=1`);
+              if (orthoOn && z >= 11) urls.push(`/ortho-tiles/${z}/${lx}/${ly}?pf=1`);
+            }
+          }
+        }
+      }
+    }
 
     if (urls.length === 0) return;
 
@@ -513,6 +580,10 @@ export function installViewportPrefetch(
     lastSignature = '';
     lastFiredAt = 0;
     lastCentreTile = { x: c.x, y: c.y, z };
+    // A search-bar / programmatic jump invalidates any pan-velocity
+    // heading the user had been building up — the destination is a
+    // discontinuity.
+    lastVelocityTile = null;
 
     // Destination-prewarm runs at HIGH priority. We deliberately do NOT
     // store this controller as `activeAbort`: we want it to run to
@@ -566,6 +637,9 @@ export function installViewportPrefetch(
     // the new viewport (otherwise the cached signature could short-circuit
     // identical-bbox refresh).
     lastSignature = '';
+    // A user gesture restarts the heading from scratch — the old vector
+    // was built during the prior pan and could point in any direction.
+    lastVelocityTile = null;
     // Clear any scheduled but not-yet-fired ambient batch. The post-idle
     // delay was set during the PREVIOUS idle for the OLD viewport; firing
     // it now would just enqueue tiles we no longer want.

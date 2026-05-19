@@ -89,11 +89,17 @@ export function attachListeners(ctx: Ctx): void {
     // Anti-flat: idle is the cheapest reliable signal that terrain
     // detach happened silently. If the DEM source exists but terrain
     // isn't bound, re-attach immediately.
+    //
+    // Use `isManagedTerrainActive()` (binding check) here, not
+    // `isManagedTerrainRenderable()` — the renderable probe returns
+    // false over water / at globe-world zoom even when terrain is
+    // healthy, which previously triggered a re-attach loop that
+    // starved basemap tile loading.
     if (fns.canMutateStyle()) {
       const managedSourceId = fns.getManagedTerrainSourceId();
-      if (managedSourceId && !fns.isManagedTerrainRenderable()) {
+      if (managedSourceId && !fns.isManagedTerrainActive()) {
         console.warn(
-          `[map3d] idle: terrain detached or non-renderable from ${managedSourceId}; re-attaching`,
+          `[map3d] idle: terrain detached from ${managedSourceId}; re-attaching`,
         );
         if (!repairManagedTerrain() && managedSourceId === unifiedDEMSource.id) {
         // Re-attach refused — escalate to forceful rebuild via the
@@ -139,12 +145,20 @@ export function attachListeners(ctx: Ctx): void {
   // Mapbox GL v3 occasionally drops terrain silently during zoom
   // transitions (when the tile pyramid crosses z-level boundaries).
   // Re-attach immediately so the user never sees a flat frame.
+  //
+  // Important: only trigger the noisy re-attach path when terrain is
+  // actually unbound (`isManagedTerrainActive()` false). The renderable
+  // check also returns false when the camera is centered over water or
+  // on the globe at world zoom where `queryTerrainElevation` returns
+  // null at every sample point — those are NOT real detachments and
+  // were causing console-spam loops + repeated style mutations that
+  // starved the basemap of its tile budget.
   const onZoomEndTerrainCheck = () => {
     if (!st.demTrackingEnabled || isCancelled()) return;
     if (!fns.canMutateStyle()) return;
     const managedSourceId = fns.getManagedTerrainSourceId();
-    if (managedSourceId && !fns.isManagedTerrainRenderable()) {
-      console.warn(`[map3d] zoomend: terrain detached or non-renderable from ${managedSourceId}; re-attaching`);
+    if (managedSourceId && !fns.isManagedTerrainActive()) {
+      console.warn(`[map3d] zoomend: terrain detached from ${managedSourceId}; re-attaching`);
       repairManagedTerrain();
     }
     if (managedSourceId === unifiedDEMSource.id) {

@@ -126,7 +126,17 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
     const demKey = buildDemCacheKey(z, x, y, demProfile);
-    let demResponse = await demCache.match(demKey);
+    // Hot-tier shortcut: skip the ~5-25 ms CacheStorage round-trip when
+    // the DEM blob is still in the in-memory LRU. Slope is fired right
+    // after the DEM lands (same idle cycle), so the hit ratio is high
+    // during interactive use.
+    let demResponse = null;
+    const demHotEntry = (typeof demHotGet === 'function') ? demHotGet(demKey.url) : null;
+    if (demHotEntry) {
+      demResponse = demHotResponse(demHotEntry);
+    } else {
+      demResponse = await demCache.match(demKey);
+    }
     if (!demResponse || demResponse.status !== 200) {
       demResponse = await handleDemRequest(
         buildSlopeDemRequest(z, x, y, demProfile, SLOPE_REQUEST_PURPOSE_VISIBLE),

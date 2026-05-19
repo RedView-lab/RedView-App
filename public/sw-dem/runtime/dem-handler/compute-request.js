@@ -20,14 +20,43 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   const t0 = performance.now();
   const requestPurpose = resolveDemRequestPurposeFromRequest(_request);
   const inLiDARRiskRegion = isExpertFallbackRiskTile(z, x, y);
-  const cache = await caches.open(CACHE_NAME);
   const cacheKey = buildDemCacheKey(z, x, y, demProfile);
+  const hotKey = cacheKey.url;
+
+  // 0. Hot in-memory tier — see DEM_HOT_CACHE in runtime/lifecycle.js.
+  // Returns a fresh Response in <1 ms, sparing the SW thread an entire
+  // CacheStorage round-trip (open + match ≈ 5-25 ms each) for the very
+  // common case of re-displaying tiles the user just panned past.
+  // Hits never need negative-cache or France-classification lookups
+  // because the hot entry was only written by `finalize()` for a
+  // confirmed pipeline success.
+  const hot = demHotGet(hotKey);
+  if (hot) return demHotResponse(hot);
+
+  // 1+2. CacheStorage tiers — open BOTH caches and look up BOTH keys in
+  // parallel. Sequential awaits used to add up to ~30-50 ms per tile on
+  // disk-backed CacheStorage; for a 100-tile pan that was 3-5 s of pure
+  // I/O latency on the SW thread, even when every lookup ultimately
+  // missed (cold session) or every one hit (warm re-display).
+  const [cache, negCache] = await Promise.all([
+    caches.open(CACHE_NAME),
+    caches.open(NEGATIVE_CACHE_NAME),
+  ]);
+  const [cached, negCached] = await Promise.all([
+    cache.match(cacheKey),
+    negCache.match(cacheKey),
+  ]);
 
   // 1. Positive cache
-  const cached = await cache.match(cacheKey);
   if (cached) {
     const ttlMs = parseInt(cached.headers.get('x-cache-ttl-ms') || '0', 10);
-    if (!ttlMs) return cached;
+    if (!ttlMs) {
+      // Promote to hot tier so the next request skips CacheStorage.
+      // We clone() because a Response body is single-shot — returning the
+      // original lets the caller read it; the clone goes to the hot tier.
+      try { demHotPut(hotKey, await cached.clone().blob(), Array.from(cached.headers.entries())); } catch { /* ignore */ }
+      return cached;
+    }
 
     const cachedAt = parseInt(cached.headers.get('x-cached-at') || '0', 10);
     if (cachedAt > 0 && (Date.now() - cachedAt) < ttlMs) return cached;
@@ -36,8 +65,6 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
   }
 
   // 2. Negative cache (TTL-bounded)
-  const negCache = await caches.open(NEGATIVE_CACHE_NAME);
-  const negCached = await negCache.match(cacheKey);
   if (negCached) {
     const age = parseInt(negCached.headers.get('x-cached-at') || '0', 10);
     const ttl = parseInt(negCached.headers.get('x-neg-ttl') || String(NEGATIVE_TTL_PIPELINE), 10);

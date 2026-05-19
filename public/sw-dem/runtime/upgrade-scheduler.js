@@ -21,6 +21,24 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
       || demSource.startsWith('overzoom')));
   const response = buildDemResponse(pngBlob, demSource, shortCache, healthStatus);
   cache.put(cacheKey, response.clone());
+
+  // Promote freshly built tile into the in-memory hot tier so the next
+  // request — typically a few hundred ms later, when Mapbox re-paints the
+  // same tile under a different camera angle, or when slope/altitude
+  // handlers fan out to the 4 neighbour DEMs — returns in <1 ms instead
+  // of paying for another CacheStorage round-trip. Short-cache tiles are
+  // intentionally skipped (they're throwaway placeholders waiting for
+  // the IGN upgrade to land, and we WANT the next request to hit
+  // CacheStorage so its TTL check can invalidate them on time).
+  if (!shortCache) {
+    try {
+      demHotPut(
+        cacheKey.url,
+        pngBlob,
+        Array.from(response.headers.entries()),
+      );
+    } catch { /* ignore */ }
+  }
   if (DEBUG) {
     const dt = (performance.now() - t0).toFixed(0);
     console.log(`[sw-dem] ${demSource} ${z}/${x}/${y} ${dt}ms`);
@@ -122,6 +140,18 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       if (!upgraded?.blob) return;
 
       await cache.put(cacheKey, buildDemResponse(upgraded.blob, upgraded.source + '+upgrade'));
+      // Refresh the hot tier so subsequent requests see the upgraded blob
+      // immediately without going through CacheStorage. Without this, the
+      // older (composite/aws/overzoom) blob would stay hot until evicted
+      // by LRU pressure, silently delaying the upgrade's visual effect.
+      try {
+        const upgradedResp = buildDemResponse(upgraded.blob, upgraded.source + '+upgrade');
+        demHotPut(
+          cacheKey.url,
+          upgraded.blob,
+          Array.from(upgradedResp.headers.entries()),
+        );
+      } catch { /* ignore */ }
       notifyDemTileCacheUpdated(z, x, y, upgraded.source);
       if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgraded.source}`);
     } catch (e) {

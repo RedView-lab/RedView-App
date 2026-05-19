@@ -142,7 +142,20 @@ const IGN_CACHE_MAX = 500;
 // tiles × 4 WGS84G sub-tiles). With concurrency=20 the 60-deep queue stretched
 // the effective fetch time past the 1.5 s soft deadline → tiles fell back to
 // overzoomed Mapbox (flat 30 m) even though IGN was serving 200s.
-const IGN_CONCURRENCY = 40;
+//
+// May 19 perf pass: CPU-adaptive. Geoplateforme's HTTP/2 server typically
+// advertises SETTINGS_MAX_CONCURRENT_STREAMS in the 100-128 range, and the
+// browser will keep all of them open as long as we have the SW work to
+// feed them. On 8+ core machines the SW thread can comfortably issue
+// 56-64 concurrent fetches without saturating the event loop. On low-end
+// devices we keep the historical 40 to avoid scheduling thrash.
+const IGN_CONCURRENCY = (() => {
+  const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
+  if (!Number.isFinite(hc) || hc <= 4) return 40;
+  if (hc >= 12) return 64;
+  if (hc >= 8) return 56;
+  return 48;
+})();
 // Sized for 60° pitch at z14 across a widescreen viewport — burst can exceed
 // 300 tile requests in < 500 ms. Below this we start pruning, which is fine
 // but degrades the pan experience.
@@ -151,7 +164,18 @@ const IGN_QUEUE_MAX = 600;
 // Separate ortho concurrency — prevents ortho from starving DEM and vice versa.
 // Bumped from 10 → 16: geopf HTTP/2 comfortably multiplexes 20+ streams, and
 // at 10 the queue head-of-line blocked the viewport during fast dezoom.
-const ORTHO_CONCURRENCY = 16;
+//
+// May 19: CPU-adaptive (same rationale as IGN_CONCURRENCY above). On 8+
+// core machines the ortho pipeline is the long pole during fast pan with
+// satellite mode; bumping to 24 closes the gap with the DEM pipeline so
+// the two land together instead of ortho ghosting in 200 ms late.
+const ORTHO_CONCURRENCY = (() => {
+  const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
+  if (!Number.isFinite(hc) || hc <= 4) return 16;
+  if (hc >= 12) return 28;
+  if (hc >= 8) return 24;
+  return 20;
+})();
 const ORTHO_QUEUE_MAX = 400;
 
 // IGN WMTS fetch timeout (ms). Geoplateforme can spike to 10+ s during peak

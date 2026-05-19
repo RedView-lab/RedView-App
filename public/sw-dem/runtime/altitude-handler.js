@@ -28,7 +28,16 @@ async function handleAltitudeRequest(z, x, y) {
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
     const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
-    let demResponse = await demCache.match(demKey);
+    // Hot-tier shortcut — see slope-handler for rationale. Altitude is
+    // typically activated alongside slope, so the DEM blob is freshly
+    // hot from the slope path.
+    let demResponse = null;
+    const demHotEntry = (typeof demHotGet === 'function') ? demHotGet(demKey.url) : null;
+    if (demHotEntry) {
+      demResponse = demHotResponse(demHotEntry);
+    } else {
+      demResponse = await demCache.match(demKey);
+    }
     if (!demResponse || demResponse.status !== 200) {
       demResponse = await handleDemRequest(demKey, z, x, y);
     }

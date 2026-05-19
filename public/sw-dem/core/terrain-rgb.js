@@ -130,8 +130,34 @@ async function encodeTerrainRGBPng(elevations) {
 }
 
 // ── Decode Terrain-RGB PNG → Float32 elevations ───────────────────────
+//
+// Memoized by Blob identity via a WeakMap. The same Blob is regularly
+// decoded multiple times in a single tick:
+//   * slope handler decodes its DEM blob, then altitude handler decodes
+//     the SAME blob a few ms later when both overlays are on
+//   * composite paths decode their Mapbox base blob, then build-tile
+//     decodes the same Mapbox blob again as the AWS prefill source
+//   * tryParentOverzoom decodes a parent blob to check flat-line stats
+//     and then overzoomDemTile decodes the same parent blob again
+// Each decode is ~8-20 ms (createImageBitmap + getImageData + Float32
+// loop for a 256² tile, more for 512² Mapbox). On a 100-tile zoom-in
+// with slope+altitude both on, that's ~2-4 s of SW-thread CPU saved.
+//
+// WeakMap means the cache evicts itself the moment the underlying blob
+// is GC'd — no manual budget, no leaks. Returns a SHARED Float32Array,
+// so callers must NOT mutate it in place; every reader I audited only
+// reads (slope/altitude/composite/overzoom all sample, never write).
+const DECODED_TERRAIN_RGB_CACHE = new WeakMap();
 
 async function decodeTerrainRGBBlob(blob) {
+  const cached = DECODED_TERRAIN_RGB_CACHE.get(blob);
+  if (cached) return cached;
+  const elevations = await decodeTerrainRGBBlobUncached(blob);
+  try { DECODED_TERRAIN_RGB_CACHE.set(blob, elevations); } catch { /* ignore */ }
+  return elevations;
+}
+
+async function decodeTerrainRGBBlobUncached(blob) {
   const img = await createImageBitmap(blob, {
     colorSpaceConversion: 'none',
     premultiplyAlpha: 'none',

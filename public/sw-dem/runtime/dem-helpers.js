@@ -118,7 +118,19 @@ async function tryParentOverzoom(cache, z, x, y, depth, demProfile = 'default') 
     const pY = y >> (z - pZ);
     const parentKey = buildDemCacheKey(pZ, pX, pY, demProfile);
 
-    let parentResp = await cache.match(parentKey);
+    // Fast path: in-memory hot tier (see DEM_HOT_CACHE in lifecycle.js).
+    // Overzoom is in the hot path for every miss inside FR/CH/ES/NO at
+    // z>14 and on every short-TTL refresh; skipping CacheStorage here
+    // for already-warm parents removes another 5-25 ms × parent-depth
+    // (up to 4) from the slow path of each held viewport tile.
+    let parentResp = null;
+    const parentHotKey = parentKey.url;
+    const parentHot = (typeof demHotGet === 'function') ? demHotGet(parentHotKey) : null;
+    if (parentHot) {
+      parentResp = demHotResponse(parentHot);
+    } else {
+      parentResp = await cache.match(parentKey);
+    }
     if (!parentResp || parentResp.status !== 200) {
       parentResp = await handleDemRequest(parentKey, pZ, pX, pY, depth + 1, demProfile);
     }

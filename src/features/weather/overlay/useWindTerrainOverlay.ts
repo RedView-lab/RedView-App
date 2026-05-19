@@ -407,6 +407,17 @@ export function useWindTerrainOverlay(
     };
 
     const scheduleRefresh = (reason: RefreshReason) => {
+      // Skip all work when overlay is disabled — avoids paying fetch /
+      // canvas / style-mutation cost on every moveend after wind is
+      // turned off. Pairs with the disable-effect below that fully
+      // removes the source/layer.
+      if (!stateRef.current.enabled) {
+        if (debounceRef.current) {
+          window.clearTimeout(debounceRef.current);
+          debounceRef.current = null;
+        }
+        return;
+      }
       if (debounceRef.current) window.clearTimeout(debounceRef.current);
       if (reason !== 'normal') {
         debounceRef.current = null;
@@ -465,8 +476,13 @@ export function useWindTerrainOverlay(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!enabled) {
+      // Full teardown when overlay is disabled. Just hiding the layer left
+      // a stale image source attached, which on globe projection / heavy
+      // basemap switches kept paying styledata + GPU cost on every
+      // map gesture ("carte megalent après avoir utilisé les overlays").
       try {
-        if (map.getLayer(LAYER_ID)) map.setLayoutProperty(LAYER_ID, 'visibility', 'none');
+        if (map.getLayer(LAYER_ID)) map.removeLayer(LAYER_ID);
+        if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       } catch {
         /* no-op */
       }
