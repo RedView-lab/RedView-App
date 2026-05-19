@@ -3,15 +3,17 @@ import { useAppI18n } from '@/shared/i18n';
 
 type ProjectBrowserOverlayDemoRailProps = {
   offersUrl: string;
+  showUpsell: boolean;
 };
 
 export function ProjectBrowserOverlayDemoRail({
   offersUrl,
+  showUpsell,
 }: ProjectBrowserOverlayDemoRailProps) {
   const { t } = useAppI18n();
 
   return (
-    <aside className="rvpb-demo-rail" aria-label={t('Informations du plan Demo')}>
+    <aside className="rvpb-demo-rail" aria-label={t('Informations du compte RedView')}>
       <div className="rvpb-demo-rail__brand" aria-label="RedView">
         <img
           className="rvpb-demo-rail__brand-image"
@@ -23,17 +25,19 @@ export function ProjectBrowserOverlayDemoRail({
       </div>
 
       <div className="rvpb-demo-rail__panel-wrap">
-        <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
-          <p>
-            {t(
-              'Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:',
-            )}
-          </p>
-          <a className="rvpb-demo-upsell__cta" href={offersUrl}>
-            <SvgV2Icon name="feedback-play.svg" size={20} />
-            <span>{t('Découvrir les offres')}</span>
-          </a>
-        </aside>
+        {showUpsell ? (
+          <aside className="rvpb-demo-upsell" aria-label={t('Découvrir les offres payantes')}>
+            <p>
+              {t(
+                'Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:',
+              )}
+            </p>
+            <a className="rvpb-demo-upsell__cta" href={offersUrl}>
+              <SvgV2Icon name="feedback-play.svg" size={20} />
+              <span>{t('Découvrir les offres')}</span>
+            </a>
+          </aside>
+        ) : null}
       </div>
     </aside>
   );

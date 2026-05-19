@@ -26,10 +26,8 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
       aria-modal="true"
       aria-label={t('Sélecteur de projet principal')}
     >
-      <div
-        className={`rvpb-shell${state.activeTab === 'account' ? ' is-account-tab' : ''}${state.showDemoRail ? ' has-demo-rail' : ''}`}
-      >
-        {state.showDemoRail ? <ProjectBrowserOverlayDemoRail offersUrl={state.offersUrl} /> : null}
+      <div className={`rvpb-shell has-demo-rail${state.activeTab === 'account' ? ' is-account-tab' : ''}`}>
+        <ProjectBrowserOverlayDemoRail offersUrl={state.offersUrl} showUpsell={state.showDemoRail} />
 
         <div className="rvpb-shell__main">
           <ProjectBrowserOverlayHeader
