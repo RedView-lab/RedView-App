@@ -71,6 +71,13 @@ export function attachDemSource(ctx: Ctx): void {
   };
 
   fns.applyUnifiedTerrain = () => {
+    // Honor the user's 3D quality choice: when fast-30m is active, every
+    // caller (bootstrap, settle-verify, reload, idle handlers, …) must
+    // route to the AWS fast source instead of re-binding the unified HD
+    // DEM that we just swapped away from.
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      return fns.applyFastDemTerrain();
+    }
     if (!map.getSource(unifiedDEMSource.id)) return false;
     try {
       if (!terrainRef.current) {
@@ -377,6 +384,12 @@ export function attachDemSource(ctx: Ctx): void {
   // pipeline, no re-encoding, no overzoom logic. ~30 m global terrain.
   fns.attachAwsFallbackTerrain = () => {
     if (!canMutateTerrainStyle()) return;
+    // Honor user's 3D quality choice: in fast-30m mode the fast source
+    // owns the terrain binding; don't let the fallback path override it.
+    if (getActiveDem3dQuality() === 'fast-30m') {
+      fns.applyFastDemTerrain();
+      return;
+    }
     // Don't attach if the unified-dem source is already present
     // (SW path took over).
     if (map.getSource(unifiedDEMSource.id)) return;
@@ -474,6 +487,15 @@ export function attachDemSource(ctx: Ctx): void {
       // unified-dem or aws-fallback-dem) with a fresh one pointing at
       // the fast source. TerrainManager.init() issues setTerrain which
       // Mapbox treats as a hot-swap — no flat frame in between.
+      let activeTerrainSource: string | null = null;
+      try { activeTerrainSource = map.getTerrain()?.source ?? null; } catch { /* best-effort */ }
+      const alreadyBound = activeTerrainSource === awsFastDEMSource.id;
+      if (alreadyBound && terrainRef.current) {
+        // Idempotent re-call — just ensure setTerrain is re-issued in
+        // case Mapbox silently detached it.
+        terrainRef.current.init();
+        return true;
+      }
       if (terrainRef.current) {
         try { terrainRef.current.destroy(); } catch { /* best-effort */ }
       }
