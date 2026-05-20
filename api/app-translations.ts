@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import { createAppTranslationBundle, resolveAppLocale } from '../src/shared/i18n/config';
+import { createAppTranslationBundle, resolveAppLocale } from '../src/shared/i18n/config/index';
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') {
