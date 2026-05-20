@@ -34,9 +34,16 @@
 // A cold viewport can ask each elevation tile as: own DEM for its slope tile
 // plus north/east/south/west neighbour for four adjacent slope tiles. Without
 // an in-memory decoded cache, that is up to 5 Terrain-RGB decodes per DEM tile
-// on top of CacheStorage blob reads. Keep a small LRU of Float32Array grids in
-// the service worker so visible-tile slope builds share decoded elevations.
-const SLOPE_DECODED_DEM_CACHE_MAX = 160;
+// on top of CacheStorage blob reads. Keep an LRU of Float32Array grids in the
+// service worker so visible-tile slope builds share decoded elevations.
+//
+// Size tuning: a cold viewport at z14 in mountainous terrain can hit
+// ~90 own tiles + ~120 unique neighbours ≈ 210 distinct DEM decodes. At 160
+// the LRU was already evicting before the harmonize/border passes consumed
+// neighbour elevations, which forced a re-decode on the seam-heal pass.
+// 384 covers two full viewports + neighbours and keeps memory under ~96 MB
+// (384 × 256 × 256 × 4 bytes).
+const SLOPE_DECODED_DEM_CACHE_MAX = 384;
 const slopeDecodedDemCache = new Map();
 const slopeDecodedDemInflight = new Map();
 let slopeDecodeCacheGeneration = 0;
@@ -456,6 +463,187 @@ function downsampleSlopes(slopes, factor) {
 // real artefact (16-bit RG bilinear glitch). With single-channel sqrt-gamma
 // encoding the GPU samples the slope ramp cleanly and shows the raw 1 m
 // terrain signal as-is — no flou needed.
+// Fused Horn + sqrt-gamma encode in a single pass directly into the RGBA
+// buffer. The previous pipeline allocated a Float32Array(S*S) for `slopes`,
+// wrote it once in `computeSlopesFromPadded`, then read it back in
+// `encodeSlopePng` — that's a full ~262 KB allocation plus an extra memory
+// pass on every slope tile. The fused loop drops both costs and lets the
+// JIT keep the Horn intermediates in registers between compute and encode.
+//
+// Border harmonization is kept as a separate step on the seam pixels only
+// because it needs cross-tile gradient samples; it then re-encodes just
+// those 4 × S pixels into the RGBA buffer. Border-fallback clamping (no
+// neighbour DEM available) is also handled inline.
+function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours) {
+  const S = DEM_TILE_SIZE;
+  const P = S + 2;
+  const n = S * S;
+  const rgba = new Uint8Array(n * 4);
+  const inv8x = 1 / (8 * cellSizeX);
+  const inv8y = 1 / (8 * cellSizeY);
+  // encoded = round(sqrt(deg/90) * 255) with deg = atan(g) * 180/π
+  //         = round(sqrt(atan(g) * (2/π)) * 255)
+  const ENC_K = 255 / Math.sqrt(Math.PI / 2); // factor outside sqrt
+
+  for (let row = 0; row < S; row++) {
+    const r0 = row * P;
+    const r1 = (row + 1) * P;
+    const r2 = (row + 2) * P;
+    const outRow = row * S;
+    for (let col = 0; col < S; col++) {
+      const elev = ownElev[outRow + col];
+      const idx = (outRow + col) * 4;
+      if (elev <= DEM_NODATA_THRESHOLD) {
+        rgba[idx + 3] = 0;
+        continue;
+      }
+      const a = pad[r0 + col];
+      const b = pad[r0 + col + 1];
+      const c = pad[r0 + col + 2];
+      const d = pad[r1 + col];
+      const f = pad[r1 + col + 2];
+      const g = pad[r2 + col];
+      const h = pad[r2 + col + 1];
+      const i = pad[r2 + col + 2];
+      const dzDx = ((c + 2 * f + i) - (a + 2 * d + g)) * inv8x;
+      const dzDy = ((g + 2 * h + i) - (a + 2 * b + c)) * inv8y;
+      const gradMag = Math.sqrt(dzDx * dzDx + dzDy * dzDy);
+      // sqrt(atan(g) * (2/π)) * 255  — monotonic, [0..255]
+      let enc = Math.sqrt(Math.atan(gradMag)) * ENC_K;
+      if (enc < 0) enc = 0; else if (enc > 255) enc = 255;
+      rgba[idx] = enc + 0.5 | 0; // round
+      rgba[idx + 3] = 255;
+    }
+  }
+
+  // Border-fallback clamp: where the neighbour DEM was missing the kernel
+  // used replicated own-tile edges and produces a noisy 1 px ring. Replace
+  // each fallback border pixel with its immediate interior neighbour so the
+  // visible tile boundary stays clean. Mirrors encodeSlopePng's behaviour.
+  const copyRgba = (dstIdx, srcIdx) => {
+    rgba[dstIdx]     = rgba[srcIdx];
+    rgba[dstIdx + 1] = rgba[srcIdx + 1];
+    rgba[dstIdx + 2] = rgba[srcIdx + 2];
+    rgba[dstIdx + 3] = rgba[srcIdx + 3];
+  };
+  if (!edgeNeighbours?.north) {
+    for (let col = 0; col < S; col++) copyRgba(col * 4, (S + col) * 4);
+  }
+  if (!edgeNeighbours?.south) {
+    const base = (S - 1) * S;
+    const src = (S - 2) * S;
+    for (let col = 0; col < S; col++) copyRgba((base + col) * 4, (src + col) * 4);
+  }
+  if (!edgeNeighbours?.west) {
+    for (let r = 0; r < S; r++) copyRgba(r * S * 4, (r * S + 1) * 4);
+  }
+  if (!edgeNeighbours?.east) {
+    for (let r = 0; r < S; r++) copyRgba((r * S + S - 1) * 4, (r * S + S - 2) * 4);
+  }
+
+  return rgba;
+}
+
+function encodeSingleSlopeByte(deg) {
+  let d = deg;
+  if (d < 0) d = 0; else if (d > 90) d = 90;
+  return Math.max(0, Math.min(255, Math.round(Math.sqrt(d / 90) * 255)));
+}
+
+function harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY) {
+  if (!neighbourElevations) return;
+  const S = DEM_TILE_SIZE;
+  const inv8x = 1 / (8 * cellSizeX);
+  const inv8y = 1 / (8 * cellSizeY);
+
+  const blend = (idx, paired) => {
+    if (rgba[idx + 3] === 0) return; // NoData — keep transparent
+    // Decode: deg = (R/255)^2 * 90
+    const r = rgba[idx];
+    const own = (r / 255);
+    const ownDeg = own * own * 90;
+    const avgDeg = (ownDeg + paired) * 0.5;
+    rgba[idx] = encodeSingleSlopeByte(avgDeg);
+  };
+
+  if (neighbourElevations.north) {
+    const north = neighbourElevations.north;
+    for (let col = 0; col < S; col++) {
+      const paired = computeHornSlope(
+        sampleTile(north, S - 2, col - 1),
+        sampleTile(north, S - 2, col),
+        sampleTile(north, S - 2, col + 1),
+        sampleTile(north, S - 1, col - 1),
+        sampleTile(north, S - 1, col + 1),
+        sampleTile(ownElev, 0, col - 1),
+        sampleTile(ownElev, 0, col),
+        sampleTile(ownElev, 0, col + 1),
+        inv8x,
+        inv8y,
+      );
+      blend(col * 4, paired);
+    }
+  }
+
+  if (neighbourElevations.south) {
+    const south = neighbourElevations.south;
+    const ownRow = (S - 1) * S;
+    for (let col = 0; col < S; col++) {
+      const paired = computeHornSlope(
+        sampleTile(ownElev, S - 1, col - 1),
+        sampleTile(ownElev, S - 1, col),
+        sampleTile(ownElev, S - 1, col + 1),
+        sampleTile(south, 0, col - 1),
+        sampleTile(south, 0, col + 1),
+        sampleTile(south, 1, col - 1),
+        sampleTile(south, 1, col),
+        sampleTile(south, 1, col + 1),
+        inv8x,
+        inv8y,
+      );
+      blend((ownRow + col) * 4, paired);
+    }
+  }
+
+  if (neighbourElevations.west) {
+    const west = neighbourElevations.west;
+    for (let row = 0; row < S; row++) {
+      const paired = computeHornSlope(
+        sampleTile(west, row - 1, S - 2),
+        sampleTile(west, row - 1, S - 1),
+        sampleTile(ownElev, row - 1, 0),
+        sampleTile(west, row, S - 2),
+        sampleTile(ownElev, row, 0),
+        sampleTile(west, row + 1, S - 2),
+        sampleTile(west, row + 1, S - 1),
+        sampleTile(ownElev, row + 1, 0),
+        inv8x,
+        inv8y,
+      );
+      blend(row * S * 4, paired);
+    }
+  }
+
+  if (neighbourElevations.east) {
+    const east = neighbourElevations.east;
+    for (let row = 0; row < S; row++) {
+      const paired = computeHornSlope(
+        sampleTile(ownElev, row - 1, S - 1),
+        sampleTile(east, row - 1, 0),
+        sampleTile(east, row - 1, 1),
+        sampleTile(ownElev, row, S - 1),
+        sampleTile(east, row, 1),
+        sampleTile(ownElev, row + 1, S - 1),
+        sampleTile(east, row + 1, 0),
+        sampleTile(east, row + 1, 1),
+        inv8x,
+        inv8y,
+      );
+      blend((row * S + S - 1) * 4, paired);
+    }
+  }
+}
+
 async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile) {
   const t0 = performance.now();
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
@@ -463,17 +651,35 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
   const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
-  let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
-  slopes = harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY);
-  if (resFactor && resFactor > 1) slopes = downsampleSlopes(slopes, resFactor | 0);
-  const t3 = performance.now();
-  const blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);
-  const t4 = performance.now();
 
-  if (DEBUG) {
-    console.log(
-      `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor || 1} profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
-    );
+  let blob;
+  const useFusedFastPath = !resFactor || resFactor <= 1;
+  if (useFusedFastPath) {
+    // Single-pass compute + encode (fast path, default resolution).
+    const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
+    harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY);
+    const t3 = performance.now();
+    blob = await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
+    const t4 = performance.now();
+    if (DEBUG) {
+      console.log(
+        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} fused=${(t3 - t2).toFixed(0)} png=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
+      );
+    }
+  } else {
+    // Legacy two-pass path — needed for the resolution-downsample mode
+    // (slopes are box-averaged into N×N blocks before encoding).
+    let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
+    slopes = harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY);
+    slopes = downsampleSlopes(slopes, resFactor | 0);
+    const t3 = performance.now();
+    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);
+    const t4 = performance.now();
+    if (DEBUG) {
+      console.log(
+        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor} profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
+      );
+    }
   }
   return { blob, missingNeighbours };
 }

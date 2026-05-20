@@ -48,29 +48,88 @@ export function addSlopeLayer(
 }
 
 export function removeSlopeLayer(map: MapboxMap): void {
+  // ── Snapshot the active terrain BEFORE removing the slope source ────
+  // Slope is a `slot:'top'` raster overlay — its source/layer have no
+  // formal link to `setTerrain`, but in practice removing a top-slot
+  // source triggers an internal Mapbox style mutation burst that
+  // sometimes drops `getTerrain()` silently. When that happens the world
+  // flattens until the user pans/zooms. We snapshot the current terrain
+  // descriptor and re-apply it through several escalating recovery
+  // attempts so the map never visibly flattens.
   let terrainBefore: ReturnType<MapboxMap['getTerrain']> | null = null;
   try {
     terrainBefore = map.getTerrain() ?? null;
   } catch {
     terrainBefore = null;
   }
+
   try {
     if (map.getLayer(SLOPE_LAYER_ID)) map.removeLayer(SLOPE_LAYER_ID);
     if (map.getSource(SLOPE_SOURCE_ID)) map.removeSource(SLOPE_SOURCE_ID);
   } catch {
     /* style may be transitioning */
   }
-  if (terrainBefore?.source) {
-    setTimeout(() => {
+
+  if (!terrainBefore?.source) return;
+
+  const snapshot = terrainBefore;
+  const snapshotSourceId = terrainBefore.source;
+
+  const reapplyTerrain = (): boolean => {
+    try {
+      if (!map.getSource(snapshotSourceId)) return false;
+      const current = map.getTerrain();
+      if (current?.source === snapshotSourceId) return true;
+      map.setTerrain(snapshot);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // Pass 1 — synchronous reapply. Catches the simple case where the
+  // source-removal styledata burst hasn't started yet.
+  reapplyTerrain();
+
+  // Pass 2 — next animation frame (covers the post-styledata frame
+  // before Mapbox commits the next render).
+  const rafId = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame(() => { reapplyTerrain(); })
+    : null;
+
+  // Pass 3 — short watchdog on `styledata` for ~800 ms. The slope
+  // source removal can produce a chain of styledata events spread over
+  // several frames (imported Standard style internal updates,
+  // dataAbort handlers, the basemap controller's own scheduleTerrainRecovery,
+  // …). Re-apply on each one until terrain is bound or the watchdog
+  // expires.
+  let watchdogActive = true;
+  const stopWatchdog = () => {
+    if (!watchdogActive) return;
+    watchdogActive = false;
+    try { map.off('styledata', onStyleData); } catch { /* noop */ }
+    if (rafId != null && typeof cancelAnimationFrame === 'function') {
+      try { cancelAnimationFrame(rafId); } catch { /* noop */ }
+    }
+    if (watchdogTimer) {
+      try { clearTimeout(watchdogTimer); } catch { /* noop */ }
+    }
+  };
+  const onStyleData = () => {
+    if (!watchdogActive) return;
+    const ok = reapplyTerrain();
+    if (ok) {
       try {
-        if (terrainBefore?.source && map.getSource(terrainBefore.source)) {
-          map.setTerrain(terrainBefore);
-        }
-      } catch {
-        /* terrain may already be restored */
-      }
-    }, 0);
-  }
+        if (map.getTerrain()?.source === snapshotSourceId) stopWatchdog();
+      } catch { /* noop */ }
+    }
+  };
+  try { map.on('styledata', onStyleData); } catch { /* noop */ }
+  const watchdogTimer = setTimeout(() => {
+    // Final retry, then stop.
+    reapplyTerrain();
+    stopWatchdog();
+  }, 800);
 }
 
 export function setSlopeVisibility(map: MapboxMap, visible: boolean): void {
