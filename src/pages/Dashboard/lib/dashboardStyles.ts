@@ -16,6 +16,7 @@ interface DashboardStylesInput {
   isLeftPanelCollapsed: boolean;
   isCenterPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
+  isCenterResizing: boolean;
   panelWidth: number;
   leftPanelWidth: number;
   rightDockWidth: number;
@@ -29,6 +30,7 @@ export function getDashboardStyles({
   isLeftPanelCollapsed,
   isCenterPanelCollapsed,
   isRightPanelCollapsed,
+  isCenterResizing,
   panelWidth,
   leftPanelWidth,
   rightDockWidth,
@@ -229,7 +231,9 @@ export function getDashboardStyles({
     touchAction: 'none',
     opacity: isMapFocusMode ? 0 : 1,
     pointerEvents: isMapFocusMode ? 'none' : 'auto',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    transition: isCenterResizing
+      ? 'none'
+      : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
 
   const centerPanelShellStyle: CSSProperties = {
@@ -248,7 +252,9 @@ export function getDashboardStyles({
       ? 'blur(0px) saturate(1)'
       : 'blur(10px) saturate(0.88)',
     pointerEvents: layout.centerPanelVisible ? 'auto' : 'none',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
+    transition: isCenterResizing
+      ? 'none'
+      : `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, filter ${IMMERSIVE_TRANSITION_MS}ms ease, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, width ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
     willChange: 'transform, opacity, filter, top, left, width',
   };
 

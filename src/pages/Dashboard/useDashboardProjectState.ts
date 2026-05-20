@@ -3,7 +3,12 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
-import { getProject, uploadProjectThumbnail } from '@/shared/utils/projects';
+import {
+  getProject,
+  isSupabaseProjectTooLarge,
+  MAX_SUPABASE_PROJECT_SIZE_BYTES,
+  uploadProjectThumbnail,
+} from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
 
@@ -158,6 +163,7 @@ export function useDashboardProjectState({
   const pendingSaveRef = useRef<ItineraryProject | null>(null);
   /** Serialized JSON of the most recent successful save (deduplication). */
   const lastSavedSerializedRef = useRef<string | null>(null);
+  const lastOversizedSignatureRef = useRef<string | null>(null);
   const saveTimerRef = useRef<number | null>(null);
   const activeProjectIdRef = useRef<string | null>(null);
   const isClosingProjectRef = useRef(false);
@@ -194,11 +200,32 @@ export function useDashboardProjectState({
       return;
     }
 
+    const sizeBytes = new Blob([serialized]).size;
+    if (isSupabaseProjectTooLarge(sizeBytes)) {
+      const oversizedSignature = `${id}:${sizeBytes}`;
+      if (oversizedSignature !== lastOversizedSignatureRef.current) {
+        console.warn(
+          '[Dashboard] autosave skipped: project exceeds Supabase payload safety limit',
+          {
+            sizeBytes,
+            maxSizeBytes: MAX_SUPABASE_PROJECT_SIZE_BYTES,
+            projectId: id,
+          },
+        );
+        lastOversizedSignatureRef.current = oversizedSignature;
+      }
+      if (pendingSaveRef.current === payload) {
+        pendingSaveRef.current = null;
+      }
+      return;
+    }
+    lastOversizedSignatureRef.current = null;
+
     const accessToken = readAccessTokenSync(anonKey);
     const body = JSON.stringify({
       name: payload.name,
       data: payload,
-      size_bytes: new Blob([serialized]).size,
+      size_bytes: sizeBytes,
       privacy: payload.privacy ?? 'private',
     });
 

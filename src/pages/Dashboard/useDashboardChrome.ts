@@ -14,8 +14,6 @@ import {
   PANEL_WIDTH_KEY,
   PANEL_PADDING,
   PANEL_WIDTH_MIN_FALLBACK,
-  CENTER_TOOLBAR_HEIGHT,
-  CENTER_PANEL_STACK_GAP,
 } from './lib/constants';
 
 import { getDashboardLayout } from './lib/layout';
@@ -52,6 +50,7 @@ export function useDashboardChrome({
     readStoredLeftWidth(),
   );
   const [isLeftResizing, setIsLeftResizing] = useState(false);
+  const [isCenterResizing, setIsCenterResizing] = useState(false);
   const [isCenterPanelCollapsed, setIsCenterPanelCollapsed] = useState(false);
   const [centerPanelHeightOverride, setCenterPanelHeightOverride] = useState<number | null>(
     () => readStoredCenterPanelHeight(),
@@ -156,6 +155,8 @@ export function useDashboardChrome({
   }, [leftPanelWidth, updatePersistedDashboard]);
 
   useEffect(() => {
+    if (isCenterResizing) return;
+
     try {
       if (centerPanelHeightOverride == null) {
         localStorage.removeItem(CENTER_PANEL_HEIGHT_KEY);
@@ -172,7 +173,7 @@ export function useDashboardChrome({
     updatePersistedDashboard((dashboard) => {
       dashboard.centerPanelHeight = centerPanelHeightOverride;
     });
-  }, [centerPanelHeightOverride, updatePersistedDashboard]);
+  }, [centerPanelHeightOverride, isCenterResizing, updatePersistedDashboard]);
 
   useEffect(() => {
     updatePersistedDashboard((dashboard) => {
@@ -293,86 +294,37 @@ export function useDashboardChrome({
   const handleCenterPanelResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       event.preventDefault();
-
-      // Create a premium, pixel-perfect visual guide line overlay
-      const guide = document.createElement('div');
-      guide.id = 'center-panel-resize-guide';
-      guide.style.position = 'absolute';
-      guide.style.left = `${layout.centerPanelLeft * layout.appScale}px`;
-      guide.style.width = `${layout.centerPanelWidth * layout.appScale}px`;
-      guide.style.height = '2px';
-      guide.style.background = '#e64a19'; // Warm RedView branding color
-      guide.style.boxShadow = '0 0 10px rgba(230, 74, 25, 0.8), 0 0 2px rgba(230, 74, 25, 0.5)';
-      guide.style.zIndex = '99999';
-      guide.style.pointerEvents = 'none';
-      guide.style.transition = 'none';
-      
-      // Gorgeous dark translucent pill badge displaying current height
-      const badge = document.createElement('div');
-      badge.style.position = 'absolute';
-      badge.style.left = '50%';
-      badge.style.transform = 'translate(-50%, -100%)';
-      badge.style.marginTop = '-8px';
-      badge.style.background = 'rgba(17, 17, 19, 0.9)';
-      badge.style.border = '1px solid rgba(255, 255, 255, 0.12)';
-      badge.style.borderRadius = '6px';
-      badge.style.padding = '4px 8px';
-      badge.style.color = '#ffffff';
-      badge.style.fontSize = '11px';
-      badge.style.fontWeight = '500';
-      badge.style.fontFamily = 'Inter, system-ui, -apple-system, sans-serif';
-      badge.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.5)';
-      badge.style.whiteSpace = 'nowrap';
-      badge.style.pointerEvents = 'none';
-      guide.appendChild(badge);
-
-      // Append directly to document body to bypass virtual DOM completely
-      document.body.appendChild(guide);
+      setIsCenterResizing(true);
 
       let finalHeight = layout.centerPanelHeight;
       let shouldCollapse = false;
 
       const onMove = (nextEvent: MouseEvent) => {
         const raw = layout.scaledViewportHeight - PANEL_PADDING - nextEvent.clientY / layout.appScale;
-        
+
         if (raw <= layout.centerPanelMinHeight - PANEL_COLLAPSE_DRAG_THRESHOLD) {
           shouldCollapse = true;
           finalHeight = layout.centerPanelMinHeight;
-          badge.textContent = 'Relâcher pour masquer';
-          badge.style.color = '#ff8d8d';
-          guide.style.background = '#ff4a4a';
-          guide.style.boxShadow = '0 0 12px rgba(255, 74, 74, 0.8)';
         } else {
           shouldCollapse = false;
           finalHeight = Math.max(layout.centerPanelMinHeight, Math.min(layout.centerPanelMaxHeight, raw));
-          badge.textContent = `${Math.round(finalHeight)}px`;
-          badge.style.color = '#ffffff';
-          guide.style.background = '#e64a19';
-          guide.style.boxShadow = '0 0 10px rgba(230, 74, 25, 0.8)';
         }
 
-        // Compute vertical layout position for the indicator line
-        const previewTop = layout.scaledViewportHeight - PANEL_PADDING - finalHeight;
-        const topPx = (previewTop - CENTER_PANEL_STACK_GAP - CENTER_TOOLBAR_HEIGHT) * layout.appScale;
-        
-        guide.style.top = `${topPx}px`;
+        setIsCenterPanelCollapsed(false);
+        setCenterPanelHeightOverride((current) => (current === finalHeight ? current : finalHeight));
       };
 
       const onUp = () => {
-        if (guide.parentNode) {
-          guide.parentNode.removeChild(guide);
-        }
-
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
 
-        // Snap to final state in a single re-render frame
         if (shouldCollapse) {
           setIsCenterPanelCollapsed(true);
         } else {
           setIsCenterPanelCollapsed(false);
           setCenterPanelHeightOverride(finalHeight);
         }
+        setIsCenterResizing(false);
       };
 
       onMove(event.nativeEvent as MouseEvent);
@@ -405,6 +357,7 @@ export function useDashboardChrome({
     leftPanelWidth,
     isResizing,
     isLeftResizing,
+    isCenterResizing,
     projectMapViewport,
     rightPrimaryPanelHostRef,
     exporterPanelHostRef,

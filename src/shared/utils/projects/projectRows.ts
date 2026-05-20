@@ -2,16 +2,9 @@ import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
 import { supabase } from '@/shared/services/supabase';
 
 import { getCurrentUserId } from './auth';
+import { computeProjectSizeBytes } from './limits';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
-
-function computeSizeBytes(data: ItineraryProject): number {
-  try {
-    return new Blob([JSON.stringify(data)]).size;
-  } catch {
-    return 0;
-  }
-}
 
 export async function listProjects(): Promise<ProjectSummary[]> {
   const { data, error } = await supabase
@@ -48,7 +41,7 @@ export async function createProject(
       folder_id: folderId ?? null,
       name: finalProject.name,
       data: finalProject,
-      size_bytes: computeSizeBytes(finalProject),
+      size_bytes: computeProjectSizeBytes(finalProject),
       privacy: finalProject.privacy ?? 'private',
     })
     .select('*')
@@ -63,7 +56,7 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
     .update({
       name: project.name,
       data: project,
-      size_bytes: computeSizeBytes(project),
+      size_bytes: computeProjectSizeBytes(project),
       privacy: project.privacy ?? 'private',
     })
     .eq('id', id);
@@ -83,7 +76,7 @@ export async function renameProject(id: string, name: string): Promise<void> {
     .update({
       name: trimmed,
       data: nextData,
-      size_bytes: computeSizeBytes(nextData),
+      size_bytes: computeProjectSizeBytes(nextData),
     })
     .eq('id', id);
   if (error) throw error;
