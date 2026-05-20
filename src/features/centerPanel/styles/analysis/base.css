@@ -52,6 +52,10 @@
 }
 
 .rvc-center-analysis__segment {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
   border: 0;
   border-radius: 6px;
   padding: 4px 8px;
@@ -73,10 +77,9 @@
   display: flex;
   align-items: center;
   flex: 0 1 auto;
-  gap: 8px;
-  height: 24px;
+  gap: 12px;
+  min-height: 32px;
   min-width: 0;
-  padding-block: 3px;
 }
 
 .rvc-center-analysis__minor-label,
@@ -85,7 +88,7 @@
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
   font-weight: 700;
-  line-height: normal;
+  line-height: 1;
   white-space: nowrap;
 }
 
@@ -93,26 +96,23 @@
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 2px;
-  height: 30px;
-  padding: 2px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
+  gap: 4px;
 }
 
 .rvc-center-analysis__detail-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  min-width: 40px;
+  height: 32px;
+  padding: 0 12px;
   border: 0;
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.64);
+  background: rgba(255, 255, 255, 0.12);
   color: var(--rvc-center-text);
   font-family: var(--rvc-center-font-family);
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 600;
   line-height: 1;
   cursor: pointer;
   transition:
@@ -122,7 +122,7 @@
 }
 
 .rvc-center-analysis__detail-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .rvc-center-analysis__detail-button:disabled {
@@ -311,9 +311,9 @@
   height: 32px;
   max-width: none;
   min-width: 0;
-  padding: 6px 8px;
+  padding: 6px 4px 6px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.64);
   display: inline-flex;
   align-items: center;
@@ -329,7 +329,7 @@
 }
 
 .rvc-center-analysis__filter-chip:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvc-center-analysis__filter-chip--off {

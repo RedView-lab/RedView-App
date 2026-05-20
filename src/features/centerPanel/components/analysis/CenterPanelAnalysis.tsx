@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react';
-import { IconCheck } from '../CenterPanelIcons';
+import { IconCheck, IconMinus, IconPlus } from '../CenterPanelIcons';
 import { AxisDropdown } from './AxisDropdown';
 import { useAnalysisFlyover } from '../../flyover';
 import { useRouteSplitToolOptional } from '../../routeSplit';
@@ -557,7 +557,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
               disabled={detailZoom <= 0.001}
               aria-label={t('Dézoomer le graphique')}
             >
-              -
+              <IconMinus size={16} aria-hidden="true" />
             </button>
             <button
               type="button"
@@ -566,7 +566,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
               disabled={detailZoom >= 0.999}
               aria-label={t('Zoomer le graphique')}
             >
-              +
+              <IconPlus size={16} aria-hidden="true" />
             </button>
           </div>
         </div>
