@@ -36,7 +36,7 @@
   flex: 0 0 auto;
   font-family: var(--rvc-center-font-family);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
 }
@@ -63,14 +63,14 @@
   color: var(--rvc-center-text);
   font-family: var(--rvc-center-font-family);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: normal;
   white-space: nowrap;
 }
 
 .rvc-center-analysis__segment--active {
   background: rgba(0, 0, 0, 0.64);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .rvc-center-analysis__detail {
@@ -87,7 +87,7 @@
   color: rgba(255, 255, 255, 0.5);
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1;
   white-space: nowrap;
 }
