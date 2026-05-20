@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, memo } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
@@ -34,7 +34,7 @@ import {
   routePointsEqual,
 } from './utils';
 
-export function CenterPanelToolbar() {
+export const CenterPanelToolbar = memo(function CenterPanelToolbar() {
   const { locale, t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
@@ -546,4 +546,4 @@ export function CenterPanelToolbar() {
       ) : null}
     </section>
   );
-}
+});

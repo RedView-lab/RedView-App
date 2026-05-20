@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
 import {
@@ -59,7 +59,7 @@ interface ItineraryPanelContainerProps {
   onBackToHome?: () => void;
 }
 
-export function ItineraryPanelContainer({
+export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   projectId,
   map,
   isMapLoaded,
@@ -605,6 +605,6 @@ export function ItineraryPanelContainer({
       />
     </>
   );
-}
+});
 
 export type { ItineraryPanelContainerProps };

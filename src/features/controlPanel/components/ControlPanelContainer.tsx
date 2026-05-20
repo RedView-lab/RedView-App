@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, memo } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
@@ -57,7 +57,7 @@ function tileKey(coord: TileCoord): string {
   return `${coord.xKm}_${coord.yKm}_${coord.projection}`;
 }
 
-export function ControlPanelContainer({
+export const ControlPanelContainer = memo(function ControlPanelContainer({
   map,
   isMapLoaded,
   onBasemapChange,
@@ -420,4 +420,4 @@ export function ControlPanelContainer({
       }}
     />
   );
-}
+});

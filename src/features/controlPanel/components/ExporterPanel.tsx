@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useState, type CSSProperties, memo } from 'react';
 
 import { exportItineraryFile, exportRoadbookExcel, type ItineraryExportFormat } from '@/features/exporter';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
@@ -44,7 +44,7 @@ const INITIAL_ROWS: ExportRow[] = [
   { id: 'chart', label: 'Graphique', format: 'pdf', checked: false, disabled: true },
 ];
 
-export function ExporterPanel({ width }: ExporterPanelProps) {
+export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPanelProps) {
   const { t } = useAppI18n();
   const store = useProjectStoreOptional();
   const [open, setOpen] = useState(true);
@@ -216,4 +216,4 @@ export function ExporterPanel({ width }: ExporterPanelProps) {
       </div>
     </aside>
   );
-}
+});

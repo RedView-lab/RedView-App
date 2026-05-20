@@ -1,6 +1,6 @@
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
@@ -19,7 +19,7 @@ interface MapViewProps {
   onViewportChange?: (viewport: MapViewport) => void;
 }
 
-export default function MapView({
+export default memo(function MapView({
   onMapReady,
   onMapLoadStatusChange,
   onMapReloadChange,
@@ -76,4 +76,4 @@ export default function MapView({
       )}
     </div>
   );
-}
+});

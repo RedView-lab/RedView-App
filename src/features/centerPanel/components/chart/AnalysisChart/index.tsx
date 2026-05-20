@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { useChartHover } from '../useChartHover';
 import { computeDomain, computeXDomain, type AxisDomain, type ChartMetricId } from '../series';
 import '../chart.css';
@@ -39,7 +39,7 @@ function pointSeriesCoversX(points: Array<{ x: number; y: number }>, xValue: num
   return xValue >= firstPoint.x && xValue <= lastPoint.x;
 }
 
-export function AnalysisChart({
+export const AnalysisChart = memo(function AnalysisChart({
   series,
   backdropProfiles = [],
   poiAnnotations = [],
@@ -48,8 +48,8 @@ export function AnalysisChart({
   axis1Metric,
   axis2Metric,
   xMode,
-  detailZoom,
-  detailOffset,
+  detailZoom = 0,
+  detailOffset = 0,
   xDomainClamp = null,
   onViewportChange,
   onDetailOffsetChange,
@@ -441,7 +441,7 @@ export function AnalysisChart({
       visibleSeries={visibleSeries}
     />
   );
-}
+});
 
 function withAlpha(color: string, alpha: number): string {
   const normalizedAlpha = Math.max(0, Math.min(1, alpha));

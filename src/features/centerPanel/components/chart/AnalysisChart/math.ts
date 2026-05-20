@@ -8,7 +8,15 @@ const HOVER_X_EMIT_EPSILON = 1e-4;
 export const MIN_VISIBLE_FRACTION = 0.04;
 const MIN_LOD_LEVEL_POINTS = 256;
 const LOD_TARGET_VISIBLE_POINTS_PER_PX = 3;
-const plotLodLevelsCache = new WeakMap<{ x: number; y: number }[], { x: number; y: number }[][]>();
+const MAX_CACHE_SIZE = 100;
+const plotLodLevelsCache = new Map<string, { x: number; y: number }[][]>();
+
+function getPointsCacheKey(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return 'empty';
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${points.length}_${first.x.toFixed(5)}_${first.y.toFixed(5)}_${last.x.toFixed(5)}_${last.y.toFixed(5)}`;
+}
 
 export function defaultDomainFor(metric: ChartMetricId): AxisDomain {
   switch (metric) {
@@ -169,12 +177,17 @@ export function selectPointsForPlotLod(
 function getPlotLodLevels(
   points: { x: number; y: number }[],
 ): { x: number; y: number }[][] {
-  const cached = plotLodLevelsCache.get(points);
+  const key = getPointsCacheKey(points);
+  const cached = plotLodLevelsCache.get(key);
   if (cached) return cached;
 
   if (points.length < MIN_LOD_LEVEL_POINTS * 2) {
     const trivial = [points];
-    plotLodLevelsCache.set(points, trivial);
+    if (plotLodLevelsCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = plotLodLevelsCache.keys().next().value;
+      if (firstKey) plotLodLevelsCache.delete(firstKey);
+    }
+    plotLodLevelsCache.set(key, trivial);
     return trivial;
   }
 
@@ -193,7 +206,11 @@ function getPlotLodLevels(
     targetMaxPoints = Math.floor(targetMaxPoints / 2);
   }
 
-  plotLodLevelsCache.set(points, levels);
+  if (plotLodLevelsCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = plotLodLevelsCache.keys().next().value;
+    if (firstKey) plotLodLevelsCache.delete(firstKey);
+  }
+  plotLodLevelsCache.set(key, levels);
   return levels;
 }
 

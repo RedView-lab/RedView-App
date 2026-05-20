@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useAppI18n } from '@/shared/i18n';
 import { CenterPanelAnalysis } from './analysis';
@@ -8,7 +9,7 @@ interface CenterPanelProps {
   map: MapboxMap | null;
 }
 
-export function CenterPanel({ map }: CenterPanelProps) {
+export const CenterPanel = memo(function CenterPanel({ map }: CenterPanelProps) {
   const { t } = useAppI18n();
 
   return (
@@ -18,4 +19,4 @@ export function CenterPanel({ map }: CenterPanelProps) {
       <CenterPanelAnalysis map={map} />
     </aside>
   );
-}
+});

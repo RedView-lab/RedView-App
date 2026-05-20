@@ -1,9 +1,10 @@
-import type {
-  CSSProperties,
-  Dispatch,
-  MouseEvent as ReactMouseEvent,
-  RefObject,
-  SetStateAction,
+import {
+  useCallback,
+  type CSSProperties,
+  type Dispatch,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject,
+  type SetStateAction,
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import {
@@ -149,6 +150,15 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
+
+  const handleLidarSelectionDisable = useCallback(() => {
+    setLidarModeEnabled(false);
+  }, [setLidarModeEnabled]);
+
+  const handleToggleLidarDownloadMode = useCallback(() => {
+    setLidarModeEnabled((value) => !value);
+  }, [setLidarModeEnabled]);
+
   const demoUpsellWidth = Math.min(
     330,
     Math.max(
@@ -184,7 +194,7 @@ export function DashboardEditor({
         onMapLoadStatusChange={onMapLoadStatusChange}
         onMapReloadChange={onMapReloadChange}
         lidarSelectionEnabled={lidarModeEnabled}
-        onLidarSelectionDisable={() => setLidarModeEnabled(false)}
+        onLidarSelectionDisable={handleLidarSelectionDisable}
         initialViewport={projectMapViewport}
         onViewportChange={onMapViewportChange}
         basemapConfig={activeBasemapConfig}
@@ -399,7 +409,7 @@ export function DashboardEditor({
                           onSlopeOverlayStatusChange={onSlopeOverlayStatusChange}
                           onAltitudeOverlayStatusChange={onAltitudeOverlayStatusChange}
                           lidarDownloadModeActive={lidarModeEnabled}
-                          onToggleLidarDownloadMode={() => setLidarModeEnabled((value) => !value)}
+                          onToggleLidarDownloadMode={handleToggleLidarDownloadMode}
                           width={panelWidth}
                           onResizeStart={onRightResizeStart}
                           isResizing={isResizing}

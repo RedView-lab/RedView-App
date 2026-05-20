@@ -15,7 +15,14 @@ import {
   ITINERARY_COLORS,
   normalizeItineraryProject,
 } from '../../lib/project';
-import { cleanGpxGlitches } from '../../lib/routes';
+import {
+  cleanGpxGlitches,
+  simplifyRouteToMaxPoints,
+  simplifyPointsByQuality,
+  cumulativeRouteLengthsM,
+  projectDistanceAlongRouteM,
+  roundDistanceKm,
+} from '../../lib/routes';
 import {
   mergeItineraryProject,
   type MergeItineraryConnectorSegment,
@@ -23,7 +30,7 @@ import {
 import { reverseItineraryGpxProject } from '../../lib/project';
 import { splitItineraryProject, type SplitItineraryProjectResult } from '../../lib/project';
 import { computeRouteElevationMetrics } from '../../lib/route-metrics';
-import { simplifyRouteToMaxPoints, simplifyPointsByQuality } from '../../lib/routes';
+
 import { ProjectStoreContext } from './context';
 import { buildPendingRoutePatchForForbiddenZone } from './forbiddenZonePatch';
 import { useTraceHistory } from './useTraceHistory';
@@ -586,9 +593,26 @@ export function ProjectProvider({
             ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
             : it.metrics?.avgSlopePercent,
         };
-        it.timeline = it.timeline.map((row) =>
-          row.kind === 'end' ? { ...row, distanceKm } : row,
-        );
+        const cumulativeLengthsM = cumulativeRouteLengthsM(simplifiedPoints);
+        it.timeline = it.timeline.map((row) => {
+          if (row.kind === 'start') {
+            return { ...row, distanceKm: 0 };
+          }
+          if (row.kind === 'end') {
+            return { ...row, distanceKm };
+          }
+          if (row.lat != null && row.lon != null) {
+            const projectedDistM = projectDistanceAlongRouteM(
+              { lat: row.lat, lon: row.lon },
+              simplifiedPoints,
+              cumulativeLengthsM,
+            );
+            if (projectedDistM != null) {
+              return { ...row, distanceKm: roundDistanceKm(projectedDistM) };
+            }
+          }
+          return row;
+        });
         it.prediction = null;
       });
     },
