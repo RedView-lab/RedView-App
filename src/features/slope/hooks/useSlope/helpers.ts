@@ -93,43 +93,23 @@ export function removeSlopeLayer(map: MapboxMap): void {
 
   // Pass 2 — next animation frame (covers the post-styledata frame
   // before Mapbox commits the next render).
-  const rafId = typeof requestAnimationFrame === 'function'
-    ? requestAnimationFrame(() => { reapplyTerrain(); })
-    : null;
-
-  // Pass 3 — short watchdog on `styledata` for ~800 ms. The slope
-  // source removal can produce a chain of styledata events spread over
-  // several frames (imported Standard style internal updates,
-  // dataAbort handlers, the basemap controller's own scheduleTerrainRecovery,
-  // …). Re-apply on each one until terrain is bound or the watchdog
-  // expires.
-  let watchdogActive = true;
-  const stopWatchdog = () => {
-    if (!watchdogActive) return;
-    watchdogActive = false;
-    try { map.off('styledata', onStyleData); } catch { /* noop */ }
-    if (rafId != null && typeof cancelAnimationFrame === 'function') {
-      try { cancelAnimationFrame(rafId); } catch { /* noop */ }
-    }
-    if (watchdogTimer) {
-      try { clearTimeout(watchdogTimer); } catch { /* noop */ }
-    }
-  };
-  const onStyleData = () => {
-    if (!watchdogActive) return;
-    const ok = reapplyTerrain();
-    if (ok) {
-      try {
-        if (map.getTerrain()?.source === snapshotSourceId) stopWatchdog();
-      } catch { /* noop */ }
-    }
-  };
-  try { map.on('styledata', onStyleData); } catch { /* noop */ }
-  const watchdogTimer = setTimeout(() => {
-    // Final retry, then stop.
-    reapplyTerrain();
-    stopWatchdog();
-  }, 800);
+  //
+  // We deliberately do NOT install a long-running styledata watchdog
+  // here: the map3d controller already binds `scheduleTerrainRecovery`
+  // to every `styledata` event with its own 60 ms delay and full
+  // `applyUnifiedTerrain → refreshDemSource({forceRebuild})` escalation
+  // path. A second watchdog re-applying terrain on every styledata
+  // races the controller's deliberate `detachManagedTerrain` step
+  // during a forced-rebuild reload, and rebinds terrain right before
+  // `removeSource('unified-dem')` runs — which then crashes inside
+  // Mapbox's `_updateTerrain → ta.update` with
+  // `Cannot read properties of undefined (reading 'get')` because the
+  // source vanishes underneath the live terrain graph. Trust the
+  // controller's recovery loop and limit our work to the two ticks
+  // immediately following the slope-source removal.
+  if (typeof requestAnimationFrame === 'function') {
+    requestAnimationFrame(() => { reapplyTerrain(); });
+  }
 }
 
 export function setSlopeVisibility(map: MapboxMap, visible: boolean): void {
