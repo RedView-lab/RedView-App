@@ -7,6 +7,7 @@ const ignTileCache = new Map();
 const ignInflight = new Map(); // Deduplication: in-progress fetches by key
 let activeIGN = 0;
 let activeIGNBackground = 0;
+let activeIGNSlopeVisible = 0;
 const ignForegroundQueue = [];
 const ignBackgroundQueue = [];
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
@@ -31,6 +32,28 @@ function currentIGNBackgroundConcurrency() {
   return Math.max(4, Math.min(12, Math.floor(IGN_CONCURRENCY * 0.25)));
 }
 
+// Sub-cap for visible-slope IGN concurrency (May 20 perf pass).
+//
+// Without this cap, when 1 m slope is enabled, getTerrainWmsTile fetches
+// (purpose='slope-visible', foreground queue) compete on equal terms with
+// basemap-driven getIGNTile/getHighresTile fetches (no purpose tag,
+// foreground queue) for the full IGN_CONCURRENCY budget. On a fast pan or
+// zoom the LIFO queue is dominated by the newest viewport's slope tiles
+// (~50–80 entries) and the basemap DEM/highres requests get pushed back
+// or never start at all — visible as "terrain stops loading while slope
+// is active" with the orthophoto + 3D mesh frozen on the previous frame
+// while the slope overlay renders crisply on top of stale geometry.
+//
+// We reserve at least ~40 % of the foreground budget for non-slope work
+// (basemap DEM, ortho, etc.). Slope-visible can still consume the full
+// budget if there are no other foreground requests, so dedicated 1 m
+// slope load tests are unaffected.
+function currentIGNSlopeVisibleCap() {
+  // Floor at 8 so that even on the smallest IGN_CONCURRENCY (40) we keep
+  // ~20 % of the budget for slope.
+  return Math.max(8, Math.floor(IGN_CONCURRENCY * 0.6));
+}
+
 function pushIGNEntry(entry) {
   if (isIGNBackgroundPurpose(entry.purpose)) {
     ignBackgroundQueue.push(entry);
@@ -41,6 +64,20 @@ function pushIGNEntry(entry) {
 
 function popNextIGNEntry() {
   if (ignForegroundQueue.length > 0) {
+    // If slope-visible is at its sub-cap, prefer a non-slope-visible
+    // entry from the foreground queue so basemap/ortho fetches always
+    // have breathing room while slope is heavily loading. Scan from the
+    // tail (newest) to keep the LIFO viewport-priority semantics.
+    if (activeIGNSlopeVisible >= currentIGNSlopeVisibleCap()) {
+      for (let i = ignForegroundQueue.length - 1; i >= 0; i--) {
+        if (ignForegroundQueue[i].purpose !== PURPOSE_SLOPE_VISIBLE) {
+          const entry = ignForegroundQueue.splice(i, 1)[0];
+          return { entry, background: false };
+        }
+      }
+      // Every queued foreground entry is slope-visible — fall through
+      // and allow exceeding the cap rather than stalling the queue.
+    }
     return { entry: ignForegroundQueue.pop(), background: false };
   }
   if (ignBackgroundQueue.length === 0) return null;
@@ -110,15 +147,18 @@ function drainIGN() {
     const next = popNextIGNEntry();
     if (!next?.entry) break;
     const { entry, background } = next;
-    const { fn, resolve, reject } = entry;
+    const { fn, resolve, reject, purpose } = entry;
     activeIGN++;
     if (background) activeIGNBackground++;
+    const isSlopeVisible = purpose === PURPOSE_SLOPE_VISIBLE;
+    if (isSlopeVisible) activeIGNSlopeVisible++;
     fn()
       .then(resolve)
       .catch(reject)
       .finally(() => {
         activeIGN--;
         if (background) activeIGNBackground = Math.max(0, activeIGNBackground - 1);
+        if (isSlopeVisible) activeIGNSlopeVisible = Math.max(0, activeIGNSlopeVisible - 1);
         drainIGN();
       });
   }
