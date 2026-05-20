@@ -17,7 +17,7 @@ import {
   CENTER_TOOLBAR_HEIGHT,
   CENTER_PANEL_STACK_GAP,
 } from './lib/constants';
-import { useAppI18n } from '@/shared/i18n';
+
 import { getDashboardLayout } from './lib/layout';
 import type { DashboardPersistedMutator } from './useDashboardProjectState';
 import {
@@ -37,7 +37,7 @@ export function useDashboardChrome({
   activeProjectInitial,
   updatePersistedDashboard,
 }: UseDashboardChromeArgs) {
-  const { t } = useAppI18n();
+
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [isMapFocusMode, setIsMapFocusMode] = useState(false);
   const [projectMapViewport, setProjectMapViewport] = useState<MapViewport | null>(
@@ -338,7 +338,7 @@ export function useDashboardChrome({
         if (raw <= layout.centerPanelMinHeight - PANEL_COLLAPSE_DRAG_THRESHOLD) {
           shouldCollapse = true;
           finalHeight = layout.centerPanelMinHeight;
-          badge.textContent = t('Relâcher pour masquer');
+          badge.textContent = 'Relâcher pour masquer';
           badge.style.color = '#ff8d8d';
           guide.style.background = '#ff4a4a';
           guide.style.boxShadow = '0 0 12px rgba(255, 74, 74, 0.8)';
@@ -380,7 +380,7 @@ export function useDashboardChrome({
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     },
-    [layout, t],
+    [layout],
   );
 
   const restoreCenterPanel = useCallback(() => {
