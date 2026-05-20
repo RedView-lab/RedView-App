@@ -10,6 +10,7 @@ import {
   removeSlopeLayer,
   setSlopeVisibility,
 } from './helpers';
+import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import { useSlopeProgressReporter } from './progress';
 
 if (typeof window !== 'undefined') {
@@ -213,6 +214,34 @@ export function useSlope(
       mountedRef.current = false;
       mountedSourceKeyRef.current = null;
       try { map.triggerRepaint(); } catch { /* map gone */ }
+
+      // ── Fast basemap recovery on slope-disable ────────────────────
+      // While slope was active, the slope SourceCache was preventing
+      // `idle` from firing cleanly, so `viewportPrefetch.ts` (idle-
+      // gated) wasn't keeping the DEM/ortho ring warm. Once we remove
+      // the slope source, idle can fire again — but the user has to
+      // WAIT for it. To make recovery feel instantaneous:
+      //
+      //   1. Drain any DEM/slope work the SW still has queued from the
+      //      slope-active period so basemap & ortho fetches don't sit
+      //      behind a stale pre-disable backlog.
+      //   2. Kick the ambient viewportPrefetch right now (its
+      //      `trigger()` schedules `fire()` after a tiny throttle
+      //      window — much faster than waiting for the next `idle`).
+      //
+      // The basemap raster source's missing tiles will be re-requested
+      // by Mapbox itself on the next render frame triggered by
+      // `triggerRepaint()` above; this block just gets the prefetch
+      // ring + ortho cache warming in parallel.
+      try {
+        const sw = navigator.serviceWorker?.controller;
+        if (sw) {
+          sw.postMessage({ type: 'CANCEL_STALE_DEM' });
+        }
+      } catch { /* SW unavailable */ }
+      try {
+        getViewportPrefetch()?.trigger();
+      } catch { /* prefetch not installed yet */ }
     }
   }, [map, isMapLoaded, enabled]);
 

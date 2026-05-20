@@ -612,7 +612,48 @@ export function installViewportPrefetch(
   // moveend fires BEFORE Mapbox issues its tile requests, so the prefetch
   // entered the LIFO queue first and got popped first → "background loads
   // ultra-fast, foreground stays low-quality forever".
-  map.on('idle', schedule);
+  let lastIdleAt = performance.now();
+  let pendingMoveendFallback: ReturnType<typeof setTimeout> | null = null;
+  const MOVEEND_FALLBACK_DELAY_MS = 1800;
+  const IDLE_RECENCY_MS = 1500;
+
+  const onIdle = (): void => {
+    lastIdleAt = performance.now();
+    if (pendingMoveendFallback != null) {
+      clearTimeout(pendingMoveendFallback);
+      pendingMoveendFallback = null;
+    }
+    schedule();
+  };
+  map.on('idle', onIdle);
+
+  // ── moveend fallback for idle-suppressed overlays ───────────────────
+  //
+  // Slope / altitude / wind overlays keep emitting `styledata` while
+  // their SW tile pipeline computes new tiles. While that's happening
+  // `idle` never fires cleanly, so the ambient prefetch (idle-gated
+  // above) stalls — visible as "basemap stops warming the ring while
+  // slope is on". We compensate with a deferred fallback on `moveend`:
+  // wait ~1.8 s after the camera comes to rest, and if `idle` has NOT
+  // fired in the meantime, force a prefetch cycle. The delay is long
+  // enough that Mapbox has already queued its visible-bbox tile
+  // requests (so we don't displace them in the SW LIFO), and the
+  // tri-tier IGN queue (May 20) preempts slope-visible whenever a
+  // basemap-tagged request lands — so the prefetch's `/dem-tiles/` and
+  // `/ortho-tiles/` URLs get serviced ahead of any pending slope work.
+  const onMoveEnd = (): void => {
+    if (disposed) return;
+    if (pendingMoveendFallback != null) clearTimeout(pendingMoveendFallback);
+    pendingMoveendFallback = setTimeout(() => {
+      pendingMoveendFallback = null;
+      if (disposed) return;
+      // If `idle` fired during the wait, the prefetch is already
+      // scheduled or has already run for this viewport — nothing to do.
+      if (performance.now() - lastIdleAt < IDLE_RECENCY_MS) return;
+      schedule();
+    }, MOVEEND_FALLBACK_DELAY_MS);
+  };
+  map.on('moveend', onMoveEnd);
 
   // Also fire shortly after every style.load — `idle` waits for every
   // source to finish loading, which on a cold start can take 2-4 s on
@@ -710,6 +751,10 @@ export function installViewportPrefetch(
         clearTimeout(scheduled);
         scheduled = null;
       }
+      if (pendingMoveendFallback != null) {
+        clearTimeout(pendingMoveendFallback);
+        pendingMoveendFallback = null;
+      }
       if (activeAbort) {
         activeAbort.abort();
         activeAbort = null;
@@ -718,7 +763,8 @@ export function installViewportPrefetch(
         prewarmAbort.abort();
         prewarmAbort = null;
       }
-      map.off('idle', schedule);
+      map.off('idle', onIdle);
+      map.off('moveend', onMoveEnd);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       map.off('movestart', cancelOnUserGesture as any);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

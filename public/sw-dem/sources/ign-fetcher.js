@@ -8,8 +8,25 @@ const ignInflight = new Map(); // Deduplication: in-progress fetches by key
 let activeIGN = 0;
 let activeIGNBackground = 0;
 let activeIGNSlopeVisible = 0;
-const ignForegroundQueue = [];
-const ignBackgroundQueue = [];
+// ── Tri-tier scheduling (May 20 rewrite) ──────────────────────────────
+// Basemap (no purpose tag) > slope-visible > slope-warm.
+//
+// Before this rewrite, basemap and slope-visible shared the same
+// "foreground" queue with a soft sub-cap on slope-visible. In practice,
+// the LIFO pop semantics meant that once slope-visible saturated the
+// queue, the basemap getIGNTile/getHighresTile requests that came in
+// AFTER the slope burst would land at the tail and pop next — fine —
+// BUT all the slope-visible entries enqueued in the same idle cycle
+// would already be in flight occupying every IGN slot. Each basemap
+// request then queued behind 40+ concurrent slope sub-tile fetches.
+//
+// The fix is to give basemap its OWN queue and pop it before touching
+// the slope-visible queue. Slope-visible still uses LIFO + a dynamic
+// sub-cap; isolated slope loads (no basemap queued) get the full
+// budget so dedicated 1 m benchmarks are unaffected.
+const ignForegroundQueue = [];   // basemap (purpose === null/undefined)
+const ignSlopeVisibleQueue = []; // PURPOSE_SLOPE_VISIBLE
+const ignBackgroundQueue = [];   // PURPOSE_SLOPE_WARM
 let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 
 // Purpose tagging — separates visible 1 m slope fetches from background
@@ -23,35 +40,38 @@ function isIGNBackgroundPurpose(purpose) {
   return purpose === PURPOSE_SLOPE_WARM;
 }
 
+function isIGNSlopeVisiblePurpose(purpose) {
+  return purpose === PURPOSE_SLOPE_VISIBLE;
+}
+
 function totalIGNQueueLength() {
-  return ignForegroundQueue.length + ignBackgroundQueue.length;
+  return ignForegroundQueue.length
+    + ignSlopeVisibleQueue.length
+    + ignBackgroundQueue.length;
 }
 
 function currentIGNBackgroundConcurrency() {
-  if (ignForegroundQueue.length === 0) return IGN_CONCURRENCY;
-  return Math.max(4, Math.min(12, Math.floor(IGN_CONCURRENCY * 0.25)));
+  if (ignForegroundQueue.length > 0 || ignSlopeVisibleQueue.length > 0) {
+    return Math.max(4, Math.min(12, Math.floor(IGN_CONCURRENCY * 0.25)));
+  }
+  return IGN_CONCURRENCY;
 }
 
-// Sub-cap for visible-slope IGN concurrency (May 20 perf pass).
+// Dynamic sub-cap for visible-slope IGN concurrency.
 //
-// Without this cap, when 1 m slope is enabled, getTerrainWmsTile fetches
-// (purpose='slope-visible', foreground queue) compete on equal terms with
-// basemap-driven getIGNTile/getHighresTile fetches (no purpose tag,
-// foreground queue) for the full IGN_CONCURRENCY budget. On a fast pan or
-// zoom the LIFO queue is dominated by the newest viewport's slope tiles
-// (~50–80 entries) and the basemap DEM/highres requests get pushed back
-// or never start at all — visible as "terrain stops loading while slope
-// is active" with the orthophoto + 3D mesh frozen on the previous frame
-// while the slope overlay renders crisply on top of stale geometry.
-//
-// We reserve at least ~40 % of the foreground budget for non-slope work
-// (basemap DEM, ortho, etc.). Slope-visible can still consume the full
-// budget if there are no other foreground requests, so dedicated 1 m
-// slope load tests are unaffected.
+// - If basemap requests are queued, throttle slope-visible to ~30 % of
+//   the budget so basemap DEM/ortho/highres fetches always have at
+//   least ~70 % of the slots immediately. This is the user-visible
+//   regression we keep solving: with slope active, the 3D world
+//   freezes because every IGN slot is taken by slope sub-tile fan-out.
+// - If basemap is NOT queued (e.g. dedicated slope load test, or
+//   ambient prefetch idle window), let slope-visible consume the full
+//   budget so a pure-slope viewport still loads at peak speed.
 function currentIGNSlopeVisibleCap() {
-  // Floor at 8 so that even on the smallest IGN_CONCURRENCY (40) we keep
-  // ~20 % of the budget for slope.
-  return Math.max(8, Math.floor(IGN_CONCURRENCY * 0.6));
+  if (ignForegroundQueue.length > 0) {
+    return Math.max(4, Math.floor(IGN_CONCURRENCY * 0.3));
+  }
+  return IGN_CONCURRENCY;
 }
 
 function pushIGNEntry(entry) {
@@ -59,27 +79,30 @@ function pushIGNEntry(entry) {
     ignBackgroundQueue.push(entry);
     return;
   }
+  if (isIGNSlopeVisiblePurpose(entry.purpose)) {
+    ignSlopeVisibleQueue.push(entry);
+    return;
+  }
   ignForegroundQueue.push(entry);
 }
 
 function popNextIGNEntry() {
+  // 1. Basemap (no purpose) — strict highest priority. LIFO so the
+  //    newest viewport's basemap requests displace older ones.
   if (ignForegroundQueue.length > 0) {
-    // If slope-visible is at its sub-cap, prefer a non-slope-visible
-    // entry from the foreground queue so basemap/ortho fetches always
-    // have breathing room while slope is heavily loading. Scan from the
-    // tail (newest) to keep the LIFO viewport-priority semantics.
-    if (activeIGNSlopeVisible >= currentIGNSlopeVisibleCap()) {
-      for (let i = ignForegroundQueue.length - 1; i >= 0; i--) {
-        if (ignForegroundQueue[i].purpose !== PURPOSE_SLOPE_VISIBLE) {
-          const entry = ignForegroundQueue.splice(i, 1)[0];
-          return { entry, background: false };
-        }
-      }
-      // Every queued foreground entry is slope-visible — fall through
-      // and allow exceeding the cap rather than stalling the queue.
-    }
     return { entry: ignForegroundQueue.pop(), background: false };
   }
+  // 2. Slope-visible — only when basemap queue is drained, and only up
+  //    to its dynamic cap so a single slope burst can never monopolise
+  //    every slot.
+  if (
+    ignSlopeVisibleQueue.length > 0
+    && activeIGNSlopeVisible < currentIGNSlopeVisibleCap()
+  ) {
+    return { entry: ignSlopeVisibleQueue.pop(), background: false };
+  }
+  // 3. Background (slope-warm) — separate concurrency budget so warmups
+  //    cannot starve foreground basemap or slope-visible.
   if (ignBackgroundQueue.length === 0) return null;
   if (activeIGNBackground >= currentIGNBackgroundConcurrency()) return null;
   return { entry: ignBackgroundQueue.pop(), background: true };
@@ -102,9 +125,11 @@ function pruneOldestIGNEntry() {
     }
   };
 
-  // Prefer pruning background work first when timestamps are comparable,
-  // but still honour global oldest-age semantics when foreground really is stale.
+  // Prune oldest background entries first (they're warmups), then
+  // slope-visible (cancellable), and finally basemap (most expensive
+  // to lose because Mapbox is actively waiting on them).
   considerQueue(ignBackgroundQueue);
+  considerQueue(ignSlopeVisibleQueue);
   considerQueue(ignForegroundQueue);
   if (!targetQueue || targetIdx < 0) return null;
   return targetQueue.splice(targetIdx, 1)[0] || null;
@@ -183,6 +208,10 @@ function flushIGNQueue() {
   // (matches the normal scheduler popping order).
   while (ignForegroundQueue.length > 0) {
     const stale = ignForegroundQueue.pop();
+    stale.resolve(PRUNED_SENTINEL);
+  }
+  while (ignSlopeVisibleQueue.length > 0) {
+    const stale = ignSlopeVisibleQueue.pop();
     stale.resolve(PRUNED_SENTINEL);
   }
   while (ignBackgroundQueue.length > 0) {
@@ -266,7 +295,12 @@ function cancelInFlightIGN() {
 // see a normal `null` return.
 function flushIGNQueueByPurpose(purpose) {
   if (!purpose || totalIGNQueueLength() === 0) return 0;
-  const targetQueue = isIGNBackgroundPurpose(purpose) ? ignBackgroundQueue : ignForegroundQueue;
+  // Route to the queue that owns this purpose tag now that slope-visible
+  // lives in its own queue separate from basemap (May 20 tri-tier rewrite).
+  let targetQueue;
+  if (isIGNBackgroundPurpose(purpose)) targetQueue = ignBackgroundQueue;
+  else if (isIGNSlopeVisiblePurpose(purpose)) targetQueue = ignSlopeVisibleQueue;
+  else targetQueue = ignForegroundQueue;
   if (targetQueue.length === 0) return 0;
   let pruned = 0;
   for (let i = targetQueue.length - 1; i >= 0; i--) {
