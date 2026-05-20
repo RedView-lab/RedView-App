@@ -144,6 +144,7 @@ export function getDashboardLayout({
     centerPanelVisible,
     centerPanelWidth,
     centerPanelMinHeight,
+    centerPanelMaxHeight,
     centerPanelHeight,
     centerPanelLeft,
     centerPanelTop,
