@@ -194,10 +194,25 @@ export function useSlope(
     visibilityDeferredRef.current = false;
     cancelSlopeWorkerPressure();
 
-    if (sourceOptionsRef.current.demProfile === 'terrain' && mountedRef.current) {
+    // Full teardown on disable for BOTH demProfiles (default 0.40 m and
+    // terrain 1 m). Leaving the raster source attached with
+    // `visibility:'none'` keeps Mapbox's internal SourceCache registered,
+    // which keeps emitting `styledata` on every style update and prevents
+    // `idle` from firing cleanly — that idle gate is what drives the
+    // ambient DEM/ortho prefetch (viewportPrefetch.ts) AND the basemap
+    // refresh hooks. Result: after disable, no further DEM/ortho tiles
+    // load until the user reloads the page. Matches the May 19 pattern
+    // already applied to useWeatherOverlay / useWindTerrainOverlay (see
+    // overlay-disable-teardown-and-terrain-renderable-may19.md), and the
+    // May 8 pattern that already removed the source for the terrain
+    // profile only (slope-1m-disable-cancel-may08.md). `removeSlopeLayer`
+    // snapshots and re-applies the current terrain so a managed terrain
+    // setup is never lost across the source removal.
+    if (mountedRef.current) {
       removeSlopeLayer(map);
       mountedRef.current = false;
       mountedSourceKeyRef.current = null;
+      try { map.triggerRepaint(); } catch { /* map gone */ }
     }
   }, [map, isMapLoaded, enabled]);
 
