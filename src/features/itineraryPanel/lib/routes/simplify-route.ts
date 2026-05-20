@@ -145,3 +145,29 @@ export function simplifyRouteToMaxPoints(
 
   return rebuildRoutePoints(points, bestIndices);
 }
+
+export function simplifyPointsByQuality(
+  points: RoutePoint[],
+  quality: 'default' | 'balanced' | 'max',
+): RoutePoint[] {
+  let targetPointsPerKm = 10;
+  if (quality === 'balanced') {
+    targetPointsPerKm = 50;
+  } else if (quality === 'max') {
+    targetPointsPerKm = 100;
+  }
+
+  let distanceM = 0;
+  for (let i = 1; i < points.length; i++) {
+    distanceM += haversineM(points[i - 1], points[i]);
+  }
+  const routeDistanceKm = distanceM / 1000;
+
+  const nextMaxPoints = Math.max(
+    2,
+    Math.round(Math.max(routeDistanceKm, 0.25) * targetPointsPerKm),
+  );
+  if (points.length <= nextMaxPoints) return points;
+
+  return simplifyRouteToMaxPoints(points, nextMaxPoints);
+}

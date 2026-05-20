@@ -192,6 +192,18 @@ export function ControlPanelContainer({
       })),
     [projectItineraries],
   );
+  const activeItineraryId = projectStore?.project.activeItineraryId;
+  const activeItinerary = useMemo(
+    () => projectItineraries.find((it) => it.id === activeItineraryId) ?? null,
+    [projectItineraries, activeItineraryId],
+  );
+  const activeGpxQuality = useMemo(
+    () =>
+      activeItinerary?.gpxRoute?.source === 'gpx'
+        ? activeItinerary.gpxRoute.gpxQuality ?? 'default'
+        : null,
+    [activeItinerary],
+  );
   const anyItineraryVisible = useMemo(
     () => projectItineraries.some((itinerary) => itinerary.visible !== false),
     [projectItineraries],
@@ -241,7 +253,12 @@ export function ControlPanelContainer({
       },
       lidarTiles,
       contourLines: terrainState.slices.contourLines,
-      routes: { enabled: routesEnabled, items: routeItems, traceWidthPx: routesTraceWidthPx },
+      routes: {
+        enabled: routesEnabled,
+        items: routeItems,
+        traceWidthPx: routesTraceWidthPx,
+        gpxQuality: activeGpxQuality,
+      },
       labels: overlayState.slices.labels,
       slopes: terrainState.slices.slopes,
       altitude: terrainState.slices.altitude,
@@ -390,6 +407,10 @@ export function ControlPanelContainer({
             traceWidthPx: Math.max(1, Math.min(8, Math.round(value))),
           };
         });
+      }}
+      onRouteQualityChange={(quality) => {
+        if (!projectStore || !activeItineraryId) return;
+        projectStore.changeItineraryGpxQuality(activeItineraryId, quality);
       }}
       onRouteVisibilityToggle={(id) => {
         if (!projectStore) return;

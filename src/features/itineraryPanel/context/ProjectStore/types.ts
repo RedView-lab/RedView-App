@@ -46,6 +46,7 @@ export interface ProjectStoreValue {
     points: Array<{ lat: number; lon: number }>,
   ) => ItineraryForbiddenZone | null;
   simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
+  changeItineraryGpxQuality: (id: string, quality: 'default' | 'balanced' | 'max') => void;
   cleanItineraryGpxGlitches: (id: string) => void;
   mergeItineraries: (
     sourceId: string,

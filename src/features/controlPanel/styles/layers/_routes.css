@@ -186,3 +186,20 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+
+.rvc-routes__quality-row {
+  min-height: 30px;
+  padding-top: 3px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.rvc-routes__quality-select.rvc-select {
+  min-height: 30px;
+  padding: 5px 5px 5px 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  font-size: 14px;
+  font-weight: 600;
+}

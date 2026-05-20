@@ -23,7 +23,7 @@ import {
 import { reverseItineraryGpxProject } from '../../lib/project';
 import { splitItineraryProject, type SplitItineraryProjectResult } from '../../lib/project';
 import { computeRouteElevationMetrics } from '../../lib/route-metrics';
-import { simplifyRouteToMaxPoints } from '../../lib/routes';
+import { simplifyRouteToMaxPoints, simplifyPointsByQuality } from '../../lib/routes';
 import { ProjectStoreContext } from './context';
 import { buildPendingRoutePatchForForbiddenZone } from './forbiddenZonePatch';
 import { useTraceHistory } from './useTraceHistory';
@@ -554,6 +554,47 @@ export function ProjectProvider({
     [updateItinerary],
   );
 
+  const changeItineraryGpxQuality = useCallback(
+    (id: string, quality: 'default' | 'balanced' | 'max') => {
+      updateItinerary(id, (it) => {
+        const route = it.gpxRoute;
+        if (!route || route.source === 'brouter') return;
+
+        const basePoints = route.originalPoints || route.points;
+        const simplifiedPoints = simplifyPointsByQuality(basePoints, quality);
+
+        const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
+        const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
+        const distanceKm = Math.round(distanceM / 100) / 10;
+
+        it.gpxRoute = {
+          ...route,
+          points: simplifiedPoints,
+          originalPoints: basePoints,
+          gpxQuality: quality,
+        };
+        it.metrics = {
+          ...it.metrics,
+          distanceKm,
+          ascentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.ascentM))
+            : it.metrics?.ascentM,
+          descentM: elevationMetrics
+            ? Math.max(0, Math.round(elevationMetrics.descentM))
+            : it.metrics?.descentM,
+          avgSlopePercent: elevationMetrics
+            ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
+            : it.metrics?.avgSlopePercent,
+        };
+        it.timeline = it.timeline.map((row) =>
+          row.kind === 'end' ? { ...row, distanceKm } : row,
+        );
+        it.prediction = null;
+      });
+    },
+    [updateItinerary],
+  );
+
   const cleanItineraryGpxGlitches = useCallback(
     (id: string) => {
       updateItinerary(id, (it) => {
@@ -673,6 +714,7 @@ export function ProjectProvider({
       appendTracePoint,
       addForbiddenZone,
       simplifyItineraryGpx,
+      changeItineraryGpxQuality,
       cleanItineraryGpxGlitches,
       mergeItineraries,
       splitItineraryAtPointIndex,
@@ -700,6 +742,7 @@ export function ProjectProvider({
       appendTracePoint,
       addForbiddenZone,
       simplifyItineraryGpx,
+      changeItineraryGpxQuality,
       cleanItineraryGpxGlitches,
       mergeItineraries,
       splitItineraryAtPointIndex,

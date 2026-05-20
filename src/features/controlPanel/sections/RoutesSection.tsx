@@ -12,6 +12,7 @@ interface Props {
   enabled: boolean;
   items: ControlPanelState['routes']['items'];
   traceWidthPx: number;
+  gpxQuality?: 'default' | 'balanced' | 'max' | null;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onRoutesEnabledChange'];
@@ -20,6 +21,7 @@ interface Props {
   onOpacityChange: ControlPanelHandlers['onRouteOpacityChange'];
   onVisibilityToggle: ControlPanelHandlers['onRouteVisibilityToggle'];
   onTraceWidthChange?: ControlPanelHandlers['onRouteTraceWidthChange'];
+  onGpxQualityChange?: (quality: 'default' | 'balanced' | 'max') => void;
 }
 
 const MODE_OPTIONS: { value: RouteRenderMode; label: string }[] = [
@@ -107,6 +109,7 @@ export function RoutesSection({
   enabled,
   items,
   traceWidthPx,
+  gpxQuality,
   open,
   onOpenChange,
   onEnabledChange,
@@ -115,6 +118,7 @@ export function RoutesSection({
   onOpacityChange,
   onVisibilityToggle,
   onTraceWidthChange,
+  onGpxQualityChange,
 }: Props) {
   const { t } = useAppI18n();
 
@@ -181,6 +185,23 @@ export function RoutesSection({
             <span className="rvc-routes__trace-width-value">{traceWidthPx} px</span>
           </div>
         </div>
+
+        {gpxQuality != null && (
+          <div className="rvc-row rvc-row--split rvc-routes__quality-row">
+            <span className="rvc-row__label">{t('Qualité tracé')}</span>
+            <Select
+              className="rvc-routes__quality-select"
+              width="140px"
+              value={gpxQuality}
+              options={[
+                { value: 'default', label: 'Défaut (rapide)' },
+                { value: 'balanced', label: 'Équilibré' },
+                { value: 'max', label: 'Maximum' },
+              ]}
+              onChange={onGpxQualityChange}
+            />
+          </div>
+        )}
       </div>
     </Section>
   );

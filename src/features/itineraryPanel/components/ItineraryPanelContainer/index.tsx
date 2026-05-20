@@ -27,6 +27,7 @@ import {
   buildImportedRouteMetrics,
   createImportedTimeline,
   normalizeImportedRoutePoints,
+  simplifyPointsByQuality,
 } from '../../lib/routes';
 import type {
   Itinerary,
@@ -346,17 +347,25 @@ export function ItineraryPanelContainer({
     async (file: File) => {
       const route = await parseGpxFile(file);
       const storedPoints = normalizeImportedRoutePoints(route.points);
-      const timeline = createImportedTimeline(storedPoints);
+      const quality = 'default';
+      const simplifiedPoints = simplifyPointsByQuality(storedPoints, quality);
+      const timeline = createImportedTimeline(simplifiedPoints);
       const id = addItinerary({
         name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-        gpxRoute: { name: route.name, points: storedPoints, source: 'gpx' },
+        gpxRoute: {
+          name: route.name,
+          points: simplifiedPoints,
+          originalPoints: storedPoints,
+          gpxQuality: quality,
+          source: 'gpx',
+        },
         timeline,
-        metrics: buildImportedRouteMetrics(storedPoints),
+        metrics: buildImportedRouteMetrics(simplifiedPoints),
       });
 
       if (id) {
         setPendingCorridorFor(id);
-        void hydrateImportedTimelineEndpoints(id, storedPoints);
+        void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
       }
     },
     [addItinerary, hydrateImportedTimelineEndpoints],

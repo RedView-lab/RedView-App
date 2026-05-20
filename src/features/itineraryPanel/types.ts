@@ -389,6 +389,14 @@ export interface Itinerary {
       gradientPct?: number | null;
     }[];
     source?: 'gpx' | 'brouter';
+    originalPoints?: {
+      lat: number;
+      lon: number;
+      distanceM?: number;
+      elevationM?: number | null;
+      gradientPct?: number | null;
+    }[];
+    gpxQuality?: 'default' | 'balanced' | 'max';
   };
   /**
    * Expert Mode profile state. When `enabled`, every parameter the user

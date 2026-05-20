@@ -78,6 +78,7 @@ export interface RoutesSectionState {
   items: RouteItem[];
   /** Global route line width in px. */
   traceWidthPx: number;
+  gpxQuality?: 'default' | 'balanced' | 'max' | null;
 }
 
 export type SlopeResolution = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
@@ -264,6 +265,7 @@ export interface ControlPanelHandlers {
   onRouteOpacityChange?: (id: string, opacity: number) => void;
   onRouteVisibilityToggle?: (id: string) => void;
   onRouteTraceWidthChange?: (value: number) => void;
+  onRouteQualityChange?: (quality: 'default' | 'balanced' | 'max') => void;
 
   onSlopesEnabledChange?: (enabled: boolean) => void;
   onSlopeResolutionChange?: (value: SlopeResolution) => void;
