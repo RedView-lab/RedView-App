@@ -6,6 +6,7 @@ import { IconContourLines } from '../icons';
 import type { ControlPanelHandlers, ContourIntervalSetting } from '../types';
 
 const INTERVAL_OPTIONS: { value: ContourIntervalSetting; label: string }[] = [
+  { value: '10m', label: '10m' },
   { value: '20m', label: '20m' },
   { value: '50m', label: '50m' },
   { value: '100m', label: '100m' },

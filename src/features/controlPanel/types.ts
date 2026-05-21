@@ -88,7 +88,7 @@ export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 
 
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
-export type ContourIntervalSetting = '20m' | '50m' | '100m' | '200m' | string;
+export type ContourIntervalSetting = '10m' | '20m' | '50m' | '100m' | '200m' | string;
 
 export interface SlopeBand {
   id: string;
