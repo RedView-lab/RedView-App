@@ -112,7 +112,7 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
   }, []);
 
   const visibleStatuses = useMemo(() => {
-    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'map', 'altitude', 'slope', 'weather', 'wind'];
+    const orderedIds: OverlayStatusId[] = ['itinerary', 'shadow', 'sunlight-map', 'map', 'altitude', 'slope', 'weather', 'wind'];
     const snapshots: Partial<Record<OverlayStatusId, OverlayStatusSnapshot>> = {
       ...overlayStatuses,
       ...(mapStatus

@@ -13,7 +13,7 @@ import { useWind } from '@/features/weather/hooks/useWind';
 import { useWeatherOverlay } from '@/features/weather/overlay/useWeatherOverlay';
 import { useWindTerrainOverlay } from '@/features/weather/overlay/useWindTerrainOverlay.ts';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
-import { useSunlight, useShadowImage } from '@/features/sunlight';
+import { useSunlight, useShadowImage, useSunlightMap } from '@/features/sunlight';
 
 import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
 import {
@@ -344,6 +344,25 @@ export function useControlPanelOverlayState({
     {
       statusReporter: onShadowOverlayStatusChange,
       registerReload: onShadowOverlayReloadChange,
+    },
+  );
+
+  useSunlightMap(
+    isMapLoaded ? map : null,
+    isMapLoaded,
+    {
+      enabled: sunlightState.enabled && sunlightState.shadowEnabled,
+      date: sunlightState.date,
+      time: sunlightState.time,
+      opacity: sunlightState.shadowOpacity / 100,
+      bands: sunlightState.bands,
+      timeScrubbing: sunlightState.timeScrubbing,
+    },
+    {
+      statusReporter: onShadowOverlayStatusChange,
+      // Reload registrar intentionally omitted — `useShadowImage` already
+      // owns it and triggers a viewport resample that this hook follows via
+      // moveend/style.load. Registering here would clobber that callback.
     },
   );
 

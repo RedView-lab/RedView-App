@@ -2,6 +2,8 @@ export { useSunlight } from './hooks/useSunlight';
 export type { UseSunlightOptions, UseSunlightResult } from './hooks/useSunlight';
 export { useShadowImage } from './hooks/useShadowImage';
 export type { UseShadowImageOptions } from './hooks/useShadowImageShared';
+export { useSunlightMap } from './hooks/useSunlightMap';
+export type { UseSunlightMapOptions, UseSunlightMapRuntimeOptions } from './hooks/useSunlightMap';
 export { getSunPosition, getSunTimes, formatHHmm, resolveSunTimesForLocalDay } from './lib/sun-calc';
 export type { ResolvedSunTimes, SunPosition, SunTimes } from './lib/sun-calc';
 export type {
