@@ -64,12 +64,14 @@ export default function Dashboard({
     handleWeatherOverlayStatusChange,
     handleWindOverlayStatusChange,
     handleShadowOverlayStatusChange,
+    handleSunlightMapOverlayStatusChange,
     handleSlopeOverlayStatusChange,
     handleAltitudeOverlayStatusChange,
     handleItineraryRouteStatusChange,
     handleWeatherOverlayReloadChange,
     handleWindOverlayReloadChange,
     handleShadowOverlayReloadChange,
+    handleSunlightMapOverlayReloadChange,
   } = useDashboardOverlayStatus();
 
   const {
@@ -225,6 +227,8 @@ export default function Dashboard({
               onWindOverlayReloadChange={handleWindOverlayReloadChange}
               onShadowOverlayStatusChange={handleShadowOverlayStatusChange}
               onShadowOverlayReloadChange={handleShadowOverlayReloadChange}
+              onSunlightMapOverlayStatusChange={handleSunlightMapOverlayStatusChange}
+              onSunlightMapOverlayReloadChange={handleSunlightMapOverlayReloadChange}
               onSlopeOverlayStatusChange={handleSlopeOverlayStatusChange}
               onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
               onItineraryRouteStatusChange={handleItineraryRouteStatusChange}

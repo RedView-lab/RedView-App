@@ -1,16 +1,19 @@
 /**
  * useSunlightMap — drives the cumulative-sunshine overlay.
  *
- * Architecture parallels `useShadowImage`:
- *   • A dedicated Web Worker owns the elevation grid + cumulative-exposure
- *     state for the current viewport. Each request is identified by an
- *     incrementing `id` so out-of-order acks can be discarded.
- *   • Sampling is debounced and replays after viewport changes only.
- *   • Compute runs whenever date/time/bands/opacity change. A monotonically
- *     advancing time within the same calendar day takes the worker's
- *     incremental fast path (no re-sweep of past steps).
- *   • Time scrubbing (`timeScrubbing: true`) switches the worker to the
- *     `preview` quality tier so the slider stays responsive.
+ * Lifecycle is fully independent from `useShadowImage`:
+ *   • Own worker, own viewport sample, own exposure cache.
+ *   • Own status id (`sunlight-map`) — does NOT clobber the cast-shadow row.
+ *
+ * Behaviour:
+ *   • Sample (debounced) on `moveend` / `zoomend` / `style.load`.
+ *   • Compute on date / time / opacity / bands changes — the worker keeps
+ *     a per-sample cumulative-minutes buffer, so most time changes only
+ *     integrate the new tranche.
+ *   • Progress messages from the worker drive the loading status update so
+ *     the user sees the integration advancing (just like the shadow dock).
+ *   • A new compute request preempts an in-flight one (the worker yields
+ *     to its event loop between batches and checks the cancellation token).
  */
 import { useEffect, useMemo, useRef } from 'react';
 import type { ImageSource, Map as MapboxMap } from 'mapbox-gl';
@@ -19,12 +22,11 @@ import {
   BLOB_REVOKE_DELAY_MS,
   BOUNDS_OVERSHOOT,
   COMPUTE_DEBOUNCE_MS,
-  FULL_STEP_MINUTES,
   MAX_PARTIAL_SAMPLE_RETRIES,
   MIN_USABLE_SAMPLE_FILL_RATIO,
   PARTIAL_SAMPLE_RETRY_DELAY_MS,
-  PREVIEW_STEP_MINUTES,
   SAMPLE_DEBOUNCE_MS,
+  STEP_MINUTES,
   STYLE_PREPARATION_RETRY_DELAY_MS,
   SUNLIGHT_MAP_LAYER_ID,
   SUNLIGHT_MAP_SOURCE_ID,
@@ -43,6 +45,7 @@ import {
   type BoundsTuple,
   type ComputeJob,
   type SmComputeAck,
+  type SmComputeCancelled,
   type SmComputeEmpty,
   type SmErrAck,
   type SmSampleAck,
@@ -56,6 +59,8 @@ import {
   sunlightMapReadyStatus,
 } from './status';
 
+type ComputeTerminal = SmComputeAck | SmComputeEmpty | SmComputeCancelled | SmErrAck;
+
 export function useSunlightMap(
   map: MapboxMap | null,
   isMapLoaded: boolean,
@@ -67,12 +72,13 @@ export function useSunlightMap(
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
-  // Memoize the serialized bands so the worker only re-runs when the user
-  // actually edits a band (not on unrelated re-renders).
   const bandsPayload = useMemo(() => serializeBands(opts.bands), [opts.bands]);
   const bandsHash = useMemo(() => hashBandPayload(bandsPayload), [bandsPayload]);
   const bandsPayloadRef = useRef(bandsPayload);
   bandsPayloadRef.current = bandsPayload;
+
+  const statusReporterRef = useRef(statusReporter);
+  statusReporterRef.current = statusReporter;
 
   const workerRef = useRef<Worker | null>(null);
   const reqIdRef = useRef(0);
@@ -82,7 +88,13 @@ export function useSunlightMap(
   const sampledRef = useRef(false);
   const sampledBoundsRef = useRef<BoundsTuple | null>(null);
   const partialSampleRetryRef = useRef(0);
-  const pendingRef = useRef(new Map<number, (ack: SunlightMapWorkerAck) => void>());
+
+  /** Terminal-only resolvers (compute-ok / -cancelled / -empty / error). */
+  const computeResolversRef = useRef(new Map<number, (ack: ComputeTerminal) => void>());
+  /** Sample resolvers (terminal). */
+  const sampleResolversRef = useRef(new Map<number, (ack: SmSampleAck | SmErrAck) => void>());
+  /** Active compute id → for routing progress messages. */
+  const activeComputeIdRef = useRef<number | null>(null);
 
   const sampleGenRef = useRef(0);
   const inflightSampleRef = useRef(false);
@@ -96,7 +108,7 @@ export function useSunlightMap(
   const scheduleComputeRef = useRef<(() => void) | null>(null);
 
   const publishStatus = (status: ReturnType<typeof sunlightMapLoadingStatus> | null) => {
-    statusReporter?.(status);
+    statusReporterRef.current?.(status);
   };
 
   useEffect(() => {
@@ -106,16 +118,38 @@ export function useSunlightMap(
     );
     workerRef.current = worker;
     worker.onmessage = (event: MessageEvent<SunlightMapWorkerAck>) => {
-      const resolver = pendingRef.current.get(event.data.id);
-      if (resolver) {
-        pendingRef.current.delete(event.data.id);
-        resolver(event.data);
+      const ack = event.data;
+      if (ack.type === 'sm-progress') {
+        // Progress is non-terminal: route to the active compute's progress
+        // hook only if it matches the current request id (drops stale).
+        if (activeComputeIdRef.current === ack.id) {
+          const totalSteps = Math.max(1, ack.totalSteps);
+          const pct = Math.round((ack.stepsDone / totalSteps) * 70) + 22; // 22→92
+          publishStatus(sunlightMapLoadingStatus(pct, `Ensoleillement ${ack.stepsDone}/${totalSteps}`));
+        }
+        return;
+      }
+      if (ack.type === 'sm-sample-ok' || ack.type === 'sm-error') {
+        const sampleResolver = sampleResolversRef.current.get(ack.id);
+        if (sampleResolver) {
+          sampleResolversRef.current.delete(ack.id);
+          sampleResolver(ack as SmSampleAck | SmErrAck);
+          return;
+        }
+        // Fall through if not a sample resolver (sm-error can resolve a compute too).
+      }
+      const computeResolver = computeResolversRef.current.get(ack.id);
+      if (computeResolver) {
+        computeResolversRef.current.delete(ack.id);
+        computeResolver(ack as ComputeTerminal);
       }
     };
     return () => {
       worker.terminate();
       workerRef.current = null;
-      pendingRef.current.clear();
+      computeResolversRef.current.clear();
+      sampleResolversRef.current.clear();
+      activeComputeIdRef.current = null;
       if (lastBlobUrlRef.current) {
         URL.revokeObjectURL(lastBlobUrlRef.current);
         lastBlobUrlRef.current = null;
@@ -127,12 +161,23 @@ export function useSunlightMap(
     if (!map || !isMapLoaded) return;
     let cancelled = false;
 
-    const post = <T extends SunlightMapWorkerAck>(message: object): Promise<T> => {
+    const postSample = (message: object): Promise<SmSampleAck | SmErrAck> => {
       const worker = workerRef.current;
       if (!worker) return Promise.reject(new Error('worker not ready'));
       const id = ++reqIdRef.current;
-      return new Promise<T>((resolve) => {
-        pendingRef.current.set(id, resolve as (ack: SunlightMapWorkerAck) => void);
+      return new Promise<SmSampleAck | SmErrAck>((resolve) => {
+        sampleResolversRef.current.set(id, resolve);
+        worker.postMessage({ ...message, id });
+      });
+    };
+
+    const postCompute = (message: object): Promise<ComputeTerminal> => {
+      const worker = workerRef.current;
+      if (!worker) return Promise.reject(new Error('worker not ready'));
+      const id = ++reqIdRef.current;
+      activeComputeIdRef.current = id;
+      return new Promise<ComputeTerminal>((resolve) => {
+        computeResolversRef.current.set(id, resolve);
         worker.postMessage({ ...message, id });
       });
     };
@@ -149,6 +194,7 @@ export function useSunlightMap(
         sampledBoundsRef.current = null;
         computeSeqRef.current++;
         pendingComputeRef.current = null;
+        activeComputeIdRef.current = null;
       }
     };
 
@@ -167,28 +213,31 @@ export function useSunlightMap(
       if (!bounds) return;
       const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
       const centerLon = (bounds.getEast() + bounds.getWest()) / 2;
+      const currentMinutes = parseTimeToMinutes(current.time);
 
-      publishStatus(sunlightMapLoadingStatus(
-        job.quality === 'preview' ? 55 : 65,
-        job.quality === 'preview' ? 'Apercu de l\'ensoleillement' : 'Cumul d\'exposition',
-      ));
+      publishStatus(sunlightMapLoadingStatus(20, 'Calcul en cours'));
 
-      const ack = await post<SmComputeAck | SmComputeEmpty | SmErrAck>({
+      const ack = await postCompute({
         type: 'sm-compute',
         isoDate: current.date,
-        currentMinutes: parseTimeToMinutes(current.time),
-        stepMinutes: job.quality === 'preview' ? PREVIEW_STEP_MINUTES : FULL_STEP_MINUTES,
+        currentMinutes,
+        stepMinutes: STEP_MINUTES,
         centerLat,
         centerLon,
         bands: bandsPayloadRef.current,
         opacity: Math.max(0, Math.min(1, current.opacity)),
-        quality: job.quality,
+        quality: current.timeScrubbing ? 'preview' : 'full',
       });
 
       if (cancelled) return;
       if (job.sampleGen !== sampleGenRef.current) return;
       if (job.computeSeq !== computeSeqRef.current) return;
 
+      if (ack.type === 'sm-compute-cancelled') {
+        // Preempted by a newer compute. Don't update the layer; the new
+        // compute will publish status when it lands.
+        return;
+      }
       if (ack.type === 'sm-error') {
         console.warn('[sunlight-map] compute failed', ack.message);
         publishStatus(sunlightMapErrorStatus(ack.message));
@@ -208,7 +257,7 @@ export function useSunlightMap(
         [job.bounds[0], job.bounds[1]],
       ];
 
-      publishStatus(sunlightMapLoadingStatus(88, 'Assemblage'));
+      publishStatus(sunlightMapLoadingStatus(94, 'Application'));
       await preloadBlobUrl(url);
       if (cancelled || job.sampleGen !== sampleGenRef.current || job.computeSeq !== computeSeqRef.current) {
         URL.revokeObjectURL(url);
@@ -240,7 +289,7 @@ export function useSunlightMap(
         setTimeout(() => URL.revokeObjectURL(previous), BLOB_REVOKE_DELAY_MS);
       }
 
-      publishStatus(sunlightMapReadyStatus('Overlay pret'));
+      publishStatus(sunlightMapReadyStatus(formatReadyDetail(currentMinutes)));
     };
 
     const processComputeQueue = async (initialJob: ComputeJob) => {
@@ -273,6 +322,7 @@ export function useSunlightMap(
         quality: current.timeScrubbing ? 'preview' : 'full',
       };
       if (computeInflightRef.current) {
+        // Replace any queued job; only the latest matters.
         pendingComputeRef.current = job;
         return;
       }
@@ -334,9 +384,9 @@ export function useSunlightMap(
       const { gridW, gridH } = chooseGridSize(map);
       const demZoom = chooseDemZoom(map, gridW);
 
-      publishStatus(sunlightMapLoadingStatus(30, 'Echantillonnage du relief'));
+      publishStatus(sunlightMapLoadingStatus(18, 'Echantillonnage du relief'));
 
-      const sampleAck = await post<SmSampleAck | SmErrAck>({
+      const sampleAck = await postSample({
         type: 'sm-sample',
         bounds: sampledBounds,
         gridW,
@@ -392,7 +442,7 @@ export function useSunlightMap(
         if (partialSampleRetryRef.current <= MAX_PARTIAL_SAMPLE_RETRIES) {
           if (hasPreviousSample) applyVisibleOpacity();
           else setSunlightMapLayerOpacity(map, 0);
-          publishStatus(sunlightMapLoadingStatus(50, `Relief partiel (${Math.round(fillRatio * 100)}%)`));
+          publishStatus(sunlightMapLoadingStatus(16, `Relief partiel (${Math.round(fillRatio * 100)}%)`));
           return;
         }
 
@@ -411,7 +461,7 @@ export function useSunlightMap(
       sampledRef.current = true;
       sampledBoundsRef.current = sampledBounds;
       publishStatus(sunlightMapLoadingStatus(
-        58,
+        20,
         sampleAck.downgraded ? `Relief capture (DEM z${sampleAck.effectiveZoom})` : 'Relief capture',
       ));
       enqueueCompute();
@@ -427,11 +477,8 @@ export function useSunlightMap(
     scheduleSampleRef.current = scheduleSample;
 
     if (optsRef.current.enabled) {
-      if (sampledRef.current && sampledBoundsRef.current) {
-        enqueueCompute();
-      } else {
-        scheduleSample();
-      }
+      if (sampledRef.current && sampledBoundsRef.current) enqueueCompute();
+      else scheduleSample();
     } else {
       setSunlightMapLayerOpacity(map, 0);
       publishStatus(null);
@@ -466,16 +513,19 @@ export function useSunlightMap(
       pendingResampleRef.current = false;
       computeInflightRef.current = false;
       pendingComputeRef.current = null;
+      activeComputeIdRef.current = null;
       scheduleSampleRef.current = null;
       requestResampleRef.current = null;
       scheduleComputeRef.current = null;
       removeOverlay(true);
       publishStatus(null);
     };
-  }, [isMapLoaded, map, statusReporter]);
+    // statusReporter intentionally excluded — captured via ref so updates
+    // don't tear down the entire pipeline.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMapLoaded, map]);
 
-  // Re-trigger sample on (enabled → true) transitions; recompute on
-  // date/time/bands/opacity changes (cheap if grid is cached).
+  // Re-trigger compute on time/date/bands/opacity/scrub changes.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!opts.enabled) {
@@ -488,7 +538,6 @@ export function useSunlightMap(
     } else {
       scheduleSampleRef.current?.();
     }
-    // bandsHash captured so external opt.bands edits trigger a recompute.
   }, [
     map,
     isMapLoaded,
@@ -498,10 +547,9 @@ export function useSunlightMap(
     opts.opacity,
     opts.timeScrubbing,
     bandsHash,
-    statusReporter,
   ]);
 
-  // Live opacity updates without recomputing the worker overlay.
+  // Live opacity updates without re-running the worker.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     setSunlightMapLayerOpacity(map, effectiveLayerOpacity(opts.enabled, opts.opacity));
@@ -524,4 +572,10 @@ export function useSunlightMap(
       registerReload(null);
     };
   }, [isMapLoaded, map, opts.enabled, registerReload]);
+}
+
+function formatReadyDetail(currentMinutes: number): string {
+  const hh = Math.floor(currentMinutes / 60).toString().padStart(2, '0');
+  const mm = (currentMinutes % 60).toString().padStart(2, '0');
+  return `Cumul jusqu'a ${hh}:${mm}`;
 }

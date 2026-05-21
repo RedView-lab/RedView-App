@@ -13,12 +13,14 @@ interface UseDashboardOverlayStatusResult {
   handleWeatherOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleWindOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleShadowOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
+  handleSunlightMapOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleSlopeOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleAltitudeOverlayStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleItineraryRouteStatusChange: (status: OverlayStatusSnapshot | null) => void;
   handleWeatherOverlayReloadChange: (reload: (() => void) | null) => void;
   handleWindOverlayReloadChange: (reload: (() => void) | null) => void;
   handleShadowOverlayReloadChange: (reload: (() => void) | null) => void;
+  handleSunlightMapOverlayReloadChange: (reload: (() => void) | null) => void;
 }
 
 export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
@@ -147,6 +149,10 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     (status: OverlayStatusSnapshot | null) => setOverlayStatus('shadow', status),
     [setOverlayStatus],
   );
+  const handleSunlightMapOverlayStatusChange = useCallback(
+    (status: OverlayStatusSnapshot | null) => setOverlayStatus('sunlight-map', status),
+    [setOverlayStatus],
+  );
   const handleSlopeOverlayStatusChange = useCallback(
     (status: OverlayStatusSnapshot | null) => setOverlayStatus('slope', status),
     [setOverlayStatus],
@@ -171,6 +177,10 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     (reload: (() => void) | null) => setOverlayReloader('shadow', reload),
     [setOverlayReloader],
   );
+  const handleSunlightMapOverlayReloadChange = useCallback(
+    (reload: (() => void) | null) => setOverlayReloader('sunlight-map', reload),
+    [setOverlayReloader],
+  );
 
   return {
     visibleStatuses,
@@ -180,11 +190,13 @@ export function useDashboardOverlayStatus(): UseDashboardOverlayStatusResult {
     handleWeatherOverlayStatusChange,
     handleWindOverlayStatusChange,
     handleShadowOverlayStatusChange,
+    handleSunlightMapOverlayStatusChange,
     handleSlopeOverlayStatusChange,
     handleAltitudeOverlayStatusChange,
     handleItineraryRouteStatusChange,
     handleWeatherOverlayReloadChange,
     handleWindOverlayReloadChange,
     handleShadowOverlayReloadChange,
+    handleSunlightMapOverlayReloadChange,
   };
 }

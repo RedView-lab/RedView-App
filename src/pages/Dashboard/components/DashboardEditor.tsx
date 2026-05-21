@@ -90,6 +90,8 @@ interface DashboardEditorProps {
   onWindOverlayReloadChange: OverlayReloadRegistrar;
   onShadowOverlayStatusChange: OverlayStatusReporter;
   onShadowOverlayReloadChange: OverlayReloadRegistrar;
+  onSunlightMapOverlayStatusChange: OverlayStatusReporter;
+  onSunlightMapOverlayReloadChange: OverlayReloadRegistrar;
   onSlopeOverlayStatusChange: OverlayStatusReporter;
   onAltitudeOverlayStatusChange: OverlayStatusReporter;
   onItineraryRouteStatusChange: OverlayStatusReporter;
@@ -145,6 +147,8 @@ export function DashboardEditor({
   onWindOverlayReloadChange,
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
+  onSunlightMapOverlayStatusChange,
+  onSunlightMapOverlayReloadChange,
   onSlopeOverlayStatusChange,
   onAltitudeOverlayStatusChange,
   onItineraryRouteStatusChange,
@@ -406,6 +410,8 @@ export function DashboardEditor({
                           onWindOverlayReloadChange={onWindOverlayReloadChange}
                           onShadowOverlayStatusChange={onShadowOverlayStatusChange}
                           onShadowOverlayReloadChange={onShadowOverlayReloadChange}
+                          onSunlightMapOverlayStatusChange={onSunlightMapOverlayStatusChange}
+                          onSunlightMapOverlayReloadChange={onSunlightMapOverlayReloadChange}
                           onSlopeOverlayStatusChange={onSlopeOverlayStatusChange}
                           onAltitudeOverlayStatusChange={onAltitudeOverlayStatusChange}
                           lidarDownloadModeActive={lidarModeEnabled}

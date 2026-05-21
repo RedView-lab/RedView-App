@@ -26,9 +26,13 @@ export const DEM_MAX_SAMPLE_ZOOM = 13;
 export const BOUNDS_OVERSHOOT = 0.10;
 export const BLOB_REVOKE_DELAY_MS = 1500;
 
-/** Riemann integration step (minutes). */
-export const FULL_STEP_MINUTES = 8;
-export const PREVIEW_STEP_MINUTES = 20;
+/**
+ * Riemann integration step (minutes). 15 min strikes a good balance between
+ * accuracy (≈ 4° azimuth resolution near solar noon) and compute cost
+ * (≈ 56 sweeps for a 14h photoperiod). Using a SINGLE step size means the
+ * worker cache is unified across scrub and full-quality requests.
+ */
+export const STEP_MINUTES = 15;
 
 /** Acceptable fill ratio before we keep retrying the sample. */
 export const MIN_USABLE_SAMPLE_FILL_RATIO = 0.65;
@@ -80,6 +84,23 @@ export interface SmComputeAck {
   gridH: number;
   integratedUpToMinutes: number;
   quality: ComputeQuality;
+  stepsDone: number;
+  totalSteps: number;
+}
+
+export interface SmComputeProgress {
+  id: number;
+  type: 'sm-progress';
+  stepsDone: number;
+  totalSteps: number;
+  integratedUpToMinutes: number;
+}
+
+export interface SmComputeCancelled {
+  id: number;
+  type: 'sm-compute-cancelled';
+  stepsDone: number;
+  totalSteps: number;
 }
 
 export interface SmComputeEmpty {
@@ -101,6 +122,8 @@ export interface SmErrAck {
 export type SunlightMapWorkerAck =
   | SmSampleAck
   | SmComputeAck
+  | SmComputeProgress
+  | SmComputeCancelled
   | SmComputeEmpty
   | SmResetAck
   | SmErrAck;

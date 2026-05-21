@@ -97,6 +97,8 @@ interface UseControlPanelOverlayStateArgs {
   onWindOverlayReloadChange?: OverlayReloadRegistrar;
   onShadowOverlayStatusChange?: OverlayStatusReporter;
   onShadowOverlayReloadChange?: OverlayReloadRegistrar;
+  onSunlightMapOverlayStatusChange?: OverlayStatusReporter;
+  onSunlightMapOverlayReloadChange?: OverlayReloadRegistrar;
 }
 
 export interface OverlayHandlers {
@@ -136,6 +138,8 @@ export function useControlPanelOverlayState({
   onWindOverlayReloadChange,
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
+  onSunlightMapOverlayStatusChange,
+  onSunlightMapOverlayReloadChange,
 }: UseControlPanelOverlayStateArgs): OverlayStateResult {
   const [labelBackend, setLabelBackend] = useState(
     () => initialControlPanel.labelsState?.backend ?? loadLabelState(),
@@ -359,10 +363,8 @@ export function useControlPanelOverlayState({
       timeScrubbing: sunlightState.timeScrubbing,
     },
     {
-      statusReporter: onShadowOverlayStatusChange,
-      // Reload registrar intentionally omitted — `useShadowImage` already
-      // owns it and triggers a viewport resample that this hook follows via
-      // moveend/style.load. Registering here would clobber that callback.
+      statusReporter: onSunlightMapOverlayStatusChange,
+      registerReload: onSunlightMapOverlayReloadChange,
     },
   );
 

@@ -38,6 +38,8 @@ export interface ControlPanelContainerProps {
   onWindOverlayReloadChange?: OverlayReloadRegistrar;
   onShadowOverlayStatusChange?: OverlayStatusReporter;
   onShadowOverlayReloadChange?: OverlayReloadRegistrar;
+  onSunlightMapOverlayStatusChange?: OverlayStatusReporter;
+  onSunlightMapOverlayReloadChange?: OverlayReloadRegistrar;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
   onAltitudeOverlayStatusChange?: OverlayStatusReporter;
   onToggleLidarDownloadMode?: () => void;
@@ -67,6 +69,8 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   onWindOverlayReloadChange,
   onShadowOverlayStatusChange,
   onShadowOverlayReloadChange,
+  onSunlightMapOverlayStatusChange,
+  onSunlightMapOverlayReloadChange,
   onSlopeOverlayStatusChange,
   onAltitudeOverlayStatusChange,
   onToggleLidarDownloadMode,
@@ -118,6 +122,8 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     onWindOverlayReloadChange,
     onShadowOverlayStatusChange,
     onShadowOverlayReloadChange,
+    onSunlightMapOverlayStatusChange,
+    onSunlightMapOverlayReloadChange,
   });
 
   const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);

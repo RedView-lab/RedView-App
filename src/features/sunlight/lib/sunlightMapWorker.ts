@@ -7,22 +7,16 @@
  * user-configured `bands` (e.g. green 0–60min, yellow 60–120min, …) and
  * returned as a PNG blob for direct ingestion as a Mapbox image source.
  *
- * Pipeline:
- *   1. `sample` — build a Float32 elevation grid for the viewport (cached
- *      between time-scrubs so only the compute step pays the cost).
- *   2. `compute` — iterate `t ∈ [0, currentMinutes]` step `stepMinutes`,
- *      compute the sun position at the viewport center, run the horizon
- *      sweep, and accumulate per-pixel exposure (rectangular Riemann sum).
- *      The exposure buffer is cached so subsequent time advances only run
- *      the additional steps (true incremental mode).
- *   3. Colorize → encode RGBA PNG → post back to main thread.
- *
- * Per-step quality:
- *   • `preview`   — coarse grid (≤ 320×240), step ≥ 15 min — used while the
- *     user drags the time slider.
- *   • `full`      — uses the native sample grid (capped at 512×384 for the
- *     sunlight pass — bands are too coarse to benefit from finer detail and
- *     cumulative compute scales linearly with pixel count).
+ * Design notes (v2 — rewrite for responsiveness):
+ *   • One grid, one exposure cache per quality tier. Cache key is
+ *     `(sampleGen, isoDate, stepMinutes)`. The observer's lat/lon is NOT
+ *     part of the key — across a viewport the sun position varies by far
+ *     less than the integration step, so re-keying on map drift would wipe
+ *     a perfectly usable cache.
+ *   • Time advances → only the missing tranches are integrated (true O(Δt)).
+ *   • The loop is async-yielding (`setTimeout(0)` every BATCH_STEPS) so:
+ *       1. Progress messages reach the main thread mid-flight.
+ *       2. A newer compute request can preempt a stale in-flight one.
  */
 import { getSunPosition } from './sun-calc';
 import {
@@ -33,10 +27,12 @@ import {
 } from './dem-grid-worker';
 import { rawPng } from './shadowWorkerEncoding';
 
-const FULL_GRID_MAX_W = 512;
-const FULL_GRID_MAX_H = 384;
-const PREVIEW_GRID_MAX_W = 320;
-const PREVIEW_GRID_MAX_H = 240;
+/** Target grid cap. ~150 k pixels keeps a single horizon sweep ≲ 5 ms. */
+const GRID_MAX_W = 448;
+const GRID_MAX_H = 336;
+/** Steps processed before yielding to the event loop. */
+const BATCH_STEPS = 6;
+const PROGRESS_THROTTLE_MS = 90;
 
 interface SampleRequest {
   type: 'sm-sample';
@@ -62,9 +58,9 @@ interface ComputeRequest {
   isoDate: string;
   /** Minutes since local midnight, 0..1440. */
   currentMinutes: number;
-  /** Riemann step size in minutes (e.g. 10). */
+  /** Riemann step size in minutes. */
   stepMinutes: number;
-  /** Sun-position observer location (we use the viewport center). */
+  /** Sun-position observer location (viewport center). */
   centerLat: number;
   centerLon: number;
   bands: BandSpec[];
@@ -91,58 +87,46 @@ interface ComputeGrid {
 }
 
 interface ExposureCache {
-  /** Sample generation id this cache belongs to. */
   sampleGen: number;
   isoDate: string;
-  centerLat: number;
-  centerLon: number;
   stepMinutes: number;
-  quality: 'preview' | 'full';
   /** Last cumulative minute boundary actually integrated. */
   lastMinutes: number;
-  /** Float32 cumulative exposure (minutes) per pixel. */
   exposure: Float32Array;
 }
 
 interface ViewportState {
   sampleGen: number;
   bounds: BoundsTuple;
-  /** Native grid as returned by the sampler (capped to FULL_GRID_MAX_*). */
-  full: ComputeGrid;
-  /** Optional downsampled grid for time-scrubbing. */
-  preview: ComputeGrid | null;
-  /** Cached exposure buffers — at most one per quality tier. */
+  grid: ComputeGrid;
   caches: { full: ExposureCache | null; preview: ExposureCache | null };
 }
 
 let state: ViewportState | null = null;
 let nextSampleGen = 1;
+/** Monotonic compute token used for cooperative cancellation. */
+let currentComputeToken = 0;
 
-self.onmessage = async (e: MessageEvent<Request>) => {
+self.onmessage = (e: MessageEvent<Request>) => {
   const msg = e.data;
-  try {
-    if (msg.type === 'sm-sample') {
-      await handleSample(msg);
-    } else if (msg.type === 'sm-compute') {
-      handleCompute(msg);
-    } else if (msg.type === 'sm-reset') {
-      state = null;
-      (self as unknown as Worker).postMessage({ id: msg.id, type: 'sm-reset-ok' });
-    }
-  } catch (err) {
-    (self as unknown as Worker).postMessage({
-      id: msg.id,
-      type: 'sm-error',
-      message: err instanceof Error ? err.message : String(err),
-    });
+  if (msg.type === 'sm-sample') {
+    handleSample(msg).catch((err) => postError(msg.id, err));
+  } else if (msg.type === 'sm-compute') {
+    // Bump the token BEFORE dispatching so any older compute loop notices
+    // its token is stale at the next batch boundary and aborts.
+    currentComputeToken += 1;
+    const myToken = currentComputeToken;
+    handleCompute(msg, myToken).catch((err) => postError(msg.id, err));
+  } else if (msg.type === 'sm-reset') {
+    state = null;
+    currentComputeToken += 1;
+    post({ id: msg.id, type: 'sm-reset-ok' });
   }
 };
 
 async function handleSample(msg: SampleRequest) {
-  // Cap the native grid: cumulative compute scales linearly with pixels and
-  // bands are coarse, so > 512×384 wastes CPU with no visible gain.
-  const cappedGridW = Math.min(FULL_GRID_MAX_W, msg.gridW);
-  const cappedGridH = Math.min(FULL_GRID_MAX_H, msg.gridH);
+  const cappedGridW = Math.min(GRID_MAX_W, Math.max(64, msg.gridW));
+  const cappedGridH = Math.min(GRID_MAX_H, Math.max(48, msg.gridH));
 
   const result: ElevationGridSampleResult = await sampleViewportElevationGrid(
     msg.bounds,
@@ -152,18 +136,11 @@ async function handleSample(msg: SampleRequest) {
   );
 
   if (result.tooMany) {
-    (self as unknown as Worker).postMessage({
-      id: msg.id,
-      type: 'sm-sample-ok',
-      filled: 0,
-      total: result.total,
-      tooMany: true,
-    });
-    state = null;
+    post({ id: msg.id, type: 'sm-sample-ok', filled: 0, total: result.total, tooMany: true });
     return;
   }
 
-  const full: ComputeGrid = {
+  const grid: ComputeGrid = {
     elev: result.elev,
     gridW: cappedGridW,
     gridH: cappedGridH,
@@ -172,17 +149,12 @@ async function handleSample(msg: SampleRequest) {
     scratchShadow: new Uint8Array(cappedGridW * cappedGridH),
     scratchShadowElev: new Float32Array(cappedGridW * cappedGridH),
   };
-  const preview = buildPreviewGrid(full);
   const sampleGen = nextSampleGen++;
-  state = {
-    sampleGen,
-    bounds: msg.bounds,
-    full,
-    preview,
-    caches: { full: null, preview: null },
-  };
+  state = { sampleGen, bounds: msg.bounds, grid, caches: { full: null, preview: null } };
+  // Invalidate any in-flight compute bound to the previous generation.
+  currentComputeToken += 1;
 
-  (self as unknown as Worker).postMessage({
+  post({
     id: msg.id,
     type: 'sm-sample-ok',
     filled: result.filled,
@@ -193,101 +165,112 @@ async function handleSample(msg: SampleRequest) {
   });
 }
 
-function buildPreviewGrid(src: ComputeGrid): ComputeGrid | null {
-  const stepX = Math.max(1, Math.ceil(src.gridW / PREVIEW_GRID_MAX_W));
-  const stepY = Math.max(1, Math.ceil(src.gridH / PREVIEW_GRID_MAX_H));
-  if (stepX === 1 && stepY === 1) return null;
-
-  const gridW = Math.max(1, Math.ceil(src.gridW / stepX));
-  const gridH = Math.max(1, Math.ceil(src.gridH / stepY));
-  const elev = new Float32Array(gridW * gridH);
-  for (let r = 0; r < gridH; r++) {
-    const srcR = Math.min(src.gridH - 1, r * stepY + ((stepY - 1) >> 1));
-    for (let c = 0; c < gridW; c++) {
-      const srcC = Math.min(src.gridW - 1, c * stepX + ((stepX - 1) >> 1));
-      elev[r * gridW + c] = src.elev[srcR * src.gridW + srcC];
-    }
-  }
-  return {
-    elev,
-    gridW,
-    gridH,
-    cellSizeX: src.cellSizeX * stepX,
-    cellSizeY: src.cellSizeY * stepY,
-    scratchShadow: new Uint8Array(gridW * gridH),
-    scratchShadowElev: new Float32Array(gridW * gridH),
-  };
-}
-
-function handleCompute(msg: ComputeRequest) {
+async function handleCompute(msg: ComputeRequest, token: number): Promise<void> {
   if (!state) {
-    (self as unknown as Worker).postMessage({ id: msg.id, type: 'sm-compute-empty' });
+    post({ id: msg.id, type: 'sm-compute-empty' });
     return;
   }
-  const grid = msg.quality === 'preview' ? (state.preview ?? state.full) : state.full;
-  const cacheSlot: 'preview' | 'full' = msg.quality === 'preview' && state.preview ? 'preview' : 'full';
-  const cached = state.caches[cacheSlot];
+  const grid = state.grid;
+  const cacheSlot: 'preview' | 'full' = msg.quality === 'preview' ? 'preview' : 'full';
 
   const currentMinutes = clamp(msg.currentMinutes, 0, 1440);
   const stepMinutes = Math.max(1, msg.stepMinutes);
 
-  let cache = cached;
-  const cacheMatches = !!cache
+  let cache = state.caches[cacheSlot];
+  const cacheValid = !!cache
     && cache.sampleGen === state.sampleGen
     && cache.isoDate === msg.isoDate
-    && cache.centerLat === msg.centerLat
-    && cache.centerLon === msg.centerLon
     && cache.stepMinutes === stepMinutes
-    && cache.quality === msg.quality
     && cache.exposure.length === grid.gridW * grid.gridH;
 
-  if (!cacheMatches) {
+  if (!cacheValid) {
     cache = {
       sampleGen: state.sampleGen,
       isoDate: msg.isoDate,
-      centerLat: msg.centerLat,
-      centerLon: msg.centerLon,
       stepMinutes,
-      quality: msg.quality,
       lastMinutes: 0,
       exposure: new Float32Array(grid.gridW * grid.gridH),
     };
   } else if (currentMinutes < cache!.lastMinutes) {
-    // Time moved backwards — reset and recompute up to the new boundary.
+    // Scrubbed backwards → reset and re-integrate (cache stays warm).
     cache!.exposure.fill(0);
     cache!.lastMinutes = 0;
   }
-
-  // Integrate from `lastMinutes` up to `currentMinutes` in `stepMinutes`
-  // increments. Each integration window contributes its `dt` to every pixel
-  // that was lit at the window's midpoint sample (sun above the horizon AND
-  // no terrain blocking).
-  const exposure = cache!.exposure;
-  let t = cache!.lastMinutes;
-  while (t < currentMinutes) {
-    const next = Math.min(currentMinutes, t + stepMinutes);
-    const dt = next - t;
-    // Midpoint sample yields better accuracy for the Riemann sum without
-    // doubling the cost of a trapezoidal rule.
-    const sampleMinutes = t + dt * 0.5;
-    accumulateExposureAt(grid, exposure, msg.isoDate, sampleMinutes, msg.centerLat, msg.centerLon, dt);
-    t = next;
-  }
-  cache!.lastMinutes = currentMinutes;
   state.caches[cacheSlot] = cache!;
 
+  const exposure = cache!.exposure;
+  const startMinutes = cache!.lastMinutes;
+  const totalSteps = Math.max(
+    0,
+    Math.ceil(Math.max(0, currentMinutes - startMinutes) / stepMinutes),
+  );
+
+  if (totalSteps === 0) {
+    finalizeCompute(msg, grid, exposure, currentMinutes, 0, 0, token);
+    return;
+  }
+
+  let stepsDone = 0;
+  let t = startMinutes;
+  let lastProgressAt = 0;
+
+  postProgress(msg.id, 0, totalSteps, t);
+
+  while (t < currentMinutes) {
+    if (token !== currentComputeToken) {
+      cache!.lastMinutes = t;
+      post({ id: msg.id, type: 'sm-compute-cancelled', stepsDone, totalSteps });
+      return;
+    }
+
+    const batchEnd = Math.min(currentMinutes, t + stepMinutes * BATCH_STEPS);
+    while (t < batchEnd) {
+      const next = Math.min(currentMinutes, t + stepMinutes);
+      const dt = next - t;
+      const sampleMinutes = t + dt * 0.5;
+      accumulateExposureAt(grid, exposure, msg.isoDate, sampleMinutes, msg.centerLat, msg.centerLon, dt);
+      t = next;
+      stepsDone += 1;
+    }
+
+    const now = nowMs();
+    if (now - lastProgressAt >= PROGRESS_THROTTLE_MS) {
+      postProgress(msg.id, stepsDone, totalSteps, t);
+      lastProgressAt = now;
+    }
+    await yieldEventLoop();
+  }
+
+  cache!.lastMinutes = currentMinutes;
+  finalizeCompute(msg, grid, exposure, currentMinutes, stepsDone, totalSteps, token);
+}
+
+function finalizeCompute(
+  msg: ComputeRequest,
+  grid: ComputeGrid,
+  exposure: Float32Array,
+  integratedUpToMinutes: number,
+  stepsDone: number,
+  totalSteps: number,
+  token: number,
+): void {
+  if (token !== currentComputeToken) {
+    post({ id: msg.id, type: 'sm-compute-cancelled', stepsDone, totalSteps });
+    return;
+  }
   const rgba = colorize(exposure, grid.gridW, grid.gridH, msg.bands, msg.opacity);
   const blob = new Blob([rawPng(grid.gridW, grid.gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
-
-  (self as unknown as Worker).postMessage({
+  post({
     id: msg.id,
     type: 'sm-compute-ok',
     blob,
-    bounds: state.bounds,
+    bounds: state?.bounds ?? [0, 0, 0, 0],
     gridW: grid.gridW,
     gridH: grid.gridH,
-    integratedUpToMinutes: currentMinutes,
+    integratedUpToMinutes,
     quality: msg.quality,
+    stepsDone,
+    totalSteps,
   });
 }
 
@@ -303,9 +286,6 @@ function accumulateExposureAt(
   const date = makeLocalDateAtMinutes(isoDate, minutesSinceMidnight);
   if (!date) return;
   const sun = getSunPosition(date, lat, lon);
-
-  // Sun below the horizon → no exposure delta for this window. We do NOT
-  // skip the loop because we still need to ensure exposure isn't decreased.
   if (!Number.isFinite(sun.altitude) || sun.altitude <= 0) return;
 
   const mask = computeHorizonSweepShadow(
@@ -319,9 +299,9 @@ function accumulateExposureAt(
     grid.scratchShadow,
     grid.scratchShadowElev,
   );
-  // mask: 0 = lit, 255 = cast-shadow. Lit pixels get the full `dt`.
+  const elev = grid.elev;
   for (let i = 0; i < mask.length; i++) {
-    if (mask[i] === 0 && !Number.isNaN(grid.elev[i])) {
+    if (mask[i] === 0 && !Number.isNaN(elev[i])) {
       exposure[i] += dtMinutes;
     }
   }
@@ -338,20 +318,13 @@ function colorize(
   const out = new Uint8Array(W * H * 4);
   if (alpha === 0 || bands.length === 0) return out;
 
-  // Bands are pre-sorted ascending by minMinutes on the main thread. Above
-  // the last band's maxMinutes we clamp into the last band (still useful
-  // information: "saturated daylight zone").
   const last = bands.length - 1;
   for (let i = 0; i < exposure.length; i++) {
     const minutes = exposure[i];
     let band: BandSpec | null = null;
     for (let b = 0; b <= last; b++) {
       const candidate = bands[b];
-      if (b === last) {
-        band = candidate;
-        break;
-      }
-      if (minutes < candidate.maxMinutes) {
+      if (b === last || minutes < candidate.maxMinutes) {
         band = candidate;
         break;
       }
@@ -382,4 +355,28 @@ function makeLocalDateAtMinutes(isoDate: string, minutesSinceMidnight: number): 
 
 function clamp(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
+}
+
+function nowMs(): number {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+}
+
+function yieldEventLoop(): Promise<void> {
+  // setTimeout(0) (not Promise.resolve) — microtasks can't interleave new
+  // MessageEvents, which would defeat cancellation.
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function post(message: object): void {
+  (self as unknown as Worker).postMessage(message);
+}
+
+function postProgress(id: number, stepsDone: number, totalSteps: number, integratedUpToMinutes: number): void {
+  post({ id, type: 'sm-progress', stepsDone, totalSteps, integratedUpToMinutes });
+}
+
+function postError(id: number, err: unknown): void {
+  post({ id, type: 'sm-error', message: err instanceof Error ? err.message : String(err) });
 }
