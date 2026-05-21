@@ -67,6 +67,7 @@ function toPersistedSunlightState(state: SunlightState) {
     time: state.time,
     timeScrubbing: state.timeScrubbing,
     shadowEnabled: state.shadowEnabled,
+    sunlightMapEnabled: state.sunlightMapEnabled,
     shadowOpacity: state.shadowOpacity,
     scaleSetting: state.scaleSetting,
     bands: structuredClone(state.bands),
@@ -249,11 +250,24 @@ export function useControlPanelOverlayState({
   );
 
   const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
-  const [sunlightState, setSunlightState] = useState(() => {
+  const [sunlightState, setSunlightState] = useState<SunlightState>(() => {
+    const persistedSunlight: Partial<NonNullable<ControlPanelPersistedState['sunlight']>> =
+      initialControlPanel.sunlight ?? {};
+    const hasSunlightMapEnabled = typeof persistedSunlight.sunlightMapEnabled === 'boolean';
+    const legacyMapToggle =
+      typeof persistedSunlight.shadowEnabled === 'boolean'
+        ? persistedSunlight.shadowEnabled
+        : DEFAULT_CONTROL_PANEL_STATE.sunlight.sunlightMapEnabled;
     const initial = {
       ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
-      ...(initialControlPanel.sunlight ?? {}),
+      ...persistedSunlight,
       enabled: initialControlPanel.toggles.sunlightEnabled,
+      shadowEnabled: hasSunlightMapEnabled
+        ? (persistedSunlight.shadowEnabled ?? DEFAULT_CONTROL_PANEL_STATE.sunlight.shadowEnabled)
+        : DEFAULT_CONTROL_PANEL_STATE.sunlight.shadowEnabled,
+      sunlightMapEnabled: hasSunlightMapEnabled
+        ? persistedSunlight.sunlightMapEnabled === true
+        : legacyMapToggle,
     };
     const scaleSetting = normalizeSunlightScaleSetting(initial.scaleSetting);
     return {
@@ -355,7 +369,7 @@ export function useControlPanelOverlayState({
     isMapLoaded ? map : null,
     isMapLoaded,
     {
-      enabled: sunlightState.enabled && sunlightState.shadowEnabled,
+      enabled: sunlightState.enabled && sunlightState.sunlightMapEnabled,
       date: sunlightState.date,
       time: sunlightState.time,
       opacity: sunlightState.shadowOpacity / 100,
@@ -385,7 +399,7 @@ export function useControlPanelOverlayState({
   );
 
   const sunlightSlice = useMemo(
-    () => ({
+    (): SunlightState => ({
       ...sunlightState,
       sunriseTime: sunlightTimes.sunriseTime,
       sunsetTime: sunlightTimes.sunsetTime,
@@ -401,7 +415,7 @@ export function useControlPanelOverlayState({
 
     setSunlightState((prev) => {
       if (prev.timeScrubbing || prev.time === nextSunsetTime) return prev;
-      const next = {
+      const next: SunlightState = {
         ...prev,
         time: nextSunsetTime,
       };
@@ -663,7 +677,7 @@ export function useControlPanelOverlayState({
       onSunlightEnabledChange: useCallback(
         (enabled: boolean) => {
           setSunlightState((prev) => {
-            const next = { ...prev, enabled };
+            const next: SunlightState = { ...prev, enabled };
             persistSunlightToProject(next);
             return next;
           });
@@ -673,7 +687,11 @@ export function useControlPanelOverlayState({
       onSunlightStateChange: useCallback(
         (changes: Partial<SunlightState>) => {
           setSunlightState((prev) => {
-            const next = { ...prev, ...changes };
+            const next: SunlightState = {
+              ...prev,
+              ...changes,
+              sunlightMapEnabled: changes.sunlightMapEnabled ?? prev.sunlightMapEnabled,
+            };
             persistSunlightToProject(next);
             return next;
           });

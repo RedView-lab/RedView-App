@@ -217,8 +217,8 @@ export function SunlightSection({
 
         <div className="rvc-sunlight__toggle-row">
           <Toggle
-            checked={state.shadowEnabled}
-            onChange={(checked) => onChange?.({ shadowEnabled: checked })}
+            checked={state.sunlightMapEnabled}
+            onChange={(checked) => onChange?.({ sunlightMapEnabled: checked })}
             ariaLabel={t("Afficher la carte d'ensoleillement")}
           />
           <button
@@ -239,7 +239,7 @@ export function SunlightSection({
           </button>
         </div>
 
-        {state.shadowEnabled && mapExpanded ? (
+        {state.sunlightMapEnabled && mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
             <div className="rvc-sunlight__opacity-row">
               <span className="rvc-sunlight__row-label">{t('Opacité')}</span>

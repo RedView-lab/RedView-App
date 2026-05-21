@@ -232,6 +232,8 @@ export interface SunlightState {
   sunsetTime: string;
   /** DEM ray-traced terrain shadows */
   shadowEnabled: boolean;
+  /** Cumulative sunlight raster overlay */
+  sunlightMapEnabled: boolean;
   /** Shadow overlay opacity 0..100 */
   shadowOpacity: number;
   scaleSetting: SunlightScaleSetting;

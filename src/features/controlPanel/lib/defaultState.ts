@@ -135,6 +135,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     sunriseTime: '06:45',
     sunsetTime: '19:33',
     shadowEnabled: true,
+    sunlightMapEnabled: true,
     shadowOpacity: 50,
     scaleSetting: DEFAULT_SUNLIGHT_SCALE_SETTING,
     bands: buildDefaultSunlightBands(DEFAULT_SUNLIGHT_SCALE_SETTING),
