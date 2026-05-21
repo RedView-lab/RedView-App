@@ -202,33 +202,14 @@ export function SunlightSection({
           </div>
         </div>
 
-        {state.shadowEnabled ? (
-          <div className="rvc-sunlight__opacity-row">
-            <span className="rvc-sunlight__row-label">{t('Opacité des ombres')}</span>
-            <div className="rvc-sunlight__opacity-control">
-              <div className="rvc-sunlight__opacity-slider-wrap">
-                <Slider
-                  min={0}
-                  max={100}
-                  value={state.shadowOpacity}
-                  onChange={(val) => onChange?.({ shadowOpacity: val })}
-                  onCommit={(val) => onChange?.({ shadowOpacity: val })}
-                  width="100%"
-                />
-              </div>
-              <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity}%</span>
-            </div>
-          </div>
-        ) : null}
-
         <div className="rvc-sunlight__sun-row">
           <div className="rvc-sunlight__sun-item">
-            <IconSunrise size={16} className="rvc-sunlight__sun-icon" />
+            <IconSunrise size={13.333} className="rvc-sunlight__sun-icon" />
             <div className="rvc-sunlight__sun-label">{t('Lever')}</div>
             <div className="rvc-sunlight__sun-value">{state.sunriseTime}</div>
           </div>
           <div className="rvc-sunlight__sun-item">
-            <IconSunset size={16} className="rvc-sunlight__sun-icon" />
+            <IconSunset size={13.333} className="rvc-sunlight__sun-icon" />
             <div className="rvc-sunlight__sun-label">{t('Coucher')}</div>
             <div className="rvc-sunlight__sun-value">{state.sunsetTime}</div>
           </div>
@@ -260,6 +241,23 @@ export function SunlightSection({
 
         {state.shadowEnabled && mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
+            <div className="rvc-sunlight__opacity-row">
+              <span className="rvc-sunlight__row-label">{t('Opacité')}</span>
+              <div className="rvc-sunlight__opacity-control">
+                <div className="rvc-sunlight__opacity-slider-wrap">
+                  <Slider
+                    min={0}
+                    max={100}
+                    value={state.shadowOpacity}
+                    onChange={(val) => onChange?.({ shadowOpacity: val })}
+                    onCommit={(val) => onChange?.({ shadowOpacity: val })}
+                    width="100%"
+                  />
+                </div>
+                <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity} %</span>
+              </div>
+            </div>
+
             <div className="rvc-sunlight__row rvc-sunlight__row--split">
               <span className="rvc-sunlight__row-label">{t('Échelle')}</span>
               <Select

@@ -111,6 +111,18 @@
   width: 100%;
 }
 
+.rvc-sunlight__slider-shell .rvc-slider__track {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-sunlight__slider-shell .rvc-slider__fill {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.rvc-sunlight__slider-shell .rvc-slider__handle {
+  border-color: rgba(0, 0, 0, 0.88);
+}
+
 .rvc-sunlight__time-bound {
   flex-shrink: 0;
   color: var(--rvc-text);
@@ -149,15 +161,16 @@
 }
 
 .rvc-sunlight__opacity-row {
+  gap: 4px;
   min-height: 30px;
 }
 
 .rvc-sunlight__opacity-control {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 0 0 156px;
-  min-width: 156px;
+  gap: 4px;
+  flex: 0 0 140px;
+  min-width: 140px;
 }
 
 .rvc-sunlight__opacity-slider-wrap {
@@ -198,17 +211,17 @@
 .rvc-sunlight__sun-value {
   display: flex;
   align-items: center;
-  justify-content: center;
-  min-width: 64px;
-  max-width: 104px;
-  height: 30px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  justify-content: flex-end;
+  min-width: 24px;
+  max-width: 64px;
+  width: 48px;
   color: var(--rvc-text);
   font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .rvc-sunlight__toggle-row {
@@ -272,10 +285,12 @@
 
 .rvc-sunlight__shadow-opacity-value {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.72);
-  min-width: 32px;
+  font-weight: 500;
+  color: var(--rvc-text);
+  min-width: 28px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .rvc-sunlight__scale-select.rvc-select {
