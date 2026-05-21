@@ -89,6 +89,7 @@ export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 export type ContourIntervalSetting = '10m' | '20m' | '50m' | '100m' | '200m' | string;
+export type SunlightScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 
 export interface SlopeBand {
   id: string;
@@ -162,6 +163,15 @@ export interface WeatherPaletteConfig {
   bands: WeatherPaletteBand[];
 }
 
+export interface SunlightBand {
+  id: string;
+  label: string;
+  color: string;
+  visible: boolean;
+  minMinutes: number;
+  maxMinutes: number;
+}
+
 export interface WeatherLayer {
   key: WeatherLayerKey;
   enabled: boolean;
@@ -224,6 +234,9 @@ export interface SunlightState {
   shadowEnabled: boolean;
   /** Shadow overlay opacity 0..100 */
   shadowOpacity: number;
+  scaleSetting: SunlightScaleSetting;
+  bands: SunlightBand[];
+  trajectoryEnabled: boolean;
 }
 
 export interface ControlPanelState {

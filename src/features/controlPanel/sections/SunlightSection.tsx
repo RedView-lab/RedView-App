@@ -9,7 +9,14 @@ import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { IconCalendar, IconChevronDown, IconClock, IconEye, IconEyeOff, IconSun, IconSunrise, IconSunset } from '../icons';
 import { CalendarPopover } from '@/features/itineraryPanel/components/calendar';
-import type { ControlPanelHandlers, SunlightState } from '../types';
+import {
+  normalizeSunlightScaleSetting,
+  resampleSunlightBands,
+} from '../lib/sunlightConfig';
+import type {
+  ControlPanelHandlers,
+  SunlightState,
+} from '../types';
 
 interface Props {
   state: SunlightState;
@@ -21,24 +28,10 @@ interface Props {
   onChange: ControlPanelHandlers['onSunlightStateChange'];
 }
 
-type SunlightScaleSetting = '4 couleurs';
+type SunlightScaleOption = '4 couleurs';
 
-interface SunlightBand {
-  id: string;
-  label: string;
-  color: string;
-  visible: boolean;
-}
-
-const SUNLIGHT_SCALE_OPTIONS: { value: SunlightScaleSetting; label: string }[] = [
+const SUNLIGHT_SCALE_OPTIONS: { value: SunlightScaleOption; label: string }[] = [
   { value: '4 couleurs', label: '4 couleurs' },
-];
-
-const DEFAULT_SUNLIGHT_BANDS: SunlightBand[] = [
-  { id: '0-1', label: '0 - 1h', color: '#2DBF8C', visible: true },
-  { id: '1-2', label: '1h - 2h', color: '#FFD800', visible: true },
-  { id: '2-3', label: '2h - 3h', color: '#FF7200', visible: true },
-  { id: '3-4', label: '3h - 4h', color: '#E50C0C', visible: true },
 ];
 
 /**
@@ -71,9 +64,6 @@ export function SunlightSection({
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
-  const [scaleSetting, setScaleSetting] = useState<SunlightScaleSetting>('4 couleurs');
-  const [sunlightBands, setSunlightBands] = useState<SunlightBand[]>(DEFAULT_SUNLIGHT_BANDS);
-  const [trajectoryEnabled, setTrajectoryEnabled] = useState(true);
   const calendarAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -118,11 +108,23 @@ export function SunlightSection({
   const m = timeParts[1] || '00';
 
   const handleBandColorChange = (bandId: string, color: string) => {
-    setSunlightBands((prev) => prev.map((band) => (band.id === bandId ? { ...band, color } : band)));
+    onChange?.({
+      bands: state.bands.map((band) => (band.id === bandId ? { ...band, color } : band)),
+    });
   };
 
   const handleBandVisibilityToggle = (bandId: string) => {
-    setSunlightBands((prev) => prev.map((band) => (band.id === bandId ? { ...band, visible: !band.visible } : band)));
+    onChange?.({
+      bands: state.bands.map((band) => (band.id === bandId ? { ...band, visible: !band.visible } : band)),
+    });
+  };
+
+  const handleScaleSettingChange = (value: SunlightScaleOption) => {
+    const scaleSetting = normalizeSunlightScaleSetting(value);
+    onChange?.({
+      scaleSetting,
+      bands: resampleSunlightBands(state.bands, scaleSetting),
+    });
   };
 
   return (
@@ -262,15 +264,15 @@ export function SunlightSection({
               <span className="rvc-sunlight__row-label">{t('Échelle')}</span>
               <Select
                 width="var(--rvc-panel-select-md)"
-                value={scaleSetting}
+                value={state.scaleSetting}
                 options={SUNLIGHT_SCALE_OPTIONS}
-                onChange={(value) => setScaleSetting(value as SunlightScaleSetting)}
+                  onChange={(value) => handleScaleSettingChange(value as SunlightScaleOption)}
                 className="rvc-sunlight__scale-select"
               />
             </div>
 
             <div className="rvc-sunlight__bands">
-              {sunlightBands.map((band) => (
+              {state.bands.map((band) => (
                 <div
                   key={band.id}
                   className={`rvc-sunlight__band-row${band.visible ? '' : ' is-hidden'}`}
@@ -279,7 +281,7 @@ export function SunlightSection({
                     type="button"
                     className="rvc-sunlight__band-eye"
                     onClick={() => handleBandVisibilityToggle(band.id)}
-                    aria-label={band.visible ? `Masquer ${band.label}` : `Afficher ${band.label}`}
+                    aria-label={band.visible ? t('Masquer la bande') : t('Afficher la bande')}
                   >
                     {band.visible ? <IconEye size={12.5} /> : <IconEyeOff size={12.5} />}
                   </button>
@@ -288,7 +290,7 @@ export function SunlightSection({
                     color={band.color}
                     onChange={(color) => handleBandColorChange(band.id, color)}
                     className="rvc-sunlight__color-chip"
-                    ariaLabel={`Choisir la couleur pour ${band.label}`}
+                    ariaLabel={t('Choisir la couleur de {{name}}', { name: band.label })}
                   >
                     <ColorSwatch color={band.color} size={12} />
                     <span className="rvc-sunlight__color-hex">{formatHexLabel(band.color)}</span>
@@ -302,8 +304,8 @@ export function SunlightSection({
 
         <div className="rvc-sunlight__toggle-row rvc-sunlight__toggle-row--compact">
           <Toggle
-            checked={trajectoryEnabled}
-            onChange={setTrajectoryEnabled}
+            checked={state.trajectoryEnabled}
+            onChange={(trajectoryEnabled) => onChange?.({ trajectoryEnabled })}
             ariaLabel={t('Afficher la trajectoire')}
           />
           <span className="rvc-sunlight__toggle-text">{t('Afficher la trajectoire')}</span>

@@ -16,6 +16,10 @@ import { clampForecastSelection, getForecastDateForOffset } from '@/features/wea
 import { useSunlight, useShadowImage } from '@/features/sunlight';
 
 import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
+import {
+  normalizeSunlightBands,
+  normalizeSunlightScaleSetting,
+} from '../lib/sunlightConfig';
 import { hasLegacyFeelsLikeBreakpoints, isLegacyFeelsLikePalette } from '../weather/defaultPalettes';
 import {
   buildWeatherPaletteBands,
@@ -64,6 +68,9 @@ function toPersistedSunlightState(state: SunlightState) {
     timeScrubbing: state.timeScrubbing,
     shadowEnabled: state.shadowEnabled,
     shadowOpacity: state.shadowOpacity,
+    scaleSetting: state.scaleSetting,
+    bands: structuredClone(state.bands),
+    trajectoryEnabled: state.trajectoryEnabled,
   };
 }
 
@@ -238,11 +245,23 @@ export function useControlPanelOverlayState({
   );
 
   const [snowEnabled, setSnowEnabled] = useState(initialControlPanel.toggles.snowEnabled);
-  const [sunlightState, setSunlightState] = useState(() => ({
-    ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
-    ...(initialControlPanel.sunlight ?? {}),
-    enabled: initialControlPanel.toggles.sunlightEnabled,
-  }));
+  const [sunlightState, setSunlightState] = useState(() => {
+    const initial = {
+      ...DEFAULT_CONTROL_PANEL_STATE.sunlight,
+      ...(initialControlPanel.sunlight ?? {}),
+      enabled: initialControlPanel.toggles.sunlightEnabled,
+    };
+    const scaleSetting = normalizeSunlightScaleSetting(initial.scaleSetting);
+    return {
+      ...initial,
+      scaleSetting,
+      bands: normalizeSunlightBands(initial.bands, scaleSetting),
+      trajectoryEnabled:
+        typeof initial.trajectoryEnabled === 'boolean'
+          ? initial.trajectoryEnabled
+          : DEFAULT_CONTROL_PANEL_STATE.sunlight.trajectoryEnabled,
+    };
+  });
 
   const persistLabelsToProject = useCallback(
     (

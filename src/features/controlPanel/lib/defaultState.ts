@@ -1,6 +1,7 @@
 import type { ControlPanelState } from '../types';
 import { translateAppText } from '@/shared/i18n';
 import { buildBasemapList, DEFAULT_BASEMAP_ID } from './basemaps';
+import { buildDefaultSunlightBands, DEFAULT_SUNLIGHT_SCALE_SETTING } from './sunlightConfig';
 import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 
@@ -135,5 +136,8 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     sunsetTime: '19:33',
     shadowEnabled: true,
     shadowOpacity: 50,
+    scaleSetting: DEFAULT_SUNLIGHT_SCALE_SETTING,
+    bands: buildDefaultSunlightBands(DEFAULT_SUNLIGHT_SCALE_SETTING),
+    trajectoryEnabled: true,
   },
 };
