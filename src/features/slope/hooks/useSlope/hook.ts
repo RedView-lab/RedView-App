@@ -220,25 +220,21 @@ export function useSlope(
       // `idle` from firing cleanly, so `viewportPrefetch.ts` (idle-
       // gated) wasn't keeping the DEM/ortho ring warm. Once we remove
       // the slope source, idle can fire again — but the user has to
-      // WAIT for it. To make recovery feel instantaneous:
+      // WAIT for it. Kick the ambient viewportPrefetch right now
+      // (`trigger()` schedules `fire()` after a tiny throttle window
+      // — much faster than waiting for the next `idle`).
       //
-      //   1. Drain any DEM/slope work the SW still has queued from the
-      //      slope-active period so basemap & ortho fetches don't sit
-      //      behind a stale pre-disable backlog.
-      //   2. Kick the ambient viewportPrefetch right now (its
-      //      `trigger()` schedules `fire()` after a tiny throttle
-      //      window — much faster than waiting for the next `idle`).
-      //
-      // The basemap raster source's missing tiles will be re-requested
-      // by Mapbox itself on the next render frame triggered by
-      // `triggerRepaint()` above; this block just gets the prefetch
-      // ring + ortho cache warming in parallel.
-      try {
-        const sw = navigator.serviceWorker?.controller;
-        if (sw) {
-          sw.postMessage({ type: 'CANCEL_STALE_DEM' });
-        }
-      } catch { /* SW unavailable */ }
+      // NOTE: We deliberately do NOT post `CANCEL_STALE_DEM` here.
+      // That message calls `cancelInFlightIGN()` / `flushIGNQueue()`
+      // which obliterate BASEMAP-tagged fetches too (the broad cancel
+      // is meant for user gestures where the viewport actually
+      // changed). On slope disable the viewport is stationary —
+      // killing in-flight basemap fetches stalls the world to a flat
+      // empty globe until the user pans, because the aborted tiles
+      // carry USER_CANCEL_REASON and Mapbox does not always retry
+      // them on the same frame. `cancelSlopeWorkerPressure()` above
+      // already posts CANCEL_SLOPE_WORK, which is the surgical
+      // slope-purpose-only drain (basemap untouched).
       try {
         getViewportPrefetch()?.trigger();
       } catch { /* prefetch not installed yet */ }
