@@ -239,10 +239,10 @@ export function SunlightSection({
           </button>
         </div>
 
-        {state.sunlightMapEnabled && mapExpanded ? (
+        {mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
             <div className="rvc-sunlight__opacity-row">
-              <span className="rvc-sunlight__row-label">{t('Opacité')}</span>
+              <span className="rvc-sunlight__row-label">{t('Opacité ombres')}</span>
               <div className="rvc-sunlight__opacity-control">
                 <div className="rvc-sunlight__opacity-slider-wrap">
                   <Slider
@@ -255,6 +255,23 @@ export function SunlightSection({
                   />
                 </div>
                 <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity} %</span>
+              </div>
+            </div>
+
+            <div className="rvc-sunlight__opacity-row">
+              <span className="rvc-sunlight__row-label">{t("Opacité carte d'ensoleillement")}</span>
+              <div className="rvc-sunlight__opacity-control">
+                <div className="rvc-sunlight__opacity-slider-wrap">
+                  <Slider
+                    min={0}
+                    max={100}
+                    value={state.sunlightMapOpacity}
+                    onChange={(val) => onChange?.({ sunlightMapOpacity: val })}
+                    onCommit={(val) => onChange?.({ sunlightMapOpacity: val })}
+                    width="100%"
+                  />
+                </div>
+                <span className="rvc-sunlight__shadow-opacity-value">{state.sunlightMapOpacity} %</span>
               </div>
             </div>
 

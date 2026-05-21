@@ -137,6 +137,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     shadowEnabled: true,
     sunlightMapEnabled: true,
     shadowOpacity: 50,
+    sunlightMapOpacity: 50,
     scaleSetting: DEFAULT_SUNLIGHT_SCALE_SETTING,
     bands: buildDefaultSunlightBands(DEFAULT_SUNLIGHT_SCALE_SETTING),
     trajectoryEnabled: true,

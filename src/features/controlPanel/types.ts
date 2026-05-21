@@ -236,6 +236,8 @@ export interface SunlightState {
   sunlightMapEnabled: boolean;
   /** Shadow overlay opacity 0..100 */
   shadowOpacity: number;
+  /** Sunlight map overlay opacity 0..100 */
+  sunlightMapOpacity: number;
   scaleSetting: SunlightScaleSetting;
   bands: SunlightBand[];
   trajectoryEnabled: boolean;
