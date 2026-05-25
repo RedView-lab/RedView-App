@@ -8,18 +8,12 @@ export function encodeShadowRgba(
   const strength = Math.max(0, Math.min(1, shadowStrength));
   const floor = (Math.max(0, Math.min(1, nightFloor)) * 255) | 0;
   const rgba = new Uint8Array(W * H * 4);
-  const shadowTintR = 7;
-  const shadowTintG = 11;
-  const shadowTintB = 18;
   for (let i = 0; i < shadow.length; i++) {
     const coverage = shadow[i] / 255;
     const cast = Math.round(Math.pow(coverage, 0.82) * 224 * strength);
     const a = cast > floor ? cast : floor;
     if (a === 0) continue;
     const o = i * 4;
-    rgba[o] = shadowTintR;
-    rgba[o + 1] = shadowTintG;
-    rgba[o + 2] = shadowTintB;
     rgba[o + 3] = a;
   }
   return rgba;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Checkbox } from '../components/Checkbox';
@@ -51,6 +51,11 @@ function formatHexLabel(color: string): string {
   return color.replace('#', '').toUpperCase();
 }
 
+function getMinutesFromTime(timeStr: string) {
+  const [hh, mm] = timeStr.split(':').map(Number);
+  return (hh || 0) * 60 + (mm || 0);
+}
+
 export function SunlightSection({
   state,
   open,
@@ -62,20 +67,9 @@ export function SunlightSection({
 }: Props) {
   const { locale, t } = useAppI18n();
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
+  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime(state.time || '00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
   const calendarAnchorRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isScrubbingTime && !state.timeScrubbing) {
-      setTimeDraftMinutes(getMinutesFromTime(state.time));
-    }
-  }, [isScrubbingTime, state.time, state.timeScrubbing]);
-
-  function getMinutesFromTime(timeStr: string) {
-    const [hh, mm] = timeStr.split(':').map(Number);
-    return (hh || 0) * 60 + (mm || 0);
-  }
 
   const formatMinutes = (val: number) => {
     const h = Math.floor(val / 60).toString().padStart(2, '0');
@@ -215,6 +209,25 @@ export function SunlightSection({
           </div>
         </div>
 
+        {mapExpanded ? (
+          <div className="rvc-sunlight__opacity-row">
+            <span className="rvc-sunlight__row-label">{t('Opacité ombres')}</span>
+            <div className="rvc-sunlight__opacity-control">
+              <div className="rvc-sunlight__opacity-slider-wrap">
+                <Slider
+                  min={0}
+                  max={100}
+                  value={state.shadowOpacity}
+                  onChange={(val) => onChange?.({ shadowOpacity: val })}
+                  onCommit={(val) => onChange?.({ shadowOpacity: val })}
+                  width="100%"
+                />
+              </div>
+              <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity} %</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="rvc-sunlight__toggle-row">
           <Toggle
             checked={state.sunlightMapEnabled}
@@ -241,23 +254,6 @@ export function SunlightSection({
 
         {mapExpanded ? (
           <div className="rvc-sunlight__map-settings">
-            <div className="rvc-sunlight__opacity-row">
-              <span className="rvc-sunlight__row-label">{t('Opacité ombres')}</span>
-              <div className="rvc-sunlight__opacity-control">
-                <div className="rvc-sunlight__opacity-slider-wrap">
-                  <Slider
-                    min={0}
-                    max={100}
-                    value={state.shadowOpacity}
-                    onChange={(val) => onChange?.({ shadowOpacity: val })}
-                    onCommit={(val) => onChange?.({ shadowOpacity: val })}
-                    width="100%"
-                  />
-                </div>
-                <span className="rvc-sunlight__shadow-opacity-value">{state.shadowOpacity} %</span>
-              </div>
-            </div>
-
             <div className="rvc-sunlight__opacity-row">
               <span className="rvc-sunlight__row-label">{t("Opacité carte d'ensoleillement")}</span>
               <div className="rvc-sunlight__opacity-control">
