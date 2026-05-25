@@ -12,6 +12,7 @@ import {
 } from '../lib/observerPoint';
 import { addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from '../lib/sun-ray/sun-ray-layer';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
+import { OPENMETEO_FORECAST_URL } from '@/features/weather/lib/openMeteoConfig';
 
 /**
  * Computes real sun position from date/time and map center.
@@ -43,7 +44,7 @@ export interface UseSunlightResult {
 }
 
 interface TimeZoneLookupPayload {
-  timeZone?: string | null;
+  timezone?: string | null;
 }
 
 const timeZoneLookupCache = new Map<string, Promise<string | null>>();
@@ -62,20 +63,29 @@ async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng
   const existing = timeZoneLookupCache.get(key);
   if (existing) return existing;
 
-  const request = fetch(`/api/timezone?lat=${encodeURIComponent(point.lat)}&lon=${encodeURIComponent(point.lng)}`)
+  const request = (() => {
+    const target = new URL(OPENMETEO_FORECAST_URL, window.location.origin);
+    target.searchParams.set('latitude', String(point.lat));
+    target.searchParams.set('longitude', String(point.lng));
+    target.searchParams.set('timezone', 'auto');
+    target.searchParams.set('current', 'is_day');
+    target.searchParams.set('forecast_days', '1');
+
+    return fetch(target.toString())
     .then(async (response) => {
       if (!response.ok) {
         throw new Error(`timezone lookup failed with ${response.status}`);
       }
       const payload = (await response.json()) as TimeZoneLookupPayload;
-      return typeof payload.timeZone === 'string' && payload.timeZone.trim()
-        ? payload.timeZone
+      return typeof payload.timezone === 'string' && payload.timezone.trim()
+        ? payload.timezone
         : null;
     })
     .catch((error) => {
       console.warn('[sunlight] timezone lookup failed, falling back to host timezone', error);
       return getHostTimeZone();
     });
+  })();
 
   timeZoneLookupCache.set(key, request);
   return request;
