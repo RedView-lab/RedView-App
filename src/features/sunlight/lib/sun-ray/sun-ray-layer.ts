@@ -76,11 +76,12 @@ precision highp float;
 uniform vec4 u_strokeColor;
 uniform vec4 u_fillColor;
 uniform float u_strokeWidth;
+uniform float u_size;
 void main() {
   vec2 centered = gl_PointCoord - vec2(0.5);
   float dist = length(centered);
   float radius = 0.5;
-  float aa = fwidth(dist);
+  float aa = max(0.5 / max(u_size, 1.0), 0.002);
   float outerMask = 1.0 - smoothstep(radius - aa, radius + aa, dist);
   if (outerMask <= 0.0) {
     discard;
