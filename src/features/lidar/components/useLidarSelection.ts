@@ -311,6 +311,32 @@ export function useLidarSelection(
       });
     };
 
+    const clearSelectionForTile = (coord: TileCoord | null | undefined) => {
+      if (!coord) return;
+
+      const hoveredMatches = sameTile(coord, hoveredRef.current);
+      const selectedMatches = sameTile(coord, selectedRef.current);
+
+      if (!hoveredMatches && !selectedMatches) return;
+
+      if (hoveredMatches) {
+        hoveredRef.current = null;
+      }
+      if (selectedMatches) {
+        selectedRef.current = null;
+      }
+
+      if (!updateSourceData()) {
+        scheduleOverlaySync();
+      }
+    };
+
+    const unsubscribeManager = manager.on((event) => {
+      if (event.type === 'tileLoaded') {
+        clearSelectionForTile(event.tileCoord);
+      }
+    });
+
     const handleMouseMove = (event: MapMouseEvent) => {
       if (!enabledRef.current) return;
 
@@ -377,6 +403,7 @@ export function useLidarSelection(
     }
 
     return () => {
+      unsubscribeManager();
       clearScheduledSync();
       map.off('mousemove', handleMouseMove);
       map.off('click', handleClick);

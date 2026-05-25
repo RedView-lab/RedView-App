@@ -18,7 +18,7 @@
  *       1. Progress messages reach the main thread mid-flight.
  *       2. A newer compute request can preempt a stale in-flight one.
  */
-import { getSunPosition } from './sun-calc';
+import { getSunPositionForLocalMinutes } from './sun-calc';
 import {
   computeHorizonSweepShadow,
   sampleViewportElevationGrid,
@@ -60,9 +60,10 @@ interface ComputeRequest {
   currentMinutes: number;
   /** Riemann step size in minutes. */
   stepMinutes: number;
-  /** Sun-position observer location (viewport center). */
-  centerLat: number;
-  centerLon: number;
+  /** Sun-position observer location and timezone. */
+  observerLat: number;
+  observerLon: number;
+  observerTimeZone: string;
   bands: BandSpec[];
   /** 0..1 final layer alpha multiplier. */
   opacity: number;
@@ -228,7 +229,16 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
       const next = Math.min(currentMinutes, t + stepMinutes);
       const dt = next - t;
       const sampleMinutes = t + dt * 0.5;
-      accumulateExposureAt(grid, exposure, msg.isoDate, sampleMinutes, msg.centerLat, msg.centerLon, dt);
+      accumulateExposureAt(
+        grid,
+        exposure,
+        msg.isoDate,
+        sampleMinutes,
+        msg.observerLat,
+        msg.observerLon,
+        msg.observerTimeZone,
+        dt,
+      );
       t = next;
       stepsDone += 1;
     }
@@ -281,11 +291,11 @@ function accumulateExposureAt(
   minutesSinceMidnight: number,
   lat: number,
   lon: number,
+  timeZone: string,
   dtMinutes: number,
 ): void {
-  const date = makeLocalDateAtMinutes(isoDate, minutesSinceMidnight);
-  if (!date) return;
-  const sun = getSunPosition(date, lat, lon);
+  const sun = getSunPositionForLocalMinutes(isoDate, minutesSinceMidnight, lat, lon, timeZone);
+  if (!sun) return;
   if (!Number.isFinite(sun.altitude) || sun.altitude <= 0) return;
 
   const mask = computeHorizonSweepShadow(
@@ -337,20 +347,6 @@ function colorize(
     out[o + 3] = alpha;
   }
   return out;
-}
-
-function makeLocalDateAtMinutes(isoDate: string, minutesSinceMidnight: number): Date | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(isoDate);
-  if (!match) return null;
-  const year = Number(match[1]);
-  const month = Number(match[2]) - 1;
-  const day = Number(match[3]);
-  const totalSeconds = Math.max(0, Math.round(minutesSinceMidnight * 60));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  const date = new Date(year, month, day, hours, minutes, seconds);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function clamp(value: number, min: number, max: number): number {

@@ -49,6 +49,10 @@ export interface UseSunlightMapOptions {
   date: string;
   /** HH:mm */
   time: string;
+  /** Observer point used for all solar calculations. */
+  observerLat: number | null;
+  observerLon: number | null;
+  observerTimeZone: string | null;
   /** True while the user is dragging the time slider. */
   timeScrubbing: boolean;
   /** 0..1 overlay opacity. */

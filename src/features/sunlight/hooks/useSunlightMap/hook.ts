@@ -211,8 +211,11 @@ export function useSunlightMap(
 
       const bounds = map.getBounds();
       if (!bounds) return;
-      const centerLat = (bounds.getNorth() + bounds.getSouth()) / 2;
-      const centerLon = (bounds.getEast() + bounds.getWest()) / 2;
+      if (!Number.isFinite(current.observerLat) || !Number.isFinite(current.observerLon) || !current.observerTimeZone) {
+        setSunlightMapLayerOpacity(map, 0);
+        publishStatus(sunlightMapErrorStatus('Point soleil indisponible'));
+        return;
+      }
       const currentMinutes = parseTimeToMinutes(current.time);
 
       publishStatus(sunlightMapLoadingStatus(20, 'Calcul en cours'));
@@ -222,8 +225,9 @@ export function useSunlightMap(
         isoDate: current.date,
         currentMinutes,
         stepMinutes: STEP_MINUTES,
-        centerLat,
-        centerLon,
+        observerLat: current.observerLat,
+        observerLon: current.observerLon,
+        observerTimeZone: current.observerTimeZone,
         bands: bandsPayloadRef.current,
         opacity: Math.max(0, Math.min(1, current.opacity)),
         quality: current.timeScrubbing ? 'preview' : 'full',
