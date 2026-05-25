@@ -29,6 +29,7 @@ export interface UseSunlightOptions {
   date: string;
   /** HH:mm */
   time: string;
+  trajectoryEnabled: boolean;
 }
 
 export interface UseSunlightResult {
@@ -160,6 +161,7 @@ export function useSunlight(
   const observerTimeZone = observerTimeZoneState?.key === observerPointKey
     ? observerTimeZoneState.timeZone
     : null;
+  const effectiveObserverTimeZone = observerTimeZone ?? getHostTimeZone();
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
@@ -198,7 +200,7 @@ export function useSunlight(
   }, [observerPoint, observerPointKey]);
 
   useEffect(() => {
-    if (!map || !isMapLoaded || !observerPoint || !observerTimeZone) return;
+    if (!map || !isMapLoaded || !observerPoint || !effectiveObserverTimeZone) return;
 
     let frameId: number | null = null;
 
@@ -208,7 +210,7 @@ export function useSunlight(
         optsRef.current.date,
         observerPoint.lat,
         observerPoint.lng,
-        observerTimeZone,
+        effectiveObserverTimeZone,
       );
       setTimes((prev) => (
         prev.sunriseTime === sunriseTime && prev.sunsetTime === sunsetTime
@@ -221,7 +223,7 @@ export function useSunlight(
         optsRef.current.time,
         observerPoint.lat,
         observerPoint.lng,
-        observerTimeZone,
+        effectiveObserverTimeZone,
       );
       if (!position) return;
 
@@ -234,13 +236,15 @@ export function useSunlight(
 
       if (!optsRef.current.enabled) return;
 
-      updateSunRayPosition(
-        position.azimuth,
-        position.altitude,
-        observerPoint.lng,
-        observerPoint.lat,
-        observerPoint.elevation,
-      );
+      if (optsRef.current.trajectoryEnabled) {
+        updateSunRayPosition(
+          position.azimuth,
+          position.altitude,
+          observerPoint.lng,
+          observerPoint.lat,
+          observerPoint.elevation,
+        );
+      }
 
       try {
         map.setLights(buildLights(position.azimuth, position.altitude));
@@ -263,7 +267,7 @@ export function useSunlight(
     map,
     isMapLoaded,
     observerPoint,
-    observerTimeZone,
+    effectiveObserverTimeZone,
     opts.enabled,
     opts.date,
     opts.time,
@@ -277,7 +281,11 @@ export function useSunlight(
         removeSunRayLayer(map);
         return;
       }
-      if (!observerPoint || !observerTimeZone) {
+      if (!optsRef.current.trajectoryEnabled) {
+        removeSunRayLayer(map);
+        return;
+      }
+      if (!observerPoint) {
         return;
       }
       try {
@@ -304,8 +312,8 @@ export function useSunlight(
     map,
     isMapLoaded,
     observerPoint,
-    observerTimeZone,
     opts.enabled,
+    opts.trajectoryEnabled,
     sunPos.azimuthDeg,
     sunPos.altitudeDeg,
   ]);

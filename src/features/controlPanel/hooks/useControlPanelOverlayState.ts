@@ -348,6 +348,7 @@ export function useControlPanelOverlayState({
     enabled: sunlightState.enabled,
     date: sunlightState.date,
     time: sunlightState.time,
+    trajectoryEnabled: sunlightState.trajectoryEnabled,
   });
 
   useShadowImage(
