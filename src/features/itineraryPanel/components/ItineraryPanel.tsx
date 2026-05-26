@@ -209,6 +209,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <ItineraryTabs
         itineraries={project.itineraries}
+        profiles={profiles}
         activeId={project.activeItineraryId}
         onSelect={onSelectItinerary}
         onAdd={onOpenAddItinerary ?? onAddItinerary}

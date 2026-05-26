@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { useAppI18n } from '@/shared/i18n';
-import { IconEye, IconPlusCircle, IconTrash } from '../icons';
-import type { Itinerary } from '../../types';
+import { IconEye, IconPlus, IconTrash } from '../icons';
+import type { Itinerary, RouteProfile } from '../../types';
 
 interface ItineraryTabsProps {
   itineraries: Itinerary[];
+  profiles: RouteProfile[];
   activeId: string;
   onSelect?: (id: string) => void;
   onAdd?: () => void;
@@ -24,6 +25,7 @@ interface ItineraryTabsProps {
 
 export function ItineraryTabs({
   itineraries,
+  profiles,
   activeId,
   onSelect,
   onAdd,
@@ -61,15 +63,22 @@ export function ItineraryTabs({
 
   const cancel = () => setEditingId(null);
 
+  const resolveProfileLabel = (profileId: string) => {
+    const profile = profiles.find((item) => item.id === profileId);
+    if (profile) return profile.name;
+    return t('Personnalisé');
+  };
+
   return (
     <nav className="rvi-itins" aria-label={t('Itinéraires')}>
       {itineraries.map((it) => {
         const isActive = it.id === activeId;
         const isEditing = editingId === it.id;
+        const profileLabel = resolveProfileLabel(it.profileId);
         return (
-          <span
+          <div
             key={it.id}
-            className={`rvi-itin-wrap${isActive ? ' is-active' : ''}`}
+            className={`rvi-itin-wrap${isActive ? ' is-active' : ''}${it.visible === false ? ' is-hidden' : ''}`}
           >
             <button
               type="button"
@@ -85,43 +94,51 @@ export function ItineraryTabs({
               onDoubleClick={() => {
                 if (canRename) startEdit(it);
               }}
+              aria-pressed={isActive}
             >
               <span className="rvi-itin__eye" aria-hidden>
                 <IconEye size={16} />
               </span>
               <span className="rvi-itin__swatch" style={{ background: it.color }} />
-              {isEditing ? (
-                <input
-                  ref={inputRef}
-                  className="rvi-itin__label rvi-itin__label--edit"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={() => commit(it.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      commit(it.id);
-                    } else if (e.key === 'Escape') {
-                      e.preventDefault();
-                      cancel();
-                    }
-                  }}
-                  aria-label={t('Renommer {{name}}', { name: it.name })}
-                />
-              ) : (
-                <span
-                  className="rvi-itin__label"
-                  title={canRename ? t('Cliquer à nouveau pour renommer') : it.name}
-                >
-                  {it.name}
+              <span className="rvi-itin__main">
+                {isEditing ? (
+                  <input
+                    ref={inputRef}
+                    className="rvi-itin__label rvi-itin__label--edit"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    onBlur={() => commit(it.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commit(it.id);
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        cancel();
+                      }
+                    }}
+                    aria-label={t('Renommer {{name}}', { name: it.name })}
+                  />
+                ) : (
+                  <span
+                    className="rvi-itin__label"
+                    title={canRename ? t('Cliquer à nouveau pour renommer') : it.name}
+                  >
+                    {it.name}
+                  </span>
+                )}
+              </span>
+              <span className="rvi-itin__meta">
+                {it.gpxRoute ? (
+                  <span className="rvi-itin__badge" title={t('Itinéraire chargé depuis un GPX')}>
+                    GPX
+                  </span>
+                ) : null}
+                <span className="rvi-itin__profile" title={profileLabel}>
+                  {profileLabel}
                 </span>
-              )}
-              {it.gpxRoute ? (
-                <span className="rvi-itin__badge" title={t('Itinéraire chargé depuis un GPX')}>
-                  GPX
-                </span>
-              ) : null}
+              </span>
             </button>
             {canRemove ? (
               <button
@@ -136,7 +153,7 @@ export function ItineraryTabs({
                 <IconTrash size={11} />
               </button>
             ) : null}
-          </span>
+          </div>
         );
       })}
       <button
@@ -145,7 +162,9 @@ export function ItineraryTabs({
         className="rvi-itin rvi-itin--add"
         onClick={onAdd}
       >
-        <IconPlusCircle size={12} />
+        <span className="rvi-itin__add-icon" aria-hidden>
+          <IconPlus size={13} />
+        </span>
         <span className="rvi-itin__label">{t('Nouvel itinéraire')}</span>
       </button>
     </nav>

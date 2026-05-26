@@ -3,46 +3,45 @@
 /* ── Itineraries ──────────────────────────────────────────────── */
 .rvi-itins {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
   width: 100%;
   flex-shrink: 0;
 }
 
 .rvi-itin {
   all: unset;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   justify-content: flex-start;
-  padding: 7px 12px 7px 8px;
-  max-width: 160px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 4px 0 8px;
   border-radius: 6px;
   cursor: pointer;
-  opacity: 0.6;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
   color: var(--rvi-text);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
+  line-height: normal;
   box-sizing: border-box;
 }
-.rvi-itin:hover { opacity: 0.85; }
+.rvi-itin:hover { background: rgba(255, 255, 255, 0.04); }
 .rvi-itin.is-active {
-  background: rgba(0, 0, 0, 0.6);
-  opacity: 1;
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rvi-itin__eye {
-  display: none;
+  display: inline-flex;
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  color: var(--rvi-text);
+  color: rgba(255, 255, 255, 0.8);
   align-items: center;
   justify-content: center;
 }
-.rvi-itin.is-active .rvi-itin__eye { display: inline-flex; }
 
 .rvi-itin__swatch {
   flex-shrink: 0;
@@ -51,6 +50,14 @@
   border-radius: 2px;
   background: var(--rvi-red-accent);
 }
+
+.rvi-itin__main {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+}
+
 .rvi-itin__label {
   flex: 1 1 auto;
   min-width: 0;
@@ -58,6 +65,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .rvi-itin__label--edit {
   flex: 1 1 auto;
   min-width: 0;
@@ -77,28 +85,62 @@
   border-color: rgba(255, 255, 255, 0.5);
 }
 
-/* GPX-loaded marker (small badge after the name) */
+.rvi-itin__meta {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rvi-itin__profile,
 .rvi-itin__badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 1px 4px;
-  border-radius: 3px;
+  max-width: 105px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 80px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.rvi-itin__profile {
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.rvi-itin__badge {
   background: rgba(61, 139, 255, 0.18);
   color: #6ea7ff;
-  letter-spacing: 0.4px;
-  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
 }
 
 /* Wrapper hosts the trash button next to the itinerary tab */
 .rvi-itin-wrap {
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  align-items: stretch;
   border-radius: 6px;
   transition: background 0.15s ease;
   position: relative;
+  width: 100%;
 }
-.rvi-itin-wrap.is-active { background: rgba(0, 0, 0, 0.6); }
+.rvi-itin-wrap.is-active { background: rgba(0, 0, 0, 0.4); }
 .rvi-itin-wrap.is-active .rvi-itin { background: transparent; }
+.rvi-itin-wrap.is-hidden .rvi-itin__eye,
+.rvi-itin-wrap.is-hidden .rvi-itin__label,
+.rvi-itin-wrap.is-hidden .rvi-itin__profile,
+.rvi-itin-wrap.is-hidden .rvi-itin__badge {
+  opacity: 0.55;
+}
 
 .rvi-itin__remove {
   all: unset;
@@ -111,7 +153,9 @@
   color: var(--rvi-text-dim);
   cursor: pointer;
   opacity: 0;
-  margin-right: 4px;
+  position: absolute;
+  top: 7px;
+  right: -22px;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .rvi-itin-wrap:hover .rvi-itin__remove,
@@ -123,6 +167,27 @@
 }
 
 /* ── Mode tabs ────────────────────────────────────────────────── */
+.rvi-itin--add {
+  width: 100%;
+  padding: 0 8px;
+  min-height: 32px;
+  font-weight: 600;
+}
+
+.rvi-itin--add:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rvi-itin__add-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.72);
+  flex: 0 0 auto;
+}
+
 .rvi-modes {
   display: flex;
   gap: 4px;
