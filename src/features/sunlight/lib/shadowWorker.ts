@@ -679,6 +679,14 @@ function computeSweepShadow(
   if (absDC >= absDR) {
     const colStep = shadowDC > 0 ? 1 : -1;
     const rowShift = shadowDR / absDC;
+    // Hoist predecessor-row decomposition out of the inner loop: predRf = r - rowShift
+    // grows by exactly 1 per r-iteration, so floor() and the fractional weight are
+    // constant across the whole sweep.
+    const rowShiftFloor = Math.floor(-rowShift);
+    const fr = -rowShift - rowShiftFloor; // [0, 1)
+    const w0 = 1 - fr;
+    const w1 = fr;
+    const noInterp = fr === 0;
     const stepDistM = Math.sqrt(
       cellSizeX * cellSizeX + (rowShift * cellSizeY) * (rowShift * cellSizeY),
     );
@@ -687,7 +695,15 @@ function computeSweepShadow(
     const colEnd = colStep > 0 ? W : -1;
     for (let c = colStart; c !== colEnd; c += colStep) {
       const predC = c - colStep;
-      const predEdge = predC < 0 || predC >= W;
+      if (predC < 0 || predC >= W) {
+        // Edge column — no predecessor; just seed shadowElev from elevation.
+        for (let r = 0; r < H; r++) {
+          const idx = r * W + c;
+          const el = elev[idx];
+          shadowElev[idx] = Number.isNaN(el) ? -Infinity : el;
+        }
+        continue;
+      }
       for (let r = 0; r < H; r++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -695,31 +711,34 @@ function computeSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        if (predEdge) {
-          shadowElev[idx] = el;
-          continue;
-        }
-        const predRf = r - rowShift;
-        const predR0 = Math.floor(predRf);
+        const predR0 = r + rowShiftFloor;
         const predR1 = predR0 + 1;
         if (predR0 < 0 || predR1 >= H) {
           shadowElev[idx] = el;
           continue;
         }
-        const v0 = shadowElev[predR0 * W + predC];
-        const v1 = shadowElev[predR1 * W + predC];
         let predElev: number;
-        if (v0 === -Infinity) {
-          if (v1 === -Infinity) {
+        if (noInterp) {
+          const v = shadowElev[predR0 * W + predC];
+          if (v === -Infinity) {
             shadowElev[idx] = el;
             continue;
           }
-          predElev = v1;
-        } else if (v1 === -Infinity) {
-          predElev = v0;
+          predElev = v;
         } else {
-          const fr = predRf - predR0;
-          predElev = v0 * (1 - fr) + v1 * fr;
+          const v0 = shadowElev[predR0 * W + predC];
+          const v1 = shadowElev[predR1 * W + predC];
+          if (v0 === -Infinity) {
+            if (v1 === -Infinity) {
+              shadowElev[idx] = el;
+              continue;
+            }
+            predElev = v1;
+          } else if (v1 === -Infinity) {
+            predElev = v0;
+          } else {
+            predElev = v0 * w0 + v1 * w1;
+          }
         }
         const propagated = predElev - dropPerStep;
         const diff = propagated - el;
@@ -735,6 +754,11 @@ function computeSweepShadow(
   } else {
     const rowStep = shadowDR > 0 ? 1 : -1;
     const colShift = shadowDC / absDR;
+    const colShiftFloor = Math.floor(-colShift);
+    const fc = -colShift - colShiftFloor;
+    const w0 = 1 - fc;
+    const w1 = fc;
+    const noInterp = fc === 0;
     const stepDistM = Math.sqrt(
       (colShift * cellSizeX) * (colShift * cellSizeX) + cellSizeY * cellSizeY,
     );
@@ -743,8 +767,17 @@ function computeSweepShadow(
     const rowEnd = rowStep > 0 ? H : -1;
     for (let r = rowStart; r !== rowEnd; r += rowStep) {
       const predR = r - rowStep;
-      const predEdge = predR < 0 || predR >= H;
-      const predRowOffset = predEdge ? 0 : predR * W;
+      if (predR < 0 || predR >= H) {
+        // Edge row — no predecessor; just seed shadowElev from elevation.
+        const rowOffset = r * W;
+        for (let c = 0; c < W; c++) {
+          const idx = rowOffset + c;
+          const el = elev[idx];
+          shadowElev[idx] = Number.isNaN(el) ? -Infinity : el;
+        }
+        continue;
+      }
+      const predRowOffset = predR * W;
       for (let c = 0; c < W; c++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -752,31 +785,34 @@ function computeSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        if (predEdge) {
-          shadowElev[idx] = el;
-          continue;
-        }
-        const predCf = c - colShift;
-        const predC0 = Math.floor(predCf);
+        const predC0 = c + colShiftFloor;
         const predC1 = predC0 + 1;
         if (predC0 < 0 || predC1 >= W) {
           shadowElev[idx] = el;
           continue;
         }
-        const v0 = shadowElev[predRowOffset + predC0];
-        const v1 = shadowElev[predRowOffset + predC1];
         let predElev: number;
-        if (v0 === -Infinity) {
-          if (v1 === -Infinity) {
+        if (noInterp) {
+          const v = shadowElev[predRowOffset + predC0];
+          if (v === -Infinity) {
             shadowElev[idx] = el;
             continue;
           }
-          predElev = v1;
-        } else if (v1 === -Infinity) {
-          predElev = v0;
+          predElev = v;
         } else {
-          const fc = predCf - predC0;
-          predElev = v0 * (1 - fc) + v1 * fc;
+          const v0 = shadowElev[predRowOffset + predC0];
+          const v1 = shadowElev[predRowOffset + predC1];
+          if (v0 === -Infinity) {
+            if (v1 === -Infinity) {
+              shadowElev[idx] = el;
+              continue;
+            }
+            predElev = v1;
+          } else if (v1 === -Infinity) {
+            predElev = v0;
+          } else {
+            predElev = v0 * w0 + v1 * w1;
+          }
         }
         const propagated = predElev - dropPerStep;
         const diff = propagated - el;

@@ -434,6 +434,28 @@ export function useShadowImage(
 
       const fillRatio = sampleAck.total > 0 ? sampleAck.filled / sampleAck.total : 0;
       if (fillRatio < MIN_USABLE_SAMPLE_FILL_RATIO) {
+        // Two distinct partial-coverage regimes:
+        //  - Genuinely thin coverage (< 30%): the DEM cache is still warming up,
+        //    keep retrying for a brief window and show the previous overlay.
+        //  - Boundary coverage (30..70%): viewport straddles a DEM edge
+        //    (ocean / national border). Retrying won't fix it — just compute
+        //    shadows from whatever data we have. The sweep handles NaN cells
+        //    fine, and the user gets a finished overlay instead of being
+        //    stuck on "Relief partiel" loading for ~5 s on every dezoom.
+        const isBoundaryCoverage = fillRatio >= 0.30;
+
+        if (isBoundaryCoverage) {
+          partialSampleRetryCountRef.current = 0;
+          sampledRef.current = true;
+          sampledBoundsRef.current = sampledBounds;
+          publishStatus(shadowLoadingStatus(
+            58,
+            `Relief partiel (${Math.round(fillRatio * 100)}%)`,
+          ));
+          requestCompute(sampledBounds, myGen);
+          return;
+        }
+
         partialSampleRetryCountRef.current++;
         if (sampleTimerRef.current !== null) {
           clearTimeout(sampleTimerRef.current);
@@ -446,10 +468,14 @@ export function useShadowImage(
         if (partialSampleRetryCountRef.current <= MAX_PARTIAL_SAMPLE_RETRIES) {
           if (hasPreviousSample) {
             applyVisibleOpacity();
+            // Don't fall back to a loading status if we already have a
+            // valid previous overlay shown — keeps the UI from looking
+            // "stuck loading" while the retry waits.
+            publishStatus(shadowReadyStatus('Dernier relief valide conserve'));
           } else {
             setLayerOpacity(0);
+            publishStatus(shadowLoadingStatus(52, `Relief partiel (${Math.round(fillRatio * 100)}%)`));
           }
-          publishStatus(shadowLoadingStatus(52, `Relief partiel (${Math.round(fillRatio * 100)}%)`));
           return;
         }
 
