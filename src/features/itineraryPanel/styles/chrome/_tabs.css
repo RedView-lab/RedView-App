@@ -27,6 +27,7 @@
   font-weight: 600;
   line-height: normal;
   box-sizing: border-box;
+  min-width: 0;
 }
 .rvi-itin:hover { background: rgba(255, 255, 255, 0.04); }
 .rvi-itin.is-active {
@@ -86,7 +87,7 @@
 }
 
 .rvi-itin__meta {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -95,7 +96,7 @@
 
 .rvi-itin__profile,
 .rvi-itin__badge {
-  max-width: 105px;
+  max-width: min(105px, 34vw);
   min-width: 0;
   height: 24px;
   padding: 0 8px;
@@ -126,8 +127,10 @@
 
 /* Wrapper hosts the trash button next to the itinerary tab */
 .rvi-itin-wrap {
-  display: flex;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px;
+  gap: 4px;
+  align-items: center;
   border-radius: 6px;
   transition: background 0.15s ease;
   position: relative;
@@ -153,17 +156,40 @@
   color: var(--rvi-text-dim);
   cursor: pointer;
   opacity: 0;
-  position: absolute;
-  top: 7px;
-  right: -22px;
+  pointer-events: none;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 .rvi-itin-wrap:hover .rvi-itin__remove,
 .rvi-itin-wrap.is-active .rvi-itin__remove,
-.rvi-itin__remove:focus-visible { opacity: 1; }
+.rvi-itin__remove:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.rvi-itin-wrap:hover .rvi-itin__remove,
+.rvi-itin-wrap.is-active .rvi-itin__remove {
+  pointer-events: auto;
+}
 .rvi-itin__remove:hover {
   background: rgba(255, 96, 96, 0.16);
   color: #ff7070;
+}
+
+@media (max-width: 420px) {
+  .rvi-itin {
+    gap: 5px;
+    padding-right: 2px;
+  }
+
+  .rvi-itin__meta {
+    gap: 4px;
+  }
+
+  .rvi-itin__profile,
+  .rvi-itin__badge {
+    max-width: min(92px, 30vw);
+    padding: 0 7px;
+    font-size: 12px;
+  }
 }
 
 /* ── Mode tabs ────────────────────────────────────────────────── */
