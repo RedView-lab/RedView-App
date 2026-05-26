@@ -310,8 +310,11 @@ function accumulateExposureAt(
     grid.scratchShadowElev,
   );
   const elev = grid.elev;
+  // Sweep now returns a soft penumbra (0..255). A cell counts as "lit"
+  // when more than half the sun disc is visible — matches a real
+  // sun-exposure meter better than the legacy hard 0/255 binary.
   for (let i = 0; i < mask.length; i++) {
-    if (mask[i] === 0 && !Number.isNaN(elev[i])) {
+    if (mask[i] < 128 && !Number.isNaN(elev[i])) {
       exposure[i] += dtMinutes;
     }
   }

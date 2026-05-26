@@ -308,12 +308,15 @@ export function bilinearSample(
 
 /**
  * Single-pass O(N) horizon sweep. `out` must be (gridW*gridH) bytes; written
- * with 0 = lit, 255 = cast-shadow. `shadowElev` is a scratch Float32 buffer
- * used internally to propagate ray altitudes — no need to clear it.
+ * with 0 = lit, 255 = fully cast-shadow, intermediate = soft penumbra.
+ * `shadowElev` is a scratch Float32 buffer used internally to propagate ray
+ * altitudes — no need to clear it.
  *
- * Same algorithm as `shadowWorker.computeSweepShadow` — kept here so the
- * sunlight-map worker can call it directly per time-step without duplicating
- * the (delicate) ray-march logic.
+ * Same algorithm as `shadowWorker.computeSweepShadow`. Kept in sync with the
+ * realism upgrades there:
+ *  - bilinear predecessor (kills row/column staircase aliasing),
+ *  - soft penumbra byte based on `(propagated - el)` over SOFTNESS_HEIGHT_M,
+ *  - NaN-tolerant chain (one bad cell doesn't break the whole shadow ray).
  */
 export function computeHorizonSweepShadow(
   elev: Float32Array,
@@ -327,7 +330,7 @@ export function computeHorizonSweepShadow(
   shadowElev: Float32Array,
 ): Uint8Array {
   out.fill(0);
-  if (sunAltDeg <= 0 || sunAltDeg >= 85) return out;
+  if (sunAltDeg <= 0 || sunAltDeg >= 89) return out;
 
   const azRad = (sunAzDeg * Math.PI) / 180;
   const tanAlt = Math.tan((sunAltDeg * Math.PI) / 180);
@@ -335,6 +338,10 @@ export function computeHorizonSweepShadow(
   const shadowDR = Math.cos(azRad);
   const absDC = Math.abs(shadowDC);
   const absDR = Math.abs(shadowDR);
+
+  const SOFTNESS_HEIGHT_M =
+    2.5 + 6 * Math.max(0, Math.min(1, (35 - sunAltDeg) / 35));
+  const invSoftness = 255 / SOFTNESS_HEIGHT_M;
 
   if (absDC >= absDR) {
     const colStep = shadowDC > 0 ? 1 : -1;
@@ -346,6 +353,8 @@ export function computeHorizonSweepShadow(
     const colStart = colStep > 0 ? 0 : W - 1;
     const colEnd = colStep > 0 ? W : -1;
     for (let c = colStart; c !== colEnd; c += colStep) {
+      const predC = c - colStep;
+      const predEdge = predC < 0 || predC >= W;
       for (let r = 0; r < H; r++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -353,16 +362,38 @@ export function computeHorizonSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        const predC = c - colStep;
-        const predR = Math.round(r - rowShift);
-        if (predC < 0 || predC >= W || predR < 0 || predR >= H) {
+        if (predEdge) {
           shadowElev[idx] = el;
           continue;
         }
-        const propagated = shadowElev[predR * W + predC] - dropPerStep;
-        if (el < propagated) {
+        const predRf = r - rowShift;
+        const predR0 = Math.floor(predRf);
+        const predR1 = predR0 + 1;
+        if (predR0 < 0 || predR1 >= H) {
+          shadowElev[idx] = el;
+          continue;
+        }
+        const v0 = shadowElev[predR0 * W + predC];
+        const v1 = shadowElev[predR1 * W + predC];
+        let predElev: number;
+        if (v0 === -Infinity) {
+          if (v1 === -Infinity) {
+            shadowElev[idx] = el;
+            continue;
+          }
+          predElev = v1;
+        } else if (v1 === -Infinity) {
+          predElev = v0;
+        } else {
+          const fr = predRf - predR0;
+          predElev = v0 * (1 - fr) + v1 * fr;
+        }
+        const propagated = predElev - dropPerStep;
+        const diff = propagated - el;
+        if (diff > 0) {
           shadowElev[idx] = propagated;
-          out[idx] = 255;
+          const cast = diff * invSoftness;
+          out[idx] = cast >= 255 ? 255 : cast | 0;
         } else {
           shadowElev[idx] = el;
         }
@@ -378,6 +409,9 @@ export function computeHorizonSweepShadow(
     const rowStart = rowStep > 0 ? 0 : H - 1;
     const rowEnd = rowStep > 0 ? H : -1;
     for (let r = rowStart; r !== rowEnd; r += rowStep) {
+      const predR = r - rowStep;
+      const predEdge = predR < 0 || predR >= H;
+      const predRowOffset = predEdge ? 0 : predR * W;
       for (let c = 0; c < W; c++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -385,16 +419,38 @@ export function computeHorizonSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        const predR = r - rowStep;
-        const predC = Math.round(c - colShift);
-        if (predR < 0 || predR >= H || predC < 0 || predC >= W) {
+        if (predEdge) {
           shadowElev[idx] = el;
           continue;
         }
-        const propagated = shadowElev[predR * W + predC] - dropPerStep;
-        if (el < propagated) {
+        const predCf = c - colShift;
+        const predC0 = Math.floor(predCf);
+        const predC1 = predC0 + 1;
+        if (predC0 < 0 || predC1 >= W) {
+          shadowElev[idx] = el;
+          continue;
+        }
+        const v0 = shadowElev[predRowOffset + predC0];
+        const v1 = shadowElev[predRowOffset + predC1];
+        let predElev: number;
+        if (v0 === -Infinity) {
+          if (v1 === -Infinity) {
+            shadowElev[idx] = el;
+            continue;
+          }
+          predElev = v1;
+        } else if (v1 === -Infinity) {
+          predElev = v0;
+        } else {
+          const fc = predCf - predC0;
+          predElev = v0 * (1 - fc) + v1 * fc;
+        }
+        const propagated = predElev - dropPerStep;
+        const diff = propagated - el;
+        if (diff > 0) {
           shadowElev[idx] = propagated;
-          out[idx] = 255;
+          const cast = diff * invSoftness;
+          out[idx] = cast >= 255 ? 255 : cast | 0;
         } else {
           shadowElev[idx] = el;
         }

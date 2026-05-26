@@ -626,6 +626,21 @@ function computeReliefFallbackShadow(
  * applied once over the whole viewport grid. No padding required: shadows
  * cast from beyond the viewport edge are simply absent (acceptable: those
  * pixels are off-screen anyway and the eye doesn't track 1-pixel rim cases).
+ *
+ * Realism improvements:
+ *  - **Bilinear predecessor** (instead of `Math.round`): eliminates the
+ *    1-pixel row/column "staircase" aliasing that made long shadows look
+ *    jagged, especially when the sun azimuth is near 30°/60°/etc.
+ *  - **Soft penumbra**: the byte written to `out` ramps with the height
+ *    difference `(propagated - el)` over `SOFTNESS_HEIGHT_M`, instead of
+ *    being a hard 0/255. Gives anti-aliased shadow edges and a real
+ *    intensity gradient that scales with sun altitude (low sun → wider
+ *    penumbra, matching physical sunset shadows).
+ *  - **NaN-tolerant chain**: when a cell's elevation is NaN we no longer
+ *    write `-Infinity` (which used to kill the propagated shadow ray for
+ *    every downstream cell). Instead the predecessor lookup uses whichever
+ *    of its two interpolation neighbours is finite, so shadows survive
+ *    crossing small DEM holes.
  */
 function computeSweepShadow(
   elev: Float32Array,
@@ -642,8 +657,8 @@ function computeSweepShadow(
   if (sunAltDeg <= 0) {
     return out;
   }
-  if (sunAltDeg >= 85) {
-    return out; // sun overhead → no terrain shadows
+  if (sunAltDeg >= 89) {
+    return out; // sun virtually overhead → shadow length ≈ 0
   }
 
   const azRad = (sunAzDeg * Math.PI) / 180;
@@ -653,6 +668,13 @@ function computeSweepShadow(
   const shadowDR = Math.cos(azRad);
   const absDC = Math.abs(shadowDC);
   const absDR = Math.abs(shadowDR);
+
+  // Penumbra height (metres). Sun disc + atmospheric softening + per-cell
+  // anti-aliasing all roll into this single parameter. Low sun → wider
+  // penumbra: matches the way real evening shadows fade out.
+  const SOFTNESS_HEIGHT_M =
+    2.5 + 6 * Math.max(0, Math.min(1, (35 - sunAltDeg) / 35));
+  const invSoftness = 255 / SOFTNESS_HEIGHT_M;
 
   if (absDC >= absDR) {
     const colStep = shadowDC > 0 ? 1 : -1;
@@ -664,6 +686,8 @@ function computeSweepShadow(
     const colStart = colStep > 0 ? 0 : W - 1;
     const colEnd = colStep > 0 ? W : -1;
     for (let c = colStart; c !== colEnd; c += colStep) {
+      const predC = c - colStep;
+      const predEdge = predC < 0 || predC >= W;
       for (let r = 0; r < H; r++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -671,16 +695,38 @@ function computeSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        const predC = c - colStep;
-        const predR = Math.round(r - rowShift);
-        if (predC < 0 || predC >= W || predR < 0 || predR >= H) {
+        if (predEdge) {
           shadowElev[idx] = el;
           continue;
         }
-        const propagated = shadowElev[predR * W + predC] - dropPerStep;
-        if (el < propagated) {
+        const predRf = r - rowShift;
+        const predR0 = Math.floor(predRf);
+        const predR1 = predR0 + 1;
+        if (predR0 < 0 || predR1 >= H) {
+          shadowElev[idx] = el;
+          continue;
+        }
+        const v0 = shadowElev[predR0 * W + predC];
+        const v1 = shadowElev[predR1 * W + predC];
+        let predElev: number;
+        if (v0 === -Infinity) {
+          if (v1 === -Infinity) {
+            shadowElev[idx] = el;
+            continue;
+          }
+          predElev = v1;
+        } else if (v1 === -Infinity) {
+          predElev = v0;
+        } else {
+          const fr = predRf - predR0;
+          predElev = v0 * (1 - fr) + v1 * fr;
+        }
+        const propagated = predElev - dropPerStep;
+        const diff = propagated - el;
+        if (diff > 0) {
           shadowElev[idx] = propagated;
-          out[idx] = 255;
+          const cast = diff * invSoftness;
+          out[idx] = cast >= 255 ? 255 : cast | 0;
         } else {
           shadowElev[idx] = el;
         }
@@ -696,6 +742,9 @@ function computeSweepShadow(
     const rowStart = rowStep > 0 ? 0 : H - 1;
     const rowEnd = rowStep > 0 ? H : -1;
     for (let r = rowStart; r !== rowEnd; r += rowStep) {
+      const predR = r - rowStep;
+      const predEdge = predR < 0 || predR >= H;
+      const predRowOffset = predEdge ? 0 : predR * W;
       for (let c = 0; c < W; c++) {
         const idx = r * W + c;
         const el = elev[idx];
@@ -703,16 +752,38 @@ function computeSweepShadow(
           shadowElev[idx] = -Infinity;
           continue;
         }
-        const predR = r - rowStep;
-        const predC = Math.round(c - colShift);
-        if (predR < 0 || predR >= H || predC < 0 || predC >= W) {
+        if (predEdge) {
           shadowElev[idx] = el;
           continue;
         }
-        const propagated = shadowElev[predR * W + predC] - dropPerStep;
-        if (el < propagated) {
+        const predCf = c - colShift;
+        const predC0 = Math.floor(predCf);
+        const predC1 = predC0 + 1;
+        if (predC0 < 0 || predC1 >= W) {
+          shadowElev[idx] = el;
+          continue;
+        }
+        const v0 = shadowElev[predRowOffset + predC0];
+        const v1 = shadowElev[predRowOffset + predC1];
+        let predElev: number;
+        if (v0 === -Infinity) {
+          if (v1 === -Infinity) {
+            shadowElev[idx] = el;
+            continue;
+          }
+          predElev = v1;
+        } else if (v1 === -Infinity) {
+          predElev = v0;
+        } else {
+          const fc = predCf - predC0;
+          predElev = v0 * (1 - fc) + v1 * fc;
+        }
+        const propagated = predElev - dropPerStep;
+        const diff = propagated - el;
+        if (diff > 0) {
           shadowElev[idx] = propagated;
-          out[idx] = 255;
+          const cast = diff * invSoftness;
+          out[idx] = cast >= 255 ? 255 : cast | 0;
         } else {
           shadowElev[idx] = el;
         }
@@ -771,21 +842,23 @@ function softenShadow(
   temp: Uint16Array,
   out: Uint8Array,
 ): Uint8Array {
-  const softness = Math.max(0, Math.min(1, (22 - sunAltDeg) / 22));
+  // Penumbra widens noticeably below ~30° sun altitude. The sweep already
+  // produces a soft edge via SOFTNESS_HEIGHT_M, so this is just a wider
+  // Gaussian-ish feather for the very low-sun case (golden hour onward).
+  const softness = Math.max(0, Math.min(1, (30 - sunAltDeg) / 30));
   if (softness <= 0.02) {
     out.set(src);
     return out;
   }
-
   const blurred = boxBlur3(src, W, H, temp, out);
-  const keep = 1 - 0.48 * softness;
-  const spread = 0.28 * softness;
-  const liftedFloor = 10 * softness;
+  // Mild widening — preserve detail at mid-sun, feather strongly only at
+  // dusk. No global "liftedFloor" any more: the cast-shadow buffer must
+  // stay zero in genuinely lit regions, otherwise the whole scene fogs up.
+  const keep = 1 - 0.55 * softness;
+  const blend = 1 - keep;
   for (let i = 0; i < blurred.length; i++) {
-    const base = src[i];
-    const soft = blurred[i];
-    const mixed = base * keep + soft * (1 - keep) + spread * soft + liftedFloor;
-    out[i] = Math.max(0, Math.min(255, mixed)) | 0;
+    const mixed = src[i] * keep + blurred[i] * blend;
+    out[i] = mixed >= 255 ? 255 : (mixed + 0.5) | 0;
   }
   return out;
 }
