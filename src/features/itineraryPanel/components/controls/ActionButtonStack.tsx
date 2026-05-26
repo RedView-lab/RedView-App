@@ -23,10 +23,12 @@ export function ActionButtonStack({
 }: ActionButtonStackProps) {
   const { t } = useAppI18n();
   const [loadingHovered, setLoadingHovered] = useState(false);
-  const showLoadingButton = typeof loadingLabel === 'string' && loadingLabel.trim().length > 0;
-  const showResultButton = typeof resultLabel === 'string' && resultLabel.trim().length > 0;
+  const hasLoadingLabel = typeof loadingLabel === 'string' && loadingLabel.trim().length > 0;
+  const hasResultLabel = typeof resultLabel === 'string' && resultLabel.trim().length > 0;
   const loadingIsCancelable = typeof onLoadingClick === 'function';
   const resultClickHandler = onResultClick ?? onPrimaryClick;
+  const resolvedLoadingLabel = hasLoadingLabel ? loadingLabel : '--';
+  const resolvedResultLabel = hasResultLabel ? resultLabel : '--';
 
   return (
     <div className="rvi-action-stack">
@@ -40,31 +42,27 @@ export function ActionButtonStack({
         <span>{primaryLabel}</span>
       </button>
 
-      {showLoadingButton ? (
-        <button
-          type="button"
-          className="rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary"
-          onClick={onLoadingClick}
-          onMouseEnter={() => setLoadingHovered(true)}
-          onMouseLeave={() => setLoadingHovered(false)}
-          disabled={!loadingIsCancelable}
-        >
-          <IconRepeat size={16} />
-          <span>{loadingHovered && loadingIsCancelable ? t('Interrompre') : loadingLabel}</span>
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className={`rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary${hasLoadingLabel ? '' : ' is-placeholder'}`}
+        onClick={onLoadingClick}
+        onMouseEnter={() => setLoadingHovered(true)}
+        onMouseLeave={() => setLoadingHovered(false)}
+        disabled={!loadingIsCancelable}
+      >
+        <IconRepeat size={16} />
+        <span>{loadingHovered && loadingIsCancelable ? t('Interrompre') : resolvedLoadingLabel}</span>
+      </button>
 
-      {showResultButton ? (
-        <button
-          type="button"
-          className="rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary"
-          onClick={resultClickHandler}
-          disabled={typeof resultClickHandler !== 'function'}
-        >
-          <IconRepeat size={16} />
-          <span>{resultLabel}</span>
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className={`rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary${hasResultLabel ? '' : ' is-placeholder'}`}
+        onClick={resultClickHandler}
+        disabled={!hasResultLabel || typeof resultClickHandler !== 'function'}
+      >
+        <IconRepeat size={16} />
+        <span>{resolvedResultLabel}</span>
+      </button>
     </div>
   );
 }
