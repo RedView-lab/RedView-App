@@ -28,8 +28,10 @@ const DEM_NODATA_THRESHOLD = -10000;
 const DEM_CACHE_NAME = `dem-tiles-${MAP_CACHE_EPOCH}`;
 const MAX_SAMPLE_TILE_COUNT = 256;
 const MIN_SAMPLE_DEM_ZOOM = 4;
-const PREVIEW_MAX_W = 448;
-const PREVIEW_MAX_H = 320;
+// Preview grid kept small so the O(N) sweep + PNG encode finishes within a
+// frame budget on a slider scrub. The full grid is reused on commit.
+const PREVIEW_MAX_W = 320;
+const PREVIEW_MAX_H = 224;
 const MIN_RELIEF_RANGE_FOR_FALLBACK_M = 18;
 const MIN_CAST_SHADOW_COVERAGE = 0.012;
 type ComputeQuality = 'preview' | 'full';

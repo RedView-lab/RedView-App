@@ -148,35 +148,24 @@ export function useShadowImage(
       });
     };
 
-    const runComputeAndApply = async (job: ComputeJob) => {
-      if (cancelled || !sampledRef.current) return;
-      if (job.sampleGen !== sampleGenRef.current) return;
-      if (job.computeSeq !== computeSeqRef.current) return;
-
-      publishStatus(shadowLoadingStatus(
-        job.quality === 'preview' ? 62 : 68,
-        job.quality === 'preview' ? 'Apercu des ombres' : 'Calcul des ombres',
-      ));
-
-      const current = optsRef.current;
-      const shadowStrength = shadowVisibility(current.sunAltitudeDeg);
-      const nightFloor = computeNightFloor(current.sunAltitudeDeg);
-      if (!current.enabled || (current.sunAltitudeDeg >= 0 && current.opacity <= 0) || shadowStrength <= 0) {
-        setLayerOpacity(0);
-        return;
-      }
-
-      const ack = await post<ComputeAck | ComputeEmpty | ErrAck>({
-        type: 'compute',
-        sunAzDeg: current.sunAzimuthDeg,
-        sunAltDeg: current.sunAltitudeDeg,
-        shadowStrength,
-        nightFloor,
-        quality: job.quality,
-      });
+    // Apply phase: takes a ready worker ack and pushes the PNG blob into the
+    // Mapbox image source. Runs in parallel with the next worker compute so
+    // the worker isn't idle while the main thread decodes/uploads the image.
+    const applyComputeAck = async (
+      job: ComputeJob,
+      ack: ComputeAck | ComputeEmpty | ErrAck,
+    ) => {
       if (cancelled) return;
       if (job.sampleGen !== sampleGenRef.current) return;
-      if (job.computeSeq !== computeSeqRef.current) return;
+      // Drop stale applies — only run when this job is still the latest, or
+      // when no newer compute is pending (i.e. it's the freshest result we
+      // have). Skipping stale applies is the main pipelining win.
+      if (
+        job.computeSeq !== computeSeqRef.current
+        && pendingComputeRef.current !== null
+      ) {
+        return;
+      }
       if (ack.type === 'error') {
         console.warn('[shadow] compute failed', ack.message);
         publishStatus(shadowErrorStatus(ack.message));
@@ -188,6 +177,7 @@ export function useShadowImage(
         return;
       }
 
+      const current = optsRef.current;
       const alphaRatio = ack.totalPixels && ack.alphaPixels !== undefined
         ? ack.alphaPixels / ack.totalPixels
         : 1;
@@ -218,10 +208,24 @@ export function useShadowImage(
 
       publishStatus(shadowLoadingStatus(86, 'Assemblage'));
 
-      await preloadBlobUrl(url);
-      if (cancelled || job.sampleGen !== sampleGenRef.current || job.computeSeq !== computeSeqRef.current) {
-        URL.revokeObjectURL(url);
-        return;
+      // Skip the PNG decode round-trip on preview frames during scrubbing —
+      // it adds ~20-50 ms per frame that would serialize behind the next
+      // worker compute. A brief flash on the first frame is acceptable; the
+      // raster layer already shows the previous image until the new one
+      // decodes inside Mapbox.
+      if (job.quality !== 'preview') {
+        await preloadBlobUrl(url);
+        if (cancelled || job.sampleGen !== sampleGenRef.current) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        if (
+          job.computeSeq !== computeSeqRef.current
+          && pendingComputeRef.current !== null
+        ) {
+          URL.revokeObjectURL(url);
+          return;
+        }
       }
 
       ensureSourceAndLayer(url, coords);
@@ -252,6 +256,41 @@ export function useShadowImage(
       publishStatus(shadowReadyStatus('Overlay pret'));
     };
 
+    // Worker phase: only awaits the worker round-trip. Returns the ack so
+    // the queue can immediately start the next worker compute while the
+    // previous result is being applied on the main thread.
+    const runWorkerCompute = async (
+      job: ComputeJob,
+    ): Promise<ComputeAck | ComputeEmpty | ErrAck | null> => {
+      if (cancelled || !sampledRef.current) return null;
+      if (job.sampleGen !== sampleGenRef.current) return null;
+
+      publishStatus(shadowLoadingStatus(
+        job.quality === 'preview' ? 62 : 68,
+        job.quality === 'preview' ? 'Apercu des ombres' : 'Calcul des ombres',
+      ));
+
+      const current = optsRef.current;
+      const shadowStrength = shadowVisibility(current.sunAltitudeDeg);
+      const nightFloor = computeNightFloor(current.sunAltitudeDeg);
+      if (!current.enabled || (current.sunAltitudeDeg >= 0 && current.opacity <= 0) || shadowStrength <= 0) {
+        setLayerOpacity(0);
+        return null;
+      }
+
+      const ack = await post<ComputeAck | ComputeEmpty | ErrAck>({
+        type: 'compute',
+        sunAzDeg: current.sunAzimuthDeg,
+        sunAltDeg: current.sunAltitudeDeg,
+        shadowStrength,
+        nightFloor,
+        quality: job.quality,
+      });
+      if (cancelled) return null;
+      if (job.sampleGen !== sampleGenRef.current) return null;
+      return ack;
+    };
+
     const processComputeQueue = async (initialJob: ComputeJob) => {
       if (computeInflightRef.current) {
         pendingComputeRef.current = initialJob;
@@ -263,7 +302,21 @@ export function useShadowImage(
       try {
         while (job && !cancelled) {
           pendingComputeRef.current = null;
-          await runComputeAndApply(job);
+          let ack: ComputeAck | ComputeEmpty | ErrAck | null = null;
+          try {
+            ack = await runWorkerCompute(job);
+          } catch (error) {
+            console.warn('[shadow] worker compute failed', error);
+          }
+          // Pipeline: kick the apply for this job in the background, then
+          // immediately loop to start the next worker compute (if any).
+          // The worker stays busy continuously instead of waiting on PNG
+          // decode + Mapbox upload on the main thread.
+          if (ack) {
+            void applyComputeAck(job, ack).catch((error) => {
+              console.warn('[shadow] apply error', error);
+            });
+          }
           job = pendingComputeRef.current;
         }
       } finally {
