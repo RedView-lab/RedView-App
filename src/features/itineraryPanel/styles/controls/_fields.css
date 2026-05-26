@@ -13,7 +13,8 @@
    Two vertical columns (Durée+Distance | Dénivelé+Tranquilité) with
    8px column gap and 2px row gap inside each column. */
 .rvi-priorities {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: flex-start;
   gap: 8px;
   width: 100%;
@@ -38,6 +39,7 @@
   height: 24px;
   padding: 3px 0;
   width: 100%;
+  min-width: 0;
 }
 
 .rvi-sfield__label {
@@ -57,7 +59,7 @@
   align-items: center;
   gap: 4px;
   flex: 1 1 0;
-  min-width: 80px; /* Figma 1697:23231 min-w-[80px] */
+  min-width: 68px;
   max-width: 140px; /* Figma 1697:23231 max-w-[140px] */
 }
 
@@ -164,6 +166,8 @@
   background: transparent;
   cursor: pointer;
   transition: background 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 .rvi-select:hover {
   background: rgba(255, 255, 255, 0.04);
@@ -279,6 +283,8 @@
   border: 1px solid var(--rvi-border);
   border-radius: var(--rvi-radius-sm);
   background: transparent;
+  width: 100%;
+  box-sizing: border-box;
 }
 .rvi-input__native {
   flex: 1 1 0;
@@ -692,9 +698,52 @@
   min-width: 0;
 }
 
-/* Small-width adaptation */
-@media (max-width: 340px) {
+@media (max-width: 440px) {
+  .rvi-priorities,
+  .rvi-row:has(> .rvi-cfield + .rvi-cfield),
+  .rvi-row:has(> .rvi-cfield + .rvi-lfield),
+  .rvi-row:has(> .rvi-lfield + .rvi-cfield),
+  .rvi-row:has(> .rvi-lfield + .rvi-lfield) {
+    gap: 6px;
+  }
+
+  .rvi-sfield,
+  .rvi-lfield {
+    gap: 6px;
+  }
+
+  .rvi-sfield__label,
+  .rvi-lfield__label {
+    font-size: 12px;
+  }
+
+  .rvi-sfield__control {
+    min-width: 60px;
+    gap: 3px;
+  }
+
+  .rvi-sfield__sign {
+    font-size: 10px;
+  }
+
+  .rvi-select,
+  .rvi-input,
+  .rvi-input__native {
+    font-size: 13px;
+  }
+
+  .rvi-select {
+    padding: 5px 6px 5px 8px;
+  }
+
+  .rvi-input {
+    padding: 5px 6px 5px 8px;
+  }
+}
+
+@media (max-width: 300px) {
   .rvi-lfield { flex-wrap: wrap; }
+
   .rvi-select,
   .rvi-input {
     max-width: 100%;

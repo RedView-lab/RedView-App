@@ -253,12 +253,9 @@
   gap: 8px;
   align-items: center;
   width: 100%;
-  /* Hard floor: the row can never shrink below the sum of its children's
-     own minimums. Combined with the panel resize clamp, this guarantees
-     that checkboxes / chips from adjacent cells can never overlap — when
-     the user drags the handle past the floor, the panel starts clipping
-     horizontally instead of letting children collide. */
-  min-width: min-content;
+  /* Allow rows to keep shrinking with the panel so sibling cells can stay
+     aligned instead of forcing horizontal clipping on narrow widths. */
+  min-width: 0;
 }
 
 /* Routing feedback banners (errors / smart-validator warnings). */
