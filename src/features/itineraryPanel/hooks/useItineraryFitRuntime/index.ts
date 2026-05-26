@@ -43,6 +43,7 @@ export function useItineraryFitRuntime({
 }: UseItineraryFitRuntimeArgs) {
   const fitInputRef = useRef<HTMLInputElement | null>(null);
   const fitUploadTargetIdRef = useRef<string | null>(null);
+  const cancelledPredictionIdsRef = useRef<Set<string>>(new Set());
   const fitEngineRef = useRef<ReturnType<typeof createFitPredictionEngine> | null>(
     null,
   );
@@ -54,10 +55,9 @@ export function useItineraryFitRuntime({
   fitRuntimeRef.current = fitRuntimeByItineraryId;
 
   useEffect(() => {
-    const engine = createFitPredictionEngine();
-    fitEngineRef.current = engine;
+    fitEngineRef.current = createFitPredictionEngine();
     return () => {
-      engine.terminate();
+      fitEngineRef.current?.terminate();
       fitEngineRef.current = null;
     };
   }, []);
@@ -110,6 +110,11 @@ export function useItineraryFitRuntime({
   }, [fitStatusText]);
 
   const calculateDisabled = activeFitRuntime?.status === 'running';
+
+  const replaceFitEngine = useCallback(() => {
+    fitEngineRef.current?.terminate();
+    fitEngineRef.current = createFitPredictionEngine();
+  }, []);
 
   const updateFitRuntime = useCallback(
     (
@@ -374,6 +379,7 @@ export function useItineraryFitRuntime({
     }
 
     const itineraryId = itinerary.id;
+    cancelledPredictionIdsRef.current.delete(itineraryId);
     const gpxFile = buildRouteGpxFile(itinerary);
     const config = buildPredictionConfigFromRhythm(
       itinerary.rhythm,
@@ -399,6 +405,7 @@ export function useItineraryFitRuntime({
         }));
       })
       .then((result: PredictionResult) => {
+        cancelledPredictionIdsRef.current.delete(itineraryId);
         setProject((prev) => ({
           ...prev,
           itineraries: prev.itineraries.map((curr) =>
@@ -424,6 +431,14 @@ export function useItineraryFitRuntime({
         predictionStore?.setPrediction(itineraryId, result);
       })
       .catch((error: unknown) => {
+        const wasCancelled =
+          cancelledPredictionIdsRef.current.has(itineraryId)
+          && error instanceof Error
+          && error.message === 'Prediction worker terminated';
+        if (wasCancelled) {
+          cancelledPredictionIdsRef.current.delete(itineraryId);
+          return;
+        }
         console.error('[fit-predictor] prediction failed', error);
         setProject((prev) => ({
           ...prev,
@@ -449,6 +464,27 @@ export function useItineraryFitRuntime({
         predictionStore?.setPrediction(itineraryId, null);
       });
   }, [active, predictionStore, setProject, updateFitRuntime]);
+
+  const cancelCalculatePrediction = useCallback(() => {
+    const itinerary = active;
+    if (!itinerary) return;
+
+    const runtime = fitRuntimeRef.current[itinerary.id] ?? createEmptyFitRuntime();
+    if (runtime.status !== 'running') return;
+
+    cancelledPredictionIdsRef.current.add(itinerary.id);
+    replaceFitEngine();
+
+    updateFitRuntime(itinerary.id, (current) => ({
+      ...current,
+      predictionResult: itinerary.prediction ?? current.predictionResult,
+      progress: [],
+      status: itinerary.prediction ? 'success' : current.fitFiles.length > 0 ? 'ready' : 'idle',
+      error: null,
+      updatedAt: new Date().toISOString(),
+    }));
+    predictionStore?.setPrediction(itinerary.id, itinerary.prediction ?? null);
+  }, [active, predictionStore, replaceFitEngine, updateFitRuntime]);
 
   useEffect(() => {
     if (!active || active.pendingFitRecompute !== true) return;
@@ -481,6 +517,7 @@ export function useItineraryFitRuntime({
   return {
     calculateDisabled,
     calculateLabel,
+    cancelCalculatePrediction,
     fitInputRef,
     handleCalculatePrediction,
     handleFitInputChange,

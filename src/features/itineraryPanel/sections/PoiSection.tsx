@@ -1,8 +1,7 @@
-﻿import { CheckboxField, ToggleRow } from '../components/controls';
+﻿import { ActionButtonStack, CheckboxField, ToggleRow } from '../components/controls';
 import { useAppI18n } from '@/shared/i18n';
 import {
   IconChevronDown,
-  IconDownloadCircle,
   IconPlusCircle,
 } from '../components/icons';
 import type { PoiCategory, PoiEntry, PoiState } from '../types';
@@ -14,6 +13,7 @@ interface PoiSectionProps {
   onChangeRefineLimit?: (value: 2 | 4 | 6) => void;
   onOpenCategories?: () => void;
   onLoad?: () => void;
+  onCancelLoad?: () => void;
   /** Map-level POI loading state. */
   loading?: boolean;
   /** 0..1 progress of the corridor search (chunks completed / total). */
@@ -93,6 +93,7 @@ export function PoiSection({
   onChangeRefine,
   onOpenCategories,
   onLoad,
+  onCancelLoad,
   loading = false,
   progress = null,
   poiCount = 0,
@@ -101,18 +102,16 @@ export function PoiSection({
   disabledReason = null,
 }: PoiSectionProps) {
   const { t } = useAppI18n();
-  const buttonDisabled = disabled || loading;
   const pct =
     progress !== null && Number.isFinite(progress)
       ? Math.max(0, Math.min(100, Math.round(progress * 100)))
       : null;
-  const buttonLabel = loading
+  const loadingLabel = loading
     ? pct !== null
-      ? t('Recherche… {{pct}}%', { pct })
+      ? `${pct}%`
       : t('Recherche…')
-    : poiCount > 0
-      ? t('Recharger ({{count}})', { count: poiCount })
-      : t('Rechercher');
+    : null;
+  const resultLabel = poiCount > 0 ? t('({{count}} POI trouvés)', { count: poiCount }) : null;
 
   return (
     <div className="rvi-params">
@@ -168,16 +167,14 @@ export function PoiSection({
         </button>
       </div>
 
-      <button
-        type="button"
-        className={`rvi-redbtn rvi-redbtn--full${buttonDisabled ? ' is-disabled' : ''}`}
-        onClick={onLoad}
-        disabled={buttonDisabled}
-        aria-busy={loading}
-      >
-        <IconDownloadCircle size={16} />
-        <span>{buttonLabel}</span>
-      </button>
+      <ActionButtonStack
+        primaryLabel={t('Charger')}
+        onPrimaryClick={onLoad}
+        primaryDisabled={disabled}
+        loadingLabel={loadingLabel}
+        onLoadingClick={onCancelLoad}
+        resultLabel={resultLabel}
+      />
 
       {error ? (
         <div className="rvi-poi-msg rvi-poi-msg--error" role="alert">

@@ -48,6 +48,8 @@ export interface UseItineraryPoiMapResult {
   corridorProgress: number | null;
   /** Trigger a corridor search along the active itinerary's GPX route. */
   searchCorridor: () => void;
+  /** Abort the in-flight corridor search, if any. */
+  cancelSearchCorridor: () => void;
   hasGpxRoute: boolean;
   hasEnabledCategories: boolean;
   /** Effective radius (max of enabled rows) used by the corridor search. */
@@ -107,7 +109,7 @@ export function useItineraryPoiMap(
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
 
-  const { loading, error, poiCount, corridorProgress, searchCorridor } = usePoi(
+  const { loading, error, poiCount, corridorProgress, searchCorridor, cancelSearchCorridor } = usePoi(
     map,
     isMapLoaded,
     enabledCategories,
@@ -125,6 +127,7 @@ export function useItineraryPoiMap(
     poiCount,
     corridorProgress,
     searchCorridor,
+    cancelSearchCorridor,
     hasGpxRoute: gpxRoute !== null,
     hasEnabledCategories: enabledCategories.size > 0,
     radiusM,

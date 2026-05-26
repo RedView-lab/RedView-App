@@ -1401,6 +1401,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Calculate"
   },
   {
+    "fr": "Appliquer",
+    "en": "Apply"
+  },
+  {
+    "fr": "Charger",
+    "en": "Load"
+  },
+  {
     "fr": "Priorités",
     "en": "Priorities"
   },
@@ -2495,6 +2503,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Rechercher",
     "en": "Search"
+  },
+  {
+    "fr": "({{count}} POI trouvés)",
+    "en": "({{count}} POIs found)"
   },
   {
     "fr": "Profil de routage",

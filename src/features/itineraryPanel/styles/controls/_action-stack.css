@@ -1,0 +1,29 @@
+.rvi-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.rvi-action-stack__button {
+  gap: 4px;
+  padding: 7px 10px 7px 8px;
+  justify-content: center;
+}
+
+.rvi-action-stack__button--primary {
+  background: var(--rvi-red);
+}
+
+.rvi-action-stack__button--secondary {
+  background: rgba(137, 0, 0, 0.4);
+}
+
+.rvi-action-stack__button--secondary:not(:disabled):hover {
+  background: var(--rvi-red);
+}
+
+.rvi-action-stack__button--secondary:disabled {
+  opacity: 1;
+  cursor: default;
+}

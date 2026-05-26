@@ -105,6 +105,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const {
     calculateDisabled,
     calculateLabel,
+    cancelCalculatePrediction,
     fitInputRef,
     handleCalculatePrediction,
     handleFitInputChange,
@@ -141,6 +142,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 
   const {
     cancelRouteRequest,
+    requestRouteRefresh,
     routeError,
     routeLoading,
     routeRequestNonce,
@@ -267,6 +269,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   }, [setProject]);
 
   const {
+    cancelSearchCorridor,
     loading: poiLoading,
     error: poiError,
     poiCount,
@@ -459,6 +462,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           (it.roadTypes[key] as RoadTypesState[typeof key]) = value;
         })
       }
+      onRefreshRoute={() => requestRouteRefresh()}
+      onCancelRoute={() => cancelRouteRequest()}
       onChangeRhythm={(key, value) =>
         updateActive((it) => {
           (it.rhythm[key] as RhythmState[typeof key]) = value;
@@ -470,6 +475,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       uploadFitLabel={uploadFitLabel}
       onCalculate={() => {
         handleCalculatePrediction();
+      }}
+      onCancelCalculate={() => {
+        cancelCalculatePrediction();
       }}
       calculateLabel={calculateLabel}
       calculateDisabled={calculateDisabled}
@@ -490,6 +498,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       }
       onOpenPoiCategories={() => {}}
       onLoadPois={() => searchCorridor()}
+      onCancelLoadPois={() => cancelSearchCorridor()}
       poiLoading={poiLoading}
       poiProgress={poiProgress}
       poiCount={poiCount}

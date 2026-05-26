@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
-import { CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
+import { ActionButtonStack, CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
 import { Collapse } from '../components/shell';
 import { PauseIntervalList, PoiPauseGrid } from './rythme/components';
 import { CalendarPopover } from '../components/calendar';
@@ -11,7 +11,6 @@ import {
   IconUpload,
   IconInfo,
   IconPlus,
-  IconRepeat,
 } from '../components/icons';
 import type { PauseIntervalRow, RhythmGender, RhythmState } from '../types';
 
@@ -21,8 +20,10 @@ interface RythmeSectionProps {
   onUploadFit?: () => void;
   uploadFitLabel?: string;
   onCalculate?: () => void;
+  onCancelCalculate?: () => void;
   calculateLabel?: string;
   calculateDisabled?: boolean;
+  resultLabel?: string | null;
 }
 
 function ChipInput({
@@ -95,8 +96,10 @@ export function RythmeSection({
   onUploadFit,
   uploadFitLabel,
   onCalculate,
+  onCancelCalculate,
   calculateLabel,
   calculateDisabled,
+  resultLabel = null,
 }: RythmeSectionProps) {
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
@@ -373,15 +376,13 @@ export function RythmeSection({
 
       <div className="rvi-divider" />
 
-      <button
-        type="button"
-        className="rvi-redbtn rvi-redbtn--full"
-        onClick={onCalculate}
-        disabled={calculateDisabled}
-      >
-        <IconRepeat size={16} />
-        <span>{calculateLabel ?? t('Calculer')}</span>
-      </button>
+      <ActionButtonStack
+        primaryLabel={t('Calculer')}
+        onPrimaryClick={onCalculate}
+        loadingLabel={calculateDisabled ? (calculateLabel ?? t('Calculer')) : null}
+        onLoadingClick={onCancelCalculate}
+        resultLabel={resultLabel}
+      />
     </div>
   );
 }

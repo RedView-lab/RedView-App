@@ -31,6 +31,7 @@ export interface UseItineraryFitRuntimeArgs {
 export interface UseItineraryFitRuntimeResult {
   calculateDisabled: boolean;
   calculateLabel: string;
+  cancelCalculatePrediction: () => void;
   fitInputRef: React.RefObject<HTMLInputElement | null>;
   handleCalculatePrediction: () => void;
   handleFitInputChange: (event: ChangeEvent<HTMLInputElement>) => void;

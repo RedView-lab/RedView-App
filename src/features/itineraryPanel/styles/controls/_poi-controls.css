@@ -9,10 +9,9 @@
   gap: 8px;
 }
 
-/* Figma 1716:52620 — "Charger" red CTA.
-   Spec: bg #890000, gap-[8px], px-[8px] py-[7px], rounded-6, w_full,
-   icon 16, label 14px Medium white. */
-.rvi-params:has(.rvi-poi-refine) > .rvi-redbtn--full {
+/* Figma 1716:52620 — bottom action stack in POI keeps the same tighter
+  button padding as the mock. */
+.rvi-params:has(.rvi-poi-refine) .rvi-action-stack__button {
   gap: 8px;
   padding: 7px 8px;
 }

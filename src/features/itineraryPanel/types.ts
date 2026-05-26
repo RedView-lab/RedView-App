@@ -519,12 +519,15 @@ export interface ItineraryPanelProps {
     key: K,
     value: RoadTypesState[K],
   ) => void;
+  onRefreshRoute?: () => void;
+  onCancelRoute?: () => void;
 
   // rythme
   onChangeRhythm?: <K extends keyof RhythmState>(key: K, value: RhythmState[K]) => void;
   onUploadFit?: () => void;
   uploadFitLabel?: string;
   onCalculate?: () => void;
+  onCancelCalculate?: () => void;
   calculateLabel?: string;
   calculateDisabled?: boolean;
 
@@ -534,6 +537,7 @@ export interface ItineraryPanelProps {
   onChangePoiRefineLimit?: (value: 2 | 4 | 6) => void;
   onOpenPoiCategories?: () => void;
   onLoadPois?: () => void;
+  onCancelLoadPois?: () => void;
   /** Map-level POI loading state (corridor / viewport fetch). */
   poiLoading?: boolean;
   /** 0..1 progress for the chunked corridor search (null when idle). */

@@ -34,6 +34,7 @@ export function useItineraryBrouterRouting({
 }: UseItineraryBrouterRoutingArgs) {
   const [routeLoading, setRouteLoading] = useState(false);
   const [routeRequestNonce, setRouteRequestNonce] = useState(0);
+  const [routeRefreshNonce, setRouteRefreshNonce] = useState(0);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [routeWarnings, setRouteWarnings] = useState<string[]>([]);
   const routeAbortRef = useRef<AbortController | null>(null);
@@ -68,6 +69,9 @@ export function useItineraryBrouterRouting({
       settleRouteState(nextError);
     });
   }, [settleRouteState]);
+  const requestRouteRefresh = useCallback(() => {
+    setRouteRefreshNonce((current) => current + 1);
+  }, []);
 
   const startKey = (() => {
     const row = active?.timeline.find((item) => item.kind === 'start');
@@ -415,6 +419,7 @@ export function useItineraryBrouterRouting({
     pendingRoutePatchKey,
     pendingTraceExtensionKey,
     profileId,
+    routeRefreshNonce,
     rollbackPendingTraceAppend,
     setProject,
     startKey,
@@ -423,6 +428,7 @@ export function useItineraryBrouterRouting({
 
   return {
     cancelRouteRequest,
+    requestRouteRefresh,
     routeError,
     routeLoading,
     routeRequestNonce,

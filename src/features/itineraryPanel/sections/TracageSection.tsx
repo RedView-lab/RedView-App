@@ -1,5 +1,5 @@
 import { useAppI18n } from '@/shared/i18n';
-import { CheckboxField, LabeledInput, LabeledSelect, LabeledSlider } from '../components/controls';
+import { ActionButtonStack, CheckboxField, LabeledInput, LabeledSelect, LabeledSlider } from '../components/controls';
 import type { PrioritiesState, RoadTypesState } from '../types';
 
 interface TracageSectionProps {
@@ -10,6 +10,10 @@ interface TracageSectionProps {
     key: K,
     value: RoadTypesState[K],
   ) => void;
+  onApply?: () => void;
+  onCancelApply?: () => void;
+  applyLoading?: boolean;
+  resultLabel?: string | null;
 }
 
 /**
@@ -26,6 +30,10 @@ export function TracageSection({
   roadTypes,
   onChangePriority,
   onChangeRoadType,
+  onApply,
+  onCancelApply,
+  applyLoading = false,
+  resultLabel = null,
 }: TracageSectionProps) {
   const { t } = useAppI18n();
 
@@ -135,6 +143,14 @@ export function TracageSection({
         onToggle={(v) => onChangeRoadType?.('applyToAllItineraries', v)}
         label="Appliquer à tout les itinéraires"
         trailing={null}
+      />
+
+      <ActionButtonStack
+        primaryLabel={t('Appliquer')}
+        onPrimaryClick={onApply}
+        loadingLabel={applyLoading ? t('Calcul du tracé en cours') : null}
+        onLoadingClick={onCancelApply}
+        resultLabel={resultLabel}
       />
     </div>
   );

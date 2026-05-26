@@ -13,6 +13,7 @@ import type {
   PanelMode,
   RouteProfile,
 } from '../../types';
+import { buildPauseAwareSchedule } from '../../lib/schedule';
 import { ComingSoonSection } from '../../sections/ComingSoonSection';
 import { PoiSection } from '../../sections/PoiSection';
 import { RythmeSection } from '../../sections/RythmeSection';
@@ -29,6 +30,9 @@ type ItineraryPanelModeContentProps = Pick<
   ItineraryPanelProps,
   | 'canRedo'
   | 'canUndo'
+  | 'onCancelCalculate'
+  | 'onCancelLoadPois'
+  | 'onCancelRoute'
   | 'calculateDisabled'
   | 'calculateLabel'
   | 'onCalculate'
@@ -40,6 +44,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onChangeRoadType'
   | 'onLoadPois'
   | 'onOpenPoiCategories'
+  | 'onRefreshRoute'
   | 'onRedo'
   | 'onSaveProfile'
   | 'onUndo'
@@ -50,6 +55,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'poiLoadDisabledReason'
   | 'poiLoading'
   | 'poiProgress'
+  | 'routeLoading'
   | 'uploadFitLabel'
 > & {
   active?: Itinerary;
@@ -63,6 +69,9 @@ export function ItineraryPanelModeContent({
   activeMode,
   canRedo,
   canUndo,
+  onCancelCalculate,
+  onCancelLoadPois,
+  onCancelRoute,
   calculateDisabled,
   calculateLabel,
   dockTimelinePanel,
@@ -75,6 +84,7 @@ export function ItineraryPanelModeContent({
   onChangeRoadType,
   onLoadPois,
   onOpenPoiCategories,
+  onRefreshRoute,
   onRedo,
   onSaveProfile,
   onUndo,
@@ -86,6 +96,7 @@ export function ItineraryPanelModeContent({
   poiLoading,
   poiProgress,
   profiles,
+  routeLoading,
   uploadFitLabel,
 }: ItineraryPanelModeContentProps) {
   const splitRef = useRef<HTMLDivElement | null>(null);
@@ -93,6 +104,8 @@ export function ItineraryPanelModeContent({
   const [splitHeight, setSplitHeight] = useState(0);
   const [dockHeights, setDockHeights] = useState<Partial<Record<VisiblePanelMode, number>>>({});
   const [isDockResizing, setIsDockResizing] = useState(false);
+  const routeResultLabel = active ? buildRouteResultLabel(active) : null;
+  const rhythmResultLabel = active ? buildRhythmResultLabel(active) : null;
   let modeContent: ReactNode = null;
 
   switch (activeMode) {
@@ -114,6 +127,10 @@ export function ItineraryPanelModeContent({
             roadTypes={active.roadTypes}
             onChangePriority={onChangePriority}
             onChangeRoadType={onChangeRoadType}
+            onApply={onRefreshRoute}
+            onCancelApply={onCancelRoute}
+            applyLoading={routeLoading}
+            resultLabel={routeResultLabel}
           />
         </>
       ) : null;
@@ -126,8 +143,10 @@ export function ItineraryPanelModeContent({
           onUploadFit={onUploadFit}
           uploadFitLabel={uploadFitLabel}
           onCalculate={onCalculate}
+          onCancelCalculate={onCancelCalculate}
           calculateLabel={calculateLabel}
           calculateDisabled={calculateDisabled}
+          resultLabel={rhythmResultLabel}
         />
       ) : null;
       break;
@@ -139,6 +158,7 @@ export function ItineraryPanelModeContent({
           onChangeRefine={onChangePoiRefine}
           onOpenCategories={onOpenPoiCategories}
           onLoad={onLoadPois}
+          onCancelLoad={onCancelLoadPois}
           loading={poiLoading}
           progress={poiProgress}
           poiCount={poiCount}
@@ -280,4 +300,40 @@ export function ItineraryPanelModeContent({
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function buildRouteResultLabel(active: Itinerary): string | null {
+  const distanceKm = active.metrics?.distanceKm
+    ?? active.timeline.find((item) => item.kind === 'end')?.distanceKm
+    ?? null;
+  if (distanceKm == null || !Number.isFinite(distanceKm) || distanceKm <= 0) {
+    return null;
+  }
+  return `(${distanceKm.toFixed(2)} km)`;
+}
+
+function buildRhythmResultLabel(active: Itinerary): string | null {
+  const schedule = active.prediction ? buildPauseAwareSchedule(active, active.prediction) : null;
+  const durationSeconds = schedule?.totalDurationSeconds ?? active.metrics?.durationSec ?? null;
+  if (durationSeconds == null || !Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return null;
+  }
+
+  const pauseSeconds = schedule
+    ? schedule.pauseSpans.reduce((total, span) => total + span.durationSeconds, 0)
+    : 0;
+
+  if (pauseSeconds > 0) {
+    return `(${formatCompactDuration(durationSeconds)} et ${formatCompactDuration(pauseSeconds)} de pause)`;
+  }
+
+  return `(${formatCompactDuration(durationSeconds)})`;
+}
+
+function formatCompactDuration(totalSeconds: number): string {
+  const roundedMinutes = Math.max(0, Math.round(totalSeconds / 60));
+  const hours = Math.floor(roundedMinutes / 60);
+  const minutes = roundedMinutes % 60;
+  if (hours <= 0) return `${minutes}m`;
+  return `${hours}h${String(minutes).padStart(2, '0')}m`;
 }

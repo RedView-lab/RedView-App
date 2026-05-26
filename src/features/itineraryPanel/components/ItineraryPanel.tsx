@@ -48,22 +48,27 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onSaveProfile,
     onChangePriority,
     onChangeRoadType,
+    onRefreshRoute,
+    onCancelRoute,
     onChangeRhythm,
     onUploadFit,
     uploadFitLabel,
     onCalculate,
+    onCancelCalculate,
     calculateLabel,
     calculateDisabled,
     onChangePoiEntry,
     onChangePoiRefine,
     onOpenPoiCategories,
     onLoadPois,
+    onCancelLoadPois,
     poiLoading,
     poiProgress,
     poiCount,
     poiError,
     poiLoadDisabled,
     poiLoadDisabledReason,
+    routeLoading,
     onChangeTimelineView,
     onAddTimelineItem,
     onToggleTimelineItem,
@@ -228,6 +233,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           activeMode={activeMode}
           canRedo={canRedo}
           canUndo={canUndo}
+          onCancelCalculate={onCancelCalculate}
+          onCancelLoadPois={onCancelLoadPois}
+          onCancelRoute={onCancelRoute}
           calculateDisabled={calculateDisabled}
           calculateLabel={calculateLabel}
           dockTimelinePanel={dockTimelinePanel}
@@ -240,6 +248,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           onChangeRoadType={onChangeRoadType}
           onLoadPois={onLoadPois}
           onOpenPoiCategories={onOpenPoiCategories}
+          onRefreshRoute={onRefreshRoute}
           onRedo={onRedo}
           onSaveProfile={onSaveProfile}
           onUndo={onUndo}
@@ -251,6 +260,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           poiLoading={poiLoading}
           poiProgress={poiProgress}
           profiles={profiles}
+          routeLoading={routeLoading}
           uploadFitLabel={uploadFitLabel}
         />
       </div>

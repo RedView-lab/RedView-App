@@ -274,6 +274,14 @@ export function usePoi(
     }
   }, [map, isMapLoaded, fetchCorridorPois]);
 
+  const cancelSearchCorridor = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setCorridorProgress(null);
+    setError(null);
+  }, []);
+
   // ── Popup on click ────────────────────────────────────────────────
 
   const popupRef = useRef<mapboxgl.Popup | null>(null);
@@ -442,7 +450,7 @@ export function usePoi(
     updateSourceData(map, refinedSeed);
   }, [map, isMapLoaded, initialFeaturesKey, updateSourceData, applyRefinement]);
 
-  return { loading, error, poiCount, corridorProgress, searchCorridor };
+  return { loading, error, poiCount, corridorProgress, searchCorridor, cancelSearchCorridor };
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
