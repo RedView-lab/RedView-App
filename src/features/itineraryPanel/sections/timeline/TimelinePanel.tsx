@@ -237,6 +237,13 @@ export function TimelinePanel({
             <hr className="rvi-tl-divider" aria-hidden />
             <TimelineSheetView
               items={visibleSheetItems}
+              rhythm={rhythm}
+              prediction={prediction}
+              columns={tableSettings.columns}
+              sort={tableSettings.sort}
+              onChangeSort={(next) =>
+                setTableSettings((s) => ({ ...s, sort: next }))
+              }
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
               onToggleVisibility={onToggleItem}

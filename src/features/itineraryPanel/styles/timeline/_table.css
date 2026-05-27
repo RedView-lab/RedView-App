@@ -1,0 +1,316 @@
+/* ─────────────────────────────────────────────────────────────────────────
+ * Roadbook sortable table — Figma node 1749:57477.
+ *
+ * A CSS-grid–based table living inside `.rvi-tl-table-wrap`. Layout:
+ *   ┌─────┬───────────────┬──────────────┬───────────┬─────┐
+ *   │ ☑   │ Type / Name / data columns                │ ⋯  │
+ *   ├─────┼───────────────┴──────────────┴───────────┼─────┤
+ *   │ ☑   │ row cells                                │ ⋯  │
+ *   └─────┴──────────────────────────────────────────┴─────┘
+ *
+ * The first column (checkbox) and last column (actions) are sticky to keep
+ * essential UI affordances visible while the user scrolls horizontally
+ * through additional data columns.
+ * ─────────────────────────────────────────────────────────────────────── */
+
+.rvi-tl-table-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.rvi-tl-table-grid {
+  display: grid;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  row-gap: 4px;
+  /* Pad the right edge so the sticky actions column never overlaps a
+     scrollbar nub on platforms that show one. */
+  scrollbar-gutter: stable;
+}
+
+/* ───── Header row ───────────────────────────────────────────────────── */
+
+.rvi-tl-thead {
+  display: contents;
+}
+
+.rvi-tl-th {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--rvi-text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease;
+  user-select: none;
+}
+.rvi-tl-th:not([aria-hidden='true']):hover {
+  color: var(--rvi-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.rvi-tl-th.is-sorted {
+  color: var(--rvi-text);
+}
+.rvi-tl-th--left   { justify-content: flex-start; }
+.rvi-tl-th--right  { justify-content: flex-end;   }
+.rvi-tl-th--center { justify-content: center;     }
+
+.rvi-tl-th__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rvi-tl-th__sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.56);
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.rvi-tl-th:hover .rvi-tl-th__sort,
+.rvi-tl-th.is-sorted .rvi-tl-th__sort,
+.rvi-tl-th:focus-visible .rvi-tl-th__sort {
+  opacity: 1;
+}
+.rvi-tl-th__sort.is-asc {
+  color: var(--rvi-red-accent);
+  clip-path: inset(50% 0 0 0); /* show only bottom arrow head + shaft (sort ascending visual) */
+}
+.rvi-tl-th__sort.is-desc {
+  color: var(--rvi-red-accent);
+  clip-path: inset(0 0 50% 0);
+}
+
+/* Sticky check + actions edges. */
+.rvi-tl-th--sticky-left,
+.rvi-tl-td--sticky-left {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--rvi-panel-bg, #0e0e10);
+}
+.rvi-tl-th--sticky-right,
+.rvi-tl-td--sticky-right {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--rvi-panel-bg, #0e0e10);
+}
+.rvi-tl-th--check,
+.rvi-tl-td--check {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.rvi-tl-th__checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 4px;
+  display: inline-block;
+}
+.rvi-tl-th--actions,
+.rvi-tl-td--actions {
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+
+/* ───── Body rows ────────────────────────────────────────────────────── */
+
+.rvi-tl-tr {
+  display: contents;
+  animation: rvi-tl-fade 260ms ease-out both;
+}
+
+.rvi-tl-td {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: var(--rvi-text);
+  background: rgba(255, 255, 255, 0.08);
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+  box-sizing: border-box;
+  transition: background 0.15s ease;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rvi-tl-tr:hover .rvi-tl-td {
+  background: rgba(255, 255, 255, 0.12);
+}
+.rvi-tl-tr.is-selected .rvi-tl-td {
+  background: rgba(197, 0, 0, 0.18);
+  box-shadow: inset 0 1px 0 rgba(197, 0, 0, 0.5), inset 0 -1px 0 rgba(197, 0, 0, 0.5);
+}
+/* The first / last cells get the leading / trailing rounded corners. */
+.rvi-tl-td--sticky-left {
+  border-top-left-radius: var(--rvi-radius-md);
+  border-bottom-left-radius: var(--rvi-radius-md);
+}
+.rvi-tl-td--sticky-right {
+  border-top-right-radius: var(--rvi-radius-md);
+  border-bottom-right-radius: var(--rvi-radius-md);
+}
+
+.rvi-tl-td--left   { justify-content: flex-start; }
+.rvi-tl-td--right  { justify-content: flex-end;   }
+.rvi-tl-td--center { justify-content: center;     }
+
+.rvi-tl-td__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rvi-tl-td__name--placeholder {
+  color: var(--rvi-text-dim);
+  font-style: italic;
+}
+.rvi-tl-td__type-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rvi-tl-td__value {
+  font-variant-numeric: tabular-nums;
+}
+
+.rvi-tl-td__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+}
+.rvi-tl-td__check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+.rvi-tl-td__check-box {
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 4px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  display: inline-block;
+  position: relative;
+}
+.rvi-tl-td__check input:checked + .rvi-tl-td__check-box {
+  background: var(--rvi-red-accent);
+  border-color: var(--rvi-red-accent);
+}
+.rvi-tl-td__check input:checked + .rvi-tl-td__check-box::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+
+.rvi-tl-tr__action {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.56);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.rvi-tl-tr__action:hover { background: rgba(255, 255, 255, 0.08); color: var(--rvi-text); }
+.rvi-tl-tr__action.is-on { color: var(--rvi-text); }
+.rvi-tl-tr__action.is-fav { color: #f5c518; }
+.rvi-tl-tr__action--danger:hover { color: var(--rvi-red-accent); }
+.rvi-tl-tr__action[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* ───── Columns dropdown (portal) ────────────────────────────────────── */
+
+.rvi-tl-columns-menu {
+  position: fixed;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  background: rgba(20, 20, 22, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--rvi-radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.48);
+  padding: 4px;
+  overflow: hidden;
+}
+.rvi-tl-columns-menu__scroll {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  max-height: inherit;
+}
+.rvi-tl-columns-menu__option {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--rvi-text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+.rvi-tl-columns-menu__option:hover { background: rgba(255, 255, 255, 0.06); }
+.rvi-tl-columns-menu__option.is-on { color: var(--rvi-text); }
+.rvi-tl-columns-menu__option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.rvi-tl-columns-menu__check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  flex-shrink: 0;
+  color: #fff;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.rvi-tl-columns-menu__option.is-on .rvi-tl-columns-menu__check {
+  background: var(--rvi-red-accent);
+  border-color: var(--rvi-red-accent);
+}
+.rvi-tl-columns-menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+}
