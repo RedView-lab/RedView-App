@@ -66,6 +66,7 @@ const DEFAULT_SHEET_COLUMN_IDS = [
   'name',
   'distance',
 ] as const satisfies ReadonlyArray<TimelineColumnId>;
+const DEFAULT_SHEET_COLUMN_ID_SET: ReadonlySet<TimelineColumnId> = new Set(DEFAULT_SHEET_COLUMN_IDS);
 
 const ALIGN_CLASS: Record<TimelineColumnAlign, string> = {
   left: 'rvi-tl-th--left',
@@ -126,7 +127,7 @@ export function TimelineSheetView({
     () =>
       DEFAULT_SHEET_COLUMN_IDS.every((columnId) => columns[columnId] !== false)
       && Object.entries(columns).every(([columnId, isVisible]) =>
-        !isVisible || DEFAULT_SHEET_COLUMN_IDS.includes(columnId as TimelineColumnId),
+        !isVisible || DEFAULT_SHEET_COLUMN_ID_SET.has(columnId as TimelineColumnId),
       ),
     [columns],
   );
