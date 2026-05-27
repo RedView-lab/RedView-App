@@ -12,7 +12,6 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
 import { IconCheck } from '../../components/icons';
 import type { TimelineColumnDef, TimelineColumnId } from './TimelineColumns';
@@ -38,7 +37,7 @@ interface TimelineColumnsMenuProps {
   onClose: () => void;
 }
 
-const MENU_WIDTH = 260;
+const MENU_WIDTH = 324;
 const ROW_HEIGHT = 30;
 
 function computeStyle(anchorEl: HTMLElement, rowCount: number): MenuStyle {
@@ -89,10 +88,7 @@ export function TimelineColumnsMenu({
   const [menuStyle, setMenuStyle] = useState<MenuStyle | null>(null);
 
   useLayoutEffect(() => {
-    if (!open || !anchorEl) {
-      setMenuStyle(null);
-      return;
-    }
+    if (!open || !anchorEl) return;
     const update = () => setMenuStyle(computeStyle(anchorEl, columns.length));
     update();
     window.addEventListener('resize', update);
@@ -145,7 +141,6 @@ export function TimelineColumnsMenu({
       }}
       onMouseDown={(event) => event.stopPropagation()}
     >
-      <MapCanvasGlassBackdrop blur={60} saturate={1.8} />
       <div className="rvi-tl-columns-menu__scroll">
         {columns.map((col) => {
           const on = visibility[col.id] === true;
@@ -163,10 +158,10 @@ export function TimelineColumnsMenu({
                 onToggle(col.id, !on);
               }}
             >
-              <span className="rvi-tl-columns-menu__check" aria-hidden>
-                {on ? <IconCheck size={12} /> : null}
-              </span>
               <span className="rvi-tl-columns-menu__label">{t(col.label)}</span>
+              <span className="rvi-tl-columns-menu__check" aria-hidden>
+                {on ? <IconCheck size={16} /> : null}
+              </span>
             </button>
           );
         })}
