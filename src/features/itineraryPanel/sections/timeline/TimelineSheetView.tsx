@@ -18,6 +18,7 @@ import type { RhythmState, TimelineItem } from '../../types';
 import { IconEye, IconStar, IconTrash } from '../../components/icons';
 import { KindBadge, kindLabel } from './KindBadge';
 import { PlaceSearchInput } from './components';
+import { TimelineRow } from './TimelineRow';
 import { TimelineAddRow } from './TimelineAddRow';
 import {
   TIMELINE_COLUMNS,
@@ -58,6 +59,13 @@ interface PreparedRow {
   ctx: TimelineColumnContext;
   cells: Array<{ display: string; sortKey: number | string | null }>;
 }
+
+const DEFAULT_SHEET_COLUMN_IDS = [
+  'typePicto',
+  'typeText',
+  'name',
+  'distance',
+] as const satisfies ReadonlyArray<TimelineColumnId>;
 
 const ALIGN_CLASS: Record<TimelineColumnAlign, string> = {
   left: 'rvi-tl-th--left',
@@ -114,6 +122,15 @@ export function TimelineSheetView({
 }: TimelineSheetViewProps) {
   const { t } = useAppI18n();
 
+  const useCompactListLayout = useMemo(
+    () =>
+      DEFAULT_SHEET_COLUMN_IDS.every((columnId) => columns[columnId] !== false)
+      && Object.entries(columns).every(([columnId, isVisible]) =>
+        !isVisible || DEFAULT_SHEET_COLUMN_IDS.includes(columnId as TimelineColumnId),
+      ),
+    [columns],
+  );
+
   const visibleColumns: TimelineColumnDef[] = useMemo(
     () => TIMELINE_COLUMNS.filter((c) => c.pinned || columns[c.id] !== false),
     [columns],
@@ -154,6 +171,93 @@ export function TimelineSheetView({
     onChangeSort(cycleSort(sort, columnId));
   };
 
+  if (useCompactListLayout) {
+    const typeDirection = sort?.columnId === 'typeText' ? sort.direction : null;
+    const distanceDirection = sort?.columnId === 'distance' ? sort.direction : null;
+
+    return (
+      <div className="rvi-tl-table-wrap" aria-label={t('Liste des étapes')}>
+        <div className="rvi-tl-list" role="table">
+          <div className="rvi-tl-list__header" role="row">
+            <span className="rvi-tl-list__col-check" aria-hidden>
+              <span className="rvi-tl-list__col-checkbox" />
+            </span>
+
+            <button
+              type="button"
+              role="columnheader"
+              aria-sort={
+                typeDirection === 'asc'
+                  ? 'ascending'
+                  : typeDirection === 'desc'
+                    ? 'descending'
+                    : 'none'
+              }
+              className={`rvi-tl-list__sort rvi-tl-list__col-type${typeDirection ? ' is-sorted' : ''}`}
+              onClick={() => handleHeaderClick('typeText')}
+              title={t('Type')}
+            >
+              <span className="rvi-tl-list__sort-label">{t('Type')}</span>
+              <SortIcon direction={typeDirection} />
+            </button>
+
+            <span className="rvi-tl-list__col-flex" aria-hidden />
+
+            <button
+              type="button"
+              role="columnheader"
+              aria-sort={
+                distanceDirection === 'asc'
+                  ? 'ascending'
+                  : distanceDirection === 'desc'
+                    ? 'descending'
+                    : 'none'
+              }
+              className={`rvi-tl-list__sort rvi-tl-list__col-distance${distanceDirection ? ' is-sorted' : ''}`}
+              onClick={() => handleHeaderClick('distance')}
+              title={t('Distance')}
+            >
+              <span className="rvi-tl-list__sort-label">{t('Distance')}</span>
+              <SortIcon direction={distanceDirection} />
+            </button>
+
+            <span className="rvi-tl-list__col-actions" aria-hidden>
+              <IconEye size={12} />
+              <IconTrash size={12} />
+              <IconStar size={12} />
+            </span>
+          </div>
+
+          <div className="rvi-tl-list__items">
+            {sortedRows.map((row, rowIndex) => {
+              const { item } = row;
+              return (
+                <div
+                  key={item.id}
+                  className="rvi-tl-list__item"
+                  role="row"
+                  style={{ animationDelay: `${Math.min(rowIndex * 18, 240)}ms` }}
+                >
+                  <TimelineRow
+                    item={item}
+                    selected={selectedIds?.has(item.id) === true}
+                    onToggleSelect={onToggleSelect}
+                    onToggleVisibility={onToggleVisibility}
+                    onToggleFavorite={onToggleFavorite}
+                    onRemove={onRemove}
+                    onSelectPlace={onSelectPlace}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <TimelineAddRow onAdd={onAdd} onOpenKindMenu={onOpenKindMenu} />
+      </div>
+    );
+  }
+
   return (
     <div className="rvi-tl-table-wrap" aria-label={t('Liste des étapes')}>
       <div
@@ -184,7 +288,17 @@ export function TimelineSheetView({
               </button>
             );
           })}
-          <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden />
+          <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden>
+            <span className="rvi-tl-th__action-icon">
+              <IconEye size={12} />
+            </span>
+            <span className="rvi-tl-th__action-icon">
+              <IconTrash size={12} />
+            </span>
+            <span className="rvi-tl-th__action-icon">
+              <IconStar size={12} />
+            </span>
+          </div>
         </div>
 
         {/* ── Body rows ──────────────────────────────────────────── */}
@@ -239,6 +353,18 @@ export function TimelineSheetView({
                 </button>
                 <button
                   type="button"
+                  className="rvi-tl-tr__action rvi-tl-tr__action--danger"
+                  onClick={() => {
+                    if (isAutoIntervalPause) return;
+                    onRemove?.(item.id);
+                  }}
+                  aria-label={t('Supprimer')}
+                  disabled={isAutoIntervalPause}
+                >
+                  <IconTrash size={12} />
+                </button>
+                <button
+                  type="button"
                   className={`rvi-tl-tr__action${item.favorite ? ' is-on is-fav' : ''}`}
                   onClick={() => {
                     if (isAutoIntervalPause) return;
@@ -249,18 +375,6 @@ export function TimelineSheetView({
                   disabled={isAutoIntervalPause}
                 >
                   <IconStar size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="rvi-tl-tr__action rvi-tl-tr__action--danger"
-                  onClick={() => {
-                    if (isAutoIntervalPause) return;
-                    onRemove?.(item.id);
-                  }}
-                  aria-label={t('Supprimer')}
-                  disabled={isAutoIntervalPause}
-                >
-                  <IconTrash size={12} />
                 </button>
               </div>
             </div>
@@ -281,7 +395,12 @@ function buildGridTemplate(cols: TimelineColumnDef[]): string {
       return `minmax(${c.minWidth}px, max-content)`;
     })
     .join(' ');
-  return `28px ${middle} 88px`;
+  return `28px ${middle} 72px`;
+}
+
+function resolveSheetKindLabel(item: TimelineItem, t: (key: string) => string): string {
+  if (item.kind === 'end') return t('Fin');
+  return kindLabel(item.kind, item.poiCategory);
 }
 
 interface RenderCellExtras {
@@ -305,9 +424,10 @@ function renderCell(
     return <KindBadge kind={item.kind} poiCategory={item.poiCategory} />;
   }
   if (col.id === 'typeText') {
+    const label = resolveSheetKindLabel(item, extras.t);
     return (
-      <span className="rvi-tl-td__type-text" title={kindLabel(item.kind, item.poiCategory)}>
-        {kindLabel(item.kind, item.poiCategory)}
+      <span className="rvi-tl-td__type-text" title={label}>
+        {label}
       </span>
     );
   }

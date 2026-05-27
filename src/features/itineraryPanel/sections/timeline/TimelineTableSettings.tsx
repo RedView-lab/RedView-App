@@ -13,11 +13,27 @@ import { useState, type MouseEvent } from 'react';
 import { IconChevronDown, IconPlusCircle } from '../../components/icons';
 import { useAppI18n } from '@/shared/i18n';
 import {
-  DEFAULT_TIMELINE_COLUMN_VISIBILITY,
   TIMELINE_COLUMNS,
   type TimelineColumnId,
 } from './TimelineColumns';
 import { TimelineColumnsMenu } from './TimelineColumnsMenu.tsx';
+
+const DEFAULT_SHEET_COLUMN_IDS = [
+  'typePicto',
+  'typeText',
+  'name',
+  'distance',
+] as const satisfies ReadonlyArray<TimelineColumnId>;
+const DEFAULT_SHEET_COLUMN_ID_SET: ReadonlySet<TimelineColumnId> = new Set(DEFAULT_SHEET_COLUMN_IDS);
+
+function buildDefaultColumnVisibility(): Record<TimelineColumnId, boolean> {
+  return Object.fromEntries(
+    TIMELINE_COLUMNS.map((column) => [
+      column.id,
+      DEFAULT_SHEET_COLUMN_ID_SET.has(column.id),
+    ]),
+  ) as Record<TimelineColumnId, boolean>;
+}
 
 export interface TimelineTableSortState {
   columnId: TimelineColumnId;
@@ -38,7 +54,7 @@ export interface TimelineTableSettingsState {
 export const DEFAULT_TIMELINE_TABLE_SETTINGS: TimelineTableSettingsState = {
   distanceBetweenWaypoints: false,
   distanceKm: 10,
-  columns: { ...DEFAULT_TIMELINE_COLUMN_VISIBILITY },
+  columns: buildDefaultColumnVisibility(),
   sort: null,
 };
 

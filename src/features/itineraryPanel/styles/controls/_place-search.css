@@ -11,29 +11,31 @@
 .rvi-place-search__input {
   flex: 1 1 0;
   min-width: 0;
-  padding: 4px 8px;
+  padding: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--rvi-text);
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 0;
+  border: 0;
   cursor: text;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
   box-sizing: border-box;
   width: 100%;
 }
 .rvi-place-search__input::placeholder {
-  color: var(--rvi-text-dim);
-  font-style: italic;
-  font-weight: 500;
+  color: var(--rvi-text);
+  font-style: normal;
+  font-weight: 600;
+  opacity: 1;
 }
 .rvi-place-search__input:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
 }
 .rvi-place-search__input:focus-visible {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: var(--rvi-red-accent);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px var(--rvi-red-accent);
   outline: none;
 }
 

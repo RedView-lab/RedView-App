@@ -19,6 +19,11 @@
   font-weight: 700;
   letter-spacing: 0.01em;
 }
+.rvi-tl-list__items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .rvi-tl-list__col-check {
   display: inline-flex;
   align-items: center;
@@ -34,17 +39,62 @@
   display: inline-block;
 }
 .rvi-tl-list__col-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex: 0 0 auto;
   padding-left: 28px;
   min-width: 56px;
 }
 .rvi-tl-list__col-flex { flex: 1 1 0; min-width: 0; }
 .rvi-tl-list__col-distance {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   flex: 0 0 auto;
   min-width: 56px;
   text-align: right;
 }
-.rvi-tl-list__col-actions { flex: 0 0 auto; width: 72px; }
+.rvi-tl-list__col-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  flex: 0 0 auto;
+  width: 72px;
+  color: var(--rvi-text-dim);
+}
+.rvi-tl-list__sort {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  transition: color 0.15s ease;
+}
+.rvi-tl-list__sort:hover,
+.rvi-tl-list__sort.is-sorted {
+  color: var(--rvi-text);
+}
+.rvi-tl-list__sort .rvi-tl-th__sort {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  color: rgba(255, 255, 255, 0.56);
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+.rvi-tl-list__sort:hover .rvi-tl-th__sort,
+.rvi-tl-list__sort.is-sorted .rvi-tl-th__sort,
+.rvi-tl-list__sort:focus-visible .rvi-tl-th__sort {
+  opacity: 1;
+}
+.rvi-tl-list__sort-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 .rvi-tl-list__item {
   animation: rvi-tl-fade 260ms ease-out both;
@@ -186,6 +236,10 @@
 .rvi-tl-row__action.is-on { opacity: 1; }
 .rvi-tl-row__action.is-on.is-fav { color: #ffd13a; }
 .rvi-tl-row__action--danger:hover { color: #ff6060; }
+.rvi-tl-row__action[disabled] {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
 .rvi-tl-row__action:focus-visible {
   outline: 2px solid var(--rvi-red-accent);
   outline-offset: 1px;
