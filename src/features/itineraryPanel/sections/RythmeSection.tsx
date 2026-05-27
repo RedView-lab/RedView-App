@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
@@ -104,14 +104,8 @@ export function RythmeSection({
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime('00:00'));
+  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime(rhythm.startTime || '00:00'));
   const [isScrubbingTime, setIsScrubbingTime] = useState(false);
-
-  useEffect(() => {
-    if (!isScrubbingTime) {
-      setTimeDraftMinutes(getMinutesFromTime(rhythm.startTime || '00:00'));
-    }
-  }, [isScrubbingTime, rhythm.startTime]);
 
   const displayTime = isScrubbingTime
     ? formatMinutes(timeDraftMinutes)

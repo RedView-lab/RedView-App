@@ -27,41 +27,42 @@ export function ActionButtonStack({
   const hasResultLabel = typeof resultLabel === 'string' && resultLabel.trim().length > 0;
   const loadingIsCancelable = typeof onLoadingClick === 'function';
   const resultClickHandler = onResultClick ?? onPrimaryClick;
-  const resolvedLoadingLabel = hasLoadingLabel ? loadingLabel : '--';
-  const resolvedResultLabel = hasResultLabel ? resultLabel : '--';
+  const isLoadingState = hasLoadingLabel;
+  const isResultState = !isLoadingState && hasResultLabel;
+
+  let buttonLabel = primaryLabel;
+  let buttonClick = onPrimaryClick;
+  let buttonDisabled = primaryDisabled;
+  let buttonClassName = 'rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--primary';
+
+  if (isLoadingState) {
+    buttonLabel = loadingHovered && loadingIsCancelable ? t('Interrompre') : loadingLabel!;
+    buttonClick = onLoadingClick;
+    buttonDisabled = !loadingIsCancelable;
+    buttonClassName = 'rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary';
+  } else if (isResultState) {
+    buttonLabel = resultLabel!;
+    buttonClick = resultClickHandler;
+    buttonDisabled = typeof resultClickHandler !== 'function';
+    buttonClassName = 'rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary';
+  }
 
   return (
     <div className="rvi-action-stack">
       <button
         type="button"
-        className="rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--primary"
-        onClick={onPrimaryClick}
-        disabled={primaryDisabled}
+        className={buttonClassName}
+        onClick={buttonClick}
+        onMouseEnter={() => {
+          if (isLoadingState) setLoadingHovered(true);
+        }}
+        onMouseLeave={() => {
+          if (isLoadingState) setLoadingHovered(false);
+        }}
+        disabled={buttonDisabled}
       >
         <IconRepeat size={16} />
-        <span>{primaryLabel}</span>
-      </button>
-
-      <button
-        type="button"
-        className={`rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary${hasLoadingLabel ? '' : ' is-placeholder'}`}
-        onClick={onLoadingClick}
-        onMouseEnter={() => setLoadingHovered(true)}
-        onMouseLeave={() => setLoadingHovered(false)}
-        disabled={!loadingIsCancelable}
-      >
-        <IconRepeat size={16} />
-        <span>{loadingHovered && loadingIsCancelable ? t('Interrompre') : resolvedLoadingLabel}</span>
-      </button>
-
-      <button
-        type="button"
-        className={`rvi-redbtn rvi-redbtn--full rvi-action-stack__button rvi-action-stack__button--secondary${hasResultLabel ? '' : ' is-placeholder'}`}
-        onClick={resultClickHandler}
-        disabled={!hasResultLabel || typeof resultClickHandler !== 'function'}
-      >
-        <IconRepeat size={16} />
-        <span>{resolvedResultLabel}</span>
+        <span>{buttonLabel}</span>
       </button>
     </div>
   );
