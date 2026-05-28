@@ -204,6 +204,14 @@
   font-weight: 600;
 }
 
+.rvc-routes__quality-unavailable {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
 .rvc-routes__quality-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
@@ -260,6 +268,12 @@
 .rvc-routes__quality-expert-toggle:hover,
 .rvc-routes__quality-apply:hover {
   background: rgba(255, 255, 255, 0.16);
+}
+
+.rvc-routes__quality-expert-toggle:disabled,
+.rvc-routes__quality-apply:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .rvc-routes__quality-apply {

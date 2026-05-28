@@ -204,23 +204,26 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     () => projectItineraries.find((it) => it.id === activeItineraryId) ?? null,
     [projectItineraries, activeItineraryId],
   );
-  const activeGpxQuality = useMemo(
-    () =>
-      activeItinerary?.gpxRoute?.source === 'gpx'
-        ? activeItinerary.gpxRoute.gpxQuality ?? 'default'
-        : null,
+  const activeQualityRoute = useMemo(
+    () => {
+      const route = activeItinerary?.gpxRoute;
+      return route && route.points.length >= 2 ? route : null;
+    },
     [activeItinerary],
+  );
+  const activeGpxQualityVisible = activeItinerary != null;
+  const activeGpxQualityAvailable = activeQualityRoute != null;
+  const activeGpxQuality = useMemo(
+    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQuality ?? 'default' : null),
+    [activeGpxQualityVisible, activeItinerary],
   );
   const activeGpxQualityPointsPerKm = useMemo(
-    () =>
-      activeItinerary?.gpxRoute?.source === 'gpx'
-        ? activeItinerary.gpxRoute.gpxQualityPointsPerKm ?? null
-        : null,
-    [activeItinerary],
+    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQualityPointsPerKm ?? null : null),
+    [activeGpxQualityVisible, activeItinerary],
   );
   const activeGpxQualityStats = useMemo(() => {
-    if (activeItinerary?.gpxRoute?.source !== 'gpx') return null;
-    const route = activeItinerary.gpxRoute;
+    const route = activeQualityRoute;
+    if (!route) return null;
     const basePoints = route.originalPoints ?? route.points;
     return buildGpxQualityStats(
       route.points,
@@ -228,7 +231,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       (route.gpxQuality ?? 'default') as GpxQualityMode,
       route.gpxQualityPointsPerKm,
     );
-  }, [activeItinerary]);
+  }, [activeQualityRoute]);
   const anyItineraryVisible = useMemo(
     () => projectItineraries.some((itinerary) => itinerary.visible !== false),
     [projectItineraries],
@@ -283,6 +286,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         items: routeItems,
         traceWidthPx: routesTraceWidthPx,
         gpxQuality: activeGpxQuality,
+        gpxQualityAvailable: activeGpxQualityAvailable,
         gpxQualityPointsPerKm: activeGpxQualityPointsPerKm,
         gpxQualityStats: activeGpxQualityStats,
       },
@@ -307,6 +311,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       routesTraceWidthPx,
       routesEnabled,
       activeGpxQuality,
+      activeGpxQualityAvailable,
       activeGpxQualityPointsPerKm,
       activeGpxQualityStats,
       terrainState.slices.contourLines,

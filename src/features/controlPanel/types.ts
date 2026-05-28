@@ -81,6 +81,7 @@ export interface RoutesSectionState {
   /** Global route line width in px. */
   traceWidthPx: number;
   gpxQuality?: GpxQualityMode | null;
+  gpxQualityAvailable?: boolean;
   gpxQualityPointsPerKm?: number | null;
   gpxQualityStats?: GpxQualityStats | null;
 }

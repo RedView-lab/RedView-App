@@ -20,6 +20,7 @@ interface Props {
   items: ControlPanelState['routes']['items'];
   traceWidthPx: number;
   gpxQuality?: GpxQualityMode | null;
+  gpxQualityAvailable?: boolean;
   gpxQualityPointsPerKm?: number | null;
   gpxQualityStats?: GpxQualityStats | null;
   open?: boolean;
@@ -120,6 +121,7 @@ export function RoutesSection({
   items,
   traceWidthPx,
   gpxQuality,
+  gpxQualityAvailable = false,
   gpxQualityPointsPerKm,
   gpxQualityStats,
   open,
@@ -138,6 +140,7 @@ export function RoutesSection({
   const [expertPointsPerKm, setExpertPointsPerKm] = useState(
     gpxQualityPointsPerKm ?? GPX_QUALITY_PRESET_POINTS_PER_KM.balanced,
   );
+  const effectiveQuality = gpxQuality ?? 'default';
 
   useEffect(() => {
     if (gpxQuality === 'expert') {
@@ -244,7 +247,7 @@ export function RoutesSection({
               <Select
                 className="rvc-routes__quality-select"
                 width="140px"
-                value={gpxQuality}
+                value={effectiveQuality}
                 options={[
                   { value: 'default', label: 'Défaut (rapide)' },
                   { value: 'balanced', label: 'Équilibré' },
@@ -252,8 +255,15 @@ export function RoutesSection({
                   { value: 'expert', label: 'Expert' },
                 ]}
                 onChange={onGpxQualityChange}
+                disabled={!gpxQualityAvailable}
               />
             </div>
+
+            {!gpxQualityAvailable ? (
+              <div className="rvc-routes__quality-unavailable">
+                {t('L’itinéraire actif n’a pas encore de trace GPX exploitable.')}
+              </div>
+            ) : null}
 
             <div className="rvc-routes__quality-meta" aria-live="polite">
               <div className="rvc-routes__quality-metric">
@@ -270,12 +280,13 @@ export function RoutesSection({
                 type="button"
                 className="rvc-routes__quality-expert-toggle"
                 onClick={() => setExpertOpen((current) => !current)}
+                disabled={!gpxQualityAvailable}
               >
                 {expertOpen ? t('Fermer expert GPX') : t('Ouvrir expert GPX')}
               </button>
             </div>
 
-            {expertOpen ? (
+            {expertOpen && gpxQualityAvailable ? (
               <div className="rvc-routes__quality-expert-panel">
                 <div className="rvc-routes__quality-expert-head">
                   <span className="rvc-routes__quality-expert-title">{t('Mode Expert GPX')}</span>
@@ -314,6 +325,7 @@ export function RoutesSection({
                     type="button"
                     className="rvc-routes__quality-apply"
                     onClick={() => onGpxQualityExpertApply?.(expertPointsPerKm)}
+                    disabled={!gpxQualityAvailable}
                   >
                     {t('Appliquer expert GPX')}
                   </button>

@@ -155,6 +155,7 @@ export function ControlPanel({
         items={state.routes.items}
         traceWidthPx={state.routes.traceWidthPx}
         gpxQuality={state.routes.gpxQuality}
+        gpxQualityAvailable={state.routes.gpxQualityAvailable}
         gpxQualityPointsPerKm={state.routes.gpxQualityPointsPerKm}
         gpxQualityStats={state.routes.gpxQualityStats}
         open={sectionsOpen?.routes}
