@@ -29,3 +29,9 @@ export function IconCompass({ size = 20, rotation = 0, ...rest }: AssetIconProps
     />
   );
 }
+
+export function IconInfo({ size = 16, ...rest }: AssetIconProps) {
+  return (
+    <AssetIcon src="/svgv2/icone/info-circle.svg" size={size} {...rest} />
+  );
+}

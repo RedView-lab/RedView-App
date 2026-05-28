@@ -64,22 +64,15 @@
   padding: 12px;
 }
 
-.rvmvc-map-tools__text-button {
-  width: auto;
+.rvmvc-map-tools__button--label {
+  width: 40px;
   min-width: 40px;
   height: 40px;
-  padding: 10px 12px;
+  padding: 10px;
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
-}
-
-.rvmvc-map-tools__legend-button {
-  justify-content: center;
-  min-width: 40px;
-  padding-inline: 10px;
-  font-size: 12px;
 }
 
 .rvmvc-route-slope-legend {
@@ -145,10 +138,11 @@
     padding: 9px;
   }
 
-  .rvmvc-map-tools__text-button {
+  .rvmvc-map-tools__button--label {
+    width: 36px;
     min-width: 36px;
     height: 36px;
-    padding: 9px 11px;
+    padding: 9px;
     font-size: 14px;
   }
 
@@ -163,11 +157,6 @@
   .rvmvc-route-slope-legend {
     width: 148px;
     padding: 10px;
-  }
-
-  .rvmvc-map-tools__legend-button {
-    padding-inline: 9px;
-    font-size: 11px;
   }
 
   .rvmvc-route-slope-legend__title {

@@ -5,6 +5,7 @@ import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import {
   IconCompass,
+  IconInfo,
   IconMaximize,
   IconZoomIn,
   IconZoomOut,
@@ -184,7 +185,7 @@ export function MapViewportControls({
         <div className="rvmvc-map-tools__button-stack">
           <button
             type="button"
-            className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
+            className={`rvmvc-map-tools__button rvmvc-map-tools__button--label${is3DView ? ' is-active' : ''}`}
             aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
             aria-pressed={is3DView}
             title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
@@ -197,7 +198,7 @@ export function MapViewportControls({
           {routeSlopeLegendTitle ? (
             <button
               type="button"
-              className={`rvmvc-map-tools__button rvmvc-map-tools__text-button rvmvc-map-tools__legend-button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
+              className={`rvmvc-map-tools__button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
               aria-label={isRouteSlopeLegendOpen ? t('Masquer la légende de pente du tracé') : t('Afficher la légende de pente du tracé')}
               aria-pressed={isRouteSlopeLegendOpen}
               title={t('Légende')}
@@ -205,7 +206,7 @@ export function MapViewportControls({
                 setIsRouteSlopeLegendOpen((value) => !value);
               }}
             >
-              <span>{t('Légende')}</span>
+              <IconInfo size={16} />
             </button>
           ) : null}
         </div>
