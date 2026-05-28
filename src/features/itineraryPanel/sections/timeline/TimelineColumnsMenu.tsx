@@ -3,7 +3,8 @@
  *
  * Mirrors the {@link TimelineKindMenu} pattern: positioned against the anchor
  * with `--app-scale` awareness, dismissed on outside click / Escape, rendered
- * inside `document.body` so it can escape clipping ancestors.
+ * in a portal target that stays inside the fullscreen shell when needed so it
+ * can escape clipping ancestors without dropping behind the fullscreen overlay.
  */
 import {
   useEffect,
@@ -75,6 +76,12 @@ function computeStyle(anchorEl: HTMLElement, rowCount: number): MenuStyle {
   };
 }
 
+function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
+  const fullscreenRoot = anchorEl.closest('.rvi-panel-fullscreen-root');
+  if (fullscreenRoot instanceof HTMLElement) return fullscreenRoot;
+  return anchorEl.ownerDocument.body ?? document.body;
+}
+
 export function TimelineColumnsMenu({
   anchorEl,
   open,
@@ -120,6 +127,8 @@ export function TimelineColumnsMenu({
   }, [anchorEl, onClose, open]);
 
   if (!open || !anchorEl || !menuStyle) return null;
+
+  const portalTarget = resolvePortalTarget(anchorEl);
 
   return createPortal(
     <div
@@ -167,6 +176,6 @@ export function TimelineColumnsMenu({
         })}
       </div>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

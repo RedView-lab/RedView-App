@@ -11,6 +11,10 @@ import {
   RouteStatusBanners,
 } from './shell';
 import { TimelinePanel } from '../sections/timeline';
+import {
+  DEFAULT_TIMELINE_TABLE_SETTINGS,
+  type TimelineTableSettingsState,
+} from '../sections/timeline/TimelineTableSettings';
 import type { ItineraryPanelProps, PanelMode, PoiCategory } from '../types';
 import '../styles/index.css';
 
@@ -22,6 +26,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const { t } = useAppI18n();
   const { scrollRef, isAutoscrolling } = useMiddleClickAutoscroll<HTMLDivElement>();
   const [timelineFullscreen, setTimelineFullscreen] = useState(false);
+  const [timelineTableSettings, setTimelineTableSettings] = useState<TimelineTableSettingsState>(
+    DEFAULT_TIMELINE_TABLE_SETTINGS,
+  );
   const {
     project,
     profiles,
@@ -153,6 +160,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const dockTimelinePanel = timelinePanelProps ? (
     <TimelinePanel
       {...timelinePanelProps}
+      tableSettings={timelineTableSettings}
+      onChangeTableSettings={setTimelineTableSettings}
       onToggleFullscreen={() => setTimelineFullscreen(true)}
     />
   ) : null;
@@ -161,6 +170,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     <TimelinePanel
       {...timelinePanelProps}
       isFullscreen
+      tableSettings={timelineTableSettings}
+      onChangeTableSettings={setTimelineTableSettings}
       onToggleFullscreen={() => setTimelineFullscreen(false)}
     />
   ) : null;

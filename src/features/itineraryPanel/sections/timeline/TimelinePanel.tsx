@@ -45,11 +45,13 @@ interface TimelinePanelProps {
   view: TimelineView;
   railConfig?: Partial<TimelineRailConfig>;
   isFullscreen?: boolean;
+  tableSettings?: TimelineTableSettingsState;
 
   onChangeView?: (v: TimelineView) => void;
   onOpenSettings?: () => void;
   onToggleFullscreen?: () => void;
   onAdd?: (kind: TimelineAddItemKind, options?: TimelineAddItemOptions) => void;
+  onChangeTableSettings?: (next: TimelineTableSettingsState) => void;
 
   onToggleItem?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;
@@ -74,10 +76,12 @@ export function TimelinePanel({
   view,
   railConfig,
   isFullscreen,
+  tableSettings,
   onChangeView,
   onOpenSettings,
   onToggleFullscreen,
   onAdd,
+  onChangeTableSettings,
   onToggleItem,
   onMovePause,
   onChangePauseDuration,
@@ -102,9 +106,11 @@ export function TimelinePanel({
   const [filters, setFilters] = useState<TimelineFilterState>(
     DEFAULT_TIMELINE_FILTER,
   );
-  const [tableSettings, setTableSettings] = useState<TimelineTableSettingsState>(
+  const [localTableSettings, setLocalTableSettings] = useState<TimelineTableSettingsState>(
     DEFAULT_TIMELINE_TABLE_SETTINGS,
   );
+  const resolvedTableSettings = tableSettings ?? localTableSettings;
+  const handleChangeTableSettings = onChangeTableSettings ?? setLocalTableSettings;
 
   const handleToggleSelect = (id: string, selected: boolean) => {
     setSelectedIds((prev) => {
@@ -251,18 +257,18 @@ export function TimelinePanel({
           <>
             <TimelineFilters value={filters} onChange={setFilters} />
             <TimelineTableSettings
-              value={tableSettings}
-              onChange={setTableSettings}
+              value={resolvedTableSettings}
+              onChange={handleChangeTableSettings}
             />
             <hr className="rvi-tl-divider" aria-hidden />
             <TimelineSheetView
               items={visibleSheetItems}
               rhythm={rhythm}
               prediction={prediction}
-              columns={tableSettings.columns}
-              sort={tableSettings.sort}
+              columns={resolvedTableSettings.columns}
+              sort={resolvedTableSettings.sort}
               onChangeSort={(next) =>
-                setTableSettings((s) => ({ ...s, sort: next }))
+                handleChangeTableSettings({ ...resolvedTableSettings, sort: next })
               }
               selectedIds={selectedIds}
               onToggleSelect={handleToggleSelect}
