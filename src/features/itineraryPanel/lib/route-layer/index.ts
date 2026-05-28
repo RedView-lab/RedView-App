@@ -124,7 +124,7 @@ function traceBorderWidthPx(traceWidthPx: number): number {
 
 function clampSlopeDeg(value: number): number {
   if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(90, value));
+  return Math.max(-90, Math.min(90, value));
 }
 
 function interpolateNumber(a: number, b: number, t: number): number {
@@ -167,13 +167,12 @@ function resolveSlopeDeg(start: RouteLayerPoint, end: RouteLayerPoint, distanceM
   if (!(distanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) return 0;
 
   if (Number.isFinite(start.elevationM) && Number.isFinite(end.elevationM)) {
-    const riseM = Math.abs((end.elevationM as number) - (start.elevationM as number));
+    const riseM = (end.elevationM as number) - (start.elevationM as number);
     return clampSlopeDeg((Math.atan(riseM / distanceM) * 180) / Math.PI);
   }
 
   const gradientCandidates = [start.gradientPct, end.gradientPct]
-    .filter((value): value is number => Number.isFinite(value))
-    .map((value) => Math.abs(value));
+    .filter((value): value is number => Number.isFinite(value));
 
   if (gradientCandidates.length === 0) return 0;
 

@@ -124,7 +124,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     itineraries,
     map,
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 4,
-    routeSlopeConfig: project.controlPanel?.slopes,
   });
 
   useEffect(() => {

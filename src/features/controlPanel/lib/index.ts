@@ -16,6 +16,9 @@ export { DEFAULT_CONTROL_PANEL_STATE } from './defaultState';
 export {
   createDefaultControlPanelPersistedState,
 } from './persistedState';
+export {
+  ROUTE_SLOPE_LEGEND_BANDS,
+} from './routeSlopeLegend';
 export type {
   ControlPanelAltitudePersistedState,
   ControlPanelLabelsPersistedState,
@@ -26,6 +29,9 @@ export type {
   ControlPanelSunlightPersistedState,
   ControlPanelWindPersistedState,
 } from './persistedState';
+export type {
+  RouteSlopeLegendBand,
+} from './routeSlopeLegend';
 export {
   buildWeatherPaletteBands,
   clampWeatherPaletteBreakpoints,

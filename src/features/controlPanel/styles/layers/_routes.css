@@ -152,6 +152,62 @@
   padding-top: 3px;
 }
 
+.rvc-routes__slope-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(160px, 100%);
+  margin-top: 6px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  backdrop-filter: blur(24px);
+}
+
+.rvc-routes__slope-legend-title {
+  width: 100%;
+  overflow: hidden;
+  color: var(--rvc-text);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvc-routes__slope-legend-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.rvc-routes__slope-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvc-routes__slope-legend-swatch {
+  flex: 0 0 12px;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.rvc-routes__slope-legend-label {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rvc-routes__trace-width-control {
   display: flex;
   align-items: center;

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { ControlPanelSlopePersistedState } from '@/features/controlPanel/lib/persistedState';
-import { SLOPE_CATEGORIES, generateDynamicCategories } from '@/features/slope/lib/slope-config';
+import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
 import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
 
 import {
@@ -36,50 +35,6 @@ interface UseItineraryRouteLayerSyncArgs {
   itineraries: ItineraryProject['itineraries'];
   map: MapboxMap | null;
   routeTraceWidthPx?: number;
-  routeSlopeConfig?: ControlPanelSlopePersistedState;
-}
-
-function routeSlopeBandCountFromSetting(setting: string | undefined): number {
-  const match = setting ? /^(\d+)/.exec(setting) : null;
-  const value = match ? Number(match[1]) : SLOPE_CATEGORIES.length;
-  return Number.isFinite(value) && value >= 2 ? value : SLOPE_CATEGORIES.length;
-}
-
-function isLegacyFourColorSlopeConfig(config: ControlPanelSlopePersistedState): boolean {
-  if (config.scaleSetting !== '4 couleurs') return false;
-  if (Object.keys(config.customColors ?? {}).length > 0) return false;
-  if (Object.keys(config.bandVisibility ?? {}).length > 0) return false;
-  if (Object.keys(config.breakpoints?.byCount ?? {}).length > 0) return false;
-  return true;
-}
-
-function buildRouteSlopeBands(
-  config: ControlPanelSlopePersistedState | undefined,
-): RouteSlopeBand[] {
-  if (!config) {
-    return SLOPE_CATEGORIES.map((category) => ({
-      id: category.id,
-      minDeg: category.minDeg,
-      maxDeg: category.maxDeg,
-      color: category.color,
-    }));
-  }
-
-  const bandCount = isLegacyFourColorSlopeConfig(config)
-    ? SLOPE_CATEGORIES.length
-    : routeSlopeBandCountFromSetting(config.scaleSetting);
-  const breakpoints = config.breakpoints?.byCount?.[bandCount];
-  const categories = generateDynamicCategories(bandCount, breakpoints).map((category) => ({
-    ...category,
-    color: config.customColors?.[category.id] ?? category.color,
-  }));
-
-  return categories.map((category) => ({
-    id: category.id,
-    minDeg: category.minDeg,
-    maxDeg: category.maxDeg,
-    color: category.color,
-  }));
 }
 
 export function useItineraryRouteLayerSync({
@@ -88,12 +43,16 @@ export function useItineraryRouteLayerSync({
   itineraries,
   map,
   routeTraceWidthPx = 4,
-  routeSlopeConfig,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeSlopeBands = useMemo(
-    () => buildRouteSlopeBands(routeSlopeConfig),
-    [routeSlopeConfig],
+    (): RouteSlopeBand[] => ROUTE_SLOPE_LEGEND_BANDS.map((band) => ({
+      id: band.id,
+      minDeg: band.minDeg,
+      maxDeg: band.maxDeg,
+      color: band.color,
+    })),
+    [],
   );
   const routeSlopeBandSignature = useMemo(
     () => routeSlopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join('|'),
