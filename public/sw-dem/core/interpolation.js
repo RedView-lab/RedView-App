@@ -162,6 +162,57 @@ function despikeElevations(elevations, coverage, size) {
   }
   elevations.set(out);
 }
+
+// Edge-preserving low-pass for resampled surface DEMs. Intended for France
+// MNS at mid zoom where canopy/building micro-relief can alias into a regular
+// wavy pattern in oblique terrain views. The filter only runs on locally
+// low-variance 3x3 neighborhoods, so real cliffs / ridgelines are preserved.
+function smoothSurfaceMicroUndulations(elevations, coverage, size, varianceThresholdM) {
+  if (!(varianceThresholdM > 0)) return;
+  const out = new Float32Array(elevations);
+  for (let y = 1; y < size - 1; y++) {
+    for (let x = 1; x < size - 1; x++) {
+      const idx = y * size + x;
+      if (!coverage[idx]) continue;
+      const iN = idx - size;
+      const iS = idx + size;
+      const iW = idx - 1;
+      const iE = idx + 1;
+      const iNW = iN - 1;
+      const iNE = iN + 1;
+      const iSW = iS - 1;
+      const iSE = iS + 1;
+      if (!(coverage[iN] && coverage[iS] && coverage[iW] && coverage[iE]
+            && coverage[iNW] && coverage[iNE] && coverage[iSW] && coverage[iSE])) continue;
+
+      const c = elevations[idx];
+      const vN = elevations[iN];
+      const vS = elevations[iS];
+      const vW = elevations[iW];
+      const vE = elevations[iE];
+      const vNW = elevations[iNW];
+      const vNE = elevations[iNE];
+      const vSW = elevations[iSW];
+      const vSE = elevations[iSE];
+
+      let minV = c;
+      let maxV = c;
+      if (vN < minV) minV = vN; if (vN > maxV) maxV = vN;
+      if (vS < minV) minV = vS; if (vS > maxV) maxV = vS;
+      if (vW < minV) minV = vW; if (vW > maxV) maxV = vW;
+      if (vE < minV) minV = vE; if (vE > maxV) maxV = vE;
+      if (vNW < minV) minV = vNW; if (vNW > maxV) maxV = vNW;
+      if (vNE < minV) minV = vNE; if (vNE > maxV) maxV = vNE;
+      if (vSW < minV) minV = vSW; if (vSW > maxV) maxV = vSW;
+      if (vSE < minV) minV = vSE; if (vSE > maxV) maxV = vSE;
+      if (maxV - minV > varianceThresholdM) continue;
+
+      out[idx] = (vNW + 2 * vN + vNE + 2 * vW + 4 * c + 2 * vE + vSW + 2 * vS + vSE) / 16;
+    }
+  }
+  elevations.set(out);
+}
+
 function bilinearSample(data, fx, fy) {
   const ix = Math.floor(fx);
   const iy = Math.floor(fy);

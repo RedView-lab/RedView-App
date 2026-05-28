@@ -78,13 +78,21 @@ const IGN_DEM_MAXZOOM = 17;
 // paying the full MNS fan-out as aggressively across overview zooms.
 //
 // HIGHRES threshold = 56 m/px: enables the France HD fallback around z11.
-// MNS threshold = 22 m/px: delays the surface-model handoff until the user
-// is closer to the terrain (typically z13 across metro France). This avoids
-// the mid-zoom canopy/building aliasing that shows up as visible
-// "ondulations" in oblique mountain views while keeping the 0.40 m quality
-// path for close flyovers.
+// MNS threshold = 36 m/px: keeps the France surface model engaged from the
+// first true close-range terrain zoom (typically z12 in metro France).
+// Mid-zoom waviness is handled by a dedicated MNS-only low-pass on the
+// resampled output, so we keep the surface model instead of falling back to
+// the 1 m terrain product.
 const IGN_HIGHRES_ENGAGE_MPP = 56;
-const IGN_MNS_ENGAGE_MPP = 22;
+const IGN_MNS_ENGAGE_MPP = 36;
+
+// France MNS mid-zoom smoothing. IGN MNS keeps top-of-canopy / buildings,
+// which is exactly what the user wants, but the resampled surface can show a
+// regular "micro-ondulation" pattern in oblique views around z11-z13. Apply
+// a very light 3x3 weighted mean only on locally low-variance neighborhoods so
+// broad slopes smooth out while cliffs / ridges / sharp rock edges stay crisp.
+const IGN_MNS_MIDZOOM_SMOOTH_MAXZOOM = 13;
+const IGN_MNS_MIDZOOM_SMOOTH_VARIANCE_M = 5;
 
 function mercatorMetersPerPixel(mercZ, lat) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -120,10 +128,10 @@ const ORTHO_TILE_SIZE = 256;
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
 //
-// 2026-05-28-france-mns-midzoom-smoothing-1: delays the France MNS surface
-// model handoff by one zoom step so 0.40 m terrain keeps the cleaner bare-
-// earth fallback during slight dezoom, removing the visible mid-zoom waves.
-const MAP_CACHE_EPOCH = '2026-05-28-france-mns-midzoom-smoothing-1';
+// 2026-05-28-france-mns-surface-midzoom-filter-1: keeps France MNS surface
+// active and filters only the low-variance mid-zoom waviness of the
+// resampled surface output, without switching to the 1 m terrain fallback.
+const MAP_CACHE_EPOCH = '2026-05-28-france-mns-surface-midzoom-filter-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

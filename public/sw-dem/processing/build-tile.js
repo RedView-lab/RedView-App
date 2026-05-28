@@ -43,6 +43,18 @@ function mnsAreaNegSet(z, x, y) {
   }
 }
 
+function postProcessFranceMnsTile(elevations, coverage, mercZ) {
+  despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+  if (mercZ <= IGN_MNS_MIDZOOM_SMOOTH_MAXZOOM) {
+    smoothSurfaceMicroUndulations(
+      elevations,
+      coverage,
+      DEM_TILE_SIZE,
+      IGN_MNS_MIDZOOM_SMOOTH_VARIANCE_M,
+    );
+  }
+}
+
 async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
@@ -275,7 +287,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
       );
     }
-    despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+    postProcessFranceMnsTile(elevations, coverage, mercZ);
     // Return elevations without blob → composite.js applies the border-ring
     // offset alignment so the output mesh is watertight with neighbour tiles.
     return { blob: null, elevations, coverage, source, pendingFetches };
@@ -362,14 +374,14 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
-    despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+    postProcessFranceMnsTile(elevations, coverage, mercZ);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
   console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
-  despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+  postProcessFranceMnsTile(elevations, coverage, mercZ);
   return { blob: null, elevations, coverage, source, pendingFetches };
 }
 
