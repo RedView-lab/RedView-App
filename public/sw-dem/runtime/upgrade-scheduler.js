@@ -114,6 +114,9 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       if (tileClass === 'outside') return;
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
+      const tileBounds = mercatorTileBounds(z, x, y);
+      const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
+      const terrainWmsEligible = demProfile === 'terrain' && shouldUseIGNTerrainWms(z, tileCenterLat);
       const terrainRebuilder = () => buildIGNTerrainTile(z, x, y, { purpose: 'slope-warm' })
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite'));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
@@ -121,7 +124,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
       const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
         .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite'));
       const rebuilders = demProfile === 'terrain'
-        ? [terrainRebuilder, highresRebuilder]
+        ? (terrainWmsEligible ? [terrainRebuilder, highresRebuilder] : [highresRebuilder])
         : preferHighres
         ? [
             highresRebuilder,

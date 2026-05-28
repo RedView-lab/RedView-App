@@ -83,8 +83,14 @@ const IGN_DEM_MAXZOOM = 17;
 // high-res path becomes visually relevant. Mid-zoom waviness is handled by a
 // dedicated MNS-only low-pass on the resampled output, so we no longer delay
 // the MNS handoff behind a bare-earth fallback step.
+// Terrain-WMS threshold = 22 m/px: unlike the MNS path, the verified 1 m bare-
+// earth WMS serves the exact Mercator bbox at 256x256, so engaging it too early
+// on oblique z11-z12 views lets row/reprojection aliasing read as a visible
+// terrain ripple. Keep the terrain profile on the smoother HIGHRES fallback
+// until the screen density is high enough for the native 1 m mesh to pay off.
 const IGN_HIGHRES_ENGAGE_MPP = 56;
 const IGN_MNS_ENGAGE_MPP = 56;
+const IGN_TERRAIN_WMS_ENGAGE_MPP = 22;
 
 // When the user selects the 0.40 m surface mode they expect actual surface
 // relief (houses, tree rows, walls), not just the correct dataset family.
@@ -118,6 +124,11 @@ function shouldUseIGN(mercZ, lat) {
   return mercatorMetersPerPixel(mercZ, lat) < IGN_MNS_ENGAGE_MPP;
 }
 
+function shouldUseIGNTerrainWms(mercZ, lat) {
+  if (mercZ < IGN_DEM_FALLBACK_MINZOOM) return false;
+  return mercatorMetersPerPixel(mercZ, lat) < IGN_TERRAIN_WMS_ENGAGE_MPP;
+}
+
 const IGN_ORTHO_LAYER = 'HR.ORTHOIMAGERY.ORTHOPHOTOS';
 const IGN_ORTHO_TILEMATRIXSET = 'PM_6_19';
 const ORTHO_TILE_SIZE = 256;
@@ -139,7 +150,10 @@ const ORTHO_TILE_SIZE = 256;
 // 2026-05-28-france-mns-source-zoom-bias-1: keep France MNS surface active
 // and request a slightly finer source zoom than the screen zoom so urban and
 // canopy relief stays visible in 0.40 m mode at oblique mid zoom.
-const MAP_CACHE_EPOCH = '2026-05-28-france-mns-source-zoom-bias-1';
+// 2026-05-28-terrain-1m-midzoom-ripple-fix-1: delay the France terrain-profile
+// WMS handoff until ~22 m/px so z11-z12 oblique views stay on the smoother
+// bare-earth fallback instead of showing 1 m reprojection ripples.
+const MAP_CACHE_EPOCH = '2026-05-28-terrain-1m-midzoom-ripple-fix-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

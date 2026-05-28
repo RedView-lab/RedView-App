@@ -104,6 +104,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     const tileBounds = mercatorTileBounds(z, x, y);
     const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
     const useFranceTerrainOnly = demProfile === 'terrain';
+    const useFranceTerrainWms = useFranceTerrainOnly && shouldUseIGNTerrainWms(z, tileCenterLat);
     const useFranceMNS = !useFranceTerrainOnly && shouldUseIGN(z, tileCenterLat);
     const useFranceHighres = useFranceMNS || shouldUseIGNHighres(z, tileCenterLat);
 
@@ -345,7 +346,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     }
 
     // 3a. Verified terrain path for slope math.
-    if (!pngBlob && tileTrulyTouchesFrance && useFranceTerrainOnly) {
+    if (!pngBlob && tileTrulyTouchesFrance && useFranceTerrainWms) {
       const terrainResult = await buildIGNTerrainTile(z, x, y, { purpose: requestPurpose });
       if (terrainResult?.elevations) {
         franceHadSomeData = true;
