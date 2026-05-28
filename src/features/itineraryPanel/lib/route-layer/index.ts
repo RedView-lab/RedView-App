@@ -104,6 +104,8 @@ interface RouteLayerRenderSpec {
   lineGradientPaint: unknown[];
 }
 
+const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
+
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 
@@ -833,13 +835,16 @@ export function setAnalysisHoverPoint(
     const source = ensureAnalysisHoverLayers(map);
     if (!source) return;
     source.setData(buildAnalysisHoverGeoJson(point));
-    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'visible');
-      map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
-    }
-    if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'visible');
-      map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+    if (!analysisHoverVisibilityState.get(map)) {
+      if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
+        map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'visible');
+        map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
+      }
+      if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
+        map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'visible');
+        map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
+      }
+      analysisHoverVisibilityState.set(map, true);
     }
   } catch {
     /* noop */
@@ -849,6 +854,7 @@ export function setAnalysisHoverPoint(
 export function clearAnalysisHoverPoint(map: MapboxMap): void {
   try {
     const source = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
+    if (!analysisHoverVisibilityState.get(map)) return;
     source?.setData(buildAnalysisHoverGeoJson(null));
     if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
       map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'none');
@@ -856,6 +862,7 @@ export function clearAnalysisHoverPoint(map: MapboxMap): void {
     if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
       map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'none');
     }
+    analysisHoverVisibilityState.set(map, false);
   } catch {
     /* noop */
   }

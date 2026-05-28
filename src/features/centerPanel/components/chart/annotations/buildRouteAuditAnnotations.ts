@@ -1,11 +1,15 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { Itinerary, ItineraryRouteAuditFinding } from '@/features/itineraryPanel/types';
 import type { AxisMode } from '../series';
+import {
+  getRoutePointDistances,
+  normalizeRouteProfile as normalizeChartRouteProfile,
+} from '../series/routeProfile';
 
 const EARTH_RADIUS_M = 6_371_008.8;
-const normalizedRouteProfileCache = new WeakMap<RoutePoint[], ElevationSample[] | null>();
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 const predictionProfileCache = new WeakMap<PredictionResult, ElevationSample[] | null>();
+const routeIndexByCoordCache = new WeakMap<RoutePoint[], Map<string, number>>();
 
 interface RoutePoint {
   lat: number;
@@ -45,20 +49,18 @@ export function buildRouteAuditAnnotationsForItinerary(
   const routePoints = itinerary.gpxRoute?.points ?? null;
   if (!routePoints || routePoints.length < 2) return [];
 
-  const profile = normalizeRouteProfile(routePoints) ?? normalizePredictionProfile(prediction);
+  const profile = normalizeChartRouteProfile(routePoints) ?? normalizePredictionProfile(prediction);
   if (!profile || profile.length < 2) return [];
 
   const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
   if (xMode !== 'distance' && (!timeline || timeline.length < 2)) return [];
 
-  const routeIndexByCoord = new Map<string, number>();
-  routePoints.forEach((point, index) => {
-    routeIndexByCoord.set(coordKey(point.lon, point.lat), index);
-  });
+  const routeIndexByCoord = getRouteIndexByCoord(routePoints);
+  const routePointDistances = getRoutePointDistances(routePoints);
 
   const result: ChartAlertAnnotation[] = [];
   for (const finding of findings) {
-    const distanceM = distanceForFinding(finding, routePoints, routeIndexByCoord);
+    const distanceM = distanceForFinding(finding, routePointDistances, routeIndexByCoord);
     if (!Number.isFinite(distanceM)) continue;
 
     const x =
@@ -88,7 +90,7 @@ export function buildRouteAuditAnnotationsForItinerary(
 
 function distanceForFinding(
   finding: ItineraryRouteAuditFinding,
-  routePoints: RoutePoint[],
+  routePointDistances: number[],
   routeIndexByCoord: Map<string, number>,
 ): number {
   const coordinates = finding.coordinates;
@@ -99,8 +101,8 @@ function distanceForFinding(
   const lastIndex = routeIndexByCoord.get(coordKey(lastCoord[0], lastCoord[1]));
 
   if (Number.isFinite(firstIndex) && Number.isFinite(lastIndex)) {
-    const startDistance = distanceAtRouteIndex(routePoints, firstIndex as number);
-    const endDistance = distanceAtRouteIndex(routePoints, lastIndex as number);
+    const startDistance = distanceAtRouteIndex(routePointDistances, firstIndex as number);
+    const endDistance = distanceAtRouteIndex(routePointDistances, lastIndex as number);
     if (Number.isFinite(startDistance) && Number.isFinite(endDistance)) {
       return (startDistance + endDistance) / 2;
     }
@@ -116,67 +118,30 @@ function distanceForFinding(
     );
   }
   if (Number.isFinite(firstIndex)) {
-    const startDistance = distanceAtRouteIndex(routePoints, firstIndex as number);
+    const startDistance = distanceAtRouteIndex(routePointDistances, firstIndex as number);
     return startDistance + distanceAlongFinding / 2;
   }
   return Number.NaN;
 }
 
-function distanceAtRouteIndex(routePoints: RoutePoint[], index: number): number {
-  const point = routePoints[index];
-  if (!point) return Number.NaN;
-  if (Number.isFinite(point.distanceM)) return point.distanceM as number;
-
-  let cumulativeDistanceM = 0;
-  for (let cursor = 1; cursor <= index; cursor++) {
-    const previous = routePoints[cursor - 1];
-    const current = routePoints[cursor];
-    if (!previous || !current) break;
-    cumulativeDistanceM += haversineMeters(previous.lat, previous.lon, current.lat, current.lon);
-  }
-  return cumulativeDistanceM;
+function distanceAtRouteIndex(routePointDistances: number[], index: number): number {
+  return routePointDistances[index] ?? Number.NaN;
 }
 
 function coordKey(lon: number, lat: number): string {
   return `${lon.toFixed(6)}:${lat.toFixed(6)}`;
 }
 
-function normalizeRouteProfile(routePoints: RoutePoint[] | null | undefined): ElevationSample[] | null {
-  if (!routePoints || routePoints.length < 2) return null;
+function getRouteIndexByCoord(routePoints: RoutePoint[]): Map<string, number> {
+  const cached = routeIndexByCoordCache.get(routePoints);
+  if (cached) return cached;
 
-  const cached = normalizedRouteProfileCache.get(routePoints);
-  if (cached !== undefined) return cached;
-
-  const samples: ElevationSample[] = [];
-  let cumulativeDistanceM = 0;
-  let previousLat = Number.NaN;
-  let previousLon = Number.NaN;
-
-  for (const point of routePoints) {
-    const hasLatLon = Number.isFinite(point.lat) && Number.isFinite(point.lon);
-    if (hasLatLon && Number.isFinite(previousLat) && Number.isFinite(previousLon)) {
-      cumulativeDistanceM += haversineMeters(previousLat, previousLon, point.lat, point.lon);
-    }
-
-    if (hasLatLon) {
-      previousLat = point.lat;
-      previousLon = point.lon;
-    }
-
-    if (!Number.isFinite(point.elevationM)) continue;
-
-    const explicitDistanceM = Number.isFinite(point.distanceM)
-      ? (point.distanceM as number)
-      : cumulativeDistanceM;
-    samples.push({
-      distanceM: explicitDistanceM,
-      elevationM: point.elevationM as number,
-    });
-  }
-
-  const result = dedupeElevationSamples(samples);
-  normalizedRouteProfileCache.set(routePoints, result);
-  return result;
+  const indexByCoord = new Map<string, number>();
+  routePoints.forEach((point, index) => {
+    indexByCoord.set(coordKey(point.lon, point.lat), index);
+  });
+  routeIndexByCoordCache.set(routePoints, indexByCoord);
+  return indexByCoord;
 }
 
 function normalizePredictionProfile(

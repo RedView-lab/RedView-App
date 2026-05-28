@@ -63,7 +63,7 @@ const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
 const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
 const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
 const HOVER_X_VALUE_EPSILON = 1e-4;
-const HOVER_MARKER_POSITION_EPSILON = 1e-6;
+const HOVER_MARKER_MIN_MOVE_M = 8;
 
 interface AnalysisFlyoverContextValue {
   canPlay: boolean;
@@ -290,8 +290,7 @@ export function AnalysisFlyoverProvider({
     const previousMarker = lastHoverMarkerRef.current;
     if (
       previousMarker &&
-      Math.abs(previousMarker.lon - nextMarker.lon) <= HOVER_MARKER_POSITION_EPSILON &&
-      Math.abs(previousMarker.lat - nextMarker.lat) <= HOVER_MARKER_POSITION_EPSILON &&
+      distanceBetweenRoutePlaybackPointsM(previousMarker, nextMarker) <= HOVER_MARKER_MIN_MOVE_M &&
       previousMarker.color === nextMarker.color
     ) {
       return;

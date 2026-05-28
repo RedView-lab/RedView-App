@@ -2,18 +2,10 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import { poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
 import type { Itinerary, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
 import type { AxisMode } from '../series';
+import { normalizeRouteProfile as normalizeChartRouteProfile } from '../series/routeProfile';
 
-const EARTH_RADIUS_M = 6_371_008.8;
-const normalizedRouteProfileCache = new WeakMap<RoutePoint[], ElevationSample[] | null>();
 const predictionTimelineCache = new WeakMap<PredictionResult, TimelineSample[] | null>();
 const predictionProfileCache = new WeakMap<PredictionResult, ElevationSample[] | null>();
-
-interface RoutePoint {
-  lat: number;
-  lon: number;
-  distanceM?: number;
-  elevationM?: number | null;
-}
 
 interface ElevationSample {
   distanceM: number;
@@ -45,7 +37,7 @@ export function buildPoiAnnotationsForItinerary(
   if (poiRows.length === 0) return [];
 
   const profile =
-    normalizeRouteProfile(itinerary.gpxRoute?.points ?? null) ??
+    normalizeChartRouteProfile(itinerary.gpxRoute?.points ?? null) ??
     normalizePredictionProfile(prediction);
   if (!profile || profile.length < 2) return [];
 
@@ -86,42 +78,6 @@ export function buildPoiAnnotationsForItinerary(
 
 function isVisiblePoiRow(row: TimelineItem): row is TimelineItem & { distanceKm: number } {
   return row.kind === 'poi' && row.visible !== false && Number.isFinite(row.distanceKm);
-}
-
-function normalizeRouteProfile(routePoints: RoutePoint[] | null | undefined): ElevationSample[] | null {
-  if (!routePoints || routePoints.length < 2) return null;
-
-  const cached = normalizedRouteProfileCache.get(routePoints);
-  if (cached !== undefined) return cached;
-
-  const samples: ElevationSample[] = [];
-  let cumulativeDistanceM = 0;
-  let previousLat = Number.NaN;
-  let previousLon = Number.NaN;
-
-  for (const point of routePoints) {
-    const hasLatLon = Number.isFinite(point.lat) && Number.isFinite(point.lon);
-    if (hasLatLon && Number.isFinite(previousLat) && Number.isFinite(previousLon)) {
-      cumulativeDistanceM += haversineMeters(previousLat, previousLon, point.lat, point.lon);
-    }
-
-    if (hasLatLon) {
-      previousLat = point.lat;
-      previousLon = point.lon;
-    }
-
-    if (!Number.isFinite(point.elevationM)) continue;
-
-    const explicitDistanceM = Number.isFinite(point.distanceM) ? (point.distanceM as number) : cumulativeDistanceM;
-    samples.push({
-      distanceM: explicitDistanceM,
-      elevationM: point.elevationM as number,
-    });
-  }
-
-  const result = dedupeElevationSamples(samples);
-  normalizedRouteProfileCache.set(routePoints, result);
-  return result;
 }
 
 function normalizePredictionProfile(
@@ -252,19 +208,4 @@ function parseStartTimeHours(startTime?: string | null): number {
   const minutes = Number.parseInt(minutesRaw ?? '', 10);
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
   return hours + minutes / 60;
-}
-
-function haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLon = Math.sin(dLon / 2);
-  const a =
-    sinLat * sinLat +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * sinLon * sinLon;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(a)));
-}
-
-function toRadians(value: number): number {
-  return (value * Math.PI) / 180;
 }
