@@ -1,6 +1,363 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
+const SETTLE_AFTER_MOVE_MS = 700;
+
+interface MirrorFrameProfile {
+  activeFrameMs: number;
+  idleFrameMs: number;
+}
+
+interface MirrorInstance {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  activeBlur: number;
+  activeSaturate: number;
+  blur: number;
+  saturate: number;
+  frameProfile: MirrorFrameProfile;
+  cachedTargetRect: DOMRect | null;
+  lastDrawAt: number;
+  applyPresentation: (moving: boolean) => void;
+}
+
+const mapBlurMirrorSchedulers = new WeakMap<MapboxMap, MapBlurMirrorScheduler>();
+
+function getMirrorFrameProfile(area: number): MirrorFrameProfile {
+  const activeFps = area >= 220000 ? 20 : area >= 120000 ? 24 : 30;
+  const idleFps = area >= 220000 ? 10 : 12;
+
+  return {
+    activeFrameMs: 1000 / activeFps,
+    idleFrameMs: 1000 / idleFps,
+  };
+}
+
+class MapBlurMirrorScheduler {
+  private readonly map: MapboxMap;
+
+  private readonly sourceCanvas: HTMLCanvasElement;
+
+  private readonly mirrors = new Set<MirrorInstance>();
+
+  private readonly sourceObserver: ResizeObserver;
+
+  private raf = 0;
+
+  private timer = 0;
+
+  private settleTimer = 0;
+
+  private renderSubscribed = false;
+
+  private attached = false;
+
+  private visible = document.visibilityState !== 'hidden';
+
+  private moving = false;
+
+  private cachedSourceRect: DOMRect | null = null;
+
+  constructor(map: MapboxMap) {
+    this.map = map;
+    this.sourceCanvas = map.getCanvas() as HTMLCanvasElement;
+    this.sourceObserver = new ResizeObserver(() => {
+      this.invalidateSourceRect();
+      this.requestRedraw();
+    });
+  }
+
+  register(mirror: MirrorInstance) {
+    this.mirrors.add(mirror);
+    mirror.applyPresentation(this.moving);
+
+    if (!this.attached) {
+      this.attach();
+    }
+
+    this.requestRedraw();
+  }
+
+  unregister(mirror: MirrorInstance) {
+    this.mirrors.delete(mirror);
+
+    if (this.mirrors.size === 0) {
+      this.detach();
+      mapBlurMirrorSchedulers.delete(this.map);
+    }
+  }
+
+  requestRedraw() {
+    this.invalidateSourceRect();
+    for (const mirror of this.mirrors) {
+      mirror.cachedTargetRect = null;
+    }
+
+    this.clearSettleTimer();
+    this.subscribeRender();
+    this.schedule(true);
+    this.restartSettleTimer();
+  }
+
+  invalidateMirrorRect(mirror: MirrorInstance) {
+    mirror.cachedTargetRect = null;
+    this.requestRedraw();
+  }
+
+  getSourceRect() {
+    if (!this.cachedSourceRect) {
+      this.cachedSourceRect = this.sourceCanvas.getBoundingClientRect();
+    }
+
+    return this.cachedSourceRect;
+  }
+
+  private attach() {
+    if (this.attached) return;
+
+    this.attached = true;
+    this.sourceObserver.observe(this.sourceCanvas);
+    this.map.on('movestart', this.handleMoveStart);
+    this.map.on('moveend', this.handleMoveEnd);
+    window.addEventListener('resize', this.handleWindowResize);
+    document.addEventListener('visibilitychange', this.handleVisibilityChange);
+    this.subscribeRender();
+    this.restartSettleTimer();
+  }
+
+  private detach() {
+    if (!this.attached) return;
+
+    this.attached = false;
+    this.sourceObserver.disconnect();
+    this.unsubscribeRender();
+    this.clearScheduledDraw();
+    this.clearSettleTimer();
+    this.map.off('movestart', this.handleMoveStart);
+    this.map.off('moveend', this.handleMoveEnd);
+    window.removeEventListener('resize', this.handleWindowResize);
+    document.removeEventListener('visibilitychange', this.handleVisibilityChange);
+    this.cachedSourceRect = null;
+    this.moving = false;
+  }
+
+  private subscribeRender() {
+    if (this.renderSubscribed) return;
+    this.map.on('render', this.handleMapRender);
+    this.renderSubscribed = true;
+  }
+
+  private unsubscribeRender() {
+    if (!this.renderSubscribed) return;
+    this.map.off('render', this.handleMapRender);
+    this.renderSubscribed = false;
+  }
+
+  private invalidateSourceRect() {
+    this.cachedSourceRect = null;
+  }
+
+  private clearScheduledDraw() {
+    if (this.raf !== 0) {
+      cancelAnimationFrame(this.raf);
+      this.raf = 0;
+    }
+    if (this.timer !== 0) {
+      clearTimeout(this.timer);
+      this.timer = 0;
+    }
+  }
+
+  private clearSettleTimer() {
+    if (this.settleTimer !== 0) {
+      clearTimeout(this.settleTimer);
+      this.settleTimer = 0;
+    }
+  }
+
+  private restartSettleTimer() {
+    this.clearSettleTimer();
+    this.settleTimer = window.setTimeout(() => {
+      this.settleTimer = 0;
+      if (!this.moving) {
+        this.unsubscribeRender();
+      }
+    }, SETTLE_AFTER_MOVE_MS);
+  }
+
+  private schedule(force = false) {
+    if (!this.visible || this.mirrors.size === 0) return;
+
+    const now = performance.now();
+
+    if (force) {
+      if (this.timer !== 0) {
+        clearTimeout(this.timer);
+        this.timer = 0;
+      }
+      if (this.raf !== 0) {
+        cancelAnimationFrame(this.raf);
+      }
+      this.raf = requestAnimationFrame(() => {
+        this.raf = 0;
+        this.flush(true);
+      });
+      return;
+    }
+
+    if (this.raf !== 0 || this.timer !== 0) return;
+
+    const nextDelay = this.getNextDelay(now);
+    if (nextDelay <= 0) {
+      this.raf = requestAnimationFrame(() => {
+        this.raf = 0;
+        this.flush(false);
+      });
+      return;
+    }
+
+    this.timer = window.setTimeout(() => {
+      this.timer = 0;
+      if (this.raf === 0) {
+        this.raf = requestAnimationFrame(() => {
+          this.raf = 0;
+          this.flush(false);
+        });
+      }
+    }, Math.max(1, Math.ceil(nextDelay)));
+  }
+
+  private getNextDelay(now: number) {
+    let nextDelay = Number.POSITIVE_INFINITY;
+
+    for (const mirror of this.mirrors) {
+      const frameBudget = this.moving
+        ? mirror.frameProfile.activeFrameMs
+        : mirror.frameProfile.idleFrameMs;
+      const elapsed = now - mirror.lastDrawAt;
+      nextDelay = Math.min(nextDelay, Math.max(0, frameBudget - elapsed));
+    }
+
+    return Number.isFinite(nextDelay) ? nextDelay : 0;
+  }
+
+  private flush(force: boolean) {
+    if (!this.visible || this.mirrors.size === 0) return;
+
+    const src = this.sourceCanvas;
+    if (!src || src.width === 0 || src.height === 0) return;
+
+    const srcCanvasRect = this.getSourceRect();
+    if (srcCanvasRect.width <= 0 || srcCanvasRect.height <= 0) return;
+
+    const now = performance.now();
+    const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
+    const syScale = src.height / Math.max(srcCanvasRect.height, 1);
+
+    for (const mirror of this.mirrors) {
+      const frameBudget = this.moving
+        ? mirror.frameProfile.activeFrameMs
+        : mirror.frameProfile.idleFrameMs;
+      const elapsed = now - mirror.lastDrawAt;
+      if (!force && elapsed < frameBudget) {
+        continue;
+      }
+
+      const mirrorRect = mirror.cachedTargetRect ?? (mirror.cachedTargetRect = mirror.canvas.getBoundingClientRect());
+      if (mirrorRect.width <= 0 || mirrorRect.height <= 0) {
+        continue;
+      }
+
+      const offsetX = mirrorRect.left - srcCanvasRect.left;
+      const offsetY = mirrorRect.top - srcCanvasRect.top;
+      const sx = Math.max(0, Math.floor(offsetX * sxScale));
+      const sy = Math.max(0, Math.floor(offsetY * syScale));
+      const sw = Math.min(src.width - sx, Math.ceil(mirrorRect.width * sxScale));
+      const sh = Math.min(src.height - sy, Math.ceil(mirrorRect.height * syScale));
+      if (sw <= 0 || sh <= 0) {
+        continue;
+      }
+
+      const dpr = getRenderDpr(mirrorRect);
+      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr));
+      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr));
+      if (mirror.canvas.width !== targetW || mirror.canvas.height !== targetH) {
+        mirror.canvas.width = targetW;
+        mirror.canvas.height = targetH;
+      }
+
+      mirror.ctx.clearRect(0, 0, mirror.canvas.width, mirror.canvas.height);
+      mirror.ctx.imageSmoothingEnabled = true;
+      try {
+        mirror.ctx.drawImage(src, sx, sy, sw, sh, 0, 0, mirror.canvas.width, mirror.canvas.height);
+        mirror.lastDrawAt = now;
+      } catch {
+        /* drawImage can throw if the WebGL context was lost; ignore one frame */
+      }
+    }
+
+    this.schedule(false);
+  }
+
+  private readonly handleMapRender = () => {
+    this.schedule(false);
+  };
+
+  private readonly handleMoveStart = () => {
+    this.moving = true;
+    for (const mirror of this.mirrors) {
+      mirror.applyPresentation(true);
+      mirror.cachedTargetRect = null;
+    }
+    this.clearSettleTimer();
+    this.subscribeRender();
+    this.schedule(true);
+  };
+
+  private readonly handleMoveEnd = () => {
+    this.moving = false;
+    for (const mirror of this.mirrors) {
+      mirror.applyPresentation(false);
+      mirror.cachedTargetRect = null;
+    }
+    this.schedule(true);
+    this.restartSettleTimer();
+  };
+
+  private readonly handleWindowResize = () => {
+    this.requestRedraw();
+  };
+
+  private readonly handleVisibilityChange = () => {
+    this.visible = document.visibilityState !== 'hidden';
+    if (!this.visible) {
+      this.clearSettleTimer();
+      this.unsubscribeRender();
+      this.clearScheduledDraw();
+      return;
+    }
+
+    this.requestRedraw();
+  };
+}
+
+function getRenderDpr(rect: DOMRect) {
+  const baseDpr = window.devicePixelRatio || 1;
+  const area = rect.width * rect.height;
+  if (area >= 240000) return Math.min(baseDpr, 1);
+  return Math.min(baseDpr, 1.25);
+}
+
+function getMapBlurMirrorScheduler(map: MapboxMap) {
+  let scheduler = mapBlurMirrorSchedulers.get(map);
+  if (!scheduler) {
+    scheduler = new MapBlurMirrorScheduler(map);
+    mapBlurMirrorSchedulers.set(map, scheduler);
+  }
+
+  return scheduler;
+}
+
 interface MapBlurMirrorProps {
   /** Mapbox map instance (must have been created with `preserveDrawingBuffer: true`). */
   map: MapboxMap | null;
@@ -60,268 +417,53 @@ export default function MapBlurMirror({
     const canvas = canvasRef.current;
     if (!canvas || !map) return;
 
-    const sourceCanvas = map.getCanvas() as HTMLCanvasElement;
-
     const ctx = canvas.getContext('2d', {
       alpha: true,
       desynchronized: true,
     });
     if (!ctx) return;
 
-    // Large frosted panels blur away high-frequency motion detail anyway, so
-    // spending 30 FPS on their mirrored background is mostly wasted GPU work.
-    // Keep small mirrors crisp while easing off the copy rate on big surfaces.
-    const ACTIVE_FPS = mirrorArea >= 220000 ? 20 : mirrorArea >= 120000 ? 24 : 30;
-    const IDLE_FPS = mirrorArea >= 220000 ? 10 : 12;
-    const ACTIVE_FRAME_MS = 1000 / ACTIVE_FPS;
-    const IDLE_FRAME_MS = 1000 / IDLE_FPS;
-    // After moveend we let a few "settling" frames render (terrain/ortho fade
-    // in, fog updates, last tile pops), then we STOP subscribing to render.
-    // Mapbox keeps firing `render` while terrain/fog/ortho refresh in the
-    // background even when the camera is fully still — without this gate
-    // every background tile load would re-trigger a full canvas blit + the
-    // expensive blur(30px) compositor pass on every mounted mirror (up to 4
-    // simultaneously). After the settle window we simply trust the last
-    // frame; on the next user gesture (movestart) we re-engage.
-    const SETTLE_AFTER_MOVE_MS = 700;
-
-    let raf = 0;
-    let timer = 0;
-    let settleTimer = 0;
-    let lastDrawAt = 0;
-    let renderSubscribed = false;
-    let isVisible = document.visibilityState !== 'hidden';
-    let cachedTargetRect: DOMRect | null = null;
-    let cachedSourceRect: DOMRect | null = null;
+    const scheduler = getMapBlurMirrorScheduler(map);
     const ACTIVE_BLUR = Math.max(10, Math.round(blur * 0.55));
     const ACTIVE_SATURATE = Math.max(1, Number((saturate * 0.72).toFixed(2)));
+    const frameProfile = getMirrorFrameProfile(mirrorArea);
 
-    const applyPresentation = () => {
-      canvas.style.filter = movingRef.current
+    const applyPresentation = (moving: boolean) => {
+      movingRef.current = moving;
+      canvas.style.filter = moving
         ? `blur(${ACTIVE_BLUR}px) saturate(${ACTIVE_SATURATE})`
         : `blur(${blur}px) saturate(${saturate})`;
-      canvas.style.opacity = movingRef.current ? '0.94' : '1';
+      canvas.style.opacity = moving ? '0.94' : '1';
     };
 
-    applyPresentation();
-
-    const clearScheduledDraw = () => {
-      if (raf !== 0) {
-        cancelAnimationFrame(raf);
-        raf = 0;
-      }
-      if (timer !== 0) {
-        clearTimeout(timer);
-        timer = 0;
-      }
-    };
-
-    const invalidateRects = () => {
-      cachedTargetRect = null;
-      cachedSourceRect = null;
-    };
-
-    const getRenderDpr = (rect: DOMRect) => {
-      const baseDpr = window.devicePixelRatio || 1;
-      const area = rect.width * rect.height;
-      if (area >= 240000) return Math.min(baseDpr, 1);
-      return Math.min(baseDpr, 1.25);
-    };
-
-    const draw = () => {
-      raf = 0;
-      timer = 0;
-      if (!isVisible) return;
-
-      const src = sourceCanvas;
-      if (!src || src.width === 0 || src.height === 0) return;
-
-      lastDrawAt = performance.now();
-
-      // Source-canvas pixels per CSS pixel (Mapbox internally uses DPR too).
-      const srcCanvasRect = cachedSourceRect ?? (cachedSourceRect = src.getBoundingClientRect());
-      const sxScale = src.width / Math.max(srcCanvasRect.width, 1);
-      const syScale = src.height / Math.max(srcCanvasRect.height, 1);
-
-      // Where this mirror sits relative to the map canvas, in CSS px.
-      const mirrorRect = cachedTargetRect ?? (cachedTargetRect = canvas.getBoundingClientRect());
-      const offsetX = mirrorRect.left - srcCanvasRect.left;
-      const offsetY = mirrorRect.top - srcCanvasRect.top;
-
-      // Slice of the source canvas (in source-canvas device pixels) that
-      // covers this mirror's CSS rectangle.
-      const sx = Math.max(0, Math.floor(offsetX * sxScale));
-      const sy = Math.max(0, Math.floor(offsetY * syScale));
-      const sw = Math.min(
-        src.width - sx,
-        Math.ceil(mirrorRect.width * sxScale),
-      );
-      const sh = Math.min(
-        src.height - sy,
-        Math.ceil(mirrorRect.height * syScale),
-      );
-
-      // Match the mirror canvas's backing-store size to its CSS rect × DPR.
-      const dpr = getRenderDpr(mirrorRect);
-      const targetW = Math.max(1, Math.round(mirrorRect.width * dpr));
-      const targetH = Math.max(1, Math.round(mirrorRect.height * dpr));
-      if (canvas.width !== targetW || canvas.height !== targetH) {
-        canvas.width = targetW;
-        canvas.height = targetH;
-      }
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.imageSmoothingEnabled = true;
-      if (sw > 0 && sh > 0) {
-        try {
-          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
-        } catch {
-          /* drawImage can throw if the WebGL context was lost; ignore one frame */
-        }
-      }
-    };
-
-    const schedule = (force = false) => {
-      if (!isVisible) return;
-
-      const frameBudget = movingRef.current ? ACTIVE_FRAME_MS : IDLE_FRAME_MS;
-      const elapsed = performance.now() - lastDrawAt;
-
-      if (!force && (raf !== 0 || timer !== 0)) return;
-
-      if (!force && elapsed < frameBudget) {
-        timer = window.setTimeout(() => {
-          timer = 0;
-          if (raf === 0) raf = requestAnimationFrame(draw);
-        }, Math.max(0, Math.ceil(frameBudget - elapsed)));
-        return;
-      }
-
-      if (timer !== 0) {
-        clearTimeout(timer);
-        timer = 0;
-      }
-      if (raf !== 0) {
-        if (!force) return;
-        cancelAnimationFrame(raf);
-      }
-      raf = requestAnimationFrame(draw);
+    const mirror: MirrorInstance = {
+      canvas,
+      ctx,
+      activeBlur: ACTIVE_BLUR,
+      activeSaturate: ACTIVE_SATURATE,
+      blur,
+      saturate,
+      frameProfile,
+      cachedTargetRect: null,
+      lastDrawAt: 0,
+      applyPresentation,
     };
 
     requestRedrawRef.current = () => {
-      invalidateRects();
-      // External geometry change (panel resize, window resize, layout shift):
-      // re-engage the render listener for one settle window so we catch any
-      // tile/fog updates that land while the rect is in motion.
-      clearSettleTimer();
-      subscribeRender();
-      settleTimer = window.setTimeout(() => {
-        settleTimer = 0;
-        unsubscribeRender();
-      }, SETTLE_AFTER_MOVE_MS);
-      schedule(true);
-    };
-
-    const onMapRender = () => {
-      schedule();
-    };
-
-    const subscribeRender = () => {
-      if (renderSubscribed) return;
-      map.on('render', onMapRender);
-      renderSubscribed = true;
-    };
-
-    const unsubscribeRender = () => {
-      if (!renderSubscribed) return;
-      map.off('render', onMapRender);
-      renderSubscribed = false;
-    };
-
-    const clearSettleTimer = () => {
-      if (settleTimer !== 0) {
-        clearTimeout(settleTimer);
-        settleTimer = 0;
-      }
-    };
-
-    const onMoveStart = () => {
-      movingRef.current = true;
-      applyPresentation();
-      cachedTargetRect = null;
-      clearSettleTimer();
-      subscribeRender();
-      schedule(true);
-    };
-
-    const onMoveEnd = () => {
-      movingRef.current = false;
-      applyPresentation();
-      cachedTargetRect = null;
-      schedule(true);
-      // Let the map settle (terrain/ortho/fog finish their last paints),
-      // then unsubscribe from render to stop burning CPU on background
-      // tile loads while the user isn't touching the camera.
-      clearSettleTimer();
-      settleTimer = window.setTimeout(() => {
-        settleTimer = 0;
-        unsubscribeRender();
-      }, SETTLE_AFTER_MOVE_MS);
-    };
-
-    const onVisibility = () => {
-      isVisible = document.visibilityState !== 'hidden';
-      if (!isVisible) {
-        clearSettleTimer();
-        unsubscribeRender();
-        clearScheduledDraw();
-        return;
-      }
-      requestRedrawRef.current?.();
+      scheduler.invalidateMirrorRect(mirror);
     };
 
     const targetObserver = new ResizeObserver(() => {
-      requestRedrawRef.current?.();
+      scheduler.invalidateMirrorRect(mirror);
     });
     targetObserver.observe(canvas);
 
-    const sourceObserver = new ResizeObserver(() => {
-      requestRedrawRef.current?.();
-    });
-    sourceObserver.observe(sourceCanvas);
-
-    // Initial paint + keep redrawing while the camera moves. Render
-    // subscription auto-disengages SETTLE_AFTER_MOVE_MS after each moveend
-    // (see onMoveEnd) so we don't blit on every background tile load.
-    subscribeRender();
-    map.on('movestart', onMoveStart);
-    map.on('moveend', onMoveEnd);
-    schedule(true);
-    // Auto-settle the very first paint so we don't keep blitting forever
-    // if the user never moves the camera (carte libre idle case).
-    settleTimer = window.setTimeout(() => {
-      settleTimer = 0;
-      unsubscribeRender();
-    }, SETTLE_AFTER_MOVE_MS);
-
-    // Also redraw when the window resizes (panel rect may move).
-    const onResize = () => {
-      requestRedrawRef.current?.();
-    };
-    window.addEventListener('resize', onResize);
-    document.addEventListener('visibilitychange', onVisibility);
+    scheduler.register(mirror);
 
     return () => {
       requestRedrawRef.current = null;
-      unsubscribeRender();
-      map.off('movestart', onMoveStart);
-      map.off('moveend', onMoveEnd);
-      window.removeEventListener('resize', onResize);
-      document.removeEventListener('visibilitychange', onVisibility);
       targetObserver.disconnect();
-      sourceObserver.disconnect();
-      clearSettleTimer();
-      clearScheduledDraw();
+      scheduler.unregister(mirror);
     };
   }, [blur, map, mirrorArea, saturate]);
 
