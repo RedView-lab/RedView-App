@@ -9,26 +9,30 @@ function isActiveRun(ctx: Ctx, runId: number): boolean {
   return !ctx.isCancelled() && runId === ctx.state.styleBootstrapRunId;
 }
 
+function safeGetStyle(ctx: Ctx) {
+  try {
+    return ctx.map.getStyle();
+  } catch {
+    return null;
+  }
+}
+
 function promoteStyleContentBypass(ctx: Ctx, logLabel: string): boolean {
-  const { map } = ctx;
   const st = ctx.state;
 
-  try {
-    const style = map.getStyle();
-    if (!style) return false;
-    const stats = getStyleContentStats(style);
-    if (!stats.hasContent) return false;
-    if (!st.spriteStormBypass) {
-      console.warn(
-        `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
-        { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
-      );
-      st.spriteStormBypass = true;
-    }
-    return true;
-  } catch {
-    return false;
+  const style = safeGetStyle(ctx);
+  if (!style) return false;
+
+  const stats = getStyleContentStats(style);
+  if (!stats.hasContent) return false;
+  if (!st.spriteStormBypass) {
+    console.warn(
+      `[map3d] ${logLabel}: style has content while isStyleLoaded() is false — enabling sprite-storm bypass`,
+      { layers: stats.layerCount, sources: stats.sourceCount, imports: stats.importCount },
+    );
+    st.spriteStormBypass = true;
   }
+  return true;
 }
 
 export async function waitForStyleReadiness(ctx: Ctx, runId: number): Promise<boolean> {
@@ -165,14 +169,12 @@ export async function waitForStyleReadiness(ctx: Ctx, runId: number): Promise<bo
       let layers = 0;
       let sources = 0;
       let importsLen = 0;
-      try {
-        const style = map.getStyle();
+      const style = safeGetStyle(ctx);
+      if (style) {
         layers = style?.layers?.length ?? 0;
         sources = Object.keys(style?.sources ?? {}).length;
         const imports = (style as { imports?: unknown[] } | null | undefined)?.imports;
         if (Array.isArray(imports)) importsLen = imports.length;
-      } catch {
-        /* ignore */
       }
       const elapsedSec = telemetryTicks * (STYLE_READINESS_TELEMETRY_INTERVAL_MS / 1000);
       const tag = elapsedSec >= 60 ? 'error' : 'warn';
@@ -238,8 +240,9 @@ export async function ensureStyleUsableForBootstrap(ctx: Ctx, runId: number): Pr
 
   let styleUsableForBootstrap = fns.canMutateStyle();
   if (!styleUsableForBootstrap) {
-    try {
-      const stats = getStyleContentStats(ctx.map.getStyle());
+    const style = safeGetStyle(ctx);
+    if (style) {
+      const stats = getStyleContentStats(style);
       if (stats.hasContent) {
         if (!st.spriteStormBypass) {
           console.warn(
@@ -250,8 +253,6 @@ export async function ensureStyleUsableForBootstrap(ctx: Ctx, runId: number): Pr
         }
         styleUsableForBootstrap = true;
       }
-    } catch {
-      styleUsableForBootstrap = false;
     }
   }
 
