@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
-import { generateDynamicCategories, clampBreakpoints } from '@/features/slope/lib/slope-config';
+import { generateDynamicCategories, clampBreakpoints, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 import { resolutionToSourceOptions } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeCategory, SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types';
@@ -55,7 +55,7 @@ function contourIntervalMetersFromSetting(setting: ContourIntervalSetting): numb
 
 function bandCountFromSetting(setting: SlopeScaleSetting): number {
   const match = /^(\d+)/.exec(setting);
-  return match ? Number(match[1]) : 4;
+  return match ? Number(match[1]) : 10;
 }
 
 function buildSlopeBandsFromDynamic(
@@ -65,7 +65,7 @@ function buildSlopeBandsFromDynamic(
   return categories.map((category) => ({
     id: category.id,
     percentRange: category.displayRange,
-    degreeRange: `${category.minDeg}° - ${category.maxDeg}° (${category.label})`,
+    degreeRange: `${formatSlopeDegreeLabel(category.minDeg)}° - ${formatSlopeDegreeLabel(category.maxDeg)}° (${category.label})`,
     label: `${category.displayRange} (${category.label})`,
     color: category.color,
     visible: visibilityById[category.id] ?? true,
@@ -148,7 +148,7 @@ export function useControlPanelTerrainState({
     () => initialControlPanel.slopes?.scale ?? 'percent',
   );
   const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>(
-    () => initialControlPanel.slopes?.scaleSetting ?? '4 couleurs',
+    () => initialControlPanel.slopes?.scaleSetting ?? '10 couleurs',
   );
   const [slopeCustomColors, setSlopeCustomColors] = useState<Record<string, string>>(
     () => initialControlPanel.slopes?.customColors ?? {},

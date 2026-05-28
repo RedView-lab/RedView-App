@@ -6,6 +6,7 @@ import { Slider } from '../components/Slider';
 import { ColorSwatch } from '../components/ColorSwatch';
 import { ColorPalettePicker } from '../components/ColorPalettePicker';
 import { IconChevronDown, IconEye, IconEyeOff, IconSlope } from '../icons';
+import { formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 import type {
   ControlPanelHandlers,
   ControlPanelState,
@@ -90,7 +91,7 @@ function degToPct(deg: number): number {
 }
 function pctToDeg(pct: number): number {
   const rad = Math.atan(pct / 100);
-  return Math.round((rad * 180) / Math.PI);
+  return Math.round(((rad * 180) / Math.PI) * 10) / 10;
 }
 
 function InlineNumericInput({
@@ -104,11 +105,11 @@ function InlineNumericInput({
   const [editing, setEditing] = useState(false);
   const isPercent = unit === 'percent';
 
-  const display = isPercent ? degToPct(valueDeg) : valueDeg;
+  const display = isPercent ? String(degToPct(valueDeg)) : formatSlopeDegreeLabel(valueDeg);
   const suffix = isPercent ? '%' : '°';
-  const maxLength = isPercent ? 4 : 2;
+  const maxLength = isPercent ? 4 : 5;
 
-  const [draft, setDraft] = useState(String(display));
+  const [draft, setDraft] = useState(display);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Auto-focus & select when entering edit mode
@@ -121,7 +122,8 @@ function InlineNumericInput({
 
   const commit = useCallback(() => {
     setEditing(false);
-    const parsed = parseInt(draft, 10);
+    const normalizedDraft = draft.replace(',', '.');
+    const parsed = isPercent ? parseInt(normalizedDraft, 10) : parseFloat(normalizedDraft);
     if (Number.isNaN(parsed)) return; // revert silently
     let nextDeg: number;
     if (isPercent) {
@@ -129,7 +131,7 @@ function InlineNumericInput({
       const pct = Math.max(0, Math.min(9999, parsed));
       nextDeg = Math.max(0, Math.min(90, pctToDeg(pct)));
     } else {
-      nextDeg = Math.max(0, Math.min(90, parsed));
+      nextDeg = Math.max(0, Math.min(90, Math.round(parsed * 10) / 10));
     }
     if (nextDeg !== valueDeg) onCommit(nextDeg);
   }, [draft, valueDeg, onCommit, isPercent]);
@@ -140,7 +142,7 @@ function InlineNumericInput({
         e.preventDefault();
         commit();
       } else if (e.key === 'Escape') {
-        setDraft(String(display));
+        setDraft(display);
         setEditing(false);
       }
     },
@@ -161,7 +163,7 @@ function InlineNumericInput({
         type="button"
         className={`rvc-slopes__deg-btn ${className ?? ''}`}
         onClick={() => {
-          setDraft(String(display));
+          setDraft(display);
           setEditing(true);
         }}
         title={isPercent ? t('Cliquer pour modifier le pourcentage') : t("Cliquer pour modifier l'angle")}
@@ -179,8 +181,9 @@ function InlineNumericInput({
       className={`rvc-slopes__deg-input ${className ?? ''}`}
       value={draft}
       onChange={(e) => {
-        // Allow only digits
-        const v = e.target.value.replace(/[^\d]/g, '');
+        const v = isPercent
+          ? e.target.value.replace(/[^\d]/g, '')
+          : e.target.value.replace(/[^\d.,]/g, '');
         setDraft(v);
       }}
       onBlur={commit}

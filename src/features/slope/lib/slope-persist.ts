@@ -47,7 +47,7 @@ export function saveSlopeState(state: SlopeState): void {
 // ── Custom breakpoints persistence ────────────────────────────────────
 
 export interface PersistedBreakpoints {
-  /** Number of bands (e.g. 4) */
+  /** Number of bands (e.g. 10) */
   bandCount: number;
   /** Internal breakpoints between bands (length = bandCount - 1).
    *  Key is the band count so each count has its own breakpoints. */
@@ -55,7 +55,7 @@ export interface PersistedBreakpoints {
 }
 
 const DEFAULT_PERSISTED: PersistedBreakpoints = {
-  bandCount: 4,
+  bandCount: 10,
   byCount: {},
 };
 

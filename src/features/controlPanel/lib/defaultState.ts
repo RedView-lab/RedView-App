@@ -4,8 +4,19 @@ import { buildBasemapList, DEFAULT_BASEMAP_ID } from './basemaps';
 import { buildDefaultSunlightBands, DEFAULT_SUNLIGHT_SCALE_SETTING } from './sunlightConfig';
 import { buildDefaultWeatherPalettePresets } from '../weather/defaultPalettes';
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
+import { generateDynamicCategories, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 
 const WEATHER_PALETTE_PRESETS = buildDefaultWeatherPalettePresets();
+const DEFAULT_SLOPE_BANDS = generateDynamicCategories(10).map((category) => ({
+  id: category.id,
+  percentRange: category.displayRange,
+  degreeRange: `${formatSlopeDegreeLabel(category.minDeg)}° - ${formatSlopeDegreeLabel(category.maxDeg)}° (${category.label})`,
+  label: `${category.displayRange} (${category.label})`,
+  color: category.color,
+  visible: true,
+  minDeg: category.minDeg,
+  maxDeg: category.maxDeg,
+}));
 
 /**
  * Default state that mirrors the Figma mock data (see node 1407:17211).
@@ -58,16 +69,9 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     resolution: '1m (LIDAR)',
     colorization: 'gradient',
     scale: 'percent',
-    scaleSetting: '4 couleurs',
+    scaleSetting: '10 couleurs',
     opacity: 20,
-    bands: [
-      { id: 'band-1', percentRange: '0% - 12%',    degreeRange: '0° - 7° (Plat)',           label: '0% - 12% (Modéré)',         color: '#2DBF8C', visible: true, minDeg: 0,  maxDeg: 7  },
-      { id: 'band-2', percentRange: '12% - 27%',   degreeRange: '7° - 15° (Pente modérée)', label: '12% - 27% (Pentu)',          color: '#FFD800', visible: true, minDeg: 7,  maxDeg: 15 },
-      { id: 'band-3', percentRange: '27% - 47%',   degreeRange: '15° - 25° (Pente forte)',  label: '27% - 47% (Très pentu)',     color: '#FF7200', visible: true, minDeg: 15, maxDeg: 25 },
-      { id: 'band-4', percentRange: '47% - 70%',   degreeRange: '25° - 35° (Très raide)',   label: '47% - 70% (Vertical)',       color: '#E50C0C', visible: true, minDeg: 25, maxDeg: 35 },
-      { id: 'band-5', percentRange: '70% - 100%',  degreeRange: '35° - 45° (Extrême)',      label: '70% - 100% (Extrême)',       color: '#E5261F', visible: true, minDeg: 35, maxDeg: 45 },
-      { id: 'band-6', percentRange: '>100%',        degreeRange: '45° - 90° (Falaise)',      label: '>100% (Falaise)',            color: '#8B0000', visible: true, minDeg: 45, maxDeg: 90 },
-    ],
+    bands: DEFAULT_SLOPE_BANDS,
   },
   altitude: {
     enabled: false,

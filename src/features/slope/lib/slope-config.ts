@@ -1,16 +1,5 @@
 import type { SlopeCategory, SlopeColorMode, SlopeState } from '../types';
 
-// ── Slope categories ──────────────────────────────────────────────────
-
-export const SLOPE_CATEGORIES: SlopeCategory[] = [
-  { id: 'flat',      label: 'Modéré',     minDeg: 0,  maxDeg: 7,  color: '#2DBF8C', displayRange: '0% - 12%'    },
-  { id: 'moderate',  label: 'Pentu',      minDeg: 7,  maxDeg: 15, color: '#FFD800', displayRange: '12% - 27%'   },
-  { id: 'steep',     label: 'Très pentu', minDeg: 15, maxDeg: 25, color: '#FF7200', displayRange: '27% - 47%'   },
-  { id: 'very-steep',label: 'Vertical',   minDeg: 25, maxDeg: 35, color: '#E50C0C', displayRange: '47% - 70%'   },
-  { id: 'extreme',   label: 'Extrême',    minDeg: 35, maxDeg: 45, color: '#A30000', displayRange: '70% - 100%'  },
-  { id: 'cliff',     label: 'Falaise',    minDeg: 45, maxDeg: 90, color: '#5C0000', displayRange: '>100%'       },
-];
-
 // ── Default state ─────────────────────────────────────────────────────
 
 export const DEFAULT_SLOPE_STATE: SlopeState = {
@@ -106,20 +95,30 @@ export function degToPercent(deg: number): string {
   return String(Math.round(Math.tan((deg * Math.PI) / 180) * 100));
 }
 
+export function percentToDeg(percent: number): number {
+  if (!(percent > 0)) return 0;
+  return Math.round((((Math.atan(percent / 100) * 180) / Math.PI) * 10)) / 10;
+}
+
+export function formatSlopeDegreeLabel(deg: number): string {
+  const rounded = Math.round(deg * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 // ── Color ramp for dynamic bands ──────────────────────────────────────
 
-/** Base color ramp from green (flat) → dark red (cliff). */
+/** Cycling-profile ramp from green (easy) → black (wall). */
 const COLOR_RAMP = [
-  '#2DBF8C', // green — flat
-  '#8DD35F', // light green
-  '#FFD800', // yellow
-  '#FFA500', // orange
-  '#FF7200', // dark orange
-  '#E50C0C', // red
-  '#C40000', // dark red
-  '#A30000', // darker red
-  '#7B0000', // very dark red
-  '#5C0000', // near-black red
+  '#3FAE2A',
+  '#77C043',
+  '#B7CF3A',
+  '#F1D43B',
+  '#F6AD2F',
+  '#F47C20',
+  '#E84A27',
+  '#C81E1E',
+  '#6F1010',
+  '#000000',
 ];
 
 /** Interpolate a hex color between two hex colors. t ∈ [0, 1]. */
@@ -142,14 +141,29 @@ function rampColor(t: number): string {
 
 /** Category labels assigned by slope severity. */
 const SEVERITY_LABELS = [
-  'Plat', 'Modéré', 'Pentu', 'Très pentu', 'Raide',
-  'Très raide', 'Vertical', 'Extrême', 'Falaise', 'Surplomb',
+  'Quasi plat', 'Faux-plat', 'Roulant', 'Soutenu', 'Sérieux',
+  'Raide', 'Très raide', 'Mur', 'Mur sévère', 'Extrême',
 ];
 
 function severityLabel(index: number, total: number): string {
   // Map band index onto the severity labels array
   const i = Math.round((index / Math.max(total - 1, 1)) * (SEVERITY_LABELS.length - 1));
   return SEVERITY_LABELS[Math.min(i, SEVERITY_LABELS.length - 1)];
+}
+
+const CYCLING_PERCENT_BREAKPOINTS_BY_COUNT: Record<number, number[]> = {
+  2: [8],
+  3: [4, 8],
+  4: [4, 8, 12],
+  6: [2, 4, 6, 8, 12],
+  8: [2, 4, 6, 8, 10, 12, 15],
+  10: [1, 2, 4, 6, 8, 10, 12, 15, 20],
+};
+
+const BREAKPOINT_STEP_DEG = 0.1;
+
+function roundBreakpointDeg(value: number): number {
+  return Math.round(value / BREAKPOINT_STEP_DEG) * BREAKPOINT_STEP_DEG;
 }
 
 // ── Breakpoint validation ─────────────────────────────────────────────
@@ -171,10 +185,13 @@ function severityLabel(index: number, total: number): string {
  * The implicit boundaries are 0° on the left and 90° on the right.
  */
 export function generateBreakpointsForCount(count: number): number[] {
-  const step = 90 / count;
+  const preset = CYCLING_PERCENT_BREAKPOINTS_BY_COUNT[count];
+  if (preset) return preset.map((percent) => percentToDeg(percent));
+
+  const step = 20 / count;
   const bp: number[] = [];
-  for (let i = 1; i < count; i++) {
-    bp.push(Math.round(step * i));
+  for (let i = 1; i < count; i += 1) {
+    bp.push(percentToDeg(step * i));
   }
   return bp;
 }
@@ -193,41 +210,41 @@ export function clampBreakpoints(breakpoints: number[], bandCount: number): numb
   // Degenerate: single band → no internal breakpoints
   if (n <= 0) return [];
 
-  // Too many bands to fit with ≥1° gaps? Fall back to even spacing.
-  if (n >= 90) return generateBreakpointsForCount(bandCount);
+  // Too many bands to fit with ≥0.1° gaps? Fall back to even spacing.
+  if (n >= 900) return generateBreakpointsForCount(bandCount);
 
-  // 1. Clamp each value individually to [1, 89]
+  // 1. Clamp each value individually to [0.1, 89.9]
   const bp = breakpoints.slice(0, n).map((v) => {
-    const rounded = Math.round(v);
-    return Math.max(1, Math.min(89, Number.isFinite(rounded) ? rounded : 1));
+    const rounded = roundBreakpointDeg(v);
+    return Math.max(BREAKPOINT_STEP_DEG, Math.min(90 - BREAKPOINT_STEP_DEG, Number.isFinite(rounded) ? rounded : BREAKPOINT_STEP_DEG));
   });
 
   // Pad with defaults if too few values provided
   while (bp.length < n) {
     const defaults = generateBreakpointsForCount(bandCount);
-    bp.push(defaults[bp.length] ?? bp[bp.length - 1] + 1);
+    bp.push(defaults[bp.length] ?? roundBreakpointDeg((bp[bp.length - 1] ?? 0) + BREAKPOINT_STEP_DEG));
   }
 
-  // 2. Forward pass: ensure strictly ascending with ≥1° gap
+  // 2. Forward pass: ensure strictly ascending with ≥0.1° gap
   for (let i = 1; i < n; i++) {
     if (bp[i] <= bp[i - 1]) {
-      bp[i] = bp[i - 1] + 1;
+      bp[i] = roundBreakpointDeg(bp[i - 1] + BREAKPOINT_STEP_DEG);
     }
   }
 
-  // 3. If last breakpoint overflows 89°, backward pass to compress
-  if (bp[n - 1] > 89) {
-    bp[n - 1] = 89;
+  // 3. If last breakpoint overflows 89.9°, backward pass to compress
+  if (bp[n - 1] > 90 - BREAKPOINT_STEP_DEG) {
+    bp[n - 1] = 90 - BREAKPOINT_STEP_DEG;
     for (let i = n - 2; i >= 0; i--) {
       if (bp[i] >= bp[i + 1]) {
-        bp[i] = bp[i + 1] - 1;
+        bp[i] = roundBreakpointDeg(bp[i + 1] - BREAKPOINT_STEP_DEG);
       }
     }
   }
 
-  // 4. If first breakpoint underflows 1°, it means the space is too cramped.
+  // 4. If first breakpoint underflows 0.1°, it means the space is too cramped.
   //    Fall back to evenly-spaced.
-  if (bp[0] < 1) {
+  if (bp[0] < BREAKPOINT_STEP_DEG) {
     return generateBreakpointsForCount(bandCount);
   }
 
@@ -268,3 +285,7 @@ export function generateDynamicCategories(
     };
   });
 }
+
+// ── Slope categories ──────────────────────────────────────────────────
+
+export const SLOPE_CATEGORIES: SlopeCategory[] = generateDynamicCategories(10, generateBreakpointsForCount(10));

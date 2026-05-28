@@ -44,6 +44,14 @@ function routeSlopeBandCountFromSetting(setting: string | undefined): number {
   return Number.isFinite(value) && value >= 2 ? value : SLOPE_CATEGORIES.length;
 }
 
+function isLegacyFourColorSlopeConfig(config: ControlPanelSlopePersistedState): boolean {
+  if (config.scaleSetting !== '4 couleurs') return false;
+  if (Object.keys(config.customColors ?? {}).length > 0) return false;
+  if (Object.keys(config.bandVisibility ?? {}).length > 0) return false;
+  if (Object.keys(config.breakpoints?.byCount ?? {}).length > 0) return false;
+  return true;
+}
+
 function buildRouteSlopeBands(
   config: ControlPanelSlopePersistedState | undefined,
 ): RouteSlopeBand[] {
@@ -56,7 +64,9 @@ function buildRouteSlopeBands(
     }));
   }
 
-  const bandCount = routeSlopeBandCountFromSetting(config.scaleSetting);
+  const bandCount = isLegacyFourColorSlopeConfig(config)
+    ? SLOPE_CATEGORIES.length
+    : routeSlopeBandCountFromSetting(config.scaleSetting);
   const breakpoints = config.breakpoints?.byCount?.[bandCount];
   const categories = generateDynamicCategories(bandCount, breakpoints).map((category) => ({
     ...category,

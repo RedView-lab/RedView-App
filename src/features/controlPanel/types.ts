@@ -84,7 +84,7 @@ export interface RoutesSectionState {
 export type SlopeResolution = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
 export type SlopeColorization = 'gradient' | 'stepped' | string;
 export type SlopeScale = 'percent' | 'degree' | string;
-export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
+export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | '8 couleurs' | '10 couleurs' | string;
 
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
