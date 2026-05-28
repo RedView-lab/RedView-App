@@ -80,6 +80,7 @@
   flex-direction: column;
   gap: 6px;
   width: 160px;
+  margin-top: 44px;
   padding: 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.74);
@@ -156,6 +157,7 @@
 
   .rvmvc-route-slope-legend {
     width: 148px;
+    margin-top: 40px;
     padding: 10px;
   }
 

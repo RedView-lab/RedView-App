@@ -1,0 +1,35 @@
+.rv-poi-marker {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 44px;
+  height: 49px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: translateZ(0);
+}
+
+.rv-poi-marker:focus {
+  outline: none;
+}
+
+.rv-poi-marker__img {
+  display: block;
+  width: 44px;
+  height: 49px;
+  pointer-events: none;
+  user-select: none;
+  transform-origin: 50% 100%;
+  transition:
+    transform 140ms ease,
+    filter 140ms ease,
+    opacity 140ms ease;
+}
+
+.rv-poi-marker:hover .rv-poi-marker__img,
+.rv-poi-marker:focus-visible .rv-poi-marker__img {
+  transform: translateY(-2px) scale(1.05);
+  filter: saturate(1.08) brightness(1.04);
+}
