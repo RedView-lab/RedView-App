@@ -14,6 +14,13 @@
   width: max-content;
 }
 
+.rvmvc-map-tools__button-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
 .rvmvc-map-tools__button {
   width: 40px;
   min-width: 40px;
@@ -66,6 +73,13 @@
   font-size: 15px;
   font-weight: 600;
   line-height: 1;
+}
+
+.rvmvc-map-tools__legend-button {
+  justify-content: center;
+  min-width: 40px;
+  padding-inline: 10px;
+  font-size: 12px;
 }
 
 .rvmvc-route-slope-legend {
@@ -142,9 +156,18 @@
     gap: 8px;
   }
 
+  .rvmvc-map-tools__button-stack {
+    gap: 4px;
+  }
+
   .rvmvc-route-slope-legend {
     width: 148px;
     padding: 10px;
+  }
+
+  .rvmvc-map-tools__legend-button {
+    padding-inline: 9px;
+    font-size: 11px;
   }
 
   .rvmvc-route-slope-legend__title {

@@ -38,6 +38,7 @@ export function MapViewportControls({
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
+  const [isRouteSlopeLegendOpen, setIsRouteSlopeLegendOpen] = useState(Boolean(routeSlopeLegendTitle));
 
   useEffect(() => {
     if (!map) {
@@ -60,6 +61,10 @@ export function MapViewportControls({
       map.off('moveend', syncCameraState);
     };
   }, [map]);
+
+  useEffect(() => {
+    setIsRouteSlopeLegendOpen(Boolean(routeSlopeLegendTitle));
+  }, [routeSlopeLegendTitle]);
 
   const disabled = !isMapLoaded || map == null;
 
@@ -158,7 +163,7 @@ export function MapViewportControls({
       </button>
 
       <div className="rvmvc-map-tools__dimension-row">
-        {routeSlopeLegendTitle ? (
+        {routeSlopeLegendTitle && isRouteSlopeLegendOpen ? (
           <section className="rvmvc-route-slope-legend" aria-label={t('Légende de pente du tracé')}>
             <div className="rvmvc-route-slope-legend__title">{routeSlopeLegendTitle}</div>
             <div className="rvmvc-route-slope-legend__list">
@@ -176,17 +181,34 @@ export function MapViewportControls({
           </section>
         ) : null}
 
-        <button
-          type="button"
-          className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
-          aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
-          aria-pressed={is3DView}
-          title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
-          onClick={handleToggleDimension}
-          disabled={disabled}
-        >
-          <span>3D</span>
-        </button>
+        <div className="rvmvc-map-tools__button-stack">
+          <button
+            type="button"
+            className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
+            aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
+            aria-pressed={is3DView}
+            title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
+            onClick={handleToggleDimension}
+            disabled={disabled}
+          >
+            <span>3D</span>
+          </button>
+
+          {routeSlopeLegendTitle ? (
+            <button
+              type="button"
+              className={`rvmvc-map-tools__button rvmvc-map-tools__text-button rvmvc-map-tools__legend-button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
+              aria-label={isRouteSlopeLegendOpen ? t('Masquer la légende de pente du tracé') : t('Afficher la légende de pente du tracé')}
+              aria-pressed={isRouteSlopeLegendOpen}
+              title={t('Légende')}
+              onClick={() => {
+                setIsRouteSlopeLegendOpen((value) => !value);
+              }}
+            >
+              <span>{t('Légende')}</span>
+            </button>
+          ) : null}
+        </div>
       </div>
     </aside>
   );
