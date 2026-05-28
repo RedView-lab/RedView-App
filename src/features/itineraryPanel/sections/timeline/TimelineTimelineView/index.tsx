@@ -204,8 +204,8 @@ export function TimelineTimelineView({
       (minMinute, minute) => Math.min(minMinute, minute),
       Number.POSITIVE_INFINITY,
     );
-    if (!Number.isFinite(firstMinute)) return reference.startMinutes;
-    return Math.max(0, Math.floor(firstMinute / 10) * 10);
+    const baseStartMinute = Number.isFinite(firstMinute) ? firstMinute : reference.startMinutes;
+    return Math.max(0, Math.floor(baseStartMinute / 60) * 60);
   }, [reference.startMinutes, visibleMinuteBounds]);
 
   const endMinutes = useMemo(() => {
@@ -461,8 +461,8 @@ export function TimelineTimelineView({
     const normalizedIndex = dayIndex ?? 0;
     const columnWidthPct = 100 / dayColumnCount;
     return {
-      left: `calc(${normalizedIndex * columnWidthPct}% + 6px)`,
-      width: `calc(${columnWidthPct}% - 12px)`,
+      left: `${normalizedIndex * columnWidthPct}%`,
+      width: `${columnWidthPct}%`,
       right: 'auto',
     };
   }

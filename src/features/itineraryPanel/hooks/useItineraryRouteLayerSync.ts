@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import type { ControlPanelSlopePersistedState } from '@/features/controlPanel/lib/persistedState';
+import { SLOPE_CATEGORIES, generateDynamicCategories } from '@/features/slope/lib/slope-config';
 
 import {
   clearForbiddenZoneDraft,
@@ -13,6 +15,7 @@ import {
   setRouteAuditFindings,
   setForbiddenZones,
   setRouteEndpoints,
+  type RouteSlopeBand,
   upsertRouteLayer,
 } from '../lib/route-layer';
 import { buildRouteContentSignature } from '../lib/routes';
@@ -32,6 +35,40 @@ interface UseItineraryRouteLayerSyncArgs {
   itineraries: ItineraryProject['itineraries'];
   map: MapboxMap | null;
   routeTraceWidthPx?: number;
+  routeSlopeConfig?: ControlPanelSlopePersistedState;
+}
+
+function routeSlopeBandCountFromSetting(setting: string | undefined): number {
+  const match = setting ? /^(\d+)/.exec(setting) : null;
+  const value = match ? Number(match[1]) : SLOPE_CATEGORIES.length;
+  return Number.isFinite(value) && value >= 2 ? value : SLOPE_CATEGORIES.length;
+}
+
+function buildRouteSlopeBands(
+  config: ControlPanelSlopePersistedState | undefined,
+): RouteSlopeBand[] {
+  if (!config) {
+    return SLOPE_CATEGORIES.map((category) => ({
+      id: category.id,
+      minDeg: category.minDeg,
+      maxDeg: category.maxDeg,
+      color: category.color,
+    }));
+  }
+
+  const bandCount = routeSlopeBandCountFromSetting(config.scaleSetting);
+  const breakpoints = config.breakpoints?.byCount?.[bandCount];
+  const categories = generateDynamicCategories(bandCount, breakpoints).map((category) => ({
+    ...category,
+    color: config.customColors?.[category.id] ?? category.color,
+  }));
+
+  return categories.map((category) => ({
+    id: category.id,
+    minDeg: category.minDeg,
+    maxDeg: category.maxDeg,
+    color: category.color,
+  }));
 }
 
 export function useItineraryRouteLayerSync({
@@ -40,10 +77,19 @@ export function useItineraryRouteLayerSync({
   itineraries,
   map,
   routeTraceWidthPx = 4,
+  routeSlopeConfig,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const routeSlopeBands = useMemo(
+    () => buildRouteSlopeBands(routeSlopeConfig),
+    [routeSlopeConfig],
+  );
+  const routeSlopeBandSignature = useMemo(
+    () => routeSlopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join('|'),
+    [routeSlopeBands],
+  );
   const layerSignature = useMemo(() => {
-    return itineraries
+    const itinerarySignature = itineraries
       .map((it) => {
         const len = it.gpxRoute?.points.length ?? 0;
         const routeKey = buildRouteContentSignature(it.gpxRoute?.points);
@@ -53,6 +99,7 @@ export function useItineraryRouteLayerSync({
           routeKey,
           it.color,
           it.opacity ?? 100,
+          it.renderMode ?? 'default',
           routeTraceWidthPx,
           it.visible !== false ? 1 : 0,
           it.analysisVisible !== false ? 1 : 0,
@@ -65,7 +112,8 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-  }, [itineraries, routeTraceWidthPx]);
+    return `${itinerarySignature}::bands:${routeSlopeBandSignature}`;
+  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx]);
 
   const replayRouteState = useCallback((): boolean => {
     if (!map || !isMapLoaded || !canAccessStyle(map)) return false;
@@ -73,16 +121,17 @@ export function useItineraryRouteLayerSync({
     for (const it of itineraries) {
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
-      const coords: [number, number][] = pts.map((p) => [p.lon, p.lat]);
       // Visible iff the user has not explicitly hidden the trace.
       // (`analysisVisible` controls the central chart/profile, not the map line.)
       const routeVisible = it.visible !== false;
       try {
-        upsertRouteLayer(map, it.id, coords, {
+        upsertRouteLayer(map, it.id, pts, {
           color: it.color,
           opacity01: (it.opacity ?? 100) / 100,
           traceWidthPx: routeTraceWidthPx,
           visible: routeVisible,
+          renderMode: it.renderMode ?? 'default',
+          slopeBands: routeSlopeBands,
         });
       } catch (error) {
         console.warn('[route-layer] upsert failed for', it.id, error);
@@ -119,7 +168,7 @@ export function useItineraryRouteLayerSync({
     }
 
     return true;
-  }, [active, isMapLoaded, itineraries, map, routeTraceWidthPx]);
+  }, [active, isMapLoaded, itineraries, map, routeSlopeBands, routeTraceWidthPx]);
 
   const scheduleReplayRouteState = useCallback(() => {
     if (replayTimerRef.current) clearTimeout(replayTimerRef.current);

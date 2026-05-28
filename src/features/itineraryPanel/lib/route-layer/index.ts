@@ -49,6 +49,7 @@ import {
   buildForbiddenZoneGeoJson,
   buildRouteAuditGeoJson,
 } from './geojson';
+import { haversineRouteDistanceM } from '../routes';
 
 export {
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -65,6 +66,23 @@ export interface RouteEndpoint {
   label?: string;
 }
 
+export interface RouteLayerPoint {
+  lat: number;
+  lon: number;
+  distanceM?: number | null;
+  elevationM?: number | null;
+  gradientPct?: number | null;
+}
+
+export interface RouteSlopeBand {
+  id: string;
+  minDeg: number;
+  maxDeg: number;
+  color: string;
+}
+
+type RouteRenderMode = 'default' | 'slope' | 'speedEst';
+
 export interface RouteLayerOptions {
   /** CSS hex color (e.g. "#ff0000"). */
   color: string;
@@ -74,7 +92,14 @@ export interface RouteLayerOptions {
   visible: boolean;
   /** Main trace width in px. */
   traceWidthPx?: number;
+  /** Alternate styling mode selected in the routes panel. */
+  renderMode?: RouteRenderMode;
+  /** Expert slope color bands used when renderMode === 'slope'. */
+  slopeBands?: ReadonlyArray<RouteSlopeBand>;
 }
+
+const ROUTE_SLOPE_TARGET_SEGMENT_M = 15;
+const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 
 function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(1, Math.min(12, Math.round(value ?? 4)));
@@ -86,6 +111,170 @@ function traceGlowWidthPx(traceWidthPx: number): number {
 
 function traceBorderWidthPx(traceWidthPx: number): number {
   return Math.max(1, Math.min(2, traceWidthPx * 0.25));
+}
+
+function clampSlopeDeg(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(90, value));
+}
+
+function interpolateNumber(a: number, b: number, t: number): number {
+  return a + ((b - a) * t);
+}
+
+function interpolateCoordinate(
+  start: RouteLayerPoint,
+  end: RouteLayerPoint,
+  t: number,
+): [number, number] {
+  return [
+    interpolateNumber(start.lon, end.lon, t),
+    interpolateNumber(start.lat, end.lat, t),
+  ];
+}
+
+function buildDefaultRouteGeoJson(
+  points: readonly RouteLayerPoint[],
+): GeoJSON.Feature<GeoJSON.LineString> {
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: points.map((point) => [point.lon, point.lat] as [number, number]),
+    },
+  };
+}
+
+function resolveSegmentDistanceM(start: RouteLayerPoint, end: RouteLayerPoint): number {
+  const startDistance = start.distanceM;
+  const endDistance = end.distanceM;
+  if (Number.isFinite(startDistance) && Number.isFinite(endDistance)) {
+    const delta = (endDistance as number) - (startDistance as number);
+    if (delta > ROUTE_MIN_SEGMENT_DISTANCE_M) return delta;
+  }
+  return haversineRouteDistanceM(start, end);
+}
+
+function resolveSlopeDeg(start: RouteLayerPoint, end: RouteLayerPoint, distanceM: number): number {
+  if (!(distanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) return 0;
+
+  if (Number.isFinite(start.elevationM) && Number.isFinite(end.elevationM)) {
+    const riseM = Math.abs((end.elevationM as number) - (start.elevationM as number));
+    return clampSlopeDeg((Math.atan(riseM / distanceM) * 180) / Math.PI);
+  }
+
+  const gradientCandidates = [start.gradientPct, end.gradientPct]
+    .filter((value): value is number => Number.isFinite(value))
+    .map((value) => Math.abs(value));
+
+  if (gradientCandidates.length === 0) return 0;
+
+  const avgGradientPct = gradientCandidates.reduce((sum, value) => sum + value, 0) / gradientCandidates.length;
+  return clampSlopeDeg((Math.atan(avgGradientPct / 100) * 180) / Math.PI);
+}
+
+function pickSlopeBand(
+  bands: ReadonlyArray<RouteSlopeBand>,
+  slopeDeg: number,
+): RouteSlopeBand | null {
+  if (bands.length === 0) return null;
+  for (let index = 0; index < bands.length; index += 1) {
+    const band = bands[index];
+    const isLast = index === bands.length - 1;
+    if (slopeDeg >= band.minDeg && (slopeDeg < band.maxDeg || isLast)) {
+      return band;
+    }
+  }
+  return bands[bands.length - 1] ?? null;
+}
+
+function buildSlopeRouteGeoJson(
+  points: readonly RouteLayerPoint[],
+  bands: ReadonlyArray<RouteSlopeBand>,
+  fallbackColor: string,
+): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
+  const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const segmentDistanceM = resolveSegmentDistanceM(start, end);
+    if (!(segmentDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) continue;
+
+    const segmentSlopeDeg = resolveSlopeDeg(start, end, segmentDistanceM);
+    const segmentSlopePct = Math.tan((segmentSlopeDeg * Math.PI) / 180) * 100;
+    const band = pickSlopeBand(bands, segmentSlopeDeg);
+    const segmentColor = band?.color ?? fallbackColor;
+    const subdivisionCount = Math.max(1, Math.ceil(segmentDistanceM / ROUTE_SLOPE_TARGET_SEGMENT_M));
+
+    for (let partIndex = 0; partIndex < subdivisionCount; partIndex += 1) {
+      const t0 = partIndex / subdivisionCount;
+      const t1 = (partIndex + 1) / subdivisionCount;
+      const coordinates = [
+        interpolateCoordinate(start, end, t0),
+        interpolateCoordinate(start, end, t1),
+      ] as [number, number][];
+
+      if (
+        coordinates[0][0] === coordinates[1][0]
+        && coordinates[0][1] === coordinates[1][1]
+      ) {
+        continue;
+      }
+
+      const lastFeature = features[features.length - 1];
+      const lastCoordinates = lastFeature?.geometry.coordinates;
+      const lastEndCoordinate = lastCoordinates?.[lastCoordinates.length - 1];
+      if (
+        lastFeature
+        && lastFeature.properties?.bandId === (band?.id ?? 'fallback')
+        && lastEndCoordinate
+        && lastEndCoordinate[0] === coordinates[0][0]
+        && lastEndCoordinate[1] === coordinates[0][1]
+      ) {
+        lastCoordinates.push(coordinates[1]);
+        continue;
+      }
+
+      features.push({
+        type: 'Feature',
+        properties: {
+          color: segmentColor,
+          bandId: band?.id ?? 'fallback',
+          slopeDeg: Math.round(segmentSlopeDeg * 10) / 10,
+          slopePct: Math.round(segmentSlopePct),
+        },
+        geometry: {
+          type: 'LineString',
+          coordinates,
+        },
+      });
+    }
+  }
+
+  if (features.length === 0) return buildDefaultRouteGeoJson(points);
+  return {
+    type: 'FeatureCollection',
+    features,
+  };
+}
+
+function buildRouteGeoJson(
+  points: readonly RouteLayerPoint[],
+  opts: RouteLayerOptions,
+): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
+  if (opts.renderMode === 'slope') {
+    return buildSlopeRouteGeoJson(points, opts.slopeBands ?? [], opts.color);
+  }
+  return buildDefaultRouteGeoJson(points);
+}
+
+function buildRouteLineColorPaint(opts: RouteLayerOptions): string | unknown[] {
+  if (opts.renderMode === 'slope') {
+    return ['coalesce', ['get', 'color'], opts.color];
+  }
+  return opts.color;
 }
 
 function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
@@ -162,7 +351,7 @@ export function isAnyRouteOnMap(map: MapboxMap): boolean {
 export function upsertRouteLayer(
   map: MapboxMap,
   itineraryId: string,
-  coordinates: [number, number][],
+  points: RouteLayerPoint[],
   opts: RouteLayerOptions,
 ): void {
   const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
@@ -171,16 +360,14 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const glowWidthPx = traceGlowWidthPx(traceWidthPx);
   const borderWidthPx = traceBorderWidthPx(traceWidthPx);
+  const routeData = buildRouteGeoJson(points, opts);
+  const lineColorPaint = buildRouteLineColorPaint(opts);
 
   const existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
   if (existing) {
     try {
-      existing.setData({
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates },
-      });
+      existing.setData(routeData);
     } catch {
       /* noop */
     }
@@ -189,11 +376,7 @@ export function upsertRouteLayer(
     map.addSource(srcId, {
       type: 'geojson',
       lineMetrics: true,
-      data: {
-        type: 'Feature',
-        properties: {},
-        geometry: { type: 'LineString', coordinates },
-      },
+      data: routeData,
     });
     map.addLayer({
       id: glowId,
@@ -208,7 +391,7 @@ export function upsertRouteLayer(
         visibility,
       },
       paint: {
-        'line-color': opts.color,
+        'line-color': lineColorPaint as never,
         'line-width': glowWidthPx,
         'line-opacity': 0.4 * opacity,
         'line-blur': 4,
@@ -228,7 +411,7 @@ export function upsertRouteLayer(
         visibility,
       },
       paint: {
-        'line-color': opts.color,
+        'line-color': lineColorPaint as never,
         'line-width': traceWidthPx,
         'line-opacity': opacity,
         'line-emissive-strength': 1,
@@ -243,13 +426,13 @@ export function upsertRouteLayer(
   // the current store state regardless of the upsert path taken above.
   try {
     if (map.getLayer(glowId)) {
-      setPaintPropertyIfChanged(map, glowId, 'line-color', opts.color);
+      map.setPaintProperty(glowId, 'line-color', lineColorPaint as never);
       setPaintPropertyIfChanged(map, glowId, 'line-width', glowWidthPx);
       setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0.4 * opacity);
       setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
     }
     if (map.getLayer(lineId)) {
-      setPaintPropertyIfChanged(map, lineId, 'line-color', opts.color);
+      map.setPaintProperty(lineId, 'line-color', lineColorPaint as never);
       setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', borderWidthPx);
