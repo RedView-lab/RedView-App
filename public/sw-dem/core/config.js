@@ -78,10 +78,13 @@ const IGN_DEM_MAXZOOM = 17;
 // paying the full MNS fan-out as aggressively across overview zooms.
 //
 // HIGHRES threshold = 56 m/px: enables the France HD fallback around z11.
-// MNS threshold = 36 m/px: keeps true LiDAR easy to reach at z12 across
-// France while avoiding a blanket z11 MNS burst.
+// MNS threshold = 22 m/px: delays the surface-model handoff until the user
+// is closer to the terrain (typically z13 across metro France). This avoids
+// the mid-zoom canopy/building aliasing that shows up as visible
+// "ondulations" in oblique mountain views while keeping the 0.40 m quality
+// path for close flyovers.
 const IGN_HIGHRES_ENGAGE_MPP = 56;
-const IGN_MNS_ENGAGE_MPP = 36;
+const IGN_MNS_ENGAGE_MPP = 22;
 
 function mercatorMetersPerPixel(mercZ, lat) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
@@ -116,7 +119,11 @@ const ORTHO_TILE_SIZE = 256;
 // (terrain-profile prefetch, decoded DEM LRU, deferred neighbour seam-heal,
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
-const MAP_CACHE_EPOCH = '2026-05-17-slope-visible-priority-1';
+//
+// 2026-05-28-france-mns-midzoom-smoothing-1: delays the France MNS surface
+// model handoff by one zoom step so 0.40 m terrain keeps the cleaner bare-
+// earth fallback during slight dezoom, removing the visible mid-zoom waves.
+const MAP_CACHE_EPOCH = '2026-05-28-france-mns-midzoom-smoothing-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check
