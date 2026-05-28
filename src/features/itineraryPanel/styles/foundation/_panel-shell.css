@@ -26,15 +26,11 @@
   max-height: 100%;
   padding: 12px;
   background: var(--rvi-bg);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
 
-  /* DO NOT add `transform`, `will-change`, `filter` or `isolation` here.
-     Mapbox already promotes its WebGL canvas to its own GPU layer; if this
-     panel is ALSO promoted to a separate compositor layer, Chromium can no
-     longer sample the sibling canvas as the backdrop image and falls back to
-     the page background (transparent -> looks opaque). `backdrop-filter`
-     itself triggers the layer promotion it needs. */
+    /* The itinerary shell sits above an explicit mirrored map backdrop
+      (DashboardEditor on the docked layout, MapCanvasGlassBackdrop when the
+      timeline is fullscreen). Keep the shell tint-only so large surfaces do
+      not pay a second compositor blur pass on top of the mirrored map slice. */
 
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);

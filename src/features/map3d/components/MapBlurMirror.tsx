@@ -54,6 +54,7 @@ export default function MapBlurMirror({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const movingRef = useRef(false);
   const requestRedrawRef = useRef<(() => void) | null>(null);
+  const mirrorArea = width * height;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -67,8 +68,13 @@ export default function MapBlurMirror({
     });
     if (!ctx) return;
 
-    const ACTIVE_FRAME_MS = 1000 / 30;
-    const IDLE_FRAME_MS = 1000 / 12;
+    // Large frosted panels blur away high-frequency motion detail anyway, so
+    // spending 30 FPS on their mirrored background is mostly wasted GPU work.
+    // Keep small mirrors crisp while easing off the copy rate on big surfaces.
+    const ACTIVE_FPS = mirrorArea >= 220000 ? 20 : mirrorArea >= 120000 ? 24 : 30;
+    const IDLE_FPS = mirrorArea >= 220000 ? 10 : 12;
+    const ACTIVE_FRAME_MS = 1000 / ACTIVE_FPS;
+    const IDLE_FRAME_MS = 1000 / IDLE_FPS;
     // After moveend we let a few "settling" frames render (terrain/ortho fade
     // in, fog updates, last tile pops), then we STOP subscribing to render.
     // Mapbox keeps firing `render` while terrain/fog/ortho refresh in the
@@ -317,7 +323,7 @@ export default function MapBlurMirror({
       clearSettleTimer();
       clearScheduledDraw();
     };
-  }, [blur, map, saturate]);
+  }, [blur, map, mirrorArea, saturate]);
 
   useLayoutEffect(() => {
     requestRedrawRef.current?.();

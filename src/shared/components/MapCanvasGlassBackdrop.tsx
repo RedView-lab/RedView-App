@@ -19,7 +19,10 @@ export function MapCanvasGlassBackdrop({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', {
+      alpha: true,
+      desynchronized: true,
+    });
     if (!ctx) return;
 
     // Behind a 30px blur the human eye cannot detect updates faster than ~10-12 FPS.
@@ -31,30 +34,108 @@ export function MapCanvasGlassBackdrop({
     const RENDER_DPR = Math.min(1, window.devicePixelRatio || 1);
 
     let timer = 0;
-    let isVisible = true;
+    let isDocumentVisible = document.visibilityState !== 'hidden';
+    let isIntersecting = true;
     let cachedTargetRect: DOMRect | null = null;
+    let cachedSourceRect: DOMRect | null = null;
+    let sourceCanvas: HTMLCanvasElement | null = null;
+
+    const clearTimer = () => {
+      if (timer !== 0) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+    };
+
+    const invalidateTargetRect = () => {
+      cachedTargetRect = null;
+    };
+
+    const invalidateSourceRect = () => {
+      cachedSourceRect = null;
+    };
+
+    const resolveSourceCanvas = () => {
+      if (sourceCanvas?.isConnected) return sourceCanvas;
+
+      sourceCanvas = document.querySelector<HTMLCanvasElement>(MAPBOX_CANVAS_SELECTOR);
+      cachedSourceRect = null;
+      return sourceCanvas;
+    };
+
+    const shouldPoll = () => isDocumentVisible && isIntersecting;
+
+    const schedule = () => {
+      if (!shouldPoll() || timer !== 0) return;
+
+      timer = window.setTimeout(() => {
+        timer = 0;
+        draw();
+        schedule();
+      }, FRAME_MS);
+    };
 
     const onVisibility = () => {
-      isVisible = document.visibilityState !== 'hidden';
+      isDocumentVisible = document.visibilityState !== 'hidden';
+      if (!shouldPoll()) {
+        clearTimer();
+        return;
+      }
+
+      draw();
+      schedule();
     };
     document.addEventListener('visibilitychange', onVisibility);
 
     // Cache target rect; refresh only on resize instead of per-frame.
     const ro = new ResizeObserver(() => {
-      cachedTargetRect = null;
+      invalidateTargetRect();
     });
     ro.observe(canvas);
 
-    const draw = () => {
-      if (!isVisible) return;
+    const sourceResizeObserver = new ResizeObserver(() => {
+      invalidateSourceRect();
+    });
 
-      const source = document.querySelector<HTMLCanvasElement>(MAPBOX_CANVAS_SELECTOR);
+    const intersectionObserver = 'IntersectionObserver' in window
+      ? new IntersectionObserver((entries) => {
+          isIntersecting = entries.some((entry) => entry.isIntersecting);
+          if (!shouldPoll()) {
+            clearTimer();
+            return;
+          }
+
+          draw();
+          schedule();
+        })
+      : null;
+    intersectionObserver?.observe(canvas);
+
+    const onResize = () => {
+      invalidateTargetRect();
+      invalidateSourceRect();
+      if (!shouldPoll()) return;
+      draw();
+      schedule();
+    };
+    window.addEventListener('resize', onResize);
+
+    const draw = () => {
+      if (!shouldPoll()) return;
+
+      const source = resolveSourceCanvas();
       if (!source || source.width === 0 || source.height === 0) return;
+
+      if (sourceCanvas !== source) {
+        sourceResizeObserver.disconnect();
+        sourceResizeObserver.observe(source);
+        invalidateSourceRect();
+      }
 
       const targetRect = cachedTargetRect ?? (cachedTargetRect = canvas.getBoundingClientRect());
       if (targetRect.width <= 0 || targetRect.height <= 0) return;
 
-      const sourceRect = source.getBoundingClientRect();
+      const sourceRect = cachedSourceRect ?? (cachedSourceRect = source.getBoundingClientRect());
       if (sourceRect.width <= 0 || sourceRect.height <= 0) return;
 
       const targetWidth = Math.max(1, Math.round(targetRect.width * RENDER_DPR));
@@ -76,21 +157,22 @@ export function MapCanvasGlassBackdrop({
       if (sw <= 0 || sh <= 0) return;
 
       try {
+        ctx.imageSmoothingEnabled = true;
         ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
       } catch {
         // Ignore transient WebGL context / drawImage failures for a frame.
       }
     };
 
-    const tick = () => {
-      draw();
-      timer = window.setTimeout(tick, FRAME_MS);
-    };
-    tick();
+    draw();
+    schedule();
 
     return () => {
-      if (timer !== 0) clearTimeout(timer);
+      clearTimer();
       ro.disconnect();
+      sourceResizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      window.removeEventListener('resize', onResize);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
