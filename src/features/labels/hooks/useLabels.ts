@@ -11,11 +11,16 @@ function applyCategory(
   visible: boolean,
 ) {
   const { mapping } = cat;
+  const mapWithConfig = map as MapboxMap & {
+    getConfigProperty?: (importId: string, configKey: string) => unknown;
+  };
 
   const applyConfigKeys = (configKey: string | string[]) => {
     const keys = Array.isArray(configKey) ? configKey : [configKey];
     for (const key of keys) {
       try {
+        const current = mapWithConfig.getConfigProperty?.('basemap', key);
+        if (current === visible) continue;
         map.setConfigProperty('basemap', key, visible);
       } catch {
         // Config property may not exist on current style variant
@@ -44,6 +49,8 @@ function applyCategory(
       const value = visible ? 'visible' : 'none';
       for (const layer of style.layers) {
         if (matchesLayerPattern(layer, pattern)) {
+          const current = map.getLayoutProperty(layer.id, 'visibility');
+          if (current === value) continue;
           map.setLayoutProperty(layer.id, 'visibility', value);
         }
       }

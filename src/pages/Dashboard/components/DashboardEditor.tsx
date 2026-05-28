@@ -155,6 +155,7 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
+  const shouldRenderMapBlurMirrors = activeBasemapConfig.visualFamily !== 'mapbox-standard-v3';
 
   const routeSlopeLegendTitle = useMemo(() => {
     const project = activeProjectInitial;
@@ -321,7 +322,7 @@ export function DashboardEditor({
         </aside>
       ) : null}
 
-      {mapLoaded && leftPanelOpen && (
+      {mapLoaded && shouldRenderMapBlurMirrors && leftPanelOpen && (
         <MapBlurMirror
           map={mapInstance}
           top={PANEL_PADDING}
@@ -333,7 +334,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && !isMapFocusMode && !isRightPanelCollapsed && (
+      {mapLoaded && shouldRenderMapBlurMirrors && !isMapFocusMode && !isRightPanelCollapsed && (
         <MapBlurMirror
           map={mapInstance}
           top={PANEL_PADDING}
@@ -343,7 +344,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && layout.centerToolbarVisible && (
+      {mapLoaded && shouldRenderMapBlurMirrors && layout.centerToolbarVisible && (
         <MapBlurMirror
           map={mapInstance}
           top={layout.centerToolbarTop}
@@ -355,7 +356,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && layout.centerPanelVisible && (
+      {mapLoaded && shouldRenderMapBlurMirrors && layout.centerPanelVisible && (
         <MapBlurMirror
           map={mapInstance}
           top={layout.centerPanelTop}
