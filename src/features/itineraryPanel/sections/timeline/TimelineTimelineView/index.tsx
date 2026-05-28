@@ -124,10 +124,7 @@ export function TimelineTimelineView({
   );
 
   const dayWindow = useMemo(() => buildDayWindow(selectedDayDate), [selectedDayDate]);
-  const headerDays = useMemo(() => {
-    if (!reference.hasRealDate) return [selectedDayDate];
-    return dayWindow;
-  }, [dayWindow, reference.hasRealDate, selectedDayDate]);
+  const headerDays = useMemo(() => dayWindow, [dayWindow]);
   const displayDays = useMemo(() => {
     if (!reference.hasRealDate || isCompactLayout) return [selectedDayDate];
     return dayWindow;
