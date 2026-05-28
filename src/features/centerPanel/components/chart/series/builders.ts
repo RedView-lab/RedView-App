@@ -17,10 +17,11 @@ import {
   getRouteBackedSeriesCacheMap,
 } from './cache';
 import {
+  getAdaptiveRouteProfileSampleSpacingM,
   getRoutePointDistances,
   interpolateRoutePointAtDistance,
   MAX_ROUTE_ALTITUDE_POINT_COUNT,
-  normalizeRouteProfile,
+  sampleNormalizedRouteProfile,
 } from './routeProfile';
 import {
   getPredictionTimeline,
@@ -43,8 +44,10 @@ function buildSeriesFromRouteProfile(
   routeSource?: 'gpx' | 'brouter',
   startTime?: string | null,
   pauseSchedule?: PauseAwareSchedule | null,
+  detailZoom = 0,
 ): ChartPoint[] | null {
-  const profile = normalizeRouteProfile(routePoints);
+  const sampleSpacingM = getAdaptiveRouteProfileSampleSpacingM(routePoints, detailZoom);
+  const profile = sampleNormalizedRouteProfile(routePoints, sampleSpacingM);
   if (!profile) return null;
 
   const routeSignature = routePoints ? buildRouteContentSignature(routePoints) : '';
@@ -60,6 +63,7 @@ function buildSeriesFromRouteProfile(
         startTime,
         pauseSchedule?.pauseSignature,
         routeSignature,
+        sampleSpacingM,
       )
     : null;
   if (routeCache && routeCacheKey) {
@@ -115,6 +119,7 @@ export function buildSeriesFromPrediction(
   routeSource?: 'gpx' | 'brouter',
   startTime?: string | null,
   itinerary?: Itinerary,
+  detailZoom = 0,
 ): ChartPoint[] | null {
   const pauseSchedule = xMode === 'distance' || !itinerary
     ? null
@@ -129,6 +134,7 @@ export function buildSeriesFromPrediction(
       routeSource,
       startTime,
       pauseSchedule,
+      detailZoom,
     );
     if (routeSeries) return routeSeries;
   }

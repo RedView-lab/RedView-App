@@ -167,6 +167,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         routeSource,
         startTime,
         itinerary,
+        detailZoom,
       );
       const axis2Points = buildSeriesFromPrediction(
         prediction,
@@ -176,6 +177,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         routeSource,
         startTime,
         itinerary,
+        detailZoom,
       );
       const altitudePoints = buildSeriesFromPrediction(
         prediction,
@@ -185,6 +187,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         routeSource,
         startTime,
         itinerary,
+        detailZoom,
       );
 
       result.push({
@@ -201,7 +204,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       });
     }
     return result;
-  }, [axis1Value, axis2Value, predictions, visualNodes, xMode]);
+  }, [axis1Value, axis2Value, detailZoom, predictions, visualNodes, xMode]);
 
   const visibleChartNodes = useMemo(
     () => preparedChartNodes.map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm })),

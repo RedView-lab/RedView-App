@@ -50,6 +50,7 @@ export function getRouteBackedSeriesCacheKey(
   startTime?: string | null,
   pauseSignature?: string,
   routeSignature?: string,
+  sampleSpacingM?: number,
 ): string {
   return [
     metric,
@@ -58,6 +59,7 @@ export function getRouteBackedSeriesCacheKey(
     xMode === 'heure' ? startTime ?? '' : '',
     pauseSignature ?? '',
     routeSignature ?? '',
+    sampleSpacingM != null ? String(sampleSpacingM) : '',
   ].join('|');
 }
 

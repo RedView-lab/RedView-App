@@ -13,12 +13,32 @@ const normalizedRouteProfileCache = new WeakMap<RouteChartPoint[], {
   signature: string;
   value: NormalizedRoutePoint[] | null;
 }>();
+const sampledRouteProfileCache = new WeakMap<RouteChartPoint[], {
+  signature: string;
+  bySpacingM: Map<number, NormalizedRoutePoint[] | null>;
+}>();
 const routePointDistancesCache = new WeakMap<RouteChartPoint[], {
   signature: string;
   value: number[];
 }>();
 
 export const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
+const ROUTE_PROFILE_TARGET_POINTS_OVERVIEW = 1_200;
+const ROUTE_PROFILE_TARGET_POINTS_DETAIL = 6_000;
+const MIN_ROUTE_PROFILE_SAMPLE_SPACING_M = 10;
+const MAX_ROUTE_PROFILE_SAMPLE_SPACING_M = 120;
+const ROUTE_PROFILE_SAMPLE_SPACING_BUCKET_M = 5;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function quantizeSampleSpacingM(spacingM: number): number {
+  return Math.max(
+    ROUTE_PROFILE_SAMPLE_SPACING_BUCKET_M,
+    Math.round(spacingM / ROUTE_PROFILE_SAMPLE_SPACING_BUCKET_M) * ROUTE_PROFILE_SAMPLE_SPACING_BUCKET_M,
+  );
+}
 
 export function haversineM(a: RouteChartPoint, b: RouteChartPoint): number {
   const toRad = (degrees: number) => (degrees * Math.PI) / 180;
@@ -158,6 +178,116 @@ export function normalizeRouteProfile(
 
   normalizedRouteProfileCache.set(routePoints, { signature, value: normalized });
   return normalized;
+}
+
+export function getAdaptiveRouteProfileSampleSpacingM(
+  routePoints: RouteChartPoint[] | null | undefined,
+  detailZoom = 0,
+): number {
+  const profile = normalizeRouteProfile(routePoints);
+  if (!profile || profile.length < 2) return MIN_ROUTE_PROFILE_SAMPLE_SPACING_M;
+
+  const totalDistanceM = profile[profile.length - 1]!.distanceM - profile[0]!.distanceM;
+  if (!(totalDistanceM > 0)) return MIN_ROUTE_PROFILE_SAMPLE_SPACING_M;
+
+  const normalizedZoom = clamp(detailZoom, 0, 1);
+  const easedZoom = Math.pow(normalizedZoom, 1.15);
+  const targetPointCount = Math.round(
+    ROUTE_PROFILE_TARGET_POINTS_OVERVIEW
+      + (ROUTE_PROFILE_TARGET_POINTS_DETAIL - ROUTE_PROFILE_TARGET_POINTS_OVERVIEW) * easedZoom,
+  );
+
+  const rawSpacingM = totalDistanceM / Math.max(2, targetPointCount);
+  return quantizeSampleSpacingM(
+    clamp(rawSpacingM, MIN_ROUTE_PROFILE_SAMPLE_SPACING_M, MAX_ROUTE_PROFILE_SAMPLE_SPACING_M),
+  );
+}
+
+function interpolateNormalizedRoutePoint(
+  profile: NormalizedRoutePoint[],
+  startIndex: number,
+  targetDistanceM: number,
+): { point: NormalizedRoutePoint; nextIndex: number } {
+  let hi = Math.max(1, startIndex);
+  while (hi < profile.length && profile[hi]!.distanceM < targetDistanceM) {
+    hi += 1;
+  }
+
+  if (hi >= profile.length) {
+    return { point: profile[profile.length - 1]!, nextIndex: profile.length - 1 };
+  }
+
+  const end = profile[hi]!;
+  if (Math.abs(end.distanceM - targetDistanceM) < 1e-6 || hi === 0) {
+    return { point: end, nextIndex: hi };
+  }
+
+  const start = profile[hi - 1]!;
+  const spanM = end.distanceM - start.distanceM;
+  if (!(spanM > 0)) {
+    return { point: end, nextIndex: hi };
+  }
+
+  const t = clamp((targetDistanceM - start.distanceM) / spanM, 0, 1);
+  return {
+    point: {
+      distanceM: targetDistanceM,
+      elevationM: start.elevationM + (end.elevationM - start.elevationM) * t,
+      gradientPct: start.gradientPct + (end.gradientPct - start.gradientPct) * t,
+    },
+    nextIndex: hi,
+  };
+}
+
+export function sampleNormalizedRouteProfile(
+  routePoints: RouteChartPoint[] | null | undefined,
+  sampleSpacingM: number,
+): NormalizedRoutePoint[] | null {
+  const profile = normalizeRouteProfile(routePoints);
+  if (!routePoints || !profile || profile.length < 2) return profile;
+
+  const signature = buildRouteContentSignature(routePoints);
+  const quantizedSpacingM = quantizeSampleSpacingM(
+    clamp(sampleSpacingM, MIN_ROUTE_PROFILE_SAMPLE_SPACING_M, MAX_ROUTE_PROFILE_SAMPLE_SPACING_M),
+  );
+  const cached = sampledRouteProfileCache.get(routePoints);
+  if (cached && cached.signature === signature) {
+    const cachedProfile = cached.bySpacingM.get(quantizedSpacingM);
+    if (cachedProfile !== undefined) return cachedProfile;
+  }
+
+  const startDistanceM = profile[0]!.distanceM;
+  const endDistanceM = profile[profile.length - 1]!.distanceM;
+  if (!(endDistanceM > startDistanceM + quantizedSpacingM)) {
+    return profile;
+  }
+
+  const sampled: NormalizedRoutePoint[] = [profile[0]!];
+  let cursorIndex = 1;
+  let targetDistanceM = startDistanceM + quantizedSpacingM;
+  while (targetDistanceM < endDistanceM - 1e-6) {
+    const { point, nextIndex } = interpolateNormalizedRoutePoint(profile, cursorIndex, targetDistanceM);
+    sampled.push(point);
+    cursorIndex = nextIndex;
+    targetDistanceM += quantizedSpacingM;
+  }
+
+  const lastPoint = profile[profile.length - 1]!;
+  const previous = sampled[sampled.length - 1];
+  if (!previous || Math.abs(previous.distanceM - lastPoint.distanceM) > 1e-6) {
+    sampled.push(lastPoint);
+  }
+
+  if (!cached || cached.signature !== signature) {
+    sampledRouteProfileCache.set(routePoints, {
+      signature,
+      bySpacingM: new Map([[quantizedSpacingM, sampled]]),
+    });
+  } else {
+    cached.bySpacingM.set(quantizedSpacingM, sampled);
+  }
+
+  return sampled;
 }
 
 export function getRoutePointDistances(routePoints: RouteChartPoint[]): number[] {
