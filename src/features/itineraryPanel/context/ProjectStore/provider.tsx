@@ -16,9 +16,8 @@ import {
   normalizeItineraryProject,
 } from '../../lib/project';
 import {
+  applyGpxQuality,
   cleanGpxGlitches,
-  simplifyRouteToMaxPoints,
-  simplifyPointsByQuality,
   normalizeImportedRoutePoints,
   cumulativeRouteLengthsM,
   projectDistanceAlongRouteM,
@@ -36,6 +35,7 @@ import { ProjectStoreContext } from './context';
 import { buildPendingRoutePatchForForbiddenZone } from './forbiddenZonePatch';
 import { useTraceHistory } from './useTraceHistory';
 import type {
+  GpxQualityMode,
   Itinerary,
   ItineraryForbiddenZone,
   ItineraryProject,
@@ -521,16 +521,11 @@ export function ProjectProvider({
         const route = it.gpxRoute;
         if (!route || route.source === 'brouter') return;
 
-        const routeDistanceKm = routeLengthM(route.points) / 1000;
-        const density = Math.max(1, targetPointsPerKm);
-        const nextMaxPoints = Math.max(
-          2,
-          Math.round(Math.max(routeDistanceKm, 0.25) * density),
-        );
-        if (route.points.length <= nextMaxPoints) return;
+        const basePoints = route.originalPoints || route.points;
+        const qualityResult = applyGpxQuality(basePoints, 'expert', targetPointsPerKm);
+        if (qualityResult.points.length >= route.points.length && route.gpxQuality === 'expert') return;
 
-        const simplifiedPoints = simplifyRouteToMaxPoints(route.points, nextMaxPoints);
-        if (simplifiedPoints.length >= route.points.length) return;
+        const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
 
         const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
         const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
@@ -539,6 +534,9 @@ export function ProjectProvider({
         it.gpxRoute = {
           ...route,
           points: simplifiedPoints,
+          originalPoints: basePoints,
+          gpxQuality: 'expert',
+          gpxQualityPointsPerKm: qualityResult.pointsPerKm,
         };
         it.metrics = {
           ...it.metrics,
@@ -563,15 +561,18 @@ export function ProjectProvider({
   );
 
   const changeItineraryGpxQuality = useCallback(
-    (id: string, quality: 'default' | 'balanced' | 'max') => {
+    (
+      id: string,
+      quality: GpxQualityMode,
+      options?: { pointsPerKm?: number | null },
+    ) => {
       updateItinerary(id, (it) => {
         const route = it.gpxRoute;
         if (!route || route.source === 'brouter') return;
 
         const basePoints = route.originalPoints || route.points;
-        const simplifiedPoints = normalizeImportedRoutePoints(
-          simplifyPointsByQuality(basePoints, quality),
-        );
+        const qualityResult = applyGpxQuality(basePoints, quality, options?.pointsPerKm);
+        const simplifiedPoints = normalizeImportedRoutePoints(qualityResult.points);
 
         const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
         const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);
@@ -582,6 +583,7 @@ export function ProjectProvider({
           points: simplifiedPoints,
           originalPoints: basePoints,
           gpxQuality: quality,
+          gpxQualityPointsPerKm: quality === 'expert' ? qualityResult.pointsPerKm : null,
         };
         it.metrics = {
           ...it.metrics,

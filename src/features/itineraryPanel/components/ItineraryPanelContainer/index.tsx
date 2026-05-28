@@ -363,6 +363,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           points: simplifiedPoints,
           originalPoints: storedPoints,
           gpxQuality: quality,
+          gpxQualityPointsPerKm: null,
           source: 'gpx',
         },
         timeline,

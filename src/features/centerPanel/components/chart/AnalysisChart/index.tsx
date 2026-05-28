@@ -17,7 +17,6 @@ import {
   normalizeUnitInterval,
   ratioFor,
   selectPointsForPlotLod,
-  sameOptionalNumber,
 } from './math';
 import { buildPoiMarkerGroups, buildViewportForPoiCluster } from './poi';
 import {
@@ -62,9 +61,13 @@ export const AnalysisChart = memo(function AnalysisChart({
   const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
   const hoverCallbackFrameRef = useRef<number | null>(null);
   const pendingHoverXValueRef = useRef<number | null>(null);
+  const pendingHoverPixelXRef = useRef<number | null>(null);
   const lastEmittedHoverXValueRef = useRef<number | null>(null);
+  const lastEmittedHoverPixelXRef = useRef<number | null>(null);
   const [expandedPoiClusterId, setExpandedPoiClusterId] = useState<string | null>(null);
   const plotSize = usePlotAreaSize(plotAreaRef);
+
+  const hoverEmissionPixelEpsilon = 2;
 
   useEffect(
     () => () => {
@@ -377,17 +380,31 @@ export const AnalysisChart = memo(function AnalysisChart({
     if (!onHoverXValueChange) return;
     if (Number.isFinite(controlledHoverXValue)) return;
     pendingHoverXValueRef.current = hoverXValue;
+    pendingHoverPixelXRef.current = activeHover?.x ?? null;
     if (hoverCallbackFrameRef.current !== null) return;
 
     hoverCallbackFrameRef.current = window.requestAnimationFrame(() => {
       hoverCallbackFrameRef.current = null;
       const nextHoverXValue = pendingHoverXValueRef.current;
+      const nextHoverPixelX = pendingHoverPixelXRef.current;
       pendingHoverXValueRef.current = null;
-      if (sameOptionalNumber(lastEmittedHoverXValueRef.current, nextHoverXValue)) return;
+      pendingHoverPixelXRef.current = null;
+      if (nextHoverXValue == null || nextHoverPixelX == null) {
+        if (lastEmittedHoverXValueRef.current == null) return;
+      } else {
+        const previousHoverPixelX = lastEmittedHoverPixelXRef.current;
+        if (
+          previousHoverPixelX != null &&
+          Math.abs(previousHoverPixelX - nextHoverPixelX) < hoverEmissionPixelEpsilon
+        ) {
+          return;
+        }
+      }
       lastEmittedHoverXValueRef.current = nextHoverXValue;
+      lastEmittedHoverPixelXRef.current = nextHoverPixelX;
       onHoverXValueChange(nextHoverXValue);
     });
-  }, [controlledHoverXValue, hoverXValue, onHoverXValueChange]);
+  }, [activeHover, controlledHoverXValue, hoverXValue, onHoverXValueChange]);
 
   const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!onPlotClick || event.button !== 0) return;

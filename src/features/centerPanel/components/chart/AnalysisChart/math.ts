@@ -4,7 +4,6 @@ import {
   type ChartMetricId,
 } from '../series';
 
-const HOVER_X_EMIT_EPSILON = 1e-4;
 export const MIN_VISIBLE_FRACTION = 0.04;
 const MIN_LOD_LEVEL_POINTS = 256;
 const LOD_TARGET_VISIBLE_POINTS_PER_PX = 3;
@@ -308,14 +307,6 @@ export function clamp(value: number, min: number, max: number): number {
 export function normalizeUnitInterval(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return clamp(value, 0, 1);
-}
-
-export function sameOptionalNumber(
-  left: number | null,
-  right: number | null,
-): boolean {
-  if (left == null || right == null) return left === right;
-  return Math.abs(left - right) <= HOVER_X_EMIT_EPSILON;
 }
 
 export function detailZoomToVisibleFraction(detailZoom: number): number {

@@ -10,7 +10,8 @@ import { useLidarManager } from '@/features/lidar/components/LidarContext';
 import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
 import { loadLidarTileLabels, setLidarTileLabel } from '@/features/lidar';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import type { RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
+import { buildGpxQualityStats } from '@/features/itineraryPanel/lib/routes';
+import type { GpxQualityMode, RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
 
 import { ControlPanel } from './ControlPanel';
 import { buildBasemapList, normalizeBasemapId } from '../lib/basemaps';
@@ -210,6 +211,24 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         : null,
     [activeItinerary],
   );
+  const activeGpxQualityPointsPerKm = useMemo(
+    () =>
+      activeItinerary?.gpxRoute?.source === 'gpx'
+        ? activeItinerary.gpxRoute.gpxQualityPointsPerKm ?? null
+        : null,
+    [activeItinerary],
+  );
+  const activeGpxQualityStats = useMemo(() => {
+    if (activeItinerary?.gpxRoute?.source !== 'gpx') return null;
+    const route = activeItinerary.gpxRoute;
+    const basePoints = route.originalPoints ?? route.points;
+    return buildGpxQualityStats(
+      route.points,
+      basePoints,
+      (route.gpxQuality ?? 'default') as GpxQualityMode,
+      route.gpxQualityPointsPerKm,
+    );
+  }, [activeItinerary]);
   const anyItineraryVisible = useMemo(
     () => projectItineraries.some((itinerary) => itinerary.visible !== false),
     [projectItineraries],
@@ -264,6 +283,8 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         items: routeItems,
         traceWidthPx: routesTraceWidthPx,
         gpxQuality: activeGpxQuality,
+        gpxQualityPointsPerKm: activeGpxQualityPointsPerKm,
+        gpxQualityStats: activeGpxQualityStats,
       },
       labels: overlayState.slices.labels,
       slopes: terrainState.slices.slopes,
@@ -285,6 +306,9 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       routeItems,
       routesTraceWidthPx,
       routesEnabled,
+      activeGpxQuality,
+      activeGpxQualityPointsPerKm,
+      activeGpxQualityStats,
       terrainState.slices.contourLines,
       terrainState.slices.altitude,
       terrainState.slices.slopes,
@@ -417,6 +441,10 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onRouteQualityChange={(quality) => {
         if (!projectStore || !activeItineraryId) return;
         projectStore.changeItineraryGpxQuality(activeItineraryId, quality);
+      }}
+      onRouteQualityExpertApply={(pointsPerKm) => {
+        if (!projectStore || !activeItineraryId) return;
+        projectStore.changeItineraryGpxQuality(activeItineraryId, 'expert', { pointsPerKm });
       }}
       onRouteVisibilityToggle={(id) => {
         if (!projectStore) return;

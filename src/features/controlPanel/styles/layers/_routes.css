@@ -203,3 +203,115 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+.rvc-routes__quality-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.rvc-routes__quality-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+}
+
+.rvc-routes__quality-metric-label,
+.rvc-routes__quality-expert-caption,
+.rvc-routes__quality-expert-subtitle {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.rvc-routes__quality-metric-value,
+.rvc-routes__quality-expert-title,
+.rvc-routes__quality-expert-value {
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.rvc-routes__quality-expert-toggle,
+.rvc-routes__quality-apply {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--rvc-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.rvc-routes__quality-expert-toggle:hover,
+.rvc-routes__quality-apply:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.rvc-routes__quality-apply {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.rvc-routes__quality-expert-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.rvc-routes__quality-expert-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvc-routes__quality-expert-slider {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.rvc-routes__quality-expert-slider-wrap {
+  min-width: 0;
+}
+
+.rvc-routes__quality-expert-slider-wrap .rvc-slider__track {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-routes__quality-expert-slider-wrap .rvc-slider__fill {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.rvc-routes__quality-expert-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  color: var(--rvc-text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.rvc-routes__quality-expert-actions {
+  display: flex;
+  justify-content: flex-end;
+}

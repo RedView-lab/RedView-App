@@ -2025,6 +2025,42 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Smart simplification"
   },
   {
+    "fr": "Paramètre GPX",
+    "en": "GPX parameter"
+  },
+  {
+    "fr": "Points source",
+    "en": "Source points"
+  },
+  {
+    "fr": "Points rendus",
+    "en": "Rendered points"
+  },
+  {
+    "fr": "Cible expert",
+    "en": "Expert target"
+  },
+  {
+    "fr": "Ouvrir expert GPX",
+    "en": "Open GPX expert"
+  },
+  {
+    "fr": "Fermer expert GPX",
+    "en": "Close GPX expert"
+  },
+  {
+    "fr": "Mode Expert GPX",
+    "en": "GPX expert mode"
+  },
+  {
+    "fr": "Préserver le profil tout en réduisant le nombre de points affichés.",
+    "en": "Preserve route shape while reducing the number of rendered points."
+  },
+  {
+    "fr": "Appliquer expert GPX",
+    "en": "Apply GPX expert"
+  },
+  {
     "fr": "Detaillé courant: {{value}} pts/km",
     "en": "Current detail: {{value}} pts/km"
   },

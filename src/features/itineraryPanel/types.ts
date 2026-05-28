@@ -10,6 +10,9 @@ import type { ControlPanelPersistedState } from '../controlPanel/lib/persistedSt
 import type { PredictionResult } from '../fitPredictor/types';
 import type { PoiFeature } from '../poi/types';
 
+export type GpxQualityPreset = 'default' | 'balanced' | 'max';
+export type GpxQualityMode = GpxQualityPreset | 'expert';
+
 /**
  * Persisted state of the bottom analysis chart (centerPanel). Stored on
  * the project so axis selections, filter chips and the X-axis mode
@@ -396,7 +399,8 @@ export interface Itinerary {
       elevationM?: number | null;
       gradientPct?: number | null;
     }[];
-    gpxQuality?: 'default' | 'balanced' | 'max';
+    gpxQuality?: GpxQualityMode;
+    gpxQualityPointsPerKm?: number | null;
   };
   /**
    * Expert Mode profile state. When `enabled`, every parameter the user
