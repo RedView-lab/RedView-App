@@ -122,15 +122,13 @@ function interpolateNumber(a: number, b: number, t: number): number {
   return a + ((b - a) * t);
 }
 
-function interpolateCoordinate(
-  start: RouteLayerPoint,
-  end: RouteLayerPoint,
-  t: number,
-): [number, number] {
-  return [
-    interpolateNumber(start.lon, end.lon, t),
-    interpolateNumber(start.lat, end.lat, t),
-  ];
+function interpolateOptionalNumber(a: number | null | undefined, b: number | null | undefined, t: number): number | null {
+  if (Number.isFinite(a) && Number.isFinite(b)) {
+    return interpolateNumber(a as number, b as number, t);
+  }
+  if (Number.isFinite(a)) return a as number;
+  if (Number.isFinite(b)) return b as number;
+  return null;
 }
 
 function buildDefaultRouteGeoJson(
@@ -174,6 +172,67 @@ function resolveSlopeDeg(start: RouteLayerPoint, end: RouteLayerPoint, distanceM
   return clampSlopeDeg((Math.atan(avgGradientPct / 100) * 180) / Math.PI);
 }
 
+interface RouteSamplePoint {
+  lon: number;
+  lat: number;
+  distanceM: number;
+  elevationM: number | null;
+  gradientPct: number | null;
+}
+
+function buildRouteSlopeSamples(points: readonly RouteLayerPoint[]): RouteSamplePoint[] {
+  if (points.length === 0) return [];
+
+  const samples: RouteSamplePoint[] = [];
+  let cumulativeDistanceM = 0;
+
+  const pushSample = (sample: RouteSamplePoint) => {
+    const last = samples[samples.length - 1];
+    if (
+      last
+      && Math.abs(last.distanceM - sample.distanceM) < 1e-6
+      && last.lon === sample.lon
+      && last.lat === sample.lat
+    ) {
+      samples[samples.length - 1] = sample;
+      return;
+    }
+    samples.push(sample);
+  };
+
+  pushSample({
+    lon: points[0].lon,
+    lat: points[0].lat,
+    distanceM: 0,
+    elevationM: Number.isFinite(points[0].elevationM) ? (points[0].elevationM as number) : null,
+    gradientPct: Number.isFinite(points[0].gradientPct) ? (points[0].gradientPct as number) : null,
+  });
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = points[index - 1];
+    const end = points[index];
+    const segmentDistanceM = resolveSegmentDistanceM(start, end);
+    if (!(segmentDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) continue;
+
+    const subdivisionCount = Math.max(1, Math.ceil(segmentDistanceM / ROUTE_SLOPE_TARGET_SEGMENT_M));
+    for (let partIndex = 1; partIndex <= subdivisionCount; partIndex += 1) {
+      const t = partIndex / subdivisionCount;
+      const targetDistanceM = cumulativeDistanceM + (segmentDistanceM * t);
+      pushSample({
+        lon: interpolateNumber(start.lon, end.lon, t),
+        lat: interpolateNumber(start.lat, end.lat, t),
+        distanceM: targetDistanceM,
+        elevationM: interpolateOptionalNumber(start.elevationM, end.elevationM, t),
+        gradientPct: interpolateOptionalNumber(start.gradientPct, end.gradientPct, t),
+      });
+    }
+
+    cumulativeDistanceM += segmentDistanceM;
+  }
+
+  return samples;
+}
+
 function pickSlopeBand(
   bands: ReadonlyArray<RouteSlopeBand>,
   slopeDeg: number,
@@ -195,62 +254,57 @@ function buildSlopeRouteGeoJson(
   fallbackColor: string,
 ): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
   const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+  const samples = buildRouteSlopeSamples(points);
 
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
-    const segmentDistanceM = resolveSegmentDistanceM(start, end);
+  for (let index = 1; index < samples.length; index += 1) {
+    const start = samples[index - 1];
+    const end = samples[index];
+    const segmentDistanceM = end.distanceM - start.distanceM;
     if (!(segmentDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) continue;
 
     const segmentSlopeDeg = resolveSlopeDeg(start, end, segmentDistanceM);
     const segmentSlopePct = Math.tan((segmentSlopeDeg * Math.PI) / 180) * 100;
     const band = pickSlopeBand(bands, segmentSlopeDeg);
     const segmentColor = band?.color ?? fallbackColor;
-    const subdivisionCount = Math.max(1, Math.ceil(segmentDistanceM / ROUTE_SLOPE_TARGET_SEGMENT_M));
+    const coordinates = [
+      [start.lon, start.lat],
+      [end.lon, end.lat],
+    ] as [number, number][];
 
-    for (let partIndex = 0; partIndex < subdivisionCount; partIndex += 1) {
-      const t0 = partIndex / subdivisionCount;
-      const t1 = (partIndex + 1) / subdivisionCount;
-      const coordinates = [
-        interpolateCoordinate(start, end, t0),
-        interpolateCoordinate(start, end, t1),
-      ] as [number, number][];
-
-      if (
-        coordinates[0][0] === coordinates[1][0]
-        && coordinates[0][1] === coordinates[1][1]
-      ) {
-        continue;
-      }
-
-      const lastFeature = features[features.length - 1];
-      const lastCoordinates = lastFeature?.geometry.coordinates;
-      const lastEndCoordinate = lastCoordinates?.[lastCoordinates.length - 1];
-      if (
-        lastFeature
-        && lastFeature.properties?.bandId === (band?.id ?? 'fallback')
-        && lastEndCoordinate
-        && lastEndCoordinate[0] === coordinates[0][0]
-        && lastEndCoordinate[1] === coordinates[0][1]
-      ) {
-        lastCoordinates.push(coordinates[1]);
-        continue;
-      }
-
-      features.push({
-        type: 'Feature',
-        properties: {
-          color: segmentColor,
-          bandId: band?.id ?? 'fallback',
-          slopeDeg: Math.round(segmentSlopeDeg * 10) / 10,
-          slopePct: Math.round(segmentSlopePct),
-        },
-        geometry: {
-          type: 'LineString',
-          coordinates,
-        },
-      });
+    if (
+      coordinates[0][0] === coordinates[1][0]
+      && coordinates[0][1] === coordinates[1][1]
+    ) {
+      continue;
     }
+
+    const lastFeature = features[features.length - 1];
+    const lastCoordinates = lastFeature?.geometry.coordinates;
+    const lastEndCoordinate = lastCoordinates?.[lastCoordinates.length - 1];
+    if (
+      lastFeature
+      && lastFeature.properties?.bandId === (band?.id ?? 'fallback')
+      && lastEndCoordinate
+      && lastEndCoordinate[0] === coordinates[0][0]
+      && lastEndCoordinate[1] === coordinates[0][1]
+    ) {
+      lastCoordinates.push(coordinates[1]);
+      continue;
+    }
+
+    features.push({
+      type: 'Feature',
+      properties: {
+        color: segmentColor,
+        bandId: band?.id ?? 'fallback',
+        slopeDeg: Math.round(segmentSlopeDeg * 10) / 10,
+        slopePct: Math.round(segmentSlopePct),
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates,
+      },
+    });
   }
 
   if (features.length === 0) return buildDefaultRouteGeoJson(points);
