@@ -1,5 +1,6 @@
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
+import { ColorPalettePicker } from '@/features/controlPanel/components/ColorPalettePicker';
 import { IconCheck, IconChevronDown } from '../CenterPanelIcons';
 
 export interface AxisOption {
@@ -10,29 +11,44 @@ export interface AxisOption {
 
 interface AxisDropdownProps {
   axisLabel: string;
+  axisColor: string;
   value: string;
   isOpen: boolean;
   options: AxisOption[];
   onToggle: () => void;
+  onColorChange: (color: string) => void;
   onSelect: (value: string) => void;
 }
 
 export function AxisDropdown({
   axisLabel,
+  axisColor,
   value,
   isOpen,
   options,
   onToggle,
+  onColorChange,
   onSelect,
 }: AxisDropdownProps) {
   const { t } = useAppI18n();
+  const translatedAxisLabel = t(axisLabel);
 
   return (
     <div className="rvc-center-analysis__axis">
-      <div className="rvc-center-analysis__axis-meta" aria-hidden="true">
-        <div className="rvc-center-analysis__axis-label">{t(axisLabel)}</div>
-        <span className="rvc-center-analysis__axis-line" />
-      </div>
+      <ColorPalettePicker
+        color={axisColor}
+        onChange={onColorChange}
+        className="rvc-center-analysis__axis-picker"
+        ariaLabel={t('Choisir la couleur de {{name}}', { name: translatedAxisLabel })}
+      >
+        <span className="rvc-center-analysis__axis-meta" aria-hidden="true">
+          <span className="rvc-center-analysis__axis-label">{translatedAxisLabel}</span>
+          <span
+            className="rvc-center-analysis__axis-line"
+            style={{ backgroundColor: axisColor }}
+          />
+        </span>
+      </ColorPalettePicker>
 
       <div className="rvc-center-analysis__axis-wrap">
         <button
@@ -48,7 +64,7 @@ export function AxisDropdown({
         </button>
 
         {isOpen ? (
-          <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={t(axisLabel)}>
+          <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={translatedAxisLabel}>
             <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
             {options.map((option) => {
               const selected = value === option.value;

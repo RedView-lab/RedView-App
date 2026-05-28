@@ -76,6 +76,10 @@ export const VIEWPORT_COMMIT_DEBOUNCE_MS = 140;
 export const CHART_CLICK_CAMERA_DURATION_MS = 950;
 export const CHART_CLICK_FOCUS_ZOOM = 15.5;
 export const CHART_CLICK_FOCUS_PITCH = 68;
+export const DEFAULT_ANALYSIS_AXIS_COLORS = {
+  axis1: '#D92D20',
+  axis2: '#155EEF',
+} as const;
 
 export function lightenColor(hex: string, amount: number): string {
   const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -132,6 +136,8 @@ export function normalizeAnalysisState(
     xMode: state?.xMode ?? fallback.xMode,
     axis1: migrateAxisMetric(state?.axis1 ?? fallback.axis1),
     axis2: migrateAxisMetric(state?.axis2 ?? fallback.axis2),
+    axis1Color: normalizeAnalysisColor(state?.axis1Color),
+    axis2Color: normalizeAnalysisColor(state?.axis2Color),
     filters,
     detailZoom: normalizeUnitInterval(state?.detailZoom, fallback.detailZoom),
     detailOffset: normalizeUnitInterval(state?.detailOffset, fallback.detailOffset),
@@ -180,6 +186,14 @@ export function selectInteractiveItineraryForChartX(
 
 export function sameViewportValue(left: number, right: number): boolean {
   return Math.abs(left - right) <= 1e-4;
+}
+
+function normalizeAnalysisColor(value: string | null | undefined): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  const match = /^#?([0-9a-f]{6})$/i.exec(trimmed);
+  if (!match) return undefined;
+  return `#${match[1].toUpperCase()}`;
 }
 
 function migrateAxisMetric(value: string): AxisMetricId {

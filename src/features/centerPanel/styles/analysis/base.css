@@ -147,6 +147,27 @@
   flex: 0 0 auto;
 }
 
+.rvc-center-analysis__axis-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 2px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+
+.rvc-center-analysis__axis-picker:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rvc-center-analysis__axis-picker:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.24);
+  outline-offset: 2px;
+}
+
 .rvc-center-analysis__axis-label {
   width: 32px;
   text-align: right;

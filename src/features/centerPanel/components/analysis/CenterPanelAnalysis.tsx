@@ -12,6 +12,7 @@ import {
   DETAIL_ZOOM_STEP,
   detailOffsetForCenter,
   detailZoomToVisibleFraction,
+  DEFAULT_ANALYSIS_AXIS_COLORS,
   filterDefs,
   findSplitIndexForChartX,
   type FilterKey,
@@ -141,6 +142,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       null
     );
   }, [activeItineraryId, itineraries]);
+  const axis1Color = analysisState.axis1Color ?? activeItinerary?.color ?? DEFAULT_ANALYSIS_AXIS_COLORS.axis1;
+  const axis2Color = analysisState.axis2Color
+    ?? (activeItinerary?.color ? lightenColor(activeItinerary.color, 0.4) : DEFAULT_ANALYSIS_AXIS_COLORS.axis2);
 
   const visualNodes = useMemo(
     () => buildItineraryVisualNodes(itineraries),
@@ -223,6 +227,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         xMode: current.xMode,
         axis1: current.axis1,
         axis2: current.axis2,
+        axis1Color: current.axis1Color,
+        axis2Color: current.axis2Color,
         filters: { ...current.filters },
         detailZoom: current.detailZoom,
         detailOffset: current.detailOffset,
@@ -240,6 +246,16 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const setAxis2Value = (value: AxisMetricId) => {
     updateAnalysis((draft) => {
       draft.axis2 = value;
+    });
+  };
+  const setAxis1Color = (value: string) => {
+    updateAnalysis((draft) => {
+      draft.axis1Color = value;
+    });
+  };
+  const setAxis2Color = (value: string) => {
+    updateAnalysis((draft) => {
+      draft.axis2Color = value;
     });
   };
   const setXMode = (value: AxisMode) => {
@@ -341,7 +357,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           itineraryId: itinerary.id,
           itineraryName: itinerary.name,
           metricId: axis1Value,
-          color: itinerary.color,
+          color: analysisState.axis1Color ?? itinerary.color,
           axis: 1,
           unit: '',
           points: axis1ShiftedPoints,
@@ -354,7 +370,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           itineraryId: itinerary.id,
           itineraryName: itinerary.name,
           metricId: axis2Value,
-          color: lightenColor(itinerary.color, 0.4),
+          color: analysisState.axis2Color ?? lightenColor(itinerary.color, 0.4),
           axis: 2,
           unit: '',
           points: axis2ShiftedPoints,
@@ -362,7 +378,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       }
     }
     return result;
-  }, [axis1Value, axis2Value, preparedChartNodes]);
+  }, [analysisState.axis1Color, analysisState.axis2Color, axis1Value, axis2Value, preparedChartNodes]);
 
   // Show the altitude backdrop whenever the user enables the
   // "Profil d'altitude"
@@ -584,19 +600,23 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
         <AxisDropdown
           axisLabel="Axe 1"
+          axisColor={axis1Color}
           value={axis1Value}
           isOpen={openAxis === 'axis1'}
           options={axisOptions}
           onToggle={() => toggleAxis('axis1')}
+          onColorChange={setAxis1Color}
           onSelect={selectAxis1}
         />
 
         <AxisDropdown
           axisLabel="Axe 2"
+          axisColor={axis2Color}
           value={axis2Value}
           isOpen={openAxis === 'axis2'}
           options={axisOptions}
           onToggle={() => toggleAxis('axis2')}
+          onColorChange={setAxis2Color}
           onSelect={selectAxis2}
         />
 
