@@ -99,7 +99,13 @@ export interface RouteLayerOptions {
   slopeBands?: ReadonlyArray<RouteSlopeBand>;
 }
 
-const ROUTE_SLOPE_TARGET_SEGMENT_M = 15;
+interface RouteLayerRenderSpec {
+  data: GeoJSON.Feature<GeoJSON.LineString>;
+  lineColorPaint: string | unknown[];
+  lineGradientPaint: unknown[];
+}
+
+const ROUTE_SLOPE_TARGET_SEGMENT_M = 24;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 const ROUTE_TERRAIN_PROFILE_MIN_ZOOM = 14;
 const ROUTE_TERRAIN_PROFILE_MIN_COVERAGE = 0.98;
@@ -113,7 +119,7 @@ function traceGlowWidthPx(traceWidthPx: number): number {
 }
 
 function traceBorderWidthPx(traceWidthPx: number): number {
-  return Math.max(1, Math.min(2, traceWidthPx * 0.25));
+  return Math.max(0, Math.min(0, traceWidthPx * 0.25));
 }
 
 function clampSlopeDeg(value: number): number {
@@ -307,15 +313,35 @@ function pickSlopeBand(
   return bands[bands.length - 1] ?? null;
 }
 
-function buildSlopeRouteGeoJson(
-  map: MapboxMap,
-  points: readonly RouteLayerPoint[],
+function buildUniformRouteGradientPaint(color: string): unknown[] {
+  return ['interpolate', ['linear'], ['line-progress'], 0, color, 1, color];
+}
+
+function buildSlopeRouteGradientPaint(
+  samples: readonly RouteSamplePoint[],
   bands: ReadonlyArray<RouteSlopeBand>,
   fallbackColor: string,
-): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
-  const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-  const refinedPoints = buildTerrainRefinedRoutePoints(map, points);
-  const samples = buildRouteSlopeSamples(refinedPoints);
+): unknown[] {
+  if (samples.length < 2) return buildUniformRouteGradientPaint(fallbackColor);
+
+  const totalDistanceM = samples[samples.length - 1]?.distanceM ?? 0;
+  if (!(totalDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) {
+    return buildUniformRouteGradientPaint(fallbackColor);
+  }
+
+  let currentColor = fallbackColor;
+  for (let index = 1; index < samples.length; index += 1) {
+    const start = samples[index - 1];
+    const end = samples[index];
+    const segmentDistanceM = end.distanceM - start.distanceM;
+    if (!(segmentDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) continue;
+    const segmentSlopeDeg = resolveSlopeDeg(start, end, segmentDistanceM);
+    currentColor = pickSlopeBand(bands, segmentSlopeDeg)?.color ?? fallbackColor;
+    break;
+  }
+
+  const expr: unknown[] = ['interpolate', ['linear'], ['line-progress'], 0, currentColor];
+  let lastColor = currentColor;
 
   for (let index = 1; index < samples.length; index += 1) {
     const start = samples[index - 1];
@@ -324,54 +350,33 @@ function buildSlopeRouteGeoJson(
     if (!(segmentDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) continue;
 
     const segmentSlopeDeg = resolveSlopeDeg(start, end, segmentDistanceM);
-    const segmentSlopePct = Math.tan((segmentSlopeDeg * Math.PI) / 180) * 100;
-    const band = pickSlopeBand(bands, segmentSlopeDeg);
-    const segmentColor = band?.color ?? fallbackColor;
-    const coordinates = [
-      [start.lon, start.lat],
-      [end.lon, end.lat],
-    ] as [number, number][];
+    const segmentColor = pickSlopeBand(bands, segmentSlopeDeg)?.color ?? fallbackColor;
+    if (segmentColor === lastColor) continue;
 
-    if (
-      coordinates[0][0] === coordinates[1][0]
-      && coordinates[0][1] === coordinates[1][1]
-    ) {
-      continue;
-    }
+    const startProgress = Math.max(0, Math.min(1, start.distanceM / totalDistanceM));
+    const endProgress = Math.max(0, Math.min(1, end.distanceM / totalDistanceM));
+    if (!(endProgress > startProgress)) continue;
 
-    const lastFeature = features[features.length - 1];
-    const lastCoordinates = lastFeature?.geometry.coordinates;
-    const lastEndCoordinate = lastCoordinates?.[lastCoordinates.length - 1];
-    if (
-      lastFeature
-      && lastFeature.properties?.bandId === (band?.id ?? 'fallback')
-      && lastEndCoordinate
-      && lastEndCoordinate[0] === coordinates[0][0]
-      && lastEndCoordinate[1] === coordinates[0][1]
-    ) {
-      lastCoordinates.push(coordinates[1]);
-      continue;
-    }
-
-    features.push({
-      type: 'Feature',
-      properties: {
-        color: segmentColor,
-        bandId: band?.id ?? 'fallback',
-        slopeDeg: Math.round(segmentSlopeDeg * 10) / 10,
-        slopePct: Math.round(segmentSlopePct),
-      },
-      geometry: {
-        type: 'LineString',
-        coordinates,
-      },
-    });
+    expr.push(startProgress, lastColor, endProgress, segmentColor);
+    lastColor = segmentColor;
   }
 
-  if (features.length === 0) return buildDefaultRouteGeoJson(points);
+  expr.push(1, lastColor);
+  return expr;
+}
+
+function buildSlopeRouteRenderSpec(
+  map: MapboxMap,
+  points: readonly RouteLayerPoint[],
+  bands: ReadonlyArray<RouteSlopeBand>,
+  fallbackColor: string,
+): RouteLayerRenderSpec {
+  const refinedPoints = buildTerrainRefinedRoutePoints(map, points);
+  const samples = buildRouteSlopeSamples(refinedPoints);
   return {
-    type: 'FeatureCollection',
-    features,
+    data: buildDefaultRouteGeoJson(refinedPoints.length >= 2 ? refinedPoints : points),
+    lineColorPaint: fallbackColor,
+    lineGradientPaint: buildSlopeRouteGradientPaint(samples, bands, fallbackColor),
   };
 }
 
@@ -379,17 +384,18 @@ function buildRouteGeoJson(
   map: MapboxMap,
   points: readonly RouteLayerPoint[],
   opts: RouteLayerOptions,
-): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
+): RouteLayerRenderSpec {
   if (opts.renderMode === 'slope') {
-    return buildSlopeRouteGeoJson(map, points, opts.slopeBands ?? [], opts.color);
+    return buildSlopeRouteRenderSpec(map, points, opts.slopeBands ?? [], opts.color);
   }
-  return buildDefaultRouteGeoJson(points);
+  return {
+    data: buildDefaultRouteGeoJson(points),
+    lineColorPaint: opts.color,
+    lineGradientPaint: buildUniformRouteGradientPaint(opts.color),
+  };
 }
 
 function buildRouteLineColorPaint(opts: RouteLayerOptions): string | unknown[] {
-  if (opts.renderMode === 'slope') {
-    return ['coalesce', ['get', 'color'], opts.color];
-  }
   return opts.color;
 }
 
@@ -476,14 +482,14 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const glowWidthPx = traceGlowWidthPx(traceWidthPx);
   const borderWidthPx = traceBorderWidthPx(traceWidthPx);
-  const routeData = buildRouteGeoJson(map, points, opts);
+  const renderSpec = buildRouteGeoJson(map, points, opts);
   const lineColorPaint = buildRouteLineColorPaint(opts);
 
   const existing = map.getSource(srcId) as GeoJSONSource | undefined;
 
   if (existing) {
     try {
-      existing.setData(routeData);
+      existing.setData(renderSpec.data);
     } catch {
       /* noop */
     }
@@ -492,7 +498,7 @@ export function upsertRouteLayer(
     map.addSource(srcId, {
       type: 'geojson',
       lineMetrics: true,
-      data: routeData,
+      data: renderSpec.data,
     });
     map.addLayer({
       id: glowId,
@@ -509,7 +515,7 @@ export function upsertRouteLayer(
       paint: {
         'line-color': lineColorPaint as never,
         'line-width': glowWidthPx,
-        'line-opacity': 0.4 * opacity,
+        'line-opacity': 0,
         'line-blur': 4,
         'line-emissive-strength': 1,
       },
@@ -528,11 +534,12 @@ export function upsertRouteLayer(
       },
       paint: {
         'line-color': lineColorPaint as never,
+        'line-gradient': renderSpec.lineGradientPaint as never,
         'line-width': traceWidthPx,
         'line-opacity': opacity,
         'line-emissive-strength': 1,
         'line-border-width': borderWidthPx,
-        'line-border-color': 'rgba(255,255,255,0.6)',
+        'line-border-color': 'rgba(255,255,255,0)',
         'line-occlusion-opacity': 0,
       },
     });
@@ -544,11 +551,12 @@ export function upsertRouteLayer(
     if (map.getLayer(glowId)) {
       map.setPaintProperty(glowId, 'line-color', lineColorPaint as never);
       setPaintPropertyIfChanged(map, glowId, 'line-width', glowWidthPx);
-      setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0.4 * opacity);
+      setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0);
       setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
     }
     if (map.getLayer(lineId)) {
       map.setPaintProperty(lineId, 'line-color', lineColorPaint as never);
+      map.setPaintProperty(lineId, 'line-gradient', renderSpec.lineGradientPaint as never);
       setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', borderWidthPx);
