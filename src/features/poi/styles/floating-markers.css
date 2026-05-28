@@ -43,16 +43,13 @@
   padding: 0;
   overflow: hidden;
   border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.04) 100%),
-    linear-gradient(180deg, rgba(16, 18, 21, 0.92) 0%, rgba(8, 9, 12, 0.9) 100%),
-    rgba(6, 7, 10, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 15, 15, 0.74);
   box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(28px) saturate(1.22);
-  -webkit-backdrop-filter: blur(28px) saturate(1.22);
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(24px) saturate(1.08);
+  -webkit-backdrop-filter: blur(24px) saturate(1.08);
 }
 
 .mapboxgl-popup.rv-poi-popup .mapboxgl-popup-tip {
@@ -66,8 +63,8 @@
 
 .rv-poi-popup__panel {
   --rv-poi-popup-border: rgba(255, 255, 255, 0.08);
-  --rv-poi-popup-surface: rgba(255, 255, 255, 0.04);
-  --rv-poi-popup-surface-hover: rgba(255, 255, 255, 0.08);
+  --rv-poi-popup-surface: rgba(255, 255, 255, 0.08);
+  --rv-poi-popup-surface-hover: rgba(255, 255, 255, 0.12);
   --rv-poi-popup-text: rgba(255, 255, 255, 0.98);
   --rv-poi-popup-text-muted: rgba(255, 255, 255, 0.64);
 
@@ -111,7 +108,7 @@
 
 .rv-poi-popup__icon-btn:hover,
 .rv-poi-popup__icon-btn:focus-visible {
-  background: var(--rv-poi-popup-surface);
+  background: var(--rv-poi-popup-surface-hover);
   opacity: 1;
   outline: none;
 }
@@ -179,13 +176,12 @@
   min-width: 0;
   height: 30px;
   padding: 4px 4px 4px 5px;
-  border: 1px solid var(--rv-poi-popup-border);
-  border-radius: 6px;
+  border: 0;
+  border-radius: 5px;
   background: var(--rv-poi-popup-surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
   color: var(--rv-poi-popup-text);
   cursor: pointer;
-  transition: background-color 140ms ease, border-color 140ms ease;
+  transition: background-color 140ms ease;
 }
 
 .rv-poi-popup__select--duration {
@@ -195,7 +191,6 @@
 .rv-poi-popup__select:hover,
 .rv-poi-popup__select:focus-visible {
   background: var(--rv-poi-popup-surface-hover);
-  border-color: rgba(255, 255, 255, 0.1);
   outline: none;
 }
 
@@ -226,7 +221,7 @@
   width: 20px;
   height: 20px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
   opacity: 1;
   flex: 0 0 auto;
 }
@@ -271,7 +266,7 @@
 .rv-poi-popup__toggle-wrap--button:focus-visible,
 .rv-poi-popup__toggle-row--button:hover,
 .rv-poi-popup__toggle-row--button:focus-visible {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--rv-poi-popup-surface);
   outline: none;
 }
 
@@ -282,10 +277,14 @@
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(213, 215, 218, 1);
+  background: transparent;
   flex: 0 0 auto;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rv-poi-popup__checkbox.is-active {
+  border-color: #890000;
+  background: #890000;
 }
 
 .rv-poi-popup__checkbox-icon {
@@ -318,7 +317,7 @@
 
 .rv-poi-popup__action-row:hover,
 .rv-poi-popup__action-row:focus-visible {
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--rv-poi-popup-surface);
   outline: none;
 }
 
@@ -352,7 +351,7 @@
   width: 20px;
   height: 20px;
   border-radius: 90px 90px 90px 8px;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(15, 15, 15, 0.74);
   border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
   transform: rotate(-45deg);

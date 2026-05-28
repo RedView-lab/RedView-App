@@ -2,7 +2,7 @@ import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor'
 import type { AxisMode, ChartMetricId, ChartPoint } from './seriesCommon';
 
 const INTERVAL_AVERAGE_SPAN_M = 500;
-const MAX_CHART_POINT_COUNT = 2_048;
+const MAX_CHART_POINT_COUNT = 500;
 
 interface DistanceMetricSample {
   distanceM: number;
@@ -34,6 +34,8 @@ export function fitChartPointBudget(
   maxPoints = MAX_CHART_POINT_COUNT,
 ): ChartPoint[] {
   if (points.length <= maxPoints) return points;
+
+  if (maxPoints <= 1) return [points[0]!];
 
   const first = points[0];
   const last = points[points.length - 1];
@@ -78,7 +80,25 @@ export function fitChartPointBudget(
     for (const point of ordered) pushPoint(point);
   }
 
-  return reduced.length >= 2 ? reduced : [first, last];
+  const candidate = reduced.length >= 2 ? reduced : [first, last];
+  if (candidate.length <= maxPoints) return candidate;
+
+  const capped: ChartPoint[] = [candidate[0]!];
+  const lastIndex = candidate.length - 1;
+  let previousIndex = 0;
+
+  for (let slot = 1; slot < maxPoints - 1; slot += 1) {
+    const remainingSlots = (maxPoints - 1) - slot;
+    const minIndex = previousIndex + 1;
+    const maxIndex = lastIndex - remainingSlots;
+    const rawIndex = Math.round((slot * lastIndex) / (maxPoints - 1));
+    const nextIndex = Math.max(minIndex, Math.min(maxIndex, rawIndex));
+    capped.push(candidate[nextIndex]!);
+    previousIndex = nextIndex;
+  }
+
+  capped.push(candidate[lastIndex]!);
+  return capped;
 }
 
 export function buildFixedDistanceAverageSeries(

@@ -20,7 +20,6 @@ import {
   getAdaptiveRouteProfileSampleSpacingM,
   getRoutePointDistances,
   interpolateRoutePointAtDistance,
-  MAX_ROUTE_ALTITUDE_POINT_COUNT,
   sampleNormalizedRouteProfile,
 } from './routeProfile';
 import {
@@ -97,12 +96,7 @@ function buildSeriesFromRouteProfile(
     : insertPauseSegments(points, pauseSchedule?.pauseSpans ?? [], xMode, startTime, () => null);
 
   const result = pointsWithPauses.length > 1
-    ? fitChartPointBudget(
-        pointsWithPauses,
-        metric === 'Altitude' && routeSource === 'gpx'
-          ? MAX_ROUTE_ALTITUDE_POINT_COUNT
-          : undefined,
-      )
+    ? fitChartPointBudget(pointsWithPauses)
     : null;
 
   if (routeCache && routeCacheKey) {

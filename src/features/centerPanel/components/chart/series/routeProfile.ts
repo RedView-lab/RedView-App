@@ -22,7 +22,7 @@ const routePointDistancesCache = new WeakMap<RouteChartPoint[], {
   value: number[];
 }>();
 
-export const MAX_ROUTE_ALTITUDE_POINT_COUNT = 12_000;
+const MAX_ROUTE_PROFILE_DISPLAY_POINT_COUNT = 500;
 const ROUTE_PROFILE_TARGET_POINTS_OVERVIEW = 1_200;
 const ROUTE_PROFILE_TARGET_POINTS_DETAIL = 6_000;
 const MIN_ROUTE_PROFILE_SAMPLE_SPACING_M = 10;
@@ -196,8 +196,9 @@ export function getAdaptiveRouteProfileSampleSpacingM(
     ROUTE_PROFILE_TARGET_POINTS_OVERVIEW
       + (ROUTE_PROFILE_TARGET_POINTS_DETAIL - ROUTE_PROFILE_TARGET_POINTS_OVERVIEW) * easedZoom,
   );
+  const cappedTargetPointCount = Math.min(MAX_ROUTE_PROFILE_DISPLAY_POINT_COUNT, targetPointCount);
 
-  const rawSpacingM = totalDistanceM / Math.max(2, targetPointCount);
+  const rawSpacingM = totalDistanceM / Math.max(2, cappedTargetPointCount);
   return quantizeSampleSpacingM(
     clamp(rawSpacingM, MIN_ROUTE_PROFILE_SAMPLE_SPACING_M, MAX_ROUTE_PROFILE_SAMPLE_SPACING_M),
   );
