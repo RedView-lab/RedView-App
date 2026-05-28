@@ -77,6 +77,7 @@ export function TimelineTimelineView({
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [viewportHeightPx, setViewportHeightPx] = useState(0);
 
   useEffect(() => {
     setSelectedDayKey(defaultAnchorDayKey);
@@ -90,6 +91,29 @@ export function TimelineTimelineView({
       const entry = entries[0];
       if (!entry) return;
       setIsCompactLayout(entry.contentRect.width < 860);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+
+    const updateViewportHeight = (nextHeight: number) => {
+      setViewportHeightPx((currentHeight) => {
+        const roundedNextHeight = Math.round(nextHeight);
+        return currentHeight === roundedNextHeight ? currentHeight : roundedNextHeight;
+      });
+    };
+
+    updateViewportHeight(node.getBoundingClientRect().height);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      updateViewportHeight(entry.contentRect.height);
     });
 
     observer.observe(node);
@@ -197,10 +221,18 @@ export function TimelineTimelineView({
     return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, roundedEnd);
   }, [reference.hasRealDate, startMinutes, timelineSpansMultipleDays, visibleMinuteBounds]);
 
-  const baseHourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
-  const hourRowHeightPx = baseHourRowHeightPx;
+  const visibleDurationMinutes = Math.max(1, endMinutes - startMinutes);
+  const fallbackCanvasBaseHeight = visibleDurationMinutes * (BASE_HOUR_ROW_HEIGHT_PX / 60);
+  const fittedCanvasBaseHeight = viewportHeightPx > 0
+    ? Math.max(
+        0,
+        viewportHeightPx - TIMELINE_VIEWPORT_TOP_INSET_PX - TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
+      )
+    : fallbackCanvasBaseHeight;
+  const fittedHourRowHeightPx = (fittedCanvasBaseHeight / visibleDurationMinutes) * 60;
+  const hourRowHeightPx = fittedHourRowHeightPx * normalizedHourZoom;
   const pixelsPerMinute = hourRowHeightPx / 60;
-  const canvasBaseHeight = Math.max((endMinutes - startMinutes) * pixelsPerMinute, 0);
+  const canvasBaseHeight = Math.max(visibleDurationMinutes * pixelsPerMinute, 0);
 
   const scheduledEvents = useMemo(
     () =>
