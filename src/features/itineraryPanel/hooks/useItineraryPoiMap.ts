@@ -6,6 +6,7 @@ import type {
   PoiCategory as FeaturePoiCategory,
   PoiFeature,
 } from '@/features/poi/types';
+import type { UsePoiPopupActions } from '@/features/poi/hooks/usePoi';
 
 import type {
   Itinerary,
@@ -72,6 +73,7 @@ export function useItineraryPoiMap(
   active: Itinerary | null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
+  popupActions?: UsePoiPopupActions,
 ): UseItineraryPoiMapResult {
   // ── Derive enabled OSM categories from the panel POI rows ─────────
   const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
@@ -119,6 +121,7 @@ export function useItineraryPoiMap(
     onCorridorUpdate,
     onCorridorComplete,
     persistedPoiFeatures,
+    popupActions,
   );
 
   return {

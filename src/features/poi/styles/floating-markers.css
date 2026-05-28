@@ -85,6 +85,7 @@
   border: 0;
   background: transparent;
   color: inherit;
+  cursor: pointer;
 }
 
 .rv-poi-popup__icon-btn--ghost {
@@ -157,6 +158,7 @@
   border-radius: 5px;
   background: transparent;
   color: #fff;
+  cursor: pointer;
 }
 
 .rv-poi-popup__select--duration {
@@ -211,6 +213,14 @@
   padding: 0 8px;
 }
 
+.rv-poi-popup__toggle-wrap--button,
+.rv-poi-popup__toggle-row--button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
 .rv-poi-popup__toggle-row {
   width: 100%;
   height: 30px;
@@ -232,6 +242,11 @@
   display: block;
   width: 12px;
   height: 12px;
+  opacity: 0;
+}
+
+.rv-poi-popup__checkbox.is-active .rv-poi-popup__checkbox-icon {
+  opacity: 1;
 }
 
 .rv-poi-popup__action-row {
@@ -245,6 +260,7 @@
   background: transparent;
   color: #fff;
   text-align: left;
+  cursor: pointer;
 }
 
 .rv-poi-popup__action-label {

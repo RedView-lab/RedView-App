@@ -27,6 +27,31 @@ interface PoiMarkerEntry {
   signature: string;
 }
 
+export interface PoiPopupState {
+  pauseEnabled: boolean;
+  pauseDurationMin: number;
+  manualTraceEnabled: boolean;
+}
+
+export interface UsePoiPopupActions {
+  getPopupState?: (feature: PoiFeature) => PoiPopupState;
+  onStartHere?: (feature: PoiFeature) => void;
+  onFinishHere?: (feature: PoiFeature) => void;
+  onTogglePause?: (
+    feature: PoiFeature,
+    nextEnabled: boolean,
+    durationMin: number,
+  ) => void;
+  onToggleManualTrace?: (feature: PoiFeature, nextEnabled: boolean) => void;
+  onOpenStreetView?: (feature: PoiFeature) => void;
+}
+
+const DEFAULT_POPUP_STATE: PoiPopupState = {
+  pauseEnabled: false,
+  pauseDurationMin: 5,
+  manualTraceEnabled: false,
+};
+
 function getMarkerKey(feature: PoiFeature): string {
   return `${feature.category}:${feature.id}`;
 }
@@ -65,9 +90,10 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
   return element;
 }
 
-function buildPopupHtml(feature: PoiFeature): string {
+function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
   const name = feature.name?.trim() || 'Sans nom';
   const category = POI_LABELS[feature.category] ?? feature.category.replace(/_/g, ' ');
+  const pauseDurationLabel = formatPauseDuration(state.pauseDurationMin);
 
   return `
     <div class="rv-poi-popup__panel">
@@ -76,7 +102,7 @@ function buildPopupHtml(feature: PoiFeature): string {
           <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
         </button>
         <div class="rv-poi-popup__title">${escapeHtml(name)}</div>
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Lieu">
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Ouvrir Street View" data-action="streetview">
           <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
         </button>
       </div>
@@ -97,37 +123,37 @@ function buildPopupHtml(feature: PoiFeature): string {
       <div class="rv-poi-popup__divider"></div>
 
       <div class="rv-poi-popup__field-row rv-poi-popup__field-row--compact">
-        <div class="rv-poi-popup__toggle-wrap">
-          <span class="rv-poi-popup__checkbox">
+        <button type="button" class="rv-poi-popup__toggle-wrap rv-poi-popup__toggle-wrap--button" data-action="pause-toggle" aria-pressed="${state.pauseEnabled}">
+          <span class="rv-poi-popup__checkbox${state.pauseEnabled ? ' is-active' : ''}">
             <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
           </span>
           <span class="rv-poi-popup__toggle-label">Pause</span>
-        </div>
-        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause">
-          <span class="rv-poi-popup__select-value">5 min</span>
+        </button>
+        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause" data-action="pause-toggle" aria-pressed="${state.pauseEnabled}">
+          <span class="rv-poi-popup__select-value">${pauseDurationLabel}</span>
           <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
         </button>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
 
-      <div class="rv-poi-popup__toggle-row">
-        <span class="rv-poi-popup__checkbox">
+      <button type="button" class="rv-poi-popup__toggle-row rv-poi-popup__toggle-row--button" data-action="manual-trace" aria-pressed="${state.manualTraceEnabled}">
+        <span class="rv-poi-popup__checkbox${state.manualTraceEnabled ? ' is-active' : ''}">
           <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
         </span>
         <span class="rv-poi-popup__toggle-label rv-poi-popup__toggle-label--solid">Tracé manuel</span>
-      </div>
+      </button>
 
       <div class="rv-poi-popup__divider"></div>
 
-      <button type="button" class="rv-poi-popup__action-row">
+      <button type="button" class="rv-poi-popup__action-row" data-action="start-here">
         <span class="rv-poi-popup__pin rv-poi-popup__pin--start">
           <img src="${UI_ICON_URLS.play}" alt="" class="rv-poi-popup__pin-icon rv-poi-popup__pin-icon--play" />
         </span>
         <span class="rv-poi-popup__action-label">Démarrer ici</span>
       </button>
 
-      <button type="button" class="rv-poi-popup__action-row">
+      <button type="button" class="rv-poi-popup__action-row" data-action="finish-here">
         <span class="rv-poi-popup__pin rv-poi-popup__pin--finish">
           <span class="rv-poi-popup__finish-flag" aria-hidden="true"></span>
         </span>
@@ -144,7 +170,82 @@ function buildPopupHtml(feature: PoiFeature): string {
   `;
 }
 
-function createPoiMarker(map: MapboxMap, feature: PoiFeature): mapboxgl.Marker {
+function buildPopupContent(
+  feature: PoiFeature,
+  state: PoiPopupState,
+  actions: UsePoiPopupActions,
+  refresh: (nextState?: PoiPopupState) => void,
+): HTMLDivElement {
+  const root = document.createElement('div');
+  root.innerHTML = buildPopupHtml(feature, state);
+  const panel = root.firstElementChild;
+  if (!(panel instanceof HTMLDivElement)) {
+    return document.createElement('div');
+  }
+
+  const bindClick = (
+    selector: string,
+    handler: () => void,
+  ) => {
+    for (const node of panel.querySelectorAll<HTMLButtonElement>(selector)) {
+      node.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handler();
+      });
+    }
+  };
+
+  bindClick('[data-action="streetview"]', () => {
+    actions.onOpenStreetView?.(feature);
+  });
+
+  bindClick('[data-action="pause-toggle"]', () => {
+    const nextState = {
+      ...state,
+      pauseEnabled: !state.pauseEnabled,
+    };
+    actions.onTogglePause?.(feature, nextState.pauseEnabled, nextState.pauseDurationMin);
+    refresh(nextState);
+  });
+
+  bindClick('[data-action="manual-trace"]', () => {
+    const nextState = {
+      ...state,
+      manualTraceEnabled: !state.manualTraceEnabled,
+    };
+    actions.onToggleManualTrace?.(feature, nextState.manualTraceEnabled);
+    refresh(nextState);
+  });
+
+  bindClick('[data-action="start-here"]', () => {
+    actions.onStartHere?.(feature);
+  });
+
+  bindClick('[data-action="finish-here"]', () => {
+    actions.onFinishHere?.(feature);
+  });
+
+  return panel;
+}
+
+function resolvePopupState(
+  actions: UsePoiPopupActions,
+  feature: PoiFeature,
+  nextState?: PoiPopupState,
+): PoiPopupState {
+  return {
+    ...DEFAULT_POPUP_STATE,
+    ...(actions.getPopupState?.(feature) ?? {}),
+    ...(nextState ?? {}),
+  };
+}
+
+function createPoiMarker(
+  map: MapboxMap,
+  feature: PoiFeature,
+  actions: UsePoiPopupActions,
+): mapboxgl.Marker {
   const popup = new mapboxgl.Popup({
     className: 'rv-poi-popup',
     closeButton: false,
@@ -153,7 +254,22 @@ function createPoiMarker(map: MapboxMap, feature: PoiFeature): mapboxgl.Marker {
     maxWidth: 'none',
     offset: MARKER_POPUP_OFFSET_PX,
     altitude: MARKER_LIFT_M,
-  }).setHTML(buildPopupHtml(feature));
+  });
+
+  const refresh = (nextState?: PoiPopupState) => {
+    popup.setDOMContent(buildPopupContent(
+      feature,
+      resolvePopupState(actions, feature, nextState),
+      actions,
+      refresh,
+    ));
+  };
+
+  refresh();
+
+  popup.on('open', () => {
+    refresh();
+  });
 
   return new mapboxgl.Marker({
     element: createMarkerElement(feature),
@@ -186,6 +302,7 @@ export function usePoi(
    * corridor search.
    */
   initialFeatures: PoiFeature[] | null = null,
+  popupActions: UsePoiPopupActions = {},
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +331,8 @@ export function usePoi(
   onCorridorUpdateRef.current = onCorridorUpdate;
   const onCorridorCompleteRef = useRef(onCorridorComplete);
   onCorridorCompleteRef.current = onCorridorComplete;
+  const popupActionsRef = useRef<UsePoiPopupActions>(popupActions);
+  popupActionsRef.current = popupActions;
 
   // Track the active itinerary's pre-loaded features (from Supabase). A
   // change in identity/length/first/last id indicates an itinerary switch
@@ -273,7 +392,7 @@ export function usePoi(
 
       existing?.marker.remove();
       registry.set(key, {
-        marker: createPoiMarker(m, feature),
+        marker: createPoiMarker(m, feature, popupActionsRef.current),
         signature,
       });
     }
@@ -418,4 +537,9 @@ function escapeHtml(str: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function formatPauseDuration(durationMin: number): string {
+  const safeDuration = Math.max(1, Math.round(durationMin || 5));
+  return `${safeDuration} min`;
 }
