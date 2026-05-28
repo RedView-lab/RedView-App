@@ -11,7 +11,16 @@ import '../styles/floating-markers.css';
 // ── Constants ─────────────────────────────────────────────────────────
 
 const MARKER_LIFT_M = 18;
-const MARKER_POPUP_OFFSET_PX = 18;
+const MARKER_POPUP_OFFSET_PX = 34;
+
+const UI_ICON_URLS = {
+  star: '/svgv2/icone/star-01.svg',
+  globe: '/svgv2/icone/globe-06.svg',
+  chevron: '/svgv2/icone/chevron-down.svg',
+  check: '/svgv2/icone/check.svg',
+  play: '/svgv2/icone/play.svg',
+  trash: '/svgv2/icone/trash-03.svg',
+} as const;
 
 interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
@@ -59,20 +68,89 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
 function buildPopupHtml(feature: PoiFeature): string {
   const name = feature.name?.trim() || 'Sans nom';
   const category = POI_LABELS[feature.category] ?? feature.category.replace(/_/g, ' ');
-  const hours = feature.tags.opening_hours?.trim() || '';
 
-  return `<div style="font:13px/1.4 system-ui;color:#fff">
-    <strong>${escapeHtml(name)}</strong>
-    <div style="opacity:0.72;font-size:11px;margin-top:2px">${escapeHtml(category)}</div>
-    ${hours ? `<div style="margin-top:4px;font-size:11px">${escapeHtml(`Horaires: ${hours}`)}</div>` : ''}
-  </div>`;
+  return `
+    <div class="rv-poi-popup__panel">
+      <div class="rv-poi-popup__header">
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Favori">
+          <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
+        </button>
+        <div class="rv-poi-popup__title">${escapeHtml(name)}</div>
+        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Lieu">
+          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
+        </button>
+      </div>
+
+      <div class="rv-poi-popup__divider"></div>
+
+      <div class="rv-poi-popup__field-row">
+        <div class="rv-poi-popup__field-label">Type</div>
+        <button type="button" class="rv-poi-popup__select" aria-label="Type de POI">
+          <span class="rv-poi-popup__type-icon-wrap">
+            <img src="${getPoiIconUrl(feature.category)}" alt="" class="rv-poi-popup__type-icon" />
+          </span>
+          <span class="rv-poi-popup__select-value">${escapeHtml(category)}</span>
+          <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
+        </button>
+      </div>
+
+      <div class="rv-poi-popup__divider"></div>
+
+      <div class="rv-poi-popup__field-row rv-poi-popup__field-row--compact">
+        <div class="rv-poi-popup__toggle-wrap">
+          <span class="rv-poi-popup__checkbox">
+            <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
+          </span>
+          <span class="rv-poi-popup__toggle-label">Pause</span>
+        </div>
+        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause">
+          <span class="rv-poi-popup__select-value">5 min</span>
+          <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
+        </button>
+      </div>
+
+      <div class="rv-poi-popup__divider"></div>
+
+      <div class="rv-poi-popup__toggle-row">
+        <span class="rv-poi-popup__checkbox">
+          <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
+        </span>
+        <span class="rv-poi-popup__toggle-label rv-poi-popup__toggle-label--solid">Tracé manuel</span>
+      </div>
+
+      <div class="rv-poi-popup__divider"></div>
+
+      <button type="button" class="rv-poi-popup__action-row">
+        <span class="rv-poi-popup__pin rv-poi-popup__pin--start">
+          <img src="${UI_ICON_URLS.play}" alt="" class="rv-poi-popup__pin-icon rv-poi-popup__pin-icon--play" />
+        </span>
+        <span class="rv-poi-popup__action-label">Démarrer ici</span>
+      </button>
+
+      <button type="button" class="rv-poi-popup__action-row">
+        <span class="rv-poi-popup__pin rv-poi-popup__pin--finish">
+          <span class="rv-poi-popup__finish-flag" aria-hidden="true"></span>
+        </span>
+        <span class="rv-poi-popup__action-label">Finir ici</span>
+      </button>
+
+      <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete">
+        <span class="rv-poi-popup__utility-icon-wrap">
+          <img src="${UI_ICON_URLS.trash}" alt="" class="rv-poi-popup__utility-icon" />
+        </span>
+        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">Supprimer</span>
+      </button>
+    </div>
+  `;
 }
 
 function createPoiMarker(map: MapboxMap, feature: PoiFeature): mapboxgl.Marker {
   const popup = new mapboxgl.Popup({
-    closeButton: true,
+    className: 'rv-poi-popup',
+    closeButton: false,
     closeOnClick: true,
-    maxWidth: '240px',
+    focusAfterOpen: false,
+    maxWidth: 'none',
     offset: MARKER_POPUP_OFFSET_PX,
     altitude: MARKER_LIFT_M,
   }).setHTML(buildPopupHtml(feature));
@@ -82,7 +160,7 @@ function createPoiMarker(map: MapboxMap, feature: PoiFeature): mapboxgl.Marker {
     anchor: 'bottom',
     pitchAlignment: 'viewport',
     rotationAlignment: 'viewport',
-    occludedOpacity: 0.3,
+    occludedOpacity: 0,
     altitude: MARKER_LIFT_M,
   })
     .setLngLat([feature.lon, feature.lat])
