@@ -6,10 +6,6 @@
   gap: 10px;
   padding: 0;
   min-width: 0;
-  background: rgba(56, 62, 52, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  padding: 8px 10px 10px;
 }
 
 .rvi-tl-edit__row {
@@ -25,7 +21,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .rvi-tl-edit__field,
@@ -48,6 +45,9 @@
   color: rgba(255, 255, 255, 0.64);
   white-space: nowrap;
   flex: 0 0 auto;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .rvi-tl-edit__filters-label {
@@ -64,11 +64,12 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 140px;
+  width: 140px;
   min-width: 140px;
   height: 32px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 5px;
-  background: rgba(41, 45, 38, 0.88);
+  background: transparent;
   color: #fff;
 }
 
@@ -108,14 +109,14 @@
   width: 32px;
   height: 32px;
   border-radius: 6px;
-  background: rgba(61, 67, 56, 0.92);
+  background: rgba(255, 255, 255, 0.04);
   color: #fff;
   cursor: pointer;
   transition: background 0.18s ease, opacity 0.18s ease;
 }
 
 .rvi-tl-edit__zoom-btn:hover:not(:disabled) {
-  background: rgba(76, 83, 69, 0.96);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvi-tl-edit__zoom-btn:disabled {
@@ -127,7 +128,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  flex: 1 1 320px;
+  flex: 1 1 240px;
   min-width: 0;
 }
 
@@ -139,13 +140,13 @@
   height: 32px;
   padding: 5px 4px 5px 8px;
   border-radius: 6px;
-  background: rgba(53, 59, 50, 0.94);
+  background: rgba(255, 255, 255, 0.05);
   cursor: pointer;
   transition: background 0.18s ease;
 }
 
 .rvi-tl-edit__chip:hover {
-  background: rgba(68, 75, 63, 0.98);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvi-tl-edit__chip-check {
@@ -218,8 +219,4 @@
 .rvi-tl-add-split__main:hover,
 .rvi-tl-add-split__chevron:hover {
   background: rgba(255, 255, 255, 0.08);
-}
-
-.rvi-timeline--fullscreen .rvi-tl-edit {
-  background: rgba(60, 67, 57, 0.84);
 }

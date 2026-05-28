@@ -76,12 +76,6 @@
 @container (max-width: 340px) {
   .rvi-tl-tabs__btn { gap: 4px; padding: 6px; }
   .rvi-tl-tabs__label { font-size: 11px; }
-  .rvi-tl-edit__field-label,
-  .rvi-tl-edit__filters-label { font-size: 12px; }
-  .rvi-tl-edit__select-wrap {
-    flex-basis: 92px;
-    min-width: 92px;
-  }
   .rvi-tl-row__kind-text { width: 44px; }
   .rvi-tl-row__distance { min-width: 36px; }
 
