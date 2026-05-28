@@ -1,36 +1,97 @@
 import type { GpxRoute } from '../types';
+import { parseGpxText } from './gpx-parse';
+
+interface GpxParseWorkerSuccess {
+  ok: true;
+  route: GpxRoute;
+}
+
+interface GpxParseWorkerFailure {
+  ok: false;
+  message: string;
+}
+
+type GpxParseWorkerResponse = GpxParseWorkerSuccess | GpxParseWorkerFailure;
 
 /**
  * Parse a .gpx file into a lightweight route.
  * Supports both <trkpt> (tracks) and <rtept> (routes).
  */
 export async function parseGpxFile(file: File): Promise<GpxRoute> {
-  const text = await file.text();
+  try {
+    return await parseGpxFileInWorker(file);
+  } catch (error) {
+    console.warn('[gpx-loader] worker parse failed, falling back to main thread', error);
+    const text = await file.text();
+    try {
+      return parseGpxText(text);
+    } catch (parseError) {
+      console.warn('[gpx-loader] fast parser failed, falling back to DOMParser', parseError);
+      return parseGpxTextWithDomParser(text);
+    }
+  }
+}
+
+function parseGpxFileInWorker(file: File): Promise<GpxRoute> {
+  return new Promise<GpxRoute>((resolve, reject) => {
+    const worker = new Worker(new URL('./gpxParseWorker.ts', import.meta.url), { type: 'module' });
+
+    const cleanup = () => {
+      worker.onmessage = null;
+      worker.onerror = null;
+      worker.terminate();
+    };
+
+    worker.onmessage = (event: MessageEvent<GpxParseWorkerResponse>) => {
+      cleanup();
+      const message = event.data;
+      if (message.ok) {
+        resolve(message.route);
+        return;
+      }
+      reject(new Error(message.message));
+    };
+
+    worker.onerror = (event) => {
+      cleanup();
+      reject(new Error(event.message || 'GPX parse worker crashed'));
+    };
+
+    worker.postMessage({ file });
+  });
+}
+
+function parseGpxTextWithDomParser(text: string): GpxRoute {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
 
   const parseError = doc.querySelector('parsererror');
-  if (parseError) throw new Error('Fichier GPX invalide');
+  if (parseError) {
+    throw new Error('Fichier GPX invalide');
+  }
 
-  // Extract route name
   const nameEl = doc.querySelector('trk > name') ?? doc.querySelector('rte > name');
   const name = nameEl?.textContent?.trim() ?? null;
 
-  // Collect track points first, then route points as fallback
   const trkpts = doc.querySelectorAll('trkpt');
   const rtepts = doc.querySelectorAll('rtept');
   const raw = trkpts.length > 0 ? trkpts : rtepts;
 
-  if (raw.length === 0) throw new Error('Aucun point trouvé dans le GPX');
+  if (raw.length === 0) {
+    throw new Error('Aucun point trouvé dans le GPX');
+  }
 
   const points: GpxRoute['points'] = [];
   let distanceM = 0;
 
-  for (const el of raw) {
-    const lat = parseFloat(el.getAttribute('lat') ?? '');
-    const lon = parseFloat(el.getAttribute('lon') ?? '');
-    if (!isFinite(lat) || !isFinite(lon)) continue;
-    const elevationText = el.querySelector('ele')?.textContent?.trim() ?? '';
-    const elevationM = elevationText ? parseFloat(elevationText) : Number.NaN;
+  for (const element of raw) {
+    const lat = Number.parseFloat(element.getAttribute('lat') ?? '');
+    const lon = Number.parseFloat(element.getAttribute('lon') ?? '');
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      continue;
+    }
+
+    const elevationText = element.querySelector('ele')?.textContent?.trim() ?? '';
+    const elevationM = elevationText ? Number.parseFloat(elevationText) : Number.NaN;
     const nextPoint: GpxRoute['points'][number] = {
       lat,
       lon,
@@ -44,7 +105,9 @@ export async function parseGpxFile(file: File): Promise<GpxRoute> {
     points.push(nextPoint);
   }
 
-  if (points.length < 2) throw new Error('GPX doit contenir au moins 2 points');
+  if (points.length < 2) {
+    throw new Error('GPX doit contenir au moins 2 points');
+  }
 
   return { name, points };
 }

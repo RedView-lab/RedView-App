@@ -350,9 +350,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const addItineraryFromGpxFile = useCallback(
     async (file: File) => {
       const route = await parseGpxFile(file);
-      const storedPoints = normalizeImportedRoutePoints(route.points);
+      const storedPoints = normalizeImportedRoutePoints(route.points, { includeGradient: false });
       const quality = 'default';
-      const simplifiedPoints = simplifyPointsByQuality(storedPoints, quality);
+      const simplifiedPoints = normalizeImportedRoutePoints(
+        simplifyPointsByQuality(storedPoints, quality),
+      );
       const timeline = createImportedTimeline(simplifiedPoints);
       const id = addItinerary({
         name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),

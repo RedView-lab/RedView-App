@@ -19,6 +19,7 @@ import {
   cleanGpxGlitches,
   simplifyRouteToMaxPoints,
   simplifyPointsByQuality,
+  normalizeImportedRoutePoints,
   cumulativeRouteLengthsM,
   projectDistanceAlongRouteM,
   roundDistanceKm,
@@ -568,7 +569,9 @@ export function ProjectProvider({
         if (!route || route.source === 'brouter') return;
 
         const basePoints = route.originalPoints || route.points;
-        const simplifiedPoints = simplifyPointsByQuality(basePoints, quality);
+        const simplifiedPoints = normalizeImportedRoutePoints(
+          simplifyPointsByQuality(basePoints, quality),
+        );
 
         const elevationMetrics = computeRouteElevationMetrics(simplifiedPoints);
         const distanceM = elevationMetrics?.distanceM ?? routeLengthM(simplifiedPoints);

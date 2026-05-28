@@ -40,9 +40,35 @@ function toStoredRoutePoints(
   }));
 }
 
-export function normalizeImportedRoutePoints(
+function buildDistanceOnlyRoutePoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
 ): NonNullable<Itinerary['gpxRoute']>['points'] {
+  let cumulativeDistanceM = 0;
+  return points.map((point, index) => {
+    if (index > 0) {
+      cumulativeDistanceM += haversineM(points[index - 1]!, point);
+    }
+    return {
+      lat: point.lat,
+      lon: point.lon,
+      distanceM: cumulativeDistanceM,
+      elevationM: point.elevationM ?? null,
+    };
+  });
+}
+
+interface NormalizeImportedRoutePointsOptions {
+  includeGradient?: boolean;
+}
+
+export function normalizeImportedRoutePoints(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+  options?: NormalizeImportedRoutePointsOptions,
+): NonNullable<Itinerary['gpxRoute']>['points'] {
+  if (options?.includeGradient === false) {
+    return buildDistanceOnlyRoutePoints(points);
+  }
+
   const geometryOnlyPoints = points.map((point) => ({
     lat: point.lat,
     lon: point.lon,
@@ -50,18 +76,7 @@ export function normalizeImportedRoutePoints(
   }));
   const profile = extractRouteProfileFromPoints(geometryOnlyPoints);
   if (!profile || profile.length !== points.length) {
-    let cumulativeDistanceM = 0;
-    return points.map((point, index) => ({
-      ...point,
-      ...(index > 0
-        ? {
-            distanceM: (() => {
-              cumulativeDistanceM += haversineM(points[index - 1]!, point);
-              return cumulativeDistanceM;
-            })(),
-          }
-        : { distanceM: 0 }),
-    }));
+    return buildDistanceOnlyRoutePoints(points);
   }
   return toStoredRoutePoints(profile);
 }

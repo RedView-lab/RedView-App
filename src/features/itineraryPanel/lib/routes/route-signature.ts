@@ -8,11 +8,15 @@ export interface RouteSignaturePoint {
 
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
+const routeSignatureCache = new WeakMap<readonly RouteSignaturePoint[], string>();
 
 export function buildRouteContentSignature(
   points: readonly RouteSignaturePoint[] | null | undefined,
 ): string {
   if (!points || points.length === 0) return 'empty';
+
+  const cached = routeSignatureCache.get(points);
+  if (cached) return cached;
 
   let hash = FNV_OFFSET;
   const mix = (value: number) => {
@@ -35,7 +39,9 @@ export function buildRouteContentSignature(
     mix(quantizeOptional(point.gradientPct, 100));
   }
 
-  return `${points.length}:${hash.toString(36)}`;
+  const signature = `${points.length}:${hash.toString(36)}`;
+  routeSignatureCache.set(points, signature);
+  return signature;
 }
 
 function quantize(value: number, scale: number): number {
