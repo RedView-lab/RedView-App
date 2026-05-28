@@ -58,7 +58,10 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
 async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
-  const demZ = Math.max(IGN_DEM_MINZOOM, Math.min(mercZ, IGN_DEM_MAXZOOM));
+  const demZ = Math.max(
+    IGN_DEM_MINZOOM,
+    Math.min(mercZ + IGN_MNS_SOURCE_ZOOM_BIAS, IGN_DEM_MAXZOOM),
+  );
 
   // Fast skip: if this area is known to have no MNS data, return immediately
   // instead of enqueuing 6-9 sub-tile fetches that will all 404.
@@ -73,10 +76,11 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
   const br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
 
-  // Log zoom clamping — key indicator of overzoom-induced flattening
-  if (demZ < mercZ) {
+  // Log source zoom remapping — useful when diagnosing why surface detail is
+  // missing (too coarse demZ) or why a close view hits the max zoom clamp.
+  if (demZ !== mercZ) {
     console.log(
-      `[sw-dem][build] %c ZOOM CLAMP %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ} but IGN maxzoom=${IGN_DEM_MAXZOOM}, using demZ=${demZ} (Δ=${mercZ - demZ})`,
+      `[sw-dem][build] %c SOURCE ZOOM %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ}, using demZ=${demZ} (Δ=${demZ - mercZ})`,
       'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }

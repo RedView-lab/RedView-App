@@ -86,6 +86,14 @@ const IGN_DEM_MAXZOOM = 17;
 const IGN_HIGHRES_ENGAGE_MPP = 56;
 const IGN_MNS_ENGAGE_MPP = 56;
 
+// When the user selects the 0.40 m surface mode they expect actual surface
+// relief (houses, tree rows, walls), not just the correct dataset family.
+// Using `demZ = mercZ` keeps the MNS active but often samples it too coarsely
+// at oblique mid zooms, so urban features blur back into something that looks
+// like bare-earth terrain. A small source-zoom bias keeps the output mesh fed
+// by finer MNS tiles before we reach the native z16/z17 close-up range.
+const IGN_MNS_SOURCE_ZOOM_BIAS = 2;
+
 // France MNS mid-zoom smoothing. IGN MNS keeps top-of-canopy / buildings,
 // which is exactly what the user wants, but the resampled surface can show a
 // regular "micro-ondulation" pattern in oblique views around z11-z13. Apply
@@ -128,10 +136,10 @@ const ORTHO_TILE_SIZE = 256;
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
 //
-// 2026-05-28-france-mns-surface-early-engage-1: engage France MNS as soon as
-// the HD path is active so urban/building relief remains visible in 0.40 m
-// mode, while the mid-zoom surface filter removes the earlier waviness.
-const MAP_CACHE_EPOCH = '2026-05-28-france-mns-surface-early-engage-1';
+// 2026-05-28-france-mns-source-zoom-bias-1: keep France MNS surface active
+// and request a slightly finer source zoom than the screen zoom so urban and
+// canopy relief stays visible in 0.40 m mode at oblique mid zoom.
+const MAP_CACHE_EPOCH = '2026-05-28-france-mns-source-zoom-bias-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check
