@@ -16,6 +16,10 @@ import {
   getActiveDem3dQuality,
   subscribeDem3dQuality,
 } from '../../lib/dem3dQualityBus';
+import {
+  getActiveDemProfilePreference,
+  subscribeDemProfilePreference,
+} from '../../lib/demProfileBus';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
 
@@ -212,6 +216,20 @@ export function useMap(
         console.warn('[map3d] setDem3dQuality failed', err);
       }
     });
+    const unsubscribeDemProfile = subscribeDemProfilePreference(() => {
+      try {
+        lifecycle.reloadMapElevation();
+      } catch (err) {
+        console.warn('[map3d] reloadMapElevation after DEM profile change failed', err);
+      }
+    });
+    if (getActiveDemProfilePreference() !== 'default') {
+      try {
+        lifecycle.reloadMapElevation();
+      } catch {
+        /* best-effort */
+      }
+    }
 
     prepareStyleChangeRef.current = lifecycle.prepareStyleChange;
     bootstrapStyleRef.current = lifecycle.bootstrapCurrentStyle;
@@ -410,6 +428,7 @@ export function useMap(
       disarmInitialReveal();
       if (stuckShellTimer) clearTimeout(stuckShellTimer);
       unsubscribeDem3dQuality();
+      unsubscribeDemProfile();
       lifecycle.cleanup();
       if (saveTimer) clearTimeout(saveTimer);
       if (mapRef.current) {

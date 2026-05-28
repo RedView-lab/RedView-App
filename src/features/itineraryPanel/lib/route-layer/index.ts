@@ -180,6 +180,13 @@ interface RouteSamplePoint {
   gradientPct: number | null;
 }
 
+type TerrainQueryableMap = MapboxMap & {
+  queryTerrainElevation?: (
+    lngLat: [number, number],
+    options?: { exaggerated?: boolean },
+  ) => number | null | undefined;
+};
+
 function buildRouteSlopeSamples(points: readonly RouteLayerPoint[]): RouteSamplePoint[] {
   if (points.length === 0) return [];
 
@@ -233,6 +240,44 @@ function buildRouteSlopeSamples(points: readonly RouteLayerPoint[]): RouteSample
   return samples;
 }
 
+function sampleTerrainElevation(map: MapboxMap, lon: number, lat: number): number | null {
+  const queryTerrainElevation = (map as TerrainQueryableMap).queryTerrainElevation;
+  if (typeof queryTerrainElevation !== 'function') return null;
+  try {
+    const elevation = queryTerrainElevation.call(map, [lon, lat], { exaggerated: false });
+    return Number.isFinite(elevation) ? (elevation as number) : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyTerrainElevations(
+  map: MapboxMap,
+  samples: readonly RouteSamplePoint[],
+): RouteSamplePoint[] {
+  const terrainSourceId = map.getTerrain()?.source;
+  if (!terrainSourceId) return samples.slice();
+  try {
+    if (!map.isSourceLoaded(terrainSourceId)) return samples.slice();
+  } catch {
+    return samples.slice();
+  }
+
+  let usedTerrain = false;
+  const hydrated = samples.map((sample) => {
+    const terrainElevationM = sampleTerrainElevation(map, sample.lon, sample.lat);
+    if (!Number.isFinite(terrainElevationM)) return sample;
+    usedTerrain = true;
+    return {
+      ...sample,
+      elevationM: terrainElevationM,
+      gradientPct: null,
+    };
+  });
+
+  return usedTerrain ? hydrated : samples.slice();
+}
+
 function pickSlopeBand(
   bands: ReadonlyArray<RouteSlopeBand>,
   slopeDeg: number,
@@ -249,12 +294,13 @@ function pickSlopeBand(
 }
 
 function buildSlopeRouteGeoJson(
+  map: MapboxMap,
   points: readonly RouteLayerPoint[],
   bands: ReadonlyArray<RouteSlopeBand>,
   fallbackColor: string,
 ): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
   const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-  const samples = buildRouteSlopeSamples(points);
+  const samples = applyTerrainElevations(map, buildRouteSlopeSamples(points));
 
   for (let index = 1; index < samples.length; index += 1) {
     const start = samples[index - 1];
@@ -315,11 +361,12 @@ function buildSlopeRouteGeoJson(
 }
 
 function buildRouteGeoJson(
+  map: MapboxMap,
   points: readonly RouteLayerPoint[],
   opts: RouteLayerOptions,
 ): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
   if (opts.renderMode === 'slope') {
-    return buildSlopeRouteGeoJson(points, opts.slopeBands ?? [], opts.color);
+    return buildSlopeRouteGeoJson(map, points, opts.slopeBands ?? [], opts.color);
   }
   return buildDefaultRouteGeoJson(points);
 }
@@ -414,7 +461,7 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const glowWidthPx = traceGlowWidthPx(traceWidthPx);
   const borderWidthPx = traceBorderWidthPx(traceWidthPx);
-  const routeData = buildRouteGeoJson(points, opts);
+  const routeData = buildRouteGeoJson(map, points, opts);
   const lineColorPaint = buildRouteLineColorPaint(opts);
 
   const existing = map.getSource(srcId) as GeoJSONSource | undefined;

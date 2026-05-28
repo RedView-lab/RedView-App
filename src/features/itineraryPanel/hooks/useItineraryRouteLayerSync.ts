@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ControlPanelSlopePersistedState } from '@/features/controlPanel/lib/persistedState';
 import { SLOPE_CATEGORIES, generateDynamicCategories } from '@/features/slope/lib/slope-config';
+import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
 
 import {
   clearForbiddenZoneDraft,
@@ -98,6 +99,10 @@ export function useItineraryRouteLayerSync({
     () => routeSlopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join('|'),
     [routeSlopeBands],
   );
+  const needsTerrainSlopeProfile = useMemo(
+    () => itineraries.some((it) => it.renderMode === 'slope' && (it.gpxRoute?.points.length ?? 0) >= 2),
+    [itineraries],
+  );
   const layerSignature = useMemo(() => {
     const itinerarySignature = itineraries
       .map((it) => {
@@ -189,6 +194,13 @@ export function useItineraryRouteLayerSync({
   }, [replayRouteState]);
 
   useEffect(() => {
+    setActiveDemProfilePreference(needsTerrainSlopeProfile ? 'terrain' : 'default');
+    return () => {
+      setActiveDemProfilePreference('default');
+    };
+  }, [needsTerrainSlopeProfile]);
+
+  useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!replayRouteState()) scheduleReplayRouteState();
   }, [isMapLoaded, layerSignature, map, replayRouteState, scheduleReplayRouteState]);
@@ -210,9 +222,20 @@ export function useItineraryRouteLayerSync({
     const onStyleData = () => {
       scheduleReplayRouteState();
     };
+    const onSourceData = (event: { sourceId?: string } | undefined) => {
+      const terrainSourceId = map.getTerrain()?.source;
+      if (!terrainSourceId || event?.sourceId !== terrainSourceId) return;
+      try {
+        if (!map.isSourceLoaded(terrainSourceId)) return;
+      } catch {
+        return;
+      }
+      scheduleReplayRouteState();
+    };
 
     map.on('style.load', onStyleLoad);
     map.on('styledata', onStyleData);
+    map.on('sourcedata', onSourceData as never);
     return () => {
       if (replayTimerRef.current) {
         clearTimeout(replayTimerRef.current);
@@ -220,6 +243,7 @@ export function useItineraryRouteLayerSync({
       }
       map.off('style.load', onStyleLoad);
       map.off('styledata', onStyleData);
+      map.off('sourcedata', onSourceData as never);
     };
   }, [isMapLoaded, map, scheduleReplayRouteState]);
 }

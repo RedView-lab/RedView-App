@@ -7,6 +7,7 @@ import type {
 import { awsFallbackDEMSource, awsFastDEMSource, unifiedDEMSource } from '../../../lib/sources';
 import { TerrainManager } from '../../../lib/terrain';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
+import { getActiveDemProfilePreference } from '../../../lib/demProfileBus';
 import {
   type OverlayReloadRegistrar,
   type OverlayStatusReporter,
@@ -388,7 +389,7 @@ export function attachHelpers(ctx: Ctx): void {
   // trees, rocks). The 'terrain' profile is reserved for slope/altitude
   // computation — it routes to RGE ALTI WMS (bare-earth) which strips
   // canopy/buildings and is unsuitable for 3D terrain display.
-  fns.getActiveDemProfile = () => 'default';
+  fns.getActiveDemProfile = () => getActiveDemProfilePreference();
 
   fns.shouldUseIgnOrthoOverlay = () => false;
 }
