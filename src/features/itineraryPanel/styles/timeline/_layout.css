@@ -41,6 +41,21 @@
 .rvi-timeline--fullscreen .rvi-timeline__body {
   gap: 14px;
 }
+
+.rvi-timeline__topbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+
+.rvi-timeline--fullscreen .rvi-timeline__topbar {
+  gap: 10px;
+}
+
 .rvi-timeline__body::-webkit-scrollbar { width: 6px; height: 6px; }
 .rvi-timeline__body::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.15);
@@ -53,23 +68,24 @@
 
 .rvi-tl-head {
   display: flex;
-  gap: 4px;
+  gap: 12px;
   align-items: stretch;
-  position: sticky;
-  top: 0;
-  z-index: 2;
+  justify-content: space-between;
   flex-shrink: 0;
 }
 
-.rvi-timeline--fullscreen .rvi-tl-head {
-  top: 0;
-  padding-bottom: 4px;
+.rvi-tl-head__actions {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 /* Segmented view switcher */
 .rvi-tl-tabs {
   display: flex;
-  flex: 1 1 0;
+  flex: 1 1 400px;
+  max-width: 400px;
   min-width: 0;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 6px;

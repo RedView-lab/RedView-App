@@ -133,6 +133,11 @@ export function TimelinePanel({
     }
   }, [view]);
 
+  useEffect(() => {
+    if (view !== 'timeline' || !isFullscreen) return;
+    setTimelineEditOpen(true);
+  }, [isFullscreen, view]);
+
   const handleOpenSettings = () => {
     if (view === 'timeline') {
       setTimelineEditOpen((current) => !current);
@@ -210,21 +215,36 @@ export function TimelinePanel({
     },
   ];
 
+  const showTimelineTopbar = view === 'timeline' && timelineEditOpen;
+
   return (
     <section
       className={`rvi-timeline rvi-timeline--${view}${isFullscreen ? ' rvi-timeline--fullscreen' : ''}`}
       aria-label={t('Feuille de route')}
     >
-      <TimelineHeader
-        view={view}
-        onChangeView={onChangeView}
-        onOpenSettings={handleOpenSettings}
-        settingsActive={view === 'timeline' && timelineEditOpen}
-        fullscreenActive={isFullscreen}
-        onToggleFullscreen={onToggleFullscreen}
-        onAdd={handleOpenKindMenu}
-        onOpenKindMenu={handleOpenKindMenu}
-      />
+      <div className="rvi-timeline__topbar">
+        <TimelineHeader
+          view={view}
+          onChangeView={onChangeView}
+          onOpenSettings={handleOpenSettings}
+          settingsActive={view === 'timeline' && timelineEditOpen}
+          fullscreenActive={isFullscreen}
+          onToggleFullscreen={onToggleFullscreen}
+          onAdd={handleOpenKindMenu}
+          onOpenKindMenu={handleOpenKindMenu}
+        />
+
+        {showTimelineTopbar ? (
+          <TimelineEditPanel
+            filters={filters}
+            markerStepKm={timelineMarkerStepKm}
+            zoomLevel={timelineZoomLevel}
+            onChangeFilters={setFilters}
+            onChangeMarkerStepKm={setTimelineMarkerStepKm}
+            onChangeZoomLevel={setTimelineZoomLevel}
+          />
+        ) : null}
+      </div>
 
       <div className="rvi-timeline__body">
         {view === 'sheet' ? (
@@ -255,39 +275,26 @@ export function TimelinePanel({
             />
           </>
         ) : (
-          <>
-            {timelineEditOpen ? (
-              <TimelineEditPanel
-                filters={filters}
-                markerStepKm={timelineMarkerStepKm}
-                zoomLevel={timelineZoomLevel}
-                onChangeFilters={setFilters}
-                onChangeMarkerStepKm={setTimelineMarkerStepKm}
-                onChangeZoomLevel={setTimelineZoomLevel}
-              />
-            ) : null}
-
-            <TimelineTimelineView
-              items={visibleTimelineItems}
-              rhythm={rhythm}
-              prediction={prediction}
-              config={railConfig}
-              markerStepKm={timelineMarkerStepKm}
-              hourZoom={timelineZoomLevel}
-              selectedIds={selectedIds}
-              onToggleSelect={handleToggleSelect}
-              onToggleVisibility={onToggleItem}
-              onMovePause={onMovePause}
-              onChangePauseDuration={onChangePauseDuration}
-              onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
-              onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
-              onRegisterPauseInsertionResolver={(resolver) => {
-                pauseInsertionResolverRef.current = resolver;
-              }}
-              onToggleFavorite={onFavoriteItem}
-              onRemove={onRemoveItem}
-            />
-          </>
+          <TimelineTimelineView
+            items={visibleTimelineItems}
+            rhythm={rhythm}
+            prediction={prediction}
+            config={railConfig}
+            markerStepKm={timelineMarkerStepKm}
+            hourZoom={timelineZoomLevel}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleVisibility={onToggleItem}
+            onMovePause={onMovePause}
+            onChangePauseDuration={onChangePauseDuration}
+            onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
+            onChangeFavoritePoiPauseDuration={onChangeFavoritePoiPauseDuration}
+            onRegisterPauseInsertionResolver={(resolver) => {
+              pauseInsertionResolverRef.current = resolver;
+            }}
+            onToggleFavorite={onFavoriteItem}
+            onRemove={onRemoveItem}
+          />
         )}
       </div>
 

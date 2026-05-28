@@ -20,6 +20,10 @@
   width: 100%;
 }
 
+.rvi-timeline--fullscreen .rvi-tl-schedule {
+  flex: 1 1 auto;
+}
+
 .rvi-tl-schedule__days {
   display: block;
   overflow: hidden;
@@ -147,6 +151,10 @@
   border-radius: var(--rvi-radius);
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+.rvi-timeline--fullscreen .rvi-tl-schedule__viewport {
+  max-height: none;
 }
 
 .rvi-tl-schedule__viewport::-webkit-scrollbar { width: 6px; height: 6px; }

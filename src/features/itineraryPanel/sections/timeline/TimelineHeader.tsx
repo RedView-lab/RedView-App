@@ -65,44 +65,46 @@ export function TimelineHeader({
         </button>
       </div>
 
-      <button
-        type="button"
-        className={`rvi-tl-tool${settingsActive ? ' is-active' : ''}`}
-        onClick={onOpenSettings}
-        aria-label={t('Paramètres de la feuille de route')}
-        aria-pressed={settingsActive}
-      >
-        <IconSettings04 size={16} />
-      </button>
-
-      <span className="rvi-tl-add-split">
+      <div className="rvi-tl-head__actions">
         <button
           type="button"
-          className="rvi-tl-add-split__main"
-          onClick={openKindMenu}
-          aria-label={t('Ajouter un élément')}
+          className={`rvi-tl-tool${settingsActive ? ' is-active' : ''}`}
+          onClick={onOpenSettings}
+          aria-label={t('Paramètres de la feuille de route')}
+          aria-pressed={settingsActive}
         >
-          <IconPlusCircleFilled size={16} />
+          <IconSettings04 size={16} />
         </button>
+
+        <span className="rvi-tl-add-split">
+          <button
+            type="button"
+            className="rvi-tl-add-split__main"
+            onClick={openKindMenu}
+            aria-label={t('Ajouter un élément')}
+          >
+            <IconPlusCircleFilled size={16} />
+          </button>
+          <button
+            type="button"
+            className="rvi-tl-add-split__chevron"
+            onClick={openKindMenu}
+            aria-label={t("Choisir le type d'élément à ajouter")}
+          >
+            <IconChevronDown size={14} />
+          </button>
+        </span>
+
         <button
           type="button"
-          className="rvi-tl-add-split__chevron"
-          onClick={openKindMenu}
-          aria-label={t("Choisir le type d'élément à ajouter")}
+          className={`rvi-tl-tool${fullscreenActive ? ' is-active' : ''}`}
+          onClick={onToggleFullscreen}
+          aria-label={fullscreenActive ? t('Quitter le plein écran') : t('Ouvrir en plein écran')}
+          aria-pressed={fullscreenActive}
         >
-          <IconChevronDown size={14} />
+          <IconMaximize size={16} />
         </button>
-      </span>
-
-      <button
-        type="button"
-        className={`rvi-tl-tool${fullscreenActive ? ' is-active' : ''}`}
-        onClick={onToggleFullscreen}
-        aria-label={fullscreenActive ? t('Quitter le plein écran') : t('Ouvrir en plein écran')}
-        aria-pressed={fullscreenActive}
-      >
-        <IconMaximize size={16} />
-      </button>
+      </div>
     </div>
   );
 }

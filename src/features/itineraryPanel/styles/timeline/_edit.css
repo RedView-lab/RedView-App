@@ -3,8 +3,16 @@
 .rvi-tl-edit {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 0;
+  min-width: 0;
+}
+
+.rvi-tl-edit__row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   min-width: 0;
 }
 
@@ -13,6 +21,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  flex: 0 1 auto;
 }
 
 .rvi-tl-edit__field,
@@ -38,6 +47,14 @@
   max-width: 44px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.rvi-tl-edit__filters-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.64);
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 
 .rvi-tl-edit__select-wrap {
@@ -109,6 +126,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .rvi-tl-edit__chip {
