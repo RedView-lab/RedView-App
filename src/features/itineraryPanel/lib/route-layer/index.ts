@@ -342,6 +342,13 @@ function buildSlopeRouteGradientPaint(
 
   const expr: unknown[] = ['interpolate', ['linear'], ['line-progress'], 0, currentColor];
   let lastColor = currentColor;
+  let lastStopProgress = 0;
+
+  const pushStop = (progress: number, color: string) => {
+    if (!(progress > lastStopProgress + 1e-6)) return;
+    expr.push(progress, color);
+    lastStopProgress = progress;
+  };
 
   for (let index = 1; index < samples.length; index += 1) {
     const start = samples[index - 1];
@@ -357,11 +364,12 @@ function buildSlopeRouteGradientPaint(
     const endProgress = Math.max(0, Math.min(1, end.distanceM / totalDistanceM));
     if (!(endProgress > startProgress)) continue;
 
-    expr.push(startProgress, lastColor, endProgress, segmentColor);
+    pushStop(startProgress, lastColor);
+    pushStop(endProgress, segmentColor);
     lastColor = segmentColor;
   }
 
-  expr.push(1, lastColor);
+  pushStop(1, lastColor);
   return expr;
 }
 

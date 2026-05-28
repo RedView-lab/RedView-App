@@ -77,14 +77,14 @@ const IGN_DEM_MAXZOOM = 17;
 // than the full MNS LiDAR path so mountainous terrain sharpens sooner without
 // paying the full MNS fan-out as aggressively across overview zooms.
 //
-// HIGHRES threshold = 56 m/px: enables the France HD fallback around z11.
-// MNS threshold = 36 m/px: keeps the France surface model engaged from the
-// first true close-range terrain zoom (typically z12 in metro France).
-// Mid-zoom waviness is handled by a dedicated MNS-only low-pass on the
-// resampled output, so we keep the surface model instead of falling back to
-// the 1 m terrain product.
+// HIGHRES threshold = 56 m/px: enables France HD around z11.
+// MNS threshold = 56 m/px: in the 0.40 m / HD mode the user expects the
+// actual surface model (buildings, tree canopy, walls) as soon as the France
+// high-res path becomes visually relevant. Mid-zoom waviness is handled by a
+// dedicated MNS-only low-pass on the resampled output, so we no longer delay
+// the MNS handoff behind a bare-earth fallback step.
 const IGN_HIGHRES_ENGAGE_MPP = 56;
-const IGN_MNS_ENGAGE_MPP = 36;
+const IGN_MNS_ENGAGE_MPP = 56;
 
 // France MNS mid-zoom smoothing. IGN MNS keeps top-of-canopy / buildings,
 // which is exactly what the user wants, but the resampled surface can show a
@@ -128,10 +128,10 @@ const ORTHO_TILE_SIZE = 256;
 // derived-cache reload fix). Bumping here guarantees sw-dem submodules are
 // fetched with a new query string and stale slope/DEM entries are purged once.
 //
-// 2026-05-28-france-mns-surface-midzoom-filter-1: keeps France MNS surface
-// active and filters only the low-variance mid-zoom waviness of the
-// resampled surface output, without switching to the 1 m terrain fallback.
-const MAP_CACHE_EPOCH = '2026-05-28-france-mns-surface-midzoom-filter-1';
+// 2026-05-28-france-mns-surface-early-engage-1: engage France MNS as soon as
+// the HD path is active so urban/building relief remains visible in 0.40 m
+// mode, while the mid-zoom surface filter removes the earlier waviness.
+const MAP_CACHE_EPOCH = '2026-05-28-france-mns-surface-early-engage-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check
