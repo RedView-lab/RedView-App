@@ -54,24 +54,27 @@
   inset: 0;
   z-index: 2147483000;
   overflow: hidden;
-  background:
-    radial-gradient(circle at top, rgba(255, 255, 255, 0.03), transparent 38%),
-    rgba(0, 0, 0, 0.12);
+  padding: 12px;
+  box-sizing: border-box;
+  background: transparent;
 }
 
 .rvi-panel--timeline-fullscreen {
   position: absolute;
-  inset: 0;
-  width: 100%;
-  min-height: 100dvh;
+  inset: 12px;
+  width: auto;
+  min-height: 0;
+  height: auto;
   max-height: none;
   padding: 12px;
   background:
     linear-gradient(180deg, rgba(7, 12, 12, 0.12), rgba(3, 5, 5, 0.24)),
     rgba(4, 7, 7, 0.18);
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow:
+    0 18px 56px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
   animation: rvi-panel-fullscreen-enter 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 

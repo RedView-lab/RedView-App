@@ -485,6 +485,7 @@ export function TimelineScheduleCanvas({
           const visible = event.item.visible !== false;
           const selected = selectedIds?.has(event.item.id) ?? false;
           const hasAttachedPauses = previewEvent.attachedPauses.length > 0;
+          const hasNextMetric = event.toNextSeconds !== null && Number.isFinite(event.toNextSeconds);
           const canEditFavoritePoiPause = Boolean(
             event.item.poiCategory && onChangeFavoritePoiPauseDuration,
           );
@@ -517,7 +518,14 @@ export function TimelineScheduleCanvas({
                 aria-pressed={selected}
                 onClick={() => onToggleSelect?.(event.item.id, !selected)}
               >
-                <span className={`rvi-tl-schedule__event-main${hasAttachedPauses ? ' has-pause' : ''}`}>
+                <span
+                  className={[
+                    'rvi-tl-schedule__event-main',
+                    hasAttachedPauses ? 'has-pause' : 'has-no-pause',
+                    hasNextMetric ? 'has-next' : 'has-no-next',
+                    event.item.favorite ? 'has-favorite' : 'has-no-favorite',
+                  ].join(' ')}
+                >
                   <span className="rvi-tl-schedule__event-icon" aria-hidden>
                     <KindBadge kind={event.item.kind} poiCategory={event.item.poiCategory} />
                   </span>
@@ -594,15 +602,19 @@ export function TimelineScheduleCanvas({
                   <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--from-start">
                     {formatDistanceLabel(event.distanceKm)}
                   </span>
-                  <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">
-                    {formatLegDuration(event.toNextSeconds)}
-                  </span>
-                  <span
-                    className={`rvi-tl-schedule__event-favorite${event.item.favorite ? ' is-active' : ''}`}
-                    aria-hidden
-                  >
-                    <IconStar size={12} />
-                  </span>
+                  {hasNextMetric ? (
+                    <span className="rvi-tl-schedule__event-metric rvi-tl-schedule__event-metric--next">
+                      {formatLegDuration(event.toNextSeconds)}
+                    </span>
+                  ) : null}
+                  {event.item.favorite ? (
+                    <span
+                      className="rvi-tl-schedule__event-favorite is-active"
+                      aria-hidden
+                    >
+                      <IconStar size={12} />
+                    </span>
+                  ) : null}
                 </span>
               </button>
 

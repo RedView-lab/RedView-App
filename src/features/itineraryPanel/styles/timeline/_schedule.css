@@ -378,6 +378,64 @@
   min-width: 0;
 }
 
+.rvi-tl-schedule__event-main.has-no-pause {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col))
+    var(--rvi-tl-fav-col);
+}
+
+.rvi-tl-schedule__event-main.has-no-pause.has-no-next {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-start-col))
+    var(--rvi-tl-fav-col);
+}
+
+.rvi-tl-schedule__event-main.has-no-pause.has-no-next.has-no-favorite {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-start-col));
+}
+
+.rvi-tl-schedule__event-main.has-no-pause.has-next.has-no-favorite {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col));
+}
+
+.rvi-tl-schedule__event-main.has-pause.has-no-next {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col))
+    var(--rvi-tl-fav-col);
+}
+
+.rvi-tl-schedule__event-main.has-pause.has-no-next.has-no-favorite {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col));
+}
+
+.rvi-tl-schedule__event-main.has-pause.has-next.has-no-favorite {
+  grid-template-columns:
+    var(--rvi-tl-icon-col)
+    minmax(0, 1fr)
+    minmax(0, var(--rvi-tl-pause-col))
+    minmax(0, var(--rvi-tl-start-col))
+    minmax(0, var(--rvi-tl-next-col));
+}
+
 .rvi-tl-schedule__event-icon {
   grid-column: 1;
   display: inline-flex;
@@ -480,6 +538,10 @@
   grid-column: 4;
 }
 
+.rvi-tl-schedule__event-main.has-no-pause .rvi-tl-schedule__event-metric--from-start {
+  grid-column: 3;
+}
+
 .rvi-tl-schedule__event-metric {
   text-align: right;
   font-size: 13px;
@@ -498,6 +560,10 @@
   width: auto;
 }
 
+.rvi-tl-schedule__event-main.has-no-pause .rvi-tl-schedule__event-metric--next {
+  grid-column: 4;
+}
+
 .rvi-tl-schedule__event-favorite {
   grid-column: 6;
   display: inline-flex;
@@ -506,6 +572,18 @@
   width: var(--rvi-tl-fav-col);
   height: 24px;
   color: rgba(255, 255, 255, 0.32);
+}
+
+.rvi-tl-schedule__event-main.has-no-pause .rvi-tl-schedule__event-favorite {
+  grid-column: 5;
+}
+
+.rvi-tl-schedule__event-main.has-no-next .rvi-tl-schedule__event-favorite {
+  grid-column: 5;
+}
+
+.rvi-tl-schedule__event-main.has-no-pause.has-no-next .rvi-tl-schedule__event-favorite {
+  grid-column: 4;
 }
 
 .rvi-tl-schedule__event-favorite.is-active {
