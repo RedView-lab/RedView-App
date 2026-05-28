@@ -16,6 +16,8 @@ export {
 export {
   extractRouteProfileFromBrouter,
   extractRouteProfileFromPoints,
+  refineRouteProfileWithIgnAltimetry,
   refineRouteProfileWithTerrain,
+  refineRouteProfileWithTerrainTiles,
   sampleRouteProfileWithTerrain,
 } from './profile';

@@ -7,6 +7,7 @@ import {
   smoothElevations,
 } from './elevation';
 import { parseMessages } from './parser';
+import { sampleTerrainElevationsAtPoints } from './terrainTiles';
 import type { RoutePointInput, RouteProfilePoint } from './types';
 
 function buildRouteProfile(rows: Array<{
@@ -96,3 +97,26 @@ export function refineRouteProfileWithTerrain(
 
   return buildRouteProfile(rows);
 }
+
+export async function refineRouteProfileWithIgnAltimetry(
+  route: BrouterRoute,
+  signal?: AbortSignal,
+): Promise<RouteProfilePoint[] | null> {
+  const rows = parseMessages(route);
+  if (rows.length < 2) return null;
+
+  const elevations = await sampleTerrainElevationsAtPoints(rows, signal);
+  let coverage = 0;
+  for (let index = 0; index < rows.length; index += 1) {
+    const elevation = elevations[index];
+    if (elevation != null && Number.isFinite(elevation)) {
+      rows[index]!.ele = elevation;
+      coverage += 1;
+    }
+  }
+
+  if (coverage / rows.length < 0.6) return null;
+  return buildRouteProfile(rows);
+}
+
+export const refineRouteProfileWithTerrainTiles = refineRouteProfileWithIgnAltimetry;

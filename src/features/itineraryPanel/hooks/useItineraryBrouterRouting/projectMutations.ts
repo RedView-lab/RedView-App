@@ -3,6 +3,7 @@ import {
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromBrouter,
   extractRouteProfileFromBrouter,
+  type RouteProfilePoint,
 } from '../../lib/route-metrics';
 import type { BrouterRoute } from '../../lib/brouter';
 import type { Itinerary, ItineraryProject } from '../../types';
@@ -21,7 +22,18 @@ import {
   toStoredRoutePoints,
 } from '../useItineraryBrouterRoutingShared';
 
-export function applyPendingRoutePatch(project: ItineraryProject, route: BrouterRoute): ItineraryProject {
+function resolveRouteProfile(
+  route: BrouterRoute,
+  routeProfileOverride?: RouteProfilePoint[] | null,
+): RouteProfilePoint[] | null {
+  return routeProfileOverride ?? extractRouteProfileFromBrouter(route);
+}
+
+export function applyPendingRoutePatch(
+  project: ItineraryProject,
+  route: BrouterRoute,
+  routeProfileOverride?: RouteProfilePoint[] | null,
+): ItineraryProject {
   const itinerary = project.itineraries.find(
     (item) => item.id === project.activeItineraryId,
   );
@@ -31,7 +43,7 @@ export function applyPendingRoutePatch(project: ItineraryProject, route: Brouter
   if (basePoints.length < 2) return project;
 
   const geometryPoints = toGeometryRoutePoints(route.coordinates);
-  const routeProfile = extractRouteProfileFromBrouter(route);
+  const routeProfile = resolveRouteProfile(route, routeProfileOverride);
   const patchRoutePoints = buildStoredRoutePointsFromBrouter(
     geometryPoints,
     routeProfile,
@@ -96,7 +108,11 @@ export function applyPendingRoutePatch(project: ItineraryProject, route: Brouter
   };
 }
 
-export function applyPendingTraceAppend(project: ItineraryProject, route: BrouterRoute): ItineraryProject {
+export function applyPendingTraceAppend(
+  project: ItineraryProject,
+  route: BrouterRoute,
+  routeProfileOverride?: RouteProfilePoint[] | null,
+): ItineraryProject {
   const itinerary = project.itineraries.find(
     (item) => item.id === project.activeItineraryId,
   );
@@ -106,7 +122,7 @@ export function applyPendingTraceAppend(project: ItineraryProject, route: Broute
   if (basePoints.length < 2) return project;
 
   const geometryPoints = toGeometryRoutePoints(route.coordinates);
-  const routeProfile = extractRouteProfileFromBrouter(route);
+  const routeProfile = resolveRouteProfile(route, routeProfileOverride);
   const segmentRoutePoints = buildStoredRoutePointsFromBrouter(
     geometryPoints,
     routeProfile,
@@ -164,14 +180,18 @@ export function applyPendingTraceAppend(project: ItineraryProject, route: Broute
   };
 }
 
-export function applyRecomputedRoute(project: ItineraryProject, route: BrouterRoute): ItineraryProject {
+export function applyRecomputedRoute(
+  project: ItineraryProject,
+  route: BrouterRoute,
+  routeProfileOverride?: RouteProfilePoint[] | null,
+): ItineraryProject {
   const itinerary = project.itineraries.find(
     (item) => item.id === project.activeItineraryId,
   );
   if (!itinerary) return project;
 
   const geometryPoints = toGeometryRoutePoints(route.coordinates);
-  const routeProfile = extractRouteProfileFromBrouter(route);
+  const routeProfile = resolveRouteProfile(route, routeProfileOverride);
   const routePoints = buildStoredRoutePointsFromBrouter(
     geometryPoints,
     routeProfile,

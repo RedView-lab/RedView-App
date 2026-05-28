@@ -1,8 +1,10 @@
 import { routeLengthM } from '@/features/poi/lib/gpx-loader';
 import { translateAppText } from '@/shared/i18n';
+import { FRANCE_BOUNDS } from '@/features/map3d/lib/ign.config';
 
 import { formatGpsCoordinateLabel } from '../geocoding';
 import { computeRouteElevationMetrics, extractRouteProfileFromPoints } from '../route-metrics';
+import { sampleTerrainElevationsAtPoints } from '../route-metrics/terrainTiles';
 import type { Itinerary, ItineraryMetrics } from '../../types';
 
 const EARTH_RADIUS_M = 6_371_008.8;
@@ -60,6 +62,43 @@ function buildDistanceOnlyRoutePoints(
 interface NormalizeImportedRoutePointsOptions {
   includeGradient?: boolean;
 }
+
+function routeIsInsideFrance(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+): boolean {
+  const [west, south, east, north] = FRANCE_BOUNDS;
+  return points.every((point) => (
+    point.lon >= west
+    && point.lon <= east
+    && point.lat >= south
+    && point.lat <= north
+  ));
+}
+
+export async function refineImportedRoutePointsWithIgnAltimetry(
+  points: NonNullable<Itinerary['gpxRoute']>['points'],
+  signal?: AbortSignal,
+): Promise<NonNullable<Itinerary['gpxRoute']>['points'] | null> {
+  if (points.length < 2 || !routeIsInsideFrance(points)) return null;
+
+  const elevations = await sampleTerrainElevationsAtPoints(points, signal);
+  let coverage = 0;
+  const refined = points.map((point, index) => {
+    const elevation = elevations[index];
+    if (elevation != null && Number.isFinite(elevation)) {
+      coverage += 1;
+      return {
+        ...point,
+        elevationM: elevation,
+      };
+    }
+    return point;
+  });
+
+  return coverage / points.length >= 0.6 ? refined : null;
+}
+
+export const refineImportedRoutePointsWithTerrainTiles = refineImportedRoutePointsWithIgnAltimetry;
 
 export function normalizeImportedRoutePoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],

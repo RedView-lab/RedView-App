@@ -27,6 +27,7 @@ import {
   buildImportedRouteMetrics,
   createImportedTimeline,
   normalizeImportedRoutePoints,
+  refineImportedRoutePointsWithIgnAltimetry,
   simplifyPointsByQuality,
 } from '../../lib/routes';
 import type {
@@ -349,7 +350,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const addItineraryFromGpxFile = useCallback(
     async (file: File) => {
       const route = await parseGpxFile(file);
-      const storedPoints = normalizeImportedRoutePoints(route.points, { includeGradient: false });
+      const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
+      const basePoints = ignAltimetryPoints ?? route.points;
+      const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });
       const quality = 'default';
       const simplifiedPoints = normalizeImportedRoutePoints(
         simplifyPointsByQuality(storedPoints, quality),
