@@ -7,7 +7,6 @@ import {
 } from '@/features/itineraryPanel/lib/routes';
 import type { GpxQualityMode } from '@/features/itineraryPanel/types';
 import { useAppI18n } from '@/shared/i18n';
-import { ROUTE_SLOPE_LEGEND_BANDS } from '../lib';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
 import { Slider } from '../components/Slider';
@@ -177,18 +176,6 @@ export function RoutesSection({
     );
   }, [gpxQualityStats, previewTargetPointCount]);
 
-  const slopeLegendRoute = useMemo(
-    () => items.find((route) => route.mode === 'slope' && route.visible)
-      ?? items.find((route) => route.mode === 'slope')
-      ?? null,
-    [items],
-  );
-
-  const slopeLegendTitle = useMemo(() => {
-    if (!slopeLegendRoute) return null;
-    return `${slopeLegendRoute.label} (${t('Pente').toLocaleLowerCase()})`;
-  }, [slopeLegendRoute, t]);
-
   return (
     <Section
       title="Itinéraires"
@@ -235,24 +222,6 @@ export function RoutesSection({
             </div>
           </div>
         ))}
-
-        {slopeLegendRoute && slopeLegendTitle ? (
-          <div className="rvc-routes__slope-legend" aria-label={t('Légende de pente du tracé')}>
-            <div className="rvc-routes__slope-legend-title">{slopeLegendTitle}</div>
-            <div className="rvc-routes__slope-legend-list">
-              {ROUTE_SLOPE_LEGEND_BANDS.map((band) => (
-                <div key={band.id} className="rvc-routes__slope-legend-item">
-                  <span
-                    className="rvc-routes__slope-legend-swatch"
-                    style={{ backgroundColor: band.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="rvc-routes__slope-legend-label">{band.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         <div className="rvc-row rvc-row--split rvc-routes__trace-width-row">
           <span className="rvc-row__label">{t('Épaisseur des tracés')}</span>

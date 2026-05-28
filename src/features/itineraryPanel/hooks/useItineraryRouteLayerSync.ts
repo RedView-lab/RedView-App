@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
-import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
 
 import {
   clearForbiddenZoneDraft,
@@ -57,10 +56,6 @@ export function useItineraryRouteLayerSync({
   const routeSlopeBandSignature = useMemo(
     () => routeSlopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join('|'),
     [routeSlopeBands],
-  );
-  const needsTerrainSlopeProfile = useMemo(
-    () => itineraries.some((it) => it.renderMode === 'slope' && (it.gpxRoute?.points.length ?? 0) >= 2),
-    [itineraries],
   );
   const layerSignature = useMemo(() => {
     const itinerarySignature = itineraries
@@ -151,13 +146,6 @@ export function useItineraryRouteLayerSync({
       replayRouteState();
     }, 0);
   }, [replayRouteState]);
-
-  useEffect(() => {
-    setActiveDemProfilePreference(needsTerrainSlopeProfile ? 'terrain' : 'default');
-    return () => {
-      setActiveDemProfilePreference('default');
-    };
-  }, [needsTerrainSlopeProfile]);
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;

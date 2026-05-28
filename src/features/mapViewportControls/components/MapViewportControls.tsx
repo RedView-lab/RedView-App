@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
+import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
 import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
 import {
@@ -15,6 +16,7 @@ interface MapViewportControlsProps {
   isMapLoaded: boolean;
   immersiveMode: boolean;
   onToggleImmersiveMode: () => void;
+  routeSlopeLegendTitle?: string | null;
 }
 
 const CAMERA_DURATION_MS = 650;
@@ -31,6 +33,7 @@ export function MapViewportControls({
   isMapLoaded,
   immersiveMode,
   onToggleImmersiveMode,
+  routeSlopeLegendTitle = null,
 }: MapViewportControlsProps) {
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
@@ -154,17 +157,37 @@ export function MapViewportControls({
         <IconZoomOut size={16} />
       </button>
 
-      <button
-        type="button"
-        className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
-        aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
-        aria-pressed={is3DView}
-        title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
-        onClick={handleToggleDimension}
-        disabled={disabled}
-      >
-        <span>3D</span>
-      </button>
+      <div className="rvmvc-map-tools__dimension-row">
+        {routeSlopeLegendTitle ? (
+          <section className="rvmvc-route-slope-legend" aria-label={t('Légende de pente du tracé')}>
+            <div className="rvmvc-route-slope-legend__title">{routeSlopeLegendTitle}</div>
+            <div className="rvmvc-route-slope-legend__list">
+              {ROUTE_SLOPE_LEGEND_BANDS.map((band) => (
+                <div key={band.id} className="rvmvc-route-slope-legend__item">
+                  <span
+                    className="rvmvc-route-slope-legend__swatch"
+                    style={{ backgroundColor: band.color }}
+                    aria-hidden="true"
+                  />
+                  <span className="rvmvc-route-slope-legend__label">{band.label}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        <button
+          type="button"
+          className={`rvmvc-map-tools__button rvmvc-map-tools__text-button${is3DView ? ' is-active' : ''}`}
+          aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
+          aria-pressed={is3DView}
+          title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}
+          onClick={handleToggleDimension}
+          disabled={disabled}
+        >
+          <span>3D</span>
+        </button>
+      </div>
     </aside>
   );
 }

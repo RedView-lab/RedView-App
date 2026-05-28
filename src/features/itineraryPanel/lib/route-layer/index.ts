@@ -50,7 +50,6 @@ import {
   buildRouteAuditGeoJson,
 } from './geojson';
 import { haversineRouteDistanceM } from '../routes';
-import { sampleRouteProfileWithTerrain } from '../route-metrics';
 
 export {
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -105,10 +104,8 @@ interface RouteLayerRenderSpec {
   lineGradientPaint: unknown[];
 }
 
-const ROUTE_SLOPE_TARGET_SEGMENT_M = 24;
+const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
-const ROUTE_TERRAIN_PROFILE_MIN_ZOOM = 14;
-const ROUTE_TERRAIN_PROFILE_MIN_COVERAGE = 0.98;
 
 function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(1, Math.min(12, Math.round(value ?? 4)));
@@ -188,13 +185,6 @@ interface RouteSamplePoint {
   gradientPct: number | null;
 }
 
-type TerrainQueryableMap = MapboxMap & {
-  queryTerrainElevation?: (
-    lngLat: [number, number],
-    options?: { exaggerated?: boolean },
-  ) => number | null | undefined;
-};
-
 function buildRouteSlopeSamples(points: readonly RouteLayerPoint[]): RouteSamplePoint[] {
   if (points.length === 0) return [];
 
@@ -246,55 +236,6 @@ function buildRouteSlopeSamples(points: readonly RouteLayerPoint[]): RouteSample
   }
 
   return samples;
-}
-
-function sampleTerrainElevation(map: MapboxMap, lon: number, lat: number): number | null {
-  const queryTerrainElevation = (map as TerrainQueryableMap).queryTerrainElevation;
-  if (typeof queryTerrainElevation !== 'function') return null;
-  try {
-    const elevation = queryTerrainElevation.call(map, [lon, lat], { exaggerated: false });
-    return Number.isFinite(elevation) ? (elevation as number) : null;
-  } catch {
-    return null;
-  }
-}
-
-function buildTerrainRefinedRoutePoints(
-  map: MapboxMap,
-  points: readonly RouteLayerPoint[],
-): RouteLayerPoint[] {
-  if (typeof map.getZoom !== 'function' || map.getZoom() < ROUTE_TERRAIN_PROFILE_MIN_ZOOM) {
-    return points.slice();
-  }
-
-  const terrainSourceId = map.getTerrain()?.source;
-  if (!terrainSourceId) return points.slice();
-  try {
-    if (!map.isSourceLoaded(terrainSourceId)) return points.slice();
-  } catch {
-    return points.slice();
-  }
-
-  const refinedProfile = sampleRouteProfileWithTerrain(
-    points.map((point) => ({
-      lat: point.lat,
-      lon: point.lon,
-      distanceM: point.distanceM ?? undefined,
-      elevationM: point.elevationM ?? undefined,
-      gradientPct: point.gradientPct ?? undefined,
-    })),
-    (lng, lat) => sampleTerrainElevation(map, lng, lat),
-    ROUTE_TERRAIN_PROFILE_MIN_COVERAGE,
-  );
-  if (!refinedProfile || refinedProfile.length < 2) return points.slice();
-
-  return refinedProfile.map((point) => ({
-    lat: point.lat,
-    lon: point.lon,
-    distanceM: point.distanceM,
-    elevationM: point.elevationM,
-    gradientPct: point.gradientPct,
-  }));
 }
 
 function pickSlopeBand(
@@ -373,15 +314,14 @@ function buildSlopeRouteGradientPaint(
 }
 
 function buildSlopeRouteRenderSpec(
-  map: MapboxMap,
+  _map: MapboxMap,
   points: readonly RouteLayerPoint[],
   bands: ReadonlyArray<RouteSlopeBand>,
   fallbackColor: string,
 ): RouteLayerRenderSpec {
-  const refinedPoints = buildTerrainRefinedRoutePoints(map, points);
-  const samples = buildRouteSlopeSamples(refinedPoints);
+  const samples = buildRouteSlopeSamples(points);
   return {
-    data: buildDefaultRouteGeoJson(refinedPoints.length >= 2 ? refinedPoints : points),
+    data: buildDefaultRouteGeoJson(points),
     lineColorPaint: fallbackColor,
     lineGradientPaint: buildSlopeRouteGradientPaint(samples, bands, fallbackColor),
   };

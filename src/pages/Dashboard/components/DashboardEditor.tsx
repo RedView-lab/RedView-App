@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useMemo,
   type CSSProperties,
   type Dispatch,
   type MouseEvent as ReactMouseEvent,
@@ -155,6 +156,21 @@ export function DashboardEditor({
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
 
+  const routeSlopeLegendTitle = useMemo(() => {
+    const project = activeProjectInitial;
+    if (!project) return null;
+
+    const activeSlopeItinerary = project.itineraries.find(
+      (itinerary) => itinerary.id === project.activeItineraryId && itinerary.renderMode === 'slope' && itinerary.visible !== false,
+    );
+    const fallbackSlopeItinerary = project.itineraries.find(
+      (itinerary) => itinerary.renderMode === 'slope' && itinerary.visible !== false,
+    );
+    const itinerary = activeSlopeItinerary ?? fallbackSlopeItinerary ?? null;
+    if (!itinerary) return null;
+    return `${itinerary.name} (${t('Pente').toLocaleLowerCase()})`;
+  }, [activeProjectInitial, t]);
+
   const handleLidarSelectionDisable = useCallback(() => {
     setLidarModeEnabled(false);
   }, [setLidarModeEnabled]);
@@ -221,6 +237,7 @@ export function DashboardEditor({
           isMapLoaded={mapLoaded}
           immersiveMode={isMapFocusMode}
           onToggleImmersiveMode={onToggleMapFocusMode}
+          routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
       </div>
 
