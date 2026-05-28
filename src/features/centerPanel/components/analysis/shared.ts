@@ -28,8 +28,11 @@ export interface PreparedChartNode {
   prediction: Itinerary['prediction'] | null;
   xOffset: number;
   axis1Points: ChartSeries['points'] | null;
+  axis1ShiftedPoints: ChartSeries['points'] | null;
   axis2Points: ChartSeries['points'] | null;
+  axis2ShiftedPoints: ChartSeries['points'] | null;
   altitudePoints: ChartSeries['points'] | null;
+  altitudeShiftedPoints: ChartSeries['points'] | null;
 }
 
 export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [

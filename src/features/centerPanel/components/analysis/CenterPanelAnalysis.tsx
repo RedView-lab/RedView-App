@@ -66,12 +66,16 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const predictionStore = usePredictionStoreOptional();
   const routeSplitTool = useRouteSplitToolOptional();
   const { controlledHoverXValue, setManualHoverXValue } = useAnalysisFlyover();
+  const project = projectStore?.project ?? null;
+  const itineraries = project?.itineraries ?? [];
+  const activeItineraryId = project?.activeItineraryId ?? null;
+  const predictions = predictionStore?.predictions ?? null;
 
   // Persisted analysis UI state (axis selections, X-axis mode, filter
   // chips). Read from the project so reopening it restores the chart.
   // Migrate legacy axis labels so projects saved before the rename keep
   // rendering without exposing the removed "Altitude" metric anymore.
-  const rawAnalysis = projectStore?.project.analysis;
+  const rawAnalysis = project?.analysis;
   const analysisState: AnalysisPanelState = rawAnalysis
     ? normalizeAnalysisState(rawAnalysis)
     : normalizeAnalysisState();
@@ -130,17 +134,17 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   }, [detailOffset, detailZoom, projectStore, storedDetailOffset, storedDetailZoom]);
 
   const activeItinerary = useMemo(() => {
-    if (!projectStore) return null;
+    if (itineraries.length === 0) return null;
     return (
-      projectStore.project.itineraries.find(
-        (itinerary) => itinerary.id === projectStore.project.activeItineraryId,
-      ) ?? projectStore.project.itineraries[0] ?? null
+      itineraries.find((itinerary) => itinerary.id === activeItineraryId) ??
+      itineraries[0] ??
+      null
     );
-  }, [projectStore]);
+  }, [activeItineraryId, itineraries]);
 
   const visualNodes = useMemo(
-    () => (projectStore ? buildItineraryVisualNodes(projectStore.project.itineraries) : []),
-    [projectStore],
+    () => buildItineraryVisualNodes(itineraries),
+    [itineraries],
   );
 
   const preparedChartNodes = useMemo<PreparedChartNode[]>(() => {
@@ -150,48 +154,54 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       if (itinerary.analysisVisible === false) continue;
       if ((itinerary.gpxRoute?.points.length ?? 0) === 0) continue;
 
-      const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
+      const prediction = predictions?.[itinerary.id] ?? itinerary.prediction ?? null;
       const routePoints = itinerary.gpxRoute?.points ?? null;
       const routeSource = itinerary.gpxRoute?.source;
       const startTime = itinerary.rhythm.startTime;
       const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+      const axis1Points = buildSeriesFromPrediction(
+        prediction,
+        axis1Value,
+        xMode,
+        routePoints,
+        routeSource,
+        startTime,
+        itinerary,
+      );
+      const axis2Points = buildSeriesFromPrediction(
+        prediction,
+        axis2Value,
+        xMode,
+        routePoints,
+        routeSource,
+        startTime,
+        itinerary,
+      );
+      const altitudePoints = buildSeriesFromPrediction(
+        prediction,
+        'Altitude',
+        xMode,
+        routePoints,
+        routeSource,
+        startTime,
+        itinerary,
+      );
 
       result.push({
         itinerary,
         startDistanceKm: node.startDistanceKm,
         prediction,
         xOffset,
-        axis1Points: buildSeriesFromPrediction(
-          prediction,
-          axis1Value,
-          xMode,
-          routePoints,
-          routeSource,
-          startTime,
-          itinerary,
-        ),
-        axis2Points: buildSeriesFromPrediction(
-          prediction,
-          axis2Value,
-          xMode,
-          routePoints,
-          routeSource,
-          startTime,
-          itinerary,
-        ),
-        altitudePoints: buildSeriesFromPrediction(
-          prediction,
-          'Altitude',
-          xMode,
-          routePoints,
-          routeSource,
-          startTime,
-          itinerary,
-        ),
+        axis1Points,
+        axis1ShiftedPoints: axis1Points ? shiftChartPoints(axis1Points, xOffset) : null,
+        axis2Points,
+        axis2ShiftedPoints: axis2Points ? shiftChartPoints(axis2Points, xOffset) : null,
+        altitudePoints,
+        altitudeShiftedPoints: altitudePoints ? shiftChartPoints(altitudePoints, xOffset) : null,
       });
     }
     return result;
-  }, [axis1Value, axis2Value, predictionStore, visualNodes, xMode]);
+  }, [axis1Value, axis2Value, predictions, visualNodes, xMode]);
 
   const visibleChartNodes = useMemo(
     () => preparedChartNodes.map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm })),
@@ -321,8 +331,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const series = useMemo<ChartSeries[]>(() => {
     const result: ChartSeries[] = [];
     for (const node of preparedChartNodes) {
-      const { itinerary, xOffset, axis1Points, axis2Points } = node;
-      if (axis1Points) {
+      const { itinerary, axis1ShiftedPoints, axis2ShiftedPoints } = node;
+      if (axis1ShiftedPoints) {
         result.push({
           id: `${itinerary.id}::axis1`,
           itineraryId: itinerary.id,
@@ -331,11 +341,11 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           color: itinerary.color,
           axis: 1,
           unit: '',
-          points: shiftChartPoints(axis1Points, xOffset),
+          points: axis1ShiftedPoints,
         });
       }
 
-      if (axis2Points) {
+      if (axis2ShiftedPoints) {
         result.push({
           id: `${itinerary.id}::axis2`,
           itineraryId: itinerary.id,
@@ -344,7 +354,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           color: lightenColor(itinerary.color, 0.4),
           axis: 2,
           unit: '',
-          points: shiftChartPoints(axis2Points, xOffset),
+          points: axis2ShiftedPoints,
         });
       }
     }
@@ -366,15 +376,15 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
     const result: ChartBackdropProfile[] = [];
     for (const node of preparedChartNodes) {
-      const { itinerary, altitudePoints, xOffset } = node;
-      const points = altitudePoints;
+      const { itinerary, altitudeShiftedPoints } = node;
+      const points = altitudeShiftedPoints;
       if (!points) continue;
       result.push({
         id: `${itinerary.id}::altitude-backdrop`,
         itineraryId: itinerary.id,
         itineraryName: itinerary.name,
         color: itinerary.color,
-        points: shiftChartPoints(points, xOffset),
+        points,
       });
     }
     return result;
@@ -382,8 +392,8 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
 
   const routeXDomainClamp = useMemo<AxisDomain | null>(() => {
     const routeProfiles = preparedChartNodes
-      .map(({ altitudePoints, xOffset }) =>
-        altitudePoints ? shiftChartPoints(altitudePoints, xOffset) : null,
+      .map(({ altitudeShiftedPoints }) =>
+        altitudeShiftedPoints ?? null,
       )
       .filter((points): points is NonNullable<typeof points> => Boolean(points));
 
@@ -425,7 +435,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     if (activeItinerary.analysisVisible === false) return null;
 
     const prediction =
-      predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+      predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null;
     if (!prediction) return null;
 
     const anchorPoint =
@@ -442,7 +452,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       longitude: anchorPoint.lon,
       xMode,
     });
-  }, [activeItinerary, dayNightStartReady, filters.jourNuit, predictionStore, xMode]);
+  }, [activeItinerary, dayNightStartReady, filters.jourNuit, predictions, xMode]);
 
   const dayNightWarning =
     (filters.jourNuit || showDayNightRequirementHint) && !dayNightStartReady
@@ -467,8 +477,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       && activeItinerary.id === targetItinerary.id
       && (activeItinerary.gpxRoute?.points.length ?? 0) >= 4
     ) {
-      const activePrediction =
-        predictionStore?.predictions[activeItinerary.id] ?? activeItinerary.prediction ?? null;
+      const activePrediction = predictions?.[activeItinerary.id] ?? activeItinerary.prediction ?? null;
       const splitIndex = findSplitIndexForChartX(
         activeItinerary.gpxRoute?.points ?? null,
         activePrediction,
@@ -482,8 +491,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     }
 
     if (!map) return;
-    const prediction =
-      predictionStore?.predictions[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+    const prediction = predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
     const point = locateRoutePointAtX(
       targetItinerary.gpxRoute?.points ?? null,
       prediction,

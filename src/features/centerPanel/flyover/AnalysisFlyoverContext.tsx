@@ -95,6 +95,10 @@ export function AnalysisFlyoverProvider({
 }: AnalysisFlyoverProviderProps) {
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
+  const project = projectStore?.project ?? null;
+  const itineraries = project?.itineraries ?? [];
+  const activeItineraryId = project?.activeItineraryId ?? null;
+  const predictions = predictionStore?.predictions ?? null;
   const [playbackDistanceM, setPlaybackDistanceM] = useState<number | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [speedIndex, setSpeedIndex] = useState(DEFAULT_SPEED_INDEX);
@@ -110,10 +114,9 @@ export function AnalysisFlyoverProvider({
   const lastHoverMarkerRef = useRef<{ lon: number; lat: number; color: string } | null>(null);
 
   const interactiveItinerary = useMemo(() => {
-    if (!projectStore) return null;
-    const itineraries = projectStore.project.itineraries;
+    if (itineraries.length === 0) return null;
     const active =
-      itineraries.find((itinerary) => itinerary.id === projectStore.project.activeItineraryId) ??
+      itineraries.find((itinerary) => itinerary.id === activeItineraryId) ??
       null;
     if (active && active.analysisVisible !== false && (active.gpxRoute?.points.length ?? 0) > 0) {
       return active;
@@ -124,23 +127,22 @@ export function AnalysisFlyoverProvider({
           itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
       ) ?? null
     );
-  }, [projectStore]);
+  }, [activeItineraryId, itineraries]);
 
-  const xMode = ((projectStore?.project.analysis?.xMode as AxisMode | undefined) ??
+  const xMode = ((project?.analysis?.xMode as AxisMode | undefined) ??
     'distance') as AxisMode;
   const visibleChartNodes = useMemo(() => {
-    if (!projectStore) return [];
-    return buildItineraryVisualNodes(projectStore.project.itineraries)
+    return buildItineraryVisualNodes(itineraries)
       .filter(
         ({ itinerary }) =>
           itinerary.analysisVisible !== false && (itinerary.gpxRoute?.points.length ?? 0) > 0,
       )
       .map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm }));
-  }, [projectStore]);
+  }, [itineraries]);
   const routePoints = interactiveItinerary?.gpxRoute?.points ?? null;
   const prediction =
     interactiveItinerary != null
-      ? predictionStore?.predictions[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null
+      ? predictions?.[interactiveItinerary.id] ?? interactiveItinerary.prediction ?? null
       : null;
   const routeGeometry = useMemo(() => buildRoutePlaybackGeometry(routePoints), [routePoints]);
   const totalDistanceM = useMemo(() => {
@@ -255,7 +257,7 @@ export function AnalysisFlyoverProvider({
     }
 
     const targetPrediction =
-      predictionStore?.predictions[targetItinerary.id] ?? targetItinerary.prediction ?? null;
+      predictions?.[targetItinerary.id] ?? targetItinerary.prediction ?? null;
     const targetRoutePoints = targetItinerary.gpxRoute?.points ?? null;
     const targetStartTime = targetItinerary.rhythm.startTime ?? null;
     const localHoverXValue =
@@ -302,7 +304,7 @@ export function AnalysisFlyoverProvider({
     interactiveItinerary,
     map,
     playbackDistanceM,
-    predictionStore,
+    predictions,
     routeGeometry,
     routePoints,
     visibleChartNodes,

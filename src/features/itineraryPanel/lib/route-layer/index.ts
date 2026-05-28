@@ -50,6 +50,7 @@ import {
   buildRouteAuditGeoJson,
 } from './geojson';
 import { haversineRouteDistanceM } from '../routes';
+import { sampleRouteProfileWithTerrain } from '../route-metrics';
 
 export {
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -100,6 +101,8 @@ export interface RouteLayerOptions {
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 15;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
+const ROUTE_TERRAIN_PROFILE_MIN_ZOOM = 14;
+const ROUTE_TERRAIN_PROFILE_MIN_COVERAGE = 0.98;
 
 function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(1, Math.min(12, Math.round(value ?? 4)));
@@ -251,31 +254,42 @@ function sampleTerrainElevation(map: MapboxMap, lon: number, lat: number): numbe
   }
 }
 
-function applyTerrainElevations(
+function buildTerrainRefinedRoutePoints(
   map: MapboxMap,
-  samples: readonly RouteSamplePoint[],
-): RouteSamplePoint[] {
-  const terrainSourceId = map.getTerrain()?.source;
-  if (!terrainSourceId) return samples.slice();
-  try {
-    if (!map.isSourceLoaded(terrainSourceId)) return samples.slice();
-  } catch {
-    return samples.slice();
+  points: readonly RouteLayerPoint[],
+): RouteLayerPoint[] {
+  if (typeof map.getZoom !== 'function' || map.getZoom() < ROUTE_TERRAIN_PROFILE_MIN_ZOOM) {
+    return points.slice();
   }
 
-  let usedTerrain = false;
-  const hydrated = samples.map((sample) => {
-    const terrainElevationM = sampleTerrainElevation(map, sample.lon, sample.lat);
-    if (!Number.isFinite(terrainElevationM)) return sample;
-    usedTerrain = true;
-    return {
-      ...sample,
-      elevationM: terrainElevationM,
-      gradientPct: null,
-    };
-  });
+  const terrainSourceId = map.getTerrain()?.source;
+  if (!terrainSourceId) return points.slice();
+  try {
+    if (!map.isSourceLoaded(terrainSourceId)) return points.slice();
+  } catch {
+    return points.slice();
+  }
 
-  return usedTerrain ? hydrated : samples.slice();
+  const refinedProfile = sampleRouteProfileWithTerrain(
+    points.map((point) => ({
+      lat: point.lat,
+      lon: point.lon,
+      distanceM: point.distanceM ?? undefined,
+      elevationM: point.elevationM ?? undefined,
+      gradientPct: point.gradientPct ?? undefined,
+    })),
+    (lng, lat) => sampleTerrainElevation(map, lng, lat),
+    ROUTE_TERRAIN_PROFILE_MIN_COVERAGE,
+  );
+  if (!refinedProfile || refinedProfile.length < 2) return points.slice();
+
+  return refinedProfile.map((point) => ({
+    lat: point.lat,
+    lon: point.lon,
+    distanceM: point.distanceM,
+    elevationM: point.elevationM,
+    gradientPct: point.gradientPct,
+  }));
 }
 
 function pickSlopeBand(
@@ -300,7 +314,8 @@ function buildSlopeRouteGeoJson(
   fallbackColor: string,
 ): GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString> {
   const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
-  const samples = applyTerrainElevations(map, buildRouteSlopeSamples(points));
+  const refinedPoints = buildTerrainRefinedRoutePoints(map, points);
+  const samples = buildRouteSlopeSamples(refinedPoints);
 
   for (let index = 1; index < samples.length; index += 1) {
     const start = samples[index - 1];
