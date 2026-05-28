@@ -28,6 +28,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
     value: 'slow-040',
     options: [
       { value: 'slow-040', label: '0.40 m (Lent)' },
+      { value: 'terrain-1m', label: '1 m terrain (IGN)' },
       { value: 'fast-30m', label: '30 m (Rapide)' },
     ],
   },

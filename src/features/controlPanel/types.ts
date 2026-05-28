@@ -30,7 +30,7 @@ export interface Basemap {
   active?: boolean;
 }
 
-export type Basemap3dQualityId = 'slow-040' | string;
+export type Basemap3dQualityId = 'slow-040' | 'terrain-1m' | 'fast-30m' | string;
 
 export interface Basemap3dQualityOption {
   value: Basemap3dQualityId;

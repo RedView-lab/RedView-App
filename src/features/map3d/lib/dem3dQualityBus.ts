@@ -1,3 +1,5 @@
+import { resolveDem3dSelection } from './dem3dSelection';
+
 /**
  * 3D DEM quality bus.
  *
@@ -23,12 +25,11 @@ const VALID_QUALITIES: ReadonlySet<string> = new Set(['hd', 'fast-30m']);
 
 /**
  * Normalize legacy / persisted option ids to the canonical `Dem3dQuality`
- * value. The ControlPanel stores values like 'slow-040' (HD) or 'fast-30m'.
+ * value. The ControlPanel stores values like 'slow-040' (HD surface),
+ * 'terrain-1m' (HD terrain), or 'fast-30m'.
  */
 export function normalizeDem3dQuality(value: string | null | undefined): Dem3dQuality {
-  if (value === 'fast-30m') return 'fast-30m';
-  // 'slow-040', 'hd', null, unknown → HD
-  return 'hd';
+  return resolveDem3dSelection(value).quality;
 }
 
 let current: Dem3dQuality = DEFAULT_DEM3D_QUALITY;
