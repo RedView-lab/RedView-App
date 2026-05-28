@@ -4,6 +4,9 @@
   --rvi-tl-day-count: 1;
   --rvi-tl-hour-row-height: 96px;
   --rvi-tl-times-col: 56px;
+  --rvi-tl-grid-border: rgba(255, 255, 255, 0.04);
+  --rvi-tl-grid-surface: rgba(255, 255, 255, 0.08);
+  --rvi-tl-label-color: rgba(255, 255, 255, 0.4);
   --rvi-tl-icon-col: 24px;
   --rvi-tl-pause-col: 84px;
   --rvi-tl-start-col: 64px;
@@ -18,6 +21,7 @@
   gap: 10px;
   min-height: 0;
   width: 100%;
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
 }
 
 .rvi-timeline--fullscreen .rvi-tl-schedule {
@@ -30,8 +34,8 @@
   flex-shrink: 0;
   min-height: 50px;
   border-radius: var(--rvi-radius);
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: var(--rvi-tl-grid-surface);
+  border: 1px solid var(--rvi-tl-grid-border);
 }
 
 .rvi-tl-schedule__days-grid {
@@ -50,7 +54,7 @@
   min-width: 0;
   color: var(--rvi-text);
   cursor: pointer;
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-right: 1px solid var(--rvi-tl-grid-border);
   background: transparent;
   transition: background 0.18s ease, color 0.18s ease;
 }
@@ -62,7 +66,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
-  color: var(--rvi-text-faint);
+  color: var(--rvi-tl-label-color);
 }
 
 .rvi-tl-schedule__day-number {
@@ -96,7 +100,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
-  color: var(--rvi-text-faint);
+  color: var(--rvi-tl-label-color);
 }
 
 .rvi-tl-schedule__legend-grid {
@@ -111,8 +115,8 @@
   column-gap: var(--rvi-tl-card-gap);
   align-items: center;
   min-width: 0;
-  padding-left: calc(6px + var(--rvi-tl-card-pad-left));
-  padding-right: calc(6px + var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter));
+  padding-left: var(--rvi-tl-card-pad-left);
+  padding-right: calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter));
 }
 
 .rvi-tl-schedule__legend-name {
@@ -171,7 +175,7 @@
 }
 
 .rvi-tl-schedule__times {
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
+  border-right: 1px solid var(--rvi-tl-grid-border);
   z-index: 3;
 }
 
@@ -189,7 +193,7 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 18px;
-  color: var(--rvi-text-faint);
+  color: var(--rvi-tl-label-color);
   white-space: nowrap;
 }
 
@@ -212,7 +216,7 @@
 }
 
 .rvi-tl-schedule__canvas {
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
   overflow-x: clip;
   z-index: 1;
   isolation: isolate;
@@ -229,12 +233,12 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.04);
-  background: rgba(0, 0, 0, 0.14);
+  border-right: 1px solid var(--rvi-tl-grid-border);
+  background: transparent;
 }
 
 .rvi-tl-schedule__grid-day.is-selected {
-  background: rgba(255, 255, 255, 0.03);
+  background: transparent;
 }
 
 .rvi-tl-schedule__grid-day:last-child {
@@ -244,7 +248,17 @@
 .rvi-tl-schedule__grid-row {
   height: var(--rvi-tl-hour-row-height);
   min-height: var(--rvi-tl-hour-row-height);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--rvi-tl-grid-border);
+  background:
+    linear-gradient(
+      to bottom,
+      var(--rvi-tl-grid-surface) 0,
+      var(--rvi-tl-grid-surface) calc(50% - 0.5px),
+      var(--rvi-tl-grid-border) calc(50% - 0.5px),
+      var(--rvi-tl-grid-border) calc(50% + 0.5px),
+      var(--rvi-tl-grid-surface) calc(50% + 0.5px),
+      var(--rvi-tl-grid-surface) 100%
+    );
 }
 
 .rvi-tl-schedule__grid-row:last-child { border-bottom: 0; }
@@ -264,7 +278,7 @@
 .rvi-tl-schedule__now::before,
 .rvi-tl-schedule__now::after {
   content: '';
-  height: 2px;
+  height: 1px;
   background: rgba(255, 255, 255, 0.72);
   flex: 1 1 auto;
 }
@@ -274,12 +288,12 @@
   height: 8px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.35);
 }
 
 .rvi-tl-schedule__now-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
   color: #fff;
   white-space: nowrap;
 }
@@ -300,14 +314,14 @@
 .rvi-tl-schedule__event-span,
 .rvi-tl-schedule__pause--standalone {
   position: absolute;
-  left: 6px;
-  right: 6px;
+  left: 0;
+  right: 0;
   animation: rvi-tl-fade 260ms ease-out both;
 }
 
 .rvi-tl-schedule__event-span {
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rvi-tl-grid-surface);
   pointer-events: none;
   z-index: 1;
 }
@@ -340,15 +354,15 @@
   height: var(--rvi-tl-card-height, auto);
   padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rvi-tl-grid-surface);
   color: var(--rvi-text);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  transition: background 0.18s ease, box-shadow 0.18s ease;
 }
 
 .rvi-tl-schedule__event-card:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .rvi-tl-schedule__event.is-selected .rvi-tl-schedule__event-card {
@@ -358,7 +372,7 @@
 
 .rvi-tl-schedule__event[data-kind='start'] .rvi-tl-schedule__event-card,
 .rvi-tl-schedule__event[data-kind='end'] .rvi-tl-schedule__event-card {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--rvi-tl-grid-surface);
 }
 
 .rvi-tl-schedule__event-main {
@@ -453,7 +467,7 @@
   white-space: nowrap;
   font-size: 14px;
   font-weight: 600;
-  line-height: 20px;
+  line-height: 24px;
 }
 
 .rvi-tl-schedule__event-pauses {
@@ -473,16 +487,17 @@
   justify-content: flex-start;
   min-width: 0;
   width: 100%;
+  min-width: 74px;
   min-height: 24px;
   height: 24px;
   gap: 4px;
   padding: 0 6px 0 4px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rvi-tl-grid-surface);
   color: #fff;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 18px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   box-sizing: border-box;
@@ -546,7 +561,7 @@
   text-align: right;
   font-size: 13px;
   font-weight: 400;
-  line-height: 20px;
+  line-height: 18px;
   color: #fff;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -610,7 +625,7 @@
   min-height: 32px;
   padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--rvi-tl-grid-surface);
   color: #fff;
   box-sizing: border-box;
   pointer-events: auto;
