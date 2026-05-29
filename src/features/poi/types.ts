@@ -93,6 +93,7 @@ export interface PoiFeature {
   category: PoiCategory;
   name: string | null;
   tags: Record<string, string>;
+  favorite?: boolean;
 }
 
 /** Backend response (Fastify /bbox and /corridor) */

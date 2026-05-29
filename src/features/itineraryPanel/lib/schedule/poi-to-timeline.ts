@@ -70,6 +70,7 @@ export function poiFeaturesToTimelineItems(
       lon: f.lon,
       poiCategory: panelKey,
       osmId: f.id,
+      favorite: f.favorite,
       visible: true,
     });
   }

@@ -1,4 +1,5 @@
 .rv-poi-marker {
+  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -26,6 +27,28 @@
     transform 140ms ease,
     filter 140ms ease,
     opacity 140ms ease;
+}
+
+.rv-poi-marker__favorite-badge {
+  position: absolute;
+  top: 11px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.94);
+  border-radius: 999px;
+  background: rgba(199, 0, 54, 0.92);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.rv-poi-marker__favorite-badge-icon {
+  display: block;
+  width: 13px;
+  height: 13px;
 }
 
 .rv-poi-marker:hover .rv-poi-marker__img,
@@ -106,6 +129,11 @@
   opacity: 0.88;
 }
 
+.rv-poi-popup__icon-btn.is-active {
+  background: rgba(241, 177, 0, 0.18);
+  opacity: 1;
+}
+
 .rv-poi-popup__icon-btn:hover,
 .rv-poi-popup__icon-btn:focus-visible {
   background: var(--rv-poi-popup-surface-hover);
@@ -121,6 +149,10 @@
 
 .rv-poi-popup__icon--star {
   opacity: 0.9;
+}
+
+.rv-poi-popup__icon-btn.is-active .rv-poi-popup__icon--star {
+  filter: saturate(1.15) brightness(1.1);
 }
 
 .rv-poi-popup__title {

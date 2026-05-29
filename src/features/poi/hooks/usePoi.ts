@@ -4,7 +4,7 @@ import mapboxgl from 'mapbox-gl';
 import { POI_LABELS, type PoiCategory, type PoiFeature, type GpxRoute } from '../types';
 import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
-import { getPoiIconUrl } from '../lib/poi-icons';
+import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from '../lib/poi-icons';
 import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
 import '../styles/floating-markers.css';
 
@@ -28,6 +28,7 @@ interface PoiMarkerEntry {
 }
 
 export interface PoiPopupState {
+  favoriteEnabled: boolean;
   pauseEnabled: boolean;
   pauseDurationMin: number;
   manualTraceEnabled: boolean;
@@ -37,6 +38,7 @@ export interface UsePoiPopupActions {
   getPopupState?: (feature: PoiFeature) => PoiPopupState;
   onStartHere?: (feature: PoiFeature) => void;
   onFinishHere?: (feature: PoiFeature) => void;
+  onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onTogglePause?: (
     feature: PoiFeature,
     nextEnabled: boolean,
@@ -47,6 +49,7 @@ export interface UsePoiPopupActions {
 }
 
 const DEFAULT_POPUP_STATE: PoiPopupState = {
+  favoriteEnabled: false,
   pauseEnabled: false,
   pauseDurationMin: 5,
   manualTraceEnabled: false,
@@ -61,6 +64,7 @@ function getMarkerSignature(feature: PoiFeature): string {
     feature.lat,
     feature.lon,
     feature.category,
+    feature.favorite ? 'favorite' : 'default',
     feature.name ?? '',
     feature.tags.opening_hours ?? '',
   ].join('|');
@@ -70,6 +74,9 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
   const element = document.createElement('button');
   element.type = 'button';
   element.className = 'rv-poi-marker';
+  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
+    element.classList.add('is-favorite-fallback');
+  }
   element.dataset.poiCategory = feature.category;
   element.setAttribute(
     'aria-label',
@@ -81,12 +88,28 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
 
   const image = document.createElement('img');
   image.className = 'rv-poi-marker__img';
-  image.src = getPoiIconUrl(feature.category);
+  image.src = getPoiIconUrl(feature.category, feature.favorite === true);
   image.alt = '';
   image.draggable = false;
   image.decoding = 'async';
 
   element.appendChild(image);
+
+  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
+    const badge = document.createElement('span');
+    badge.className = 'rv-poi-marker__favorite-badge';
+    badge.setAttribute('aria-hidden', 'true');
+
+    const badgeIcon = document.createElement('img');
+    badgeIcon.className = 'rv-poi-marker__favorite-badge-icon';
+    badgeIcon.src = UI_ICON_URLS.star;
+    badgeIcon.alt = '';
+    badgeIcon.draggable = false;
+    badge.appendChild(badgeIcon);
+
+    element.appendChild(badge);
+  }
+
   return element;
 }
 
@@ -98,7 +121,13 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
   return `
     <div class="rv-poi-popup__panel">
       <div class="rv-poi-popup__header">
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Favori">
+        <button
+          type="button"
+          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${state.favoriteEnabled ? ' is-active' : ''}"
+          aria-label="Favori"
+          aria-pressed="${state.favoriteEnabled}"
+          data-action="favorite-toggle"
+        >
           <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
         </button>
         <div class="rv-poi-popup__title">${escapeHtml(name)}</div>
@@ -113,7 +142,7 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
         <div class="rv-poi-popup__field-label">Type</div>
         <button type="button" class="rv-poi-popup__select" aria-label="Type de POI">
           <span class="rv-poi-popup__type-icon-wrap">
-            <img src="${getPoiIconUrl(feature.category)}" alt="" class="rv-poi-popup__type-icon" />
+            <img src="${getPoiIconUrl(feature.category, state.favoriteEnabled)}" alt="" class="rv-poi-popup__type-icon" />
           </span>
           <span class="rv-poi-popup__select-value">${escapeHtml(category)}</span>
           <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
@@ -198,6 +227,15 @@ function buildPopupContent(
 
   bindClick('[data-action="streetview"]', () => {
     actions.onOpenStreetView?.(feature);
+  });
+
+  bindClick('[data-action="favorite-toggle"]', () => {
+    const nextState = {
+      ...state,
+      favoriteEnabled: !state.favoriteEnabled,
+    };
+    actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
+    refresh(nextState);
   });
 
   bindClick('[data-action="pause-toggle"]', () => {
@@ -341,7 +379,13 @@ export function usePoi(
   const initialFeaturesRef = useRef<PoiFeature[] | null>(initialFeatures);
   initialFeaturesRef.current = initialFeatures;
   const initialFeaturesKey = initialFeatures && initialFeatures.length > 0
-    ? `${initialFeatures.length}:${initialFeatures[0].id}:${initialFeatures[initialFeatures.length - 1].id}`
+    ? initialFeatures.map((feature) => [
+      feature.id,
+      feature.category,
+      feature.favorite ? '1' : '0',
+      feature.lat,
+      feature.lon,
+    ].join(':')).join('|')
     : 'empty';
 
   const applyRefinement = useCallback((features: PoiFeature[]) => {

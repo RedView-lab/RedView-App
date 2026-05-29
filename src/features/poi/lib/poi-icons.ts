@@ -24,6 +24,31 @@ const PROVIDED_ICON_URLS: Record<PoiCategory, string> = {
   hospital: FALLBACK_POI_ICON_URL,
 };
 
-export function getPoiIconUrl(category: PoiCategory): string {
+const PROVIDED_FAVORITE_ICON_URLS: Partial<Record<PoiCategory, string>> = {
+  drinking_water: PROVIDED_POI_SVG.favoriteWater,
+  bakery: PROVIDED_POI_SVG.favoriteBakery,
+  convenience: PROVIDED_POI_SVG.favoriteShop,
+  supermarket: PROVIDED_POI_SVG.favoriteSupermarket,
+  toilets: PROVIDED_POI_SVG.favoriteToilet,
+  fuel: PROVIDED_POI_SVG.favoriteFuel,
+  fast_food: PROVIDED_POI_SVG.favoriteFastFood,
+  cafe: PROVIDED_POI_SVG.favoriteCafe,
+  bar: PROVIDED_POI_SVG.favoriteBar,
+  restaurant: PROVIDED_POI_SVG.favoriteRestaurant,
+  hotel: PROVIDED_POI_SVG.favoriteHotelPin,
+  alpine_hut: PROVIDED_POI_SVG.favoriteRefugePin,
+  camp_site: PROVIDED_POI_SVG.favoriteRefugePin,
+  shelter: PROVIDED_POI_SVG.favoriteRefugePin,
+};
+
+export function hasDedicatedFavoritePoiIcon(category: PoiCategory): boolean {
+  return Boolean(PROVIDED_FAVORITE_ICON_URLS[category]);
+}
+
+export function getPoiIconUrl(category: PoiCategory, favorite: boolean = false): string {
+  if (favorite) {
+    return PROVIDED_FAVORITE_ICON_URLS[category] ?? PROVIDED_ICON_URLS[category] ?? FALLBACK_POI_ICON_URL;
+  }
+
   return PROVIDED_ICON_URLS[category] ?? FALLBACK_POI_ICON_URL;
 }

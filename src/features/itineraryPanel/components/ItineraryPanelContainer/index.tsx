@@ -221,6 +221,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     const itinerary = activeItineraryRef.current;
     if (!itinerary) {
       return {
+        favoriteEnabled: Boolean(feature.favorite),
         pauseEnabled: false,
         pauseDurationMin: 5,
         manualTraceEnabled: false,
@@ -236,6 +237,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     const manualTraceWaypointId = `poi-waypoint-${feature.id}`;
 
     return {
+      favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
       pauseEnabled: Boolean(
         poiRow
         && poiRow.favorite
@@ -248,6 +250,16 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       ),
     };
   }, []);
+
+  const handlePoiFavoriteToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
+    updateActive((it) => {
+      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
+      if (poiRow) {
+        poiRow.favorite = nextEnabled;
+      }
+      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
+    });
+  }, [updateActive]);
 
   const handlePoiStartHere = useCallback((feature: PoiFeature) => {
     updateActive((it) => {
@@ -307,6 +319,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       const rhythm = normalizeItineraryRhythmState(it.rhythm);
       it.rhythm = rhythm;
       poiRow.favorite = nextEnabled;
+      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
 
       if (!nextEnabled) {
         return;
@@ -372,24 +385,30 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     setProject((p) => {
       const target = p.itineraries.find((i) => i.id === targetId);
       if (!target) return p;
+      const mergedFeatures = mergePoiFeatureFavorites(
+        features,
+        target.timeline,
+        target.poiFeatures ?? [],
+      );
       const current = target.poiFeatures ?? [];
       const unchanged =
-        current.length === features.length
+        current.length === mergedFeatures.length
         && current.every((feature, index) => {
-          const next = features[index];
+          const next = mergedFeatures[index];
           return (
             feature.id === next?.id
             && feature.lat === next.lat
             && feature.lon === next.lon
             && feature.category === next.category
             && feature.name === next.name
+            && Boolean(feature.favorite) === Boolean(next.favorite)
           );
         });
       if (unchanged) return p;
       return {
         ...p,
         itineraries: p.itineraries.map((it) =>
-          it.id === targetId ? { ...it, poiFeatures: features } : it,
+          it.id === targetId ? { ...it, poiFeatures: mergedFeatures } : it,
         ),
       };
     });
@@ -402,6 +421,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       if (!target) return p;
       const route = target.gpxRoute?.points;
       if (!route || route.length < 2) return p;
+      const mergedFeatures = mergePoiFeatureFavorites(
+        features,
+        target.timeline,
+        target.poiFeatures ?? [],
+      );
 
       const existingPoiRows = new Map(
         target.timeline
@@ -409,7 +433,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           .map((row) => [row.osmId as number, row]),
       );
 
-      const newPoiRows = poiFeaturesToTimelineItems(features, route).map((row) => {
+      const newPoiRows = poiFeaturesToTimelineItems(mergedFeatures, route).map((row) => {
         const previous = row.osmId != null ? existingPoiRows.get(row.osmId) : undefined;
         return previous
           ? {
@@ -433,7 +457,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         ...p,
         itineraries: p.itineraries.map((it) =>
           it.id === targetId
-            ? { ...it, timeline: merged, poiFeatures: features }
+            ? { ...it, timeline: merged, poiFeatures: mergedFeatures }
             : it,
         ),
       };
@@ -459,6 +483,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       getPopupState: resolvePoiPopupState,
       onStartHere: handlePoiStartHere,
       onFinishHere: handlePoiFinishHere,
+      onToggleFavorite: handlePoiFavoriteToggle,
       onTogglePause: handlePoiPauseToggle,
       onToggleManualTrace: handlePoiManualTraceToggle,
       onOpenStreetView: handlePoiStreetView,
@@ -738,6 +763,9 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           if (hasAutomaticFavoritePause) return;
 
           row.favorite = favorite;
+          if (row.kind === 'poi' && row.osmId != null) {
+            it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, row.osmId, favorite);
+          }
         })
       }
       onSearchTimeline={() => {}}
@@ -785,5 +813,59 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     </>
   );
 });
+
+function setPoiFeatureFavoriteState(
+  features: PoiFeature[] | undefined,
+  poiId: number,
+  favorite: boolean,
+): PoiFeature[] | undefined {
+  if (!features || features.length === 0) return features;
+
+  let changed = false;
+  const nextFeatures = features.map((feature) => {
+    if (feature.id !== poiId) return feature;
+    if (Boolean(feature.favorite) === favorite) return feature;
+    changed = true;
+    return { ...feature, favorite };
+  });
+
+  return changed ? nextFeatures : features;
+}
+
+function mergePoiFeatureFavorites(
+  features: PoiFeature[],
+  timeline: Itinerary['timeline'],
+  currentFeatures: PoiFeature[],
+): PoiFeature[] {
+  if (features.length === 0) return features;
+
+  const timelineFavorites = new Map<number, boolean>();
+  for (const row of timeline) {
+    if (row.kind === 'poi' && row.osmId != null) {
+      timelineFavorites.set(row.osmId, Boolean(row.favorite));
+    }
+  }
+
+  const currentFavorites = new Map<number, boolean>();
+  for (const feature of currentFeatures) {
+    if (feature.favorite != null) {
+      currentFavorites.set(feature.id, feature.favorite);
+    }
+  }
+
+  let changed = false;
+  const merged = features.map((feature) => {
+    const nextFavorite = timelineFavorites.get(feature.id)
+      ?? currentFavorites.get(feature.id)
+      ?? Boolean(feature.favorite);
+    if (Boolean(feature.favorite) === nextFavorite) {
+      return feature;
+    }
+    changed = true;
+    return { ...feature, favorite: nextFavorite };
+  });
+
+  return changed ? merged : features;
+}
 
 export type { ItineraryPanelContainerProps };
