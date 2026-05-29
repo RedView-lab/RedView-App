@@ -68,6 +68,7 @@ export interface CreateMapLifecycleControllerOptions {
 export interface MapLifecycleController {
   reportStatus: (state: 'loading' | 'ready' | 'error', progress: number, detail?: string) => void;
   reloadMapElevation: () => void;
+  reloadMapElevationForProfile: () => void;
   prepareStyleChange: (detail?: string) => void;
   bootstrapCurrentStyle: () => Promise<boolean>;
   setDem3dQuality: (quality: 'hd' | 'fast-30m') => void;
@@ -167,6 +168,7 @@ export interface ControllerFns {
   performReloadOnce: () => boolean;
   scheduleTerrainVerifyAfterReload: () => void;
   reloadMapElevation: () => void;
+  reloadMapElevationForProfile: () => void;
 
   // ign overlay
   addIgnOrthoOverlay: () => void;

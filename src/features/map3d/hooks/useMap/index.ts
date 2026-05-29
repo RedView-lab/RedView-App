@@ -218,14 +218,17 @@ export function useMap(
     });
     const unsubscribeDemProfile = subscribeDemProfilePreference(() => {
       try {
-        lifecycle.reloadMapElevation();
+        // Lightweight reload: keeps the SW DEM cache + cache-bust token
+        // intact so a switch back to a previously viewed profile resolves
+        // instantly from CacheStorage instead of re-fetching from IGN.
+        lifecycle.reloadMapElevationForProfile();
       } catch (err) {
-        console.warn('[map3d] reloadMapElevation after DEM profile change failed', err);
+        console.warn('[map3d] reloadMapElevationForProfile after DEM profile change failed', err);
       }
     });
     if (getActiveDemProfilePreference() !== 'default') {
       try {
-        lifecycle.reloadMapElevation();
+        lifecycle.reloadMapElevationForProfile();
       } catch {
         /* best-effort */
       }

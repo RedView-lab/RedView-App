@@ -63,6 +63,7 @@ export function createMapLifecycleController(
   return {
     reportStatus: ctx.fns.reportStatus,
     reloadMapElevation: ctx.fns.reloadMapElevation,
+    reloadMapElevationForProfile: ctx.fns.reloadMapElevationForProfile,
     prepareStyleChange: ctx.fns.prepareStyleChange,
     bootstrapCurrentStyle: ctx.fns.bootstrapCurrentStyle,
     setDem3dQuality: ctx.fns.setDem3dQuality,

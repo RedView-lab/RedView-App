@@ -1,6 +1,12 @@
 import { unifiedDEMSource } from '../../../lib/sources';
 import { DEM_RELOAD_COOLDOWN_MS } from '../constants';
+import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
 import type { Ctx } from './context';
+
+// Debounce window for back-to-back DEM profile switches. The profile path
+// is cheap (no cache wipe), but a forceRebuild still removes/re-adds the
+// source, so coalescing rapid toggles avoids thrashing Mapbox's tile graph.
+const PROFILE_RELOAD_DEBOUNCE_MS = 250;
 
 /**
  * Reload pipeline + escalation. Used both by the manual reload button
@@ -11,23 +17,37 @@ export function attachReload(ctx: Ctx): void {
   const fns = ctx.fns;
   const st = ctx.state;
 
-  fns.performReloadOnce = (): boolean => {
+  // Shared reload core. The manual reload button wipes the SW caches and
+  // bumps the cache-bust token (forces a clean re-fetch from IGN); the DEM
+  // profile switch keeps both stable so each profile's tiles survive in
+  // CacheStorage and a switch *back* resolves instantly.
+  const runReloadOnce = (opts: {
+    clearCaches: boolean;
+    bumpCacheBust: boolean;
+    statusDetail: string;
+  }): boolean => {
     if (!fns.canMutateStyle()) return false;
     if (!navigator.serviceWorker?.controller) return false;
 
-    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DEM_CACHE' });
-    navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+    if (opts.clearCaches) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_DEM_CACHE' });
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_NEGATIVE_CACHE' });
+    }
 
-    st.demCacheBust = Date.now();
+    if (opts.bumpCacheBust) {
+      st.demCacheBust = Date.now();
+    }
     // Force a real source rebuild — `setTiles` alone keeps mapbox's
     // existing (possibly empty) tile pyramid, which is the typical cause
-    // of "reload says 100% but the map stays flat".
+    // of "reload says 100% but the map stays flat". For a profile switch
+    // this re-issues the new `rv-dem-profile` template so Mapbox refetches
+    // through the SW (served from the profile-keyed cache when warm).
     if (!fns.refreshDemSource({ forceRebuild: true })) return false;
 
     st.demPassiveRefreshPending = false;
     st.demTrackingEnabled = false;
     fns.clearDemTracking();
-    fns.reportStatus('loading', 0, 'Rechargement relief');
+    fns.reportStatus('loading', 0, opts.statusDetail);
 
     fns.armTerrainBootstrap(() => {
       st.demTrackingEnabled = true;
@@ -35,6 +55,35 @@ export function attachReload(ctx: Ctx): void {
     });
     fns.scheduleTerrainVerifyAfterReload();
     return true;
+  };
+
+  fns.performReloadOnce = (): boolean =>
+    runReloadOnce({ clearCaches: true, bumpCacheBust: true, statusDetail: 'Rechargement relief' });
+
+  // ── DEM profile switch (0.40 m surface ↔ 1 m terrain) ──────────────
+  // Lightweight reload for the "Qualité 3D" selector. Critically it does
+  // NOT clear the SW DEM/negative caches and does NOT bump the cache-bust
+  // token: the Service Worker keys every DEM tile by profile
+  // (buildDemCacheKey includes the profile), so keeping URLs stable lets a
+  // switch back to a previously viewed profile come straight from
+  // CacheStorage instead of re-fetching the entire viewport from IGN.
+  let lastProfileReloadAt = 0;
+  fns.reloadMapElevationForProfile = () => {
+    // Fast 30 m mode is GPU-decoded AWS Terrarium with no profile concept;
+    // the unified DEM pipeline is detached, so a profile change is a no-op
+    // until the user returns to an HD quality.
+    if (getActiveDem3dQuality() === 'fast-30m') return;
+
+    const now = Date.now();
+    if (now - lastProfileReloadAt < PROFILE_RELOAD_DEBOUNCE_MS) return;
+    lastProfileReloadAt = now;
+
+    // Don't collide with a heavy manual reload already in flight.
+    if (st.reloadInProgress) return;
+
+    if (runReloadOnce({ clearCaches: false, bumpCacheBust: false, statusDetail: 'Changement de relief' })) {
+      st.reloadInProgress = true;
+    }
   };
 
   fns.scheduleTerrainVerifyAfterReload = () => {
