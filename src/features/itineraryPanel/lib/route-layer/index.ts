@@ -1,7 +1,7 @@
 ﻿/**
  * Mapbox layer helpers for the BRouter-computed routes.
  *
- * Each itinerary owns its own source + glow + line layer triplet, keyed
+ * Each itinerary owns its own source + line layer pair, keyed
  * by its store id. That way several itineraries can be visible at once
  * (with their individual colors / opacities / visibilities) without the
  * layers stomping on one another.
@@ -86,7 +86,7 @@ type RouteRenderMode = 'default' | 'slope' | 'speedEst';
 export interface RouteLayerOptions {
   /** CSS hex color (e.g. "#ff0000"). */
   color: string;
-  /** Line opacity 0..1. The glow layer is scaled to 40 % of this. */
+  /** Line opacity 0..1. */
   opacity01: number;
   /** Hide the layer without removing it. */
   visible: boolean;
@@ -100,11 +100,13 @@ export interface RouteLayerOptions {
 
 interface RouteLayerRenderSpec {
   data: GeoJSON.Feature<GeoJSON.LineString>;
-  lineColorPaint: string | unknown[];
-  lineGradientPaint: unknown[];
+  lineColorPaint: string;
+  lineGradientPaint: unknown[] | null;
+  requiresLineMetrics: boolean;
 }
 
 const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
+const routeLineMetricsState = new WeakMap<MapboxMap, Map<string, boolean>>();
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
@@ -113,12 +115,26 @@ function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(1, Math.min(12, Math.round(value ?? 4)));
 }
 
-function traceGlowWidthPx(traceWidthPx: number): number {
-  return Math.max(traceWidthPx + 6, traceWidthPx * 2.2);
-}
-
 function traceBorderWidthPx(traceWidthPx: number): number {
   return Math.max(0, Math.min(0, traceWidthPx * 0.25));
+}
+
+function getRouteLineMetricsRegistry(map: MapboxMap): Map<string, boolean> {
+  let registry = routeLineMetricsState.get(map);
+  if (!registry) {
+    registry = new Map<string, boolean>();
+    routeLineMetricsState.set(map, registry);
+  }
+  return registry;
+}
+
+function inferMountedRouteUsesLineGradient(map: MapboxMap, layerId: string): boolean | null {
+  try {
+    if (!map.getLayer(layerId)) return null;
+    return map.getPaintProperty(layerId, 'line-gradient') != null;
+  } catch {
+    return null;
+  }
 }
 
 function clampSlopeDeg(value: number): number {
@@ -316,7 +332,6 @@ function buildSlopeRouteGradientPaint(
 }
 
 function buildSlopeRouteRenderSpec(
-  _map: MapboxMap,
   points: readonly RouteLayerPoint[],
   bands: ReadonlyArray<RouteSlopeBand>,
   fallbackColor: string,
@@ -326,26 +341,23 @@ function buildSlopeRouteRenderSpec(
     data: buildDefaultRouteGeoJson(points),
     lineColorPaint: fallbackColor,
     lineGradientPaint: buildSlopeRouteGradientPaint(samples, bands, fallbackColor),
+    requiresLineMetrics: true,
   };
 }
 
 function buildRouteGeoJson(
-  map: MapboxMap,
   points: readonly RouteLayerPoint[],
   opts: RouteLayerOptions,
 ): RouteLayerRenderSpec {
   if (opts.renderMode === 'slope') {
-    return buildSlopeRouteRenderSpec(map, points, opts.slopeBands ?? [], opts.color);
+    return buildSlopeRouteRenderSpec(points, opts.slopeBands ?? [], opts.color);
   }
   return {
     data: buildDefaultRouteGeoJson(points),
     lineColorPaint: opts.color,
-    lineGradientPaint: buildUniformRouteGradientPaint(opts.color),
+    lineGradientPaint: null,
+    requiresLineMetrics: false,
   };
-}
-
-function buildRouteLineColorPaint(opts: RouteLayerOptions): string | unknown[] {
-  return opts.color;
 }
 
 function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
@@ -429,12 +441,25 @@ export function upsertRouteLayer(
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
-  const glowWidthPx = traceGlowWidthPx(traceWidthPx);
   const borderWidthPx = traceBorderWidthPx(traceWidthPx);
-  const renderSpec = buildRouteGeoJson(map, points, opts);
-  const lineColorPaint = buildRouteLineColorPaint(opts);
+  const renderSpec = buildRouteGeoJson(points, opts);
+  const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
 
-  const existing = map.getSource(srcId) as GeoJSONSource | undefined;
+  let existing = map.getSource(srcId) as GeoJSONSource | undefined;
+  const mountedRequiresLineMetrics = lineMetricsRegistry.get(itineraryId)
+    ?? inferMountedRouteUsesLineGradient(map, lineId);
+
+  if (existing && mountedRequiresLineMetrics != null && mountedRequiresLineMetrics !== renderSpec.requiresLineMetrics) {
+    try {
+      if (map.getLayer(lineId)) map.removeLayer(lineId);
+      if (map.getLayer(glowId)) map.removeLayer(glowId);
+      if (map.getSource(srcId)) map.removeSource(srcId);
+    } catch {
+      /* noop */
+    }
+    lineMetricsRegistry.delete(itineraryId);
+    existing = undefined;
+  }
 
   if (existing) {
     try {
@@ -442,32 +467,19 @@ export function upsertRouteLayer(
     } catch {
       /* noop */
     }
+    // Defensive: drop any legacy glow layer left over from older builds so
+    // the map never drapes a second, fully-transparent line over terrain.
+    try {
+      if (map.getLayer(glowId)) map.removeLayer(glowId);
+    } catch {
+      /* noop */
+    }
   } else {
     if (!canMutateStyle(map)) return;
     map.addSource(srcId, {
       type: 'geojson',
-      lineMetrics: true,
+      lineMetrics: renderSpec.requiresLineMetrics,
       data: renderSpec.data,
-    });
-    map.addLayer({
-      id: glowId,
-      type: 'line',
-      source: srcId,
-      slot: 'top',
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-        'line-elevation-reference': 'ground' as unknown as undefined,
-        'line-z-offset': 3 as unknown as undefined,
-        visibility,
-      },
-      paint: {
-        'line-color': lineColorPaint as never,
-        'line-width': glowWidthPx,
-        'line-opacity': 0,
-        'line-blur': 4,
-        'line-emissive-strength': 1,
-      },
     });
     map.addLayer({
       id: lineId,
@@ -482,35 +494,39 @@ export function upsertRouteLayer(
         visibility,
       },
       paint: {
-        'line-color': lineColorPaint as never,
-        'line-gradient': renderSpec.lineGradientPaint as never,
+        'line-color': renderSpec.lineColorPaint as never,
         'line-width': traceWidthPx,
         'line-opacity': opacity,
         'line-emissive-strength': 1,
-        'line-border-width': borderWidthPx,
-        'line-border-color': 'rgba(255,255,255,0)',
         'line-occlusion-opacity': 0,
+        ...(renderSpec.lineGradientPaint ? { 'line-gradient': renderSpec.lineGradientPaint as never } : {}),
+        ...(borderWidthPx > 0
+          ? {
+              'line-border-width': borderWidthPx,
+              'line-border-color': 'rgba(255,255,255,0)',
+            }
+          : {}),
       },
     });
+    lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
   }
 
   // Always reapply paint / layout â€” cheap, ensures the layer reflects
   // the current store state regardless of the upsert path taken above.
   try {
-    if (map.getLayer(glowId)) {
-      map.setPaintProperty(glowId, 'line-color', lineColorPaint as never);
-      setPaintPropertyIfChanged(map, glowId, 'line-width', glowWidthPx);
-      setPaintPropertyIfChanged(map, glowId, 'line-opacity', 0);
-      setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
-    }
     if (map.getLayer(lineId)) {
-      map.setPaintProperty(lineId, 'line-color', lineColorPaint as never);
-      map.setPaintProperty(lineId, 'line-gradient', renderSpec.lineGradientPaint as never);
+      map.setPaintProperty(lineId, 'line-color', renderSpec.lineColorPaint as never);
+      if (renderSpec.lineGradientPaint) {
+        map.setPaintProperty(lineId, 'line-gradient', renderSpec.lineGradientPaint as never);
+      } else if (map.getPaintProperty(lineId, 'line-gradient') != null) {
+        map.setPaintProperty(lineId, 'line-gradient', null as never);
+      }
       setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', borderWidthPx);
       setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
     }
+    lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
     // Keep endpoint markers (if any) on top of the route lines.
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
@@ -520,10 +536,9 @@ export function upsertRouteLayer(
 }
 
 export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
-  const { glow: glowId, line: lineId } = ids(itineraryId);
+  const { line: lineId } = ids(itineraryId);
   try {
-    if (!hasRasterLayerAbove(map, glowId) && !hasRasterLayerAbove(map, lineId)) return;
-    if (map.getLayer(glowId)) map.moveLayer(glowId);
+    if (!hasRasterLayerAbove(map, lineId)) return;
     if (map.getLayer(lineId)) map.moveLayer(lineId);
   } catch {
     /* map may be tearing down */
@@ -536,6 +551,7 @@ export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
     if (map.getLayer(lineId)) map.removeLayer(lineId);
     if (map.getLayer(glowId)) map.removeLayer(glowId);
     if (map.getSource(srcId)) map.removeSource(srcId);
+    routeLineMetricsState.get(map)?.delete(itineraryId);
   } catch {
     /* noop */
   }
@@ -564,6 +580,7 @@ export function removeAllRouteLayers(map: MapboxMap): void {
   try {
     const style = map.getStyle();
     if (!style?.sources) return;
+    routeLineMetricsState.get(map)?.clear();
     for (const key of Object.keys(style.sources)) {
       if (!key.startsWith(SOURCE_PREFIX)) continue;
       const safe = key.slice(SOURCE_PREFIX.length);
