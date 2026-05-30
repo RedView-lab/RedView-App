@@ -54,7 +54,7 @@
 
 .rvi-itin__main {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   display: flex;
   align-items: center;
 }
@@ -87,17 +87,17 @@
 }
 
 .rvi-itin__meta {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px;
   min-width: 0;
 }
 
 .rvi-itin__profile,
 .rvi-itin__badge {
-  max-width: min(105px, 34vw);
-  min-width: 0;
+  flex-shrink: 0;
   height: 24px;
   padding: 0 8px;
   border-radius: 80px;
@@ -111,6 +111,9 @@
 }
 
 .rvi-itin__profile {
+  width: clamp(88px, 28vw, 120px);
+  min-width: 88px;
+  max-width: 120px;
   background: rgba(255, 255, 255, 0.07);
   color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
@@ -118,6 +121,9 @@
 }
 
 .rvi-itin__badge {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
   background: rgba(61, 139, 255, 0.18);
   color: #6ea7ff;
   font-size: 11px;
@@ -186,9 +192,16 @@
 
   .rvi-itin__profile,
   .rvi-itin__badge {
-    max-width: min(92px, 30vw);
     padding: 0 7px;
     font-size: 12px;
+  }
+
+  .rvi-itin__profile {
+    width: clamp(88px, 30vw, 120px);
+  }
+
+  .rvi-itin__badge {
+    width: 44px;
   }
 }
 
@@ -246,6 +259,12 @@
 .rvi-mode.is-active {
   background: rgba(0, 0, 0, 0.6);
   opacity: 1;
+}
+
+.rvi-mode.is-active.is-collapsed {
+  background: rgba(0, 0, 0, 0.34);
+  opacity: 0.82;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .rvi-mode__icon {

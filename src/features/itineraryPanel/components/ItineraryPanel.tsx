@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
@@ -29,6 +29,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const [timelineTableSettings, setTimelineTableSettings] = useState<TimelineTableSettingsState>(
     DEFAULT_TIMELINE_TABLE_SETTINGS,
   );
+  const modeContentId = useId();
   const {
     project,
     profiles,
@@ -91,6 +92,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
   const activeMode = resolveVisiblePanelMode(project.activeMode);
+  const [collapsedMode, setCollapsedMode] = useState<Exclude<PanelMode, 'nutrition'> | null>(null);
+  const modeCollapsed = collapsedMode === activeMode;
   const isTimelineFullscreenOpen = timelineFullscreen && Boolean(active);
 
   const style: CSSProperties | undefined =
@@ -176,6 +179,16 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     />
   ) : null;
 
+  const handleModeChange = (mode: Exclude<PanelMode, 'nutrition'>) => {
+    if (mode === activeMode) {
+      setCollapsedMode((current) => (current === mode ? null : mode));
+      return;
+    }
+
+    setCollapsedMode(null);
+    onChangeMode?.(mode);
+  };
+
   if (isTimelineFullscreenOpen && fullscreenTimelinePanel && typeof document !== 'undefined') {
     return createPortal(
       <div className="rvi-panel-fullscreen-root">
@@ -231,7 +244,12 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
       <div className="rvi-divider" />
 
-      <ModeTabs active={activeMode} onChange={onChangeMode} />
+      <ModeTabs
+        active={activeMode}
+        collapsed={modeCollapsed}
+        controlsId={modeContentId}
+        onChange={handleModeChange}
+      />
 
       <div className="rvi-divider" />
 
@@ -245,6 +263,8 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           activeMode={activeMode}
           canRedo={canRedo}
           canUndo={canUndo}
+          collapsed={modeCollapsed}
+          contentId={modeContentId}
           onCancelCalculate={onCancelCalculate}
           onCancelLoadPois={onCancelLoadPois}
           onCancelRoute={onCancelRoute}

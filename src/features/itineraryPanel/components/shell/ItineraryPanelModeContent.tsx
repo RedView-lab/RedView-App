@@ -14,6 +14,7 @@ import type {
   RouteProfile,
 } from '../../types';
 import { buildPauseAwareSchedule } from '../../lib/schedule';
+import { Collapse } from './Collapse';
 import { ComingSoonSection } from '../../sections/ComingSoonSection';
 import { PoiSection } from '../../sections/PoiSection';
 import { RythmeSection } from '../../sections/RythmeSection';
@@ -60,6 +61,8 @@ type ItineraryPanelModeContentProps = Pick<
 > & {
   active?: Itinerary;
   activeMode: VisiblePanelMode;
+  collapsed?: boolean;
+  contentId?: string;
   dockTimelinePanel: ReactNode;
   profiles: RouteProfile[];
 };
@@ -89,6 +92,8 @@ export function ItineraryPanelModeContent({
   onSaveProfile,
   onUndo,
   onUploadFit,
+  collapsed = false,
+  contentId,
   poiCount,
   poiError,
   poiLoadDisabled,
@@ -264,24 +269,25 @@ export function ItineraryPanelModeContent({
     setIsDockResizing(true);
   };
 
-  const modeMainStyle = {
-    '--rvi-main-dispawn': dockExpandProgress.toFixed(3),
+  const modeLayoutStyle = {
+    '--rvi-main-dispawn': (collapsed ? 1 : dockExpandProgress).toFixed(3),
+    '--rvi-dock-height': `${resolvedDockHeight}px`,
   } as CSSProperties;
-
-  const dockSlotStyle = {
-    flexBasis: `${resolvedDockHeight}px`,
-  } satisfies CSSProperties;
 
   return (
     <div
       ref={splitRef}
-      className={`rvi-panel__mode-layout${isDockResizing ? ' is-dock-resizing' : ''}`}
+      id={contentId}
+      className={`rvi-panel__mode-layout${isDockResizing ? ' is-dock-resizing' : ''}${collapsed ? ' is-collapsed' : ''}`}
+      style={modeLayoutStyle}
     >
-      <div className="rvi-panel__mode-main" style={modeMainStyle}>
-        <div className="rvi-panel__mode-main-inner">{modeContent}</div>
+      <div className="rvi-panel__mode-main">
+        <Collapse open={!collapsed} className="rvi-panel__mode-main-collapse">
+          <div className="rvi-panel__mode-main-inner">{modeContent}</div>
+        </Collapse>
       </div>
 
-      <div className="rvi-panel__dock-slot" style={dockSlotStyle}>
+      <div className="rvi-panel__dock-slot">
         <div
           role="separator"
           aria-orientation="horizontal"

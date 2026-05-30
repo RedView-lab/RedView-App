@@ -261,7 +261,17 @@ export function useAltitude(
       const STAGNATION_MS = 8000;
       watchdog = setTimeout(() => {
         watchdog = null;
-        if (requested.size === 0) return;
+        if (requested.size === 0) {
+          // No tiles in flight. This can happen because every requested
+          // tile errored out (e.g. the SW isn't controlling the page yet,
+          // so /altitude-tiles/* hits the SPA fallback and fails to decode)
+          // or because none have been requested yet. Re-publish the current
+          // state and keep the watchdog alive instead of dying here — the
+          // previous early `return` left the pill stuck on "loading" forever.
+          publishProgress();
+          armWatchdog();
+          return;
+        }
         if (loaded.size >= requested.size) {
           emit('ready', 100, 'Altitude prête');
           return;

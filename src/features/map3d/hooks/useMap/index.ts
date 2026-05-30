@@ -423,6 +423,16 @@ export function useMap(
         );
         return;
       }
+      // Benign internal noise: the imported Mapbox Standard / Standard-
+      // Satellite style references its builtin terrain source `mapbox-dem`
+      // during hydration and terrain-slot rebinding (e.g. when switching DEM
+      // quality to 1 m / 0.40 m, which forces a unified-DEM rebuild). We own
+      // terrain via `unified-dem`, never `mapbox-dem`, so this transient
+      // "no source" complaint is harmless — it just floods the console and
+      // hides real errors. Drop it.
+      if (message.includes("no source with ID 'mapbox-dem'")) {
+        return;
+      }
       console.error('[mapbox]', message);
     });
 

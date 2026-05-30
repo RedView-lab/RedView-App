@@ -265,17 +265,35 @@ function purgeManagedMapCaches({ includeCurrent = false } = {}) {
 }
 
 self.addEventListener('install', (e) => {
+  // CRITICAL: install must NEVER hinge on a network fetch. `cache.add()`
+  // rejects on any transient hiccup (offline, 5xx, slow proxy) or non-ok
+  // response for /france-border.json. If install rejects, the SW becomes
+  // redundant → activate/clients.claim() never run → no controller for the
+  // whole session → DEM, slope AND altitude overlays silently stall (they
+  // all depend on the SW serving their tile endpoints). The France polygon
+  // is only needed for ortho clipping and is loaded lazily by
+  // ensureFrancePoly() on demand anyway, so prefetch failure is non-fatal.
   e.waitUntil(
     caches.open(STATIC_CACHE_NAME)
       .then((cache) => cache.add('/france-border.json'))
       .then(() => ensureFrancePoly())
+      .catch((err) => {
+        console.warn('[sw-dem] install: france-border.json prefetch failed (non-fatal, loaded lazily later):', err);
+      })
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (e) => {
+  // clients.claim() is what fires `controllerchange` on the page and lets the
+  // DEM/slope/altitude pipeline come alive. It must run even if the cache
+  // purge fails, otherwise a CacheStorage error would strand the page with no
+  // controller (same failure mode as a rejecting install).
   e.waitUntil(
     purgeManagedMapCaches()
+      .catch((err) => {
+        console.warn('[sw-dem] activate: managed cache purge failed (non-fatal):', err);
+      })
       .then(() => self.clients.claim())
   );
 });

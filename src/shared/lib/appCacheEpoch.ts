@@ -1,4 +1,4 @@
-const APP_CACHE_FIX_EPOCH = '2026-05-28-terrain-1m-midzoom-ripple-fix-1';
+const APP_CACHE_FIX_EPOCH = '2026-05-30-sw-install-resilient-altitude-watchdog-1';
 
 export const APP_BUILD_ID = __REDVIEW_BUILD_ID__;
 export const APP_CACHE_EPOCH = `${__REDVIEW_BUILD_ID__}:${APP_CACHE_FIX_EPOCH}`;
