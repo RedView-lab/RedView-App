@@ -6,6 +6,11 @@ export type {
 	MapContextMenuActionPayload,
 	MapContextMenuPoint,
 } from './components/MapContextMenu';
+export type {
+	MapPoiDraft,
+	MapPoiDraftActionId,
+	MapPoiDraftActionPayload,
+} from './components/MapPoiDraftCard';
 export { createOverlayStatus } from './lib/overlayStatus';
 export type {
 	OverlayReloadRegistrar,

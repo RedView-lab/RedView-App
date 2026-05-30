@@ -199,11 +199,6 @@ function collectActiveRouteEndpoints(
   timeline: ItineraryProject['itineraries'][number]['timeline'],
 ): RouteEndpoint[] {
   const endpoints: RouteEndpoint[] = [];
-  const start = timeline.find((row) => row.kind === 'start');
-  if (start && start.lat != null && start.lon != null) {
-    endpoints.push({ lon: start.lon, lat: start.lat, kind: 'start', label: start.label });
-  }
-
   for (const waypoint of timeline) {
     if (waypoint.kind !== 'waypoint' || waypoint.lat == null || waypoint.lon == null) continue;
     endpoints.push({
@@ -212,11 +207,6 @@ function collectActiveRouteEndpoints(
       kind: 'waypoint',
       label: waypoint.label,
     });
-  }
-
-  const end = timeline.find((row) => row.kind === 'end');
-  if (end && end.lat != null && end.lon != null) {
-    endpoints.push({ lon: end.lon, lat: end.lat, kind: 'end', label: end.label });
   }
 
   return endpoints;

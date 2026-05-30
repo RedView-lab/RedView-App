@@ -10,6 +10,7 @@ import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
 import { useItineraryBrouterRouting } from '../../hooks/useItineraryBrouterRouting';
 import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
+import { useItinerary3dMarkers } from '../../hooks/useItinerary3dMarkers';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
 import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../../lib/schedule';
@@ -128,6 +129,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     map,
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 4,
   });
+
+  useItinerary3dMarkers(map, isMapLoaded, active);
 
   useEffect(() => {
     const previousIds = previousItineraryIdsRef.current;

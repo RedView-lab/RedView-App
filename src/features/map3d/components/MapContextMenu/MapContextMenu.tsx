@@ -17,6 +17,8 @@ import type { MapContextMenuActionId, MapContextMenuActionPayload, MapContextMen
 import { clamp, copyTextToClipboard, formatCoordinates } from './utils';
 
 const MENU_EDGE_PADDING = 8;
+const RIGHT_CLICK_MOVE_TOLERANCE_PX = 8;
+const RIGHT_CLICK_MAX_HOLD_MS = 320;
 
 interface MapContextMenuProps {
   map: MapboxMap | null;
@@ -32,10 +34,19 @@ interface MenuState {
   point: MapContextMenuPoint;
 }
 
+interface PendingRightClickState {
+  startedAtMs: number;
+  startX: number;
+  startY: number;
+  moved: boolean;
+  consumed: boolean;
+}
+
 export function MapContextMenu({ map, containerRef, onAction }: MapContextMenuProps) {
   const { t } = useAppI18n();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const copyResetTimerRef = useRef<number | null>(null);
+  const pendingRightClickRef = useRef<PendingRightClickState | null>(null);
   const [menuState, setMenuState] = useState<MenuState | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -51,8 +62,64 @@ export function MapContextMenu({ map, containerRef, onAction }: MapContextMenuPr
   useEffect(() => {
     if (!map) return;
 
+    const canvas = map.getCanvas();
+
+    const resetPendingRightClick = () => {
+      pendingRightClickRef.current = null;
+    };
+
+    const markPendingRightClickAsMoved = () => {
+      const pending = pendingRightClickRef.current;
+      if (!pending) return;
+      pending.moved = true;
+    };
+
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+      pendingRightClickRef.current = {
+        startedAtMs: performance.now(),
+        startX: event.clientX,
+        startY: event.clientY,
+        moved: false,
+        consumed: false,
+      };
+    };
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const pending = pendingRightClickRef.current;
+      if (!pending) return;
+
+      const deltaX = event.clientX - pending.startX;
+      const deltaY = event.clientY - pending.startY;
+      if (Math.hypot(deltaX, deltaY) > RIGHT_CLICK_MOVE_TOLERANCE_PX) {
+        pending.moved = true;
+      }
+    };
+
+    const handleMouseUp = (event: MouseEvent) => {
+      if (event.button !== 2) return;
+      const pending = pendingRightClickRef.current;
+      if (!pending) return;
+      if (pending.consumed || pending.moved) {
+        pendingRightClickRef.current = null;
+      }
+    };
+
     const handleContextMenu = (event: MapMouseEvent) => {
       event.preventDefault();
+
+      const pending = pendingRightClickRef.current;
+      const elapsedMs = pending ? performance.now() - pending.startedAtMs : Number.POSITIVE_INFINITY;
+      const shouldOpenMenu = Boolean(
+        pending
+          && !pending.consumed
+          && !pending.moved
+          && elapsedMs <= RIGHT_CLICK_MAX_HOLD_MS,
+      );
+
+      pendingRightClickRef.current = null;
+      if (!shouldOpenMenu || !pending) return;
+
       const container = containerRef.current;
       if (!container) return;
 
@@ -61,6 +128,7 @@ export function MapContextMenu({ map, containerRef, onAction }: MapContextMenuPr
       const elevation = map.queryTerrainElevation?.([lng, lat]);
 
       setCopied(false);
+      pending.consumed = true;
       setMenuState({
         left: event.originalEvent.clientX - rect.left,
         top: event.originalEvent.clientY - rect.top,
@@ -75,18 +143,34 @@ export function MapContextMenu({ map, containerRef, onAction }: MapContextMenuPr
       });
     };
 
+    canvas.addEventListener('mousedown', handleMouseDown);
+    canvas.addEventListener('mousemove', handleMouseMove);
+    canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('mouseleave', resetPendingRightClick);
     map.on('contextmenu', handleContextMenu);
     map.on('movestart', closeMenu);
     map.on('dragstart', closeMenu);
     map.on('pitchstart', closeMenu);
     map.on('rotatestart', closeMenu);
+    map.on('movestart', markPendingRightClickAsMoved);
+    map.on('dragstart', markPendingRightClickAsMoved);
+    map.on('pitchstart', markPendingRightClickAsMoved);
+    map.on('rotatestart', markPendingRightClickAsMoved);
 
     return () => {
+      canvas.removeEventListener('mousedown', handleMouseDown);
+      canvas.removeEventListener('mousemove', handleMouseMove);
+      canvas.removeEventListener('mouseup', handleMouseUp);
+      canvas.removeEventListener('mouseleave', resetPendingRightClick);
       map.off('contextmenu', handleContextMenu);
       map.off('movestart', closeMenu);
       map.off('dragstart', closeMenu);
       map.off('pitchstart', closeMenu);
       map.off('rotatestart', closeMenu);
+      map.off('movestart', markPendingRightClickAsMoved);
+      map.off('dragstart', markPendingRightClickAsMoved);
+      map.off('pitchstart', markPendingRightClickAsMoved);
+      map.off('rotatestart', markPendingRightClickAsMoved);
     };
   }, [closeMenu, containerRef, map]);
 

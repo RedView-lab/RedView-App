@@ -1541,6 +1541,38 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Map context menu"
   },
   {
+    "fr": "Nouveau POI",
+    "en": "New POI"
+  },
+  {
+    "fr": "Coordonnées",
+    "en": "Coordinates"
+  },
+  {
+    "fr": "Altitude",
+    "en": "Altitude"
+  },
+  {
+    "fr": "Pente :",
+    "en": "Slope:"
+  },
+  {
+    "fr": "Revêtement :",
+    "en": "Surface:"
+  },
+  {
+    "fr": "Type :",
+    "en": "Type:"
+  },
+  {
+    "fr": "Sélectionner",
+    "en": "Select"
+  },
+  {
+    "fr": "Ouvrir Street View",
+    "en": "Open Street View"
+  },
+  {
     "fr": "Copier les coordonnées",
     "en": "Copy coordinates"
   },
