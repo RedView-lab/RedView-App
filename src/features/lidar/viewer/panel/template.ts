@@ -115,6 +115,13 @@ const PANEL_TEMPLATE = `
       </div>
     </div>
     <div class="viewer-panel__divider"></div>
+    <section class="viewer-panel__tile-nav" aria-label="Navigation des tuiles LiDAR">
+      <p id="viewer-tile-nav-status" class="viewer-panel__sr-only" aria-live="polite">
+        Chargement des tuiles voisines.
+      </p>
+      <div id="viewer-tile-nav-grid" class="viewer-panel__tile-nav-grid" role="grid"></div>
+    </section>
+    <div class="viewer-panel__divider viewer-panel__divider--compact"></div>
     <button id="panel-engine-btn" class="viewer-panel__cta" type="button">
       <span class="viewer-panel__cta-icon" aria-hidden="true">
         <svg class="viewer-panel__cta-icon-svg" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">

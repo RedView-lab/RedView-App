@@ -1,8 +1,8 @@
 import type { TileCoord } from '../../types';
 import { LidarManager } from '../../lib/lidarManager';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
+import { ensureViewerPanel } from '../panel/template';
 import { buildTileNavigatorCells, buildTileNavigatorLabel, tileCoordKey } from './model';
-import { ensureViewerTileNavigator } from './template';
 
 interface ViewerTileNavigatorOptions {
   currentTile: TileCoord;
@@ -20,10 +20,51 @@ function sameTile(a: TileCoord | undefined, b: TileCoord): boolean {
     && a!.altRef === b.altRef;
 }
 
+const DOWNLOAD_ICON = `
+  <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 3.75v7.5"></path>
+    <path d="m5.75 8.5 3.25 3.25 3.25-3.25"></path>
+    <path d="M4 14.25h10"></path>
+  </svg>
+`;
+
+const EYE_ICON = `
+  <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1.75 9s2.7-4.25 7.25-4.25S16.25 9 16.25 9s-2.7 4.25-7.25 4.25S1.75 9 1.75 9Z"></path>
+    <circle cx="9" cy="9" r="2.15"></circle>
+  </svg>
+`;
+
+const EYE_OFF_ICON = `
+  <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2.25 2.25 15.75 15.75"></path>
+    <path d="M7.4 4.95A8.17 8.17 0 0 1 9 4.75c4.55 0 7.25 4.25 7.25 4.25a13.3 13.3 0 0 1-2.15 2.6"></path>
+    <path d="M10.6 10.6A2.3 2.3 0 0 1 7.4 7.4"></path>
+    <path d="M5.12 5.12C3.11 6.2 1.75 9 1.75 9S4.45 13.25 9 13.25c1.25 0 2.37-.32 3.36-.8"></path>
+  </svg>
+`;
+
+const LOADING_ICON = `
+  <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    <path d="M9 2.5v2.2"></path>
+    <path d="M9 13.3v2.2"></path>
+    <path d="m4.4 4.4 1.55 1.55"></path>
+    <path d="m12.05 12.05 1.55 1.55"></path>
+    <path d="M2.5 9h2.2"></path>
+    <path d="M13.3 9h2.2"></path>
+    <path d="m4.4 13.6 1.55-1.55"></path>
+    <path d="m12.05 5.95 1.55-1.55"></path>
+  </svg>
+`;
+
+function buildCellIconMarkup(icon: string): string {
+  return `<span class="viewer-panel__tile-nav-cell-icon" aria-hidden="true">${icon}</span>`;
+}
+
 export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
-  const root = ensureViewerTileNavigator();
-  const gridEl = document.getElementById('viewer-tile-nav-grid');
-  const statusEl = document.getElementById('viewer-tile-nav-status');
+  const root = ensureViewerPanel();
+  const gridEl = root.querySelector('#viewer-tile-nav-grid');
+  const statusEl = root.querySelector('#viewer-tile-nav-status');
 
   if (!(gridEl instanceof HTMLDivElement) || !(statusEl instanceof HTMLParagraphElement)) {
     throw new Error('Tile navigator DOM is incomplete.');
@@ -57,19 +98,32 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       const isPending = pendingTile ? sameTile(pendingTile, cell.coord) : false;
       const isCached = cachedTileKeys.has(cellKey);
       const button = document.createElement('button');
+      let iconMarkup = buildCellIconMarkup(DOWNLOAD_ICON);
 
       button.type = 'button';
-      button.className = 'viewer-tile-nav__cell';
+      button.className = 'viewer-panel__tile-nav-cell';
       button.setAttribute('role', 'gridcell');
       button.setAttribute('aria-label', buildTileNavigatorLabel(cell));
       button.title = buildTileNavigatorLabel(cell);
 
-      if (isCurrent) button.classList.add('is-current');
-      else if (isLoading) button.classList.add('is-loading');
-      else if (isPending) button.classList.add('is-pending');
-      else if (isActiveSecondary) button.classList.add('is-paired');
-      else if (isCached) button.classList.add('is-cached');
-      else button.classList.add('is-idle');
+      if (isCurrent) {
+        button.classList.add('is-current');
+        iconMarkup = buildCellIconMarkup(EYE_ICON);
+      } else if (isLoading) {
+        button.classList.add('is-loading');
+        iconMarkup = buildCellIconMarkup(LOADING_ICON);
+      } else if (isPending) {
+        button.classList.add('is-pending');
+      } else if (isActiveSecondary) {
+        button.classList.add('is-paired');
+        iconMarkup = buildCellIconMarkup(EYE_OFF_ICON);
+      } else if (isCached) {
+        button.classList.add('is-cached');
+      } else {
+        button.classList.add('is-idle');
+      }
+
+      button.innerHTML = iconMarkup;
 
       if (loadingTileKey && !isLoading) button.disabled = true;
       if (isCurrent) button.disabled = true;
@@ -210,7 +264,8 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
       destroyed = true;
       options.onPreviewTile?.(null);
       unsubscribe();
-      root.remove();
+      gridEl.replaceChildren();
+      setStatus('');
     },
   };
 }

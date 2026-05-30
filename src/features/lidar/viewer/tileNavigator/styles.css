@@ -1,118 +1,89 @@
-.viewer-tile-nav {
-  position: fixed;
-  left: 16px;
-  bottom: 16px;
-  z-index: 70;
-  width: 108px;
-  padding: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  background: rgba(8, 8, 8, 0.72);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.26);
-  color: #fff;
-  font-family: 'Rethink Sans', system-ui, sans-serif;
+.viewer-panel__tile-nav {
+  width: 100%;
 }
 
-.viewer-tile-nav * {
-  font-family: inherit;
-}
-
-.viewer-tile-nav__header {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.viewer-tile-nav__title {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-}
-
-.viewer-tile-nav__status {
-  min-height: 24px;
-  color: rgba(255, 255, 255, 0.66);
-  font-size: 9px;
-  line-height: 1.3;
-}
-
-.viewer-tile-nav__grid {
+.viewer-panel__tile-nav-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 5px;
-  margin-top: 6px;
+  gap: 6px;
+  width: 100%;
 }
 
-.viewer-tile-nav__cell {
-  aspect-ratio: 1;
+.viewer-panel__tile-nav-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 7px 8px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
 }
 
-.viewer-tile-nav__cell:hover:not(:disabled) {
+.viewer-panel__tile-nav-cell:hover:not(:disabled) {
   transform: translateY(-1px);
-  filter: brightness(1.05);
+  background: rgba(255, 255, 255, 0.12);
 }
 
-.viewer-tile-nav__cell:disabled {
+.viewer-panel__tile-nav-cell:disabled {
   cursor: default;
 }
 
-.viewer-tile-nav__cell.is-current {
-  background: linear-gradient(180deg, #d31111 0%, #9d0707 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+.viewer-panel__tile-nav-cell.is-idle,
+.viewer-panel__tile-nav-cell.is-cached {
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.viewer-tile-nav__cell.is-pending {
-  background: linear-gradient(180deg, #6f0b0b 0%, #450505 100%);
-  box-shadow: inset 0 0 0 2px rgba(255, 112, 112, 0.86);
+.viewer-panel__tile-nav-cell.is-cached {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.viewer-tile-nav__cell.is-cached {
-  background: linear-gradient(180deg, #ffb347 0%, #f08f17 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+.viewer-panel__tile-nav-cell.is-paired,
+.viewer-panel__tile-nav-cell.is-pending {
+  background: rgba(137, 0, 0, 0.4);
+  color: #fff;
 }
 
-.viewer-tile-nav__cell.is-paired {
-  background: linear-gradient(180deg, #ffb347 0%, #da7b08 100%);
-  box-shadow: inset 0 0 0 2px rgba(255, 247, 214, 0.88);
+.viewer-panel__tile-nav-cell.is-pending {
+  box-shadow: inset 0 0 0 1px rgba(255, 176, 176, 0.72);
 }
 
-.viewer-tile-nav__cell.is-idle {
-  background: #d5d5d5;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+.viewer-panel__tile-nav-cell.is-current {
+  background: #890000;
+  color: #fff;
 }
 
-.viewer-tile-nav__cell.is-loading {
-  background: linear-gradient(180deg, #7a0c0c 0%, #3d0505 100%);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-  animation: viewer-tile-nav-pulse 1.1s ease-in-out infinite alternate;
+.viewer-panel__tile-nav-cell.is-loading {
+  background: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.5);
 }
 
-@keyframes viewer-tile-nav-pulse {
+.viewer-panel__tile-nav-cell-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.viewer-panel__tile-nav-cell-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.viewer-panel__tile-nav-cell.is-loading .viewer-panel__tile-nav-cell-icon {
+  animation: viewer-panel-tile-nav-spin 1.1s linear infinite;
+}
+
+@keyframes viewer-panel-tile-nav-spin {
   from {
-    opacity: 0.6;
+    transform: rotate(0deg);
   }
 
   to {
-    opacity: 1;
-  }
-}
-
-@media (max-width: 720px) {
-  .viewer-tile-nav {
-    left: 12px;
-    bottom: 12px;
-    width: 96px;
-    padding: 7px;
-  }
-
-  .viewer-tile-nav__grid {
-    gap: 4px;
+    transform: rotate(360deg);
   }
 }

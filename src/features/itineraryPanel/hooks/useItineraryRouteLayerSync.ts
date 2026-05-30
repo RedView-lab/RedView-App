@@ -7,10 +7,10 @@ import {
   clearForbiddenZones,
   clearRouteAuditFindings,
   clearRouteEndpoints,
+  collectRouteEndpoints,
   listMountedRouteIds,
   removeAllRouteLayers,
   removeRouteLayer,
-  type RouteEndpoint,
   setRouteAuditFindings,
   setForbiddenZones,
   setRouteEndpoints,
@@ -126,7 +126,7 @@ export function useItineraryRouteLayerSync({
         active.routeAudit?.visible === true,
       );
       setForbiddenZones(map, active.forbiddenZones ?? []);
-      const endpoints = collectActiveRouteEndpoints(active.timeline);
+      const endpoints = collectRouteEndpoints(active.timeline);
       if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
       else clearRouteEndpoints(map);
     } else {
@@ -193,21 +193,4 @@ export function useItineraryRouteLayerSync({
       map.off('sourcedata', onSourceData as never);
     };
   }, [isMapLoaded, map, scheduleReplayRouteState]);
-}
-
-function collectActiveRouteEndpoints(
-  timeline: ItineraryProject['itineraries'][number]['timeline'],
-): RouteEndpoint[] {
-  const endpoints: RouteEndpoint[] = [];
-  for (const waypoint of timeline) {
-    if (waypoint.kind !== 'waypoint' || waypoint.lat == null || waypoint.lon == null) continue;
-    endpoints.push({
-      lon: waypoint.lon,
-      lat: waypoint.lat,
-      kind: 'waypoint',
-      label: waypoint.label,
-    });
-  }
-
-  return endpoints;
 }
