@@ -153,7 +153,10 @@ const ORTHO_TILE_SIZE = 256;
 // 2026-05-28-terrain-1m-midzoom-ripple-fix-1: delay the France terrain-profile
 // WMS handoff until ~22 m/px so z11-z12 oblique views stay on the smoother
 // bare-earth fallback instead of showing 1 m reprojection ripples.
-const MAP_CACHE_EPOCH = '2026-05-28-terrain-1m-midzoom-ripple-fix-1';
+// 2026-05-30-france-lod-datum-wall-fix-1: drop the per-tile Mapbox datum bias
+// on full-coverage France interior tiles so neighbouring tiles rendered at
+// different LOD no longer step a few metres apart (vertical "walls" at 0.40 m).
+const MAP_CACHE_EPOCH = '2026-05-30-france-lod-datum-wall-fix-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

@@ -72,7 +72,7 @@ function notifyDemTileCacheUpdated(z, x, y, source) {
 // Coalesce concurrent upgrade jobs for the same tile.
 const pendingUpgrades = new Set();
 
-async function materializeUpgradeResult(result, z, x, y, compositeSource) {
+async function materializeUpgradeResult(result, z, x, y, compositeSource, skipDatumBias = false) {
   if (!result?.elevations) return null;
   if (result.blob) {
     return { blob: result.blob, source: result.source || compositeSource };
@@ -81,7 +81,7 @@ async function materializeUpgradeResult(result, z, x, y, compositeSource) {
   await acquireComposite();
   try {
     return {
-      blob: await compositeIGNMapbox(result.elevations, result.coverage, z, x, y),
+      blob: await compositeIGNMapbox(result.elevations, result.coverage, z, x, y, { skipDatumBias }),
       source: compositeSource,
     };
   } finally {
@@ -112,17 +112,21 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
         ? 'inside'
         : classifyDemTile(z, x, y);
       if (tileClass === 'outside') return;
+      // Interior tiles keep the raw, globally-consistent IGN datum (no
+      // per-tile Mapbox bias) so background-upgraded tiles stay LOD-aligned
+      // with their neighbours — same anti-"wall" rule as the live path.
+      const skipDatumBias = tileClass === 'inside';
       const preferHighres = typeof preferredSource === 'string'
         && preferredSource.startsWith('ign-highres');
       const tileBounds = mercatorTileBounds(z, x, y);
       const tileCenterLat = (tileBounds.north + tileBounds.south) / 2;
       const terrainWmsEligible = demProfile === 'terrain' && shouldUseIGNTerrainWms(z, tileCenterLat);
       const terrainRebuilder = () => buildIGNTerrainTile(z, x, y, { purpose: 'slope-warm' })
-        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite'));
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-rgealti-wms-composite', skipDatumBias));
       const highresRebuilder = () => buildIGNFallbackTile(z, x, y)
-        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite'));
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-highres-composite', skipDatumBias));
       const mnsRebuilder = () => buildIGNTile(z, x, y, tileClass)
-        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite'));
+        .then((result) => materializeUpgradeResult(result, z, x, y, 'ign-composite', skipDatumBias));
       const rebuilders = demProfile === 'terrain'
         ? (terrainWmsEligible ? [terrainRebuilder, highresRebuilder] : [highresRebuilder])
         : preferHighres

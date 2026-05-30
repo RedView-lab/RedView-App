@@ -10,8 +10,14 @@ import '../styles/floating-markers.css';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
-const MARKER_LIFT_M = 18;
-const MARKER_POPUP_OFFSET_PX = 34;
+const MARKER_MIN_SCALE_ZOOM = 8.25;
+const MARKER_MAX_SCALE_ZOOM = 15.1;
+const MARKER_MIN_SCREEN_SCALE = 0.42;
+const MARKER_MAX_SCREEN_SCALE = 1;
+const MARKER_MIN_LIFT_M = 7;
+const MARKER_MAX_LIFT_M = 10.5;
+const MARKER_MIN_POPUP_OFFSET_PX = 26;
+const MARKER_MAX_POPUP_OFFSET_PX = 34;
 
 const UI_ICON_URLS = {
   star: '/svgv2/icone/star-01.svg',
@@ -24,7 +30,14 @@ const UI_ICON_URLS = {
 
 interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
+  popup: mapboxgl.Popup;
   signature: string;
+}
+
+interface PoiMarkerVisualState {
+  scale: number;
+  altitude: number;
+  popupOffsetPx: number;
 }
 
 export interface PoiPopupState {
@@ -279,19 +292,47 @@ function resolvePopupState(
   };
 }
 
+function getPoiMarkerVisualState(zoom: number): PoiMarkerVisualState {
+  const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
+  const scale = lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress);
+
+  return {
+    scale,
+    altitude: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
+    popupOffsetPx: Math.round(
+      lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
+    ),
+  };
+}
+
+function applyPoiMarkerVisualState(
+  marker: mapboxgl.Marker,
+  popup: mapboxgl.Popup,
+  zoom: number,
+): void {
+  const visualState = getPoiMarkerVisualState(zoom);
+  marker.getElement().style.setProperty(
+    '--rv-poi-marker-scale',
+    visualState.scale.toFixed(3),
+  );
+  marker.setAltitude(visualState.altitude);
+  popup.setAltitude(visualState.altitude);
+  popup.setOffset(visualState.popupOffsetPx);
+}
+
 function createPoiMarker(
   map: MapboxMap,
   feature: PoiFeature,
   actions: UsePoiPopupActions,
-): mapboxgl.Marker {
+): PoiMarkerEntry {
   const popup = new mapboxgl.Popup({
     className: 'rv-poi-popup',
     closeButton: false,
     closeOnClick: true,
     focusAfterOpen: false,
     maxWidth: 'none',
-    offset: MARKER_POPUP_OFFSET_PX,
-    altitude: MARKER_LIFT_M,
+    offset: MARKER_MAX_POPUP_OFFSET_PX,
+    altitude: MARKER_MIN_LIFT_M,
   });
 
   const refresh = (nextState?: PoiPopupState) => {
@@ -309,17 +350,25 @@ function createPoiMarker(
     refresh();
   });
 
-  return new mapboxgl.Marker({
+  const marker = new mapboxgl.Marker({
     element: createMarkerElement(feature),
     anchor: 'bottom',
     pitchAlignment: 'viewport',
     rotationAlignment: 'viewport',
     occludedOpacity: 0,
-    altitude: MARKER_LIFT_M,
+    altitude: MARKER_MIN_LIFT_M,
   })
     .setLngLat([feature.lon, feature.lat])
     .setPopup(popup)
     .addTo(map);
+
+  applyPoiMarkerVisualState(marker, popup, map.getZoom());
+
+  return {
+    marker,
+    popup,
+    signature: getMarkerSignature(feature),
+  };
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────
@@ -415,6 +464,13 @@ export function usePoi(
     setPoiCount(0);
   }, []);
 
+  const syncMarkerVisualState = useCallback((m: MapboxMap) => {
+    const zoom = m.getZoom();
+    for (const { marker, popup } of markerRegistryRef.current.values()) {
+      applyPoiMarkerVisualState(marker, popup, zoom);
+    }
+  }, []);
+
   const syncRenderedFeatures = useCallback((m: MapboxMap, features: PoiFeature[]) => {
     const registry = markerRegistryRef.current;
     const nextKeys = new Set(features.map(getMarkerKey));
@@ -435,10 +491,7 @@ export function usePoi(
       }
 
       existing?.marker.remove();
-      registry.set(key, {
-        marker: createPoiMarker(m, feature, popupActionsRef.current),
-        signature,
-      });
+      registry.set(key, createPoiMarker(m, feature, popupActionsRef.current));
     }
 
     setPoiCount(features.length);
@@ -550,6 +603,30 @@ export function usePoi(
     };
   }, [map, isMapLoaded, buildRenderableFeatures, syncRenderedFeatures, clearMarkers]);
 
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    let frameId: number | null = null;
+
+    const scheduleVisualRefresh = () => {
+      if (frameId != null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        syncMarkerVisualState(map);
+      });
+    };
+
+    scheduleVisualRefresh();
+    map.on('zoom', scheduleVisualRefresh);
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      map.off('zoom', scheduleVisualRefresh);
+    };
+  }, [map, isMapLoaded, syncMarkerVisualState]);
+
   // ── Re-fetch when enabled categories change (corridor mode only) ──
 
   useEffect(() => {
@@ -586,4 +663,17 @@ function escapeHtml(str: string): string {
 function formatPauseDuration(durationMin: number): string {
   const safeDuration = Math.max(1, Math.round(durationMin || 5));
   return `${safeDuration} min`;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function lerp(start: number, end: number, progress: number): number {
+  return start + (end - start) * progress;
+}
+
+function smoothstep(edge0: number, edge1: number, value: number): number {
+  const progress = clamp((value - edge0) / (edge1 - edge0), 0, 1);
+  return progress * progress * (3 - 2 * progress);
 }

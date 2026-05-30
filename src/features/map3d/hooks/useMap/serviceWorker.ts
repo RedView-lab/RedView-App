@@ -145,6 +145,84 @@ async function waitForServiceWorkerController(timeoutMs: number): Promise<Servic
   });
 }
 
+// Module-scoped handle to the live registration so the late-recovery path can
+// re-run `update()` on it. Assigned inside `swReady`.
+let swRegistration: ServiceWorkerRegistration | null = null;
+
+// True once any installing worker we registered has reached `redundant`
+// WITHOUT ever giving us a controller. That state is the page-visible
+// signature of an install failure — most commonly an `importScripts()`
+// throw inside sw-dem.js when one of its ~28 submodule fetches hiccupped
+// during a deploy / on a flaky network. The worker never activates, so
+// `clients.claim()` never runs and no `controllerchange` ever fires.
+let swInstallFailed = false;
+
+function watchForRedundantInstall(registration: ServiceWorkerRegistration): void {
+  const tracked = registration.installing ?? registration.waiting ?? null;
+  if (!tracked) return;
+  const onState = () => {
+    if (tracked.state === 'redundant' && !navigator.serviceWorker.controller) {
+      swInstallFailed = true;
+    }
+    if (tracked.state === 'redundant' || tracked.state === 'activated') {
+      tracked.removeEventListener('statechange', onState);
+    }
+  };
+  tracked.addEventListener('statechange', onState);
+}
+
+/**
+ * Self-heal a registration whose worker failed to take control. Re-runs
+ * `update()` (which re-fetches sw-dem.js AND every epoch-busted submodule,
+ * recovering a transient `importScripts()` failure) and then waits for the
+ * controller to appear, for up to a few bounded attempts.
+ *
+ * Returns `true` as soon as a controller is present, `false` if every
+ * attempt is exhausted without one.
+ */
+async function recoverServiceWorkerRegistration(maxAttempts: number): Promise<boolean> {
+  if (!('serviceWorker' in navigator)) return false;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (navigator.serviceWorker.controller) return true;
+
+    let registration = swRegistration;
+    try {
+      // Re-register defensively with a one-shot recovery nonce. A plain
+      // re-register/update() with the IDENTICAL script URL is frequently a
+      // no-op: the browser only re-runs install→activate when the fetched
+      // script bytes differ. Appending `rv-sw-recovery=<attempt-ts>` makes
+      // the browser see a "new" worker and forces a fresh install cycle,
+      // which re-fetches every epoch-busted submodule and recovers a
+      // transient importScripts() failure. The SW only reads
+      // `rv-map-cache-epoch`, so the extra param never affects cache keys.
+      const recoveryUrl =
+        `/sw-dem.js?rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`
+        + `&rv-sw-recovery=${Date.now()}-${attempt}`;
+      registration = await navigator.serviceWorker.register(recoveryUrl, { scope: '/' });
+      swRegistration = registration;
+      watchForRedundantInstall(registration);
+      swInstallFailed = false;
+      await registration.update();
+    } catch (err) {
+      console.warn(`[sw-dem] recovery attempt ${attempt}/${maxAttempts} — register/update failed:`, err);
+    }
+
+    // Wait for the controller to appear after this attempt. Give later
+    // attempts a longer window — a cold install on a slow link can take
+    // several seconds to fetch all submodules and activate.
+    const waitMs = Math.min(4000 + attempt * 2000, 10_000);
+    const controller = await waitForServiceWorkerController(waitMs);
+    if (controller) {
+      console.log(`[sw-dem] recovery succeeded on attempt ${attempt} — controller claimed`);
+      return true;
+    }
+  }
+
+  return false;
+}
+
+
 /**
  * Primary bootstrap promise — resolves `true` within SW_CONTROLLER_TIMEOUT
  * if the SW controller is available, `false` otherwise.
@@ -161,6 +239,8 @@ export const swReady: Promise<boolean> = (async () => {
       `/sw-dem.js?rv-map-cache-epoch=${encodeURIComponent(MAP_CACHE_EPOCH)}`,
       { scope: '/' },
     );
+    swRegistration = registration;
+    watchForRedundantInstall(registration);
 
     if (epochReset) {
       notifyRegistrationMapCacheReset(registration);
@@ -214,7 +294,25 @@ export const swLateReady: Promise<boolean> = (async () => {
       console.log('[sw-dem] Late controller claim detected — DEM pipeline can recover');
       return true;
     }
+    // If the installing worker went redundant, the SW will NEVER claim on
+    // its own (importScripts/install threw). Stop polling a dead worker and
+    // self-heal immediately via re-register + update().
+    if (swInstallFailed) {
+      console.warn('[sw-dem] install failed (worker redundant) — attempting registration self-heal');
+      const recovered = await recoverServiceWorkerRegistration(3);
+      if (recovered) return true;
+      break;
+    }
     interval = Math.min(interval * 1.5, 2000);
+  }
+
+  // Last-ditch self-heal even when we never observed an explicit redundant
+  // transition (e.g. the statechange fired before our listener attached, or
+  // the activate phase stalled). A fresh update() is cheap and is the single
+  // most effective recovery for a transient submodule fetch failure.
+  if (!navigator.serviceWorker.controller) {
+    const recovered = await recoverServiceWorkerRegistration(2);
+    if (recovered) return true;
   }
 
   console.warn('[sw-dem] Controller never appeared within late-recovery window');

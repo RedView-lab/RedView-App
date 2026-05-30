@@ -9,7 +9,7 @@
 // composite at the same LOD). This is O(4·TILE_SIZE) instead of O(TILE²).
 // ---------------------------------------------------------------------------
 
-async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
+async function compositeIGNMapbox(ignElevations, coverage, z, x, y, opts = {}) {
   const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
 
   // Fast path: uniform full coverage → border-ring offset alignment only.
@@ -19,6 +19,27 @@ async function compositeIGNMapbox(ignElevations, coverage, z, x, y) {
   }
 
   if (fullCoverageFast) {
+    // LOD-invariant datum path (national-dataset interior tiles).
+    //
+    // A full-coverage tile that lies entirely inside the national dataset
+    // polygon never borders a pure-Mapbox tile, so it needs NO Mapbox-datum
+    // alignment. The per-tile constant bias below (median IGN−Mapbox over the
+    // border ring) is recomputed independently for every tile AND every LOD
+    // level. Under oblique pitch Mapbox renders neighbouring tiles at
+    // different zooms (a normal terrain LOD ring), so two tiles covering the
+    // same ground received DIFFERENT constant shifts — moving one whole tile
+    // a few metres relative to its neighbour and producing the vertical
+    // "wall" reported at 0.40 m, which appears/disappears as the camera angle
+    // moves the LOD ring. Encoding the raw IGN datum keeps every IGN tile on
+    // the single, globally self-consistent MNS vertical reference, so
+    // neighbours match regardless of LOD. Genuine IGN↔Mapbox continuity at
+    // the actual national boundary is handled by the partial-coverage blend
+    // path below (border tiles are partial coverage), not here. Bonus: skips
+    // a Mapbox fetch + Terrain-RGB decode per interior tile.
+    if (opts.skipDatumBias) {
+      return encodeTerrainRGBPng(ignElevations);
+    }
+
     const mapboxBlob = await fetchMapboxTile(z, x, y);
     if (!mapboxBlob) {
       // No Mapbox reference available — encode IGN as-is. Neighbour tiles in

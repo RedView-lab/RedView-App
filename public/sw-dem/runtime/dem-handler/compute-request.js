@@ -187,8 +187,14 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         swissHadSomeData = true;
         await acquireComposite();
         try {
+          // Interior national tiles encode the raw, LOD-invariant Swiss
+          // datum (no per-tile Mapbox bias) so neighbouring tiles rendered
+          // at different LOD don't step apart — see compositeIGNMapbox().
+          // Border tiles are partial coverage → blend path handles the
+          // Mapbox transition regardless of this flag.
           pngBlob = await compositeIGNMapbox(
             swissResult.elevations, swissResult.coverage, z, x, y,
+            { skipDatumBias: true },
           );
         } finally {
           releaseComposite();
@@ -216,12 +222,15 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         norwayHadSomeData = true;
         await acquireComposite();
         try {
+          // Raw, LOD-invariant Norway DTM datum on interior tiles (see
+          // Swiss branch / compositeIGNMapbox comment).
           pngBlob = await compositeIGNMapbox(
             norwayResult.elevations,
             norwayResult.coverage,
             z,
             x,
             y,
+            { skipDatumBias: true },
           );
         } finally {
           releaseComposite();
@@ -250,12 +259,17 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         spainHadSomeData = true;
         await acquireComposite();
         try {
+          // Raw, LOD-invariant Spain MDT datum on interior tiles (see
+          // Swiss branch / compositeIGNMapbox comment). This is the path
+          // that restores 1–5 m relief instead of the per-tile-biased
+          // surface that stepped between LODs.
           pngBlob = await compositeIGNMapbox(
             spainResult.elevations,
             spainResult.coverage,
             z,
             x,
             y,
+            { skipDatumBias: true },
           );
         } finally {
           releaseComposite();
@@ -309,7 +323,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           } else {
             await acquireComposite();
             try {
-              pngBlob = await compositeIGNMapbox(ignResult.elevations, ignResult.coverage, z, x, y);
+              pngBlob = await compositeIGNMapbox(
+                ignResult.elevations, ignResult.coverage, z, x, y,
+                { skipDatumBias: franceClass === 'inside' },
+              );
             } finally {
               releaseComposite();
             }
