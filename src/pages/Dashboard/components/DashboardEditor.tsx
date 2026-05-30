@@ -155,7 +155,16 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
-  const shouldRenderMapBlurMirrors = activeBasemapConfig.visualFamily !== 'mapbox-standard-v3';
+  const isStandardBasemap = activeBasemapConfig.visualFamily === 'mapbox-standard-v3';
+  // The large docked panel shells are intentionally tint-only and rely on a
+  // mirrored map slice underneath for their glass treatment. Fully disabling
+  // mirrors on Standard v3 fixed a perf cliff, but it also removed the only
+  // blur layer behind the main panels, leaving them visually transparent.
+  // Restore mirrors for the substantive panel surfaces and keep the smaller
+  // center toolbar on the cheaper no-mirror path to avoid reintroducing the
+  // full four-mirror readback cost.
+  const shouldRenderPanelMapBlurMirrors = true;
+  const shouldRenderToolbarMapBlurMirror = !isStandardBasemap;
 
   const routeSlopeLegendTitle = useMemo(() => {
     const project = activeProjectInitial;
@@ -322,7 +331,7 @@ export function DashboardEditor({
         </aside>
       ) : null}
 
-      {mapLoaded && shouldRenderMapBlurMirrors && leftPanelOpen && (
+      {mapLoaded && shouldRenderPanelMapBlurMirrors && leftPanelOpen && (
         <MapBlurMirror
           map={mapInstance}
           top={PANEL_PADDING}
@@ -334,7 +343,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && shouldRenderMapBlurMirrors && !isMapFocusMode && !isRightPanelCollapsed && (
+      {mapLoaded && shouldRenderPanelMapBlurMirrors && !isMapFocusMode && !isRightPanelCollapsed && (
         <MapBlurMirror
           map={mapInstance}
           top={PANEL_PADDING}
@@ -344,7 +353,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && shouldRenderMapBlurMirrors && layout.centerToolbarVisible && (
+      {mapLoaded && shouldRenderToolbarMapBlurMirror && layout.centerToolbarVisible && (
         <MapBlurMirror
           map={mapInstance}
           top={layout.centerToolbarTop}
@@ -356,7 +365,7 @@ export function DashboardEditor({
           borderRadius={8}
         />
       )}
-      {mapLoaded && shouldRenderMapBlurMirrors && layout.centerPanelVisible && (
+      {mapLoaded && shouldRenderPanelMapBlurMirrors && layout.centerPanelVisible && (
         <MapBlurMirror
           map={mapInstance}
           top={layout.centerPanelTop}

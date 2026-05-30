@@ -32,8 +32,23 @@ function markReloadedForCurrentEpoch(): void {
   }
 }
 
-function scheduleEpochTakeoverReload(epochReset: boolean): void {
-  if (!epochReset || typeof window === 'undefined' || hasReloadedForCurrentEpoch()) return;
+function registrationHasTargetEpoch(
+  registration: ServiceWorkerRegistration | null | undefined,
+): boolean {
+  if (!registration) return false;
+  return getServiceWorkerEpoch(registration.installing) === MAP_CACHE_EPOCH
+    || getServiceWorkerEpoch(registration.waiting) === MAP_CACHE_EPOCH
+    || getServiceWorkerEpoch(registration.active) === MAP_CACHE_EPOCH;
+}
+
+function scheduleEpochTakeoverReload(
+  registration: ServiceWorkerRegistration | null | undefined,
+  epochReset: boolean,
+): void {
+  if (typeof window === 'undefined' || hasReloadedForCurrentEpoch()) return;
+
+  const hasTargetRegistration = registrationHasTargetEpoch(registration);
+  if (!epochReset && !hasTargetRegistration) return;
 
   let reloaded = false;
   const reloadOnce = (reason: string) => {
@@ -50,18 +65,47 @@ function scheduleEpochTakeoverReload(epochReset: boolean): void {
     return;
   }
 
+  const maybeReloadFromRegistration = (reason: string) => {
+    if (!registrationHasTargetEpoch(registration)) return;
+    if (getServiceWorkerEpoch(navigator.serviceWorker.controller) === MAP_CACHE_EPOCH) {
+      reloadOnce(`${reason}: controller updated`);
+      return;
+    }
+    const activeEpoch = getServiceWorkerEpoch(registration?.active);
+    if (activeEpoch === MAP_CACHE_EPOCH) {
+      reloadOnce(`${reason}: target registration active without takeover`);
+    }
+  };
+
+  const trackedWorker = registration?.installing ?? registration?.waiting ?? null;
+
   const onControllerChange = () => {
     if (getServiceWorkerEpoch(navigator.serviceWorker.controller) !== MAP_CACHE_EPOCH) return;
     navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+    trackedWorker?.removeEventListener('statechange', onTrackedWorkerStateChange);
     clearTimeout(fallbackTimer);
     reloadOnce('controllerchange');
   };
 
+  const onTrackedWorkerStateChange = () => {
+    maybeReloadFromRegistration(`registration state=${trackedWorker?.state ?? 'unknown'}`);
+  };
+
   navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+  trackedWorker?.addEventListener('statechange', onTrackedWorkerStateChange);
   const fallbackTimer = window.setTimeout(() => {
     navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
-    reloadOnce('takeover timeout');
+    trackedWorker?.removeEventListener('statechange', onTrackedWorkerStateChange);
+    if (registrationHasTargetEpoch(registration)) {
+      reloadOnce('takeover timeout with target registration present');
+      return;
+    }
+    if (epochReset) {
+      reloadOnce('takeover timeout after epoch reset');
+    }
   }, 2500);
+
+  maybeReloadFromRegistration('post-register');
 }
 
 function notifyMapCacheReset(serviceWorker: ServiceWorker | null | undefined): void {
@@ -121,8 +165,9 @@ export const swReady: Promise<boolean> = (async () => {
     if (epochReset) {
       notifyRegistrationMapCacheReset(registration);
       notifyMapCacheReset(navigator.serviceWorker.controller);
-      scheduleEpochTakeoverReload(true);
     }
+
+    scheduleEpochTakeoverReload(registration, epochReset);
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
     if (!controller) {
