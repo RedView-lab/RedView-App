@@ -164,7 +164,18 @@ export function useSlope(
 
     const cancelTerrainSlopeBacklog = () => {
       if (!enabledRef.current) return;
-      if (sourceOptionsRef.current.demProfile !== 'terrain') return;
+      // Drop the stale slope backlog on EVERY viewport change, for both
+      // demProfiles. Previously this was gated to `terrain` only, so in
+      // `0.40m (LIDAR SURFACE)` (default profile) mode panning/zooming
+      // never flushed the SW slope build queue + in-flight tile promises.
+      // Each new viewport piled fresh Horn+PNG builds on top of the
+      // previous viewport's unfinished work, so after a few location
+      // changes the slope pipeline carried thousands of orphan builds and
+      // crawled. CANCEL_SLOPE_WORK only bumps the slope cancel generation
+      // and flushes the slope-purpose IGN lanes + slope build queue; it
+      // never touches untagged basemap DEM/ortho fetches, so cancelling
+      // for the default profile is safe for the basemap (its DEM tiles
+      // are shared via DEM_INFLIGHT dedup and re-resolve from cache).
       cancelSlopeWorkerPressure();
     };
 

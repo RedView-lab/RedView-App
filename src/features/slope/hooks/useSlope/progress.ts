@@ -183,10 +183,32 @@ export function useSlopeProgressReporter({
       armWatchdog();
     };
 
+    // ── Reset progress tracking on every viewport change ───────────────
+    // `requested` / `loaded` accumulate one entry per slope tile that ever
+    // fired `sourcedataloading`. Mapbox keeps already-loaded tiles across
+    // pans and never re-emits a loading event for them, so these Sets are
+    // effectively SESSION-CUMULATIVE: after exploring several areas the
+    // denominator balloons (the "Tuiles 43/1809" the user reported) even
+    // though only a handful of tiles for the CURRENT viewport are actually
+    // outstanding. That stale denominator also feeds the watchdog's
+    // straggler math, keeping the pill stuck. Clearing both Sets when the
+    // viewport starts moving rescopes the counter to the new viewport's
+    // tiles only — already-rendered tiles stay on screen (Mapbox cache),
+    // they simply don't need to be re-counted.
+    const onViewportChange = () => {
+      requested.clear();
+      loaded.clear();
+      lastProgressMs = Date.now();
+      scheduleSettle();
+      armWatchdog();
+    };
+
     map.on('sourcedataloading', onLoading);
     map.on('sourcedata', onLoaded);
     map.on('dataabort', onError);
     map.on('idle', onIdle);
+    map.on('movestart', onViewportChange);
+    map.on('zoomstart', onViewportChange);
 
     emit('loading', 5, 'Préparation des pentes');
     armWatchdog();
@@ -196,6 +218,8 @@ export function useSlopeProgressReporter({
       map.off('sourcedata', onLoaded);
       map.off('dataabort', onError);
       map.off('idle', onIdle);
+      map.off('movestart', onViewportChange);
+      map.off('zoomstart', onViewportChange);
       if (settleTimer) clearTimeout(settleTimer);
       if (watchdog) clearTimeout(watchdog);
       onLoadStatusChangeRef.current?.(null);
