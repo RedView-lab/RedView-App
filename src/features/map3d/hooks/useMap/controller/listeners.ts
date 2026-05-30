@@ -1,6 +1,7 @@
 import type { ErrorEvent as MapboxErrorEvent, MapSourceDataEvent } from 'mapbox-gl';
 import { awsFallbackDEMSource, awsFastDEMSource, ignOrthoSource, unifiedDEMSource } from '../../../lib/sources';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
+import { getActiveDemProfilePreference } from '../../../lib/demProfileBus';
 import { installViewportPrefetch } from '../../../lib/viewportPrefetch';
 import type { Ctx } from './context';
 
@@ -174,8 +175,39 @@ export function attachListeners(ctx: Ctx): void {
 
   const onServiceWorkerMessage = (event: MessageEvent) => {
     if (event.data?.type !== 'DEM_TILE_CACHE_UPDATED') return;
-    st.demPassiveRefreshPending = true;
-    fns.scheduleDemSettle();
+
+    // ── Decide whether this cache update affects the BASEMAP mesh ────────
+    // A basemap passive refresh is expensive: `applyPendingDemPassiveRefresh`
+    // bumps `st.demCacheBust`, which rewrites every DEM tile URL and forces
+    // a full network re-fetch of the visible terrain (extremely visible on
+    // Satellite). It is only worth it when the tile that just changed in the
+    // SW cache actually feeds the basemap relief.
+    //
+    // Two updates do NOT feed the basemap and must be treated as derived-
+    // overlay-only (reload slope/altitude, never touch the DEM source):
+    //   1. `source === 'slope-seam-heal'` — the SW only warmed *neighbour*
+    //      DEM tiles so the slope overlay's 3×3 Horn padding is seam-free.
+    //      The basemap DEM render is unchanged. Dozens of these fire while
+    //      1 m slope is active; before this guard they queued a pending
+    //      passive refresh that fired (cache-bust + full DEM rebuild) the
+    //      instant the overlay was torn down and `idle` fired → "the map
+    //      takes forever to load after disabling 1 m slope".
+    //   2. A genuine quality upgrade built for a DEM profile that is NOT the
+    //      active basemap profile (e.g. a terrain-profile 1 m slope tile
+    //      upgrade while the basemap runs the default 0.40 m surface). The
+    //      basemap reads a different profile-keyed tile, so refreshing it
+    //      would re-fetch identical bytes.
+    const source = typeof event.data.source === 'string' ? event.data.source : '';
+    const tileProfile = typeof event.data.profile === 'string' ? event.data.profile : null;
+    const isSlopeSeamHeal = source === 'slope-seam-heal';
+    const profileMatchesBasemap =
+      tileProfile == null || tileProfile === getActiveDemProfilePreference();
+    const affectsBasemap = !isSlopeSeamHeal && profileMatchesBasemap;
+
+    if (affectsBasemap) {
+      st.demPassiveRefreshPending = true;
+      fns.scheduleDemSettle();
+    }
 
     // Per-tile invalidation of derived slope/altitude caches so the
     // upgraded DEM resolution actually shows up in the overlays. Without

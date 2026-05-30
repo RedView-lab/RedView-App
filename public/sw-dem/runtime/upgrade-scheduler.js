@@ -53,7 +53,7 @@ async function finalize(cache, cacheKey, t0, z, x, y, pngBlob, demSource, upgrad
   return response;
 }
 
-function notifyDemTileCacheUpdated(z, x, y, source) {
+function notifyDemTileCacheUpdated(z, x, y, source, profile) {
   self.clients.matchAll({ type: 'window' })
     .then((clients) => {
       clients.forEach((client) => client.postMessage({
@@ -62,6 +62,7 @@ function notifyDemTileCacheUpdated(z, x, y, source) {
         x,
         y,
         source,
+        profile,
       }));
     })
     .catch(() => {
@@ -159,7 +160,7 @@ function scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, fetches, preferredS
           Array.from(upgradedResp.headers.entries()),
         );
       } catch { /* ignore */ }
-      notifyDemTileCacheUpdated(z, x, y, upgraded.source);
+      notifyDemTileCacheUpdated(z, x, y, upgraded.source, demProfile);
       if (DEBUG) console.log(`[sw-dem][upgrade] ${z}/${x}/${y} re-cached at ${upgraded.source}`);
     } catch (e) {
       if (DEBUG) console.warn(`[sw-dem][upgrade] ${z}/${x}/${y} failed`, e);

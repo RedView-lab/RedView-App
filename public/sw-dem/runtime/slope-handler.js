@@ -89,6 +89,7 @@ function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours, g
             type: 'DEM_TILE_CACHE_UPDATED',
             z, x, y,
             source: 'slope-seam-heal',
+            profile: demProfile,
           }));
         }).catch(() => { /* best-effort */ });
       } catch { /* noop */ }
