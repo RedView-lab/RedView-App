@@ -127,6 +127,9 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   // Cells are 1 km × 1 km aligned on integer km — the lookup is trivial.
   const cellByKey = new Map();
   for (const c of usableCells) cellByKey.set(`${c.Ekm}/${c.Nkm}`, c);
+  // url → cog index so the prefetch grouping / snapshot avoids O(cells) finds.
+  const cogByUrl = new Map();
+  for (const c of usableCells) cogByUrl.set(c.cog.url, c.cog);
 
   const n = 1 << mercZ;
 
@@ -156,13 +159,18 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   const elevations = new Float32Array(totalPixels);
   const coverage = new Uint8Array(totalPixels);
 
-  // Pre-pass: compute LV95 (E, N) for every output pixel. Convert in row-major
-  // order; per-pixel reprojection is ~50 ns (closed-form polynomial).
-  // We then group pixel sample requests by *internal COG tile* so we batch
-  // tile-decompression rather than re-decompressing the same tile per pixel.
+  // ── Single 256×256 pre-pass. For every output pixel: reproject to LV95,
+  // assign it to its COG cell + chosen pyramid level, bucket it by primary
+  // internal tile (so the sampler iterates locally), AND accumulate the exact
+  // set of internal tiles the bilinear sampler will read — all in one sweep.
+  // The previous code ran TWO full-resolution loops (one to bucket, one to
+  // recompute the bilinear corner tiles); merging them halves the per-pixel
+  // CPU and avoids a redundant reprojection-free recompute.
   //
-  // pixelsByTile: Map<`${cellKey}#L${levelIdx}#${tileIndex}`, { cell, levelIdx, level, tileIndex, pts }>
+  // pixelsByTile: Map<groupKey, { cog, levelIdx, pts:[{outIdx,E,N}] }>
+  // tilePrefetchSet: Set<`${url}|${levelIdx}|${tileIndex}`>
   const pixelsByTile = new Map();
+  const tilePrefetchSet = new Set();
   let droppedOutside = 0;
 
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
@@ -178,24 +186,44 @@ async function buildSwissTile(mercZ, mercX, mercY) {
       const cell = cellByKey.get(cellKey);
       if (!cell) { droppedOutside++; continue; }
 
-      // Map pixel to internal COG tile of the chosen pyramid LEVEL
       const cog = cell.cog;
       const picked = pickedLevels.get(cellKey);
       const level = picked.level;
+      const lvl = picked.idx;
+      const tileW = level.tileW;
+      const tileH = level.tileH;
+      const across = level.tilesAcross;
+      const widthM1 = level.width - 1;
+      const heightM1 = level.height - 1;
+
+      // Bilinear footprint of this pixel at the chosen pyramid level.
       const ipx = (E - cog.originE) / level.pixelScaleX;
       const ipy = (cog.originN - N) / level.pixelScaleY;
-      const x0 = Math.max(0, Math.min(Math.floor(ipx), level.width - 1));
-      const y0 = Math.max(0, Math.min(Math.floor(ipy), level.height - 1));
-      const tx = (x0 / level.tileW) | 0;
-      const ty = (y0 / level.tileH) | 0;
-      const tileIndex = ty * level.tilesAcross + tx;
-      const groupKey = `${cellKey}#L${picked.idx}#${tileIndex}`;
+      const x0 = Math.max(0, Math.min(Math.floor(ipx), widthM1));
+      const y0 = Math.max(0, Math.min(Math.floor(ipy), heightM1));
+      const x1 = Math.min(x0 + 1, widthM1);
+      const y1 = Math.min(y0 + 1, heightM1);
+      const tx0 = (x0 / tileW) | 0;
+      const tx1 = (x1 / tileW) | 0;
+      const ty0 = (y0 / tileH) | 0;
+      const ty1 = (y1 / tileH) | 0;
+      const primaryTile = ty0 * across + tx0;
+
+      const groupKey = `${cellKey}#L${lvl}#${primaryTile}`;
       let bucket = pixelsByTile.get(groupKey);
       if (!bucket) {
-        bucket = { cell, levelIdx: picked.idx, level, tileIndex, pts: [] };
+        bucket = { cog, levelIdx: lvl, pts: [] };
         pixelsByTile.set(groupKey, bucket);
       }
       bucket.pts.push({ outIdx: py * DEM_TILE_SIZE + px, E, N });
+
+      // Exact internal tiles the bilinear sampler reads: (x0,y0)(x1,y0)
+      // (x0,y1)(x1,y1). Most interior pixels resolve to a single tile.
+      const url = cog.url;
+      tilePrefetchSet.add(`${url}|${lvl}|${primaryTile}`);
+      if (tx1 !== tx0) tilePrefetchSet.add(`${url}|${lvl}|${ty0 * across + tx1}`);
+      if (ty1 !== ty0) tilePrefetchSet.add(`${url}|${lvl}|${ty1 * across + tx0}`);
+      if (tx1 !== tx0 && ty1 !== ty0) tilePrefetchSet.add(`${url}|${lvl}|${ty1 * across + tx1}`);
     }
   }
 
@@ -211,64 +239,67 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     };
   }
 
-  // Compute the EXACT set of internal tiles needed for bilinear sampling at
-  // the chosen pyramid level. The bilinear sampler in sampleSwissCOG() only
-  // ever reads pixels (x0,y0) (x0+1,y0) (x0,y1) (x0+1,y1).
-  const tilePrefetchSet = new Set();
-  for (const { cell, levelIdx, level, pts } of pixelsByTile.values()) {
-    const cog = cell.cog;
-    const tilesAcross = level.tilesAcross;
-    const tileW = level.tileW;
-    const tileH = level.tileH;
-    const widthM1 = level.width - 1;
-    const heightM1 = level.height - 1;
-    for (const { E, N } of pts) {
-      const ipxF = (E - cog.originE) / level.pixelScaleX;
-      const ipyF = (cog.originN - N) / level.pixelScaleY;
-      const x0 = Math.max(0, Math.min(Math.floor(ipxF), widthM1));
-      const y0 = Math.max(0, Math.min(Math.floor(ipyF), heightM1));
-      const x1 = Math.min(x0 + 1, widthM1);
-      const y1 = Math.min(y0 + 1, heightM1);
-      const tx0 = (x0 / tileW) | 0;
-      const tx1 = (x1 / tileW) | 0;
-      const ty0 = (y0 / tileH) | 0;
-      const ty1 = (y1 / tileH) | 0;
-      tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty0 * tilesAcross + tx0}`);
-      if (tx1 !== tx0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty0 * tilesAcross + tx1}`);
-      if (ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty1 * tilesAcross + tx0}`);
-      if (tx1 !== tx0 && ty1 !== ty0) tilePrefetchSet.add(`${cog.url}|${levelIdx}|${ty1 * tilesAcross + tx1}`);
+  // Step 2b — coalesced range prefetch. Group the needed internal tiles per
+  // (COG, level) and let swiss-fetcher merge contiguous byte ranges into a
+  // single HTTP request each (swisstopo stores a level's tiles contiguously,
+  // so most multi-tile cells collapse to ONE fetch instead of N). All fetches
+  // share the SWISS_CONCURRENCY limiter so this never floods the queue.
+  const prefetchByCog = new Map(); // `${url}|${lvl}` → { cog, levelIdx, tiles:[] }
+  for (const k of tilePrefetchSet) {
+    const bar1 = k.indexOf('|');
+    const bar2 = k.indexOf('|', bar1 + 1);
+    const url = k.slice(0, bar1);
+    const lvl = parseInt(k.slice(bar1 + 1, bar2), 10);
+    const tileIndex = parseInt(k.slice(bar2 + 1), 10);
+    const gk = `${url}|${lvl}`;
+    let g = prefetchByCog.get(gk);
+    if (!g) {
+      const cog = cogByUrl.get(url);
+      if (!cog) continue;
+      g = { cog, levelIdx: lvl, tiles: [] };
+      prefetchByCog.set(gk, g);
+    }
+    g.tiles.push(tileIndex);
+  }
+  const prefetchCount = tilePrefetchSet.size;
+  await Promise.all(
+    Array.from(prefetchByCog.values()).map((g) =>
+      prefetchCOGTilesCoalesced(g.cog, g.levelIdx, g.tiles),
+    ),
+  );
+
+  // Snapshot the decoded tiles into a local map (strong references) so that
+  // LRU eviction triggered by concurrent Mercator-tile builds cannot drop a
+  // tile out from under the synchronous sampler mid-pass.
+  const tileMap = new Map(); // `${url}#L${lvl}#${tileIndex}` → Float32Array
+  for (const k of tilePrefetchSet) {
+    const bar1 = k.indexOf('|');
+    const bar2 = k.indexOf('|', bar1 + 1);
+    const url = k.slice(0, bar1);
+    const lvl = parseInt(k.slice(bar1 + 1, bar2), 10);
+    const tileIndex = parseInt(k.slice(bar2 + 1), 10);
+    const cog = cogByUrl.get(url);
+    if (!cog) continue;
+    const t = getCOGInternalTileCached(cog, lvl, tileIndex);
+    if (t) tileMap.set(`${url}#L${lvl}#${tileIndex}`, t);
+  }
+  const getTileSync = (cog, levelIdx, tileIndex) =>
+    tileMap.get(`${cog.url}#L${levelIdx}#${tileIndex}`) || null;
+
+  // Step 3 — sample every pixel SYNCHRONOUSLY from the decoded tiles. The old
+  // path awaited 4 cache lookups per pixel (~260 k microtasks per tile); this
+  // reads straight from the Float32Arrays and is an order of magnitude faster.
+  let coveredCount = 0;
+  for (const { cog, levelIdx, pts } of pixelsByTile.values()) {
+    for (const { outIdx, E, N } of pts) {
+      const v = sampleSwissCOGSync(cog, levelIdx, E, N, getTileSync);
+      if (Number.isFinite(v)) {
+        elevations[outIdx] = v;
+        coverage[outIdx] = 1;
+        coveredCount++;
+      }
     }
   }
-  // Fan out tile fetches with Promise.all — they share swiss-fetcher's
-  // concurrency limiter so this never exceeds SWISS_CONCURRENCY in flight.
-  const prefetchCount = tilePrefetchSet.size;
-  await Promise.all(Array.from(tilePrefetchSet).map((k) => {
-    const parts = k.split('|');
-    const url = parts[0];
-    const levelIdx = parseInt(parts[1], 10);
-    const tileIndex = parseInt(parts[2], 10);
-    const cog = usableCells.find((c) => c.cog.url === url)?.cog;
-    if (!cog) return null;
-    return getCOGInternalTile(cog, levelIdx, tileIndex);
-  }));
-
-  // Step 3 — sample every pixel (now using cached internal tiles)
-  let coveredCount = 0;
-  const samplers = [];
-  for (const { cell, levelIdx, pts } of pixelsByTile.values()) {
-    const cog = cell.cog;
-    samplers.push((async () => {
-      for (const { outIdx, E, N } of pts) {
-        const v = await sampleSwissCOG(cog, levelIdx, E, N, (lvl, idx) => getCOGInternalTile(cog, lvl, idx));
-        if (Number.isFinite(v)) {
-          elevations[outIdx] = v;
-          coverage[outIdx] = 1;
-          coveredCount++;
-        }
-      }
-    })());
-  }
-  await Promise.all(samplers);
 
   if (coveredCount === 0) {
     // 0 covered pixels can also be a symptom of range-fetch timeouts

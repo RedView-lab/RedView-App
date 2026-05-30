@@ -97,9 +97,10 @@ const SWISS_STAC_CELL_CACHE_MAX = 4096; // STAC item resolutions per LV95-km cel
 // COG concurrency limiter — separate semaphore from IGN so France traffic
 // never starves Swiss traffic and vice versa. CDN benchmark (Apr 24) shows
 // data.geo.admin.ch handles 32 streams at p95=2.5s with 0 errors. Bumped
-// 16 → 24 (Apr 24 evening) once grid-aligned STAC dedup eliminated the
-// duplicate-window thrash that previously saturated the queue.
-const SWISS_CONCURRENCY = 24;
+// 24 → 32 (May 30) once header fetches dropped to 32 KB and range requests
+// are coalesced, so per-tile fetch VOLUME is far lower and the extra streams
+// drain the cold-pan burst faster without queue saturation.
+const SWISS_CONCURRENCY = 32;
 const SWISS_QUEUE_MAX = 400;
 
 // STAC clustering window — every cell snaps to a fixed (Ekm/STAC_GRID,

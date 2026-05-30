@@ -313,7 +313,7 @@ async function getCOGUrlForCell(Ekm, Nkm) {
 const _cogHeaderCache = new Map();
 const _cogHeaderInflight = new Map();
 
-const SWISS_HEADER_INITIAL_BYTES = 131_072; // 128 KB — fits IFD0 + 4-5 overview IFDs in one round-trip
+const SWISS_HEADER_INITIAL_BYTES = 32_768; // 32 KB — GDAL writes IFD0 + every overview IFD into the front "ghost" header (<4 KB total); the openSwissCOG refetch loop covers the rare outlier
 const SWISS_HEADER_MAX_BYTES = 524_288;
 
 function _headerGet(url) {
@@ -480,8 +480,95 @@ async function getCOGInternalTile(cog, levelIdx, tileIndex) {
   return promise;
 }
 
-// High-level helper: given an LV95 point, sample elevation at native
-// resolution (level 0). Returns NaN if no data.
+// Synchronous cache reader — returns the decoded Float32Array if it is already
+// resident, else null. Used by the sync bilinear sampler after a prefetch has
+// guaranteed the needed tiles are in cache.
+function getCOGInternalTileCached(cog, levelIdx, tileIndex) {
+  const e = _tileCache.get(`${cog.url}#L${levelIdx}#${tileIndex}`);
+  if (!e || e._null) return null;
+  return e;
+}
+
+// ─── Coalesced multi-tile prefetch ──────────────────────────────────────────
+// Groups the requested internal tiles of one COG level into contiguous
+// byte-range runs and issues ONE Range request per run. swisstopo writes a
+// level's tiles contiguously in file order, so a cell that needs several
+// adjacent tiles (native / high zoom) collapses from N HTTP requests to ~1.
+// Each tile is still decoded individually (every tile is compressed on its
+// own) and cached under its own key, so getCOGInternalTile() and the sync
+// sampler both find it afterwards.
+const SWISS_RANGE_MERGE_GAP = 16 * 1024;      // merge tiles ≤16 KB apart in the file
+const SWISS_RANGE_MAX_SPAN = 6 * 1024 * 1024; // cap a single coalesced fetch at 6 MB
+
+async function prefetchCOGTilesCoalesced(cog, levelIdx, tileIndices) {
+  const level = cog.levels[levelIdx];
+  if (!level) return;
+
+  // Dedup + drop tiles already cached or in-flight; collect their byte ranges.
+  const seen = new Set();
+  const need = [];
+  for (const ti of tileIndices) {
+    if (seen.has(ti)) continue;
+    seen.add(ti);
+    const key = `${cog.url}#L${levelIdx}#${ti}`;
+    if (_tileGet(key).hit) continue;
+    if (_tileInflight.has(key)) continue;
+    const offset = level.tileOffsets[ti];
+    const length = level.tileByteCounts[ti];
+    if (!Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) {
+      _tileSetNull(key, SWISS_NULL_TTL_TRANSIENT);
+      continue;
+    }
+    need.push({ ti, offset, length, key });
+  }
+  if (need.length === 0) return;
+
+  need.sort((a, b) => a.offset - b.offset);
+
+  // Build contiguous runs (merge tiles whose gap ≤ MERGE_GAP, span ≤ MAX_SPAN).
+  const runs = [];
+  let cur = null;
+  for (const t of need) {
+    const end = t.offset + t.length;
+    if (cur && t.offset - cur.end <= SWISS_RANGE_MERGE_GAP && end - cur.start <= SWISS_RANGE_MAX_SPAN) {
+      cur.tiles.push(t);
+      if (end > cur.end) cur.end = end;
+    } else {
+      cur = { start: t.offset, end, tiles: [t] };
+      runs.push(cur);
+    }
+  }
+
+  await Promise.all(runs.map(async (run) => {
+    if (run.tiles.length === 1) {
+      // Singleton — defer to the normal cached/inflight path (no merge gain).
+      await getCOGInternalTile(cog, levelIdx, run.tiles[0].ti);
+      return;
+    }
+    const span = run.end - run.start;
+    const fetchPromise = swissRangeFetch(cog.url, run.start, span);
+    // Register a per-tile inflight promise derived from the shared fetch so a
+    // concurrent build for any of these tiles dedups onto this request.
+    const tilePromises = run.tiles.map((t) => {
+      const p = fetchPromise
+        .then(async (buf) => {
+          if (!buf) { _tileSetNull(t.key, SWISS_NULL_TTL_TRANSIENT); return null; }
+          const sub = buf.slice(t.offset - run.start, t.offset - run.start + t.length);
+          const data = await decodeSwissTileBytes(level, levelIdx, t.ti, sub);
+          if (!data) { _tileSetNull(t.key, SWISS_NULL_TTL_TRANSIENT); return null; }
+          _tileCache.set(t.key, data);
+          evictMap(_tileCache, SWISS_TILE_CACHE_MAX);
+          return data;
+        })
+        .finally(() => {
+          if (_tileInflight.get(t.key) === p) _tileInflight.delete(t.key);
+        });
+      _tileInflight.set(t.key, p);
+      return p;
+    });
+    await Promise.all(tilePromises);
+  }));
+}
 async function sampleSwissElevation(E, N) {
   if (
     E < SWISS_LV95_BOUNDS.Emin || E > SWISS_LV95_BOUNDS.Emax ||

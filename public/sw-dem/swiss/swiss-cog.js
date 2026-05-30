@@ -441,15 +441,11 @@ function pickSwissCOGLevel(cog, mppOut) {
 
 // ─── Internal-tile fetch + decode ───────────────────────────────────────────
 
-async function fetchAndDecodeTile(cog, levelIdx, tileIndex, fetcher) {
-  const level = cog.levels[levelIdx];
-  if (!level) return null;
-  const offset = level.tileOffsets[tileIndex];
-  const length = level.tileByteCounts[tileIndex];
-  if (!Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) {
-    return null;
-  }
-  const buf = await fetcher(cog.url, offset, length);
+// Decode an already-fetched internal-tile byte range into a Float32Array.
+// Split out from fetchAndDecodeTile() so the coalesced range scheduler in
+// swiss-fetcher.js can fetch several tiles in one HTTP request and then decode
+// each slice independently (each tile is compressed on its own).
+async function decodeSwissTileBytes(level, levelIdx, tileIndex, buf) {
   if (!buf) return null;
 
   let raw;
@@ -476,6 +472,19 @@ async function fetchAndDecodeTile(cog, levelIdx, tileIndex, fetcher) {
   }
 
   return new Float32Array(raw.buffer, raw.byteOffset, level.tileW * level.tileH);
+}
+
+async function fetchAndDecodeTile(cog, levelIdx, tileIndex, fetcher) {
+  const level = cog.levels[levelIdx];
+  if (!level) return null;
+  const offset = level.tileOffsets[tileIndex];
+  const length = level.tileByteCounts[tileIndex];
+  if (!Number.isFinite(offset) || !Number.isFinite(length) || length <= 0) {
+    return null;
+  }
+  const buf = await fetcher(cog.url, offset, length);
+  if (!buf) return null;
+  return decodeSwissTileBytes(level, levelIdx, tileIndex, buf);
 }
 
 // Convert LV95 (E, N) → image (px, py) in *pixel-centre* coordinates for
@@ -530,6 +539,64 @@ async function sampleSwissCOG(cog, levelIdx, E, N, getInternalTile) {
   if (count === 0) return NaN;
   if (count === 4) return sum;
   // Partial coverage — re-weight by valid bilinear weights only.
+  let wSum = 0;
+  if (!Number.isNaN(v00)) wSum += (1 - fx) * (1 - fy);
+  if (!Number.isNaN(v10)) wSum += fx * (1 - fy);
+  if (!Number.isNaN(v01)) wSum += (1 - fx) * fy;
+  if (!Number.isNaN(v11)) wSum += fx * fy;
+  return wSum > 0 ? sum / wSum : NaN;
+}
+
+// Synchronous bilinear sampler. Identical maths to sampleSwissCOG() but reads
+// decoded internal tiles from a *synchronous* getter (`getTileSync(cog,
+// levelIdx, tileIndex) → Float32Array | null`). Callers MUST have prefetched
+// every internal tile the point touches before calling this. Removing the
+// per-pixel `await` (4 cache lookups × 65 536 px ≈ 260 k microtasks per tile)
+// is the single biggest CPU win in the Swiss build path.
+function sampleSwissCOGSync(cog, levelIdx, E, N, getTileSync) {
+  if (E < cog.Emin || E > cog.Emax || N < cog.Nmin || N > cog.Nmax) return NaN;
+  const level = cog.levels[levelIdx];
+  if (!level) return NaN;
+
+  const px = (E - cog.originE) / level.pixelScaleX;
+  const py = (cog.originN - N) / level.pixelScaleY;
+  const widthM1 = level.width - 1;
+  const heightM1 = level.height - 1;
+  const x0 = Math.max(0, Math.min(Math.floor(px), widthM1));
+  const y0 = Math.max(0, Math.min(Math.floor(py), heightM1));
+  const x1 = Math.min(x0 + 1, widthM1);
+  const y1 = Math.min(y0 + 1, heightM1);
+  const fx = px - x0;
+  const fy = py - y0;
+
+  const tileW = level.tileW;
+  const tileH = level.tileH;
+  const across = level.tilesAcross;
+  const nodata = cog.nodata;
+
+  const sampleAt = (x, y) => {
+    const tx = (x / tileW) | 0;
+    const ty = (y / tileH) | 0;
+    const tile = getTileSync(cog, levelIdx, ty * across + tx);
+    if (!tile) return NaN;
+    const v = tile[(y - ty * tileH) * tileW + (x - tx * tileW)];
+    if (!Number.isFinite(v)) return NaN;
+    if (nodata !== undefined && v === nodata) return NaN;
+    return v;
+  };
+
+  const v00 = sampleAt(x0, y0);
+  const v10 = sampleAt(x1, y0);
+  const v01 = sampleAt(x0, y1);
+  const v11 = sampleAt(x1, y1);
+
+  let sum = 0, count = 0;
+  if (!Number.isNaN(v00)) { sum += v00 * (1 - fx) * (1 - fy); count++; }
+  if (!Number.isNaN(v10)) { sum += v10 * fx * (1 - fy); count++; }
+  if (!Number.isNaN(v01)) { sum += v01 * (1 - fx) * fy; count++; }
+  if (!Number.isNaN(v11)) { sum += v11 * fx * fy; count++; }
+  if (count === 0) return NaN;
+  if (count === 4) return sum;
   let wSum = 0;
   if (!Number.isNaN(v00)) wSum += (1 - fx) * (1 - fy);
   if (!Number.isNaN(v10)) wSum += fx * (1 - fy);
