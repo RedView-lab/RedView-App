@@ -157,14 +157,20 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
   // STAC bbox is in WGS84. Convert the corners.
   const sw = lv95ToWGS84(EkmMin * 1000, NkmMin * 1000);
   const ne = lv95ToWGS84((EkmMax + 1) * 1000, (NkmMax + 1) * 1000);
-  const url =
+
+  // The swisstopo STAC API hard-caps `limit` at 100 features/page and
+  // paginates via an opaque `cursor` carried in the response's
+  // rel="next" link. We follow that cursor up to SWISS_STAC_MAX_PAGES so
+  // a large discovery window (14×14 km) is fully resolved instead of
+  // silently truncated at 100 features → missing cells → flat patches.
+  const firstUrl =
     `${SWISS_STAC_BASE}` +
     `?bbox=${sw.lng.toFixed(6)},${sw.lat.toFixed(6)},${ne.lng.toFixed(6)},${ne.lat.toFixed(6)}` +
-    `&limit=200`;
+    `&limit=${SWISS_STAC_PAGE_LIMIT}`;
 
-  const json = await swissScheduleFetch(async () => {
+  const fetchPage = (pageUrl) => swissScheduleFetch(async () => {
     try {
-      const res = await fetch(url, {
+      const res = await fetch(pageUrl, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(SWISS_STAC_FETCH_TIMEOUT_MS),
         priority: 'high',
@@ -172,37 +178,57 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
       if (!res.ok) {
         // 4xx → permanent (treat as "ok, zero features"). 5xx → transient.
         if (res.status >= 400 && res.status < 500) {
-          console.warn(`[swiss][stac] HTTP ${res.status} ${url} (permanent)`);
+          console.warn(`[swiss][stac] HTTP ${res.status} ${pageUrl} (permanent)`);
           return { _permanent: true, value: { features: [] } };
         }
-        console.warn(`[swiss][stac] HTTP ${res.status} ${url} (transient)`);
+        console.warn(`[swiss][stac] HTTP ${res.status} ${pageUrl} (transient)`);
         return null;
       }
       return { _permanent: true, value: await res.json() };
     } catch (e) {
-      console.warn(`[swiss][stac] fetch error ${url}:`, e?.message || e);
+      console.warn(`[swiss][stac] fetch error ${pageUrl}:`, e?.message || e);
       return null; // transient (timeout, network)
     }
   });
-  // Pruned or transient network failure → tell caller to retry, do NOT
-  // mark cells as permanent-null.
-  if (!json || json === SWISS_PRUNED_SENTINEL) {
-    console.warn(`[swiss][stac] transient failure for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
-    return { ok: false };
+
+  // Accumulate features across every cursor page. Any page that fails
+  // transiently aborts the whole window resolution (return {ok:false})
+  // so we never mark cells permanent-null on a partial read.
+  const allFeatures = [];
+  let nextUrl = firstUrl;
+  let page = 0;
+  while (nextUrl && page < SWISS_STAC_MAX_PAGES) {
+    const json = await fetchPage(nextUrl);
+    // Pruned or transient network failure → tell caller to retry, do NOT
+    // mark cells as permanent-null.
+    if (!json || json === SWISS_PRUNED_SENTINEL) {
+      console.warn(`[swiss][stac] transient failure (page ${page}) for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
+      return { ok: false };
+    }
+    const payload = json._permanent ? json.value : json;
+    if (!payload || !Array.isArray(payload.features)) {
+      console.warn(`[swiss][stac] malformed payload (page ${page}) for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
+      return { ok: false };
+    }
+    for (const feat of payload.features) allFeatures.push(feat);
+    page++;
+    // Follow the rel="next" cursor link if present and the page was full
+    // (a short page means the catalogue is exhausted for this bbox).
+    nextUrl = null;
+    if (payload.features.length >= SWISS_STAC_PAGE_LIMIT && Array.isArray(payload.links)) {
+      const link = payload.links.find((l) => l && l.rel === 'next' && l.href);
+      if (link) nextUrl = link.href;
+    }
   }
-  const payload = json._permanent ? json.value : json;
-  if (!payload || !Array.isArray(payload.features)) {
-    console.warn(`[swiss][stac] malformed payload for bbox ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)}`);
-    return { ok: false };
-  }
+
   console.log(
-    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${payload.features.length} features`,
+    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${allFeatures.length} features (${page} page${page === 1 ? '' : 's'})`,
     'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
   );
 
   // Group features by (Ekm, Nkm) keeping the most recent year per cell.
   const cellBest = new Map();
-  for (const feat of payload.features) {
+  for (const feat of allFeatures) {
     const id = feat.id || '';
     const m = id.match(/^swisssurface3d-raster_(\d{4})_(\d+)-(\d+)$/);
     if (!m) continue;

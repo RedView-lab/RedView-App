@@ -156,7 +156,7 @@ const ORTHO_TILE_SIZE = 256;
 // 2026-05-30-france-lod-datum-wall-fix-1: drop the per-tile Mapbox datum bias
 // on full-coverage France interior tiles so neighbouring tiles rendered at
 // different LOD no longer step a few metres apart (vertical "walls" at 0.40 m).
-const MAP_CACHE_EPOCH = '2026-05-30-swiss-fast-pipeline-1';
+const MAP_CACHE_EPOCH = '2026-05-30-swiss-stac-multifetch-1';
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check

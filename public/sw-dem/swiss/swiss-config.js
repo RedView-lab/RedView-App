@@ -92,7 +92,7 @@ const SWISS_NULL_TTL_TRANSIENT = 5_000;    // 5 s
 // because adjacent Mercator tiles re-sample the same internal tiles.
 const SWISS_HEADER_CACHE_MAX = 512;   // ≈2 MB
 const SWISS_TILE_CACHE_MAX = 256;     // ≈64 MB upper bound
-const SWISS_STAC_CELL_CACHE_MAX = 4096; // STAC item resolutions per LV95-km cell
+const SWISS_STAC_CELL_CACHE_MAX = 16384; // STAC item resolutions per LV95-km cell (a 14×14 window writes ~196 at once)
 
 // COG concurrency limiter — separate semaphore from IGN so France traffic
 // never starves Swiss traffic and vice versa. CDN benchmark (Apr 24) shows
@@ -106,11 +106,22 @@ const SWISS_QUEUE_MAX = 400;
 // STAC clustering window — every cell snaps to a fixed (Ekm/STAC_GRID,
 // Nkm/STAC_GRID) block so sibling cells deterministically join the SAME
 // inflight STAC query (super-window dedup, see swiss-fetcher.js).
-//   7×7 = 49 cells/query × ~2 published years/cell ≈ 100 features (well
-//   under STAC's 200-feature limit). Larger window → fewer STAC round-trips
-//   per Mercator tile (a z=12 tile spans ~100 cells → 2-3 STAC queries vs
-//   5-7 with a 5-cell window).
-const SWISS_STAC_GRID = 7;
+//   The swisstopo STAC API caps `limit` at 100 features/page and paginates
+//   via an opaque `cursor` in the response's rel="next" link. We now FOLLOW
+//   that cursor (up to SWISS_STAC_MAX_PAGES), so a window may hold far more
+//   than 100 cells without silently truncating. A 14×14 = 196-cell block ×
+//   ~1.2 published years/cell ≈ 235 features = 3 pages, but ONE logical
+//   window now covers ~4× the area of the old 7×7 block → a viewport pan
+//   resolves discovery in a handful of windows instead of ~15, and every
+//   subsequent tile in the pan reads cells straight from cache.
+const SWISS_STAC_GRID = 14;
+
+// STAC page size (server hard-caps at 100) and the max number of cursor
+// pages we will follow per window before giving up. 4 pages × 100 = 400
+// features comfortably covers a fully-populated 14×14 block even where
+// every cell has 2 published acquisition years.
+const SWISS_STAC_PAGE_LIMIT = 100;
+const SWISS_STAC_MAX_PAGES = 6;
 
 const SWISS_PRUNED_SENTINEL = Object.freeze({ _swissPruned: true });
 
