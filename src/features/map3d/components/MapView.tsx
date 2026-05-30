@@ -4,6 +4,7 @@ import { useRef, useEffect, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
+import { MapContextMenu, type MapContextMenuActionPayload } from './MapContextMenu';
 import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
 import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
@@ -17,6 +18,7 @@ interface MapViewProps {
   onLidarSelectionDisable?: () => void;
   initialViewport?: MapViewport | null;
   onViewportChange?: (viewport: MapViewport) => void;
+  onMapContextMenuAction?: (payload: MapContextMenuActionPayload) => void;
 }
 
 export default memo(function MapView({
@@ -28,6 +30,7 @@ export default memo(function MapView({
   onLidarSelectionDisable,
   initialViewport,
   onViewportChange,
+  onMapContextMenuAction,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const { map, isLoaded } = useMap(containerRef, {
@@ -55,6 +58,12 @@ export default memo(function MapView({
       <div
         ref={containerRef}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+      />
+
+      <MapContextMenu
+        map={isLoaded ? map.current : null}
+        containerRef={containerRef}
+        onAction={onMapContextMenuAction}
       />
 
       {!isLoaded && (

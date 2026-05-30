@@ -1537,6 +1537,30 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Switch to 3D"
   },
   {
+    "fr": "Menu contextuel de la carte",
+    "en": "Map context menu"
+  },
+  {
+    "fr": "Copier les coordonnées",
+    "en": "Copy coordinates"
+  },
+  {
+    "fr": "Créer un POI",
+    "en": "Create a POI"
+  },
+  {
+    "fr": "Démarrer ici",
+    "en": "Start here"
+  },
+  {
+    "fr": "Ajouter une étape",
+    "en": "Add a waypoint"
+  },
+  {
+    "fr": "Finir ici",
+    "en": "Finish here"
+  },
+  {
     "fr": "Nouveau projet",
     "en": "New project"
   },
