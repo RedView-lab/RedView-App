@@ -138,29 +138,32 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
   const routePoints = active.gpxRoute?.points ?? [];
   const totalDistanceM = routePoints[routePoints.length - 1]?.distanceM ?? 0;
   const markers: ItineraryMarkerPoint[] = [];
+  const showEndpointMarkers = active.gpxRoute?.source !== 'brouter';
 
-  const start = active.timeline.find((row) => row.kind === 'start');
-  const startPoint = resolveTimelinePoint(start ?? null, routePoints, totalDistanceM);
-  if (startPoint) {
-    markers.push({
-      id: start ? `start:${start.id}` : 'start:route',
-      kind: 'start',
-      label: start?.label?.trim() || 'Depart',
-      lat: startPoint.lat,
-      lon: startPoint.lon,
-    });
-  }
+  if (showEndpointMarkers) {
+    const start = active.timeline.find((row) => row.kind === 'start');
+    const startPoint = resolveTimelinePoint(start ?? null, routePoints, totalDistanceM);
+    if (startPoint) {
+      markers.push({
+        id: start ? `start:${start.id}` : 'start:route',
+        kind: 'start',
+        label: start?.label?.trim() || 'Depart',
+        lat: startPoint.lat,
+        lon: startPoint.lon,
+      });
+    }
 
-  const end = active.timeline.find((row) => row.kind === 'end');
-  const endPoint = resolveTimelinePoint(end ?? null, routePoints, totalDistanceM);
-  if (endPoint) {
-    markers.push({
-      id: end ? `end:${end.id}` : 'end:route',
-      kind: 'end',
-      label: end?.label?.trim() || 'Arrivee',
-      lat: endPoint.lat,
-      lon: endPoint.lon,
-    });
+    const end = active.timeline.find((row) => row.kind === 'end');
+    const endPoint = resolveTimelinePoint(end ?? null, routePoints, totalDistanceM);
+    if (endPoint) {
+      markers.push({
+        id: end ? `end:${end.id}` : 'end:route',
+        kind: 'end',
+        label: end?.label?.trim() || 'Arrivee',
+        lat: endPoint.lat,
+        lon: endPoint.lon,
+      });
+    }
   }
 
   for (const item of active.timeline) {
