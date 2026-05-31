@@ -257,6 +257,8 @@ async function fetchVisibleViewportPois(
   signal: AbortSignal,
 ): Promise<PoiFeature[]> {
   const bounds = map.getBounds();
+  if (!bounds) return [];
+
   const south = bounds.getSouth();
   const north = bounds.getNorth();
   const west = bounds.getWest();

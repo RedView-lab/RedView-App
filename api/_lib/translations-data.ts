@@ -2137,6 +2137,30 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "New point"
   },
   {
+    "fr": "Point d\\'intérêt",
+    "en": "Point Of Interest"
+  },
+  {
+    "fr": "Catégories POI",
+    "en": "POI categories"
+  },
+  {
+    "fr": "Eau",
+    "en": "Water"
+  },
+  {
+    "fr": "Toilette",
+    "en": "Toilet"
+  },
+  {
+    "fr": "Station Service",
+    "en": "Fuel station"
+  },
+  {
+    "fr": "Magasin de vélo",
+    "en": "Bike shop"
+  },
+  {
     "fr": "Erreur de recherche",
     "en": "Search error"
   },
