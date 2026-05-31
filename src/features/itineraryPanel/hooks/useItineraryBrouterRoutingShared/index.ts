@@ -5,6 +5,7 @@ export type {
   UseItineraryBrouterRoutingArgs,
 } from './types';
 export {
+  applyBrouterSurfaceToRoutePoints,
   buildStoredRoutePointsFromBrouter,
   toGeometryRoutePoints,
   toStoredRoutePoints,
