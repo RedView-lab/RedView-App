@@ -58,7 +58,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   },
   routes: {
     enabled: true,
-    traceWidthPx: 4,
+    traceWidthPx: 8,
     items: [
       { id: 'route-1', label: translateAppText('Itinéraire {{index}}', { index: 1 }), color: '#c50000', mode: 'default', opacity: 100, visible: true },
       { id: 'route-2', label: translateAppText('Variante 2'), color: '#ffa630', mode: 'slope', opacity: 100, visible: true },

@@ -39,7 +39,8 @@ export function MapViewportControls({
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
-  const [isRouteSlopeLegendOpen, setIsRouteSlopeLegendOpen] = useState(Boolean(routeSlopeLegendTitle));
+  const [isRouteSlopeLegendOpen, setIsRouteSlopeLegendOpen] = useState(true);
+  const slopeLegendPanelTitle = routeSlopeLegendTitle ?? t('Légende de pente du tracé');
 
   useEffect(() => {
     if (!map) {
@@ -62,10 +63,6 @@ export function MapViewportControls({
       map.off('moveend', syncCameraState);
     };
   }, [map]);
-
-  useEffect(() => {
-    setIsRouteSlopeLegendOpen(Boolean(routeSlopeLegendTitle));
-  }, [routeSlopeLegendTitle]);
 
   const disabled = !isMapLoaded || map == null;
 
@@ -164,9 +161,9 @@ export function MapViewportControls({
       </button>
 
       <div className="rvmvc-map-tools__dimension-row">
-        {routeSlopeLegendTitle && isRouteSlopeLegendOpen ? (
+        {isRouteSlopeLegendOpen ? (
           <section className="rvmvc-route-slope-legend" aria-label={t('Légende de pente du tracé')}>
-            <div className="rvmvc-route-slope-legend__title">{routeSlopeLegendTitle}</div>
+            <div className="rvmvc-route-slope-legend__title">{slopeLegendPanelTitle}</div>
             <div className="rvmvc-route-slope-legend__list">
               {ROUTE_SLOPE_LEGEND_BANDS.map((band) => (
                 <div key={band.id} className="rvmvc-route-slope-legend__item">
@@ -195,20 +192,18 @@ export function MapViewportControls({
             <span>3D</span>
           </button>
 
-          {routeSlopeLegendTitle ? (
-            <button
-              type="button"
-              className={`rvmvc-map-tools__button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
-              aria-label={isRouteSlopeLegendOpen ? t('Masquer la légende de pente du tracé') : t('Afficher la légende de pente du tracé')}
-              aria-pressed={isRouteSlopeLegendOpen}
-              title={t('Légende')}
-              onClick={() => {
-                setIsRouteSlopeLegendOpen((value) => !value);
-              }}
-            >
-              <IconInfo size={16} />
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className={`rvmvc-map-tools__button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
+            aria-label={isRouteSlopeLegendOpen ? t('Masquer la légende de pente du tracé') : t('Afficher la légende de pente du tracé')}
+            aria-pressed={isRouteSlopeLegendOpen}
+            title={t('Légende')}
+            onClick={() => {
+              setIsRouteSlopeLegendOpen((value) => !value);
+            }}
+          >
+            <IconInfo size={16} />
+          </button>
         </div>
       </div>
     </aside>

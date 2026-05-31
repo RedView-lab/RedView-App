@@ -438,6 +438,8 @@ export function useDashboardProjectState({
 
   const handleProjectChange = useCallback(
     (next: ItineraryProject) => {
+      activeProjectSnapshotRef.current = next;
+      setActiveProjectInitial(next);
       queueProjectSave(next);
     },
     [queueProjectSave],

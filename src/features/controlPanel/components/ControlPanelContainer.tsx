@@ -494,7 +494,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onRouteTraceWidthChange={(value) => {
         updateProjectControlPanel((draft) => {
           draft.routes = {
-            traceWidthPx: Math.max(1, Math.min(8, Math.round(value))),
+            traceWidthPx: Math.max(8, Math.min(20, Math.round(value))),
           };
         });
       }}

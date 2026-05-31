@@ -38,7 +38,7 @@ export function useItineraryRouteLayerSync({
   isMapLoaded,
   itineraries,
   map,
-  routeTraceWidthPx = 4,
+  routeTraceWidthPx = 8,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const routeSlopeBands = useMemo(

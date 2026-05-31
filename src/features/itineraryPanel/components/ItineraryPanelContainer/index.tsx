@@ -126,7 +126,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     isMapLoaded,
     itineraries,
     map,
-    routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 4,
+    routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
   });
 
   useEffect(() => {

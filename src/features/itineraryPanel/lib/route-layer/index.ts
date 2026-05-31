@@ -102,7 +102,7 @@ const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 
 function normalizeTraceWidthPx(value: number | null | undefined): number {
-  return Math.max(1, Math.min(12, Math.round(value ?? 4)));
+  return Math.max(8, Math.min(20, Math.round(value ?? 8)));
 }
 
 function traceBorderWidthPx(traceWidthPx: number): number {

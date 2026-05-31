@@ -127,7 +127,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       opacity: 100,
     },
     routes: {
-      traceWidthPx: 4,
+      traceWidthPx: 8,
     },
     weather: undefined,
   };
