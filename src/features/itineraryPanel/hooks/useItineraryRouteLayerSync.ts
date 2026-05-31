@@ -6,14 +6,11 @@ import {
   clearForbiddenZoneDraft,
   clearForbiddenZones,
   clearRouteAuditFindings,
-  clearRouteEndpoints,
-  collectRouteEndpoints,
   listMountedRouteIds,
   removeAllRouteLayers,
   removeRouteLayer,
   setRouteAuditFindings,
   setForbiddenZones,
-  setRouteEndpoints,
   type RouteSlopeBand,
   upsertRouteLayer,
 } from '../lib/route-layer';
@@ -126,14 +123,10 @@ export function useItineraryRouteLayerSync({
         active.routeAudit?.visible === true,
       );
       setForbiddenZones(map, active.forbiddenZones ?? []);
-      const endpoints = collectRouteEndpoints(active.timeline);
-      if (endpoints.length > 0) setRouteEndpoints(map, endpoints);
-      else clearRouteEndpoints(map);
     } else {
       clearRouteAuditFindings(map);
       clearForbiddenZones(map);
       clearForbiddenZoneDraft(map);
-      clearRouteEndpoints(map);
     }
 
     return true;
@@ -160,7 +153,6 @@ export function useItineraryRouteLayerSync({
         clearRouteAuditFindings(map);
         clearForbiddenZones(map);
         clearForbiddenZoneDraft(map);
-        clearRouteEndpoints(map);
       } catch {
         /* noop */
       }

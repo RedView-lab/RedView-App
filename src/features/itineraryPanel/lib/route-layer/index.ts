@@ -5,9 +5,6 @@
  * by its store id. That way several itineraries can be visible at once
  * (with their individual colors / opacities / visibilities) without the
  * layers stomping on one another.
- *
- * The start / end endpoint markers stay global â€” only the active
- * itinerary's endpoints are shown to keep the editing UI focused.
  */
 import type { Map as MapboxMap, LngLatBoundsLike, GeoJSONSource } from 'mapbox-gl';
 import {
@@ -17,9 +14,6 @@ import {
   ANALYSIS_HOVER_SOURCE_ID,
   ANALYSIS_HOVER_HALO_LAYER_ID,
   ANALYSIS_HOVER_POINT_LAYER_ID,
-  ENDPOINT_HALO_LAYER_ID,
-  ENDPOINT_LAYER_ID,
-  ENDPOINT_HANDLE_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_LINE_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
@@ -33,9 +27,6 @@ import {
   ROUTE_AUDIT_GLOW_LAYER_ID,
   ROUTE_AUDIT_LINE_LAYER_ID,
   SOURCE_PREFIX,
-  START_SOURCE_ID,
-  WAYPOINT_DRAG_CONNECTOR_LAYER_ID,
-  WAYPOINT_DRAG_CONNECTOR_SOURCE_ID,
   canMutateStyle,
   ids,
 } from './constants';
@@ -54,51 +45,13 @@ import {
   buildRouteAuditGeoJson,
 } from './geojson';
 import { haversineRouteDistanceM } from '../routes';
-import type { TimelineItem } from '../../types';
 
 export {
-  ENDPOINT_HALO_LAYER_ID,
-  ENDPOINT_LAYER_ID,
-  ENDPOINT_HANDLE_HIT_LAYER_ID,
-  START_SOURCE_ID,
   FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_HALO_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_VERTEX_LAYER_ID,
 } from './constants';
-
-export interface RouteEndpoint {
-  lon: number;
-  lat: number;
-  /** Used to pick the marker colour. */
-  kind: 'start' | 'end' | 'waypoint';
-  /** Timeline anchor id â€” lets the drag handler map a hit feature back to the row. */
-  id?: string;
-  label?: string;
-}
-
-/**
- * Build the draggable endpoint handles for an itinerary timeline: the start,
- * every intermediate waypoint, and the end. Each handle carries its timeline
- * anchor id so the map drag handler can reroute the matching segment.
- */
-export function collectRouteEndpoints(
-  timeline: ReadonlyArray<TimelineItem>,
-): RouteEndpoint[] {
-  const endpoints: RouteEndpoint[] = [];
-  for (const row of timeline) {
-    if (row.kind !== 'start' && row.kind !== 'waypoint' && row.kind !== 'end') continue;
-    if (row.lat == null || row.lon == null) continue;
-    endpoints.push({
-      id: row.id,
-      lon: row.lon,
-      lat: row.lat,
-      kind: row.kind,
-      label: row.label,
-    });
-  }
-  return endpoints;
-}
 
 export interface RouteLayerPoint {
   lat: number;
@@ -562,10 +515,6 @@ export function upsertRouteLayer(
     }
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
-    // Keep endpoint markers (if any) on top of the route lines.
-    if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
-    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
-    if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
   } catch {
     /* map may be tearing down */
   }
@@ -655,105 +604,6 @@ export function listMountedRouteIds(map: MapboxMap): string[] {
 /* ------------------------------------------------------------------ */
 /* Endpoints (single global layer â€” follows the active itinerary)      */
 /* ------------------------------------------------------------------ */
-
-export function setRouteEndpoints(
-  map: MapboxMap,
-  endpoints: RouteEndpoint[],
-): void {
-  if (!canMutateStyle(map)) return;
-
-  const features = endpoints.map((p) => ({
-    type: 'Feature' as const,
-    properties: { kind: p.kind, label: p.label ?? '', anchorId: p.id ?? '' },
-    geometry: { type: 'Point' as const, coordinates: [p.lon, p.lat] },
-  }));
-  const geojson: GeoJSON.FeatureCollection = {
-    type: 'FeatureCollection',
-    features,
-  };
-
-  const existing = map.getSource(START_SOURCE_ID) as GeoJSONSource | undefined;
-
-  if (existing) {
-    try {
-      existing.setData(geojson);
-    } catch {
-      /* noop */
-    }
-  } else {
-    map.addSource(START_SOURCE_ID, { type: 'geojson', data: geojson });
-    // Invisible, generously sized circle underneath the visible handle so the
-    // drag interaction has a comfortable hit target on touch + mouse.
-    map.addLayer({
-      id: ENDPOINT_HANDLE_HIT_LAYER_ID,
-      type: 'circle',
-      source: START_SOURCE_ID,
-      slot: 'top',
-      paint: {
-        'circle-radius': 16,
-        'circle-color': '#000000',
-        'circle-opacity': 0,
-      },
-    });
-    map.addLayer({
-      id: ENDPOINT_HALO_LAYER_ID,
-      type: 'circle',
-      source: START_SOURCE_ID,
-      slot: 'top',
-      paint: {
-        'circle-radius': [
-          'match',
-          ['get', 'kind'],
-          'waypoint',
-          11,
-          12,
-        ],
-        'circle-color': '#ffffff',
-        'circle-opacity': 0.94,
-        'circle-stroke-width': 1,
-        'circle-stroke-color': 'rgba(15, 23, 42, 0.16)',
-        'circle-emissive-strength': 1,
-      },
-    });
-    map.addLayer({
-      id: ENDPOINT_LAYER_ID,
-      type: 'circle',
-      source: START_SOURCE_ID,
-      slot: 'top',
-      paint: {
-        'circle-radius': [
-          'match',
-          ['get', 'kind'],
-          'waypoint',
-          7,
-          8,
-        ],
-        'circle-color': [
-          'match',
-          ['get', 'kind'],
-          'start',
-          '#34a853',
-          'waypoint',
-          '#ff8a3d',
-          'end',
-          '#c50000',
-          '#ffffff',
-        ],
-        'circle-stroke-width': 1.5,
-        'circle-stroke-color': 'rgba(15, 23, 42, 0.92)',
-        'circle-emissive-strength': 1,
-      },
-    });
-  }
-
-  try {
-    if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
-    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
-    if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
-  } catch {
-    /* noop */
-  }
-}
 
 export function setRouteAuditFindings(
   map: MapboxMap,
@@ -901,82 +751,6 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
     if (map.getLayer(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID)) {
       map.setLayoutProperty(FORBIDDEN_ZONE_DRAFT_SEGMENT_HIT_LAYER_ID, 'visibility', 'none');
     }
-  } catch {
-    /* noop */
-  }
-}
-
-export function clearRouteEndpoints(map: MapboxMap): void {
-  try {
-    if (map.getLayer(ENDPOINT_LAYER_ID)) map.removeLayer(ENDPOINT_LAYER_ID);
-    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.removeLayer(ENDPOINT_HALO_LAYER_ID);
-    if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.removeLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
-    if (map.getSource(START_SOURCE_ID)) map.removeSource(START_SOURCE_ID);
-  } catch {
-    /* noop */
-  }
-}
-
-/**
- * Live dashed rubber-band drawn while a waypoint handle is being dragged.
- * `coords` is the polyline prev -> cursor -> next (2 or 3 points); pass null to clear.
- */
-export function setWaypointDragConnector(
-  map: MapboxMap,
-  coords: Array<[number, number]> | null,
-): void {
-  if (!canMutateStyle(map)) return;
-  if (!coords || coords.length < 2) {
-    clearWaypointDragConnector(map);
-    return;
-  }
-
-  const data: GeoJSON.Feature<GeoJSON.LineString> = {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates: coords },
-  };
-
-  const existing = map.getSource(WAYPOINT_DRAG_CONNECTOR_SOURCE_ID) as GeoJSONSource | undefined;
-  if (existing) {
-    try {
-      existing.setData(data);
-    } catch {
-      /* noop */
-    }
-  } else {
-    map.addSource(WAYPOINT_DRAG_CONNECTOR_SOURCE_ID, { type: 'geojson', data });
-    map.addLayer({
-      id: WAYPOINT_DRAG_CONNECTOR_LAYER_ID,
-      type: 'line',
-      source: WAYPOINT_DRAG_CONNECTOR_SOURCE_ID,
-      slot: 'top',
-      layout: { 'line-cap': 'round', 'line-join': 'round' },
-      paint: {
-        'line-color': '#ff8a3d',
-        'line-width': 2.5,
-        'line-dasharray': [1.6, 1.4],
-        'line-opacity': 0.95,
-        'line-emissive-strength': 1,
-      },
-    });
-  }
-
-  try {
-    if (map.getLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID)) map.moveLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID);
-    // Keep the handles above the connector line.
-    if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
-    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
-    if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
-  } catch {
-    /* noop */
-  }
-}
-
-export function clearWaypointDragConnector(map: MapboxMap): void {
-  try {
-    if (map.getLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID)) map.removeLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID);
-    if (map.getSource(WAYPOINT_DRAG_CONNECTOR_SOURCE_ID)) map.removeSource(WAYPOINT_DRAG_CONNECTOR_SOURCE_ID);
   } catch {
     /* noop */
   }

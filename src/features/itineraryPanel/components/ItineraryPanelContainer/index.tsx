@@ -10,10 +10,8 @@ import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
 import { useItineraryBrouterRouting } from '../../hooks/useItineraryBrouterRouting';
 import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
-import { useItinerary3dMarkers } from '../../hooks/useItinerary3dMarkers';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
-import { useItineraryWaypointDrag } from '../../hooks/useItineraryWaypointDrag';
 import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { useProjectStore } from '../../context/ProjectStore';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
@@ -131,8 +129,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 4,
   });
 
-  useItinerary3dMarkers(map, isMapLoaded, active);
-
   useEffect(() => {
     const previousIds = previousItineraryIdsRef.current;
     const currentIds = itineraries.map((itinerary) => itinerary.id);
@@ -213,34 +209,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     },
     [setProject],
   );
-
-  const handleWaypointDragCommit = useCallback(
-    (anchorId: string, lat: number, lon: number) => {
-      updateActive((it) => {
-        if (it.gpxRoute?.source !== 'brouter') return;
-        const row = it.timeline.find((item) => item.id === anchorId);
-        if (!row || (row.kind !== 'start' && row.kind !== 'waypoint' && row.kind !== 'end')) return;
-
-        row.lat = lat;
-        row.lon = lon;
-        if (row.kind === 'start') row.distanceKm = 0;
-        else if (row.kind === 'end') row.distanceKm = null;
-
-        delete it.routeAudit;
-        delete it.pendingTraceExtension;
-        it.prediction = null;
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-      });
-    },
-    [updateActive],
-  );
-
-  useItineraryWaypointDrag({
-    active,
-    isMapLoaded,
-    map,
-    onCommitMove: handleWaypointDragCommit,
-  });
 
   const activeIdRef = useRef(project.activeItineraryId);
   activeIdRef.current = project.activeItineraryId;

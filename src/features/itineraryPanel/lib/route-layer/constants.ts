@@ -4,14 +4,6 @@ export const SOURCE_PREFIX = 'brouter-route-source-';
 export const GLOW_PREFIX = 'brouter-route-glow-';
 export const LINE_PREFIX = 'brouter-route-line-';
 
-export const START_SOURCE_ID = 'brouter-endpoints-source';
-export const ENDPOINT_HALO_LAYER_ID = 'brouter-endpoints-halo-layer';
-export const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
-/** Invisible, larger circle layer that makes the endpoint handles easy to grab + drag. */
-export const ENDPOINT_HANDLE_HIT_LAYER_ID = 'brouter-endpoints-hit-layer';
-/** Dashed rubber-band shown while dragging a handle (prev -> cursor -> next). */
-export const WAYPOINT_DRAG_CONNECTOR_SOURCE_ID = 'brouter-waypoint-drag-connector-source';
-export const WAYPOINT_DRAG_CONNECTOR_LAYER_ID = 'brouter-waypoint-drag-connector-layer';
 export const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
 export const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
 export const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
