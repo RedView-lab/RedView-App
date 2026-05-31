@@ -17,6 +17,7 @@ import {
   ANALYSIS_HOVER_SOURCE_ID,
   ANALYSIS_HOVER_HALO_LAYER_ID,
   ANALYSIS_HOVER_POINT_LAYER_ID,
+  ENDPOINT_HALO_LAYER_ID,
   ENDPOINT_LAYER_ID,
   ENDPOINT_HANDLE_HIT_LAYER_ID,
   FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
@@ -56,6 +57,7 @@ import { haversineRouteDistanceM } from '../routes';
 import type { TimelineItem } from '../../types';
 
 export {
+  ENDPOINT_HALO_LAYER_ID,
   ENDPOINT_LAYER_ID,
   ENDPOINT_HANDLE_HIT_LAYER_ID,
   START_SOURCE_ID,
@@ -562,6 +564,7 @@ export function upsertRouteLayer(
     raiseRouteLayer(map, itineraryId);
     // Keep endpoint markers (if any) on top of the route lines.
     if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
+    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
   } catch {
     /* map may be tearing down */
@@ -693,6 +696,26 @@ export function setRouteEndpoints(
       },
     });
     map.addLayer({
+      id: ENDPOINT_HALO_LAYER_ID,
+      type: 'circle',
+      source: START_SOURCE_ID,
+      slot: 'top',
+      paint: {
+        'circle-radius': [
+          'match',
+          ['get', 'kind'],
+          'waypoint',
+          11,
+          12,
+        ],
+        'circle-color': '#ffffff',
+        'circle-opacity': 0.94,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': 'rgba(15, 23, 42, 0.16)',
+        'circle-emissive-strength': 1,
+      },
+    });
+    map.addLayer({
       id: ENDPOINT_LAYER_ID,
       type: 'circle',
       source: START_SOURCE_ID,
@@ -702,8 +725,8 @@ export function setRouteEndpoints(
           'match',
           ['get', 'kind'],
           'waypoint',
-          6,
           7,
+          8,
         ],
         'circle-color': [
           'match',
@@ -716,8 +739,8 @@ export function setRouteEndpoints(
           '#c50000',
           '#ffffff',
         ],
-        'circle-stroke-width': 2,
-        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1.5,
+        'circle-stroke-color': 'rgba(15, 23, 42, 0.92)',
         'circle-emissive-strength': 1,
       },
     });
@@ -725,6 +748,7 @@ export function setRouteEndpoints(
 
   try {
     if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
+    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
   } catch {
     /* noop */
@@ -885,6 +909,7 @@ export function clearForbiddenZoneDraft(map: MapboxMap): void {
 export function clearRouteEndpoints(map: MapboxMap): void {
   try {
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.removeLayer(ENDPOINT_LAYER_ID);
+    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.removeLayer(ENDPOINT_HALO_LAYER_ID);
     if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.removeLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
     if (map.getSource(START_SOURCE_ID)) map.removeSource(START_SOURCE_ID);
   } catch {
@@ -941,6 +966,7 @@ export function setWaypointDragConnector(
     if (map.getLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID)) map.moveLayer(WAYPOINT_DRAG_CONNECTOR_LAYER_ID);
     // Keep the handles above the connector line.
     if (map.getLayer(ENDPOINT_HANDLE_HIT_LAYER_ID)) map.moveLayer(ENDPOINT_HANDLE_HIT_LAYER_ID);
+    if (map.getLayer(ENDPOINT_HALO_LAYER_ID)) map.moveLayer(ENDPOINT_HALO_LAYER_ID);
     if (map.getLayer(ENDPOINT_LAYER_ID)) map.moveLayer(ENDPOINT_LAYER_ID);
   } catch {
     /* noop */

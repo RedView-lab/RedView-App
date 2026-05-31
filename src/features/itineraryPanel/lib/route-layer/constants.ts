@@ -5,6 +5,7 @@ export const GLOW_PREFIX = 'brouter-route-glow-';
 export const LINE_PREFIX = 'brouter-route-line-';
 
 export const START_SOURCE_ID = 'brouter-endpoints-source';
+export const ENDPOINT_HALO_LAYER_ID = 'brouter-endpoints-halo-layer';
 export const ENDPOINT_LAYER_ID = 'brouter-endpoints-layer';
 /** Invisible, larger circle layer that makes the endpoint handles easy to grab + drag. */
 export const ENDPOINT_HANDLE_HIT_LAYER_ID = 'brouter-endpoints-hit-layer';

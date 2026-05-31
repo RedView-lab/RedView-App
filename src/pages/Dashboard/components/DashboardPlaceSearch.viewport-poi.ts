@@ -95,7 +95,7 @@ export function selectViewportLodPois(
   for (const candidate of rankViewportPoiCandidates(map, features)) {
     const cellX = Math.floor(candidate.x / profile.cellPx);
     const cellY = Math.floor(candidate.y / profile.cellPx);
-    const key = `${cellX}:${cellY}`;
+    const key = `${cellX}:${cellY}:${candidate.feature.category}`;
     const existing = cellBuckets.get(key);
     const candidateIsSticky = stickyKeys.has(getViewportPoiMarkerKey(candidate.feature));
     const existingIsSticky = existing
