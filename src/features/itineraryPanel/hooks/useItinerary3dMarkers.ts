@@ -28,6 +28,7 @@ interface ItineraryMarkerPoint {
   label: string;
   lat: number;
   lon: number;
+  grounded?: boolean;
 }
 
 interface ItineraryMarkerEntry {
@@ -59,12 +60,12 @@ export function useItinerary3dMarkers(
   const syncMarkerVisualState = useCallback((currentMap: MapboxMap) => {
     const zoom = currentMap.getZoom();
     const visualState = getMarkerVisualState(zoom);
-    for (const { marker } of markerRegistryRef.current.values()) {
+    for (const { marker, signature } of markerRegistryRef.current.values()) {
       marker.getElement().style.setProperty(
         '--rv-itinerary-marker-scale',
         visualState.scale.toFixed(3),
       );
-      marker.setAltitude(visualState.altitude);
+      marker.setAltitude(signature.includes('|grounded') ? 0 : visualState.altitude);
     }
   }, []);
 
@@ -134,13 +135,11 @@ export function useItinerary3dMarkers(
 
 function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
   if (!active) return [];
-  if (active.gpxRoute?.source === 'brouter') {
-    return buildPauseMarkerPoints(active);
-  }
 
   const routePoints = active.gpxRoute?.points ?? [];
   const totalDistanceM = routePoints[routePoints.length - 1]?.distanceM ?? 0;
   const markers: ItineraryMarkerPoint[] = [];
+  const grounded = active.gpxRoute?.source === 'brouter';
   const start = active.timeline.find((row) => row.kind === 'start');
   const startPoint = resolveTimelinePoint(start ?? null, routePoints, totalDistanceM);
   if (startPoint) {
@@ -150,6 +149,7 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
       label: start?.label?.trim() || 'Depart',
       lat: startPoint.lat,
       lon: startPoint.lon,
+      grounded,
     });
   }
 
@@ -162,7 +162,24 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
       label: end?.label?.trim() || 'Arrivee',
       lat: endPoint.lat,
       lon: endPoint.lon,
+      grounded,
     });
+  }
+
+  if (grounded) {
+    for (const item of active.timeline) {
+      if (item.kind !== 'waypoint' || item.visible === false) continue;
+      const point = resolveTimelinePoint(item, routePoints, totalDistanceM);
+      if (!point) continue;
+      markers.push({
+        id: `waypoint:${item.id}`,
+        kind: 'waypoint',
+        label: item.label?.trim() || 'Waypoint',
+        lat: point.lat,
+        lon: point.lon,
+        grounded: true,
+      });
+    }
   }
 
   markers.push(...buildPauseMarkerPoints(active, routePoints, totalDistanceM));
@@ -257,11 +274,11 @@ function sampleRoutePointAtDistance(
 function createMarker(currentMap: MapboxMap, point: ItineraryMarkerPoint): ItineraryMarkerEntry {
   const marker = new mapboxgl.Marker({
     element: createMarkerElement(point),
-    anchor: 'bottom',
+    anchor: point.kind === 'waypoint' ? 'center' : 'bottom',
     pitchAlignment: 'viewport',
     rotationAlignment: 'viewport',
     occludedOpacity: 0,
-    altitude: MARKER_MIN_LIFT_M,
+    altitude: point.grounded ? 0 : MARKER_MIN_LIFT_M,
   })
     .setLngLat([point.lon, point.lat])
     .addTo(currentMap);
@@ -298,7 +315,7 @@ function createMarkerElement(point: ItineraryMarkerPoint): HTMLDivElement {
 }
 
 function getMarkerSignature(point: ItineraryMarkerPoint): string {
-  return [point.kind, point.label, point.lat, point.lon].join('|');
+  return [point.kind, point.label, point.lat, point.lon, point.grounded ? 'grounded' : 'floating'].join('|');
 }
 
 function getMarkerVisualState(zoom: number): { scale: number; altitude: number } {
