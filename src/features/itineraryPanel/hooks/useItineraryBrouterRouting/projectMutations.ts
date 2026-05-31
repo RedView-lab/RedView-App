@@ -8,6 +8,7 @@ import {
 import type { BrouterRoute } from '../../lib/brouter';
 import type { Itinerary, ItineraryProject } from '../../types';
 import {
+  applyBrouterSurfaceToRoutePoints,
   appendRoutePoints,
   buildStoredRoutePointsFromBrouter,
   getRoutePointTotalDistanceM,
@@ -49,11 +50,12 @@ export function applyPendingRoutePatch(
     routeProfile,
     route.distanceM,
   );
+  const surfacedPatchRoutePoints = applyBrouterSurfaceToRoutePoints(route, patchRoutePoints);
   const patchSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
   const mergedRoutePoints = replaceRouteSegment(
     basePoints,
     itinerary.pendingRoutePatch,
-    patchRoutePoints,
+    surfacedPatchRoutePoints,
   );
   const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
   const distanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
@@ -128,8 +130,9 @@ export function applyPendingTraceAppend(
     routeProfile,
     route.distanceM,
   );
+  const surfacedSegmentRoutePoints = applyBrouterSurfaceToRoutePoints(route, segmentRoutePoints);
   const segmentSurfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
-  const mergedRoutePoints = appendRoutePoints(basePoints, segmentRoutePoints);
+  const mergedRoutePoints = appendRoutePoints(basePoints, surfacedSegmentRoutePoints);
   const elevationMetrics = computeRouteElevationMetrics(mergedRoutePoints);
   const totalDistanceM = getRoutePointTotalDistanceM(mergedRoutePoints);
   const distanceKm = roundRouteDistanceKm(totalDistanceM);
@@ -137,7 +140,7 @@ export function applyPendingTraceAppend(
     itinerary.metrics,
     getRoutePointTotalDistanceM(basePoints),
     segmentSurfaceMetrics,
-    route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(segmentRoutePoints),
+    route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(surfacedSegmentRoutePoints),
   );
   const nextTimeline = projectTimelineLocationDistances(
     itinerary.timeline,
@@ -197,12 +200,13 @@ export function applyRecomputedRoute(
     routeProfile,
     route.distanceM,
   );
-  const elevationMetrics = computeRouteElevationMetrics(routePoints);
+  const surfacedRoutePoints = applyBrouterSurfaceToRoutePoints(route, routePoints);
+  const elevationMetrics = computeRouteElevationMetrics(surfacedRoutePoints);
   const surfaceMetrics = computeRouteSurfaceMetricsFromBrouter(route);
   const auditRoutePoints: NonNullable<Itinerary['gpxRoute']>['points'] = routeProfile
     ? toStoredRoutePoints(routeProfile)
-    : routePoints;
-  const distanceM = route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(routePoints);
+    : surfacedRoutePoints;
+  const distanceM = route.distanceM > 0 ? route.distanceM : getRoutePointTotalDistanceM(surfacedRoutePoints);
   const distanceKm = roundRouteDistanceKm(distanceM);
   const ascentM = elevationMetrics
     ? Math.max(0, Math.round(elevationMetrics.ascentM))
@@ -222,10 +226,10 @@ export function applyRecomputedRoute(
   const auditFindings = analyzeBrouterRoute(route, auditRoutePoints);
   const nextTimeline = projectTimelineLocationDistances(
     itinerary.timeline,
-    routePoints,
+    surfacedRoutePoints,
     distanceKm,
   );
-  const gpxAlreadyOk = routePointsEqual(itinerary.gpxRoute?.points, routePoints);
+  const gpxAlreadyOk = routePointsEqual(itinerary.gpxRoute?.points, surfacedRoutePoints);
   const metricsAlreadyOk =
     itinerary.metrics?.distanceKm === distanceKm &&
     itinerary.metrics?.ascentM === ascentM &&
@@ -250,7 +254,7 @@ export function applyRecomputedRoute(
             visible: true,
             gpxRoute: {
               name: current.gpxRoute?.name ?? null,
-              points: routePoints,
+              points: surfacedRoutePoints,
               source: 'brouter',
             },
             metrics: {

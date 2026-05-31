@@ -392,6 +392,7 @@ export interface Itinerary {
       distanceM?: number;
       elevationM?: number | null;
       gradientPct?: number | null;
+      surface?: 'tarmac' | 'offroad' | 'unknown';
     }[];
     source?: 'gpx' | 'brouter';
     originalPoints?: {
@@ -400,6 +401,7 @@ export interface Itinerary {
       distanceM?: number;
       elevationM?: number | null;
       gradientPct?: number | null;
+      surface?: 'tarmac' | 'offroad' | 'unknown';
     }[];
     gpxQuality?: GpxQualityMode;
     gpxQualityPointsPerKm?: number | null;

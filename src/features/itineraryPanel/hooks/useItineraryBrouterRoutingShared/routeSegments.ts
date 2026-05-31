@@ -26,6 +26,7 @@ export function routePointsEqual(
     if (!sameOptionalFiniteNumber(leftPoint.distanceM, rightPoint.distanceM, 0.25)) return false;
     if (!sameOptionalFiniteNumber(leftPoint.elevationM, rightPoint.elevationM, 0.1)) return false;
     if (!sameOptionalFiniteNumber(leftPoint.gradientPct, rightPoint.gradientPct, 0.05)) return false;
+    if ((leftPoint.surface ?? 'unknown') !== (rightPoint.surface ?? 'unknown')) return false;
   }
 
   return true;
@@ -252,6 +253,10 @@ function interpolateRoutePointAtDistance(
       Number.isFinite(startPoint.gradientPct) && Number.isFinite(endPoint.gradientPct)
         ? (startPoint.gradientPct as number) + (((endPoint.gradientPct as number) - (startPoint.gradientPct as number)) * t)
         : startPoint.gradientPct ?? endPoint.gradientPct ?? null,
+    surface:
+      t < 0.5
+        ? (startPoint.surface ?? endPoint.surface ?? 'unknown')
+        : (endPoint.surface ?? startPoint.surface ?? 'unknown'),
   };
 }
 

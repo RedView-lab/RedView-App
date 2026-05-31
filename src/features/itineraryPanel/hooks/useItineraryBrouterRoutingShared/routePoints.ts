@@ -1,4 +1,7 @@
+import type { BrouterRoute } from '../../lib/brouter';
 import { extractRouteProfileFromPoints } from '../../lib/route-metrics';
+import { parseMessages } from '../../lib/route-metrics/parser';
+import type { Surface } from '../../lib/route-metrics/types';
 
 import type { ProfilePoint, RoutePoints } from './types';
 
@@ -39,6 +42,41 @@ export function buildStoredRoutePointsFromBrouter(
   return messageProfile
     ? enrichGeometryRoutePoints(geometryPoints, messageProfile)
     : geometryPoints;
+}
+
+export function applyBrouterSurfaceToRoutePoints(
+  route: BrouterRoute,
+  points: RoutePoints,
+): RoutePoints {
+  if (points.length === 0) return points;
+
+  const rows = parseMessages(route);
+  if (rows.length === 0) return points;
+
+  const surfaceSamples = buildSurfaceSamples(rows);
+  if (surfaceSamples.length === 0) return points;
+
+  let sampleIndex = 0;
+  const lastSample = surfaceSamples[surfaceSamples.length - 1];
+
+  return points.map((point, index) => {
+    const fallbackDistanceM = index > 0
+      ? Number(points[index - 1]?.distanceM ?? 0) + haversineMeters(points[index - 1], point)
+      : 0;
+    const distanceM = Number.isFinite(point.distanceM) ? (point.distanceM as number) : fallbackDistanceM;
+
+    while (
+      sampleIndex < surfaceSamples.length - 1
+      && surfaceSamples[sampleIndex]!.distanceM < distanceM
+    ) {
+      sampleIndex += 1;
+    }
+
+    return {
+      ...point,
+      surface: (surfaceSamples[sampleIndex] ?? lastSample).surface,
+    };
+  });
 }
 
 function scaleRouteProfileDistances(points: RoutePoints, targetDistanceM: number): RoutePoints {
@@ -144,4 +182,23 @@ function haversineMeters(a: { lat: number; lon: number }, b: { lat: number; lon:
     Math.sin(deltaLat / 2) ** 2 +
     Math.cos(latA) * Math.cos(latB) * Math.sin(deltaLon / 2) ** 2;
   return 2 * 6_371_008.8 * Math.asin(Math.sqrt(h));
+}
+
+function buildSurfaceSamples(
+  rows: Array<{ segDistM: number; surface: Surface }>,
+): Array<{ distanceM: number; surface: Surface }> {
+  const samples: Array<{ distanceM: number; surface: Surface }> = [];
+  let cumulativeDistanceM = 0;
+
+  for (let index = 0; index < rows.length; index += 1) {
+    if (index > 0) {
+      cumulativeDistanceM += Math.max(0, rows[index]!.segDistM);
+    }
+    samples.push({
+      distanceM: cumulativeDistanceM,
+      surface: rows[index]!.surface,
+    });
+  }
+
+  return samples;
 }
