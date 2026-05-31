@@ -1,302 +1,41 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
-import type { BasemapRenderConfig } from '@/features/controlPanel';
-import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
-import { getPoiIconUrl } from '@/features/poi/lib/poi-icons';
 import type { PoiCategory, PoiFeature } from '@/features/poi/types';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
 import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
+
+import { getSearchCameraProfile } from './DashboardPlaceSearch.camera';
+import {
+  DASHBOARD_POI_OPTIONS,
+  POI_MENU_CLOSE_MS,
+  SEARCH_COUNTRIES,
+  VIEWPORT_POI_FETCH_DEBOUNCE_MS,
+  VIEWPORT_POI_MIN_ZOOM,
+} from './DashboardPlaceSearch.constants';
+import {
+  PoiOptionMarker,
+  PoiTriggerIcon,
+  SearchIcon,
+} from './DashboardPlaceSearch.icons';
+import type {
+  DashboardPlaceSearchProps,
+  DashboardPoiOptionId,
+  ViewportPoiMarkerEntry,
+} from './DashboardPlaceSearch.types';
+import {
+  applyViewportPoiMarkerVisualState,
+  createViewportPoiMarkerElement,
+  fetchVisibleViewportPois,
+  getViewportPoiMarkerKey,
+  getViewportPoiMarkerSignature,
+  selectViewportLodPois,
+} from './DashboardPlaceSearch.viewport-poi';
+
 import './dashboard-place-search.css';
-
-interface DashboardPlaceSearchProps {
-  map: MapboxMap | null;
-  basemapConfig: BasemapRenderConfig;
-  visible: boolean;
-  left: number;
-  top: number;
-}
-
-const SEARCH_PRELOAD_LEAD_MS = 140;
-const SEARCH_SATELLITE_PRELOAD_LEAD_MS = 240;
-const SEARCH_NEAR_ZOOM = 14.4;
-const SEARCH_MEDIUM_ZOOM = 13.4;
-const SEARCH_FAR_ZOOM = 12.35;
-const SEARCH_NEAR_MAX_KM = 45;
-const SEARCH_MEDIUM_MAX_KM = 180;
-const SEARCH_COUNTRIES = 'fr,ch,be,lu,it,de,es,ad';
-const SEARCH_SATELLITE_STAGE_MIN_KM = 16;
-const SEARCH_SATELLITE_NEAR_ENTRY_PITCH = 46;
-const SEARCH_SATELLITE_MEDIUM_ENTRY_PITCH = 34;
-const SEARCH_SATELLITE_FAR_ENTRY_PITCH = 26;
-const SEARCH_SATELLITE_NEAR_ZOOM_DELTA = 0.35;
-const SEARCH_SATELLITE_MEDIUM_ZOOM_DELTA = 0.7;
-const SEARCH_SATELLITE_FAR_ZOOM_DELTA = 0.95;
-const SEARCH_SATELLITE_NEAR_SETTLE_MS = 700;
-const SEARCH_SATELLITE_MEDIUM_SETTLE_MS = 1100;
-const SEARCH_SATELLITE_FAR_SETTLE_MS = 1500;
-const SEARCH_SATELLITE_NEAR_RESTORE_MS = 550;
-const SEARCH_SATELLITE_MEDIUM_RESTORE_MS = 700;
-const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
-const VIEWPORT_POI_MIN_ZOOM = 10.8;
-const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 120;
-
-const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
-  drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
-  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
-  supermarket: '/svgv2/poi/dropdown-maps/supermarket.svg',
-  bakery: '/svgv2/poi/dropdown-maps/bakery.svg',
-  fuel: '/svgv2/poi/dropdown-maps/fuel.svg',
-  bar: '/svgv2/poi/dropdown-maps/bar.svg',
-  cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
-  restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
-  convenience: '/svgv2/poi/dropdown-maps/shop.svg',
-  hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
-  alpine_hut: '/svgv2/poi/dropdown-maps/refuge.svg',
-};
-
-type DashboardPoiOptionId =
-  | 'drinking_water'
-  | 'toilets'
-  | 'supermarket'
-  | 'bakery'
-  | 'fuel'
-  | 'bar'
-  | 'cafe'
-  | 'restaurant'
-  | 'convenience'
-  | 'hotel'
-  | 'alpine_hut'
-  | 'bicycle';
-
-interface DashboardPoiOption {
-  id: DashboardPoiOptionId;
-  label: string;
-  color: string;
-}
-
-const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
-  { id: 'drinking_water', label: 'Eau', color: '#1447E6' },
-  { id: 'toilets', label: 'Toilette', color: '#312C85' },
-  { id: 'supermarket', label: 'Supermarché', color: '#F1B100' },
-  { id: 'bakery', label: 'Boulangerie', color: '#FF6900' },
-  { id: 'fuel', label: 'Station Service', color: '#CA3500' },
-  { id: 'bar', label: 'Bar', color: '#C70036' },
-  { id: 'cafe', label: 'Café', color: '#FF2157' },
-  { id: 'restaurant', label: 'Restaurant', color: '#8B0836' },
-  { id: 'convenience', label: 'Supermarché', color: '#A900B7' },
-  { id: 'hotel', label: 'Hôtel', color: '#008236' },
-  { id: 'alpine_hut', label: 'Refuge', color: '#7DCF00' },
-  { id: 'bicycle', label: 'Magasin de vélo', color: '#63758E' },
-] as const;
-
-const POI_MENU_CLOSE_MS = 150;
-
-interface SearchCameraProfile {
-  targetZoom: number;
-  duration: number;
-  screenSpeed: number;
-  curve: number;
-  preloadLeadMs: number;
-  entryZoom: number;
-  entryPitch: number;
-  finalPitch: number;
-  shouldStageFinalApproach: boolean;
-  settleWaitMs: number;
-  finalApproachDuration: number;
-}
-
-interface ViewportPoiMarkerEntry {
-  marker: mapboxgl.Marker;
-  signature: string;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
-}
-
-function distanceKm(from: { lon: number; lat: number }, to: { lon: number; lat: number }): number {
-  const toRad = (value: number) => value * Math.PI / 180;
-  const earthRadiusKm = 6371;
-  const dLat = toRad(to.lat - from.lat);
-  const dLon = toRad(to.lon - from.lon);
-  const lat1 = toRad(from.lat);
-  const lat2 = toRad(to.lat);
-  const sinLat = Math.sin(dLat / 2);
-  const sinLon = Math.sin(dLon / 2);
-  const a = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
-  return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function getSearchCameraProfile(
-  map: MapboxMap,
-  basemapConfig: BasemapRenderConfig,
-  suggestion: GeocodeSuggestion,
-): SearchCameraProfile {
-  const currentCenter = map.getCenter();
-  const currentPitch = map.getPitch();
-  const jumpDistanceKm = distanceKm(
-    { lon: currentCenter.lng, lat: currentCenter.lat },
-    { lon: suggestion.lon, lat: suggestion.lat },
-  );
-
-  const targetZoom = jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-    ? clamp(map.getZoom(), 13.6, SEARCH_NEAR_ZOOM)
-    : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-      ? clamp(map.getZoom(), 12.8, SEARCH_MEDIUM_ZOOM)
-      : clamp(map.getZoom(), 11.6, SEARCH_FAR_ZOOM);
-
-  const duration = jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-    ? 1050
-    : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-      ? 1450
-      : 1900;
-
-  const isSatellite = basemapConfig.id === 'satellite';
-  const shouldStageFinalApproach = isSatellite && (
-    jumpDistanceKm >= SEARCH_SATELLITE_STAGE_MIN_KM
-    || currentPitch >= SEARCH_SATELLITE_NEAR_ENTRY_PITCH
-  );
-
-  const entryZoom = shouldStageFinalApproach
-    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-      ? Math.max(13.1, targetZoom - SEARCH_SATELLITE_NEAR_ZOOM_DELTA)
-      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-        ? Math.max(12.2, targetZoom - SEARCH_SATELLITE_MEDIUM_ZOOM_DELTA)
-        : Math.max(11.1, targetZoom - SEARCH_SATELLITE_FAR_ZOOM_DELTA)
-    : targetZoom;
-
-  const entryPitch = shouldStageFinalApproach
-    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-      ? Math.min(currentPitch, SEARCH_SATELLITE_NEAR_ENTRY_PITCH)
-      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-        ? Math.min(currentPitch, SEARCH_SATELLITE_MEDIUM_ENTRY_PITCH)
-        : Math.min(currentPitch, SEARCH_SATELLITE_FAR_ENTRY_PITCH)
-    : currentPitch;
-
-  const settleWaitMs = shouldStageFinalApproach
-    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-      ? SEARCH_SATELLITE_NEAR_SETTLE_MS
-      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-        ? SEARCH_SATELLITE_MEDIUM_SETTLE_MS
-        : SEARCH_SATELLITE_FAR_SETTLE_MS
-    : 0;
-
-  const finalApproachDuration = shouldStageFinalApproach
-    ? jumpDistanceKm <= SEARCH_NEAR_MAX_KM
-      ? SEARCH_SATELLITE_NEAR_RESTORE_MS
-      : jumpDistanceKm <= SEARCH_MEDIUM_MAX_KM
-        ? SEARCH_SATELLITE_MEDIUM_RESTORE_MS
-        : SEARCH_SATELLITE_FAR_RESTORE_MS
-    : 0;
-
-  return {
-    targetZoom,
-    duration,
-    screenSpeed: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.15 : 0.95,
-    curve: jumpDistanceKm <= SEARCH_NEAR_MAX_KM ? 1.2 : 1.42,
-    preloadLeadMs: shouldStageFinalApproach ? SEARCH_SATELLITE_PRELOAD_LEAD_MS : SEARCH_PRELOAD_LEAD_MS,
-    entryZoom,
-    entryPitch,
-    finalPitch: currentPitch,
-    shouldStageFinalApproach,
-    settleWaitMs,
-    finalApproachDuration,
-  };
-}
-
-function SearchIcon() {
-  return <SvgV2Icon name="search-sm.svg" size={20} />;
-}
-
-function PoiOptionMarker({ option }: { option: DashboardPoiOption }) {
-  return (
-    <img
-      className="rvd-place-search__poi-option-marker-image"
-      src={getPoiIconUrl(option.id as PoiCategory)}
-      alt=""
-      draggable="false"
-    />
-  );
-}
-
-function PoiTriggerIcon() {
-  return <SvgV2Icon name="poi-pin.svg" size={20} />;
-}
-
-function getDropdownViewportPoiIconUrl(category: PoiCategory): string {
-  return DROPDOWN_VIEWPORT_POI_ICON_URLS[category] ?? getPoiIconUrl(category);
-}
-
-function getViewportPoiMarkerKey(feature: PoiFeature): string {
-  return `${feature.category}:${feature.id}`;
-}
-
-function getViewportPoiMarkerSignature(feature: PoiFeature): string {
-  return [feature.category, feature.id, feature.lat, feature.lon].join('|');
-}
-
-function getViewportPoiResultLimit(zoom: number): number {
-  if (zoom < 11.8) return 300;
-  if (zoom < 12.7) return 650;
-  if (zoom < 13.7) return 1_100;
-  return 1_600;
-}
-
-function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
-  const element = document.createElement('div');
-  element.style.display = 'inline-flex';
-  element.style.alignItems = 'center';
-  element.style.justifyContent = 'center';
-  element.style.width = '24px';
-  element.style.height = '24px';
-  element.style.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.16))';
-  element.style.pointerEvents = 'none';
-
-  const image = document.createElement('img');
-  image.src = getDropdownViewportPoiIconUrl(feature.category);
-  image.alt = '';
-  image.draggable = false;
-  image.decoding = 'async';
-  image.style.display = 'block';
-  image.style.width = '24px';
-  image.style.height = '24px';
-
-  element.appendChild(image);
-  return element;
-}
-
-async function fetchVisibleViewportPois(
-  map: MapboxMap,
-  categories: PoiCategory[],
-  signal: AbortSignal,
-): Promise<PoiFeature[]> {
-  const bounds = map.getBounds();
-  if (!bounds) return [];
-
-  const south = bounds.getSouth();
-  const north = bounds.getNorth();
-  const west = bounds.getWest();
-  const east = bounds.getEast();
-  const limit = getViewportPoiResultLimit(map.getZoom());
-
-  if (west <= east) {
-    return fetchPoisInBbox(south, west, north, east, categories, signal, limit);
-  }
-
-  const [left, right] = await Promise.all([
-    fetchPoisInBbox(south, west, north, 180, categories, signal, limit),
-    fetchPoisInBbox(south, -180, north, east, categories, signal, limit),
-  ]);
-  const deduped = new Map<string, PoiFeature>();
-  for (const feature of [...left, ...right]) {
-    deduped.set(getViewportPoiMarkerKey(feature), feature);
-  }
-  return [...deduped.values()];
-}
 
 export function DashboardPlaceSearch({
   map,
@@ -403,6 +142,14 @@ export function DashboardPlaceSearch({
     poiMarkerRegistryRef.current.clear();
   }, []);
 
+  const syncViewportPoiMarkerVisualState = useCallback(() => {
+    if (!map) return;
+    const zoom = map.getZoom();
+    for (const { marker } of poiMarkerRegistryRef.current.values()) {
+      applyViewportPoiMarkerVisualState(marker, zoom);
+    }
+  }, [map]);
+
   const syncViewportPoiMarkers = useCallback((features: PoiFeature[]) => {
     if (!map) return;
 
@@ -422,18 +169,43 @@ export function DashboardPlaceSearch({
       if (existing && existing.signature === signature) continue;
 
       existing?.marker.remove();
-      registry.set(key, {
-        marker: new mapboxgl.Marker({
+      const marker = new mapboxgl.Marker({
           element: createViewportPoiMarkerElement(feature),
           anchor: 'center',
           pitchAlignment: 'viewport',
           rotationAlignment: 'viewport',
           occludedOpacity: 0.85,
-        }).setLngLat([feature.lon, feature.lat]).addTo(map),
+        }).setLngLat([feature.lon, feature.lat]).addTo(map);
+      applyViewportPoiMarkerVisualState(marker, map.getZoom());
+      registry.set(key, {
+        marker,
         signature,
       });
     }
   }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    let frameId: number | null = null;
+    const scheduleVisualRefresh = () => {
+      if (frameId != null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        syncViewportPoiMarkerVisualState();
+      });
+    };
+
+    scheduleVisualRefresh();
+    map.on('zoom', scheduleVisualRefresh);
+
+    return () => {
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId);
+      }
+      map.off('zoom', scheduleVisualRefresh);
+    };
+  }, [map, syncViewportPoiMarkerVisualState]);
 
   useEffect(() => {
     if (!map) return;
@@ -466,7 +238,7 @@ export function DashboardPlaceSearch({
       void fetchVisibleViewportPois(map, categories, controller.signal)
         .then((features) => {
           if (controller.signal.aborted) return;
-          syncViewportPoiMarkers(features);
+          syncViewportPoiMarkers(selectViewportLodPois(map, features, categories));
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === 'AbortError') return;

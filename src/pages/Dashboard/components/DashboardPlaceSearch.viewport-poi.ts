@@ -1,0 +1,196 @@
+import type { Map as MapboxMap, Marker } from 'mapbox-gl';
+
+import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
+import { getPoiIconUrl } from '@/features/poi/lib/poi-icons';
+import type { PoiCategory, PoiFeature } from '@/features/poi/types';
+
+import { DROPDOWN_VIEWPORT_POI_ICON_URLS } from './DashboardPlaceSearch.constants';
+import type {
+  ViewportPoiCandidate,
+  ViewportPoiLodProfile,
+} from './DashboardPlaceSearch.types';
+
+function getDropdownViewportPoiIconUrl(category: PoiCategory): string {
+  return DROPDOWN_VIEWPORT_POI_ICON_URLS[category] ?? getPoiIconUrl(category);
+}
+
+function getViewportPoiMarkerKey(feature: PoiFeature): string {
+  return `${feature.category}:${feature.id}`;
+}
+
+function getViewportPoiMarkerSignature(feature: PoiFeature): string {
+  return [feature.category, feature.id, feature.lat, feature.lon].join('|');
+}
+
+function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
+  if (zoom < 6.2) {
+    return { fetchLimit: 900, targetCount: 18, cellPx: 190, maxPerCategory: 3 };
+  }
+  if (zoom < 7.4) {
+    return { fetchLimit: 1_200, targetCount: 28, cellPx: 168, maxPerCategory: 4 };
+  }
+  if (zoom < 8.8) {
+    return { fetchLimit: 1_600, targetCount: 42, cellPx: 142, maxPerCategory: 6 };
+  }
+  if (zoom < 10.4) {
+    return { fetchLimit: 2_100, targetCount: 64, cellPx: 116, maxPerCategory: 8 };
+  }
+  if (zoom < 12.2) {
+    return { fetchLimit: 2_600, targetCount: 96, cellPx: 92, maxPerCategory: 12 };
+  }
+  return { fetchLimit: 3_200, targetCount: 144, cellPx: 74, maxPerCategory: 20 };
+}
+
+function getViewportPoiMarkerSizePx(zoom: number): number {
+  if (zoom < 6.2) return 38;
+  if (zoom < 7.4) return 36;
+  if (zoom < 8.8) return 34;
+  if (zoom < 10.4) return 32;
+  if (zoom < 12.2) return 30;
+  return 28;
+}
+
+export function applyViewportPoiMarkerVisualState(marker: Marker, zoom: number): void {
+  const sizePx = getViewportPoiMarkerSizePx(zoom);
+  marker.getElement().style.setProperty('--rv-dashboard-poi-marker-size', `${sizePx}px`);
+}
+
+function rankViewportPoiCandidates(
+  map: MapboxMap,
+  features: PoiFeature[],
+): ViewportPoiCandidate[] {
+  const container = map.getContainer();
+  const centerX = container.clientWidth / 2;
+  const centerY = container.clientHeight / 2;
+  const ranked: ViewportPoiCandidate[] = [];
+
+  for (const feature of features) {
+    const point = map.project([feature.lon, feature.lat]);
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    ranked.push({
+      feature,
+      x: point.x,
+      y: point.y,
+      centerDistance: Math.sqrt(dx * dx + dy * dy),
+    });
+  }
+
+  return ranked;
+}
+
+export function selectViewportLodPois(
+  map: MapboxMap,
+  features: PoiFeature[],
+  categories: PoiCategory[],
+): PoiFeature[] {
+  if (features.length === 0) return [];
+
+  const zoom = map.getZoom();
+  const profile = getViewportPoiLodProfile(zoom);
+  const cellBuckets = new Map<string, ViewportPoiCandidate>();
+
+  for (const candidate of rankViewportPoiCandidates(map, features)) {
+    const cellX = Math.floor(candidate.x / profile.cellPx);
+    const cellY = Math.floor(candidate.y / profile.cellPx);
+    const key = `${cellX}:${cellY}`;
+    const existing = cellBuckets.get(key);
+    if (!existing || candidate.centerDistance < existing.centerDistance) {
+      cellBuckets.set(key, candidate);
+    }
+  }
+
+  const grouped = new Map<PoiCategory, ViewportPoiCandidate[]>();
+  for (const candidate of cellBuckets.values()) {
+    const list = grouped.get(candidate.feature.category) ?? [];
+    list.push(candidate);
+    grouped.set(candidate.feature.category, list);
+  }
+  for (const list of grouped.values()) {
+    list.sort((left, right) => left.centerDistance - right.centerDistance);
+  }
+
+  const perCategoryCount = new Map<PoiCategory, number>();
+  const selected: PoiFeature[] = [];
+  const maxIterations = profile.targetCount * Math.max(categories.length, 1);
+  let iterations = 0;
+
+  while (selected.length < profile.targetCount && iterations < maxIterations) {
+    let progressed = false;
+    for (const category of categories) {
+      if (selected.length >= profile.targetCount) break;
+      const bucket = grouped.get(category);
+      if (!bucket || bucket.length === 0) continue;
+      const used = perCategoryCount.get(category) ?? 0;
+      if (used >= profile.maxPerCategory) continue;
+      const next = bucket.shift();
+      if (!next) continue;
+      selected.push(next.feature);
+      perCategoryCount.set(category, used + 1);
+      progressed = true;
+      if (selected.length >= profile.targetCount) break;
+    }
+    if (!progressed) break;
+    iterations += 1;
+  }
+
+  return selected;
+}
+
+export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
+  const element = document.createElement('div');
+  element.style.display = 'inline-flex';
+  element.style.alignItems = 'center';
+  element.style.justifyContent = 'center';
+  element.style.width = 'var(--rv-dashboard-poi-marker-size, 30px)';
+  element.style.height = 'var(--rv-dashboard-poi-marker-size, 30px)';
+  element.style.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.16))';
+  element.style.pointerEvents = 'none';
+
+  const image = document.createElement('img');
+  image.src = getDropdownViewportPoiIconUrl(feature.category);
+  image.alt = '';
+  image.draggable = false;
+  image.decoding = 'async';
+  image.style.display = 'block';
+  image.style.width = '100%';
+  image.style.height = '100%';
+
+  element.appendChild(image);
+  return element;
+}
+
+export async function fetchVisibleViewportPois(
+  map: MapboxMap,
+  categories: PoiCategory[],
+  signal: AbortSignal,
+): Promise<PoiFeature[]> {
+  const bounds = map.getBounds();
+  if (!bounds) return [];
+
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const limit = getViewportPoiLodProfile(map.getZoom()).fetchLimit;
+
+  if (west <= east) {
+    return fetchPoisInBbox(south, west, north, east, categories, signal, limit);
+  }
+
+  const [left, right] = await Promise.all([
+    fetchPoisInBbox(south, west, north, 180, categories, signal, limit),
+    fetchPoisInBbox(south, -180, north, east, categories, signal, limit),
+  ]);
+  const deduped = new Map<string, PoiFeature>();
+  for (const feature of [...left, ...right]) {
+    deduped.set(getViewportPoiMarkerKey(feature), feature);
+  }
+  return [...deduped.values()];
+}
+
+export {
+  getViewportPoiMarkerKey,
+  getViewportPoiMarkerSignature,
+};
