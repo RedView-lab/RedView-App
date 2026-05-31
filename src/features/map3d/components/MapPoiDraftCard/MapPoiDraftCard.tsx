@@ -208,10 +208,20 @@ export function MapPoiDraftCard({
       }
     };
 
-    document.addEventListener('click', handleClick);
+    let clickListenerAttached = false;
+    // Delay outside-click arming so the menu click that opened the card
+    // cannot bubble into an immediate close on the same turn.
+    const animationFrameId = window.requestAnimationFrame(() => {
+      document.addEventListener('click', handleClick);
+      clickListenerAttached = true;
+    });
+
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('click', handleClick);
+      window.cancelAnimationFrame(animationFrameId);
+      if (clickListenerAttached) {
+        document.removeEventListener('click', handleClick);
+      }
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [draft, onAction]);
