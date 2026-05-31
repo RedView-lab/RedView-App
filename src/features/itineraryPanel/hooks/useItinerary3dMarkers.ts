@@ -18,7 +18,7 @@ const ITINERARY_MARKER_ICON_URLS = {
   pause: '/svgv2/icone/itinerary-3d/pause.svg',
 } as const;
 
-type ItineraryMarkerKind = keyof typeof ITINERARY_MARKER_ICON_URLS;
+type ItineraryMarkerKind = keyof typeof ITINERARY_MARKER_ICON_URLS | 'waypoint';
 
 type RoutePoint = NonNullable<Itinerary['gpxRoute']>['points'][number];
 
@@ -138,32 +138,41 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
   const routePoints = active.gpxRoute?.points ?? [];
   const totalDistanceM = routePoints[routePoints.length - 1]?.distanceM ?? 0;
   const markers: ItineraryMarkerPoint[] = [];
-  const showEndpointMarkers = active.gpxRoute?.source !== 'brouter';
+  const start = active.timeline.find((row) => row.kind === 'start');
+  const startPoint = resolveTimelinePoint(start ?? null, routePoints, totalDistanceM);
+  if (startPoint) {
+    markers.push({
+      id: start ? `start:${start.id}` : 'start:route',
+      kind: 'start',
+      label: start?.label?.trim() || 'Depart',
+      lat: startPoint.lat,
+      lon: startPoint.lon,
+    });
+  }
 
-  if (showEndpointMarkers) {
-    const start = active.timeline.find((row) => row.kind === 'start');
-    const startPoint = resolveTimelinePoint(start ?? null, routePoints, totalDistanceM);
-    if (startPoint) {
-      markers.push({
-        id: start ? `start:${start.id}` : 'start:route',
-        kind: 'start',
-        label: start?.label?.trim() || 'Depart',
-        lat: startPoint.lat,
-        lon: startPoint.lon,
-      });
-    }
+  const end = active.timeline.find((row) => row.kind === 'end');
+  const endPoint = resolveTimelinePoint(end ?? null, routePoints, totalDistanceM);
+  if (endPoint) {
+    markers.push({
+      id: end ? `end:${end.id}` : 'end:route',
+      kind: 'end',
+      label: end?.label?.trim() || 'Arrivee',
+      lat: endPoint.lat,
+      lon: endPoint.lon,
+    });
+  }
 
-    const end = active.timeline.find((row) => row.kind === 'end');
-    const endPoint = resolveTimelinePoint(end ?? null, routePoints, totalDistanceM);
-    if (endPoint) {
-      markers.push({
-        id: end ? `end:${end.id}` : 'end:route',
-        kind: 'end',
-        label: end?.label?.trim() || 'Arrivee',
-        lat: endPoint.lat,
-        lon: endPoint.lon,
-      });
-    }
+  for (const item of active.timeline) {
+    if (item.kind !== 'waypoint' || item.visible === false) continue;
+    const point = resolveTimelinePoint(item, routePoints, totalDistanceM);
+    if (!point) continue;
+    markers.push({
+      id: `waypoint:${item.id}`,
+      kind: 'waypoint',
+      label: item.label?.trim() || 'Waypoint',
+      lat: point.lat,
+      lon: point.lon,
+    });
   }
 
   for (const item of active.timeline) {
@@ -269,14 +278,21 @@ function createMarkerElement(point: ItineraryMarkerPoint): HTMLDivElement {
   element.dataset.kind = point.kind;
   element.setAttribute('aria-hidden', 'true');
 
-  const image = document.createElement('img');
-  image.className = 'rv-itinerary-marker__img';
-  image.src = ITINERARY_MARKER_ICON_URLS[point.kind];
-  image.alt = '';
-  image.draggable = false;
-  image.decoding = 'async';
+  if (point.kind !== 'waypoint') {
+    const image = document.createElement('img');
+    image.className = 'rv-itinerary-marker__img';
+    image.src = ITINERARY_MARKER_ICON_URLS[point.kind];
+    image.alt = '';
+    image.draggable = false;
+    image.decoding = 'async';
+    element.appendChild(image);
+  }
 
-  element.appendChild(image);
+  if (point.kind === 'start' || point.kind === 'end' || point.kind === 'waypoint') {
+    const handle = document.createElement('span');
+    handle.className = 'rv-itinerary-marker__handle';
+    element.appendChild(handle);
+  }
 
   return element;
 }
