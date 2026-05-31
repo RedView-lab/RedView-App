@@ -134,6 +134,9 @@ export function useItinerary3dMarkers(
 
 function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
   if (!active) return [];
+  if (active.gpxRoute?.source === 'brouter') {
+    return buildPauseMarkerPoints(active);
+  }
 
   const routePoints = active.gpxRoute?.points ?? [];
   const totalDistanceM = routePoints[routePoints.length - 1]?.distanceM ?? 0;
@@ -162,19 +165,17 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
     });
   }
 
-  for (const item of active.timeline) {
-    if (item.kind !== 'waypoint' || item.visible === false) continue;
-    const point = resolveTimelinePoint(item, routePoints, totalDistanceM);
-    if (!point) continue;
-    markers.push({
-      id: `waypoint:${item.id}`,
-      kind: 'waypoint',
-      label: item.label?.trim() || 'Waypoint',
-      lat: point.lat,
-      lon: point.lon,
-    });
-  }
+  markers.push(...buildPauseMarkerPoints(active, routePoints, totalDistanceM));
 
+  return markers;
+}
+
+function buildPauseMarkerPoints(
+  active: Itinerary,
+  routePoints: RoutePoint[] = active.gpxRoute?.points ?? [],
+  totalDistanceM: number = routePoints[routePoints.length - 1]?.distanceM ?? 0,
+): ItineraryMarkerPoint[] {
+  const markers: ItineraryMarkerPoint[] = [];
   for (const item of active.timeline) {
     if (item.kind !== 'pause' || item.visible === false) continue;
     const point = resolveTimelinePoint(item, routePoints, totalDistanceM);
@@ -187,7 +188,6 @@ function buildMarkerPoints(active: Itinerary | null): ItineraryMarkerPoint[] {
       lon: point.lon,
     });
   }
-
   return markers;
 }
 
