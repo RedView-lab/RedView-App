@@ -139,6 +139,10 @@ function normalizeSurfaceLabel(value: string | null): string | null {
   return SURFACE_LABELS[normalized] ?? humanizeToken(value);
 }
 
+function isFiniteCoordinate(value: number): boolean {
+  return Number.isFinite(value);
+}
+
 function scoreFeature(feature: MapboxGeoJSONFeature): number {
   const properties = (feature.properties ?? {}) as Record<string, unknown>;
   const layerId = feature.layer?.id?.toLowerCase() ?? '';
@@ -564,16 +568,30 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
 
     const menuRect = menuRef.current.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
+    const fallbackPoint = {
+      x: menuState.screenX - containerRect.left,
+      y: menuState.screenY - containerRect.top,
+    };
     const projectedPoint = map
       ? map.project([menuState.point.lng, menuState.point.lat])
-      : {
-          x: menuState.screenX - containerRect.left,
-          y: menuState.screenY - containerRect.top,
-        };
+      : fallbackPoint;
+    const anchorX = isFiniteCoordinate(projectedPoint.x) ? projectedPoint.x : fallbackPoint.x;
+    const anchorY = isFiniteCoordinate(projectedPoint.y) ? projectedPoint.y : fallbackPoint.y;
+
+    if (
+      !isFiniteCoordinate(anchorX)
+      || !isFiniteCoordinate(anchorY)
+      || !isFiniteCoordinate(menuRect.width)
+      || !isFiniteCoordinate(menuRect.height)
+      || !isFiniteCoordinate(containerRect.width)
+      || !isFiniteCoordinate(containerRect.height)
+    ) {
+      return;
+    }
 
     const nextPosition = computePanelPosition(
-      projectedPoint.x,
-      projectedPoint.y,
+      anchorX,
+      anchorY,
       menuRect.width,
       menuRect.height,
       containerRect.width,

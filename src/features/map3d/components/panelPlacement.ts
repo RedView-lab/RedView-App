@@ -3,6 +3,10 @@ export interface PanelPlacement {
   vertical: 'down' | 'up';
 }
 
+function finiteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export function resolvePanelPlacement(
   anchorX: number,
   anchorY: number,
@@ -25,15 +29,22 @@ export function computePanelPosition(
   padding: number,
   placement: PanelPlacement,
 ): { left: number; top: number } {
+  const safePadding = finiteOr(padding, 0);
+  const safeAnchorX = finiteOr(anchorX, safePadding);
+  const safeAnchorY = finiteOr(anchorY, safePadding);
+  const safePanelWidth = Math.max(0, finiteOr(panelWidth, 0));
+  const safePanelHeight = Math.max(0, finiteOr(panelHeight, 0));
+  const safeContainerWidth = Math.max(safePadding * 2, finiteOr(containerWidth, safePanelWidth + safePadding * 2));
+  const safeContainerHeight = Math.max(safePadding * 2, finiteOr(containerHeight, safePanelHeight + safePadding * 2));
   const rawLeft = placement.horizontal === 'right'
-    ? anchorX
-    : anchorX - panelWidth;
+    ? safeAnchorX
+    : safeAnchorX - safePanelWidth;
   const rawTop = placement.vertical === 'down'
-    ? anchorY
-    : anchorY - panelHeight;
+    ? safeAnchorY
+    : safeAnchorY - safePanelHeight;
 
   return {
-    left: Math.max(padding, Math.min(rawLeft, Math.max(padding, containerWidth - panelWidth - padding))),
-    top: Math.max(padding, Math.min(rawTop, Math.max(padding, containerHeight - panelHeight - padding))),
+    left: Math.max(safePadding, Math.min(rawLeft, Math.max(safePadding, safeContainerWidth - safePanelWidth - safePadding))),
+    top: Math.max(safePadding, Math.min(rawTop, Math.max(safePadding, safeContainerHeight - safePanelHeight - safePadding))),
   };
 }
