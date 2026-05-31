@@ -4,7 +4,11 @@ import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
-import { MapContextMenu, type MapContextMenuActionPayload } from './MapContextMenu';
+import { MapContextMenu } from './MapContextMenu/MapContextMenu';
+import type {
+  MapContextMenuActionPayload,
+  MapContextMenuOverlayContext,
+} from './MapContextMenu/types';
 import { MapPoiDraftCard, type MapPoiDraft, type MapPoiDraftActionPayload } from './MapPoiDraftCard';
 import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
@@ -34,12 +38,12 @@ function createPoiDraft(
     id: `map-poi-draft-${Date.now()}`,
     point: payload.point,
     screenPoint: payload.screenPoint,
-    name: null,
+    name: payload.point.title,
     favorite: false,
     category: null,
     slopePct: map ? sampleSlopePct(map, payload.point.lng, payload.point.lat) : null,
-    surfaceLabel: null,
-    roadTypeLabel: null,
+    surfaceLabel: payload.point.surfaceLabel,
+    roadTypeLabel: payload.point.categoryLabel,
   };
 }
 
@@ -54,6 +58,7 @@ interface MapViewProps {
   onViewportChange?: (viewport: MapViewport) => void;
   onMapContextMenuAction?: (payload: MapContextMenuActionPayload) => void;
   onMapPoiDraftAction?: (payload: MapPoiDraftActionPayload) => void;
+  contextMenuOverlayContext?: MapContextMenuOverlayContext;
 }
 
 export default memo(function MapView({
@@ -67,6 +72,7 @@ export default memo(function MapView({
   onViewportChange,
   onMapContextMenuAction,
   onMapPoiDraftAction,
+  contextMenuOverlayContext,
 }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [poiDraft, setPoiDraft] = useState<MapPoiDraft | null>(null);
@@ -99,6 +105,13 @@ export default memo(function MapView({
     }
   }, [onMapPoiDraftAction]);
 
+  const ContextMenuComponent = MapContextMenu as (props: {
+    map: MapboxMap | null;
+    containerRef: typeof containerRef;
+    onAction?: (payload: MapContextMenuActionPayload) => void;
+    overlayContext?: MapContextMenuOverlayContext;
+  }) => React.ReactNode;
+
   useEffect(() => {
     const currentMap = isLoaded ? map.current : null;
     if (!currentMap || !poiDraft) return;
@@ -128,10 +141,11 @@ export default memo(function MapView({
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
       />
 
-      <MapContextMenu
+      <ContextMenuComponent
         map={isLoaded ? map.current : null}
         containerRef={containerRef}
         onAction={handleMapContextMenuAction}
+        overlayContext={contextMenuOverlayContext}
       />
 
       {poiDraft ? (

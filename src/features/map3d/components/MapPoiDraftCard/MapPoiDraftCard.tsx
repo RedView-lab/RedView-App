@@ -1,14 +1,24 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 
 import { POI_CATEGORIES, POI_LABELS, type PoiCategory } from '@/features/poi/types';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
-import { FinishGlyph, StartGlyph, WaypointGlyph } from '../MapContextMenu/icons';
+import {
+  CopyButtonIcon,
+  ElevationGlyph,
+  FinishGlyph,
+  GlobeGlyph,
+  SlopeGlyph,
+  StartGlyph,
+  SurfaceGlyph,
+  WaypointGlyph,
+} from '../MapContextMenu/icons';
+import { copyTextToClipboard } from '../MapContextMenu/utils';
 import type { MapPoiDraft, MapPoiDraftActionPayload } from './types';
 
-const CARD_WIDTH = 182;
+const CARD_WIDTH = 200;
 const EDGE_PADDING = 8;
 
 interface MapPoiDraftCardProps {
@@ -20,56 +30,6 @@ interface MapPoiDraftCardProps {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
-}
-
-function FieldRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        minHeight: 24,
-      }}
-    >
-      <span
-        style={{
-          flex: '0 0 auto',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 12,
-          fontWeight: 500,
-          lineHeight: 'normal',
-          color: 'rgba(255,255,255,0.64)',
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          marginLeft: 12,
-          minWidth: 0,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          fontSize: 13,
-          fontWeight: 500,
-          lineHeight: 'normal',
-          color: '#ffffff',
-        }}
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 function ActionRow({
@@ -98,6 +58,7 @@ function ActionRow({
         gap: 4,
         width: '100%',
         minWidth: 80,
+        minHeight: 32,
         padding: 4,
         border: 'none',
         borderRadius: 6,
@@ -116,9 +77,9 @@ function ActionRow({
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           fontSize: 14,
-          fontWeight: 600,
-          lineHeight: 'normal',
-          color: danger ? 'rgba(255,255,255,0.92)' : '#ffffff',
+          fontWeight: danger ? 400 : 600,
+          lineHeight: '18px',
+          color: '#ffffff',
         }}
       >
         {label}
@@ -153,7 +114,9 @@ export function MapPoiDraftCard({
 }: MapPoiDraftCardProps) {
   const { t } = useAppI18n();
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const copyResetTimerRef = useRef<number | null>(null);
   const [categoryOpen, setCategoryOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [position, setPosition] = useState({ left: EDGE_PADDING, top: EDGE_PADDING });
 
   const categoryOptions = useMemo(() => {
@@ -205,10 +168,39 @@ export function MapPoiDraftCard({
     };
   }, [draft, onAction]);
 
-  const slopeLabel = draft.slopePct == null ? '—' : `∼ ${Math.abs(draft.slopePct)}%`;
-  const surfaceLabel = draft.surfaceLabel ?? '—';
-  const roadTypeLabel = draft.roadTypeLabel ?? '—';
-  const title = draft.name?.trim() || t('Nouveau POI');
+  const handleCopyCoordinates = useCallback(async () => {
+    try {
+      await copyTextToClipboard(draft.point.coordinatesLabel);
+      setCopied(true);
+      if (copyResetTimerRef.current != null) {
+        window.clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copyResetTimerRef.current = null;
+      }, 1200);
+    } catch {
+      setCopied(false);
+    }
+  }, [draft.point.coordinatesLabel]);
+
+  useEffect(() => () => {
+    if (copyResetTimerRef.current != null) {
+      window.clearTimeout(copyResetTimerRef.current);
+    }
+  }, []);
+
+  const handleOpenStreetView = useCallback(() => {
+    onAction({ action: 'open-street-view', draft });
+    const streetViewUrl = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${encodeURIComponent(`${draft.point.lat},${draft.point.lng}`)}`;
+    window.open(streetViewUrl, '_blank', 'noopener,noreferrer');
+  }, [draft, onAction]);
+
+  const slopeLabel = draft.slopePct == null ? null : `${Math.abs(draft.slopePct)}%`;
+  const elevationLabel = draft.point.elevationMeters == null ? '—' : `${Math.round(draft.point.elevationMeters)}m`;
+  const surfaceLabel = draft.surfaceLabel ?? draft.point.surfaceLabel ?? '—';
+  const infoCategoryLabel = draft.point.categoryLabel ?? draft.roadTypeLabel ?? t('Position');
+  const title = draft.name?.trim() || draft.point.title?.trim() || t('Nouveau POI');
   const categoryLabel = draft.category ? POI_LABELS[draft.category] : t('Sélectionner');
 
   return (
@@ -269,8 +261,8 @@ export function MapPoiDraftCard({
             whiteSpace: 'nowrap',
             fontSize: 13,
             fontWeight: 500,
-            lineHeight: 'normal',
-            color: 'rgba(255,255,255,0.64)',
+            lineHeight: '17px',
+            color: '#ffffff',
           }}
         >
           {title}
@@ -280,7 +272,7 @@ export function MapPoiDraftCard({
           type="button"
           aria-label={t('Ouvrir Street View')}
           title={t('Ouvrir Street View')}
-          onClick={() => onAction({ action: 'open-street-view', draft })}
+          onClick={handleOpenStreetView}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -294,18 +286,125 @@ export function MapPoiDraftCard({
             cursor: 'pointer',
           }}
         >
-          <SvgV2Icon name="globe-06.svg" size={16} />
+          <GlobeGlyph />
         </button>
       </div>
 
       <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgba(255,255,255,0.12)' }} />
 
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', width: '100%', padding: '4px 0', color: '#ffffff' }}>
-        <FieldRow label={t('Coordonnées')} value={draft.point.coordinatesLabel} />
-        <FieldRow label={t('Altitude')} value={draft.point.elevationMeters == null ? '—' : `${Math.round(draft.point.elevationMeters)}m`} />
-        <FieldRow label={t('Pente :')} value={slopeLabel} />
-        <FieldRow label={t('Revêtement :')} value={surfaceLabel} />
-        <FieldRow label={t('Type :')} value={roadTypeLabel} />
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, width: '100%', color: '#ffffff' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24, paddingBlock: 4 }}>
+          <span
+            style={{
+              minWidth: 0,
+              flex: '0 1 auto',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 12,
+              fontWeight: 500,
+              fontStyle: 'italic',
+              lineHeight: '16px',
+              color: '#ffffff',
+            }}
+          >
+            {infoCategoryLabel}
+          </span>
+
+          <span
+            style={{
+              minWidth: 0,
+              flex: '1 1 0',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontSize: 12,
+              fontWeight: 500,
+              fontStyle: 'italic',
+              lineHeight: '16px',
+              color: '#ffffff',
+            }}
+          >
+            {draft.point.coordinatesLabel}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => {
+              void handleCopyCoordinates();
+            }}
+            aria-label={t('Copier les coordonnées')}
+            title={t('Copier les coordonnées')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 16,
+              height: 16,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'rgba(255,255,255,0.92)',
+              cursor: 'pointer',
+              flex: '0 0 auto',
+            }}
+          >
+            <CopyButtonIcon copied={copied} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24 }}>
+          {slopeLabel ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <SlopeGlyph />
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  fontStyle: 'italic',
+                  lineHeight: '16px',
+                  color: '#ffffff',
+                }}
+              >
+                {slopeLabel}
+              </span>
+            </div>
+          ) : null}
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <ElevationGlyph />
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 500,
+                fontStyle: 'italic',
+                lineHeight: '16px',
+                color: '#ffffff',
+              }}
+            >
+              {elevationLabel}
+            </span>
+          </div>
+
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <SurfaceGlyph />
+            <span
+              style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontSize: 12,
+                fontWeight: 500,
+                fontStyle: 'italic',
+                lineHeight: '16px',
+                color: '#ffffff',
+              }}
+            >
+              {surfaceLabel}
+            </span>
+          </div>
+        </div>
       </div>
 
       <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgba(255,255,255,0.12)' }} />
@@ -352,7 +451,7 @@ export function MapPoiDraftCard({
                 whiteSpace: 'nowrap',
                 fontSize: 14,
                 fontWeight: 600,
-                lineHeight: 'normal',
+                lineHeight: '18px',
                 color: draft.category ? '#ffffff' : 'rgba(255,255,255,0.64)',
                 textAlign: 'left',
               }}

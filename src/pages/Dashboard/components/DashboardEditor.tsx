@@ -1,4 +1,5 @@
 import {
+  useState,
   useCallback,
   useMemo,
   type CSSProperties,
@@ -12,6 +13,7 @@ import {
   MapBlurMirror,
   MapOverlayStatusDock,
   MapView,
+  type MapContextMenuOverlayContext,
   type OverlayReloadRegistrar,
   type OverlayStatusId,
   type OverlayStatusReporter,
@@ -155,6 +157,31 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
+  const [contextMenuOverlayContext, setContextMenuOverlayContext] = useState<MapContextMenuOverlayContext>({
+    weather: {
+      enabled: false,
+      tab: 'forecast',
+      date: '',
+      time: '',
+      forecastDay: 0,
+      activeLayers: [],
+    },
+    wind: {
+      enabled: false,
+      date: '',
+      time: '',
+      forecastDay: 0,
+      terrainOverlayEnabled: false,
+      particlesEnabled: false,
+    },
+    sunlight: {
+      enabled: false,
+      date: '',
+      time: '',
+      shadowEnabled: false,
+      sunlightMapEnabled: false,
+    },
+  });
   const isStandardBasemap = activeBasemapConfig.visualFamily === 'mapbox-standard-v3';
   // The large docked panel shells are intentionally tint-only and rely on a
   // mirrored map slice underneath for their glass treatment. Fully disabling
@@ -228,6 +255,7 @@ export function DashboardEditor({
         initialViewport={projectMapViewport}
         onViewportChange={onMapViewportChange}
         basemapConfig={activeBasemapConfig}
+        contextMenuOverlayContext={contextMenuOverlayContext}
       />
 
       <MapOverlayStatusDock
@@ -446,6 +474,7 @@ export function DashboardEditor({
                           width={panelWidth}
                           onResizeStart={onRightResizeStart}
                           isResizing={isResizing}
+                          onContextMenuOverlayContextChange={setContextMenuOverlayContext}
                         />
                       </div>
                       <div ref={exporterPanelHostRef} style={{ flex: '0 0 auto' }}>

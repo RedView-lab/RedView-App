@@ -27,6 +27,7 @@ import { useControlPanelTerrainState } from '../hooks/useControlPanelTerrainStat
 import { setActiveDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import { resolveDem3dSelection } from '@/features/map3d/lib/dem3dSelection';
 import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
+import type { MapContextMenuOverlayContext } from '@/features/map3d';
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
@@ -47,6 +48,7 @@ export interface ControlPanelContainerProps {
   width?: number;
   onResizeStart?: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   isResizing?: boolean;
+  onContextMenuOverlayContextChange?: (context: MapContextMenuOverlayContext) => void;
 }
 
 function formatLidarTileLabel(info: CachedTileInfo): string {
@@ -78,6 +80,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   width,
   onResizeStart,
   isResizing,
+  onContextMenuOverlayContextChange,
 }: ControlPanelContainerProps) {
   const lidarManager = useLidarManager();
   const projectStore = useProjectStoreOptional();
@@ -324,6 +327,43 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     setActiveDem3dQuality(next.quality);
     setActiveDemProfilePreference(next.profile);
   }, []);
+
+  useEffect(() => {
+    onContextMenuOverlayContextChange?.({
+      weather: {
+        enabled: overlayState.slices.weather.enabled,
+        tab: overlayState.slices.weather.tab,
+        date: overlayState.slices.weather.date,
+        time: overlayState.slices.weather.time,
+        forecastDay: overlayState.slices.weather.forecastDay,
+        activeLayers: overlayState.slices.weather.layers
+          .filter((layer) => layer.enabled)
+          .map((layer) => layer.key)
+          .filter((key): key is MapContextMenuOverlayContext['weather']['activeLayers'][number] => (
+            key === 'temperature'
+            || key === 'feelsLike'
+            || key === 'rain'
+            || key === 'cloudCover'
+            || key === 'humidity'
+          )),
+      },
+      wind: {
+        enabled: overlayState.slices.wind.enabled,
+        date: overlayState.slices.wind.date,
+        time: overlayState.slices.wind.time,
+        forecastDay: overlayState.slices.wind.forecastDay,
+        terrainOverlayEnabled: overlayState.slices.wind.terrainOverlayEnabled,
+        particlesEnabled: overlayState.slices.wind.particlesEnabled,
+      },
+      sunlight: {
+        enabled: overlayState.slices.sunlight.enabled,
+        date: overlayState.slices.sunlight.date,
+        time: overlayState.slices.sunlight.time,
+        shadowEnabled: overlayState.slices.sunlight.shadowEnabled,
+        sunlightMapEnabled: overlayState.slices.sunlight.sunlightMapEnabled,
+      },
+    });
+  }, [onContextMenuOverlayContextChange, overlayState.slices.sunlight, overlayState.slices.weather, overlayState.slices.wind]);
 
   // Keep the map3d quality bus in sync with the persisted project
   // state. Runs on mount, project switch, and any external mutation

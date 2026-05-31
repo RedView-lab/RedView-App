@@ -4,6 +4,8 @@ export { default as MapOverlayStatusDock } from './components/MapOverlayStatusDo
 export type {
 	MapContextMenuActionId,
 	MapContextMenuActionPayload,
+	MapContextMenuOverlayContext,
+	MapContextMenuOverlayDetail,
 	MapContextMenuPoint,
 } from './components/MapContextMenu';
 export type {
