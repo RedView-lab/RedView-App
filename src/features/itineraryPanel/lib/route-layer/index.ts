@@ -85,6 +85,9 @@ export interface RouteLayerOptions {
   slopeBands?: ReadonlyArray<RouteSlopeBand>;
 }
 
+const ROUTE_LINE_ELEVATION_REFERENCE = 'ground' as unknown as undefined;
+const ROUTE_LINE_Z_OFFSET = 0 as unknown as undefined;
+
 interface RouteLayerRenderSpec {
   data: GeoJSON.Feature<GeoJSON.LineString>;
   lineColorPaint: string;
@@ -476,8 +479,8 @@ export function upsertRouteLayer(
       layout: {
         'line-cap': 'round',
         'line-join': 'round',
-        'line-elevation-reference': 'ground' as unknown as undefined,
-        'line-z-offset': 3 as unknown as undefined,
+        'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
+        'line-z-offset': ROUTE_LINE_Z_OFFSET,
         visibility,
       },
       paint: {
@@ -508,6 +511,8 @@ export function upsertRouteLayer(
       } else if (map.getPaintProperty(lineId, 'line-gradient') != null) {
         map.setPaintProperty(lineId, 'line-gradient', null as never);
       }
+      setLayoutPropertyIfChanged(map, lineId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
+      setLayoutPropertyIfChanged(map, lineId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
       setPaintPropertyIfChanged(map, lineId, 'line-width', traceWidthPx);
       setPaintPropertyIfChanged(map, lineId, 'line-opacity', opacity);
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', borderWidthPx);
