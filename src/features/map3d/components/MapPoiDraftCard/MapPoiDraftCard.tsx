@@ -23,6 +23,10 @@ import { computePanelPosition } from '../panelPlacement';
 const CARD_WIDTH = 200;
 const EDGE_PADDING = 8;
 
+function isFiniteCoordinate(value: number): boolean {
+  return Number.isFinite(value);
+}
+
 interface MapPoiDraftCardProps {
   draft: MapPoiDraft;
   map: MapboxMap | null;
@@ -132,16 +136,30 @@ export function MapPoiDraftCard({
 
     const cardRect = cardRef.current.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
+    const fallbackPoint = {
+      x: draft.screenPoint.x - containerRect.left,
+      y: draft.screenPoint.y - containerRect.top,
+    };
     const projectedPoint = map
       ? map.project([draft.point.lng, draft.point.lat])
-      : {
-          x: draft.screenPoint.x - containerRect.left,
-          y: draft.screenPoint.y - containerRect.top,
-        };
+      : fallbackPoint;
+    const anchorX = isFiniteCoordinate(projectedPoint.x) ? projectedPoint.x : fallbackPoint.x;
+    const anchorY = isFiniteCoordinate(projectedPoint.y) ? projectedPoint.y : fallbackPoint.y;
+
+    if (
+      !isFiniteCoordinate(anchorX)
+      || !isFiniteCoordinate(anchorY)
+      || !isFiniteCoordinate(cardRect.width)
+      || !isFiniteCoordinate(cardRect.height)
+      || !isFiniteCoordinate(containerRect.width)
+      || !isFiniteCoordinate(containerRect.height)
+    ) {
+      return;
+    }
 
     const nextPosition = computePanelPosition(
-      projectedPoint.x,
-      projectedPoint.y,
+      anchorX,
+      anchorY,
       cardRect.width,
       cardRect.height,
       containerRect.width,
