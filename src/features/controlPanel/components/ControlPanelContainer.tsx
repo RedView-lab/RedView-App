@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, memo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
@@ -328,8 +328,9 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     setActiveDemProfilePreference(next.profile);
   }, []);
 
+  const lastEmittedOverlayContextRef = useRef<string | null>(null);
   useEffect(() => {
-    onContextMenuOverlayContextChange?.({
+    const nextContext: MapContextMenuOverlayContext = {
       weather: {
         enabled: overlayState.slices.weather.enabled,
         tab: overlayState.slices.weather.tab,
@@ -362,7 +363,17 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
         shadowEnabled: overlayState.slices.sunlight.shadowEnabled,
         sunlightMapEnabled: overlayState.slices.sunlight.sunlightMapEnabled,
       },
-    });
+    };
+
+    // overlayState.slices.wind is rebuilt as a fresh object literal on every
+    // render, so this effect runs each render. Emitting unconditionally would
+    // push a new object into the parent's state on every pass and create an
+    // update loop (React error #185). Only notify the parent when the derived
+    // context content actually changes.
+    const serialized = JSON.stringify(nextContext);
+    if (serialized === lastEmittedOverlayContextRef.current) return;
+    lastEmittedOverlayContextRef.current = serialized;
+    onContextMenuOverlayContextChange?.(nextContext);
   }, [onContextMenuOverlayContextChange, overlayState.slices.sunlight, overlayState.slices.weather, overlayState.slices.wind]);
 
   // Keep the map3d quality bus in sync with the persisted project
