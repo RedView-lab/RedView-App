@@ -44,6 +44,20 @@ const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
 const VIEWPORT_POI_MIN_ZOOM = 10.8;
 const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 120;
 
+const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {
+  drinking_water: '/svgv2/poi/dropdown-maps/water.svg',
+  toilets: '/svgv2/poi/dropdown-maps/toilets.svg',
+  supermarket: '/svgv2/poi/dropdown-maps/supermarket.svg',
+  bakery: '/svgv2/poi/dropdown-maps/bakery.svg',
+  fuel: '/svgv2/poi/dropdown-maps/fuel.svg',
+  bar: '/svgv2/poi/dropdown-maps/bar.svg',
+  cafe: '/svgv2/poi/dropdown-maps/cafe.svg',
+  restaurant: '/svgv2/poi/dropdown-maps/restaurant.svg',
+  convenience: '/svgv2/poi/dropdown-maps/shop.svg',
+  hotel: '/svgv2/poi/dropdown-maps/hotel.svg',
+  alpine_hut: '/svgv2/poi/dropdown-maps/refuge.svg',
+};
+
 type DashboardPoiOptionId =
   | 'drinking_water'
   | 'toilets'
@@ -213,6 +227,10 @@ function PoiTriggerIcon() {
   return <SvgV2Icon name="poi-pin.svg" size={20} />;
 }
 
+function getDropdownViewportPoiIconUrl(category: PoiCategory): string {
+  return DROPDOWN_VIEWPORT_POI_ICON_URLS[category] ?? getPoiIconUrl(category);
+}
+
 function getViewportPoiMarkerKey(feature: PoiFeature): string {
   return `${feature.category}:${feature.id}`;
 }
@@ -239,7 +257,7 @@ function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
   element.style.pointerEvents = 'none';
 
   const image = document.createElement('img');
-  image.src = getPoiIconUrl(feature.category);
+  image.src = getDropdownViewportPoiIconUrl(feature.category);
   image.alt = '';
   image.draggable = false;
   image.decoding = 'async';
