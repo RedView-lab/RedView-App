@@ -76,9 +76,9 @@ function ActionRow({
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          fontSize: 14,
+          fontSize: 13,
           fontWeight: danger ? 400 : 600,
-          lineHeight: '18px',
+          lineHeight: '17px',
           color: '#ffffff',
         }}
       >
@@ -202,6 +202,7 @@ export function MapPoiDraftCard({
   const infoCategoryLabel = draft.point.categoryLabel ?? draft.roadTypeLabel ?? t('Position');
   const title = draft.name?.trim() || draft.point.title?.trim() || t('Nouveau POI');
   const categoryLabel = draft.category ? POI_LABELS[draft.category] : t('Sélectionner');
+  const metadataColor = 'rgba(255,255,255,0.64)';
 
   return (
     <div
@@ -218,7 +219,6 @@ export function MapPoiDraftCard({
         gap: 4,
         padding: 6,
         overflow: 'hidden',
-        border: '1px solid rgba(255,255,255,0.08)',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
         borderBottomRightRadius: 8,
@@ -259,9 +259,9 @@ export function MapPoiDraftCard({
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 500,
-            lineHeight: '17px',
+            lineHeight: '16px',
             color: '#ffffff',
           }}
         >
@@ -292,7 +292,7 @@ export function MapPoiDraftCard({
 
       <div aria-hidden style={{ position: 'relative', width: '100%', height: 1, background: 'rgba(255,255,255,0.12)' }} />
 
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, width: '100%', color: '#ffffff' }}>
+      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 0, width: '100%', color: metadataColor }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 24, paddingBlock: 4 }}>
           <span
             style={{
@@ -305,7 +305,7 @@ export function MapPoiDraftCard({
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
-              color: '#ffffff',
+              color: 'currentColor',
             }}
           >
             {infoCategoryLabel}
@@ -322,7 +322,7 @@ export function MapPoiDraftCard({
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
-              color: '#ffffff',
+              color: 'currentColor',
             }}
           >
             {draft.point.coordinatesLabel}
@@ -344,7 +344,7 @@ export function MapPoiDraftCard({
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: 'rgba(255,255,255,0.92)',
+              color: metadataColor,
               cursor: 'pointer',
               flex: '0 0 auto',
             }}
@@ -355,7 +355,7 @@ export function MapPoiDraftCard({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24 }}>
           {slopeLabel ? (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, color: metadataColor }}>
               <SlopeGlyph />
               <span
                 style={{
@@ -363,7 +363,7 @@ export function MapPoiDraftCard({
                   fontWeight: 500,
                   fontStyle: 'italic',
                   lineHeight: '16px',
-                  color: '#ffffff',
+                  color: 'currentColor',
                 }}
               >
                 {slopeLabel}
@@ -371,7 +371,7 @@ export function MapPoiDraftCard({
             </div>
           ) : null}
 
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, color: metadataColor }}>
             <ElevationGlyph />
             <span
               style={{
@@ -379,7 +379,7 @@ export function MapPoiDraftCard({
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
-                color: '#ffffff',
+                color: 'currentColor',
               }}
             >
               {elevationLabel}
@@ -398,7 +398,7 @@ export function MapPoiDraftCard({
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
-                color: '#ffffff',
+                color: metadataColor,
               }}
             >
               {surfaceLabel}
@@ -413,10 +413,10 @@ export function MapPoiDraftCard({
         <span
           style={{
             flex: '0 0 auto',
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 500,
             lineHeight: 'normal',
-            color: 'rgba(255,255,255,0.64)',
+            color: metadataColor,
           }}
         >
           POI
@@ -449,9 +449,9 @@ export function MapPoiDraftCard({
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
-                fontSize: 14,
+                fontSize: 13,
                 fontWeight: 600,
-                lineHeight: '18px',
+                lineHeight: '17px',
                 color: draft.category ? '#ffffff' : 'rgba(255,255,255,0.64)',
                 textAlign: 'left',
               }}
@@ -506,7 +506,7 @@ export function MapPoiDraftCard({
                       textAlign: 'left',
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 500, lineHeight: 'normal' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, lineHeight: '16px' }}>
                       {option.label}
                     </span>
                     {selected ? <SvgV2Icon name="check.svg" size={14} /> : null}
