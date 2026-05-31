@@ -43,7 +43,6 @@ export interface RouteLayerRenderSpec {
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 const ROUTE_TARMAC_BORDER_COLOR = '#ffffff';
-const ROUTE_OFFROAD_FILL_COLOR = '#d1cbc2';
 const ROUTE_OFFROAD_OVERLAY_COLOR = '#0a0a0a';
 const ROUTE_OFFROAD_DASHARRAY = [0.9, 1.35];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
@@ -292,13 +291,13 @@ function hasOffroadSurface(points: readonly RouteLayerPoint[]): boolean {
 
 function resolveSurfaceFillColor(surface: Surface, fallbackColor: string): string {
   if (surface === 'tarmac') return fallbackColor;
-  if (surface === 'offroad') return ROUTE_OFFROAD_FILL_COLOR;
+  if (surface === 'offroad') return fallbackColor;
   return fallbackColor;
 }
 
 function resolveSurfaceBorderColor(surface: Surface, fallbackColor: string): string {
   if (surface === 'tarmac') return ROUTE_TARMAC_BORDER_COLOR;
-  if (surface === 'offroad') return fallbackColor;
+  if (surface === 'offroad') return ROUTE_TRANSPARENT_COLOR;
   return ROUTE_TRANSPARENT_COLOR;
 }
 

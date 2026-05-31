@@ -40,46 +40,28 @@ export function projectTimelineLocationDistances(
   totalDistanceKm: number,
 ): Itinerary['timeline'] {
   const cumulativeLengths = cumulativeRouteLengthsM(routePoints);
-  const snappedStart = routePoints[0] ?? null;
-  const snappedEnd = routePoints[routePoints.length - 1] ?? null;
   let changed = false;
 
   const nextTimeline = timeline.map((row) => {
     if (row.kind === 'start') {
-      const nextLat = snappedStart?.lat ?? row.lat;
-      const nextLon = snappedStart?.lon ?? row.lon;
-      if (
-        row.distanceKm === 0 &&
-        row.lat === nextLat &&
-        row.lon === nextLon
-      ) {
+      if (row.distanceKm === 0) {
         return row;
       }
       changed = true;
       return {
         ...row,
         distanceKm: 0,
-        lat: nextLat,
-        lon: nextLon,
       };
     }
 
     if (row.kind === 'end') {
-      const nextLat = snappedEnd?.lat ?? row.lat;
-      const nextLon = snappedEnd?.lon ?? row.lon;
-      if (
-        row.distanceKm === totalDistanceKm &&
-        row.lat === nextLat &&
-        row.lon === nextLon
-      ) {
+      if (row.distanceKm === totalDistanceKm) {
         return row;
       }
       changed = true;
       return {
         ...row,
         distanceKm: totalDistanceKm,
-        lat: nextLat,
-        lon: nextLon,
       };
     }
 
@@ -95,21 +77,13 @@ export function projectTimelineLocationDistances(
         : null;
     const projectedDistanceKm =
       snappedWaypoint == null ? null : roundDistanceKm(snappedWaypoint.distanceM);
-    const nextLat = snappedWaypoint?.lat ?? row.lat;
-    const nextLon = snappedWaypoint?.lon ?? row.lon;
-    if (
-      row.distanceKm === projectedDistanceKm
-      && row.lat === nextLat
-      && row.lon === nextLon
-    ) {
+    if (row.distanceKm === projectedDistanceKm) {
       return row;
     }
     changed = true;
     return {
       ...row,
       distanceKm: projectedDistanceKm,
-      lat: nextLat,
-      lon: nextLon,
     };
   });
 
