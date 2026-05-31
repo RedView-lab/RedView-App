@@ -180,6 +180,7 @@ export function DashboardPlaceSearch({
       registry.set(key, {
         marker,
         signature,
+        feature,
       });
     }
   }, [map]);
@@ -234,15 +235,27 @@ export function DashboardPlaceSearch({
       abortInFlightFetch();
       const controller = new AbortController();
       poiAbortRef.current = controller;
+      const retainedFeatures = [...poiMarkerRegistryRef.current.values()]
+        .map((entry) => entry.feature)
+        .filter((feature) => categories.includes(feature.category));
+      const stickyKeys = new Set(retainedFeatures.map(getViewportPoiMarkerKey));
 
       void fetchVisibleViewportPois(map, categories, controller.signal)
         .then((features) => {
           if (controller.signal.aborted) return;
-          syncViewportPoiMarkers(selectViewportLodPois(map, features, categories));
+          const mergedFeatures = new Map<string, PoiFeature>();
+          for (const feature of retainedFeatures) {
+            mergedFeatures.set(getViewportPoiMarkerKey(feature), feature);
+          }
+          for (const feature of features) {
+            mergedFeatures.set(getViewportPoiMarkerKey(feature), feature);
+          }
+          syncViewportPoiMarkers(
+            selectViewportLodPois(map, [...mergedFeatures.values()], categories, stickyKeys),
+          );
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === 'AbortError') return;
-          clearViewportPoiMarkers();
         });
     };
 

@@ -48,6 +48,7 @@ export interface SearchCameraProfile {
 export interface ViewportPoiMarkerEntry {
   marker: Marker;
   signature: string;
+  feature: PoiFeature;
 }
 
 export interface ViewportPoiCandidate {

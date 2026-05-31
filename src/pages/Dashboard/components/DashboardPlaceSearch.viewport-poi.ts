@@ -84,6 +84,7 @@ export function selectViewportLodPois(
   map: MapboxMap,
   features: PoiFeature[],
   categories: PoiCategory[],
+  stickyKeys: ReadonlySet<string> = new Set(),
 ): PoiFeature[] {
   if (features.length === 0) return [];
 
@@ -96,7 +97,16 @@ export function selectViewportLodPois(
     const cellY = Math.floor(candidate.y / profile.cellPx);
     const key = `${cellX}:${cellY}`;
     const existing = cellBuckets.get(key);
-    if (!existing || candidate.centerDistance < existing.centerDistance) {
+    const candidateIsSticky = stickyKeys.has(getViewportPoiMarkerKey(candidate.feature));
+    const existingIsSticky = existing
+      ? stickyKeys.has(getViewportPoiMarkerKey(existing.feature))
+      : false;
+    if (
+      !existing
+      || (candidateIsSticky && !existingIsSticky)
+      || (candidateIsSticky === existingIsSticky
+        && candidate.centerDistance < existing.centerDistance)
+    ) {
       cellBuckets.set(key, candidate);
     }
   }
@@ -108,7 +118,14 @@ export function selectViewportLodPois(
     grouped.set(candidate.feature.category, list);
   }
   for (const list of grouped.values()) {
-    list.sort((left, right) => left.centerDistance - right.centerDistance);
+    list.sort((left, right) => {
+      const leftSticky = stickyKeys.has(getViewportPoiMarkerKey(left.feature));
+      const rightSticky = stickyKeys.has(getViewportPoiMarkerKey(right.feature));
+      if (leftSticky !== rightSticky) {
+        return leftSticky ? -1 : 1;
+      }
+      return left.centerDistance - right.centerDistance;
+    });
   }
 
   const activeCategories = categories.filter((category) => (grouped.get(category)?.length ?? 0) > 0);
