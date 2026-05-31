@@ -24,30 +24,30 @@ function getViewportPoiMarkerSignature(feature: PoiFeature): string {
 
 function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
   if (zoom < 6.2) {
-    return { fetchLimit: 900, targetCount: 18, cellPx: 190, maxPerCategory: 3 };
+    return { fetchLimit: 2_400, targetCount: 40, cellPx: 136, maxPerCategory: 8 };
   }
   if (zoom < 7.4) {
-    return { fetchLimit: 1_200, targetCount: 28, cellPx: 168, maxPerCategory: 4 };
+    return { fetchLimit: 2_800, targetCount: 56, cellPx: 120, maxPerCategory: 10 };
   }
   if (zoom < 8.8) {
-    return { fetchLimit: 1_600, targetCount: 42, cellPx: 142, maxPerCategory: 6 };
+    return { fetchLimit: 3_200, targetCount: 72, cellPx: 104, maxPerCategory: 12 };
   }
   if (zoom < 10.4) {
-    return { fetchLimit: 2_100, targetCount: 64, cellPx: 116, maxPerCategory: 8 };
+    return { fetchLimit: 3_800, targetCount: 96, cellPx: 90, maxPerCategory: 16 };
   }
   if (zoom < 12.2) {
-    return { fetchLimit: 2_600, targetCount: 96, cellPx: 92, maxPerCategory: 12 };
+    return { fetchLimit: 4_400, targetCount: 132, cellPx: 78, maxPerCategory: 22 };
   }
-  return { fetchLimit: 3_200, targetCount: 144, cellPx: 74, maxPerCategory: 20 };
+  return { fetchLimit: 5_200, targetCount: 180, cellPx: 64, maxPerCategory: 30 };
 }
 
 function getViewportPoiMarkerSizePx(zoom: number): number {
-  if (zoom < 6.2) return 38;
-  if (zoom < 7.4) return 36;
-  if (zoom < 8.8) return 34;
-  if (zoom < 10.4) return 32;
-  if (zoom < 12.2) return 30;
-  return 28;
+  if (zoom < 6.2) return 76;
+  if (zoom < 7.4) return 72;
+  if (zoom < 8.8) return 68;
+  if (zoom < 10.4) return 64;
+  if (zoom < 12.2) return 60;
+  return 56;
 }
 
 export function applyViewportPoiMarkerVisualState(marker: Marker, zoom: number): void {
@@ -111,19 +111,25 @@ export function selectViewportLodPois(
     list.sort((left, right) => left.centerDistance - right.centerDistance);
   }
 
+  const activeCategories = categories.filter((category) => (grouped.get(category)?.length ?? 0) > 0);
   const perCategoryCount = new Map<PoiCategory, number>();
   const selected: PoiFeature[] = [];
-  const maxIterations = profile.targetCount * Math.max(categories.length, 1);
+  const fairnessCategoryCount = Math.max(activeCategories.length, 1);
+  const effectivePerCategoryCap = Math.max(
+    profile.maxPerCategory,
+    Math.ceil(profile.targetCount / fairnessCategoryCount),
+  );
+  const maxIterations = profile.targetCount * fairnessCategoryCount;
   let iterations = 0;
 
   while (selected.length < profile.targetCount && iterations < maxIterations) {
     let progressed = false;
-    for (const category of categories) {
+    for (const category of activeCategories) {
       if (selected.length >= profile.targetCount) break;
       const bucket = grouped.get(category);
       if (!bucket || bucket.length === 0) continue;
       const used = perCategoryCount.get(category) ?? 0;
-      if (used >= profile.maxPerCategory) continue;
+      if (used >= effectivePerCategoryCap) continue;
       const next = bucket.shift();
       if (!next) continue;
       selected.push(next.feature);
@@ -135,6 +141,17 @@ export function selectViewportLodPois(
     iterations += 1;
   }
 
+  if (selected.length < profile.targetCount) {
+    const leftovers = [...grouped.values()]
+      .flat()
+      .sort((left, right) => left.centerDistance - right.centerDistance);
+
+    for (const candidate of leftovers) {
+      if (selected.length >= profile.targetCount) break;
+      selected.push(candidate.feature);
+    }
+  }
+
   return selected;
 }
 
@@ -143,8 +160,8 @@ export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElem
   element.style.display = 'inline-flex';
   element.style.alignItems = 'center';
   element.style.justifyContent = 'center';
-  element.style.width = 'var(--rv-dashboard-poi-marker-size, 30px)';
-  element.style.height = 'var(--rv-dashboard-poi-marker-size, 30px)';
+  element.style.width = 'var(--rv-dashboard-poi-marker-size, 60px)';
+  element.style.height = 'var(--rv-dashboard-poi-marker-size, 60px)';
   element.style.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.16))';
   element.style.pointerEvents = 'none';
 
