@@ -46,8 +46,8 @@ export function projectTimelineLocationDistances(
 
   const nextTimeline = timeline.map((row) => {
     if (row.kind === 'start') {
-      const nextLat = row.lat ?? snappedStart?.lat;
-      const nextLon = row.lon ?? snappedStart?.lon;
+      const nextLat = snappedStart?.lat ?? row.lat;
+      const nextLon = snappedStart?.lon ?? row.lon;
       if (
         row.distanceKm === 0 &&
         row.lat === nextLat &&
@@ -65,8 +65,8 @@ export function projectTimelineLocationDistances(
     }
 
     if (row.kind === 'end') {
-      const nextLat = row.lat ?? snappedEnd?.lat;
-      const nextLon = row.lon ?? snappedEnd?.lon;
+      const nextLat = snappedEnd?.lat ?? row.lat;
+      const nextLon = snappedEnd?.lon ?? row.lon;
       if (
         row.distanceKm === totalDistanceKm &&
         row.lat === nextLat &&
@@ -95,13 +95,21 @@ export function projectTimelineLocationDistances(
         : null;
     const projectedDistanceKm =
       snappedWaypoint == null ? null : roundDistanceKm(snappedWaypoint.distanceM);
-    if (row.distanceKm === projectedDistanceKm) {
+    const nextLat = snappedWaypoint?.lat ?? row.lat;
+    const nextLon = snappedWaypoint?.lon ?? row.lon;
+    if (
+      row.distanceKm === projectedDistanceKm
+      && row.lat === nextLat
+      && row.lon === nextLon
+    ) {
       return row;
     }
     changed = true;
     return {
       ...row,
       distanceKm: projectedDistanceKm,
+      lat: nextLat,
+      lon: nextLon,
     };
   });
 
