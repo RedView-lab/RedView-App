@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import type { BasemapRenderConfig } from '@/features/controlPanel';
+import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
+import { getPoiIconUrl } from '@/features/poi/lib/poi-icons';
+import type { PoiCategory, PoiFeature } from '@/features/poi/types';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
 import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
@@ -38,6 +41,8 @@ const SEARCH_SATELLITE_FAR_SETTLE_MS = 1500;
 const SEARCH_SATELLITE_NEAR_RESTORE_MS = 550;
 const SEARCH_SATELLITE_MEDIUM_RESTORE_MS = 700;
 const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
+const VIEWPORT_POI_MIN_ZOOM = 10.8;
+const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 120;
 
 type DashboardPoiOptionId =
   | 'drinking_water'
@@ -88,6 +93,11 @@ interface SearchCameraProfile {
   shouldStageFinalApproach: boolean;
   settleWaitMs: number;
   finalApproachDuration: number;
+}
+
+interface ViewportPoiMarkerEntry {
+  marker: mapboxgl.Marker;
+  signature: string;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -184,135 +194,88 @@ function getSearchCameraProfile(
   };
 }
 
-function PoiPinBadge({
-  color,
-  children,
-}: {
-  color: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <span className="rvd-place-search__poi-pin" aria-hidden="true">
-      <svg className="rvd-place-search__poi-pin-shape" viewBox="0 0 28 30" focusable="false">
-        <path
-          d="M8.73245 18.4551C6.0476 15.7703 6.0476 11.4172 8.73245 8.73239C11.4173 6.04754 15.7703 6.04754 18.4552 8.73239C21.14 11.4172 21.14 15.7703 18.4552 18.4551L14.0075 22.9027C13.779 23.1312 13.4086 23.1312 13.1801 22.9027L8.73245 18.4551Z"
-          fill={color}
-        />
-        <path
-          d="M8.73245 18.4551C6.0476 15.7703 6.0476 11.4172 8.73245 8.73239C11.4173 6.04754 15.7703 6.04754 18.4552 8.73239C21.14 11.4172 21.14 15.7703 18.4552 18.4551L14.0075 22.9027C13.779 23.1312 13.4086 23.1312 13.1801 22.9027L8.73245 18.4551Z"
-          fill="none"
-          stroke="#FFFFFF"
-          strokeWidth="0.9375"
-        />
-      </svg>
-      {children ? <span className="rvd-place-search__poi-pin-glyph">{children}</span> : null}
-    </span>
-  );
-}
-
-function PoiOptionGlyph({ kind }: { kind: DashboardPoiOptionId }) {
-  switch (kind) {
-    case 'drinking_water':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M7.2 1.55c0 1.08-.72 1.7-1.55 2.5-.88.86-1.7 1.67-1.7 3.03 0 1.33 1 2.37 2.3 2.37 1.33 0 2.35-1.03 2.35-2.37 0-1.07-.64-1.76-1.4-2.55-.52-.55-1-1.09-1-1.98Z" fill="currentColor" />
-          <path d="M3.2 3.5c0 .73-.46 1.18-.96 1.67-.52.5-.99.96-.99 1.72 0 .78.57 1.38 1.32 1.38" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'toilets':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <text x="6" y="8.05" textAnchor="middle" fontSize="5.25" fontWeight="700" fill="currentColor">WC</text>
-        </svg>
-      );
-    case 'supermarket':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2 2.5h1.2l.7 3.35h4.36l1-2.55H4.28" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="4.8" cy="8.95" r="0.75" fill="currentColor" />
-          <circle cx="8.2" cy="8.95" r="0.75" fill="currentColor" />
-        </svg>
-      );
-    case 'bakery':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.1 7.45c0-1.6 1.54-2.85 3.9-2.85 2.25 0 3.9 1.1 3.9 2.85 0 1.06-.72 2.05-1.92 2.05H4.03c-1.22 0-1.93-.97-1.93-2.05Z" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
-          <path d="M4.6 5.05c.2.35.15.67-.18.96M6.15 4.8c.2.34.14.66-.18.95M7.7 5.05c.2.35.15.67-.18.96" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" />
-        </svg>
-      );
-    case 'fuel':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M3.2 2.1h3.2v7.35H3.2Zm3.2 1.15h1.35c.56 0 1 .45 1 1V9.4" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M4.15 3.2h1.3" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" />
-        </svg>
-      );
-    case 'bar':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.4 2.4h7.2L6.95 5.6v1.7h1.2M5.75 7.3h1.2" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'cafe':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.75 4.2h4v2.35c0 1-.8 1.8-1.8 1.8H4.55c-1 0-1.8-.8-1.8-1.8Z" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinejoin="round" />
-          <path d="M6.75 4.75h1.1c.48 0 .87.4.87.88 0 .49-.39.88-.87.88h-.6M3 9h4.7" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'restaurant':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M3.1 2.2v3.15M4.35 2.2v3.15M3.1 3.85h1.25M3.72 5.35v3.95M7.45 2.2v2.55c0 .8.65 1.45 1.45 1.45V10" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'convenience':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.1 5h7.8M2.55 4.95l.72-1.78h5.46l.72 1.78M3.1 5v2.55c0 .7.58 1.28 1.28 1.28h3.24c.7 0 1.28-.58 1.28-1.28V5" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M4.7 6.15h2.6" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" />
-        </svg>
-      );
-    case 'hotel':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.35 8.9V3.3h2.1v2.05h3.1V3.95h2.1V8.9M1.9 8.9h8.2M3.45 4.35h.01" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'alpine_hut':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <path d="M2.2 5.6 6 2.7l3.8 2.9v3.7H2.2Z" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinejoin="round" />
-          <path d="M5.1 9.3V6.95h1.8V9.3" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'bicycle':
-      return (
-        <svg className="rvd-place-search__poi-glyph" viewBox="0 0 12 12" focusable="false">
-          <circle cx="3.15" cy="8.2" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.05" />
-          <circle cx="8.85" cy="8.2" r="1.6" fill="none" stroke="currentColor" strokeWidth="1.05" />
-          <path d="M4.7 3.05h1.55l1.05 2.15H5.55l1.65 3M4.7 3.05 3.9 5.2m2.35 0h2.35M7.3 5.2l.9-1.45" fill="none" stroke="currentColor" strokeWidth="1.05" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      );
-  }
-
-  return null;
-}
-
 function SearchIcon() {
   return <SvgV2Icon name="search-sm.svg" size={20} />;
 }
 
 function PoiOptionMarker({ option }: { option: DashboardPoiOption }) {
   return (
-    <PoiPinBadge color={option.color}>
-      <PoiOptionGlyph kind={option.id} />
-    </PoiPinBadge>
+    <img
+      className="rvd-place-search__poi-option-marker-image"
+      src={getPoiIconUrl(option.id as PoiCategory)}
+      alt=""
+      draggable="false"
+    />
   );
 }
 
 function PoiTriggerIcon() {
-  return <PoiPinBadge color="#000000" />;
+  return <SvgV2Icon name="poi-pin.svg" size={20} />;
+}
+
+function getViewportPoiMarkerKey(feature: PoiFeature): string {
+  return `${feature.category}:${feature.id}`;
+}
+
+function getViewportPoiMarkerSignature(feature: PoiFeature): string {
+  return [feature.category, feature.id, feature.lat, feature.lon].join('|');
+}
+
+function getViewportPoiResultLimit(zoom: number): number {
+  if (zoom < 11.8) return 300;
+  if (zoom < 12.7) return 650;
+  if (zoom < 13.7) return 1_100;
+  return 1_600;
+}
+
+function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
+  const element = document.createElement('div');
+  element.style.display = 'inline-flex';
+  element.style.alignItems = 'center';
+  element.style.justifyContent = 'center';
+  element.style.width = '24px';
+  element.style.height = '24px';
+  element.style.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.16))';
+  element.style.pointerEvents = 'none';
+
+  const image = document.createElement('img');
+  image.src = getPoiIconUrl(feature.category);
+  image.alt = '';
+  image.draggable = false;
+  image.decoding = 'async';
+  image.style.display = 'block';
+  image.style.width = '24px';
+  image.style.height = '24px';
+
+  element.appendChild(image);
+  return element;
+}
+
+async function fetchVisibleViewportPois(
+  map: MapboxMap,
+  categories: PoiCategory[],
+  signal: AbortSignal,
+): Promise<PoiFeature[]> {
+  const bounds = map.getBounds();
+  const south = bounds.getSouth();
+  const north = bounds.getNorth();
+  const west = bounds.getWest();
+  const east = bounds.getEast();
+  const limit = getViewportPoiResultLimit(map.getZoom());
+
+  if (west <= east) {
+    return fetchPoisInBbox(south, west, north, east, categories, signal, limit);
+  }
+
+  const [left, right] = await Promise.all([
+    fetchPoisInBbox(south, west, north, 180, categories, signal, limit),
+    fetchPoisInBbox(south, -180, north, east, categories, signal, limit),
+  ]);
+  const deduped = new Map<string, PoiFeature>();
+  for (const feature of [...left, ...right]) {
+    deduped.set(getViewportPoiMarkerKey(feature), feature);
+  }
+  return [...deduped.values()];
 }
 
 export function DashboardPlaceSearch({
@@ -330,10 +293,13 @@ export function DashboardPlaceSearch({
   const flightTimerRef = useRef<number | null>(null);
   const settleTokenRef = useRef(0);
   const pendingMoveEndRef = useRef<(() => void) | null>(null);
+  const poiFetchTimerRef = useRef<number | null>(null);
+  const poiAbortRef = useRef<AbortController | null>(null);
+  const poiMarkerRegistryRef = useRef<Map<string, ViewportPoiMarkerEntry>>(new Map());
   const [poiMenuOpen, setPoiMenuOpen] = useState(false);
   const [poiMenuMounted, setPoiMenuMounted] = useState(false);
   const [selectedPoiIds, setSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
-    () => new Set(DASHBOARD_POI_OPTIONS.map(({ id }) => id)),
+    () => new Set(),
   );
 
   const handleClosePoiMenu = useCallback(() => {
@@ -409,6 +375,103 @@ export function DashboardPlaceSearch({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [handleClosePoiMenu, poiMenuOpen]);
+
+  const clearViewportPoiMarkers = useCallback(() => {
+    for (const { marker } of poiMarkerRegistryRef.current.values()) {
+      marker.remove();
+    }
+    poiMarkerRegistryRef.current.clear();
+  }, []);
+
+  const syncViewportPoiMarkers = useCallback((features: PoiFeature[]) => {
+    if (!map) return;
+
+    const registry = poiMarkerRegistryRef.current;
+    const nextKeys = new Set(features.map(getViewportPoiMarkerKey));
+
+    for (const [key, entry] of registry) {
+      if (nextKeys.has(key)) continue;
+      entry.marker.remove();
+      registry.delete(key);
+    }
+
+    for (const feature of features) {
+      const key = getViewportPoiMarkerKey(feature);
+      const signature = getViewportPoiMarkerSignature(feature);
+      const existing = registry.get(key);
+      if (existing && existing.signature === signature) continue;
+
+      existing?.marker.remove();
+      registry.set(key, {
+        marker: new mapboxgl.Marker({
+          element: createViewportPoiMarkerElement(feature),
+          anchor: 'center',
+          pitchAlignment: 'viewport',
+          rotationAlignment: 'viewport',
+          occludedOpacity: 0.85,
+        }).setLngLat([feature.lon, feature.lat]).addTo(map),
+        signature,
+      });
+    }
+  }, [map]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const categories = [...selectedPoiIds] as PoiCategory[];
+
+    const clearScheduledRefresh = () => {
+      if (poiFetchTimerRef.current != null) {
+        window.clearTimeout(poiFetchTimerRef.current);
+        poiFetchTimerRef.current = null;
+      }
+    };
+
+    const abortInFlightFetch = () => {
+      poiAbortRef.current?.abort();
+      poiAbortRef.current = null;
+    };
+
+    const refreshViewportPois = () => {
+      if (categories.length === 0 || map.getZoom() < VIEWPORT_POI_MIN_ZOOM) {
+        abortInFlightFetch();
+        clearViewportPoiMarkers();
+        return;
+      }
+
+      abortInFlightFetch();
+      const controller = new AbortController();
+      poiAbortRef.current = controller;
+
+      void fetchVisibleViewportPois(map, categories, controller.signal)
+        .then((features) => {
+          if (controller.signal.aborted) return;
+          syncViewportPoiMarkers(features);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          clearViewportPoiMarkers();
+        });
+    };
+
+    const scheduleViewportRefresh = () => {
+      clearScheduledRefresh();
+      poiFetchTimerRef.current = window.setTimeout(() => {
+        poiFetchTimerRef.current = null;
+        refreshViewportPois();
+      }, VIEWPORT_POI_FETCH_DEBOUNCE_MS);
+    };
+
+    scheduleViewportRefresh();
+    map.on('moveend', scheduleViewportRefresh);
+
+    return () => {
+      map.off('moveend', scheduleViewportRefresh);
+      clearScheduledRefresh();
+      abortInFlightFetch();
+      clearViewportPoiMarkers();
+    };
+  }, [clearViewportPoiMarkers, map, selectedPoiIds, syncViewportPoiMarkers]);
 
   const handlePick = useCallback(
     (suggestion: GeocodeSuggestion) => {

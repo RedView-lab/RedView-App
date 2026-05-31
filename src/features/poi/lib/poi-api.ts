@@ -52,6 +52,7 @@ export async function fetchPoisInBbox(
   east: number,
   categories: PoiCategory[],
   signal?: AbortSignal,
+  limit?: number,
 ): Promise<PoiFeature[]> {
   if (categories.length === 0) return [];
 
@@ -63,6 +64,9 @@ export async function fetchPoisInBbox(
     categories: categories.join(','),
     op: 'bbox',
   });
+  if (Number.isFinite(limit) && (limit ?? 0) > 0) {
+    params.set('limit', String(Math.round(limit as number)));
+  }
 
   const res = await fetchWithTimeout(
     `${ENDPOINT}?${params.toString()}`,
