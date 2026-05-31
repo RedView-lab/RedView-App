@@ -13,6 +13,7 @@ import { MapPoiDraftCard, type MapPoiDraft, type MapPoiDraftActionPayload } from
 import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
 import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
+import { resolvePanelPlacement } from './panelPlacement';
 
 function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null {
   const elevation = map.queryTerrainElevation?.([lng, lat]);
@@ -33,6 +34,7 @@ function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null
 function createPoiDraft(
   payload: MapContextMenuActionPayload,
   map: MapboxMap | null,
+  placement: ReturnType<typeof resolvePanelPlacement>,
 ): MapPoiDraft {
   return {
     id: `map-poi-draft-${Date.now()}`,
@@ -44,6 +46,7 @@ function createPoiDraft(
     slopePct: map ? sampleSlopePct(map, payload.point.lng, payload.point.lat) : null,
     surfaceLabel: payload.point.surfaceLabel,
     roadTypeLabel: payload.point.categoryLabel,
+    placement,
   };
 }
 
@@ -95,7 +98,16 @@ export default memo(function MapView({
   const handleMapContextMenuAction = useCallback((payload: MapContextMenuActionPayload) => {
     onMapContextMenuAction?.(payload);
     if (payload.action !== 'create-poi') return;
-    setPoiDraft(createPoiDraft(payload, map.current));
+    const containerRect = containerRef.current?.getBoundingClientRect();
+    const anchorX = containerRect ? payload.screenPoint.x - containerRect.left : payload.screenPoint.x;
+    const anchorY = containerRect ? payload.screenPoint.y - containerRect.top : payload.screenPoint.y;
+    const placement = resolvePanelPlacement(
+      anchorX,
+      anchorY,
+      containerRect?.width ?? window.innerWidth,
+      containerRect?.height ?? window.innerHeight,
+    );
+    setPoiDraft(createPoiDraft(payload, map.current, placement));
   }, [map, onMapContextMenuAction]);
 
   const handlePoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
@@ -111,24 +123,6 @@ export default memo(function MapView({
     onAction?: (payload: MapContextMenuActionPayload) => void;
     overlayContext?: MapContextMenuOverlayContext;
   }) => React.ReactNode;
-
-  useEffect(() => {
-    const currentMap = isLoaded ? map.current : null;
-    if (!currentMap || !poiDraft) return;
-
-    const closeDraft = () => setPoiDraft(null);
-    currentMap.on('movestart', closeDraft);
-    currentMap.on('dragstart', closeDraft);
-    currentMap.on('pitchstart', closeDraft);
-    currentMap.on('rotatestart', closeDraft);
-
-    return () => {
-      currentMap.off('movestart', closeDraft);
-      currentMap.off('dragstart', closeDraft);
-      currentMap.off('pitchstart', closeDraft);
-      currentMap.off('rotatestart', closeDraft);
-    };
-  }, [isLoaded, map, poiDraft]);
 
   return (
     // width/height: 100% (not 100vw/100dvh) so the map fills its parent
@@ -151,6 +145,7 @@ export default memo(function MapView({
       {poiDraft ? (
         <MapPoiDraftCard
           draft={poiDraft}
+          map={isLoaded ? map.current : null}
           containerRef={containerRef}
           onDraftChange={setPoiDraft}
           onAction={handlePoiDraftAction}

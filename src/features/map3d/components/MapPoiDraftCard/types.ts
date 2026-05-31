@@ -1,5 +1,6 @@
 import type { PoiCategory } from '@/features/poi/types';
 import type { MapContextMenuPoint } from '../MapContextMenu';
+import type { PanelPlacement } from '../panelPlacement';
 
 export interface MapPoiDraft {
   id: string;
@@ -14,6 +15,7 @@ export interface MapPoiDraft {
   slopePct: number | null;
   surfaceLabel: string | null;
   roadTypeLabel: string | null;
+  placement: PanelPlacement;
 }
 
 export type MapPoiDraftActionId =

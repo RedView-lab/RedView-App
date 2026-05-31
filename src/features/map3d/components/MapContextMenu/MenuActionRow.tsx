@@ -30,6 +30,7 @@ export function MenuActionRow({ label, icon, onClick }: MenuActionRowProps) {
         cursor: 'pointer',
         textAlign: 'left',
         color: '#ffffff',
+        pointerEvents: 'auto',
       }}
     >
       {icon}

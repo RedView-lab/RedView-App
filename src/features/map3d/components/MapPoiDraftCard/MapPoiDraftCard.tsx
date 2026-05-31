@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { POI_CATEGORIES, POI_LABELS, type PoiCategory } from '@/features/poi/types';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
@@ -17,19 +18,17 @@ import {
 } from '../MapContextMenu/icons';
 import { copyTextToClipboard } from '../MapContextMenu/utils';
 import type { MapPoiDraft, MapPoiDraftActionPayload } from './types';
+import { computePanelPosition } from '../panelPlacement';
 
 const CARD_WIDTH = 200;
 const EDGE_PADDING = 8;
 
 interface MapPoiDraftCardProps {
   draft: MapPoiDraft;
+  map: MapboxMap | null;
   containerRef: RefObject<HTMLDivElement | null>;
   onDraftChange: (nextDraft: MapPoiDraft) => void;
   onAction: (payload: MapPoiDraftActionPayload) => void;
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
 }
 
 function ActionRow({
@@ -66,6 +65,7 @@ function ActionRow({
         cursor: 'pointer',
         color: '#ffffff',
         textAlign: 'left',
+        pointerEvents: 'auto',
       }}
     >
       {icon}
@@ -108,6 +108,7 @@ function DeleteGlyph() {
 
 export function MapPoiDraftCard({
   draft,
+  map,
   containerRef,
   onDraftChange,
   onAction,
@@ -126,29 +127,58 @@ export function MapPoiDraftCard({
     }));
   }, []);
 
-  useLayoutEffect(() => {
+  const syncCardPosition = useCallback(() => {
     if (!cardRef.current || !containerRef.current) return;
+
     const cardRect = cardRef.current.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
-    const rawLeft = draft.screenPoint.x - containerRect.left;
-    const rawTop = draft.screenPoint.y - containerRect.top;
+    const projectedPoint = map
+      ? map.project([draft.point.lng, draft.point.lat])
+      : {
+          x: draft.screenPoint.x - containerRect.left,
+          y: draft.screenPoint.y - containerRect.top,
+        };
 
-    setPosition({
-      left: clamp(
-        rawLeft,
-        EDGE_PADDING,
-        Math.max(EDGE_PADDING, containerRect.width - cardRect.width - EDGE_PADDING),
-      ),
-      top: clamp(
-        rawTop,
-        EDGE_PADDING,
-        Math.max(EDGE_PADDING, containerRect.height - cardRect.height - EDGE_PADDING),
-      ),
-    });
-  }, [containerRef, draft, categoryOpen]);
+    const nextPosition = computePanelPosition(
+      projectedPoint.x,
+      projectedPoint.y,
+      cardRect.width,
+      cardRect.height,
+      containerRect.width,
+      containerRect.height,
+      EDGE_PADDING,
+      draft.placement,
+    );
+
+    setPosition((current) => (
+      current.left === nextPosition.left && current.top === nextPosition.top
+        ? current
+        : nextPosition
+    ));
+  }, [containerRef, draft, map]);
+
+  useLayoutEffect(() => {
+    syncCardPosition();
+  }, [categoryOpen, syncCardPosition]);
 
   useEffect(() => {
-    const handlePointerDown = (event: MouseEvent) => {
+    if (!map) return;
+
+    const handleMove = () => {
+      syncCardPosition();
+    };
+
+    map.on('move', handleMove);
+    map.on('resize', handleMove);
+
+    return () => {
+      map.off('move', handleMove);
+      map.off('resize', handleMove);
+    };
+  }, [map, syncCardPosition]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (cardRef.current?.contains(target)) return;
       onAction({ action: 'close', draft });
@@ -160,10 +190,10 @@ export function MapPoiDraftCard({
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleKeyDown);
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('click', handleClick);
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [draft, onAction]);
@@ -207,7 +237,6 @@ export function MapPoiDraftCard({
   return (
     <div
       ref={cardRef}
-      onMouseDown={(event) => event.stopPropagation()}
       style={{
         position: 'absolute',
         top: position.top,
@@ -226,6 +255,7 @@ export function MapPoiDraftCard({
         boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
         color: '#ffffff',
         fontFamily: 'Rethink Sans, system-ui, -apple-system, Segoe UI, sans-serif',
+        pointerEvents: 'none',
       }}
     >
       <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="rgba(15, 15, 15, 0.74)" />
@@ -247,6 +277,7 @@ export function MapPoiDraftCard({
             background: 'transparent',
             color: draft.favorite ? '#ffffff' : 'rgba(255,255,255,0.64)',
             cursor: 'pointer',
+            pointerEvents: 'auto',
           }}
         >
           <SvgV2Icon name="star-01.svg" size={16} />
@@ -284,6 +315,7 @@ export function MapPoiDraftCard({
             background: 'transparent',
             color: 'rgba(255,255,255,0.96)',
             cursor: 'pointer',
+            pointerEvents: 'auto',
           }}
         >
           <GlobeGlyph />
@@ -347,6 +379,7 @@ export function MapPoiDraftCard({
               color: metadataColor,
               cursor: 'pointer',
               flex: '0 0 auto',
+              pointerEvents: 'auto',
             }}
           >
             <CopyButtonIcon copied={copied} />
@@ -440,6 +473,7 @@ export function MapPoiDraftCard({
               background: 'rgba(255,255,255,0.02)',
               color: '#ffffff',
               cursor: 'pointer',
+              pointerEvents: 'auto',
             }}
           >
             <span
@@ -476,6 +510,7 @@ export function MapPoiDraftCard({
                 border: '1px solid rgba(255,255,255,0.08)',
                 background: 'rgba(10, 10, 12, 0.92)',
                 boxShadow: '0 8px 24px rgba(0,0,0,0.28)',
+                pointerEvents: 'auto',
               }}
             >
               {categoryOptions.map((option) => {

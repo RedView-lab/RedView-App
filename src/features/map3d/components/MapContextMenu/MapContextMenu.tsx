@@ -8,6 +8,7 @@ import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
 import { MenuActionRow } from './MenuActionRow';
+import { computePanelPosition, resolvePanelPlacement, type PanelPlacement } from '../panelPlacement';
 import {
   ClockGlyph,
   CopyButtonIcon,
@@ -30,7 +31,7 @@ import type {
   MapContextMenuOverlayDetail,
   MapContextMenuPoint,
 } from './types';
-import { clamp, copyTextToClipboard, formatCoordinates } from './utils';
+import { copyTextToClipboard, formatCoordinates } from './utils';
 
 const MENU_EDGE_PADDING = 8;
 const RIGHT_CLICK_MOVE_TOLERANCE_PX = 8;
@@ -194,10 +195,9 @@ interface MapContextMenuProps {
 }
 
 interface MenuState {
-  left: number;
-  top: number;
   screenX: number;
   screenY: number;
+  placement: PanelPlacement;
   point: MapContextMenuPoint;
 }
 
@@ -432,6 +432,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
   const pendingRightClickRef = useRef<PendingRightClickState | null>(null);
   const [menuState, setMenuState] = useState<MenuState | null>(null);
   const [copied, setCopied] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ left: MENU_EDGE_PADDING, top: MENU_EDGE_PADDING });
 
   const closeMenu = useCallback(() => {
     setMenuState(null);
@@ -512,14 +513,14 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
       const rect = container.getBoundingClientRect();
       const elevation = map.queryTerrainElevation?.([lng, lat]);
       const pointContext = resolvePointContext(map, event.point);
+      const placement = resolvePanelPlacement(event.point.x, event.point.y, rect.width, rect.height);
 
       setCopied(false);
       pending.consumed = true;
       setMenuState({
-        left: event.originalEvent.clientX - rect.left,
-        top: event.originalEvent.clientY - rect.top,
         screenX: event.originalEvent.clientX,
         screenY: event.originalEvent.clientY,
+        placement,
         point: {
           lng,
           lat,
@@ -540,10 +541,6 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
     canvas.addEventListener('mouseup', handleMouseUp);
     canvas.addEventListener('mouseleave', resetPendingRightClick);
     map.on('contextmenu', handleContextMenu);
-    map.on('movestart', closeMenu);
-    map.on('dragstart', closeMenu);
-    map.on('pitchstart', closeMenu);
-    map.on('rotatestart', closeMenu);
     map.on('movestart', markPendingRightClickAsMoved);
     map.on('dragstart', markPendingRightClickAsMoved);
     map.on('pitchstart', markPendingRightClickAsMoved);
@@ -555,41 +552,62 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
       canvas.removeEventListener('mouseup', handleMouseUp);
       canvas.removeEventListener('mouseleave', resetPendingRightClick);
       map.off('contextmenu', handleContextMenu);
-      map.off('movestart', closeMenu);
-      map.off('dragstart', closeMenu);
-      map.off('pitchstart', closeMenu);
-      map.off('rotatestart', closeMenu);
       map.off('movestart', markPendingRightClickAsMoved);
       map.off('dragstart', markPendingRightClickAsMoved);
       map.off('pitchstart', markPendingRightClickAsMoved);
       map.off('rotatestart', markPendingRightClickAsMoved);
     };
-  }, [closeMenu, containerRef, map]);
+  }, [containerRef, map]);
 
-  useLayoutEffect(() => {
+  const syncMenuPosition = useCallback(() => {
     if (!menuState || !menuRef.current || !containerRef.current) return;
 
     const menuRect = menuRef.current.getBoundingClientRect();
     const containerRect = containerRef.current.getBoundingClientRect();
-    const nextLeft = clamp(
-      menuState.left,
+    const projectedPoint = map
+      ? map.project([menuState.point.lng, menuState.point.lat])
+      : {
+          x: menuState.screenX - containerRect.left,
+          y: menuState.screenY - containerRect.top,
+        };
+
+    const nextPosition = computePanelPosition(
+      projectedPoint.x,
+      projectedPoint.y,
+      menuRect.width,
+      menuRect.height,
+      containerRect.width,
+      containerRect.height,
       MENU_EDGE_PADDING,
-      Math.max(MENU_EDGE_PADDING, containerRect.width - menuRect.width - MENU_EDGE_PADDING),
-    );
-    const nextTop = clamp(
-      menuState.top,
-      MENU_EDGE_PADDING,
-      Math.max(MENU_EDGE_PADDING, containerRect.height - menuRect.height - MENU_EDGE_PADDING),
+      menuState.placement,
     );
 
-    if (nextLeft !== menuState.left || nextTop !== menuState.top) {
-      setMenuState((current) => {
-        if (!current) return current;
-        if (current.left === nextLeft && current.top === nextTop) return current;
-        return { ...current, left: nextLeft, top: nextTop };
-      });
-    }
-  }, [containerRef, menuState]);
+    setMenuPosition((current) => (
+      current.left === nextPosition.left && current.top === nextPosition.top
+        ? current
+        : nextPosition
+    ));
+  }, [containerRef, map, menuState]);
+
+  useLayoutEffect(() => {
+    syncMenuPosition();
+  }, [syncMenuPosition]);
+
+  useEffect(() => {
+    if (!map || !menuState) return;
+
+    const handleMove = () => {
+      syncMenuPosition();
+    };
+
+    map.on('move', handleMove);
+    map.on('resize', handleMove);
+
+    return () => {
+      map.off('move', handleMove);
+      map.off('resize', handleMove);
+    };
+  }, [map, menuState, syncMenuPosition]);
 
   const activePoint = menuState?.point ?? null;
 
@@ -634,7 +652,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
   useEffect(() => {
     if (!menuState) return;
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handleClick = (event: MouseEvent) => {
       const target = event.target as Node;
       if (menuRef.current?.contains(target)) return;
       closeMenu();
@@ -646,13 +664,13 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
 
     const handleWindowChange = () => closeMenu();
 
-    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('click', handleClick);
     document.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleWindowChange);
     window.addEventListener('blur', handleWindowChange);
 
     return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('click', handleClick);
       document.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleWindowChange);
       window.removeEventListener('blur', handleWindowChange);
@@ -726,12 +744,10 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
       ref={menuRef}
       role="menu"
       aria-label={t('Menu contextuel de la carte')}
-      onMouseDown={(event) => event.stopPropagation()}
-      onContextMenu={(event) => event.preventDefault()}
       style={{
         position: 'absolute',
-        top: menuState.top,
-        left: menuState.left,
+        top: menuPosition.top,
+        left: menuPosition.left,
         zIndex: 34,
         width: MENU_WIDTH,
         display: 'flex',
@@ -746,6 +762,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         boxShadow: '0 12px 36px rgba(0,0,0,0.38)',
         color: '#ffffff',
         fontFamily: 'Rethink Sans, system-ui, -apple-system, Segoe UI, sans-serif',
+        pointerEvents: 'none',
       }}
     >
       <MapCanvasGlassBackdrop blur={60} saturate={1.6} tint="rgba(15, 15, 15, 0.74)" />
@@ -799,6 +816,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
             color: 'rgba(255,255,255,0.92)',
             cursor: 'pointer',
             flex: '0 0 auto',
+            pointerEvents: 'auto',
           }}
         >
           <GlobeGlyph />
@@ -859,6 +877,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
               background: 'transparent',
               color: metadataColor,
               cursor: 'pointer',
+              pointerEvents: 'auto',
             }}
           >
             <CopyButtonIcon copied={copied} />
