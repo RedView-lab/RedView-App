@@ -403,7 +403,7 @@ function OverlayDetailRow({ detail }: { detail: MapContextMenuOverlayDetail }) {
       : <WindGlyph />;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24, color: 'rgba(255,255,255,0.64)' }}>
       {icon}
       <span
         style={{
@@ -415,7 +415,7 @@ function OverlayDetailRow({ detail }: { detail: MapContextMenuOverlayDetail }) {
           fontWeight: 500,
           fontStyle: 'italic',
           lineHeight: '16px',
-          color: '#ffffff',
+          color: 'currentColor',
         }}
       >
         {detail.label}
@@ -709,6 +709,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
 
   const titleLabel = menuState?.point.title?.trim() || t('Point sélectionné');
   const categoryLabel = menuState?.point.categoryLabel?.trim() || t('Position');
+  const metadataColor = 'rgba(255,255,255,0.64)';
 
   const handleOpenStreetView = useCallback(() => {
     if (!menuState) return;
@@ -738,7 +739,6 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         gap: 4,
         padding: 6,
         overflow: 'hidden',
-        border: '1px solid rgba(255,255,255,0.08)',
         borderTopLeftRadius: 8,
         borderTopRightRadius: 8,
         borderBottomRightRadius: 8,
@@ -818,7 +818,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
-              color: '#ffffff',
+              color: metadataColor,
             }}
           >
             {categoryLabel}
@@ -835,7 +835,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
               fontWeight: 500,
               fontStyle: 'italic',
               lineHeight: '16px',
-              color: '#ffffff',
+              color: metadataColor,
             }}
           >
             {menuState.point.coordinatesLabel}
@@ -857,7 +857,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
               padding: 0,
               border: 'none',
               background: 'transparent',
-              color: 'rgba(255,255,255,0.92)',
+              color: metadataColor,
               cursor: 'pointer',
             }}
           >
@@ -867,7 +867,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24 }}>
           {slopeLabel ? (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, color: metadataColor }}>
               <SlopeGlyph />
               <span
                 style={{
@@ -875,7 +875,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
                   fontWeight: 500,
                   fontStyle: 'italic',
                   lineHeight: '16px',
-                  color: '#ffffff',
+                  color: 'currentColor',
                 }}
               >
                 {slopeLabel}
@@ -883,7 +883,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
             </div>
           ) : null}
 
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, color: metadataColor }}>
             <ElevationGlyph />
             <span
               style={{
@@ -891,7 +891,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
-                color: '#ffffff',
+                color: 'currentColor',
               }}
             >
               {elevationLabel}
@@ -911,7 +911,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
                   fontWeight: 500,
                   fontStyle: 'italic',
                   lineHeight: '16px',
-                  color: '#ffffff',
+                  color: metadataColor,
                 }}
               >
                 {menuState.point.surfaceLabel}
@@ -921,7 +921,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         </div>
 
         {menuState.point.openingHoursLabel ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minHeight: 24, color: metadataColor }}>
             <ClockGlyph />
             <span
               style={{
@@ -933,7 +933,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
                 fontWeight: 500,
                 fontStyle: 'italic',
                 lineHeight: '16px',
-                color: '#ffffff',
+                color: 'currentColor',
               }}
             >
               {menuState.point.openingHoursLabel}

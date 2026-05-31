@@ -46,11 +46,11 @@ export function CopyButtonIcon({ copied }: { copied: boolean }) {
 }
 
 export function ElevationGlyph() {
-  return <RightClickImageIcon src="altitude.svg" width={12} height={10} />;
+  return <RightClickImageIcon src="altitude.svg" width={10} height={8} frame={10} opacity={0.64} />;
 }
 
 export function SlopeGlyph() {
-  return <RightClickImageIcon src="slope.svg" width={16} height={16} />;
+  return <RightClickImageIcon src="slope.svg" width={16} height={16} opacity={0.64} />;
 }
 
 export function GlobeGlyph() {
