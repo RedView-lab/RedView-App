@@ -610,11 +610,14 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
   }, [map, menuState, syncMenuPosition]);
 
   const activePoint = menuState?.point ?? null;
+  const activePointLat = activePoint?.lat ?? null;
+  const activePointLng = activePoint?.lng ?? null;
 
   useEffect(() => {
-    if (!activePoint || !overlayContext) return;
+    if (activePointLat == null || activePointLng == null || !overlayContext) return;
 
-    const { lat, lng } = activePoint;
+    const lat = activePointLat;
+    const lng = activePointLng;
 
     const controller = new AbortController();
     overlayAbortRef.current?.abort();
@@ -647,7 +650,7 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
         overlayAbortRef.current = null;
       }
     };
-  }, [activePoint, overlayContext]);
+  }, [activePointLat, activePointLng, overlayContext]);
 
   useEffect(() => {
     if (!menuState) return;
