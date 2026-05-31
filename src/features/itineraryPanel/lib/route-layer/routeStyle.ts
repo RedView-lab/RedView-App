@@ -295,7 +295,7 @@ function resolveSurfaceFillColor(surface: Surface, fallbackColor: string): strin
   return fallbackColor;
 }
 
-function resolveSurfaceBorderColor(surface: Surface, fallbackColor: string): string {
+function resolveSurfaceBorderColor(surface: Surface): string {
   if (surface === 'tarmac') return ROUTE_TARMAC_BORDER_COLOR;
   if (surface === 'offroad') return ROUTE_TRANSPARENT_COLOR;
   return ROUTE_TRANSPARENT_COLOR;
@@ -392,7 +392,7 @@ function buildSurfaceRouteRenderSpec(
   );
   const borderPaint = buildSurfaceRouteStepExpression(
     points,
-    (surface) => resolveSurfaceBorderColor(surface, fallbackColor),
+    resolveSurfaceBorderColor,
     ROUTE_TRANSPARENT_COLOR,
   );
   const overlayPaint = hasOffroadSurface(points)
