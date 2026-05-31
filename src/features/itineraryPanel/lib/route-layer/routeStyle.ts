@@ -212,6 +212,12 @@ function buildUniformRouteGradientPaint(color: string): unknown[] {
   return ['interpolate', ['linear'], ['line-progress'], 0, color, 1, color];
 }
 
+interface SurfaceStepExpression {
+  expression: unknown[];
+  defaultColor: string;
+  hasTransitions: boolean;
+}
+
 function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Surface {
   return end.surface ?? start.surface ?? 'unknown';
 }
@@ -226,22 +232,33 @@ function buildRoutePointDistances(points: readonly RouteLayerPoint[]): number[] 
   return distances;
 }
 
-function buildSurfaceRouteStepPaint(
+function buildSurfaceRouteStepExpression(
   points: readonly RouteLayerPoint[],
   resolveColor: (surface: Surface) => string,
   fallbackColor: string,
-): unknown[] {
-  if (points.length < 2) return buildUniformRouteGradientPaint(fallbackColor);
+): SurfaceStepExpression {
+  if (points.length < 2) {
+    return {
+      expression: ['step', ['line-progress'], fallbackColor, 1, fallbackColor],
+      defaultColor: fallbackColor,
+      hasTransitions: false,
+    };
+  }
 
   const distances = buildRoutePointDistances(points);
   const totalDistanceM = distances[distances.length - 1] ?? 0;
   if (!(totalDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) {
-    return buildUniformRouteGradientPaint(fallbackColor);
+    return {
+      expression: ['step', ['line-progress'], fallbackColor, 1, fallbackColor],
+      defaultColor: fallbackColor,
+      hasTransitions: false,
+    };
   }
 
   const currentColor = resolveColor(resolveSegmentSurface(points[0], points[1]));
   const expr: unknown[] = ['step', ['line-progress'], currentColor];
   let lastColor = currentColor;
+  let hasTransitions = false;
 
   for (let index = 2; index < points.length; index += 1) {
     const nextColor = resolveColor(resolveSegmentSurface(points[index - 1], points[index]));
@@ -250,15 +267,27 @@ function buildSurfaceRouteStepPaint(
     const progress = Math.max(0, Math.min(1, distances[index - 1]! / totalDistanceM));
     expr.push(progress, nextColor);
     lastColor = nextColor;
+    hasTransitions = true;
   }
 
-  return expr;
+  return {
+    expression: hasTransitions ? expr : ['step', ['line-progress'], currentColor, 1, currentColor],
+    defaultColor: currentColor,
+    hasTransitions,
+  };
 }
 
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
   for (let index = 1; index < points.length; index += 1) {
     const surface = resolveSegmentSurface(points[index - 1], points[index]);
     if (surface === 'tarmac' || surface === 'offroad') return true;
+  }
+  return false;
+}
+
+function hasOffroadSurface(points: readonly RouteLayerPoint[]): boolean {
+  for (let index = 1; index < points.length; index += 1) {
+    if (resolveSegmentSurface(points[index - 1], points[index]) === 'offroad') return true;
   }
   return false;
 }
@@ -359,27 +388,37 @@ function buildSurfaceRouteRenderSpec(
   fallbackColor: string,
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
+  const fillPaint = buildSurfaceRouteStepExpression(
+    points,
+    (surface) => resolveSurfaceFillColor(surface, fallbackColor),
+    fallbackColor,
+  );
+  const borderPaint = buildSurfaceRouteStepExpression(
+    points,
+    resolveSurfaceBorderColor,
+    ROUTE_TRANSPARENT_COLOR,
+  );
+  const overlayPaint = hasOffroadSurface(points)
+    ? buildSurfaceRouteStepExpression(
+        points,
+        resolveSurfaceOverlayColor,
+        ROUTE_TRANSPARENT_COLOR,
+      )
+    : null;
+
   return {
     data: buildDefaultRouteGeoJson(points),
     lineColorPaint: fallbackColor,
-    lineGradientPaint: buildSurfaceRouteStepPaint(
-      points,
-      (surface) => resolveSurfaceFillColor(surface, fallbackColor),
-      fallbackColor,
-    ),
-    lineBorderColorPaint: buildSurfaceRouteStepPaint(
-      points,
-      resolveSurfaceBorderColor,
-      ROUTE_TRANSPARENT_COLOR,
-    ),
+    lineGradientPaint: fillPaint.hasTransitions
+      ? fillPaint.expression
+      : buildUniformRouteGradientPaint(fillPaint.defaultColor),
+    lineBorderColorPaint: borderPaint.hasTransitions ? borderPaint.expression : borderPaint.defaultColor,
     lineBorderWidthPx: tarmacBorderWidthPx(traceWidthPx),
-    overlayColorPaint: buildSurfaceRouteStepPaint(
-      points,
-      resolveSurfaceOverlayColor,
-      ROUTE_TRANSPARENT_COLOR,
-    ),
-    overlayWidthPx: offroadOverlayWidthPx(traceWidthPx),
-    overlayDasharray: ROUTE_OFFROAD_DASHARRAY,
+    overlayColorPaint: overlayPaint
+      ? (overlayPaint.hasTransitions ? overlayPaint.expression : overlayPaint.defaultColor)
+      : null,
+    overlayWidthPx: overlayPaint ? offroadOverlayWidthPx(traceWidthPx) : 0,
+    overlayDasharray: overlayPaint ? ROUTE_OFFROAD_DASHARRAY : null,
     requiresLineMetrics: true,
   };
 }
