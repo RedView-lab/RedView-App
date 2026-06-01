@@ -29,7 +29,7 @@ export interface RouteLayerOptions {
 }
 
 export interface RouteLayerRenderSpec {
-  data: GeoJSON.Feature<GeoJSON.LineString>;
+  data: GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString>;
   lineColorPaint: string;
   lineGradientPaint: unknown[] | null;
   lineBorderColorPaint: string | unknown[];
@@ -209,69 +209,8 @@ function buildUniformRouteGradientPaint(color: string): unknown[] {
   return ['interpolate', ['linear'], ['line-progress'], 0, color, 1, color];
 }
 
-interface SurfaceStepExpression {
-  expression: unknown[];
-  defaultColor: string;
-  hasTransitions: boolean;
-}
-
 function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Surface {
   return end.surface ?? start.surface ?? 'unknown';
-}
-
-function buildRoutePointDistances(points: readonly RouteLayerPoint[]): number[] {
-  if (points.length === 0) return [];
-
-  const distances = new Array<number>(points.length).fill(0);
-  for (let index = 1; index < points.length; index += 1) {
-    distances[index] = distances[index - 1] + resolveSegmentDistanceM(points[index - 1], points[index]);
-  }
-  return distances;
-}
-
-function buildSurfaceRouteStepExpression(
-  points: readonly RouteLayerPoint[],
-  resolveColor: (surface: Surface) => string,
-  fallbackColor: string,
-): SurfaceStepExpression {
-  if (points.length < 2) {
-    return {
-      expression: ['step', ['line-progress'], fallbackColor, 1, fallbackColor],
-      defaultColor: fallbackColor,
-      hasTransitions: false,
-    };
-  }
-
-  const distances = buildRoutePointDistances(points);
-  const totalDistanceM = distances[distances.length - 1] ?? 0;
-  if (!(totalDistanceM > ROUTE_MIN_SEGMENT_DISTANCE_M)) {
-    return {
-      expression: ['step', ['line-progress'], fallbackColor, 1, fallbackColor],
-      defaultColor: fallbackColor,
-      hasTransitions: false,
-    };
-  }
-
-  const currentColor = resolveColor(resolveSegmentSurface(points[0], points[1]));
-  const expr: unknown[] = ['step', ['line-progress'], currentColor];
-  let lastColor = currentColor;
-  let hasTransitions = false;
-
-  for (let index = 2; index < points.length; index += 1) {
-    const nextColor = resolveColor(resolveSegmentSurface(points[index - 1], points[index]));
-    if (nextColor === lastColor) continue;
-
-    const progress = Math.max(0, Math.min(1, distances[index - 1]! / totalDistanceM));
-    expr.push(progress, nextColor);
-    lastColor = nextColor;
-    hasTransitions = true;
-  }
-
-  return {
-    expression: hasTransitions ? expr : ['step', ['line-progress'], currentColor, 1, currentColor],
-    defaultColor: currentColor,
-    hasTransitions,
-  };
 }
 
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
@@ -303,6 +242,73 @@ function resolveSurfaceBorderColor(surface: Surface): string {
 
 function resolveSurfaceOverlayColor(surface: Surface): string {
   return surface === 'offroad' ? ROUTE_OFFROAD_OVERLAY_COLOR : ROUTE_TRANSPARENT_COLOR;
+}
+
+interface SurfaceRouteFeatureProperties {
+  borderColor: string;
+  overlayColor: string;
+}
+
+function surfaceFeaturePropertiesEqual(
+  left: SurfaceRouteFeatureProperties,
+  right: SurfaceRouteFeatureProperties,
+): boolean {
+  return left.borderColor === right.borderColor && left.overlayColor === right.overlayColor;
+}
+
+function buildSurfaceRouteFeature(
+  points: readonly RouteLayerPoint[],
+  startIndex: number,
+  endIndex: number,
+  properties: SurfaceRouteFeatureProperties,
+): GeoJSON.Feature<GeoJSON.LineString> {
+  return {
+    type: 'Feature',
+    properties,
+    geometry: {
+      type: 'LineString',
+      coordinates: points
+        .slice(startIndex, endIndex + 1)
+        .map((point) => [point.lon, point.lat] as [number, number]),
+    },
+  };
+}
+
+function buildSurfaceRouteGeoJson(
+  points: readonly RouteLayerPoint[],
+): GeoJSON.FeatureCollection<GeoJSON.LineString> {
+  if (points.length < 2) {
+    return {
+      type: 'FeatureCollection',
+      features: [],
+    };
+  }
+
+  const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
+  let runStartIndex = 0;
+  let runProperties: SurfaceRouteFeatureProperties = {
+    borderColor: resolveSurfaceBorderColor(resolveSegmentSurface(points[0], points[1])),
+    overlayColor: resolveSurfaceOverlayColor(resolveSegmentSurface(points[0], points[1])),
+  };
+
+  for (let index = 2; index < points.length; index += 1) {
+    const surface = resolveSegmentSurface(points[index - 1], points[index]);
+    const nextProperties: SurfaceRouteFeatureProperties = {
+      borderColor: resolveSurfaceBorderColor(surface),
+      overlayColor: resolveSurfaceOverlayColor(surface),
+    };
+    if (surfaceFeaturePropertiesEqual(runProperties, nextProperties)) continue;
+
+    features.push(buildSurfaceRouteFeature(points, runStartIndex, index - 1, runProperties));
+    runStartIndex = index - 1;
+    runProperties = nextProperties;
+  }
+
+  features.push(buildSurfaceRouteFeature(points, runStartIndex, points.length - 1, runProperties));
+  return {
+    type: 'FeatureCollection',
+    features,
+  };
 }
 
 function buildSlopeRouteGradientPaint(
@@ -385,38 +391,18 @@ function buildSurfaceRouteRenderSpec(
   fallbackColor: string,
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
-  const fillPaint = buildSurfaceRouteStepExpression(
-    points,
-    (surface) => resolveSurfaceFillColor(surface, fallbackColor),
-    fallbackColor,
-  );
-  const borderPaint = buildSurfaceRouteStepExpression(
-    points,
-    resolveSurfaceBorderColor,
-    ROUTE_TRANSPARENT_COLOR,
-  );
-  const overlayPaint = hasOffroadSurface(points)
-    ? buildSurfaceRouteStepExpression(
-        points,
-        resolveSurfaceOverlayColor,
-        ROUTE_TRANSPARENT_COLOR,
-      )
-    : null;
-
   return {
-    data: buildDefaultRouteGeoJson(points),
-    lineColorPaint: fallbackColor,
-    lineGradientPaint: fillPaint.hasTransitions
-      ? fillPaint.expression
-      : buildUniformRouteGradientPaint(fillPaint.defaultColor),
-    lineBorderColorPaint: borderPaint.hasTransitions ? borderPaint.expression : borderPaint.defaultColor,
+    data: buildSurfaceRouteGeoJson(points),
+    lineColorPaint: resolveSurfaceFillColor('unknown', fallbackColor),
+    lineGradientPaint: null,
+    lineBorderColorPaint: ['coalesce', ['get', 'borderColor'], ROUTE_TRANSPARENT_COLOR],
     lineBorderWidthPx: tarmacBorderWidthPx(traceWidthPx),
-    overlayColorPaint: overlayPaint
-      ? (overlayPaint.hasTransitions ? overlayPaint.expression : overlayPaint.defaultColor)
+    overlayColorPaint: hasOffroadSurface(points)
+      ? ['coalesce', ['get', 'overlayColor'], ROUTE_TRANSPARENT_COLOR]
       : null,
-    overlayWidthPx: overlayPaint ? offroadOverlayWidthPx(traceWidthPx) : 0,
-    overlayDasharray: overlayPaint ? ROUTE_OFFROAD_DASHARRAY : null,
-    requiresLineMetrics: true,
+    overlayWidthPx: hasOffroadSurface(points) ? offroadOverlayWidthPx(traceWidthPx) : 0,
+    overlayDasharray: hasOffroadSurface(points) ? ROUTE_OFFROAD_DASHARRAY : null,
+    requiresLineMetrics: false,
   };
 }
 

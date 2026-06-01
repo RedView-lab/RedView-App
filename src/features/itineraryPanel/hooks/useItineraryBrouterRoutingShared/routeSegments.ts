@@ -195,7 +195,10 @@ function sameOptionalFiniteNumber(
 
 function sameRoutePoint(left: RoutePoint | undefined, right: RoutePoint | undefined): boolean {
   if (!left || !right) return false;
-  return Math.abs(left.lat - right.lat) < 1e-6 && Math.abs(left.lon - right.lon) < 1e-6;
+  if (Math.abs(left.lat - right.lat) >= 1e-6 || Math.abs(left.lon - right.lon) >= 1e-6) {
+    return false;
+  }
+  return (left.surface ?? 'unknown') === (right.surface ?? 'unknown');
 }
 
 function getRoutePointDistances(points: RoutePoints): number[] {
