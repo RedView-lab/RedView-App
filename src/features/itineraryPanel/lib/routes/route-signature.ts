@@ -4,6 +4,7 @@ export interface RouteSignaturePoint {
   distanceM?: number | null;
   elevationM?: number | null;
   gradientPct?: number | null;
+  surface?: string | null;
 }
 
 const FNV_OFFSET = 0x811c9dc5;
@@ -37,6 +38,7 @@ export function buildRouteContentSignature(
     mix(quantizeOptional(point.distanceM, 10));
     mix(quantizeOptional(point.elevationM, 10));
     mix(quantizeOptional(point.gradientPct, 100));
+    mix(hashString(point.surface ?? 'unknown'));
   }
 
   const signature = `${points.length}:${hash.toString(36)}`;
@@ -50,4 +52,13 @@ function quantize(value: number, scale: number): number {
 
 function quantizeOptional(value: number | null | undefined, scale: number): number {
   return Number.isFinite(value) ? quantize(value as number, scale) : 0x7fffffff;
+}
+
+function hashString(value: string): number {
+  let hash = FNV_OFFSET;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, FNV_PRIME) >>> 0;
+  }
+  return hash;
 }

@@ -129,8 +129,11 @@ export function upsertRouteLayer(
     || routeLayerUsesLineGradient(map, casingId)
     || inferMountedRouteUsesLineGradient(map, lineId) === true;
   const mountedRegistryRequiresLineMetrics = lineMetricsRegistry.get(itineraryId);
+  const mountedSourceLineMetricsMismatch = renderSpec.requiresLineMetrics
+    ? mountedSourceRequiresLineMetrics !== true
+    : mountedSourceRequiresLineMetrics === true;
   const shouldRecreateSource = existing && (
-    (mountedSourceRequiresLineMetrics != null && mountedSourceRequiresLineMetrics !== renderSpec.requiresLineMetrics)
+    mountedSourceLineMetricsMismatch
     || (mountedRegistryRequiresLineMetrics != null && mountedRegistryRequiresLineMetrics !== renderSpec.requiresLineMetrics)
     || (mountedLayerUsesLineProgress && !renderSpec.requiresLineMetrics)
   );
