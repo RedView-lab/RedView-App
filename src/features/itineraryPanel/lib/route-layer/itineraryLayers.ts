@@ -50,6 +50,14 @@ function getMountedSourceRequiresLineMetrics(map: MapboxMap, sourceId: string): 
   }
 }
 
+function routeLayerUsesLineGradient(map: MapboxMap, layerId: string): boolean {
+  try {
+    return Boolean(map.getLayer(layerId) && map.getPaintProperty(layerId, 'line-gradient') != null);
+  } catch {
+    return false;
+  }
+}
+
 function setPaintPropertyIfChanged(
   map: MapboxMap,
   layerId: string,
@@ -115,11 +123,19 @@ export function upsertRouteLayer(
   const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
-  const mountedRequiresLineMetrics = lineMetricsRegistry.get(itineraryId)
-    ?? getMountedSourceRequiresLineMetrics(map, srcId)
-    ?? inferMountedRouteUsesLineGradient(map, lineId);
+  const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
+  const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)
+    || routeLayerUsesLineGradient(map, glowId)
+    || routeLayerUsesLineGradient(map, casingId)
+    || inferMountedRouteUsesLineGradient(map, lineId) === true;
+  const mountedRegistryRequiresLineMetrics = lineMetricsRegistry.get(itineraryId);
+  const shouldRecreateSource = existing && (
+    (mountedSourceRequiresLineMetrics != null && mountedSourceRequiresLineMetrics !== renderSpec.requiresLineMetrics)
+    || (mountedRegistryRequiresLineMetrics != null && mountedRegistryRequiresLineMetrics !== renderSpec.requiresLineMetrics)
+    || (mountedLayerUsesLineProgress && !renderSpec.requiresLineMetrics)
+  );
 
-  if (existing && mountedRequiresLineMetrics != null && mountedRequiresLineMetrics !== renderSpec.requiresLineMetrics) {
+  if (shouldRecreateSource) {
     try {
       if (map.getLayer(casingId)) map.removeLayer(casingId);
       if (map.getLayer(lineId)) map.removeLayer(lineId);
