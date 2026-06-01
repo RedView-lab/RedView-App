@@ -1,6 +1,7 @@
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 export const SOURCE_PREFIX = 'brouter-route-source-';
+export const CASING_PREFIX = 'brouter-route-casing-';
 export const GLOW_PREFIX = 'brouter-route-glow-';
 export const LINE_PREFIX = 'brouter-route-line-';
 
@@ -44,6 +45,7 @@ export function ids(itineraryId: string) {
   const safe = sanitizeId(itineraryId);
   return {
     source: `${SOURCE_PREFIX}${safe}`,
+    casing: `${CASING_PREFIX}${safe}`,
     glow: `${GLOW_PREFIX}${safe}`,
     line: `${LINE_PREFIX}${safe}`,
   };

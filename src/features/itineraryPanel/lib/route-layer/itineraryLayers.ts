@@ -1,6 +1,7 @@
 import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 
 import {
+  CASING_PREFIX,
   GLOW_PREFIX,
   LINE_PREFIX,
   SOURCE_PREFIX,
@@ -37,6 +38,15 @@ function hasRasterLayerAbove(map: MapboxMap, layerId: string): boolean {
     return layers.slice(index + 1).some((layer) => layer.type === 'raster');
   } catch {
     return false;
+  }
+}
+
+function getMountedSourceRequiresLineMetrics(map: MapboxMap, sourceId: string): boolean | null {
+  try {
+    const source = map.getStyle()?.sources?.[sourceId] as { lineMetrics?: boolean } | undefined;
+    return typeof source?.lineMetrics === 'boolean' ? source.lineMetrics : null;
+  } catch {
+    return null;
   }
 }
 
@@ -97,7 +107,7 @@ export function upsertRouteLayer(
   points: RouteLayerPoint[],
   opts: RouteLayerOptions,
 ): void {
-  const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
+  const { source: srcId, casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
@@ -106,10 +116,12 @@ export function upsertRouteLayer(
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
   const mountedRequiresLineMetrics = lineMetricsRegistry.get(itineraryId)
+    ?? getMountedSourceRequiresLineMetrics(map, srcId)
     ?? inferMountedRouteUsesLineGradient(map, lineId);
 
   if (existing && mountedRequiresLineMetrics != null && mountedRequiresLineMetrics !== renderSpec.requiresLineMetrics) {
     try {
+      if (map.getLayer(casingId)) map.removeLayer(casingId);
       if (map.getLayer(lineId)) map.removeLayer(lineId);
       if (map.getLayer(glowId)) map.removeLayer(glowId);
       if (map.getSource(srcId)) map.removeSource(srcId);
@@ -127,6 +139,7 @@ export function upsertRouteLayer(
       /* noop */
     }
     try {
+      if (map.getLayer(casingId)) map.removeLayer(casingId);
       if (map.getLayer(glowId)) map.removeLayer(glowId);
     } catch {
       /* noop */
@@ -138,6 +151,29 @@ export function upsertRouteLayer(
       lineMetrics: renderSpec.requiresLineMetrics,
       data: renderSpec.data,
     });
+    if (renderSpec.casingColorPaint && renderSpec.casingFilter && renderSpec.casingWidthPx > traceWidthPx) {
+      map.addLayer({
+        id: casingId,
+        type: 'line',
+        source: srcId,
+        slot: 'top',
+        filter: renderSpec.casingFilter as never,
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+          'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
+          'line-z-offset': ROUTE_LINE_Z_OFFSET,
+          visibility,
+        },
+        paint: {
+          'line-color': renderSpec.casingColorPaint as never,
+          'line-width': renderSpec.casingWidthPx,
+          'line-opacity': opacity,
+          'line-emissive-strength': 1,
+          'line-occlusion-opacity': 0,
+        },
+      });
+    }
     map.addLayer({
       id: lineId,
       type: 'line',
@@ -167,6 +203,7 @@ export function upsertRouteLayer(
         type: 'line',
         source: srcId,
         slot: 'top',
+        filter: renderSpec.overlayFilter as never,
         layout: {
           'line-cap': 'butt',
           'line-join': 'round',
@@ -203,6 +240,43 @@ export function upsertRouteLayer(
       setPaintPropertyIfChanged(map, lineId, 'line-border-width', renderSpec.lineBorderWidthPx);
       setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
     }
+    if (renderSpec.casingColorPaint && renderSpec.casingFilter && renderSpec.casingWidthPx > traceWidthPx) {
+      if (!map.getLayer(casingId)) {
+        map.addLayer({
+          id: casingId,
+          type: 'line',
+          source: srcId,
+          slot: 'top',
+          filter: renderSpec.casingFilter as never,
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+            'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
+            'line-z-offset': ROUTE_LINE_Z_OFFSET,
+            visibility,
+          },
+          paint: {
+            'line-color': renderSpec.casingColorPaint as never,
+            'line-width': renderSpec.casingWidthPx,
+            'line-opacity': opacity,
+            'line-emissive-strength': 1,
+            'line-occlusion-opacity': 0,
+          },
+        }, lineId);
+      } else {
+        map.setPaintProperty(casingId, 'line-color', renderSpec.casingColorPaint as never);
+        setPaintPropertyIfChanged(map, casingId, 'line-width', renderSpec.casingWidthPx);
+        setPaintPropertyIfChanged(map, casingId, 'line-opacity', opacity);
+        setLayoutPropertyIfChanged(map, casingId, 'line-cap', 'round');
+        setLayoutPropertyIfChanged(map, casingId, 'line-join', 'round');
+        setLayoutPropertyIfChanged(map, casingId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
+        setLayoutPropertyIfChanged(map, casingId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
+        setLayoutPropertyIfChanged(map, casingId, 'visibility', visibility);
+        map.setFilter(casingId, renderSpec.casingFilter as never);
+      }
+    } else if (map.getLayer(casingId)) {
+      map.removeLayer(casingId);
+    }
     if (renderSpec.overlayColorPaint && renderSpec.overlayWidthPx > 0) {
       if (!map.getLayer(glowId)) {
         map.addLayer({
@@ -210,6 +284,7 @@ export function upsertRouteLayer(
           type: 'line',
           source: srcId,
           slot: 'top',
+          filter: renderSpec.overlayFilter as never,
           layout: {
             'line-cap': 'butt',
             'line-join': 'round',
@@ -236,6 +311,9 @@ export function upsertRouteLayer(
         setLayoutPropertyIfChanged(map, glowId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
         setLayoutPropertyIfChanged(map, glowId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
         setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
+        if (renderSpec.overlayFilter) {
+          map.setFilter(glowId, renderSpec.overlayFilter as never);
+        }
       }
     } else if (map.getLayer(glowId)) {
       map.removeLayer(glowId);
@@ -248,9 +326,10 @@ export function upsertRouteLayer(
 }
 
 export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
-  const { glow: glowId, line: lineId } = ids(itineraryId);
+  const { casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
   try {
     if (!hasRasterLayerAbove(map, lineId)) return;
+    if (map.getLayer(casingId)) map.moveLayer(casingId);
     if (map.getLayer(lineId)) map.moveLayer(lineId);
     if (map.getLayer(glowId)) map.moveLayer(glowId);
   } catch {
@@ -259,8 +338,9 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
 }
 
 export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
-  const { source: srcId, glow: glowId, line: lineId } = ids(itineraryId);
+  const { source: srcId, casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
   try {
+    if (map.getLayer(casingId)) map.removeLayer(casingId);
     if (map.getLayer(lineId)) map.removeLayer(lineId);
     if (map.getLayer(glowId)) map.removeLayer(glowId);
     if (map.getSource(srcId)) map.removeSource(srcId);
@@ -275,9 +355,10 @@ export function setRouteLayerVisibility(
   itineraryId: string,
   visible: boolean,
 ): void {
-  const { glow: glowId, line: lineId } = ids(itineraryId);
+  const { casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
   const visibility = visible ? 'visible' : 'none';
   try {
+    if (map.getLayer(casingId)) map.setLayoutProperty(casingId, 'visibility', visibility);
     if (map.getLayer(glowId)) map.setLayoutProperty(glowId, 'visibility', visibility);
     if (map.getLayer(lineId)) map.setLayoutProperty(lineId, 'visibility', visibility);
   } catch {
@@ -293,9 +374,11 @@ export function removeAllRouteLayers(map: MapboxMap): void {
     for (const key of Object.keys(style.sources)) {
       if (!key.startsWith(SOURCE_PREFIX)) continue;
       const safe = key.slice(SOURCE_PREFIX.length);
+      const casingId = `${CASING_PREFIX}${safe}`;
       const glowId = `${GLOW_PREFIX}${safe}`;
       const lineId = `${LINE_PREFIX}${safe}`;
       try {
+        if (map.getLayer(casingId)) map.removeLayer(casingId);
         if (map.getLayer(lineId)) map.removeLayer(lineId);
         if (map.getLayer(glowId)) map.removeLayer(glowId);
         if (map.getSource(key)) map.removeSource(key);

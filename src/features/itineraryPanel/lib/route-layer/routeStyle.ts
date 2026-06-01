@@ -34,9 +34,13 @@ export interface RouteLayerRenderSpec {
   lineGradientPaint: unknown[] | null;
   lineBorderColorPaint: string | unknown[];
   lineBorderWidthPx: number;
+  casingColorPaint: string | null;
+  casingWidthPx: number;
+  casingFilter: unknown[] | null;
   overlayColorPaint: string | unknown[] | null;
   overlayWidthPx: number;
   overlayDasharray: number[] | null;
+  overlayFilter: unknown[] | null;
   requiresLineMetrics: boolean;
 }
 
@@ -245,15 +249,14 @@ function resolveSurfaceOverlayColor(surface: Surface): string {
 }
 
 interface SurfaceRouteFeatureProperties {
-  borderColor: string;
-  overlayColor: string;
+  surface: Surface;
 }
 
 function surfaceFeaturePropertiesEqual(
   left: SurfaceRouteFeatureProperties,
   right: SurfaceRouteFeatureProperties,
 ): boolean {
-  return left.borderColor === right.borderColor && left.overlayColor === right.overlayColor;
+  return left.surface === right.surface;
 }
 
 function buildSurfaceRouteFeature(
@@ -287,15 +290,13 @@ function buildSurfaceRouteGeoJson(
   const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
   let runStartIndex = 0;
   let runProperties: SurfaceRouteFeatureProperties = {
-    borderColor: resolveSurfaceBorderColor(resolveSegmentSurface(points[0], points[1])),
-    overlayColor: resolveSurfaceOverlayColor(resolveSegmentSurface(points[0], points[1])),
+    surface: resolveSegmentSurface(points[0], points[1]),
   };
 
   for (let index = 2; index < points.length; index += 1) {
     const surface = resolveSegmentSurface(points[index - 1], points[index]);
     const nextProperties: SurfaceRouteFeatureProperties = {
-      borderColor: resolveSurfaceBorderColor(surface),
-      overlayColor: resolveSurfaceOverlayColor(surface),
+      surface,
     };
     if (surfaceFeaturePropertiesEqual(runProperties, nextProperties)) continue;
 
@@ -379,9 +380,13 @@ function buildSlopeRouteRenderSpec(
     lineGradientPaint: buildSlopeRouteGradientPaint(samples, bands, fallbackColor),
     lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
     lineBorderWidthPx: 0,
+    casingColorPaint: null,
+    casingWidthPx: 0,
+    casingFilter: null,
     overlayColorPaint: null,
     overlayWidthPx: 0,
     overlayDasharray: null,
+    overlayFilter: null,
     requiresLineMetrics: true,
   };
 }
@@ -391,17 +396,21 @@ function buildSurfaceRouteRenderSpec(
   fallbackColor: string,
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
+  const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
+  const offroadPresent = hasOffroadSurface(points);
   return {
     data: buildSurfaceRouteGeoJson(points),
     lineColorPaint: resolveSurfaceFillColor('unknown', fallbackColor),
     lineGradientPaint: null,
-    lineBorderColorPaint: ['coalesce', ['get', 'borderColor'], ROUTE_TRANSPARENT_COLOR],
-    lineBorderWidthPx: tarmacBorderWidthPx(traceWidthPx),
-    overlayColorPaint: hasOffroadSurface(points)
-      ? ['coalesce', ['get', 'overlayColor'], ROUTE_TRANSPARENT_COLOR]
-      : null,
-    overlayWidthPx: hasOffroadSurface(points) ? offroadOverlayWidthPx(traceWidthPx) : 0,
-    overlayDasharray: hasOffroadSurface(points) ? ROUTE_OFFROAD_DASHARRAY : null,
+    lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
+    lineBorderWidthPx: 0,
+    casingColorPaint: resolveSurfaceBorderColor('tarmac'),
+    casingWidthPx: traceWidthPx + (borderWidthPx * 2),
+    casingFilter: ['==', ['get', 'surface'], 'tarmac'],
+    overlayColorPaint: offroadPresent ? resolveSurfaceOverlayColor('offroad') : null,
+    overlayWidthPx: offroadPresent ? offroadOverlayWidthPx(traceWidthPx) : 0,
+    overlayDasharray: offroadPresent ? ROUTE_OFFROAD_DASHARRAY : null,
+    overlayFilter: offroadPresent ? ['==', ['get', 'surface'], 'offroad'] : null,
     requiresLineMetrics: false,
   };
 }
@@ -423,9 +432,13 @@ export function buildRouteGeoJson(
     lineGradientPaint: null,
     lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
     lineBorderWidthPx: 0,
+    casingColorPaint: null,
+    casingWidthPx: 0,
+    casingFilter: null,
     overlayColorPaint: null,
     overlayWidthPx: 0,
     overlayDasharray: null,
+    overlayFilter: null,
     requiresLineMetrics: false,
   };
 }
