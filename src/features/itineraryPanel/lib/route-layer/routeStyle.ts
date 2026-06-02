@@ -30,11 +30,11 @@ export interface RouteLayerOptions {
 
 export interface RouteLayerRenderSpec {
   data: GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString>;
-  lineColorPaint: string;
+  lineColorPaint: string | unknown[];
   lineGradientPaint: unknown[] | null;
   lineBorderColorPaint: string | unknown[];
   lineBorderWidthPx: number;
-  casingColorPaint: string | null;
+  casingColorPaint: string | unknown[] | null;
   casingWidthPx: number;
   casingFilter: unknown[] | null;
   overlayColorPaint: string | unknown[] | null;
@@ -250,6 +250,25 @@ function resolveSurfaceOverlayColor(surface: Surface): string {
 
 interface SurfaceRouteFeatureProperties {
   surface: Surface;
+  lineColor: string;
+  casingColor: string;
+  overlayColor: string;
+}
+
+function buildSurfaceRouteFeatureProperties(
+  surface: Surface,
+  fallbackColor: string,
+): SurfaceRouteFeatureProperties {
+  return {
+    surface,
+    lineColor: resolveSurfaceFillColor(surface, fallbackColor),
+    casingColor: resolveSurfaceBorderColor(surface),
+    overlayColor: resolveSurfaceOverlayColor(surface),
+  };
+}
+
+function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor' | 'overlayColor', fallbackColor: string): unknown[] {
+  return ['coalesce', ['get', property], fallbackColor];
 }
 
 function surfaceFeaturePropertiesEqual(
@@ -279,6 +298,7 @@ function buildSurfaceRouteFeature(
 
 function buildSurfaceRouteGeoJson(
   points: readonly RouteLayerPoint[],
+  fallbackColor: string,
 ): GeoJSON.FeatureCollection<GeoJSON.LineString> {
   if (points.length < 2) {
     return {
@@ -289,15 +309,16 @@ function buildSurfaceRouteGeoJson(
 
   const features: GeoJSON.Feature<GeoJSON.LineString>[] = [];
   let runStartIndex = 0;
-  let runProperties: SurfaceRouteFeatureProperties = {
-    surface: resolveSegmentSurface(points[0], points[1]),
-  };
+  let runProperties = buildSurfaceRouteFeatureProperties(
+    resolveSegmentSurface(points[0], points[1]),
+    fallbackColor,
+  );
 
   for (let index = 2; index < points.length; index += 1) {
-    const surface = resolveSegmentSurface(points[index - 1], points[index]);
-    const nextProperties: SurfaceRouteFeatureProperties = {
-      surface,
-    };
+    const nextProperties = buildSurfaceRouteFeatureProperties(
+      resolveSegmentSurface(points[index - 1], points[index]),
+      fallbackColor,
+    );
     if (surfaceFeaturePropertiesEqual(runProperties, nextProperties)) continue;
 
     features.push(buildSurfaceRouteFeature(points, runStartIndex, index - 1, runProperties));
@@ -399,15 +420,17 @@ function buildSurfaceRouteRenderSpec(
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
   const offroadPresent = hasOffroadSurface(points);
   return {
-    data: buildSurfaceRouteGeoJson(points),
-    lineColorPaint: resolveSurfaceFillColor('unknown', fallbackColor),
+    data: buildSurfaceRouteGeoJson(points, fallbackColor),
+    lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
     lineGradientPaint: null,
     lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
     lineBorderWidthPx: 0,
-    casingColorPaint: resolveSurfaceBorderColor('tarmac'),
+    casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
     casingFilter: ['==', ['get', 'surface'], 'tarmac'],
-    overlayColorPaint: offroadPresent ? resolveSurfaceOverlayColor('offroad') : null,
+    overlayColorPaint: offroadPresent
+      ? buildSurfaceColorExpression('overlayColor', ROUTE_TRANSPARENT_COLOR)
+      : null,
     overlayWidthPx: offroadPresent ? offroadOverlayWidthPx(traceWidthPx) : 0,
     overlayDasharray: offroadPresent ? ROUTE_OFFROAD_DASHARRAY : null,
     overlayFilter: offroadPresent ? ['==', ['get', 'surface'], 'offroad'] : null,
