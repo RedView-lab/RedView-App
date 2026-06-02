@@ -38,6 +38,11 @@ export interface RouteLayerRenderSpec {
   casingColorPaint: string | unknown[] | null;
   casingWidthPx: number;
   casingFilter: unknown[] | null;
+  accentColorPaint: string | unknown[] | null;
+  accentWidthPx: number;
+  accentDasharray: number[] | null;
+  accentFilter: unknown[] | null;
+  accentCap: 'butt' | 'round';
   overlayColorPaint: string | unknown[] | null;
   overlayWidthPx: number;
   overlayDasharray: number[] | null;
@@ -53,17 +58,18 @@ export interface RouteLayerRenderSpec {
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
-const ROUTE_PAVED_FILL_COLOR = '#232323';
-const ROUTE_PAVED_CASING_COLOR = '#ffffff';
-const ROUTE_DIRT_FILL_COLOR = '#ffffff';
-const ROUTE_DIRT_CASING_COLOR = '#232323';
-const ROUTE_DIRT_PATTERN_COLOR = '#000000';
-const ROUTE_DIRT_DASHARRAY = [0.85, 1.55];
-const ROUTE_SAND_FILL_COLOR = '#ffffff';
-const ROUTE_SAND_CASING_COLOR = '#232323';
-const ROUTE_SAND_PATTERN_COLOR = '#000000';
-const ROUTE_SAND_DASHARRAY = [0.01, 1.9];
+const ROUTE_PAVED_DASHARRAY = [1.35, 0.7];
+const ROUTE_GRAVEL_DASHARRAY = [0.95, 0.95];
+const ROUTE_DIRT_DASHARRAY = [0.42, 1.1];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
+
+interface RgbColor {
+  red: number;
+  green: number;
+  blue: number;
+}
+
+type StyledSurface = 'paved' | 'gravel' | 'dirt' | 'unknown';
 
 export function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(8, Math.min(20, Math.round(value ?? 8)));
@@ -85,12 +91,65 @@ function tarmacBorderWidthPx(traceWidthPx: number): number {
   return Math.max(1.25, Math.min(3.25, traceWidthPx * 0.22));
 }
 
-function dirtPatternWidthPx(traceWidthPx: number): number {
-  return Math.max(1.8, Math.min(4, traceWidthPx * 0.34));
+function pavedPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(2.8, Math.min(6, traceWidthPx * 0.7));
 }
 
-function sandPatternWidthPx(traceWidthPx: number): number {
-  return Math.max(1.6, Math.min(3.4, traceWidthPx * 0.3));
+function gravelPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(2.1, Math.min(4.4, traceWidthPx * 0.42));
+}
+
+function dirtPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(1.7, Math.min(3.4, traceWidthPx * 0.28));
+}
+
+function clampByte(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function parseHexColor(color: string): RgbColor | null {
+  const normalized = color.trim();
+  if (/^#[0-9a-f]{3}$/i.test(normalized)) {
+    return {
+      red: Number.parseInt(normalized[1] + normalized[1], 16),
+      green: Number.parseInt(normalized[2] + normalized[2], 16),
+      blue: Number.parseInt(normalized[3] + normalized[3], 16),
+    };
+  }
+  if (/^#[0-9a-f]{6}$/i.test(normalized)) {
+    return {
+      red: Number.parseInt(normalized.slice(1, 3), 16),
+      green: Number.parseInt(normalized.slice(3, 5), 16),
+      blue: Number.parseInt(normalized.slice(5, 7), 16),
+    };
+  }
+  return null;
+}
+
+function formatRgbColor(color: RgbColor): string {
+  const toHex = (value: number) => clampByte(value).toString(16).padStart(2, '0');
+  return `#${toHex(color.red)}${toHex(color.green)}${toHex(color.blue)}`;
+}
+
+function mixRgbColors(base: RgbColor, target: RgbColor, amount: number): RgbColor {
+  const t = Math.max(0, Math.min(1, amount));
+  return {
+    red: clampByte(base.red + ((target.red - base.red) * t)),
+    green: clampByte(base.green + ((target.green - base.green) * t)),
+    blue: clampByte(base.blue + ((target.blue - base.blue) * t)),
+  };
+}
+
+function tintUserColor(color: string, amount: number): string {
+  const parsed = parseHexColor(color);
+  if (!parsed) return color;
+  return formatRgbColor(mixRgbColors(parsed, { red: 255, green: 255, blue: 255 }, amount));
+}
+
+function shadeUserColor(color: string, amount: number): string {
+  const parsed = parseHexColor(color);
+  if (!parsed) return color;
+  return formatRgbColor(mixRgbColors(parsed, { red: 0, green: 0, blue: 0 }, amount));
 }
 
 function clampSlopeDeg(value: number): number {
@@ -231,41 +290,54 @@ function buildUniformRouteGradientPaint(color: string): unknown[] {
   return ['interpolate', ['linear'], ['line-progress'], 0, color, 1, color];
 }
 
+function normalizeSurfaceForStyle(surface: Surface): StyledSurface {
+  if (surface === 'sand') return 'dirt';
+  if (surface === 'paved' || surface === 'gravel' || surface === 'dirt') return surface;
+  return 'unknown';
+}
+
 function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Surface {
   return end.surface ?? start.surface ?? 'unknown';
 }
 
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
   for (let index = 1; index < points.length; index += 1) {
-    const surface = resolveSegmentSurface(points[index - 1], points[index]);
+    const surface = normalizeSurfaceForStyle(resolveSegmentSurface(points[index - 1], points[index]));
     if (isStyledSurface(surface)) return true;
   }
   return false;
 }
 
-function hasSurface(points: readonly RouteLayerPoint[], targetSurface: Surface): boolean {
+function hasSurface(points: readonly RouteLayerPoint[], targetSurface: StyledSurface): boolean {
   for (let index = 1; index < points.length; index += 1) {
-    if (resolveSegmentSurface(points[index - 1], points[index]) === targetSurface) return true;
+    if (normalizeSurfaceForStyle(resolveSegmentSurface(points[index - 1], points[index])) === targetSurface) return true;
   }
   return false;
 }
 
-function resolveSurfaceFillColor(surface: Surface, fallbackColor: string): string {
-  if (surface === 'paved') return ROUTE_PAVED_FILL_COLOR;
-  if (surface === 'dirt') return ROUTE_DIRT_FILL_COLOR;
-  if (surface === 'sand') return ROUTE_SAND_FILL_COLOR;
+function resolveSurfaceFillColor(surface: StyledSurface, fallbackColor: string): string {
+  if (surface === 'paved') return shadeUserColor(fallbackColor, 0.72);
+  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.88);
+  if (surface === 'dirt') return tintUserColor(fallbackColor, 0.8);
   return fallbackColor;
 }
 
-function resolveSurfaceBorderColor(surface: Surface): string {
-  if (surface === 'paved') return ROUTE_PAVED_CASING_COLOR;
-  if (surface === 'dirt') return ROUTE_DIRT_CASING_COLOR;
-  if (surface === 'sand') return ROUTE_SAND_CASING_COLOR;
+function resolveSurfaceBorderColor(surface: StyledSurface, fallbackColor: string): string {
+  if (surface === 'paved') return tintUserColor(fallbackColor, 0.82);
+  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.9);
+  if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.58);
   return ROUTE_TRANSPARENT_COLOR;
 }
 
+function resolveSurfacePatternColor(surface: 'paved' | 'gravel' | 'dirt', fallbackColor: string): string {
+  if (surface === 'paved') return tintUserColor(fallbackColor, 0.92);
+  if (surface === 'gravel') return shadeUserColor(fallbackColor, 0.84);
+  if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.84);
+  return shadeUserColor(fallbackColor, 0.84);
+}
+
 interface SurfaceRouteFeatureProperties {
-  surface: Surface;
+  surface: StyledSurface;
   lineColor: string;
   casingColor: string;
 }
@@ -274,10 +346,11 @@ function buildSurfaceRouteFeatureProperties(
   surface: Surface,
   fallbackColor: string,
 ): SurfaceRouteFeatureProperties {
+  const styledSurface = normalizeSurfaceForStyle(surface);
   return {
-    surface,
-    lineColor: resolveSurfaceFillColor(surface, fallbackColor),
-    casingColor: resolveSurfaceBorderColor(surface),
+    surface: styledSurface,
+    lineColor: resolveSurfaceFillColor(styledSurface, fallbackColor),
+    casingColor: resolveSurfaceBorderColor(styledSurface, fallbackColor),
   };
 }
 
@@ -286,7 +359,7 @@ function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor', fall
 }
 
 function buildStyledSurfaceFilter(): unknown[] {
-  return ['in', ['get', 'surface'], ['literal', ['paved', 'dirt', 'sand']]];
+  return ['in', ['get', 'surface'], ['literal', ['paved', 'gravel', 'dirt']]];
 }
 
 function surfaceFeaturePropertiesEqual(
@@ -422,6 +495,11 @@ function buildSlopeRouteRenderSpec(
     casingColorPaint: null,
     casingWidthPx: 0,
     casingFilter: null,
+    accentColorPaint: null,
+    accentWidthPx: 0,
+    accentDasharray: null,
+    accentFilter: null,
+    accentCap: 'butt',
     overlayColorPaint: null,
     overlayWidthPx: 0,
     overlayDasharray: null,
@@ -442,8 +520,9 @@ function buildSurfaceRouteRenderSpec(
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
+  const pavedPresent = hasSurface(points, 'paved');
+  const gravelPresent = hasSurface(points, 'gravel');
   const dirtPresent = hasSurface(points, 'dirt');
-  const sandPresent = hasSurface(points, 'sand');
   return {
     data: buildSurfaceRouteGeoJson(points, fallbackColor),
     lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
@@ -453,17 +532,24 @@ function buildSurfaceRouteRenderSpec(
     casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
     casingFilter: buildStyledSurfaceFilter(),
-    overlayColorPaint: dirtPresent
-      ? ROUTE_DIRT_PATTERN_COLOR
+    accentColorPaint: pavedPresent
+      ? resolveSurfacePatternColor('paved', fallbackColor)
       : null,
-    overlayWidthPx: dirtPresent ? dirtPatternWidthPx(traceWidthPx) : 0,
-    overlayDasharray: dirtPresent ? ROUTE_DIRT_DASHARRAY : null,
-    overlayFilter: dirtPresent ? ['==', ['get', 'surface'], 'dirt'] : null,
+    accentWidthPx: pavedPresent ? pavedPatternWidthPx(traceWidthPx) : 0,
+    accentDasharray: pavedPresent ? ROUTE_PAVED_DASHARRAY : null,
+    accentFilter: pavedPresent ? ['==', ['get', 'surface'], 'paved'] : null,
+    accentCap: 'butt',
+    overlayColorPaint: gravelPresent
+      ? resolveSurfacePatternColor('gravel', fallbackColor)
+      : null,
+    overlayWidthPx: gravelPresent ? gravelPatternWidthPx(traceWidthPx) : 0,
+    overlayDasharray: gravelPresent ? ROUTE_GRAVEL_DASHARRAY : null,
+    overlayFilter: gravelPresent ? ['==', ['get', 'surface'], 'gravel'] : null,
     overlayCap: 'butt',
-    textureColorPaint: sandPresent ? ROUTE_SAND_PATTERN_COLOR : null,
-    textureWidthPx: sandPresent ? sandPatternWidthPx(traceWidthPx) : 0,
-    textureDasharray: sandPresent ? ROUTE_SAND_DASHARRAY : null,
-    textureFilter: sandPresent ? ['==', ['get', 'surface'], 'sand'] : null,
+    textureColorPaint: dirtPresent ? resolveSurfacePatternColor('dirt', fallbackColor) : null,
+    textureWidthPx: dirtPresent ? dirtPatternWidthPx(traceWidthPx) : 0,
+    textureDasharray: dirtPresent ? ROUTE_DIRT_DASHARRAY : null,
+    textureFilter: dirtPresent ? ['==', ['get', 'surface'], 'dirt'] : null,
     textureCap: 'round',
     requiresLineMetrics: false,
   };
@@ -489,6 +575,11 @@ export function buildRouteGeoJson(
     casingColorPaint: null,
     casingWidthPx: 0,
     casingFilter: null,
+    accentColorPaint: null,
+    accentWidthPx: 0,
+    accentDasharray: null,
+    accentFilter: null,
+    accentCap: 'butt',
     overlayColorPaint: null,
     overlayWidthPx: 0,
     overlayDasharray: null,

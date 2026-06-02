@@ -287,7 +287,6 @@ export function upsertRouteLayer(
   }
 
   try {
-    removeLayerIfPresent(map, legacyGlowId);
     if (map.getLayer(lineId)) {
       map.setPaintProperty(lineId, 'line-color', renderSpec.lineColorPaint as never);
       if (renderSpec.lineGradientPaint) {
@@ -341,6 +340,17 @@ export function upsertRouteLayer(
       map.removeLayer(casingId);
     }
     syncPatternLayer(map, {
+      layerId: legacyGlowId,
+      sourceId: srcId,
+      visibility,
+      opacity,
+      colorPaint: renderSpec.accentColorPaint,
+      widthPx: renderSpec.accentWidthPx,
+      dasharray: renderSpec.accentDasharray,
+      filter: renderSpec.accentFilter,
+      lineCap: renderSpec.accentCap,
+    });
+    syncPatternLayer(map, {
       layerId: dirtPatternId,
       sourceId: srcId,
       visibility,
@@ -381,9 +391,9 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
     if (!hasRasterLayerAbove(map, lineId)) return;
     if (map.getLayer(casingId)) map.moveLayer(casingId);
     if (map.getLayer(lineId)) map.moveLayer(lineId);
+    if (map.getLayer(legacyGlowId)) map.moveLayer(legacyGlowId);
     if (map.getLayer(dirtPatternId)) map.moveLayer(dirtPatternId);
     if (map.getLayer(sandPatternId)) map.moveLayer(sandPatternId);
-    if (map.getLayer(legacyGlowId)) map.removeLayer(legacyGlowId);
   } catch {
     /* map may be tearing down */
   }
@@ -426,9 +436,9 @@ export function setRouteLayerVisibility(
   const visibility = visible ? 'visible' : 'none';
   try {
     if (map.getLayer(casingId)) map.setLayoutProperty(casingId, 'visibility', visibility);
+    if (map.getLayer(legacyGlowId)) map.setLayoutProperty(legacyGlowId, 'visibility', visibility);
     if (map.getLayer(dirtPatternId)) map.setLayoutProperty(dirtPatternId, 'visibility', visibility);
     if (map.getLayer(sandPatternId)) map.setLayoutProperty(sandPatternId, 'visibility', visibility);
-    if (map.getLayer(legacyGlowId)) map.removeLayer(legacyGlowId);
     if (map.getLayer(lineId)) map.setLayoutProperty(lineId, 'visibility', visibility);
   } catch {
     /* noop */

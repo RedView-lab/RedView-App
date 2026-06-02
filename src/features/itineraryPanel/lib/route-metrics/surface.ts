@@ -16,26 +16,25 @@ const PAVED_SURFACES = new Set([
   'tartan',
 ]);
 
-const DIRT_SURFACES = new Set([
+const GRAVEL_SURFACES = new Set([
   'unpaved',
   'gravel',
   'fine_gravel',
   'compacted',
+  'pebblestone',
+]);
+
+const DIRT_SURFACES = new Set([
   'dirt',
   'earth',
   'ground',
   'grass',
   'mud',
-  'pebblestone',
   'rock',
   'snow',
   'ice',
   'salt',
   'woodchips',
-]);
-
-const SAND_SURFACES = new Set([
-  'sand',
 ]);
 
 const PAVED_HIGHWAYS = new Set([
@@ -58,7 +57,18 @@ const PAVED_HIGHWAYS = new Set([
   'cycleway',
 ]);
 
-const DIRT_HIGHWAYS = new Set(['track', 'path', 'bridleway', 'footway']);
+const DIRT_HIGHWAYS = new Set(['path', 'bridleway', 'footway']);
+
+function isLikelyGravelTrack(tags: Record<string, string>): boolean {
+  if (tags.highway !== 'track') return false;
+  if (!tags.tracktype) return true;
+  return tags.tracktype === 'grade1' || tags.tracktype === 'grade2';
+}
+
+function isLikelyDirtTrack(tags: Record<string, string>): boolean {
+  if (tags.highway !== 'track') return false;
+  return tags.tracktype === 'grade3' || tags.tracktype === 'grade4' || tags.tracktype === 'grade5';
+}
 
 function parseWayTags(tagsStr: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -76,10 +86,14 @@ function parseWayTags(tagsStr: string): Record<string, string> {
 export function classifySegment(tagsStr: string): Surface {
   const tags = parseWayTags(tagsStr);
   if (tags.surface) {
-    if (SAND_SURFACES.has(tags.surface)) return 'sand';
+    if (tags.surface === 'sand') return 'dirt';
     if (DIRT_SURFACES.has(tags.surface)) return 'dirt';
+    if (GRAVEL_SURFACES.has(tags.surface)) return 'gravel';
     if (PAVED_SURFACES.has(tags.surface)) return 'paved';
   }
+
+  if (isLikelyDirtTrack(tags)) return 'dirt';
+  if (isLikelyGravelTrack(tags)) return 'gravel';
 
   if (tags.highway) {
     if (PAVED_HIGHWAYS.has(tags.highway)) return 'paved';
@@ -94,7 +108,7 @@ export function isPavedSurface(surface: Surface | null | undefined): boolean {
 }
 
 export function isOffroadSurface(surface: Surface | null | undefined): boolean {
-  return surface === 'dirt' || surface === 'sand';
+  return surface === 'gravel' || surface === 'dirt' || surface === 'sand';
 }
 
 export function isStyledSurface(surface: Surface | null | undefined): boolean {
