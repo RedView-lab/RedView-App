@@ -1,5 +1,4 @@
 import { haversineRouteDistanceM } from '../routes';
-import { isStyledSurface } from '../route-metrics/surface';
 import type { Surface } from '../route-metrics/types';
 
 export interface RouteLayerPoint {
@@ -58,10 +57,10 @@ export interface RouteLayerRenderSpec {
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
-const ROUTE_PAVED_DASHARRAY = [1.35, 0.7];
 const ROUTE_GRAVEL_DASHARRAY = [0.95, 0.95];
 const ROUTE_DIRT_DASHARRAY = [0.42, 1.1];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
+const ROUTE_DEFAULT_BORDER_COLOR = 'rgba(255,255,255,0.94)';
 
 interface RgbColor {
   red: number;
@@ -89,10 +88,6 @@ export function inferMountedRouteUsesLineGradient(
 
 function tarmacBorderWidthPx(traceWidthPx: number): number {
   return Math.max(1.25, Math.min(3.25, traceWidthPx * 0.22));
-}
-
-function pavedPatternWidthPx(traceWidthPx: number): number {
-  return Math.max(2.8, Math.min(6, traceWidthPx * 0.7));
 }
 
 function gravelPatternWidthPx(traceWidthPx: number): number {
@@ -303,7 +298,7 @@ function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Su
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
   for (let index = 1; index < points.length; index += 1) {
     const surface = normalizeSurfaceForStyle(resolveSegmentSurface(points[index - 1], points[index]));
-    if (isStyledSurface(surface)) return true;
+    if (surface === 'gravel' || surface === 'dirt') return true;
   }
   return false;
 }
@@ -316,14 +311,12 @@ function hasSurface(points: readonly RouteLayerPoint[], targetSurface: StyledSur
 }
 
 function resolveSurfaceFillColor(surface: StyledSurface, fallbackColor: string): string {
-  if (surface === 'paved') return shadeUserColor(fallbackColor, 0.72);
   if (surface === 'gravel') return tintUserColor(fallbackColor, 0.88);
   if (surface === 'dirt') return tintUserColor(fallbackColor, 0.8);
   return fallbackColor;
 }
 
 function resolveSurfaceBorderColor(surface: StyledSurface, fallbackColor: string): string {
-  if (surface === 'paved') return tintUserColor(fallbackColor, 0.82);
   if (surface === 'gravel') return tintUserColor(fallbackColor, 0.9);
   if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.58);
   return ROUTE_TRANSPARENT_COLOR;
@@ -359,7 +352,7 @@ function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor', fall
 }
 
 function buildStyledSurfaceFilter(): unknown[] {
-  return ['in', ['get', 'surface'], ['literal', ['paved', 'gravel', 'dirt']]];
+  return ['in', ['get', 'surface'], ['literal', ['gravel', 'dirt']]];
 }
 
 function surfaceFeaturePropertiesEqual(
@@ -520,24 +513,21 @@ function buildSurfaceRouteRenderSpec(
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
-  const pavedPresent = hasSurface(points, 'paved');
   const gravelPresent = hasSurface(points, 'gravel');
   const dirtPresent = hasSurface(points, 'dirt');
   return {
     data: buildSurfaceRouteGeoJson(points, fallbackColor),
     lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
     lineGradientPaint: null,
-    lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
-    lineBorderWidthPx: 0,
+    lineBorderColorPaint: ROUTE_DEFAULT_BORDER_COLOR,
+    lineBorderWidthPx: borderWidthPx,
     casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
     casingFilter: buildStyledSurfaceFilter(),
-    accentColorPaint: pavedPresent
-      ? resolveSurfacePatternColor('paved', fallbackColor)
-      : null,
-    accentWidthPx: pavedPresent ? pavedPatternWidthPx(traceWidthPx) : 0,
-    accentDasharray: pavedPresent ? ROUTE_PAVED_DASHARRAY : null,
-    accentFilter: pavedPresent ? ['==', ['get', 'surface'], 'paved'] : null,
+    accentColorPaint: null,
+    accentWidthPx: 0,
+    accentDasharray: null,
+    accentFilter: null,
     accentCap: 'butt',
     overlayColorPaint: gravelPresent
       ? resolveSurfacePatternColor('gravel', fallbackColor)
@@ -566,12 +556,13 @@ export function buildRouteGeoJson(
   if (hasStyledSurface(points)) {
     return buildSurfaceRouteRenderSpec(points, opts.color, traceWidthPx);
   }
+  const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
   return {
     data: buildDefaultRouteGeoJson(points),
     lineColorPaint: opts.color,
     lineGradientPaint: null,
-    lineBorderColorPaint: ROUTE_TRANSPARENT_COLOR,
-    lineBorderWidthPx: 0,
+    lineBorderColorPaint: ROUTE_DEFAULT_BORDER_COLOR,
+    lineBorderWidthPx: borderWidthPx,
     casingColorPaint: null,
     casingWidthPx: 0,
     casingFilter: null,
