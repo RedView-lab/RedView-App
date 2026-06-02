@@ -7,6 +7,7 @@ import {
   smoothElevations,
 } from './elevation';
 import { parseMessages } from './parser';
+import { isOffroadSurface, isPavedSurface } from './surface';
 import type {
   ParsedRow,
   RouteElevationMetrics,
@@ -25,8 +26,8 @@ function aggregate(rows: ParsedRow[], totalDistFallback: number): RouteMetrics {
   for (let i = 1; i < rows.length; i++) {
     const distance = rows[i].segDistM;
     totalDist += distance;
-    if (rows[i].surface === 'tarmac') tarmacDist += distance;
-    else if (rows[i].surface === 'offroad') offroadDist += distance;
+    if (isPavedSurface(rows[i].surface)) tarmacDist += distance;
+    else if (isOffroadSurface(rows[i].surface)) offroadDist += distance;
   }
   if (totalDist === 0) totalDist = totalDistFallback;
 
@@ -79,8 +80,8 @@ export function computeRouteSurfaceMetricsFromBrouter(
   for (let i = 1; i < rows.length; i++) {
     const distance = rows[i].segDistM;
     totalDist += distance;
-    if (rows[i].surface === 'tarmac') tarmacDist += distance;
-    else if (rows[i].surface === 'offroad') offroadDist += distance;
+    if (isPavedSurface(rows[i].surface)) tarmacDist += distance;
+    else if (isOffroadSurface(rows[i].surface)) offroadDist += distance;
   }
   if (totalDist <= 0) totalDist = route.distanceM;
 

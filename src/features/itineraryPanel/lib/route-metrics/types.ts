@@ -44,7 +44,7 @@ export interface ElevationSample {
   gradientPct?: number | null;
 }
 
-export type Surface = 'tarmac' | 'offroad' | 'unknown';
+export type Surface = 'paved' | 'dirt' | 'sand' | 'unknown';
 
 export interface ParsedRow {
   lon: number;

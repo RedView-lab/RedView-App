@@ -1,4 +1,5 @@
 import { haversineRouteDistanceM } from '../routes';
+import { isStyledSurface } from '../route-metrics/surface';
 import type { Surface } from '../route-metrics/types';
 
 export interface RouteLayerPoint {
@@ -41,14 +42,27 @@ export interface RouteLayerRenderSpec {
   overlayWidthPx: number;
   overlayDasharray: number[] | null;
   overlayFilter: unknown[] | null;
+  overlayCap: 'butt' | 'round';
+  textureColorPaint: string | unknown[] | null;
+  textureWidthPx: number;
+  textureDasharray: number[] | null;
+  textureFilter: unknown[] | null;
+  textureCap: 'butt' | 'round';
   requiresLineMetrics: boolean;
 }
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
-const ROUTE_TARMAC_BORDER_COLOR = '#ffffff';
-const ROUTE_OFFROAD_OVERLAY_COLOR = '#0a0a0a';
-const ROUTE_OFFROAD_DASHARRAY = [0.9, 1.35];
+const ROUTE_PAVED_FILL_COLOR = '#232323';
+const ROUTE_PAVED_CASING_COLOR = '#ffffff';
+const ROUTE_DIRT_FILL_COLOR = '#ffffff';
+const ROUTE_DIRT_CASING_COLOR = '#232323';
+const ROUTE_DIRT_PATTERN_COLOR = '#000000';
+const ROUTE_DIRT_DASHARRAY = [0.85, 1.55];
+const ROUTE_SAND_FILL_COLOR = '#ffffff';
+const ROUTE_SAND_CASING_COLOR = '#232323';
+const ROUTE_SAND_PATTERN_COLOR = '#000000';
+const ROUTE_SAND_DASHARRAY = [0.01, 1.9];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
 
 export function normalizeTraceWidthPx(value: number | null | undefined): number {
@@ -71,8 +85,12 @@ function tarmacBorderWidthPx(traceWidthPx: number): number {
   return Math.max(1.25, Math.min(3.25, traceWidthPx * 0.22));
 }
 
-function offroadOverlayWidthPx(traceWidthPx: number): number {
-  return Math.max(1.4, Math.min(3.6, traceWidthPx * 0.28));
+function dirtPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(1.8, Math.min(4, traceWidthPx * 0.34));
+}
+
+function sandPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(1.6, Math.min(3.4, traceWidthPx * 0.3));
 }
 
 function clampSlopeDeg(value: number): number {
@@ -220,39 +238,36 @@ function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Su
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
   for (let index = 1; index < points.length; index += 1) {
     const surface = resolveSegmentSurface(points[index - 1], points[index]);
-    if (surface === 'tarmac' || surface === 'offroad') return true;
+    if (isStyledSurface(surface)) return true;
   }
   return false;
 }
 
-function hasOffroadSurface(points: readonly RouteLayerPoint[]): boolean {
+function hasSurface(points: readonly RouteLayerPoint[], targetSurface: Surface): boolean {
   for (let index = 1; index < points.length; index += 1) {
-    if (resolveSegmentSurface(points[index - 1], points[index]) === 'offroad') return true;
+    if (resolveSegmentSurface(points[index - 1], points[index]) === targetSurface) return true;
   }
   return false;
 }
 
 function resolveSurfaceFillColor(surface: Surface, fallbackColor: string): string {
-  if (surface === 'tarmac') return fallbackColor;
-  if (surface === 'offroad') return fallbackColor;
+  if (surface === 'paved') return ROUTE_PAVED_FILL_COLOR;
+  if (surface === 'dirt') return ROUTE_DIRT_FILL_COLOR;
+  if (surface === 'sand') return ROUTE_SAND_FILL_COLOR;
   return fallbackColor;
 }
 
 function resolveSurfaceBorderColor(surface: Surface): string {
-  if (surface === 'tarmac') return ROUTE_TARMAC_BORDER_COLOR;
-  if (surface === 'offroad') return ROUTE_TRANSPARENT_COLOR;
+  if (surface === 'paved') return ROUTE_PAVED_CASING_COLOR;
+  if (surface === 'dirt') return ROUTE_DIRT_CASING_COLOR;
+  if (surface === 'sand') return ROUTE_SAND_CASING_COLOR;
   return ROUTE_TRANSPARENT_COLOR;
-}
-
-function resolveSurfaceOverlayColor(surface: Surface): string {
-  return surface === 'offroad' ? ROUTE_OFFROAD_OVERLAY_COLOR : ROUTE_TRANSPARENT_COLOR;
 }
 
 interface SurfaceRouteFeatureProperties {
   surface: Surface;
   lineColor: string;
   casingColor: string;
-  overlayColor: string;
 }
 
 function buildSurfaceRouteFeatureProperties(
@@ -263,12 +278,15 @@ function buildSurfaceRouteFeatureProperties(
     surface,
     lineColor: resolveSurfaceFillColor(surface, fallbackColor),
     casingColor: resolveSurfaceBorderColor(surface),
-    overlayColor: resolveSurfaceOverlayColor(surface),
   };
 }
 
-function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor' | 'overlayColor', fallbackColor: string): unknown[] {
+function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor', fallbackColor: string): unknown[] {
   return ['coalesce', ['get', property], fallbackColor];
+}
+
+function buildStyledSurfaceFilter(): unknown[] {
+  return ['in', ['get', 'surface'], ['literal', ['paved', 'dirt', 'sand']]];
 }
 
 function surfaceFeaturePropertiesEqual(
@@ -408,6 +426,12 @@ function buildSlopeRouteRenderSpec(
     overlayWidthPx: 0,
     overlayDasharray: null,
     overlayFilter: null,
+    overlayCap: 'butt',
+    textureColorPaint: null,
+    textureWidthPx: 0,
+    textureDasharray: null,
+    textureFilter: null,
+    textureCap: 'round',
     requiresLineMetrics: true,
   };
 }
@@ -418,7 +442,8 @@ function buildSurfaceRouteRenderSpec(
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
-  const offroadPresent = hasOffroadSurface(points);
+  const dirtPresent = hasSurface(points, 'dirt');
+  const sandPresent = hasSurface(points, 'sand');
   return {
     data: buildSurfaceRouteGeoJson(points, fallbackColor),
     lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
@@ -427,13 +452,19 @@ function buildSurfaceRouteRenderSpec(
     lineBorderWidthPx: 0,
     casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
-    casingFilter: ['==', ['get', 'surface'], 'tarmac'],
-    overlayColorPaint: offroadPresent
-      ? buildSurfaceColorExpression('overlayColor', ROUTE_TRANSPARENT_COLOR)
+    casingFilter: buildStyledSurfaceFilter(),
+    overlayColorPaint: dirtPresent
+      ? ROUTE_DIRT_PATTERN_COLOR
       : null,
-    overlayWidthPx: offroadPresent ? offroadOverlayWidthPx(traceWidthPx) : 0,
-    overlayDasharray: offroadPresent ? ROUTE_OFFROAD_DASHARRAY : null,
-    overlayFilter: offroadPresent ? ['==', ['get', 'surface'], 'offroad'] : null,
+    overlayWidthPx: dirtPresent ? dirtPatternWidthPx(traceWidthPx) : 0,
+    overlayDasharray: dirtPresent ? ROUTE_DIRT_DASHARRAY : null,
+    overlayFilter: dirtPresent ? ['==', ['get', 'surface'], 'dirt'] : null,
+    overlayCap: 'butt',
+    textureColorPaint: sandPresent ? ROUTE_SAND_PATTERN_COLOR : null,
+    textureWidthPx: sandPresent ? sandPatternWidthPx(traceWidthPx) : 0,
+    textureDasharray: sandPresent ? ROUTE_SAND_DASHARRAY : null,
+    textureFilter: sandPresent ? ['==', ['get', 'surface'], 'sand'] : null,
+    textureCap: 'round',
     requiresLineMetrics: false,
   };
 }
@@ -462,6 +493,12 @@ export function buildRouteGeoJson(
     overlayWidthPx: 0,
     overlayDasharray: null,
     overlayFilter: null,
+    overlayCap: 'butt',
+    textureColorPaint: null,
+    textureWidthPx: 0,
+    textureDasharray: null,
+    textureFilter: null,
+    textureCap: 'round',
     requiresLineMetrics: false,
   };
 }

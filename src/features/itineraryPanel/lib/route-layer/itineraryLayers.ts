@@ -2,8 +2,10 @@ import type { GeoJSONSource, Map as MapboxMap } from 'mapbox-gl';
 
 import {
   CASING_PREFIX,
+  DIRT_PATTERN_PREFIX,
   GLOW_PREFIX,
   LINE_PREFIX,
+  SAND_PATTERN_PREFIX,
   SOURCE_PREFIX,
   canMutateStyle,
   ids,
@@ -88,6 +90,83 @@ function setLayoutPropertyIfChanged(
   }
 }
 
+function removeLayerIfPresent(map: MapboxMap, layerId: string): void {
+  try {
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+  } catch {
+    /* map may be tearing down */
+  }
+}
+
+function syncPatternLayer(
+  map: MapboxMap,
+  params: {
+    layerId: string;
+    sourceId: string;
+    visibility: 'visible' | 'none';
+    opacity: number;
+    colorPaint: string | unknown[] | null;
+    widthPx: number;
+    dasharray: number[] | null;
+    filter: unknown[] | null;
+    lineCap: 'butt' | 'round';
+  },
+): void {
+  const {
+    layerId,
+    sourceId,
+    visibility,
+    opacity,
+    colorPaint,
+    widthPx,
+    dasharray,
+    filter,
+    lineCap,
+  } = params;
+
+  if (!colorPaint || !(widthPx > 0) || !filter) {
+    removeLayerIfPresent(map, layerId);
+    return;
+  }
+
+  if (!map.getLayer(layerId)) {
+    map.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      slot: 'top',
+      filter: filter as never,
+      layout: {
+        'line-cap': lineCap,
+        'line-join': 'round',
+        'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
+        'line-z-offset': ROUTE_LINE_Z_OFFSET,
+        visibility,
+      },
+      paint: {
+        'line-color': colorPaint as never,
+        'line-width': widthPx,
+        'line-opacity': opacity,
+        'line-dasharray': dasharray as never,
+        'line-emissive-strength': 1,
+        'line-occlusion-opacity': 0,
+      },
+    });
+    return;
+  }
+
+  map.setPaintProperty(layerId, 'line-color', colorPaint as never);
+  setPaintPropertyIfChanged(map, layerId, 'line-width', widthPx);
+  setPaintPropertyIfChanged(map, layerId, 'line-opacity', opacity);
+  setPaintPropertyIfChanged(map, layerId, 'line-dasharray', dasharray);
+  setLayoutPropertyIfChanged(map, layerId, 'line-cap', lineCap);
+  setLayoutPropertyIfChanged(map, layerId, 'line-join', 'round');
+  setLayoutPropertyIfChanged(map, layerId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
+  setLayoutPropertyIfChanged(map, layerId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
+  setLayoutPropertyIfChanged(map, layerId, 'visibility', visibility);
+  map.setFilter(layerId, filter as never);
+}
+
 export function hasRouteLayer(map: MapboxMap, itineraryId: string): boolean {
   try {
     return !!map.getSource(ids(itineraryId).source);
@@ -115,7 +194,14 @@ export function upsertRouteLayer(
   points: RouteLayerPoint[],
   opts: RouteLayerOptions,
 ): void {
-  const { source: srcId, casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
+  const {
+    source: srcId,
+    casing: casingId,
+    glow: legacyGlowId,
+    dirtPattern: dirtPatternId,
+    sandPattern: sandPatternId,
+    line: lineId,
+  } = ids(itineraryId);
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
@@ -125,7 +211,7 @@ export function upsertRouteLayer(
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
   const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)
-    || routeLayerUsesLineGradient(map, glowId)
+    || routeLayerUsesLineGradient(map, legacyGlowId)
     || routeLayerUsesLineGradient(map, casingId)
     || inferMountedRouteUsesLineGradient(map, lineId) === true;
   const mountedRegistryRequiresLineMetrics = lineMetricsRegistry.get(itineraryId);
@@ -140,9 +226,11 @@ export function upsertRouteLayer(
 
   if (shouldRecreateSource) {
     try {
-      if (map.getLayer(casingId)) map.removeLayer(casingId);
-      if (map.getLayer(lineId)) map.removeLayer(lineId);
-      if (map.getLayer(glowId)) map.removeLayer(glowId);
+      removeLayerIfPresent(map, casingId);
+      removeLayerIfPresent(map, legacyGlowId);
+      removeLayerIfPresent(map, dirtPatternId);
+      removeLayerIfPresent(map, sandPatternId);
+      removeLayerIfPresent(map, lineId);
       if (map.getSource(srcId)) map.removeSource(srcId);
     } catch {
       /* noop */
@@ -158,8 +246,10 @@ export function upsertRouteLayer(
       /* noop */
     }
     try {
-      if (map.getLayer(casingId)) map.removeLayer(casingId);
-      if (map.getLayer(glowId)) map.removeLayer(glowId);
+      removeLayerIfPresent(map, casingId);
+      removeLayerIfPresent(map, legacyGlowId);
+      removeLayerIfPresent(map, dirtPatternId);
+      removeLayerIfPresent(map, sandPatternId);
     } catch {
       /* noop */
     }
@@ -170,29 +260,6 @@ export function upsertRouteLayer(
       lineMetrics: renderSpec.requiresLineMetrics,
       data: renderSpec.data,
     });
-    if (renderSpec.casingColorPaint && renderSpec.casingFilter && renderSpec.casingWidthPx > traceWidthPx) {
-      map.addLayer({
-        id: casingId,
-        type: 'line',
-        source: srcId,
-        slot: 'top',
-        filter: renderSpec.casingFilter as never,
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-          'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-          'line-z-offset': ROUTE_LINE_Z_OFFSET,
-          visibility,
-        },
-        paint: {
-          'line-color': renderSpec.casingColorPaint as never,
-          'line-width': renderSpec.casingWidthPx,
-          'line-opacity': opacity,
-          'line-emissive-strength': 1,
-          'line-occlusion-opacity': 0,
-        },
-      });
-    }
     map.addLayer({
       id: lineId,
       type: 'line',
@@ -216,34 +283,11 @@ export function upsertRouteLayer(
         ...(renderSpec.lineGradientPaint ? { 'line-gradient': renderSpec.lineGradientPaint as never } : {}),
       },
     });
-    if (renderSpec.overlayColorPaint && renderSpec.overlayWidthPx > 0) {
-      map.addLayer({
-        id: glowId,
-        type: 'line',
-        source: srcId,
-        slot: 'top',
-        filter: renderSpec.overlayFilter as never,
-        layout: {
-          'line-cap': 'butt',
-          'line-join': 'round',
-          'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-          'line-z-offset': ROUTE_LINE_Z_OFFSET,
-          visibility,
-        },
-        paint: {
-          'line-color': renderSpec.overlayColorPaint as never,
-          'line-width': renderSpec.overlayWidthPx,
-          'line-opacity': opacity,
-          'line-dasharray': renderSpec.overlayDasharray as never,
-          'line-emissive-strength': 1,
-          'line-occlusion-opacity': 0,
-        },
-      });
-    }
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
   }
 
   try {
+    removeLayerIfPresent(map, legacyGlowId);
     if (map.getLayer(lineId)) {
       map.setPaintProperty(lineId, 'line-color', renderSpec.lineColorPaint as never);
       if (renderSpec.lineGradientPaint) {
@@ -296,47 +340,28 @@ export function upsertRouteLayer(
     } else if (map.getLayer(casingId)) {
       map.removeLayer(casingId);
     }
-    if (renderSpec.overlayColorPaint && renderSpec.overlayWidthPx > 0) {
-      if (!map.getLayer(glowId)) {
-        map.addLayer({
-          id: glowId,
-          type: 'line',
-          source: srcId,
-          slot: 'top',
-          filter: renderSpec.overlayFilter as never,
-          layout: {
-            'line-cap': 'butt',
-            'line-join': 'round',
-            'line-elevation-reference': ROUTE_LINE_ELEVATION_REFERENCE,
-            'line-z-offset': ROUTE_LINE_Z_OFFSET,
-            visibility,
-          },
-          paint: {
-            'line-color': renderSpec.overlayColorPaint as never,
-            'line-width': renderSpec.overlayWidthPx,
-            'line-opacity': opacity,
-            'line-dasharray': renderSpec.overlayDasharray as never,
-            'line-emissive-strength': 1,
-            'line-occlusion-opacity': 0,
-          },
-        });
-      } else {
-        map.setPaintProperty(glowId, 'line-color', renderSpec.overlayColorPaint as never);
-        setPaintPropertyIfChanged(map, glowId, 'line-width', renderSpec.overlayWidthPx);
-        setPaintPropertyIfChanged(map, glowId, 'line-opacity', opacity);
-        setPaintPropertyIfChanged(map, glowId, 'line-dasharray', renderSpec.overlayDasharray);
-        setLayoutPropertyIfChanged(map, glowId, 'line-cap', 'butt');
-        setLayoutPropertyIfChanged(map, glowId, 'line-join', 'round');
-        setLayoutPropertyIfChanged(map, glowId, 'line-elevation-reference', ROUTE_LINE_ELEVATION_REFERENCE);
-        setLayoutPropertyIfChanged(map, glowId, 'line-z-offset', ROUTE_LINE_Z_OFFSET);
-        setLayoutPropertyIfChanged(map, glowId, 'visibility', visibility);
-        if (renderSpec.overlayFilter) {
-          map.setFilter(glowId, renderSpec.overlayFilter as never);
-        }
-      }
-    } else if (map.getLayer(glowId)) {
-      map.removeLayer(glowId);
-    }
+    syncPatternLayer(map, {
+      layerId: dirtPatternId,
+      sourceId: srcId,
+      visibility,
+      opacity,
+      colorPaint: renderSpec.overlayColorPaint,
+      widthPx: renderSpec.overlayWidthPx,
+      dasharray: renderSpec.overlayDasharray,
+      filter: renderSpec.overlayFilter,
+      lineCap: renderSpec.overlayCap,
+    });
+    syncPatternLayer(map, {
+      layerId: sandPatternId,
+      sourceId: srcId,
+      visibility,
+      opacity,
+      colorPaint: renderSpec.textureColorPaint,
+      widthPx: renderSpec.textureWidthPx,
+      dasharray: renderSpec.textureDasharray,
+      filter: renderSpec.textureFilter,
+      lineCap: renderSpec.textureCap,
+    });
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
   } catch {
@@ -345,23 +370,40 @@ export function upsertRouteLayer(
 }
 
 export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
-  const { casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
+  const {
+    casing: casingId,
+    glow: legacyGlowId,
+    dirtPattern: dirtPatternId,
+    sandPattern: sandPatternId,
+    line: lineId,
+  } = ids(itineraryId);
   try {
     if (!hasRasterLayerAbove(map, lineId)) return;
     if (map.getLayer(casingId)) map.moveLayer(casingId);
     if (map.getLayer(lineId)) map.moveLayer(lineId);
-    if (map.getLayer(glowId)) map.moveLayer(glowId);
+    if (map.getLayer(dirtPatternId)) map.moveLayer(dirtPatternId);
+    if (map.getLayer(sandPatternId)) map.moveLayer(sandPatternId);
+    if (map.getLayer(legacyGlowId)) map.removeLayer(legacyGlowId);
   } catch {
     /* map may be tearing down */
   }
 }
 
 export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
-  const { source: srcId, casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
+  const {
+    source: srcId,
+    casing: casingId,
+    glow: legacyGlowId,
+    dirtPattern: dirtPatternId,
+    sandPattern: sandPatternId,
+    line: lineId,
+  } = ids(itineraryId);
   try {
-    if (map.getLayer(casingId)) map.removeLayer(casingId);
-    if (map.getLayer(lineId)) map.removeLayer(lineId);
-    if (map.getLayer(glowId)) map.removeLayer(glowId);
+    removeLayerIfPresent(map, casingId);
+    removeLayerIfPresent(map, dirtPatternId);
+    removeLayerIfPresent(map, sandPatternId);
+    removeLayerIfPresent(map, legacyGlowId);
+    removeLayerIfPresent(map, lineId);
     if (map.getSource(srcId)) map.removeSource(srcId);
     routeLineMetricsState.get(map)?.delete(itineraryId);
   } catch {
@@ -374,11 +416,19 @@ export function setRouteLayerVisibility(
   itineraryId: string,
   visible: boolean,
 ): void {
-  const { casing: casingId, glow: glowId, line: lineId } = ids(itineraryId);
+  const {
+    casing: casingId,
+    glow: legacyGlowId,
+    dirtPattern: dirtPatternId,
+    sandPattern: sandPatternId,
+    line: lineId,
+  } = ids(itineraryId);
   const visibility = visible ? 'visible' : 'none';
   try {
     if (map.getLayer(casingId)) map.setLayoutProperty(casingId, 'visibility', visibility);
-    if (map.getLayer(glowId)) map.setLayoutProperty(glowId, 'visibility', visibility);
+    if (map.getLayer(dirtPatternId)) map.setLayoutProperty(dirtPatternId, 'visibility', visibility);
+    if (map.getLayer(sandPatternId)) map.setLayoutProperty(sandPatternId, 'visibility', visibility);
+    if (map.getLayer(legacyGlowId)) map.removeLayer(legacyGlowId);
     if (map.getLayer(lineId)) map.setLayoutProperty(lineId, 'visibility', visibility);
   } catch {
     /* noop */
@@ -395,11 +445,15 @@ export function removeAllRouteLayers(map: MapboxMap): void {
       const safe = key.slice(SOURCE_PREFIX.length);
       const casingId = `${CASING_PREFIX}${safe}`;
       const glowId = `${GLOW_PREFIX}${safe}`;
+      const dirtPatternId = `${DIRT_PATTERN_PREFIX}${safe}`;
       const lineId = `${LINE_PREFIX}${safe}`;
+      const sandPatternId = `${SAND_PATTERN_PREFIX}${safe}`;
       try {
-        if (map.getLayer(casingId)) map.removeLayer(casingId);
-        if (map.getLayer(lineId)) map.removeLayer(lineId);
-        if (map.getLayer(glowId)) map.removeLayer(glowId);
+        removeLayerIfPresent(map, casingId);
+        removeLayerIfPresent(map, dirtPatternId);
+        removeLayerIfPresent(map, sandPatternId);
+        removeLayerIfPresent(map, glowId);
+        removeLayerIfPresent(map, lineId);
         if (map.getSource(key)) map.removeSource(key);
       } catch {
         /* noop */
