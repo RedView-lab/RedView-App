@@ -5,7 +5,7 @@ import { useAppI18n } from '@/shared/i18n';
 import { IconEye, IconPlus } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
 
-const MENU_WIDTH = 112;
+const MENU_WIDTH = 107;
 const MENU_GAP = 6;
 const VIEWPORT_PADDING = 8;
 
@@ -207,11 +207,6 @@ export function ItineraryTabs({
                   )}
                 </span>
                 <span className="rvi-itin__meta">
-                  {it.gpxRoute ? (
-                    <span className="rvi-itin__badge" title={t('Itinéraire chargé depuis un GPX')}>
-                      GPX
-                    </span>
-                  ) : null}
                   <span className="rvi-itin__profile" title={profileLabel}>
                     {profileLabel}
                   </span>
