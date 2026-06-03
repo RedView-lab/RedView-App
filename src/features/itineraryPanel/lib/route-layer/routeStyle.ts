@@ -60,7 +60,6 @@ const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
 const ROUTE_GRAVEL_DASHARRAY = [0.95, 0.95];
 const ROUTE_DIRT_DASHARRAY = [0.42, 1.1];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
-const ROUTE_DEFAULT_BORDER_COLOR = 'rgba(255,255,255,0.94)';
 
 interface RgbColor {
   red: number;
@@ -145,6 +144,10 @@ function shadeUserColor(color: string, amount: number): string {
   const parsed = parseHexColor(color);
   if (!parsed) return color;
   return formatRgbColor(mixRgbColors(parsed, { red: 0, green: 0, blue: 0 }, amount));
+}
+
+function resolveRouteBorderColor(color: string): string {
+  return tintUserColor(color, 0.18);
 }
 
 function clampSlopeDeg(value: number): number {
@@ -311,14 +314,14 @@ function hasSurface(points: readonly RouteLayerPoint[], targetSurface: StyledSur
 }
 
 function resolveSurfaceFillColor(surface: StyledSurface, fallbackColor: string): string {
-  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.88);
-  if (surface === 'dirt') return tintUserColor(fallbackColor, 0.8);
+  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.18);
+  if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.12);
   return fallbackColor;
 }
 
 function resolveSurfaceBorderColor(surface: StyledSurface, fallbackColor: string): string {
-  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.9);
-  if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.58);
+  if (surface === 'gravel') return tintUserColor(fallbackColor, 0.34);
+  if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.24);
   return ROUTE_TRANSPARENT_COLOR;
 }
 
@@ -519,7 +522,7 @@ function buildSurfaceRouteRenderSpec(
     data: buildSurfaceRouteGeoJson(points, fallbackColor),
     lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
     lineGradientPaint: null,
-    lineBorderColorPaint: ROUTE_DEFAULT_BORDER_COLOR,
+    lineBorderColorPaint: resolveRouteBorderColor(fallbackColor),
     lineBorderWidthPx: borderWidthPx,
     casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
@@ -561,7 +564,7 @@ export function buildRouteGeoJson(
     data: buildDefaultRouteGeoJson(points),
     lineColorPaint: opts.color,
     lineGradientPaint: null,
-    lineBorderColorPaint: ROUTE_DEFAULT_BORDER_COLOR,
+    lineBorderColorPaint: resolveRouteBorderColor(opts.color),
     lineBorderWidthPx: borderWidthPx,
     casingColorPaint: null,
     casingWidthPx: 0,
