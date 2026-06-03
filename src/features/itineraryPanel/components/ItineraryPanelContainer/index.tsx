@@ -626,6 +626,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       }}
       onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
       onAddItineraryFromGpx={addItineraryFromGpxFile}
+      onDuplicateItinerary={duplicateItinerary}
       onRemoveItinerary={removeItinerary}
       onRenameItinerary={setItineraryName}
       onChangeMode={(mode: PanelMode) =>

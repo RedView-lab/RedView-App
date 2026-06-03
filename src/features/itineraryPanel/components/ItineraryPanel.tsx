@@ -47,6 +47,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onSelectItinerary,
     onAddItinerary,
     onOpenAddItinerary,
+    onDuplicateItinerary,
     onRemoveItinerary,
     onRenameItinerary,
     onChangeMode,
@@ -238,6 +239,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onSelect={onSelectItinerary}
         onAdd={onOpenAddItinerary ?? onAddItinerary}
         onAddButtonRef={props.onAddButtonRef}
+        onDuplicate={onDuplicateItinerary}
         onRemove={onRemoveItinerary}
         onRename={onRenameItinerary}
       />

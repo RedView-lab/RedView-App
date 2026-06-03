@@ -134,8 +134,8 @@
 /* Wrapper hosts the trash button next to the itinerary tab */
 .rvi-itin-wrap {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 2px;
   align-items: center;
   border-radius: 6px;
   transition: background 0.15s ease;
@@ -151,33 +151,81 @@
   opacity: 0.55;
 }
 
-.rvi-itin__remove {
+.rvi-itin__menu-trigger {
   all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   color: var(--rvi-text-dim);
   cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0.76;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
-.rvi-itin-wrap:hover .rvi-itin__remove,
-.rvi-itin-wrap.is-active .rvi-itin__remove,
-.rvi-itin__remove:focus-visible {
+.rvi-itin-wrap:hover .rvi-itin__menu-trigger,
+.rvi-itin-wrap.is-active .rvi-itin__menu-trigger,
+.rvi-itin__menu-trigger:focus-visible,
+.rvi-itin__menu-trigger.is-open {
   opacity: 1;
-  pointer-events: auto;
 }
-.rvi-itin-wrap:hover .rvi-itin__remove,
-.rvi-itin-wrap.is-active .rvi-itin__remove {
-  pointer-events: auto;
+.rvi-itin__menu-trigger:hover,
+.rvi-itin__menu-trigger:focus-visible,
+.rvi-itin__menu-trigger.is-open {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.96);
 }
-.rvi-itin__remove:hover {
-  background: rgba(255, 96, 96, 0.16);
-  color: #ff7070;
+
+.rvi-itin-actions-menu {
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.44);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 18px 42px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
+  isolation: isolate;
+}
+
+.rvi-itin-actions-menu__item {
+  all: unset;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 6px 12px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.rvi-itin-actions-menu__item + .rvi-itin-actions-menu__item {
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+}
+.rvi-itin-actions-menu__item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.rvi-itin-actions-menu__item:focus-visible {
+  outline: none;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(197, 0, 0, 0.48);
+}
+.rvi-itin-actions-menu__item:disabled {
+  color: rgba(255, 255, 255, 0.34);
+  cursor: default;
+}
+.rvi-itin-actions-menu__item:disabled:hover {
+  background: transparent;
 }
 
 @media (max-width: 420px) {

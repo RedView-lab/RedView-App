@@ -501,6 +501,8 @@ export interface ItineraryPanelProps {
    * The container is expected to call `parseGpxFile()` and store the route.
    */
   onAddItineraryFromGpx?: (file: File) => Promise<void> | void;
+  /** Duplicate an itinerary by id. */
+  onDuplicateItinerary?: (id: string) => void;
   /** Remove an itinerary by id. The container should refuse if it's the last one. */
   onRemoveItinerary?: (id: string) => void;
   /** Inline-rename an itinerary from its tab. */
