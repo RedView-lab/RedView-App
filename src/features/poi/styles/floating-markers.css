@@ -127,12 +127,10 @@
   overflow: hidden;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 15, 15, 0.74);
+  background: #0f0f0f;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 12px 30px rgba(0, 0, 0, 0.28);
-  backdrop-filter: blur(24px) saturate(1.08);
-  -webkit-backdrop-filter: blur(24px) saturate(1.08);
 }
 
 .mapboxgl-popup.rv-poi-popup .mapboxgl-popup-tip {
@@ -155,6 +153,7 @@
   flex-direction: column;
   gap: 3px;
   padding: 4px;
+  background: #0f0f0f;
   color: var(--rv-poi-popup-text);
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;

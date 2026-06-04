@@ -284,6 +284,35 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     });
   }, [resolvePoiTitle, updateActive]);
 
+  const handlePoiAddWaypoint = useCallback((feature: PoiFeature) => {
+    updateActive((it) => {
+      const waypointId = `poi-waypoint-${feature.id}`;
+      const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
+      if (existingIndex >= 0) return;
+
+      const poiIndex = it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
+      const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
+      const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
+      const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
+
+      it.timeline.splice(insertAt, 0, {
+        id: waypointId,
+        kind: 'waypoint',
+        label: resolvePoiTitle(feature),
+        distanceKm: anchorRow?.distanceKm ?? null,
+        lat: feature.lat,
+        lon: feature.lon,
+        osmId: feature.id,
+        visible: true,
+      });
+
+      delete it.pendingRoutePatch;
+      delete it.pendingTraceExtension;
+      delete it.routeAudit;
+      it.prediction = null;
+    });
+  }, [resolvePoiTitle, updateActive]);
+
   const handlePoiFinishHere = useCallback((feature: PoiFeature) => {
     updateActive((it) => {
       let row = it.timeline.find((item) => item.kind === 'end');
@@ -482,6 +511,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     {
       getPopupState: resolvePoiPopupState,
       onStartHere: handlePoiStartHere,
+      onAddWaypoint: handlePoiAddWaypoint,
       onFinishHere: handlePoiFinishHere,
       onToggleFavorite: handlePoiFavoriteToggle,
       onTogglePause: handlePoiPauseToggle,
