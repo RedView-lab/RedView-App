@@ -185,6 +185,24 @@ export function useMap(
 
     mapRef.current = map;
 
+    let resizeFrame: number | null = null;
+    const scheduleResize = () => {
+      if (resizeFrame != null) return;
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        map.resize();
+      });
+    };
+
+    scheduleResize();
+
+    const resizeObserver = typeof ResizeObserver === 'function'
+      ? new ResizeObserver(() => {
+        scheduleResize();
+      })
+      : null;
+    resizeObserver?.observe(containerRef.current);
+
     const lifecycle = createMapLifecycleController({
       map,
       fogConfig: FOG_CONFIG as mapboxgl.FogSpecification,
@@ -438,6 +456,10 @@ export function useMap(
 
     return () => {
       cancelled = true;
+      resizeObserver?.disconnect();
+      if (resizeFrame != null) {
+        window.cancelAnimationFrame(resizeFrame);
+      }
       disarmInitialReveal();
       if (stuckShellTimer) clearTimeout(stuckShellTimer);
       unsubscribeDem3dQuality();
