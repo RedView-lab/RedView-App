@@ -20,12 +20,12 @@ const MARKER_MIN_POPUP_OFFSET_PX = 26;
 const MARKER_MAX_POPUP_OFFSET_PX = 34;
 
 const UI_ICON_URLS = {
+  rightClick: '/right-click-icons',
   star: '/svgv2/icone/star-01.svg',
-  globe: '/svgv2/icone/globe-06.svg',
+  globe: '/right-click-icons/globe-06.svg',
   chevron: '/svgv2/icone/chevron-down.svg',
   check: '/svgv2/icone/check.svg',
-  play: '/svgv2/icone/play.svg',
-  trash: '/svgv2/icone/trash-03.svg',
+  trash: '/right-click-icons/trash-01.svg',
 } as const;
 
 interface PoiMarkerEntry {
@@ -189,15 +189,15 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
       <div class="rv-poi-popup__divider"></div>
 
       <button type="button" class="rv-poi-popup__action-row" data-action="start-here">
-        <span class="rv-poi-popup__pin rv-poi-popup__pin--start">
-          <img src="${UI_ICON_URLS.play}" alt="" class="rv-poi-popup__pin-icon rv-poi-popup__pin-icon--play" />
+        <span class="rv-poi-popup__action-icon-wrap" aria-hidden="true">
+          <img src="${UI_ICON_URLS.rightClick}/start.svg" alt="" class="rv-poi-popup__action-icon rv-poi-popup__action-icon--pin" />
         </span>
         <span class="rv-poi-popup__action-label">Démarrer ici</span>
       </button>
 
       <button type="button" class="rv-poi-popup__action-row" data-action="finish-here">
-        <span class="rv-poi-popup__pin rv-poi-popup__pin--finish">
-          <span class="rv-poi-popup__finish-flag" aria-hidden="true"></span>
+        <span class="rv-poi-popup__action-icon-wrap" aria-hidden="true">
+          <img src="${UI_ICON_URLS.rightClick}/finish.svg" alt="" class="rv-poi-popup__action-icon rv-poi-popup__action-icon--pin" />
         </span>
         <span class="rv-poi-popup__action-label">Finir ici</span>
       </button>

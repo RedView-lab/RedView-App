@@ -393,11 +393,11 @@
 .rv-poi-popup__action-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 80px;
   min-height: 32px;
-  padding: 2px 6px 2px 4px;
+  padding: 4px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -425,10 +425,10 @@
 }
 
 .rv-poi-popup__action-label--delete {
-  font-weight: 500;
+  font-weight: 600;
 }
 
-.rv-poi-popup__pin {
+.rv-poi-popup__action-icon-wrap {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -438,37 +438,14 @@
   flex: 0 0 auto;
 }
 
-.rv-poi-popup__pin::before {
-  content: '';
-  width: 20px;
-  height: 20px;
-  border-radius: 90px 90px 90px 8px;
-  background: rgba(15, 15, 15, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.16);
-  transform: rotate(-45deg);
+.rv-poi-popup__action-icon {
+  display: block;
+  flex: 0 0 auto;
 }
 
-.rv-poi-popup__pin-icon,
-.rv-poi-popup__finish-flag {
-  position: absolute;
-}
-
-.rv-poi-popup__pin-icon--play {
-  width: 12px;
-  height: 12px;
-}
-
-.rv-poi-popup__finish-flag {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  width: 12px;
-  height: 7px;
-  background:
-    linear-gradient(90deg, #fff 0 33.33%, transparent 33.33% 66.66%, #fff 66.66% 100%),
-    linear-gradient(180deg, #fff 0 50%, transparent 50% 100%);
-  background-size: 12px 7px;
-  mask: none;
+.rv-poi-popup__action-icon--pin {
+  width: 24px;
+  height: 24px;
 }
 
 .rv-poi-popup__utility-icon-wrap {
@@ -482,7 +459,7 @@
 
 .rv-poi-popup__utility-icon {
   display: block;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   opacity: 0.92;
 }
