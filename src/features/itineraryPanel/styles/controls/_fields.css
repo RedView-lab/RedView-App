@@ -307,10 +307,10 @@
   border-radius: 6px;
   padding: 6px 8px;
   height: 28px;
-  flex: 0 0 64px;
+  flex: 1 1 64px;
   min-width: 64px;
   max-width: 104px;
-  width: 64px;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
@@ -344,7 +344,7 @@
   font-size: 14px;
   font-weight: 600; /* SemiBold — Figma 1251:19621 */
   cursor: pointer;
-  flex: 0 1 104px;
+  flex: 1 1 64px;
   min-width: 64px;
   max-width: 104px;
   position: relative;
@@ -375,7 +375,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 88px;
+  width: 100%;
   min-width: 88px;
   max-width: 104px;
   height: 30px;
@@ -386,7 +386,7 @@
   font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
-  flex: 0 0 88px;
+  flex: 1 1 88px;
   box-sizing: border-box;
 }
 
@@ -486,10 +486,10 @@
   align-items: center;
   gap: 2px;
   box-sizing: border-box;
-  flex: 0 0 88px;
+  flex: 1 1 88px;
   min-width: 88px;
   max-width: 104px;
-  width: 88px;
+  width: 100%;
   padding: 7px 8px 7px 6px;
   background: var(--rvi-bg-chip);
   border-radius: 6px;
@@ -559,7 +559,8 @@
 
 /* ── Checkbox + label + trailing input/chip row ──────────────── */
 .rvi-cfield {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(64px, 104px);
   align-items: center;
   gap: 4px;
   width: 100%;
@@ -570,11 +571,16 @@
      truncates (it already has flex:1 + ellipsis). */
   overflow: hidden;
 }
+
+.rvi-cfield:has(.rvi-uploadchip) {
+  grid-template-columns: 24px minmax(0, 1fr) minmax(88px, 104px);
+}
 .rvi-cfield__label {
   flex: 1 1 0;
   /* min-width:0 lets the label ellipsis ("Mét…") so the trailing chip
      stays column-aligned even when the panel is at its resize floor. */
   min-width: 0;
+  margin-left: 4px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — Figma I855:19882;1251:19160 (Rethink_Sans:Medium) */
@@ -620,11 +626,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  min-width: 16px;
-  min-height: 16px;
+  flex: 0 0 20px;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
   color: var(--rvi-text);
+  overflow: visible;
+}
+
+.rvi-toggle-row__trailing--muted {
   opacity: 0.6;
+}
+
+.rvi-toggle-row__trailing > .rvi-iconbtn {
+  flex: 0 0 20px;
 }
 
 /* Tight-trailing variant — Figma 855:19587 (PacingBreaksExt POI favori).

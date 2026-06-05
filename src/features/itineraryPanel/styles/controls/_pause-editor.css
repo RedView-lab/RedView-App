@@ -25,7 +25,8 @@
 }
 
 .rvi-pause-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto 20px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -55,10 +56,9 @@
 /* ---- Label + chip group (Durée / Interval) -------------------------------- */
 .rvi-pause-row__field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(64px, 104px);
+  grid-template-columns: auto minmax(64px, 104px);
   align-items: center;
   gap: 4px;
-  flex: 0 1 160px;
   min-width: 0;
 }
 
@@ -119,6 +119,7 @@
   color: var(--rvi-text);
   cursor: pointer;
   flex-shrink: 0;
+  justify-self: end;
   transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
   opacity: 0.72;
 }
@@ -159,15 +160,16 @@
 }
 
 .rvi-poipause-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: 8px;
   width: 100%;
 }
 
 .rvi-poipause-cell {
-  display: flex;
-  flex: 1 1 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(64px, 104px);
   min-width: 0;
   align-items: center;
   gap: 4px;
@@ -180,6 +182,7 @@
 .rvi-poipause-cell__label {
   flex: 1 1 0;
   min-width: 0; /* allow ellipsis ("Sup…") at narrow widths */
+  margin-left: 4px;
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 500; /* Medium — matches Figma Rethink_Sans:Medium */
@@ -194,9 +197,8 @@
 .rvi-poipause-cell__chip {
   /* Default field clamp for pause durations in the responsive POI grid. */
   box-sizing: border-box;
-  flex: 0 1 104px;
-  min-width: 64px;
-  max-width: 104px;
+  min-width: 0;
+  max-width: none;
   width: 100%;
   display: inline-flex;
   align-items: center;
@@ -226,22 +228,26 @@
 
 @media (max-width: 440px) {
   .rvi-pause-row {
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      'name remove'
+      'duration interval';
     align-items: flex-start;
   }
 
   .rvi-pause-row__name {
-    order: 1;
-    flex: 1 1 calc(100% - 28px);
+    grid-area: name;
   }
 
   .rvi-pause-row__remove {
-    order: 2;
-    margin-left: auto;
+    grid-area: remove;
   }
 
-  .rvi-pause-row__field {
-    order: 3;
-    flex: 1 1 calc(50% - 4px);
+  .rvi-pause-row > .rvi-pause-row__field:nth-of-type(2) {
+    grid-area: duration;
+  }
+
+  .rvi-pause-row > .rvi-pause-row__field:nth-of-type(3) {
+    grid-area: interval;
   }
 }

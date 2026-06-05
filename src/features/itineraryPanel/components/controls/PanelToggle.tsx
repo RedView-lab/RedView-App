@@ -27,6 +27,7 @@ interface ToggleRowProps {
   onChange?: (v: boolean) => void;
   label: string;
   trailing?: ReactNode;
+  trailingMuted?: boolean;
   /**
    * When true the trailing element hugs the label at a 4-px gap instead
    * of the row's default 12-px gap. Matches Figma 855:19587 (POI favori
@@ -44,6 +45,7 @@ export function ToggleRow({
   onChange,
   label,
   trailing,
+  trailingMuted = false,
   trailingTight = false,
 }: ToggleRowProps) {
   const { t } = useAppI18n();
@@ -60,7 +62,13 @@ export function ToggleRow({
       >
         {t(label)}
       </button>
-      {trailing ? <span className="rvi-toggle-row__trailing">{trailing}</span> : null}
+      {trailing ? (
+        <span
+          className={`rvi-toggle-row__trailing${trailingMuted ? ' rvi-toggle-row__trailing--muted' : ''}`}
+        >
+          {trailing}
+        </span>
+      ) : null}
     </div>
   );
 }
