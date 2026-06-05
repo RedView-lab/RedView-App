@@ -124,7 +124,7 @@
 .rvi-panel__mode-layout {
   display: grid;
   flex: 1 1 auto;
-  min-height: 100%;
+  min-height: 0;
   gap: 12px;
   grid-template-rows: minmax(0, 1fr) minmax(0, var(--rvi-dock-height, 320px));
   transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -138,19 +138,12 @@
   position: relative;
   display: flex;
   min-height: 0;
-  overflow: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow: visible;
   opacity: calc(1 - (var(--rvi-main-dispawn, 0) * 0.16));
   transform: translateY(calc(var(--rvi-main-dispawn, 0) * -12px));
   transition:
     opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
     transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.rvi-panel__mode-main::-webkit-scrollbar {
-  width: 0;
-  height: 0;
 }
 
 .rvi-panel__mode-main::after {
@@ -174,7 +167,7 @@
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  min-height: min-content;
+  min-height: 0;
   gap: 12px;
 }
 

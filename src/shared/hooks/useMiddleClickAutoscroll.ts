@@ -5,6 +5,7 @@ const SCROLL_SPEED = 0.35;
 
 export function useMiddleClickAutoscroll<T extends HTMLElement>() {
   const scrollRef = useRef<T | null>(null);
+  const activeScrollNodeRef = useRef<HTMLElement | null>(null);
   const frameRef = useRef<number | null>(null);
   const activeRef = useRef(false);
   const pointerRef = useRef({ x: 0, y: 0 });
@@ -17,6 +18,7 @@ export function useMiddleClickAutoscroll<T extends HTMLElement>() {
 
     const stop = () => {
       activeRef.current = false;
+      activeScrollNodeRef.current = null;
       setIsAutoscrolling(false);
       if (frameRef.current != null) {
         window.cancelAnimationFrame(frameRef.current);
@@ -31,6 +33,8 @@ export function useMiddleClickAutoscroll<T extends HTMLElement>() {
     const tick = () => {
       if (!activeRef.current) return;
 
+      const scrollNode = activeScrollNodeRef.current ?? node;
+
       const deltaX = pointerRef.current.x - anchorRef.current.x;
       const deltaY = pointerRef.current.y - anchorRef.current.y;
 
@@ -43,14 +47,15 @@ export function useMiddleClickAutoscroll<T extends HTMLElement>() {
           ? 0
           : (deltaY - Math.sign(deltaY) * DEAD_ZONE_PX) * SCROLL_SPEED;
 
-      if (scrollX !== 0) node.scrollLeft += scrollX;
-      if (scrollY !== 0) node.scrollTop += scrollY;
+      if (scrollX !== 0) scrollNode.scrollLeft += scrollX;
+      if (scrollY !== 0) scrollNode.scrollTop += scrollY;
 
       frameRef.current = window.requestAnimationFrame(tick);
     };
 
-    const start = (clientX: number, clientY: number) => {
+    const start = (clientX: number, clientY: number, scrollNode: HTMLElement) => {
       activeRef.current = true;
+      activeScrollNodeRef.current = scrollNode;
       anchorRef.current = { x: clientX, y: clientY };
       pointerRef.current = { x: clientX, y: clientY };
       setIsAutoscrolling(true);
@@ -85,7 +90,7 @@ export function useMiddleClickAutoscroll<T extends HTMLElement>() {
         stop();
         return;
       }
-      start(event.clientX, event.clientY);
+      start(event.clientX, event.clientY, resolveScrollableNode(event.target, node));
     };
 
     const handleAuxClick = (event: MouseEvent) => {
@@ -105,4 +110,26 @@ export function useMiddleClickAutoscroll<T extends HTMLElement>() {
   }, []);
 
   return { scrollRef, isAutoscrolling };
+}
+
+function resolveScrollableNode(target: EventTarget | null, fallback: HTMLElement): HTMLElement {
+  const root = fallback;
+  let current = target instanceof HTMLElement ? target : fallback;
+
+  while (current) {
+    if (isScrollable(current)) return current;
+    if (current === root) break;
+    current = current.parentElement ?? root;
+  }
+
+  return fallback;
+}
+
+function isScrollable(node: HTMLElement): boolean {
+  const style = window.getComputedStyle(node);
+  const canScrollY =
+    /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1;
+  const canScrollX =
+    /(auto|scroll|overlay)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 1;
+  return canScrollX || canScrollY;
 }
