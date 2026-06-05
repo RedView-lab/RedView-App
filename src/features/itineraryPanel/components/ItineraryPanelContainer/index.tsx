@@ -5,6 +5,12 @@ import {
   createOverlayStatus,
   type OverlayStatusReporter,
 } from '@/features/map3d';
+import type {
+  MapContextMenuActionPayload,
+  MapContextMenuPoint,
+  MapPoiDraft,
+  MapPoiDraftActionPayload,
+} from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
@@ -47,6 +53,117 @@ import {
   insertTimelineItem,
   moveTimelinePauseItem,
 } from './timelineMutations';
+import { listenItineraryMapAction } from '../../lib/mapActionBridge';
+
+const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
+
+function resolveMapContextPointTitle(point: MapContextMenuPoint): string {
+  return point.title?.trim() || point.coordinatesLabel;
+}
+
+function resolveDraftTitle(draft: MapPoiDraft): string {
+  return draft.name?.trim() || draft.point.title?.trim() || 'POI';
+}
+
+function resolveDraftFeatureId(draft: MapPoiDraft): number {
+  const match = /(\d+)$/.exec(draft.id);
+  const parsed = match ? Number.parseInt(match[1], 10) : Number.NaN;
+  return Number.isFinite(parsed) ? -parsed : -Date.now();
+}
+
+function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
+  if (!draft.category) return null;
+
+  return {
+    id: resolveDraftFeatureId(draft),
+    lat: draft.point.lat,
+    lon: draft.point.lng,
+    category: draft.category,
+    name: resolveDraftTitle(draft),
+    tags: { source: 'redview_custom_poi' },
+    favorite: draft.favorite,
+  };
+}
+
+function buildTimelineRowFromPoiFeature(
+  itinerary: Itinerary,
+  feature: PoiFeature,
+): Itinerary['timeline'][number] | null {
+  const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
+  if (!panelCategory) return null;
+
+  const routePoints = itinerary.gpxRoute?.points.map((point) => ({ lat: point.lat, lon: point.lon })) ?? [];
+  const projectedRow = routePoints.length >= 2 ? poiFeaturesToTimelineItems([feature], routePoints)[0] : null;
+  if (projectedRow) return projectedRow;
+
+  return {
+    id: `poi-${feature.id}`,
+    kind: 'poi',
+    label: feature.name?.trim() || POI_LABELS[feature.category] || 'POI',
+    distanceKm: null,
+    lat: feature.lat,
+    lon: feature.lon,
+    poiCategory: panelCategory,
+    osmId: feature.id,
+    favorite: feature.favorite,
+    visible: true,
+  };
+}
+
+function upsertDraftPoiIntoItinerary(itinerary: Itinerary, draft: MapPoiDraft): number | null {
+  const feature = buildDraftPoiFeature(draft);
+  if (!feature) return null;
+
+  const currentFeatures = itinerary.poiFeatures ?? [];
+  const existingFeatureIndex = currentFeatures.findIndex((entry) => entry.id === feature.id);
+  itinerary.poiFeatures = existingFeatureIndex >= 0
+    ? currentFeatures.map((entry, index) => (index === existingFeatureIndex ? { ...entry, ...feature } : entry))
+    : [...currentFeatures, feature];
+
+  const nextRow = buildTimelineRowFromPoiFeature(itinerary, feature);
+  if (!nextRow) return feature.id;
+
+  const existingRowIndex = itinerary.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
+  if (existingRowIndex >= 0) {
+    const previous = itinerary.timeline[existingRowIndex];
+    itinerary.timeline[existingRowIndex] = {
+      ...nextRow,
+      visible: previous.visible ?? nextRow.visible,
+      favorite: feature.favorite,
+      distanceKm: nextRow.distanceKm ?? previous.distanceKm ?? null,
+    };
+    return feature.id;
+  }
+
+  let insertAt = itinerary.timeline.findIndex((row) => row.kind === 'end');
+  if (insertAt < 0) insertAt = itinerary.timeline.length;
+
+  if (nextRow.distanceKm != null) {
+    const nextDistanceKm = nextRow.distanceKm;
+    const distanceInsertIndex = itinerary.timeline.findIndex((row) => (
+      row.kind !== 'start'
+      && (row.kind === 'end' || (row.distanceKm != null && row.distanceKm > nextDistanceKm))
+    ));
+    if (distanceInsertIndex >= 0) {
+      insertAt = distanceInsertIndex;
+    }
+  }
+
+  itinerary.timeline.splice(insertAt, 0, nextRow);
+  return feature.id;
+}
+
+function removePoiAndLinkedWaypoints(itinerary: Itinerary, poiId: number): void {
+  if (itinerary.poiFeatures) {
+    itinerary.poiFeatures = itinerary.poiFeatures.filter((feature) => feature.id !== poiId);
+  }
+
+  itinerary.timeline = itinerary.timeline.filter((row) => !(
+    (row.kind === 'poi' && row.osmId === poiId)
+    || (row.kind === 'waypoint' && row.osmId === poiId)
+    || row.id === `poi-waypoint-${poiId}`
+  ));
+}
 
 interface ItineraryPanelContainerProps {
   projectId?: string | null;
@@ -187,7 +304,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     }
 
     onRouteStatusChange(null);
-  }, [onRouteStatusChange, routeError, routeLoading, routeRequestNonce]);
+  }, [onRouteStatusChange, routeError, routeLoading, routeRequestNonce, t]);
 
   useEffect(() => {
     return () => {
@@ -336,6 +453,21 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     });
   }, [resolvePoiTitle, updateActive]);
 
+  const handlePoiCyclePauseDuration = useCallback((feature: PoiFeature) => {
+    updateActive((it) => {
+      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
+      const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
+      if (!panelCategory) return;
+
+      const rhythm = normalizeItineraryRhythmState(it.rhythm);
+      it.rhythm = rhythm;
+      const current = rhythm.poiPauseDurations[panelCategory] ?? POI_PAUSE_DURATION_STEPS[0];
+      const currentIndex = POI_PAUSE_DURATION_STEPS.findIndex((value) => value === current);
+      const nextDuration = POI_PAUSE_DURATION_STEPS[(currentIndex + 1) % POI_PAUSE_DURATION_STEPS.length] ?? POI_PAUSE_DURATION_STEPS[0];
+      rhythm.poiPauseDurations[panelCategory] = nextDuration;
+    });
+  }, [updateActive]);
+
   const handlePoiPauseToggle = useCallback((
     feature: PoiFeature,
     nextEnabled: boolean,
@@ -408,6 +540,201 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     url.searchParams.set('viewpoint', `${feature.lat},${feature.lon}`);
     window.open(url.toString(), '_blank', 'noopener,noreferrer');
   }, []);
+
+  const handlePoiDelete = useCallback((feature: PoiFeature) => {
+    updateActive((it) => {
+      removePoiAndLinkedWaypoints(it, feature.id);
+      delete it.pendingRoutePatch;
+      delete it.pendingTraceExtension;
+      delete it.routeAudit;
+      it.prediction = null;
+    });
+  }, [updateActive]);
+
+  const handleExternalMapContextAction = useCallback((payload: MapContextMenuActionPayload) => {
+    switch (payload.action) {
+      case 'set-start':
+        updateActive((it) => {
+          let row = it.timeline.find((item) => item.kind === 'start');
+          if (!row) {
+            insertTimelineItem(it.timeline, 'start');
+            row = it.timeline.find((item) => item.kind === 'start');
+          }
+          if (!row) return;
+
+          row.label = resolveMapContextPointTitle(payload.point);
+          row.lat = payload.point.lat;
+          row.lon = payload.point.lng;
+          row.distanceKm = 0;
+          delete it.routeAudit;
+          delete it.pendingTraceExtension;
+          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          }
+        });
+        break;
+      case 'add-waypoint':
+        updateActive((it) => {
+          const waypointId = `map-waypoint-${Date.now()}`;
+          if (it.timeline.some((row) => row.id === waypointId)) return;
+
+          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
+          const insertAt = endIndex >= 0 ? endIndex : it.timeline.length;
+
+          it.timeline.splice(insertAt, 0, {
+            id: waypointId,
+            kind: 'waypoint',
+            label: resolveMapContextPointTitle(payload.point),
+            distanceKm: null,
+            lat: payload.point.lat,
+            lon: payload.point.lng,
+            visible: true,
+          });
+
+          delete it.pendingRoutePatch;
+          delete it.pendingTraceExtension;
+          delete it.routeAudit;
+          it.prediction = null;
+        });
+        break;
+      case 'set-finish':
+        updateActive((it) => {
+          let row = it.timeline.find((item) => item.kind === 'end');
+          if (!row) {
+            insertTimelineItem(it.timeline, 'end');
+            row = it.timeline.find((item) => item.kind === 'end');
+          }
+          if (!row) return;
+
+          row.label = resolveMapContextPointTitle(payload.point);
+          row.lat = payload.point.lat;
+          row.lon = payload.point.lng;
+          row.distanceKm = null;
+          delete it.routeAudit;
+          delete it.pendingTraceExtension;
+          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          }
+        });
+        break;
+      default:
+        break;
+    }
+  }, [updateActive]);
+
+  const handleExternalPoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
+    switch (payload.action) {
+      case 'toggle-favorite':
+      case 'change-category':
+        updateActive((it) => {
+          upsertDraftPoiIntoItinerary(it, payload.draft);
+        });
+        break;
+      case 'start-here':
+        updateActive((it) => {
+          upsertDraftPoiIntoItinerary(it, payload.draft);
+
+          let row = it.timeline.find((item) => item.kind === 'start');
+          if (!row) {
+            insertTimelineItem(it.timeline, 'start');
+            row = it.timeline.find((item) => item.kind === 'start');
+          }
+          if (!row) return;
+
+          row.label = resolveDraftTitle(payload.draft);
+          row.lat = payload.draft.point.lat;
+          row.lon = payload.draft.point.lng;
+          row.distanceKm = 0;
+          delete it.routeAudit;
+          delete it.pendingTraceExtension;
+          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          }
+        });
+        break;
+      case 'add-waypoint':
+        updateActive((it) => {
+          const poiId = upsertDraftPoiIntoItinerary(it, payload.draft);
+          const waypointId = poiId != null ? `poi-waypoint-${poiId}` : `draft-waypoint-${payload.draft.id}`;
+          const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
+          if (existingIndex >= 0) return;
+
+          const poiIndex = poiId != null
+            ? it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === poiId)
+            : -1;
+          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
+          const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
+          const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
+
+          it.timeline.splice(insertAt, 0, {
+            id: waypointId,
+            kind: 'waypoint',
+            label: resolveDraftTitle(payload.draft),
+            distanceKm: anchorRow?.distanceKm ?? null,
+            lat: payload.draft.point.lat,
+            lon: payload.draft.point.lng,
+            osmId: poiId ?? undefined,
+            visible: true,
+          });
+
+          delete it.pendingRoutePatch;
+          delete it.pendingTraceExtension;
+          delete it.routeAudit;
+          it.prediction = null;
+        });
+        break;
+      case 'finish-here':
+        updateActive((it) => {
+          upsertDraftPoiIntoItinerary(it, payload.draft);
+
+          let row = it.timeline.find((item) => item.kind === 'end');
+          if (!row) {
+            insertTimelineItem(it.timeline, 'end');
+            row = it.timeline.find((item) => item.kind === 'end');
+          }
+          if (!row) return;
+
+          row.label = resolveDraftTitle(payload.draft);
+          row.lat = payload.draft.point.lat;
+          row.lon = payload.draft.point.lng;
+          row.distanceKm = null;
+          delete it.routeAudit;
+          delete it.pendingTraceExtension;
+          it.prediction = null;
+
+          if (it.gpxRoute?.source === 'brouter') {
+            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
+          }
+        });
+        break;
+      case 'delete':
+        updateActive((it) => {
+          removePoiAndLinkedWaypoints(it, resolveDraftFeatureId(payload.draft));
+          delete it.pendingRoutePatch;
+          delete it.pendingTraceExtension;
+          delete it.routeAudit;
+          it.prediction = null;
+        });
+        break;
+      default:
+        break;
+    }
+  }, [updateActive]);
+
+  useEffect(() => listenItineraryMapAction((detail) => {
+    if (detail.kind === 'context-menu') {
+      handleExternalMapContextAction(detail.payload);
+      return;
+    }
+
+    handleExternalPoiDraftAction(detail.payload);
+  }), [handleExternalMapContextAction, handleExternalPoiDraftAction]);
 
   const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
@@ -513,10 +840,12 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       onStartHere: handlePoiStartHere,
       onAddWaypoint: handlePoiAddWaypoint,
       onFinishHere: handlePoiFinishHere,
+      onCyclePauseDuration: handlePoiCyclePauseDuration,
       onToggleFavorite: handlePoiFavoriteToggle,
       onTogglePause: handlePoiPauseToggle,
       onToggleManualTrace: handlePoiManualTraceToggle,
       onOpenStreetView: handlePoiStreetView,
+      onDelete: handlePoiDelete,
     },
   );
 

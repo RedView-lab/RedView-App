@@ -54,10 +54,12 @@
 
 /* ---- Label + chip group (Durée / Interval) -------------------------------- */
 .rvi-pause-row__field {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(64px, 104px);
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  flex: 0 1 160px;
+  min-width: 0;
 }
 
 .rvi-pause-row__field-label {
@@ -75,7 +77,9 @@
 /* Numeric chip: fixed 60px wide, radius 4 (Figma 1695:22013). */
 .rvi-pause-chip {
   box-sizing: border-box;
-  width: 60px;
+  width: 100%;
+  min-width: 64px;
+  max-width: 104px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
@@ -87,8 +91,8 @@
 .rvi-pause-chip__native {
   display: block;
   box-sizing: border-box;
-  min-width: 24px;
-  max-width: 48px;
+  min-width: 0;
+  max-width: none;
   width: 100%;
   text-align: left;
   font-family: 'Rethink Sans', sans-serif;
@@ -188,10 +192,12 @@
 }
 
 .rvi-poipause-cell__chip {
-  /* Fixed 64 px so every row's chip lines up column-wise. */
+  /* Default field clamp for pause durations in the responsive POI grid. */
   box-sizing: border-box;
-  flex-shrink: 0;
-  width: 64px;
+  flex: 0 1 104px;
+  min-width: 64px;
+  max-width: 104px;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.08);
@@ -216,4 +222,26 @@
 }
 .rvi-poipause-cell__native:disabled {
   cursor: not-allowed;
+}
+
+@media (max-width: 440px) {
+  .rvi-pause-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .rvi-pause-row__name {
+    order: 1;
+    flex: 1 1 calc(100% - 28px);
+  }
+
+  .rvi-pause-row__remove {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .rvi-pause-row__field {
+    order: 3;
+    flex: 1 1 calc(50% - 4px);
+  }
 }

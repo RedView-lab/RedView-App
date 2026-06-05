@@ -49,6 +49,7 @@ export interface UsePoiPopupActions {
   onStartHere?: (feature: PoiFeature) => void;
   onAddWaypoint?: (feature: PoiFeature) => void;
   onFinishHere?: (feature: PoiFeature) => void;
+  onCyclePauseDuration?: (feature: PoiFeature) => void;
   onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onTogglePause?: (
     feature: PoiFeature,
@@ -57,6 +58,7 @@ export interface UsePoiPopupActions {
   ) => void;
   onToggleManualTrace?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onOpenStreetView?: (feature: PoiFeature) => void;
+  onDelete?: (feature: PoiFeature) => void;
 }
 
 const DEFAULT_POPUP_STATE: PoiPopupState = {
@@ -151,13 +153,12 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
 
       <div class="rv-poi-popup__field-row">
         <div class="rv-poi-popup__field-label">Type</div>
-        <button type="button" class="rv-poi-popup__select" aria-label="Type de POI">
+        <div class="rv-poi-popup__select" aria-label="Type de POI" role="presentation">
           <span class="rv-poi-popup__type-icon-wrap">
             <img src="${getPoiIconUrl(feature.category, state.favoriteEnabled)}" alt="" class="rv-poi-popup__type-icon" />
           </span>
           <span class="rv-poi-popup__select-value">${escapeHtml(category)}</span>
-          <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
-        </button>
+        </div>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
@@ -169,7 +170,7 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
           </span>
           <span class="rv-poi-popup__toggle-label">Pause</span>
         </button>
-        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause" data-action="pause-toggle" aria-pressed="${state.pauseEnabled}">
+        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause" data-action="pause-duration">
           <span class="rv-poi-popup__select-value">${pauseDurationLabel}</span>
           <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
         </button>
@@ -207,7 +208,7 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
         <span class="rv-poi-popup__action-label">Finir ici</span>
       </button>
 
-      <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete">
+      <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
         <span class="rv-poi-popup__utility-icon-wrap">
           <img src="${UI_ICON_URLS.trash}" alt="" class="rv-poi-popup__utility-icon" />
         </span>
@@ -265,6 +266,10 @@ function buildPopupContent(
     refresh(nextState);
   });
 
+  bindClick('[data-action="pause-duration"]', () => {
+    actions.onCyclePauseDuration?.(feature);
+  });
+
   bindClick('[data-action="manual-trace"]', () => {
     const nextState = {
       ...state,
@@ -284,6 +289,10 @@ function buildPopupContent(
 
   bindClick('[data-action="finish-here"]', () => {
     actions.onFinishHere?.(feature);
+  });
+
+  bindClick('[data-action="delete"]', () => {
+    actions.onDelete?.(feature);
   });
 
   return panel;

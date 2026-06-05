@@ -11,7 +11,7 @@
 
 /* ── Priorities grid — Figma 1697:23227 ──────────────────────────
    Two vertical columns (Durée+Distance | Dénivelé+Tranquilité) with
-   8px column gap and 2px row gap inside each column. */
+   8px column gap and 8px row gap inside each column. */
 .rvi-priorities {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -24,7 +24,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 8px;
 }
 
 /* ── Types de route rows — Figma 1697:23276…1697:23321 ──────────
@@ -300,15 +300,16 @@
 }
 
 .rvi-chip-input {
-  /* Fixed 64 px so chips line up column-wise across every row in a
-     CheckboxField stack, regardless of content width (FTP "300" vs
-     "95 kg" vs "100%"). Label absorbs the remaining width via flex. */
+  /* Default field size: 64 px base width with a 104 px hard cap.
+     Checkbox rows keep the label as the only flexible element. */
   background: var(--rvi-bg-chip);
   border: none;
   border-radius: 6px;
   padding: 6px 8px;
   height: 28px;
-  flex-shrink: 0;
+  flex: 0 0 64px;
+  min-width: 64px;
+  max-width: 104px;
   width: 64px;
   display: inline-flex;
   align-items: center;
@@ -343,10 +344,14 @@
   font-size: 14px;
   font-weight: 600; /* SemiBold — Figma 1251:19621 */
   cursor: pointer;
-  flex-shrink: 0;
+  flex: 0 1 104px;
+  min-width: 64px;
+  max-width: 104px;
   position: relative;
   box-sizing: border-box;
   height: 28px;
+  width: 100%;
+  overflow: hidden;
 }
 .rvi-datechip:hover { background: var(--rvi-bg-chip-hover); }
 .rvi-datechip__icon {
@@ -358,12 +363,21 @@
   flex-shrink: 0;
 }
 
+.rvi-datechip > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rvi-time-input {
   position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 108px;
+  width: 88px;
+  min-width: 88px;
+  max-width: 104px;
   height: 30px;
   padding: 2px 8px;
   border-radius: 6px;
@@ -372,7 +386,7 @@
   font-family: 'Rethink Sans', sans-serif;
   font-size: 14px;
   font-weight: 600;
-  flex-shrink: 0;
+  flex: 0 0 88px;
   box-sizing: border-box;
 }
 
@@ -472,8 +486,10 @@
   align-items: center;
   gap: 2px;
   box-sizing: border-box;
-  flex-shrink: 0;
-  max-width: 132px;
+  flex: 0 0 88px;
+  min-width: 88px;
+  max-width: 104px;
+  width: 88px;
   padding: 7px 8px 7px 6px;
   background: var(--rvi-bg-chip);
   border-radius: 6px;
@@ -511,8 +527,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   cursor: pointer;
   flex-shrink: 0;
   position: relative;
@@ -604,8 +620,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  flex: 0 0 auto;
+  min-width: 16px;
+  min-height: 16px;
   color: var(--rvi-text);
   opacity: 0.6;
 }

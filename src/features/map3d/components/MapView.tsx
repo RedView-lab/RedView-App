@@ -13,6 +13,7 @@ import { MapPoiDraftCard, type MapPoiDraft, type MapPoiDraftActionPayload } from
 import type { MapViewport } from '../lib/viewport-persist';
 import type { OverlayReloadRegistrar, OverlayStatusReporter } from '../lib/overlayStatus';
 import type { BasemapRenderConfig } from '@/features/controlPanel/lib';
+import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
 import { resolvePanelPlacement } from './panelPlacement';
 
 function sampleSlopePct(map: MapboxMap, lng: number, lat: number): number | null {
@@ -97,6 +98,7 @@ export default memo(function MapView({
 
   const handleMapContextMenuAction = useCallback((payload: MapContextMenuActionPayload) => {
     onMapContextMenuAction?.(payload);
+    dispatchItineraryMapAction({ kind: 'context-menu', payload });
     if (payload.action !== 'create-poi') return;
     const containerRect = containerRef.current?.getBoundingClientRect();
     const anchorX = containerRect ? payload.screenPoint.x - containerRect.left : payload.screenPoint.x;
@@ -112,7 +114,14 @@ export default memo(function MapView({
 
   const handlePoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
     onMapPoiDraftAction?.(payload);
-    if (payload.action === 'delete' || payload.action === 'close') {
+    dispatchItineraryMapAction({ kind: 'poi-draft', payload });
+    if (
+      payload.action === 'delete'
+      || payload.action === 'close'
+      || payload.action === 'start-here'
+      || payload.action === 'add-waypoint'
+      || payload.action === 'finish-here'
+    ) {
       setPoiDraft(null);
     }
   }, [onMapPoiDraftAction]);

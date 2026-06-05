@@ -80,6 +80,22 @@
   opacity: 1;
 }
 
+@media (max-width: 440px) {
+  .rvi-poi-refine {
+    flex-wrap: wrap;
+  }
+
+  .rvi-poi-refine__toggle {
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .rvi-categories-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 /* "Charger" button — disabled state (no GPX or no enabled category). */
 .rvi-redbtn.is-disabled,
 .rvi-redbtn[disabled] {
