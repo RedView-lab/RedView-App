@@ -32,11 +32,13 @@ interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
   popup: mapboxgl.Popup;
   signature: string;
+  lon: number;
+  lat: number;
 }
 
 interface PoiMarkerVisualState {
   scale: number;
-  altitude: number;
+  lift: number;
   popupOffsetPx: number;
 }
 
@@ -319,16 +321,42 @@ function getPoiMarkerVisualState(zoom: number): PoiMarkerVisualState {
 
   return {
     scale,
-    altitude: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
+    lift: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
     popupOffsetPx: Math.round(
       lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
     ),
   };
 }
 
+/**
+ * Terrain-aware marker altitude.
+ *
+ * Mapbox's built-in marker terrain snapping is unreliable on top of our
+ * custom service-worker DEM (markers fall back to ~sea level and sink far
+ * below the exaggerated 3D terrain, while the GPU-draped route line stays
+ * on the surface). We therefore anchor markers explicitly the same way the
+ * rest of the app positions terrain elements: query the rendered
+ * (exaggerated) terrain height at the POI and add a small zoom-responsive
+ * lift. Returns just the lift when terrain isn't ready yet — a later
+ * `idle`/`zoom` refresh re-runs this once tiles load.
+ */
+function resolveMarkerAltitude(
+  map: MapboxMap,
+  lon: number,
+  lat: number,
+  lift: number,
+): number {
+  const terrain = map.queryTerrainElevation?.([lon, lat], { exaggerated: true });
+  const base = typeof terrain === 'number' && Number.isFinite(terrain) ? terrain : 0;
+  return base + lift;
+}
+
 function applyPoiMarkerVisualState(
+  map: MapboxMap,
   marker: mapboxgl.Marker,
   popup: mapboxgl.Popup,
+  lon: number,
+  lat: number,
   zoom: number,
 ): void {
   const visualState = getPoiMarkerVisualState(zoom);
@@ -336,8 +364,9 @@ function applyPoiMarkerVisualState(
     '--rv-poi-marker-scale',
     visualState.scale.toFixed(3),
   );
-  marker.setAltitude(visualState.altitude);
-  popup.setAltitude(visualState.altitude);
+  const altitude = resolveMarkerAltitude(map, lon, lat, visualState.lift);
+  marker.setAltitude(altitude);
+  popup.setAltitude(altitude);
   popup.setOffset(visualState.popupOffsetPx);
 }
 
@@ -353,7 +382,6 @@ function createPoiMarker(
     focusAfterOpen: false,
     maxWidth: 'none',
     offset: MARKER_MAX_POPUP_OFFSET_PX,
-    altitude: MARKER_MIN_LIFT_M,
   });
 
   const refresh = (nextState?: PoiPopupState) => {
@@ -376,19 +404,20 @@ function createPoiMarker(
     anchor: 'bottom',
     pitchAlignment: 'viewport',
     rotationAlignment: 'viewport',
-    occludedOpacity: 0,
-    altitude: MARKER_MIN_LIFT_M,
+    occludedOpacity: 1,
   })
     .setLngLat([feature.lon, feature.lat])
     .setPopup(popup)
     .addTo(map);
 
-  applyPoiMarkerVisualState(marker, popup, map.getZoom());
+  applyPoiMarkerVisualState(map, marker, popup, feature.lon, feature.lat, map.getZoom());
 
   return {
     marker,
     popup,
     signature: getMarkerSignature(feature),
+    lon: feature.lon,
+    lat: feature.lat,
   };
 }
 
@@ -487,8 +516,8 @@ export function usePoi(
 
   const syncMarkerVisualState = useCallback((m: MapboxMap) => {
     const zoom = m.getZoom();
-    for (const { marker, popup } of markerRegistryRef.current.values()) {
-      applyPoiMarkerVisualState(marker, popup, zoom);
+    for (const { marker, popup, lon, lat } of markerRegistryRef.current.values()) {
+      applyPoiMarkerVisualState(m, marker, popup, lon, lat, zoom);
     }
   }, []);
 
@@ -639,12 +668,18 @@ export function usePoi(
 
     scheduleVisualRefresh();
     map.on('zoom', scheduleVisualRefresh);
+    map.on('move', scheduleVisualRefresh);
+    // `idle` fires once terrain tiles finish loading, so markers created
+    // before the DEM was ready get re-anchored onto the surface here.
+    map.on('idle', scheduleVisualRefresh);
 
     return () => {
       if (frameId != null) {
         window.cancelAnimationFrame(frameId);
       }
       map.off('zoom', scheduleVisualRefresh);
+      map.off('move', scheduleVisualRefresh);
+      map.off('idle', scheduleVisualRefresh);
     };
   }, [map, isMapLoaded, syncMarkerVisualState]);
 
