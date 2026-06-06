@@ -137,6 +137,7 @@
 .rvi-panel__mode-main {
   position: relative;
   display: flex;
+  align-items: flex-start;
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
