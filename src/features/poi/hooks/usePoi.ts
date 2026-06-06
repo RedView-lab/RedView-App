@@ -4,18 +4,22 @@ import mapboxgl from 'mapbox-gl';
 import { POI_LABELS, type PoiCategory, type PoiFeature, type GpxRoute } from '../types';
 import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
-import { getPoiIconUrl, hasDedicatedFavoritePoiIcon } from '../lib/poi-icons';
+import {
+  getPoiIconUrl,
+  getPoiLayerIconId,
+  registerPoiIcons,
+  resetIconRegistration,
+} from '../lib/poi-icons';
 import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
 import '../styles/floating-markers.css';
 
 // ── Constants ─────────────────────────────────────────────────────────
 
+const SOURCE_ID = 'poi-source';
+const LAYER_ID = 'poi-layer';
+const TEXT_LAYER_ID = 'poi-text-layer';
 const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
-const MARKER_MIN_SCREEN_SCALE = 0.42;
-const MARKER_MAX_SCREEN_SCALE = 1;
-const MARKER_MIN_LIFT_M = 7;
-const MARKER_MAX_LIFT_M = 10.5;
 const MARKER_MIN_POPUP_OFFSET_PX = 26;
 const MARKER_MAX_POPUP_OFFSET_PX = 34;
 
@@ -28,18 +32,9 @@ const UI_ICON_URLS = {
   trash: '/right-click-icons/trash-01.svg',
 } as const;
 
-interface PoiMarkerEntry {
-  marker: mapboxgl.Marker;
-  popup: mapboxgl.Popup;
+interface PoiRenderedFeatureEntry {
+  feature: PoiFeature;
   signature: string;
-  lon: number;
-  lat: number;
-}
-
-interface PoiMarkerVisualState {
-  scale: number;
-  lift: number;
-  popupOffsetPx: number;
 }
 
 export interface PoiPopupState {
@@ -86,49 +81,6 @@ function getMarkerSignature(feature: PoiFeature): string {
     feature.name ?? '',
     feature.tags.opening_hours ?? '',
   ].join('|');
-}
-
-function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
-  const element = document.createElement('button');
-  element.type = 'button';
-  element.className = 'rv-poi-marker';
-  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
-    element.classList.add('is-favorite-fallback');
-  }
-  element.dataset.poiCategory = feature.category;
-  element.setAttribute(
-    'aria-label',
-    feature.name?.trim()
-      ? `${feature.name} - ${POI_LABELS[feature.category]}`
-      : POI_LABELS[feature.category],
-  );
-  element.title = feature.name?.trim() || POI_LABELS[feature.category];
-
-  const image = document.createElement('img');
-  image.className = 'rv-poi-marker__img';
-  image.src = getPoiIconUrl(feature.category, feature.favorite === true);
-  image.alt = '';
-  image.draggable = false;
-  image.decoding = 'async';
-
-  element.appendChild(image);
-
-  if (feature.favorite && !hasDedicatedFavoritePoiIcon(feature.category)) {
-    const badge = document.createElement('span');
-    badge.className = 'rv-poi-marker__favorite-badge';
-    badge.setAttribute('aria-hidden', 'true');
-
-    const badgeIcon = document.createElement('img');
-    badgeIcon.className = 'rv-poi-marker__favorite-badge-icon';
-    badgeIcon.src = UI_ICON_URLS.star;
-    badgeIcon.alt = '';
-    badgeIcon.draggable = false;
-    badge.appendChild(badgeIcon);
-
-    element.appendChild(badge);
-  }
-
-  return element;
 }
 
 function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
@@ -315,110 +267,11 @@ function resolvePopupState(
   };
 }
 
-function getPoiMarkerVisualState(zoom: number): PoiMarkerVisualState {
+function getPoiPopupOffsetPx(zoom: number): number {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
-  const scale = lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress);
-
-  return {
-    scale,
-    lift: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
-    popupOffsetPx: Math.round(
-      lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
-    ),
-  };
-}
-
-/**
- * Terrain-aware marker altitude.
- *
- * Mapbox's built-in marker terrain snapping is unreliable on top of our
- * custom service-worker DEM (markers fall back to ~sea level and sink far
- * below the exaggerated 3D terrain, while the GPU-draped route line stays
- * on the surface). We therefore anchor markers explicitly the same way the
- * rest of the app positions terrain elements: query the rendered
- * (exaggerated) terrain height at the POI and add a small zoom-responsive
- * lift. Returns just the lift when terrain isn't ready yet — a later
- * `idle`/`zoom` refresh re-runs this once tiles load.
- */
-function resolveMarkerAltitude(
-  map: MapboxMap,
-  lon: number,
-  lat: number,
-  lift: number,
-): number {
-  const terrain = map.queryTerrainElevation?.([lon, lat], { exaggerated: true });
-  const base = typeof terrain === 'number' && Number.isFinite(terrain) ? terrain : 0;
-  return base + lift;
-}
-
-function applyPoiMarkerVisualState(
-  map: MapboxMap,
-  marker: mapboxgl.Marker,
-  popup: mapboxgl.Popup,
-  lon: number,
-  lat: number,
-  zoom: number,
-): void {
-  const visualState = getPoiMarkerVisualState(zoom);
-  marker.getElement().style.setProperty(
-    '--rv-poi-marker-scale',
-    visualState.scale.toFixed(3),
+  return Math.round(
+    lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
   );
-  const altitude = resolveMarkerAltitude(map, lon, lat, visualState.lift);
-  marker.setAltitude(altitude);
-  popup.setAltitude(altitude);
-  popup.setOffset(visualState.popupOffsetPx);
-}
-
-function createPoiMarker(
-  map: MapboxMap,
-  feature: PoiFeature,
-  actions: UsePoiPopupActions,
-): PoiMarkerEntry {
-  const popup = new mapboxgl.Popup({
-    className: 'rv-poi-popup',
-    closeButton: false,
-    closeOnClick: true,
-    focusAfterOpen: false,
-    maxWidth: 'none',
-    offset: MARKER_MAX_POPUP_OFFSET_PX,
-  });
-
-  const refresh = (nextState?: PoiPopupState) => {
-    popup.setDOMContent(buildPopupContent(
-      feature,
-      resolvePopupState(actions, feature, nextState),
-      actions,
-      refresh,
-    ));
-  };
-
-  refresh();
-
-  popup.on('open', () => {
-    refresh();
-  });
-
-  const marker = new mapboxgl.Marker({
-    element: createMarkerElement(feature),
-    anchor: 'bottom',
-    pitchAlignment: 'viewport',
-    rotationAlignment: 'viewport',
-    occludedOpacity: 1,
-  })
-    .setLngLat([feature.lon, feature.lat])
-    .setPopup(popup)
-    .addTo(map);
-
-  applyPoiMarkerVisualState(map, marker, popup, feature.lon, feature.lat, map.getZoom());
-
-  return {
-    marker,
-    popup,
-    signature: getMarkerSignature(feature),
-    lon: feature.lon,
-    lat: feature.lat,
-  };
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────
@@ -430,6 +283,7 @@ export function usePoi(
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
   refineMaxPerCategoryPerKm: number | null = null,
+  maxLateralDistanceByCategory: Partial<Record<PoiCategory, number>> | null = null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
   /**
@@ -450,12 +304,19 @@ export function usePoi(
   );
 
   const abortRef = useRef<AbortController | null>(null);
-  const markerRegistryRef = useRef<Map<string, PoiMarkerEntry>>(new Map());
+  const featureRegistryRef = useRef<Map<string, PoiRenderedFeatureEntry>>(new Map());
+  const popupRef = useRef<mapboxgl.Popup | null>(null);
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
   const refineKey = refineMaxPerCategoryPerKm
     ? String(refineMaxPerCategoryPerKm)
+    : 'off';
+  const lateralDistanceKey = maxLateralDistanceByCategory
+    ? Object.entries(maxLateralDistanceByCategory)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category, distance]) => `${category}:${distance}`)
+      .join('|')
     : 'off';
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
@@ -463,6 +324,8 @@ export function usePoi(
   radiusRef.current = radiusM;
   const refineMaxRef = useRef(refineMaxPerCategoryPerKm);
   refineMaxRef.current = refineMaxPerCategoryPerKm;
+  const maxLateralDistanceByCategoryRef = useRef(maxLateralDistanceByCategory);
+  maxLateralDistanceByCategoryRef.current = maxLateralDistanceByCategory;
   const lastCorridorFeatures = useRef<PoiFeature[]>([]);
   const onCorridorUpdateRef = useRef(onCorridorUpdate);
   onCorridorUpdateRef.current = onCorridorUpdate;
@@ -494,6 +357,7 @@ export function usePoi(
     return refinePoiFeaturesAlongRoute(features, route.points, {
       maxPerCategoryPerKm,
       windowM: 1_000,
+      maxLateralDistanceByCategory: maxLateralDistanceByCategoryRef.current ?? undefined,
     });
   }, []);
 
@@ -506,45 +370,143 @@ export function usePoi(
     return applyRefinement(filtered);
   }, [applyRefinement]);
 
-  const clearMarkers = useCallback(() => {
-    for (const { marker } of markerRegistryRef.current.values()) {
-      marker.remove();
+  const updateSourceData = useCallback((m: MapboxMap, features: PoiFeature[]) => {
+    const source = m.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+    if (!source) return;
+
+    const registry = new Map<string, PoiRenderedFeatureEntry>();
+    const geojson: GeoJSON.FeatureCollection = {
+      type: 'FeatureCollection',
+      features: features.map((feature) => {
+        const key = getMarkerKey(feature);
+        registry.set(key, {
+          feature,
+          signature: getMarkerSignature(feature),
+        });
+
+        return {
+          type: 'Feature' as const,
+          geometry: {
+            type: 'Point' as const,
+            coordinates: [feature.lon, feature.lat],
+          },
+          properties: {
+            key,
+            id: feature.id,
+            category: feature.category,
+            name: feature.name ?? '',
+            iconId: getPoiLayerIconId(feature.category, feature.favorite === true),
+          },
+        };
+      }),
+    };
+
+    featureRegistryRef.current = registry;
+    source.setData(geojson);
+    setPoiCount(features.length);
+  }, []);
+
+  const clearRenderedFeatures = useCallback((m?: MapboxMap) => {
+    popupRef.current?.remove();
+    popupRef.current = null;
+    featureRegistryRef.current.clear();
+    if (m) {
+      const source = m.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
+      source?.setData({ type: 'FeatureCollection', features: [] });
     }
-    markerRegistryRef.current.clear();
     setPoiCount(0);
   }, []);
 
-  const syncMarkerVisualState = useCallback((m: MapboxMap) => {
-    const zoom = m.getZoom();
-    for (const { marker, popup, lon, lat } of markerRegistryRef.current.values()) {
-      applyPoiMarkerVisualState(m, marker, popup, lon, lat, zoom);
+  const ensureSourceAndLayer = useCallback((m: MapboxMap) => {
+    if (!m.getSource(SOURCE_ID)) {
+      m.addSource(SOURCE_ID, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+    }
+
+    if (!m.getLayer(LAYER_ID)) {
+      m.addLayer({
+        id: LAYER_ID,
+        type: 'symbol',
+        source: SOURCE_ID,
+        slot: 'top',
+        layout: {
+          'icon-image': ['get', 'iconId'],
+          'icon-size': [
+            'interpolate', ['linear'], ['zoom'],
+            8, 0.5,
+            12, 0.72,
+            16, 0.98,
+          ],
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'icon-padding': 2,
+          'icon-pitch-alignment': 'map',
+          'icon-rotation-alignment': 'viewport',
+          'symbol-z-elevate': true,
+        },
+      });
+    }
+
+    if (!m.getLayer(TEXT_LAYER_ID)) {
+      m.addLayer({
+        id: TEXT_LAYER_ID,
+        type: 'symbol',
+        source: SOURCE_ID,
+        slot: 'top',
+        minzoom: 14,
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
+          'text-size': 11,
+          'text-offset': [0, 1.45],
+          'text-anchor': 'top',
+          'text-optional': true,
+          'text-allow-overlap': false,
+          'text-pitch-alignment': 'map',
+          'text-rotation-alignment': 'viewport',
+          'symbol-z-elevate': true,
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': 'rgba(0,0,0,0.72)',
+          'text-halo-width': 1,
+        },
+      });
     }
   }, []);
 
   const syncRenderedFeatures = useCallback((m: MapboxMap, features: PoiFeature[]) => {
-    const registry = markerRegistryRef.current;
-    const nextKeys = new Set(features.map(getMarkerKey));
+    ensureSourceAndLayer(m);
+    updateSourceData(m, features);
+  }, [ensureSourceAndLayer, updateSourceData]);
 
-    for (const [key, entry] of registry) {
-      if (nextKeys.has(key)) continue;
-      entry.marker.remove();
-      registry.delete(key);
-    }
+  const openFeaturePopup = useCallback((m: MapboxMap, feature: PoiFeature) => {
+    popupRef.current?.remove();
 
-    for (const feature of features) {
-      const key = getMarkerKey(feature);
-      const signature = getMarkerSignature(feature);
-      const existing = registry.get(key);
+    const popup = new mapboxgl.Popup({
+      className: 'rv-poi-popup',
+      closeButton: false,
+      closeOnClick: true,
+      focusAfterOpen: false,
+      maxWidth: 'none',
+      offset: getPoiPopupOffsetPx(m.getZoom()),
+    }).setLngLat([feature.lon, feature.lat]);
 
-      if (existing && existing.signature === signature) {
-        continue;
-      }
+    const refresh = (nextState?: PoiPopupState) => {
+      popup.setDOMContent(buildPopupContent(
+        feature,
+        resolvePopupState(popupActionsRef.current, feature, nextState),
+        popupActionsRef.current,
+        refresh,
+      ));
+      popup.setOffset(getPoiPopupOffsetPx(m.getZoom()));
+    };
 
-      existing?.marker.remove();
-      registry.set(key, createPoiMarker(m, feature, popupActionsRef.current));
-    }
-
-    setPoiCount(features.length);
+    refresh();
+    popup.addTo(m);
+    popupRef.current = popup;
   }, []);
 
   // ── Corridor fetch (along GPX route, chunked & progressive) ──────
@@ -643,45 +605,63 @@ export function usePoi(
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
-    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
-    lastCorridorFeatures.current = seed;
-    syncRenderedFeatures(map, seed);
+    let cancelled = false;
 
-    return () => {
-      abortRef.current?.abort();
-      clearMarkers();
+    const getHoveredEntry = (point: mapboxgl.Point) => {
+      const rendered = map.queryRenderedFeatures(point, { layers: [LAYER_ID, TEXT_LAYER_ID] });
+      const rawKey = rendered[0]?.properties?.key;
+      if (typeof rawKey !== 'string') return;
+      return featureRegistryRef.current.get(rawKey);
     };
-  }, [map, isMapLoaded, buildRenderableFeatures, syncRenderedFeatures, clearMarkers]);
 
-  useEffect(() => {
-    if (!map || !isMapLoaded) return;
+    const handleMapClick = (event: mapboxgl.MapMouseEvent) => {
+      const entry = getHoveredEntry(event.point);
+      if (!entry) return;
+      openFeaturePopup(map, entry.feature);
+    };
 
-    let frameId: number | null = null;
+    const handleMouseMove = (event: mapboxgl.MapMouseEvent) => {
+      map.getCanvas().style.cursor = getHoveredEntry(event.point) ? 'pointer' : '';
+    };
 
-    const scheduleVisualRefresh = () => {
-      if (frameId != null) return;
-      frameId = window.requestAnimationFrame(() => {
-        frameId = null;
-        syncMarkerVisualState(map);
+    const ensurePresentation = async () => {
+      await registerPoiIcons(map);
+      if (cancelled) return;
+      ensureSourceAndLayer(map);
+      const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
+      lastCorridorFeatures.current = seed;
+      syncRenderedFeatures(map, seed);
+    };
+
+    void ensurePresentation();
+
+    const handleStyleData = () => {
+      void registerPoiIcons(map).then(() => {
+        if (cancelled) return;
+        ensureSourceAndLayer(map);
+        syncRenderedFeatures(map, lastCorridorFeatures.current);
+      }).catch(() => {
+        // ignore transient style/image races; the next styledata or user action retries
       });
     };
 
-    scheduleVisualRefresh();
-    map.on('zoom', scheduleVisualRefresh);
-    map.on('move', scheduleVisualRefresh);
-    // `idle` fires once terrain tiles finish loading, so markers created
-    // before the DEM was ready get re-anchored onto the surface here.
-    map.on('idle', scheduleVisualRefresh);
+    map.on('click', handleMapClick);
+    map.on('mousemove', handleMouseMove);
+    map.on('styledata', handleStyleData);
 
     return () => {
-      if (frameId != null) {
-        window.cancelAnimationFrame(frameId);
-      }
-      map.off('zoom', scheduleVisualRefresh);
-      map.off('move', scheduleVisualRefresh);
-      map.off('idle', scheduleVisualRefresh);
+      cancelled = true;
+      abortRef.current?.abort();
+      popupRef.current?.remove();
+      popupRef.current = null;
+      map.getCanvas().style.cursor = '';
+      map.off('click', handleMapClick);
+      map.off('mousemove', handleMouseMove);
+      map.off('styledata', handleStyleData);
+      clearRenderedFeatures(map);
+      resetIconRegistration(map);
     };
-  }, [map, isMapLoaded, syncMarkerVisualState]);
+  }, [map, isMapLoaded, buildRenderableFeatures, syncRenderedFeatures, ensureSourceAndLayer, openFeaturePopup, clearRenderedFeatures]);
 
   // ── Re-fetch when enabled categories change (corridor mode only) ──
 
@@ -693,7 +673,7 @@ export function usePoi(
     }
 
     syncRenderedFeatures(map, buildRenderableFeatures(initialFeaturesRef.current ?? []));
-  }, [map, isMapLoaded, enabledCategoriesKey, refineKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
+  }, [map, isMapLoaded, enabledCategoriesKey, refineKey, lateralDistanceKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
 
   // ── Rehydrate from saved features when active itinerary changes ───
   useEffect(() => {

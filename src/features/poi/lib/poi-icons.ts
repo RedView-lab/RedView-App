@@ -1,4 +1,5 @@
-import type { PoiCategory } from '../types';
+import type { Map as MapboxMap } from 'mapbox-gl';
+import { POI_CATEGORIES, type PoiCategory } from '../types';
 import { PROVIDED_POI_SVG } from './providedPoiSvg';
 
 const FALLBACK_POI_ICON_URL = '/svgv2/icone/x.svg';
@@ -51,4 +52,58 @@ export function getPoiIconUrl(category: PoiCategory, favorite: boolean = false):
   }
 
   return PROVIDED_ICON_URLS[category] ?? FALLBACK_POI_ICON_URL;
+}
+
+export function getPoiLayerIconId(category: PoiCategory, favorite: boolean = false): string {
+  return favorite && hasDedicatedFavoritePoiIcon(category)
+    ? `poi-${category}-favorite`
+    : `poi-${category}`;
+}
+
+function loadMapImage(
+  map: MapboxMap,
+  url: string,
+): Promise<HTMLImageElement | ImageBitmap | ImageData> {
+  return new Promise((resolve, reject) => {
+    map.loadImage(url, (error, image) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      if (!image) {
+        reject(new Error(`Mapbox returned no image for ${url}`));
+        return;
+      }
+      resolve(image);
+    });
+  });
+}
+
+export async function registerPoiIcons(map: MapboxMap): Promise<void> {
+  for (const category of POI_CATEGORIES) {
+    const baseId = getPoiLayerIconId(category, false);
+    if (!map.hasImage(baseId)) {
+      const image = await loadMapImage(map, getPoiIconUrl(category, false));
+      map.addImage(baseId, image);
+    }
+
+    const favoriteId = getPoiLayerIconId(category, true);
+    if (favoriteId !== baseId && !map.hasImage(favoriteId)) {
+      const image = await loadMapImage(map, getPoiIconUrl(category, true));
+      map.addImage(favoriteId, image);
+    }
+  }
+}
+
+export function resetIconRegistration(map: MapboxMap): void {
+  for (const category of POI_CATEGORIES) {
+    const baseId = getPoiLayerIconId(category, false);
+    if (map.hasImage(baseId)) {
+      map.removeImage(baseId);
+    }
+    const favoriteId = getPoiLayerIconId(category, true);
+    if (favoriteId !== baseId && map.hasImage(favoriteId)) {
+      map.removeImage(favoriteId);
+    }
+  }
 }

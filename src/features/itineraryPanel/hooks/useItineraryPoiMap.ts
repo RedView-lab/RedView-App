@@ -108,6 +108,21 @@ export function useItineraryPoiMap(
     return active.poi.refineLimitPerKm ?? DEFAULT_REFINE_LIMIT_PER_KM;
   }, [active]);
 
+  const maxLateralDistanceByCategory = useMemo<Partial<Record<FeaturePoiCategory, number>> | null>(() => {
+    if (!active) return null;
+    const next: Partial<Record<FeaturePoiCategory, number>> = {};
+    for (const [panelKey, raw] of Object.entries(active.poi)) {
+      if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
+      const entry = raw as PoiEntry;
+      if (!entry.enabled || !entry.distanceM || entry.distanceM <= 0) continue;
+      const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
+      for (const category of mapped) {
+        next[category] = entry.distanceM;
+      }
+    }
+    return Object.keys(next).length > 0 ? next : null;
+  }, [active]);
+
   const gpxRoute = active?.gpxRoute ?? null;
   const persistedPoiFeatures = active?.poiFeatures ?? null;
 
@@ -118,6 +133,7 @@ export function useItineraryPoiMap(
     gpxRoute,
     radiusM,
     refineMaxPerCategoryPerKm,
+    maxLateralDistanceByCategory,
     onCorridorUpdate,
     onCorridorComplete,
     persistedPoiFeatures,

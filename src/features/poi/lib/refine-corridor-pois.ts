@@ -134,6 +134,15 @@ export interface RefinementOptions {
    *  closed at the estimated arrival. Default 30 min — accounts for
    *  ETA imprecision and small wait. */
   openingToleranceMin?: number;
+
+  /** Optional: hard lateral cap (m) from the route. Defaults to the
+   *  point where proximity scoring already reaches zero. */
+  maxLateralDistanceM?: number;
+
+  /** Optional: per-category hard lateral caps (m). When provided, each
+   *  category uses its own route distance budget before falling back to
+   *  `maxLateralDistanceM`. */
+  maxLateralDistanceByCategory?: Partial<Record<PoiCategory, number>>;
 }
 
 // ── Internal types ───────────────────────────────────────────────────
@@ -188,6 +197,11 @@ export function refinePoiFeaturesAlongRoute(
   const clusterRadiusM = Math.max(20, options.clusterRadiusM ?? DEFAULT_CLUSTER_RADIUS_M);
   const clusterMaxLateralM = Math.max(20, options.clusterMaxLateralM ?? DEFAULT_CLUSTER_LATERAL_M);
   const openingToleranceMin = Math.max(0, options.openingToleranceMin ?? 30);
+  const maxLateralDistanceM = Math.max(
+    50,
+    options.maxLateralDistanceM ?? PROXIMITY_FULL_FALLOFF_M,
+  );
+  const maxLateralDistanceByCategory = options.maxLateralDistanceByCategory ?? null;
 
   const etaSecByPoint =
     options.etaSecByPoint && options.etaSecByPoint.length === routePoints.length
@@ -222,6 +236,18 @@ export function refinePoiFeaturesAlongRoute(
     }
     survivors = projected.filter((p) => p.openStatus !== 'closed');
   }
+
+  // Hard detour guard: once a POI is far enough from the route that its
+  // proximity score would already be zero, keeping it only lets cluster
+  // bonuses resurrect off-route village groups that look wrong in 3D.
+  survivors = survivors.filter((p) => {
+    const categoryCap = maxLateralDistanceByCategory?.[p.feature.category];
+    const lateralCap = Number.isFinite(categoryCap)
+      ? Math.max(10, categoryCap as number)
+      : maxLateralDistanceM;
+    return p.lateralDistanceM <= lateralCap;
+  });
+  if (survivors.length === 0) return [];
 
   // 3) CLUSTER + bonus → effective score.
   const clusters = clusterAlongRoute(survivors, clusterRadiusM, clusterMaxLateralM);
@@ -362,7 +388,10 @@ function scorePoi(feature: PoiFeature, lateralDistanceM: number): number {
   }
   const richness = Math.min(1, richHits / 3);
 
-  return 0.55 * proximity + 0.27 * namedness + 0.18 * richness;
+  // Proximity remains the outer gate: metadata can break ties between
+  // near-route POIs, but it must not let a far-away clustered village
+  // outrank a modest POI sitting next to the trace.
+  return proximity * (0.55 + 0.27 * namedness + 0.18 * richness);
 }
 
 function planarDistanceM(
