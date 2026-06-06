@@ -14,6 +14,8 @@ const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
+const MARKER_MIN_LIFT_M = 7;
+const MARKER_MAX_LIFT_M = 10.5;
 const MARKER_MIN_POPUP_OFFSET_PX = 26;
 const MARKER_MAX_POPUP_OFFSET_PX = 34;
 
@@ -34,6 +36,7 @@ interface PoiMarkerEntry {
 
 interface PoiMarkerVisualState {
   scale: number;
+  altitude: number;
   popupOffsetPx: number;
 }
 
@@ -316,6 +319,7 @@ function getPoiMarkerVisualState(zoom: number): PoiMarkerVisualState {
 
   return {
     scale,
+    altitude: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
     popupOffsetPx: Math.round(
       lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
     ),
@@ -332,6 +336,8 @@ function applyPoiMarkerVisualState(
     '--rv-poi-marker-scale',
     visualState.scale.toFixed(3),
   );
+  marker.setAltitude(visualState.altitude);
+  popup.setAltitude(visualState.altitude);
   popup.setOffset(visualState.popupOffsetPx);
 }
 
@@ -347,6 +353,7 @@ function createPoiMarker(
     focusAfterOpen: false,
     maxWidth: 'none',
     offset: MARKER_MAX_POPUP_OFFSET_PX,
+    altitude: MARKER_MIN_LIFT_M,
   });
 
   const refresh = (nextState?: PoiPopupState) => {
@@ -369,7 +376,8 @@ function createPoiMarker(
     anchor: 'bottom',
     pitchAlignment: 'viewport',
     rotationAlignment: 'viewport',
-    occludedOpacity: 1,
+    occludedOpacity: 0,
+    altitude: MARKER_MIN_LIFT_M,
   })
     .setLngLat([feature.lon, feature.lat])
     .setPopup(popup)
