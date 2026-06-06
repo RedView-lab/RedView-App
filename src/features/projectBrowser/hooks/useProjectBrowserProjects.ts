@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { translateAppText } from '@/shared/i18n';
 import {
@@ -46,6 +46,7 @@ export function useProjectBrowserProjects({
   const [folders, setFolders] = useState<ProjectFolderSummary[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [thumbnails, setThumbnails] = useState<Record<string, string | null>>({});
+  const [thumbnailLoadingIds, setThumbnailLoadingIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
@@ -63,6 +64,7 @@ export function useProjectBrowserProjects({
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [dragPreview, setDragPreview] = useState<DragPreviewState | null>(null);
   const [toast, setToast] = useState<BrowserToast | null>(null);
+  const thumbnailRequestRef = useRef(0);
 
   useEffect(() => {
     if (!toast) return;
@@ -88,17 +90,31 @@ export function useProjectBrowserProjects({
     setError(null);
     try {
       const snapshot = await listProjectBrowserSnapshot();
+      const thumbnailRequestId = ++thumbnailRequestRef.current;
       setFolders(snapshot.folders);
       setProjects(snapshot.projects);
       setCurrentFolderId((prev) =>
         prev && !snapshot.folders.some((folder) => folder.id === prev) ? null : prev,
       );
       if (snapshot.projects.length > 0) {
-        getProjectThumbnailUrls(snapshot.projects.map((row) => row.id))
-          .then((map) => setThumbnails(map))
-          .catch((nextError) => console.warn('[ProjectBrowser] thumbnails failed', nextError));
+        const projectIds = snapshot.projects.map((row) => row.id);
+        setThumbnailLoadingIds(new Set(projectIds));
+        getProjectThumbnailUrls(projectIds)
+          .then((map) => {
+            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
+            setThumbnails(map);
+          })
+          .catch((nextError) => {
+            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
+            console.warn('[ProjectBrowser] thumbnails failed', nextError);
+          })
+          .finally(() => {
+            if (thumbnailRequestRef.current !== thumbnailRequestId) return;
+            setThumbnailLoadingIds(new Set());
+          });
       } else {
         setThumbnails({});
+        setThumbnailLoadingIds(new Set());
       }
     } catch (nextError) {
       const message = nextError instanceof Error ? translateAppText(nextError.message) : translateAppText('Impossible de charger les projets.');
@@ -470,6 +486,7 @@ export function useProjectBrowserProjects({
     folders,
     projects,
     thumbnails,
+    thumbnailLoadingIds,
     loading,
     error,
     busyIds,

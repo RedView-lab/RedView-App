@@ -56,6 +56,7 @@ type ProjectsPanelProps = {
   visibleFolders: Array<ProjectFolderSummary & { aggregateSizeBytes: number }>;
   visibleProjects: ProjectSummary[];
   thumbnails: Record<string, string | null>;
+  thumbnailLoadingIds: Set<string>;
   busyIds: Set<string>;
   draggedItem: { type: 'project' | 'folder'; id: string } | null;
   dropTarget: string | null;
@@ -100,6 +101,7 @@ export function ProjectsPanel({
   visibleFolders,
   visibleProjects,
   thumbnails,
+  thumbnailLoadingIds,
   busyIds,
   draggedItem,
   dropTarget,
@@ -369,6 +371,7 @@ export function ProjectsPanel({
                 key={project.id}
                 project={project}
                 thumbnailUrl={thumbnails[project.id] ?? null}
+                thumbnailLoading={thumbnailLoadingIds.has(project.id)}
                 busy={busyIds.has(project.id)}
                 dragActive={draggedItem?.type === 'project' && draggedItem.id === project.id}
                 onOpen={onOpenProject}

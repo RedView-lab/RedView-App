@@ -65,6 +65,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
               visibleFolders={state.visibleFolders}
               visibleProjects={state.visibleProjects}
               thumbnails={state.thumbnails}
+              thumbnailLoadingIds={state.thumbnailLoadingIds}
               busyIds={state.busyIds}
               draggedItem={state.draggedItem}
               dropTarget={state.dropTarget}

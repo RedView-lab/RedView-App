@@ -560,6 +560,7 @@ export function useProjectBrowserOverlayState({
     showSearch: projects.showSearch,
     subscriptionState,
     thumbnails: projects.thumbnails,
+    thumbnailLoadingIds: projects.thumbnailLoadingIds,
     tierLabel,
     toast: projects.toast,
     view: projects.view,

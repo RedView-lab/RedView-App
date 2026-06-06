@@ -9,11 +9,11 @@ import {
 import type { ProjectSummary } from '@/shared/utils/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../../lib';
-import { PROJECT_BROWSER_PREVIEW_URL } from '../../lib/projects';
 
 type ProjectCardProps = {
   project: ProjectSummary;
   thumbnailUrl: string | null;
+  thumbnailLoading: boolean;
   onOpen: (id: string) => void;
   onRename: (id: string, nextName: string) => Promise<void> | void;
   busy: boolean;
@@ -30,6 +30,7 @@ const EMPTY_DRAG_IMAGE =
 export function ProjectCard({
   project,
   thumbnailUrl,
+  thumbnailLoading,
   onOpen,
   onRename,
   busy,
@@ -42,7 +43,8 @@ export function ProjectCard({
   const { t } = useAppI18n();
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(project.name);
-  const [previewSrc, setPreviewSrc] = useState(thumbnailUrl ?? PROJECT_BROWSER_PREVIEW_URL);
+  const [previewSrc, setPreviewSrc] = useState(thumbnailUrl);
+  const [previewReady, setPreviewReady] = useState(false);
   const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -63,9 +65,14 @@ export function ProjectCard({
   }, [project.name]);
 
   useEffect(() => {
-    setPreviewSrc(thumbnailUrl ?? PROJECT_BROWSER_PREVIEW_URL);
+    setPreviewSrc(thumbnailUrl);
+    setPreviewReady(false);
     setPreviewUnavailable(false);
   }, [thumbnailUrl]);
+
+  const hasPreviewImage = Boolean(previewSrc) && !previewUnavailable;
+  const showLoadingPlaceholder = !previewUnavailable && (thumbnailLoading || (hasPreviewImage && !previewReady));
+  const showPlaceholder = !hasPreviewImage || !previewReady;
 
   const commitRename = async () => {
     const next = draft.trim();
@@ -166,22 +173,27 @@ export function ProjectCard({
         disabled={busy}
         aria-label={t('Entrer dans {{name}}', { name: project.name })}
       >
-        {!previewUnavailable ? (
+        {hasPreviewImage ? (
           <img
+            className={`rvpb-card__preview-image${previewReady ? ' is-ready' : ''}`}
             src={previewSrc}
             alt={t('Aperçu de projet')}
             loading="lazy"
+            onLoad={() => setPreviewReady(true)}
             onError={() => {
-              if (previewSrc !== PROJECT_BROWSER_PREVIEW_URL) {
-                setPreviewSrc(PROJECT_BROWSER_PREVIEW_URL);
-                return;
-              }
+              setPreviewReady(false);
               setPreviewUnavailable(true);
             }}
           />
-        ) : (
-          <div className="rvpb-card__preview-placeholder" aria-hidden="true" />
-        )}
+        ) : null}
+        {showPlaceholder ? (
+          <div
+            className={`rvpb-card__preview-placeholder${showLoadingPlaceholder ? ' is-loading' : ''}`}
+            aria-hidden="true"
+          >
+            <SvgV2Icon name={showLoadingPlaceholder ? 'arrow-down.svg' : 'map-01.svg'} size={40} />
+          </div>
+        ) : null}
       </button>
     </article>
   );

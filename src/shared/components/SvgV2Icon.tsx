@@ -8,6 +8,7 @@ const SVGV2_ICONE_ASSETS = new Set([
   'annotation-info.svg',
   'annotation-question.svg',
   'annotation-x.svg',
+  'arrow-down.svg',
   'bar-chart-10.svg',
   'bar-chart-square-01.svg',
   'calendar.svg',
