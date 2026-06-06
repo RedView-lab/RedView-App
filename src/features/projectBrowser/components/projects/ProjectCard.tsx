@@ -176,7 +176,7 @@ export function ProjectCard({
         {hasPreviewImage ? (
           <img
             className={`rvpb-card__preview-image${previewReady ? ' is-ready' : ''}`}
-            src={previewSrc}
+            src={previewSrc ?? undefined}
             alt={t('Aperçu de projet')}
             loading="lazy"
             onLoad={() => setPreviewReady(true)}
