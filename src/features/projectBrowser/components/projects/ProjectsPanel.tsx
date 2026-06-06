@@ -350,6 +350,7 @@ export function ProjectsPanel({
               <FolderCard
                 key={folder.id}
                 folder={folder}
+                view={view}
                 sizeBytes={folder.aggregateSizeBytes}
                 busy={busyIds.has(folder.id)}
                 dragActive={draggedItem?.type === 'folder' && draggedItem.id === folder.id}
@@ -370,6 +371,7 @@ export function ProjectsPanel({
               <ProjectCard
                 key={project.id}
                 project={project}
+                view={view}
                 thumbnailUrl={thumbnails[project.id] ?? null}
                 thumbnailLoading={thumbnailLoadingIds.has(project.id)}
                 busy={busyIds.has(project.id)}
