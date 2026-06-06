@@ -61,36 +61,47 @@ export function getPoiLayerIconId(category: PoiCategory, favorite: boolean = fal
 }
 
 function loadMapImage(
-  map: MapboxMap,
   url: string,
-): Promise<HTMLImageElement | ImageBitmap | ImageData> {
+  size: number,
+): Promise<ImageData> {
   return new Promise((resolve, reject) => {
-    map.loadImage(url, (error, image) => {
-      if (error) {
-        reject(error);
+    const image = new Image();
+    image.crossOrigin = 'anonymous';
+    image.decoding = 'async';
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error(`2D canvas unavailable for ${url}`));
         return;
       }
-      if (!image) {
-        reject(new Error(`Mapbox returned no image for ${url}`));
-        return;
-      }
-      resolve(image);
-    });
+      context.clearRect(0, 0, size, size);
+      context.drawImage(image, 0, 0, size, size);
+      resolve(context.getImageData(0, 0, size, size));
+    };
+    image.onerror = () => {
+      reject(new Error(`Failed to load POI icon ${url}`));
+    };
+    image.src = url;
   });
 }
 
 export async function registerPoiIcons(map: MapboxMap): Promise<void> {
+  const size = 96;
+
   for (const category of POI_CATEGORIES) {
     const baseId = getPoiLayerIconId(category, false);
     if (!map.hasImage(baseId)) {
-      const image = await loadMapImage(map, getPoiIconUrl(category, false));
-      map.addImage(baseId, image);
+      const image = await loadMapImage(getPoiIconUrl(category, false), size);
+      map.addImage(baseId, image, { pixelRatio: 2 });
     }
 
     const favoriteId = getPoiLayerIconId(category, true);
     if (favoriteId !== baseId && !map.hasImage(favoriteId)) {
-      const image = await loadMapImage(map, getPoiIconUrl(category, true));
-      map.addImage(favoriteId, image);
+      const image = await loadMapImage(getPoiIconUrl(category, true), size);
+      map.addImage(favoriteId, image, { pixelRatio: 2 });
     }
   }
 }
