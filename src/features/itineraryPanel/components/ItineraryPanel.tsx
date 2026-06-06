@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useState, type CSSProperties, type WheelEvent as ReactWheelEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import { useAppI18n } from '@/shared/i18n';
@@ -99,6 +99,25 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
   const style: CSSProperties | undefined =
     width !== undefined ? { width: `${width}px` } : undefined;
+
+  const handleWheelCapture = (event: ReactWheelEvent<HTMLDivElement>) => {
+    const root = scrollRef.current;
+    if (!root || event.defaultPrevented || event.ctrlKey) return;
+    if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return;
+
+    const scrollNodes = collectScrollableAncestors(event.target, root);
+    for (const node of scrollNodes) {
+      const maxScrollTop = node.scrollHeight - node.clientHeight;
+      if (maxScrollTop <= 0) continue;
+
+      const nextScrollTop = clampScroll(node.scrollTop + event.deltaY, 0, maxScrollTop);
+      if (Math.abs(nextScrollTop - node.scrollTop) < 0.5) continue;
+
+      node.scrollTop = nextScrollTop;
+      event.preventDefault();
+      return;
+    }
+  };
 
   useEffect(() => {
     if (project.activeMode === 'nutrition') {
@@ -258,6 +277,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       <div
         ref={scrollRef}
         className={`rvi-panel__scroll${isAutoscrolling ? ' is-middle-autoscrolling' : ''}`}
+        onWheelCapture={handleWheelCapture}
       >
         <RouteStatusBanners routeError={routeError} routeWarnings={routeWarnings} />
         <ItineraryPanelModeContent
@@ -310,4 +330,35 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       ) : null}
     </aside>
   );
+}
+
+function collectScrollableAncestors(
+  target: EventTarget | null,
+  root: HTMLElement,
+): HTMLElement[] {
+  const result: HTMLElement[] = [];
+  let current = target instanceof HTMLElement ? target : root;
+
+  while (current) {
+    if (isVerticallyScrollable(current)) {
+      result.push(current);
+    }
+    if (current === root) break;
+    current = current.parentElement ?? root;
+  }
+
+  if (!result.includes(root) && isVerticallyScrollable(root)) {
+    result.push(root);
+  }
+
+  return result;
+}
+
+function isVerticallyScrollable(node: HTMLElement): boolean {
+  const style = window.getComputedStyle(node);
+  return /(auto|scroll|overlay)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 1;
+}
+
+function clampScroll(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }
