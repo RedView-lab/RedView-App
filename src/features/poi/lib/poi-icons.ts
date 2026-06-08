@@ -88,20 +88,42 @@ function loadMapImage(
   });
 }
 
+async function addPoiImageIfMissing(
+  map: MapboxMap,
+  imageId: string,
+  url: string,
+  size: number,
+): Promise<void> {
+  if (map.hasImage(imageId)) {
+    return;
+  }
+
+  const image = await loadMapImage(url, size);
+  if (map.hasImage(imageId)) {
+    return;
+  }
+
+  try {
+    map.addImage(imageId, image, { pixelRatio: 2 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (/already exists/i.test(message)) {
+      return;
+    }
+    throw error;
+  }
+}
+
 export async function registerPoiIcons(map: MapboxMap): Promise<void> {
   const size = 96;
 
   for (const category of POI_CATEGORIES) {
     const baseId = getPoiLayerIconId(category, false);
-    if (!map.hasImage(baseId)) {
-      const image = await loadMapImage(getPoiIconUrl(category, false), size);
-      map.addImage(baseId, image, { pixelRatio: 2 });
-    }
+    await addPoiImageIfMissing(map, baseId, getPoiIconUrl(category, false), size);
 
     const favoriteId = getPoiLayerIconId(category, true);
-    if (favoriteId !== baseId && !map.hasImage(favoriteId)) {
-      const image = await loadMapImage(getPoiIconUrl(category, true), size);
-      map.addImage(favoriteId, image, { pixelRatio: 2 });
+    if (favoriteId !== baseId) {
+      await addPoiImageIfMissing(map, favoriteId, getPoiIconUrl(category, true), size);
     }
   }
 }
