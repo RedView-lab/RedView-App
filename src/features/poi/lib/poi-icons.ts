@@ -4,6 +4,15 @@ import { PROVIDED_POI_SVG } from './providedPoiSvg';
 
 const FALLBACK_POI_ICON_URL = '/svgv2/icone/x.svg';
 
+/**
+ * Map image id of a guaranteed-visible fallback dot. It is drawn locally
+ * on a canvas (no network), so it is always available the instant the POI
+ * symbol layer is created — even before the per-category SVG sprites have
+ * finished loading or if one of them fails. The symbol layer coalesces to
+ * this image so every POI is visible regardless of sprite-loading races.
+ */
+export const POI_FALLBACK_ICON_ID = 'poi-fallback';
+
 const PROVIDED_ICON_URLS: Record<PoiCategory, string> = {
   drinking_water: PROVIDED_POI_SVG.water,
   bakery: PROVIDED_POI_SVG.bakery,
@@ -98,23 +107,69 @@ async function addPoiImageIfMissing(
     return;
   }
 
-  const image = await loadMapImage(url, size);
+  let image: ImageData;
+  try {
+    image = await loadMapImage(url, size);
+  } catch {
+    // A single sprite failing to load (404, decode error, …) must never
+    // abort the rest of the registration — the layer's fallback dot keeps
+    // the POI visible.
+    return;
+  }
+
   if (map.hasImage(imageId)) {
     return;
   }
 
   try {
     map.addImage(imageId, image, { pixelRatio: 2 });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (/already exists/i.test(message)) {
-      return;
-    }
-    throw error;
+  } catch {
+    // Concurrent registration already added this id ("already exists"), or
+    // the map was torn down mid-flight. Either way, nothing to do.
+  }
+}
+
+/**
+ * Draw and register the always-available fallback marker. Synchronous and
+ * idempotent: safe to call on every layer (re)creation and style reload.
+ */
+export function ensurePoiFallbackImage(map: MapboxMap): void {
+  if (map.hasImage(POI_FALLBACK_ICON_ID)) {
+    return;
+  }
+
+  const size = 96;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return;
+  }
+
+  const center = size / 2;
+  context.clearRect(0, 0, size, size);
+  context.beginPath();
+  context.arc(center, center, size * 0.34, 0, Math.PI * 2);
+  context.fillStyle = '#ffffff';
+  context.fill();
+  context.beginPath();
+  context.arc(center, center, size * 0.26, 0, Math.PI * 2);
+  context.fillStyle = '#ff5a1f';
+  context.fill();
+
+  try {
+    map.addImage(POI_FALLBACK_ICON_ID, context.getImageData(0, 0, size, size), {
+      pixelRatio: 2,
+    });
+  } catch {
+    // Already registered by a concurrent call.
   }
 }
 
 export async function registerPoiIcons(map: MapboxMap): Promise<void> {
+  ensurePoiFallbackImage(map);
+
   const size = 96;
 
   for (const category of POI_CATEGORIES) {

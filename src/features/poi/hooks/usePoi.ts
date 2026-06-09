@@ -9,6 +9,8 @@ import {
   getPoiLayerIconId,
   registerPoiIcons,
   resetIconRegistration,
+  ensurePoiFallbackImage,
+  POI_FALLBACK_ICON_ID,
 } from '../lib/poi-icons';
 import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
 import '../styles/floating-markers.css';
@@ -425,6 +427,11 @@ export function usePoi(
       });
     }
 
+    // Guarantee a visible marker for every POI even before the per-category
+    // SVG sprites finish loading (or if one fails): the layer coalesces the
+    // category icon with this locally-drawn fallback dot.
+    ensurePoiFallbackImage(m);
+
     if (!m.getLayer(LAYER_ID)) {
       m.addLayer({
         id: LAYER_ID,
@@ -432,7 +439,11 @@ export function usePoi(
         source: SOURCE_ID,
         slot: 'top',
         layout: {
-          'icon-image': ['get', 'iconId'],
+          'icon-image': [
+            'coalesce',
+            ['image', ['get', 'iconId']],
+            ['image', POI_FALLBACK_ICON_ID],
+          ],
           'icon-size': [
             'interpolate', ['linear'], ['zoom'],
             8, 0.5,
@@ -624,25 +635,37 @@ export function usePoi(
       map.getCanvas().style.cursor = getHoveredEntry(event.point) ? 'pointer' : '';
     };
 
-    const ensurePresentation = async () => {
-      await registerPoiIcons(map);
-      if (cancelled) return;
+    const ensurePresentation = () => {
+      // Create the source + layer synchronously so POI geometry renders
+      // immediately (the fallback icon is registered inside
+      // ensureSourceAndLayer). Icon sprites load in the background and the
+      // symbols repaint as each becomes available — registration is no
+      // longer a hard prerequisite for showing POIs.
       ensureSourceAndLayer(map);
       const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
       lastCorridorFeatures.current = seed;
       syncRenderedFeatures(map, seed);
+      void registerPoiIcons(map).catch(() => {
+        // Per-icon failures are swallowed inside registerPoiIcons; ignore.
+      });
     };
 
-    void ensurePresentation();
+    ensurePresentation();
 
     const handleStyleData = () => {
-      void registerPoiIcons(map).then(() => {
-        if (cancelled) return;
-        ensureSourceAndLayer(map);
-        syncRenderedFeatures(map, lastCorridorFeatures.current);
-      }).catch(() => {
-        // ignore transient style/image races; the next styledata or user action retries
-      });
+      if (cancelled) return;
+      // A style reload clears custom images, sources and layers. Detect the
+      // cleared sprite atlas via the fallback dot, re-create the presentation
+      // synchronously (fallback dots reappear at once), then re-register the
+      // detailed SVG sprites in the background.
+      const spritesCleared = !map.hasImage(POI_FALLBACK_ICON_ID);
+      ensureSourceAndLayer(map);
+      syncRenderedFeatures(map, lastCorridorFeatures.current);
+      if (spritesCleared) {
+        void registerPoiIcons(map).catch(() => {
+          // ignore transient style/image races; the next styledata retries
+        });
+      }
     };
 
     map.on('click', handleMapClick);
