@@ -10,13 +10,14 @@
 // - Icons are plain `<img src>` SVGs: no canvas rasterisation, no sprite
 //   atlas races, no `addImage` lifecycle.
 //
-// Terrain note: `Marker.altitude` is RELATIVE to the rendered terrain
-// surface. Mapbox samples the (exaggerated) DEM itself on every projection
-// (`_coordinatePoint`: z = sampled terrain elevation + marker altitude), so
-// markers stay glued to the ground through rotation/pitch with a small
-// constant lift. Never add `queryTerrainElevation` on top — that double-
-// counts the terrain height and makes POIs float and drift with parallax.
-// An `idle` nudge re-projects markers created before DEM tiles loaded.
+// Terrain note: markers carry NO `altitude` option, exactly like the
+// viewport POI markers in DashboardPlaceSearch (the reference
+// implementation, verified pixel-perfect on 3D terrain). Mapbox samples the
+// rendered (exaggerated) DEM itself on every projection and keeps the
+// marker glued to the surface through rotation/pitch/zoom. Never set an
+// altitude on top — any extra meters displace the pin vertically and make
+// it drift with parallax when the camera rotates. An `idle` nudge
+// re-projects markers created before DEM tiles loaded.
 
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -37,10 +38,10 @@ const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
-/** Meters above the terrain surface (relative offset, sampled by Mapbox). */
-const MARKER_LIFT_M = 1.5;
 const MARKER_MIN_POPUP_OFFSET_PX = 26;
 const MARKER_MAX_POPUP_OFFSET_PX = 34;
+/** Same occlusion behaviour as the viewport POI markers. */
+const MARKER_OCCLUDED_OPACITY = 0.85;
 
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
 
@@ -245,16 +246,12 @@ export class PoiMarkerManager {
       anchor: 'bottom',
       pitchAlignment: 'viewport',
       rotationAlignment: 'viewport',
-      // Relative to the terrain surface: keeps the pin tip just above the
-      // ground without z-fighting the DEM mesh.
-      altitude: MARKER_LIFT_M,
-      // Never fade markers hidden by terrain: at high pitch the anchor often
-      // sits just behind the DEM surface and the default 0.2 made POIs
-      // near-invisible.
-      occludedOpacity: 1,
+      // No `altitude`: identical projection path to the viewport POI
+      // markers — Mapbox anchors the pin tip on the terrain surface.
+      occludedOpacity: MARKER_OCCLUDED_OPACITY,
     })
       .setLngLat([feature.lon, feature.lat])
-      .setPopup(popup) // copies the marker altitude onto the popup
+      .setPopup(popup)
       .addTo(this.map);
 
     const entry: PoiMarkerEntry = {
