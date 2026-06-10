@@ -1,282 +1,26 @@
+// POI engine hook — fetches POIs along the active GPX corridor and renders
+// them as 3D DOM markers on the Mapbox map.
+//
+// Rendering is delegated to `PoiMarkerManager` (lib/poi-markers.ts), which
+// uses `mapboxgl.Marker` DOM overlays instead of symbol layers. DOM markers
+// survive style reloads and are immune to the symbol-placement/terrain
+// occlusion culling that previously made POIs invisible on the 3D map, so
+// this hook no longer needs any `styledata` resynchronisation, sprite
+// registration or source/layer lifecycle management.
+
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import mapboxgl from 'mapbox-gl';
-import { POI_LABELS, type PoiCategory, type PoiFeature, type GpxRoute } from '../types';
+
+import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
-import {
-  getPoiIconUrl,
-  getPoiLayerIconId,
-  registerPoiIcons,
-  resetIconRegistration,
-  ensurePoiFallbackImage,
-  POI_FALLBACK_ICON_ID,
-} from '../lib/poi-icons';
 import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
+import { PoiMarkerManager } from '../lib/poi-markers';
+import type { UsePoiPopupActions } from '../lib/poi-popup';
 import '../styles/floating-markers.css';
 
-// ── Constants ─────────────────────────────────────────────────────────
-
-const SOURCE_ID = 'poi-source';
-const LAYER_ID = 'poi-layer';
-const TEXT_LAYER_ID = 'poi-text-layer';
-const MARKER_MIN_SCALE_ZOOM = 8.25;
-const MARKER_MAX_SCALE_ZOOM = 15.1;
-const MARKER_MIN_POPUP_OFFSET_PX = 26;
-const MARKER_MAX_POPUP_OFFSET_PX = 34;
-
-const UI_ICON_URLS = {
-  rightClick: '/right-click-icons',
-  star: '/svgv2/icone/star-01.svg',
-  globe: '/right-click-icons/globe-06.svg',
-  chevron: '/svgv2/icone/chevron-down.svg',
-  check: '/svgv2/icone/check.svg',
-  trash: '/right-click-icons/trash-01.svg',
-} as const;
-
-interface PoiRenderedFeatureEntry {
-  feature: PoiFeature;
-  signature: string;
-}
-
-export interface PoiPopupState {
-  favoriteEnabled: boolean;
-  pauseEnabled: boolean;
-  pauseDurationMin: number;
-  manualTraceEnabled: boolean;
-}
-
-export interface UsePoiPopupActions {
-  getPopupState?: (feature: PoiFeature) => PoiPopupState;
-  onStartHere?: (feature: PoiFeature) => void;
-  onAddWaypoint?: (feature: PoiFeature) => void;
-  onFinishHere?: (feature: PoiFeature) => void;
-  onCyclePauseDuration?: (feature: PoiFeature) => void;
-  onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean) => void;
-  onTogglePause?: (
-    feature: PoiFeature,
-    nextEnabled: boolean,
-    durationMin: number,
-  ) => void;
-  onToggleManualTrace?: (feature: PoiFeature, nextEnabled: boolean) => void;
-  onOpenStreetView?: (feature: PoiFeature) => void;
-  onDelete?: (feature: PoiFeature) => void;
-}
-
-const DEFAULT_POPUP_STATE: PoiPopupState = {
-  favoriteEnabled: false,
-  pauseEnabled: false,
-  pauseDurationMin: 5,
-  manualTraceEnabled: false,
-};
-
-function getMarkerKey(feature: PoiFeature): string {
-  return `${feature.category}:${feature.id}`;
-}
-
-function getMarkerSignature(feature: PoiFeature): string {
-  return [
-    feature.lat,
-    feature.lon,
-    feature.category,
-    feature.favorite ? 'favorite' : 'default',
-    feature.name ?? '',
-    feature.tags.opening_hours ?? '',
-  ].join('|');
-}
-
-function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
-  const name = feature.name?.trim() || 'Sans nom';
-  const category = POI_LABELS[feature.category] ?? feature.category.replace(/_/g, ' ');
-  const pauseDurationLabel = formatPauseDuration(state.pauseDurationMin);
-
-  return `
-    <div class="rv-poi-popup__panel">
-      <div class="rv-poi-popup__header">
-        <button
-          type="button"
-          class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost${state.favoriteEnabled ? ' is-active' : ''}"
-          aria-label="Favori"
-          aria-pressed="${state.favoriteEnabled}"
-          data-action="favorite-toggle"
-        >
-          <img src="${UI_ICON_URLS.star}" alt="" class="rv-poi-popup__icon rv-poi-popup__icon--star" />
-        </button>
-        <div class="rv-poi-popup__title">${escapeHtml(name)}</div>
-        <button type="button" class="rv-poi-popup__icon-btn rv-poi-popup__icon-btn--ghost" aria-label="Ouvrir Street View" data-action="streetview">
-          <img src="${UI_ICON_URLS.globe}" alt="" class="rv-poi-popup__icon" />
-        </button>
-      </div>
-
-      <div class="rv-poi-popup__divider"></div>
-
-      <div class="rv-poi-popup__field-row">
-        <div class="rv-poi-popup__field-label">Type</div>
-        <div class="rv-poi-popup__select" aria-label="Type de POI" role="presentation">
-          <span class="rv-poi-popup__type-icon-wrap">
-            <img src="${getPoiIconUrl(feature.category, state.favoriteEnabled)}" alt="" class="rv-poi-popup__type-icon" />
-          </span>
-          <span class="rv-poi-popup__select-value">${escapeHtml(category)}</span>
-        </div>
-      </div>
-
-      <div class="rv-poi-popup__divider"></div>
-
-      <div class="rv-poi-popup__field-row rv-poi-popup__field-row--compact">
-        <button type="button" class="rv-poi-popup__toggle-wrap rv-poi-popup__toggle-wrap--button" data-action="pause-toggle" aria-pressed="${state.pauseEnabled}">
-          <span class="rv-poi-popup__checkbox${state.pauseEnabled ? ' is-active' : ''}">
-            <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
-          </span>
-          <span class="rv-poi-popup__toggle-label">Pause</span>
-        </button>
-        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause" data-action="pause-duration">
-          <span class="rv-poi-popup__select-value">${pauseDurationLabel}</span>
-          <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
-        </button>
-      </div>
-
-      <div class="rv-poi-popup__divider"></div>
-
-      <button type="button" class="rv-poi-popup__toggle-row rv-poi-popup__toggle-row--button" data-action="manual-trace" aria-pressed="${state.manualTraceEnabled}">
-        <span class="rv-poi-popup__checkbox${state.manualTraceEnabled ? ' is-active' : ''}">
-          <img src="${UI_ICON_URLS.check}" alt="" class="rv-poi-popup__checkbox-icon" />
-        </span>
-        <span class="rv-poi-popup__toggle-label rv-poi-popup__toggle-label--solid">Tracé manuel</span>
-      </button>
-
-      <div class="rv-poi-popup__divider"></div>
-
-      <button type="button" class="rv-poi-popup__action-row" data-action="start-here">
-        <span class="rv-poi-popup__action-icon-wrap" aria-hidden="true">
-          <img src="${UI_ICON_URLS.rightClick}/start.svg" alt="" class="rv-poi-popup__action-icon rv-poi-popup__action-icon--pin" />
-        </span>
-        <span class="rv-poi-popup__action-label">Démarrer ici</span>
-      </button>
-
-      <button type="button" class="rv-poi-popup__action-row" data-action="add-waypoint">
-        <span class="rv-poi-popup__action-icon-wrap" aria-hidden="true">
-          <img src="${UI_ICON_URLS.rightClick}/ajouteruneetape.svg" alt="" class="rv-poi-popup__action-icon rv-poi-popup__action-icon--pin" />
-        </span>
-        <span class="rv-poi-popup__action-label">Ajouter une étape</span>
-      </button>
-
-      <button type="button" class="rv-poi-popup__action-row" data-action="finish-here">
-        <span class="rv-poi-popup__action-icon-wrap" aria-hidden="true">
-          <img src="${UI_ICON_URLS.rightClick}/finish.svg" alt="" class="rv-poi-popup__action-icon rv-poi-popup__action-icon--pin" />
-        </span>
-        <span class="rv-poi-popup__action-label">Finir ici</span>
-      </button>
-
-      <button type="button" class="rv-poi-popup__action-row rv-poi-popup__action-row--delete" data-action="delete">
-        <span class="rv-poi-popup__utility-icon-wrap">
-          <img src="${UI_ICON_URLS.trash}" alt="" class="rv-poi-popup__utility-icon" />
-        </span>
-        <span class="rv-poi-popup__action-label rv-poi-popup__action-label--delete">Supprimer</span>
-      </button>
-    </div>
-  `;
-}
-
-function buildPopupContent(
-  feature: PoiFeature,
-  state: PoiPopupState,
-  actions: UsePoiPopupActions,
-  refresh: (nextState?: PoiPopupState) => void,
-): HTMLDivElement {
-  const root = document.createElement('div');
-  root.innerHTML = buildPopupHtml(feature, state);
-  const panel = root.firstElementChild;
-  if (!(panel instanceof HTMLDivElement)) {
-    return document.createElement('div');
-  }
-
-  const bindClick = (
-    selector: string,
-    handler: () => void,
-  ) => {
-    for (const node of panel.querySelectorAll<HTMLButtonElement>(selector)) {
-      node.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        handler();
-      });
-    }
-  };
-
-  bindClick('[data-action="streetview"]', () => {
-    actions.onOpenStreetView?.(feature);
-  });
-
-  bindClick('[data-action="favorite-toggle"]', () => {
-    const nextState = {
-      ...state,
-      favoriteEnabled: !state.favoriteEnabled,
-    };
-    actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
-    refresh(nextState);
-  });
-
-  bindClick('[data-action="pause-toggle"]', () => {
-    const nextState = {
-      ...state,
-      pauseEnabled: !state.pauseEnabled,
-    };
-    actions.onTogglePause?.(feature, nextState.pauseEnabled, nextState.pauseDurationMin);
-    refresh(nextState);
-  });
-
-  bindClick('[data-action="pause-duration"]', () => {
-    actions.onCyclePauseDuration?.(feature);
-  });
-
-  bindClick('[data-action="manual-trace"]', () => {
-    const nextState = {
-      ...state,
-      manualTraceEnabled: !state.manualTraceEnabled,
-    };
-    actions.onToggleManualTrace?.(feature, nextState.manualTraceEnabled);
-    refresh(nextState);
-  });
-
-  bindClick('[data-action="start-here"]', () => {
-    actions.onStartHere?.(feature);
-  });
-
-  bindClick('[data-action="add-waypoint"]', () => {
-    actions.onAddWaypoint?.(feature);
-  });
-
-  bindClick('[data-action="finish-here"]', () => {
-    actions.onFinishHere?.(feature);
-  });
-
-  bindClick('[data-action="delete"]', () => {
-    actions.onDelete?.(feature);
-  });
-
-  return panel;
-}
-
-function resolvePopupState(
-  actions: UsePoiPopupActions,
-  feature: PoiFeature,
-  nextState?: PoiPopupState,
-): PoiPopupState {
-  return {
-    ...DEFAULT_POPUP_STATE,
-    ...(actions.getPopupState?.(feature) ?? {}),
-    ...(nextState ?? {}),
-  };
-}
-
-function getPoiPopupOffsetPx(zoom: number): number {
-  const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
-  return Math.round(
-    lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
-  );
-}
-
-// ── Hook ──────────────────────────────────────────────────────────────
+// Re-exported so existing consumers keep importing from the hook module.
+export type { PoiPopupState, UsePoiPopupActions } from '../lib/poi-popup';
 
 export function usePoi(
   map: MapboxMap | null,
@@ -290,9 +34,8 @@ export function usePoi(
   onCorridorComplete?: (features: PoiFeature[]) => void,
   /**
    * Pre-loaded POI features to render immediately (e.g. rehydrated from
-   * a saved project). Seeds `lastCorridorFeatures` so map/style reloads
-   * and itinerary switches restore the markers without re-running the
-   * corridor search.
+   * a saved project). Seeds the marker registry so itinerary switches
+   * restore markers without re-running the corridor search.
    */
   initialFeatures: PoiFeature[] | null = null,
   popupActions: UsePoiPopupActions = {},
@@ -301,25 +44,15 @@ export function usePoi(
   const [error, setError] = useState<string | null>(null);
   const [poiCount, setPoiCount] = useState(0);
   /** 0..1 progress for corridor fetches; null when not running. */
-  const [corridorProgress, setCorridorProgress] = useState<number | null>(
-    null,
-  );
+  const [corridorProgress, setCorridorProgress] = useState<number | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
-  const featureRegistryRef = useRef<Map<string, PoiRenderedFeatureEntry>>(new Map());
-  const popupRef = useRef<mapboxgl.Popup | null>(null);
+  const managerRef = useRef<PoiMarkerManager | null>(null);
+  const lastCorridorFeatures = useRef<PoiFeature[]>([]);
+
+  // Mirror reactive inputs into refs so stable callbacks read fresh values.
   const enabledRef = useRef(enabledCategories);
   enabledRef.current = enabledCategories;
-  const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
-  const refineKey = refineMaxPerCategoryPerKm
-    ? String(refineMaxPerCategoryPerKm)
-    : 'off';
-  const lateralDistanceKey = maxLateralDistanceByCategory
-    ? Object.entries(maxLateralDistanceByCategory)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([category, distance]) => `${category}:${distance}`)
-      .join('|')
-    : 'off';
   const gpxRef = useRef(gpxRoute);
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
@@ -328,20 +61,26 @@ export function usePoi(
   refineMaxRef.current = refineMaxPerCategoryPerKm;
   const maxLateralDistanceByCategoryRef = useRef(maxLateralDistanceByCategory);
   maxLateralDistanceByCategoryRef.current = maxLateralDistanceByCategory;
-  const lastCorridorFeatures = useRef<PoiFeature[]>([]);
   const onCorridorUpdateRef = useRef(onCorridorUpdate);
   onCorridorUpdateRef.current = onCorridorUpdate;
   const onCorridorCompleteRef = useRef(onCorridorComplete);
   onCorridorCompleteRef.current = onCorridorComplete;
   const popupActionsRef = useRef<UsePoiPopupActions>(popupActions);
   popupActionsRef.current = popupActions;
-
-  // Track the active itinerary's pre-loaded features (from Supabase). A
-  // change in identity/length/first/last id indicates an itinerary switch
-  // or a freshly-rehydrated project, prompting a rehydration of the
-  // shared POI source.
   const initialFeaturesRef = useRef<PoiFeature[] | null>(initialFeatures);
   initialFeaturesRef.current = initialFeatures;
+
+  // Stable dependency keys for effects that react to semantic changes.
+  const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
+  const refineKey = refineMaxPerCategoryPerKm ? String(refineMaxPerCategoryPerKm) : 'off';
+  const lateralDistanceKey = maxLateralDistanceByCategory
+    ? Object.entries(maxLateralDistanceByCategory)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category, distance]) => `${category}:${distance}`)
+      .join('|')
+    : 'off';
+  // Identity of the itinerary's saved features: a change signals an
+  // itinerary switch or a favorite toggle and prompts a marker rehydration.
   const initialFeaturesKey = initialFeatures && initialFeatures.length > 0
     ? initialFeatures.map((feature) => [
       feature.id,
@@ -352,16 +91,7 @@ export function usePoi(
     ].join(':')).join('|')
     : 'empty';
 
-  const applyRefinement = useCallback((features: PoiFeature[]) => {
-    const route = gpxRef.current;
-    const maxPerCategoryPerKm = refineMaxRef.current;
-    if (!route || !maxPerCategoryPerKm) return features;
-    return refinePoiFeaturesAlongRoute(features, route.points, {
-      maxPerCategoryPerKm,
-      windowM: 1_000,
-      maxLateralDistanceByCategory: maxLateralDistanceByCategoryRef.current ?? undefined,
-    });
-  }, []);
+  // ── Feature filtering / refinement ────────────────────────────────
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
     if (features.length === 0 || enabledRef.current.size === 0) return [];
@@ -369,174 +99,32 @@ export function usePoi(
     const filtered = features.filter((feature) => enabledRef.current.has(feature.category));
     if (filtered.length === 0) return [];
 
-    return applyRefinement(filtered);
-  }, [applyRefinement]);
+    const route = gpxRef.current;
+    const maxPerCategoryPerKm = refineMaxRef.current;
+    if (!route || !maxPerCategoryPerKm) return filtered;
 
-  const updateSourceData = useCallback((m: MapboxMap, features: PoiFeature[]) => {
-    const source = m.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
-    if (!source) return;
+    return refinePoiFeaturesAlongRoute(filtered, route.points, {
+      maxPerCategoryPerKm,
+      windowM: 1_000,
+      maxLateralDistanceByCategory: maxLateralDistanceByCategoryRef.current ?? undefined,
+    });
+  }, []);
 
-    const registry = new Map<string, PoiRenderedFeatureEntry>();
-    const geojson: GeoJSON.FeatureCollection = {
-      type: 'FeatureCollection',
-      features: features.map((feature) => {
-        const key = getMarkerKey(feature);
-        registry.set(key, {
-          feature,
-          signature: getMarkerSignature(feature),
-        });
-
-        return {
-          type: 'Feature' as const,
-          geometry: {
-            type: 'Point' as const,
-            coordinates: [feature.lon, feature.lat],
-          },
-          properties: {
-            key,
-            id: feature.id,
-            category: feature.category,
-            name: feature.name ?? '',
-            iconId: getPoiLayerIconId(feature.category, feature.favorite === true),
-          },
-        };
-      }),
-    };
-
-    featureRegistryRef.current = registry;
-    source.setData(geojson);
+  const syncRenderedFeatures = useCallback((features: PoiFeature[]) => {
+    const manager = managerRef.current;
+    if (!manager) return;
+    manager.sync(features);
     setPoiCount(features.length);
   }, []);
 
-  const clearRenderedFeatures = useCallback((m?: MapboxMap) => {
-    popupRef.current?.remove();
-    popupRef.current = null;
-    featureRegistryRef.current.clear();
-    if (m) {
-      const source = m.getSource(SOURCE_ID) as mapboxgl.GeoJSONSource | undefined;
-      source?.setData({ type: 'FeatureCollection', features: [] });
-    }
-    setPoiCount(0);
-  }, []);
+  // ── Corridor fetch (along GPX route, chunked & progressive) ───────
 
-  const ensureSourceAndLayer = useCallback((m: MapboxMap) => {
-    if (!m.getSource(SOURCE_ID)) {
-      m.addSource(SOURCE_ID, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] },
-      });
-    }
-
-    // Guarantee a visible marker for every POI even before the per-category
-    // SVG sprites finish loading (or if one fails): the layer coalesces the
-    // category icon with this locally-drawn fallback dot.
-    ensurePoiFallbackImage(m);
-
-    if (!m.getLayer(LAYER_ID)) {
-      m.addLayer({
-        id: LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        slot: 'top',
-        layout: {
-          'icon-image': [
-            'coalesce',
-            ['image', ['get', 'iconId']],
-            ['image', POI_FALLBACK_ICON_ID],
-          ],
-          'icon-size': [
-            'interpolate', ['linear'], ['zoom'],
-            8, 0.5,
-            12, 0.72,
-            16, 0.98,
-          ],
-          'icon-allow-overlap': true,
-          'icon-ignore-placement': true,
-          'icon-padding': 2,
-          // Screen-facing billboards. With 'icon-pitch-alignment: map' the
-          // icons lie flat on the terrain; at the app's default 60° pitch they
-          // become coplanar with the DEM surface and get culled by Mapbox's
-          // terrain depth-occlusion (icon-occlusion-opacity defaults to 0),
-          // which is why none of the found POIs were visible on the 3D map.
-          'icon-pitch-alignment': 'viewport',
-          'icon-rotation-alignment': 'viewport',
-        },
-        paint: {
-          // Keep POIs visible even when their anchor falls behind 3D terrain
-          // (e.g. the far side of a ridge), matching the legacy DOM markers.
-          'icon-occlusion-opacity': 1,
-        },
-      });
-    }
-
-    if (!m.getLayer(TEXT_LAYER_ID)) {
-      m.addLayer({
-        id: TEXT_LAYER_ID,
-        type: 'symbol',
-        source: SOURCE_ID,
-        slot: 'top',
-        minzoom: 14,
-        layout: {
-          'text-field': ['get', 'name'],
-          'text-font': ['DIN Pro Medium', 'Arial Unicode MS Regular'],
-          'text-size': 11,
-          'text-offset': [0, 1.45],
-          'text-anchor': 'top',
-          'text-optional': true,
-          'text-allow-overlap': false,
-          'text-pitch-alignment': 'viewport',
-          'text-rotation-alignment': 'viewport',
-        },
-        paint: {
-          'text-color': '#ffffff',
-          'text-halo-color': 'rgba(0,0,0,0.72)',
-          'text-halo-width': 1,
-          'text-occlusion-opacity': 1,
-        },
-      });
-    }
-  }, []);
-
-  const syncRenderedFeatures = useCallback((m: MapboxMap, features: PoiFeature[]) => {
-    ensureSourceAndLayer(m);
-    updateSourceData(m, features);
-  }, [ensureSourceAndLayer, updateSourceData]);
-
-  const openFeaturePopup = useCallback((m: MapboxMap, feature: PoiFeature) => {
-    popupRef.current?.remove();
-
-    const popup = new mapboxgl.Popup({
-      className: 'rv-poi-popup',
-      closeButton: false,
-      closeOnClick: true,
-      focusAfterOpen: false,
-      maxWidth: 'none',
-      offset: getPoiPopupOffsetPx(m.getZoom()),
-    }).setLngLat([feature.lon, feature.lat]);
-
-    const refresh = (nextState?: PoiPopupState) => {
-      popup.setDOMContent(buildPopupContent(
-        feature,
-        resolvePopupState(popupActionsRef.current, feature, nextState),
-        popupActionsRef.current,
-        refresh,
-      ));
-      popup.setOffset(getPoiPopupOffsetPx(m.getZoom()));
-    };
-
-    refresh();
-    popup.addTo(m);
-    popupRef.current = popup;
-  }, []);
-
-  // ── Corridor fetch (along GPX route, chunked & progressive) ──────
-
-  const fetchCorridorPois = useCallback(async (m: MapboxMap) => {
+  const fetchCorridorPois = useCallback(async () => {
     const route = gpxRef.current;
     const cats = Array.from(enabledRef.current);
     if (!route || cats.length === 0) {
       lastCorridorFeatures.current = [];
-      syncRenderedFeatures(m, []);
+      syncRenderedFeatures([]);
       return;
     }
 
@@ -548,14 +136,13 @@ export function usePoi(
     setError(null);
     setCorridorProgress(0);
 
-    // Spacing chosen so consecutive Overpass `around:r` disks overlap
-    // (no gaps in the corridor). Three constraints:
+    // Spacing chosen so consecutive `around:r` disks overlap (no corridor
+    // gaps) under three constraints:
     //   1. spacing >= radius * 1.6  → adjacent disks overlap.
     //   2. spacing >= 200 m         → tiny user radii still produce a
     //      reasonable sample count (avoids 10 000+ samples for 40 m).
-    //   3. spacing chosen so total samples never exceed ~1500          →
-    //      caps the number of sequential Overpass chunks for huge GPX
-    //      routes (e.g. multi-day alpine tours) at ~20 calls.
+    //   3. total samples never exceed ~1500 → caps sequential POI-server
+    //      chunks for huge GPX routes (multi-day tours) at ~20 calls.
     const radius = radiusRef.current;
     let approxLenM = 0;
     for (let i = 1; i < route.points.length; i++) {
@@ -582,7 +169,7 @@ export function usePoi(
           if (controller.signal.aborted) return;
           const rendered = buildRenderableFeatures(deduped);
           lastCorridorFeatures.current = rendered;
-          syncRenderedFeatures(m, rendered);
+          syncRenderedFeatures(rendered);
           onCorridorUpdateRef.current?.(rendered);
           setCorridorProgress(total > 0 ? done / total : 0);
         },
@@ -590,7 +177,7 @@ export function usePoi(
       if (!controller.signal.aborted) {
         const rendered = buildRenderableFeatures(features);
         lastCorridorFeatures.current = rendered;
-        syncRenderedFeatures(m, rendered);
+        syncRenderedFeatures(rendered);
         onCorridorCompleteRef.current?.(rendered);
       }
     } catch (err: unknown) {
@@ -604,13 +191,13 @@ export function usePoi(
     }
   }, [buildRenderableFeatures, syncRenderedFeatures]);
 
-  // ── Public trigger for corridor search ────────────────────────────
+  // ── Public triggers ───────────────────────────────────────────────
 
   const searchCorridor = useCallback(() => {
-    if (map && isMapLoaded && gpxRef.current) {
-      fetchCorridorPois(map);
+    if (managerRef.current && gpxRef.current) {
+      void fetchCorridorPois();
     }
-  }, [map, isMapLoaded, fetchCorridorPois]);
+  }, [fetchCorridorPois]);
 
   const cancelSearchCorridor = useCallback(() => {
     abortRef.current?.abort();
@@ -620,128 +207,49 @@ export function usePoi(
     setError(null);
   }, []);
 
-  // ── Main effect: setup & teardown ─────────────────────────────────
+  // ── Marker manager lifecycle ──────────────────────────────────────
 
   useEffect(() => {
     if (!map || !isMapLoaded) return;
 
-    let cancelled = false;
+    const manager = new PoiMarkerManager(map, () => popupActionsRef.current);
+    managerRef.current = manager;
 
-    const getHoveredEntry = (point: mapboxgl.Point) => {
-      const rendered = map.queryRenderedFeatures(point, { layers: [LAYER_ID, TEXT_LAYER_ID] });
-      const rawKey = rendered[0]?.properties?.key;
-      if (typeof rawKey !== 'string') return;
-      return featureRegistryRef.current.get(rawKey);
-    };
-
-    const handleMapClick = (event: mapboxgl.MapMouseEvent) => {
-      const entry = getHoveredEntry(event.point);
-      if (!entry) return;
-      openFeaturePopup(map, entry.feature);
-    };
-
-    const handleMouseMove = (event: mapboxgl.MapMouseEvent) => {
-      map.getCanvas().style.cursor = getHoveredEntry(event.point) ? 'pointer' : '';
-    };
-
-    const ensurePresentation = () => {
-      // Create the source + layer synchronously so POI geometry renders
-      // immediately (the fallback icon is registered inside
-      // ensureSourceAndLayer). Icon sprites load in the background and the
-      // symbols repaint as each becomes available — registration is no
-      // longer a hard prerequisite for showing POIs.
-      ensureSourceAndLayer(map);
-      const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
-      lastCorridorFeatures.current = seed;
-      syncRenderedFeatures(map, seed);
-      void registerPoiIcons(map).catch(() => {
-        // Per-icon failures are swallowed inside registerPoiIcons; ignore.
-      });
-    };
-
-    ensurePresentation();
-
-    const handleStyleData = () => {
-      if (cancelled) return;
-      // A style reload clears custom images, sources and layers. Detect the
-      // cleared sprite atlas via the fallback dot, re-create the presentation
-      // synchronously (fallback dots reappear at once), then re-register the
-      // detailed SVG sprites in the background.
-      const spritesCleared = !map.hasImage(POI_FALLBACK_ICON_ID);
-      ensureSourceAndLayer(map);
-      syncRenderedFeatures(map, lastCorridorFeatures.current);
-      if (spritesCleared) {
-        void registerPoiIcons(map).catch(() => {
-          // ignore transient style/image races; the next styledata retries
-        });
-      }
-    };
-
-    map.on('click', handleMapClick);
-    map.on('mousemove', handleMouseMove);
-    map.on('styledata', handleStyleData);
+    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
+    lastCorridorFeatures.current = seed;
+    manager.sync(seed);
+    setPoiCount(seed.length);
 
     return () => {
-      cancelled = true;
       abortRef.current?.abort();
-      popupRef.current?.remove();
-      popupRef.current = null;
-      map.getCanvas().style.cursor = '';
-      map.off('click', handleMapClick);
-      map.off('mousemove', handleMouseMove);
-      map.off('styledata', handleStyleData);
-      clearRenderedFeatures(map);
-      resetIconRegistration(map);
+      managerRef.current = null;
+      manager.destroy();
+      setPoiCount(0);
     };
-  }, [map, isMapLoaded, buildRenderableFeatures, syncRenderedFeatures, ensureSourceAndLayer, openFeaturePopup, clearRenderedFeatures]);
+  }, [map, isMapLoaded, buildRenderableFeatures]);
 
-  // ── Re-fetch when enabled categories change (corridor mode only) ──
+  // ── React to category / refinement changes ────────────────────────
 
   useEffect(() => {
-    if (!map || !isMapLoaded) return;
+    if (!managerRef.current) return;
+    // In corridor mode a settings change re-runs the search; otherwise the
+    // saved features are simply re-filtered.
     if (gpxRef.current && lastCorridorFeatures.current.length > 0) {
-      fetchCorridorPois(map);
+      void fetchCorridorPois();
       return;
     }
 
-    syncRenderedFeatures(map, buildRenderableFeatures(initialFeaturesRef.current ?? []));
+    syncRenderedFeatures(buildRenderableFeatures(initialFeaturesRef.current ?? []));
   }, [map, isMapLoaded, enabledCategoriesKey, refineKey, lateralDistanceKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
 
-  // ── Rehydrate from saved features when active itinerary changes ───
+  // ── Rehydrate when the active itinerary's saved features change ───
+
   useEffect(() => {
-    if (!map || !isMapLoaded) return;
+    if (!managerRef.current) return;
     const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
     lastCorridorFeatures.current = seed;
-    syncRenderedFeatures(map, seed);
+    syncRenderedFeatures(seed);
   }, [map, isMapLoaded, initialFeaturesKey, buildRenderableFeatures, syncRenderedFeatures]);
 
   return { loading, error, poiCount, corridorProgress, searchCorridor, cancelSearchCorridor };
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function formatPauseDuration(durationMin: number): string {
-  const safeDuration = Math.max(1, Math.round(durationMin || 5));
-  return `${safeDuration} min`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function lerp(start: number, end: number, progress: number): number {
-  return start + (end - start) * progress;
-}
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  const progress = clamp((value - edge0) / (edge1 - edge0), 0, 1);
-  return progress * progress * (3 - 2 * progress);
 }
