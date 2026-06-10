@@ -10,12 +10,13 @@
 // - Icons are plain `<img src>` SVGs: no canvas rasterisation, no sprite
 //   atlas races, no `addImage` lifecycle.
 //
-// Terrain note: Mapbox's built-in marker terrain snapping is unreliable on
-// top of the custom service-worker DEM (markers can fall back to ~sea level
-// under exaggerated 3D terrain). Markers are therefore anchored explicitly:
-// query the rendered (exaggerated) terrain height at the POI and add a
-// small zoom-responsive lift. A rAF-throttled refresh on `zoom`/`move`/
-// `idle` re-runs this once DEM tiles finish loading.
+// Terrain note: `Marker.altitude` is RELATIVE to the rendered terrain
+// surface. Mapbox samples the (exaggerated) DEM itself on every projection
+// (`_coordinatePoint`: z = sampled terrain elevation + marker altitude), so
+// markers stay glued to the ground through rotation/pitch with a small
+// constant lift. Never add `queryTerrainElevation` on top — that double-
+// counts the terrain height and makes POIs float and drift with parallax.
+// An `idle` nudge re-projects markers created before DEM tiles loaded.
 
 import mapboxgl from 'mapbox-gl';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -36,8 +37,8 @@ const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
-const MARKER_MIN_LIFT_M = 7;
-const MARKER_MAX_LIFT_M = 10.5;
+/** Meters above the terrain surface (relative offset, sampled by Mapbox). */
+const MARKER_LIFT_M = 1.5;
 const MARKER_MIN_POPUP_OFFSET_PX = 26;
 const MARKER_MAX_POPUP_OFFSET_PX = 34;
 
@@ -47,8 +48,6 @@ interface PoiMarkerEntry {
   marker: mapboxgl.Marker;
   popup: mapboxgl.Popup;
   signature: string;
-  lon: number;
-  lat: number;
 }
 
 export function getMarkerKey(feature: PoiFeature): string {
@@ -108,11 +107,10 @@ function createMarkerElement(feature: PoiFeature): HTMLButtonElement {
   return element;
 }
 
-// ── Zoom-responsive sizing + terrain anchoring ────────────────────────
+// ── Zoom-responsive sizing ────────────────────────────────────────────
 
 interface PoiMarkerVisualState {
   scale: number;
-  liftM: number;
   popupOffsetPx: number;
 }
 
@@ -120,37 +118,18 @@ function getMarkerVisualState(zoom: number): PoiMarkerVisualState {
   const progress = smoothstep(MARKER_MIN_SCALE_ZOOM, MARKER_MAX_SCALE_ZOOM, zoom);
   return {
     scale: lerp(MARKER_MIN_SCREEN_SCALE, MARKER_MAX_SCREEN_SCALE, progress),
-    liftM: lerp(MARKER_MAX_LIFT_M, MARKER_MIN_LIFT_M, progress),
     popupOffsetPx: Math.round(
       lerp(MARKER_MIN_POPUP_OFFSET_PX, MARKER_MAX_POPUP_OFFSET_PX, progress),
     ),
   };
 }
 
-function resolveMarkerAltitude(
-  map: MapboxMap,
-  lon: number,
-  lat: number,
-  liftM: number,
-): number {
-  const terrain = map.queryTerrainElevation?.([lon, lat], { exaggerated: true });
-  const base = typeof terrain === 'number' && Number.isFinite(terrain) ? terrain : 0;
-  return base + liftM;
-}
-
-function applyMarkerVisualState(
-  map: MapboxMap,
-  entry: PoiMarkerEntry,
-  zoom: number,
-): void {
+function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
   const visual = getMarkerVisualState(zoom);
   entry.marker.getElement().style.setProperty(
     '--rv-poi-marker-scale',
     visual.scale.toFixed(3),
   );
-  const altitude = resolveMarkerAltitude(map, entry.lon, entry.lat, visual.liftM);
-  entry.marker.setAltitude(altitude);
-  entry.popup.setAltitude(altitude);
   entry.popup.setOffset(visual.popupOffsetPx);
 }
 
@@ -172,19 +151,26 @@ export class PoiMarkerManager {
       this.frameId = null;
       const zoom = this.map.getZoom();
       for (const entry of this.registry.values()) {
-        applyMarkerVisualState(this.map, entry, zoom);
+        applyMarkerVisualState(entry, zoom);
       }
     });
+  };
+
+  // Markers created before DEM tiles finished loading were projected with a
+  // default elevation; re-setting their LngLat forces a re-projection that
+  // re-samples the now-loaded terrain. `idle` fires exactly when tiles and
+  // camera settle, and the nudge itself does not schedule another repaint.
+  private readonly reanchorOnIdle = (): void => {
+    for (const entry of this.registry.values()) {
+      entry.marker.setLngLat(entry.marker.getLngLat());
+    }
   };
 
   constructor(map: MapboxMap, getActions: () => UsePoiPopupActions) {
     this.map = map;
     this.getActions = getActions;
     map.on('zoom', this.scheduleVisualRefresh);
-    map.on('move', this.scheduleVisualRefresh);
-    // `idle` fires once terrain tiles finish loading: markers created before
-    // the DEM was ready get re-anchored onto the surface here.
-    map.on('idle', this.scheduleVisualRefresh);
+    map.on('idle', this.reanchorOnIdle);
   }
 
   /** Currently rendered feature count. */
@@ -223,8 +209,7 @@ export class PoiMarkerManager {
       this.frameId = null;
     }
     this.map.off('zoom', this.scheduleVisualRefresh);
-    this.map.off('move', this.scheduleVisualRefresh);
-    this.map.off('idle', this.scheduleVisualRefresh);
+    this.map.off('idle', this.reanchorOnIdle);
     for (const entry of this.registry.values()) {
       entry.marker.remove();
     }
@@ -260,24 +245,25 @@ export class PoiMarkerManager {
       anchor: 'bottom',
       pitchAlignment: 'viewport',
       rotationAlignment: 'viewport',
+      // Relative to the terrain surface: keeps the pin tip just above the
+      // ground without z-fighting the DEM mesh.
+      altitude: MARKER_LIFT_M,
       // Never fade markers hidden by terrain: at high pitch the anchor often
       // sits just behind the DEM surface and the default 0.2 made POIs
       // near-invisible.
       occludedOpacity: 1,
     })
       .setLngLat([feature.lon, feature.lat])
-      .setPopup(popup)
+      .setPopup(popup) // copies the marker altitude onto the popup
       .addTo(this.map);
 
     const entry: PoiMarkerEntry = {
       marker,
       popup,
       signature: getMarkerSignature(feature),
-      lon: feature.lon,
-      lat: feature.lat,
     };
 
-    applyMarkerVisualState(this.map, entry, this.map.getZoom());
+    applyMarkerVisualState(entry, this.map.getZoom());
     return entry;
   }
 }
