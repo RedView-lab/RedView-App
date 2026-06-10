@@ -453,9 +453,18 @@ export function usePoi(
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
           'icon-padding': 2,
-          'icon-pitch-alignment': 'map',
+          // Screen-facing billboards. With 'icon-pitch-alignment: map' the
+          // icons lie flat on the terrain; at the app's default 60° pitch they
+          // become coplanar with the DEM surface and get culled by Mapbox's
+          // terrain depth-occlusion (icon-occlusion-opacity defaults to 0),
+          // which is why none of the found POIs were visible on the 3D map.
+          'icon-pitch-alignment': 'viewport',
           'icon-rotation-alignment': 'viewport',
-          'symbol-z-elevate': true,
+        },
+        paint: {
+          // Keep POIs visible even when their anchor falls behind 3D terrain
+          // (e.g. the far side of a ridge), matching the legacy DOM markers.
+          'icon-occlusion-opacity': 1,
         },
       });
     }
@@ -475,14 +484,14 @@ export function usePoi(
           'text-anchor': 'top',
           'text-optional': true,
           'text-allow-overlap': false,
-          'text-pitch-alignment': 'map',
+          'text-pitch-alignment': 'viewport',
           'text-rotation-alignment': 'viewport',
-          'symbol-z-elevate': true,
         },
         paint: {
           'text-color': '#ffffff',
           'text-halo-color': 'rgba(0,0,0,0.72)',
           'text-halo-width': 1,
+          'text-occlusion-opacity': 1,
         },
       });
     }
