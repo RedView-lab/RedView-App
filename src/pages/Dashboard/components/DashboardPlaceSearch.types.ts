@@ -60,7 +60,4 @@ export interface ViewportPoiCandidate {
 
 export interface ViewportPoiLodProfile {
   fetchLimit: number;
-  targetCount: number;
-  cellPx: number;
-  maxPerCategory: number;
 }

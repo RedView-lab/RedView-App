@@ -23,22 +23,27 @@ function getViewportPoiMarkerSignature(feature: PoiFeature): string {
 }
 
 function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
+  // `fetchLimit` est l'unique paramètre actif : il borne la requête bbox au
+  // serveur POI. Les anciens caps de sélection (targetCount / maxPerCategory /
+  // cellPx) ont été retirés — voir `selectViewportLodPois` : on affiche
+  // désormais TOUS les POI renvoyés, avec un garde-fou de perf uniquement
+  // lorsque le count devient pathologique.
   if (zoom < 6.2) {
-    return { fetchLimit: 2_400, targetCount: 40, cellPx: 136, maxPerCategory: 8 };
+    return { fetchLimit: 8_000 };
   }
   if (zoom < 7.4) {
-    return { fetchLimit: 2_800, targetCount: 56, cellPx: 120, maxPerCategory: 10 };
+    return { fetchLimit: 8_000 };
   }
   if (zoom < 8.8) {
-    return { fetchLimit: 3_200, targetCount: 72, cellPx: 104, maxPerCategory: 12 };
+    return { fetchLimit: 9_000 };
   }
   if (zoom < 10.4) {
-    return { fetchLimit: 3_800, targetCount: 96, cellPx: 90, maxPerCategory: 16 };
+    return { fetchLimit: 10_000 };
   }
   if (zoom < 12.2) {
-    return { fetchLimit: 4_400, targetCount: 132, cellPx: 78, maxPerCategory: 22 };
+    return { fetchLimit: 11_000 };
   }
-  return { fetchLimit: 5_200, targetCount: 180, cellPx: 64, maxPerCategory: 30 };
+  return { fetchLimit: 12_000 };
 }
 
 function getViewportPoiMarkerSizePx(zoom: number): number {
@@ -80,21 +85,48 @@ function rankViewportPoiCandidates(
   return ranked;
 }
 
+/**
+ * Nombre de markers DOM au-delà duquel on amorce un amincissement spatial
+ * doux pour éviter le lag pathologique (vue pays entière). En-dessous de ce
+ * seuil, TOUS les POI renvoyés par le serveur sont affichés sans aucun drop.
+ */
+const VIEWPORT_POI_PERF_HARD_CAP = 800;
+
 export function selectViewportLodPois(
   map: MapboxMap,
   features: PoiFeature[],
-  categories: PoiCategory[],
+  _categories: PoiCategory[],
   stickyKeys: ReadonlySet<string> = new Set(),
 ): PoiFeature[] {
   if (features.length === 0) return [];
 
-  const zoom = map.getZoom();
-  const profile = getViewportPoiLodProfile(zoom);
-  const cellBuckets = new Map<string, ViewportPoiCandidate>();
+  // Cas nominal : on est sous le garde-fou de perf → on affiche TOUT.
+  // Aucun cell-bucketing, aucun cap par catégorie. Les POI proches de la
+  // route (auparavant éliminés par le sélecteur LOD) sont conservés.
+  if (features.length <= VIEWPORT_POI_PERF_HARD_CAP) {
+    return features.slice().sort((left, right) => {
+      const leftId = left.id;
+      const rightId = right.id;
+      return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
+    });
+  }
 
-  for (const candidate of rankViewportPoiCandidates(map, features)) {
-    const cellX = Math.floor(candidate.x / profile.cellPx);
-    const cellY = Math.floor(candidate.y / profile.cellPx);
+  // Garde-fou perf : trop de POI pour le DOM. On amorce un échantillonnage
+  // spatial doux via cell-bucketing, mais UNIQUEMENT comme moyen d'amincir
+  // (plus de grille fixe par zoom, plus de cap par catégorie). La taille de
+  // cellule est calculée dynamiquement pour atterrir près du cap.
+  const candidates = rankViewportPoiCandidates(map, features);
+  const container = map.getContainer();
+  const viewportAreaPx = Math.max(1, container.clientWidth * container.clientHeight);
+  // nb de cellules souhaité ≈ cap ; on en déduit la taille de cellule dont
+  // l'aire couvre le viewport en ~`cap` cellules.
+  const cellAreaPx = Math.max(1, viewportAreaPx / VIEWPORT_POI_PERF_HARD_CAP);
+  const cellPx = Math.sqrt(cellAreaPx);
+
+  const cellBuckets = new Map<string, ViewportPoiCandidate>();
+  for (const candidate of candidates) {
+    const cellX = Math.floor(candidate.x / cellPx);
+    const cellY = Math.floor(candidate.y / cellPx);
     const key = `${cellX}:${cellY}:${candidate.feature.category}`;
     const existing = cellBuckets.get(key);
     const candidateIsSticky = stickyKeys.has(getViewportPoiMarkerKey(candidate.feature));
@@ -111,65 +143,18 @@ export function selectViewportLodPois(
     }
   }
 
-  const grouped = new Map<PoiCategory, ViewportPoiCandidate[]>();
-  for (const candidate of cellBuckets.values()) {
-    const list = grouped.get(candidate.feature.category) ?? [];
-    list.push(candidate);
-    grouped.set(candidate.feature.category, list);
-  }
-  for (const list of grouped.values()) {
-    list.sort((left, right) => {
-      const leftSticky = stickyKeys.has(getViewportPoiMarkerKey(left.feature));
-      const rightSticky = stickyKeys.has(getViewportPoiMarkerKey(right.feature));
-      if (leftSticky !== rightSticky) {
-        return leftSticky ? -1 : 1;
-      }
-      return left.centerDistance - right.centerDistance;
-    });
-  }
-
-  const activeCategories = categories.filter((category) => (grouped.get(category)?.length ?? 0) > 0);
-  const perCategoryCount = new Map<PoiCategory, number>();
-  const selected: PoiFeature[] = [];
-  const fairnessCategoryCount = Math.max(activeCategories.length, 1);
-  const effectivePerCategoryCap = Math.max(
-    profile.maxPerCategory,
-    Math.ceil(profile.targetCount / fairnessCategoryCount),
-  );
-  const maxIterations = profile.targetCount * fairnessCategoryCount;
-  let iterations = 0;
-
-  while (selected.length < profile.targetCount && iterations < maxIterations) {
-    let progressed = false;
-    for (const category of activeCategories) {
-      if (selected.length >= profile.targetCount) break;
-      const bucket = grouped.get(category);
-      if (!bucket || bucket.length === 0) continue;
-      const used = perCategoryCount.get(category) ?? 0;
-      if (used >= effectivePerCategoryCap) continue;
-      const next = bucket.shift();
-      if (!next) continue;
-      selected.push(next.feature);
-      perCategoryCount.set(category, used + 1);
-      progressed = true;
-      if (selected.length >= profile.targetCount) break;
+  // Tri final stable : d'abord les sticky (évite le clignotement des POI déjà
+  // affichés), puis par distance au centre du viewport.
+  const selected = [...cellBuckets.values()].sort((left, right) => {
+    const leftSticky = stickyKeys.has(getViewportPoiMarkerKey(left.feature));
+    const rightSticky = stickyKeys.has(getViewportPoiMarkerKey(right.feature));
+    if (leftSticky !== rightSticky) {
+      return leftSticky ? -1 : 1;
     }
-    if (!progressed) break;
-    iterations += 1;
-  }
+    return left.centerDistance - right.centerDistance;
+  });
 
-  if (selected.length < profile.targetCount) {
-    const leftovers = [...grouped.values()]
-      .flat()
-      .sort((left, right) => left.centerDistance - right.centerDistance);
-
-    for (const candidate of leftovers) {
-      if (selected.length >= profile.targetCount) break;
-      selected.push(candidate.feature);
-    }
-  }
-
-  return selected;
+  return selected.map((candidate) => candidate.feature);
 }
 
 export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
