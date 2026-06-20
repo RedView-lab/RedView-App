@@ -98,7 +98,23 @@ const IGN_TERRAIN_WMS_ENGAGE_MPP = 22;
 // at oblique mid zooms, so urban features blur back into something that looks
 // like bare-earth terrain. A small source-zoom bias keeps the output mesh fed
 // by finer MNS tiles before we reach the native z16/z17 close-up range.
-const IGN_MNS_SOURCE_ZOOM_BIAS = 2;
+//
+// 2026-06-20 multicore pass: the bias is now ZOOM-AWARE. The WGS84G
+// TileMatrixSet is 2× wider than tall, so each +1 of bias roughly QUADRUPLES
+// the sub-tile fan-out. At z14, bias=2 → demZ 16 → 63 sub-tiles (9×7); on a
+// cold cache each one is a separate IGN fetch that 404s in MNS-empty zones,
+// burning the 5 s soft deadline and wedging the SW thread (the "map freezes
+// when slope is on" symptom). At z14 the screen pixel is already ~9 m, so
+// sampling z16 (≈2.5 m) is overkill — bias=1 (z15, ≈5 m, 20 sub-tiles) gives
+// the same visual surface detail at 1/3 the fan-out. We keep the full bias=2
+// only at z15+, where the user is close enough that the extra detail is
+// actually visible AND a single tile covers a smaller ground footprint so
+// the fan-out tiles are more likely to all be MNS-covered (not 404ing).
+function ignMnsSourceZoomBias(mercZ) {
+  if (mercZ >= 15) return 2;
+  if (mercZ >= 13) return 1;
+  return 0;
+}
 
 // France MNS mid-zoom smoothing. IGN MNS keeps top-of-canopy / buildings,
 // which is exactly what the user wants, but the resampled surface can show a
@@ -157,11 +173,15 @@ const ORTHO_TILE_SIZE = 256;
 // on full-coverage France interior tiles so neighbouring tiles rendered at
 // different LOD no longer step a few metres apart (vertical "walls" at 0.40 m).
 //
-// 2026-06-20-slope-multicore-pool-1: dedicated worker pool for slope builds
+// 2026-06-20-slope-multicore-pool-2: dedicated worker pool for slope builds
 // (Horn + decode + PNG encode off the SW thread), SLOPE_HOT_CACHE in-memory
-// tier (mirrors DEM_HOT_CACHE), cross-profile prewarm + viewport slope
-// prefetch. Bumping the epoch purges the previous single-thread slope PNGs.
-const MAP_CACHE_EPOCH = '2026-06-20-slope-multicore-pool-1';
+// tier (mirrors DEM_HOT_CACHE), cross-profile prewarm. Also fixes the
+// basemap-freeze-on-zoom symptom: (a) early-abort build-tile when the first
+// 8 sub-tiles all miss (was waiting the full 5s deadline for 63 fan-out
+// 404s); (b) zoom-aware MNS source bias (z14 was fanning out 63 sub-tiles
+// instead of 20); (c) lower soft deadlines; (d) CANCEL_STALE_DEM now clears
+// DEM_INFLIGHT so new-viewport requests don't coalesce onto stale builds.
+const MAP_CACHE_EPOCH = '2026-06-20-slope-multicore-pool-2';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
@@ -307,9 +327,9 @@ const DEM_OVERZOOM_MAX_DEPTH = 4;
 //     deadline → composite with partial coverage → visual quality drop.
 function ignSoftDeadlineMs(mercZ) {
   if (mercZ <= 12) return 1_200;
-  if (mercZ === 13) return 2_500;
-  if (mercZ === 14) return 5_000;
-  if (mercZ === 15) return 9_000;
-  return 14_000;
+  if (mercZ === 13) return 2_000;
+  if (mercZ === 14) return 3_000;
+  if (mercZ === 15) return 6_000;
+  return 10_000;
 }
 const IGN_SUBTILE_SOFT_DEADLINE_MS = 14_000; // fallback/legacy const

@@ -502,9 +502,28 @@ self.addEventListener('message', (e) => {
     try { ignF = typeof cancelInFlightIGN === 'function' ? cancelInFlightIGN() : 0; } catch { /* ignore */ }
     try { orthoQ = typeof flushOrthoQueue === 'function' ? flushOrthoQueue() : 0; } catch { /* ignore */ }
     try { orthoF = typeof cancelInFlightOrtho === 'function' ? cancelInFlightOrtho() : 0; } catch { /* ignore */ }
-    if (DEBUG && (ignQ + ignF + orthoQ + orthoF) > 0) {
+    // ── Clear DEM_INFLIGHT so new-viewport requests don't coalesce onto
+    //    stale builds ──────────────────────────────────────────────────
+    // Previously CANCEL_STALE_DEM drained the IGN/ortho queues + aborted
+    // their HTTP fetches but LEFT the DEM_INFLIGHT dedup map intact. Every
+    // in-flight buildIGNTile promise stayed registered, so when the user
+    // panned/zoomed and Mapbox re-requested the SAME tile for the new
+    // viewport, handleDemRequest found the stale entry and awaited it —
+    // getting either the old-viewport result or waiting up to the soft
+    // deadline (5 s at z14) for a build targeting tiles the user had
+    // already left behind. Result: "plus rien ne se charge" — the basemap
+    // froze until every stale build finished. Clearing the map here lets
+    // the next request start a fresh build for the current viewport.
+    // (The stale build completes in the background and writes to cache
+    // harmlessly — it just isn't shared with anyone anymore.)
+    let demDropped = 0;
+    try {
+      demDropped = DEM_INFLIGHT.size;
+      DEM_INFLIGHT.clear();
+    } catch { /* ignore */ }
+    if (DEBUG && (ignQ + ignF + orthoQ + orthoF + demDropped) > 0) {
       console.warn(
-        `[sw-dem][cancel-stale] ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}`,
+        `[sw-dem][cancel-stale] ign queued=${ignQ} inflight=${ignF}, ortho queued=${orthoQ} inflight=${orthoF}, demInflight=${demDropped}`,
       );
     }
     return;

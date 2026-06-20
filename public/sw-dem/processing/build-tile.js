@@ -58,9 +58,14 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
 async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
+  // Zoom-aware MNS source bias (see ignMnsSourceZoomBias in config.js).
+  // Avoids the 63-sub-tile fan-out that wedged the SW thread at z14.
+  const mnsBias = (typeof ignMnsSourceZoomBias === 'function')
+    ? ignMnsSourceZoomBias(mercZ)
+    : 2;
   const demZ = Math.max(
     IGN_DEM_MINZOOM,
-    Math.min(mercZ + IGN_MNS_SOURCE_ZOOM_BIAS, IGN_DEM_MAXZOOM),
+    Math.min(mercZ + mnsBias, IGN_DEM_MAXZOOM),
   );
 
   // Fast skip: if this area is known to have no MNS data, return immediately
@@ -119,9 +124,26 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
     // cache write), which is exactly when we need the deadline to fire.
     // checkDone runs in the same microtask graph as the fetch resolutions
     // so it ALWAYS gets scheduling parity with them.
+    //
+    // EARLY-ABORT (2026-06-20): if every sub-tile that has settled so far
+    // is a miss, we don't need to wait for the deadline — the area is
+    // almost certainly empty IGN coverage and the remaining in-flight
+    // fetches will 404 too. Previously a z14 tile over an MNS-empty zone
+    // waited the full 5s deadline with 63 fan-out sub-tiles all 404ing
+    // in parallel, wedging the SW thread and freezing the basemap. Now we
+    // bail as soon as we've seen >= 8 settled misses with zero hits.
+    // 8 is chosen so a single slow/timeout straggler can't trick us into
+    // aborting a genuinely-available tile (those typically have ≥4 hits
+    // out of the first 8 sub-tiles for an interior France tile).
+    let settledMisses = 0;
+    let settledHits = 0;
+    const EARLY_ABORT_MIN_MISSES = 8;
     const checkDone = () => {
       if (settledCount >= fetchCount) { resolveAll(); return; }
       if (performance.now() >= deadlineAt) { resolveAll(); return; }
+      if (settledHits === 0 && settledMisses >= EARLY_ABORT_MIN_MISSES) {
+        resolveAll(); return;
+      }
     };
     for (let row = tl.row; row <= br.row; row++) {
       for (let col = tl.col; col <= br.col; col++) {
@@ -133,7 +155,12 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
           getIGNTileWithFallback(demZ, col, row, deadlineAt).then((result) => {
             tileMap.set(key, result);
             settledCount++;
-            if (result && result.data) anySuccess = true;
+            if (result && result.data) {
+              anySuccess = true;
+              settledHits++;
+            } else {
+              settledMisses++;
+            }
             checkDone();
           }),
         );
