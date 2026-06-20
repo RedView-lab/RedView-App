@@ -1,33 +1,31 @@
 .rvd-place-search {
-  width: min(440px, calc(100vw - 24px));
+  width: max-content;
+  max-width: min(720px, calc(100vw - 24px));
   transition: opacity 220ms ease, transform 220ms cubic-bezier(0.2, 0.75, 0.2, 1);
 }
 
 .rvd-place-search__row {
-  display: grid;
-  grid-template-columns: minmax(0, 234px) 200px;
-  align-items: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
   width: 100%;
 }
 
-.rvd-place-search__search-shell,
-.rvd-place-search__poi-trigger-shell {
+.rvd-place-search__search-shell {
   position: relative;
   display: flex;
   align-items: center;
-  width: 100%;
-  height: 40px;
-  min-height: 40px;
+  flex: 0 0 234px;
+  min-width: 200px;
+  width: 234px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
   box-sizing: border-box;
   overflow: hidden;
-}
-
-.rvd-place-search__search-shell {
-  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
   box-shadow:
     0 1px 2px rgba(10, 13, 18, 0.05),
     0 8px 18px rgba(0, 0, 0, 0.24);
@@ -42,7 +40,7 @@
 
 .rvd-place-search__icon {
   position: absolute;
-  left: 12px;
+  left: 8px;
   top: 50%;
   display: inline-flex;
   align-items: center;
@@ -53,12 +51,6 @@
   transform: translateY(-50%);
   pointer-events: none;
   z-index: 1;
-}
-
-.rvd-place-search__icon-svg {
-  display: block;
-  width: 100%;
-  height: 100%;
 }
 
 .rvd-place-search__field {
@@ -75,7 +67,7 @@
   border: 0;
   border-radius: 0;
   font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 400;
   line-height: 24px;
 }
@@ -92,97 +84,132 @@
   font-weight: 400;
 }
 
-.rvd-place-search__poi {
+.rvd-place-search__filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.rvd-place-search__filter {
   position: relative;
-  width: 100%;
+  flex: 0 0 auto;
+  min-width: 0;
 }
 
-.rvd-place-search__poi-trigger-shell {
-  border-radius: 8px;
-}
-
-.rvd-place-search__poi-trigger {
+.rvd-place-search__filter-shell {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 100%;
-  height: 40px;
-  padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.24);
-  color: #ffffff;
-  cursor: pointer;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px 0 8px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.22);
+}
+
+.rvd-place-search__filter.is-active .rvd-place-search__filter-shell {
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.rvd-place-search__filter-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: inherit;
   font: inherit;
-  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+  cursor: pointer;
 }
 
-.rvd-place-search__poi.is-open .rvd-place-search__poi-trigger {
-  border-color: rgba(255, 255, 255, 0.14);
-}
-
-.rvd-place-search__poi-trigger:hover {
-  background: rgba(255, 255, 255, 0.27);
-}
-
-.rvd-place-search__poi-trigger:focus-visible {
+.rvd-place-search__filter-toggle:focus-visible {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.24);
 }
 
-.rvd-place-search__poi-trigger-marker,
-.rvd-place-search__poi-option-marker {
+.rvd-place-search__filter-checkbox {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.rvd-place-search__poi-trigger-marker {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
   color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(213, 215, 218, 0.5);
+  background: transparent;
 }
 
-.rvd-place-search__poi-trigger-label {
+.rvd-place-search__filter-checkbox.is-checked {
+  background: rgba(0, 0, 0, 0.64);
+  box-shadow: none;
+}
+
+.rvd-place-search__filter-marker {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.rvd-place-search__filter-label {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: 'Rethink Sans', system-ui, sans-serif;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 24px;
+  line-height: normal;
   text-align: left;
+  color: rgba(255, 255, 255, 0.64);
 }
 
-.rvd-place-search__poi-trigger-chevron {
+.rvd-place-search__filter-chevron {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 14px;
   height: 14px;
+  padding: 0;
+  background: transparent;
+  border: 0;
   color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
   transition: transform 180ms ease;
 }
 
-.rvd-place-search__poi.is-open .rvd-place-search__poi-trigger-chevron {
+.rvd-place-search__filter-chevron:focus-visible {
+  outline: none;
+}
+
+.rvd-place-search__filter.is-open .rvd-place-search__filter-chevron {
   transform: rotate(180deg);
 }
 
 .rvd-place-search__poi-menu {
   position: absolute;
-  top: 44px;
-  right: 0;
-  width: 100%;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 168px;
+  width: max-content;
+  max-width: 240px;
   border-radius: 8px 8px 8px 0;
   overflow: hidden;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
-  transform-origin: top right;
+  transform-origin: top left;
   z-index: 5;
 }
 
@@ -264,41 +291,6 @@
   filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.16));
 }
 
-.rvd-place-search__poi-pin {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.16));
-}
-
-.rvd-place-search__poi-pin-shape {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-.rvd-place-search__poi-pin-glyph {
-  position: absolute;
-  left: 50%;
-  top: 45%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 12px;
-  height: 12px;
-  color: #ffffff;
-  transform: translate(-50%, -50%);
-}
-
-.rvd-place-search__poi-glyph {
-  display: block;
-  width: 12px;
-  height: 12px;
-}
-
 @keyframes rvd-poi-menu-in {
   from {
     opacity: 0;
@@ -325,21 +317,17 @@
 
 @media (max-width: 900px) {
   .rvd-place-search {
-    width: min(440px, calc(100vw - 32px));
+    max-width: min(560px, calc(100vw - 32px));
   }
 }
 
 @media (max-width: 560px) {
   .rvd-place-search {
-    width: min(440px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
   }
 
-  .rvd-place-search__row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rvd-place-search__poi {
-    width: min(200px, 100%);
-    justify-self: end;
+  .rvd-place-search__search-shell {
+    flex: 1 1 100%;
+    width: auto;
   }
 }

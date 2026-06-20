@@ -19,6 +19,6 @@ export function PoiOptionMarker({ option }: { option: DashboardPoiOption }) {
   );
 }
 
-export function PoiTriggerIcon() {
-  return <SvgV2Icon name="poi-pin.svg" size={20} />;
+export function FilterChipIcon({ name }: { name: string }) {
+  return <SvgV2Icon name={name} size={24} />;
 }

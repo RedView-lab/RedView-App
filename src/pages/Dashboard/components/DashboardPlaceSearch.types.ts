@@ -25,6 +25,20 @@ export type DashboardPoiOptionId =
   | 'alpine_hut'
   | 'bicycle';
 
+export type DashboardFilterId =
+  | 'pois_map'
+  | 'pois_route'
+  | 'favoris'
+  | 'pauses'
+  | 'waypoints';
+
+export interface DashboardFilterOption {
+  id: DashboardFilterId;
+  label: string;
+  icon: string;
+  hasDropdown?: boolean;
+}
+
 export interface DashboardPoiOption {
   id: DashboardPoiOptionId;
   label: string;

@@ -1,6 +1,6 @@
 import type { PoiCategory } from '@/features/poi/types';
 
-import type { DashboardPoiOption } from './DashboardPlaceSearch.types';
+import type { DashboardFilterOption, DashboardPoiOption } from './DashboardPlaceSearch.types';
 
 export const SEARCH_PRELOAD_LEAD_MS = 140;
 export const SEARCH_SATELLITE_PRELOAD_LEAD_MS = 240;
@@ -54,4 +54,12 @@ export const DASHBOARD_POI_OPTIONS: readonly DashboardPoiOption[] = [
   { id: 'hotel', label: 'Hôtel', color: '#008236' },
   { id: 'alpine_hut', label: 'Refuge', color: '#7DCF00' },
   { id: 'bicycle', label: 'Magasin de vélo', color: '#63758E' },
+] as const;
+
+export const DASHBOARD_FILTER_OPTIONS: readonly DashboardFilterOption[] = [
+  { id: 'pois_map', label: 'POIs sur carte', icon: 'search-filter-pois-map.svg', hasDropdown: true },
+  { id: 'pois_route', label: 'POIs sur itinéraires', icon: 'search-filter-pois-route.svg' },
+  { id: 'favoris', label: 'Favoris', icon: 'search-filter-favoris.svg' },
+  { id: 'pauses', label: 'Pauses', icon: 'search-filter-pauses.svg' },
+  { id: 'waypoints', label: 'Points de passage', icon: 'search-filter-waypoints.svg' },
 ] as const;

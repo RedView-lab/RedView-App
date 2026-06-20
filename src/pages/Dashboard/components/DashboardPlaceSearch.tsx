@@ -10,6 +10,7 @@ import { useAppI18n } from '@/shared/i18n';
 
 import { getSearchCameraProfile } from './DashboardPlaceSearch.camera';
 import {
+  DASHBOARD_FILTER_OPTIONS,
   DASHBOARD_POI_OPTIONS,
   POI_MENU_CLOSE_MS,
   SEARCH_COUNTRIES,
@@ -17,11 +18,12 @@ import {
   VIEWPORT_POI_MIN_ZOOM,
 } from './DashboardPlaceSearch.constants';
 import {
+  FilterChipIcon,
   PoiOptionMarker,
-  PoiTriggerIcon,
   SearchIcon,
 } from './DashboardPlaceSearch.icons';
 import type {
+  DashboardFilterId,
   DashboardPlaceSearchProps,
   DashboardPoiOptionId,
   ViewportPoiMarkerEntry,
@@ -59,6 +61,9 @@ export function DashboardPlaceSearch({
   const [poiMenuMounted, setPoiMenuMounted] = useState(false);
   const [selectedPoiIds, setSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
     () => new Set(),
+  );
+  const [activeFilters, setActiveFilters] = useState<Set<DashboardFilterId>>(
+    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses']),
   );
 
   const handleClosePoiMenu = useCallback(() => {
@@ -342,6 +347,31 @@ export function DashboardPlaceSearch({
     });
   }, []);
 
+  const handleToggleFilter = useCallback((filterId: DashboardFilterId) => {
+    if (filterId === 'pois_map') {
+      setSelectedPoiIds((current) => {
+        if (current.size > 0) return new Set();
+        return new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
+      });
+      return;
+    }
+    setActiveFilters((current) => {
+      const next = new Set(current);
+      if (next.has(filterId)) {
+        next.delete(filterId);
+      } else {
+        next.add(filterId);
+      }
+      return next;
+    });
+  }, []);
+
+  const isFilterActive = useCallback(
+    (filterId: DashboardFilterId) =>
+      filterId === 'pois_map' ? selectedPoiIds.size > 0 : activeFilters.has(filterId),
+    [activeFilters, selectedPoiIds],
+  );
+
   return (
     <div className="rvd-place-search" style={wrapperStyle} aria-hidden={!visible}>
       <div className="rvd-place-search__row" ref={rootRef}>
@@ -361,61 +391,99 @@ export function DashboardPlaceSearch({
           />
         </div>
 
-        <div className={`rvd-place-search__poi${poiMenuOpen ? ' is-open' : ''}`}>
-          <div className="rvd-place-search__poi-trigger-shell">
-            <MapCanvasGlassBackdrop blur={60} saturate={1.8} tint="rgba(15, 15, 15, 0.74)" />
-            <button
-              type="button"
-              className="rvd-place-search__poi-trigger"
-              aria-haspopup="menu"
-              aria-expanded={poiMenuOpen}
-              aria-controls={poiMenuMounted ? 'rvd-poi-menu' : undefined}
-              aria-label={t('Point d\'intérêt')}
-              onClick={handleTogglePoiMenu}
-            >
-              <span className="rvd-place-search__poi-trigger-marker">
-                <PoiTriggerIcon />
-              </span>
-              <span className="rvd-place-search__poi-trigger-label">{t('Point d\'intérêt')}</span>
-              <span className="rvd-place-search__poi-trigger-chevron" aria-hidden="true">
-                <SvgV2Icon name="chevron-down.svg" size={14} />
-              </span>
-            </button>
-          </div>
-
-          {poiMenuMounted ? (
-            <div
-              id="rvd-poi-menu"
-              className={`rvd-place-search__poi-menu${poiMenuOpen ? ' is-open' : ' is-closing'}`}
-              role="menu"
-              aria-label={t('Catégories POI')}
-            >
-              <MapCanvasGlassBackdrop blur={60} saturate={1.8} tint="rgba(15, 15, 15, 0.74)" />
-              <div className="rvd-place-search__poi-menu-list">
-                {DASHBOARD_POI_OPTIONS.map((option) => {
-                  const selected = selectedPoiIds.has(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      role="menuitemcheckbox"
-                      aria-checked={selected}
-                      className="rvd-place-search__poi-option"
-                      onClick={() => handleTogglePoiOption(option.id)}
+        <div className="rvd-place-search__filters">
+          {DASHBOARD_FILTER_OPTIONS.map((filter) => {
+            const active = isFilterActive(filter.id);
+            const shellClassName = `rvd-place-search__filter${
+              active ? ' is-active' : ''
+            }${filter.hasDropdown && poiMenuOpen ? ' is-open' : ''}`;
+            return (
+              <div key={filter.id} className={shellClassName}>
+                <div className="rvd-place-search__filter-shell">
+                  <MapCanvasGlassBackdrop
+                    blur={60}
+                    saturate={1.8}
+                    tint={active ? 'rgba(15, 15, 15, 0.74)' : 'rgba(52, 52, 52, 0.77)'}
+                  />
+                  <button
+                    type="button"
+                    className="rvd-place-search__filter-toggle"
+                    aria-pressed={active}
+                    aria-label={t(filter.label)}
+                    onClick={() => handleToggleFilter(filter.id)}
+                  >
+                    <span
+                      className={`rvd-place-search__filter-checkbox${
+                        active ? ' is-checked' : ''
+                      }`}
+                      aria-hidden="true"
                     >
-                      <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
-                        {selected ? <SvgV2Icon name="check.svg" size={12} /> : null}
-                      </span>
-                      <span className="rvd-place-search__poi-option-marker">
-                        <PoiOptionMarker option={option} />
-                      </span>
-                      <span className="rvd-place-search__poi-option-label">{t(option.label)}</span>
+                      {active ? <SvgV2Icon name="check.svg" size={12} /> : null}
+                    </span>
+                    <span className="rvd-place-search__filter-marker">
+                      <FilterChipIcon name={filter.icon} />
+                    </span>
+                    <span className="rvd-place-search__filter-label">{t(filter.label)}</span>
+                  </button>
+                  {filter.hasDropdown ? (
+                    <button
+                      type="button"
+                      className="rvd-place-search__filter-chevron"
+                      aria-haspopup="menu"
+                      aria-expanded={poiMenuOpen}
+                      aria-controls={poiMenuMounted ? 'rvd-poi-menu' : undefined}
+                      aria-label={t('Catégories POI')}
+                      onClick={handleTogglePoiMenu}
+                    >
+                      <SvgV2Icon name="chevron-down.svg" size={14} />
                     </button>
-                  );
-                })}
+                  ) : null}
+                </div>
+
+                {filter.hasDropdown && poiMenuMounted ? (
+                  <div
+                    id="rvd-poi-menu"
+                    className={`rvd-place-search__poi-menu${
+                      poiMenuOpen ? ' is-open' : ' is-closing'
+                    }`}
+                    role="menu"
+                    aria-label={t('Catégories POI')}
+                  >
+                    <MapCanvasGlassBackdrop
+                      blur={60}
+                      saturate={1.8}
+                      tint="rgba(15, 15, 15, 0.74)"
+                    />
+                    <div className="rvd-place-search__poi-menu-list">
+                      {DASHBOARD_POI_OPTIONS.map((option) => {
+                        const selected = selectedPoiIds.has(option.id);
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={selected}
+                            className="rvd-place-search__poi-option"
+                            onClick={() => handleTogglePoiOption(option.id)}
+                          >
+                            <span className="rvd-place-search__poi-checkbox" aria-hidden="true">
+                              {selected ? <SvgV2Icon name="check.svg" size={12} /> : null}
+                            </span>
+                            <span className="rvd-place-search__poi-option-marker">
+                              <PoiOptionMarker option={option} />
+                            </span>
+                            <span className="rvd-place-search__poi-option-label">
+                              {t(option.label)}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            </div>
-          ) : null}
+            );
+          })}
         </div>
       </div>
     </div>
