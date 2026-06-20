@@ -1,6 +1,26 @@
 .rv-poi-marker {
   --rv-poi-marker-scale: 1;
-  position: relative;
+  /* CRITICAL: never set `position` here.
+   *
+   * Mapbox drives the marker with `.mapboxgl-marker { position: absolute;
+   * left:0; top:0 }` (from mapbox-gl.css) and repositions it every frame
+   * via `transform: translate(x,y) ...`. That transform is correct ONLY
+   * when the element is taken out of the flow — i.e. absolutely
+   * positioned at the canvas origin.
+   *
+   * Setting `position: relative` (the old value) overrode that rule with
+   * the same specificity but a later cascade order, so each marker stayed
+   * in the document flow. The Mapbox transform was then applied on top of
+   * each marker's *flow position* (which grows ~ `markerIndex × 98px`
+   * downward), not the canvas origin. During pan/pitch the projected
+   * (x,y) is recomputed correctly, but the per-marker flow offset was
+   * constant and different for every pin → markers drifted apart and
+   * shifted as the camera moved (the reported "perspective / parallax"
+   * bug).
+   *
+   * `absolute` (inherited from .mapboxgl-marker) is itself a positioned
+   * context, so the absolutely-positioned favorite badge below still
+   * anchors to it. */
   display: flex;
   align-items: flex-end;
   justify-content: center;
