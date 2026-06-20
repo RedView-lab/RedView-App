@@ -27,7 +27,6 @@ import {
   type TimelineKindMenuOption,
 } from './TimelineKindMenu.tsx';
 import {
-  TimelineFilters,
   type TimelineFilterState,
   DEFAULT_TIMELINE_FILTER,
 } from './TimelineFilters';
@@ -255,7 +254,6 @@ export function TimelinePanel({
       <div className="rvi-timeline__body">
         {view === 'sheet' ? (
           <>
-            <TimelineFilters value={filters} onChange={setFilters} />
             <TimelineTableSettings
               value={resolvedTableSettings}
               onChange={handleChangeTableSettings}

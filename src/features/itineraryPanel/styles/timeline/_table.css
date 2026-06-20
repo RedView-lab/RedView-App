@@ -248,16 +248,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4.5px;
   color: rgba(255, 255, 255, 0.56);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
+.rvi-tl-tr__action--star { color: rgba(255, 255, 255, 0.32); }
 .rvi-tl-tr__action:hover { background: rgba(255, 255, 255, 0.08); color: var(--rvi-text); }
 .rvi-tl-tr__action.is-on { color: var(--rvi-text); }
-.rvi-tl-tr__action.is-fav { color: #f5c518; }
+.rvi-tl-tr__action.is-fav { color: #FDB022; }
 .rvi-tl-tr__action--danger:hover { color: var(--rvi-red-accent); }
 .rvi-tl-tr__action[disabled] { opacity: 0.4; cursor: not-allowed; }
 

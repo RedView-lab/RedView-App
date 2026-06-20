@@ -211,7 +211,7 @@
 .rvi-tl-row__actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 2.4px;
   flex-shrink: 0;
   margin-left: 4px;
 }
@@ -219,14 +219,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   color: var(--rvi-text);
-  border-radius: 4px;
+  border-radius: 4.5px;
   cursor: pointer;
   opacity: 0.6;
   transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease,
     transform 0.15s ease;
+}
+.rvi-tl-row__action--star {
+  width: 24px;
+  height: 24px;
+  color: rgba(255, 255, 255, 0.32);
+  opacity: 1;
 }
 .rvi-tl-row__action:hover {
   opacity: 1;
@@ -234,7 +240,7 @@
 }
 .rvi-tl-row__action:active { transform: scale(0.92); }
 .rvi-tl-row__action.is-on { opacity: 1; }
-.rvi-tl-row__action.is-on.is-fav { color: #ffd13a; }
+.rvi-tl-row__action.is-on.is-fav { color: #FDB022; opacity: 1; }
 .rvi-tl-row__action--danger:hover { color: #ff6060; }
 .rvi-tl-row__action[disabled] {
   opacity: 0.32;
@@ -275,57 +281,53 @@
 .rvi-tl-add {
   display: flex;
   align-items: center;
-  gap: 4px;
   margin-top: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: var(--rvi-radius-md);
   overflow: hidden;
   transition: background 0.15s ease;
 }
-.rvi-tl-add:hover { background: rgba(255, 255, 255, 0.1); }
+.rvi-tl-add:hover { background: rgba(255, 255, 255, 0.2); }
 
 .rvi-tl-add__main {
+  all: unset;
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 10px;
+  padding: 4px 8px;
   cursor: pointer;
-  min-height: 30px;
+  min-height: 36px;
+  width: 100%;
+  box-sizing: border-box;
+  color: #fff;
 }
 .rvi-tl-add__badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  color: var(--rvi-text);
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 .rvi-tl-add__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
   font-size: 14px;
   font-weight: 600;
-  color: var(--rvi-text);
+  color: #fff;
+  text-align: left;
 }
 .rvi-tl-add__chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 6px 8px;
-  color: var(--rvi-text-dim);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-  position: relative;
+  width: 16px;
+  height: 16px;
+  color: #fff;
+  flex-shrink: 0;
 }
-.rvi-tl-add__chevron::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 0;
-  width: 1px;
-  background: rgba(255, 255, 255, 0.08);
-}
-.rvi-tl-add__chevron:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
 
 /* Add item dropdown */
 .rvi-tl-kind-menu {

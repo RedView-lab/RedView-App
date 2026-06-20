@@ -1,9 +1,8 @@
 /**
- * "Tableau" section of the Feuille de route — Figma node 1694:18364.
+ * "Tableau" section of the Feuille de route — Figma node 855:22688.
  *
- * Renders the small "Tableau" eyebrow label followed by a row of inline
- * controls:
- *   ☑ Distance entre waypoints  [10 km]   ⊕ Colonnes ▾
+ * Renders a single horizontal control bar:
+ *   Points de passages automatiques  [10 km ▾]   ⊕ Ajouter des colonnes ▾
  *
  * Like the filters above, the component is fully controlled. Inputs live
  * in the parent (or in the ItineraryPanelContainer once wired) so we can
@@ -96,33 +95,24 @@ export function TimelineTableSettings({
 
   return (
     <div className="rvi-tl-table" aria-label="Tableau">
-      <span className="rvi-tl-table__label">{t('Tableau')}</span>
-
-      <div className="rvi-tl-table__row">
-        <label className="rvi-tl-table__check">
-          <input
-            type="checkbox"
-            checked={value.distanceBetweenWaypoints}
-            onChange={(e) => setField('distanceBetweenWaypoints', e.target.checked)}
-          />
-          <span className="rvi-tl-table__check-box" aria-hidden />
-          <span className="rvi-tl-table__check-label">
-            {t('Distance entre waypoints')}
+      <div className="rvi-tl-table__bar">
+        <div className={`rvi-tl-table__auto${value.distanceBetweenWaypoints ? ' is-on' : ''}`}>
+          <span className="rvi-tl-table__auto-label">
+            {t('Points de passages automatiques')}
           </span>
-        </label>
-
-        <span className="rvi-tl-table__field">
-          <input
-            type="number"
-            min={1}
-            step={1}
-            value={value.distanceKm}
-            onChange={(e) => setField('distanceKm', Math.max(1, Number(e.target.value) || 1))}
-            disabled={!value.distanceBetweenWaypoints}
-            aria-label={t('Distance entre waypoints (km)')}
-          />
-          <span className="rvi-tl-table__field-suffix">km</span>
-        </span>
+          <span className="rvi-tl-table__auto-value">
+            <button
+              type="button"
+              className="rvi-tl-table__auto-value-btn"
+              onClick={() => setField('distanceBetweenWaypoints', !value.distanceBetweenWaypoints)}
+              aria-pressed={value.distanceBetweenWaypoints}
+              aria-label={t('Distance entre waypoints (km)')}
+            >
+              <span>{value.distanceKm} km</span>
+              <IconChevronDown size={20} />
+            </button>
+          </span>
+        </div>
 
         <button
           ref={setTriggerEl}
@@ -132,9 +122,9 @@ export function TimelineTableSettings({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
         >
-          <IconPlusCircle size={14} />
-          <span>{t('Colonnes')}</span>
-          <IconChevronDown size={12} />
+          <IconPlusCircle size={16} />
+          <span>{t('Ajouter des colonnes')}</span>
+          <IconChevronDown size={14} />
         </button>
       </div>
 

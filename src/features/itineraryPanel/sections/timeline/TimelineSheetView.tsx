@@ -223,9 +223,9 @@ export function TimelineSheetView({
             </button>
 
             <span className="rvi-tl-list__col-actions" aria-hidden>
-              <IconEye size={12} />
-              <IconTrash size={12} />
-              <IconStar size={12} />
+              <IconEye size={15} />
+              <IconTrash size={15} />
+              <IconStar size={20} />
             </span>
           </div>
 
@@ -291,13 +291,13 @@ export function TimelineSheetView({
           })}
           <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden>
             <span className="rvi-tl-th__action-icon">
-              <IconEye size={12} />
+              <IconEye size={15} />
             </span>
             <span className="rvi-tl-th__action-icon">
-              <IconTrash size={12} />
+              <IconTrash size={15} />
             </span>
             <span className="rvi-tl-th__action-icon">
-              <IconStar size={12} />
+              <IconStar size={20} />
             </span>
           </div>
         </div>
@@ -350,7 +350,7 @@ export function TimelineSheetView({
                   aria-pressed={visible}
                   disabled={isAutoIntervalPause}
                 >
-                  <IconEye size={12} />
+                  <IconEye size={15} />
                 </button>
                 <button
                   type="button"
@@ -362,11 +362,11 @@ export function TimelineSheetView({
                   aria-label={t('Supprimer')}
                   disabled={isAutoIntervalPause}
                 >
-                  <IconTrash size={12} />
+                  <IconTrash size={15} />
                 </button>
                 <button
                   type="button"
-                  className={`rvi-tl-tr__action${item.favorite ? ' is-on is-fav' : ''}`}
+                  className={`rvi-tl-tr__action rvi-tl-tr__action--star${item.favorite ? ' is-on is-fav' : ''}`}
                   onClick={() => {
                     if (isAutoIntervalPause) return;
                     onToggleFavorite?.(item.id, !item.favorite);
@@ -375,7 +375,7 @@ export function TimelineSheetView({
                   aria-pressed={!!item.favorite}
                   disabled={isAutoIntervalPause}
                 >
-                  <IconStar size={12} />
+                  <IconStar size={24} />
                 </button>
               </div>
             </div>

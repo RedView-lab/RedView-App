@@ -2,12 +2,14 @@ import type { MouseEventHandler } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 
 /**
- * "Ajouter un élément" split-button row — ends the sheet view.
+ * "Ajouter un élément" row — ends the sheet view.
  *
- * Both hit targets open the kind picker; the component stays stateless so the
- * parent can decide how the anchored menu is presented.
+ * Matches Figma node 855:22735 / 855:20479: a single rounded bar with a
+ * checkpoint pin glyph + label on the left and a chevron on the right
+ * (no divider). The whole row opens the kind picker.
  */
-import { IconChevronDown, IconPlusCircle } from '../../components/icons';
+import { IconChevronDown } from '../../components/icons';
+import { KindBadge } from './KindBadge';
 
 interface TimelineAddRowProps {
   onAdd?: MouseEventHandler<HTMLButtonElement>;
@@ -27,17 +29,12 @@ export function TimelineAddRow({ onAdd, onOpenKindMenu }: TimelineAddRowProps) {
         aria-label={t('Ajouter un élément')}
       >
         <span className="rvi-tl-add__badge" aria-hidden>
-          <IconPlusCircle size={16} />
+          <KindBadge kind="waypoint" size={24} />
         </span>
         <span className="rvi-tl-add__label">{t('Ajouter un élément')}</span>
-      </button>
-      <button
-        type="button"
-        className="rvi-tl-add__chevron"
-        onClick={openKindMenu}
-        aria-label={t("Choisir le type d'élément")}
-      >
-        <IconChevronDown size={14} />
+        <span className="rvi-tl-add__chevron" aria-hidden>
+          <IconChevronDown size={16} />
+        </span>
       </button>
     </div>
   );
