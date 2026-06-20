@@ -4,12 +4,11 @@ import { useAppI18n } from '@/shared/i18n';
 /**
  * "Ajouter un élément" row — ends the sheet view.
  *
- * Matches Figma node 855:22735 / 855:20479: a single rounded bar with a
- * checkpoint pin glyph + label on the left and a chevron on the right
- * (no divider). The whole row opens the kind picker.
+ * Matches Figma node 855:20479: a single rounded bar with a plain "+"
+ * glyph + label on the left and a chevron on the right (no divider).
+ * The whole row opens the kind picker.
  */
-import { IconChevronDown } from '../../components/icons';
-import { KindBadge } from './KindBadge';
+import { IconChevronDown, IconPlus } from '../../components/icons';
 
 interface TimelineAddRowProps {
   onAdd?: MouseEventHandler<HTMLButtonElement>;
@@ -29,7 +28,7 @@ export function TimelineAddRow({ onAdd, onOpenKindMenu }: TimelineAddRowProps) {
         aria-label={t('Ajouter un élément')}
       >
         <span className="rvi-tl-add__badge" aria-hidden>
-          <KindBadge kind="waypoint" size={24} />
+          <IconPlus size={16} />
         </span>
         <span className="rvi-tl-add__label">{t('Ajouter un élément')}</span>
         <span className="rvi-tl-add__chevron" aria-hidden>

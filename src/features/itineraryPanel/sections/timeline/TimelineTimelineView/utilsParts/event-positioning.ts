@@ -16,6 +16,7 @@ export function positionTimelineBlocks(
     kind: 'event' | 'pause';
     laneKey: string;
     scheduledTopPx: number;
+    stackHeightPx: number;
     heightPx: number;
     sortIndex: number;
   }> = [
@@ -24,6 +25,9 @@ export function positionTimelineBlocks(
       kind: 'event' as const,
       laneKey: event.spanSegments[0]?.dayKey ?? event.dayKey ?? '__single__',
       scheduledTopPx: event.scheduledTopPx,
+      // The visible 32px frame (card) drives stacking so POI frames never
+      // overlap, regardless of the event's temporal span height.
+      stackHeightPx: event.cardHeightPx,
       heightPx: event.heightPx,
       sortIndex: event.sortIndex,
     })),
@@ -32,6 +36,7 @@ export function positionTimelineBlocks(
       kind: 'pause' as const,
       laneKey: standalonePauseDayKeyById.get(pause.id) ?? '__single__',
       scheduledTopPx: pause.scheduledTopPx,
+      stackHeightPx: pause.heightPx,
       heightPx: pause.heightPx,
       sortIndex: pause.sortIndex,
     })),
@@ -52,8 +57,8 @@ export function positionTimelineBlocks(
       nextAvailableTopPxByLane.get(block.laneKey) ?? TIMELINE_VIEWPORT_TOP_INSET_PX;
     const topPx = Math.max(block.scheduledTopPx, nextAvailableTopPx);
     positionedTopById.set(block.id, topPx);
-    nextAvailableTopPxByLane.set(block.laneKey, topPx + block.heightPx + TIMELINE_BLOCK_GAP_PX);
-    maxContentBottomPx = Math.max(maxContentBottomPx, topPx + block.heightPx);
+    nextAvailableTopPxByLane.set(block.laneKey, topPx + block.stackHeightPx + TIMELINE_BLOCK_GAP_PX);
+    maxContentBottomPx = Math.max(maxContentBottomPx, topPx + block.stackHeightPx);
     if (firstTopPx === null) firstTopPx = topPx;
   });
 

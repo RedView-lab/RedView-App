@@ -105,7 +105,9 @@ export function buildScheduledEvents(
       0,
     );
     const firstSegmentHeightPx = firstSegment?.heightPx ?? 0;
-    const cardHeightPx = Math.max(RAIL_ITEM_HEIGHT_PX, pauseColumnHeightPx, firstSegmentHeightPx);
+    // The visible frame (card) is a fixed 32px Figma bar — it never grows with
+    // the event's temporal duration, only to fit attached pauses.
+    const cardHeightPx = Math.max(RAIL_ITEM_HEIGHT_PX, pauseColumnHeightPx);
     const heightPx = Math.max(cardHeightPx, pauseColumnHeightPx, firstSegmentHeightPx);
 
     return {

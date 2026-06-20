@@ -527,7 +527,7 @@ export function TimelineScheduleCanvas({
                   ].join(' ')}
                 >
                   <span className="rvi-tl-schedule__event-icon" aria-hidden>
-                    <KindBadge kind={event.item.kind} poiCategory={event.item.poiCategory} />
+                    <KindBadge kind={event.item.kind} poiCategory={event.item.poiCategory} size={24} />
                   </span>
                   <span className="rvi-tl-schedule__event-name" title={title}>
                     {title}
@@ -612,7 +612,7 @@ export function TimelineScheduleCanvas({
                       className="rvi-tl-schedule__event-favorite is-active"
                       aria-hidden
                     >
-                      <IconStar size={12} />
+                      <IconStar size={24} />
                     </span>
                   ) : null}
                 </span>
@@ -629,7 +629,7 @@ export function TimelineScheduleCanvas({
                   aria-label={visible ? t('Masquer') : t('Afficher')}
                   aria-pressed={visible}
                 >
-                  <IconEye size={12} />
+                  <IconEye size={15} />
                 </button>
                 <button
                   type="button"
@@ -643,7 +643,7 @@ export function TimelineScheduleCanvas({
                   aria-pressed={!!event.item.favorite}
                   disabled={isFavoriteLocked}
                 >
-                  <IconStar size={12} />
+                  <IconStar size={24} />
                 </button>
                 <button
                   type="button"
@@ -654,7 +654,7 @@ export function TimelineScheduleCanvas({
                   }}
                   aria-label={t('Supprimer')}
                 >
-                  <IconTrash size={12} />
+                  <IconTrash size={15} />
                 </button>
               </span>
             </article>
@@ -765,7 +765,7 @@ export function TimelineScheduleCanvas({
                     className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${pause.source !== 'manual' ? ' is-active' : ''}`}
                     aria-hidden
                   >
-                    <IconStar size={12} />
+                    <IconStar size={24} />
                   </span>
                 </div>
               </div>
@@ -803,7 +803,7 @@ export function TimelineScheduleCanvas({
                   className={`rvi-tl-schedule__event-favorite rvi-tl-schedule__pause-favorite${dragState.source !== 'manual' ? ' is-active' : ''}`}
                   aria-hidden
                 >
-                  <IconStar size={12} />
+                  <IconStar size={24} />
                 </span>
               </div>
             </div>
