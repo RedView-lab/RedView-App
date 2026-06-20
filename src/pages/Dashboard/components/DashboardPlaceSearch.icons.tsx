@@ -20,5 +20,12 @@ export function PoiOptionMarker({ option }: { option: DashboardPoiOption }) {
 }
 
 export function FilterChipIcon({ name }: { name: string }) {
-  return <SvgV2Icon name={name} size={24} />;
+  return (
+    <img
+      className="rvd-place-search__filter-marker-image"
+      src={`/svgv2/icone/${name}`}
+      alt=""
+      draggable="false"
+    />
+  );
 }
