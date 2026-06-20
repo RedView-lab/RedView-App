@@ -3,7 +3,7 @@ import { Encoder, Profile } from '@garmin/fitsdk';
 import { cumulativeRouteLengthsM, projectDistanceAlongRouteM } from '@/features/itineraryPanel/lib/routes';
 import type { Itinerary, TimelineItem } from '@/features/itineraryPanel/types';
 
-export type ItineraryExportFormat = 'gpx' | 'fit';
+export type ItineraryExportFormat = 'gpx' | 'fit' | 'kml';
 
 interface ExportAnchor {
   id: string;
@@ -14,6 +14,10 @@ interface ExportAnchor {
   elevationM: number | null;
   kind: TimelineItem['kind'];
   poiCategory?: TimelineItem['poiCategory'];
+  /** Whether the POI is a user favorite. Surfaced so GPX/KML can restrict
+   *  exports to favorites (the user's "send my favorited POIs to my watch"
+   *  workflow). Undefined for start/end/waypoint anchors. */
+  favorite?: boolean;
 }
 
 interface ExportRoutePoint {
@@ -24,6 +28,7 @@ interface ExportRoutePoint {
 }
 
 const GPX_NAMESPACE = 'http://www.topografix.com/GPX/1/1';
+const KML_NAMESPACE = 'http://www.opengis.net/kml/2.2';
 const APP_CREATOR = 'RedView';
 const FIT_PRODUCT_ID = 1;
 
@@ -39,6 +44,15 @@ export function exportItineraryFile(
     return { fileName };
   }
 
+  if (format === 'kml') {
+    const xml = buildItineraryKml(itinerary);
+    triggerBrowserDownload(
+      new Blob([xml], { type: 'application/vnd.google-earth.kml+xml;charset=utf-8' }),
+      fileName,
+    );
+    return { fileName };
+  }
+
   const fitBytes = buildItineraryFitCourse(itinerary);
   const fitPayload = new Uint8Array(fitBytes.byteLength);
   fitPayload.set(fitBytes);
@@ -46,9 +60,9 @@ export function exportItineraryFile(
   return { fileName };
 }
 
-export function buildItineraryGpx(itinerary: Itinerary): string {
+export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnly?: boolean }): string {
   const routePoints = getExportRoutePoints(itinerary);
-  const anchors = collectExportAnchors(itinerary, routePoints);
+  const anchors = collectExportAnchors(itinerary, routePoints, { favoritesOnly: options?.favoritesOnly ?? true });
   const bounds = buildBounds(routePoints);
   const exportedAt = new Date().toISOString();
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
@@ -62,6 +76,10 @@ export function buildItineraryGpx(itinerary: Itinerary): string {
         lines.push(`  <ele>${formatDecimal(anchor.elevationM, 1)}</ele>`);
       }
       lines.push(`  <name>${escapeXml(anchor.name)}</name>`);
+      // <sym> drives the on-device icon on Garmin/Coros. Recognized Garmin
+      // symbol names (e.g. "Drinking Water", "Restaurant") are widely adopted;
+      // falls back to a generic flag for anything unmapped.
+      lines.push(`  <sym>${escapeXml(mapPoiCategoryToGpxSym(anchor))}</sym>`);
       lines.push(`  <type>${escapeXml(buildGpxWaypointType(anchor))}</type>`);
       lines.push(`  <desc>${escapeXml(buildWaypointDescription(anchor))}</desc>`);
       lines.push('</wpt>');
@@ -123,6 +141,216 @@ export function buildItineraryGpx(itinerary: Itinerary): string {
     .filter(Boolean)
     .join('\n');
 }
+
+// ── Symbol / style tables (device compatibility) ──────────────────────
+//
+// Both Garmin and Coros import GPX `<sym>` names and KML styles on a
+// best-effort basis. We map the panel POI taxonomy to the de-facto Garmin
+// symbol set (the widest cross-device vocabulary) so a favorited water stop
+// shows a water icon, a refuge shows lodging, etc. Anything unmapped falls
+// back to a neutral marker.
+
+const POI_CATEGORY_TO_GPX_SYM: Record<string, string> = {
+  fountains: 'Drinking Water',
+  toilets: 'Restroom',
+  supermarkets: 'Store',
+  gasStations: 'Gas Station',
+  bakeries: 'Restaurant',
+  fastFood: 'Restaurant',
+  cafes: 'Restaurant',
+  bars: 'Bar',
+  restaurants: 'Restaurant',
+  bikeShops: 'Bike Trail',
+  hotels: 'Lodging',
+  refuges: 'Lodging',
+  passes: 'Summit',
+};
+
+/** KML color = aabbggrr (alpha + BGR hex). Hex pairs matching the panel POI
+ *  palette so the export mirrors the in-app marker colors. */
+const POI_CATEGORY_TO_KML_COLOR: Record<string, string> = {
+  fountains: 'ff0047e1', // eau (bleu)
+  toilets: 'ff852c31', // toilette (violet foncé)
+  supermarkets: 'ff00b1f1', // supermarché (jaune)
+  gasStations: 'ff0035ca', // station (rouge sombre)
+  bakeries: 'ff0069ff', // boulangerie (orange)
+  fastFood: 'ff0069ff',
+  cafes: 'ff5721ff', // café (rose)
+  bars: 'ff3600c7', // bar (rouge)
+  restaurants: 'ff36088b', // restaurant (bordeaux)
+  bikeShops: 'ff8e7563', // magasin vélo (gris)
+  hotels: 'ff368200', // hôtel (vert)
+  refuges: 'ff00cf7d', // refuge (vert clair)
+  passes: 'ff8e7563',
+};
+
+const POI_CATEGORY_LABEL_FR: Record<string, string> = {
+  fountains: 'Point d\'eau',
+  toilets: 'Toilettes',
+  supermarkets: 'Supermarche',
+  gasStations: 'Station-service',
+  bakeries: 'Boulangerie',
+  fastFood: 'Restauration rapide',
+  cafes: 'Cafe',
+  bars: 'Bar',
+  restaurants: 'Restaurant',
+  bikeShops: 'Magasin velo',
+  hotels: 'Hotel',
+  refuges: 'Refuge / gite',
+  passes: 'Col',
+};
+
+function mapPoiCategoryToGpxSym(anchor: ExportAnchor): string {
+  if (anchor.kind === 'start') return 'Flag, Green';
+  if (anchor.kind === 'end') return 'Flag, Red';
+  if (anchor.kind === 'waypoint') return 'Flag, Blue';
+  if (anchor.kind === 'poi' && anchor.poiCategory) {
+    return POI_CATEGORY_TO_GPX_SYM[anchor.poiCategory] ?? 'Waypoint';
+  }
+  return 'Waypoint';
+}
+
+function resolvePoiCategoryLabel(anchor: ExportAnchor): string {
+  return anchor.poiCategory ? (POI_CATEGORY_LABEL_FR[anchor.poiCategory] ?? 'POI') : 'POI';
+}
+
+// ── KML builder ───────────────────────────────────────────────────────
+
+export function buildItineraryKml(itinerary: Itinerary): string {
+  const routePoints = getExportRoutePoints(itinerary);
+  const anchors = collectExportAnchors(itinerary, routePoints, { favoritesOnly: true });
+  const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
+
+  // One shared <Style> per category (referenced by styleUrl) so the file
+  // stays compact even with many favorited POIs. The track style is emitted
+  // unconditionally (the track folder always references it).
+  const styleIds = new Set<string>(['rv-track']);
+  for (const anchor of anchors) {
+    styleIds.add(kmlStyleIdForAnchor(anchor));
+  }
+  const styleXml = [...styleIds]
+    .map((id) => {
+      const color = KML_STYLE_COLORS[id] ?? 'ffffffff';
+      const isTrack = id === 'rv-track';
+      const geometryStyle = isTrack
+        ? [
+            '      <LineStyle>',
+            `        <color>${color}</color>`,
+            '        <width>4</width>',
+            '      </LineStyle>',
+          ].join('\n')
+        : [
+            '      <IconStyle>',
+            `        <color>${color}</color>`,
+            '        <scale>1.0</scale>',
+            '      </IconStyle>',
+            '      <LabelStyle>',
+            '        <scale>0.8</scale>',
+            '      </LabelStyle>',
+          ].join('\n');
+      return [
+        `    <Style id="${id}">`,
+        geometryStyle,
+        '    </Style>',
+      ].join('\n');
+    })
+    .join('\n');
+
+  // Favorited POIs as Point placemarks.
+  const poiPlacemarkXml = anchors
+    .filter((anchor) => anchor.kind === 'poi')
+    .map((anchor) => {
+      const distanceKm = (anchor.distanceM / 1000).toFixed(1);
+      const description = `${resolvePoiCategoryLabel(anchor)} - km ${distanceKm}${anchor.favorite ? ' (favori)' : ''}`;
+      const coord = anchor.elevationM != null
+        ? `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},${formatDecimal(anchor.elevationM, 1)}`
+        : `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},0`;
+      return [
+        '    <Placemark>',
+        `      <name>${escapeXml(anchor.name)}</name>`,
+        `      <description>${escapeXml(description)}</description>`,
+        `      <styleUrl>#${kmlStyleIdForAnchor(anchor)}</styleUrl>`,
+        '      <Point>',
+        `        <coordinates>${coord}</coordinates>`,
+        '      </Point>',
+        '    </Placemark>',
+      ].join('\n');
+    })
+    .join('\n');
+
+  // Start / end / waypoints placemarks (kept alongside POIs in the same folder).
+  const checkpointPlacemarkXml = anchors
+    .filter((anchor) => anchor.kind !== 'poi')
+    .map((anchor) => {
+      const coord = anchor.elevationM != null
+        ? `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},${formatDecimal(anchor.elevationM, 1)}`
+        : `${formatCoordinate(anchor.lon)},${formatCoordinate(anchor.lat)},0`;
+      return [
+        '    <Placemark>',
+        `      <name>${escapeXml(anchor.name)}</name>`,
+        `      <styleUrl>#${kmlStyleIdForAnchor(anchor)}</styleUrl>`,
+        '      <Point>',
+        `        <coordinates>${coord}</coordinates>`,
+        '      </Point>',
+        '    </Placemark>',
+      ].join('\n');
+    })
+    .join('\n');
+
+  // The full track as a LineString.
+  const trackCoords = routePoints
+    .map((point) => {
+      const ele = point.elevationM != null ? formatDecimal(point.elevationM, 1) : '0';
+      return `${formatCoordinate(point.lon)},${formatCoordinate(point.lat)},${ele}`;
+    })
+    .join(' ');
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<kml xmlns="${KML_NAMESPACE}">`,
+    '  <Document>',
+    `    <name>${escapeXml(routeName)}</name>`,
+    `    <description>${escapeXml('Trace et POI favoris exportes depuis RedView.')}</description>`,
+    styleXml,
+    '    <Folder>',
+    `      <name>${escapeXml('POI favoris')}</name>`,
+    poiPlacemarkXml,
+    checkpointPlacemarkXml,
+    '    </Folder>',
+    '    <Folder>',
+    `      <name>${escapeXml('Trace')}</name>`,
+    '      <Placemark>',
+    `        <name>${escapeXml(routeName)}</name>`,
+    '        <styleUrl>#rv-track</styleUrl>',
+    '        <LineString>',
+    '          <tessellate>1</tessellate>',
+    `          <coordinates>${trackCoords}</coordinates>`,
+    '        </LineString>',
+    '      </Placemark>',
+    '    </Folder>',
+    '  </Document>',
+    '</kml>',
+  ]
+    .join('\n');
+}
+
+function kmlStyleIdForAnchor(anchor: ExportAnchor): string {
+  if (anchor.kind === 'start') return 'rv-start';
+  if (anchor.kind === 'end') return 'rv-end';
+  if (anchor.kind === 'waypoint') return 'rv-waypoint';
+  return anchor.poiCategory ? `rv-poi-${anchor.poiCategory}` : 'rv-poi';
+}
+
+const KML_STYLE_COLORS: Record<string, string> = {
+  'rv-start': 'ff008000', // green
+  'rv-end': 'ff0000ff', // red
+  'rv-waypoint': 'ffff7800', // orange
+  'rv-poi': 'ffffffff',
+  'rv-track': 'ff00aaff', // bright orange-red line
+  ...Object.fromEntries(
+    Object.entries(POI_CATEGORY_TO_KML_COLOR).map(([cat, color]) => [`rv-poi-${cat}`, color]),
+  ),
+};
 
 export function buildItineraryFitCourse(itinerary: Itinerary): Uint8Array {
   const routePoints = getExportRoutePoints(itinerary);
@@ -210,7 +438,9 @@ function getExportRoutePoints(itinerary: Itinerary): ExportRoutePoint[] {
 function collectExportAnchors(
   itinerary: Itinerary,
   routePoints: ExportRoutePoint[],
+  options?: { favoritesOnly?: boolean },
 ): ExportAnchor[] {
+  const favoritesOnly = options?.favoritesOnly ?? false;
   const routeDistancePoints = routePoints.map((point) => ({ lat: point.lat, lon: point.lon }));
   const cumulativeLengths = cumulativeRouteLengthsM(routeDistancePoints);
   const totalDistanceM = routePoints[routePoints.length - 1]?.distanceM ?? 0;
@@ -219,6 +449,10 @@ function collectExportAnchors(
 
   for (const item of itinerary.timeline) {
     if (!shouldExportTimelineItem(item)) continue;
+    // When exporting "favorites only" (the user's "send my favorited POIs to
+    // my watch" workflow), drop POI rows that the user has not starred.
+    // Start/end/waypoint anchors are always kept — they define the route.
+    if (favoritesOnly && item.kind === 'poi' && !item.favorite) continue;
     if (!Number.isFinite(item.lat) || !Number.isFinite(item.lon)) continue;
     const lat = item.lat as number;
     const lon = item.lon as number;
@@ -245,6 +479,7 @@ function collectExportAnchors(
       elevationM: estimateAnchorElevation(distanceM, routePoints),
       kind: item.kind,
       poiCategory: item.poiCategory,
+      favorite: item.kind === 'poi' ? Boolean(item.favorite) : undefined,
     });
   }
 

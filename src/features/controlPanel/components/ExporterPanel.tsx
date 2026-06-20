@@ -11,6 +11,15 @@ import '../styles/index.css';
 
 type ExportFormat = ItineraryExportFormat | 'excel' | 'pdf';
 
+// Itinerary export formats selectable in the dropdown. KML is listed
+// alongside GPX/FIT so the user can send favorited POIs + the trace to a
+// watch/bike computer (Garmin, Coros) or a visualizer (Google Earth).
+const ITINERARY_FORMAT_OPTIONS: { value: ItineraryExportFormat; label: string }[] = [
+  { value: 'gpx', label: 'GPX' },
+  { value: 'kml', label: 'KML' },
+  { value: 'fit', label: 'FIT' },
+];
+
 interface ExporterPanelProps {
   width?: number;
 }
@@ -24,14 +33,9 @@ interface ExportRow {
 }
 
 const FORMAT_OPTIONS: Record<ExportFormat, { value: ExportFormat; label: string }[]> = {
-  gpx: [
-    { value: 'gpx', label: 'GPX' },
-    { value: 'fit', label: 'FIT' },
-  ],
-  fit: [
-    { value: 'gpx', label: 'GPX' },
-    { value: 'fit', label: 'FIT' },
-  ],
+  gpx: ITINERARY_FORMAT_OPTIONS,
+  kml: ITINERARY_FORMAT_OPTIONS,
+  fit: ITINERARY_FORMAT_OPTIONS,
   excel: [{ value: 'excel', label: 'Excel' }],
   pdf: [{ value: 'pdf', label: 'PDF' }],
 };
@@ -84,7 +88,12 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
       setStatus({ tone: 'error', message: t('Aucun itinéraire actif à exporter.') });
       return;
     }
-    if (itineraryRow && itineraryRow.format !== 'gpx' && itineraryRow.format !== 'fit') {
+    if (
+      itineraryRow
+      && itineraryRow.format !== 'gpx'
+      && itineraryRow.format !== 'fit'
+      && itineraryRow.format !== 'kml'
+    ) {
       setStatus({ tone: 'error', message: t("Le format sélectionné n'est pas encore pris en charge pour l'itinéraire.") });
       return;
     }
@@ -98,7 +107,10 @@ export const ExporterPanel = memo(function ExporterPanel({ width }: ExporterPane
       setStatus(null);
       const exportedFiles: string[] = [];
 
-      if (itineraryRow && (itineraryRow.format === 'gpx' || itineraryRow.format === 'fit')) {
+      if (
+        itineraryRow
+        && (itineraryRow.format === 'gpx' || itineraryRow.format === 'fit' || itineraryRow.format === 'kml')
+      ) {
         const { fileName } = exportItineraryFile(activeItinerary, itineraryRow.format);
         exportedFiles.push(fileName);
       }

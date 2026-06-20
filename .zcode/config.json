@@ -1,0 +1,10 @@
+{
+  "mcp": {
+    "servers": {
+      "mcp": {
+        "type": "http",
+        "url": ""
+      }
+    }
+  }
+}
