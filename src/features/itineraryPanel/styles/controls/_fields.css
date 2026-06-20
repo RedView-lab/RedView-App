@@ -655,16 +655,21 @@
   margin-left: -8px;
 }
 
-/* ── Toggle switch ───────────────────────────────────────────── */
+/* ── Toggle switch — Figma "_Toggle base" (206:5002 / instance 3026:27097)
+   Slim 32×16 pill: translucent white track (no border), white knob with a
+   2px black border and medium shadow. Neutral on/off — no red accent.
+   Knob uses transform-based travel (not left) for a smoother slide and
+   border-box sizing so the 2px stroke stays inside its 16px footprint. */
 .rvi-toggle {
   all: unset;
   position: relative;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   width: 32px;
   height: 16px;
-  background: rgba(245, 245, 245, 0.08);
-  border: 1px solid rgba(233, 234, 235, 0.3);
+  background: rgba(255, 255, 255, 0.25);
+  border: none;
   border-radius: 9999px;
   cursor: pointer;
   flex-shrink: 0;
@@ -672,22 +677,23 @@
 }
 .rvi-toggle__knob {
   position: absolute;
+  top: 0;
   left: 0;
+  box-sizing: border-box;
   width: 16px;
   height: 16px;
   background: #ffffff;
-  border: 1px solid #3f3f3f;
+  border: 2px solid #000000;
   border-radius: 9999px;
-  box-shadow: 0 1px 2px 0 rgba(10, 13, 18, 0.05);
-  transition: left 0.2s ease, border-color 0.2s ease;
+  box-shadow: 0 2px 4px -2px rgba(10, 13, 18, 0.06),
+    0 4px 6px -1px rgba(10, 13, 18, 0.1);
+  transition: transform 0.2s ease;
 }
 .rvi-toggle.is-on {
-  background: var(--rvi-red);
-  border-color: var(--rvi-red-border);
+  background: rgba(255, 255, 255, 0.25);
 }
 .rvi-toggle.is-on .rvi-toggle__knob {
-  left: calc(100% - 16px);
-  border-color: var(--rvi-red-border);
+  transform: translateX(16px);
 }
 
 /* Params block wrapper */

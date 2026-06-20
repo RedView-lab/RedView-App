@@ -243,29 +243,36 @@
   line-height: 1.35;
 }
 
-/* ── Toggle switch ───────────────────────────────────────────────── */
+/* ── Toggle switch — Figma "_Toggle base" (206:5002 / instance 3026:27097)
+   Larger 36×20 variant reusing the same neutral look as the slim toggle:
+   translucent white track, white knob with a 2px black border and medium
+   shadow. No red accent. */
 .rvi-expert-toggle {
   all: unset;
+  position: relative;
+  box-sizing: border-box;
   width: 36px;
   height: 20px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.12);
-  position: relative;
+  background: rgba(255, 255, 255, 0.25);
   cursor: pointer;
   transition: background 0.15s ease;
 }
 .rvi-expert-toggle.is-on {
-  background: var(--rvi-red);
+  background: rgba(255, 255, 255, 0.25);
 }
 .rvi-expert-toggle__thumb {
   position: absolute;
   top: 2px;
   left: 2px;
+  box-sizing: border-box;
   width: 16px;
   height: 16px;
   background: #fff;
+  border: 2px solid #000000;
   border-radius: 9999px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 4px -2px rgba(10, 13, 18, 0.06),
+    0 4px 6px -1px rgba(10, 13, 18, 0.1);
   transition: transform 0.15s ease;
 }
 .rvi-expert-toggle.is-on .rvi-expert-toggle__thumb {

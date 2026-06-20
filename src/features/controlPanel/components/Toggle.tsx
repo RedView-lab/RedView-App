@@ -5,7 +5,7 @@ interface ToggleProps {
   disabled?: boolean;
 }
 
-/** _Toggle base — red track, white knob, slides to the right when on. */
+/** _Toggle base — neutral translucent track, white knob, slides right when on. */
 export function Toggle({ checked, onChange, ariaLabel, disabled = false }: ToggleProps) {
   return (
     <button
