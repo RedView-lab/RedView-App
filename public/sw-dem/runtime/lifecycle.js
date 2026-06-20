@@ -56,7 +56,8 @@ const COMPOSITE_MAX_CONCURRENT = (() => {
 // stale references that never get queried again because the cacheKey URL
 // embeds the epoch via demProfile and PURGE messages call demHotClear).
 // ──────────────────────────────────────────────────────────────────────────
-const DEM_HOT_CACHE_MAX = 192;
+const DEM_HOT_CACHE_DEFAULT_MAX = 192;
+let DEM_HOT_CACHE_MAX = DEM_HOT_CACHE_DEFAULT_MAX;
 const DEM_HOT_CACHE = new Map();
 
 function demHotGet(keyStr) {
@@ -91,6 +92,73 @@ function demHotClear() {
 // own Response wrapper (cheap) backed by the SAME Blob (zero-copy on
 // most engines — the renderer just bumps an internal ref count).
 function demHotResponse(entry) {
+  return new Response(entry.blob, { status: 200, headers: entry.headers });
+}
+
+// Resize the DEM hot tier at runtime. Called when slope is enabled (the
+// slope pipeline reads 5× more DEM tiles than the basemap, so the LRU
+// needs more headroom to avoid evicting basemap tiles that will be
+// re-asked for next frame) and when slope is disabled (shrink back to
+// the default to free memory). Setting a smaller cap than the current
+// size triggers an immediate LRU trim.
+function setDemHotCacheCapacity(newMax) {
+  if (!Number.isFinite(newMax) || newMax < 32) return;
+  DEM_HOT_CACHE_MAX = newMax;
+  if (DEM_HOT_CACHE.size > DEM_HOT_CACHE_MAX) {
+    const drop = DEM_HOT_CACHE.size - Math.floor(DEM_HOT_CACHE_MAX * 0.85);
+    const iter = DEM_HOT_CACHE.keys();
+    for (let i = 0; i < drop; i++) {
+      const k = iter.next().value;
+      if (k === undefined) break;
+      DEM_HOT_CACHE.delete(k);
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SLOPE_HOT_CACHE — in-memory LRU of recently served slope PNG blobs.
+//
+// Mirrors DEM_HOT_CACHE in front of CacheStorage for the /slope-tiles
+// endpoint. Every slope cache hit currently pays 5-25 ms on the SW thread
+// for caches.open() + cache.match(). On a resolution switch (0.40m ↔ 1m)
+// or a pan-back, the same viewport re-asks for ~25-50 slope tiles within a
+// few hundred ms; even when every one is cached on disk the cumulative
+// CacheStorage latency stacks into 0.5-2 s of pure I/O — exactly the
+// "switch isn't instant" symptom. This tier returns a fresh Response in
+// <1 ms, so cached slope tiles paint immediately.
+//
+// Size budget: 192 × ~8 KB average slope PNG ≈ 1.5 MB peak — trivial.
+// ──────────────────────────────────────────────────────────────────────────
+const SLOPE_HOT_CACHE = new Map();
+
+function slopeHotGet(keyStr) {
+  const entry = SLOPE_HOT_CACHE.get(keyStr);
+  if (!entry) return null;
+  SLOPE_HOT_CACHE.delete(keyStr);
+  SLOPE_HOT_CACHE.set(keyStr, entry);
+  return entry;
+}
+
+function slopeHotPut(keyStr, blob, headerInit) {
+  if (!blob) return;
+  if (SLOPE_HOT_CACHE.has(keyStr)) SLOPE_HOT_CACHE.delete(keyStr);
+  SLOPE_HOT_CACHE.set(keyStr, { blob, headers: headerInit });
+  if (SLOPE_HOT_CACHE.size > SLOPE_HOT_CACHE_MAX) {
+    const drop = SLOPE_HOT_CACHE.size - Math.floor(SLOPE_HOT_CACHE_MAX * 0.85);
+    const iter = SLOPE_HOT_CACHE.keys();
+    for (let i = 0; i < drop; i++) {
+      const k = iter.next().value;
+      if (k === undefined) break;
+      SLOPE_HOT_CACHE.delete(k);
+    }
+  }
+}
+
+function slopeHotClear() {
+  SLOPE_HOT_CACHE.clear();
+}
+
+function slopeHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
 let _compositeActive = 0;
@@ -146,8 +214,17 @@ function cancelSlopeWork() {
     const queued = _slopeBuildQueue.shift();
     try { queued?.resolve(null); } catch { /* ignore */ }
   }
+  // Drop every pending worker-pool job too. The pool workers themselves
+  // cannot be interrupted mid-computation, but their pending callbacks are
+  // resolved with null so the SW caller returns a transparent tile exactly
+  // like the in-process queue above. The in-flight worker result is then
+  // ignored on arrival (generation mismatch).
+  let poolCancelled = 0;
+  try {
+    if (typeof cancelAllSlopePoolJobs === 'function') poolCancelled = cancelAllSlopePoolJobs();
+  } catch { /* ignore */ }
   try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
-  return { slopeCount };
+  return { slopeCount, poolCancelled };
 }
 
 function cancelAltitudeWork() {
@@ -314,6 +391,7 @@ self.addEventListener('message', (e) => {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     try { demHotClear(); } catch { /* ignore */ }
+    try { slopeHotClear(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
@@ -321,12 +399,32 @@ self.addEventListener('message', (e) => {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     try { demHotClear(); } catch { /* ignore */ }
+    try { slopeHotClear(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
     return;
   }
   if (e.data?.type === 'CLEAR_SLOPE_CACHE') {
     try { if (typeof clearSlopeProcessingCaches === 'function') clearSlopeProcessingCaches(); } catch { /* ignore */ }
+    try { slopeHotClear(); } catch { /* ignore */ }
     caches.delete(SLOPE_CACHE_NAME);
+    return;
+  }
+  // Slope active state change — expands/shrinks the DEM hot tier so panning
+  // with slope on (which reads 5× more DEM tiles than the basemap) does not
+  // evict basemap DEM tiles the user will re-ask for next frame. Sent by
+  // useSlope on enable/disable. Idempotent.
+  if (e.data?.type === 'SLOPE_ACTIVE_STATE') {
+    try {
+      if (e.data.active) {
+        setDemHotCacheCapacity(
+          (typeof DEM_HOT_CACHE_MAX_SLOPE_ACTIVE !== 'undefined')
+            ? DEM_HOT_CACHE_MAX_SLOPE_ACTIVE
+            : 384
+        );
+      } else {
+        setDemHotCacheCapacity(DEM_HOT_CACHE_DEFAULT_MAX);
+      }
+    } catch { /* ignore */ }
     return;
   }
   if (e.data?.type === 'CANCEL_SLOPE_WORK') {
@@ -454,6 +552,25 @@ self.addEventListener('message', (e) => {
           .map((req) => cache.delete(req)));
       })),
     ]).catch(() => { /* best-effort */ });
+    return;
+  }
+  // ── Cross-profile / viewport slope prewarm (2026-06-20 multicore) ────
+  // The page posts this when (a) the user switches resolution (0.40m ↔
+  // 1m) so the OTHER profile's slope tiles are built in the background
+  // while the user is still looking at the current one, and (b) on idle
+  // to opportunistically warm the visible slope ring. The work runs at
+  // slope-warm priority (already isolated from basemap IGN traffic) and
+  // is cancelled by the next CANCEL_SLOPE_WORK if the viewport moves.
+  //
+  // `profile`: 'default' | 'terrain' — which demProfile to build against.
+  // `tiles`: [{z,x,y}, ...] — viewport tiles to warm.
+  if (e.data?.type === 'PREWARM_SLOPE') {
+    const tiles = Array.isArray(e.data.tiles) ? e.data.tiles : [];
+    const profile = e.data.profile === 'terrain' ? 'terrain' : 'default';
+    if (tiles.length === 0) return;
+    try {
+      if (typeof prewarmSlopeTiles === 'function') prewarmSlopeTiles(tiles, profile);
+    } catch { /* best-effort */ }
     return;
   }
 });

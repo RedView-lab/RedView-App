@@ -449,7 +449,17 @@ export function installViewportPrefetch(
     lastFiredAt = performance.now();
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
-    const slopeOn = false;
+    // ── Slope / altitude prefetch (2026-06-20 multicore pass) ──────────
+    // Previously hard-coded to false, which meant the ambient idle cycle
+    // NEVER warmed slope tiles — so the moment the user zoomed/panned,
+    // every newly-visible slope tile was a cold build (Horn + PNG encode
+    // on the SW thread, the exact thing that made dezoom feel like
+    // "nothing happens"). With the slope worker pool + SLOPE_HOT_CACHE
+    // now in place, warming slope tiles during idle is cheap and is the
+    // single biggest contributor to the "dezoom shows slope instantly"
+    // goal. The `?pf=1` tag + the SW's LIFO + prefetch-shed gate keep
+    // this strictly behind real foreground traffic.
+    const slopeOn = opts.isSlopeActive?.() ?? false;
     const altitudeOn = false;
     const urls = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,

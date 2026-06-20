@@ -106,9 +106,28 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
   const params = new URLSearchParams();
   if (resFactor > 1) params.set('res', String(resFactor));
   if (demProfile === 'terrain') params.set('rv-dem-profile', 'terrain');
-  const cacheKey = new Request(`/slope-tiles/${z}/${x}/${y}${params.size ? `?${params.toString()}` : ''}`);
+  const cacheKeyUrl = `/slope-tiles/${z}/${x}/${y}${params.size ? `?${params.toString()}` : ''}`;
+
+  // ── Hot tier (SLOPE_HOT_CACHE) ──────────────────────────────────────
+  // Sits in FRONT of CacheStorage exactly like DEM_HOT_CACHE. A pan-back
+  // or resolution-switch re-asks for tiles that were served a moment ago;
+  // this returns them in <1 ms instead of paying 5-25 ms for caches.match.
+  const hotKey = `${demProfile}:${cacheKeyUrl}`;
+  const hot = (typeof slopeHotGet === 'function') ? slopeHotGet(hotKey) : null;
+  if (hot) return slopeHotResponse(hot);
+
+  const cacheKey = new Request(cacheKeyUrl);
   const cached = await slopeCache.match(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // Promote a fresh CacheStorage hit to the hot tier so the next request
+    // skips CacheStorage entirely. Cheap (Blob is refcounted).
+    try {
+      if (typeof slopeHotPut === 'function') {
+        slopeHotPut(hotKey, await cached.clone().blob(), Array.from(cached.headers.entries()));
+      }
+    } catch { /* ignore */ }
+    return cached;
+  }
 
   // ── In-flight coalescing ────────────────────────────────────────────
   // Rapid toggling / panning can spawn duplicate concurrent requests for
@@ -184,10 +203,49 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
       if (isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
-      const slopeResult = await scheduleSlopeBuild(
-        () => buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile),
-        generation,
-      );
+
+      // ── Build path selection: worker pool first, in-process fallback ──
+      // The pool offloads the pure Horn + sqrt-gamma encode + PNG encode
+      // loop to dedicated Workers so the SW thread stays free for the
+      // IGN fetch / CacheStorage / neighbour-DEM work that the next slope
+      // tile in the burst needs. If the pool isn't available (older
+      // browser, Worker spawn failure) OR the pool job was cancelled,
+      // fall through to the in-process buildSlopeTile() — the result is
+      // byte-identical because both share slope-math.js.
+      let slopeResult = null;
+      let usedPool = false;
+      if (typeof computeSlopeViaPool === 'function') {
+        try {
+          const poolResult = await computeSlopeViaPool(
+            demBlob, demCache, z, x, y, resFactor, demProfile, generation,
+          );
+          if (poolResult) {
+            slopeResult = {
+              blob: poolResult.blob,
+              missingNeighbours: poolResult.missingDirections.map((dir) => {
+                // Map direction names back to the [dx, dy] neighbour coords
+                // the existing scheduleSlopeNeighbourWarm expects.
+                if (dir === 'north') return [x, y - 1];
+                if (dir === 'east')  return [x + 1, y];
+                if (dir === 'south') return [x, y + 1];
+                if (dir === 'west')  return [x - 1, y];
+                return null;
+              }).filter(Boolean),
+            };
+            usedPool = true;
+          }
+        } catch {
+          /* fall through to in-process */
+        }
+      }
+
+      if (!usedPool) {
+        slopeResult = await scheduleSlopeBuild(
+          () => buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile),
+          generation,
+        );
+      }
+
       if (!slopeResult || isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
@@ -204,7 +262,17 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
           'X-DEM-Profile': demProfile,
         },
       });
-      if (!isSlopeWorkCancelled(generation)) slopeCache.put(cacheKey, response.clone());
+      if (!isSlopeWorkCancelled(generation)) {
+        slopeCache.put(cacheKey, response.clone());
+        // Promote the freshly built tile into the slope hot tier so an
+        // immediate re-request (Mapbox repaint, resolution-toggle a
+        // moment later, neighbour prewarm) returns in <1 ms.
+        try {
+          if (typeof slopeHotPut === 'function') {
+            slopeHotPut(hotKey, slopeBlob, Array.from(response.headers.entries()));
+          }
+        } catch { /* ignore */ }
+      }
 
       // Seam self-heal happens after the visible tile is returned. The first
       // pass is fast and uses replicated own-tile edges where needed; the
@@ -227,5 +295,40 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
     if (SLOPE_INFLIGHT.get(inflightKey) === work) {
       SLOPE_INFLIGHT.delete(inflightKey);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Viewport / cross-profile slope prewarm (2026-06-20 multicore pass)
+//
+// Invoked by the SW message handler (PREWARM_SLOPE) when (a) the page
+// detects an imminent resolution switch (so the OTHER profile's slope
+// tiles are already in the cache when the user actually toggles) and
+// (b) on idle to opportunistically warm the visible slope ring. Each
+// prewarm is just a fire-and-forget handleSlopeRequest() — which already
+// honours the hot tier + CacheStorage + pool + cancel-generation gates,
+// so a prewarm that becomes stale (viewport moved) is dropped by the
+// next CANCEL_SLOPE_WORK. We deliberately do NOT pass a `pf=1` tag here
+// because these are real (not speculative) tiles that we want built and
+// cached; the LIFO + slope-warm IGN priority already keeps them behind
+// visible slope traffic.
+//
+// Concurrency is implicit: handleSlopeRequest dedups via SLOPE_INFLIGHT,
+// so prewarming a tile that's already in-flight or cached is a no-op.
+// ---------------------------------------------------------------------------
+function prewarmSlopeTiles(tiles, profile) {
+  if (!Array.isArray(tiles) || tiles.length === 0) return;
+  const demProfile = profile === 'terrain' ? 'terrain' : 'default';
+  // Cap the batch so a runaway caller can't enqueue the whole world.
+  const batch = tiles.slice(0, 64);
+  for (const t of batch) {
+    if (!t) continue;
+    const z = t.z | 0;
+    const x = t.x | 0;
+    const y = t.y | 0;
+    if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (z < 0 || x < 0 || y < 0) continue;
+    // Fire-and-forget; errors are swallowed inside handleSlopeRequest.
+    handleSlopeRequest(z, x, y, '', demProfile).catch(() => { /* best-effort */ });
   }
 }

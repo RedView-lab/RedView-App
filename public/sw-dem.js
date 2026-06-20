@@ -64,11 +64,20 @@ importScripts(
   // defined in any order. We list lifecycle first (declares the global
   // in-flight Maps + composite limiter), then helpers, then handlers,
   // then the router (which only registers a listener).
+  //
+  // slope-pool.js (the dedicated Worker pool manager) MUST load before
+  // slope-handler.js — handleSlopeRequest references computeSlopeViaPool
+  // at call time, and cancelSlopeWork() (in lifecycle.js) references
+  // cancelAllSlopePoolJobs. Both are plain function declarations, so the
+  // actual call sites run well after this importScripts block finishes,
+  // but keeping the order stable makes the dependency obvious.
+  withEpoch('/sw-dem/workers/slope-math.js'),
   withEpoch('/sw-dem/runtime/lifecycle.js'),
   withEpoch('/sw-dem/runtime/dem-helpers.js'),
   withEpoch('/sw-dem/runtime/dem-health.js'),
   withEpoch('/sw-dem/runtime/upgrade-scheduler.js'),
   withEpoch('/sw-dem/runtime/dem-handler.js'),
+  withEpoch('/sw-dem/runtime/slope-pool.js'),
   withEpoch('/sw-dem/runtime/slope-handler.js'),
   withEpoch('/sw-dem/runtime/altitude-handler.js'),
   withEpoch('/sw-dem/runtime/router.js'),

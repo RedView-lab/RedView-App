@@ -2377,6 +2377,22 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Favorites"
   },
   {
+    "fr": "POIs sur carte",
+    "en": "POIs on map"
+  },
+  {
+    "fr": "POIs sur itinéraires",
+    "en": "POIs on routes"
+  },
+  {
+    "fr": "Pauses",
+    "en": "Pauses"
+  },
+  {
+    "fr": "Points de passage",
+    "en": "Waypoints"
+  },
+  {
     "fr": "Liste des étapes",
     "en": "Steps list"
   },
