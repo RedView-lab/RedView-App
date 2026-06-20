@@ -449,17 +449,26 @@ export function installViewportPrefetch(
     lastFiredAt = performance.now();
 
     const orthoOn = opts.isOrthoActive?.() ?? false;
-    // ── Slope / altitude prefetch (2026-06-20 multicore pass) ──────────
-    // Previously hard-coded to false, which meant the ambient idle cycle
-    // NEVER warmed slope tiles — so the moment the user zoomed/panned,
-    // every newly-visible slope tile was a cold build (Horn + PNG encode
-    // on the SW thread, the exact thing that made dezoom feel like
-    // "nothing happens"). With the slope worker pool + SLOPE_HOT_CACHE
-    // now in place, warming slope tiles during idle is cheap and is the
-    // single biggest contributor to the "dezoom shows slope instantly"
-    // goal. The `?pf=1` tag + the SW's LIFO + prefetch-shed gate keep
-    // this strictly behind real foreground traffic.
-    const slopeOn = opts.isSlopeActive?.() ?? false;
+    // ── Slope ambient prefetch is intentionally OFF here ───────────────
+    // The ambient `fire()` cycle runs every ~600 ms after `idle`. Each
+    // slope tile build does 5 DEM decodes (own + 4 neighbours) of 8-20 ms
+    // each on the SW thread BEFORE the worker pool even kicks in. Even
+    // though the per-fetch carries `?pf=1` (so it can be shed under
+    // DEM_INFLIGHT pressure), slope builds do NOT bump DEM_INFLIGHT (they
+    // reuse cached DEMs), so the shed gate never trips — and a 48-tile
+    // cycle can stack 48 concurrent SW-side decode bursts that block the
+    // basemap DEM/ortho pipeline the moment the user starts a new zoom.
+    //
+    // Slope cache warmth is instead maintained by:
+    //   * The cross-profile prewarm in useSlope (fires on resolution
+    //     switch + initial enable, capped at 20 foreground tiles, the
+    //     OTHER profile only — so the just-active profile is built by
+    //     Mapbox's own slope-visible requests).
+    //   * SLOPE_HOT_CACHE (in-memory LRU, <1 ms re-display).
+    //   * The slope worker pool itself (parallel Horn + PNG encode).
+    // Re-enabling ambient slope prefetch would need a slope-specific shed
+    // counter that the SW can bump from inside the slope handler.
+    const slopeOn = false;
     const altitudeOn = false;
     const urls = buildUrls(
       z, xMin, yMin, xMax, yMax, anchor, tilted, orthoOn,

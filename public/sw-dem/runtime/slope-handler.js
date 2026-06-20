@@ -319,8 +319,21 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default') {
 function prewarmSlopeTiles(tiles, profile) {
   if (!Array.isArray(tiles) || tiles.length === 0) return;
   const demProfile = profile === 'terrain' ? 'terrain' : 'default';
-  // Cap the batch so a runaway caller can't enqueue the whole world.
-  const batch = tiles.slice(0, 64);
+  // Cap the batch at 24 foreground tiles. Each prewarm tile still does a
+  // DEM decode + neighbour lookups on the SW thread before the worker
+  // pool takes over — running 64 of those in parallel saturates the SW
+  // event loop and freezes the basemap DEM/ortho pipeline. 24 is roughly
+  // one foreground screen worth and matches the page-side cap in useSlope.
+  const batch = tiles.slice(0, 24);
+
+  // SERIALISE the prewarm builds instead of firing all 24 in one tick.
+  // handleSlopeRequest itself dedups via SLOPE_INFLIGHT, but the *entry*
+  // of each call still opens caches + reads the DEM blob + decodes on the
+  // SW thread. With Promise.all they all compete for the same microtask
+  // graph and the SW can't service a real basemap fetch in between. The
+  // serial chain yields to the event loop after each tile so a foreground
+  // basemap request can preempt.
+  let chain = Promise.resolve();
   for (const t of batch) {
     if (!t) continue;
     const z = t.z | 0;
@@ -328,7 +341,8 @@ function prewarmSlopeTiles(tiles, profile) {
     const y = t.y | 0;
     if (!Number.isFinite(z) || !Number.isFinite(x) || !Number.isFinite(y)) continue;
     if (z < 0 || x < 0 || y < 0) continue;
-    // Fire-and-forget; errors are swallowed inside handleSlopeRequest.
-    handleSlopeRequest(z, x, y, '', demProfile).catch(() => { /* best-effort */ });
+    chain = chain
+      .then(() => handleSlopeRequest(z, x, y, '', demProfile))
+      .catch(() => { /* best-effort */ });
   }
 }

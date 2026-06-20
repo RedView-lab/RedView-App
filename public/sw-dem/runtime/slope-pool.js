@@ -33,6 +33,45 @@ let _slopePoolDisabled = false;      // set true after a structural failure
 const _slopeJobCallbacks = new Map(); // id → { resolve, reject }
 let _slopeJobMonotonic = 0;
 
+// ── Pre-work concurrency gate ─────────────────────────────────────────
+// Before a job reaches a worker it must do SW-thread work: decode the own
+// DEM + read/decode up to 4 neighbour DEMs from CacheStorage. Without a
+// gate, a 90-tile viewport fires 90 handleSlopeRequest() events at once,
+// each running its own decode burst in parallel — the SW event loop
+// saturates and the basemap DEM/ortho fetch pipeline stalls for the
+// first second+ of every zoom ("map freezes when slope is on"). Since
+// the worker pool only has `poolSize` cores anyway, anything beyond
+// `poolSize + 2` in-flight pre-work just queues in the decode cache
+// without reaching a worker sooner. This semaphore caps the concurrent
+// SW-side decode bursts so the SW thread stays responsive for basemap
+// fetches in between.
+let _slopePreWorkActive = 0;
+const _slopePreWorkQueue = [];
+
+function slopePreWorkConcurrency() {
+  // Match the worker count (one pre-work burst per available worker,
+  // plus a small buffer so a worker never sits idle waiting for the next
+  // decode to finish). Falls back to 4 when the pool isn't sized yet.
+  if (_slopeWorkers && _slopeWorkers.length > 0) return _slopeWorkers.length + 2;
+  return 4;
+}
+
+function acquireSlopePreWork() {
+  if (_slopePreWorkActive < slopePreWorkConcurrency()) {
+    _slopePreWorkActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _slopePreWorkQueue.push(resolve));
+}
+
+function releaseSlopePreWork() {
+  _slopePreWorkActive = Math.max(0, _slopePreWorkActive - 1);
+  if (_slopePreWorkQueue.length > 0 && _slopePreWorkActive < slopePreWorkConcurrency()) {
+    _slopePreWorkActive++;
+    _slopePreWorkQueue.shift()();
+  }
+}
+
 function detectSlopePoolSize() {
   const hc = Number(globalThis.navigator?.hardwareConcurrency || 0);
   if (!Number.isFinite(hc) || hc <= 0) return SLOPE_POOL_MIN_WORKERS;
@@ -148,9 +187,11 @@ function cancelAllSlopePoolJobs() {
 }
 
 // ── Decode neighbours using the SW's memoised decoder ─────────────────
-// Resolves the 4 cardinal neighbour DEM blobs from demCache, decodes them
-// via decodeTerrainRGBBlob (WeakMap-memoised by blob identity), and returns
-// a {north,east,south,west} map of Float32Array (or null where missing).
+// Resolves the 4 cardinal neighbour DEM blobs from demCache and decodes
+// them via the tile-coord-keyed LRU (decodeSlopeDemBlob from slope.js),
+// so adjacent slope tiles share decoded elevations instead of each
+// re-decoding the same neighbour. Returns a {north,east,south,west} map
+// of Float32Array (or null where missing).
 //
 // Mirrors slope.js > cachedElev but kept here so the pool module owns the
 // full "assemble transferable inputs" step.
@@ -201,7 +242,14 @@ async function resolveAndDecodeNeighbours(z, x, y, demCache, demProfile) {
         return;
       }
       const blob = await resp.clone().blob();
-      out[direction] = await decodeTerrainRGBBlob(blob);
+      // Use the tile-coord-keyed LRU (decodeSlopeDemBlob from slope.js),
+      // NOT the blob-identity WeakMap (decodeTerrainRGBBlob). The LRU is
+      // shared across the whole slope pipeline: tile B's "north" neighbour
+      // is tile A's own DEM, and it was already decoded when A built — so
+      // the decode is a free LRU hit instead of a fresh 8-20 ms decode on
+      // the SW thread. On a 90-tile viewport this collapses ~360 redundant
+      // neighbour decodes back to ~90 unique ones.
+      out[direction] = await decodeSlopeDemBlob(blob, z, nx, ny, demProfile);
     } catch {
       missing.push(direction);
     }
@@ -240,84 +288,101 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
     return null;
   }
 
-  // Decode own elevations on the SW thread (memoised via WeakMap).
-  let ownElev;
+  // Acquire a pre-work slot so we don't run 90 SW-thread decode bursts in
+  // parallel (one per slope tile in the viewport). This is what keeps the
+  // basemap DEM/ortho pipeline responsive while slope builds. Re-check the
+  // cancel generation after acquiring — a queued job whose viewport moved
+  // should bail without doing the work.
+  await acquireSlopePreWork();
   try {
-    ownElev = await decodeTerrainRGBBlob(demBlob);
-  } catch {
-    return null;
-  }
-  if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
-    return null;
-  }
-
-  // Resolve + decode the 4 cardinal neighbours from the DEM cache.
-  const { neighbours, missing } = await resolveAndDecodeNeighbours(z, x, y, demCache, demProfile);
-  if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
-    return null;
-  }
-
-  // Build transferable buffers. Each Float32Array.buffer is transferred
-  // (zero copy) — the SW no longer owns them after postMessage. Since the
-  // own/decoded-elev caches share these underlying buffers, we MUST copy
-  // before transfer so the SW's caches stay valid for the next tile.
-  // (decodeTerrainRGBBlob returns a SHARED Float32Array per blob; if we
-  // transferred the underlying buffer, the next consumer of the same blob
-  // would see a detached array. Copy is 256 KB → ~0.1 ms.)
-  const ownCopy = ownElev.slice().buffer;
-  const neighbourCopies = {};
-  const transferList = [ownCopy];
-  for (const dir of ['north', 'east', 'south', 'west']) {
-    if (neighbours[dir]) {
-      const c = neighbours[dir].slice().buffer;
-      neighbourCopies[dir] = c;
-      transferList.push(c);
+    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+      return null;
     }
+
+    // Decode own elevations on the SW thread. Use the tile-coord-keyed LRU
+    // (decodeSlopeDemBlob) so the decoded array is shared with the neighbour
+    // lookups of the adjacent slope tiles — every tile is someone's
+    // neighbour, and a 90-tile viewport becomes ~90 unique decodes instead
+    // of ~450.
+    let ownElev;
+    try {
+      ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
+    } catch {
+      return null;
+    }
+    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+      return null;
+    }
+
+    // Resolve + decode the 4 cardinal neighbours from the DEM cache.
+    const { neighbours, missing } = await resolveAndDecodeNeighbours(z, x, y, demCache, demProfile);
+    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+      return null;
+    }
+
+    // Build transferable buffers. Each Float32Array.buffer is transferred
+    // (zero copy) — the SW no longer owns them after postMessage. Since the
+    // own/decoded-elev caches share these underlying buffers, we MUST copy
+    // before transfer so the SW's caches stay valid for the next tile.
+    // (decodeSlopeDemBlob returns a SHARED Float32Array per tile coord; if
+    // we transferred the underlying buffer, the next consumer of the same
+    // tile would see a detached array. Copy is 256 KB → ~0.1 ms.)
+    const ownCopy = ownElev.slice().buffer;
+    const neighbourCopies = {};
+    const transferList = [ownCopy];
+    for (const dir of ['north', 'east', 'south', 'west']) {
+      if (neighbours[dir]) {
+        const c = neighbours[dir].slice().buffer;
+        neighbourCopies[dir] = c;
+        transferList.push(c);
+      }
+    }
+
+    const workerIdx = pickSlopeWorker();
+    if (workerIdx < 0) return null;
+    const worker = workers[workerIdx];
+
+    const id = ++_slopeJobMonotonic;
+    const jobPromise = new Promise((resolve, reject) => {
+      _slopeJobCallbacks.set(id, { resolve, reject });
+    });
+
+    worker.postMessage(
+      {
+        id, z, x, y,
+        resFactor: Number(resFactor) > 1 ? Number(resFactor) : 1,
+        ownElev: ownCopy,
+        neighbours: neighbourCopies,
+      },
+      transferList,
+    );
+    let result;
+    try {
+      result = await jobPromise;
+    } catch {
+      return null;
+    }
+    if (!result) return null; // cancelled
+
+    // Generation check on the way out — if the viewport moved while we were
+    // waiting, drop the result.
+    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+      return null;
+    }
+
+    // Wrap the returned ArrayBuffer into a PNG Blob.
+    const blob = new Blob([result.png], { type: 'image/png' });
+
+    // Merge missing-direction reports: directions missing from the cache
+    // are always reported; the worker may also report its own (should be
+    // identical because we pre-decoded, but be defensive).
+    const seen = new Set(missing);
+    for (const d of result.missingDirections || []) seen.add(d);
+
+    return { blob, missingDirections: Array.from(seen) };
+  } finally {
+    releaseSlopePreWork();
   }
-
-  const workerIdx = pickSlopeWorker();
-  if (workerIdx < 0) return null;
-  const worker = workers[workerIdx];
-
-  const id = ++_slopeJobMonotonic;
-  const jobPromise = new Promise((resolve, reject) => {
-    _slopeJobCallbacks.set(id, { resolve, reject });
-  });
-
-  worker.postMessage(
-    {
-      id, z, x, y,
-      resFactor: Number(resFactor) > 1 ? Number(resFactor) : 1,
-      ownElev: ownCopy,
-      neighbours: neighbourCopies,
-    },
-    transferList,
-  );
-
-  let result;
-  try {
-    result = await jobPromise;
-  } catch {
-    return null;
-  }
-  if (!result) return null; // cancelled
-
-  // Generation check on the way out — if the viewport moved while we were
-  // waiting, drop the result.
-  if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
-    return null;
-  }
-
-  // Wrap the returned ArrayBuffer into a PNG Blob.
-  const blob = new Blob([result.png], { type: 'image/png' });
-
-  // Merge missing-direction reports: directions missing from the cache
-  // are always reported; the worker may also report its own (should be
-  // identical because we pre-decoded, but be defensive).
-  const seen = new Set(missing);
-  for (const d of result.missingDirections || []) seen.add(d);
-
-  return { blob, missingDirections: Array.from(seen) };
 }
 
 // Expose hooks for lifecycle.js to call on cancel / teardown.

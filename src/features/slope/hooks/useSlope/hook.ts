@@ -141,20 +141,26 @@ export function useSlope(
     // changes every tile's cache key (`?rv-dem-profile=…`). Without
     // warming, the new viewport is a complete cache miss and the user
     // waits for the full IGN DEM + Horn build pipeline on every tile.
-    // Instead, fire-and-forget a prewarm for the visible tiles in BOTH
-    // profiles right after the swap, so:
-    //   * The just-selected profile builds immediately (the SW pool chews
-    //     through it off the SW thread).
-    //   * The OTHER profile starts building too, so the NEXT toggle is
-    //     almost entirely cache hits (the user perceives the switch as
-    //     instant — the original "instant resolution switch" goal).
-    // The SW dedups via SLOPE_INFLIGHT and respects CANCEL_SLOPE_WORK on
-    // viewport move, so this is safe to fire speculatively.
+    //
+    // CRITICAL: we warm ONLY the OTHER profile (a tight foreground batch),
+    // NOT the just-selected one. The just-selected profile is built
+    // naturally by Mapbox's own tile requests for the now-visible source —
+    // and those requests go through the SW's slope-visible IGN priority,
+    // so they correctly yield to basemap traffic. If we prewarmed the
+    // just-selected profile too, we'd DOUBLE the work on the SW thread
+    // (one batch from Mapbox + one from our prewarm) and starve the
+    // basemap DEM/ortho pipeline for the first second after the switch —
+    // the "map freezes on zoom after enabling slope" symptom.
+    //
+    // Batch is capped at 20 foreground tiles (the foreground footprint at
+    // any pitch). The SW's PREWARM_SLOPE handler caps at 64 itself and
+    // runs everything at slope-warm priority, so even an over-eager caller
+    // cannot preempt basemap IGN fetches.
     try {
-      const tiles = snapshotVisibleTiles(map, 'slope-tiles');
+      const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
       if (tiles.length) {
-        prewarmSlopeViewport(tiles, sourceOptionsRef.current.demProfile === 'terrain' ? 'terrain' : 'default');
-        prewarmSlopeViewport(tiles, sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain');
+        const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
+        prewarmSlopeViewport(tiles, otherProfile);
       }
     } catch {
       /* best-effort */
@@ -164,26 +170,31 @@ export function useSlope(
   // ── Active-state + initial dual-profile prewarm ────────────────────
   // Tells the SW to grow the DEM hot tier when slope is on (it reads ~5×
   // more DEM tiles than the basemap). On the enable transition we also
-  // kick a dual-profile prewarm of the visible viewport so the user can
-  // flip between 0.40m / 1m without retriggering the full build pipeline
-  // — this is what makes the resolution switch feel instant.
+  // kick a prewarm of the OTHER profile's foreground tiles so the user
+  // can flip between 0.40m / 1m without retriggering the full build
+  // pipeline. We do NOT prewarm the just-enabled profile: Mapbox's own
+  // tile requests handle that with correct slope-visible priority.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     notifySlopeActiveState(enabled);
     if (!enabled) return;
-    // Fire once per enable; use a short delay so Mapbox has actually
-    // mounted the slope source + issued its first tile requests (the
-    // visible-coords snapshot is empty before that).
+    // Fire once per enable; the delay lets Mapbox mount the slope source
+    // and issue its first tile requests (the visible-coords snapshot is
+    // empty before that). 1.2 s is long enough for the basemap + slope to
+    // land first; prewarming the other profile only after that means we
+    // never compete with the user's first paint.
     const timer = setTimeout(() => {
       try {
-        const tiles = snapshotVisibleTiles(map, 'slope-tiles');
+        const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
         if (!tiles.length) return;
-        prewarmSlopeViewport(tiles, sourceOptionsRef.current.demProfile === 'terrain' ? 'terrain' : 'default');
-        prewarmSlopeViewport(tiles, sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain');
+        // Only warm the OTHER profile — Mapbox is already building the
+        // active one via its own tile requests at slope-visible priority.
+        const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
+        prewarmSlopeViewport(tiles, otherProfile);
       } catch {
         /* best-effort */
       }
-    }, 400);
+    }, 1200);
     return () => clearTimeout(timer);
   }, [map, isMapLoaded, enabled]);
 
