@@ -419,7 +419,9 @@ async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
     rgba[idx + 3] = 255;
   }
 
-  return buildRawPng(size, size, rgba);
+  return (typeof buildRawPngSlope === 'function')
+    ? buildRawPngSlope(size, size, rgba)
+    : buildRawPng(size, size, rgba);
 }
 
 // ── Resolution downsampling ──────────────────────────────────────────
@@ -659,7 +661,9 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
     const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
     harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY);
     const t3 = performance.now();
-    blob = await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
+    blob = (typeof buildRawPngSlope === 'function')
+      ? await buildRawPngSlope(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba)
+      : await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
     const t4 = performance.now();
     if (DEBUG) {
       console.log(

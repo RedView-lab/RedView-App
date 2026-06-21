@@ -181,7 +181,12 @@ const ORTHO_TILE_SIZE = 256;
 // 404s); (b) zoom-aware MNS source bias (z14 was fanning out 63 sub-tiles
 // instead of 20); (c) lower soft deadlines; (d) CANCEL_STALE_DEM now clears
 // DEM_INFLIGHT so new-viewport requests don't coalesce onto stale builds.
-const MAP_CACHE_EPOCH = '2026-06-20-slope-multicore-pool-2';
+//
+// 2026-06-21-slope-decode-in-worker-1: DEM decode (createImageBitmap +
+// getImageData + Float32 loop) moved INTO the worker — the SW now only
+// does CacheStorage match + transfer. PNG encoder uses Sub filter (~3x
+// faster deflate + smaller PNGs on smooth slope gradients).
+const MAP_CACHE_EPOCH = '2026-06-21-slope-decode-in-worker-1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW

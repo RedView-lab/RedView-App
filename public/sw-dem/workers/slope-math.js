@@ -440,7 +440,13 @@ async function buildSlopeRgbaFromElevations(ownElev, neighbourElevations, z, x, 
   if (useFusedFastPath) {
     const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
     harmonizeSlopeBordersIntoRgba(rgba, ownElev, ne, cellSizeX, cellSizeY);
-    blob = await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
+    // Use the slope-optimised encoder (Sub filter) when available — ~2-3x
+    // faster deflate + smaller PNGs. Fall back to buildRawPng for any caller
+    // that loads slope-math.js without terrain-rgb.js's new helper (none
+    // today, but defensive).
+    blob = (typeof buildRawPngSlope === 'function')
+      ? await buildRawPngSlope(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba)
+      : await buildRawPng(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba);
   } else {
     let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
     slopes = harmonizeSlopeBorders(slopes, ownElev, ne, cellSizeX, cellSizeY);
