@@ -30,6 +30,14 @@ export interface UseSunlightOptions {
   /** HH:mm */
   time: string;
   trajectoryEnabled: boolean;
+  /**
+   * Real-time GPU shadow casting on 3D geometry (Mapbox `cast-shadows`).
+   * This is the expensive path: on styles with fill-extrusion buildings (e.g.
+   * the light "Standard" basemap) it forces a shadow-map pass over every
+   * extruded building each frame and tanks FPS in cities. Tied to the same
+   * "Ombres" toggle as the DEM ray-traced overlay so the user has one knob.
+   */
+  shadowEnabled: boolean;
 }
 
 export interface UseSunlightResult {
@@ -101,13 +109,13 @@ const DEFAULT_LIGHTS: LightsSpecification[] = [
       color: '#ffffff',
       intensity: 0.55,
       direction: [180, 38],
-      'cast-shadows': true,
-      'shadow-intensity': 0.62,
+      'cast-shadows': false,
+      'shadow-intensity': 0,
     },
   },
 ];
 
-function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecification[] {
+function buildLights(azimuthDeg: number, altitudeDeg: number, castShadows: boolean): LightsSpecification[] {
   const clampedAltitude = Math.max(-12, Math.min(85, altitudeDeg));
   const polar = Math.min(88, Math.max(4, 90 - clampedAltitude));
 
@@ -124,8 +132,13 @@ function buildLights(azimuthDeg: number, altitudeDeg: number): LightsSpecificati
         color: '#ffffff',
         intensity: 0.55,
         direction: [azimuthDeg, polar],
-        'cast-shadows': true,
-        'shadow-intensity': 0.62,
+        // `cast-shadows` is the single most expensive Mapbox light property
+        // on styles with fill-extrusion 3D buildings (light "Standard" basemap):
+        // it triggers a per-frame shadow-map render over every extruded
+        // building, which collapses FPS to single digits in dense cities.
+        // Gated by the user-facing "Ombres" toggle so it can be turned off.
+        'cast-shadows': castShadows,
+        'shadow-intensity': castShadows ? 0.62 : 0,
       },
     },
   ];
@@ -247,7 +260,7 @@ export function useSunlight(
       }
 
       try {
-        map.setLights(buildLights(position.azimuth, position.altitude));
+        map.setLights(buildLights(position.azimuth, position.altitude, optsRef.current.shadowEnabled));
       } catch (err) {
         console.warn('[sunlight] setLights failed', err);
       }
@@ -271,6 +284,7 @@ export function useSunlight(
     opts.enabled,
     opts.date,
     opts.time,
+    opts.shadowEnabled,
   ]);
 
   useEffect(() => {

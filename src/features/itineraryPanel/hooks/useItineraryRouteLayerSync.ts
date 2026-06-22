@@ -25,6 +25,11 @@ function canAccessStyle(map: MapboxMap): boolean {
   }
 }
 
+// Debounce window for coalescing bursts of styledata / sourcedata events.
+// These fire repeatedly while DEM terrain tiles stream in, but the route
+// geometry itself does not depend on terrain, so we batch them hard.
+const REPLAY_DEBOUNCE_MS = 120;
+
 interface UseItineraryRouteLayerSyncArgs {
   active: ItineraryProject['itineraries'][number] | null;
   isMapLoaded: boolean;
@@ -41,6 +46,12 @@ export function useItineraryRouteLayerSync({
   routeTraceWidthPx = 8,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const forceReplayPendingRef = useRef(false);
+  // Signature the last time we actually pushed data to the map. When styledata /
+  // sourcedata fire but this signature is unchanged, the replay is a no-op
+  // (the route geometry / styling has not changed — only terrain did).
+  const lastReplayedSignatureRef = useRef<string | null>(null);
+
   const routeSlopeBands = useMemo(
     (): RouteSlopeBand[] => ROUTE_SLOPE_LEGEND_BANDS.map((band) => ({
       id: band.id,
@@ -81,70 +92,117 @@ export function useItineraryRouteLayerSync({
     return `${itinerarySignature}::bands:${routeSlopeBandSignature}`;
   }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx]);
 
-  const replayRouteState = useCallback((): boolean => {
-    if (!map || !isMapLoaded || !canAccessStyle(map)) return false;
+  // Ref bag so the stable map listeners always read the latest values without
+  // having to re-subscribe on every project mutation. Updated in an effect
+  // (never during render) so the ref only reflects committed state.
+  const stateRef = useRef({
+    active,
+    isMapLoaded,
+    itineraries,
+    map,
+    routeSlopeBands,
+    routeTraceWidthPx,
+    layerSignature,
+  });
+  useEffect(() => {
+    stateRef.current = {
+      active,
+      isMapLoaded,
+      itineraries,
+      map,
+      routeSlopeBands,
+      routeTraceWidthPx,
+      layerSignature,
+    };
+  });
 
-    for (const it of itineraries) {
+  const replayRouteState = useCallback((force = false): boolean => {
+    const {
+      map: currentMap,
+      isMapLoaded: loaded,
+      itineraries: currentItineraries,
+      active: currentActive,
+      routeSlopeBands: bands,
+      routeTraceWidthPx: traceWidthPx,
+      layerSignature: signature,
+    } = stateRef.current;
+    if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
+
+    // If nothing about the routes changed since the last successful replay,
+    // skip the (expensive, O(total points)) rebuild. styledata/sourcedata storms
+    // triggered by terrain tile streaming collapse here.
+    if (!force && lastReplayedSignatureRef.current === signature) return true;
+
+    for (const it of currentItineraries) {
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
       // Visible iff the user has not explicitly hidden the trace.
       // (`analysisVisible` controls the central chart/profile, not the map line.)
       const routeVisible = it.visible !== false;
       try {
-        upsertRouteLayer(map, it.id, pts, {
+        upsertRouteLayer(currentMap, it.id, pts, {
           color: it.color,
           opacity01: (it.opacity ?? 100) / 100,
-          traceWidthPx: routeTraceWidthPx,
+          traceWidthPx,
           visible: routeVisible,
           renderMode: it.renderMode ?? 'default',
-          slopeBands: routeSlopeBands,
+          slopeBands: bands,
         });
       } catch (error) {
         console.warn('[route-layer] upsert failed for', it.id, error);
       }
     }
 
-    for (const mountedId of listMountedRouteIds(map)) {
-      const stillWanted = itineraries.some(
+    for (const mountedId of listMountedRouteIds(currentMap)) {
+      const stillWanted = currentItineraries.some(
         (it) =>
           it.id.replace(/[^a-zA-Z0-9_-]/g, '_') === mountedId &&
           it.gpxRoute &&
           it.gpxRoute.points.length >= 2,
       );
       if (!stillWanted) {
-        removeRouteLayer(map, mountedId);
+        removeRouteLayer(currentMap, mountedId);
       }
     }
 
-    if (active) {
+    if (currentActive) {
       setRouteAuditFindings(
-        map,
-        active.routeAudit?.findings ?? [],
-        active.routeAudit?.visible === true,
+        currentMap,
+        currentActive.routeAudit?.findings ?? [],
+        currentActive.routeAudit?.visible === true,
       );
-      setForbiddenZones(map, active.forbiddenZones ?? []);
+      setForbiddenZones(currentMap, currentActive.forbiddenZones ?? []);
     } else {
-      clearRouteAuditFindings(map);
-      clearForbiddenZones(map);
-      clearForbiddenZoneDraft(map);
+      clearRouteAuditFindings(currentMap);
+      clearForbiddenZones(currentMap);
+      clearForbiddenZoneDraft(currentMap);
     }
 
+    lastReplayedSignatureRef.current = signature;
     return true;
-  }, [active, isMapLoaded, itineraries, map, routeSlopeBands, routeTraceWidthPx]);
+  }, []);
 
-  const scheduleReplayRouteState = useCallback(() => {
-    if (replayTimerRef.current) clearTimeout(replayTimerRef.current);
+  const scheduleReplayRouteState = useCallback((force = false): void => {
+    if (force) forceReplayPendingRef.current = true;
+    // Already scheduled — the pending timer will pick up the `force` flag.
+    if (replayTimerRef.current) return;
     replayTimerRef.current = setTimeout(() => {
       replayTimerRef.current = null;
-      replayRouteState();
-    }, 0);
+      const pendingForce = forceReplayPendingRef.current;
+      forceReplayPendingRef.current = false;
+      replayRouteState(pendingForce);
+    }, REPLAY_DEBOUNCE_MS);
   }, [replayRouteState]);
 
+  // Replay whenever the actual route state (points / colors / visibility) changes.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     if (!replayRouteState()) scheduleReplayRouteState();
   }, [isMapLoaded, layerSignature, map, replayRouteState, scheduleReplayRouteState]);
 
+  // Stable map listeners: subscribe once per (map, isMapLoaded). They read the
+  // latest state through refs, so they don't tear down/re-attach on every project
+  // mutation — which previously caused a listener churn storm during GPX import.
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     const onStyleLoad = () => {
@@ -156,10 +214,13 @@ export function useItineraryRouteLayerSync({
       } catch {
         /* noop */
       }
-      scheduleReplayRouteState();
+      // Layers were wiped — next replay MUST push everything back regardless of
+      // signature, so bust the cache and force.
+      lastReplayedSignatureRef.current = null;
+      scheduleReplayRouteState(true);
     };
     const onStyleData = () => {
-      scheduleReplayRouteState();
+      scheduleReplayRouteState(false);
     };
     const onSourceData = (event: { sourceId?: string } | undefined) => {
       const terrainSourceId = map.getTerrain()?.source;
@@ -169,7 +230,7 @@ export function useItineraryRouteLayerSync({
       } catch {
         return;
       }
-      scheduleReplayRouteState();
+      scheduleReplayRouteState(false);
     };
 
     map.on('style.load', onStyleLoad);
@@ -180,6 +241,7 @@ export function useItineraryRouteLayerSync({
         clearTimeout(replayTimerRef.current);
         replayTimerRef.current = null;
       }
+      forceReplayPendingRef.current = false;
       map.off('style.load', onStyleLoad);
       map.off('styledata', onStyleData);
       map.off('sourcedata', onSourceData as never);

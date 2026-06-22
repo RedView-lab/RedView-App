@@ -17,11 +17,41 @@ import {
   type RouteLayerOptions,
   type RouteLayerPoint,
 } from './routeStyle';
+import { buildRouteContentSignature } from '../routes';
 
 const ROUTE_LINE_ELEVATION_REFERENCE = 'ground' as unknown as undefined;
 const ROUTE_LINE_Z_OFFSET = 0 as unknown as undefined;
 
 const routeLineMetricsState = new WeakMap<MapboxMap, Map<string, boolean>>();
+// Per-map signature cache: sourceId -> last applied option+content signature.
+// Lets upsertRouteLayer skip setData / paint-property churn when nothing
+// (geometry, color, width, opacity, render mode, slope bands) has changed —
+// which is the common case during styledata/sourcedata storms.
+const routeAppliedSignatureState = new WeakMap<MapboxMap, Map<string, string>>();
+
+function getRouteAppliedSignatureRegistry(map: MapboxMap): Map<string, string> {
+  let registry = routeAppliedSignatureState.get(map);
+  if (!registry) {
+    registry = new Map<string, string>();
+    routeAppliedSignatureState.set(map, registry);
+  }
+  return registry;
+}
+
+function buildRouteOptionSignature(opts: RouteLayerOptions, contentSignature: string): string {
+  const slopeBandsSignature = opts.slopeBands
+    ? opts.slopeBands.map((band) => `${band.id}:${band.minDeg}:${band.maxDeg}:${band.color}`).join(',')
+    : '';
+  return [
+    contentSignature,
+    opts.color,
+    opts.opacity01,
+    opts.visible ? 1 : 0,
+    normalizeTraceWidthPx(opts.traceWidthPx),
+    opts.renderMode ?? 'default',
+    slopeBandsSignature,
+  ].join('|');
+}
 
 function getRouteLineMetricsRegistry(map: MapboxMap): Map<string, boolean> {
   let registry = routeLineMetricsState.get(map);
@@ -207,6 +237,7 @@ export function upsertRouteLayer(
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
   const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
   const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
+  const appliedSignatureRegistry = getRouteAppliedSignatureRegistry(map);
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
@@ -236,6 +267,7 @@ export function upsertRouteLayer(
       /* noop */
     }
     lineMetricsRegistry.delete(itineraryId);
+    appliedSignatureRegistry.delete(itineraryId);
     existing = undefined;
   }
 
@@ -285,6 +317,22 @@ export function upsertRouteLayer(
     });
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
   }
+
+  // Short-circuit: if the source already existed and nothing about the
+  // geometry/options changed since the last push for this itinerary, the
+  // setData + paint-property churn below is pure waste. This is the hot path
+  // during styledata/sourcedata storms (terrain tile streaming) which do not
+  // affect route geometry at all.
+  const optionSignature = buildRouteOptionSignature(opts, buildRouteContentSignature(points));
+  if (existing && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
+    try {
+      raiseRouteLayer(map, itineraryId);
+    } catch {
+      /* map may be tearing down */
+    }
+    return;
+  }
+  appliedSignatureRegistry.set(itineraryId, optionSignature);
 
   try {
     if (map.getLayer(lineId)) {
@@ -416,6 +464,7 @@ export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
     removeLayerIfPresent(map, lineId);
     if (map.getSource(srcId)) map.removeSource(srcId);
     routeLineMetricsState.get(map)?.delete(itineraryId);
+    routeAppliedSignatureState.get(map)?.delete(itineraryId);
   } catch {
     /* noop */
   }
@@ -450,6 +499,7 @@ export function removeAllRouteLayers(map: MapboxMap): void {
     const style = map.getStyle();
     if (!style?.sources) return;
     routeLineMetricsState.get(map)?.clear();
+    routeAppliedSignatureState.get(map)?.clear();
     for (const key of Object.keys(style.sources)) {
       if (!key.startsWith(SOURCE_PREFIX)) continue;
       const safe = key.slice(SOURCE_PREFIX.length);
