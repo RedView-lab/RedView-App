@@ -7,6 +7,7 @@ export {
   createDefaultItinerary,
   createDefaultProject,
   createDefaultAnalysisPanelState,
+  hasProjectTracedContent,
 } from './defaultState';
 export {
   MERGE_CONNECT_THRESHOLD_M,

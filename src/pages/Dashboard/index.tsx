@@ -96,6 +96,7 @@ export default function Dashboard({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    handleTraceStarted,
     restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,
@@ -214,6 +215,7 @@ export default function Dashboard({
               onRestoreLeftPanel={restoreLeftPanel}
               onRestoreRightPanel={restoreRightPanel}
               onRestoreCenterPanel={restoreCenterPanel}
+              onTraceStarted={handleTraceStarted}
               onLeftResizeStart={handleLeftResizeStart}
               onRightResizeStart={handleResizeStart}
               onCenterResizeStart={handleCenterPanelResizeStart}

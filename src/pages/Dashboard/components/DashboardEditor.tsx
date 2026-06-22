@@ -1,4 +1,6 @@
 import {
+  useEffect,
+  useRef,
   useState,
   useCallback,
   useMemo,
@@ -31,8 +33,9 @@ import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
-import { ItineraryPanel, PredictionProvider, ProjectProvider } from '@/features/itineraryPanel';
+import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
@@ -80,6 +83,12 @@ interface DashboardEditorProps {
   onRestoreLeftPanel: () => void;
   onRestoreRightPanel: () => void;
   onRestoreCenterPanel: () => void;
+  /**
+   * Fired the first time the active (empty) project receives traced content
+   * (a placed start point or an imported route). Used to auto-reveal the
+   * center analysis table and the right settings dock.
+   */
+  onTraceStarted: () => void;
   onLeftResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onRightResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
   onCenterResizeStart: (ev: ReactMouseEvent<HTMLDivElement>) => void;
@@ -98,6 +107,30 @@ interface DashboardEditorProps {
   onSlopeOverlayStatusChange: OverlayStatusReporter;
   onAltitudeOverlayStatusChange: OverlayStatusReporter;
   onItineraryRouteStatusChange: OverlayStatusReporter;
+}
+
+/**
+ * Side-effect-only bridge: lives inside <ProjectProvider> so it can read the
+ * LIVE project state, and fires `onTraceStarted` exactly once when the project
+ * transitions from empty (no placed start point / no route) to having traced
+ * content. That triggers the auto-reveal of the center table + right dock for
+ * projects that started collapsed.
+ *
+ * Renders nothing.
+ */
+function TraceRevealWatcher({ onTraceStarted }: { onTraceStarted: () => void }) {
+  const { project } = useProjectStore();
+  const wasTracedRef = useRef(hasProjectTracedContent(project));
+
+  useEffect(() => {
+    const isTraced = hasProjectTracedContent(project);
+    if (!wasTracedRef.current && isTraced) {
+      onTraceStarted();
+    }
+    wasTracedRef.current = isTraced;
+  }, [project, onTraceStarted]);
+
+  return null;
 }
 
 export function DashboardEditor({
@@ -137,6 +170,7 @@ export function DashboardEditor({
   onRestoreLeftPanel,
   onRestoreRightPanel,
   onRestoreCenterPanel,
+  onTraceStarted,
   onLeftResizeStart,
   onRightResizeStart,
   onCenterResizeStart,
@@ -409,6 +443,7 @@ export function DashboardEditor({
         initialProject={activeProjectInitial ?? undefined}
         onProjectChange={onProjectChange}
       >
+        <TraceRevealWatcher onTraceStarted={onTraceStarted} />
         <RouteSplitToolProvider map={mapInstance}>
           <RouteMergeToolProvider>
             <TraceToolProvider map={mapInstance}>

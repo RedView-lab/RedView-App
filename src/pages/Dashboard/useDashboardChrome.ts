@@ -6,6 +6,7 @@ import {
   type MouseEvent as ReactMouseEvent,
 } from 'react';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
 import { loadViewport, type MapViewport } from '@/features/map3d/lib/viewport-persist';
 import {
   CENTER_PANEL_HEIGHT_KEY,
@@ -97,9 +98,15 @@ export function useDashboardChrome({
           ? null
           : readStoredCenterPanelHeight(),
     );
+    // On a brand-new (empty) project the user hasn't started tracing yet, so we
+    // keep the docked panels out of the way: the right settings dock and the
+    // center analysis table stay collapsed. They reveal themselves as soon as
+    // the first trace point lands (see the traced-content effect below). The
+    // left "feuille de route" dock stays open — that's where tracing starts.
+    const isEmptyProject = !hasProjectTracedContent(activeProjectInitial);
     setIsLeftPanelCollapsed(false);
-    setIsCenterPanelCollapsed(false);
-    setIsRightPanelCollapsed(false);
+    setIsCenterPanelCollapsed(isEmptyProject);
+    setIsRightPanelCollapsed(isEmptyProject);
     setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
     setProjectMapViewport(dashboard?.mapViewport ?? loadViewport());
   }, [activeProjectInitial]);
@@ -345,6 +352,23 @@ export function useDashboardChrome({
     setIsMapFocusMode((current) => !current);
   }, []);
 
+  // Auto-reveal the center analysis table + right settings dock the first time
+  // the user drops a trace point on a project that started empty. Idempotent:
+  // no-op if the panels are already open (e.g. an existing project, or the user
+  // already expanded them manually).
+  const handleTraceStarted = useCallback(() => {
+    setIsCenterPanelCollapsed((current) => {
+      if (!current) return current;
+      restoreCenterPanel();
+      return false;
+    });
+    setIsRightPanelCollapsed((current) => {
+      if (!current) return current;
+      restoreRightPanel();
+      return false;
+    });
+  }, [restoreCenterPanel, restoreRightPanel]);
+
   return {
     lidarModeEnabled,
     setLidarModeEnabled,
@@ -367,6 +391,7 @@ export function useDashboardChrome({
     handleLeftResizeStart,
     handleCenterPanelResizeStart,
     handleToggleMapFocusMode,
+    handleTraceStarted,
     restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,

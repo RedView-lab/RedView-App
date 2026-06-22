@@ -39,7 +39,12 @@ export function MapViewportControls({
   const { t } = useAppI18n();
   const [bearing, setBearing] = useState(0);
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
-  const [isRouteSlopeLegendOpen, setIsRouteSlopeLegendOpen] = useState(true);
+  const [isRouteSlopeLegendOpen, setIsRouteSlopeLegendOpen] = useState(false);
+  // The slope legend is only meaningful when an itinerary is actually rendered
+  // in slope mode. `routeSlopeLegendTitle` is non-null exactly then, so we use
+  // it as the availability signal: the info button is grayed out (disabled)
+  // and the panel stays closed while there is nothing to show.
+  const hasRouteSlope = routeSlopeLegendTitle != null;
   const slopeLegendPanelTitle = routeSlopeLegendTitle ?? t('Légende de pente du tracé');
 
   useEffect(() => {
@@ -161,7 +166,7 @@ export function MapViewportControls({
       </button>
 
       <div className="rvmvc-map-tools__dimension-row">
-        {isRouteSlopeLegendOpen ? (
+        {hasRouteSlope && isRouteSlopeLegendOpen ? (
           <section className="rvmvc-route-slope-legend" aria-label={t('Légende de pente du tracé')}>
             <div className="rvmvc-route-slope-legend__title">{slopeLegendPanelTitle}</div>
             <div className="rvmvc-route-slope-legend__list">
@@ -194,10 +199,11 @@ export function MapViewportControls({
 
           <button
             type="button"
-            className={`rvmvc-map-tools__button${isRouteSlopeLegendOpen ? ' is-active' : ''}`}
+            className={`rvmvc-map-tools__button${isRouteSlopeLegendOpen && hasRouteSlope ? ' is-active' : ''}`}
             aria-label={isRouteSlopeLegendOpen ? t('Masquer la légende de pente du tracé') : t('Afficher la légende de pente du tracé')}
             aria-pressed={isRouteSlopeLegendOpen}
             title={t('Légende')}
+            disabled={!hasRouteSlope}
             onClick={() => {
               setIsRouteSlopeLegendOpen((value) => !value);
             }}

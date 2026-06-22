@@ -199,3 +199,19 @@ export function createDefaultProject(): ItineraryProject {
     analysis: createDefaultAnalysisPanelState(),
   };
 }
+
+/**
+ * True if a project already contains traced content — i.e. the user has started
+ * drawing (the active itinerary's start point is placed) or has loaded a route
+ * (gpxRoute with points). Used to decide whether the analysis table / docked
+ * panels should start expanded or collapsed.
+ */
+export function hasProjectTracedContent(project: ItineraryProject | null | undefined): boolean {
+  if (!project) return false;
+  for (const itinerary of project.itineraries) {
+    if (itinerary.gpxRoute && itinerary.gpxRoute.points.length > 0) return true;
+    const start = itinerary.timeline.find((row) => row.kind === 'start');
+    if (start && start.lat != null && start.lon != null) return true;
+  }
+  return false;
+}
