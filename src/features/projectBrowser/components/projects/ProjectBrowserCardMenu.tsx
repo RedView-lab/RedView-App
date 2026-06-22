@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
-import { IconCopy04, IconTrash } from '@/features/itineraryPanel/components/icons';
 
 type MenuDestination = {
   id: string | null;
@@ -22,7 +21,7 @@ type ProjectBrowserCardMenuProps = {
   onDelete: () => void;
 };
 
-const MENU_WIDTH = 280;
+const MENU_WIDTH = 197;
 const MENU_GAP = 8;
 
 export function ProjectBrowserCardMenu({
@@ -89,9 +88,16 @@ export function ProjectBrowserCardMenu({
       aria-label={t(title)}
       style={{ top: menuStyle.top, left: menuStyle.left, width: MENU_WIDTH }}
     >
+      {onDuplicate ? (
+        <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onDuplicate}>
+          <span>{t('Dupliquer')}</span>
+          <SvgV2Icon name="copy-03.svg" size={16} />
+        </button>
+      ) : null}
+
       <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onRename}>
-        <span>{isFolderMenu ? t('Renommer le dossier') : t('Renommer le projet')}</span>
-        <SvgV2Icon name="edit-05.svg" size={16} />
+        <span>{isFolderMenu ? t('Renommer le dossier') : t('Renommer')}</span>
+        <SvgV2Icon name="edit-01.svg" size={16} />
       </button>
 
       <button
@@ -101,8 +107,8 @@ export function ProjectBrowserCardMenu({
         aria-expanded={moveOpen}
         onClick={() => setMoveOpen((prev) => !prev)}
       >
-        <span>{t('Déplacer vers…')}</span>
-        <SvgV2Icon name="switch-horizontal-01.svg" size={16} />
+        <span>{t('Déplacer vers...')}</span>
+        <SvgV2Icon name="arrow-circle-right.svg" size={16} />
       </button>
 
       {moveOpen ? (
@@ -124,21 +130,14 @@ export function ProjectBrowserCardMenu({
         </div>
       ) : null}
 
-      {onDuplicate ? (
-        <button type="button" className="rvpb-card-menu__item" role="menuitem" onClick={onDuplicate}>
-          <span>{t('Dupliquer le projet')}</span>
-          <IconCopy04 size={16} />
-        </button>
-      ) : null}
-
       <button
         type="button"
         className="rvpb-card-menu__item rvpb-card-menu__item--danger"
         role="menuitem"
         onClick={onDelete}
       >
-        <span>{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer le projet')}</span>
-        <IconTrash size={14} />
+        <span>{isFolderMenu ? t('Supprimer le dossier') : t('Supprimer')}</span>
+        <SvgV2Icon name="trash-03.svg" size={16} />
       </button>
     </div>,
     document.body,
