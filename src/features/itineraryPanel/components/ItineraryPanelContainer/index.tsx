@@ -7,14 +7,13 @@ import {
 } from '@/features/map3d';
 import type {
   MapContextMenuActionPayload,
-  MapContextMenuPoint,
-  MapPoiDraft,
   MapPoiDraftActionPayload,
 } from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
 import { useItineraryBrouterRouting } from '../../hooks/useItineraryBrouterRouting';
+import { useItineraryDeleteShortcut } from '../../hooks/useItineraryDeleteShortcut';
 import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
@@ -53,117 +52,20 @@ import {
   insertTimelineItem,
   moveTimelinePauseItem,
 } from './timelineMutations';
+import {
+  resolveMapContextPointTitle,
+  resolveDraftTitle,
+  resolveDraftFeatureId,
+  upsertDraftPoiIntoItinerary,
+  removePoiAndLinkedWaypoints,
+} from './poiDraft';
+import {
+  setPoiFeatureFavoriteState,
+  mergePoiFeatureFavorites,
+} from './poiFeatureUtils';
 import { listenItineraryMapAction } from '../../lib/mapActionBridge';
 
 const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
-
-function resolveMapContextPointTitle(point: MapContextMenuPoint): string {
-  return point.title?.trim() || point.coordinatesLabel;
-}
-
-function resolveDraftTitle(draft: MapPoiDraft): string {
-  return draft.name?.trim() || draft.point.title?.trim() || 'POI';
-}
-
-function resolveDraftFeatureId(draft: MapPoiDraft): number {
-  const match = /(\d+)$/.exec(draft.id);
-  const parsed = match ? Number.parseInt(match[1], 10) : Number.NaN;
-  return Number.isFinite(parsed) ? -parsed : -Date.now();
-}
-
-function buildDraftPoiFeature(draft: MapPoiDraft): PoiFeature | null {
-  if (!draft.category) return null;
-
-  return {
-    id: resolveDraftFeatureId(draft),
-    lat: draft.point.lat,
-    lon: draft.point.lng,
-    category: draft.category,
-    name: resolveDraftTitle(draft),
-    tags: { source: 'redview_custom_poi' },
-    favorite: draft.favorite,
-  };
-}
-
-function buildTimelineRowFromPoiFeature(
-  itinerary: Itinerary,
-  feature: PoiFeature,
-): Itinerary['timeline'][number] | null {
-  const panelCategory = FEATURE_TO_PANEL_POI[feature.category];
-  if (!panelCategory) return null;
-
-  const routePoints = itinerary.gpxRoute?.points.map((point) => ({ lat: point.lat, lon: point.lon })) ?? [];
-  const projectedRow = routePoints.length >= 2 ? poiFeaturesToTimelineItems([feature], routePoints)[0] : null;
-  if (projectedRow) return projectedRow;
-
-  return {
-    id: `poi-${feature.id}`,
-    kind: 'poi',
-    label: feature.name?.trim() || POI_LABELS[feature.category] || 'POI',
-    distanceKm: null,
-    lat: feature.lat,
-    lon: feature.lon,
-    poiCategory: panelCategory,
-    osmId: feature.id,
-    favorite: feature.favorite,
-    visible: true,
-  };
-}
-
-function upsertDraftPoiIntoItinerary(itinerary: Itinerary, draft: MapPoiDraft): number | null {
-  const feature = buildDraftPoiFeature(draft);
-  if (!feature) return null;
-
-  const currentFeatures = itinerary.poiFeatures ?? [];
-  const existingFeatureIndex = currentFeatures.findIndex((entry) => entry.id === feature.id);
-  itinerary.poiFeatures = existingFeatureIndex >= 0
-    ? currentFeatures.map((entry, index) => (index === existingFeatureIndex ? { ...entry, ...feature } : entry))
-    : [...currentFeatures, feature];
-
-  const nextRow = buildTimelineRowFromPoiFeature(itinerary, feature);
-  if (!nextRow) return feature.id;
-
-  const existingRowIndex = itinerary.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
-  if (existingRowIndex >= 0) {
-    const previous = itinerary.timeline[existingRowIndex];
-    itinerary.timeline[existingRowIndex] = {
-      ...nextRow,
-      visible: previous.visible ?? nextRow.visible,
-      favorite: feature.favorite,
-      distanceKm: nextRow.distanceKm ?? previous.distanceKm ?? null,
-    };
-    return feature.id;
-  }
-
-  let insertAt = itinerary.timeline.findIndex((row) => row.kind === 'end');
-  if (insertAt < 0) insertAt = itinerary.timeline.length;
-
-  if (nextRow.distanceKm != null) {
-    const nextDistanceKm = nextRow.distanceKm;
-    const distanceInsertIndex = itinerary.timeline.findIndex((row) => (
-      row.kind !== 'start'
-      && (row.kind === 'end' || (row.distanceKm != null && row.distanceKm > nextDistanceKm))
-    ));
-    if (distanceInsertIndex >= 0) {
-      insertAt = distanceInsertIndex;
-    }
-  }
-
-  itinerary.timeline.splice(insertAt, 0, nextRow);
-  return feature.id;
-}
-
-function removePoiAndLinkedWaypoints(itinerary: Itinerary, poiId: number): void {
-  if (itinerary.poiFeatures) {
-    itinerary.poiFeatures = itinerary.poiFeatures.filter((feature) => feature.id !== poiId);
-  }
-
-  itinerary.timeline = itinerary.timeline.filter((row) => !(
-    (row.kind === 'poi' && row.osmId === poiId)
-    || (row.kind === 'waypoint' && row.osmId === poiId)
-    || row.id === `poi-waypoint-${poiId}`
-  ));
-}
 
 interface ItineraryPanelContainerProps {
   projectId?: string | null;
@@ -244,6 +146,17 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     itineraries,
     map,
     routeTraceWidthPx: project.controlPanel?.routes?.traceWidthPx ?? 8,
+    routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
+  });
+
+  // Keyboard shortcut: Delete / Backspace removes the active itinerary.
+  // Works from both the left itinerary tabs and the central synthesis panel,
+  // since they share the same `activeItineraryId`. Typing targets and the
+  // single-itinerary edge case are guarded inside the hook.
+  useItineraryDeleteShortcut({
+    activeItineraryId: active?.id ?? null,
+    itineraryCount: itineraries.length,
+    onRemove: removeItinerary,
   });
 
   useEffect(() => {
@@ -1173,59 +1086,5 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     </>
   );
 });
-
-function setPoiFeatureFavoriteState(
-  features: PoiFeature[] | undefined,
-  poiId: number,
-  favorite: boolean,
-): PoiFeature[] | undefined {
-  if (!features || features.length === 0) return features;
-
-  let changed = false;
-  const nextFeatures = features.map((feature) => {
-    if (feature.id !== poiId) return feature;
-    if (Boolean(feature.favorite) === favorite) return feature;
-    changed = true;
-    return { ...feature, favorite };
-  });
-
-  return changed ? nextFeatures : features;
-}
-
-function mergePoiFeatureFavorites(
-  features: PoiFeature[],
-  timeline: Itinerary['timeline'],
-  currentFeatures: PoiFeature[],
-): PoiFeature[] {
-  if (features.length === 0) return features;
-
-  const timelineFavorites = new Map<number, boolean>();
-  for (const row of timeline) {
-    if (row.kind === 'poi' && row.osmId != null) {
-      timelineFavorites.set(row.osmId, Boolean(row.favorite));
-    }
-  }
-
-  const currentFavorites = new Map<number, boolean>();
-  for (const feature of currentFeatures) {
-    if (feature.favorite != null) {
-      currentFavorites.set(feature.id, feature.favorite);
-    }
-  }
-
-  let changed = false;
-  const merged = features.map((feature) => {
-    const nextFavorite = timelineFavorites.get(feature.id)
-      ?? currentFavorites.get(feature.id)
-      ?? Boolean(feature.favorite);
-    if (Boolean(feature.favorite) === nextFavorite) {
-      return feature;
-    }
-    changed = true;
-    return { ...feature, favorite: nextFavorite };
-  });
-
-  return changed ? merged : features;
-}
 
 export type { ItineraryPanelContainerProps };

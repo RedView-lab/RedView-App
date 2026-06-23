@@ -188,7 +188,13 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   );
 
   const projectItineraries = projectStore?.project.itineraries ?? [];
-  const [routesEnabled, setRoutesEnabled] = useState(true);
+  const projectControlPanel =
+    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
+  // The routes toggle is the single source of truth for whether ANY route
+  // trace renders on the map. It is persisted (not derived from per-itinerary
+  // visibility) so deactivating the section reliably hides every trace,
+  // regardless of per-track eye toggles or project hydration.
+  const routesEnabled = projectControlPanel.toggles.routesEnabled ?? true;
   const routeItems = useMemo(
     () =>
       projectItineraries.map((itinerary) => ({
@@ -234,17 +240,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       route.gpxQualityPointsPerKm,
     );
   }, [activeQualityRoute]);
-  const anyItineraryVisible = useMemo(
-    () => projectItineraries.some((itinerary) => itinerary.visible !== false),
-    [projectItineraries],
-  );
 
-  useEffect(() => {
-    setRoutesEnabled(anyItineraryVisible);
-  }, [anyItineraryVisible]);
-
-  const projectControlPanel =
-    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
   const routesTraceWidthPx = projectControlPanel.routes?.traceWidthPx ?? DEFAULT_CONTROL_PANEL_STATE.routes.traceWidthPx;
   const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
@@ -458,13 +454,9 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onSunlightEnabledChange={overlayState.handlers.onSunlightEnabledChange}
       onSunlightStateChange={overlayState.handlers.onSunlightStateChange}
       onRoutesEnabledChange={(enabled) => {
-        setRoutesEnabled(enabled);
-        if (!projectStore) return;
-        for (const itinerary of projectStore.project.itineraries) {
-          if ((itinerary.visible !== false) !== enabled) {
-            projectStore.setItineraryVisibility(itinerary.id, enabled);
-          }
-        }
+        updateProjectControlPanel((draft) => {
+          draft.toggles.routesEnabled = enabled;
+        });
       }}
       onRouteColorChange={(id, color) => {
         projectStore?.setItineraryColor(id, color);
@@ -494,7 +486,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onRouteTraceWidthChange={(value) => {
         updateProjectControlPanel((draft) => {
           draft.routes = {
-            traceWidthPx: Math.max(8, Math.min(20, Math.round(value))),
+            traceWidthPx: Math.max(1, Math.min(20, Math.round(value))),
           };
         });
       }}

@@ -80,6 +80,7 @@ export interface ControlPanelPersistedState {
     windEnabled: boolean;
     snowEnabled: boolean;
     sunlightEnabled: boolean;
+    routesEnabled: boolean;
   };
   sunlightMapExpanded: boolean;
   lidarTilesHidden?: Record<string, boolean>;
@@ -120,6 +121,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       windEnabled: false,
       snowEnabled: false,
       sunlightEnabled: false,
+      routesEnabled: true,
     },
     sunlightMapExpanded: false,
     contourLines: {

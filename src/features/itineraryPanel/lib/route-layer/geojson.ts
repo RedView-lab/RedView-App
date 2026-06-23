@@ -18,6 +18,41 @@ export function buildAnalysisHoverGeoJson(
   };
 }
 
+export interface RouteHoverPreviewPoint {
+  lon: number;
+  lat: number;
+  color?: string;
+  /**
+   * When true the marker renders dimmed, signalling that a click at this
+   * position would be ignored (e.g. the cursor is too far from the trace in
+   * split mode). False ⇒ full-strength "clickable" marker.
+   */
+  dimmed?: boolean;
+}
+
+export function buildRouteHoverPreviewGeoJson(
+  point?: RouteHoverPreviewPoint | null,
+): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: point
+      ? [
+          {
+            type: 'Feature',
+            properties: {
+              color: point.color ?? '#ff4d4f',
+              dimmed: Boolean(point.dimmed),
+            },
+            geometry: {
+              type: 'Point',
+              coordinates: [point.lon, point.lat],
+            },
+          },
+        ]
+      : [],
+  };
+}
+
 export function buildAnalysisFlyoverProgressGeoJson(
   coordinates?: [number, number][] | null,
   color?: string,

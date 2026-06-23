@@ -229,7 +229,7 @@ export function RoutesSection({
             <div className="rvc-routes__trace-width-slider-wrap">
               <Slider
                 value={traceWidthPx}
-                min={8}
+                min={1}
                 max={20}
                 step={1}
                 onChange={onTraceWidthChange}

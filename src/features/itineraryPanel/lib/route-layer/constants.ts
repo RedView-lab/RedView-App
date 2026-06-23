@@ -10,6 +10,15 @@ export const LINE_PREFIX = 'brouter-route-line-';
 export const ANALYSIS_HOVER_SOURCE_ID = 'brouter-analysis-hover-source';
 export const ANALYSIS_HOVER_HALO_LAYER_ID = 'brouter-analysis-hover-halo-layer';
 export const ANALYSIS_HOVER_POINT_LAYER_ID = 'brouter-analysis-hover-point-layer';
+
+/**
+ * Hover-preview marker shown while a central-panel tool (split / trace) is
+ * armed. Distinct from ANALYSIS_HOVER_* so a chart-driven hover and a
+ * tool-driven hover can coexist without clobbering each other.
+ */
+export const ROUTE_HOVER_PREVIEW_SOURCE_ID = 'brouter-route-hover-preview-source';
+export const ROUTE_HOVER_PREVIEW_HALO_LAYER_ID = 'brouter-route-hover-preview-halo-layer';
+export const ROUTE_HOVER_PREVIEW_POINT_LAYER_ID = 'brouter-route-hover-preview-point-layer';
 export const ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID = 'brouter-analysis-flyover-progress-source';
 export const ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID = 'brouter-analysis-flyover-progress-glow-layer';
 export const ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID = 'brouter-analysis-flyover-progress-line-layer';

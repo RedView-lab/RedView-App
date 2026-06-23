@@ -36,6 +36,8 @@ interface UseItineraryRouteLayerSyncArgs {
   itineraries: ItineraryProject['itineraries'];
   map: MapboxMap | null;
   routeTraceWidthPx?: number;
+  /** When false the entire Routes section is off and NO trace renders. */
+  routesEnabled?: boolean;
 }
 
 export function useItineraryRouteLayerSync({
@@ -44,6 +46,7 @@ export function useItineraryRouteLayerSync({
   itineraries,
   map,
   routeTraceWidthPx = 8,
+  routesEnabled = true,
 }: UseItineraryRouteLayerSyncArgs): void {
   const replayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceReplayPendingRef = useRef(false);
@@ -89,8 +92,8 @@ export function useItineraryRouteLayerSync({
         ].join(':');
       })
       .join('|');
-    return `${itinerarySignature}::bands:${routeSlopeBandSignature}`;
-  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx]);
+    return `${routesEnabled ? 1 : 0}::${itinerarySignature}::bands:${routeSlopeBandSignature}`;
+  }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled]);
 
   // Ref bag so the stable map listeners always read the latest values without
   // having to re-subscribe on every project mutation. Updated in an effect
@@ -102,6 +105,7 @@ export function useItineraryRouteLayerSync({
     map,
     routeSlopeBands,
     routeTraceWidthPx,
+    routesEnabled,
     layerSignature,
   });
   useEffect(() => {
@@ -112,6 +116,7 @@ export function useItineraryRouteLayerSync({
       map,
       routeSlopeBands,
       routeTraceWidthPx,
+      routesEnabled,
       layerSignature,
     };
   });
@@ -136,9 +141,10 @@ export function useItineraryRouteLayerSync({
     for (const it of currentItineraries) {
       const pts = it.gpxRoute?.points;
       if (!pts || pts.length < 2) continue;
-      // Visible iff the user has not explicitly hidden the trace.
-      // (`analysisVisible` controls the central chart/profile, not the map line.)
-      const routeVisible = it.visible !== false;
+      // Visible iff the Routes section is active AND the user has not
+      // explicitly hidden this trace. (`analysisVisible` controls the central
+      // chart/profile, not the map line.)
+      const routeVisible = stateRef.current.routesEnabled && it.visible !== false;
       try {
         upsertRouteLayer(currentMap, it.id, pts, {
           color: it.color,

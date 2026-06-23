@@ -17,6 +17,9 @@ import {
   FORBIDDEN_ZONE_LINE_LAYER_ID,
   ROUTE_AUDIT_GLOW_LAYER_ID,
   ROUTE_AUDIT_LINE_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_POINT_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_SOURCE_ID,
   canMutateStyle,
 } from './constants';
 import {
@@ -25,6 +28,7 @@ import {
   ensureForbiddenZoneDraftLayers,
   ensureForbiddenZoneLayers,
   ensureRouteAuditLayers,
+  ensureRouteHoverPreviewLayers,
 } from './auxiliaryLayers';
 import {
   buildAnalysisFlyoverProgressGeoJson,
@@ -32,9 +36,12 @@ import {
   buildForbiddenZoneDraftGeoJson,
   buildForbiddenZoneGeoJson,
   buildRouteAuditGeoJson,
+  buildRouteHoverPreviewGeoJson,
+  type RouteHoverPreviewPoint,
 } from './geojson';
 
 const analysisHoverVisibilityState = new WeakMap<MapboxMap, boolean>();
+const routeHoverPreviewVisibilityState = new WeakMap<MapboxMap, boolean>();
 
 export function setRouteAuditFindings(
   map: MapboxMap,
@@ -223,6 +230,44 @@ export function clearAnalysisHoverPoint(map: MapboxMap): void {
       map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'none');
     }
     analysisHoverVisibilityState.set(map, false);
+  } catch {
+    /* noop */
+  }
+}
+
+export function setRouteHoverPreview(map: MapboxMap, point: RouteHoverPreviewPoint): void {
+  try {
+    const source = ensureRouteHoverPreviewLayers(map);
+    if (!source) return;
+    source.setData(buildRouteHoverPreviewGeoJson(point));
+    if (!routeHoverPreviewVisibilityState.get(map)) {
+      if (map.getLayer(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID)) {
+        map.setLayoutProperty(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID, 'visibility', 'visible');
+        map.moveLayer(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID);
+      }
+      if (map.getLayer(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID)) {
+        map.setLayoutProperty(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID, 'visibility', 'visible');
+        map.moveLayer(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID);
+      }
+      routeHoverPreviewVisibilityState.set(map, true);
+    }
+  } catch {
+    /* noop */
+  }
+}
+
+export function clearRouteHoverPreview(map: MapboxMap): void {
+  try {
+    if (!routeHoverPreviewVisibilityState.get(map)) return;
+    const source = map.getSource(ROUTE_HOVER_PREVIEW_SOURCE_ID) as GeoJSONSource | undefined;
+    source?.setData(buildRouteHoverPreviewGeoJson(null));
+    if (map.getLayer(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_HOVER_PREVIEW_HALO_LAYER_ID, 'visibility', 'none');
+    }
+    if (map.getLayer(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID)) {
+      map.setLayoutProperty(ROUTE_HOVER_PREVIEW_POINT_LAYER_ID, 'visibility', 'none');
+    }
+    routeHoverPreviewVisibilityState.set(map, false);
   } catch {
     /* noop */
   }

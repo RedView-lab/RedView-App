@@ -70,7 +70,7 @@ interface RgbColor {
 type StyledSurface = 'paved' | 'gravel' | 'dirt' | 'unknown';
 
 export function normalizeTraceWidthPx(value: number | null | undefined): number {
-  return Math.max(8, Math.min(20, Math.round(value ?? 8)));
+  return Math.max(1, Math.min(20, Math.round(value ?? 8)));
 }
 
 export function inferMountedRouteUsesLineGradient(

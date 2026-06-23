@@ -15,6 +15,7 @@ import {
   reverseGeocodeSettlement,
 } from '@/features/itineraryPanel/lib/geocoding';
 import { translateAppText } from '@/shared/i18n';
+import { useRouteHoverPreview } from '../hooks/useRouteHoverPreview';
 
 const TRACE_CURSOR = 'url("/svgv2/icone/edit-04.svg") 3 17, crosshair';
 
@@ -45,6 +46,14 @@ export function TraceToolProvider({ children, map }: TraceToolProviderProps) {
   const hasStartPoint = Boolean(startRow && startRow.lat != null && startRow.lon != null);
   const hasEndPoint = Boolean(endRow && endRow.lat != null && endRow.lon != null);
   const canTrace = Boolean(store && activeItinerary && startRow && endRow);
+
+  // Hover-preview marker: free-follows the cursor (no snap) since every
+  // position is a valid click target for start / end / waypoint.
+  useRouteHoverPreview({
+    map,
+    armed,
+    color: activeItinerary?.color,
+  });
 
   const buildTracePrompt = useCallback(() => {
     if (!hasStartPoint) return translateAppText('Cliquez sur la carte pour placer le départ');

@@ -20,6 +20,9 @@ import {
   ROUTE_AUDIT_GLOW_LAYER_ID,
   ROUTE_AUDIT_LINE_LAYER_ID,
   ROUTE_AUDIT_SOURCE_ID,
+  ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_POINT_LAYER_ID,
+  ROUTE_HOVER_PREVIEW_SOURCE_ID,
   canMutateStyle,
 } from './constants';
 import {
@@ -28,6 +31,7 @@ import {
   buildForbiddenZoneDraftGeoJson,
   buildForbiddenZoneGeoJson,
   buildRouteAuditGeoJson,
+  buildRouteHoverPreviewGeoJson,
 } from './geojson';
 
 export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null {
@@ -77,6 +81,57 @@ export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null 
   });
 
   return map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | null;
+}
+
+export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | null {
+  if (!canMutateStyle(map)) return null;
+  const existing = map.getSource(ROUTE_HOVER_PREVIEW_SOURCE_ID) as GeoJSONSource | undefined;
+  if (existing) return existing;
+
+  map.addSource(ROUTE_HOVER_PREVIEW_SOURCE_ID, {
+    type: 'geojson',
+    data: buildRouteHoverPreviewGeoJson(null),
+  });
+
+  map.addLayer({
+    id: ROUTE_HOVER_PREVIEW_HALO_LAYER_ID,
+    type: 'circle',
+    source: ROUTE_HOVER_PREVIEW_SOURCE_ID,
+    slot: 'top',
+    layout: { visibility: 'none' },
+    paint: {
+      // Shrink + soften the halo when dimmed so an out-of-range cursor reads
+      // as "no action here" while staying visible.
+      'circle-radius': ['case', ['get', 'dimmed'], 10, 15],
+      'circle-color': '#ffffff',
+      'circle-opacity': ['case', ['get', 'dimmed'], 0.22, 0.42],
+      'circle-blur': 0.75,
+      'circle-pitch-alignment': 'viewport',
+      'circle-pitch-scale': 'viewport',
+      'circle-emissive-strength': 1,
+    },
+  });
+
+  map.addLayer({
+    id: ROUTE_HOVER_PREVIEW_POINT_LAYER_ID,
+    type: 'circle',
+    source: ROUTE_HOVER_PREVIEW_SOURCE_ID,
+    slot: 'top',
+    layout: { visibility: 'none' },
+    paint: {
+      'circle-radius': 8,
+      'circle-color': '#ffffff',
+      'circle-stroke-width': 3,
+      'circle-stroke-color': ['coalesce', ['get', 'color'], '#ff4d4f'],
+      'circle-opacity': 1,
+      'circle-stroke-opacity': ['case', ['get', 'dimmed'], 0.45, 0.96],
+      'circle-pitch-alignment': 'viewport',
+      'circle-pitch-scale': 'viewport',
+      'circle-emissive-strength': 1.2,
+    },
+  });
+
+  return map.getSource(ROUTE_HOVER_PREVIEW_SOURCE_ID) as GeoJSONSource | null;
 }
 
 export function ensureAnalysisFlyoverProgressLayers(map: MapboxMap): GeoJSONSource | null {

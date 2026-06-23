@@ -32,10 +32,12 @@ export {
   clearForbiddenZoneDraft,
   clearForbiddenZones,
   clearRouteAuditFindings,
+  clearRouteHoverPreview,
   fitToRoute,
   setAnalysisFlyoverProgress,
   setAnalysisHoverPoint,
   setForbiddenZoneDraft,
   setForbiddenZones,
   setRouteAuditFindings,
+  setRouteHoverPreview,
 } from './mapOverlays';
