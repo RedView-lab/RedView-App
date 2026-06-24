@@ -426,9 +426,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 0 6px 0 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvpb-grid-shell.is-list .rvpb-card__header {
@@ -440,7 +444,7 @@
   border: 0;
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: 100px minmax(140px, 1.8fr) minmax(72px, 0.7fr) minmax(140px, 1.15fr) auto;
+  grid-template-columns: 100px minmax(0, 1fr) 80px 160px auto;
   align-items: center;
   gap: 12px;
   min-width: 0;
@@ -461,7 +465,7 @@
   width: 100px;
   height: 40px;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.16);
 }
 
@@ -478,13 +482,15 @@
 .rvpb-card__list-size,
 .rvpb-card__list-saved {
   min-width: 0;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 1);
+  opacity: 0.4;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.2;
 }
 
 .rvpb-card__list-size {
+  width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -494,6 +500,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  width: 160px;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -501,20 +508,43 @@
 .rvpb-card__badge--list {
   justify-self: start;
   white-space: nowrap;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .rvpb-card__list-actions {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex: 0 0 auto;
 }
 
 .rvpb-card__menu-button--list {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: transparent;
+}
+
+.rvpb-card__menu-button--list:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.rvpb-card__list-actions .rvpb-card__open {
+  width: 31px;
+  height: 31px;
+  border-radius: 77px;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rvpb-card__rename-input--list {
