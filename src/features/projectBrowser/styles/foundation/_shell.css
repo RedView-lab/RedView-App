@@ -416,6 +416,9 @@
 
 .rvpb-grid-shell.is-list {
   grid-template-columns: 1fr;
+  gap: 24px;
+  padding: 48px;
+  background: #111;
 }
 
 .rvpb-grid-shell.is-list .rvpb-card__preview {
@@ -425,9 +428,10 @@
 .rvpb-grid-shell.is-list .rvpb-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 6px 0 0;
-  border-radius: 8px;
+  gap: 25px;
+  min-height: 80px;
+  padding: 0 12px 0 0;
+  border-radius: 12px;
   background: transparent;
 }
 
@@ -444,10 +448,10 @@
   border: 0;
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: 100px minmax(0, 1fr) 80px 160px auto;
+  grid-template-columns: 200px 26px minmax(0, 1fr) 74px 110px 75px 240px 102px 84px;
   align-items: center;
-  gap: 12px;
   min-width: 0;
+  height: 80px;
   padding: 0;
   background: transparent;
   color: inherit;
@@ -462,19 +466,21 @@
 
 .rvpb-card__list-preview {
   position: relative;
-  width: 100px;
-  height: 40px;
+  grid-column: 1;
+  width: 200px;
+  height: 80px;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.16);
 }
 
 .rvpb-card__list-title {
+  grid-column: 3;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 16px;
+  font-size: 30px;
   font-weight: 700;
   line-height: 1.2;
 }
@@ -484,37 +490,40 @@
   min-width: 0;
   color: rgba(255, 255, 255, 1);
   opacity: 0.4;
-  font-size: 13px;
+  font-size: 28px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.18;
 }
 
 .rvpb-card__list-size {
-  width: 80px;
+  grid-column: 5;
+  width: 110px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rvpb-card__list-saved {
+  grid-column: 7;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  width: 160px;
+  gap: 11px;
+  width: 240px;
   overflow: hidden;
   white-space: nowrap;
 }
 
 .rvpb-card__badge--list {
+  grid-column: 9;
   justify-self: start;
   white-space: nowrap;
-  padding: 3px 6px;
-  border-radius: 6px;
+  min-height: 48px;
+  padding: 6px 12px;
+  border-radius: 12px;
   background: rgba(0, 0, 0, 0.24);
   color: #fff;
-  font-size: 13px;
+  font-size: 26px;
   font-weight: 500;
-  height: 24px;
   display: inline-flex;
   align-items: center;
 }
@@ -522,15 +531,23 @@
 .rvpb-card__list-actions {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  flex: 0 0 auto;
+  justify-content: space-between;
+  width: 251px;
+  flex: 0 0 251px;
 }
 
 .rvpb-card__menu-button--list {
-  width: 20px;
-  height: 20px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   background: transparent;
+  opacity: 0;
+  transition: opacity 160ms ease, background-color 160ms ease;
+}
+
+.rvpb-grid-shell.is-list .rvpb-card:hover .rvpb-card__menu-button--list,
+.rvpb-grid-shell.is-list .rvpb-card:focus-within .rvpb-card__menu-button--list {
+  opacity: 1;
 }
 
 .rvpb-card__menu-button--list:hover {
@@ -538,13 +555,18 @@
 }
 
 .rvpb-card__list-actions .rvpb-card__open {
-  width: 31px;
-  height: 31px;
+  width: 62px;
+  height: 62px;
   border-radius: 77px;
   background: rgba(255, 255, 255, 0.1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.rvpb-card__list-actions .rvpb-card__open > span {
+  width: 34px !important;
+  height: 34px !important;
 }
 
 .rvpb-card__rename-input--list {
@@ -553,6 +575,7 @@
 
 .rvpb-folder-card__list-preview .rvpb-card__preview-placeholder {
   background: rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
 }
 
 .rvpb-card {
@@ -649,7 +672,6 @@
   height: 28px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
-  transform: rotate(180deg);
 }
 
 .rvpb-card__menu-button {

@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from 'react';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import {
-  IconArrowLeft,
   IconSave,
 } from '@/features/itineraryPanel/components/icons';
 import type { ProjectSummary } from '@/shared/utils/projects';
@@ -75,7 +74,7 @@ export function ProjectCard({
   const hasPreviewImage = Boolean(previewSrc) && !previewUnavailable;
   const showLoadingPlaceholder = !previewUnavailable && (thumbnailLoading || (hasPreviewImage && !previewReady));
   const showPlaceholder = !hasPreviewImage || !previewReady;
-  const placeholderIconSize = view === 'list' ? 20 : 40;
+  const placeholderIconSize = view === 'list' ? 38 : 40;
 
   const commitRename = async () => {
     const next = draft.trim();
@@ -156,7 +155,7 @@ export function ProjectCard({
         {titleContent}
         <span className="rvpb-card__list-size">{formatSize(project.sizeBytes)}</span>
         <span className="rvpb-card__list-saved">
-          <IconSave size={14} />
+          <IconSave size={24} />
           <span>{formatSavedAt(project.updatedAt)}</span>
         </span>
         <span className="rvpb-card__badge rvpb-card__badge--list">{privacyLabel(project.privacy)}</span>
@@ -207,7 +206,7 @@ export function ProjectCard({
               onOpenMenu(project.id, menuButtonRef.current);
             }}
           >
-            <SvgV2Icon name="dots-vertical.svg" size={16} />
+            <SvgV2Icon name="settings-01.svg" size={16} />
           </button>
           <button
             type="button"
@@ -216,7 +215,7 @@ export function ProjectCard({
             disabled={busy}
             onClick={() => onOpen(project.id)}
           >
-            <IconArrowLeft size={18} />
+            <SvgV2Icon name="arrow-right.svg" size={18} />
           </button>
         </div>
       </article>
@@ -296,7 +295,7 @@ export function ProjectCard({
             disabled={busy}
             onClick={() => onOpen(project.id)}
           >
-            <IconArrowLeft size={18} />
+            <SvgV2Icon name="arrow-right.svg" size={18} />
           </button>
         </div>
       </div>
