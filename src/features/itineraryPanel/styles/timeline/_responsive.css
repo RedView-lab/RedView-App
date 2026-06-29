@@ -325,39 +325,8 @@
 
 /* ── "Tableau" control bar (Figma 855:22688) ──────────────────────────────
  * The bar holds "Points de passages automatiques [10 km]" + "Ajouter des
- * colonnes". On narrow panels the two controls must not overlap:
- *   - Mid widths: the bar wraps, so "Ajouter des colonnes" drops to a new
- *     row once the auto-waypoints block can no longer sit beside it. The
- *     "10 km" pill never shrinks/overflows — its label ellipsises instead.
- *   - Narrow panels (≤460px): the row stacks vertically and each control
- *     spans the full width for comfortable touch targets.
+ * colonnes" on a single line. When the panel shrinks, the only element that
+ * may give up space is the descriptive label — it ellipsises. The "10 km"
+ * pill and "Ajouter des colonnes" button keep their natural width and never
+ * overlap.
  * ─────────────────────────────────────────────────────────────────────── */
-
-@container (max-width: 460px) {
-  /* The whole row stacks when the two controls can't sit side by side. */
-  .rvi-tl-table__bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-
-  /* The auto-waypoints block keeps its label + "10 km" pill inline, but the
-     label may ellipsis while the pill stays fully visible (never overflow). */
-  .rvi-tl-table__auto {
-    width: 100%;
-    gap: 8px;
-  }
-  .rvi-tl-table__auto-label {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  .rvi-tl-table__auto-value {
-    flex-shrink: 0;
-  }
-
-  /* "Ajouter des colonnes" spans the full row when stacked. */
-  .rvi-tl-table__columns {
-    width: 100%;
-    justify-content: center;
-  }
-}
