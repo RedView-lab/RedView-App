@@ -1,20 +1,30 @@
 // ---------------------------------------------------------------------------
-// Slope worker POOL — SW-side manager for the dedicated slope build workers.
+// Slope + Altitude worker POOL — SW-side manager for the dedicated build
+// workers (a single shared pool serves BOTH overlays).
 //
 // Spawns `min(hardwareConcurrency-1, SLOPE_POOL_MAX_WORKERS)` dedicated
-// Workers (each runs slope-pool.worker.js). Exposes a single async entry
-// point `computeSlopeViaPool(...)` that:
-//   1. reads the own DEM blob + up to 4 cached neighbour DEM blobs from
-//      CacheStorage on the SW thread (cheap — the hot tier makes most of
-//      these <1 ms),
-//   2. TRANSFERS the raw PNG bytes to a free worker — the worker decodes
+// Workers (each runs slope-pool.worker.js). A SHARED pool (rather than one
+// pool per overlay) caps total worker count at the hardware budget — two
+// independent pools of up to 8 each would oversubscribe an 8-core box and
+// thrash when both overlays are active simultaneously. Each job is tagged
+// `kind: 'slope' | 'altitude'` so a cancel on one overlay never kills the
+// other's in-flight jobs.
+//
+// Exposes two async entry points:
+//   * computeSlopeViaPool(...)  — own DEM + up to 4 neighbour DEMs → slope PNG
+//   * computeAltitudeViaPool(...) — own DEM only → altitude PNG
+// Both:
+//   1. read the own (and for slope, neighbour) DEM blob(s) from CacheStorage
+//      on the SW thread (cheap — the hot tier makes most of these <1 ms),
+//   2. TRANSFER the raw PNG bytes to a free worker — the worker decodes
 //      them itself, so the heavy createImageBitmap + getImageData + Float32
 //      loop runs OFF the SW thread,
-//   3. awaits the transferable PNG ArrayBuffer,
-//   4. cancels pending jobs when slopeCancelGeneration bumps.
+//   3. await the transferable PNG ArrayBuffer,
+//   4. cancel pending jobs (per kind) when the matching cancelGeneration bumps.
 //
 // Returns `null` if the pool is unavailable or the job was cancelled —
-// callers (slope-handler.js) fall back to the in-process path.
+// callers (slope-handler.js / altitude-handler.js) fall back to the
+// in-process path.
 //
 // The pool is created lazily on first use and re-created on demand if any
 // worker errors out (workers are cheap, ~5 ms spawn). If the browser does
@@ -27,12 +37,13 @@
 // ---------------------------------------------------------------------------
 
 // Internal pool state. Lives in module scope so the SW reuses one pool
-// across all slope requests.
+// across all slope/altitude requests.
 let _slopeWorkers = null;            // Worker[]
 let _slopeWorkerReady = null;        // boolean[] — worker accepted at least one job
 let _slopeWorkerMonotonic = 0;       // round-robin counter
 let _slopePoolDisabled = false;      // set true after a structural failure
-const _slopeJobCallbacks = new Map(); // id → { resolve, reject }
+// id → { resolve, reject, kind } — `kind` lets cancel target one overlay only.
+const _slopeJobCallbacks = new Map();
 let _slopeJobMonotonic = 0;
 
 // ── Pre-work concurrency gate ─────────────────────────────────────────
@@ -102,7 +113,12 @@ function spawnSlopeWorker() {
       if (!cb) return;
       _slopeJobCallbacks.delete(msg.id);
       if (msg.ok) {
-        cb.resolve({ png: msg.png, missingDirections: msg.missingDirections || [] });
+        if (cb.kind === 'altitude') {
+          // Altitude jobs return a single PNG ArrayBuffer + no neighbours.
+          cb.resolve({ png: msg.png });
+        } else {
+          cb.resolve({ png: msg.png, missingDirections: msg.missingDirections || [] });
+        }
       } else {
         cb.reject(new Error(`slope-worker: ${msg.error || 'unknown'}`));
       }
@@ -173,22 +189,31 @@ function terminateSlopePool() {
   _slopeJobCallbacks.clear();
 }
 
-// ── Cancel handling ───────────────────────────────────────────────────
-// Called from lifecycle.js when slopeCancelGeneration bumps. We cannot
-// interrupt a worker mid-job, but we CAN drop every pending callback so
-// the SW caller sees the cancellation and returns a transparent tile.
-// The worker finishes its current job in the background; the result is
-// simply ignored (its callback is gone). This matches the in-process
-// queue behaviour where cancelSlopeWork() resolves pending entries with
-// null.
-function cancelAllSlopePoolJobs() {
+// ── Cancel handling (per-kind) ────────────────────────────────────────
+// Called from lifecycle.js when slopeCancelGeneration / altitudeCancelGeneration
+// bumps. We cannot interrupt a worker mid-job, but we CAN drop every pending
+// callback tagged to that kind so the SW caller sees the cancellation and
+// returns a transparent tile. The worker finishes its current job in the
+// background; the result is simply ignored (its callback is gone). The OTHER
+// overlay's jobs are left untouched — a cancel must never cross overlays
+// (disabling slope must not kill altitude builds the user still wants).
+function cancelPoolJobsByKind(kind) {
   let n = 0;
-  for (const [, cb] of _slopeJobCallbacks) {
+  for (const [id, cb] of _slopeJobCallbacks) {
+    if (cb.kind !== kind) continue;
+    _slopeJobCallbacks.delete(id);
     cb.resolve(null); // null == "cancelled" — caller treats as transparent
     n++;
   }
-  _slopeJobCallbacks.clear();
   return n;
+}
+
+function cancelAllSlopePoolJobs() {
+  return cancelPoolJobsByKind('slope');
+}
+
+function cancelAllAltitudePoolJobs() {
+  return cancelPoolJobsByKind('altitude');
 }
 
 // ── Resolve neighbour DEM BLOBS (no decode) ───────────────────────────
@@ -335,12 +360,12 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 
     const id = ++_slopeJobMonotonic;
     const jobPromise = new Promise((resolve, reject) => {
-      _slopeJobCallbacks.set(id, { resolve, reject });
+      _slopeJobCallbacks.set(id, { resolve, reject, kind: 'slope' });
     });
 
     worker.postMessage(
       {
-        id, z, x, y,
+        id, kind: 'slope', z, x, y,
         resFactor: Number(resFactor) > 1 ? Number(resFactor) : 1,
         ownDem: ownDemBuf,
         neighbours: neighbourMsg,
@@ -380,3 +405,108 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 // (Plain function declarations — these files are importScripts'd into the
 // SW global scope, so they're already global; the references below just
 // make the intent explicit for readers.)
+
+// ── Altitude entry: compute one altitude tile via the pool ───────────────
+//
+//   demBlob        own DEM tile blob (already fetched + cached)
+//   z, x, y        tile coords
+//   generation     altitudeCancelGeneration snapshot — job auto-cancels if it
+//                  no longer matches by the time the worker replies.
+//
+// Returns:
+//   { blob: Blob } — altitude PNG ready to wrap into a Response
+//   null — cancelled (generation mismatch) or pool unavailable; caller
+//          MUST fall back to the in-process buildAltitudeTile() path.
+//
+// Altitude only needs its OWN DEM (no seam-padding neighbours), so the
+// SW-thread work per job is minimal: one arrayBuffer() + one postMessage.
+// We still gate it so a 90-tile viewport doesn't fire 90 arrayBuffer() calls
+// in a single tick and starve the basemap pipeline — but the gate is wider
+// than slope's (3× pool size) because each slot does ~1/5 the I/O of a
+// slope slot (1 DEM read vs 5).
+//
+// Pre-work concurrency for altitude. Falls back to 9 when the pool isn't
+// sized yet (3× the slope fallback of 6 ≈ same ratio).
+function altitudePreWorkConcurrency() {
+  if (_slopeWorkers && _slopeWorkers.length > 0) return _slopeWorkers.length * 3;
+  return 9;
+}
+
+let _altitudePreWorkActive = 0;
+const _altitudePreWorkQueue = [];
+
+function acquireAltitudePreWork() {
+  if (_altitudePreWorkActive < altitudePreWorkConcurrency()) {
+    _altitudePreWorkActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _altitudePreWorkQueue.push(resolve));
+}
+
+function releaseAltitudePreWork() {
+  _altitudePreWorkActive = Math.max(0, _altitudePreWorkActive - 1);
+  if (_altitudePreWorkQueue.length > 0 && _altitudePreWorkActive < altitudePreWorkConcurrency()) {
+    _altitudePreWorkActive++;
+    _altitudePreWorkQueue.shift()();
+  }
+}
+
+async function computeAltitudeViaPool(demBlob, z, x, y, generation) {
+  const workers = ensureSlopePool();
+  if (!workers) return null;
+
+  // Cancel check BEFORE expensive work.
+  if (typeof altitudeCancelGeneration !== 'undefined' && generation !== altitudeCancelGeneration) {
+    return null;
+  }
+
+  await acquireAltitudePreWork();
+  try {
+    if (typeof altitudeCancelGeneration !== 'undefined' && generation !== altitudeCancelGeneration) {
+      return null;
+    }
+
+    // Grab the own DEM bytes (transferable). We do NOT decode here.
+    let ownDemBuf;
+    try {
+      ownDemBuf = await demBlob.arrayBuffer();
+    } catch {
+      return null;
+    }
+    if (typeof altitudeCancelGeneration !== 'undefined' && generation !== altitudeCancelGeneration) {
+      return null;
+    }
+
+    const workerIdx = pickSlopeWorker();
+    if (workerIdx < 0) return null;
+    const worker = workers[workerIdx];
+
+    const id = ++_slopeJobMonotonic;
+    const jobPromise = new Promise((resolve, reject) => {
+      _slopeJobCallbacks.set(id, { resolve, reject, kind: 'altitude' });
+    });
+
+    worker.postMessage(
+      { id, kind: 'altitude', z, x, y, ownDem: ownDemBuf },
+      [ownDemBuf],
+    );
+
+    let result;
+    try {
+      result = await jobPromise;
+    } catch {
+      return null;
+    }
+    if (!result) return null; // cancelled
+
+    if (typeof altitudeCancelGeneration !== 'undefined' && generation !== altitudeCancelGeneration) {
+      return null;
+    }
+
+    // Wrap the returned ArrayBuffer into a PNG Blob.
+    const blob = new Blob([result.png], { type: 'image/png' });
+    return { blob };
+  } finally {
+    releaseAltitudePreWork();
+  }
+}

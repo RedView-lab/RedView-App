@@ -73,7 +73,14 @@ function invalidateAltitudeProcessingTile(z, x, y) {
 // reconstruct meters with a single raster-color-mix. Unlike the DEM terrain
 // mesh tiles, NoData pixels stay transparent so the orthophoto remains visible
 // where the DEM pipeline has no altitude sample.
-async function encodeAltitudePng(elevations) {
+//
+// `buildAltitudeRgba` is the pure RGBA encode loop (no I/O). It's split out so
+// the altitude worker pool (workers/slope-pool.worker.js > kind:'altitude')
+// can run it off-thread without depending on Blob/CompressionStream state —
+// the worker then calls buildRawPng itself. The in-process path below wraps
+// the same RGBA buffer in buildRawPng, so pool and in-process outputs are
+// byte-identical.
+function buildAltitudeRgba(elevations) {
   const size = DEM_TILE_SIZE;
   const rgba = new Uint8Array(size * size * 4);
 
@@ -94,6 +101,12 @@ async function encodeAltitudePng(elevations) {
     rgba[idx + 3] = 255;
   }
 
+  return rgba;
+}
+
+async function encodeAltitudePng(elevations) {
+  const size = DEM_TILE_SIZE;
+  const rgba = buildAltitudeRgba(elevations);
   return buildRawPng(size, size, rgba);
 }
 

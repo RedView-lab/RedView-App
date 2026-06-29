@@ -48,6 +48,7 @@ importScripts(
   _withEpoch('../../sw-dem/core/geo.js'),
   _withEpoch('../../sw-dem/core/interpolation.js'),
   _withEpoch('../../sw-dem/core/terrain-rgb.js'),
+  _withEpoch('../../sw-dem/processing/altitude.js'),
   _withEpoch('../../sw-dem/workers/slope-math.js'),
 );
 
@@ -97,6 +98,37 @@ self.onmessage = async (event) => {
   const msg = event.data;
   if (!msg || typeof msg !== 'object') return;
   const id = msg.id;
+
+  // ── Altitude build branch (2026-06-29 altitude-decode-in-worker) ──────────
+  // Altitude only needs its OWN DEM decoded (no seam-padding neighbours like
+  // slope), then the altitude RGBA encode + PNG wrap. Reuses the same worker
+  // + per-worker DEM LRU as slope, so when both overlays are active on the
+  // same tile the second one hits the decoded-elevation cache (cross-overlay
+  // hit). Returns a TRANSFERABLE PNG ArrayBuffer — zero copy back to the SW.
+  if (msg.kind === 'altitude') {
+    try {
+      if (!msg.ownDem || !msg.ownDem.byteLength) {
+        self.postMessage({ id, ok: false, error: 'missing-own-dem' });
+        return;
+      }
+      const elevations = await workerDecodeDem(msg.ownDem, msg.z, msg.x, msg.y);
+      if (!elevations) {
+        self.postMessage({ id, ok: false, error: 'own-dem-decode-failed' });
+        return;
+      }
+
+      const size = DEM_TILE_SIZE;
+      const rgba = buildAltitudeRgba(elevations);
+      const pngBlob = await buildRawPng(size, size, rgba);
+      const pngBuf = await pngBlob.arrayBuffer();
+
+      // Transfer the PNG buffer back — zero copy.
+      self.postMessage({ id, ok: true, png: pngBuf }, [pngBuf]);
+    } catch (err) {
+      self.postMessage({ id, ok: false, error: String((err && err.message) || err) });
+    }
+    return;
+  }
 
   try {
     // Decode the own DEM blob in-worker.

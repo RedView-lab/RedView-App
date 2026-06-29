@@ -186,7 +186,14 @@ const ORTHO_TILE_SIZE = 256;
 // getImageData + Float32 loop) moved INTO the worker — the SW now only
 // does CacheStorage match + transfer. PNG encoder uses Sub filter (~3x
 // faster deflate + smaller PNGs on smooth slope gradients).
-const MAP_CACHE_EPOCH = '2026-06-21-slope-decode-in-worker-1';
+//
+// 2026-06-29-altitude-decode-in-worker-1: altitude overlay joins the shared
+// slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
+// SW thread (kind:'altitude' dispatch). Previously altitude computed
+// entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
+// cause of the sluggish "altitude overlay" symptom. Also adds
+// ALTITUDE_HOT_CACHE (mirrors SLOPE_HOT_CACHE) for instant toggle/repaint.
+const MAP_CACHE_EPOCH = '2026-06-29-altitude-decode-in-worker-1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
@@ -209,6 +216,17 @@ const SLOPE_POOL_MIN_WORKERS = 2;
 // Size budget: 192 entries × ~8 KB average slope PNG ≈ 1.5 MB peak —
 // trivial vs the DEM hot tier (~23 MB) and WebGL textures (1 GB+).
 const SLOPE_HOT_CACHE_MAX = 192;
+
+// ALTITUDE_HOT_CACHE — in-memory LRU of recently served altitude PNG blobs,
+// mirroring SLOPE_HOT_CACHE. Same rationale: a toggle off/on, Mapbox repaint
+// or pan-back re-asks for ~25-50 altitude tiles within a few hundred ms, and
+// even fully cached on disk each hit still pays 5-25 ms of CacheStorage I/O
+// on the SW thread — exactly the "altitude overlay is sluggish" symptom.
+// This tier returns a fresh Response in <1 ms.
+//
+// Size budget: 192 entries × ~4 KB average altitude PNG ≈ 0.8 MB peak —
+// trivial vs the DEM hot tier (~23 MB) and WebGL textures (1 GB+).
+const ALTITUDE_HOT_CACHE_MAX = 192;
 
 // When the user enables slope, the slope pipeline reads up to 5× more DEM
 // tiles than the basemap (own + 4 cardinal neighbours per slope tile).

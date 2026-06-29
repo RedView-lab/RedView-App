@@ -161,13 +161,66 @@ function slopeHotClear() {
 function slopeHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
+
+// ──────────────────────────────────────────────────────────────────────────
+// ALTITUDE_HOT_CACHE — in-memory LRU of recently served altitude PNG blobs.
+//
+// Mirrors SLOPE_HOT_CACHE in front of CacheStorage for the /altitude-tiles
+// endpoint. Every altitude cache hit currently pays 5-25 ms on the SW thread
+// for caches.open() + cache.match(). On a toggle off/on, a Mapbox repaint
+// or a pan-back, the same viewport re-asks for ~25-50 altitude tiles within
+// a few hundred ms; even when every one is cached on disk the cumulative
+// CacheStorage latency stacks into ~0.5-2 s of pure I/O — exactly the
+// "altitude overlay is sluggish" symptom. This tier returns a fresh Response
+// in <1 ms, so cached altitude tiles paint immediately.
+//
+// Size budget: 192 × ~4 KB average altitude PNG ≈ 0.8 MB peak — trivial.
+// ──────────────────────────────────────────────────────────────────────────
+const ALTITUDE_HOT_CACHE = new Map();
+
+function altitudeHotGet(keyStr) {
+  const entry = ALTITUDE_HOT_CACHE.get(keyStr);
+  if (!entry) return null;
+  ALTITUDE_HOT_CACHE.delete(keyStr);
+  ALTITUDE_HOT_CACHE.set(keyStr, entry);
+  return entry;
+}
+
+function altitudeHotPut(keyStr, blob, headerInit) {
+  if (!blob) return;
+  if (ALTITUDE_HOT_CACHE.has(keyStr)) ALTITUDE_HOT_CACHE.delete(keyStr);
+  ALTITUDE_HOT_CACHE.set(keyStr, { blob, headers: headerInit });
+  if (ALTITUDE_HOT_CACHE.size > ALTITUDE_HOT_CACHE_MAX) {
+    const drop = ALTITUDE_HOT_CACHE.size - Math.floor(ALTITUDE_HOT_CACHE_MAX * 0.85);
+    const iter = ALTITUDE_HOT_CACHE.keys();
+    for (let i = 0; i < drop; i++) {
+      const k = iter.next().value;
+      if (k === undefined) break;
+      ALTITUDE_HOT_CACHE.delete(k);
+    }
+  }
+}
+
+function altitudeHotClear() {
+  ALTITUDE_HOT_CACHE.clear();
+}
+
+function altitudeHotResponse(entry) {
+  return new Response(entry.blob, { status: 200, headers: entry.headers });
+}
 let _compositeActive = 0;
 const _compositeQueue = [];
 const SLOPE_BUILD_BUSY_CONCURRENT = 2;
 const SLOPE_BUILD_WARM_CONCURRENT = 4;
 let _slopeBuildActive = 0;
 const _slopeBuildQueue = [];
-const ALTITUDE_BUILD_MAX_CONCURRENT = 2;
+// Altitude build concurrency is adaptive (mirrors slope's
+// currentSlopeBuildConcurrency). This only caps the IN-PROCESS fallback
+// path; the worker pool is the primary build path and is bounded by the
+// pool size. A flat `2` starved the fallback on multi-core machines where
+// the pool is briefly unavailable.
+const ALTITUDE_BUILD_BUSY_CONCURRENT = 2;
+const ALTITUDE_BUILD_WARM_CONCURRENT = 4;
 let _altitudeBuildActive = 0;
 const _altitudeBuildQueue = [];
 
@@ -206,6 +259,17 @@ function currentSlopeBuildConcurrency() {
   return SLOPE_BUILD_IDLE_CONCURRENT;
 }
 
+// Altitude in-process fallback concurrency. Same DEM-pressure heuristic as
+// slope: back off when the DEM pipeline is saturated, free-run when it's
+// idle. Mirrors currentSlopeBuildConcurrency so the fallback never starves
+// the basemap.
+function currentAltitudeBuildConcurrency() {
+  const demPressure = DEM_INFLIGHT.size;
+  if (demPressure >= 24) return ALTITUDE_BUILD_BUSY_CONCURRENT;
+  if (demPressure >= 8) return Math.min(SLOPE_BUILD_IDLE_CONCURRENT, ALTITUDE_BUILD_WARM_CONCURRENT);
+  return SLOPE_BUILD_IDLE_CONCURRENT;
+}
+
 function cancelSlopeWork() {
   slopeCancelGeneration += 1;
   const slopeCount = SLOPE_INFLIGHT.size;
@@ -235,11 +299,19 @@ function cancelAltitudeWork() {
     const queued = _altitudeBuildQueue.shift();
     try { queued?.resolve(null); } catch { /* ignore */ }
   }
-  return { altitudeCount };
+  // Drop every pending worker-pool job tagged kind:'altitude' too (see
+  // slope's CANCEL_SLOPE_WORK for rationale). Per-kind cancel ensures we
+  // never touch slope's in-flight jobs.
+  let poolCancelled = 0;
+  try {
+    if (typeof cancelAllAltitudePoolJobs === 'function') poolCancelled = cancelAllAltitudePoolJobs();
+  } catch { /* ignore */ }
+  try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
+  return { altitudeCount, poolCancelled };
 }
 
 function pumpAltitudeBuildQueue() {
-  while (_altitudeBuildActive < ALTITUDE_BUILD_MAX_CONCURRENT && _altitudeBuildQueue.length > 0) {
+  while (_altitudeBuildActive < currentAltitudeBuildConcurrency() && _altitudeBuildQueue.length > 0) {
     const entry = _altitudeBuildQueue.shift();
     if (!entry) break;
     if (entry.generation !== altitudeCancelGeneration) {
@@ -392,6 +464,7 @@ self.addEventListener('message', (e) => {
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     try { demHotClear(); } catch { /* ignore */ }
     try { slopeHotClear(); } catch { /* ignore */ }
+    try { altitudeHotClear(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
@@ -400,6 +473,7 @@ self.addEventListener('message', (e) => {
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
     try { demHotClear(); } catch { /* ignore */ }
     try { slopeHotClear(); } catch { /* ignore */ }
+    try { altitudeHotClear(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
     return;
   }
@@ -466,13 +540,14 @@ self.addEventListener('message', (e) => {
   }
   if (e.data?.type === 'CANCEL_ALTITUDE_WORK') {
     const cancelled = cancelAltitudeWork();
-    if (DEBUG && cancelled.altitudeCount > 0) {
-      console.warn(`[sw-dem][cancel-altitude] altitude=${cancelled.altitudeCount}`);
+    if (DEBUG && (cancelled.altitudeCount > 0 || cancelled.poolCancelled > 0)) {
+      console.warn(`[sw-dem][cancel-altitude] altitude=${cancelled.altitudeCount} pool=${cancelled.poolCancelled}`);
     }
     return;
   }
   if (e.data?.type === 'CLEAR_ALTITUDE_CACHE') {
     try { if (typeof clearAltitudeProcessingCaches === 'function') clearAltitudeProcessingCaches(); } catch { /* ignore */ }
+    try { altitudeHotClear(); } catch { /* ignore */ }
     caches.delete(ALTITUDE_CACHE_NAME);
     return;
   }
