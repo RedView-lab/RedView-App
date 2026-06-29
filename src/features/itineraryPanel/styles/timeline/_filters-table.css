@@ -25,6 +25,7 @@
 
 .rvi-tl-table__bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
@@ -52,6 +53,7 @@
 }
 .rvi-tl-table__auto-value {
   display: inline-flex;
+  flex-shrink: 0;
   min-width: 0;
 }
 .rvi-tl-table__auto-value-btn {
