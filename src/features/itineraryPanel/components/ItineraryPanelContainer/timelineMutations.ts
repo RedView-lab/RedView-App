@@ -5,6 +5,10 @@ import type {
   TimelineItem,
 } from '../../types';
 import { translateAppText } from '@/shared/i18n';
+import {
+  cumulativeRouteLengthsM,
+  projectPointAlongRoute,
+} from '@/features/itineraryPanel/lib/routes';
 
 function isRoutableTimelineRow(
   row: TimelineItem | null | undefined,
@@ -89,6 +93,73 @@ export function buildPendingRoutePatchAfterRemoval(
     end: { lat: after.lat, lon: after.lon, kind: after.kind === 'end' ? 'end' : 'waypoint' },
     via: [],
   };
+}
+
+/**
+ * Insert a brand-new `waypoint` row into the timeline at the position that
+ * matches where the user grabbed the trace (expressed as a cumulative distance
+ * along the route). Unlike {@link insertTimelineItem} — which always appends
+ * before the `end` row — this places the row in physical order along the route
+ * so the downstream patch (`buildPendingRoutePatchForEditedRow`) reroutes the
+ * correct local segment.
+ *
+ * Returns the new row's id (or null when the geometry is unusable), so the
+ * caller can feed it straight to `buildPendingRoutePatchForEditedRow`.
+ *
+ * @param routePoints  Active Brouter route points (must be ≥ 2).
+ * @param anchorLonLat Geographic coordinate the user grabbed on the trace.
+ *                     Projected onto the polyline to derive the insertion
+ *                     distance — not stored on the row.
+ * @param dropLatLon   Coordinate where the user released the drag. Becomes the
+ *                     waypoint's persisted lat/lon (BRouter snaps it to the
+ *                     nearest road server-side).
+ */
+export function insertWaypointAtRoutePosition(
+  timeline: TimelineItem[],
+  routePoints: Array<{ lat: number; lon: number }>,
+  anchorLonLat: { lat: number; lon: number },
+  dropLatLon: { lat: number; lon: number },
+): { newRowId: string } | null {
+  if (routePoints.length < 2) return null;
+
+  const cumulative = cumulativeRouteLengthsM(routePoints);
+  const anchor = projectPointAlongRoute(anchorLonLat, routePoints, cumulative);
+  if (!anchor) return null;
+
+  // Walk the timeline in order, finding the index of the first routable row
+  // whose distance exceeds the anchor. The new waypoint splices in just before
+  // it. `end` (distance = total) naturally acts as a sentinel for an anchor
+  // near the tail.
+  let insertIndex = timeline.length;
+  for (let index = 0; index < timeline.length; index += 1) {
+    const row = timeline[index];
+    if (!isRoutableTimelineRow(row)) continue;
+    const rowDistanceM = projectPointAlongRoute(
+      { lat: row.lat, lon: row.lon },
+      routePoints,
+      cumulative,
+    )?.distanceM;
+    if (rowDistanceM != null && rowDistanceM > anchor.distanceM) {
+      insertIndex = index;
+      break;
+    }
+  }
+
+  // Clamp so we never insert past the `end` row's natural tail slot.
+  const endIndex = timeline.findIndex((row) => row.kind === 'end');
+  if (endIndex >= 0) insertIndex = Math.min(insertIndex, endIndex);
+
+  const newRowId = `wp-drag-${Date.now()}`;
+  const newRow: TimelineItem = {
+    id: newRowId,
+    kind: 'waypoint',
+    label: translateAppText('Nouveau point'),
+    distanceKm: null,
+    lat: dropLatLon.lat,
+    lon: dropLatLon.lon,
+  };
+  timeline.splice(insertIndex, 0, newRow);
+  return { newRowId };
 }
 
 export function buildTimelineAfterRemoval(

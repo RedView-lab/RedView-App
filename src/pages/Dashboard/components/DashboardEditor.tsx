@@ -31,6 +31,7 @@ import { CenterPanel, CenterPanelToolbar } from '@/features/centerPanel';
 import { AnalysisFlyoverProvider } from '@/features/centerPanel/flyover';
 import { RouteMergeToolProvider } from '@/features/centerPanel/routeMerge';
 import { RouteSplitToolProvider } from '@/features/centerPanel/routeSplit';
+import { RouteDragWaypointProvider } from '@/features/centerPanel/routeDragWaypoint';
 import { TraceToolProvider } from '@/features/centerPanel/tracer';
 import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones';
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
@@ -448,6 +449,7 @@ export function DashboardEditor({
           <RouteMergeToolProvider>
             <TraceToolProvider map={mapInstance}>
               <ForbiddenZoneToolProvider map={mapInstance}>
+            <RouteDragWaypointProvider map={mapInstance}>
                 <PredictionProvider>
                   <div style={styles.leftPanelStyle}>
                     <div style={styles.leftPanelContentStyle}>
@@ -518,6 +520,7 @@ export function DashboardEditor({
                     </div>
                   </div>
                 </PredictionProvider>
+            </RouteDragWaypointProvider>
               </ForbiddenZoneToolProvider>
             </TraceToolProvider>
           </RouteMergeToolProvider>
