@@ -75,12 +75,6 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const mergeTool = useRouteMergeToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
 
-  // The session lives in a ref so the map listeners (attached once) can read
-  // and mutate it without becoming stale closures.
-  const sessionRef = useRef<DragSession | null>(null);
-  const overRouteRef = useRef(false);
-  const dragWasActiveRef = useRef(false);
-
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
   );
@@ -96,11 +90,34 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
   const enabled = Boolean(map) && hasBrouterRoute && !otherToolArmed;
 
+  // The session lives in a ref so the canvas listeners (attached once) can read
+  // and mutate it without becoming stale closures.
+  const sessionRef = useRef<DragSession | null>(null);
+  const overRouteRef = useRef(false);
+  const dragWasActiveRef = useRef(false);
+
+  // Live values read inside the (stable) DOM handlers. Kept in refs and updated
+  // via an effect so the listeners never go stale, BUT the attach/detach effect
+  // doesn't re-run on every store mutation — otherwise an in-progress grab is
+  // torn down the moment the project object changes identity.
+  const storeRef = useRef(store);
+  const activeItineraryIdRef = useRef(activeItinerary?.id);
+  const routePointsRef = useRef(routePoints);
+  const routeColorRef = useRef(activeItinerary?.color);
+  useEffect(() => {
+    storeRef.current = store;
+    activeItineraryIdRef.current = activeItinerary?.id;
+    routePointsRef.current = routePoints;
+    routeColorRef.current = activeItinerary?.color;
+  });
+
   const commitDrag = useCallback(
     (anchorLat: number, anchorLon: number, dropLng: number, dropLat: number) => {
-      if (!store || !activeItinerary) return;
+      const currentStore = storeRef.current;
+      const itineraryId = activeItineraryIdRef.current;
+      if (!currentStore || !itineraryId) return;
 
-      store.updateItinerary(activeItinerary.id, (it) => {
+      currentStore.updateItinerary(itineraryId, (it) => {
         if (it.gpxRoute?.source !== 'brouter' || it.gpxRoute.points.length < 2) return;
         const result = insertWaypointAtRoutePosition(
           it.timeline,
@@ -115,11 +132,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         it.prediction = null;
       });
     },
-    [activeItinerary, store],
+    [],
   );
 
   useEffect(() => {
-    if (!enabled || !map || !routePoints) {
+    if (!enabled || !map) {
       sessionRef.current = null;
       overRouteRef.current = false;
       return;
@@ -175,7 +192,6 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
      * hover detection.
      */
     const handleWindowMouseMove = (event: MouseEvent) => {
-      if (event.button !== 0) return;
       if (!sessionRef.current) return;
       const lngLat = unprojectClient(event.clientX, event.clientY);
       pendingDragLngLat = { lng: lngLat.lng, lat: lngLat.lat };
@@ -214,16 +230,19 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       if (event.button !== 0) return;
       if (sessionRef.current) return;
 
+      const routePts = routePointsRef.current;
+      if (!routePts || routePts.length < 2) return;
+
       const rect = canvas.getBoundingClientRect();
       const projection = findSplitProjectionForMapHover(
         map,
-        routePoints,
+        routePts,
         event.clientX - rect.left,
         event.clientY - rect.top,
       );
       if (!projection?.withinTolerance) return;
 
-      const anchor = projectClickOntoRoute(routePoints, projection.snapped.lon, projection.snapped.lat);
+      const anchor = projectClickOntoRoute(routePts, projection.snapped.lon, projection.snapped.lat);
       if (!anchor) return;
 
       // Swallow the event before Mapbox's own handler sees it. This is the key
@@ -239,7 +258,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       setRouteHoverPreview(map, {
         lon: anchor.lon,
         lat: anchor.lat,
-        color: activeItinerary?.color,
+        color: routeColorRef.current,
       });
 
       window.addEventListener('mousemove', handleWindowMouseMove);
@@ -248,10 +267,12 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
     const handleHoverMouseMove = (event: MouseEvent) => {
       if (sessionRef.current) return;
+      const routePts = routePointsRef.current;
+      if (!routePts || routePts.length < 2) return;
       const rect = canvas.getBoundingClientRect();
       const projection = findSplitProjectionForMapHover(
         map,
-        routePoints,
+        routePts,
         event.clientX - rect.left,
         event.clientY - rect.top,
       );
@@ -299,7 +320,10 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       clearRouteHoverPreview(map);
       dragWasActiveRef.current = false;
     };
-  }, [activeItinerary?.color, commitDrag, enabled, map, routePoints]);
+    // Listeners attach once per map/enablement change. Live project data is
+    // read from refs inside the handlers, so a store mutation never tears down
+    // an in-progress grab.
+  }, [commitDrag, enabled, map]);
 
   const value = ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE;
 
