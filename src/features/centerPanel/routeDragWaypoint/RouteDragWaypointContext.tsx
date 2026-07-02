@@ -6,7 +6,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import type { Map as MapboxMap } from 'mapbox-gl';
+import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
@@ -36,20 +36,26 @@ import {
  * it is ambient whenever a route is on the map, and only stands down while an
  * explicit tool is active so the two interaction modes never compete for the
  * same click.
+ *
+ * Implementation notes:
+ *  - Uses Mapbox's own `mousedown`/`mousemove`/`mouseup` events (not raw
+ *    `canvas.addEventListener`) so the handlers receive `.lngLat` / `.point`
+ *    already resolved — no manual `unproject` maths — and fire even when the
+ *    cursor leaves the canvas mid-drag (Mapbox tracks the pointer globally
+ *    while a drag is in progress).
+ *  - `map.dragPan.disable()` is called on the grab `mousedown` together with
+ *    `preventDefault()` on the original event, so Mapbox's built-in pan never
+ *    starts and the gesture is fully owned by the waypoint drag. `dragPan` is
+ *    re-enabled on every exit path.
  */
 
 interface RouteDragWaypointContextValue {
-  /**
-   * Always false for now — kept on the interface so consumers can later read
-   * the live drag state without a breaking change. The interaction itself is
-   * fully driven by the provider's effects and refs.
-   */
+  /** Reserved for future consumers; the drag itself is fully effect-driven. */
   dragging: boolean;
 }
 
 const RouteDragWaypointContext = createContext<RouteDragWaypointContextValue | null>(null);
 
-/** Stable default value (dragging is ref-driven and not yet exposed). */
 const ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE: RouteDragWaypointContextValue = { dragging: false };
 
 interface RouteDragWaypointProviderProps {
@@ -69,10 +75,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
   const mergeTool = useRouteMergeToolOptional();
   const forbiddenZoneTool = useForbiddenZoneToolOptional();
 
-  // The session lives in a ref so the canvas listeners (attached once) can read
+  // The session lives in a ref so the map listeners (attached once) can read
   // and mutate it without becoming stale closures.
   const sessionRef = useRef<DragSession | null>(null);
   const overRouteRef = useRef(false);
+  const dragWasActiveRef = useRef(false);
 
   const activeItinerary = store?.project.itineraries.find(
     (itinerary) => itinerary.id === store.project.activeItineraryId,
@@ -89,22 +96,16 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
   const enabled = Boolean(map) && hasBrouterRoute && !otherToolArmed;
 
-  const clearPreview = useCallback((target: MapboxMap) => {
-    clearRouteHoverPreview(target);
-  }, []);
-
   const commitDrag = useCallback(
-    (dropLng: number, dropLat: number) => {
-      if (!store || !activeItinerary || !routePoints) return;
-      const session = sessionRef.current;
-      if (!session) return;
+    (anchorLat: number, anchorLon: number, dropLng: number, dropLat: number) => {
+      if (!store || !activeItinerary) return;
 
       store.updateItinerary(activeItinerary.id, (it) => {
         if (it.gpxRoute?.source !== 'brouter' || it.gpxRoute.points.length < 2) return;
         const result = insertWaypointAtRoutePosition(
           it.timeline,
           it.gpxRoute.points,
-          session.anchor,
+          { lat: anchorLat, lon: anchorLon },
           { lat: dropLat, lon: dropLng },
         );
         if (!result) return;
@@ -114,7 +115,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
         it.prediction = null;
       });
     },
-    [activeItinerary, routePoints, store],
+    [activeItinerary, store],
   );
 
   useEffect(() => {
@@ -126,130 +127,151 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
 
     const canvas = map.getCanvas();
     let rafId: number | null = null;
-    let pendingMove: { x: number; y: number; lng: number; lat: number } | null = null;
+    let pendingDragLngLat: { lng: number; lat: number } | null = null;
 
     const applyCursor = (cursor: string) => {
       canvas.style.cursor = cursor;
     };
 
-    const isOverRoute = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
+    const reenableDragPan = () => {
+      try {
+        map.dragPan.enable();
+      } catch {
+        /* noop */
+      }
+    };
+
+    const flushDragMove = () => {
+      rafId = null;
+      const next = pendingDragLngLat;
+      pendingDragLngLat = null;
+      if (!next) return;
+      // The drag marker follows the cursor verbatim — BRouter snaps it to the
+      // nearest road only on commit, so the preview shows the raw drop target.
+      setRouteHoverPreview(map, { lon: next.lng, lat: next.lat });
+    };
+
+    const handleMouseDown = (event: MapMouseEvent) => {
+      if (event.originalEvent.button !== 0) return;
+      if (sessionRef.current) return;
+
       const projection = findSplitProjectionForMapHover(
         map,
         routePoints,
-        clientX - rect.left,
-        clientY - rect.top,
+        event.point.x,
+        event.point.y,
       );
-      return projection?.withinTolerance ?? false;
-    };
+      if (!projection?.withinTolerance) return;
 
-    const flushMove = () => {
-      rafId = null;
-      const move = pendingMove;
-      pendingMove = null;
-      if (!move || !sessionRef.current) return;
-      // The drag marker follows the cursor verbatim — BRouter snaps it to the
-      // nearest road only on commit, so the preview shows the raw drop target.
-      setRouteHoverPreview(map, { lon: move.lng, lat: move.lat });
-    };
-
-    const handleMouseDown = (event: MouseEvent) => {
-      if (event.button !== 0) return;
-      if (sessionRef.current) return;
-      if (!isOverRoute(event.clientX, event.clientY)) return;
-
-      const lngLat = map.unproject([event.clientX, event.clientY] as [number, number]);
-      const anchor = projectClickOntoRoute(routePoints, lngLat.lng, lngLat.lat);
+      const anchor = projectClickOntoRoute(routePoints, event.lngLat.lng, event.lngLat.lat);
       if (!anchor) return;
 
-      sessionRef.current = { anchor };
-      // Suppress native pan so the drag moves the waypoint, not the map.
+      // Own the gesture: stop Mapbox from panning and swallow the default
+      // action so the press is interpreted as a waypoint grab, not a map drag.
+      event.originalEvent.preventDefault();
       map.dragPan.disable();
+
+      sessionRef.current = { anchor };
+      dragWasActiveRef.current = true;
       applyCursor('grabbing');
-      setRouteHoverPreview(map, { lon: anchor.lon, lat: anchor.lat });
-      event.preventDefault();
+      setRouteHoverPreview(map, { lon: anchor.lon, lat: anchor.lat, color: activeItinerary?.color });
     };
 
-    const handleMouseMove = (event: MouseEvent) => {
-      if (sessionRef.current) {
-        const lngLat = map.unproject([event.clientX, event.clientY] as [number, number]);
-        pendingMove = { x: event.clientX, y: event.clientY, lng: lngLat.lng, lat: lngLat.lat };
-        if (rafId === null) rafId = window.requestAnimationFrame(flushMove);
+    const handleMouseMove = (event: MapMouseEvent) => {
+      const session = sessionRef.current;
+      if (session) {
+        pendingDragLngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
+        if (rafId === null) rafId = window.requestAnimationFrame(flushDragMove);
         return;
       }
 
       // Idle hover: toggle the "grab" affordance when entering/leaving the trace.
-      const over = isOverRoute(event.clientX, event.clientY);
+      const projection = findSplitProjectionForMapHover(
+        map,
+        routePoints,
+        event.point.x,
+        event.point.y,
+      );
+      const over = projection?.withinTolerance ?? false;
       if (over !== overRouteRef.current) {
         overRouteRef.current = over;
         applyCursor(over ? 'grab' : '');
       }
     };
 
-    const endDrag = (commit: boolean, event?: MouseEvent) => {
+    const handleMouseUp = (event: MapMouseEvent) => {
+      if (event.originalEvent.button !== 0) return;
       const session = sessionRef.current;
       if (!session) return;
+
       sessionRef.current = null;
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
         rafId = null;
       }
-      pendingMove = null;
+      pendingDragLngLat = null;
 
-      if (commit && event) {
-        const lngLat = map.unproject([event.clientX, event.clientY] as [number, number]);
-        commitDrag(lngLat.lng, lngLat.lat);
-      }
+      commitDrag(session.anchor.lat, session.anchor.lon, event.lngLat.lng, event.lngLat.lat);
 
-      map.dragPan.enable();
+      reenableDragPan();
       applyCursor(overRouteRef.current ? 'grab' : '');
-      clearPreview(map);
+      clearRouteHoverPreview(map);
     };
 
-    const handleMouseUp = (event: MouseEvent) => {
-      if (event.button !== 0) return;
-      endDrag(true, event);
+    const cancelDrag = () => {
+      if (!sessionRef.current) return;
+      sessionRef.current = null;
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      pendingDragLngLat = null;
+      reenableDragPan();
+      applyCursor(overRouteRef.current ? 'grab' : '');
+      clearRouteHoverPreview(map);
     };
 
     const handleMouseLeave = () => {
-      overRouteRef.current = false;
-      endDrag(false);
+      // Only cancel if we're not mid-drag — Mapbox keeps firing mousemove while
+      // a drag is captured even outside the canvas, so a stray mouseleave must
+      // not abort an ongoing grab.
+      if (!sessionRef.current) {
+        overRouteRef.current = false;
+        applyCursor('');
+      }
     };
 
-    const handleContextMenu = (event: MouseEvent) => {
+    const handleContextMenu = (event: MapMouseEvent) => {
       if (!sessionRef.current) return;
       event.preventDefault();
-      endDrag(false);
+      cancelDrag();
     };
 
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('mouseleave', handleMouseLeave);
-    canvas.addEventListener('contextmenu', handleContextMenu);
+    map.on('mousedown', handleMouseDown);
+    map.on('mousemove', handleMouseMove);
+    map.on('mouseup', handleMouseUp);
+    map.on('mouseleave', handleMouseLeave);
+    map.on('contextmenu', handleContextMenu);
 
     return () => {
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mouseup', handleMouseUp);
-      canvas.removeEventListener('mouseleave', handleMouseLeave);
-      canvas.removeEventListener('contextmenu', handleContextMenu);
+      map.off('mousedown', handleMouseDown);
+      map.off('mousemove', handleMouseMove);
+      map.off('mouseup', handleMouseUp);
+      map.off('mouseleave', handleMouseLeave);
+      map.off('contextmenu', handleContextMenu);
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
         rafId = null;
       }
-      pendingMove = null;
+      pendingDragLngLat = null;
       sessionRef.current = null;
       overRouteRef.current = false;
-      try {
-        map.dragPan.enable();
-      } catch {
-        /* noop */
-      }
+      reenableDragPan();
       applyCursor('');
-      clearPreview(map);
+      clearRouteHoverPreview(map);
+      dragWasActiveRef.current = false;
     };
-  }, [clearPreview, commitDrag, enabled, map, routePoints]);
+  }, [activeItinerary?.color, commitDrag, enabled, map, routePoints]);
 
   const value = ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE;
 
