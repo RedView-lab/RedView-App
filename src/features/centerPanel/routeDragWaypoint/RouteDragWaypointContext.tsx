@@ -6,7 +6,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import type { Map as MapboxMap, MapMouseEvent } from 'mapbox-gl';
+import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import {
@@ -126,6 +126,7 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
     }
 
     const canvas = map.getCanvas();
+    const canvasContainer = map.getCanvasContainer();
     let rafId: number | null = null;
     let pendingDragLngLat: { lng: number; lat: number } | null = null;
 
@@ -141,6 +142,12 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       }
     };
 
+    /** Convert a viewport (clientX/Y) coordinate into an lng/lat. */
+    const unprojectClient = (clientX: number, clientY: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return map.unproject([clientX - rect.left, clientY - rect.top] as [number, number]);
+    };
+
     const flushDragMove = () => {
       rafId = null;
       const next = pendingDragLngLat;
@@ -151,46 +158,102 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       setRouteHoverPreview(map, { lon: next.lng, lat: next.lat });
     };
 
-    const handleMouseDown = (event: MapMouseEvent) => {
-      if (event.originalEvent.button !== 0) return;
+    const resetAfterDrag = () => {
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      pendingDragLngLat = null;
+      reenableDragPan();
+      applyCursor(overRouteRef.current ? 'grab' : '');
+      clearRouteHoverPreview(map);
+    };
+
+    /**
+     * Window-level move handler active only while a grab is in progress. Bound
+     * on `mousedown` and removed on `mouseup`, so it never competes with idle
+     * hover detection.
+     */
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      if (!sessionRef.current) return;
+      const lngLat = unprojectClient(event.clientX, event.clientY);
+      pendingDragLngLat = { lng: lngLat.lng, lat: lngLat.lat };
+      if (rafId === null) rafId = window.requestAnimationFrame(flushDragMove);
+    };
+
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      if (event.button !== 0) return;
+      const session = sessionRef.current;
+      if (!session) return;
+
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+
+      sessionRef.current = null;
+      const lngLat = unprojectClient(event.clientX, event.clientY);
+      commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat);
+      resetAfterDrag();
+    };
+
+    const cancelDrag = () => {
+      if (!sessionRef.current) return;
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+      sessionRef.current = null;
+      resetAfterDrag();
+    };
+
+    /**
+     * Capture-phase mousedown on the canvas container. By stopping propagation
+     * here Mapbox never receives the press, so it cannot start its own drag-pan
+     * — no race, no immediate cancel. We then drive the rest of the gesture
+     * from window-level listeners (so the cursor can leave the canvas mid-drag).
+     */
+    const handleMouseDown = (event: MouseEvent) => {
+      if (event.button !== 0) return;
       if (sessionRef.current) return;
 
+      const rect = canvas.getBoundingClientRect();
       const projection = findSplitProjectionForMapHover(
         map,
         routePoints,
-        event.point.x,
-        event.point.y,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
       );
       if (!projection?.withinTolerance) return;
 
-      const anchor = projectClickOntoRoute(routePoints, event.lngLat.lng, event.lngLat.lat);
+      const anchor = projectClickOntoRoute(routePoints, projection.snapped.lon, projection.snapped.lat);
       if (!anchor) return;
 
-      // Own the gesture: stop Mapbox from panning and swallow the default
-      // action so the press is interpreted as a waypoint grab, not a map drag.
-      event.originalEvent.preventDefault();
+      // Swallow the event before Mapbox's own handler sees it. This is the key
+      // fix: previously Mapbox started a pan on the same mousedown and fired a
+      // mouseup immediately, cancelling the grab within a frame.
+      event.stopPropagation();
+      event.preventDefault();
       map.dragPan.disable();
 
       sessionRef.current = { anchor };
       dragWasActiveRef.current = true;
       applyCursor('grabbing');
-      setRouteHoverPreview(map, { lon: anchor.lon, lat: anchor.lat, color: activeItinerary?.color });
+      setRouteHoverPreview(map, {
+        lon: anchor.lon,
+        lat: anchor.lat,
+        color: activeItinerary?.color,
+      });
+
+      window.addEventListener('mousemove', handleWindowMouseMove);
+      window.addEventListener('mouseup', handleWindowMouseUp);
     };
 
-    const handleMouseMove = (event: MapMouseEvent) => {
-      const session = sessionRef.current;
-      if (session) {
-        pendingDragLngLat = { lng: event.lngLat.lng, lat: event.lngLat.lat };
-        if (rafId === null) rafId = window.requestAnimationFrame(flushDragMove);
-        return;
-      }
-
-      // Idle hover: toggle the "grab" affordance when entering/leaving the trace.
+    const handleHoverMouseMove = (event: MouseEvent) => {
+      if (sessionRef.current) return;
+      const rect = canvas.getBoundingClientRect();
       const projection = findSplitProjectionForMapHover(
         map,
         routePoints,
-        event.point.x,
-        event.point.y,
+        event.clientX - rect.left,
+        event.clientY - rect.top,
       );
       const over = projection?.withinTolerance ?? false;
       if (over !== overRouteRef.current) {
@@ -199,66 +262,31 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       }
     };
 
-    const handleMouseUp = (event: MapMouseEvent) => {
-      if (event.originalEvent.button !== 0) return;
-      const session = sessionRef.current;
-      if (!session) return;
-
-      sessionRef.current = null;
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      pendingDragLngLat = null;
-
-      commitDrag(session.anchor.lat, session.anchor.lon, event.lngLat.lng, event.lngLat.lat);
-
-      reenableDragPan();
-      applyCursor(overRouteRef.current ? 'grab' : '');
-      clearRouteHoverPreview(map);
-    };
-
-    const cancelDrag = () => {
-      if (!sessionRef.current) return;
-      sessionRef.current = null;
-      if (rafId !== null) {
-        window.cancelAnimationFrame(rafId);
-        rafId = null;
-      }
-      pendingDragLngLat = null;
-      reenableDragPan();
-      applyCursor(overRouteRef.current ? 'grab' : '');
-      clearRouteHoverPreview(map);
-    };
-
     const handleMouseLeave = () => {
-      // Only cancel if we're not mid-drag — Mapbox keeps firing mousemove while
-      // a drag is captured even outside the canvas, so a stray mouseleave must
-      // not abort an ongoing grab.
-      if (!sessionRef.current) {
-        overRouteRef.current = false;
-        applyCursor('');
-      }
+      if (sessionRef.current) return;
+      overRouteRef.current = false;
+      applyCursor('');
     };
 
-    const handleContextMenu = (event: MapMouseEvent) => {
+    const handleContextMenu = (event: MouseEvent) => {
       if (!sessionRef.current) return;
       event.preventDefault();
       cancelDrag();
     };
 
-    map.on('mousedown', handleMouseDown);
-    map.on('mousemove', handleMouseMove);
-    map.on('mouseup', handleMouseUp);
-    map.on('mouseleave', handleMouseLeave);
-    map.on('contextmenu', handleContextMenu);
+    // Capture phase so we run *before* Mapbox's drag-pan handler.
+    canvasContainer.addEventListener('mousedown', handleMouseDown, true);
+    canvas.addEventListener('mousemove', handleHoverMouseMove);
+    canvas.addEventListener('mouseleave', handleMouseLeave);
+    canvas.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
-      map.off('mousedown', handleMouseDown);
-      map.off('mousemove', handleMouseMove);
-      map.off('mouseup', handleMouseUp);
-      map.off('mouseleave', handleMouseLeave);
-      map.off('contextmenu', handleContextMenu);
+      canvasContainer.removeEventListener('mousedown', handleMouseDown, true);
+      canvas.removeEventListener('mousemove', handleHoverMouseMove);
+      canvas.removeEventListener('mouseleave', handleMouseLeave);
+      canvas.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
       if (rafId !== null) {
         window.cancelAnimationFrame(rafId);
         rafId = null;
