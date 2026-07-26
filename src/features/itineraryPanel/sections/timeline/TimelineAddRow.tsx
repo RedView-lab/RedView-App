@@ -30,11 +30,12 @@ export function TimelineAddRow({ onAdd, onOpenKindMenu }: TimelineAddRowProps) {
         <span className="rvi-tl-add__badge" aria-hidden>
           <IconPlus size={16} />
         </span>
-        <span className="rvi-tl-add__label">{t('Ajouter un élément')}</span>
         <span className="rvi-tl-add__chevron" aria-hidden>
           <IconChevronDown size={16} />
         </span>
+        <span className="rvi-tl-add__label">{t('Ajouter un élément')}</span>
       </button>
     </div>
   );
 }
+

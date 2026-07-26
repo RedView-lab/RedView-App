@@ -223,8 +223,8 @@ export function TimelineSheetView({
             </button>
 
             <span className="rvi-tl-list__col-actions" aria-hidden>
-              <IconEye size={15} />
-              <IconTrash size={15} />
+              <span className="rvi-tl-header-icon-btn"><IconEye size={12.5} /></span>
+              <span className="rvi-tl-header-icon-btn"><IconTrash size={12.5} /></span>
               <IconStar size={20} />
             </span>
           </div>

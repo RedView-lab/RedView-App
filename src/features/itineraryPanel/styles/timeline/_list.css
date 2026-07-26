@@ -277,7 +277,7 @@
   pointer-events: none;
 }
 
-/* Add row */
+/* Add row — Figma node 855:20479 */
 .rvi-tl-add {
   display: flex;
   align-items: center;
@@ -287,17 +287,17 @@
   overflow: hidden;
   transition: background 0.15s ease;
 }
-.rvi-tl-add:hover { background: rgba(255, 255, 255, 0.2); }
+.rvi-tl-add:hover { background: rgba(255, 255, 255, 0.22); }
 
 .rvi-tl-add__main {
   all: unset;
   flex: 1 1 auto;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 7px 8px;
   cursor: pointer;
-  min-height: 36px;
+  min-height: 32px;
   width: 100%;
   box-sizing: border-box;
   color: #fff;
@@ -310,6 +310,15 @@
   height: 16px;
   flex-shrink: 0;
 }
+.rvi-tl-add__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: #fff;
+  flex-shrink: 0;
+}
 .rvi-tl-add__label {
   flex: 1 1 auto;
   min-width: 0;
@@ -319,14 +328,16 @@
   color: #fff;
   text-align: left;
 }
-.rvi-tl-add__chevron {
+
+.rvi-tl-header-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  color: #fff;
-  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 3.75px;
+  padding: 3.75px;
+  box-sizing: border-box;
 }
 
 /* Add item dropdown */

@@ -1,10 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  GPX_QUALITY_EXPERT_MAX_POINTS_PER_KM,
-  GPX_QUALITY_EXPERT_MIN_POINTS_PER_KM,
-  GPX_QUALITY_PRESET_POINTS_PER_KM,
-  type GpxQualityStats,
-} from '@/features/itineraryPanel/lib/routes';
+import { useEffect, useRef, useState } from 'react';
 import type { GpxQualityMode } from '@/features/itineraryPanel/types';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
@@ -121,9 +115,6 @@ export function RoutesSection({
   items,
   traceWidthPx,
   gpxQuality,
-  gpxQualityAvailable = false,
-  gpxQualityPointsPerKm,
-  gpxQualityStats,
   open,
   onOpenChange,
   onEnabledChange,
@@ -133,48 +124,9 @@ export function RoutesSection({
   onVisibilityToggle,
   onTraceWidthChange,
   onGpxQualityChange,
-  onGpxQualityExpertApply,
 }: Props) {
   const { t } = useAppI18n();
-  const [expertOpen, setExpertOpen] = useState(false);
-  const [expertPointsPerKm, setExpertPointsPerKm] = useState(
-    gpxQualityPointsPerKm ?? GPX_QUALITY_PRESET_POINTS_PER_KM.balanced,
-  );
   const effectiveQuality = gpxQuality ?? 'default';
-
-  useEffect(() => {
-    if (gpxQuality === 'expert') {
-      setExpertOpen(true);
-    }
-  }, [gpxQuality]);
-
-  useEffect(() => {
-    const nextPointsPerKm = gpxQuality === 'expert'
-      ? gpxQualityPointsPerKm ?? GPX_QUALITY_PRESET_POINTS_PER_KM.balanced
-      : gpxQuality != null
-        ? GPX_QUALITY_PRESET_POINTS_PER_KM[gpxQuality]
-        : GPX_QUALITY_PRESET_POINTS_PER_KM.balanced;
-    setExpertPointsPerKm(nextPointsPerKm);
-  }, [gpxQuality, gpxQualityPointsPerKm]);
-
-  const previewTargetPointCount = useMemo(() => {
-    if (!gpxQualityStats) return null;
-    const rawTarget = Math.round(Math.max(gpxQualityStats.distanceKm, 0.25) * expertPointsPerKm);
-    return Math.max(2, Math.min(gpxQualityStats.originalPointCount, rawTarget));
-  }, [expertPointsPerKm, gpxQualityStats]);
-
-  const previewReductionPercent = useMemo(() => {
-    if (!gpxQualityStats || previewTargetPointCount == null || gpxQualityStats.originalPointCount <= 0) {
-      return null;
-    }
-    return Math.max(
-      0,
-      Math.min(
-        100,
-        Math.round((1 - previewTargetPointCount / gpxQualityStats.originalPointCount) * 100),
-      ),
-    );
-  }, [gpxQualityStats, previewTargetPointCount]);
 
   return (
     <Section
@@ -240,101 +192,23 @@ export function RoutesSection({
           </div>
         </div>
 
-        {gpxQuality != null && (
-          <>
-            <div className="rvc-row rvc-row--split rvc-routes__quality-row">
-              <span className="rvc-row__label">{t('Qualité tracé')}</span>
-              <Select
-                className="rvc-routes__quality-select"
-                width="140px"
-                value={effectiveQuality}
-                options={[
-                  { value: 'default', label: 'Défaut (rapide)' },
-                  { value: 'balanced', label: 'Équilibré' },
-                  { value: 'max', label: 'Maximum' },
-                  { value: 'expert', label: 'Expert' },
-                ]}
-                onChange={onGpxQualityChange}
-                disabled={!gpxQualityAvailable}
-              />
-            </div>
-
-            {!gpxQualityAvailable ? (
-              <div className="rvc-routes__quality-unavailable">
-                {t('L’itinéraire actif n’a pas encore de trace GPX exploitable.')}
-              </div>
-            ) : null}
-
-            <div className="rvc-routes__quality-meta" aria-live="polite">
-              <div className="rvc-routes__quality-metric">
-                <span className="rvc-routes__quality-metric-label">{t('Paramètre GPX')}</span>
-                <span className="rvc-routes__quality-metric-value">{expertPointsPerKm} pts/km</span>
-              </div>
-              {gpxQualityStats ? (
-                <div className="rvc-routes__quality-metric">
-                  <span className="rvc-routes__quality-metric-label">{t('Réduction')}</span>
-                  <span className="rvc-routes__quality-metric-value">{gpxQualityStats.reductionPercent} %</span>
-                </div>
-              ) : null}
-              <button
-                type="button"
-                className="rvc-routes__quality-expert-toggle"
-                onClick={() => setExpertOpen((current) => !current)}
-                disabled={!gpxQualityAvailable}
-              >
-                {expertOpen ? t('Fermer expert GPX') : t('Ouvrir expert GPX')}
-              </button>
-            </div>
-
-            {expertOpen && gpxQualityAvailable ? (
-              <div className="rvc-routes__quality-expert-panel">
-                <div className="rvc-routes__quality-expert-head">
-                  <span className="rvc-routes__quality-expert-title">{t('Mode Expert GPX')}</span>
-                  <span className="rvc-routes__quality-expert-subtitle">
-                    {t('Préserver le profil tout en réduisant le nombre de points affichés.')}
-                  </span>
-                </div>
-
-                <div className="rvc-routes__quality-expert-slider">
-                  <span className="rvc-routes__quality-expert-caption">{t('Densité cible')}</span>
-                  <div className="rvc-routes__quality-expert-slider-wrap">
-                    <Slider
-                      value={expertPointsPerKm}
-                      min={GPX_QUALITY_EXPERT_MIN_POINTS_PER_KM}
-                      max={GPX_QUALITY_EXPERT_MAX_POINTS_PER_KM}
-                      step={1}
-                      width="100%"
-                      onChange={setExpertPointsPerKm}
-                      onCommit={setExpertPointsPerKm}
-                    />
-                  </div>
-                  <span className="rvc-routes__quality-expert-value">{expertPointsPerKm} pts/km</span>
-                </div>
-
-                {gpxQualityStats ? (
-                  <div className="rvc-routes__quality-expert-stats">
-                    <span>{t('Points source')}: {gpxQualityStats.originalPointCount.toLocaleString('fr-FR')}</span>
-                    <span>{t('Points rendus')}: {gpxQualityStats.renderedPointCount.toLocaleString('fr-FR')}</span>
-                    <span>{t('Cible expert')}: {previewTargetPointCount?.toLocaleString('fr-FR') ?? '-'}</span>
-                    <span>{t('Réduction')}: {previewReductionPercent != null ? `${previewReductionPercent} %` : '-'}</span>
-                  </div>
-                ) : null}
-
-                <div className="rvc-routes__quality-expert-actions">
-                  <button
-                    type="button"
-                    className="rvc-routes__quality-apply"
-                    onClick={() => onGpxQualityExpertApply?.(expertPointsPerKm)}
-                    disabled={!gpxQualityAvailable}
-                  >
-                    {t('Appliquer expert GPX')}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </>
-        )}
+        <div className="rvc-row rvc-row--split rvc-routes__quality-row">
+          <span className="rvc-row__label">{t('Qualité tracé')}</span>
+          <Select
+            className="rvc-routes__quality-select"
+            width="140px"
+            value={effectiveQuality}
+            options={[
+              { value: 'default', label: 'Défaut (rapide)' },
+              { value: 'balanced', label: 'Équilibré' },
+              { value: 'max', label: 'Maximum' },
+              { value: 'expert', label: 'Expert' },
+            ]}
+            onChange={onGpxQualityChange}
+          />
+        </div>
       </div>
     </Section>
   );
 }
+
