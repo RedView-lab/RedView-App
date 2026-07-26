@@ -11,7 +11,7 @@
   -webkit-backdrop-filter: blur(24px);
   border-radius: var(--rvi-radius);
   flex: 1 1 auto;
-  min-height: 260px;
+  min-height: 0;
   overflow: hidden;
   container-type: inline-size;
 }

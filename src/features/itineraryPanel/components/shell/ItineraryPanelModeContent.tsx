@@ -24,7 +24,7 @@ import { ProfileBar } from './ProfileBar';
 type VisiblePanelMode = Exclude<PanelMode, 'nutrition'>;
 
 const DEFAULT_DOCK_HEIGHT_PX = 320;
-const MIN_DOCK_HEIGHT_PX = 260;
+const MIN_DOCK_HEIGHT_PX = 180;
 const MIN_MODE_CONTENT_HEIGHT_PX = 168;
 
 type ItineraryPanelModeContentProps = Pick<

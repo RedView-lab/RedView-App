@@ -225,7 +225,7 @@ export function TimelineSheetView({
             <span className="rvi-tl-list__col-actions" aria-hidden>
               <span className="rvi-tl-header-icon-btn"><IconEye size={12.5} /></span>
               <span className="rvi-tl-header-icon-btn"><IconTrash size={12.5} /></span>
-              <IconStar size={20} />
+              <span className="rvi-tl-header-icon-btn"><IconStar size={10} /></span>
             </span>
           </div>
 
@@ -297,7 +297,7 @@ export function TimelineSheetView({
               <IconTrash size={15} />
             </span>
             <span className="rvi-tl-th__action-icon">
-              <IconStar size={20} />
+              <IconStar size={10} />
             </span>
           </div>
         </div>
@@ -375,7 +375,7 @@ export function TimelineSheetView({
                   aria-pressed={!!item.favorite}
                   disabled={isAutoIntervalPause}
                 >
-                  <IconStar size={24} />
+                  <IconStar size={12} />
                 </button>
               </div>
             </div>

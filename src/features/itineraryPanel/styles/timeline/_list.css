@@ -9,6 +9,9 @@
 }
 
 .rvi-tl-list__header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -18,11 +21,14 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.01em;
+  background: var(--rvi-panel-bg, #0e0e10);
+  flex-shrink: 0;
 }
 .rvi-tl-list__items {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex-shrink: 0;
 }
 .rvi-tl-list__col-check {
   display: inline-flex;
@@ -98,6 +104,7 @@
 
 .rvi-tl-list__item {
   animation: rvi-tl-fade 260ms ease-out both;
+  flex-shrink: 0;
 }
 @keyframes rvi-tl-fade {
   from { opacity: 0; transform: translateY(4px); }
@@ -115,6 +122,7 @@
   min-height: 32px;
   width: 100%;
   box-sizing: border-box;
+  flex-shrink: 0;
   transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 .rvi-tl-row:hover { background: rgba(255, 255, 255, 0.12); }
@@ -279,12 +287,16 @@
 
 /* Add row — Figma node 855:20479 */
 .rvi-tl-add {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  margin-top: 4px;
+  margin-top: 6px;
   background: rgba(255, 255, 255, 0.16);
   border-radius: var(--rvi-radius-md);
   overflow: hidden;
+  flex-shrink: 0;
+  min-height: 32px;
   transition: background 0.15s ease;
 }
 .rvi-tl-add:hover { background: rgba(255, 255, 255, 0.22); }
