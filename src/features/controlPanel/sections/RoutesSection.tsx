@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GpxQualityMode } from '@/features/itineraryPanel/types';
+import type { GpxQualityStats } from '@/features/itineraryPanel/lib/routes';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
