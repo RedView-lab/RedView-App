@@ -97,9 +97,6 @@ export function SunlightSection({
   };
 
   const displayTime = isScrubbingTime ? formatMinutes(timeDraftMinutes) : (state.time || '00:00');
-  const timeParts = displayTime.split(':');
-  const h = timeParts[0] || '00';
-  const m = timeParts[1] || '00';
 
   const handleBandColorChange = (bandId: string, color: string) => {
     onChange?.({
@@ -177,11 +174,7 @@ export function SunlightSection({
           <span className="rvc-sunlight__time-bound">23:59</span>
           <div className="rvc-sunlight__time-input">
             <IconClock size={12} />
-            <div className="rvc-sunlight__time-display">
-              <div className="rvc-sunlight__time-display-segment">{h}</div>
-              <div className="rvc-sunlight__time-display-colon">:</div>
-              <div className="rvc-sunlight__time-display-segment">{m}</div>
-            </div>
+            <span className="rvc-sunlight__time-text">{displayTime}</span>
             <input
               type="time"
               value={displayTime}

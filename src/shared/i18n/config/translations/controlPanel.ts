@@ -67,6 +67,8 @@ export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Afficher la bande météo', en: 'Show weather band' },
   { fr: 'Ajouter des alertes', en: 'Add alerts' },
   { fr: 'Choisir une date personnalisée', en: 'Choose a custom date' },
+  { fr: 'Opacité ombres', en: 'Shadow opacity' },
+  { fr: "Opacité carte d'ensoleillement", en: 'Sunlight map opacity' },
   { fr: 'Opacité des ombres', en: 'Shadow opacity' },
   { fr: 'Lever', en: 'Sunrise' },
   { fr: 'Coucher', en: 'Sunset' },
