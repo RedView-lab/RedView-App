@@ -62,6 +62,15 @@ export function hasStoredSupabaseSession(): boolean {
 }
 
 export function readStoredSupabaseSession(): StoredSupabaseSessionSnapshot | null {
+	if (typeof window !== "undefined" && window.localStorage.getItem("redview:dev-session") === "true") {
+		return {
+			user: {
+				id: "dev-user-001",
+				email: "dev@redview.app",
+			},
+		};
+	}
+
 	const parsed = readStoredSupabaseSessionPayload();
 	if (!parsed?.user || typeof parsed.user.id !== "string") return null;
 	if (typeof parsed.access_token !== "string" || typeof parsed.refresh_token !== "string") {

@@ -961,6 +961,34 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Labels"
   },
   {
+    "fr": "POI Labels",
+    "en": "POI Labels"
+  },
+  {
+    "fr": "Villes",
+    "en": "Cities"
+  },
+  {
+    "fr": "États / Régions",
+    "en": "States / Regions"
+  },
+  {
+    "fr": "Parcs Naturels",
+    "en": "Natural Parks"
+  },
+  {
+    "fr": "Pays",
+    "en": "Countries"
+  },
+  {
+    "fr": "Plans d’eau",
+    "en": "Water bodies"
+  },
+  {
+    "fr": "Plans d'eau",
+    "en": "Water bodies"
+  },
+  {
     "fr": "Courbes de niveau",
     "en": "Contour lines"
   },
@@ -1191,6 +1219,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Choisir une date personnalisée",
     "en": "Choose a custom date"
+  },
+  {
+    "fr": "Opacité ombres",
+    "en": "Shadow opacity"
+  },
+  {
+    "fr": "Opacité carte d'ensoleillement",
+    "en": "Sunlight map opacity"
   },
   {
     "fr": "Opacité des ombres",
@@ -1437,6 +1473,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Off-road"
   },
   {
+    "fr": "Voies cyclables",
+    "en": "Bike lanes"
+  },
+  {
     "fr": "Voix cyclables",
     "en": "Bike lanes"
   },
@@ -1535,6 +1575,70 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Passer en 3D",
     "en": "Switch to 3D"
+  },
+  {
+    "fr": "Zone d’analyse",
+    "en": "Analysis zone"
+  },
+  {
+    "fr": "Tracer une zone d’analyse",
+    "en": "Draw an analysis zone"
+  },
+  {
+    "fr": "Zone d’analyse terrain (pentes, altitude, ensoleillement)",
+    "en": "Terrain analysis zone (slopes, altitude, sunlight)"
+  },
+  {
+    "fr": "Redessiner la zone",
+    "en": "Redraw the zone"
+  },
+  {
+    "fr": "Zoomer sur la zone",
+    "en": "Zoom to the zone"
+  },
+  {
+    "fr": "Supprimer la zone",
+    "en": "Delete the zone"
+  },
+  {
+    "fr": "Cliquez pour placer les sommets, double-cliquez pour terminer, Échap pour annuler",
+    "en": "Click to place vertices, double-click to finish, Esc to cancel"
+  },
+  {
+    "fr": "1 sommet placé — cliquez pour le 2e",
+    "en": "1 vertex placed — click for the 2nd"
+  },
+  {
+    "fr": "2 sommets placés — cliquez pour le 3e",
+    "en": "2 vertices placed — click for the 3rd"
+  },
+  {
+    "fr": "Double-cliquez ou cliquez sur le 1er point pour valider",
+    "en": "Double-click or click the 1st point to validate"
+  },
+  {
+    "fr": "Valider",
+    "en": "Validate"
+  },
+  {
+    "fr": "Annuler point",
+    "en": "Undo point"
+  },
+  {
+    "fr": "Annuler",
+    "en": "Cancel"
+  },
+  {
+    "fr": "Zone très étendue — les calculs resteront plus lents qu’avec une zone réduite",
+    "en": "Very large zone — computations will stay slower than with a smaller zone"
+  },
+  {
+    "fr": "Zone d’analyse requise — tracez-la pour activer",
+    "en": "Analysis zone required — draw one to enable"
+  },
+  {
+    "fr": "Zone d’analyse active",
+    "en": "Analysis zone active"
   },
   {
     "fr": "Menu contextuel de la carte",
@@ -1675,6 +1779,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Gravel (défaut)",
     "en": "Gravel (default)"
+  },
+  {
+    "fr": "Gravel",
+    "en": "Gravel"
   },
   {
     "fr": "Route",
@@ -1939,6 +2047,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Modifier la durée de la pause",
     "en": "Edit pause duration"
+  },
+  {
+    "fr": "Modifier la durée (min)",
+    "en": "Edit duration (min)"
+  },
+  {
+    "fr": "Modifier la distance (km)",
+    "en": "Edit distance (km)"
+  },
+  {
+    "fr": "Modifier la distance en kilomètres",
+    "en": "Edit distance in kilometers"
   },
   {
     "fr": "Masquer",
@@ -2646,7 +2766,7 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   },
   {
     "fr": "Itinéraire",
-    "en": "Route"
+    "en": "Itinerary"
   },
   {
     "fr": "Calcul du tracé en cours",
@@ -2771,5 +2891,69 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Erreur BRouter",
     "en": "BRouter error"
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : le point d’arrivée se trouve dans une zone interdite.",
+    "en": "Unable to calculate route: destination point is in a forbidden zone."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : le point de départ se trouve dans une zone interdite.",
+    "en": "Unable to calculate route: start point is in a forbidden zone."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : un point de passage se trouve dans une zone interdite.",
+    "en": "Unable to calculate route: a waypoint is in a forbidden zone."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : un point se trouve dans une zone interdite.",
+    "en": "Unable to calculate route: a point is in a forbidden zone."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : le point de départ est hors de la zone couverte ou inaccessible.",
+    "en": "Unable to calculate route: start point is outside the covered area or inaccessible."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : le point d’arrivée est hors de la zone couverte ou inaccessible.",
+    "en": "Unable to calculate route: destination point is outside the covered area or inaccessible."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : un point est hors de la zone couverte ou inaccessible.",
+    "en": "Unable to calculate route: a point is outside the covered area or inaccessible."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : aucun tracé praticable trouvé entre ces points.",
+    "en": "Unable to calculate route: no viable path found between these points."
+  },
+  {
+    "fr": "Le calcul de l’itinéraire a pris trop de temps. Déplacez vos points ou simplifiez le tracé.",
+    "en": "Route calculation timed out. Move your points or simplify the route."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : les points doivent être situés en France métropolitaine ou en Corse.",
+    "en": "Unable to calculate route: points must be located in mainland France or Corsica."
+  },
+  {
+    "fr": "Le serveur de calcul d’itinéraire est temporairement inaccessible. Veuillez réessayer.",
+    "en": "Route calculation server is temporarily unreachable. Please try again."
+  },
+  {
+    "fr": "Erreur dans le profil de traçage personnalisé. Vérifiez vos paramètres.",
+    "en": "Error in custom routing profile. Check your settings."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire : vérifiez l’emplacement de vos points et des zones interdites.",
+    "en": "Unable to calculate route: check the placement of your points and forbidden zones."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire pour ces points.",
+    "en": "Unable to calculate route for these points."
+  },
+  {
+    "fr": "Impossible de calculer l’itinéraire.",
+    "en": "Unable to calculate route."
+  },
+  {
+    "fr": "Supprimer la zone interdite",
+    "en": "Delete forbidden zone"
   }
 ];

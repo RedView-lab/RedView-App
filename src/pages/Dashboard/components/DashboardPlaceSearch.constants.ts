@@ -23,8 +23,8 @@ export const SEARCH_SATELLITE_FAR_SETTLE_MS = 1500;
 export const SEARCH_SATELLITE_NEAR_RESTORE_MS = 550;
 export const SEARCH_SATELLITE_MEDIUM_RESTORE_MS = 700;
 export const SEARCH_SATELLITE_FAR_RESTORE_MS = 900;
-export const VIEWPORT_POI_MIN_ZOOM = 5.2;
-export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 120;
+export const VIEWPORT_POI_MIN_ZOOM = 9.5;
+export const VIEWPORT_POI_FETCH_DEBOUNCE_MS = 160;
 export const POI_MENU_CLOSE_MS = 150;
 
 export const DROPDOWN_VIEWPORT_POI_ICON_URLS: Partial<Record<PoiCategory, string>> = {

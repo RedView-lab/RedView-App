@@ -50,6 +50,20 @@
   min-width: 0;
   flex: 0 1 auto;
 }
+.rvi-tl-table__auto-label--short,
+.rvi-tl-table__columns-label--short {
+  display: none;
+}
+@container (max-width: 440px) {
+  .rvi-tl-table__auto-label--full,
+  .rvi-tl-table__columns-label--full {
+    display: none;
+  }
+  .rvi-tl-table__auto-label--short,
+  .rvi-tl-table__columns-label--short {
+    display: inline;
+  }
+}
 .rvi-tl-table__auto-value {
   display: inline-flex;
   flex-shrink: 0;

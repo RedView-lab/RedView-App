@@ -21,10 +21,9 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
     id: 'standard',
     label: 'Standard (clair)',
-    styleUrl: 'mapbox://styles/mapbox/standard',
-    visualFamily: 'mapbox-standard-v3',
+    styleUrl: 'mapbox://styles/mapbox/light-v11',
+    visualFamily: 'mapbox-classic-v12',
     terrainContract: 'unified-dem-v1',
-    lightPreset: 'day',
   },
   {
     id: 'dark',
@@ -43,10 +42,9 @@ export const MAPBOX_BASEMAPS: readonly BasemapOption[] = [
   {
     id: 'satellite',
     label: 'Satellite',
-    styleUrl: 'mapbox://styles/mapbox/standard-satellite',
-    visualFamily: 'mapbox-standard-v3',
+    styleUrl: 'mapbox://styles/mapbox/satellite-streets-v12',
+    visualFamily: 'mapbox-classic-v12',
     terrainContract: 'unified-dem-v1',
-    lightPreset: 'day',
   },
 ] as const;
 

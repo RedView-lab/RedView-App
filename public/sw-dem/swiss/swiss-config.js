@@ -61,7 +61,7 @@ const SWISS_KM_TILE_M = 1000;       // 1 km tile size in metres
 // Inside that range, pickSwissCOGLevel() reads the matching overview
 // instead of native 0.5 m, so a z=12 tile resolves from L4 (8 m) and only
 // needs ~1 internal tile per cell.
-const SWISS_ENGAGE_MPP = 30;
+const SWISS_ENGAGE_MPP = 40;
 function shouldUseSwiss(mercZ, lat) {
   if (mercZ < SWISS_DEM_MINZOOM) return false;
   const cosLat = Math.cos((lat * Math.PI) / 180);

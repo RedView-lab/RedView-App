@@ -3,6 +3,10 @@ import type {
   OverlayReloadRegistrar,
   OverlayStatusReporter,
 } from '@/features/map3d';
+import {
+  adaptiveOvershoot,
+  sunAltitudeOvershootBucket,
+} from '@/features/sunlight/lib/shadowSweep';
 
 export const SOURCE_ID = 'shadow-image';
 export const LAYER_ID = 'shadow-image';
@@ -24,6 +28,21 @@ export interface UseShadowImageOptions {
   sunAltitudeDeg: number;
   opacity: number;
   timeScrubbing: boolean;
+  /**
+   * Analysis zone restricting the overlay: DEM grid sampled over the polygon
+   * bbox (+ adaptive overshoot — shadows come from relief OUTSIDE the zone)
+   * and the output PNG masked to the polygon.
+   */
+  analysisZone?: ShadowAnalysisZone | null;
+}
+
+export interface ShadowAnalysisZone {
+  /** Stable key — changes force a full re-sample. */
+  key: string;
+  /** [west, south, east, north] polygon bbox. */
+  bounds: BoundsTuple;
+  /** Flat [lng, lat, lng, lat, …] closed ring payload for the worker. */
+  ring: number[];
 }
 
 export interface UseShadowImageRuntimeOptions {
@@ -147,6 +166,48 @@ export function chooseGridSize(map: MapboxMap): { gridW: number; gridH: number }
   return { gridW: w, gridH: h };
 }
 
+// ── Analysis-zone variants ─────────────────────────────────────────────────
+// Same grid budget as the viewport version, but sized from the zone bbox: a
+// small zone gets a much finer metres-per-cell DEM sample (better shadow
+// fidelity) and needs far fewer DEM tiles.
+
+function mercYDeg(latDeg: number): number {
+  const clamped = Math.max(-85.051129, Math.min(85.051129, latDeg));
+  const rad = (clamped * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+}
+
+export function chooseZoneGridSize(zoneBounds: BoundsTuple): { gridW: number; gridH: number } {
+  const [w, s, e, n] = zoneBounds;
+  const dxRad = ((e - w) * Math.PI) / 180;
+  const dyRad = Math.abs(mercYDeg(s) - mercYDeg(n));
+  if (dxRad <= 0 || dyRad <= 0) return { gridW: GRID_MIN_W, gridH: GRID_MIN_H };
+  let gw = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, GRID_MAX_W));
+  let gh = Math.round((gw * dyRad) / dxRad);
+  if (gh > GRID_MAX_H) {
+    gh = GRID_MAX_H;
+    gw = Math.round((gh * dxRad) / dyRad);
+  }
+  if (gh < GRID_MIN_H) {
+    gh = GRID_MIN_H;
+    gw = Math.round((gh * dxRad) / dyRad);
+  }
+  return {
+    gridW: Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, gw)),
+    gridH: Math.max(GRID_MIN_H, Math.min(GRID_MAX_H, gh)),
+  };
+}
+
+export function chooseZoneDemZoom(zoneBounds: BoundsTuple, gridW: number): number {
+  const [w, s, e, n] = zoneBounds;
+  const lat = (n + s) / 2;
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
+  const targetMpp = lonExtentM / gridW;
+  const ideal = Math.log2((40075016.686 * Math.abs(cosLat)) / (256 * targetMpp));
+  return Math.max(DEM_MIN_SAMPLE_ZOOM, Math.min(DEM_MAX_SAMPLE_ZOOM, Math.round(ideal)));
+}
+
 export function withOvershoot(
   b: BoundsTuple,
   factor: number,
@@ -159,6 +220,43 @@ export function withOvershoot(
   const ss = Math.max(-85.05, s - dy);
   const ns = Math.min(85.05, n + dy);
   return [Math.max(-180, ws), ss, Math.min(180, es), ns];
+}
+
+/**
+ * Picks a viewport-overshoot factor that grows as the sun sinks, so off-screen
+ * peaks still cast their shadow into the visible area.
+ *
+ * The factor is bucketed by sun altitude (see `sunAltitudeOvershootBucket`):
+ * the DEM is only re-sampled when the sun crosses a bucket boundary (≤5°, ≤10°,
+ * ≤15°, ≤25°), not on every pixel of a time-scrub drag. Between buckets the
+ * previous factor is reused — `lastBucket` carries the bucket the current
+ * sample was taken at, and is updated in place when a re-sample is required.
+ *
+ * @param rawBounds      Viewport bounds (west, south, east, north) BEFORE overshoot.
+ * @param sunAltitudeDeg Current sun altitude in degrees.
+ * @param lastBucket     Bucket of the currently-sampled grid (or `null` if none).
+ * @returns `{ overshoot, bucket, resample }` — `resample` is true iff the
+ *          bucket changed and the DEM must be re-sampled at the new overshoot.
+ */
+export function chooseAdaptiveOvershoot(
+  rawBounds: BoundsTuple,
+  sunAltitudeDeg: number,
+  lastBucket: number | null,
+): { overshoot: number; bucket: number; resample: boolean } {
+  const bucket = sunAltitudeOvershootBucket(sunAltitudeDeg);
+  if (lastBucket !== null && lastBucket === bucket) {
+    // Same bucket → keep the previous factor; caller caches it.
+    return { overshoot: NaN, bucket, resample: false };
+  }
+  const [w, , e, n] = rawBounds;
+  const midLat = n; // good enough for the cos(lat) term
+  const cosLat = Math.cos((midLat * Math.PI) / 180);
+  const viewportWidthM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
+  // `adaptiveOvershoot` estimates the shadow length of a typical peak; the
+  // fallback peak height inside it keeps this robust even before we have
+  // sampled the actual viewport relief.
+  const overshoot = adaptiveOvershoot(sunAltitudeDeg, NaN, viewportWidthM);
+  return { overshoot, bucket, resample: true };
 }
 
 export async function preloadBlobUrl(url: string): Promise<void> {

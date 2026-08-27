@@ -30,8 +30,6 @@ function sameHoverState(left: ChartHoverState | null, right: ChartHoverState | n
 export function useChartHover<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   const [hover, setHover] = useState<ChartHoverState | null>(null);
-  const hoverRafIdRef = useRef<number | null>(null);
-  const pendingPointerRef = useRef<{ clientX: number; clientY: number } | null>(null);
   const lastHoverRef = useRef<ChartHoverState | null>(null);
 
   useEffect(() => {
@@ -44,57 +42,38 @@ export function useChartHover<T extends HTMLElement>() {
       setHover(nextHover);
     };
 
-    const flushPendingPointer = () => {
-      hoverRafIdRef.current = null;
-      const pointer = pendingPointerRef.current;
-      pendingPointerRef.current = null;
-      if (!pointer) return;
-
+    const update = (event: PointerEvent) => {
       const rect = el.getBoundingClientRect();
       if (rect.width <= 0 || rect.height <= 0) {
         commitHover(null);
         return;
       }
 
-      const x = pointer.clientX - rect.left;
-      const y = pointer.clientY - rect.top;
-      if (x < 0 || x > rect.width || y < 0 || y > rect.height) {
+      const rawX = event.clientX - rect.left;
+      const rawY = event.clientY - rect.top;
+      if (rawX < 0 || rawX > rect.width || rawY < 0 || rawY > rect.height) {
         commitHover(null);
         return;
       }
 
-      commitHover({ x, y, ratioX: x / rect.width });
-    };
+      const x = Math.max(0, Math.min(rect.width, rawX));
+      const y = Math.max(0, Math.min(rect.height, rawY));
+      const ratioX = rect.width > 0 ? x / rect.width : 0;
 
-    const update = (event: PointerEvent) => {
-      pendingPointerRef.current = {
-        clientX: event.clientX,
-        clientY: event.clientY,
-      };
-      if (hoverRafIdRef.current !== null) return;
-      hoverRafIdRef.current = window.requestAnimationFrame(flushPendingPointer);
+      commitHover({ x, y, ratioX });
     };
 
     const clear = () => {
-      pendingPointerRef.current = null;
-      if (hoverRafIdRef.current !== null) {
-        window.cancelAnimationFrame(hoverRafIdRef.current);
-        hoverRafIdRef.current = null;
-      }
       commitHover(null);
     };
 
-    el.addEventListener('pointermove', update);
-    el.addEventListener('pointerenter', update);
-    el.addEventListener('pointerdown', update);
+    el.addEventListener('pointermove', update, { passive: true });
+    el.addEventListener('pointerenter', update, { passive: true });
+    el.addEventListener('pointerdown', update, { passive: true });
     el.addEventListener('pointerleave', clear);
     el.addEventListener('pointercancel', clear);
 
     return () => {
-      if (hoverRafIdRef.current !== null) {
-        window.cancelAnimationFrame(hoverRafIdRef.current);
-        hoverRafIdRef.current = null;
-      }
       el.removeEventListener('pointermove', update);
       el.removeEventListener('pointerenter', update);
       el.removeEventListener('pointerdown', update);

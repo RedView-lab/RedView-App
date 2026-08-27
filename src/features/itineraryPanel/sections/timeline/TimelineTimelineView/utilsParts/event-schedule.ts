@@ -79,8 +79,8 @@ export function buildScheduledEvents(
       ...pause,
       heightPx: resolveAttachedPauseHeightPx(pause.durationMin, pixelsPerMinute),
     }));
-    const toNextSeconds = resolveSecondsToNextPoi(filteredPrimaryItems, index);
-    const spanToNextSeconds = resolveSecondsToNextCheckpoint(filteredPrimaryItems, index);
+    const toNextSeconds = resolveSecondsToNextCheckpoint(filteredPrimaryItems, index);
+    const spanToNextSeconds = toNextSeconds;
     const displayDurationMin = resolveEventDisplayDurationMin(
       entry.item,
       rawAttachedPauses,
@@ -122,20 +122,6 @@ export function buildScheduledEvents(
       spanSegments,
     };
   });
-}
-
-function resolveSecondsToNextPoi(entries: TimedTimelineItem[], currentIndex: number): number | null {
-  const currentEntry = entries[currentIndex];
-  if (!currentEntry) return null;
-
-  for (let index = currentIndex + 1; index < entries.length; index += 1) {
-    const candidate = entries[index];
-    if (!candidate || candidate.item.kind !== 'poi') continue;
-    if (candidate.elapsedSeconds <= currentEntry.elapsedSeconds) continue;
-    return Math.max(0, candidate.elapsedSeconds - currentEntry.elapsedSeconds);
-  }
-
-  return null;
 }
 
 function resolveSecondsToNextCheckpoint(

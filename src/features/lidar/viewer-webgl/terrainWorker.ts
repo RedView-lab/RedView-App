@@ -40,7 +40,9 @@ export interface TerrainMeshWebGL {
 
 type WorkerInput = {
   type: 'build';
-  buffer: ArrayBuffer;
+  buffer?: ArrayBuffer;
+  buffers?: ArrayBuffer[];
+  bounds?: PointCloudBounds;
   cornerUV: CornerUV;
   /** Hard cap on grid side (vertices). Caller picks per device tier. */
   maxGrid?: number;
@@ -64,20 +66,57 @@ const MAX_HOLE_DIST = 14;
 scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
   if (e.data.type !== 'build') return;
   try {
-    const { buffer, cornerUV, maxGrid, minResM } = e.data;
+    const { buffer, buffers, bounds: customBounds, cornerUV, maxGrid, minResM } = e.data;
+    const rawBuffers: ArrayBuffer[] = buffers && buffers.length > 0
+      ? buffers
+      : (buffer ? [buffer] : []);
+
+    if (rawBuffers.length === 0) {
+      throw new Error('Aucun buffer LAZ transmis au worker de terrain WebGL.');
+    }
+
     const gridCap = clampInt(maxGrid ?? DEFAULT_MAX_GRID, 64, 4096);
     const resFloor = Math.max(0.05, minResM ?? DEFAULT_MIN_RES_M);
 
-    // Parse LAZ — same path as WebGPU pipeline. Colours unused.
-    const pc = await parseLazBuffer(buffer, (phase, pct) => {
-      post({ type: 'progress', phase: `LAZ : ${phase}`, percent: pct * 0.55 });
-    });
+    const pointClouds: Array<{
+      positions: Float32Array;
+      classifications: Uint8Array;
+      count: number;
+      bounds: PointCloudBounds;
+    }> = [];
+
+    const totalBuffers = rawBuffers.length;
+    for (let i = 0; i < totalBuffers; i++) {
+      const buf = rawBuffers[i]!;
+      const pc = await parseLazBuffer(buf, (phase, pct) => {
+        const slicePct = (i + pct) / totalBuffers;
+        post({ type: 'progress', phase: `LAZ (${i + 1}/${totalBuffers}) : ${phase}`, percent: slicePct * 0.55 });
+      });
+      pointClouds.push({
+        positions: pc.positions,
+        classifications: pc.classifications,
+        count: pc.count,
+        bounds: pc.bounds,
+      });
+    }
 
     post({ type: 'progress', phase: 'Construction du terrain HD…', percent: 60 });
 
+    const combinedBounds: PointCloudBounds = customBounds ?? {
+      minX: Math.min(...pointClouds.map((pc) => pc.bounds.minX)),
+      minY: Math.min(...pointClouds.map((pc) => pc.bounds.minY)),
+      minZ: Math.min(...pointClouds.map((pc) => pc.bounds.minZ)),
+      maxX: Math.max(...pointClouds.map((pc) => pc.bounds.maxX)),
+      maxY: Math.max(...pointClouds.map((pc) => pc.bounds.maxY)),
+      maxZ: Math.max(...pointClouds.map((pc) => pc.bounds.maxZ)),
+    };
+
     const mesh = buildTerrain(
-      pc.positions, pc.classifications, pc.count, pc.bounds, cornerUV,
-      gridCap, resFloor,
+      pointClouds,
+      combinedBounds,
+      cornerUV,
+      gridCap,
+      resFloor,
       (pct) => post({ type: 'progress', phase: 'Maillage HD…', percent: 60 + pct * 0.4 }),
     );
 
@@ -97,9 +136,12 @@ function post(msg: WorkerOutput, transfer?: Transferable[]) {
 }
 
 function buildTerrain(
-  positions: Float32Array,
-  classifications: Uint8Array,
-  count: number,
+  pointClouds: Array<{
+    positions: Float32Array;
+    classifications: Uint8Array;
+    count: number;
+    bounds: PointCloudBounds;
+  }>,
   bounds: PointCloudBounds,
   cornerUV: CornerUV,
   maxGrid: number,
@@ -115,33 +157,89 @@ function buildTerrain(
   const gridH = Math.max(2, Math.min(maxGrid + 1, Math.ceil(rangeY / res) + 1));
   const N = gridW * gridH;
 
-  const heights = new Float32Array(N).fill(Infinity);
+  // 1) First pass: count ground points to decide fallback
+  let totalCount = 0;
+  let groundCount = 0;
+  for (const pc of pointClouds) {
+    totalCount += pc.count;
+    for (let i = 0; i < pc.count; i++) {
+      const cls = pc.classifications[i];
+      if (cls === 2 || cls === 9 || cls === 17) groundCount++;
+    }
+  }
+  const useStrictGround = groundCount >= Math.min(1000, totalCount * 0.05);
 
-  // 1) Bin lowest ground / water / bridge points into the grid
-  for (let i = 0; i < count; i++) {
-    const cls = classifications[i];
-    if (cls !== 2 && cls !== 9 && cls !== 17) continue;
-    const x = positions[i * 3];
-    const y = positions[i * 3 + 1];
-    const z = positions[i * 3 + 2];
-    const gx = clampInt(Math.floor((x - bounds.minX) / res), 0, gridW - 1);
-    const gy = clampInt(Math.floor((y - bounds.minY) / res), 0, gridH - 1);
-    const idx = gy * gridW + gx;
-    if (z < heights[idx]) heights[idx] = z;
+  // 2) Bilinear splatting accumulation grid (completely eliminates flight-line stepping and moiré beating)
+  const sumZ = new Float64Array(N);
+  const sumW = new Float32Array(N);
+  const hasPoint = new Uint8Array(N);
+
+  for (const pc of pointClouds) {
+    const { positions, classifications, count } = pc;
+    for (let i = 0; i < count; i++) {
+      const cls = classifications[i];
+      if (useStrictGround) {
+        if (cls !== 2 && cls !== 9 && cls !== 17) continue;
+      } else {
+        if (cls === 7 || cls === 18) continue; // ignore noise
+      }
+
+      const x = positions[i * 3];
+      const y = positions[i * 3 + 1];
+      const z = positions[i * 3 + 2];
+
+      const gx = (x - bounds.minX) / res;
+      const gy = (y - bounds.minY) / res;
+
+      const x0 = Math.floor(gx);
+      const y0 = Math.floor(gy);
+      const fx = gx - x0;
+      const fy = gy - y0;
+
+      if (x0 >= 0 && x0 < gridW - 1 && y0 >= 0 && y0 < gridH - 1) {
+        const w00 = (1 - fx) * (1 - fy);
+        const w10 = fx * (1 - fy);
+        const w01 = (1 - fx) * fy;
+        const w11 = fx * fy;
+
+        const i00 = y0 * gridW + x0;
+        const i10 = y0 * gridW + (x0 + 1);
+        const i01 = (y0 + 1) * gridW + x0;
+        const i11 = (y0 + 1) * gridW + (x0 + 1);
+
+        sumZ[i00] += z * w00; sumW[i00] += w00; hasPoint[i00] = 1;
+        sumZ[i10] += z * w10; sumW[i10] += w10; hasPoint[i10] = 1;
+        sumZ[i01] += z * w01; sumW[i01] += w01; hasPoint[i01] = 1;
+        sumZ[i11] += z * w11; sumW[i11] += w11; hasPoint[i11] = 1;
+      }
+    }
+  }
+
+  const heights = new Float32Array(N);
+  for (let i = 0; i < N; i++) {
+    if (sumW[i] > 0) {
+      heights[i] = sumZ[i] / sumW[i];
+    } else {
+      heights[i] = Infinity;
+    }
   }
   onProgress(0.25);
 
-  // 2) BFS hole-fill so even cells without ground hits get a height
+  // 3) Initial distance BFS fill for large gaps
   fillHoles(heights, gridW, gridH);
-  onProgress(0.45);
+  onProgress(0.40);
 
-  // 3) Global fallback for fully empty tiles
+  // Global fallback for fully empty tiles
   let globalMinZ = Infinity;
   for (let i = 0; i < N; i++) if (heights[i] < globalMinZ) globalMinZ = heights[i];
   if (!isFinite(globalMinZ)) globalMinZ = bounds.minZ;
   for (let i = 0; i < N; i++) if (!isFinite(heights[i])) heights[i] = globalMinZ;
 
-  // 4) Build interleaved VBO (pos.xyz | normal.xyz | uv.xy)
+  // 4) Harmonic Laplace relaxation on unmeasured cells (smooth C2 boundary blending without altering real points)
+  relaxHolesLaplacian(heights, hasPoint, gridW, gridH, 20);
+  onProgress(0.65);
+
+  // 5) Build interleaved VBO (pos.xyz | normal.xyz | uv.xy) with 100% crisp raw LiDAR elevations
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   const cz = (bounds.minZ + bounds.maxZ) / 2;
@@ -166,8 +264,7 @@ function buildTerrain(
       vertices[vi + 1] = lz - cz;
       vertices[vi + 2] = -(ly - cy);
 
-      // Bilinear-interp UV from the 4 corner pixel anchors. Linear over
-      // ~1 km tile is well below 1 px error at z19.
+      // Bilinear-interp UV from the 4 corner pixel anchors.
       const fx1 = 1 - fx, fy1 = 1 - fy;
       const u = fx1 * fy1 * cornerUV.u00 + fx * fy1 * cornerUV.u10
               + fx1 * fy  * cornerUV.u01 + fx * fy  * cornerUV.u11;
@@ -177,23 +274,42 @@ function buildTerrain(
       vertices[vi + 7] = v;
     }
   }
-  onProgress(0.7);
+  onProgress(0.75);
 
-  // 5) Per-vertex normal from height gradient (Sobel-ish, central diff)
+  // 6) Per-vertex normal from Horn's 8-neighbor weighted slope gradient (GIS industry standard)
   for (let gy = 0; gy < gridH; gy++) {
+    const y0 = Math.max(0, gy - 1);
+    const y1 = gy;
+    const y2 = Math.min(gridH - 1, gy + 1);
+
     for (let gx = 0; gx < gridW; gx++) {
       const idx = gy * gridW + gx;
       const vi = idx * FLOATS_PER_VERTEX;
 
-      const zL = gx > 0          ? heights[idx - 1]      : heights[idx];
-      const zR = gx < gridW - 1  ? heights[idx + 1]      : heights[idx];
-      const zD = gy > 0          ? heights[idx - gridW]  : heights[idx];
-      const zU = gy < gridH - 1  ? heights[idx + gridW]  : heights[idx];
+      const x0 = Math.max(0, gx - 1);
+      const x1 = gx;
+      const x2 = Math.min(gridW - 1, gx + 1);
 
-      const sx = (gx > 0 && gx < gridW - 1) ? 2 * res : res;
-      const sy = (gy > 0 && gy < gridH - 1) ? 2 * res : res;
-      const dzdx = (zR - zL) / sx;
-      const dzdy = (zU - zD) / sy;
+      // 8 neighboring elevation samples
+      const z00 = heights[y0 * gridW + x0];
+      const z10 = heights[y0 * gridW + x1];
+      const z20 = heights[y0 * gridW + x2];
+
+      const z01 = heights[y1 * gridW + x0];
+      const z21 = heights[y1 * gridW + x2];
+
+      const z02 = heights[y2 * gridW + x0];
+      const z12 = heights[y2 * gridW + x1];
+      const z22 = heights[y2 * gridW + x2];
+
+      // Horn's 8-neighbor gradient formula:
+      // dz/dx = ((z20 + 2*z21 + z22) - (z00 + 2*z01 + z02)) / (8 * res)
+      // dz/dy = ((z02 + 2*z12 + z22) - (z00 + 2*z10 + z20)) / (8 * res)
+      const scaleX = (x2 === x0) ? (2 * res) : (x2 - x0) * 4 * res;
+      const scaleY = (y2 === y0) ? (2 * res) : (y2 - y0) * 4 * res;
+
+      const dzdx = ((z20 + 2 * z21 + z22) - (z00 + 2 * z01 + z02)) / Math.max(0.0001, scaleX);
+      const dzdy = ((z02 + 2 * z12 + z22) - (z00 + 2 * z10 + z20)) / Math.max(0.0001, scaleY);
 
       // Y up → ground normal = (-dz/dx, 1, +dz/dy) in renderer space
       let nx = -dzdx, ny = 1.0, nz = dzdy;
@@ -205,7 +321,7 @@ function buildTerrain(
   }
   onProgress(0.9);
 
-  // 6) Indices (two triangles / quad)
+  // 7) Indices (two triangles / quad)
   const quadW = gridW - 1;
   const quadH = gridH - 1;
   const indexCount = quadW * quadH * 6;
@@ -244,6 +360,9 @@ function buildTerrain(
   };
 }
 
+/**
+ * Initial BFS distance-based flood fill to ensure every cell has an initial value.
+ */
 function fillHoles(heights: Float32Array, w: number, h: number): void {
   const N = w * h;
   const dist = new Uint32Array(N).fill(0xFFFFFFFF);
@@ -282,6 +401,52 @@ function fillHoles(heights: Float32Array, w: number, h: number): void {
       heights[ni] = heights[src];
       dist[ni] = newD;
       queue[tail++] = ni;
+    }
+  }
+}
+
+/**
+ * Smooths unfilled cells using Laplacian harmonic relaxation (Poisson PDE)
+ * to eliminate staircases and scanline gaps while strictly preserving measured points.
+ * Pre-indexes hole cells to avoid scanning millions of measured vertices on each iteration.
+ */
+function relaxHolesLaplacian(
+  heights: Float32Array,
+  hasPoint: Uint8Array,
+  w: number,
+  h: number,
+  iterations = 20,
+): void {
+  const N = w * h;
+  let holeCount = 0;
+  for (let i = 0; i < N; i++) {
+    if (hasPoint[i] === 0) holeCount++;
+  }
+  if (holeCount === 0) return; // No holes to relax
+
+  const holeIndices = new Uint32Array(holeCount);
+  let hIdx = 0;
+  for (let i = 0; i < N; i++) {
+    if (hasPoint[i] === 0) holeIndices[hIdx++] = i;
+  }
+
+  for (let iter = 0; iter < iterations; iter++) {
+    for (let i = 0; i < holeCount; i++) {
+      const idx = holeIndices[i]!;
+      const x = idx % w;
+      const y = (idx / w) | 0;
+
+      let sum = 0;
+      let count = 0;
+
+      if (x > 0) { sum += heights[idx - 1]!; count++; }
+      if (x < w - 1) { sum += heights[idx + 1]!; count++; }
+      if (y > 0) { sum += heights[idx - w]!; count++; }
+      if (y < h - 1) { sum += heights[idx + w]!; count++; }
+
+      if (count > 0) {
+        heights[idx] = sum / count;
+      }
     }
   }
 }

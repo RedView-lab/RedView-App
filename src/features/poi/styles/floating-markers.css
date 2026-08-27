@@ -8,28 +8,17 @@
    * when the element is taken out of the flow — i.e. absolutely
    * positioned at the canvas origin.
    *
-   * Setting `position: relative` (the old value) overrode that rule with
-   * the same specificity but a later cascade order, so each marker stayed
-   * in the document flow. The Mapbox transform was then applied on top of
-   * each marker's *flow position* (which grows ~ `markerIndex × 98px`
-   * downward), not the canvas origin. During pan/pitch the projected
-   * (x,y) is recomputed correctly, but the per-marker flow offset was
-   * constant and different for every pin → markers drifted apart and
-   * shifted as the camera moved (the reported "perspective / parallax"
-   * bug).
-   *
-   * `absolute` (inherited from .mapboxgl-marker) is itself a positioned
-   * context, so the absolutely-positioned favorite badge below still
-   * anchors to it. */
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
+   * The container height is set to the exact distance from top to pin tip
+   * (75px * scale), so Mapbox's anchor: 'bottom' translates the pin tip
+   * precisely onto the geographic coordinate with 0px error at any zoom scale. */
+  display: block;
   width: calc(88px * var(--rv-poi-marker-scale));
-  height: calc(98px * var(--rv-poi-marker-scale));
+  height: calc(75px * var(--rv-poi-marker-scale));
   padding: 0;
   border: 0;
   background: transparent;
   cursor: pointer;
+  pointer-events: auto;
 }
 
 .rv-poi-marker:focus {
@@ -37,12 +26,15 @@
 }
 
 .rv-poi-marker__img {
+  position: absolute;
+  top: 0;
+  left: 0;
   display: block;
-  width: 100%;
-  height: 100%;
+  width: calc(88px * var(--rv-poi-marker-scale));
+  height: calc(98px * var(--rv-poi-marker-scale));
   pointer-events: none;
   user-select: none;
-  transform-origin: 50% 100%;
+  transform-origin: 50% calc(75px * var(--rv-poi-marker-scale));
   transition:
     transform 140ms ease,
     filter 140ms ease,
@@ -79,7 +71,6 @@
 
 .rv-itinerary-marker {
   --rv-itinerary-marker-scale: 1;
-  position: relative;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -137,14 +128,45 @@
   transform: none;
 }
 
+/* 3D Checkpoint markers (Départ & Arrivée / Fin) */
+.rv-checkpoint-marker {
+  --rv-checkpoint-scale: 1;
+  display: block;
+  width: calc(26px * var(--rv-checkpoint-scale, 1));
+  height: calc(24.8px * var(--rv-checkpoint-scale, 1));
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.rv-checkpoint-marker:hover .rv-checkpoint-marker__img {
+  transform: scale(1.22);
+}
+
+.rv-checkpoint-marker__img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  width: calc(26px * var(--rv-checkpoint-scale, 1));
+  height: calc(28.5px * var(--rv-checkpoint-scale, 1));
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.45));
+  pointer-events: none;
+  transform-origin: 50% calc(24.8px * var(--rv-checkpoint-scale, 1));
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.16s ease;
+}
+
 .mapboxgl-popup.rv-poi-popup {
-  z-index: 12;
+  z-index: 1200;
 }
 
 .mapboxgl-popup.rv-poi-popup .mapboxgl-popup-content {
   width: 182px;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: #0f0f0f;
@@ -178,6 +200,7 @@
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   line-height: 1.2;
+  overflow: visible;
 }
 
 .rv-poi-popup__header {
@@ -279,11 +302,19 @@
   color: #fff;
 }
 
+.rv-poi-popup__select-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .rv-poi-popup__select {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   flex: 1 1 0;
+  width: 100%;
   min-width: 0;
   height: 30px;
   padding: 4px 4px 4px 5px;
@@ -323,6 +354,80 @@
   height: 18px;
   flex: 0 0 auto;
   opacity: 0.9;
+}
+
+.rv-poi-popup__dropdown.rvc-select__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1000;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  width: 100%;
+  background: rgba(12, 12, 12, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  overflow: clip;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.rv-poi-popup__dropdown-list {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  margin: 0;
+}
+
+.rv-poi-popup__dropdown .rvc-select__option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  min-width: 80px;
+  padding: 7px 8px 7px 10px;
+  background: transparent;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-sizing: border-box;
+  user-select: none;
+  transition: background 0.16s ease;
+}
+
+.rv-poi-popup__dropdown .rvc-select__option + .rvc-select__option {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.rv-poi-popup__dropdown .rvc-select__option.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rv-poi-popup__dropdown .rvc-select__option:hover:not(.is-selected) {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rv-poi-popup__dropdown .rvc-select__option-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rv-poi-popup__dropdown .rvc-select__option-check {
+  display: block;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: #ffffff;
 }
 
 .rv-poi-popup__type-icon-wrap {

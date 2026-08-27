@@ -4,15 +4,11 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type {
   OverlayReloadRegistrar,
   OverlayStatusReporter,
+  MapContextMenuOverlayContext,
 } from '@/features/map3d';
 
-import { useLidarManager } from '@/features/lidar/components/LidarContext';
-import type { CachedTileInfo, DownloadProgress, TileCoord } from '@/features/lidar/types';
-import { loadLidarTileLabels, setLidarTileLabel } from '@/features/lidar';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
-import { buildGpxQualityStats } from '@/features/itineraryPanel/lib/routes';
-import type { GpxQualityMode, RouteRenderMode as ItinRouteRenderMode } from '@/features/itineraryPanel/types';
-
+import { useLidarRouteSync, type LidarRouteOverlayItem } from '@/features/lidar';
 import { ControlPanel } from './ControlPanel';
 import { buildBasemapList, normalizeBasemapId } from '../lib/basemaps';
 import { DEFAULT_CONTROL_PANEL_STATE } from '../lib/defaultState';
@@ -24,10 +20,12 @@ import {
 import type { BasemapId, ControlPanelState } from '../types';
 import { useControlPanelOverlayState } from '../hooks/useControlPanelOverlayState';
 import { useControlPanelTerrainState } from '../hooks/useControlPanelTerrainState';
+import { useControlPanelZoneGating } from '../hooks/container/useControlPanelZoneGating';
+import { useControlPanelLidarTiles } from '../hooks/container/useControlPanelLidarTiles';
+import { useControlPanelRoutes } from '../hooks/container/useControlPanelRoutes';
 import { setActiveDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import { resolveDem3dSelection } from '@/features/map3d/lib/dem3dSelection';
 import { setActiveDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
-import type { MapContextMenuOverlayContext } from '@/features/map3d';
 
 export interface ControlPanelContainerProps {
   map: MapboxMap | null;
@@ -51,16 +49,10 @@ export interface ControlPanelContainerProps {
   onContextMenuOverlayContextChange?: (context: MapContextMenuOverlayContext) => void;
 }
 
-function formatLidarTileLabel(info: CachedTileInfo): string {
-  const sizeMb = Math.round(info.sizeBytes / (1024 * 1024));
-  const year = new Date(info.cachedAt).getFullYear();
-  return `Tuile ${info.coord.xKm}×${info.coord.yKm} (LIDAR) (${sizeMb}mo) (${year} IGN)`;
-}
-
-function tileKey(coord: TileCoord): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}`;
-}
-
+/**
+ * Conteneur principal du Control Panel.
+ * Orchestre les états de basemap, LiDAR, itinéraires, relief (terrain) et calques météo/ensoleillement.
+ */
 export const ControlPanelContainer = memo(function ControlPanelContainer({
   map,
   isMapLoaded,
@@ -82,28 +74,119 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   isResizing,
   onContextMenuOverlayContextChange,
 }: ControlPanelContainerProps) {
-  const lidarManager = useLidarManager();
   const projectStore = useProjectStoreOptional();
-  const initialControlPanel =
-    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
+  const setProject = projectStore?.setProject;
+  const initialControlPanelRef = useRef(
+    projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState(),
+  );
+  const initialControlPanel = initialControlPanelRef.current;
 
   const updateProjectControlPanel = useCallback(
     (mut: (draft: ControlPanelPersistedState) => void) => {
-      if (!projectStore) return;
-      projectStore.setProject((prev) => {
-        const controlPanel = structuredClone(
-          prev.controlPanel ?? createDefaultControlPanelPersistedState(),
-        );
-        mut(controlPanel);
-        return { ...prev, controlPanel };
+      if (!setProject) return;
+      queueMicrotask(() => {
+        setProject((prev) => {
+          const controlPanel = structuredClone(
+            prev.controlPanel ?? createDefaultControlPanelPersistedState(),
+          );
+          mut(controlPanel);
+          return { ...prev, controlPanel };
+        });
       });
     },
-    [projectStore],
+    [setProject],
   );
 
   const [activeBasemapId, setActiveBasemapId] = useState<BasemapId>(
     () => normalizeBasemapId(initialControlPanel.basemapId),
   );
+
+  const itineraries = projectStore?.project.itineraries;
+
+  useLidarRouteSync({
+    itineraries,
+    onLidarRouteEdit: useCallback(
+      (
+        routeId: string,
+        points: Array<{ lat: number; lon: number; elevationM?: number | null; distanceM?: number }>,
+        actionName?: string,
+      ) => {
+        projectStore?.updateItineraryRoutePoints(routeId, points, {
+          source: 'lidar_viewer',
+          actionName,
+        });
+      },
+      [projectStore],
+    ),
+    onLidarRouteCreate: useCallback(
+      (route: LidarRouteOverlayItem) => {
+        projectStore?.addItinerary({
+          id: route.id,
+          name: route.name,
+          color: route.color,
+          opacity: Math.round(route.opacity * 100),
+          visible: route.visible,
+          gpxRoute: {
+            name: route.name,
+            source: 'gpx',
+            points: route.points.map((pt, idx: number) => ({
+              lat: pt.lat,
+              lon: pt.lon,
+              elevationM: pt.elevationM ?? null,
+              distanceM: pt.distanceM ?? idx * 10,
+            })),
+          },
+        });
+      },
+      [projectStore],
+    ),
+    onLidarRouteRename: useCallback(
+      (routeId: string, name: string) => {
+        projectStore?.setItineraryName(routeId, name);
+      },
+      [projectStore],
+    ),
+    onLidarRouteDelete: useCallback(
+      (routeId: string) => {
+        projectStore?.removeItinerary(routeId);
+      },
+      [projectStore],
+    ),
+  });
+
+  const {
+    lidarTiles,
+    lidarDownloadProgress,
+    lidarDownloadError,
+    handlers: lidarHandlers,
+  } = useControlPanelLidarTiles({
+    initialControlPanel,
+    updateProjectControlPanel,
+    onToggleLidarDownloadMode,
+    itineraries,
+  });
+
+  const { routesSlice, handlers: routeHandlers } = useControlPanelRoutes({
+    updateProjectControlPanel,
+  });
+
+  // Temporarily stub zone gating callback ref to avoid cyclic dependency with terrain
+  const terrainHandlersRef = useRef<{
+    onSlopesEnabledChange: (enabled: boolean) => void;
+    onAltitudeEnabledChange: (enabled: boolean) => void;
+  }>({ onSlopesEnabledChange: () => {}, onAltitudeEnabledChange: () => {} });
+
+  const {
+    analysisZonePayload,
+    analysisZoneActive,
+    handleSlopesEnabledChange,
+    handleAltitudeEnabledChange,
+  } = useControlPanelZoneGating({
+    onSlopesEnabledChange: (enabled) => terrainHandlersRef.current.onSlopesEnabledChange(enabled),
+    onAltitudeEnabledChange: (enabled) => terrainHandlersRef.current.onAltitudeEnabledChange(enabled),
+    slopesEnabled: initialControlPanel.toggles.slopesEnabled,
+    altitudeEnabled: initialControlPanel.toggles.altitudeEnabled,
+  });
 
   const terrainState = useControlPanelTerrainState({
     map,
@@ -111,14 +194,17 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     activeBasemapId,
     initialControlPanel,
     updateProjectControlPanel,
+    analysisZone: analysisZonePayload,
     onSlopeOverlayStatusChange,
     onAltitudeOverlayStatusChange,
   });
+
   const overlayState = useControlPanelOverlayState({
     map,
     isMapLoaded,
     initialControlPanel,
     updateProjectControlPanel,
+    analysisZone: analysisZonePayload,
     onWeatherOverlayStatusChange,
     onWeatherOverlayReloadChange,
     onWindOverlayStatusChange,
@@ -129,120 +215,13 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     onSunlightMapOverlayReloadChange,
   });
 
-  const [cachedTiles, setCachedTiles] = useState<CachedTileInfo[]>([]);
-  const [hiddenTiles, setHiddenTiles] = useState<Record<string, boolean>>(
-    () => initialControlPanel.lidarTilesHidden ?? {},
-  );
-  const [customLabels, setCustomLabels] = useState<Record<string, string>>(
-    () => loadLidarTileLabels(),
-  );
-  const [lidarDownloadProgress, setLidarDownloadProgress] = useState<DownloadProgress | null>(null);
-  const [lidarDownloadError, setLidarDownloadError] = useState<string | null>(null);
+  terrainHandlersRef.current = {
+    onSlopesEnabledChange: terrainState.handlers.onSlopesEnabledChange,
+    onAltitudeEnabledChange: terrainState.handlers.onAltitudeEnabledChange,
+  };
 
-  const refreshTiles = useCallback(async () => {
-    try {
-      setCachedTiles(await lidarManager.getCachedTiles());
-    } catch (err) {
-      console.warn('[controlPanel] getCachedTiles failed', err);
-    }
-  }, [lidarManager]);
-
-  useEffect(() => {
-    void refreshTiles();
-    return lidarManager.on((evt) => {
-      if (evt.type === 'progress' && evt.progress) {
-        setLidarDownloadProgress(evt.progress);
-        setLidarDownloadError(null);
-      }
-      if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') {
-        setLidarDownloadProgress(null);
-        if (evt.type === 'tileLoaded') setLidarDownloadError(null);
-        void refreshTiles();
-      }
-      if (evt.type === 'error') {
-        setLidarDownloadProgress(null);
-        setLidarDownloadError(evt.error ?? evt.message ?? 'Erreur LiDAR');
-      }
-    });
-  }, [lidarManager, refreshTiles]);
-
-  useEffect(() => {
-    updateProjectControlPanel((draft) => {
-      draft.lidarTilesHidden = structuredClone(hiddenTiles);
-    });
-  }, [hiddenTiles, updateProjectControlPanel]);
-
-  const lidarTiles = useMemo(
-    () => cachedTiles.map((info) => {
-      const id = tileKey(info.coord);
-      return {
-        id,
-        label: customLabels[id] ?? formatLidarTileLabel(info),
-        sizeMb: Math.round(info.sizeBytes / (1024 * 1024)),
-        year: new Date(info.cachedAt).getFullYear(),
-        source: 'LIDAR' as const,
-        visible: !hiddenTiles[id],
-      };
-    }),
-    [cachedTiles, customLabels, hiddenTiles],
-  );
-
-  const projectItineraries = projectStore?.project.itineraries ?? [];
   const projectControlPanel =
     projectStore?.project.controlPanel ?? createDefaultControlPanelPersistedState();
-  // The routes toggle is the single source of truth for whether ANY route
-  // trace renders on the map. It is persisted (not derived from per-itinerary
-  // visibility) so deactivating the section reliably hides every trace,
-  // regardless of per-track eye toggles or project hydration.
-  const routesEnabled = projectControlPanel.toggles.routesEnabled ?? true;
-  const routeItems = useMemo(
-    () =>
-      projectItineraries.map((itinerary) => ({
-        id: itinerary.id,
-        label: itinerary.name,
-        color: itinerary.color,
-        mode: (itinerary.renderMode ?? 'default') as ItinRouteRenderMode,
-        opacity: itinerary.opacity ?? 100,
-        visible: itinerary.visible !== false,
-      })),
-    [projectItineraries],
-  );
-  const activeItineraryId = projectStore?.project.activeItineraryId;
-  const activeItinerary = useMemo(
-    () => projectItineraries.find((it) => it.id === activeItineraryId) ?? null,
-    [projectItineraries, activeItineraryId],
-  );
-  const activeQualityRoute = useMemo(
-    () => {
-      const route = activeItinerary?.gpxRoute;
-      return route && route.points.length >= 2 ? route : null;
-    },
-    [activeItinerary],
-  );
-  const activeGpxQualityVisible = activeItinerary != null;
-  const activeGpxQualityAvailable = activeQualityRoute != null;
-  const activeGpxQuality = useMemo(
-    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQuality ?? 'default' : null),
-    [activeGpxQualityVisible, activeItinerary],
-  );
-  const activeGpxQualityPointsPerKm = useMemo(
-    () => (activeGpxQualityVisible ? activeItinerary?.gpxRoute?.gpxQualityPointsPerKm ?? null : null),
-    [activeGpxQualityVisible, activeItinerary],
-  );
-  const activeGpxQualityStats = useMemo(() => {
-    const route = activeQualityRoute;
-    if (!route) return null;
-    const basePoints = route.originalPoints ?? route.points;
-    return buildGpxQualityStats(
-      route.points,
-      basePoints,
-      (route.gpxQuality ?? 'default') as GpxQualityMode,
-      route.gpxQualityPointsPerKm,
-    );
-  }, [activeQualityRoute]);
-
-  const routesTraceWidthPx = projectControlPanel.routes?.traceWidthPx ?? DEFAULT_CONTROL_PANEL_STATE.routes.traceWidthPx;
-  const className = lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined;
 
   const handleSectionOpenChange = useCallback(
     (section: ControlPanelSectionKey, open: boolean) => {
@@ -279,15 +258,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       },
       lidarTiles,
       contourLines: terrainState.slices.contourLines,
-      routes: {
-        enabled: routesEnabled,
-        items: routeItems,
-        traceWidthPx: routesTraceWidthPx,
-        gpxQuality: activeGpxQuality,
-        gpxQualityAvailable: activeGpxQualityAvailable,
-        gpxQualityPointsPerKm: activeGpxQualityPointsPerKm,
-        gpxQualityStats: activeGpxQualityStats,
-      },
+      routes: routesSlice,
       labels: overlayState.slices.labels,
       slopes: terrainState.slices.slopes,
       altitude: terrainState.slices.altitude,
@@ -305,13 +276,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       overlayState.slices.weather,
       overlayState.slices.wind,
       projectControlPanel.basemap3dQuality,
-      routeItems,
-      routesTraceWidthPx,
-      routesEnabled,
-      activeGpxQuality,
-      activeGpxQualityAvailable,
-      activeGpxQualityPointsPerKm,
-      activeGpxQualityStats,
+      routesSlice,
       terrainState.slices.contourLines,
       terrainState.slices.altitude,
       terrainState.slices.slopes,
@@ -361,22 +326,12 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       },
     };
 
-    // overlayState.slices.wind is rebuilt as a fresh object literal on every
-    // render, so this effect runs each render. Emitting unconditionally would
-    // push a new object into the parent's state on every pass and create an
-    // update loop (React error #185). Only notify the parent when the derived
-    // context content actually changes.
     const serialized = JSON.stringify(nextContext);
     if (serialized === lastEmittedOverlayContextRef.current) return;
     lastEmittedOverlayContextRef.current = serialized;
     onContextMenuOverlayContextChange?.(nextContext);
   }, [onContextMenuOverlayContextChange, overlayState.slices.sunlight, overlayState.slices.weather, overlayState.slices.wind]);
 
-  // Keep the map3d quality bus in sync with the persisted project
-  // state. Runs on mount, project switch, and any external mutation
-  // (e.g. project hydration) so the lifecycle controller always sees
-  // the correct DEM quality/profile even when the user never touched
-  // the selector this session.
   useEffect(() => {
     applyDem3dSelection(projectControlPanel.basemap3dQuality);
   }, [applyDem3dSelection, projectControlPanel.basemap3dQuality]);
@@ -387,10 +342,11 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       lidarDownloadProgress={lidarDownloadProgress}
       lidarDownloadError={lidarDownloadError}
       lidarDownloadModeActive={lidarDownloadModeActive}
-      className={className}
+      className={lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
-      onAltitudeEnabledChange={terrainState.handlers.onAltitudeEnabledChange}
+      analysisZoneActive={analysisZoneActive}
+      onAltitudeEnabledChange={handleAltitudeEnabledChange}
       onAltitudeColorizationChange={terrainState.handlers.onAltitudeColorizationChange}
       onAltitudeScaleSettingChange={terrainState.handlers.onAltitudeScaleSettingChange}
       onAltitudeOpacityChange={terrainState.handlers.onAltitudeOpacityChange}
@@ -407,28 +363,17 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onResizeStart={onResizeStart}
       isResizing={isResizing}
       onBasemapToggle={handleBasemapToggle}
-      onLidarTileToggle={(id) => setHiddenTiles((prev) => ({ ...prev, [id]: !prev[id] }))}
-      onLidarTileOpen={(id) => {
-        const info = cachedTiles.find((tile) => tileKey(tile.coord) === id);
-        if (info) lidarManager.openViewer(info.coord);
-      }}
-      onLidarTileDelete={(id) => {
-        const info = cachedTiles.find((tile) => tileKey(tile.coord) === id);
-        if (info) void lidarManager.removeTile(info.coord);
-      }}
-      onLidarTileRename={(id, name) => {
-        const next = setLidarTileLabel(id, name);
-        setCustomLabels(next);
-      }}
-      onLidarTileDownload={() => {
-        onToggleLidarDownloadMode?.();
-      }}
+      onLidarTileToggle={lidarHandlers.onLidarTileToggle}
+      onLidarTileOpen={lidarHandlers.onLidarTileOpen}
+      onLidarTileDelete={lidarHandlers.onLidarTileDelete}
+      onLidarTileRename={lidarHandlers.onLidarTileRename}
+      onLidarTileDownload={lidarHandlers.onLidarTileDownload}
       onLabelsEnabledChange={overlayState.handlers.onLabelsEnabledChange}
       onLabelToggle={overlayState.handlers.onLabelToggle}
       onContourLinesEnabledChange={terrainState.handlers.onContourLinesEnabledChange}
       onContourLinesIntervalChange={terrainState.handlers.onContourLinesIntervalChange}
       onContourLinesOpacityChange={terrainState.handlers.onContourLinesOpacityChange}
-      onSlopesEnabledChange={terrainState.handlers.onSlopesEnabledChange}
+      onSlopesEnabledChange={handleSlopesEnabledChange}
       onSlopeResolutionChange={terrainState.handlers.onSlopeResolutionChange}
       onSlopeColorizationChange={terrainState.handlers.onSlopeColorizationChange}
       onSlopeScaleChange={terrainState.handlers.onSlopeScaleChange}
@@ -453,57 +398,20 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onSnowEnabledChange={overlayState.handlers.onSnowEnabledChange}
       onSunlightEnabledChange={overlayState.handlers.onSunlightEnabledChange}
       onSunlightStateChange={overlayState.handlers.onSunlightStateChange}
-      onRoutesEnabledChange={(enabled) => {
+      onRoutesEnabledChange={routeHandlers.onRoutesEnabledChange}
+      onRouteColorChange={routeHandlers.onRouteColorChange}
+      onRouteModeChange={routeHandlers.onRouteModeChange}
+      onRouteOpacityChange={routeHandlers.onRouteOpacityChange}
+      onBasemap3dQualityChange={(value) => {
+        applyDem3dSelection(value);
         updateProjectControlPanel((draft) => {
-          draft.toggles.routesEnabled = enabled;
+          draft.basemap3dQuality = value;
         });
       }}
-      onRouteColorChange={(id, color) => {
-        projectStore?.setItineraryColor(id, color);
-      }}
-      onRouteModeChange={(id, mode) => {
-        const allowed: ItinRouteRenderMode[] = ['default', 'slope', 'speedEst'];
-        const safe = (allowed as string[]).includes(mode)
-          ? (mode as ItinRouteRenderMode)
-          : 'default';
-        projectStore?.setItineraryRenderMode(id, safe);
-      }}
-      onRouteOpacityChange={(id, opacity) => {
-        projectStore?.setItineraryOpacity(id, opacity);
-      }}
-        onBasemap3dQualityChange={(value) => {
-          // Publish to the map3d quality bus FIRST so the lifecycle
-          // controller swaps the bound DEM source synchronously on the
-          // same tick the persisted state updates. This keeps the
-          // selector value and the actual terrain perfectly in sync
-          // with no perceivable flicker. The same control also selects
-          // the SW DEM profile so IGN 1 m terrain is engaged end-to-end.
-          applyDem3dSelection(value);
-          updateProjectControlPanel((draft) => {
-            draft.basemap3dQuality = value;
-          });
-        }}
-      onRouteTraceWidthChange={(value) => {
-        updateProjectControlPanel((draft) => {
-          draft.routes = {
-            traceWidthPx: Math.max(1, Math.min(20, Math.round(value))),
-          };
-        });
-      }}
-      onRouteQualityChange={(quality) => {
-        if (!projectStore || !activeItineraryId) return;
-        projectStore.changeItineraryGpxQuality(activeItineraryId, quality);
-      }}
-      onRouteQualityExpertApply={(pointsPerKm) => {
-        if (!projectStore || !activeItineraryId) return;
-        projectStore.changeItineraryGpxQuality(activeItineraryId, 'expert', { pointsPerKm });
-      }}
-      onRouteVisibilityToggle={(id) => {
-        if (!projectStore) return;
-        const current = projectStore.project.itineraries.find((itinerary) => itinerary.id === id);
-        if (!current) return;
-        projectStore.setItineraryVisibility(id, current.visible === false);
-      }}
+      onRouteTraceWidthChange={routeHandlers.onRouteTraceWidthChange}
+      onRouteQualityChange={routeHandlers.onRouteQualityChange}
+      onRouteQualityExpertApply={routeHandlers.onRouteQualityExpertApply}
+      onRouteVisibilityToggle={routeHandlers.onRouteVisibilityToggle}
     />
   );
 });

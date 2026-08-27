@@ -36,30 +36,55 @@ fn estimate_ftp_20min(activities: &[ActivityData]) -> f64 {
             continue;
         }
 
-        let window_s = 1200.0; // 20 minutes
-        let mut window_power_sum = 0.0;
-        let mut window_count = 0usize;
-        let mut left = 0;
-
-        for right in 0..pts.len() {
-            window_power_sum += pts[right].power_w;
-            window_count += 1;
-
-            while pts[right].timestamp_s - pts[left].timestamp_s > window_s {
-                window_power_sum -= pts[left].power_w;
-                window_count -= 1;
-                left += 1;
-            }
-
-            if pts[right].timestamp_s - pts[left].timestamp_s >= window_s * 0.9 && window_count > 0
-            {
-                let avg = window_power_sum / window_count as f64;
-                best_20min_avg = best_20min_avg.max(avg);
-            }
-        }
+        best_20min_avg = best_20min_avg.max(best_time_weighted_power(pts, 1200.0));
     }
 
     best_20min_avg * 0.95
+}
+
+/// Best `duration_s` average power, time-weighted.
+///
+/// FIT smart recording writes samples at irregular intervals (up to 15-30 s
+/// and more when stationary). Averaging per-sample would over-weight slow
+/// segments recorded at high frequency; weighting by the time each sample
+/// represents (t_i − t_{i−1}) gives the true mean power over the window.
+/// Single O(N) sliding pass.
+fn best_time_weighted_power(pts: &[crate::types::DataPoint], duration_s: f64) -> f64 {
+    let mut best_avg = 0.0_f64;
+    let mut left = 0usize;
+    let mut sum_pdt = 0.0_f64; // Σ power·dt over the window
+    let mut sum_dt = 0.0_f64; // Σ dt over the window
+
+    for right in 0..pts.len() {
+        let t_r = pts[right].timestamp_s;
+        // dt each sample represents (guarded against gaps / unsorted data)
+        let dt = if right == 0 {
+            0.0
+        } else {
+            (t_r - pts[right - 1].timestamp_s).max(0.0).min(3600.0)
+        };
+        sum_pdt += pts[right].power_w * dt;
+        sum_dt += dt;
+
+        while t_r - pts[left].timestamp_s > duration_s {
+            let dtl = if left == 0 {
+                0.0
+            } else {
+                (pts[left].timestamp_s - pts[left - 1].timestamp_s)
+                    .max(0.0)
+                    .min(3600.0)
+            };
+            sum_pdt -= pts[left].power_w * dtl;
+            sum_dt -= dtl;
+            left += 1;
+        }
+
+        if t_r - pts[left].timestamp_s >= duration_s * 0.9 && sum_dt > duration_s * 0.5 {
+            best_avg = best_avg.max(sum_pdt / sum_dt);
+        }
+    }
+
+    best_avg
 }
 
 /// Estimate FTP via Critical Power (CP) from Mean Maximal Power at multiple durations.
@@ -88,26 +113,7 @@ fn estimate_ftp_from_mmp(activities: &[ActivityData]) -> f64 {
                 continue;
             }
 
-            let mut window_power_sum = 0.0;
-            let mut window_count = 0usize;
-            let mut left = 0;
-
-            for right in 0..pts.len() {
-                window_power_sum += pts[right].power_w;
-                window_count += 1;
-
-                while pts[right].timestamp_s - pts[left].timestamp_s > dur {
-                    window_power_sum -= pts[left].power_w;
-                    window_count -= 1;
-                    left += 1;
-                }
-
-                if pts[right].timestamp_s - pts[left].timestamp_s >= dur * 0.9 && window_count > 0
-                {
-                    let avg = window_power_sum / window_count as f64;
-                    best_avg = best_avg.max(avg);
-                }
-            }
+            best_avg = best_avg.max(best_time_weighted_power(pts, dur));
         }
 
         if best_avg > 30.0 {

@@ -1,4 +1,4 @@
-import type { PointCloudData, PointCloudBounds } from '../types';
+import type { PointCloudData, PointCloudBounds, DetectedCrs } from '../types';
 import { detectCrs } from './coordConvert';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,12 +18,13 @@ async function getLazPerf() {
 
 function makeGetter(ab: ArrayBuffer): (begin: number, end: number) => Promise<Uint8Array> {
   const view = new Uint8Array(ab);
-  return async (begin: number, end: number) => view.slice(begin, end);
+  return async (begin: number, end: number) => view.subarray(begin, end);
 }
 
 export async function parseLazBuffer(
   buffer: ArrayBuffer,
-  onProgress?: (phase: string, percent: number) => void
+  onProgress?: (phase: string, percent: number) => void,
+  hintCrs?: DetectedCrs
 ): Promise<PointCloudData> {
   onProgress?.('Chargement du parser LAZ...', 0);
 
@@ -59,6 +60,8 @@ export async function parseLazBuffer(
     pointCount = views.reduce((s, v) => s + v.count, 0);
     const positions = new Float32Array(pointCount * 3);
     const classifications = new Uint8Array(pointCount);
+    let minX = Infinity, minY = Infinity, minZ = Infinity;
+    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     let offset = 0;
 
     for (const { v, count } of views) {
@@ -67,17 +70,24 @@ export async function parseLazBuffer(
       const getZ = v.getter('Z');
       const getCls = v.getter('Classification');
       for (let i = 0; i < count; i++) {
-        positions[(offset + i) * 3] = getX(i);
-        positions[(offset + i) * 3 + 1] = getY(i);
-        positions[(offset + i) * 3 + 2] = getZ(i);
+        const x = getX(i);
+        const y = getY(i);
+        const z = getZ(i);
+        const idx = (offset + i) * 3;
+        positions[idx] = x;
+        positions[idx + 1] = y;
+        positions[idx + 2] = z;
         classifications[offset + i] = getCls(i);
+
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+        if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
       }
       offset += count;
     }
 
-    onProgress?.('Calcul des bornes...', 80);
-    const bounds = computeBounds(positions, pointCount);
-    const crs = detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
+    const bounds: PointCloudBounds = { minX, minY, minZ, maxX, maxY, maxZ };
+    const crs = hintCrs ?? detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
 
     onProgress?.('Prêt', 100);
     return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
@@ -102,36 +112,27 @@ export async function parseLazBuffer(
   const getZ = view.getter('Z');
   const getCls = view.getter('Classification');
 
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+
   for (let i = 0; i < pointCount; i++) {
-    positions[i * 3] = getX(i);
-    positions[i * 3 + 1] = getY(i);
-    positions[i * 3 + 2] = getZ(i);
+    const x = getX(i);
+    const y = getY(i);
+    const z = getZ(i);
+    const idx = i * 3;
+    positions[idx] = x;
+    positions[idx + 1] = y;
+    positions[idx + 2] = z;
     classifications[i] = getCls(i);
+
+    if (x < minX) minX = x; if (x > maxX) maxX = x;
+    if (y < minY) minY = y; if (y > maxY) maxY = y;
+    if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
   }
 
-  onProgress?.('Calcul des bornes...', 80);
-  const bounds = computeBounds(positions, pointCount);
-  const crs = detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
+  const bounds: PointCloudBounds = { minX, minY, minZ, maxX, maxY, maxZ };
+  const crs = hintCrs ?? detectCrs(bounds.minY, bounds.maxY, bounds.minX, bounds.maxX);
 
   onProgress?.('Prêt', 100);
   return { positions, colors: new Uint8Array(pointCount * 3), classifications, count: pointCount, bounds, crs };
-}
-
-function computeBounds(positions: Float32Array, count: number): PointCloudBounds {
-  const bounds: PointCloudBounds = {
-    minX: Infinity, minY: Infinity, minZ: Infinity,
-    maxX: -Infinity, maxY: -Infinity, maxZ: -Infinity,
-  };
-  for (let i = 0; i < count; i++) {
-    const x = positions[i * 3];
-    const y = positions[i * 3 + 1];
-    const z = positions[i * 3 + 2];
-    if (x < bounds.minX) bounds.minX = x;
-    if (y < bounds.minY) bounds.minY = y;
-    if (z < bounds.minZ) bounds.minZ = z;
-    if (x > bounds.maxX) bounds.maxX = x;
-    if (y > bounds.maxY) bounds.maxY = y;
-    if (z > bounds.maxZ) bounds.maxZ = z;
-  }
-  return bounds;
 }

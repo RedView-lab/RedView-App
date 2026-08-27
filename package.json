@@ -6,7 +6,9 @@
   "scripts": {
     "build:fit-engine": "powershell -ExecutionPolicy Bypass -File ./vendor/redviewalgo/build.ps1",
     "bench:analysis-chart": "node --experimental-strip-types ./scripts/benchmark-analysis-chart-cache.mjs",
-    "dev": "vite",
+    "dev": "node scripts/prebuild-api-i18n.mjs && vite",
+    "services": "node scripts/start-dev-services.mjs",
+    "services:stop": "node scripts/stop-dev-services.mjs",
     "build": "node scripts/prebuild-api-i18n.mjs && tsc -b && vite build",
     "test:openmeteo:vps": "node ./scripts/test-openmeteo-vps.mjs",
     "lint": "eslint .",

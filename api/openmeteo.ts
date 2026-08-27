@@ -109,14 +109,12 @@ export default async function handler(
   } else {
     const upstream = (process.env.OPENMETEO_UPSTREAM ?? '').trim();
     if (!upstream) {
-      return res.status(503).json({
-        error: 'Open-Meteo VPS unavailable',
-        detail: 'OPENMETEO_UPSTREAM is not configured',
-      });
+      target = `https://api.open-meteo.com${pathAndQuery}`;
+      source = 'public-api';
+    } else {
+      target = `${upstream.replace(/\/+$/, '')}${pathAndQuery}`;
+      source = 'self-hosted-vps';
     }
-
-    target = `${upstream.replace(/\/+$/, '')}${pathAndQuery}`;
-    source = 'self-hosted-vps';
   }
 
   try {

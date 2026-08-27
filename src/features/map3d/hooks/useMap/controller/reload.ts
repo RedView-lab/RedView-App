@@ -1,6 +1,7 @@
 import { unifiedDEMSource } from '../../../lib/sources';
 import { DEM_RELOAD_COOLDOWN_MS } from '../constants';
 import { getActiveDem3dQuality } from '../../../lib/dem3dQualityBus';
+import { buildDemTilesTemplate } from '../demTiles';
 import type { Ctx } from './context';
 
 // Debounce window for back-to-back DEM profile switches. The profile path
@@ -81,6 +82,24 @@ export function attachReload(ctx: Ctx): void {
     // Don't collide with a heavy manual reload already in flight.
     if (st.reloadInProgress) return;
 
+    const profile = fns.getActiveDemProfile();
+    const tiles = buildDemTilesTemplate(st.demCacheBust, profile);
+    const existingSource = map.getSource(unifiedDEMSource.id) as {
+      setTiles?: (tiles: string[]) => unknown;
+    } | undefined;
+
+    if (existingSource && typeof existingSource.setTiles === 'function') {
+      existingSource.setTiles(tiles);
+      fns.refreshTrackedSourceIds();
+      fns.applyUnifiedTerrain();
+      st.demTrackingEnabled = true;
+      fns.clearDemTracking();
+      fns.reportStatus('loading', 20, profile === 'terrain' ? 'Relief 1 m' : 'Relief 0.40 m');
+      fns.scheduleDemSettle();
+      fns.scheduleSetTilesVerify();
+      return;
+    }
+
     if (runReloadOnce({ clearCaches: false, bumpCacheBust: false, statusDetail: 'Changement de relief' })) {
       st.reloadInProgress = true;
     }
@@ -91,10 +110,42 @@ export function attachReload(ctx: Ctx): void {
     st.reloadVerifyTimer = setTimeout(() => {
       st.reloadVerifyTimer = null;
       if (isCancelled()) return;
-      // If terrain is still not the unified DEM, escalate: do a full
-      // setStyle re-apply (limited to 2 attempts) so the style.load
-      // recovery handler rebuilds DEM + terrain from scratch.
-      if (!fns.isUnifiedTerrainActive() || !fns.isManagedTerrainRenderable() || !map.getSource(unifiedDEMSource.id)) {
+      if (getActiveDem3dQuality() === 'fast-30m') return;
+
+      const unifiedPresent = Boolean(map.getSource(unifiedDEMSource.id));
+      const terrainBound = fns.isUnifiedTerrainActive();
+
+      // If terrain merely unbound, try gentle re-attachment before any escalation
+      if (unifiedPresent && !terrainBound) {
+        fns.applyUnifiedTerrain();
+        if (fns.isUnifiedTerrainActive()) {
+          st.reloadInProgress = false;
+          return;
+        }
+      }
+
+      // Check if tiles are actively loading (0.40m DEM takes 3-6s cold on remote IGN)
+      let isSourceBusy = false;
+      try {
+        isSourceBusy = !map.isSourceLoaded(unifiedDEMSource.id);
+      } catch {
+        isSourceBusy = false;
+      }
+      const hasTileActivity = [...st.requestedTiles].some((key) => key.startsWith(`${unifiedDEMSource.id}:`))
+        && st.requestedTiles.size > st.loadedTiles.size;
+
+      // Do NOT destroy and re-apply style if tiles are actively in-flight
+      if (unifiedPresent && (isSourceBusy || hasTileActivity)) {
+        console.log('[map3d] reload verify: tiles still loading, extending grace window');
+        st.reloadVerifyTimer = setTimeout(() => {
+          if (isCancelled()) return;
+          st.reloadInProgress = false;
+        }, 5000);
+        return;
+      }
+
+      // If terrain is still completely broken after grace period, escalate gracefully
+      if (!terrainBound || !unifiedPresent) {
         if (st.reloadStyleEscalations >= 2) {
           console.warn('[map3d] reload escalation exhausted; map may stay flat');
           fns.reportStatus('error', 0, 'Relief 3D indisponible');
@@ -120,8 +171,6 @@ export function attachReload(ctx: Ctx): void {
           st.reloadInProgress = false;
           return;
         }
-        // After style.load fires, recoverStyleArtifacts re-runs and we
-        // re-attempt the elevation refresh.
         const onLateStyleLoad = () => {
           map.off('style.load', onLateStyleLoad);
           if (isCancelled()) return;
@@ -135,7 +184,7 @@ export function attachReload(ctx: Ctx): void {
       }
       st.reloadInProgress = false;
       st.reloadStyleEscalations = 0;
-    }, 2500);
+    }, 9000);
   };
 
   fns.reloadMapElevation = () => {

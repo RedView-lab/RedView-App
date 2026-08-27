@@ -6,6 +6,7 @@ export const LABEL_CATEGORIES = [
   'poi',
   'roads',
   'places',
+  'states',
   'naturalParks',
   'countries',
   'waterBody',

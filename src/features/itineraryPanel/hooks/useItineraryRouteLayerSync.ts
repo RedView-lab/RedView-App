@@ -96,8 +96,8 @@ export function useItineraryRouteLayerSync({
   }, [itineraries, routeSlopeBandSignature, routeTraceWidthPx, routesEnabled]);
 
   // Ref bag so the stable map listeners always read the latest values without
-  // having to re-subscribe on every project mutation. Updated in an effect
-  // (never during render) so the ref only reflects committed state.
+  // having to re-subscribe on every project mutation. Updated synchronously
+  // during render so effects always see the freshest committed state.
   const stateRef = useRef({
     active,
     isMapLoaded,
@@ -108,18 +108,16 @@ export function useItineraryRouteLayerSync({
     routesEnabled,
     layerSignature,
   });
-  useEffect(() => {
-    stateRef.current = {
-      active,
-      isMapLoaded,
-      itineraries,
-      map,
-      routeSlopeBands,
-      routeTraceWidthPx,
-      routesEnabled,
-      layerSignature,
-    };
-  });
+  stateRef.current = {
+    active,
+    isMapLoaded,
+    itineraries,
+    map,
+    routeSlopeBands,
+    routeTraceWidthPx,
+    routesEnabled,
+    layerSignature,
+  };
 
   const replayRouteState = useCallback((force = false): boolean => {
     const {
@@ -130,6 +128,7 @@ export function useItineraryRouteLayerSync({
       routeSlopeBands: bands,
       routeTraceWidthPx: traceWidthPx,
       layerSignature: signature,
+      routesEnabled: areRoutesEnabled,
     } = stateRef.current;
     if (!currentMap || !loaded || !canAccessStyle(currentMap)) return false;
 
@@ -144,7 +143,7 @@ export function useItineraryRouteLayerSync({
       // Visible iff the Routes section is active AND the user has not
       // explicitly hidden this trace. (`analysisVisible` controls the central
       // chart/profile, not the map line.)
-      const routeVisible = stateRef.current.routesEnabled && it.visible !== false;
+      const routeVisible = areRoutesEnabled && it.visible !== false;
       try {
         upsertRouteLayer(currentMap, it.id, pts, {
           color: it.color,
@@ -171,7 +170,7 @@ export function useItineraryRouteLayerSync({
       }
     }
 
-    if (currentActive) {
+    if (currentActive && areRoutesEnabled) {
       setRouteAuditFindings(
         currentMap,
         currentActive.routeAudit?.findings ?? [],

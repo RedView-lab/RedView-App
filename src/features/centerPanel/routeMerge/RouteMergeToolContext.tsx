@@ -18,6 +18,7 @@ import {
   checkRouteWithinFrance,
   fetchBrouterRoute,
   fetchBrouterRouteBestOfN,
+  formatBrouterErrorMessage,
   formatForbiddenZonePolygons,
   isClimbingMode,
   panelProfileToBrouter,
@@ -269,7 +270,7 @@ export function RouteMergeToolProvider({ children }: RouteMergeToolProviderProps
       } catch (error) {
         console.error('[Route merge fail]', error);
         setSelectedIds([sourceId]);
-        setStatusMessage(error instanceof Error ? translateAppText(error.message) : translateAppText('Erreur pendant la fusion.'));
+        setStatusMessage(formatBrouterErrorMessage(error));
         return false;
       } finally {
         setIsMerging(false);

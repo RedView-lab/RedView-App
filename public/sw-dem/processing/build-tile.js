@@ -55,7 +55,7 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
   }
 }
 
-async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
+async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
   // Zoom-aware MNS source bias (see ignMnsSourceZoomBias in config.js).
@@ -63,7 +63,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const mnsBias = (typeof ignMnsSourceZoomBias === 'function')
     ? ignMnsSourceZoomBias(mercZ)
     : 2;
-  const demZ = Math.max(
+  let demZ = Math.max(
     IGN_DEM_MINZOOM,
     Math.min(mercZ + mnsBias, IGN_DEM_MAXZOOM),
   );
@@ -78,14 +78,26 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
-  const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
-  const br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
+  let tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
+  let br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
+  let gridCols = br.col - tl.col + 1;
+  let gridRows = br.row - tl.row + 1;
+
+  // Dynamic cap: if sub-tile fan-out exceeds 12, step demZ down by 1 so no
+  // single Mercator tile ever explodes into 20-40 HTTP fetches.
+  if (gridCols * gridRows > 12 && demZ > IGN_DEM_MINZOOM) {
+    demZ -= 1;
+    tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
+    br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
+    gridCols = br.col - tl.col + 1;
+    gridRows = br.row - tl.row + 1;
+  }
 
   // Log source zoom remapping — useful when diagnosing why surface detail is
   // missing (too coarse demZ) or why a close view hits the max zoom clamp.
   if (demZ !== mercZ) {
     console.log(
-      `[sw-dem][build] %c SOURCE ZOOM %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ}, using demZ=${demZ} (Δ=${demZ - mercZ})`,
+      `[sw-dem][build] %c SOURCE ZOOM %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ}, using demZ=${demZ} (Δ=${demZ - mercZ}, ${gridCols * gridRows} sub-tiles)`,
       'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
@@ -97,92 +109,76 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // as null for the immediate build. The original promises are kept alive
   // (`fetches`) so the caller can await them in background and trigger a
   // cache-upgrade once the tail stragglers arrive.
-  //
-  // Compute the absolute soft-deadline timestamp BEFORE launching fetches
-  // so it can be passed into each `getIGNTileWithFallback` call. Without
-  // this, a sub-tile that 404s at native zoom would hold an IGN slot for
-  // up to IGN_FALLBACK_MAX_DEPTH × IGN_FETCH_TIMEOUT_MS ≈ 45 s while
-  // sequentially probing z-1, z-2, z-3 — saturating the 40-slot queue and
-  // producing the 17–71 s per-build wall-clock the user reported.
   const softDeadlineMs = typeof ignSoftDeadlineMs === 'function'
     ? ignSoftDeadlineMs(mercZ)
     : IGN_SUBTILE_SOFT_DEADLINE_MS;
   const deadlineAt = t0 + softDeadlineMs;
 
-  const tileMap = new Map();
+  const totalSubTiles = Math.max(0, gridCols * gridRows);
+  const subTileGrid = new Array(totalSubTiles).fill(null);
+
+  // Center-first sub-tile order: fetch the central sub-tiles before the perimeter
+  const midRow = (tl.row + br.row) / 2;
+  const midCol = (tl.col + br.col) / 2;
+  const subTileOrder = [];
+  for (let row = tl.row; row <= br.row; row++) {
+    const rowOffset = (row - tl.row) * gridCols;
+    for (let col = tl.col; col <= br.col; col++) {
+      const gridIdx = rowOffset + (col - tl.col);
+      const dRow = row - midRow;
+      const dCol = col - midCol;
+      subTileOrder.push({ row, col, gridIdx, dist: dRow * dRow + dCol * dCol });
+    }
+  }
+  subTileOrder.sort((a, b) => a.dist - b.dist);
+
   const fetches = [];
-  const keys = [];
   let fetchCount = 0;
   let settledCount = 0;
   let anySuccess = false;
   const allSettled = new Promise((resolveAll) => {
-    // checkDone is invoked from EVERY sub-tile fetch resolution microtask.
-    // We piggyback the deadline check on it instead of relying on a
-    // standalone `setTimeout(softDeadlineMs)`: the macrotask `setTimeout`
-    // gets starved for tens of seconds when 200+ fetches are resolving in
-    // parallel (each microtask chain runs arrayBuffer → decodeBIL32 →
-    // cache write), which is exactly when we need the deadline to fire.
-    // checkDone runs in the same microtask graph as the fetch resolutions
-    // so it ALWAYS gets scheduling parity with them.
-    //
-    // EARLY-ABORT (2026-06-20): if every sub-tile that has settled so far
-    // is a miss, we don't need to wait for the deadline — the area is
-    // almost certainly empty IGN coverage and the remaining in-flight
-    // fetches will 404 too. Previously a z14 tile over an MNS-empty zone
-    // waited the full 5s deadline with 63 fan-out sub-tiles all 404ing
-    // in parallel, wedging the SW thread and freezing the basemap. Now we
-    // bail as soon as we've seen >= 8 settled misses with zero hits.
-    // 8 is chosen so a single slow/timeout straggler can't trick us into
-    // aborting a genuinely-available tile (those typically have ≥4 hits
-    // out of the first 8 sub-tiles for an interior France tile).
     let settledMisses = 0;
     let settledHits = 0;
-    const EARLY_ABORT_MIN_MISSES = 8;
     const checkDone = () => {
       if (settledCount >= fetchCount) { resolveAll(); return; }
       if (performance.now() >= deadlineAt) { resolveAll(); return; }
-      if (settledHits === 0 && settledMisses >= EARLY_ABORT_MIN_MISSES) {
+      const earlyAbortThreshold = Math.max(3, Math.floor(fetchCount * 0.7));
+      if (settledHits === 0 && settledMisses >= earlyAbortThreshold) {
         resolveAll(); return;
       }
     };
-    for (let row = tl.row; row <= br.row; row++) {
-      for (let col = tl.col; col <= br.col; col++) {
-        fetchCount++;
-        const key = `${col}/${row}`;
-        keys.push(key);
-        tileMap.set(key, undefined); // placeholder — "pending"
-        fetches.push(
-          getIGNTileWithFallback(demZ, col, row, deadlineAt).then((result) => {
-            tileMap.set(key, result);
-            settledCount++;
-            if (result && result.data) {
-              anySuccess = true;
-              settledHits++;
-            } else {
-              settledMisses++;
-            }
-            checkDone();
-          }),
-        );
-      }
+
+    for (let i = 0; i < subTileOrder.length; i++) {
+      const { row, col, gridIdx } = subTileOrder[i];
+      fetchCount++;
+      subTileGrid[gridIdx] = undefined; // placeholder — "pending"
+      fetches.push(
+        getIGNTileWithFallback(demZ, col, row, deadlineAt, tilePurpose).then((result) => {
+          subTileGrid[gridIdx] = result || null;
+          settledCount++;
+          if (result && result.data) {
+            anySuccess = true;
+            settledHits++;
+          } else {
+            settledMisses++;
+          }
+          checkDone();
+        }),
+      );
     }
-    // Edge case: 0 sub-tiles (shouldn't happen but be safe)
     if (fetchCount === 0) resolveAll();
   });
 
-  // Macrotask deadline fallback — fires the race resolver in the rare case
-  // where the SW thread genuinely goes idle (no fetches arriving) AND we're
-  // still past the deadline. Normally checkDone already fired this above.
+  // Macrotask deadline fallback
   await Promise.race([
     allSettled,
     new Promise((resolve) => setTimeout(resolve, softDeadlineMs)),
   ]);
 
-  // Count / clear still-pending entries so the resampling loop below sees null.
   let pendingCount = 0;
-  for (const k of keys) {
-    if (tileMap.get(k) === undefined) {
-      tileMap.set(k, null);
+  for (let i = 0; i < totalSubTiles; i++) {
+    if (subTileGrid[i] === undefined) {
+      subTileGrid[i] = null;
       pendingCount++;
     }
   }
@@ -194,8 +190,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   // Log IGN sub-tile fetch results
-  let ignOk = 0, ignFallback = 0, ignMissing = 0, ignPermanent404 = 0;
-  for (const [key, result] of tileMap) {
+  let ignOk = 0, ignFallback = 0, ignMissing = 0;
+  for (let i = 0; i < totalSubTiles; i++) {
+    const result = subTileGrid[i];
     if (result && result.data) {
       if (result.actualZ < demZ) ignFallback++;
       else ignOk++;
@@ -220,24 +217,30 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   const n = 1 << mercZ;
   let coveredCount = 0;
 
+  const matrixWidth = 1 << (demZ + 1);
+  const matrixHeight = 1 << demZ;
+
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     const yFrac = (mercY + (py + 0.5) / DEM_TILE_SIZE) / n;
     const lat = mercatorYToLat(yFrac);
+    const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
+    const relRow = row - tl.row;
+    const rowInGrid = relRow >= 0 && relRow < gridRows;
+    const rowOffset = relRow * gridCols;
 
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
       const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
 
-      // Compute which tile at demZ this pixel maps to
-      const matrixWidth = 1 << (demZ + 1);
-      const matrixHeight = 1 << demZ;
-      const col = Math.max(0, Math.min(Math.floor(((lng + 180) / 360) * matrixWidth), matrixWidth - 1));
-      const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
-
       // For border tiles, skip pixels outside France polygon
       if (isBorder && francePoly && !pointInFrance(lng, lat)) continue;
 
-      const result = tileMap.get(`${col}/${row}`);
+      if (!rowInGrid) continue;
+      const col = Math.max(0, Math.min(Math.floor(((lng + 180) / 360) * matrixWidth), matrixWidth - 1));
+      const relCol = col - tl.col;
+      if (relCol < 0 || relCol >= gridCols) continue;
+
+      const result = subTileGrid[rowOffset + relCol];
       if (result && result.data) {
         // Compute fractional pixel coords in the ACTUAL tile's coordinate space
         const aZ = result.actualZ;
@@ -267,7 +270,7 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   }
 
   // Release IGN source tile references — no longer needed after resampling
-  tileMap.clear();
+  subTileGrid.fill(null);
 
   // Expose in-flight promises to the caller so it can schedule a background
   // cache upgrade once slow stragglers eventually settle.
@@ -276,9 +279,6 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
-    // Return a structured result so the caller can:
-    //   1. Schedule a background upgrade when pending sub-tile fetches settle
-    //   2. Know whether all failures were permanent 404s (→ skip HIGHRES fallback faster)
     return {
       blob: null, elevations: null, coverage: null,
       source: 'ign-empty',
@@ -290,13 +290,6 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
   // Determine source label for diagnostics
   const source = usedFallback ? `ign-fallback-z${minFallbackZ}` : 'ign';
 
-  // NOTE: the former "full-coverage fast path" that encoded the raw IGN
-  // elevations directly (bypassing compositeIGNMapbox) has been removed.
-  // Even on full-coverage tiles, neighbour tiles can be pure-Mapbox or
-  // partial-composite, and encoding the raw bare-earth values without any
-  // reference to the Mapbox datum produces C0-discontinuous meshes at every
-  // IGN↔Mapbox seam. compositeIGNMapbox() now handles full-coverage inputs
-  // via a fast ring-only offset-alignment path — see composite.js.
   if (coveredCount === totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     let eMin = Infinity, eMax = -Infinity;
@@ -319,32 +312,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
       );
     }
     postProcessFranceMnsTile(elevations, coverage, mercZ);
-    // Return elevations without blob → composite.js applies the border-ring
-    // offset alignment so the output mesh is watertight with neighbour tiles.
     return { blob: null, elevations, coverage, source, pendingFetches };
   }
 
   // --- Pre-fill uncovered pixels with Mapbox elevation ---
-  // Prevents 0 m sea-level default from creating km-high vertical cliffs
-  // anywhere IGN has NODATA holes (sensor gaps, water bodies, NaN pixels),
-  // not only at France borders. Composite.js handles the smooth blend for
-  // border tiles; this prefill is the raw-elevation safety net for the
-  // *inside* path where the dilation stage would otherwise propagate 0 m.
-  //
-  // GUARD: at mercZ > MAPBOX_DEM_MAXZOOM (=14) any Mapbox tile we fetch is
-  // server-side overzoomed — i.e. visually flat 30 m. Prefilling IGN holes
-  // with that coarse data is exactly what the user described as "qualité
-  // LiDAR qui disparaît quand je zoome in": even tiny sensor gaps in the
-  // LiDAR HD grid got filled with 30 m Mapbox blur, turning crisp rock
-  // detail into a smeared surface. At high zoom we rely solely on IGN
-  // dilation below (cardinal + diagonal neighbours from LiDAR-covered
-  // pixels), keeping the tile 100 % LiDAR-sourced.
+  let prefilledMbElev = null;
   if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
     try {
       const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
       if (mbBlob) {
         const mbElev = await decodeTerrainRGBBlob(mbBlob);
         if (mbElev && mbElev.length > 0) {
+          prefilledMbElev = mbElev;
           const mbSize = Math.round(Math.sqrt(mbElev.length));
           const mbScale = mbSize / DEM_TILE_SIZE;
           for (let i = 0; i < totalPixels; i++) {
@@ -362,23 +341,22 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
           }
         }
       }
-    } catch {
-      // Mapbox prefill is best-effort; continue with dilation if it fails
-    }
+    } catch { /* best-effort */ }
   }
 
-  // --- Adaptive border pixel dilation (8-connected) ---
-  // Capped at 4 passes max to limit memory pressure in the SW.
-  // Mapbox prefill already covers uncovered pixels, so fewer passes suffice.
+  // --- Adaptive border pixel dilation (8-connected) with recycled ping-pong buffers ---
   const coverageRatio = coveredCount / totalPixels;
   const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
+  const scratchElev = new Float32Array(totalPixels);
+  const scratchCov = new Uint8Array(totalPixels);
 
   for (let pass = 0; pass < dilationPasses; pass++) {
-    const newElevations = new Float32Array(elevations);
-    const newCoverage = new Uint8Array(coverage);
+    scratchElev.set(elevations);
+    scratchCov.set(coverage);
     for (let py = 0; py < DEM_TILE_SIZE; py++) {
+      const row = py * DEM_TILE_SIZE;
       for (let px = 0; px < DEM_TILE_SIZE; px++) {
-        const idx = py * DEM_TILE_SIZE + px;
+        const idx = row + px;
         if (coverage[idx]) continue;
         let sum = 0, count = 0;
         // Cardinal neighbors (4-connected)
@@ -392,28 +370,28 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass) {
         if (py < DEM_TILE_SIZE - 1 && px > 0 && coverage[idx + DEM_TILE_SIZE - 1]) { sum += elevations[idx + DEM_TILE_SIZE - 1]; count++; }
         if (py < DEM_TILE_SIZE - 1 && px < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE + 1]) { sum += elevations[idx + DEM_TILE_SIZE + 1]; count++; }
         if (count > 0) {
-          newElevations[idx] = sum / count;
-          newCoverage[idx] = 1;
+          scratchElev[idx] = sum / count;
+          scratchCov[idx] = 1;
           coveredCount++;
         }
       }
     }
-    elevations.set(newElevations);
-    coverage.set(newCoverage);
+    elevations.set(scratchElev);
+    coverage.set(scratchCov);
   }
 
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
     console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
     postProcessFranceMnsTile(elevations, coverage, mercZ);
-    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
+    return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches, prefilledMbElev };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
   console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
   postProcessFranceMnsTile(elevations, coverage, mercZ);
-  return { blob: null, elevations, coverage, source, pendingFetches };
+  return { blob: null, elevations, coverage, source, pendingFetches, prefilledMbElev };
 }
 
 // ---------------------------------------------------------------------------
@@ -428,26 +406,28 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   const tl = lngLatToWGS84GTile(bounds.west, bounds.north, demZ);
   const br = lngLatToWGS84GTile(bounds.east, bounds.south, demZ);
 
-  const tileMap = new Map();
+  const gridCols = br.col - tl.col + 1;
+  const gridRows = br.row - tl.row + 1;
+  const totalSubTiles = Math.max(0, gridCols * gridRows);
+  const subTileGrid = new Array(totalSubTiles).fill(null);
+
   const fetches = [];
-  const keys = [];
   let fetchCount = 0;
   for (let row = tl.row; row <= br.row; row++) {
+    const rowOffset = (row - tl.row) * gridCols;
     for (let col = tl.col; col <= br.col; col++) {
+      const gridIdx = rowOffset + (col - tl.col);
       fetchCount++;
-      const key = `${col}/${row}`;
-      keys.push(key);
-      tileMap.set(key, undefined);
+      subTileGrid[gridIdx] = undefined;
       fetches.push(
         getHighresTileWithFallback(demZ, col, row).then((result) => {
-          tileMap.set(key, result);
+          subTileGrid[gridIdx] = result || null;
         }),
       );
     }
   }
 
-  // Shorter deadline for HIGHRES — it's the fallback layer, so we want to
-  // fail fast to Mapbox rather than block the viewport for 8 s.
+  // Shorter deadline for HIGHRES
   const softDeadlineMs = Math.min(3000, typeof ignSoftDeadlineMs === 'function'
     ? ignSoftDeadlineMs(mercZ) : IGN_SUBTILE_SOFT_DEADLINE_MS);
   await Promise.race([
@@ -456,13 +436,14 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   ]);
 
   let pendingCount = 0;
-  for (const k of keys) {
-    if (tileMap.get(k) === undefined) { tileMap.set(k, null); pendingCount++; }
+  for (let i = 0; i < totalSubTiles; i++) {
+    if (subTileGrid[i] === undefined) { subTileGrid[i] = null; pendingCount++; }
   }
   const hasPending = pendingCount > 0;
 
   let hrOk = 0, hrMissing = 0;
-  for (const [, result] of tileMap) {
+  for (let i = 0; i < totalSubTiles; i++) {
+    const result = subTileGrid[i];
     if (result && result.data) hrOk++;
     else hrMissing++;
   }
@@ -479,19 +460,27 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   const n = 1 << mercZ;
   let coveredCount = 0;
 
+  const matrixWidth = 1 << (demZ + 1);
+  const matrixHeight = 1 << demZ;
+
   for (let py = 0; py < DEM_TILE_SIZE; py++) {
     const yFrac = (mercY + (py + 0.5) / DEM_TILE_SIZE) / n;
     const lat = mercatorYToLat(yFrac);
+    const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
+    const relRow = row - tl.row;
+    const rowInGrid = relRow >= 0 && relRow < gridRows;
+    const rowOffset = relRow * gridCols;
+
     for (let px = 0; px < DEM_TILE_SIZE; px++) {
       const xFrac = (mercX + (px + 0.5) / DEM_TILE_SIZE) / n;
       const lng = xFrac * 360 - 180;
 
-      const matrixWidth = 1 << (demZ + 1);
-      const matrixHeight = 1 << demZ;
+      if (!rowInGrid) continue;
       const col = Math.max(0, Math.min(Math.floor(((lng + 180) / 360) * matrixWidth), matrixWidth - 1));
-      const row = Math.max(0, Math.min(Math.floor(((90 - lat) / 180) * matrixHeight), matrixHeight - 1));
+      const relCol = col - tl.col;
+      if (relCol < 0 || relCol >= gridCols) continue;
 
-      const result = tileMap.get(`${col}/${row}`);
+      const result = subTileGrid[rowOffset + relCol];
       if (result && result.data) {
         const aZ = result.actualZ;
         const aCol = result.actualCol;
@@ -514,7 +503,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     }
   }
 
-  tileMap.clear();
+  subTileGrid.fill(null);
   const pendingFetches = hasPending ? fetches : null;
 
   if (coveredCount === 0) {
@@ -563,15 +552,19 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     } catch { /* best-effort */ }
   }
 
-  // Dilation
+  // Dilation with recycled ping-pong buffers
   const coverageRatio = coveredCount / totalPixels;
   const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
+  const scratchElev = new Float32Array(totalPixels);
+  const scratchCov = new Uint8Array(totalPixels);
+
   for (let pass = 0; pass < dilationPasses; pass++) {
-    const newElevations = new Float32Array(elevations);
-    const newCoverage = new Uint8Array(coverage);
+    scratchElev.set(elevations);
+    scratchCov.set(coverage);
     for (let py = 0; py < DEM_TILE_SIZE; py++) {
+      const row = py * DEM_TILE_SIZE;
       for (let px = 0; px < DEM_TILE_SIZE; px++) {
-        const idx = py * DEM_TILE_SIZE + px;
+        const idx = row + px;
         if (coverage[idx]) continue;
         let sum = 0, count = 0;
         if (py > 0 && coverage[idx - DEM_TILE_SIZE]) { sum += elevations[idx - DEM_TILE_SIZE]; count++; }
@@ -582,11 +575,11 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
         if (py > 0 && px < DEM_TILE_SIZE - 1 && coverage[idx - DEM_TILE_SIZE + 1]) { sum += elevations[idx - DEM_TILE_SIZE + 1]; count++; }
         if (py < DEM_TILE_SIZE - 1 && px > 0 && coverage[idx + DEM_TILE_SIZE - 1]) { sum += elevations[idx + DEM_TILE_SIZE - 1]; count++; }
         if (py < DEM_TILE_SIZE - 1 && px < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE + 1]) { sum += elevations[idx + DEM_TILE_SIZE + 1]; count++; }
-        if (count > 0) { newElevations[idx] = sum / count; newCoverage[idx] = 1; coveredCount++; }
+        if (count > 0) { scratchElev[idx] = sum / count; scratchCov[idx] = 1; coveredCount++; }
       }
     }
-    elevations.set(newElevations);
-    coverage.set(newCoverage);
+    elevations.set(scratchElev);
+    coverage.set(scratchCov);
   }
 
   if (coveredCount >= totalPixels) {
@@ -602,6 +595,7 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
   return { blob: null, elevations, coverage, source, pendingFetches };
 }
+
 
 // ---------------------------------------------------------------------------
 // Build direct RGE ALTI terrain tile from the official WMS endpoint.
@@ -639,24 +633,31 @@ async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
 
   const source = 'ign-rgealti-wms';
 
-  if (coveredCount < totalPixels && mercZ <= MAPBOX_DEM_MAXZOOM) {
+  if (coveredCount < totalPixels) {
     try {
-      const mbBlob = await fetchMapboxTile(mercZ, mercX, mercY);
-      if (mbBlob) {
-        const mbElev = await decodeTerrainRGBBlob(mbBlob);
-        if (mbElev && mbElev.length > 0) {
-          const mbSize = Math.round(Math.sqrt(mbElev.length));
-          const mbScale = mbSize / DEM_TILE_SIZE;
+      let bgBlob = null;
+      if (typeof fetchAWSTerrainTile === 'function') {
+        bgBlob = await fetchAWSTerrainTile(mercZ, mercX, mercY);
+      }
+      if (!bgBlob && mercZ <= MAPBOX_DEM_MAXZOOM && typeof fetchMapboxTile === 'function') {
+        bgBlob = await fetchMapboxTile(mercZ, mercX, mercY);
+      }
+      if (bgBlob) {
+        const bgElev = await decodeTerrainRGBBlob(bgBlob);
+        if (bgElev && bgElev.length > 0) {
+          const bgSize = Math.round(Math.sqrt(bgElev.length));
+          const bgScale = bgSize / DEM_TILE_SIZE;
           for (let i = 0; i < totalPixels; i++) {
             if (!coverage[i]) {
-              if (mbScale === 1) {
-                elevations[i] = mbElev[i];
-              } else {
-                const py = (i / DEM_TILE_SIZE) | 0;
-                const px = i % DEM_TILE_SIZE;
-                const mx = Math.min((px * mbScale) | 0, mbSize - 1);
-                const my = Math.min((py * mbScale) | 0, mbSize - 1);
-                elevations[i] = mbElev[my * mbSize + mx];
+              const py = (i / DEM_TILE_SIZE) | 0;
+              const px = i % DEM_TILE_SIZE;
+              const mx = Math.min((px * bgScale) | 0, bgSize - 1);
+              const my = Math.min((py * bgScale) | 0, bgSize - 1);
+              const val = bgElev[my * bgSize + mx];
+              if (!Number.isNaN(val) && val >= MIN_VALID_ELEVATION_M && val <= MAX_VALID_ELEVATION_M) {
+                elevations[i] = val;
+                coverage[i] = 1;
+                coveredCount++;
               }
             }
           }
@@ -700,5 +701,8 @@ async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
   console.log(`[sw-dem][build-terrain] ${mercZ}/${mercX}/${mercY} — coverage ${covPct}%, ${dt}ms`);
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+  if (typeof smoothSurfaceMicroUndulations === 'function') {
+    smoothSurfaceMicroUndulations(elevations, coverage, DEM_TILE_SIZE, 6);
+  }
   return { blob: null, elevations, coverage, source, pendingFetches: null };
 }

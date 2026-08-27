@@ -24,6 +24,7 @@
   padding: 0;
   width: 100%;
   color: var(--rvc-text);
+  box-sizing: border-box;
 }
 
 .rvc-section__icon {
@@ -37,12 +38,15 @@
 }
 
 .rvc-section__title-btn {
-  all: unset;
   display: flex;
   align-items: center;
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
   min-height: 17px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
   font-family: inherit;
   font-size: 14px;
@@ -52,15 +56,27 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
+}
+
+.rvc-section__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .rvc-section__chevron {
-  all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 20px;
   height: 20px;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
   flex-shrink: 0;
   cursor: pointer;
   color: var(--rvc-text);
@@ -94,7 +110,8 @@
 }
 
 .rvc-section__body-inner.is-fully-open {
-  overflow: clip;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 .rvc-section__body-wrap .rvc-section__body {

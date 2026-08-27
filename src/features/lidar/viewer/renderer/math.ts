@@ -1,4 +1,4 @@
-export function mat4MultiplyInto(a: Float32Array, b: Float32Array, out: Float32Array): Float32Array {
+export function mat4MultiplyInto(out: Float32Array, a: Float32Array, b: Float32Array): Float32Array {
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       out[j * 4 + i] =

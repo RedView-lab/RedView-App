@@ -9,7 +9,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   BASE_HOUR_ROW_HEIGHT_PX,
-  MIN_TIMELINE_HOURS,
   MINUTES_PER_DAY,
   TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
   TIMELINE_VIEWPORT_TOP_INSET_PX,
@@ -24,7 +23,6 @@ import {
   buildScheduledTimelineState,
   buildScheduledEvents,
   buildScheduledStandalonePauses,
-  buildVisibleMinuteBounds,
   distanceAtElapsedSeconds,
   parseDayKey,
   parseStartReference,
@@ -42,6 +40,7 @@ export function TimelineTimelineView({
   markerStepKm,
   hourZoom = 1,
   selectedIds,
+  filters,
   onToggleSelect,
   onToggleVisibility,
   onMovePause,
@@ -67,18 +66,17 @@ export function TimelineTimelineView({
   const stopAnchors = scheduleState.stopAnchors;
 
   const defaultAnchorDay = useMemo(() => {
-    const firstDatedItem = [...timedItems, ...autoPauseItems].find((item) => item.dayKey);
+    const activeAutoPauses = filters && !filters.pause ? [] : autoPauseItems;
+    const firstDatedItem = [...timedItems, ...activeAutoPauses].find((item) => item.dayKey);
     if (firstDatedItem?.date) return new Date(firstDatedItem.date);
     if (reference.reference && reference.hasRealDate) return new Date(reference.reference);
     return new Date();
-  }, [autoPauseItems, reference, timedItems]);
+  }, [autoPauseItems, filters, reference, timedItems]);
   const defaultAnchorDayKey = useMemo(() => toDayKey(defaultAnchorDay), [defaultAnchorDay]);
 
   const [selectedDayKey, setSelectedDayKey] = useState(() => defaultAnchorDayKey);
   const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [now, setNow] = useState(() => new Date());
-  const [viewportHeightPx, setViewportHeightPx] = useState(0);
-
   useEffect(() => {
     setSelectedDayKey(defaultAnchorDayKey);
   }, [defaultAnchorDayKey]);
@@ -91,29 +89,6 @@ export function TimelineTimelineView({
       const entry = entries[0];
       if (!entry) return;
       setIsCompactLayout(entry.contentRect.width < 860);
-    });
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const node = viewportRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') return;
-
-    const updateViewportHeight = (nextHeight: number) => {
-      setViewportHeightPx((currentHeight) => {
-        const roundedNextHeight = Math.round(nextHeight);
-        return currentHeight === roundedNextHeight ? currentHeight : roundedNextHeight;
-      });
-    };
-
-    updateViewportHeight(node.getBoundingClientRect().height);
-
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      updateViewportHeight(entry.contentRect.height);
     });
 
     observer.observe(node);
@@ -148,18 +123,10 @@ export function TimelineTimelineView({
     () => timedItems.filter((entry) => entry.item.kind !== 'pause'),
     [timedItems],
   );
-  const timelineSpansMultipleDays = useMemo(() => {
-    const dayKeys = new Set(
-      [...timedItems, ...autoPauseItems]
-        .map((entry) => entry.dayKey)
-        .filter((dayKey): dayKey is string => Boolean(dayKey)),
-    );
-    return dayKeys.size > 1;
-  }, [autoPauseItems, timedItems]);
-  const pauseItems = useMemo(
-    () => timedItems.filter((entry) => entry.item.kind === 'pause'),
-    [timedItems],
-  );
+  const pauseItems = useMemo(() => {
+    if (filters && !filters.pause) return [];
+    return timedItems.filter((entry) => entry.item.kind === 'pause');
+  }, [filters, timedItems]);
 
   const filteredPrimaryItems = useMemo(() => {
     if (!reference.hasRealDate) return primaryItems;
@@ -167,14 +134,16 @@ export function TimelineTimelineView({
   }, [displayDayKeySet, primaryItems, reference.hasRealDate]);
 
   const filteredPauseItems = useMemo(() => {
+    if (filters && !filters.pause) return [];
     if (!reference.hasRealDate) return pauseItems;
     return pauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [displayDayKeySet, pauseItems, reference.hasRealDate]);
+  }, [displayDayKeySet, filters, pauseItems, reference.hasRealDate]);
 
   const filteredAutoPauseItems = useMemo(() => {
+    if (filters && !filters.pause) return [];
     if (!reference.hasRealDate) return autoPauseItems;
     return autoPauseItems.filter((entry) => entry.dayKey && displayDayKeySet.has(entry.dayKey));
-  }, [autoPauseItems, displayDayKeySet, reference.hasRealDate]);
+  }, [autoPauseItems, displayDayKeySet, filters, reference.hasRealDate]);
 
   const pauseAttachment = useMemo(
     () => buildPauseAttachment(filteredPrimaryItems, filteredAutoPauseItems),
@@ -186,51 +155,21 @@ export function TimelineTimelineView({
     [items],
   );
 
-  const visibleMinuteBounds = useMemo(
-    () =>
-      buildVisibleMinuteBounds(
-        filteredPrimaryItems,
-        filteredPauseItems,
-        pauseAttachment.unattachedPauses,
-        pauseAttachment,
-        displayDays,
-        reference,
-      ),
-    [displayDays, filteredPauseItems, filteredPrimaryItems, pauseAttachment, reference],
-  );
-
   const startMinutes = useMemo(() => {
-    const firstMinute = visibleMinuteBounds.reduce(
-      (minMinute, minute) => Math.min(minMinute, minute),
-      Number.POSITIVE_INFINITY,
-    );
-    const baseStartMinute = Number.isFinite(firstMinute) ? firstMinute : reference.startMinutes;
-    return Math.max(0, Math.floor(baseStartMinute / 60) * 60);
-  }, [reference.startMinutes, visibleMinuteBounds]);
+    return Math.max(0, Math.floor(reference.startMinutes / 60) * 60);
+  }, [reference.startMinutes]);
 
   const endMinutes = useMemo(() => {
-    const lastVisibleMinute = visibleMinuteBounds.reduce(
-      (maxMinute, minute) => Math.max(maxMinute, minute),
-      Number.NEGATIVE_INFINITY,
+    const lastItemMinute = [...timedItems, ...autoPauseItems].reduce(
+      (maxMinute, item) => Math.max(maxMinute, item.minuteOfDay),
+      startMinutes,
     );
-    if (!Number.isFinite(lastVisibleMinute)) return startMinutes + 60;
-    if (reference.hasRealDate && timelineSpansMultipleDays) {
-      return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, MINUTES_PER_DAY);
-    }
-    const roundedEnd = Math.ceil(lastVisibleMinute / 60) * 60;
-    return Math.max(startMinutes + MIN_TIMELINE_HOURS * 60, roundedEnd);
-  }, [reference.hasRealDate, startMinutes, timelineSpansMultipleDays, visibleMinuteBounds]);
+    const roundedLastMinute = Math.ceil(lastItemMinute / 60) * 60;
+    return Math.max(startMinutes + 12 * 60, MINUTES_PER_DAY, roundedLastMinute);
+  }, [autoPauseItems, startMinutes, timedItems]);
 
-  const visibleDurationMinutes = Math.max(1, endMinutes - startMinutes);
-  const fallbackCanvasBaseHeight = visibleDurationMinutes * (BASE_HOUR_ROW_HEIGHT_PX / 60);
-  const fittedCanvasBaseHeight = viewportHeightPx > 0
-    ? Math.max(
-        0,
-        viewportHeightPx - TIMELINE_VIEWPORT_TOP_INSET_PX - TIMELINE_VIEWPORT_BOTTOM_INSET_PX,
-      )
-    : fallbackCanvasBaseHeight;
-  const fittedHourRowHeightPx = (fittedCanvasBaseHeight / visibleDurationMinutes) * 60;
-  const hourRowHeightPx = fittedHourRowHeightPx * normalizedHourZoom;
+  const visibleDurationMinutes = Math.max(60, endMinutes - startMinutes);
+  const hourRowHeightPx = BASE_HOUR_ROW_HEIGHT_PX * normalizedHourZoom;
   const pixelsPerMinute = hourRowHeightPx / 60;
   const canvasBaseHeight = Math.max(visibleDurationMinutes * pixelsPerMinute, 0);
 
@@ -430,7 +369,8 @@ export function TimelineTimelineView({
     if (lastAutoScrollKeyRef.current === autoScrollKey) return;
     lastAutoScrollKeyRef.current = autoScrollKey;
 
-    const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx;
+    const fallbackTopPx = (reference.startMinutes - startMinutes) * pixelsPerMinute + TIMELINE_VIEWPORT_TOP_INSET_PX;
+    const preferredTopPx = currentTimeLineTopPx ?? firstVisibleTopPx ?? fallbackTopPx;
     if (preferredTopPx === null) {
       viewport.scrollTop = 0;
       return;
@@ -444,7 +384,7 @@ export function TimelineTimelineView({
       ),
     );
     viewport.scrollTop = targetScrollTop;
-  }, [autoScrollKey, currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx]);
+  }, [autoScrollKey, currentTimeLineTopPx, firstVisibleTopPx, hourRowHeightPx, pixelsPerMinute, reference.startMinutes, startMinutes]);
 
   const visibleWindowHasEvents = events.length > 0 || standalonePauses.length > 0;
   const scheduleStyle = {

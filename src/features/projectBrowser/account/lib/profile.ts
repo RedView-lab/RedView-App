@@ -166,6 +166,9 @@ export async function updateAccountPassword(password: string) {
 }
 
 export async function signOutAccount() {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem('redview:dev-session');
+  }
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }

@@ -37,12 +37,18 @@ import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
+import {
+  AnalysisZoneProvider,
+  AnalysisZoneProjectBridge,
+  AnalysisZoneToolArbiter,
+} from '@/features/analysisZone';
 import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
+import type { DashboardFilterId } from './DashboardPlaceSearch.types';
 import { CENTER_TOOLBAR_HEIGHT, PANEL_PADDING } from '../lib/constants';
 import { getDashboardStyles } from '../lib/dashboardStyles';
 import { getDashboardLayout } from '../lib/layout';
@@ -192,6 +198,9 @@ export function DashboardEditor({
   onItineraryRouteStatusChange,
 }: DashboardEditorProps) {
   const { t } = useAppI18n();
+  const [dashboardSearchActiveFilters, setDashboardSearchActiveFilters] = useState<Set<DashboardFilterId>>(
+    () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses', 'waypoints']),
+  );
   const [contextMenuOverlayContext, setContextMenuOverlayContext] = useState<MapContextMenuOverlayContext>({
     weather: {
       enabled: false,
@@ -280,18 +289,23 @@ export function DashboardEditor({
   };
 
   return (
-    <>
-      <MapView
-        onMapReady={onMapReady}
-        onMapLoadStatusChange={onMapLoadStatusChange}
-        onMapReloadChange={onMapReloadChange}
-        lidarSelectionEnabled={lidarModeEnabled}
-        onLidarSelectionDisable={handleLidarSelectionDisable}
-        initialViewport={projectMapViewport}
-        onViewportChange={onMapViewportChange}
-        basemapConfig={activeBasemapConfig}
-        contextMenuOverlayContext={contextMenuOverlayContext}
-      />
+    <AnalysisZoneProvider map={mapInstance}>
+      <ProjectProvider
+        key={activeProjectId ?? 'no-project'}
+        initialProject={activeProjectInitial ?? undefined}
+        onProjectChange={onProjectChange}
+      >
+        <MapView
+          onMapReady={onMapReady}
+          onMapLoadStatusChange={onMapLoadStatusChange}
+          onMapReloadChange={onMapReloadChange}
+          lidarSelectionEnabled={lidarModeEnabled}
+          onLidarSelectionDisable={handleLidarSelectionDisable}
+          initialViewport={projectMapViewport}
+          onViewportChange={onMapViewportChange}
+          basemapConfig={activeBasemapConfig}
+          contextMenuOverlayContext={contextMenuOverlayContext}
+        />
 
       <MapOverlayStatusDock
         statuses={visibleStatuses}
@@ -356,6 +370,8 @@ export function DashboardEditor({
         visible={dashboardSearchVisible}
         left={dashboardSearchLeft}
         top={PANEL_PADDING}
+        activeFilters={dashboardSearchActiveFilters}
+        onFilterChange={setDashboardSearchActiveFilters}
       />
 
       {isDemoAccount ? (
@@ -439,16 +455,13 @@ export function DashboardEditor({
         />
       )}
 
-      <ProjectProvider
-        key={activeProjectId ?? 'no-project'}
-        initialProject={activeProjectInitial ?? undefined}
-        onProjectChange={onProjectChange}
-      >
-        <TraceRevealWatcher onTraceStarted={onTraceStarted} />
+      <TraceRevealWatcher onTraceStarted={onTraceStarted} />
+        <AnalysisZoneProjectBridge />
         <RouteSplitToolProvider map={mapInstance}>
           <RouteMergeToolProvider>
             <TraceToolProvider map={mapInstance}>
               <ForbiddenZoneToolProvider map={mapInstance}>
+                <AnalysisZoneToolArbiter />
             <RouteDragWaypointProvider map={mapInstance}>
                 <PredictionProvider>
                   <div style={styles.leftPanelStyle}>
@@ -463,6 +476,8 @@ export function DashboardEditor({
                         isResizing={isLeftResizing}
                         isReturningToBrowser={isClosingProject}
                         onBackToHome={onBackToBrowser}
+                        pausesEnabled={dashboardSearchActiveFilters.has('pauses')}
+                        waypointsEnabled={dashboardSearchActiveFilters.has('waypoints')}
                       />
                     </div>
                   </div>
@@ -526,6 +541,6 @@ export function DashboardEditor({
           </RouteMergeToolProvider>
         </RouteSplitToolProvider>
       </ProjectProvider>
-    </>
+    </AnalysisZoneProvider>
   );
 }

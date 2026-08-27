@@ -74,7 +74,7 @@ export function ProjectCard({
   const hasPreviewImage = Boolean(previewSrc) && !previewUnavailable;
   const showLoadingPlaceholder = !previewUnavailable && (thumbnailLoading || (hasPreviewImage && !previewReady));
   const showPlaceholder = !hasPreviewImage || !previewReady;
-  const placeholderIconSize = view === 'list' ? 38 : 40;
+  const placeholderIconSize = view === 'list' ? 20 : 40;
 
   const commitRename = async () => {
     const next = draft.trim();
@@ -155,7 +155,7 @@ export function ProjectCard({
         {titleContent}
         <span className="rvpb-card__list-size">{formatSize(project.sizeBytes)}</span>
         <span className="rvpb-card__list-saved">
-          <IconSave size={24} />
+          <IconSave size={14} />
           <span>{formatSavedAt(project.updatedAt)}</span>
         </span>
         <span className="rvpb-card__badge rvpb-card__badge--list">{privacyLabel(project.privacy)}</span>

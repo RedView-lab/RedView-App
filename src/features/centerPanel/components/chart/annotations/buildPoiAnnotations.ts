@@ -1,6 +1,8 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import { poiLabel } from '@/features/itineraryPanel/sections/timeline/KindBadge';
+import { buildScheduledTimelineState, parseStartReference } from '@/features/itineraryPanel/sections/timeline/TimelineTimelineView/utils';
 import type { Itinerary, PoiCategory, TimelineItem } from '@/features/itineraryPanel/types';
+import { translateAppText } from '@/shared/i18n';
 import type { AxisMode } from '../series';
 import { normalizeRouteProfile as normalizeChartRouteProfile } from '../series/routeProfile';
 
@@ -23,18 +25,30 @@ export interface ChartPoiAnnotation {
   itineraryName: string;
   label: string;
   categoryLabel: string;
+  kind?: 'poi' | 'pause' | 'waypoint';
   poiCategory?: PoiCategory;
+  durationMin?: number | null;
   x: number;
   y: number;
+}
+
+export interface BuildPoiAnnotationsOptions {
+  includePoi?: boolean;
+  includePause?: boolean;
+  includeWaypoint?: boolean;
 }
 
 export function buildPoiAnnotationsForItinerary(
   itinerary: Itinerary,
   prediction: PredictionResult | null | undefined,
   xMode: AxisMode,
+  options?: BuildPoiAnnotationsOptions,
 ): ChartPoiAnnotation[] {
-  const poiRows = itinerary.timeline.filter(isVisiblePoiRow);
-  if (poiRows.length === 0) return [];
+  const includePoi = options?.includePoi ?? true;
+  const includePause = options?.includePause ?? false;
+  const includeWaypoint = options?.includeWaypoint ?? false;
+
+  if (!includePoi && !includePause && !includeWaypoint) return [];
 
   const profile =
     normalizeChartRouteProfile(itinerary.gpxRoute?.points ?? null) ??
@@ -45,32 +59,130 @@ export function buildPoiAnnotationsForItinerary(
   if (xMode !== 'distance' && (!timeline || timeline.length < 2)) return [];
 
   const result: ChartPoiAnnotation[] = [];
-  for (const row of poiRows) {
-    const distanceKm = row.distanceKm;
-    if (!Number.isFinite(distanceKm)) continue;
 
-    const distanceM = (distanceKm as number) * 1000;
+  const addAnnotation = (
+    id: string,
+    label: string,
+    categoryLabel: string,
+    distanceKm: number,
+    extra: {
+      kind: 'poi' | 'pause' | 'waypoint';
+      poiCategory?: PoiCategory;
+      durationMin?: number | null;
+    },
+  ) => {
+    if (!Number.isFinite(distanceKm)) return;
+    const distanceM = distanceKm * 1000;
     const x =
       xMode === 'distance'
-        ? (distanceKm as number)
+        ? distanceKm
         : projectElapsedHoursToX(
             interpolateElapsedHoursFromTimeline(timeline, distanceM),
             xMode,
             itinerary.rhythm.startTime,
           );
     const y = interpolateElevation(profile, distanceM);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
     result.push({
-      id: `${itinerary.id}::poi::${row.id}`,
+      id,
       itineraryId: itinerary.id,
       itineraryName: itinerary.name,
-      label: row.label?.trim() || poiLabel(row.poiCategory ?? 'fountains'),
-      categoryLabel: row.poiCategory ? poiLabel(row.poiCategory) : 'POI',
-      poiCategory: row.poiCategory,
+      label,
+      categoryLabel,
+      kind: extra.kind,
+      poiCategory: extra.poiCategory,
+      durationMin: extra.durationMin,
       x,
       y,
     });
+  };
+
+  // 1. POI rows
+  if (includePoi) {
+    const poiRows = itinerary.timeline.filter(isVisiblePoiRow);
+    for (const row of poiRows) {
+      addAnnotation(
+        `${itinerary.id}::poi::${row.id}`,
+        row.label?.trim() || poiLabel(row.poiCategory ?? 'fountains'),
+        row.poiCategory ? poiLabel(row.poiCategory) : 'POI',
+        row.distanceKm,
+        {
+          kind: 'poi',
+          poiCategory: row.poiCategory,
+        },
+      );
+    }
+  }
+
+  // 2. Pause rows
+  if (includePause) {
+    // 2a. Manual timeline pauses
+    const pauseRows = itinerary.timeline.filter(
+      (row) => row.kind === 'pause' && row.visible !== false && Number.isFinite(row.distanceKm),
+    );
+    for (const row of pauseRows) {
+      const durSuffix = row.durationMin ? ` · ${row.durationMin}min` : '';
+      addAnnotation(
+        `${itinerary.id}::pause::${row.id}`,
+        row.label?.trim() || translateAppText('Pause'),
+        `${translateAppText('Pause')}${durSuffix}`,
+        row.distanceKm as number,
+        {
+          kind: 'pause',
+          durationMin: row.durationMin ?? 15,
+        },
+      );
+    }
+
+    // 2b. Auto-generated interval pauses
+    if (
+      itinerary.rhythm?.pauseEveryIntervalEnabled &&
+      (prediction || itinerary.prediction)
+    ) {
+      const pred = prediction ?? itinerary.prediction;
+      if (pred && pred.points && pred.points.length >= 2) {
+        const reference = parseStartReference(itinerary.rhythm);
+        const { autoPauses } = buildScheduledTimelineState(
+          itinerary.timeline,
+          pred,
+          reference,
+          itinerary.rhythm,
+        );
+        for (const autoPause of autoPauses) {
+          if (autoPause.visible === false || !Number.isFinite(autoPause.distanceKm)) continue;
+          const durSuffix = autoPause.durationMin ? ` · ${autoPause.durationMin}min` : '';
+          addAnnotation(
+            `${itinerary.id}::pause::${autoPause.id}`,
+            autoPause.label || translateAppText('Pause'),
+            `${translateAppText('Pause')}${durSuffix}`,
+            autoPause.distanceKm,
+            {
+              kind: 'pause',
+              durationMin: autoPause.durationMin ?? 15,
+            },
+          );
+        }
+      }
+    }
+  }
+
+  // 3. Waypoint rows
+  if (includeWaypoint) {
+    const waypointRows = itinerary.timeline.filter(
+      (row) => row.kind === 'waypoint' && row.visible !== false && Number.isFinite(row.distanceKm),
+    );
+    for (const row of waypointRows) {
+      addAnnotation(
+        `${itinerary.id}::waypoint::${row.id}`,
+        row.label?.trim() || translateAppText('Waypoint'),
+        translateAppText('Waypoint'),
+        row.distanceKm as number,
+        {
+          kind: 'waypoint',
+        },
+      );
+    }
   }
 
   return result;
@@ -209,3 +321,4 @@ function parseStartTimeHours(startTime?: string | null): number {
   if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
   return hours + minutes / 60;
 }
+

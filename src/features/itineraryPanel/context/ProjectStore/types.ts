@@ -46,6 +46,10 @@ export interface ProjectStoreValue {
     id: string,
     points: Array<{ lat: number; lon: number }>,
   ) => ItineraryForbiddenZone | null;
+  removeForbiddenZone: (
+    id: string,
+    options?: { zoneId?: string; point?: { lat: number; lon: number } },
+  ) => boolean;
   simplifyItineraryGpx: (id: string, targetPointsPerKm: number) => void;
   changeItineraryGpxQuality: (
     id: string,
@@ -62,6 +66,11 @@ export interface ProjectStoreValue {
     id: string,
     splitIndex: number,
   ) => Omit<SplitItineraryProjectResult, 'project'> | null;
+  updateItineraryRoutePoints: (
+    id: string,
+    points: Array<{ lat: number; lon: number; elevationM?: number | null; distanceM?: number }>,
+    options?: { source?: string; actionName?: string },
+  ) => boolean;
 }
 
 export interface ProjectProviderProps {

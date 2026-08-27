@@ -9,6 +9,8 @@ export interface DashboardPlaceSearchProps {
   visible: boolean;
   left: number;
   top: number;
+  activeFilters?: Set<DashboardFilterId>;
+  onFilterChange?: (filters: Set<DashboardFilterId>) => void;
 }
 
 export type DashboardPoiOptionId =

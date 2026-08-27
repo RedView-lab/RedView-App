@@ -103,13 +103,19 @@ fn compute_training_dplus_stats(activities: &[ActivityData]) -> (f64, f64, f64, 
             continue;
         }
 
+        // Despike altitudes before integrating D+ — raw per-second diffs of
+        // barometric noise accumulate hundreds of fake metres on long rides
+        // and skew route-vs-training difficulty comparison.
+        let raw_altitudes: Vec<f64> = pts.iter().map(|p| p.altitude_m).collect();
+        let altitudes = crate::math::median_filter_elevations(&raw_altitudes, 5);
+
         let mut activity_dplus = 0.0_f64;
         // Track climbing blocks: accumulate D+ and time while gradient > 2%
         let mut block_dplus = 0.0_f64;
         let mut block_time_s = 0.0_f64;
 
         for i in 1..pts.len() {
-            let ele_diff = pts[i].altitude_m - pts[i - 1].altitude_m;
+            let ele_diff = altitudes[i] - altitudes[i - 1];
             let dt = pts[i].timestamp_s - pts[i - 1].timestamp_s;
 
             if ele_diff > 0.0 {

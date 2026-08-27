@@ -258,6 +258,21 @@ pub fn normalize_features_weighted(
     ]
 }
 
+/// Uniformly strided indices over `0..n`, capped at `cap` entries.
+fn stride_indices(n: usize, cap: usize) -> Vec<usize> {
+    if n <= cap {
+        return (0..n).collect();
+    }
+    let step = n as f64 / cap as f64;
+    let mut v = Vec::with_capacity(cap);
+    let mut idx = 0.0;
+    while (idx as usize) < n && v.len() < cap {
+        v.push(idx as usize);
+        idx += step;
+    }
+    v
+}
+
 /// Optimize feature weights via leave-one-out cross-validation on a subsample.
 /// Tests random weight combinations and returns the set minimizing RMSE.
 /// Uses k-d tree for fast neighbor lookups in inner loop.
@@ -265,19 +280,16 @@ pub fn optimize_feature_weights(
     samples: &[TrainingSample],
     norms: &[FeatureNorm],
 ) -> [f64; N_FEATURES] {
-    // Subsample for speed: max 1000 samples for LOO-CV
-    let max_cv_samples = 1000;
-    let step = if samples.len() > max_cv_samples {
-        samples.len() as f64 / max_cv_samples as f64
-    } else {
-        1.0
-    };
-    let mut cv_indices: Vec<usize> = Vec::new();
-    let mut idx = 0.0;
-    while (idx as usize) < samples.len() && cv_indices.len() < max_cv_samples {
-        cv_indices.push(idx as usize);
-        idx += step;
-    }
+    // Cap the neighbour corpus used for LOO evaluation. Building a k-d tree
+    // over every training sample for every candidate weight vector used to
+    // dominate profile-build time on large datasets (201 trees over up to
+    // 50k samples). A strided subsample keeps the LOO estimate statistically
+    // equivalent at a fraction of the cost.
+    const MAX_CORPUS: usize = 4000;
+    const MAX_TEST: usize = 1000;
+    let corpus = stride_indices(samples.len(), MAX_CORPUS);
+    // Test positions are indices into `corpus` (== positions in `normalized`)
+    let test = stride_indices(corpus.len(), MAX_TEST);
 
     let weight_options: &[f64] = &[0.5, 1.0, 1.5, 2.0, 3.0, 4.0];
 
@@ -292,7 +304,7 @@ pub fn optimize_feature_weights(
     let mut best_rmse = f64::MAX;
 
     // Test default weights first
-    let default_rmse = evaluate_weights_loo(&cv_indices, samples, norms, &DEFAULT_WEIGHTS);
+    let default_rmse = evaluate_weights_loo(&test, &corpus, samples, norms, &DEFAULT_WEIGHTS);
     if default_rmse < best_rmse {
         best_rmse = default_rmse;
     }
@@ -308,7 +320,7 @@ pub fn optimize_feature_weights(
             candidate[0] = 2.0;
         }
 
-        let rmse = evaluate_weights_loo(&cv_indices, samples, norms, &candidate);
+        let rmse = evaluate_weights_loo(&test, &corpus, samples, norms, &candidate);
         if rmse < best_rmse {
             best_rmse = rmse;
             best_weights = candidate;
@@ -321,15 +333,17 @@ pub fn optimize_feature_weights(
 /// Evaluate feature weights via approximate LOO-CV, returning RMSE.
 /// Uses k-d tree for fast nearest-neighbor queries in the inner loop.
 fn evaluate_weights_loo(
-    indices: &[usize],
+    test_indices: &[usize],
+    corpus_indices: &[usize],
     samples: &[TrainingSample],
     norms: &[FeatureNorm],
     weights: &[f64; N_FEATURES],
 ) -> f64 {
-    // Pre-normalize all samples with these weights
-    let normalized: Vec<([f64; N_FEATURES], f64)> = samples
+    // Normalize + index only the corpus subset with these weights
+    let normalized: Vec<([f64; N_FEATURES], f64)> = corpus_indices
         .iter()
-        .map(|s| {
+        .map(|&i| {
+            let s = &samples[i];
             let f = normalize_features_weighted(
                 s.gradient_pct, s.elapsed_h, s.cum_climb_m,
                 s.recent_avg_gradient, s.elevation_m, s.cum_distance_m,
@@ -339,19 +353,19 @@ fn evaluate_weights_loo(
         })
         .collect();
 
-    // Build k-d tree over all normalized samples
+    // Build k-d tree over the normalized corpus
     let feats: Vec<[f64; N_FEATURES]> = normalized.iter().map(|(f, _)| *f).collect();
     let speeds: Vec<f64> = normalized.iter().map(|(_, s)| *s).collect();
     let tree = super::kdtree::KdTree::build(&feats, &speeds);
 
     // K+1 because we need to exclude self
-    let k = ((samples.len() as f64).sqrt() as usize).clamp(7, 50);
-    let k_query = (k + 1).min(samples.len());
+    let k = ((corpus_indices.len() as f64).sqrt() as usize).clamp(7, 50);
+    let k_query = (k + 1).min(corpus_indices.len());
     let mut sse = 0.0;
 
-    for &test_idx in indices {
-        let q = &normalized[test_idx].0;
-        let actual_speed = normalized[test_idx].1;
+    for &test_pos in test_indices {
+        let q = &normalized[test_pos].0;
+        let actual_speed = normalized[test_pos].1;
 
         // Query k+1 neighbors (one will be self with dist=0, skip it)
         let neighbors = tree.knn_query(q, k_query);
@@ -382,7 +396,7 @@ fn evaluate_weights_loo(
         sse += (predicted - actual_speed).powi(2);
     }
 
-    (sse / indices.len() as f64).sqrt()
+    (sse / test_indices.len() as f64).sqrt()
 }
 
 #[inline]

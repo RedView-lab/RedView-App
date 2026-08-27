@@ -82,12 +82,10 @@ export function attachDemSource(ctx: Ctx): void {
     try {
       if (!terrainRef.current) {
         terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+        terrainRef.current.init();
+      } else {
+        terrainRef.current.setSource(unifiedDEMSource.id);
       }
-      // Idempotent: TerrainManager.init re-issues setTerrain. Doing this
-      // unconditionally is the cheapest way to recover from a silent
-      // detach (mapbox sometimes drops terrain after a late style.load
-      // without firing any error).
-      terrainRef.current.init();
       return true;
     } catch (error) {
       console.warn('[map3d] Unified terrain apply failed', error);
@@ -173,6 +171,11 @@ export function attachDemSource(ctx: Ctx): void {
       // pyramid from scratch (setTiles alone leaves cached empty tiles in
       // place, which is what keeps the map flat after a soft reload).
       fns.detachManagedTerrain();
+      try {
+        map.setTerrain(null);
+      } catch {
+        /* noop */
+      }
       let removeSucceeded = false;
       try {
         map.removeSource(unifiedDEMSource.id);
@@ -497,16 +500,15 @@ export function attachDemSource(ctx: Ctx): void {
       try { activeTerrainSource = map.getTerrain()?.source ?? null; } catch { /* best-effort */ }
       const alreadyBound = activeTerrainSource === awsFastDEMSource.id;
       if (alreadyBound && terrainRef.current) {
-        // Idempotent re-call — just ensure setTerrain is re-issued in
-        // case Mapbox silently detached it.
         terrainRef.current.init();
         return true;
       }
-      if (terrainRef.current) {
-        try { terrainRef.current.destroy(); } catch { /* best-effort */ }
+      if (!terrainRef.current) {
+        terrainRef.current = new TerrainManager(map, awsFastDEMSource.id);
+        terrainRef.current.init();
+      } else {
+        terrainRef.current.setSource(awsFastDEMSource.id);
       }
-      terrainRef.current = new TerrainManager(map, awsFastDEMSource.id);
-      terrainRef.current.init();
       console.log(
         sourceAlreadyPresent
           ? '[map3d] fast 30 m terrain re-bound'
@@ -523,38 +525,67 @@ export function attachDemSource(ctx: Ctx): void {
   // with the same value (no-ops if the desired terrain is already
   // bound). Designed for zero-flicker user-facing toggling.
   fns.setDem3dQuality = (quality) => {
+    if (!canMutateTerrainStyle()) return;
+
     if (quality === 'fast-30m') {
       fns.applyFastDemTerrain();
+      fns.reportStatus('ready', 100, 'Relief 30 m (rapide)');
       return;
     }
-    // 'hd' → return to the unified SW pipeline. Don't tear down the
-    // fast source — keep it resident so the next switch back is
-    // also instant.
+
+    // 'hd' mode:
+    const profile = fns.getActiveDemProfile();
+    const tiles = buildDemTilesTemplate(st.demCacheBust, profile);
+    let unifiedSource = map.getSource(unifiedDEMSource.id) as {
+      setTiles?: (tiles: string[]) => unknown;
+    } | undefined;
+
+    if (!unifiedSource) {
+      try {
+        map.addSource(unifiedDEMSource.id, {
+          type: 'raster-dem',
+          tiles,
+          tileSize: unifiedDEMSource.tileSize,
+          encoding: unifiedDEMSource.encoding,
+          minzoom: unifiedDEMSource.minzoom,
+          maxzoom: unifiedDEMSource.maxzoom,
+        });
+        unifiedSource = map.getSource(unifiedDEMSource.id) as {
+          setTiles?: (tiles: string[]) => unknown;
+        } | undefined;
+      } catch (error) {
+        console.warn('[map3d] DEM source attach failed during quality switch', error);
+      }
+    } else if (typeof unifiedSource.setTiles === 'function') {
+      unifiedSource.setTiles(tiles);
+    }
+
+    fns.refreshTrackedSourceIds();
+
     if (map.getSource(unifiedDEMSource.id)) {
-      // Re-bind TerrainManager to the unified source.
-      try {
-        if (terrainRef.current) {
-          try { terrainRef.current.destroy(); } catch { /* best-effort */ }
-          terrainRef.current = null;
-        }
-      } catch { /* best-effort */ }
-      fns.applyUnifiedTerrain();
-      console.log('[map3d] HD terrain re-bound (unified DEM)');
+      if (!terrainRef.current) {
+        terrainRef.current = new TerrainManager(map, unifiedDEMSource.id);
+        terrainRef.current.init();
+      } else {
+        terrainRef.current.setSource(unifiedDEMSource.id);
+      }
+      st.demTrackingEnabled = true;
+      fns.clearDemTracking();
+      fns.reportStatus('loading', 25, profile === 'terrain' ? 'Relief 1 m' : 'Relief 0.40 m');
+      fns.scheduleDemSettle();
+      fns.scheduleSetTilesVerify();
+      console.log('[map3d] HD terrain hot-swapped (unified DEM)');
       return;
     }
-    // Unified source missing — fall back to AWS fallback (or, if even
-    // that's missing, leave the fast source bound rather than going
-    // flat). The bootstrap will eventually attach unified-dem.
+
     if (map.getSource(awsFallbackDEMSource.id)) {
-      try {
-        if (terrainRef.current) {
-          try { terrainRef.current.destroy(); } catch { /* best-effort */ }
-          terrainRef.current = null;
-        }
-      } catch { /* best-effort */ }
-      fns.attachAwsFallbackTerrain();
-      console.log('[map3d] HD terrain unavailable — bound to AWS fallback while bootstrap runs');
+      if (!terrainRef.current) {
+        terrainRef.current = new TerrainManager(map, awsFallbackDEMSource.id);
+        terrainRef.current.init();
+      } else {
+        terrainRef.current.setSource(awsFallbackDEMSource.id);
+      }
+      console.log('[map3d] HD terrain unavailable — bound to AWS fallback');
     }
-    // Else: nothing to do; bootstrap will route via applyManagedTerrain.
   };
 }

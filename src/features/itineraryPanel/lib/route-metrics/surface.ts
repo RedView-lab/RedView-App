@@ -1,27 +1,44 @@
 import type { Surface } from './types';
 
-const PAVED_SURFACES = new Set([
+const ASPHALT_SURFACES = new Set([
   'asphalt',
+  'chipseal',
+  'tartan',
+  'bitumen',
+  'asphalt:lanes',
+  'tar',
+  'macadam',
+]);
+
+const PAVED_SURFACES = new Set([
   'paved',
   'concrete',
   'concrete:plates',
   'concrete:lanes',
   'paving_stones',
+  'paving_stones:lanes',
   'sett',
   'metal',
   'wood',
   'cobblestone',
+  'cobblestone:flattened',
   'unhewn_cobblestone',
-  'chipseal',
-  'tartan',
+  'bricks',
+  'interlocking',
+  'stone',
 ]);
 
 const GRAVEL_SURFACES = new Set([
   'unpaved',
   'gravel',
   'fine_gravel',
+  'gravel:lanes',
   'compacted',
   'pebblestone',
+  'crushed_limestone',
+  'limestone',
+  'stabilized_turf',
+  'grass_paver',
 ]);
 
 const DIRT_SURFACES = new Set([
@@ -31,10 +48,21 @@ const DIRT_SURFACES = new Set([
   'grass',
   'mud',
   'rock',
+  'rocky',
   'snow',
   'ice',
   'salt',
   'woodchips',
+  'clay',
+  'scree',
+  'shingle',
+  'volcanic',
+]);
+
+const SAND_SURFACES = new Set([
+  'sand',
+  'dune',
+  'sandy',
 ]);
 
 const PAVED_HIGHWAYS = new Set([
@@ -70,7 +98,7 @@ function isLikelyDirtTrack(tags: Record<string, string>): boolean {
   return tags.tracktype === 'grade3' || tags.tracktype === 'grade4' || tags.tracktype === 'grade5';
 }
 
-function parseWayTags(tagsStr: string): Record<string, string> {
+export function parseWayTags(tagsStr: string): Record<string, string> {
   const out: Record<string, string> = {};
   if (!tagsStr) return out;
 
@@ -86,25 +114,33 @@ function parseWayTags(tagsStr: string): Record<string, string> {
 export function classifySegment(tagsStr: string): Surface {
   const tags = parseWayTags(tagsStr);
   if (tags.surface) {
-    if (tags.surface === 'sand') return 'dirt';
-    if (DIRT_SURFACES.has(tags.surface)) return 'dirt';
-    if (GRAVEL_SURFACES.has(tags.surface)) return 'gravel';
-    if (PAVED_SURFACES.has(tags.surface)) return 'paved';
+    const surfaceVal = tags.surface.toLowerCase().trim();
+    if (SAND_SURFACES.has(surfaceVal)) return 'sand';
+    if (DIRT_SURFACES.has(surfaceVal)) return 'dirt';
+    if (GRAVEL_SURFACES.has(surfaceVal)) return 'gravel';
+    if (PAVED_SURFACES.has(surfaceVal)) return 'paved';
+    if (ASPHALT_SURFACES.has(surfaceVal)) return 'asphalt';
   }
 
   if (isLikelyDirtTrack(tags)) return 'dirt';
   if (isLikelyGravelTrack(tags)) return 'gravel';
 
   if (tags.highway) {
-    if (PAVED_HIGHWAYS.has(tags.highway)) return 'paved';
-    if (DIRT_HIGHWAYS.has(tags.highway)) return 'dirt';
+    const highwayVal = tags.highway.toLowerCase().trim();
+    if (highwayVal === 'pedestrian' || highwayVal === 'living_street') return 'paved';
+    if (PAVED_HIGHWAYS.has(highwayVal)) return 'asphalt';
+    if (DIRT_HIGHWAYS.has(highwayVal)) return 'dirt';
   }
 
   return 'unknown';
 }
 
+export function isAsphaltSurface(surface: Surface | null | undefined): boolean {
+  return surface === 'asphalt';
+}
+
 export function isPavedSurface(surface: Surface | null | undefined): boolean {
-  return surface === 'paved';
+  return surface === 'asphalt' || surface === 'paved';
 }
 
 export function isOffroadSurface(surface: Surface | null | undefined): boolean {
@@ -112,5 +148,5 @@ export function isOffroadSurface(surface: Surface | null | undefined): boolean {
 }
 
 export function isStyledSurface(surface: Surface | null | undefined): boolean {
-  return isPavedSurface(surface) || isOffroadSurface(surface);
+  return surface === 'asphalt' || surface === 'paved' || isOffroadSurface(surface);
 }

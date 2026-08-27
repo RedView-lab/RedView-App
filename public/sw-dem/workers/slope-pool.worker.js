@@ -119,6 +119,13 @@ self.onmessage = async (event) => {
 
       const size = DEM_TILE_SIZE;
       const rgba = buildAltitudeRgba(elevations);
+      // Analysis-zone mask — rasterizeRingMask/applyRingMaskToRgba come from
+      // slope-math.js (importScripts above), keeping pool and in-process
+      // outputs byte-identical.
+      if (msg.zoneRing) {
+        const zoneMask = rasterizeRingMask(msg.zoneRing, msg.z, msg.x, msg.y, size);
+        if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
+      }
       const pngBlob = await buildRawPng(size, size, rgba);
       const pngBuf = await pngBlob.arrayBuffer();
 
@@ -169,7 +176,7 @@ self.onmessage = async (event) => {
 
     const resFactor = Number(msg.resFactor) > 1 ? Number(msg.resFactor) : 1;
     const result = await buildSlopeRgbaFromElevations(
-      ownElev, neighbours, msg.z, msg.x, msg.y, resFactor,
+      ownElev, neighbours, msg.z, msg.x, msg.y, resFactor, msg.zoneRing || null,
     );
 
     // Merge any worker-side missing directions into the result.

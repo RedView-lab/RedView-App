@@ -2,8 +2,8 @@ import type { TileCoord, CachedTileInfo, PointCloudData, DetectedCrs } from '../
 import { buildTileFileName } from './coordConvert';
 
 const LIDAR_DIR = 'lidar-hd';
-const MAX_COLORIZED_CACHE_BYTES = 128 * 1024 * 1024;
-const MAX_TERRAIN_CACHE_BYTES = 96 * 1024 * 1024;
+const MAX_COLORIZED_CACHE_BYTES = 512 * 1024 * 1024;
+const MAX_TERRAIN_CACHE_BYTES = 256 * 1024 * 1024;
 
 async function getLidarDir(): Promise<FileSystemDirectoryHandle> {
   const root = await navigator.storage.getDirectory();
@@ -33,6 +33,16 @@ export function hasValidLasSignature(data: ArrayBuffer): boolean {
   if (data.byteLength < 4) return false;
   try {
     return new DataView(data).getUint32(0, false) === 0x4C415346;
+  } catch {
+    return false;
+  }
+}
+
+export function hasValidZipSignature(data: ArrayBuffer): boolean {
+  if (data.byteLength < 4) return false;
+  try {
+    const magic = new DataView(data).getUint32(0, false);
+    return magic === 0x504B0304 || magic === 0x504B0506 || magic === 0x504B0708;
   } catch {
     return false;
   }
@@ -108,20 +118,31 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
 
     const file = await (handle as FileSystemFileHandle).getFile();
 
-    const match = name.match(/^LHD_(\w+)_(\d{4})_(\d{4})_PTS_(\w+)_(\w+)\.copc\.laz$/);
+    const match = name.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
     if (!match) continue;
 
     const [, territory, xStr, yStr, projection, altRef] = match;
     // For IGN tiles the filename encodes the NW corner (y = south edge + 1 km)
-    // and TileCoord uses the south edge convention. For Swiss tiles the
+    // and TileCoord uses the south edge convention. For Swiss, NZ and Japan tiles the
     // filename already encodes the SW corner (no offset).
     const isSwiss = territory === 'CH';
+    const isNz = territory === 'NZ';
+    const isJapan = territory === 'JP';
+    const isSwCorner = isSwiss || isNz || isJapan;
+
+    let xKm = parseInt(xStr, 10);
+    let yKm = parseInt(yStr, 10);
+    if (isJapan) {
+      xKm = xStr.startsWith('m') ? -parseInt(xStr.slice(1), 10) : xStr.startsWith('p') ? parseInt(xStr.slice(1), 10) : parseInt(xStr, 10);
+      yKm = yStr.startsWith('m') ? -parseInt(yStr.slice(1), 10) : yStr.startsWith('p') ? parseInt(yStr.slice(1), 10) : parseInt(yStr, 10);
+    }
+
     tiles.push({
       coord: {
-        xKm: parseInt(xStr, 10),
-        yKm: parseInt(yStr, 10) - (isSwiss ? 0 : 1),
+        xKm,
+        yKm: yKm - (isSwCorner ? 0 : 1),
         territory: territory as any,
-        projection: (isSwiss ? 'CH1903_LV95' : projection) as any,
+        projection: (isSwiss ? 'CH1903_LV95' : isNz ? 'NZTM2000' : projection) as any,
         altRef: altRef as any,
       },
       fileName: name,
@@ -150,7 +171,7 @@ export async function clearAllTiles(): Promise<void> {
 // --- Colorized point cloud cache ---
 
 function colorizedKey(baseName: string): string {
-  return baseName.replace(/\.copc\.laz$/, '.colorized');
+  return baseName.replace(/(\.copc)?\.laz$/, '.colorized_v3');
 }
 
 export async function saveColorizedData(lazFileName: string, pc: PointCloudData): Promise<void> {
@@ -235,7 +256,7 @@ export async function loadColorizedData(lazFileName: string): Promise<PointCloud
 // --- Terrain mesh cache ---
 
 function terrainKey(baseName: string): string {
-  return baseName.replace(/\.copc\.laz$/, '.terrain');
+  return baseName.replace(/\.copc\.laz$/, '.terrain_hd_v2');
 }
 
 export interface TerrainCache {

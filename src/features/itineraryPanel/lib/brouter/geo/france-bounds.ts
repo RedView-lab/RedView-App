@@ -63,8 +63,7 @@ export function checkRouteWithinFrance(points: LatLon[]): FranceBoundsCheck {
       return {
         ok: false,
         reason:
-          'RedView limite temporairement le routage à la France métropolitaine. ' +
-          'Repositionnez vos points dans l’hexagone (ou en Corse).',
+          'Impossible de calculer l’itinéraire : les points doivent être situés en France métropolitaine ou en Corse.',
       };
     }
   }

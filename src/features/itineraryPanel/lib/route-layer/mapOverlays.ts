@@ -203,10 +203,6 @@ export function setAnalysisHoverPoint(
     if (!source) return;
     source.setData(buildAnalysisHoverGeoJson(point));
     if (!analysisHoverVisibilityState.get(map)) {
-      if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
-        map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'visible');
-        map.moveLayer(ANALYSIS_HOVER_HALO_LAYER_ID);
-      }
       if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
         map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'visible');
         map.moveLayer(ANALYSIS_HOVER_POINT_LAYER_ID);
@@ -223,9 +219,6 @@ export function clearAnalysisHoverPoint(map: MapboxMap): void {
     const source = map.getSource(ANALYSIS_HOVER_SOURCE_ID) as GeoJSONSource | undefined;
     if (!analysisHoverVisibilityState.get(map)) return;
     source?.setData(buildAnalysisHoverGeoJson(null));
-    if (map.getLayer(ANALYSIS_HOVER_HALO_LAYER_ID)) {
-      map.setLayoutProperty(ANALYSIS_HOVER_HALO_LAYER_ID, 'visibility', 'none');
-    }
     if (map.getLayer(ANALYSIS_HOVER_POINT_LAYER_ID)) {
       map.setLayoutProperty(ANALYSIS_HOVER_POINT_LAYER_ID, 'visibility', 'none');
     }

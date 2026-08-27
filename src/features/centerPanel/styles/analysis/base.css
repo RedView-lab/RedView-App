@@ -16,126 +16,135 @@
   gap: 12px;
   font-family: inherit;
   min-width: 0;
-  min-height: 0;
+  min-height: 220px;
 }
 
 .rvc-center-analysis__toolbar {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
-  gap: 12px;
+  gap: 8px;
   min-height: 32px;
   min-width: 0;
   position: relative;
-  z-index: 3;
+  z-index: 30;
   overflow: visible;
   font-family: var(--rvc-center-font-family);
 }
 
 .rvc-center-analysis__label {
-  flex: 0 0 auto;
+  flex-shrink: 0;
   font-family: var(--rvc-center-font-family);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
   line-height: normal;
   white-space: nowrap;
 }
 
 .rvc-center-analysis__segmented {
   display: inline-flex;
-  flex: 0 0 auto;
+  align-items: center;
+  flex-shrink: 0;
   gap: 2px;
-  height: 30px;
+  height: 28px;
   padding: 2px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .rvc-center-analysis__segment {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 26px;
+  height: 24px;
   border: 0;
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: 4px;
+  padding: 0 8px;
   background: transparent;
-  color: var(--rvc-center-text);
+  color: rgba(255, 255, 255, 0.7);
   font-family: var(--rvc-center-font-family);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 400;
   line-height: normal;
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rvc-center-analysis__segment:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .rvc-center-analysis__segment--active {
-  background: rgba(0, 0, 0, 0.64);
-  font-weight: 500;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font-weight: 400;
 }
 
 .rvc-center-analysis__detail {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
-  gap: 12px;
-  min-height: 32px;
-  min-width: 0;
+  flex-shrink: 0;
+  gap: 6px;
+  min-height: 28px;
 }
 
 .rvc-center-analysis__minor-label,
 .rvc-center-analysis__axis-label {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.6);
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: 1;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .rvc-center-analysis__detail-buttons {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
-  gap: 4px;
+  flex-shrink: 0;
+  gap: 2px;
 }
 
 .rvc-center-analysis__detail-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 32px;
-  padding: 0 12px;
-  border: 0;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-  color: var(--rvc-center-text);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
   font-family: var(--rvc-center-font-family);
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 400;
   line-height: 1;
   cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease,
-    opacity 140ms ease;
+  flex-shrink: 0;
+  transition: all 140ms ease;
 }
 
 .rvc-center-analysis__detail-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .rvc-center-analysis__detail-button:disabled {
-  opacity: 0.38;
+  opacity: 0.35;
   cursor: default;
 }
 
 .rvc-center-analysis__axis {
   display: flex;
   align-items: center;
-  flex: 0 0 auto;
-  gap: 12px;
-  min-width: 0;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .rvc-center-analysis__axis-meta {
@@ -143,16 +152,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  flex: 0 0 auto;
+  gap: 3px;
+  flex-shrink: 0;
 }
 
 .rvc-center-analysis__axis-picker {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: 0 0 auto;
-  min-width: 0;
+  flex-shrink: 0;
   padding: 2px 4px;
   border-radius: 6px;
   cursor: pointer;
@@ -169,13 +177,18 @@
 }
 
 .rvc-center-analysis__axis-label {
+  font-size: 12px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.6);
   width: 32px;
   text-align: right;
+  flex-shrink: 0;
 }
 
 .rvc-center-analysis__axis-line {
   width: 12px;
-  height: 1px;
+  height: 2px;
+  border-radius: 1px;
   background: var(--rvc-center-red-accent);
   opacity: 0.92;
 }
@@ -184,30 +197,37 @@
   position: relative;
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .rvc-center-analysis__select {
-  min-width: 80px;
-  width: min(116px, 16cqi);
-  max-width: 116px;
-  height: 32px;
-  padding: 6px 8px 6px 12px;
-  border: 1.5px solid #444;
+  min-width: 76px;
+  width: auto;
+  max-width: 120px;
+  height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 6px;
-  background: transparent;
-  color: var(--rvc-center-text);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.9);
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: normal;
   cursor: pointer;
   overflow: hidden;
+  flex-shrink: 0;
+  transition: all 0.14s ease;
+}
+
+.rvc-center-analysis__select:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #fff;
 }
 
 .rvc-center-analysis__select-value {
@@ -216,30 +236,57 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-weight: 400;
 }
 
 .rvc-center-analysis__select-icon {
-  flex: 0 0 auto;
-  color: rgba(152, 157, 171, 0.9);
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .rvc-center-analysis__dropdown {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 8;
+  z-index: 100;
   isolation: isolate;
   width: min(220px, max(160px, 100%));
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   overflow: hidden;
   pointer-events: auto;
+  background: rgba(20, 22, 28, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
 }
 
-.rvc-center-analysis__dropdown > * {
+.rvc-center-analysis__dropdown-list {
   position: relative;
   z-index: 1;
+  max-height: min(280px, calc(100vh - 220px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 3px 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}
+
+.rvc-center-analysis__dropdown-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.rvc-center-analysis__dropdown-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rvc-center-analysis__dropdown-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+.rvc-center-analysis__dropdown-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .rvc-center-analysis__dropdown-option {
@@ -283,7 +330,7 @@
 
 .rvc-center-analysis__dropdown-text--primary {
   font-size: inherit;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .rvc-center-analysis__dropdown-text--secondary {
@@ -299,11 +346,10 @@
 
 .rvc-center-analysis__separator {
   width: 1px;
-  height: 32px;
+  height: 20px;
   align-self: center;
-  flex: 0 0 auto;
-  background: rgba(255, 255, 255, 0.8);
-  opacity: 0.16;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvc-center-analysis__filters {
@@ -312,7 +358,13 @@
   flex: 0 1 auto;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.rvc-center-analysis__filters::-webkit-scrollbar {
+  display: none;
 }
 
 .rvc-center-analysis__warning {
@@ -321,7 +373,7 @@
   color: #ff6b6b;
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   line-height: 1.2;
   text-align: right;
   white-space: normal;
@@ -329,36 +381,44 @@
 
 .rvc-center-analysis__filter-chip {
   position: relative;
-  height: 32px;
+  height: 28px;
+  flex-shrink: 0;
   max-width: none;
   min-width: 0;
-  padding: 6px 4px 6px 8px;
+  padding: 4px 8px 4px 6px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.85);
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   font-family: var(--rvc-center-font-family);
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 400;
   line-height: normal;
   overflow: hidden;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  transition: all 0.14s ease;
 }
 
 .rvc-center-analysis__filter-chip:hover {
   background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .rvc-center-analysis__filter-chip--off {
-  color: rgba(255, 255, 255, 0.36);
+  background: transparent;
+  border-color: transparent;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-.rvc-center-analysis__filter-chip--off .rvc-center-analysis__checkbox {
-  background: rgba(0, 0, 0, 0.32);
+.rvc-center-analysis__filter-chip--off:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .rvc-center-analysis__filter-input {
@@ -376,7 +436,7 @@
 
 .rvc-center-analysis__filter-label {
   min-width: 0;
-  font-weight: inherit;
+  font-weight: 400;
   color: inherit;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -384,15 +444,20 @@
 }
 
 .rvc-center-analysis__checkbox {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.64);
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.16);
   color: #fff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+}
+
+.rvc-center-analysis__filter-chip--off .rvc-center-analysis__checkbox {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .rvc-center-analysis__results {

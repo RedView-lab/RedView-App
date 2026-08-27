@@ -99,6 +99,7 @@ export function formatDayLabel(date: Date): string {
 
 export function formatDistanceLabel(distanceKm: number): string {
   if (!Number.isFinite(distanceKm)) return '--';
+  if (distanceKm === 0) return '0 km';
   return `${distanceKm.toFixed(1)} km`;
 }
 
@@ -107,8 +108,8 @@ export function formatLegDuration(seconds: number | null): string {
   const totalMinutes = Math.max(0, Math.round(seconds / 60));
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-  if (hours <= 0) return `${minutes}min`;
-  return `${String(hours).padStart(2, '0')}h${String(minutes).padStart(2, '0')}`;
+  if (hours <= 0) return `00h${String(minutes).padStart(2, '0')}`;
+  return `${String(hours).padStart(2, '0')}h${String(minutes).padStart(2, '0')}m`;
 }
 
 export function formatPauseDuration(minutes: number): string {
@@ -119,21 +120,18 @@ export function formatPauseDuration(minutes: number): string {
   return remainder > 0 ? `${hours}h${String(remainder).padStart(2, '0')}` : `${hours}h`;
 }
 
-export function formatHourLabel(hour: number, isBoundary: boolean): string {
+export function formatHourLabel(hour: number, _isBoundary?: boolean): string {
   const normalizedMinuteOfDay = ((Math.round(hour) % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
   const hours = Math.floor(normalizedMinuteOfDay / 60);
   const minutes = normalizedMinuteOfDay % 60;
   const date = new Date(2000, 0, 1, hours, minutes, 0, 0);
-  if (isBoundary) {
-    return date
-      .toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: minutes > 0 ? '2-digit' : undefined,
-        hour12: true,
-      })
-      .replace('\u202f', ' ');
-  }
-  return `${hours}:${String(minutes).padStart(2, '0')}`;
+  return date
+    .toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: minutes > 0 ? '2-digit' : undefined,
+      hour12: true,
+    })
+    .replace('\u202f', ' ');
 }
 
 export function getMinuteOfDay(date: Date): number {

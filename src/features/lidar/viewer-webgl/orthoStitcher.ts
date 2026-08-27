@@ -7,7 +7,7 @@
 // the four corner UVs (in stitched-texture space [0..1]) so the worker can
 // pre-compute per-vertex UVs.
 
-import { toWgs84 } from '../lib/coordConvert';
+import { toWgs84, isJgd2011Crs } from '../lib/coordConvert';
 import type { PointCloudBounds, DetectedCrs } from '../types';
 import type { CornerUV } from './terrainWorker';
 
@@ -37,6 +37,29 @@ async function fetchTile(col: number, row: number, crs: DetectedCrs): Promise<Im
     // swisstopo SWISSIMAGE — Web-Mercator (3857) tile grid, public + CORS.
     const sub = (col + row) % 10;
     url = `https://wmts${sub}.geo.admin.ch/1.0.0/ch.swisstopo.swissimage/default/current/3857/${WMTS_ZOOM}/${col}/${row}.jpeg`;
+  } else if (isJgd2011Crs(crs)) {
+    // Japan — GSI Seamless Orthophotos (Geospatial Information Authority of Japan)
+    const gsiCol = col >> (WMTS_ZOOM - 18);
+    const gsiRow = row >> (WMTS_ZOOM - 18);
+    const subX = (col & 1) * 128;
+    const subY = (row & 1) * 128;
+    const gsiUrl = `https://cyberjapandata.gsi.go.jp/xyz/seamlessphoto/18/${gsiCol}/${gsiRow}.jpg`;
+    try {
+      const r = await fetch(gsiUrl);
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      const bitmap = await createImageBitmap(blob);
+      const canvas = new OffscreenCanvas(TILE_SIZE, TILE_SIZE);
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(bitmap, subX, subY, 128, 128, 0, 0, TILE_SIZE, TILE_SIZE);
+      bitmap.close();
+      return await createImageBitmap(canvas);
+    } catch {
+      return null;
+    }
+  } else if (crs === 'NZTM2000') {
+    // New Zealand — ESRI World Imagery (Web-Mercator, public + CORS)
+    url = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${WMTS_ZOOM}/${row}/${col}`;
   } else {
     url =
       `https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0` +
@@ -89,7 +112,8 @@ export async function stitchOrtho(
   const canvas = new OffscreenCanvas(W, H);
   const ctx = canvas.getContext('2d', { alpha: false });
   if (!ctx) throw new Error('OffscreenCanvas 2D context unavailable');
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.fillStyle = '#1a1a1a';
   ctx.fillRect(0, 0, W, H);
 
@@ -107,11 +131,13 @@ export async function stitchOrtho(
     for (let k = 0; k < batch.length; k++) {
       const bm = bitmaps[k];
       if (!bm) continue;
-      const dx = (batch[k].col - minTileCol) * TILE_SIZE * scale;
-      const dy = (batch[k].row - minTileRow) * TILE_SIZE * scale;
-      const dw = TILE_SIZE * scale;
-      const dh = TILE_SIZE * scale;
-      ctx.drawImage(bm, dx, dy, dw, dh);
+      const x0 = Math.round((batch[k].col - minTileCol) * TILE_SIZE * scale);
+      const x1 = Math.round((batch[k].col - minTileCol + 1) * TILE_SIZE * scale);
+      const y0 = Math.round((batch[k].row - minTileRow) * TILE_SIZE * scale);
+      const y1 = Math.round((batch[k].row - minTileRow + 1) * TILE_SIZE * scale);
+      const dw = x1 - x0;
+      const dh = y1 - y0;
+      ctx.drawImage(bm, x0, y0, dw, dh);
       bm.close();
     }
     done += batch.length;

@@ -13,7 +13,13 @@ export function drawAnalysisChartCanvas(
     seriesLayers: CanvasSeriesLayer[];
   },
 ) {
-  const ctx = prepareCanvas2d(canvas, input.width, input.height);
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const width = rect.width > 0 ? rect.width : input.width;
+  const height = rect.height > 0 ? rect.height : input.height;
+
+  const ctx = prepareCanvas2d(canvas, width, height);
   if (!ctx) return;
 
   if (input.backdropYDomain) {
@@ -24,6 +30,8 @@ export function drawAnalysisChartCanvas(
         input.xDomain,
         input.backdropYDomain,
         layer.fillColor,
+        width,
+        height,
       );
     }
     for (const layer of input.backdropSeries) {
@@ -34,12 +42,23 @@ export function drawAnalysisChartCanvas(
         input.backdropYDomain,
         layer.lineColor,
         1.15,
+        width,
+        height,
       );
     }
   }
 
   for (const layer of input.seriesLayers) {
-    drawCanvasLine(ctx, layer.points, input.xDomain, layer.yDomain, layer.color, layer.lineWidth);
+    drawCanvasLine(
+      ctx,
+      layer.points,
+      input.xDomain,
+      layer.yDomain,
+      layer.color,
+      layer.lineWidth,
+      width,
+      height,
+    );
   }
 }
 
@@ -48,22 +67,22 @@ function prepareCanvas2d(
   width: number,
   height: number,
 ) {
-  if (!canvas) return null;
+  if (!canvas || width <= 0 || height <= 0) return null;
 
-  const cssWidth = Math.max(0, width);
-  const cssHeight = Math.max(0, height);
   const dpr = window.devicePixelRatio || 1;
+  const targetBufferWidth = Math.max(1, Math.round(width * dpr));
+  const targetBufferHeight = Math.max(1, Math.round(height * dpr));
 
-  canvas.style.width = `${cssWidth}px`;
-  canvas.style.height = `${cssHeight}px`;
-  canvas.width = Math.max(1, Math.round(cssWidth * dpr));
-  canvas.height = Math.max(1, Math.round(cssHeight * dpr));
+  if (canvas.width !== targetBufferWidth || canvas.height !== targetBufferHeight) {
+    canvas.width = targetBufferWidth;
+    canvas.height = targetBufferHeight;
+  }
 
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.clearRect(0, 0, width, height);
   return ctx;
 }
 
@@ -74,11 +93,10 @@ function drawCanvasLine(
   yDomain: AxisDomain,
   color: string,
   lineWidth: number,
+  width: number,
+  height: number,
 ) {
-  if (points.length < 2) return;
-
-  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
-  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+  if (points.length < 2 || width <= 0 || height <= 0) return;
 
   ctx.save();
   ctx.beginPath();
@@ -102,11 +120,10 @@ function drawCanvasArea(
   xDomain: AxisDomain,
   yDomain: AxisDomain,
   fill: string,
+  width: number,
+  height: number,
 ) {
-  if (points.length < 2) return;
-
-  const width = Number(ctx.canvas.style.width.replace('px', '')) || ctx.canvas.width;
-  const height = Number(ctx.canvas.style.height.replace('px', '')) || ctx.canvas.height;
+  if (points.length < 2 || width <= 0 || height <= 0) return;
 
   ctx.save();
   ctx.beginPath();

@@ -376,7 +376,7 @@ function harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, 
 }
 
 // ── Slope-only RGBA PNG (R = sqrt-encoded angle, A = NoData mask) ─────
-async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
+async function encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
@@ -418,6 +418,8 @@ async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
     rgba[idx + 2] = 0;
     rgba[idx + 3] = 255;
   }
+
+  if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
 
   return (typeof buildRawPngSlope === 'function')
     ? buildRawPngSlope(size, size, rgba)
@@ -646,7 +648,7 @@ function harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellS
   }
 }
 
-async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile) {
+async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing) {
   const t0 = performance.now();
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
   const t1 = performance.now();
@@ -654,12 +656,18 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
   const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
   const t2 = performance.now();
 
+  // Analysis-zone mask (see core/analysis-zone.js). rasterizeRingMask comes
+  // from workers/slope-math.js (shared kernel), so the in-process output is
+  // byte-identical to the worker-pool output.
+  const zoneMask = zoneRing ? rasterizeRingMask(zoneRing, z, x, y, DEM_TILE_SIZE) : null;
+
   let blob;
   const useFusedFastPath = !resFactor || resFactor <= 1;
   if (useFusedFastPath) {
     // Single-pass compute + encode (fast path, default resolution).
     const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
     harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY);
+    if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
     const t3 = performance.now();
     blob = (typeof buildRawPngSlope === 'function')
       ? await buildRawPngSlope(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba)
@@ -667,7 +675,7 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
     const t4 = performance.now();
     if (DEBUG) {
       console.log(
-        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} fused=${(t3 - t2).toFixed(0)} png=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
+        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} fused=${(t3 - t2).toFixed(0)} png=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms profile=${demProfile || 'default'}${zoneMask ? ' zone=1' : ''} missingN=${missingNeighbours.length}`
       );
     }
   } else {
@@ -677,11 +685,11 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile)
     slopes = harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY);
     slopes = downsampleSlopes(slopes, resFactor | 0);
     const t3 = performance.now();
-    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);
+    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask);
     const t4 = performance.now();
     if (DEBUG) {
       console.log(
-        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor} profile=${demProfile || 'default'} missingN=${missingNeighbours.length}`
+        `[slope] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} pad=${(t2 - t1).toFixed(0)} horn=${(t3 - t2).toFixed(0)} enc=${(t4 - t3).toFixed(0)} total=${(t4 - t0).toFixed(0)}ms res=${resFactor} profile=${demProfile || 'default'}${zoneMask ? ' zone=1' : ''} missingN=${missingNeighbours.length}`
       );
     }
   }

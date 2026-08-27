@@ -22,10 +22,11 @@ export function usePlotAreaSize(ref: RefObject<HTMLElement | null>) {
     let pendingWidth = 0;
     let pendingHeight = 0;
     const observer = new ResizeObserver((entries) => {
-      const contentRect = entries[0]?.contentRect;
-      if (!contentRect) return;
-      pendingWidth = contentRect.width;
-      pendingHeight = contentRect.height;
+      const entry = entries[0];
+      if (!entry) return;
+      const targetRect = (entry.target as HTMLElement).getBoundingClientRect();
+      pendingWidth = targetRect.width;
+      pendingHeight = targetRect.height;
       if (rafId !== 0) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = 0;

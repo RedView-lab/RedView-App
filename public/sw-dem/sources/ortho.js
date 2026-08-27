@@ -130,13 +130,33 @@ function latToTilePy(lat, z, tileY, size) {
   return (mercY - tileY) * size;
 }
 
+let _sharedOrthoMaskCanvas = null;
+let _sharedOrthoMaskCtx = null;
+
+function getSharedOrthoMaskCtx(size) {
+  if (!_sharedOrthoMaskCanvas) {
+    _sharedOrthoMaskCanvas = new OffscreenCanvas(size, size);
+    _sharedOrthoMaskCtx = _sharedOrthoMaskCanvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+  } else if (_sharedOrthoMaskCanvas.width !== size || _sharedOrthoMaskCanvas.height !== size) {
+    _sharedOrthoMaskCanvas.width = size;
+    _sharedOrthoMaskCanvas.height = size;
+    _sharedOrthoMaskCtx = _sharedOrthoMaskCanvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+  }
+  return _sharedOrthoMaskCtx;
+}
+
 async function maskOrthoTile(imgBlob, z, tileX, tileY) {
   const img = await createImageBitmap(imgBlob);
   try {
-    const canvas = new OffscreenCanvas(ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
-    const ctx = canvas.getContext('2d');
+    const ctx = getSharedOrthoMaskCtx(ORTHO_TILE_SIZE);
+    ctx.clearRect(0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
     const b = mercatorTileBounds(z, tileX, tileY);
 
+    ctx.save();
     ctx.beginPath();
     for (let p = 0; p < francePoly.length; p++) {
       const [bw, bs, be, bn] = francePolyBBoxes[p];
@@ -155,7 +175,8 @@ async function maskOrthoTile(imgBlob, z, tileX, tileY) {
     }
     ctx.clip();
     ctx.drawImage(img, 0, 0, ORTHO_TILE_SIZE, ORTHO_TILE_SIZE);
-    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    ctx.restore();
+    const blob = await _sharedOrthoMaskCanvas.convertToBlob({ type: 'image/png' });
     return blob;
   } finally {
     img.close(); // Release GPU texture memory even if convertToBlob fails
@@ -396,10 +417,25 @@ async function tryParentOrthoOverzoom(cache, z, x, y) {
 
 async function handleOrthoRequest(z, x, y) {
   const tileKey = `${z}/${x}/${y}`;
+  const hotKey = `/ortho-tiles/${tileKey}`;
+
+  // 0. Fast in-memory hit from ORTHO_HOT_CACHE (<1 ms, zero disk I/O)
+  if (typeof orthoHotGet === 'function') {
+    const hot = orthoHotGet(hotKey);
+    if (hot) return orthoHotResponse(hot);
+  }
+
   const cache = await caches.open(ORTHO_CACHE_NAME);
-  const cacheKey = new Request(`/ortho-tiles/${tileKey}`);
+  const cacheKey = new Request(hotKey);
   const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    if (typeof orthoHotPut === 'function') {
+      try {
+        orthoHotPut(hotKey, await cached.clone().blob(), Array.from(cached.headers.entries()));
+      } catch { /* ignore */ }
+    }
+    return cached;
+  }
 
   // Negative cache — skip tiles that recently failed. Try the cropped-parent
   // overzoom before giving up: a recently-timed-out tile is exactly the case
@@ -500,6 +536,11 @@ async function handleOrthoRequest(z, x, y) {
         }
 
         cache.put(cacheKey, response.clone());
+        if (typeof orthoHotPut === 'function') {
+          try {
+            orthoHotPut(hotKey, await response.clone().blob(), Array.from(response.headers.entries()));
+          } catch { /* ignore */ }
+        }
         return response;
       } catch (err) {
         const name = err && err.name;

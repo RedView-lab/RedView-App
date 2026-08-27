@@ -92,7 +92,11 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
   const missingDirections = [];
 
   for (let r = 0; r < S; r++) {
-    pad.set(ownElev.subarray(r * S, (r + 1) * S), (r + 1) * P + 1);
+    const srcOff = r * S;
+    const dstOff = (r + 1) * P + 1;
+    for (let c = 0; c < S; c++) {
+      pad[dstOff + c] = ownElev[srcOff + c];
+    }
   }
 
   const nN = neighbourElevations?.north || null;
@@ -378,7 +382,7 @@ function harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, 
   return slopes;
 }
 
-async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
+async function encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
@@ -412,7 +416,106 @@ async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
     rgba[idx + 2] = 0;
     rgba[idx + 3] = 255;
   }
+  if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
   return buildRawPng(size, size, rgba);
+}
+
+// ── Analysis-zone per-pixel mask ──────────────────────────────────────
+// PURE functions (geo.js's mercatorTileBounds only) shared by the SW scope
+// and the worker pool, so pool and in-process builds are byte-identical.
+//
+// rasterizeRingMask projects the polygon ring ([lng, lat] pairs) into tile
+// pixel space and fills it with a scanline algorithm at 2× supersampling;
+// the 2×2 box downsample gives a natural ~1 px feathered edge so the zone
+// boundary doesn't alias against the terrain mesh.
+
+function rasterizeRingMask(ring, z, x, y, size) {
+  const n = ring.length;
+  if (!n || n < 3) return null;
+
+  // 2× supersampled coverage buffer.
+  const ss = 2;
+  const sw = size * ss;
+  const worldTiles = 1 << z;
+
+  // Project polygon vertices into Web Mercator pixel coordinates in [0, sw] space.
+  const px = new Float64Array(n);
+  const py = new Float64Array(n);
+  for (let i = 0; i < n; i++) {
+    const lng = ring[i][0];
+    const lat = ring[i][1];
+
+    // X in Web Mercator tile pixel space
+    const tileFracX = ((lng + 180) / 360) * worldTiles - x;
+    px[i] = tileFracX * sw;
+
+    // Y in Web Mercator tile pixel space
+    const latRad = (lat * Math.PI) / 180;
+    const sinLat = Math.sin(latRad);
+    const clampedSin = Math.max(-0.999999, Math.min(0.999999, sinLat));
+    const mercY = 0.5 * Math.log((1 + clampedSin) / (1 - clampedSin));
+    const yFrac = 0.5 - mercY / (2 * Math.PI);
+    const tileFracY = yFrac * worldTiles - y;
+    py[i] = tileFracY * sw;
+  }
+
+  const mask = new Uint8Array(sw * sw);
+  const xs = [];
+  for (let row = 0; row < sw; row++) {
+    const sy = row + 0.5;
+    xs.length = 0;
+    for (let e = 0; e < n; e++) {
+      const i1 = (e + 1) % n;
+      const y0 = py[e];
+      const y1 = py[i1];
+      if ((sy >= y0 && sy < y1) || (sy >= y1 && sy < y0)) {
+        const t = (sy - y0) / (y1 - y0);
+        xs.push(px[e] + t * (px[i1] - px[e]));
+      }
+    }
+    if (xs.length < 2) continue;
+    xs.sort((a, c) => a - c);
+    const rowBase = row * sw;
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const cx0 = Math.max(0, Math.ceil(xs[k]));
+      const cx1 = Math.min(sw - 1, Math.floor(xs[k + 1]));
+      for (let cx = cx0; cx <= cx1; cx++) {
+        mask[rowBase + cx] = 255;
+      }
+    }
+  }
+
+  // 2×2 average downsample → feathered alpha.
+  const out = new Uint8Array(size * size);
+  for (let r = 0; r < size; r++) {
+    const sRow = r * ss * sw;
+    const oRow = r * size;
+    for (let c = 0; c < size; c++) {
+      const s0 = sRow + c * ss;
+      out[oRow + c] = (mask[s0] + mask[s0 + 1] + mask[s0 + sw] + mask[s0 + sw + 1]) >> 2;
+    }
+  }
+  return out;
+}
+
+// Multiplies the RGBA alpha channel by the mask (0 → fully transparent,
+// 255 → untouched). RGB is left as-is: GPU-side raster-color only reads
+// pixels with alpha > 0 (bilinear alpha blend handles the feather).
+function applyRingMaskToRgba(rgba, mask) {
+  const n = mask.length;
+  for (let j = 0; j < n; j++) {
+    const m = mask[j];
+    if (m >= 255) continue;
+    const idx = j * 4;
+    if (m === 0) {
+      rgba[idx] = 0;
+      rgba[idx + 1] = 0;
+      rgba[idx + 2] = 0;
+      rgba[idx + 3] = 0;
+    } else {
+      rgba[idx + 3] = ((rgba[idx + 3] * m) + 127) >> 8;
+    }
+  }
 }
 
 // ── Worker-only orchestrator ──────────────────────────────────────────
@@ -426,20 +529,25 @@ async function encodeSlopePng(slopes, ownElev, edgeNeighbours) {
 //   neighbourElevations { north?, east?, south?, west? } Float32Array each
 //   z, x, y            tile coords (for cell-size + diagnostics)
 //   resFactor          1 = fused fast path; >1 = legacy downsample path
+//   zoneRing           optional [[lng, lat], …] analysis-zone ring — when
+//                      present the output alpha is masked to the polygon
 //
 // Output:
 //   { pngArrayBuffer: ArrayBuffer, missingDirections: string[] }
-async function buildSlopeRgbaFromElevations(ownElev, neighbourElevations, z, x, y, resFactor) {
+async function buildSlopeRgbaFromElevations(ownElev, neighbourElevations, z, x, y, resFactor, zoneRing) {
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
   const {
     pad, edgeNeighbours, neighbourElevations: ne, missingDirections,
   } = buildPaddedElevationsFromArrays(ownElev, neighbourElevations);
+
+  const zoneMask = zoneRing ? rasterizeRingMask(zoneRing, z, x, y, DEM_TILE_SIZE) : null;
 
   let blob;
   const useFusedFastPath = !resFactor || resFactor <= 1;
   if (useFusedFastPath) {
     const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
     harmonizeSlopeBordersIntoRgba(rgba, ownElev, ne, cellSizeX, cellSizeY);
+    if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
     // Use the slope-optimised encoder (Sub filter) when available — ~2-3x
     // faster deflate + smaller PNGs. Fall back to buildRawPng for any caller
     // that loads slope-math.js without terrain-rgb.js's new helper (none
@@ -451,7 +559,7 @@ async function buildSlopeRgbaFromElevations(ownElev, neighbourElevations, z, x, 
     let slopes = computeSlopesFromPadded(pad, cellSizeX, cellSizeY);
     slopes = harmonizeSlopeBorders(slopes, ownElev, ne, cellSizeX, cellSizeY);
     slopes = downsampleSlopes(slopes, resFactor | 0);
-    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours);
+    blob = await encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask);
   }
 
   const pngArrayBuffer = await blob.arrayBuffer();

@@ -147,6 +147,48 @@
   opacity: 1;
 }
 
+.rvc-routes__add-btn {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 30px;
+  padding: 0 4px;
+  border-radius: 6px;
+  color: var(--rvc-text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-sizing: border-box;
+  opacity: 0.82;
+  transition: background 0.15s ease, opacity 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.rvc-routes__add-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  opacity: 1;
+}
+
+.rvc-routes__add-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.rvc-routes__add-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 .rvc-routes__trace-width-row {
   min-height: 30px;
   padding-top: 3px;

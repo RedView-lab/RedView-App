@@ -10,6 +10,10 @@ import type {
   OverlayStatusReporter,
 } from '@/features/map3d';
 import type { SunlightBand } from '@/features/controlPanel/types';
+import {
+  adaptiveOvershoot,
+  sunAltitudeOvershootBucket,
+} from '@/features/sunlight/lib/shadowSweep';
 
 export const SUNLIGHT_MAP_SOURCE_ID = 'sunlight-map-image';
 export const SUNLIGHT_MAP_LAYER_ID = 'sunlight-map-image';
@@ -43,6 +47,20 @@ export const MAX_PARTIAL_SAMPLE_RETRIES = 3;
 export type BoundsTuple = [number, number, number, number];
 export type ComputeQuality = 'preview' | 'full';
 
+/**
+ * Analysis-zone restriction for the sunshine overlays: the DEM grid is
+ * sampled over `bounds` (the polygon bbox + adaptive overshoot for shadows
+ * cast from outside the zone) and the output PNG is alpha-masked to `ring`.
+ */
+export interface SunlightAnalysisZone {
+  /** Stable key — changes force a full re-sample. */
+  key: string;
+  /** [west, south, east, north] polygon bbox. */
+  bounds: BoundsTuple;
+  /** Flat [lng, lat, lng, lat, …] closed ring payload for the workers. */
+  ring: number[];
+}
+
 export interface UseSunlightMapOptions {
   enabled: boolean;
   /** ISO YYYY-MM-DD */
@@ -59,6 +77,8 @@ export interface UseSunlightMapOptions {
   opacity: number;
   /** User-configured colour bands. */
   bands: readonly SunlightBand[];
+  /** Analysis zone restricting the overlay (zone-gated widget). */
+  analysisZone?: SunlightAnalysisZone | null;
 }
 
 export interface UseSunlightMapRuntimeOptions {
@@ -161,6 +181,39 @@ export function withOvershoot(b: BoundsTuple, factor: number): BoundsTuple {
   return [Math.max(-180, ws), ss, Math.min(180, es), ns];
 }
 
+/**
+ * Picks a viewport-overshoot factor that grows as the sun sinks, so off-screen
+ * peaks still cast their shadow into the visible area during the cumulative
+ * sunlight integration (low sun → very long shadows → wider overshoot needed).
+ *
+ * Bucketed by sun altitude so the DEM is only re-sampled when the bucket
+ * changes (≤5°, ≤10°, ≤15°, ≤25°), not on every pixel of a time-scrub drag.
+ *
+ * @param rawBounds      Viewport bounds (west, south, east, north) BEFORE overshoot.
+ * @param sunAltitudeDeg Representative sun altitude for the integration span.
+ *                       Callers typically pass the altitude at the current time,
+ *                       which is a good proxy for the worst-case shadow length.
+ * @param lastBucket     Bucket of the currently-sampled grid (or `null` if none).
+ * @returns `{ overshoot, bucket, resample }` — `resample` is true iff the
+ *          bucket changed and the DEM must be re-sampled at the new overshoot.
+ */
+export function chooseAdaptiveOvershoot(
+  rawBounds: BoundsTuple,
+  sunAltitudeDeg: number,
+  lastBucket: number | null,
+): { overshoot: number; bucket: number; resample: boolean } {
+  const bucket = sunAltitudeOvershootBucket(sunAltitudeDeg);
+  if (lastBucket !== null && lastBucket === bucket) {
+    return { overshoot: NaN, bucket, resample: false };
+  }
+  const [w, , e, n] = rawBounds;
+  const midLat = n;
+  const cosLat = Math.cos((midLat * Math.PI) / 180);
+  const viewportWidthM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
+  const overshoot = adaptiveOvershoot(sunAltitudeDeg, NaN, viewportWidthM);
+  return { overshoot, bucket, resample: true };
+}
+
 export function chooseDemZoom(map: MapboxMap, gridW: number): number {
   const z = Math.round(map.getZoom());
   const bounds = map.getBounds();
@@ -168,6 +221,48 @@ export function chooseDemZoom(map: MapboxMap, gridW: number): number {
   const w = bounds.getWest();
   const e = bounds.getEast();
   const lat = (bounds.getNorth() + bounds.getSouth()) / 2;
+  const cosLat = Math.cos((lat * Math.PI) / 180);
+  const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
+  const targetMpp = lonExtentM / gridW;
+  const ideal = Math.log2((40075016.686 * Math.abs(cosLat)) / (256 * targetMpp));
+  return Math.max(DEM_MIN_SAMPLE_ZOOM, Math.min(DEM_MAX_SAMPLE_ZOOM, Math.round(ideal)));
+}
+
+// ── Analysis-zone variants ─────────────────────────────────────────────────
+// Same budget as the viewport versions, but sized from the zone bbox: the
+// grid keeps its full resolution concentrated on the polygon, so a small
+// zone gets a much finer metres-per-cell sample than the whole viewport.
+
+function mercYDeg(latDeg: number): number {
+  const clamped = Math.max(-85.051129, Math.min(85.051129, latDeg));
+  const rad = (clamped * Math.PI) / 180;
+  return Math.log(Math.tan(Math.PI / 4 + rad / 2));
+}
+
+export function chooseZoneGridSize(zoneBounds: BoundsTuple): { gridW: number; gridH: number } {
+  const [w, s, e, n] = zoneBounds;
+  const dxRad = ((e - w) * Math.PI) / 180;
+  const dyRad = Math.abs(mercYDeg(s) - mercYDeg(n));
+  if (dxRad <= 0 || dyRad <= 0) return { gridW: GRID_MIN_W, gridH: GRID_MIN_H };
+  let gw = Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, GRID_MAX_W));
+  let gh = Math.round((gw * dyRad) / dxRad);
+  if (gh > GRID_MAX_H) {
+    gh = GRID_MAX_H;
+    gw = Math.round((gh * dxRad) / dyRad);
+  }
+  if (gh < GRID_MIN_H) {
+    gh = GRID_MIN_H;
+    gw = Math.round((gh * dxRad) / dyRad);
+  }
+  return {
+    gridW: Math.max(GRID_MIN_W, Math.min(GRID_MAX_W, gw)),
+    gridH: Math.max(GRID_MIN_H, Math.min(GRID_MAX_H, gh)),
+  };
+}
+
+export function chooseZoneDemZoom(zoneBounds: BoundsTuple, gridW: number): number {
+  const [w, s, e, n] = zoneBounds;
+  const lat = (n + s) / 2;
   const cosLat = Math.cos((lat * Math.PI) / 180);
   const lonExtentM = ((e - w) * Math.PI * 6378137 * cosLat) / 180;
   const targetMpp = lonExtentM / gridW;

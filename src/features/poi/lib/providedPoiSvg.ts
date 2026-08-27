@@ -1,4 +1,5 @@
 export const PROVIDED_POI_SVG = {
+  waypoint: '/svgv2/icone/checkpoint-waypoint.svg',
   water: '/svgv2/poi/eau.svg',
   bakery: '/svgv2/poi/boulangerie.svg',
   cafe: '/svgv2/poi/cafe.svg',

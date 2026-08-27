@@ -10,7 +10,7 @@
 
 const NORWAY_BOUNDS = [2.0, 57.0, 33.4, 72.2];
 const NORWAY_DEM_MINZOOM = 10;
-const NORWAY_ENGAGE_MPP = 72;
+const NORWAY_ENGAGE_MPP = 75;
 const NORWAY_WCS_VERSION = '1.0.0';
 // Cold backend (`hoydedata.no`) can take 15-25 s to render a fresh tile;
 // 30 s prevents abort-and-retry storms when panning to a new region.

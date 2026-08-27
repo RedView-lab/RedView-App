@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildBrfProfile,
   checkRouteWithinFrance,
+  formatBrouterErrorMessage,
   formatForbiddenZonePolygons,
   hashBrf,
   isClimbingMode,
@@ -236,7 +237,7 @@ export function useItineraryBrouterRouting({
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
           console.error('[BRouter local patch fail]', error);
-          setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
+          setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
           if (!ctrl.signal.aborted) setRouteLoading(false);
@@ -309,7 +310,7 @@ export function useItineraryBrouterRouting({
             rollbackPendingTraceAppend(currentActive.id);
           }
           console.error('[BRouter append fail]', error);
-          setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
+          setRouteError(formatBrouterErrorMessage(error));
         })
         .finally(() => {
           if (!ctrl.signal.aborted) setRouteLoading(false);
@@ -417,7 +418,7 @@ export function useItineraryBrouterRouting({
       .catch((error: unknown) => {
         if ((error as { name?: string }).name === 'AbortError') return;
         console.error('[BRouter fetch fail]', error);
-        setRouteError(error instanceof Error ? error.message : 'Erreur BRouter');
+        setRouteError(formatBrouterErrorMessage(error));
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setRouteLoading(false);

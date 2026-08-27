@@ -6,15 +6,13 @@
 import './loading/styles.css';
 import './panel/styles.css';
 import './tileNavigator/styles.css';
-import { LidarRenderer } from './renderer';
-import type { HeightmapParams } from './renderer';
+import { LidarRenderer, type HeightmapParams } from './renderer';
 import { CameraController } from './camera';
-import { buildTileFileName, getTileInfo, toWgs84 } from '../lib/coordConvert';
-import type { DetectedCrs, AltitudeRef, TileCoord } from '../types';
+import { getTimeZoneForCoordinates, toWgs84 } from '../lib/coordConvert';
 import type { AABB } from './lod/types';
 import { LodManager } from './lod/lodManager';
 import { LidarManager } from '../lib/lidarManager';
-import { buildViewerUrl, MAX_VIEWER_SCENE_TILES } from '../lib/viewerUrl';
+import { buildViewerUrl } from '../lib/viewerUrl';
 import {
   createViewerPanel,
   densityScaleToPercent,
@@ -28,9 +26,20 @@ import {
 import { buildGoogleMapsTileCenterUrl, buildTileLocationLabel } from './panel/location';
 import { exitLidarViewer, switchViewerEngine } from './panel/runtime/navigation';
 import { createViewerTileNavigator } from './tileNavigator/controller';
+import { createViewerRightPanel } from './rightPanel';
+import { ViewerSlopeController } from './slope/viewerSlopeController';
+import { ViewerAltitudeController } from './altitude/viewerAltitudeController';
+import { ViewerRouteController } from './route/viewerRouteController';
+import { SunlightController } from '../viewer-webgl/sunlightController';
 import { buildTilePreviewMesh } from './preview/tilePreview';
 import { createViewerLoadingOverlay } from './loading/controller';
-import { loadViewerScene } from './session/dataset';
+import { loadViewerSceneData } from './session/dataset';
+import { buildTileFileCandidates } from './session/datasetPointCap';
+import {
+  computeSceneBudgetScale,
+  parseViewerParamsFromUrl,
+} from './session/viewerUrlParams';
+import { ViewerSnowController } from './session/viewerSnowController';
 import {
   buildOctreeInWorker,
   buildRGBA,
@@ -82,196 +91,115 @@ function enqueueBackgroundCacheWrite(label: string, task: () => Promise<void>): 
     });
 }
 
-function buildPanelTileLabel(x: number, y: number, projection: DetectedCrs): string {
-  return `Tuile ${x}/${y} (${projection})`;
-}
-
-function tileCoordKey(coord: Pick<TileCoord, 'xKm' | 'yKm' | 'projection' | 'altRef'>): string {
-  return `${coord.xKm}_${coord.yKm}_${coord.projection}_${coord.altRef}`;
-}
-
-function parseSceneTileCoords(params: URLSearchParams, primaryTile: TileCoord): TileCoord[] {
-  const tiles: TileCoord[] = [primaryTile];
-  const seen = new Set<string>([tileCoordKey(primaryTile)]);
-
-  const appendTile = (xKm: number, yKm: number) => {
-    if (!Number.isFinite(xKm) || !Number.isFinite(yKm)) return;
-    if (tiles.length >= MAX_VIEWER_SCENE_TILES) return;
-
-    const coord: TileCoord = {
-      ...primaryTile,
-      xKm,
-      yKm,
-    };
-    const key = tileCoordKey(coord);
-    if (seen.has(key)) return;
-    seen.add(key);
-    tiles.push(coord);
-  };
-
-  for (const rawTile of params.getAll('tile')) {
-    const [rawX, rawY] = rawTile.split(',', 2);
-    appendTile(parseInt(rawX || '', 10), parseInt(rawY || '', 10));
-  }
-
-  const legacySecondaryXKm = parseInt(params.get('sx') || '', 10);
-  const legacySecondaryYKm = parseInt(params.get('sy') || '', 10);
-  appendTile(legacySecondaryXKm, legacySecondaryYKm);
-
-  return tiles;
-}
-
-function computeSceneBudgetScale(tileCount: number, totalPoints: number, pointChunkCapacity: number): number {
-  if (tileCount <= 1) return 1.0;
-
-  const tilePressureScale = 1 / (1 + (tileCount - 1) * 0.16);
-  const chunkPressureRatio = totalPoints / Math.max(pointChunkCapacity * 1.5, 1);
-  const chunkPressureScale = chunkPressureRatio <= 1
-    ? 1.0
-    : 1 / (1 + Math.log2(chunkPressureRatio) * 0.18);
-
-  return Math.max(0.35, Math.min(1.0, tilePressureScale * chunkPressureScale));
-}
-
-// --- Parse URL params ---
-const params = new URLSearchParams(window.location.search);
-const xKm = parseInt(params.get('x') || '', 10);
-const yKm = parseInt(params.get('y') || '', 10);
-const crs = (params.get('crs') || 'LAMB93') as DetectedCrs;
-const altRef = (params.get('alt') || 'IGN69') as AltitudeRef;
-
-if (isNaN(xKm) || isNaN(yKm)) {
-  setStatus('❌ Paramètres invalides. URL: ?x=1003&y=6547&crs=LAMB93&alt=IGN69');
-  throw new Error('Invalid viewer params');
-}
-
-const tileFileName = `${buildTileFileName(xKm, yKm, crs, altRef)}.copc.laz`;
-// Legacy naming used yKm directly instead of yKm+1 (NW corner). Fall back to it
-// for tiles downloaded before the naming convention fix.
-const legacyTileFileName = `${buildTileFileName(xKm, yKm - 1, crs, altRef)}.copc.laz`;
-const tileInfo = getTileInfo(crs);
-const viewerTileCoord = {
-  xKm,
-  yKm,
-  territory: tileInfo.territory,
-  projection: crs,
-  altRef,
-} as TileCoord;
-const sceneTileCoords = parseSceneTileCoords(params, viewerTileCoord);
-const panelTileLabel = sceneTileCoords
-  .map((coord) => buildPanelTileLabel(coord.xKm, coord.yKm, coord.projection))
-  .join(' + ');
-document.title = `LiDAR — ${sceneTileCoords
-  .map((coord) => `${buildTileFileName(coord.xKm, coord.yKm, coord.projection, coord.altRef)}.copc.laz`)
-  .join(' + ')}`;
-
-// --- Load tile from OPFS ---
-async function loadFromOPFS(): Promise<ArrayBuffer> {
-  return loadTileFromOPFS([tileFileName, legacyTileFileName]);
-}
-
-// --- Main ---
 let renderer: LidarRenderer | null = null;
-const forceWebGL = params.get('engine') === 'webgl';
 
-async function startWebGLFallback(reasonForLog: string): Promise<void> {
-  if (sceneTileCoords.length > 1) {
-    throw new Error('Le mode LowQuality/WebGL ne supporte qu une seule tuile a la fois.');
-  }
-  await launchWebGLFallback({
-    reasonForLog,
-    dom: { canvas, overlay, statusEl, barFill, statsEl },
-    loadFromOPFS,
-    altRef,
-    tileLabel: `${xKm},${yKm} ${crs}/${altRef}`,
-    setStatus,
-  });
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const maxDim = Math.max(window.innerWidth, window.innerHeight);
+  const maxCanvasDim = renderer?.platform?.maxCanvasDim ?? 4096;
+  const effectiveDpr = Math.min(dpr, maxCanvasDim / maxDim);
+  canvas.width = Math.floor(window.innerWidth * effectiveDpr);
+  canvas.height = Math.floor(window.innerHeight * effectiveDpr);
 }
 
 (async () => {
   try {
-    // User explicitly requested WebGL via the engine switch button → skip
-    // the entire WebGPU pipeline and run the fallback directly.
+    const {
+      crs,
+      altRef,
+      forceWebGL,
+      viewerTileCoord,
+      sceneTileCoords,
+      panelTileLabel,
+    } = parseViewerParamsFromUrl();
+
+    document.title = `LiDAR — ${sceneTileCoords.map((c) => `${c.xKm}_${c.yKm}`).join(' + ')}`;
+
+    const lidarManager = new LidarManager();
+
+    const startWebGLFallback = async (reasonForLog: string): Promise<void> => {
+      const loadAllBuffers = async (): Promise<ArrayBuffer[]> => {
+        const buffers: ArrayBuffer[] = [];
+        for (const coord of sceneTileCoords) {
+          const { fileName, legacyFileName } = buildTileFileCandidates(coord);
+          const buf = await loadTileFromOPFS([fileName, legacyFileName]);
+          buffers.push(buf);
+        }
+        return buffers;
+      };
+
+      await launchWebGLFallback({
+        reasonForLog,
+        dom: { canvas, overlay, statusEl, barFill, statsEl },
+        loadFromOPFS: loadAllBuffers,
+        altRef,
+        tileLabel: panelTileLabel,
+        tileCoord: viewerTileCoord,
+        sceneTileCoords,
+        lidarManager,
+        setStatus,
+      });
+    };
+
     if (forceWebGL) {
       try {
         await startWebGLFallback('user requested ?engine=webgl');
         return;
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('[Viewer] Forced WebGL fallback failed:', err);
         showFatalError(overlay, {
           title: 'Moteur WebGL HD indisponible',
           message: "Impossible de démarrer le moteur WebGL HD demandé.",
-          hint: "Vérifiez que la tuile est bien téléchargée, mettez à jour vos pilotes graphiques, ou réessayez sans le paramètre ?engine=webgl.",
-          technical: err?.message || String(err),
+          hint: "Vérifiez que la tuile est bien téléchargée ou réessayez sans le paramètre ?engine=webgl.",
+          technical: (err as Error)?.message || String(err),
         });
         return;
       }
     }
 
-    // 0. WebGPU preflight — bail early on machines without a usable GPU
     setStatus('Vérification du support WebGPU...', 2);
     const pre = await preflightWebGPU();
     if (!pre.ok) {
-      // No usable WebGPU adapter → spin up the WebGL2 fallback engine
-      // (textured terrain only, no point cloud). Works on iGPU / older
-      // browsers / headless setups.
       try {
         await startWebGLFallback(`preflight=${pre.code}`);
         return;
-      } catch (fallbackErr: any) {
+      } catch (fallbackErr: unknown) {
         console.error('[Viewer] WebGL fallback failed:', fallbackErr);
-        const detail = fallbackErr?.message || String(fallbackErr);
+        const detail = (fallbackErr as Error)?.message || String(fallbackErr);
         showFatalError(overlay, {
           title: 'Aucun moteur compatible',
-          message:
-            "Ni WebGPU ni le moteur WebGL HD de secours n'ont pu démarrer sur cette machine. " +
-            "Le visualiseur LiDAR HD ne peut pas s'afficher.",
-          hint:
-            "Mettez à jour vos pilotes graphiques, utilisez un navigateur récent (Chrome / Edge / Firefox), " +
-            "ou ouvrez le visualiseur sur une machine équipée d'un GPU dédié.",
+          message: "Ni WebGPU ni le moteur WebGL HD de secours n'ont pu démarrer sur cette machine.",
+          hint: "Mettez à jour vos pilotes graphiques ou utilisez un navigateur récent.",
           technical: `WebGPU: ${pre.code} — ${pre.detail}\nWebGL fallback: ${detail}`,
         });
         return;
       }
     }
-    console.log(`[Viewer] Preflight OK — vendor=${pre.vendor} arch=${pre.arch} desc=${pre.desc}`);
 
     const deviceMemoryGiB = (navigator as MemoryAwareNavigator).deviceMemory;
-
-    const scene = await loadViewerScene(sceneTileCoords, setStatus, {
+    const scene = await loadViewerSceneData(sceneTileCoords, setStatus, {
       deviceMemoryGiB,
-      gpuInfo: {
-        vendor: pre.vendor,
-        arch: pre.arch,
-        desc: pre.desc,
-      },
+      gpuInfo: { vendor: pre.vendor, arch: pre.arch, desc: pre.desc },
     });
     const pointCloud = scene.pointCloud;
-
-    // 3. Build RGBA colors
     const rgba = buildRGBA(pointCloud);
 
-    // 3b. The scene terrain is merged once so the primary tile and the added
-    // neighbor share the same height texture, one terrain pass, and one octree.
     setStatus('Assemblage du terrain...', 82);
     const terrainMesh = scene.terrainMesh;
-    console.log(`[Viewer] Terrain: ${terrainMesh.vertexCount.toLocaleString()} vertices, ${(terrainMesh.indexCount / 3).toLocaleString()} triangles`);
-
-    // 4. Center positions relative to bounding box center
     const { positions } = centerPositions(pointCloud);
 
-    // 5. Init WebGPU
     setStatus('Initialisation WebGPU...', 85);
     resizeCanvas();
     renderer = new LidarRenderer();
     await renderer.init(canvas);
-    // Re-resize with platform-aware DPR cap now that we know the GPU
     resizeCanvas();
     renderer.resize(canvas.width, canvas.height);
 
-    // 5b. Upload heightmap texture for GPU Sobel normals
     const cx = (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2;
     const cy = (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2;
+    const cz = (pointCloud.bounds.minZ + pointCloud.bounds.maxZ) / 2;
+    renderer.centerAltitude = cz;
+    renderer.setMaxAltitude(pointCloud.bounds.maxZ);
     const rangeX = pointCloud.bounds.maxX - pointCloud.bounds.minX;
     const rangeY = pointCloud.bounds.maxY - pointCloud.bounds.minY;
     renderer.setHeightmap({
@@ -284,15 +212,10 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       scaleZ: rangeY,
     } as HeightmapParams);
 
-    const extent = Math.max(
-      pointCloud.bounds.maxX - pointCloud.bounds.minX,
-      pointCloud.bounds.maxY - pointCloud.bounds.minY,
-      pointCloud.bounds.maxZ - pointCloud.bounds.minZ,
-    );
+    const extent = Math.max(rangeX, rangeY, pointCloud.bounds.maxZ - pointCloud.bounds.minZ);
     renderer.pointSize = 0.59;
     renderer.lodThreshold = Math.max(50, extent * 0.5);
 
-    // 6. Build octree LOD in Web Worker
     setStatus('Construction octree LOD...', 87);
     const centeredBounds: AABB = {
       minX: pointCloud.bounds.minX - cx,
@@ -304,40 +227,81 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
     };
 
     const octree = await buildOctreeInWorker(positions, rgba, centeredBounds, setStatus);
-    console.log(`[Viewer] Octree: ${octree.nodeCount} nodes, depth ${octree.maxDepthReached}, ${octree.totalVoxelSamples.toLocaleString()} voxels`);
-
-    // 6b. Upload octree data to GPU
     setStatus('Upload GPU (octree)...', 92);
     renderer.setOctreeData(octree);
     renderer.setMesh(terrainMesh.vertices, terrainMesh.colors, terrainMesh.indices);
 
-    // 7. Camera + LOD Manager
     const camera = new CameraController(canvas);
-    const halfExt = extent / 2;
-    camera.lookAt(0, (pointCloud.bounds.maxZ - pointCloud.bounds.minZ) / 2, 0, halfExt);
+    camera.lookAt(0, 0, 0, extent * 0.6);
 
     const lodManager = new LodManager();
     lodManager.setOctree(octree);
     if (renderer.platform) lodManager.applyPlatformProfile(renderer.platform);
-    const sceneBudgetScale = computeSceneBudgetScale(
-      sceneTileCoords.length,
-      pointCloud.count,
-      renderer.getPointChunkCapacity(),
-    );
+    const sceneBudgetScale = computeSceneBudgetScale(sceneTileCoords.length, pointCloud.count, renderer.getPointChunkCapacity());
     lodManager.setSceneBudgetScale(sceneBudgetScale);
-    console.log(
-      `[Viewer] Scene budget scale ${sceneBudgetScale.toFixed(2)} for ` +
-      `${sceneTileCoords.length} tile(s), ${pointCloud.count.toLocaleString()} pts, ` +
-      `chunkCapacity=${renderer.getPointChunkCapacity().toLocaleString()}`,
-    );
 
-    const [lon, lat] = toWgs84(
-      (pointCloud.bounds.minX + pointCloud.bounds.maxX) / 2,
-      (pointCloud.bounds.minY + pointCloud.bounds.maxY) / 2,
-      crs,
-    );
-    const lidarManager = new LidarManager();
-    let panelSnowHandler = async (_mode: SnowModeKey) => {};
+    let showLodStats = true;
+    let lastCpuFrameMs = 16.6;
+    let frameHandle: number | null = null;
+    let renderRequested = true;
+    let idleReset = true;
+    let cleanedUp = false;
+    let lastStatsUpdateTime = 0;
+
+    const requestRender = () => {
+      renderRequested = true;
+      if (cleanedUp || document.hidden || frameHandle != null) return;
+      frameHandle = window.requestAnimationFrame(renderLoop);
+    };
+
+    const renderLoop = () => {
+      frameHandle = null;
+      if (!renderer || cleanedUp || document.hidden) {
+        idleReset = true;
+        return;
+      }
+      const frameStart = performance.now();
+      const budgetSampleMs = idleReset ? Math.max(16.6, lastCpuFrameMs) : lastCpuFrameMs;
+      idleReset = false;
+      renderRequested = false;
+
+      renderer.updateCamera(camera.getViewMatrix(), camera.getProjMatrix(), camera.getEye());
+
+      const [cpx, cpy, cpz] = renderer.lastCamPos;
+      const [cfx, cfy, cfz] = renderer.lastCamFwd;
+      lodManager.update(renderer.lastViewProj, cpx, cpy, cpz, cfx, cfy, cfz, canvas.width, canvas.height, budgetSampleMs);
+
+      const voxelSize = lodManager.getVoxelPointSize(renderer.pointSize);
+      renderer.renderLOD(lodManager.getVisibleNodes(), voxelSize);
+
+      const now = performance.now();
+      if (now - lastStatsUpdateTime >= 100) {
+        lastStatsUpdateTime = now;
+        const s = lodManager.stats;
+        const renderStats = renderer.getLastRenderStats();
+        const gpu = renderer.platform?.isApple ? ' [Apple]' : '';
+        if (showLodStats) {
+          statsEl.textContent =
+            `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
+            ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
+            ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
+            ` · draws ${renderStats.drawCalls} · batches ${renderStats.leafBatches + renderStats.voxelBatches}${renderStats.gpuDrivenDensity ? ' gpu' : ''}` +
+            ` · qual ${(s.qualityScale * 100).toFixed(0)}% · move ${(s.motionPressure * 100).toFixed(0)}%` +
+            ` · voxel ${renderer.pointSize.toFixed(2)}m` +
+            ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
+        } else {
+          statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${scene.tileFileLabel}`;
+        }
+      }
+
+      lastCpuFrameMs = Math.max(1, performance.now() - frameStart);
+      if (renderRequested) requestRender();
+      else idleReset = true;
+    };
+
+    const [lon, lat] = toWgs84(cx, cy, crs);
+    const snowController = new ViewerSnowController();
+
     const panel = createViewerPanel({
       tileLabel: panelTileLabel,
       locationLabel: buildTileLocationLabel(lon, lat),
@@ -349,10 +313,7 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         { key: 'webgpu' },
         {
           key: 'webgl',
-          disabled: sceneTileCoords.length > 1,
-          title: sceneTileCoords.length > 1
-            ? 'Le mode WebGl HD est limité à une seule tuile.'
-            : 'Basculer vers le moteur WebGl HD.',
+          title: 'Basculer vers le moteur WebGL HD.',
         },
       ],
       onPointSizeChange: (percent) => {
@@ -364,21 +325,90 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
         lodManager.setUserDensityScale(percentToDensityScale(percent));
         requestRender();
       },
-      onEngineModeChange: (mode) => {
-        switchViewerEngine(mode);
-      },
+      onEngineModeChange: (mode) => switchViewerEngine(mode),
       onSnowModeChange: (mode) => {
-        void panelSnowHandler(mode);
+        void snowController.handleSnowModeChange(
+          mode,
+          renderer,
+          pointCloud,
+          terrainMesh,
+          crs,
+          cx,
+          cy,
+          (loading) => panel.setSnowLoading(loading),
+          (next) => panel.setSnowMode(next),
+          requestRender,
+        );
       },
-      onPrimaryActionClick: () => {
-        exitLidarViewer();
-      },
+      onPrimaryActionClick: () => exitLidarViewer(),
     });
+
     panel.setSnowMode('off');
-    panel.setPrimaryActionState({
-      label: 'Quitter le mode LIDAR',
-      title: 'Fermer le viewer LiDAR et revenir à l’application.',
+    panel.setPrimaryActionState({ label: 'Quitter le mode LIDAR', title: 'Fermer le viewer LiDAR.' });
+
+    const tileTimeZone = getTimeZoneForCoordinates(lon, lat, crs);
+
+    const slopeController = new ViewerSlopeController(renderer, () => requestRender());
+    const altitudeController = new ViewerAltitudeController(renderer, () => requestRender());
+    const sunlightController = new SunlightController({
+      bounds: pointCloud.bounds,
+      centerX: cx,
+      centerY: cy,
+      centerZ: cz,
+      centerLon: lon,
+      centerLat: lat,
+      timeZone: tileTimeZone,
+      heightGrid: terrainMesh.heightGrid,
+      gridWidth: terrainMesh.gridWidth,
+      gridHeight: terrainMesh.gridHeight,
+      onRequestRender: () => requestRender(),
     });
+
+    const routeController = new ViewerRouteController({
+      sceneParams: {
+        bounds: pointCloud.bounds,
+        crs,
+        centerX: cx,
+        centerY: cy,
+        centerZ: cz,
+        heightGrid: terrainMesh.heightGrid,
+        gridWidth: terrainMesh.gridWidth,
+        gridHeight: terrainMesh.gridHeight,
+      },
+      canvas,
+      container: canvas.parentElement ?? document.body,
+      camera,
+      onMeshChange: (geom) => {
+        if (!renderer) return;
+        if (geom) {
+          renderer.setRouteMesh(geom.vertices, geom.colors, geom.indices, geom.indexCount);
+        } else {
+          renderer.clearRouteMesh();
+        }
+      },
+      onRequestRender: () => requestRender(),
+    });
+
+    const rightPanel = createViewerRightPanel({
+      centerLon: lon,
+      centerLat: lat,
+      timeZone: tileTimeZone,
+      routeController,
+      onSlopeChange: (slopeState) => {
+        slopeController.handleSlopeChange(slopeState);
+      },
+      onAltitudeChange: (altitudeState) => {
+        altitudeController.handleAltitudeChange(altitudeState);
+      },
+      onSunlightChange: (sunlightState) => {
+        const renderState = sunlightController.compute(sunlightState);
+        if (renderer) {
+          renderer.setSunlightRenderState(renderState);
+          requestRender();
+        }
+      },
+    });
+
     const tileNavigator = createViewerTileNavigator({
       currentTile: viewerTileCoord,
       activeTiles: sceneTileCoords,
@@ -398,93 +428,37 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       },
     });
 
-    // Done — hide overlay
     setStatus('Prêt', 100);
     setTimeout(() => overlay.classList.add('hidden'), 300);
     for (const write of scene.cacheWrites) {
       enqueueBackgroundCacheWrite(write.label, write.task);
     }
 
-    // 8. Render loop with LOD
-    let showLodStats = true;
-    let lastCpuFrameMs = 16.6;
-
-    let frameHandle: number | null = null;
-    let renderRequested = true;
-    let idleReset = true;
-    let cleanedUp = false;
-
-    const requestRender = () => {
-      renderRequested = true;
-      if (cleanedUp || document.hidden || frameHandle != null) return;
-      frameHandle = window.requestAnimationFrame(renderLoop);
+    camera.onChange = () => {
+      requestRender();
+      routeController.updateOverlay();
     };
-
-    const renderLoop = () => {
-      frameHandle = null;
-      if (!renderer || cleanedUp || document.hidden) {
-        idleReset = true;
-        return;
-      }
-      const frameStart = performance.now();
-      const budgetSampleMs = idleReset ? Math.max(16.6, lastCpuFrameMs) : lastCpuFrameMs;
-      idleReset = false;
-      renderRequested = false;
-
-      renderer.updateCamera(camera.getViewMatrix(), camera.getProjMatrix());
-
-      const [cpx, cpy, cpz] = renderer.lastCamPos;
-      const [cfx, cfy, cfz] = renderer.lastCamFwd;
-      lodManager.update(
-        renderer.lastViewProj,
-        cpx, cpy, cpz,
-        cfx, cfy, cfz,
-        canvas.width, canvas.height,
-        budgetSampleMs,
-      );
-
-      const voxelSize = lodManager.getVoxelPointSize(renderer.pointSize);
-      renderer.renderLOD(lodManager.getVisibleNodes(), voxelSize);
-
-      const s = lodManager.stats;
-      const renderStats = renderer.getLastRenderStats();
-      const gpu = renderer.platform?.isApple ? ' [Apple]' : '';
-      if (showLodStats) {
-        statsEl.textContent =
-          `${s.visiblePoints.toLocaleString()} / ${s.totalPoints.toLocaleString()} pts` +
-          ` · ${s.fps} fps · budget ${(s.pointBudget / 1000).toFixed(0)}K` +
-          ` · ${s.visibleNodes} nodes · cull ${s.frustumCulled} · lod ${s.lodSkipped}` +
-          ` · draws ${renderStats.drawCalls} · batches ${renderStats.leafBatches + renderStats.voxelBatches}${renderStats.gpuDrivenDensity ? ' gpu' : ''}` +
-          ` · qual ${(s.qualityScale * 100).toFixed(0)}% · move ${(s.motionPressure * 100).toFixed(0)}%` +
-          ` · voxel ${renderer.pointSize.toFixed(2)}m` +
-          ` · ${sceneTileCoords.length} tuile(s) · ${canvas.width}×${canvas.height}${gpu}`;
-      } else {
-        statsEl.textContent = `${pointCloud.count.toLocaleString()} pts · voxel ${renderer.pointSize.toFixed(2)}m · ${scene.tileFileLabel}`;
-      }
-
-      lastCpuFrameMs = Math.max(1, performance.now() - frameStart);
-
-      if (renderRequested) {
-        requestRender();
-      } else {
-        idleReset = true;
-      }
-    };
-    camera.onChange = () => requestRender();
     requestRender();
 
-    // Handle resize
     const handleResize = () => {
       if (!renderer) return;
       resizeCanvas();
       renderer.resize(canvas.width, canvas.height);
+      routeController.updateOverlay();
       requestRender();
     };
     window.addEventListener('resize', handleResize);
 
-    // Keyboard controls
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!renderer) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+      if (e.key === 'e' || e.key === 'E') {
+        const curState = routeController.getState();
+        routeController.setEditMode(!curState.editMode);
+        return;
+      }
       if (e.key === '+' || e.key === '=') renderer.pointSize *= 1.2;
       if (e.key === '-' || e.key === '_') renderer.pointSize /= 1.2;
       renderer.pointSize = Math.max(POINT_SIZE_MIN, Math.min(POINT_SIZE_MAX, renderer.pointSize));
@@ -494,12 +468,23 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       }
       if (e.key === 'q' || e.key === 'Q') showLodStats = !showLodStats;
       if (e.key === 'n' || e.key === 'N') {
-        const nextMode: SnowModeKey = snowMode === 'off'
+        const nextMode: SnowModeKey = snowController.getMode() === 'off'
           ? 'cover'
-          : snowMode === 'cover'
+          : snowController.getMode() === 'cover'
             ? 'thickness'
             : 'off';
-        void panelSnowHandler(nextMode);
+        void snowController.handleSnowModeChange(
+          nextMode,
+          renderer,
+          pointCloud,
+          terrainMesh,
+          crs,
+          cx,
+          cy,
+          (loading) => panel.setSnowLoading(loading),
+          (next) => panel.setSnowMode(next),
+          requestRender,
+        );
       }
       panel.setPointSizePercent(pointSizeToPercent(renderer.pointSize));
       requestRender();
@@ -530,123 +515,23 @@ async function startWebGLFallback(reasonForLog: string): Promise<void> {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('pagehide', handlePageHide);
       camera.onChange = null;
       camera.destroy();
       tileNavigator.destroy();
       lidarManager.destroy();
+      routeController.destroy();
       panel.destroy();
+      rightPanel.destroy();
       renderer?.destroy();
       renderer = null;
     };
-    const handlePageHide = (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        handleVisibilityChange();
-        return;
-      }
-      cleanup();
-    };
-    window.addEventListener('pagehide', handlePageHide);
-
-    // ---------------- SNOW ❄ ----------------
-    // Le panneau Figma pilote les modes neige (off / couverture / épaisseur).
-    const snowModes: Record<SnowModeKey, 0 | 1 | 2> = {
-      off: 0,
-      cover: 1,
-      thickness: 2,
-    };
-    let snowMode: SnowModeKey = 'off';
-    let snowFieldLoaded = false;
-    let snowLoading = false;
-
-    async function ensureSnowFieldLoaded() {
-      if (!renderer || snowLoading || snowFieldLoaded) return true;
-      const pc = pointCloud;
-      const tm = terrainMesh;
-      if (!pc || !tm) return false;
-      snowLoading = true;
-      panel.setSnowLoading(true);
-      try {
-        const { runSnowPipeline } = await import('../../snow');
-        const field = await runSnowPipeline(
-          {
-            data: tm.heightGrid,
-            width: tm.gridWidth,
-            height: tm.gridHeight,
-            bounds: pc.bounds,
-            crs,
-          },
-          { progress: () => undefined },
-        );
-        const flipped = new Float32Array(field.data.length);
-        for (let y = 0; y < field.height; y++) {
-          const srcRow = (field.height - 1 - y) * field.width;
-          const dstRow = y * field.width;
-          for (let x = 0; x < field.width; x++) {
-            flipped[dstRow + x] = field.data[srcRow + x];
-          }
-        }
-        renderer.setSnow({
-          data: flipped,
-          width: field.width,
-          height: field.height,
-          originX: pc.bounds.minX - cx,
-          originZ: -(pc.bounds.maxY - cy),
-          scaleX: pc.bounds.maxX - pc.bounds.minX,
-          scaleZ: pc.bounds.maxY - pc.bounds.minY,
-        });
-        requestRender();
-        snowFieldLoaded = true;
-        console.log(
-          `[Viewer] Snow loaded: avg=${field.stats.meanCm.toFixed(0)}cm, ` +
-          `max=${field.stats.maxCm.toFixed(0)}cm, cov=${field.stats.coveragePct.toFixed(1)}%, ` +
-          `${field.stats.elapsedMs.toFixed(0)}ms (AROME ${field.arome.timestamp})`,
-        );
-        return true;
-      } catch (err) {
-        console.error('[Viewer] Snow fetch failed:', err);
-        renderer.setSnowMode(0);
-        requestRender();
-        return false;
-      } finally {
-        snowLoading = false;
-        panel.setSnowLoading(false);
-      }
-    }
-
-    panelSnowHandler = async (nextMode: SnowModeKey) => {
-      if (!renderer || snowLoading) return;
-      if (nextMode !== 'off') {
-        const ready = await ensureSnowFieldLoaded();
-        if (!ready) {
-          snowMode = 'off';
-          panel.setSnowMode('off');
-          return;
-        }
-      }
-      snowMode = nextMode;
-      renderer.setSnowMode(snowModes[nextMode]);
-      panel.setSnowMode(nextMode);
-      requestRender();
-    };
-
-  } catch (err: any) {
-    const raw = err?.message || String(err);
+    window.addEventListener('pagehide', (ev) => {
+      if (!ev.persisted) cleanup();
+    });
+  } catch (err: unknown) {
+    const raw = (err as Error)?.message || String(err);
     console.error('[Viewer] Fatal:', err);
     const explained = explainWorkerError(raw);
     showFatalError(overlay, { ...explained, technical: raw });
   }
 })();
-
-// --- Helpers ---
-
-function resizeCanvas() {
-  const dpr = window.devicePixelRatio || 1;
-  // Cap resolution to avoid oversized canvases on high-DPR screens (Retina Mac M1 etc.)
-  const MAX_DIM = renderer?.platform?.maxCanvasDim ?? 4096;
-  const maxDim = Math.max(window.innerWidth, window.innerHeight);
-  const effectiveDpr = Math.min(dpr, MAX_DIM / maxDim);
-  canvas.width = Math.floor(window.innerWidth * effectiveDpr);
-  canvas.height = Math.floor(window.innerHeight * effectiveDpr);
-}
-

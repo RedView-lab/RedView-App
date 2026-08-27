@@ -55,7 +55,7 @@ export function SummaryRow({
   const predictionStore = usePredictionStoreOptional();
   const prediction = predictionStore?.predictions[itinerary.id] ?? itinerary.prediction ?? null;
   const values = buildValues(itinerary, prediction);
-  const analysisVisible = itinerary.analysisVisible !== false;
+  const analysisVisible = itinerary.visible !== false && itinerary.analysisVisible !== false;
   const hasChildren = childCount > 0;
   const isMergeSelected = mergeSelectionOrder != null;
   const rowStyle =
@@ -124,8 +124,8 @@ export function SummaryRow({
             onToggleAnalysisVisibility?.(itinerary.id, !analysisVisible);
           }}
           aria-pressed={analysisVisible}
-          aria-label={analysisVisible ? t('Masquer le graphique') : t('Afficher le graphique')}
-          title={analysisVisible ? t('Masquer le graphique') : t('Afficher le graphique')}
+          aria-label={analysisVisible ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+          title={analysisVisible ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
           data-visible={analysisVisible ? 'true' : 'false'}
         >
           <IconEye size={14} />

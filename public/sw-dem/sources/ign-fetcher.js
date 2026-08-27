@@ -35,13 +35,35 @@ let ignPrunedTotal = 0; // Lifetime counter for diagnostics
 // abort them without touching basemap-driven IGN traffic.
 const PURPOSE_SLOPE_VISIBLE = 'slope-visible';
 const PURPOSE_SLOPE_WARM = 'slope-warm';
+const PURPOSE_SLOPE_ZONE = 'slope-zone';
+const PURPOSE_DEM_PREFETCH = 'dem-prefetch';
+
+let ignViewportCenter = null;
+
+function setIGNViewportCenter(center) {
+  if (center && Number.isFinite(center.lng) && Number.isFinite(center.lat)) {
+    ignViewportCenter = { lng: center.lng, lat: center.lat };
+  }
+}
+
+function wgs84TileCenter(z, col, row) {
+  const matrixWidth = 1 << (z + 1);
+  const matrixHeight = 1 << z;
+  const lng = ((col + 0.5) / matrixWidth) * 360 - 180;
+  const lat = 90 - ((row + 0.5) / matrixHeight) * 180;
+  return { lng, lat };
+}
 
 function isIGNBackgroundPurpose(purpose) {
-  return purpose === PURPOSE_SLOPE_WARM;
+  return purpose === PURPOSE_SLOPE_WARM || purpose === PURPOSE_DEM_PREFETCH;
 }
 
 function isIGNSlopeVisiblePurpose(purpose) {
   return purpose === PURPOSE_SLOPE_VISIBLE;
+}
+
+function isIGNSlopeZonePurpose(purpose) {
+  return purpose === PURPOSE_SLOPE_ZONE;
 }
 
 function totalIGNQueueLength() {
@@ -75,6 +97,11 @@ function currentIGNSlopeVisibleCap() {
 }
 
 function pushIGNEntry(entry) {
+  if (isIGNSlopeZonePurpose(entry.purpose)) {
+    // Zone requests have top priority — push directly into foreground queue
+    ignForegroundQueue.push(entry);
+    return;
+  }
   if (isIGNBackgroundPurpose(entry.purpose)) {
     ignBackgroundQueue.push(entry);
     return;
@@ -87,10 +114,29 @@ function pushIGNEntry(entry) {
 }
 
 function popNextIGNEntry() {
-  // 1. Basemap (no purpose) — strict highest priority. LIFO so the
-  //    newest viewport's basemap requests displace older ones.
+  // 1. Basemap / Slope-Zone (foreground) — strict highest priority.
+  //    Select candidate closest to current viewport center so center of screen loads first!
   if (ignForegroundQueue.length > 0) {
-    return { entry: ignForegroundQueue.pop(), background: false };
+    if (ignForegroundQueue.length === 1 || !ignViewportCenter) {
+      // FIFO when center is unknown (Mapbox sends center tiles first)
+      return { entry: ignForegroundQueue.shift(), background: false };
+    }
+    let bestIdx = 0;
+    let minD2 = Infinity;
+    const cLng = ignViewportCenter.lng;
+    const cLat = ignViewportCenter.lat;
+    for (let i = 0; i < ignForegroundQueue.length; i++) {
+      const e = ignForegroundQueue[i];
+      if (!e.hasCoords) continue;
+      const dLng = e.lng - cLng;
+      const dLat = e.lat - cLat;
+      const d2 = dLng * dLng + dLat * dLat;
+      if (d2 < minD2) {
+        minD2 = d2;
+        bestIdx = i;
+      }
+    }
+    return { entry: ignForegroundQueue.splice(bestIdx, 1)[0], background: false };
   }
   // 2. Slope-visible — only when basemap queue is drained, and only up
   //    to its dynamic cap so a single slope burst can never monopolise
@@ -101,11 +147,11 @@ function popNextIGNEntry() {
   ) {
     return { entry: ignSlopeVisibleQueue.pop(), background: false };
   }
-  // 3. Background (slope-warm) — separate concurrency budget so warmups
+  // 3. Background (prefetch / slope-warm) — separate concurrency budget so warmups
   //    cannot starve foreground basemap or slope-visible.
   if (ignBackgroundQueue.length === 0) return null;
   if (activeIGNBackground >= currentIGNBackgroundConcurrency()) return null;
-  return { entry: ignBackgroundQueue.pop(), background: true };
+  return { entry: ignBackgroundQueue.shift(), background: true };
 }
 
 function pruneOldestIGNEntry() {
@@ -145,9 +191,26 @@ function evict(cache, max) {
   }
 }
 
-function scheduleIGN(fn, purpose) {
+function scheduleIGN(fn, purpose, coords) {
   return new Promise((resolve, reject) => {
-    pushIGNEntry({ fn, resolve, reject, ts: performance.now(), purpose: purpose || null });
+    let lng = 0, lat = 0;
+    let hasCoords = false;
+    if (coords && typeof coords.z === 'number' && typeof coords.col === 'number') {
+      const c = wgs84TileCenter(coords.z, coords.col, coords.row);
+      lng = c.lng;
+      lat = c.lat;
+      hasCoords = true;
+    }
+    pushIGNEntry({
+      fn,
+      resolve,
+      reject,
+      ts: performance.now(),
+      purpose: purpose || null,
+      lng,
+      lat,
+      hasCoords,
+    });
     // When the queue overflows, drop the OLDEST entries by enqueue timestamp
     // (tiles requested during an earlier pan gesture) instead of the head.
     // Ensures the current viewport survives rapid panning.
@@ -202,14 +265,20 @@ function drainIGN() {
 //
 // Returns the number of pruned entries for diagnostics.
 function flushIGNQueue() {
-  const pruned = totalIGNQueueLength();
-  if (pruned === 0) return 0;
-  // Resolve in reverse insertion order so promise chains unwind LIFO
-  // (matches the normal scheduler popping order).
+  const total = totalIGNQueueLength();
+  if (total === 0) return 0;
+  // Keep PURPOSE_SLOPE_ZONE entries in foreground queue!
+  const keptForeground = [];
   while (ignForegroundQueue.length > 0) {
-    const stale = ignForegroundQueue.pop();
-    stale.resolve(PRUNED_SENTINEL);
+    const entry = ignForegroundQueue.pop();
+    if (entry.purpose === PURPOSE_SLOPE_ZONE) {
+      keptForeground.unshift(entry);
+    } else {
+      entry.resolve(PRUNED_SENTINEL);
+    }
   }
+  for (const entry of keptForeground) ignForegroundQueue.push(entry);
+
   while (ignSlopeVisibleQueue.length > 0) {
     const stale = ignSlopeVisibleQueue.pop();
     stale.resolve(PRUNED_SENTINEL);
@@ -218,8 +287,11 @@ function flushIGNQueue() {
     const stale = ignBackgroundQueue.pop();
     stale.resolve(PRUNED_SENTINEL);
   }
-  ignPrunedTotal += pruned;
-  if (DEBUG) console.warn(`[sw-dem][queue] flushed ${pruned} stale on viewport change`);
+  const pruned = total - keptForeground.length;
+  if (pruned > 0) {
+    ignPrunedTotal += pruned;
+    if (DEBUG) console.warn(`[sw-dem][queue] flushed ${pruned} stale on viewport change`);
+  }
   return pruned;
 }
 
@@ -248,6 +320,7 @@ function ignFetchInit(extra) {
     ? Object.fromEntries(Object.entries(extra).filter(([k]) => k !== 'purpose'))
     : (extra || {});
   const controller = new AbortController();
+  controller._purpose = purpose;
   const timeout = setTimeout(() => {
     try { controller.abort('rv-ign-timeout'); } catch { /* ignore */ }
   }, IGN_FETCH_TIMEOUT_MS);
@@ -280,11 +353,12 @@ function isIGNUserCancel(controller) {
 function cancelInFlightIGN() {
   if (ignActiveControllers.size === 0) return 0;
   let n = 0;
-  for (const c of ignActiveControllers) {
+  for (const c of Array.from(ignActiveControllers)) {
+    // Analysis-zone requests are user-initiated and must NOT be cancelled by camera movements
+    if (c._purpose === PURPOSE_SLOPE_ZONE) continue;
     try { c.abort(USER_CANCEL_REASON); n++; } catch { /* ignore */ }
+    ignActiveControllers.delete(c);
   }
-  ignActiveControllers.clear();
-  ignActiveControllersByPurpose.clear();
   if (DEBUG) console.warn(`[sw-dem][queue] aborted ${n} in-flight IGN fetches on viewport change`);
   return n;
 }
@@ -373,7 +447,7 @@ function getCached(key) {
   return { hit: true, data: entry };
 }
 
-async function getIGNTile(z, col, row) {
+async function getIGNTile(z, col, row, purpose) {
   const key = `${z}/${col}/${row}`;
   const cached = getCached(key);
   if (cached.hit) return cached.data;
@@ -420,7 +494,7 @@ async function getIGNTile(z, col, row) {
     } finally {
       cleanup();
     }
-  }).then((result) => {
+  }, purpose, { z, col, row }).then((result) => {
     // If the request was pruned from the queue, do NOT cache — return null
     if (result === PRUNED_SENTINEL) return null;
     return result;
@@ -443,8 +517,8 @@ function isCachedPermanent404(key) {
   return entry && entry._null && entry.errorType === 'permanent';
 }
 
-async function getIGNTileWithFallback(z, col, row, deadlineAt) {
-  const data = await getIGNTile(z, col, row);
+async function getIGNTileWithFallback(z, col, row, deadlineAt, purpose) {
+  const data = await getIGNTile(z, col, row, purpose);
   if (data) return { data, actualZ: z, actualCol: col, actualRow: row };
 
   // If the native zoom returned a confirmed 404, reduce fallback depth.
@@ -461,26 +535,21 @@ async function getIGNTileWithFallback(z, col, row, deadlineAt) {
     fbCol = fbCol >> 1;
     fbRow = fbRow >> 1;
     // Per-build deadline check: when the caller (build-tile.js) is past
-    // its soft deadline, give up on the fallback chain. Without this each
-    // sub-tile that 404s at native zoom can hold an IGN slot for up to
-    // IGN_FALLBACK_MAX_DEPTH × IGN_FETCH_TIMEOUT_MS = 45 s while sequentially
-    // trying z-1, z-2, z-3 — starving the next viewport burst and producing
-    // the 17–71 s wall-clock per-tile builds the user reported. Cached
-    // (z-1) hits still resolve instantly even past the deadline since
-    // `getIGNTile` is short-circuited by the in-memory cache.
+    // its soft deadline, give up on the fallback chain.
     if (typeof deadlineAt === 'number' && performance.now() >= deadlineAt) {
-      // Try the very next zoom level only if it's already cached — costs
-      // nothing and may give us a quick coarse answer the renderer uses
-      // as overzoom mesh.
       const cached = getCached(`${fbZ}/${fbCol}/${fbRow}`);
       if (cached.hit && cached.data) {
         return { data: cached.data, actualZ: fbZ, actualCol: fbCol, actualRow: fbRow };
       }
       return null;
     }
-    const fbData = await getIGNTile(fbZ, fbCol, fbRow);
+    const fbData = await getIGNTile(fbZ, fbCol, fbRow, purpose);
     if (fbData) {
       return { data: fbData, actualZ: fbZ, actualCol: fbCol, actualRow: fbRow };
+    }
+    // Optimization: if native zoom and z-1 both returned 404, don't probe deeper on network!
+    if (fbZ === z - 1) {
+      break;
     }
   }
 
@@ -511,7 +580,10 @@ function buildHighresTileURL(z, col, row) {
 }
 
 function terrainWmsSupersampleFactor(mercZ) {
-  return mercZ >= 15 ? 2 : 1;
+  // 2× supersampling for z>=13: fetches 512×512 BIL32 from IGN WMS and box-averages
+  // 2×2 -> 256×256. This eliminates the IGN WMS server's internal scanline duplication
+  // and staircase row artifacts in Horn slope math.
+  return mercZ >= 13 ? 2 : 1;
 }
 
 function buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample) {

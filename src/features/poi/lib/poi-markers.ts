@@ -38,8 +38,8 @@ const MARKER_MIN_SCALE_ZOOM = 8.25;
 const MARKER_MAX_SCALE_ZOOM = 15.1;
 const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
-const MARKER_MIN_POPUP_OFFSET_PX = 26;
-const MARKER_MAX_POPUP_OFFSET_PX = 34;
+const MARKER_MIN_POPUP_OFFSET_PX = 38;
+const MARKER_MAX_POPUP_OFFSET_PX = 80;
 /** Same occlusion behaviour as the viewport POI markers. */
 const MARKER_OCCLUDED_OPACITY = 0.85;
 
@@ -126,8 +126,14 @@ function getMarkerVisualState(zoom: number): PoiMarkerVisualState {
 }
 
 function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
+  const el = entry.marker.getElement();
+  if (zoom < 8.0) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = '';
   const visual = getMarkerVisualState(zoom);
-  entry.marker.getElement().style.setProperty(
+  el.style.setProperty(
     '--rv-poi-marker-scale',
     visual.scale.toFixed(3),
   );

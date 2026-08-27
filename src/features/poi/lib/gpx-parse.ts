@@ -75,8 +75,15 @@ function parseCoordinateAttribute(attrs: string, attribute: 'lat' | 'lon'): numb
   return Number.parseFloat(match[2]);
 }
 
+function stripCdata(value: string): string {
+  const trimmed = value.trim();
+  const match = /^<!\[CDATA\[([\s\S]*?)\]\]>$/i.exec(trimmed);
+  return match ? match[1].trim() : trimmed;
+}
+
 function decodeXmlText(value: string): string {
-  return value.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
+  const cleaned = stripCdata(value);
+  return cleaned.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos);/gi, (entity, code: string) => {
     const normalized = code.toLowerCase();
     switch (normalized) {
       case 'amp':
@@ -91,12 +98,12 @@ function decodeXmlText(value: string): string {
         return "'";
       default:
         if (normalized.startsWith('#x')) {
-          const value = Number.parseInt(normalized.slice(2), 16);
-          return Number.isFinite(value) ? String.fromCodePoint(value) : entity;
+          const parsed = Number.parseInt(normalized.slice(2), 16);
+          return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : entity;
         }
         if (normalized.startsWith('#')) {
-          const value = Number.parseInt(normalized.slice(1), 10);
-          return Number.isFinite(value) ? String.fromCodePoint(value) : entity;
+          const parsed = Number.parseInt(normalized.slice(1), 10);
+          return Number.isFinite(parsed) ? String.fromCodePoint(parsed) : entity;
         }
         return entity;
     }

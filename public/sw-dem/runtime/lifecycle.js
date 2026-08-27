@@ -154,6 +154,20 @@ function slopeHotPut(keyStr, blob, headerInit) {
   }
 }
 
+function slopeHotDelete(keyStr) {
+  SLOPE_HOT_CACHE.delete(keyStr);
+}
+
+function slopeHotInvalidateZoneDownsampled(zoneHash) {
+  if (!zoneHash) return;
+  const zoneSub = `zone=${zoneHash}`;
+  for (const key of Array.from(SLOPE_HOT_CACHE.keys())) {
+    if (key.includes(zoneSub)) {
+      SLOPE_HOT_CACHE.delete(key);
+    }
+  }
+}
+
 function slopeHotClear() {
   SLOPE_HOT_CACHE.clear();
 }
@@ -206,6 +220,47 @@ function altitudeHotClear() {
 }
 
 function altitudeHotResponse(entry) {
+  return new Response(entry.blob, { status: 200, headers: entry.headers });
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// ORTHO_HOT_CACHE — in-memory LRU of recently served orthophoto image blobs.
+//
+// Eliminates CacheStorage disk round-trips for the /ortho-tiles endpoint.
+// Returns a fresh Response in <1 ms so cached orthophoto tiles paint instantly.
+// Size budget: 192 × ~25 KB average JPEG ≈ 4.8 MB peak.
+// ──────────────────────────────────────────────────────────────────────────
+const ORTHO_HOT_CACHE_MAX = 192;
+const ORTHO_HOT_CACHE = new Map();
+
+function orthoHotGet(keyStr) {
+  const entry = ORTHO_HOT_CACHE.get(keyStr);
+  if (!entry) return null;
+  ORTHO_HOT_CACHE.delete(keyStr);
+  ORTHO_HOT_CACHE.set(keyStr, entry);
+  return entry;
+}
+
+function orthoHotPut(keyStr, blob, headerInit) {
+  if (!blob) return;
+  if (ORTHO_HOT_CACHE.has(keyStr)) ORTHO_HOT_CACHE.delete(keyStr);
+  ORTHO_HOT_CACHE.set(keyStr, { blob, headers: headerInit });
+  if (ORTHO_HOT_CACHE.size > ORTHO_HOT_CACHE_MAX) {
+    const drop = ORTHO_HOT_CACHE.size - Math.floor(ORTHO_HOT_CACHE_MAX * 0.85);
+    const iter = ORTHO_HOT_CACHE.keys();
+    for (let i = 0; i < drop; i++) {
+      const k = iter.next().value;
+      if (k === undefined) break;
+      ORTHO_HOT_CACHE.delete(k);
+    }
+  }
+}
+
+function orthoHotClear() {
+  ORTHO_HOT_CACHE.clear();
+}
+
+function orthoHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
 let _compositeActive = 0;
@@ -274,15 +329,17 @@ function cancelSlopeWork() {
   slopeCancelGeneration += 1;
   const slopeCount = SLOPE_INFLIGHT.size;
   SLOPE_INFLIGHT.clear();
+  const remainingSlope = [];
   while (_slopeBuildQueue.length > 0) {
     const queued = _slopeBuildQueue.shift();
-    try { queued?.resolve(null); } catch { /* ignore */ }
+    if (queued?.generation === null) {
+      remainingSlope.push(queued);
+    } else {
+      try { queued?.resolve(null); } catch { /* ignore */ }
+    }
   }
-  // Drop every pending worker-pool job too. The pool workers themselves
-  // cannot be interrupted mid-computation, but their pending callbacks are
-  // resolved with null so the SW caller returns a transparent tile exactly
-  // like the in-process queue above. The in-flight worker result is then
-  // ignored on arrival (generation mismatch).
+  _slopeBuildQueue.push(...remainingSlope);
+  // Drop every pending worker-pool job too (except uncancellable ones).
   let poolCancelled = 0;
   try {
     if (typeof cancelAllSlopePoolJobs === 'function') poolCancelled = cancelAllSlopePoolJobs();
@@ -334,7 +391,7 @@ function pumpSlopeBuildQueue() {
   while (_slopeBuildActive < currentSlopeBuildConcurrency() && _slopeBuildQueue.length > 0) {
     const entry = _slopeBuildQueue.shift();
     if (!entry) break;
-    if (entry.generation !== slopeCancelGeneration) {
+    if (entry.generation !== null && entry.generation !== undefined && entry.generation !== slopeCancelGeneration) {
       entry.resolve(null);
       continue;
     }
@@ -351,7 +408,7 @@ function pumpSlopeBuildQueue() {
 }
 
 function scheduleSlopeBuild(run, generation) {
-  if (generation !== slopeCancelGeneration) return Promise.resolve(null);
+  if (generation !== null && generation !== undefined && generation !== slopeCancelGeneration) return Promise.resolve(null);
   return new Promise((resolve, reject) => {
     _slopeBuildQueue.push({ run, generation, resolve, reject });
     pumpSlopeBuildQueue();
@@ -448,6 +505,14 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('message', (e) => {
+  if (e.data?.type === 'SET_VIEWPORT_CENTER') {
+    try {
+      if (typeof setIGNViewportCenter === 'function') {
+        setIGNViewportCenter(e.data.center);
+      }
+    } catch { /* ignore */ }
+    return;
+  }
   // DEM ↔ Ortho pairing toggle. Set by listeners.ts when the satellite
   // basemap is mounted / removed. See router.js > maybeKickOrtho for
   // the rationale. Idempotent.
@@ -465,6 +530,7 @@ self.addEventListener('message', (e) => {
     try { demHotClear(); } catch { /* ignore */ }
     try { slopeHotClear(); } catch { /* ignore */ }
     try { altitudeHotClear(); } catch { /* ignore */ }
+    try { orthoHotClear(); } catch { /* ignore */ }
     purgeManagedMapCaches({ includeCurrent: true });
     return;
   }
@@ -474,6 +540,7 @@ self.addEventListener('message', (e) => {
     try { demHotClear(); } catch { /* ignore */ }
     try { slopeHotClear(); } catch { /* ignore */ }
     try { altitudeHotClear(); } catch { /* ignore */ }
+    try { orthoHotClear(); } catch { /* ignore */ }
     caches.delete(CACHE_NAME);
     return;
   }
@@ -502,6 +569,9 @@ self.addEventListener('message', (e) => {
     return;
   }
   if (e.data?.type === 'CANCEL_SLOPE_WORK') {
+    if (typeof activeZonePipeline !== 'undefined' && activeZonePipeline) {
+      activeZonePipeline.cancelled = true;
+    }
     const cancelled = cancelSlopeWork();
     // Free terrain-WMS IGN slots immediately so the basemap (default
     // DEM profile) doesn't have to wait up to IGN_FETCH_TIMEOUT_MS for
@@ -518,12 +588,6 @@ self.addEventListener('message', (e) => {
       inflightTerrain += typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-warm') : 0;
     } catch { /* ignore */ }
     // Drop in-flight DEM dedup entries scoped to the terrain profile.
-    // Those entries are consumed exclusively by the slope pipeline (the
-    // basemap uses demProfile='default'), so once the user disables
-    // slope they're orphan promises holding ortho/composite resources
-    // and blocking new basemap-profile DEM requests for the same tile
-    // from re-entering the dispatcher cleanly. Removing them now lets
-    // the next basemap fetch run unencumbered.
     let demDropped = 0;
     try {
       for (const key of Array.from(DEM_INFLIGHT.keys())) {
@@ -535,6 +599,28 @@ self.addEventListener('message', (e) => {
     } catch { /* ignore */ }
     if (DEBUG && (cancelled.slopeCount > 0 || queuedTerrain > 0 || inflightTerrain > 0 || demDropped > 0)) {
       console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount} terrainQueued=${queuedTerrain} terrainInflight=${inflightTerrain} demInflightDropped=${demDropped}`);
+    }
+    return;
+  }
+  if (e.data?.type === 'START_ZONE_SLOPE_PIPELINE') {
+    const tiles = Array.isArray(e.data.tiles) ? e.data.tiles : [];
+    const profile = e.data.profile === 'terrain' ? 'terrain' : 'default';
+    const zone = typeof e.data.zone === 'string' ? e.data.zone : '';
+    if (zone && e.data.ring && typeof registerAnalysisZone === 'function') {
+      try { registerAnalysisZone(zone, e.data.ring); } catch { /* ignore */ }
+    }
+    if (tiles.length === 0) return;
+    try {
+      if (typeof startZoneSlopeMultiFetch === 'function') {
+        startZoneSlopeMultiFetch(tiles, profile, zone);
+      }
+    } catch { /* best-effort */ }
+    return;
+  }
+  if (e.data?.type === 'PURGE_SLOPE_CACHE') {
+    const zone = typeof e.data.zone === 'string' ? e.data.zone : '';
+    if (typeof purgeSlopeCache === 'function') {
+      purgeSlopeCache(zone).catch(() => {});
     }
     return;
   }
@@ -661,10 +747,29 @@ self.addEventListener('message', (e) => {
   if (e.data?.type === 'PREWARM_SLOPE') {
     const tiles = Array.isArray(e.data.tiles) ? e.data.tiles : [];
     const profile = e.data.profile === 'terrain' ? 'terrain' : 'default';
+    const zone = typeof e.data.zone === 'string' ? e.data.zone : '';
     if (tiles.length === 0) return;
     try {
-      if (typeof prewarmSlopeTiles === 'function') prewarmSlopeTiles(tiles, profile);
+      if (typeof prewarmSlopeTiles === 'function') prewarmSlopeTiles(tiles, profile, zone);
     } catch { /* best-effort */ }
+    return;
+  }
+  // ── Analysis zone (zone-gated terrain overlays) ─────────────────────
+  // The page registers the polygon behind `?zone=<hash>` tile requests.
+  // Re-sent on controllerchange (the registry dies with the SW instance).
+  // An unknown hash in a tile URL degrades to an unmasked build — never an
+  // error — so a restart race only costs trim fidelity, not tiles.
+  if (e.data?.type === 'SET_ANALYSIS_ZONE') {
+    try {
+      const registered = registerAnalysisZone(e.data.hash, e.data.ring);
+      if (!registered && e.data.hash) {
+        console.warn('[sw-dem] SET_ANALYSIS_ZONE: invalid ring ignored', e.data.hash);
+      }
+    } catch { /* ignore */ }
+    return;
+  }
+  if (e.data?.type === 'CLEAR_ANALYSIS_ZONE') {
+    try { clearAnalysisZones(); } catch { /* ignore */ }
     return;
   }
 });

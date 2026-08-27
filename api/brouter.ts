@@ -56,13 +56,7 @@ export default async function handler(
     return res.status(204).end();
   }
 
-  const upstream = process.env.BROUTER_UPSTREAM;
-  if (!upstream) {
-    return res.status(500).json({
-      error:
-        'BROUTER_UPSTREAM env var is not set on Vercel. Configure it to e.g. http://<vps-ip>',
-    });
-  }
+  const upstream = (process.env.BROUTER_UPSTREAM ?? '').trim() || 'http://localhost:17777';
   const base = upstream.replace(/\/+$/, '');
 
   if (req.method === 'POST') {

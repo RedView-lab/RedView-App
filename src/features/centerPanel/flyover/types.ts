@@ -1,0 +1,40 @@
+export const SPEED_STEPS = [0.5, 0.75, 1, 1.5, 2, 3] as const;
+export const DEFAULT_SPEED_INDEX = 2;
+export const FLYOVER_REFERENCE_DISTANCE_KM = 80;
+export const FLYOVER_REFERENCE_DURATION_MS = 40_000;
+export const FLYOVER_MIN_DURATION_MS = 12_000;
+export const FLYOVER_MAX_DURATION_MS = 180_000;
+export const FLYOVER_CAMERA_ZOOM = 15.6;
+export const FLYOVER_CAMERA_PITCH = 70;
+export const FLYOVER_CENTER_SMOOTHING = 0.12;
+export const FLYOVER_BEARING_SMOOTHING = 0.075;
+export const FLYOVER_ZOOM_SMOOTHING = 0.14;
+export const FLYOVER_PITCH_SMOOTHING = 0.09;
+export const FLYOVER_RELIEF_PITCH_ATTACK_SMOOTHING = 0.032;
+export const FLYOVER_RELIEF_PITCH_RELEASE_SMOOTHING = 0.11;
+export const FLYOVER_RELIEF_PITCH_DEADBAND_DEG = 0.08;
+export const FLYOVER_RELIEF_PITCH_MAX_STEP_DEG = 0.14;
+export const FLYOVER_MICRO_TURN_THRESHOLD_DEG = 4.5;
+export const FLYOVER_MIN_BEARING_PROGRESS_M = 18;
+export const FLYOVER_TURN_LOOKAHEAD_THRESHOLD_DEG = 10;
+export const FLYOVER_RELIEF_ENGAGE_THRESHOLD_M = 50;
+export const FLYOVER_RELIEF_RELEASE_THRESHOLD_M = 32;
+export const HOVER_X_VALUE_EPSILON = 1e-5;
+export const HOVER_MARKER_MIN_MOVE_M = 1;
+
+export interface AnalysisFlyoverContextValue {
+  canPlay: boolean;
+  isPlaying: boolean;
+  playbackActive: boolean;
+  controlledHoverXValue: number | null;
+  setManualHoverXValue: (xValue: number | null) => void;
+  togglePlayback: () => void;
+  slowDown: () => void;
+  speedUp: () => void;
+  resetPlayback: () => void;
+  canSlowDown: boolean;
+  canSpeedUp: boolean;
+  distanceLabel: string;
+  timeLabel: string;
+  speedLabel: string;
+}

@@ -201,6 +201,7 @@ function cancelPoolJobsByKind(kind) {
   let n = 0;
   for (const [id, cb] of _slopeJobCallbacks) {
     if (cb.kind !== kind) continue;
+    if (cb.uncancellable) continue;
     _slopeJobCallbacks.delete(id);
     cb.resolve(null); // null == "cancelled" — caller treats as transparent
     n++;
@@ -230,10 +231,19 @@ function buildSlopePoolCachePath(z, x, y, demProfile) {
 }
 
 function shouldUseSlopeNeighbourDem(resp, demProfile) {
-  if (!resp || resp.status !== 200) return false;
-  const health = (resp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
+  if (!resp) return false;
+  if (typeof resp.status === 'number' && resp.status !== 200) return false;
+  const getHeader = (name) => {
+    if (typeof resp.headers?.get === 'function') return resp.headers.get(name);
+    if (Array.isArray(resp.headers)) {
+      const entry = resp.headers.find(([k]) => k.toLowerCase() === name.toLowerCase());
+      return entry ? entry[1] : null;
+    }
+    return null;
+  };
+  const health = (getHeader('X-DEM-Health') || 'ok').toLowerCase();
   if (health !== 'ok') return false;
-  const source = (resp.headers.get('X-DEM-Source') || '').toLowerCase();
+  const source = (getHeader('X-DEM-Source') || '').toLowerCase();
   if (!source) return true;
   if (
     source.startsWith('aws-emergency')
@@ -263,15 +273,34 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
       missing.push(direction);
       return;
     }
+    const path = buildSlopePoolCachePath(z, nx, ny, demProfile);
+    // 1. Fast in-memory hit from DEM_HOT_CACHE (avoids disk CacheStorage round-trip)
+    if (typeof demHotGet === 'function') {
+      const hot = demHotGet(path);
+      if (hot && hot.blob) {
+        if (shouldUseSlopeNeighbourDem(hot, demProfile)) {
+          try {
+            out[direction] = await hot.blob.arrayBuffer();
+            return;
+          } catch {
+            /* fall through to disk cache */
+          }
+        } else {
+          missing.push(direction);
+          return;
+        }
+      }
+    }
+
+    // 2. Disk CacheStorage match
     try {
-      const resp = await demCache.match(new Request(buildSlopePoolCachePath(z, nx, ny, demProfile)));
+      const resp = await demCache.match(new Request(path));
       if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
         missing.push(direction);
         return;
       }
-      // Grab the underlying ArrayBuffer so we can TRANSFER it (zero copy)
-      // to the worker. We do NOT decode here.
-      out[direction] = await resp.clone().arrayBuffer();
+      // Grab ArrayBuffer directly without redundant response.clone()
+      out[direction] = await resp.arrayBuffer();
     } catch {
       missing.push(direction);
     }
@@ -296,6 +325,8 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
 //   demProfile     'default' | 'terrain'
 //   generation     slopeCancelGeneration snapshot — job auto-cancels if it
 //                  no longer matches by the time the worker replies.
+//   zoneRing       optional [[lng, lat], …] analysis-zone ring — the worker
+//                  rasterizes it into an alpha mask (see slope-math.js).
 //
 // Returns:
 //   { blob: Blob, missingDirections: string[] } — ready to wrap into a Response
@@ -305,12 +336,14 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
 // SW-thread work done here: CacheStorage match for neighbours + 1
 // arrayBuffer() on the own blob + postMessage. NO createImageBitmap, NO
 // getImageData, NO Float32 decode loop — all of that moved into the worker.
-async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demProfile, generation) {
+async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demProfile, generation, zoneRing) {
   const workers = ensureSlopePool();
   if (!workers) return null;
 
+  const isCancelled = () => generation !== null && generation !== undefined && typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration;
+
   // Cancel check BEFORE expensive work.
-  if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+  if (isCancelled()) {
     return null;
   }
 
@@ -320,7 +353,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
   // them in parallel. The gate keeps the SW responsive for basemap fetches.
   await acquireSlopePreWork();
   try {
-    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+    if (isCancelled()) {
       return null;
     }
 
@@ -331,14 +364,14 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
     } catch {
       return null;
     }
-    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+    if (isCancelled()) {
       return null;
     }
 
     // Resolve neighbour DEM blobs from the cache. Each is a raw PNG
     // ArrayBuffer ready to transfer.
     const { blobs: neighbourBlobs, missing } = await resolveNeighbourBlobs(z, x, y, demCache, demProfile);
-    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+    if (isCancelled()) {
       return null;
     }
 
@@ -360,7 +393,12 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 
     const id = ++_slopeJobMonotonic;
     const jobPromise = new Promise((resolve, reject) => {
-      _slopeJobCallbacks.set(id, { resolve, reject, kind: 'slope' });
+      _slopeJobCallbacks.set(id, {
+        resolve,
+        reject,
+        kind: 'slope',
+        uncancellable: generation === null || generation === undefined,
+      });
     });
 
     worker.postMessage(
@@ -369,6 +407,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
         resFactor: Number(resFactor) > 1 ? Number(resFactor) : 1,
         ownDem: ownDemBuf,
         neighbours: neighbourMsg,
+        zoneRing: zoneRing || null,
       },
       transferList,
     );
@@ -382,7 +421,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 
     // Generation check on the way out — if the viewport moved while we were
     // waiting, drop the result.
-    if (typeof slopeCancelGeneration !== 'undefined' && generation !== slopeCancelGeneration) {
+    if (isCancelled()) {
       return null;
     }
 
@@ -412,6 +451,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 //   z, x, y        tile coords
 //   generation     altitudeCancelGeneration snapshot — job auto-cancels if it
 //                  no longer matches by the time the worker replies.
+//   zoneRing       optional [[lng, lat], …] analysis-zone ring (alpha mask)
 //
 // Returns:
 //   { blob: Blob } — altitude PNG ready to wrap into a Response
@@ -451,7 +491,7 @@ function releaseAltitudePreWork() {
   }
 }
 
-async function computeAltitudeViaPool(demBlob, z, x, y, generation) {
+async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
   const workers = ensureSlopePool();
   if (!workers) return null;
 
@@ -487,7 +527,7 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation) {
     });
 
     worker.postMessage(
-      { id, kind: 'altitude', z, x, y, ownDem: ownDemBuf },
+      { id, kind: 'altitude', z, x, y, ownDem: ownDemBuf, zoneRing: zoneRing || null },
       [ownDemBuf],
     );
 

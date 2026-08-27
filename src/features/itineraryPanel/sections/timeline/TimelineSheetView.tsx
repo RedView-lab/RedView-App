@@ -11,11 +11,11 @@
  * The component is fully stateless: selection / visibility / favorite /
  * sort all flow through callbacks.
  */
-import { useMemo, type MouseEventHandler } from 'react';
+import { useMemo, useState, type MouseEventHandler } from 'react';
 import type { PredictionResult } from '@/features/fitPredictor';
 import { useAppI18n } from '@/shared/i18n';
 import type { RhythmState, TimelineItem } from '../../types';
-import { IconEye, IconStar, IconTrash } from '../../components/icons';
+import { IconNiceManYellow, IconStar, IconTrash } from '../../components/icons';
 import { KindBadge, kindLabel } from './KindBadge';
 import { PlaceSearchInput } from './components';
 import { TimelineRow } from './TimelineRow';
@@ -52,6 +52,9 @@ interface TimelineSheetViewProps {
     id: string,
     place: { name: string; fullName: string; lat: number; lon: number },
   ) => void;
+  onMovePause?: (id: string, distanceKm: number) => void;
+  onChangePauseDuration?: (id: string, durationMin: number) => void;
+  onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
 }
 
 interface PreparedRow {
@@ -120,6 +123,9 @@ export function TimelineSheetView({
   onAdd,
   onOpenKindMenu,
   onSelectPlace,
+  onMovePause,
+  onChangePauseDuration,
+  onChangeIntervalPauseDuration,
 }: TimelineSheetViewProps) {
   const { t } = useAppI18n();
 
@@ -136,6 +142,11 @@ export function TimelineSheetView({
     () => TIMELINE_COLUMNS.filter((c) => c.pinned || columns[c.id] !== false),
     [columns],
   );
+
+  const maxDistanceKm = useMemo(() => {
+    const totalDistanceM = resolveTotalDistanceM(items, prediction ?? null);
+    return totalDistanceM > 0 ? totalDistanceM / 1000 : undefined;
+  }, [items, prediction]);
 
   const preparedRows: PreparedRow[] = useMemo(() => {
     const totalDistanceM = resolveTotalDistanceM(items, prediction ?? null);
@@ -223,9 +234,9 @@ export function TimelineSheetView({
             </button>
 
             <span className="rvi-tl-list__col-actions" aria-hidden>
-              <span className="rvi-tl-header-icon-btn"><IconEye size={12.5} /></span>
-              <span className="rvi-tl-header-icon-btn"><IconTrash size={12.5} /></span>
-              <span className="rvi-tl-header-icon-btn"><IconStar size={10} /></span>
+              <span className="rvi-tl-header-icon-btn"><IconNiceManYellow size={15} /></span>
+              <span className="rvi-tl-header-icon-btn"><IconTrash size={15} /></span>
+              <span className="rvi-tl-header-icon-btn"><IconStar size={12} /></span>
             </span>
           </div>
 
@@ -247,6 +258,10 @@ export function TimelineSheetView({
                     onToggleFavorite={onToggleFavorite}
                     onRemove={onRemove}
                     onSelectPlace={onSelectPlace}
+                    onMovePause={onMovePause}
+                    onChangePauseDuration={onChangePauseDuration}
+                    onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
+                    maxDistanceKm={maxDistanceKm}
                   />
                 </div>
               );
@@ -291,7 +306,7 @@ export function TimelineSheetView({
           })}
           <div className="rvi-tl-th rvi-tl-th--sticky-right rvi-tl-th--actions" role="columnheader" aria-hidden>
             <span className="rvi-tl-th__action-icon">
-              <IconEye size={15} />
+              <IconNiceManYellow size={15} />
             </span>
             <span className="rvi-tl-th__action-icon">
               <IconTrash size={15} />
@@ -334,7 +349,14 @@ export function TimelineSheetView({
                   role="cell"
                   className={`rvi-tl-td ${CELL_ALIGN_CLASS[col.align]}`}
                 >
-                  {renderCell(col, row, colIndex, { onSelectPlace, t })}
+                  {renderCell(col, row, colIndex, {
+                    onSelectPlace,
+                    onMovePause,
+                    onChangePauseDuration,
+                    onChangeIntervalPauseDuration,
+                    maxDistanceKm,
+                    t,
+                  })}
                 </div>
               ))}
 
@@ -350,7 +372,7 @@ export function TimelineSheetView({
                   aria-pressed={visible}
                   disabled={isAutoIntervalPause}
                 >
-                  <IconEye size={15} />
+                  <IconNiceManYellow size={15} style={!visible ? { opacity: 0.35, filter: 'grayscale(1)' } : undefined} />
                 </button>
                 <button
                   type="button"
@@ -399,6 +421,12 @@ function buildGridTemplate(cols: TimelineColumnDef[]): string {
   return `28px ${middle} 72px`;
 }
 
+function resolveIntervalPauseId(pauseId: string): string | null {
+  const separatorIndex = pauseId.indexOf('::');
+  if (separatorIndex <= 0) return null;
+  return pauseId.slice(0, separatorIndex);
+}
+
 function resolveSheetKindLabel(item: TimelineItem, t: (key: string) => string): string {
   if (item.kind === 'end') return t('Fin');
   return kindLabel(item.kind, item.poiCategory);
@@ -409,7 +437,187 @@ interface RenderCellExtras {
     id: string,
     place: { name: string; fullName: string; lat: number; lon: number },
   ) => void;
+  onMovePause?: (id: string, distanceKm: number) => void;
+  onChangePauseDuration?: (id: string, durationMin: number) => void;
+  onChangeIntervalPauseDuration?: (pauseIntervalId: string, durationMin: number) => void;
+  maxDistanceKm?: number;
   t: (key: string) => string;
+}
+
+function TimelineSheetDistanceCell({
+  item,
+  displayValue,
+  extras,
+}: {
+  item: TimelineItem;
+  displayValue: string;
+  extras: RenderCellExtras;
+}) {
+  const { onMovePause, maxDistanceKm, t } = extras;
+  const isPause = item.kind === 'pause';
+  const canEdit = isPause && Boolean(onMovePause);
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canEdit) return;
+    setIsEditing(true);
+    setDraft(item.distanceKm != null ? String(item.distanceKm) : '');
+  };
+
+  const handleCommit = () => {
+    if (!isEditing) return;
+    const clean = draft.trim().replace(',', '.');
+    const parsed = parseFloat(clean);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      let finalKm = parsed;
+      if (maxDistanceKm != null && maxDistanceKm > 0) {
+        finalKm = Math.min(finalKm, maxDistanceKm);
+      }
+      finalKm = Number(finalKm.toFixed(3));
+      if (finalKm !== item.distanceKm) {
+        onMovePause?.(item.id, finalKm);
+      }
+    }
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        type="text"
+        className="rvi-tl-td__distance-input"
+        value={draft}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCommit();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setIsEditing(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={t('Modifier la distance en kilomètres')}
+      />
+    );
+  }
+
+  if (canEdit) {
+    return (
+      <span
+        className="rvi-tl-td__value rvi-tl-td__distance--editable"
+        onClick={handleStartEdit}
+        title={t('Modifier la distance (km)')}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleStartEdit(e as unknown as React.MouseEvent);
+          }
+        }}
+      >
+        {displayValue}
+      </span>
+    );
+  }
+
+  return <span className="rvi-tl-td__value">{displayValue}</span>;
+}
+
+function TimelineSheetDurationCell({
+  item,
+  primaryLabel,
+  extras,
+}: {
+  item: TimelineItem;
+  primaryLabel: string;
+  extras: RenderCellExtras;
+}) {
+  const { onChangePauseDuration, onChangeIntervalPauseDuration, t } = extras;
+  const isAutoIntervalPause = item.autoGenerated === 'intervalPause';
+  const canEdit = Boolean(
+    isAutoIntervalPause ? onChangeIntervalPauseDuration : onChangePauseDuration,
+  );
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  const handleStartEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canEdit) return;
+    setIsEditing(true);
+    setDraft(item.durationMin != null ? String(item.durationMin) : '15');
+  };
+
+  const handleCommit = () => {
+    if (!isEditing) return;
+    const clean = draft.trim().replace(/\D/g, '');
+    const parsed = parseInt(clean, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      if (isAutoIntervalPause) {
+        const intervalId = resolveIntervalPauseId(item.id);
+        if (intervalId) {
+          onChangeIntervalPauseDuration?.(intervalId, parsed);
+        }
+      } else {
+        onChangePauseDuration?.(item.id, parsed);
+      }
+    }
+    setIsEditing(false);
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        type="text"
+        className="rvi-tl-td__duration-input"
+        value={draft}
+        autoFocus
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={handleCommit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleCommit();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setIsEditing(false);
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        aria-label={t('Modifier la durée de la pause')}
+      />
+    );
+  }
+
+  return (
+    <span
+      className={`rvi-tl-td__name${canEdit ? ' rvi-tl-td__name--editable' : ''}`}
+      title={canEdit ? t('Modifier la durée de la pause') : primaryLabel}
+      onClick={canEdit ? handleStartEdit : undefined}
+      role={canEdit ? 'button' : undefined}
+      tabIndex={canEdit ? 0 : undefined}
+      onKeyDown={
+        canEdit
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                handleStartEdit(e as unknown as React.MouseEvent);
+              }
+            }
+          : undefined
+      }
+    >
+      {primaryLabel}
+    </span>
+  );
 }
 
 function renderCell(
@@ -435,6 +643,9 @@ function renderCell(
   if (col.id === 'name') {
     return renderNameCell(item, extras);
   }
+  if (col.id === 'distance') {
+    return <TimelineSheetDistanceCell item={item} displayValue={cell.display} extras={extras} />;
+  }
   return <span className="rvi-tl-td__value">{cell.display}</span>;
 }
 
@@ -448,8 +659,9 @@ function renderNameCell(item: TimelineItem, extras: RenderCellExtras) {
   const useSearchInput = !!extras.onSelectPlace && isLocationRow;
 
   const isAutoIntervalPause = item.autoGenerated === 'intervalPause';
+  const isPause = item.kind === 'pause';
   const primaryLabel =
-    item.kind === 'pause' && item.durationMin
+    isPause && item.durationMin
       ? (isAutoIntervalPause ? `${item.label} · ${item.durationMin}min` : `${item.durationMin}min`)
       : item.label;
 
@@ -469,6 +681,17 @@ function renderNameCell(item: TimelineItem, extras: RenderCellExtras) {
       />
     );
   }
+
+  if (isPause) {
+    return (
+      <TimelineSheetDurationCell
+        item={item}
+        primaryLabel={primaryLabel}
+        extras={extras}
+      />
+    );
+  }
+
   return (
     <span
       className={`rvi-tl-td__name${isPlaceholder ? ' rvi-tl-td__name--placeholder' : ''}`}

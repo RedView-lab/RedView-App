@@ -98,7 +98,8 @@ export function TimelineTableSettings({
       <div className="rvi-tl-table__bar">
         <div className={`rvi-tl-table__auto${value.distanceBetweenWaypoints ? ' is-on' : ''}`}>
           <span className="rvi-tl-table__auto-label">
-            {t('Points de passages automatiques')}
+            <span className="rvi-tl-table__auto-label--full">{t('Points de passages automatiques')}</span>
+            <span className="rvi-tl-table__auto-label--short">{t('Passages auto.')}</span>
           </span>
           <span className="rvi-tl-table__auto-value">
             <button
@@ -109,7 +110,7 @@ export function TimelineTableSettings({
               aria-label={t('Distance entre waypoints (km)')}
             >
               <span>{value.distanceKm} km</span>
-              <IconChevronDown size={20} />
+              <IconChevronDown size={14} />
             </button>
           </span>
         </div>
@@ -122,8 +123,9 @@ export function TimelineTableSettings({
           aria-haspopup="menu"
           aria-expanded={menuOpen}
         >
-          <IconPlusCircle size={16} />
-          <span>{t('Ajouter des colonnes')}</span>
+          <IconPlusCircle size={15} />
+          <span className="rvi-tl-table__columns-label--full">{t('Ajouter des colonnes')}</span>
+          <span className="rvi-tl-table__columns-label--short">{t('Colonnes')}</span>
           <IconChevronDown size={14} />
         </button>
       </div>

@@ -99,7 +99,7 @@ export function TracageSection({
       </div>
       <div className="rvi-row">
         <LabeledSelect
-          label="Voix cyclables"
+          label="Voies cyclables"
           value={roadTypes.bikeLanes}
           onChange={(v) => onChangeRoadType?.('bikeLanes', v)}
         />

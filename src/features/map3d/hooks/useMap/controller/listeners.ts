@@ -174,6 +174,79 @@ export function attachListeners(ctx: Ctx): void {
   };
 
   const onServiceWorkerMessage = (event: MessageEvent) => {
+    if (event.data?.type === 'DEM_PENTE_LOG') {
+      return;
+    }
+
+    if (event.data?.type === 'ZONE_SLOPE_PROGRESS') {
+      const { phase, loaded, total, percent } = event.data;
+      if (phase === 'low' && (loaded === 0 || loaded === 1)) {
+        console.log(`%c[DEM PENTE]%c 🚀 Démarrage calcul zone : ${total} tuiles z14`, 'background:#e11d48;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+      } else if (phase === 'low' && (loaded === total || loaded % 10 === 0)) {
+        console.log(`%c[DEM PENTE]%c ⚡ Phase 1 (Aperçu 30m) : ${loaded}/${total} (${percent}%)`, 'background:#f59e0b;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+      } else if (phase === 'hd' && (loaded === total || loaded % 5 === 0)) {
+        console.log(`%c[DEM PENTE]%c 🏔️ Phase 2 (LiDAR HD) : ${loaded}/${total} (${percent}%)`, 'background:#3b82f6;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+      } else if (phase === 'done') {
+        console.log(`%c[DEM PENTE]%c ✨ Pentes LiDAR HD prêtes à 100% (${total} tuiles)`, 'background:#10b981;color:#fff;font-weight:bold;padding:2px 6px;border-radius:3px;', '');
+        // Safety reload on done
+        try {
+          const sourceCaches = (map.style as unknown as {
+            _sourceCaches?: Record<string, { reload?: () => void }>;
+            sourceCaches?: Record<string, { reload?: () => void }>;
+          });
+          const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
+          if (caches) {
+            for (const key of Object.keys(caches)) {
+              if (key === 'slope-tiles' || key.endsWith(':slope-tiles')) {
+                try { caches[key].reload?.(); } catch { /* noop */ }
+              }
+            }
+            map.triggerRepaint();
+          }
+        } catch { /* noop */ }
+      }
+      return;
+    }
+
+    const scheduleDerivedCachesReload = (delayMs = 250) => {
+      if (st.derivedReloadTimer) clearTimeout(st.derivedReloadTimer);
+      st.derivedReloadTimer = setTimeout(() => {
+        st.derivedReloadTimer = null;
+        try {
+          const sourceCaches = (map.style as unknown as {
+            _sourceCaches?: Record<string, { reload?: () => void }>;
+            sourceCaches?: Record<string, { reload?: () => void }>;
+          });
+          const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
+          if (!caches) return;
+          const isDerivedSourceCache = (key: string): boolean => (
+            key === 'slope-tiles'
+            || key === 'altitude-tiles'
+            || key.endsWith(':slope-tiles')
+            || key.endsWith(':altitude-tiles')
+          );
+          for (const key of Object.keys(caches)) {
+            if (isDerivedSourceCache(key)) {
+              try { caches[key].reload?.(); } catch { /* noop */ }
+            }
+          }
+          map.triggerRepaint();
+        } catch { /* noop */ }
+      }, delayMs);
+    };
+
+    if (event.data?.type === 'SLOPE_ZONE_HD_READY' || event.data?.type === 'SLOPE_ZONE_PHASE1_READY') {
+      scheduleDerivedCachesReload(0);
+      return;
+    }
+
+    if (event.data?.type === 'SLOPE_TILE_UPDATED') {
+      // Ignore zone-specific per-tile updates to avoid patchy tile-by-tile reloads
+      if (event.data?.zone) return;
+      scheduleDerivedCachesReload(200);
+      return;
+    }
+
     if (event.data?.type !== 'DEM_TILE_CACHE_UPDATED') return;
 
     // ── Decide whether this cache update affects the BASEMAP mesh ────────
@@ -226,34 +299,7 @@ export function attachListeners(ctx: Ctx): void {
           y,
         });
       } catch { /* best-effort */ }
-      // Then nudge Mapbox to refetch slope/altitude. We debounce a full
-      // sourceCache reload because many DEM tiles may upgrade in quick
-      // succession (after a fresh viewport settles); reloading once per
-      // burst is far cheaper than per-tile and visually identical.
-      if (st.derivedReloadTimer) clearTimeout(st.derivedReloadTimer);
-      st.derivedReloadTimer = setTimeout(() => {
-        st.derivedReloadTimer = null;
-        try {
-          // Internal but stable Mapbox API for v3.x.
-          const sourceCaches = (map.style as unknown as {
-            _sourceCaches?: Record<string, { reload?: () => void }>;
-            sourceCaches?: Record<string, { reload?: () => void }>;
-          });
-          const caches = sourceCaches?._sourceCaches ?? sourceCaches?.sourceCaches;
-          if (!caches) return;
-          const isDerivedSourceCache = (key: string): boolean => (
-            key === 'slope-tiles'
-            || key === 'altitude-tiles'
-            || key.endsWith(':slope-tiles')
-            || key.endsWith(':altitude-tiles')
-          );
-          for (const key of Object.keys(caches)) {
-            if (isDerivedSourceCache(key)) {
-              try { caches[key].reload?.(); } catch { /* noop */ }
-            }
-          }
-        } catch { /* noop */ }
-      }, 350);
+      scheduleDerivedCachesReload(300);
     }
   };
 
@@ -266,12 +312,30 @@ export function attachListeners(ctx: Ctx): void {
     }
   };
 
+  let lastSyncCenterAt = 0;
+  const syncViewportCenterToSW = () => {
+    if (isCancelled()) return;
+    const now = Date.now();
+    if (now - lastSyncCenterAt < 150) return;
+    lastSyncCenterAt = now;
+    try {
+      const center = map.getCenter();
+      navigator.serviceWorker?.controller?.postMessage({
+        type: 'SET_VIEWPORT_CENTER',
+        center: { lng: center.lng, lat: center.lat },
+        z: map.getZoom(),
+      });
+    } catch { /* best-effort */ }
+  };
+
   fns.ensureTrackingListeners = () => {
     if (st.trackingListenersBound) return;
     map.on('sourcedataloading', onTrackedSourceDataLoading);
     map.on('sourcedata', onTrackedSourceData);
     map.on('dataabort', onTrackedSourceAbort);
     map.on('error', onTrackedTileError);
+    map.on('move', syncViewportCenterToSW);
+    map.on('moveend', syncViewportCenterToSW);
     map.on('moveend', fns.scheduleDemSettle);
     map.on('zoomend', fns.scheduleDemSettle);
     map.on('zoomend', onZoomEndTerrainCheck);
@@ -280,6 +344,7 @@ export function attachListeners(ctx: Ctx): void {
     map.on('styledata', onStyleDataTerrainCheck);
     map.on('styledata', fns.scheduleTerrainRecovery);
     navigator.serviceWorker?.addEventListener('message', onServiceWorkerMessage);
+    syncViewportCenterToSW();
     // Strava-style speculative prefetch: warm the 1-tile ring outside the
     // visible bbox + the 4 z+1 children of centre on every idle. Tiles land
     // in the SW CacheStorage at low H2 priority (won't preempt visible-tile
@@ -354,6 +419,8 @@ export function attachListeners(ctx: Ctx): void {
     map.off('sourcedata', onTrackedSourceData);
     map.off('dataabort', onTrackedSourceAbort);
     map.off('error', onTrackedTileError);
+    map.off('move', syncViewportCenterToSW);
+    map.off('moveend', syncViewportCenterToSW);
     map.off('moveend', fns.scheduleDemSettle);
     map.off('zoomend', fns.scheduleDemSettle);
     map.off('zoomend', onZoomEndTerrainCheck);

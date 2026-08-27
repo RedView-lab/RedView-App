@@ -15,6 +15,7 @@ export interface PoiPopupState {
   pauseEnabled: boolean;
   pauseDurationMin: number;
   manualTraceEnabled: boolean;
+  isDurationDropdownOpen?: boolean;
 }
 
 export interface UsePoiPopupActions {
@@ -23,6 +24,7 @@ export interface UsePoiPopupActions {
   onAddWaypoint?: (feature: PoiFeature) => void;
   onFinishHere?: (feature: PoiFeature) => void;
   onCyclePauseDuration?: (feature: PoiFeature) => void;
+  onSelectPauseDuration?: (feature: PoiFeature, durationMin: number) => void;
   onToggleFavorite?: (feature: PoiFeature, nextEnabled: boolean) => void;
   onTogglePause?: (
     feature: PoiFeature,
@@ -39,7 +41,10 @@ const DEFAULT_POPUP_STATE: PoiPopupState = {
   pauseEnabled: false,
   pauseDurationMin: 5,
   manualTraceEnabled: false,
+  isDurationDropdownOpen: false,
 };
+
+const PAUSE_DURATION_OPTIONS = [5, 10, 15, 20, 30] as const;
 
 const UI_ICON_URLS = {
   rightClick: '/right-click-icons',
@@ -106,10 +111,43 @@ function buildPopupHtml(feature: PoiFeature, state: PoiPopupState): string {
           </span>
           <span class="rv-poi-popup__toggle-label">Pause</span>
         </button>
-        <button type="button" class="rv-poi-popup__select rv-poi-popup__select--duration" aria-label="Durée de pause" data-action="pause-duration">
-          <span class="rv-poi-popup__select-value">${pauseDurationLabel}</span>
-          <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
-        </button>
+        <div class="rv-poi-popup__select-wrap">
+          <button
+            type="button"
+            class="rv-poi-popup__select rv-poi-popup__select--duration"
+            aria-label="Durée de pause"
+            data-action="pause-duration"
+            aria-haspopup="listbox"
+            aria-expanded="${state.isDurationDropdownOpen === true}"
+          >
+            <span class="rv-poi-popup__select-value">${pauseDurationLabel}</span>
+            <img src="${UI_ICON_URLS.chevron}" alt="" class="rv-poi-popup__chevron" />
+          </button>
+          ${
+            state.isDurationDropdownOpen
+              ? `
+            <div class="rvc-select__dropdown rv-poi-popup__dropdown" role="listbox" aria-label="Durée de pause">
+              <div class="rv-poi-popup__dropdown-list">
+                ${PAUSE_DURATION_OPTIONS.map((dur) => {
+                  const selected = dur === state.pauseDurationMin;
+                  return `
+                    <div
+                      class="rvc-select__option rv-poi-popup__dropdown-option${selected ? ' is-selected' : ''}"
+                      role="option"
+                      data-duration="${dur}"
+                      aria-selected="${selected}"
+                    >
+                      <span class="rvc-select__option-label rv-poi-popup__dropdown-text">${dur} min</span>
+                      ${selected ? `<img src="${UI_ICON_URLS.check}" alt="" class="rvc-select__option-check rv-poi-popup__dropdown-check" />` : ''}
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          `
+              : ''
+          }
+        </div>
       </div>
 
       <div class="rv-poi-popup__divider"></div>
@@ -189,23 +227,44 @@ export function buildPopupContent(
   });
 
   bindClick('[data-action="favorite-toggle"]', () => {
-    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled };
+    const nextState = { ...state, favoriteEnabled: !state.favoriteEnabled, isDurationDropdownOpen: false };
     actions.onToggleFavorite?.(feature, nextState.favoriteEnabled);
     refresh(nextState);
   });
 
   bindClick('[data-action="pause-toggle"]', () => {
-    const nextState = { ...state, pauseEnabled: !state.pauseEnabled };
+    const nextState = { ...state, pauseEnabled: !state.pauseEnabled, isDurationDropdownOpen: false };
     actions.onTogglePause?.(feature, nextState.pauseEnabled, nextState.pauseDurationMin);
     refresh(nextState);
   });
 
   bindClick('[data-action="pause-duration"]', () => {
-    actions.onCyclePauseDuration?.(feature);
+    const nextState = { ...state, isDurationDropdownOpen: !state.isDurationDropdownOpen };
+    refresh(nextState);
   });
 
+  for (const optionBtn of panel.querySelectorAll<HTMLButtonElement>('.rv-poi-popup__dropdown-option')) {
+    optionBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const rawDur = optionBtn.dataset.duration;
+      const duration = rawDur ? parseInt(rawDur, 10) : 5;
+      if (Number.isFinite(duration)) {
+        const nextState = {
+          ...state,
+          pauseDurationMin: duration,
+          pauseEnabled: true,
+          isDurationDropdownOpen: false,
+        };
+        actions.onSelectPauseDuration?.(feature, duration);
+        actions.onTogglePause?.(feature, true, duration);
+        refresh(nextState);
+      }
+    });
+  }
+
   bindClick('[data-action="manual-trace"]', () => {
-    const nextState = { ...state, manualTraceEnabled: !state.manualTraceEnabled };
+    const nextState = { ...state, manualTraceEnabled: !state.manualTraceEnabled, isDurationDropdownOpen: false };
     actions.onToggleManualTrace?.(feature, nextState.manualTraceEnabled);
     refresh(nextState);
   });

@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState, memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { useChartHover } from '../useChartHover';
-import { computeDomain, computeXDomain, type AxisDomain, type ChartMetricId } from '../series';
+import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain, type ChartMetricId } from '../series';
 import '../chart.css';
 import { AnalysisChartLayout } from './AnalysisChartLayout';
 import { drawAnalysisChartCanvas } from './canvas';
 import { buildResponsiveXAxisLabels } from './format';
 import {
   buildInterpolatedTicks,
-  buildNiceTicks,
+  buildNiceDomain,
+  buildNiceXTicks,
   buildVisibleXDomain,
   clampXDomainToRoute,
+  computeCumulativeElevationAtX,
   defaultDomainFor,
   detailZoomToVisibleFraction,
   interpolateY,
@@ -59,33 +61,21 @@ export const AnalysisChart = memo(function AnalysisChart({
 }: AnalysisChartProps) {
   const { ref: plotAreaRef, hover } = useChartHover<HTMLDivElement>();
   const seriesCanvasRef = useRef<HTMLCanvasElement>(null);
-  const hoverCallbackFrameRef = useRef<number | null>(null);
-  const pendingHoverXValueRef = useRef<number | null>(null);
-  const pendingHoverPixelXRef = useRef<number | null>(null);
-  const lastEmittedHoverXValueRef = useRef<number | null>(null);
-  const lastEmittedHoverPixelXRef = useRef<number | null>(null);
   const [expandedPoiClusterId, setExpandedPoiClusterId] = useState<string | null>(null);
   const plotSize = usePlotAreaSize(plotAreaRef);
 
-  const hoverEmissionPixelEpsilon = 2;
-
-  useEffect(
-    () => () => {
-      if (hoverCallbackFrameRef.current !== null) {
-        window.cancelAnimationFrame(hoverCallbackFrameRef.current);
-      }
-    },
-    [],
-  );
-
   const xDomain = useMemo<AxisDomain>(() => {
-    const domain = computeXDomain(series.map((entry) => entry.points), xMode);
+    const allSeriesPoints = [
+      ...series.map((entry) => entry.points),
+      ...backdropProfiles.map((profile) => profile.points),
+    ];
+    const domain = computeXDomain(allSeriesPoints, xMode);
     const clamped = clampXDomainToRoute(domain, xDomainClamp);
     if (clamped) return clamped;
     if (xMode === 'distance') return { min: 0, max: 90 };
     if (xMode === 'heure') return { min: 0, max: 24 };
     return { min: 0, max: 6 };
-  }, [series, xDomainClamp, xMode]);
+  }, [backdropProfiles, series, xDomainClamp, xMode]);
 
   const visibleFraction = useMemo(() => detailZoomToVisibleFraction(normalizeUnitInterval(detailZoom)), [detailZoom]);
   const normalizedDetailOffset = useMemo(() => normalizeUnitInterval(detailOffset), [detailOffset]);
@@ -109,49 +99,62 @@ export const AnalysisChart = memo(function AnalysisChart({
     return hover;
   }, [controlledHoverXValue, hover, plotSize.width, plotXDomain]);
 
-  const xTicks = useMemo(() => {
+  const xNice = useMemo(() => {
     const target = Math.max(2, Math.round(plotSize.width / X_MAJOR_TARGET_PX));
-    return buildNiceTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
+    return buildNiceXTicks(plotXDomain.min, plotXDomain.max, target || DEFAULT_TICK_COUNT);
   }, [plotSize.width, plotXDomain.max, plotXDomain.min]);
+  const xTicks = xNice;
   const visibleSeries = useMemo(() => (showSeriesRows ? series : []), [series, showSeriesRows]);
 
   const axis1Series = useMemo(() => series.filter((entry) => entry.axis === 1), [series]);
   const axis2Series = useMemo(() => series.filter((entry) => entry.axis === 2), [series]);
-  const yDomain = useMemo<AxisDomain>(() => {
+
+  const rawYDomain = useMemo<AxisDomain>(() => {
     const domain = computeDomain(axis1Series.map((entry) => entry.points));
-    return domain ? normalizeMetricDomain(axis1Metric, domain) : defaultDomainFor(axis1Metric);
+    if (!domain) return defaultDomainFor(axis1Metric);
+    const range = Math.max(1, domain.max - domain.min);
+    const withHeadroom = {
+      min: domain.min,
+      max: domain.max + (isInclinationMetric(axis1Metric) ? 0 : range * 0.14),
+    };
+    return normalizeMetricDomain(axis1Metric, withHeadroom);
   }, [axis1Metric, axis1Series]);
-  const y2Domain = useMemo<AxisDomain>(() => {
+
+  const rawY2Domain = useMemo<AxisDomain>(() => {
     const domain = computeDomain(axis2Series.map((entry) => entry.points));
-    return domain ? normalizeMetricDomain(axis2Metric, domain) : defaultDomainFor(axis2Metric);
+    if (!domain) return defaultDomainFor(axis2Metric);
+    const range = Math.max(1, domain.max - domain.min);
+    const withHeadroom = {
+      min: domain.min,
+      max: domain.max + (isInclinationMetric(axis2Metric) ? 0 : range * 0.14),
+    };
+    return normalizeMetricDomain(axis2Metric, withHeadroom);
   }, [axis2Metric, axis2Series]);
 
-  const yTicksAsc = useMemo(() => {
+  const yNice = useMemo(() => {
     const target =
       plotSize.height > 0
         ? Math.max(2, Math.round(plotSize.height / Y_MAJOR_TARGET_PX))
         : DEFAULT_TICK_COUNT;
-    return buildNiceTicks(yDomain.min, yDomain.max, target);
-  }, [plotSize.height, yDomain.max, yDomain.min]);
+    const forceZero = axis1Metric !== 'Altitude' && !isInclinationMetric(axis1Metric);
+    return buildNiceDomain(rawYDomain.min, rawYDomain.max, target, { forceZero });
+  }, [axis1Metric, plotSize.height, rawYDomain]);
+
+  const plotYDomain = yNice.domain;
+  const yTicksAsc = yNice.ticks;
   const yTicks = useMemo(() => yTicksAsc.slice().reverse(), [yTicksAsc]);
-  const plotYDomain = useMemo<AxisDomain>(() => {
-    if (yTicksAsc.length === 0) return yDomain;
-    return {
-      min: yTicksAsc[0] ?? yDomain.min,
-      max: yTicksAsc[yTicksAsc.length - 1] ?? yDomain.max,
-    };
-  }, [yDomain, yTicksAsc]);
+
+  const y2Nice = useMemo(() => {
+    const target = yTicks.length || DEFAULT_TICK_COUNT;
+    const forceZero = axis2Metric !== 'Altitude' && !isInclinationMetric(axis2Metric);
+    return buildNiceDomain(rawY2Domain.min, rawY2Domain.max, target, { forceZero });
+  }, [axis2Metric, rawY2Domain, yTicks.length]);
+
+  const plotY2Domain = y2Nice.domain;
   const y2Ticks = useMemo(
-    () => buildInterpolatedTicks(y2Domain.max, y2Domain.min, yTicks.length),
-    [y2Domain.max, y2Domain.min, yTicks.length],
+    () => buildInterpolatedTicks(plotY2Domain.max, plotY2Domain.min, yTicks.length),
+    [plotY2Domain.max, plotY2Domain.min, yTicks.length],
   );
-  const plotY2Domain = useMemo<AxisDomain>(() => {
-    if (y2Ticks.length === 0) return y2Domain;
-    return {
-      min: y2Ticks[y2Ticks.length - 1] ?? y2Domain.min,
-      max: y2Ticks[0] ?? y2Domain.max,
-    };
-  }, [y2Domain, y2Ticks]);
 
   const xPositions = useMemo(
     () => xTicks.map((value) => ({ value, ratio: ratioFor(value, plotXDomain) })),
@@ -161,65 +164,90 @@ export const AnalysisChart = memo(function AnalysisChart({
     () => buildResponsiveXAxisLabels(xPositions, xMode, plotSize.width),
     [plotSize.width, xMode, xPositions],
   );
+
   const yPositions = useMemo(
     () =>
-      yTicks.map((value, index) => ({
+      yTicks.map((value) => ({
         value,
-        ratio: yTicks.length > 1 ? index / (yTicks.length - 1) : 0,
+        ratio: 1 - ratioFor(value, plotYDomain),
       })),
-    [yTicks],
+    [plotYDomain, yTicks],
   );
+
+  const y2Positions = useMemo(
+    () =>
+      y2Ticks.map((value) => ({
+        value,
+        ratio: 1 - ratioFor(value, plotY2Domain),
+      })),
+    [plotY2Domain, y2Ticks],
+  );
+
   const style = useMemo<CSSProperties>(
     () => ({ ['--rvchart-left' as string]: '95px', ['--rvchart-right' as string]: '60px' }),
     [],
   );
 
-  const backdropYDomain = useMemo<AxisDomain | null>(
-    () => computeDomain(backdropProfiles.map((profile) => profile.points)),
-    [backdropProfiles],
-  );
+  const rawBackdropYDomain = useMemo<AxisDomain | null>(() => {
+    const domain = computeDomain(backdropProfiles.map((profile) => profile.points));
+    if (!domain) return null;
+    const range = Math.max(1, domain.max - domain.min);
+    return { min: domain.min, max: domain.max + range * 0.14 };
+  }, [backdropProfiles]);
+
+  const backdropYDomain = useMemo<AxisDomain | null>(() => {
+    if (!rawBackdropYDomain) return null;
+    const target =
+      plotSize.height > 0
+        ? Math.max(2, Math.round(plotSize.height / Y_MAJOR_TARGET_PX))
+        : DEFAULT_TICK_COUNT;
+    return buildNiceDomain(rawBackdropYDomain.min, rawBackdropYDomain.max, target).domain;
+  }, [plotSize.height, rawBackdropYDomain]);
+
   const backdropSeries = useMemo(() => {
     if (!backdropYDomain) return [];
     return backdropProfiles.map((profile) => ({
       id: profile.id,
-      fillColor: withAlpha(profile.color, 0.12),
-      lineColor: withAlpha(profile.color, 0.46),
+      fillColor: withAlpha(profile.color, 0.16),
+      lineColor: withAlpha(profile.color, 0.72),
       points: selectPointsForPlotLod(profile.points, plotXDomain, plotSize.width),
     }));
   }, [backdropProfiles, backdropYDomain, plotSize.width, plotXDomain]);
 
+  const altitudeDomainForAnnotations = useMemo(() => {
+    if (axis1Metric === 'Altitude') return plotYDomain;
+    return backdropYDomain ?? plotYDomain;
+  }, [axis1Metric, backdropYDomain, plotYDomain]);
+
   const visiblePoiAnnotations = useMemo(() => {
-    if (!backdropYDomain || poiAnnotations.length === 0) return [];
+    if (!altitudeDomainForAnnotations || poiAnnotations.length === 0) return [];
     return poiAnnotations
       .filter((annotation) => annotation.x >= plotXDomain.min && annotation.x <= plotXDomain.max)
       .map((annotation) => ({
         ...annotation,
         xRatio: ratioFor(annotation.x, plotXDomain),
-        yRatio: 1 - ratioFor(annotation.y, backdropYDomain),
+        yRatio: 1 - ratioFor(annotation.y, altitudeDomainForAnnotations),
         xPx: ratioFor(annotation.x, plotXDomain) * plotSize.width,
-        yPx: (1 - ratioFor(annotation.y, backdropYDomain)) * plotSize.height,
+        yPx: (1 - ratioFor(annotation.y, altitudeDomainForAnnotations)) * plotSize.height,
       }));
-  }, [backdropYDomain, plotSize.height, plotSize.width, plotXDomain, poiAnnotations]);
+  }, [altitudeDomainForAnnotations, plotSize.height, plotSize.width, plotXDomain, poiAnnotations]);
   const poiMarkerGroups = useMemo(
     () => buildPoiMarkerGroups(visiblePoiAnnotations, visibleFraction),
     [visibleFraction, visiblePoiAnnotations],
   );
   const visibleAlertAnnotations = useMemo(() => {
-    if (!backdropYDomain || alertAnnotations.length === 0) return [];
+    if (!altitudeDomainForAnnotations || alertAnnotations.length === 0) return [];
     return alertAnnotations
       .filter((annotation) => annotation.x >= plotXDomain.min && annotation.x <= plotXDomain.max)
       .map((annotation) => ({
         ...annotation,
         xRatio: ratioFor(annotation.x, plotXDomain),
-        yRatio: 1 - ratioFor(annotation.y, backdropYDomain),
+        yRatio: 1 - ratioFor(annotation.y, altitudeDomainForAnnotations),
       }));
-  }, [alertAnnotations, backdropYDomain, plotXDomain]);
+  }, [alertAnnotations, altitudeDomainForAnnotations, plotXDomain]);
 
-  useEffect(() => {
-    if (visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION) {
-      setExpandedPoiClusterId(null);
-    }
-  }, [visibleFraction]);
+  const effectiveExpandedPoiClusterId =
+    visibleFraction >= POI_CLUSTER_COMPACT_VISIBLE_FRACTION ? null : expandedPoiClusterId;
 
   const dayNightBands = useMemo(
     () =>
@@ -258,7 +286,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       series.map((entry) => ({
         id: entry.id,
         color: entry.color,
-        lineWidth: 1.4,
+        lineWidth: 2.0,
         points: selectPointsForPlotLod(entry.points, plotXDomain, plotSize.width),
         yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,
       })),
@@ -284,6 +312,16 @@ export const AnalysisChart = memo(function AnalysisChart({
     return series
       .map<HoverCardRow | null>((entry) => {
         if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
+        const val = interpolateY(entry.points, hoverXValue);
+        if (!Number.isFinite(val)) return null;
+
+        const matchingProfile = backdropProfiles.find(
+          (p) => p.itineraryName === entry.itineraryName,
+        );
+        const { gainM, lossM } = matchingProfile
+          ? computeCumulativeElevationAtX(matchingProfile.points, hoverXValue)
+          : { gainM: undefined, lossM: undefined };
+
         return {
           id: entry.id,
           itineraryName: entry.itineraryName,
@@ -291,30 +329,40 @@ export const AnalysisChart = memo(function AnalysisChart({
           axis: entry.axis,
           axisLabel: `Axe ${entry.axis}`,
           metric: entry.metricId,
-          value: interpolateY(entry.points, hoverXValue),
+          value: val,
+          gainM,
+          lossM,
         };
       })
       .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [hoverXValue, series]);
+  }, [backdropProfiles, hoverXValue, series]);
+
   const hoverBackdropData = useMemo<HoverCardRow[]>(() => {
     if (hoverXValue == null || !backdropProfiles.length) return [];
+    const hasAltitudeSeries = series.some((entry) => entry.metricId === 'Altitude');
+    if (hasAltitudeSeries) return [];
+
     return backdropProfiles
       .map<HoverCardRow | null>((profile) => {
         if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
         const value = interpolateY(profile.points, hoverXValue);
         if (!Number.isFinite(value)) return null;
+        const { gainM, lossM } = computeCumulativeElevationAtX(profile.points, hoverXValue);
         return {
           id: `${profile.id}::hover-altitude`,
           itineraryName: profile.itineraryName,
-          color: withAlpha(profile.color, 0.92),
+          color: withAlpha(profile.color, 0.95),
           axis: null,
           axisLabel: "Profil d'altitude",
           metric: 'Altitude' as ChartMetricId,
           value,
+          gainM,
+          lossM,
         };
       })
       .filter((entry): entry is HoverCardRow => entry !== null);
-  }, [backdropProfiles, hoverXValue]);
+  }, [backdropProfiles, hoverXValue, series]);
+
   const hoverRows = useMemo(
     () => [...(hoverData ?? []), ...hoverBackdropData],
     [hoverBackdropData, hoverData],
@@ -323,88 +371,46 @@ export const AnalysisChart = memo(function AnalysisChart({
   const hoverMarkers = useMemo(() => {
     if (hoverXValue == null || !activeHover) return [];
 
-    // The marker dot must sit ON the rendered curve, not on the underlying
-    // full-resolution data: the canvas draws LoD-decimated points
-    // (see `seriesLayers` / `backdropSeries` above), so when the LoD
-    // bucketing flattens a sharp spike (sorted [first, min, max, last]
-    // segments per bucket), the linearly-interpolated rendered Y at
-    // hoverXValue can differ noticeably from `interpolateY(fullPoints,
-    // hoverXValue)`. Sampling the same decimated arrays here keeps the
-    // marker glued to the visible line. Tooltip values continue to use
-    // the full-resolution arrays for accuracy (see hoverData /
-    // hoverBackdropData above).
-    const seriesPoints = series
-      .map((entry) => {
-        if (!pointSeriesCoversX(entry.points, hoverXValue)) return null;
-        const lodLayer = seriesLayers.find((layer) => layer.id === entry.id);
-        const lodPoints = lodLayer?.points ?? entry.points;
-        const yValue = interpolateY(
-          pointSeriesCoversX(lodPoints, hoverXValue) ? lodPoints : entry.points,
-          hoverXValue,
-        );
-        if (!Number.isFinite(yValue)) return null;
-        const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
-        return {
-          id: `${entry.id}::marker`,
-          topPx: (1 - ratioFor(yValue, domain)) * plotSize.height,
-          color: entry.color,
-          backdrop: false,
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+    const markers: Array<{ id: string; topRatio: number; color: string; backdrop: boolean }> = [];
+    const hasAltitudeSeries = series.some((entry) => entry.metricId === 'Altitude');
 
-    const backdropPoints = backdropProfiles
-      .map((profile) => {
-        if (!backdropYDomain) return null;
-        if (!pointSeriesCoversX(profile.points, hoverXValue)) return null;
-        const lodLayer = backdropSeries.find((layer) => layer.id === profile.id);
-        const lodPoints = lodLayer?.points ?? profile.points;
-        const yValue = interpolateY(
-          pointSeriesCoversX(lodPoints, hoverXValue) ? lodPoints : profile.points,
-          hoverXValue,
-        );
-        if (!Number.isFinite(yValue)) return null;
-        return {
-          id: `${profile.id}::marker`,
-          topPx: (1 - ratioFor(yValue, backdropYDomain)) * plotSize.height,
-          color: withAlpha(profile.color, 0.96),
+    if (!hasAltitudeSeries && backdropYDomain) {
+      for (const profile of backdropProfiles) {
+        if (!pointSeriesCoversX(profile.points, hoverXValue)) continue;
+        const yValue = interpolateY(profile.points, hoverXValue);
+        if (!Number.isFinite(yValue)) continue;
+        const ratio = ratioFor(yValue, backdropYDomain);
+        markers.push({
+          id: `${profile.id}::backdrop-marker`,
+          topRatio: 1 - ratio,
+          color: withAlpha(profile.color, 0.98),
           backdrop: true,
-        };
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+        });
+      }
+    }
 
-    return [...backdropPoints, ...seriesPoints];
-  }, [activeHover, backdropProfiles, backdropSeries, backdropYDomain, hoverXValue, plotSize.height, plotY2Domain, plotYDomain, series, seriesLayers]);
+    for (const entry of series) {
+      if (!pointSeriesCoversX(entry.points, hoverXValue)) continue;
+      const yValue = interpolateY(entry.points, hoverXValue);
+      if (!Number.isFinite(yValue)) continue;
+      const domain = entry.axis === 2 ? plotY2Domain : plotYDomain;
+      const ratio = ratioFor(yValue, domain);
+      markers.push({
+        id: `${entry.id}::series-marker`,
+        topRatio: 1 - ratio,
+        color: entry.color,
+        backdrop: false,
+      });
+    }
+
+    return markers;
+  }, [activeHover, backdropProfiles, backdropYDomain, hoverXValue, plotY2Domain, plotYDomain, series]);
 
   useEffect(() => {
     if (!onHoverXValueChange) return;
     if (Number.isFinite(controlledHoverXValue)) return;
-    pendingHoverXValueRef.current = hoverXValue;
-    pendingHoverPixelXRef.current = activeHover?.x ?? null;
-    if (hoverCallbackFrameRef.current !== null) return;
-
-    hoverCallbackFrameRef.current = window.requestAnimationFrame(() => {
-      hoverCallbackFrameRef.current = null;
-      const nextHoverXValue = pendingHoverXValueRef.current;
-      const nextHoverPixelX = pendingHoverPixelXRef.current;
-      pendingHoverXValueRef.current = null;
-      pendingHoverPixelXRef.current = null;
-      if (nextHoverXValue == null || nextHoverPixelX == null) {
-        if (lastEmittedHoverXValueRef.current == null) return;
-      } else {
-        const previousHoverPixelX = lastEmittedHoverPixelXRef.current;
-        if (
-          previousHoverPixelX != null &&
-          Math.abs(previousHoverPixelX - nextHoverPixelX) < hoverEmissionPixelEpsilon
-        ) {
-          return;
-        }
-      }
-      lastEmittedHoverXValueRef.current = nextHoverXValue;
-      lastEmittedHoverPixelXRef.current = nextHoverPixelX;
-      onHoverXValueChange(nextHoverXValue);
-    });
-  }, [activeHover, controlledHoverXValue, hoverXValue, onHoverXValueChange]);
+    onHoverXValueChange(hoverXValue);
+  }, [controlledHoverXValue, hoverXValue, onHoverXValueChange]);
 
   const handlePlotClick = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!onPlotClick || event.button !== 0) return;
@@ -430,27 +436,26 @@ export const AnalysisChart = memo(function AnalysisChart({
   return (
     <AnalysisChartLayout
       style={style}
-      yTicks={yTicks}
       axis1Metric={axis1Metric}
       axis2Metric={axis2Metric}
       plotAreaRef={plotAreaRef}
       handlePlotClick={handlePlotClick}
       dayNightBands={dayNightBands}
       yPositions={yPositions}
+      y2Positions={y2Positions}
       xPositions={xPositions}
       nightFrames={nightFrames}
       seriesCanvasRef={seriesCanvasRef}
       visibleAlertAnnotations={visibleAlertAnnotations}
       poiMarkerGroups={poiMarkerGroups}
       visibleFraction={visibleFraction}
-      expandedPoiClusterId={expandedPoiClusterId}
+      expandedPoiClusterId={effectiveExpandedPoiClusterId}
       onPoiClusterClick={handlePoiClusterClick}
       activeHover={activeHover}
       hoverMarkers={hoverMarkers}
       hoverXValue={hoverXValue}
       xMode={xMode}
       hoverRows={hoverRows}
-      y2Ticks={y2Ticks}
       xAxisLabels={xAxisLabels}
       normalizedDetailOffset={normalizedDetailOffset}
       onDetailOffsetChange={onDetailOffsetChange}

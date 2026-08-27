@@ -3,6 +3,7 @@ import {
   buildElevationSamplesFromPoints,
   computeAscentDescent,
   computeAscentDescentFromElevations,
+  haversineM,
   smoothElevationValues,
   smoothElevations,
 } from './elevation';
@@ -90,6 +91,44 @@ export function computeRouteSurfaceMetricsFromBrouter(
     distanceM: totalDist,
     tarmacPercent: classifiedDist > 0 ? (tarmacDist / classifiedDist) * 100 : 0,
     offroadPercent: classifiedDist > 0 ? (offroadDist / classifiedDist) * 100 : 0,
+  };
+}
+
+export function computeRouteSurfaceMetricsFromPoints(
+  points: RoutePointInput[],
+): RouteSurfaceMetrics | null {
+  if (points.length < 2) return null;
+
+  let totalDist = 0;
+  let tarmacDist = 0;
+  let offroadDist = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const segDist =
+      Number.isFinite(curr.distanceM) &&
+      Number.isFinite(prev.distanceM) &&
+      (curr.distanceM as number) >= (prev.distanceM as number)
+        ? (curr.distanceM as number) - (prev.distanceM as number)
+        : haversineM(prev, curr);
+
+    totalDist += segDist;
+    const surface = curr.surface ?? prev.surface;
+    if (isPavedSurface(surface)) {
+      tarmacDist += segDist;
+    } else if (isOffroadSurface(surface)) {
+      offroadDist += segDist;
+    }
+  }
+
+  const classifiedDist = tarmacDist + offroadDist;
+  if (classifiedDist <= 0) return null;
+
+  return {
+    distanceM: totalDist,
+    tarmacPercent: (tarmacDist / classifiedDist) * 100,
+    offroadPercent: (offroadDist / classifiedDist) * 100,
   };
 }
 

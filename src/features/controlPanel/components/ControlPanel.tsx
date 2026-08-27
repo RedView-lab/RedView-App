@@ -81,6 +81,7 @@ export function ControlPanel({
   onSunlightStateChange,
   sunlightMapExpanded,
   onSunlightMapExpandedChange,
+  analysisZoneActive = true,
   width,
   onResizeStart,
   isResizing,
@@ -172,6 +173,7 @@ export function ControlPanel({
 
       <SlopesSection
         enabled={state.slopes.enabled}
+        zoneActive={analysisZoneActive}
         open={sectionsOpen?.slopes}
         onOpenChange={(open) => onSectionOpenChange?.('slopes', open)}
         state={{
@@ -195,6 +197,7 @@ export function ControlPanel({
 
       <AltitudeSection
         enabled={state.altitude.enabled}
+        zoneActive={analysisZoneActive}
         open={sectionsOpen?.altitude}
         state={{
           colorization: state.altitude.colorization,

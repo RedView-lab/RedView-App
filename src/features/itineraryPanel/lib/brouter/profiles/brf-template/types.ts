@@ -51,6 +51,7 @@ export interface BrfProfileValues {
   elevMaxBuffer: number;
   elevBufferReduce: number;
   pass1Coefficient: number;
+  pass2Coefficient: number;
   inClimbMode: boolean;
   maxSlope: number;
   maxSlopeCost: number;

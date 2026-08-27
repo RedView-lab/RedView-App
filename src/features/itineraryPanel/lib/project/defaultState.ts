@@ -3,7 +3,6 @@ import type {
   Itinerary,
   ItineraryProject,
   RhythmState,
-  RouteProfile,
   TimelineItem,
 } from '../../types';
 import { translateAppText } from '@/shared/i18n';
@@ -32,13 +31,8 @@ export const ITINERARY_COLORS = [
   '#9b59ff',
 ] as const;
 
-export const DEFAULT_PROFILES: RouteProfile[] = [
-  { id: 'gravel-default', name: translateAppText('Gravel (défaut)'), isDefault: true },
-  { id: 'road', name: translateAppText('Route') },
-  { id: 'mtb', name: translateAppText('VTT') },
-  { id: 'touring', name: translateAppText('Touring') },
-  { id: 'custom', name: translateAppText('Personnalisé') },
-];
+export { DEFAULT_PROFILES, ROUTE_PROFILE_PRESETS } from './profilePresets';
+import { ROUTE_PROFILE_PRESETS } from './profilePresets';
 
 const DEFAULT_TIMELINE_START: TimelineItem = {
   id: 'start',
@@ -117,28 +111,15 @@ export function createDefaultItinerary(
   index = 1,
   color: string = ITINERARY_COLORS[0],
 ): Itinerary {
+  const defaultPreset = ROUTE_PROFILE_PRESETS['gravel-default'];
   return {
     id: `it-${Date.now()}-${index}`,
     name: translateAppText('Itinéraire {{index}}', { index }),
     color,
-    profileId: 'gravel-default',
-    priorities: {
-      duration: 50,
-      elevation: 50,
-      distance: 50,
-      tranquility: 50,
-    },
+    profileId: defaultPreset.id,
+    priorities: { ...defaultPreset.priorities },
     roadTypes: {
-      road: 'avoid',
-      gravel: 'prefer',
-      singletrack: 'tolerate',
-      offroad: 'forbid',
-      bikeLanes: 'tolerate',
-      majorRoads: 'avoid',
-      ferry: 'tolerate',
-      turns: 'avoid',
-      maxSlopePercent: 20,
-      cities: 'tolerate',
+      ...defaultPreset.roadTypes,
       applyToAllItineraries: false,
     },
     rhythm: createDefaultRhythmState(),

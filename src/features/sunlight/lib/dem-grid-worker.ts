@@ -11,6 +11,7 @@
  * worker-global state lives here — each call is self-contained.
  */
 import { latToMercY, lngLatToMercTile } from './shadowWorkerEncoding';
+import { computeShadowSweep } from './shadowSweep';
 import { MAP_CACHE_EPOCH } from '../../map3d/lib/mapCacheEpoch';
 
 export const DEM_TILE_SIZE = 256;
@@ -312,11 +313,10 @@ export function bilinearSample(
  * `shadowElev` is a scratch Float32 buffer used internally to propagate ray
  * altitudes — no need to clear it.
  *
- * Same algorithm as `shadowWorker.computeSweepShadow`. Kept in sync with the
- * realism upgrades there:
- *  - bilinear predecessor (kills row/column staircase aliasing),
- *  - soft penumbra byte based on `(propagated - el)` over SOFTNESS_HEIGHT_M,
- *  - NaN-tolerant chain (one bad cell doesn't break the whole shadow ray).
+ * Thin wrapper over `computeShadowSweep` (shadowSweep.ts), which is now the
+ * single source of truth for the sweep algorithm shared by the cast-shadow and
+ * sunlight-map workers. The wrapper exists to preserve this module's existing
+ * `(out, shadowElev)` signature used by `sunlightMapWorker.ts`.
  */
 export function computeHorizonSweepShadow(
   elev: Float32Array,
@@ -329,164 +329,14 @@ export function computeHorizonSweepShadow(
   out: Uint8Array,
   shadowElev: Float32Array,
 ): Uint8Array {
-  out.fill(0);
-  if (sunAltDeg <= 0 || sunAltDeg >= 89) return out;
-
-  const azRad = (sunAzDeg * Math.PI) / 180;
-  const tanAlt = Math.tan((sunAltDeg * Math.PI) / 180);
-  const shadowDC = -Math.sin(azRad);
-  const shadowDR = Math.cos(azRad);
-  const absDC = Math.abs(shadowDC);
-  const absDR = Math.abs(shadowDR);
-
-  const SOFTNESS_HEIGHT_M =
-    2.5 + 6 * Math.max(0, Math.min(1, (35 - sunAltDeg) / 35));
-  const invSoftness = 255 / SOFTNESS_HEIGHT_M;
-
-  if (absDC >= absDR) {
-    const colStep = shadowDC > 0 ? 1 : -1;
-    const rowShift = shadowDR / absDC;
-    const rowShiftFloor = Math.floor(-rowShift);
-    const fr = -rowShift - rowShiftFloor;
-    const w0 = 1 - fr;
-    const w1 = fr;
-    const noInterp = fr === 0;
-    const stepDistM = Math.sqrt(
-      cellSizeX * cellSizeX + (rowShift * cellSizeY) * (rowShift * cellSizeY),
-    );
-    const dropPerStep = stepDistM * tanAlt;
-    const colStart = colStep > 0 ? 0 : W - 1;
-    const colEnd = colStep > 0 ? W : -1;
-    for (let c = colStart; c !== colEnd; c += colStep) {
-      const predC = c - colStep;
-      if (predC < 0 || predC >= W) {
-        for (let r = 0; r < H; r++) {
-          const idx = r * W + c;
-          const el = elev[idx];
-          shadowElev[idx] = Number.isNaN(el) ? -Infinity : el;
-        }
-        continue;
-      }
-      for (let r = 0; r < H; r++) {
-        const idx = r * W + c;
-        const el = elev[idx];
-        if (Number.isNaN(el)) {
-          shadowElev[idx] = -Infinity;
-          continue;
-        }
-        const predR0 = r + rowShiftFloor;
-        const predR1 = predR0 + 1;
-        if (predR0 < 0 || predR1 >= H) {
-          shadowElev[idx] = el;
-          continue;
-        }
-        let predElev: number;
-        if (noInterp) {
-          const v = shadowElev[predR0 * W + predC];
-          if (v === -Infinity) {
-            shadowElev[idx] = el;
-            continue;
-          }
-          predElev = v;
-        } else {
-          const v0 = shadowElev[predR0 * W + predC];
-          const v1 = shadowElev[predR1 * W + predC];
-          if (v0 === -Infinity) {
-            if (v1 === -Infinity) {
-              shadowElev[idx] = el;
-              continue;
-            }
-            predElev = v1;
-          } else if (v1 === -Infinity) {
-            predElev = v0;
-          } else {
-            predElev = v0 * w0 + v1 * w1;
-          }
-        }
-        const propagated = predElev - dropPerStep;
-        const diff = propagated - el;
-        if (diff > 0) {
-          shadowElev[idx] = propagated;
-          const cast = diff * invSoftness;
-          out[idx] = cast >= 255 ? 255 : cast | 0;
-        } else {
-          shadowElev[idx] = el;
-        }
-      }
-    }
-  } else {
-    const rowStep = shadowDR > 0 ? 1 : -1;
-    const colShift = shadowDC / absDR;
-    const colShiftFloor = Math.floor(-colShift);
-    const fc = -colShift - colShiftFloor;
-    const w0 = 1 - fc;
-    const w1 = fc;
-    const noInterp = fc === 0;
-    const stepDistM = Math.sqrt(
-      (colShift * cellSizeX) * (colShift * cellSizeX) + cellSizeY * cellSizeY,
-    );
-    const dropPerStep = stepDistM * tanAlt;
-    const rowStart = rowStep > 0 ? 0 : H - 1;
-    const rowEnd = rowStep > 0 ? H : -1;
-    for (let r = rowStart; r !== rowEnd; r += rowStep) {
-      const predR = r - rowStep;
-      if (predR < 0 || predR >= H) {
-        const rowOffset = r * W;
-        for (let c = 0; c < W; c++) {
-          const idx = rowOffset + c;
-          const el = elev[idx];
-          shadowElev[idx] = Number.isNaN(el) ? -Infinity : el;
-        }
-        continue;
-      }
-      const predRowOffset = predR * W;
-      for (let c = 0; c < W; c++) {
-        const idx = r * W + c;
-        const el = elev[idx];
-        if (Number.isNaN(el)) {
-          shadowElev[idx] = -Infinity;
-          continue;
-        }
-        const predC0 = c + colShiftFloor;
-        const predC1 = predC0 + 1;
-        if (predC0 < 0 || predC1 >= W) {
-          shadowElev[idx] = el;
-          continue;
-        }
-        let predElev: number;
-        if (noInterp) {
-          const v = shadowElev[predRowOffset + predC0];
-          if (v === -Infinity) {
-            shadowElev[idx] = el;
-            continue;
-          }
-          predElev = v;
-        } else {
-          const v0 = shadowElev[predRowOffset + predC0];
-          const v1 = shadowElev[predRowOffset + predC1];
-          if (v0 === -Infinity) {
-            if (v1 === -Infinity) {
-              shadowElev[idx] = el;
-              continue;
-            }
-            predElev = v1;
-          } else if (v1 === -Infinity) {
-            predElev = v0;
-          } else {
-            predElev = v0 * w0 + v1 * w1;
-          }
-        }
-        const propagated = predElev - dropPerStep;
-        const diff = propagated - el;
-        if (diff > 0) {
-          shadowElev[idx] = propagated;
-          const cast = diff * invSoftness;
-          out[idx] = cast >= 255 ? 255 : cast | 0;
-        } else {
-          shadowElev[idx] = el;
-        }
-      }
-    }
-  }
-  return out;
+  return computeShadowSweep(
+    elev,
+    W,
+    H,
+    sunAzDeg,
+    sunAltDeg,
+    cellSizeX,
+    cellSizeY,
+    { shadow: out, shadowElev },
+  );
 }

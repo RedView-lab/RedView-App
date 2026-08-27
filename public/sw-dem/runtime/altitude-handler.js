@@ -27,12 +27,12 @@ function isAltitudeWorkCancelled(generation) {
   return generation !== altitudeCancelGeneration;
 }
 
-async function handleAltitudeRequest(z, x, y) {
-  // ── Hot tier (ALTITUDE_HOT_CACHE) ────────────────────────────────────
-  // Sits in FRONT of CacheStorage exactly like SLOPE_HOT_CACHE. A toggle
-  // off/on or a Mapbox repaint re-asks for tiles served a moment ago; this
-  // returns them in <1 ms instead of paying 5-25 ms for caches.match.
-  const hotKey = `/altitude-tiles/${z}/${x}/${y}`;
+async function handleAltitudeRequest(z, x, y, zoneHash = '') {
+  // ── Analysis-zone cache key ──────────────────────────────────────────
+  // `?zone=<hash>` isolates masked from unmasked tiles in CacheStorage and
+  // the hot tier (same convention as the slope handler), so a zone edit can
+  // never serve a stale unmasked tile under the new key.
+  const hotKey = `/altitude-tiles/${z}/${x}/${y}${zoneHash ? `?zone=${zoneHash}` : ''}`;
   const hot = (typeof altitudeHotGet === 'function') ? altitudeHotGet(hotKey) : null;
   if (hot) return altitudeHotResponse(hot);
 
@@ -50,7 +50,15 @@ async function handleAltitudeRequest(z, x, y) {
     return cached;
   }
 
-  const inflightKey = `${z}/${x}/${y}`;
+  // ── Analysis-zone early rejection ────────────────────────────────────
+  const { entry: zoneEntry, ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
+  if (zoneHash) {
+    if (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y)) {
+      return transparentTileResponse();
+    }
+  }
+
+  const inflightKey = `${z}/${x}/${y}${zoneHash ? `?z=${zoneHash}` : ''}`;
   const existing = ALTITUDE_INFLIGHT.get(inflightKey);
   if (existing) {
     try { return (await existing).clone(); }
@@ -96,7 +104,7 @@ async function handleAltitudeRequest(z, x, y) {
       let usedPool = false;
       if (typeof computeAltitudeViaPool === 'function') {
         try {
-          const poolResult = await computeAltitudeViaPool(demBlob, z, x, y, generation);
+          const poolResult = await computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing);
           if (poolResult) {
             altitudeBlob = poolResult.blob;
             usedPool = true;
@@ -114,6 +122,7 @@ async function handleAltitudeRequest(z, x, y) {
             x,
             y,
             () => isAltitudeWorkCancelled(generation),
+            zoneRing,
           ),
           generation,
         );

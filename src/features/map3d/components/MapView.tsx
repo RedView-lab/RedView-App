@@ -3,6 +3,7 @@ import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
+import { useMapPoiExternalLink } from '../hooks/useMapPoiExternalLink';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import { MapContextMenu } from './MapContextMenu/MapContextMenu';
 import type {
@@ -89,6 +90,7 @@ export default memo(function MapView({
   });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
+  useMapPoiExternalLink(isLoaded ? map.current : null);
 
   useEffect(() => {
     if (isLoaded && map.current && onMapReady) {
@@ -138,7 +140,7 @@ export default memo(function MapView({
     // container. The Dashboard wraps everything in a scaled box whose
     // logical size is `viewport / appScale`, so vw/dvh would only cover
     // a fraction of the wrapper and leave empty space on small screens.
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', zIndex: 0, isolation: 'isolate' }}>
       <div
         ref={containerRef}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}

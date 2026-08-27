@@ -4,7 +4,9 @@ import {
   CASING_PREFIX,
   DIRT_PATTERN_PREFIX,
   GLOW_PREFIX,
+  GRAVEL_PATTERN_PREFIX,
   LINE_PREFIX,
+  PAVED_PATTERN_PREFIX,
   SAND_PATTERN_PREFIX,
   SOURCE_PREFIX,
   canMutateStyle,
@@ -228,6 +230,8 @@ export function upsertRouteLayer(
     source: srcId,
     casing: casingId,
     glow: legacyGlowId,
+    pavedPattern: pavedPatternId,
+    gravelPattern: gravelPatternId,
     dirtPattern: dirtPatternId,
     sandPattern: sandPatternId,
     line: lineId,
@@ -235,11 +239,33 @@ export function upsertRouteLayer(
   const visibility = opts.visible ? 'visible' : 'none';
   const opacity = Math.max(0, Math.min(1, opts.opacity01));
   const traceWidthPx = normalizeTraceWidthPx(opts.traceWidthPx);
-  const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
   const lineMetricsRegistry = getRouteLineMetricsRegistry(map);
   const appliedSignatureRegistry = getRouteAppliedSignatureRegistry(map);
+  const contentSignature = buildRouteContentSignature(points);
+  const optionSignature = buildRouteOptionSignature(opts, contentSignature);
 
   let existing = map.getSource(srcId) as GeoJSONSource | undefined;
+
+  // If the route is hidden:
+  if (!opts.visible) {
+    if (existing || map.getLayer(lineId)) {
+      setRouteLayerVisibility(map, itineraryId, false);
+      appliedSignatureRegistry.set(itineraryId, optionSignature);
+    }
+    return;
+  }
+
+  // Short-circuit: if the source already existed and nothing changed, do nothing.
+  if (existing && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
+    try {
+      raiseRouteLayer(map, itineraryId);
+    } catch {
+      /* map may be tearing down */
+    }
+    return;
+  }
+
+  const renderSpec = buildRouteGeoJson(points, opts, traceWidthPx);
   const mountedSourceRequiresLineMetrics = getMountedSourceRequiresLineMetrics(map, srcId);
   const mountedLayerUsesLineProgress = routeLayerUsesLineGradient(map, lineId)
     || routeLayerUsesLineGradient(map, legacyGlowId)
@@ -259,6 +285,8 @@ export function upsertRouteLayer(
     try {
       removeLayerIfPresent(map, casingId);
       removeLayerIfPresent(map, legacyGlowId);
+      removeLayerIfPresent(map, pavedPatternId);
+      removeLayerIfPresent(map, gravelPatternId);
       removeLayerIfPresent(map, dirtPatternId);
       removeLayerIfPresent(map, sandPatternId);
       removeLayerIfPresent(map, lineId);
@@ -277,19 +305,11 @@ export function upsertRouteLayer(
     } catch {
       /* noop */
     }
-    try {
-      removeLayerIfPresent(map, casingId);
-      removeLayerIfPresent(map, legacyGlowId);
-      removeLayerIfPresent(map, dirtPatternId);
-      removeLayerIfPresent(map, sandPatternId);
-    } catch {
-      /* noop */
-    }
   } else {
     if (!canMutateStyle(map)) return;
     map.addSource(srcId, {
       type: 'geojson',
-      lineMetrics: renderSpec.requiresLineMetrics,
+      lineMetrics: true,
       data: renderSpec.data,
     });
     map.addLayer({
@@ -318,20 +338,6 @@ export function upsertRouteLayer(
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
   }
 
-  // Short-circuit: if the source already existed and nothing about the
-  // geometry/options changed since the last push for this itinerary, the
-  // setData + paint-property churn below is pure waste. This is the hot path
-  // during styledata/sourcedata storms (terrain tile streaming) which do not
-  // affect route geometry at all.
-  const optionSignature = buildRouteOptionSignature(opts, buildRouteContentSignature(points));
-  if (existing && appliedSignatureRegistry.get(itineraryId) === optionSignature) {
-    try {
-      raiseRouteLayer(map, itineraryId);
-    } catch {
-      /* map may be tearing down */
-    }
-    return;
-  }
   appliedSignatureRegistry.set(itineraryId, optionSignature);
 
   try {
@@ -392,33 +398,55 @@ export function upsertRouteLayer(
       sourceId: srcId,
       visibility,
       opacity,
-      colorPaint: renderSpec.accentColorPaint,
-      widthPx: renderSpec.accentWidthPx,
-      dasharray: renderSpec.accentDasharray,
-      filter: renderSpec.accentFilter,
-      lineCap: renderSpec.accentCap,
+      colorPaint: null,
+      widthPx: 0,
+      dasharray: null,
+      filter: null,
+      lineCap: 'butt',
+    });
+    syncPatternLayer(map, {
+      layerId: pavedPatternId,
+      sourceId: srcId,
+      visibility,
+      opacity,
+      colorPaint: renderSpec.pavedPattern?.colorPaint ?? null,
+      widthPx: renderSpec.pavedPattern?.widthPx ?? 0,
+      dasharray: renderSpec.pavedPattern?.dasharray ?? null,
+      filter: renderSpec.pavedPattern?.filter ?? null,
+      lineCap: renderSpec.pavedPattern?.lineCap ?? 'butt',
+    });
+    syncPatternLayer(map, {
+      layerId: gravelPatternId,
+      sourceId: srcId,
+      visibility,
+      opacity,
+      colorPaint: renderSpec.gravelPattern?.colorPaint ?? null,
+      widthPx: renderSpec.gravelPattern?.widthPx ?? 0,
+      dasharray: renderSpec.gravelPattern?.dasharray ?? null,
+      filter: renderSpec.gravelPattern?.filter ?? null,
+      lineCap: renderSpec.gravelPattern?.lineCap ?? 'butt',
     });
     syncPatternLayer(map, {
       layerId: dirtPatternId,
       sourceId: srcId,
       visibility,
       opacity,
-      colorPaint: renderSpec.overlayColorPaint,
-      widthPx: renderSpec.overlayWidthPx,
-      dasharray: renderSpec.overlayDasharray,
-      filter: renderSpec.overlayFilter,
-      lineCap: renderSpec.overlayCap,
+      colorPaint: renderSpec.dirtPattern?.colorPaint ?? null,
+      widthPx: renderSpec.dirtPattern?.widthPx ?? 0,
+      dasharray: renderSpec.dirtPattern?.dasharray ?? null,
+      filter: renderSpec.dirtPattern?.filter ?? null,
+      lineCap: renderSpec.dirtPattern?.lineCap ?? 'butt',
     });
     syncPatternLayer(map, {
       layerId: sandPatternId,
       sourceId: srcId,
       visibility,
       opacity,
-      colorPaint: renderSpec.textureColorPaint,
-      widthPx: renderSpec.textureWidthPx,
-      dasharray: renderSpec.textureDasharray,
-      filter: renderSpec.textureFilter,
-      lineCap: renderSpec.textureCap,
+      colorPaint: renderSpec.sandPattern?.colorPaint ?? null,
+      widthPx: renderSpec.sandPattern?.widthPx ?? 0,
+      dasharray: renderSpec.sandPattern?.dasharray ?? null,
+      filter: renderSpec.sandPattern?.filter ?? null,
+      lineCap: renderSpec.sandPattern?.lineCap ?? 'round',
     });
     lineMetricsRegistry.set(itineraryId, renderSpec.requiresLineMetrics);
     raiseRouteLayer(map, itineraryId);
@@ -431,6 +459,8 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
   const {
     casing: casingId,
     glow: legacyGlowId,
+    pavedPattern: pavedPatternId,
+    gravelPattern: gravelPatternId,
     dirtPattern: dirtPatternId,
     sandPattern: sandPatternId,
     line: lineId,
@@ -440,6 +470,8 @@ export function raiseRouteLayer(map: MapboxMap, itineraryId: string): void {
     if (map.getLayer(casingId)) map.moveLayer(casingId);
     if (map.getLayer(lineId)) map.moveLayer(lineId);
     if (map.getLayer(legacyGlowId)) map.moveLayer(legacyGlowId);
+    if (map.getLayer(pavedPatternId)) map.moveLayer(pavedPatternId);
+    if (map.getLayer(gravelPatternId)) map.moveLayer(gravelPatternId);
     if (map.getLayer(dirtPatternId)) map.moveLayer(dirtPatternId);
     if (map.getLayer(sandPatternId)) map.moveLayer(sandPatternId);
   } catch {
@@ -452,12 +484,16 @@ export function removeRouteLayer(map: MapboxMap, itineraryId: string): void {
     source: srcId,
     casing: casingId,
     glow: legacyGlowId,
+    pavedPattern: pavedPatternId,
+    gravelPattern: gravelPatternId,
     dirtPattern: dirtPatternId,
     sandPattern: sandPatternId,
     line: lineId,
   } = ids(itineraryId);
   try {
     removeLayerIfPresent(map, casingId);
+    removeLayerIfPresent(map, pavedPatternId);
+    removeLayerIfPresent(map, gravelPatternId);
     removeLayerIfPresent(map, dirtPatternId);
     removeLayerIfPresent(map, sandPatternId);
     removeLayerIfPresent(map, legacyGlowId);
@@ -478,17 +514,21 @@ export function setRouteLayerVisibility(
   const {
     casing: casingId,
     glow: legacyGlowId,
+    pavedPattern: pavedPatternId,
+    gravelPattern: gravelPatternId,
     dirtPattern: dirtPatternId,
     sandPattern: sandPatternId,
     line: lineId,
   } = ids(itineraryId);
   const visibility = visible ? 'visible' : 'none';
   try {
-    if (map.getLayer(casingId)) map.setLayoutProperty(casingId, 'visibility', visibility);
-    if (map.getLayer(legacyGlowId)) map.setLayoutProperty(legacyGlowId, 'visibility', visibility);
-    if (map.getLayer(dirtPatternId)) map.setLayoutProperty(dirtPatternId, 'visibility', visibility);
-    if (map.getLayer(sandPatternId)) map.setLayoutProperty(sandPatternId, 'visibility', visibility);
-    if (map.getLayer(lineId)) map.setLayoutProperty(lineId, 'visibility', visibility);
+    if (map.getLayer(casingId)) setLayoutPropertyIfChanged(map, casingId, 'visibility', visibility);
+    if (map.getLayer(legacyGlowId)) setLayoutPropertyIfChanged(map, legacyGlowId, 'visibility', visibility);
+    if (map.getLayer(pavedPatternId)) setLayoutPropertyIfChanged(map, pavedPatternId, 'visibility', visibility);
+    if (map.getLayer(gravelPatternId)) setLayoutPropertyIfChanged(map, gravelPatternId, 'visibility', visibility);
+    if (map.getLayer(dirtPatternId)) setLayoutPropertyIfChanged(map, dirtPatternId, 'visibility', visibility);
+    if (map.getLayer(sandPatternId)) setLayoutPropertyIfChanged(map, sandPatternId, 'visibility', visibility);
+    if (map.getLayer(lineId)) setLayoutPropertyIfChanged(map, lineId, 'visibility', visibility);
   } catch {
     /* noop */
   }
@@ -505,11 +545,15 @@ export function removeAllRouteLayers(map: MapboxMap): void {
       const safe = key.slice(SOURCE_PREFIX.length);
       const casingId = `${CASING_PREFIX}${safe}`;
       const glowId = `${GLOW_PREFIX}${safe}`;
+      const pavedPatternId = `${PAVED_PATTERN_PREFIX}${safe}`;
+      const gravelPatternId = `${GRAVEL_PATTERN_PREFIX}${safe}`;
       const dirtPatternId = `${DIRT_PATTERN_PREFIX}${safe}`;
-      const lineId = `${LINE_PREFIX}${safe}`;
       const sandPatternId = `${SAND_PATTERN_PREFIX}${safe}`;
+      const lineId = `${LINE_PREFIX}${safe}`;
       try {
         removeLayerIfPresent(map, casingId);
+        removeLayerIfPresent(map, pavedPatternId);
+        removeLayerIfPresent(map, gravelPatternId);
         removeLayerIfPresent(map, dirtPatternId);
         removeLayerIfPresent(map, sandPatternId);
         removeLayerIfPresent(map, glowId);

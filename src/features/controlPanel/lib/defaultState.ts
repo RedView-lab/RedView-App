@@ -46,7 +46,7 @@ export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
       cities: true,
       states: true,
       naturalParks: true,
-      countries: false,
+      countries: true,
       waterBody: false,
     },
   },

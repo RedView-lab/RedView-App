@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
-import type { SlopeCategory, SlopeColorMode } from '../../types';
-import { type SlopeTileSourceOptions, buildSlopeColorExpression, buildSlopeSourceKey } from '../../lib/slope-source';
+import type { SlopeCategory, SlopeColorMode, SlopeDemProfile } from '../../types';
+import { type SlopeTileSourceOptions, type SlopeZoneOptions, buildSlopeColorExpression, buildSlopeSourceKey } from '../../lib/slope-source';
 import {
   addSlopeLayer,
   cancelSlopeWorkerPressure,
@@ -67,6 +67,53 @@ export function useSlope(
   const mountedRef = useRef(false);
   const visibilityDeferredRef = useRef(enabled);
   const mountedSourceKeyRef = useRef<string | null>(null);
+  const lastZonePipelineRef = useRef<{ hash: string; profile: string; time: number } | null>(null);
+
+  const triggerZonePipeline = (zone: SlopeZoneOptions, profile: SlopeDemProfile) => {
+    const now = Date.now();
+    if (
+      lastZonePipelineRef.current &&
+      lastZonePipelineRef.current.hash === zone.hash &&
+      lastZonePipelineRef.current.profile === profile &&
+      now - lastZonePipelineRef.current.time < 1000
+    ) {
+      return;
+    }
+    lastZonePipelineRef.current = { hash: zone.hash, profile, time: now };
+
+    try {
+      const [w, s, e, n] = zone.bounds;
+      const tiles: Array<{ z: number; x: number; y: number }> = [];
+      const seen = new Set<string>();
+      const z = 14;
+      const world = 1 << z;
+      const minX = Math.max(0, Math.min(world - 1, Math.floor(((w + 180) / 360) * world)));
+      const maxX = Math.max(0, Math.min(world - 1, Math.floor(((e + 180) / 360) * world)));
+      const minLatRad = (Math.min(85, Math.max(-85, s)) * Math.PI) / 180;
+      const maxLatRad = (Math.min(85, Math.max(-85, n)) * Math.PI) / 180;
+      const maxY = Math.max(0, Math.min(world - 1, Math.floor((0.5 - Math.log(Math.tan(Math.PI / 4 + minLatRad / 2)) / (2 * Math.PI)) * world)));
+      const minY = Math.max(0, Math.min(world - 1, Math.floor((0.5 - Math.log(Math.tan(Math.PI / 4 + maxLatRad / 2)) / (2 * Math.PI)) * world)));
+
+      for (let tx = minX; tx <= maxX; tx++) {
+        for (let ty = minY; ty <= maxY; ty++) {
+          const key = `${z}/${tx}/${ty}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            tiles.push({ z, x: tx, y: ty });
+          }
+        }
+      }
+      navigator.serviceWorker?.controller?.postMessage({
+        type: 'START_ZONE_SLOPE_PIPELINE',
+        profile,
+        zone: zone.hash,
+        ring: zone.ring,
+        tiles,
+      });
+    } catch {
+      /* best-effort */
+    }
+  };
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
@@ -136,34 +183,19 @@ export function useSlope(
     mountedSourceKeyRef.current = sourceKey;
     setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
 
-    // ── Cross-profile prewarm on resolution switch ───────────────────
-    // When the user flips 0.40m ↔ 1m we swap the tile source, which
-    // changes every tile's cache key (`?rv-dem-profile=…`). Without
-    // warming, the new viewport is a complete cache miss and the user
-    // waits for the full IGN DEM + Horn build pipeline on every tile.
-    //
-    // CRITICAL: we warm ONLY the OTHER profile (a tight foreground batch),
-    // NOT the just-selected one. The just-selected profile is built
-    // naturally by Mapbox's own tile requests for the now-visible source —
-    // and those requests go through the SW's slope-visible IGN priority,
-    // so they correctly yield to basemap traffic. If we prewarmed the
-    // just-selected profile too, we'd DOUBLE the work on the SW thread
-    // (one batch from Mapbox + one from our prewarm) and starve the
-    // basemap DEM/ortho pipeline for the first second after the switch —
-    // the "map freezes on zoom after enabling slope" symptom.
-    //
-    // Batch is capped at 20 foreground tiles (the foreground footprint at
-    // any pitch). The SW's PREWARM_SLOPE handler caps at 64 itself and
-    // runs everything at slope-warm priority, so even an over-eager caller
-    // cannot preempt basemap IGN fetches.
-    try {
-      const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
-      if (tiles.length) {
-        const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
-        prewarmSlopeViewport(tiles, otherProfile);
+    // ── Zone multi-fetch or cross-profile prewarm on resolution switch ──
+    if (sourceOptions.zone?.bounds) {
+      triggerZonePipeline(sourceOptions.zone, sourceOptions.demProfile);
+    } else {
+      try {
+        const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
+        if (tiles.length) {
+          const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
+          prewarmSlopeViewport(tiles, otherProfile, sourceOptionsRef.current.zone?.hash);
+        }
+      } catch {
+        /* best-effort */
       }
-    } catch {
-      /* best-effort */
     }
   }, [map, isMapLoaded, sourceKey, sourceOptions]);
 
@@ -178,19 +210,17 @@ export function useSlope(
     if (!map || !isMapLoaded) return;
     notifySlopeActiveState(enabled);
     if (!enabled) return;
-    // Fire once per enable; the delay lets Mapbox mount the slope source
-    // and issue its first tile requests (the visible-coords snapshot is
-    // empty before that). 1.2 s is long enough for the basemap + slope to
-    // land first; prewarming the other profile only after that means we
-    // never compete with the user's first paint.
+
+    if (sourceOptionsRef.current.zone?.bounds) {
+      triggerZonePipeline(sourceOptionsRef.current.zone, sourceOptionsRef.current.demProfile);
+    }
+
     const timer = setTimeout(() => {
       try {
         const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
         if (!tiles.length) return;
-        // Only warm the OTHER profile — Mapbox is already building the
-        // active one via its own tile requests at slope-visible priority.
         const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
-        prewarmSlopeViewport(tiles, otherProfile);
+        prewarmSlopeViewport(tiles, otherProfile, sourceOptionsRef.current.zone?.hash);
       } catch {
         /* best-effort */
       }

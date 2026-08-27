@@ -502,12 +502,11 @@ export async function reverseGeocodeSettlement(
   lat: number,
   opts: ReverseGeocodeOptions = {},
 ): Promise<GeocodeSuggestion | null> {
-  if (!MAPBOX_TOKEN) return null;
+  if (!MAPBOX_TOKEN || !Number.isFinite(lon) || !Number.isFinite(lat)) return null;
 
   const params = new URLSearchParams({
     access_token: MAPBOX_TOKEN,
     language: opts.language ?? 'fr',
-    limit: String(Math.min(Math.max(opts.limit ?? 5, 1), 10)),
     types: 'place,locality,neighborhood,address',
   });
   if (opts.countries) params.set('country', opts.countries);

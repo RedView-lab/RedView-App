@@ -235,33 +235,42 @@ fn collect_all_samples(activities: &[ActivityData], samples: &mut Vec<(f64, f64)
 }
 
 fn bin_samples(samples: &[(f64, f64)], speed_percentile: f64) -> Vec<GradientBin> {
-    let mut bins: Vec<GradientBin> = Vec::new();
-    let mut g = GRADIENT_MIN;
-    while g < GRADIENT_MAX {
-        let center = g + BIN_WIDTH / 2.0;
-        let mut speeds: Vec<f64> = samples
-            .iter()
-            .filter(|(grad, _)| *grad >= g && *grad < g + BIN_WIDTH)
-            .map(|(_, s)| *s)
-            .collect();
+    // Single pass: bucket each sample by gradient bin index instead of
+    // re-filtering the whole sample list once per bin (O(bins × N) before).
+    let n_bins = ((GRADIENT_MAX - GRADIENT_MIN) / BIN_WIDTH).ceil() as usize;
+    let mut buckets: Vec<Vec<f64>> = vec![Vec::new(); n_bins];
 
-        if speeds.len() >= MIN_BIN_SAMPLES {
-            let adaptive_pct = if center > 3.0 || center < -3.0 {
-                speed_percentile.min(0.50)
-            } else {
-                speed_percentile
-            };
-            let p = percentile(&mut speeds, adaptive_pct);
-            let sd = std_dev(&speeds);
-            bins.push(GradientBin {
-                gradient_pct: center,
-                median_speed_ms: p,
-                std_speed_ms: sd,
-                count: speeds.len() as u32,
-            });
+    for &(grad, speed) in samples {
+        let idx = ((grad - GRADIENT_MIN) / BIN_WIDTH).floor();
+        if !(idx >= 0.0) {
+            continue; // NaN or below range
         }
+        let idx = idx as usize;
+        if idx >= n_bins {
+            continue;
+        }
+        buckets[idx].push(speed);
+    }
 
-        g += BIN_WIDTH;
+    let mut bins: Vec<GradientBin> = Vec::new();
+    for (idx, mut speeds) in buckets.into_iter().enumerate() {
+        if speeds.len() < MIN_BIN_SAMPLES {
+            continue;
+        }
+        let center = GRADIENT_MIN + (idx as f64 + 0.5) * BIN_WIDTH;
+        let adaptive_pct = if center > 3.0 || center < -3.0 {
+            speed_percentile.min(0.50)
+        } else {
+            speed_percentile
+        };
+        let p = percentile(&mut speeds, adaptive_pct);
+        let sd = std_dev(&speeds);
+        bins.push(GradientBin {
+            gradient_pct: center,
+            median_speed_ms: p,
+            std_speed_ms: sd,
+            count: speeds.len() as u32,
+        });
     }
 
     bins

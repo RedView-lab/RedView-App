@@ -18,9 +18,23 @@
   flex-shrink: 0;
 }
 
-.rvc-slopes__opacity-control .rvc-slider {
-  flex: 1 1 0;
-  min-width: 0;
+.rvc-slopes__opacity-slider-wrap {
+  width: var(--rvc-panel-altitude-slider-width);
+  flex: 0 0 var(--rvc-panel-altitude-slider-width);
+}
+
+.rvc-slopes__opacity-slider-wrap .rvc-slider {
+  width: 100%;
+}
+
+.rvc-slopes__opacity-value {
+  flex-shrink: 0;
+  color: var(--rvc-text);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: normal;
+  white-space: nowrap;
 }
 
 /* ── Bands container (shared) ─────────────────────────────────────── */
@@ -38,6 +52,7 @@
 .rvc-slopes__band-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 4px;
   width: 100%;
   min-width: 0;
@@ -160,6 +175,8 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* ── Legacy band-label (kept for backwards compat) ────────────────── */
@@ -184,7 +201,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 140px;
+  width: var(--rvc-panel-select-md);
   flex-shrink: 0;
   padding: 5px 6px 5px 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);

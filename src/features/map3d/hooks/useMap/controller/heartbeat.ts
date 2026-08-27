@@ -89,7 +89,16 @@ export function attachHeartbeat(ctx: Ctx): void {
         } catch { /* fallback re-attach failed */ }
       }
 
-      if (sourcePresent && terrainBound && terrainRenderable) {
+      let isSourceBusy = false;
+      try {
+        isSourceBusy = !map.isSourceLoaded(unifiedDEMSource.id);
+      } catch {
+        isSourceBusy = false;
+      }
+      const hasTileActivity = [...st.requestedTiles].some((key) => key.startsWith(`${unifiedDEMSource.id}:`))
+        && st.requestedTiles.size > st.loadedTiles.size;
+
+      if (sourcePresent && terrainBound && (terrainRenderable || isSourceBusy || hasTileActivity)) {
         st.heartbeatFailures = 0;
         return;
       }

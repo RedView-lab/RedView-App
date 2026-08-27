@@ -4,12 +4,14 @@ export type {
   RoutePointInput,
   RouteProfilePoint,
   RouteSurfaceMetrics,
+  Surface,
 } from './types';
 
 export {
   computeRouteElevationMetrics,
   computeRouteMetricsFromBrouter,
   computeRouteSurfaceMetricsFromBrouter,
+  computeRouteSurfaceMetricsFromPoints,
   refineMetricsWithTerrain,
 } from './metrics';
 
@@ -18,6 +20,13 @@ export {
   extractRouteProfileFromPoints,
   refineRouteProfileWithIgnAltimetry,
   refineRouteProfileWithTerrain,
-  refineRouteProfileWithTerrainTiles,
   sampleRouteProfileWithTerrain,
 } from './profile';
+
+export {
+  analyzeGpxSurfaces,
+  type SurfaceAnalysisOptions,
+  type SurfaceAnalysisProgress,
+  type SurfaceAnalysisResult,
+} from './surfaceAnalysis';
+

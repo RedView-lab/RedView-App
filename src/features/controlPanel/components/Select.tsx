@@ -15,6 +15,7 @@ interface SelectProps<T extends string = string> {
   onChange?: (value: T) => void;
   width?: number | string;
   className?: string;
+  placeholder?: string;
   /** Rendered on the left side of the value, e.g. a color swatch. */
   startAdornment?: ReactNode;
   /** Optional class variant. */
@@ -29,6 +30,7 @@ export function Select<T extends string = string>({
   onChange,
   width,
   className,
+  placeholder,
   startAdornment,
   variant = 'default',
   disabled = false,
@@ -40,6 +42,7 @@ export function Select<T extends string = string>({
     top: number;
     left: number;
     width: number;
+    maxHeight: number;
     scale: number;
     fontFamily: string;
     fontSize: string;
@@ -68,7 +71,9 @@ export function Select<T extends string = string>({
     const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
     const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
     const rowHeight = 32 * scale;
-    const dropdownHeight = options.length * rowHeight;
+    const maxDropdownHeight = 260 * scale;
+    const rawDropdownHeight = options.length * rowHeight;
+    const dropdownHeight = Math.min(rawDropdownHeight, maxDropdownHeight);
     const offset = 4 * scale;
     const spaceBelow = window.innerHeight - rect.bottom - 8;
     const placeAbove = spaceBelow < dropdownHeight && rect.top > spaceBelow;
@@ -76,6 +81,7 @@ export function Select<T extends string = string>({
       top: placeAbove ? rect.top - dropdownHeight - offset : rect.bottom + offset,
       left: rect.left,
       width: Math.max(140, rect.width / scale),
+      maxHeight: 260,
       scale,
       fontFamily: computed.fontFamily,
       fontSize: computed.fontSize,
@@ -83,6 +89,8 @@ export function Select<T extends string = string>({
       lineHeight: computed.lineHeight,
     });
   }, [open, options.length]);
+
+  const selectedOption = options.find((o) => o.value === value);
 
   const dropdown = open && !disabled && dropPos
     ? createPortal(
@@ -93,13 +101,18 @@ export function Select<T extends string = string>({
             top: dropPos.top,
             left: dropPos.left,
             width: dropPos.width,
-            zIndex: 9999,
+            maxHeight: dropPos.maxHeight,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            zIndex: 99999,
             transform: `scale(${dropPos.scale})`,
             transformOrigin: 'top left',
             fontFamily: dropPos.fontFamily,
             fontSize: dropPos.fontSize,
             fontWeight: dropPos.fontWeight,
             lineHeight: dropPos.lineHeight,
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(255, 255, 255, 0.24) transparent',
           }}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -136,8 +149,11 @@ export function Select<T extends string = string>({
         }}
       >
         {startAdornment ? <span className="rvc-select__adornment">{startAdornment}</span> : null}
-        <span className="rvc-select__value">
-          {t(options.find((o) => o.value === value)?.label ?? value)}
+        <span
+          className="rvc-select__value"
+          style={!selectedOption && placeholder ? { color: 'rgba(255, 255, 255, 0.64)' } : undefined}
+        >
+          {selectedOption ? t(selectedOption.label) : (placeholder ?? (value ? t(value) : ''))}
         </span>
         <IconChevronDown size={20} className="rvc-select__chevron" />
       </div>

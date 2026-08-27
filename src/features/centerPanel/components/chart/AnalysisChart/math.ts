@@ -5,32 +5,34 @@ import {
 } from '../series';
 
 export const MIN_VISIBLE_FRACTION = 0.04;
-const MIN_LOD_LEVEL_POINTS = 256;
-const LOD_TARGET_VISIBLE_POINTS_PER_PX = 3;
-const MAX_CACHE_SIZE = 100;
-const plotLodLevelsCache = new Map<string, { x: number; y: number }[][]>();
 
-function getPointsCacheKey(points: { x: number; y: number }[]): string {
-  if (points.length === 0) return 'empty';
-  const first = points[0];
-  const last = points[points.length - 1];
-  return `${points.length}_${first.x.toFixed(5)}_${first.y.toFixed(5)}_${last.x.toFixed(5)}_${last.y.toFixed(5)}`;
+export interface NiceDomainResult {
+  domain: AxisDomain;
+  step: number;
+  ticks: number[];
 }
 
 export function defaultDomainFor(metric: ChartMetricId): AxisDomain {
   switch (metric) {
+    case 'Altitude':
+      return { min: 0, max: 2000 };
     case 'Vitesse':
     case 'Vitesse moyenne':
       return { min: 0, max: 50 };
     case 'Puissance':
     case 'Puissance moyenne':
       return { min: 0, max: 400 };
-    case 'Altitude':
-      return { min: 0, max: 3000 };
     case 'Inclinaison (°)':
-      return { min: -90, max: 90 };
+      return { min: -25, max: 25 };
     case 'Inclinaison (%)':
-      return { min: -100, max: 100 };
+      return { min: -20, max: 20 };
+    case 'Température':
+    case 'Température ressentie (°)':
+      return { min: 0, max: 40 };
+    case 'Vent (km/h)':
+      return { min: 0, max: 80 };
+    case 'Pluie (mm)':
+      return { min: 0, max: 20 };
     default:
       return { min: 0, max: 100 };
   }
@@ -40,16 +42,85 @@ export function normalizeMetricDomain(
   metric: ChartMetricId,
   domain: AxisDomain,
 ): AxisDomain {
-  if (!isInclinationMetric(metric)) return domain;
-  const min = Math.min(domain.min, 0);
-  const max = Math.max(domain.max, 0);
-  if (metric === 'Inclinaison (°)') {
-    return {
-      min: clamp(min, -90, 90),
-      max: clamp(max, -90, 90),
-    };
+  if (isInclinationMetric(metric)) {
+    const bound = Math.max(Math.abs(domain.min), Math.abs(domain.max), 5);
+    const maxBound = metric === 'Inclinaison (°)' ? 45 : 30;
+    const clampedBound = Math.min(maxBound, Math.ceil(bound / 5) * 5);
+    return { min: -clampedBound, max: clampedBound };
   }
-  return { min, max };
+  return domain;
+}
+
+export function buildNiceDomain(
+  min: number,
+  max: number,
+  targetCount: number,
+  options?: {
+    forceZero?: boolean;
+    clampMin?: number;
+    clampMax?: number;
+  },
+): NiceDomainResult {
+  let rawMin = Number.isFinite(min) ? min : 0;
+  let rawMax = Number.isFinite(max) ? max : 100;
+  if (rawMin > rawMax) {
+    const tmp = rawMin;
+    rawMin = rawMax;
+    rawMax = tmp;
+  }
+  if (rawMin === rawMax) {
+    const pad = Math.abs(rawMin) > 0 ? Math.abs(rawMin) * 0.1 : 1;
+    rawMin -= pad;
+    rawMax += pad;
+  }
+
+  if (options?.forceZero) {
+    if (rawMin > 0) rawMin = 0;
+    if (rawMax < 0) rawMax = 0;
+  }
+
+  const range = Math.max(1e-6, rawMax - rawMin);
+  const desired = Math.max(2, targetCount);
+  const rough = range / desired;
+  const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / pow10;
+  let niceMult: number;
+
+  if (norm < 1.4) niceMult = 1;
+  else if (norm < 2.8) niceMult = 2;
+  else if (norm < 4.2) niceMult = 2.5;
+  else if (norm < 7.5) niceMult = 5;
+  else niceMult = 10;
+
+  const step = niceMult * pow10;
+  let niceMin = Math.floor(rawMin / step) * step;
+  let niceMax = Math.ceil(rawMax / step) * step;
+
+  if (options?.forceZero && rawMin >= 0 && niceMin < 0) {
+    niceMin = 0;
+  }
+
+  if (niceMax <= niceMin) {
+    niceMax = niceMin + step;
+  }
+
+  if (options?.clampMin != null) niceMin = Math.max(options.clampMin, niceMin);
+  if (options?.clampMax != null) niceMax = Math.min(options.clampMax, niceMax);
+
+  const ticks: number[] = [];
+  const count = Math.min(100, Math.round((niceMax - niceMin) / step) + 1);
+  for (let i = 0; i < count; i++) {
+    const val = Number((niceMin + i * step).toFixed(8));
+    if (val <= niceMax + step * 1e-4) {
+      ticks.push(val);
+    }
+  }
+
+  return {
+    domain: { min: niceMin, max: niceMax },
+    step,
+    ticks,
+  };
 }
 
 export function clampXDomainToRoute(
@@ -127,14 +198,61 @@ function upperBoundPointIndex(points: { x: number; y: number }[], xValue: number
   return lo;
 }
 
-function compressPointsForPlot(
+export function downsampleLTTB(
   points: { x: number; y: number }[],
-  xDomain: AxisDomain,
-  plotWidth: number,
+  targetPoints: number,
 ): { x: number; y: number }[] {
-  const bucketCount = Math.max(32, Math.round(plotWidth));
-  if (points.length <= 2 || plotWidth <= 0) return points;
-  return compressPointsToBucketCount(points, xDomain, bucketCount);
+  if (points.length <= targetPoints || targetPoints <= 2) return points;
+
+  const sampled: { x: number; y: number }[] = [];
+  const bucketSize = (points.length - 2) / (targetPoints - 2);
+
+  let a = 0;
+  sampled.push(points[a]!);
+
+  for (let i = 0; i < targetPoints - 2; i++) {
+    let avgX = 0;
+    let avgY = 0;
+    const avgRangeStart = Math.floor((i + 1) * bucketSize) + 1;
+    const avgRangeEnd = Math.min(Math.floor((i + 2) * bucketSize) + 1, points.length);
+    const avgRangeLength = avgRangeEnd - avgRangeStart;
+
+    for (let j = avgRangeStart; j < avgRangeEnd; j++) {
+      avgX += points[j]!.x;
+      avgY += points[j]!.y;
+    }
+    if (avgRangeLength > 0) {
+      avgX /= avgRangeLength;
+      avgY /= avgRangeLength;
+    }
+
+    const rangeOffs = Math.floor(i * bucketSize) + 1;
+    const rangeTo = Math.min(Math.floor((i + 1) * bucketSize) + 1, points.length);
+
+    const pointAX = points[a]!.x;
+    const pointAY = points[a]!.y;
+
+    let maxArea = -1;
+    let maxAreaPointIndex = rangeOffs;
+
+    for (let j = rangeOffs; j < rangeTo; j++) {
+      const area =
+        Math.abs(
+          (pointAX - avgX) * (points[j]!.y - pointAY) -
+            (pointAX - points[j]!.x) * (avgY - pointAY),
+        ) * 0.5;
+      if (area > maxArea) {
+        maxArea = area;
+        maxAreaPointIndex = j;
+      }
+    }
+
+    sampled.push(points[maxAreaPointIndex]!);
+    a = maxAreaPointIndex;
+  }
+
+  sampled.push(points[points.length - 1]!);
+  return sampled;
 }
 
 export function selectPointsForPlotLod(
@@ -144,154 +262,13 @@ export function selectPointsForPlotLod(
 ): { x: number; y: number }[] {
   if (points.length < 2 || plotWidth <= 0) return points;
 
-  const fullDomain = {
-    min: points[0]?.x ?? xDomain.min,
-    max: points[points.length - 1]?.x ?? xDomain.max,
-  };
-  const fullSpan = fullDomain.max - fullDomain.min;
-  if (!(fullSpan > 0)) {
-    return compressPointsForPlot(clipPointsToXDomain(points, xDomain), xDomain, plotWidth);
-  }
+  const clipped = clipPointsToXDomain(points, xDomain);
+  if (clipped.length <= 2) return clipped;
 
-  const visibleSpan = Math.max(0, xDomain.max - xDomain.min);
-  const visibleFraction = clamp(visibleSpan / fullSpan, 0, 1);
-  const targetVisiblePoints = Math.max(
-    192,
-    Math.round(plotWidth * LOD_TARGET_VISIBLE_POINTS_PER_PX),
-  );
+  const targetPoints = Math.max(384, Math.round(plotWidth * 2));
+  if (clipped.length <= targetPoints) return clipped;
 
-  let selected = points;
-  for (const level of getPlotLodLevels(points)) {
-    if (level === points) continue;
-    const expectedVisiblePoints = Math.ceil(level.length * visibleFraction);
-    if (expectedVisiblePoints <= targetVisiblePoints) {
-      selected = level;
-      break;
-    }
-  }
-
-  return compressPointsForPlot(clipPointsToXDomain(selected, xDomain), xDomain, plotWidth);
-}
-
-function getPlotLodLevels(
-  points: { x: number; y: number }[],
-): { x: number; y: number }[][] {
-  const key = getPointsCacheKey(points);
-  const cached = plotLodLevelsCache.get(key);
-  if (cached) return cached;
-
-  if (points.length < MIN_LOD_LEVEL_POINTS * 2) {
-    const trivial = [points];
-    if (plotLodLevelsCache.size >= MAX_CACHE_SIZE) {
-      const firstKey = plotLodLevelsCache.keys().next().value;
-      if (firstKey) plotLodLevelsCache.delete(firstKey);
-    }
-    plotLodLevelsCache.set(key, trivial);
-    return trivial;
-  }
-
-  const fullDomain = {
-    min: points[0]?.x ?? 0,
-    max: points[points.length - 1]?.x ?? 0,
-  };
-  const levels: { x: number; y: number }[][] = [points];
-  let targetMaxPoints = Math.floor(points.length / 2);
-
-  while (targetMaxPoints >= MIN_LOD_LEVEL_POINTS) {
-    const reduced = compressPointsToTarget(points, fullDomain, targetMaxPoints);
-    const previous = levels[levels.length - 1] ?? points;
-    if (reduced.length >= previous.length) break;
-    levels.push(reduced);
-    targetMaxPoints = Math.floor(targetMaxPoints / 2);
-  }
-
-  if (plotLodLevelsCache.size >= MAX_CACHE_SIZE) {
-    const firstKey = plotLodLevelsCache.keys().next().value;
-    if (firstKey) plotLodLevelsCache.delete(firstKey);
-  }
-  plotLodLevelsCache.set(key, levels);
-  return levels;
-}
-
-function compressPointsToTarget(
-  points: { x: number; y: number }[],
-  xDomain: AxisDomain,
-  targetMaxPoints: number,
-): { x: number; y: number }[] {
-  const span = xDomain.max - xDomain.min;
-  if (points.length <= targetMaxPoints || span <= 0 || targetMaxPoints <= 0) return points;
-
-  const bucketCount = Math.max(32, Math.ceil(targetMaxPoints / 4));
-
-  return compressPointsToBucketCount(points, xDomain, bucketCount);
-}
-
-function compressPointsToBucketCount(
-  points: { x: number; y: number }[],
-  xDomain: AxisDomain,
-  bucketCount: number,
-): { x: number; y: number }[] {
-  const span = xDomain.max - xDomain.min;
-  if (points.length <= 2 || span <= 0 || bucketCount <= 0) return points;
-
-  const compressed: { x: number; y: number }[] = [];
-  let activeBucket = -1;
-  let firstPoint: { x: number; y: number } | null = null;
-  let lastPoint: { x: number; y: number } | null = null;
-  let minPoint: { x: number; y: number } | null = null;
-  let maxPoint: { x: number; y: number } | null = null;
-
-  const pushPoint = (point: { x: number; y: number }) => {
-    const previous = compressed[compressed.length - 1];
-    if (
-      previous &&
-      Math.abs(previous.x - point.x) < 1e-6 &&
-      Math.abs(previous.y - point.y) < 1e-6
-    ) {
-      return;
-    }
-    compressed.push(point);
-  };
-
-  const flushBucket = () => {
-    if (!firstPoint || !lastPoint || !minPoint || !maxPoint) return;
-
-    const ordered = [
-      firstPoint,
-      minPoint,
-      maxPoint,
-      lastPoint,
-    ]
-      .filter((point, index, array) => array.indexOf(point) === index)
-      .sort((left, right) => left.x - right.x);
-
-    for (const point of ordered) pushPoint(point);
-    firstPoint = null;
-    lastPoint = null;
-    minPoint = null;
-    maxPoint = null;
-  };
-
-  for (const point of points) {
-    const ratio = (point.x - xDomain.min) / span;
-    const nextBucket = clamp(Math.floor(ratio * bucketCount), 0, bucketCount - 1);
-    if (nextBucket !== activeBucket) {
-      flushBucket();
-      activeBucket = nextBucket;
-      firstPoint = point;
-      lastPoint = point;
-      minPoint = point;
-      maxPoint = point;
-      continue;
-    }
-
-    lastPoint = point;
-    if (!minPoint || point.y < minPoint.y) minPoint = point;
-    if (!maxPoint || point.y > maxPoint.y) maxPoint = point;
-  }
-
-  flushBucket();
-  return compressed;
+  return downsampleLTTB(clipped, targetPoints);
 }
 
 export function ratioFor(value: number, domain: AxisDomain): number {
@@ -370,33 +347,78 @@ export function buildNiceTicks(
   min: number,
   max: number,
   targetCount: number,
+  options?: {
+    forceZero?: boolean;
+    clampMin?: number;
+    clampMax?: number;
+  },
 ): number[] {
-  const range = Math.max(1e-9, max - min);
+  return buildNiceDomain(min, max, targetCount, options).ticks;
+}
+
+export function buildNiceXTicks(
+  min: number,
+  max: number,
+  targetCount: number,
+): number[] {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [min || 0];
+
+  const range = max - min;
   const desired = Math.max(2, targetCount);
   const rough = range / desired;
   const pow10 = Math.pow(10, Math.floor(Math.log10(rough)));
   const norm = rough / pow10;
-  let nice: number;
+  let niceMult: number;
 
-  if (norm < 1.5) nice = 1;
-  else if (norm < 3) nice = 2;
-  else if (norm < 4) nice = 2.5;
-  else if (norm < 7) nice = 5;
-  else nice = 10;
+  if (norm < 1.4) niceMult = 1;
+  else if (norm < 2.8) niceMult = 2;
+  else if (norm < 4.2) niceMult = 2.5;
+  else if (norm < 7.5) niceMult = 5;
+  else niceMult = 10;
 
-  const step = nice * pow10;
-  const start = Math.ceil(min / step) * step;
+  const step = niceMult * pow10;
+  const start = Math.ceil((min - 1e-6) / step) * step;
   const ticks: number[] = [];
-  for (let value = start; value <= max + step * 1e-6; value += step) {
-    ticks.push(Number((Math.round(value / step) * step).toFixed(10)));
-  }
-  if (ticks.length === 0 || ticks[0] > min + step * 1e-6) ticks.unshift(min);
-  if (ticks[ticks.length - 1] < max - step * 1e-6) ticks.push(max);
 
-  const seen = new Set<number>();
-  return ticks.filter((value) => {
-    if (seen.has(value)) return false;
-    seen.add(value);
-    return true;
-  });
+  for (let val = start; val <= max + step * 1e-4; val += step) {
+    ticks.push(Number(val.toFixed(8)));
+  }
+
+  if (ticks.length === 0) {
+    ticks.push(Number(min.toFixed(8)));
+  }
+
+  return ticks;
+}
+
+export function computeCumulativeElevationAtX(
+  points: { x: number; y: number }[],
+  xTarget: number,
+): { gainM: number; lossM: number } {
+  if (points.length < 2) return { gainM: 0, lossM: 0 };
+  let gain = 0;
+  let loss = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const pPrev = points[i - 1];
+    const pCurr = points[i];
+
+    if (pCurr.x <= xTarget) {
+      const dy = pCurr.y - pPrev.y;
+      if (dy > 0) gain += dy;
+      else if (dy < 0) loss += Math.abs(dy);
+    } else if (pPrev.x < xTarget && pCurr.x > xTarget) {
+      const span = pCurr.x - pPrev.x;
+      const t = span > 0 ? (xTarget - pPrev.x) / span : 0;
+      const yInterp = pPrev.y + t * (pCurr.y - pPrev.y);
+      const dy = yInterp - pPrev.y;
+      if (dy > 0) gain += dy;
+      else if (dy < 0) loss += Math.abs(dy);
+      break;
+    } else if (pPrev.x >= xTarget) {
+      break;
+    }
+  }
+
+  return { gainM: Math.round(gain), lossM: Math.round(loss) };
 }

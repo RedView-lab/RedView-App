@@ -2,10 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { useAppI18n } from '@/shared/i18n';
-import { IconEye, IconPlus } from '../icons';
+import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { IconEye, IconPlus, IconTrash } from '../icons';
 import type { Itinerary, RouteProfile } from '../../types';
 
-const MENU_WIDTH = 107;
+const MENU_WIDTH = 104;
 const MENU_GAP = 6;
 const VIEWPORT_PADDING = 8;
 
@@ -28,6 +30,7 @@ interface ItineraryTabsProps {
   profiles: RouteProfile[];
   activeId: string;
   onSelect?: (id: string) => void;
+  onToggleVisibility?: (id: string) => void;
   onAdd?: () => void;
   onAddButtonRef?: (element: HTMLButtonElement | null) => void;
   onDuplicate?: (id: string) => void;
@@ -46,6 +49,7 @@ export function ItineraryTabs({
   profiles,
   activeId,
   onSelect,
+  onToggleVisibility,
   onAdd,
   onAddButtonRef,
   onDuplicate,
@@ -151,7 +155,6 @@ export function ItineraryTabs({
     ? itineraries.find((itinerary) => itinerary.id === openMenuId) ?? null
     : null;
 
-  const removeDisabled = itineraries.length <= 1;
   const showMenuTrigger = canRename || canDuplicate || canRemove;
 
   return (
@@ -167,18 +170,35 @@ export function ItineraryTabs({
               key={it.id}
               className={`rvi-itin-wrap${isActive ? ' is-active' : ''}${it.visible === false ? ' is-hidden' : ''}`}
             >
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 className={`rvi-itin${isActive ? ' is-active' : ''}`}
                 onClick={() => {
                   if (isEditing) return;
                   onSelect?.(it.id);
                 }}
+                onKeyDown={(e) => {
+                  if (isEditing) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect?.(it.id);
+                  }
+                }}
                 aria-pressed={isActive}
               >
-                <span className="rvi-itin__eye" aria-hidden>
+                <button
+                  type="button"
+                  className="rvi-itin__eye"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleVisibility?.(it.id);
+                  }}
+                  aria-label={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+                  title={it.visible !== false ? t('Masquer l’itinéraire') : t('Afficher l’itinéraire')}
+                >
                   <IconEye size={16} />
-                </span>
+                </button>
                 <span className="rvi-itin__swatch" style={{ background: it.color }} />
                 <span className="rvi-itin__main">
                   {isEditing ? (
@@ -211,7 +231,7 @@ export function ItineraryTabs({
                     {profileLabel}
                   </span>
                 </span>
-              </button>
+              </div>
               {showMenuTrigger ? (
                 <button
                   ref={(element) => {
@@ -255,6 +275,7 @@ export function ItineraryTabs({
               aria-label={t('Actions de l’itinéraire')}
               style={{ top: menuPosition.top, left: menuPosition.left, width: MENU_WIDTH }}
             >
+              <MapCanvasGlassBackdrop blur={34} saturate={1.85} tint="rgba(10, 10, 12, 0.46)" />
               {canRename ? (
                 <button
                   type="button"
@@ -262,7 +283,10 @@ export function ItineraryTabs({
                   role="menuitem"
                   onClick={() => startEdit(menuItinerary)}
                 >
-                  {t('Renommer')}
+                  <span className="rvi-itin-actions-menu__label">{t('Renommer')}</span>
+                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
+                    <SvgV2Icon name="edit-05.svg" size={12} />
+                  </span>
                 </button>
               ) : null}
               {canDuplicate ? (
@@ -276,23 +300,27 @@ export function ItineraryTabs({
                     setMenuPosition(null);
                   }}
                 >
-                  {t('Dupliquer')}
+                  <span className="rvi-itin-actions-menu__label">{t('Dupliquer')}</span>
+                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
+                    <SvgV2Icon name="copy-04.svg" size={12} />
+                  </span>
                 </button>
               ) : null}
               {canRemove ? (
                 <button
                   type="button"
-                  className="rvi-itin-actions-menu__item"
+                  className="rvi-itin-actions-menu__item rvi-itin-actions-menu__item--danger"
                   role="menuitem"
-                  disabled={removeDisabled}
                   onClick={() => {
-                    if (removeDisabled) return;
                     onRemove?.(menuItinerary.id);
                     setOpenMenuId(null);
                     setMenuPosition(null);
                   }}
                 >
-                  {t('Supprimer')}
+                  <span className="rvi-itin-actions-menu__label">{t('Supprimer')}</span>
+                  <span className="rvi-itin-actions-menu__icon" aria-hidden>
+                    <IconTrash size={12} />
+                  </span>
                 </button>
               ) : null}
             </div>,

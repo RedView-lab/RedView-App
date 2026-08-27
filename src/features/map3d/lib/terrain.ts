@@ -33,6 +33,16 @@ export class TerrainManager {
     }
   }
 
+  setSource(sourceId: string): void {
+    if (this.sourceId === sourceId && this.applied) return;
+    this.sourceId = sourceId;
+    this.applyTerrain();
+  }
+
+  getSourceId(): string {
+    return this.sourceId;
+  }
+
   setExaggeration(value: number): void {
     this.exaggeration = value;
     if (this.applied) this.applyTerrain();

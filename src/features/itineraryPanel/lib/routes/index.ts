@@ -4,7 +4,6 @@ export {
   buildImportedRouteMetrics,
   createImportedTimeline,
   refineImportedRoutePointsWithIgnAltimetry,
-  refineImportedRoutePointsWithTerrainTiles,
 } from './imported-route';
 export {
   haversineRouteDistanceM,
@@ -13,6 +12,7 @@ export {
   projectPointAlongRoute,
   roundDistanceKm,
 } from './route-distance';
+export type { RouteDistancePoint, ProjectedRoutePoint } from './route-distance';
 export { buildRouteContentSignature } from './route-signature';
 export type { RouteSignaturePoint } from './route-signature';
 export {

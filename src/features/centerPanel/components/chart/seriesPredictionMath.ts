@@ -2,7 +2,7 @@ import type { PredictionPoint, PredictionResult } from '@/features/fitPredictor'
 import type { AxisMode, ChartMetricId, ChartPoint } from './seriesCommon';
 
 const INTERVAL_AVERAGE_SPAN_M = 500;
-const MAX_CHART_POINT_COUNT = 500;
+const MAX_CHART_POINT_COUNT = 2000;
 
 interface DistanceMetricSample {
   distanceM: number;
@@ -33,72 +33,57 @@ export function fitChartPointBudget(
   points: ChartPoint[],
   maxPoints = MAX_CHART_POINT_COUNT,
 ): ChartPoint[] {
-  if (points.length <= maxPoints) return points;
+  if (points.length <= maxPoints || maxPoints <= 2) return points;
 
-  if (maxPoints <= 1) return [points[0]!];
+  const sampled: ChartPoint[] = [];
+  const bucketSize = (points.length - 2) / (maxPoints - 2);
 
-  const first = points[0];
-  const last = points[points.length - 1];
-  const span = last.x - first.x;
-  if (span <= 0) return [first, last];
+  let a = 0;
+  sampled.push(points[a]!);
 
-  const bucketCount = Math.max(8, Math.floor(maxPoints / 2));
-  const buckets: ChartPoint[][] = Array.from({ length: bucketCount }, () => []);
-  for (const point of points) {
-    const ratio = (point.x - first.x) / span;
-    const bucketIndex = Math.max(0, Math.min(bucketCount - 1, Math.floor(ratio * bucketCount)));
-    buckets[bucketIndex]?.push(point);
-  }
+  for (let i = 0; i < maxPoints - 2; i++) {
+    let avgX = 0;
+    let avgY = 0;
+    const avgRangeStart = Math.floor((i + 1) * bucketSize) + 1;
+    const avgRangeEnd = Math.min(Math.floor((i + 2) * bucketSize) + 1, points.length);
+    const avgRangeLength = avgRangeEnd - avgRangeStart;
 
-  const reduced: ChartPoint[] = [];
-  const pushPoint = (point: ChartPoint) => {
-    const previous = reduced[reduced.length - 1];
-    if (
-      previous &&
-      Math.abs(previous.x - point.x) < 1e-6 &&
-      Math.abs(previous.y - point.y) < 1e-6
-    ) {
-      return;
+    for (let j = avgRangeStart; j < avgRangeEnd; j++) {
+      avgX += points[j]!.x;
+      avgY += points[j]!.y;
     }
-    reduced.push(point);
-  };
-
-  for (const bucket of buckets) {
-    if (bucket.length === 0) continue;
-
-    let minPoint = bucket[0];
-    let maxPoint = bucket[0];
-    for (const point of bucket) {
-      if (point.y < minPoint.y) minPoint = point;
-      if (point.y > maxPoint.y) maxPoint = point;
+    if (avgRangeLength > 0) {
+      avgX /= avgRangeLength;
+      avgY /= avgRangeLength;
     }
 
-    const ordered = [bucket[0], minPoint, maxPoint, bucket[bucket.length - 1]]
-      .filter((point, index, arr) => arr.indexOf(point) === index)
-      .sort((left, right) => left.x - right.x);
+    const rangeOffs = Math.floor(i * bucketSize) + 1;
+    const rangeTo = Math.min(Math.floor((i + 1) * bucketSize) + 1, points.length);
 
-    for (const point of ordered) pushPoint(point);
+    const pointAX = points[a]!.x;
+    const pointAY = points[a]!.y;
+
+    let maxArea = -1;
+    let maxAreaPointIndex = rangeOffs;
+
+    for (let j = rangeOffs; j < rangeTo; j++) {
+      const area =
+        Math.abs(
+          (pointAX - avgX) * (points[j]!.y - pointAY) -
+            (pointAX - points[j]!.x) * (avgY - pointAY),
+        ) * 0.5;
+      if (area > maxArea) {
+        maxArea = area;
+        maxAreaPointIndex = j;
+      }
+    }
+
+    sampled.push(points[maxAreaPointIndex]!);
+    a = maxAreaPointIndex;
   }
 
-  const candidate = reduced.length >= 2 ? reduced : [first, last];
-  if (candidate.length <= maxPoints) return candidate;
-
-  const capped: ChartPoint[] = [candidate[0]!];
-  const lastIndex = candidate.length - 1;
-  let previousIndex = 0;
-
-  for (let slot = 1; slot < maxPoints - 1; slot += 1) {
-    const remainingSlots = (maxPoints - 1) - slot;
-    const minIndex = previousIndex + 1;
-    const maxIndex = lastIndex - remainingSlots;
-    const rawIndex = Math.round((slot * lastIndex) / (maxPoints - 1));
-    const nextIndex = Math.max(minIndex, Math.min(maxIndex, rawIndex));
-    capped.push(candidate[nextIndex]!);
-    previousIndex = nextIndex;
-  }
-
-  capped.push(candidate[lastIndex]!);
-  return capped;
+  sampled.push(points[points.length - 1]!);
+  return sampled;
 }
 
 export function buildFixedDistanceAverageSeries(

@@ -11,57 +11,70 @@ import type { LabelCategoryDef } from '../types';
 export const LABEL_CATEGORIES: LabelCategoryDef[] = [
   {
     id: 'poi',
-    label: 'POI',
+    label: 'POI Labels',
     defaultEnabled: true,
     mapping: {
       type: 'mixed',
-      configKey: 'showPointOfInterestLabels',
-      // Some basemap variants keep airport / station symbol-label layers
-      // outside the generic POI config toggle or expose them via broader
-      // transport / POI layer naming.
-      pattern: /(poi|point[-_ ]?of[-_ ]?interest|airport|aerodrome|airfield|airstrip|heliport|terminal|gate|station|transit|rail|metro|subway|tram|ferry|bus).*(label|symbol|poi)|(label|symbol|poi).*(poi|point[-_ ]?of[-_ ]?interest|airport|aerodrome|airfield|airstrip|heliport|terminal|gate|station|transit|rail|metro|subway|tram|ferry|bus)/i,
+      configKey: ['showPointOfInterestLabels', 'showTransitLabels'],
+      pattern: /(poi|point[-_ ]?of[-_ ]?interest|airport|aerodrome|airfield|airstrip|heliport|terminal|gate|station|transit|rail|metro|subway|tram|ferry|bus|attraction|lodging|food|hospital|school)/i,
     },
   },
   {
     id: 'roads',
-    label: 'Routes',
+    label: 'Itinéraires',
     defaultEnabled: true,
     mapping: {
       type: 'mixed',
       configKey: ['showRoadLabels', 'showRoadsAndTransit', 'showPedestrianRoads'],
-      pattern: /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield).*(label|number|ref|symbol)|(label|number|ref|symbol).*(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield)/i,
+      pattern: /(road|street|highway|motorway|trunk|primary|secondary|tertiary|pedestrian|path|track|junction|shield|tunnel|bridge|traffic|railway|rail|transit|ferry|aerialway|aeroway|runway|taxiway)/i,
     },
   },
   {
     id: 'places',
-    label: 'Villes & Lieux',
+    label: 'Villes',
     defaultEnabled: true,
     mapping: {
       type: 'mixed',
       configKey: 'showPlaceLabels',
-      pattern: /(place|settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|region|province|state).*(label|name|symbol)|(label|name|symbol).*(place|settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|region|province|state)/i,
+      pattern: /(settlement|locality|city|town|village|hamlet|suburb|neighbou?rhood|district|place[-_](city|town|village|hamlet|suburb|neighbourhood|other|island|islet|locality))/i,
+    },
+  },
+  {
+    id: 'states',
+    label: 'États / Régions',
+    defaultEnabled: true,
+    mapping: {
+      type: 'mixed',
+      configKey: 'showAdminBoundaries',
+      pattern: /(state|province|admin[-_]?1)/i,
     },
   },
   {
     id: 'naturalParks',
     label: 'Parcs Naturels',
     defaultEnabled: false,
-    mapping: { type: 'layers', pattern: /natural|park|protected/i },
+    mapping: {
+      type: 'layers',
+      pattern: /(natural|park|protected|national-park)/i,
+    },
   },
   {
     id: 'countries',
-    label: 'Frontières',
-    defaultEnabled: false,
+    label: 'Pays',
+    defaultEnabled: true,
     mapping: {
       type: 'mixed',
       configKey: 'showAdminBoundaries',
-      pattern: /(country|admin|boundary|border|state|province).*(label|name|line)|(label|name|line).*(country|admin|boundary|border|state|province)/i,
+      pattern: /(country|admin[-_]?0|boundary[-_]?(land|water)|border|disputed)/i,
     },
   },
   {
     id: 'waterBody',
     label: 'Plans d\'eau',
     defaultEnabled: false,
-    mapping: { type: 'layers', pattern: /water.*label|waterway.*label/i },
+    mapping: {
+      type: 'layers',
+      pattern: /(water.*label|waterway.*label|marine.*label|water-point-label|water-line-label)/i,
+    },
   },
 ];

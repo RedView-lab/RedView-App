@@ -70,6 +70,7 @@ export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBu
 export function processPointCloudInWorker(
   buffer: ArrayBuffer,
   setStatus: ViewerStatusReporter,
+  crs?: DetectedCrs,
 ): Promise<PointCloudData> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../workers/processWorker.ts', import.meta.url), { type: 'module' });
@@ -101,7 +102,7 @@ export function processPointCloudInWorker(
       reject(new Error(err.message));
     };
 
-    worker.postMessage({ type: 'process', buffer }, [buffer]);
+    worker.postMessage({ type: 'process', buffer, crs }, [buffer]);
   });
 }
 
@@ -209,18 +210,25 @@ export async function launchWebGLFallback({
   loadFromOPFS,
   altRef,
   tileLabel,
+  tileCoord,
+  sceneTileCoords,
+  lidarManager,
   setStatus,
 }: {
   reasonForLog: string;
   dom: ViewerDomElements;
-  loadFromOPFS: () => Promise<ArrayBuffer>;
+  loadFromOPFS: () => Promise<ArrayBuffer | ArrayBuffer[]>;
   altRef: AltitudeRef;
   tileLabel: string;
+  tileCoord?: import('../types').TileCoord;
+  sceneTileCoords?: import('../types').TileCoord[];
+  lidarManager?: import('../lib/lidarManager').LidarManager;
   setStatus: ViewerStatusReporter;
 }): Promise<void> {
   console.warn(`[Viewer] Starting WebGL HD fallback — ${reasonForLog}`);
   setStatus('Bascule vers le moteur WebGL HD…', 4);
-  const buffer = await loadFromOPFS();
+  const loaded = await loadFromOPFS();
+  const buffers = Array.isArray(loaded) ? loaded : [loaded];
   const { runWebGLFallback } = await import('../../lidar/viewer-webgl/main');
   await runWebGLFallback(
     {
@@ -229,12 +237,20 @@ export async function launchWebGLFallback({
       status: dom.statusEl,
       bar: dom.barFill,
       stats: dom.statsEl,
+      percent: dom.overlay.querySelector<HTMLElement>('#progress-percent') ?? undefined,
+      detail: dom.overlay.querySelector<HTMLElement>('#status-detail') ?? undefined,
     },
     {
-      buffer,
+      buffers,
       altRefLabel: altRef,
       tileLabel,
-      reloadBuffer: () => loadFromOPFS(),
+      tileCoord,
+      sceneTileCoords,
+      lidarManager,
+      reloadBuffer: async () => {
+        const res = await loadFromOPFS();
+        return Array.isArray(res) ? res[0]! : res;
+      },
     },
   );
 }

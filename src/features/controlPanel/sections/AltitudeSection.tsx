@@ -182,6 +182,8 @@ interface AltitudeSectionProps {
   state: Omit<ControlPanelState['altitude'], 'enabled'>;
   enabled?: boolean;
   open?: boolean;
+  /** False while no analysis zone is drawn — the widget is zone-gated. */
+  zoneActive?: boolean;
   onEnabledChange?: (enabled: boolean) => void;
   onOpenChange?: (open: boolean) => void;
   onColorizationChange?: ControlPanelHandlers['onAltitudeColorizationChange'];
@@ -196,6 +198,7 @@ export function AltitudeSection({
   state,
   enabled = true,
   open,
+  zoneActive = true,
   onEnabledChange,
   onOpenChange,
   onColorizationChange,
@@ -214,6 +217,11 @@ export function AltitudeSection({
       open={open}
       onOpenChange={onOpenChange}
     >
+      {zoneActive ? null : (
+        <div className="rvc-zone-hint" role="note">
+          {t('Zone d’analyse requise — tracez-la pour activer')}
+        </div>
+      )}
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">{t('Type de colorisation')}</span>
         <Select

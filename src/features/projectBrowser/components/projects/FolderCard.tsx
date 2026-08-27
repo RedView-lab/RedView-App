@@ -83,7 +83,7 @@ export function FolderCard({
     }
   };
 
-  const placeholderIconSize = view === 'list' ? 38 : 40;
+  const placeholderIconSize = view === 'list' ? 20 : 40;
   const previewContent = (
     <div className="rvpb-card__preview-placeholder rvpb-folder-card__placeholder" aria-hidden="true">
       <IconFolder size={placeholderIconSize} />
@@ -129,7 +129,7 @@ export function FolderCard({
         {titleContent}
         <span className="rvpb-card__list-size">{formatSize(sizeBytes)}</span>
         <span className="rvpb-card__list-saved">
-          <IconSave size={24} />
+          <IconSave size={14} />
           <span>{formatSavedAt(folder.updatedAt)}</span>
         </span>
         <span className="rvpb-card__badge rvpb-card__badge--list">{privacyLabel(folder.privacy)}</span>

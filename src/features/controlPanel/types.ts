@@ -94,7 +94,7 @@ export type SlopeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 
 export type AltitudeColorization = 'gradient' | 'stepped' | string;
 export type AltitudeScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
 export type ContourIntervalSetting = '10m' | '20m' | '50m' | '100m' | '200m' | string;
-export type SunlightScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | string;
+export type SunlightScaleSetting = '2 couleurs' | '3 couleurs' | '4 couleurs' | '6 couleurs' | '8 couleurs' | '10 couleurs' | '12 couleurs' | string;
 
 export interface SlopeBand {
   id: string;
@@ -344,6 +344,8 @@ export interface ControlPanelProps extends ControlPanelHandlers {
   onSectionOpenChange?: (section: ControlPanelSectionKey, open: boolean) => void;
   sunlightMapExpanded?: boolean;
   onSunlightMapExpandedChange?: (open: boolean) => void;
+  /** False while no analysis zone is drawn — zone-gated sections show a hint. */
+  analysisZoneActive?: boolean;
   /** Optional px width the panel shell should render at. */
   width?: number;
   /** Mouse-down handler on the drag-to-resize handle (left edge). */

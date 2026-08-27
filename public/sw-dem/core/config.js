@@ -70,27 +70,13 @@ const MAX_VALID_ELEVATION_M = 9_000;
 // erasing real ridgelines (real cliffs span multiple pixels).
 const DESPIKE_THRESHOLD_M = 80;
 
-const IGN_DEM_MINZOOM = 4;
+const IGN_DEM_MINZOOM = 11;
 const IGN_DEM_MAXZOOM = 17;
 
-// France HD engage gates. We open the RGE ALTI terrain fallback one zoom earlier
-// than the full MNS LiDAR path so mountainous terrain sharpens sooner without
-// paying the full MNS fan-out as aggressively across overview zooms.
-//
-// HIGHRES threshold = 56 m/px: enables France HD around z11.
-// MNS threshold = 56 m/px: in the 0.40 m / HD mode the user expects the
-// actual surface model (buildings, tree canopy, walls) as soon as the France
-// high-res path becomes visually relevant. Mid-zoom waviness is handled by a
-// dedicated MNS-only low-pass on the resampled output, so we no longer delay
-// the MNS handoff behind a bare-earth fallback step.
-// Terrain-WMS threshold = 22 m/px: unlike the MNS path, the verified 1 m bare-
-// earth WMS serves the exact Mercator bbox at 256x256, so engaging it too early
-// on oblique z11-z12 views lets row/reprojection aliasing read as a visible
-// terrain ripple. Keep the terrain profile on the smoother HIGHRES fallback
-// until the screen density is high enough for the native 1 m mesh to pay off.
-const IGN_HIGHRES_ENGAGE_MPP = 56;
-const IGN_MNS_ENGAGE_MPP = 56;
-const IGN_TERRAIN_WMS_ENGAGE_MPP = 22;
+// France HD engage gates (z >= 11).
+const IGN_HIGHRES_ENGAGE_MPP = 80;
+const IGN_MNS_ENGAGE_MPP = 80;
+const IGN_TERRAIN_WMS_ENGAGE_MPP = 80;
 
 // When the user selects the 0.40 m surface mode they expect actual surface
 // relief (houses, tree rows, walls), not just the correct dataset family.
@@ -111,7 +97,11 @@ const IGN_TERRAIN_WMS_ENGAGE_MPP = 22;
 // actually visible AND a single tile covers a smaller ground footprint so
 // the fan-out tiles are more likely to all be MNS-covered (not 404ing).
 function ignMnsSourceZoomBias(mercZ) {
-  if (mercZ >= 15) return 2;
+  // At z>=16, WGS84G demZ=16 already provides 0.84 m/px resolution at France latitude,
+  // which is already finer than IGN MNS LiDAR's native ~1m point grid. Bias=0 prevents
+  // the quadratic explosion into 20-30 sub-tiles while delivering pristine full detail.
+  if (mercZ >= 16) return 0;
+  // At z13-15, bias=1 provides ~1.7m resolution with only 4-8 sub-tiles instead of 20+.
   if (mercZ >= 13) return 1;
   return 0;
 }
@@ -191,9 +181,7 @@ const ORTHO_TILE_SIZE = 256;
 // slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
 // SW thread (kind:'altitude' dispatch). Previously altitude computed
 // entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
-// cause of the sluggish "altitude overlay" symptom. Also adds
-// ALTITUDE_HOT_CACHE (mirrors SLOPE_HOT_CACHE) for instant toggle/repaint.
-const MAP_CACHE_EPOCH = '2026-06-29-altitude-decode-in-worker-1';
+const MAP_CACHE_EPOCH = '2026-08-21-slope-smooth-hd-1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW

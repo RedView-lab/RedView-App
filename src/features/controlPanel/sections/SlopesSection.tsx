@@ -21,6 +21,8 @@ interface Props {
   enabled: boolean;
   state: Omit<ControlPanelState['slopes'], 'enabled'>;
   open?: boolean;
+  /** False while no analysis zone is drawn — the widget is zone-gated. */
+  zoneActive?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onSlopesEnabledChange'];
   onResolutionChange: ControlPanelHandlers['onSlopeResolutionChange'];
@@ -31,6 +33,8 @@ interface Props {
   onBandColorChange: ControlPanelHandlers['onSlopeBandColorChange'];
   onBandVisibilityToggle: ControlPanelHandlers['onSlopeBandVisibilityToggle'];
   onBandBreakpointChange?: ControlPanelHandlers['onSlopeBandBreakpointChange'];
+  noTopBorder?: boolean;
+  showResolution?: boolean;
 }
 
 const RESOLUTION_OPTIONS: { value: SlopeResolution; label: string }[] = [
@@ -290,6 +294,7 @@ export function SlopesSection({
   enabled,
   state,
   open,
+  zoneActive = true,
   onOpenChange,
   onEnabledChange,
   onResolutionChange,
@@ -300,6 +305,8 @@ export function SlopesSection({
   onBandColorChange,
   onBandVisibilityToggle,
   onBandBreakpointChange,
+  noTopBorder,
+  showResolution = true,
 }: Props) {
   const { t } = useAppI18n();
   const visibleBands = state.bands;
@@ -308,19 +315,27 @@ export function SlopesSection({
     <Section
       title="Pentes"
       icon={<IconSlope size={16} />}
+      noTopBorder={noTopBorder}
       toggle={{ checked: enabled, onChange: onEnabledChange }}
       open={open}
       onOpenChange={onOpenChange}
     >
-      <div className="rvc-row rvc-row--split">
-        <span className="rvc-row__label">{t('Résolution')}</span>
-        <Select
-          width="var(--rvc-panel-select-md)"
-          value={state.resolution}
-          options={RESOLUTION_OPTIONS}
-          onChange={(v) => onResolutionChange?.(v as SlopeResolution)}
-        />
-      </div>
+      {zoneActive ? null : (
+        <div className="rvc-zone-hint" role="note">
+          {t('Zone d’analyse requise — tracez-la pour activer')}
+        </div>
+      )}
+      {showResolution ? (
+        <div className="rvc-row rvc-row--split">
+          <span className="rvc-row__label">{t('Résolution')}</span>
+          <Select
+            width="var(--rvc-panel-select-md)"
+            value={state.resolution}
+            options={RESOLUTION_OPTIONS}
+            onChange={(v) => onResolutionChange?.(v as SlopeResolution)}
+          />
+        </div>
+      ) : null}
 
       <div className="rvc-row rvc-row--split">
         <span className="rvc-row__label">{t('Type de colorisation')}</span>
@@ -355,8 +370,16 @@ export function SlopesSection({
       <div className="rvc-row rvc-row--split rvc-slopes__opacity-row">
         <span className="rvc-row__label">{t('Opacité')}</span>
         <div className="rvc-slopes__opacity-control">
-          <span className="rvc-row__value-sm">{state.opacity} %</span>
-          <Slider value={state.opacity} onChange={onOpacityChange} />
+          <div className="rvc-slopes__opacity-slider-wrap">
+            <Slider
+              min={0}
+              max={100}
+              value={state.opacity}
+              onChange={onOpacityChange}
+              width="100%"
+            />
+          </div>
+          <span className="rvc-slopes__opacity-value">{state.opacity} %</span>
         </div>
       </div>
 

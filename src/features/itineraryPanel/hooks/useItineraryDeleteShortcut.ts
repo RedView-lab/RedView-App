@@ -56,7 +56,7 @@ export function useItineraryDeleteShortcut({
       // Never hijack text entry.
       if (isTypingTarget(event.target)) return;
 
-      if (!activeItineraryId || itineraryCount <= 1) return;
+      if (!activeItineraryId || itineraryCount <= 0) return;
 
       const removed = onRemove(activeItineraryId);
       if (removed) {

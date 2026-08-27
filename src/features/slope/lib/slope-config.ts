@@ -6,7 +6,7 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
   enabled: false,
   opacity: 0.5,
   colorMode: 'gradient',
-  resolution: '0.40m (LIDAR SURFACE)',
+  resolution: '1m (LIDAR TERRAIN)',
 };
 
 // ── Build raster-color expression ─────────────────────────────────────
@@ -141,23 +141,30 @@ function rampColor(t: number): string {
 
 /** Category labels assigned by slope severity. */
 const SEVERITY_LABELS = [
-  'Quasi plat', 'Faux-plat', 'Roulant', 'Soutenu', 'Sérieux',
-  'Raide', 'Très raide', 'Mur', 'Mur sévère', 'Extrême',
+  'Quasi plat', 'Roulant', 'Soutenu', 'Raide', 'Mur', 'Extrême',
 ];
 
-function severityLabel(index: number, total: number): string {
-  // Map band index onto the severity labels array
+function severityLabel(index: number, total: number, minDeg?: number): string {
+  if (minDeg !== undefined) {
+    if (minDeg < 10) return 'Quasi plat';
+    if (minDeg < 20) return 'Roulant';
+    if (minDeg < 30) return 'Soutenu';
+    if (minDeg < 40) return 'Raide';
+    if (minDeg < 50) return 'Mur';
+    return 'Extrême';
+  }
   const i = Math.round((index / Math.max(total - 1, 1)) * (SEVERITY_LABELS.length - 1));
   return SEVERITY_LABELS[Math.min(i, SEVERITY_LABELS.length - 1)];
 }
 
-const CYCLING_PERCENT_BREAKPOINTS_BY_COUNT: Record<number, number[]> = {
-  2: [8],
-  3: [4, 8],
-  4: [4, 8, 12],
-  6: [2, 4, 6, 8, 12],
-  8: [2, 4, 6, 8, 10, 12, 15],
-  10: [1, 2, 4, 6, 8, 10, 12, 15, 20],
+const DEFAULT_DEGREE_BREAKPOINTS_BY_COUNT: Record<number, number[]> = {
+  2: [30],
+  3: [15, 30],
+  4: [15, 30, 45],
+  5: [10, 20, 30, 45],
+  6: [10, 20, 30, 40, 50],
+  8: [10, 20, 25, 30, 35, 40, 50],
+  10: [5, 10, 15, 20, 25, 30, 35, 40, 50],
 };
 
 const BREAKPOINT_STEP_DEG = 0.1;
@@ -167,31 +174,20 @@ function roundBreakpointDeg(value: number): number {
 }
 
 // ── Breakpoint validation ─────────────────────────────────────────────
-// Robust clamping & deduplication for user-entered breakpoints.
-//
-// Rules enforced:
-//   1. First breakpoint is always 0° (immutable)
-//   2. Last band always ends at 90° (immutable)
-//   3. All breakpoints clamped to [0, 90]
-//   4. Breakpoints must be strictly ascending — if the user sets a value
-//      that violates ordering we push neighbours up/down by ≥1° each
-//   5. Minimum 1° gap between consecutive breakpoints
-//   6. If full correction is impossible (too many bands for the 0–90 range)
-//      we fall back to evenly-spaced breakpoints
 
 /**
- * Given `count` bands, produce the default evenly-spaced internal breakpoints.
+ * Given `count` bands, produce clean, intuitive degree breakpoints.
  * Returns an array of length `count - 1` (the boundaries between bands).
  * The implicit boundaries are 0° on the left and 90° on the right.
  */
 export function generateBreakpointsForCount(count: number): number[] {
-  const preset = CYCLING_PERCENT_BREAKPOINTS_BY_COUNT[count];
-  if (preset) return preset.map((percent) => percentToDeg(percent));
+  const preset = DEFAULT_DEGREE_BREAKPOINTS_BY_COUNT[count];
+  if (preset) return [...preset];
 
-  const step = 20 / count;
+  const step = 50 / count;
   const bp: number[] = [];
   for (let i = 1; i < count; i += 1) {
-    bp.push(percentToDeg(step * i));
+    bp.push(Math.round(step * i));
   }
   return bp;
 }
@@ -273,7 +269,7 @@ export function generateDynamicCategories(
     const minPct = degToPercent(minDeg);
     const maxPct = degToPercent(maxDeg);
     const pctRange = maxDeg >= 90 ? `>${minPct}%` : `${minPct}% - ${maxPct}%`;
-    const label = severityLabel(i, count);
+    const label = severityLabel(i, count, minDeg);
 
     return {
       id: `band-${i}`,

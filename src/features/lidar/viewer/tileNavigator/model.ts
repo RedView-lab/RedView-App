@@ -30,13 +30,28 @@ export function buildTileNavigatorCells(center: TileCoord): TileNavigatorCell[] 
   return cells;
 }
 
-export function buildTileNavigatorLabel(cell: TileNavigatorCell): string {
-  if (cell.offsetX === 0 && cell.offsetY === 0) {
-    return `Tuile ouverte ${cell.coord.xKm}/${cell.coord.yKm}`;
+export function buildTileNavigatorLabel(
+  cell: TileNavigatorCell,
+  state?: { isCurrent?: boolean; isActiveSecondary?: boolean; isCached?: boolean; isPreviewing?: boolean },
+): string {
+  if (state?.isCurrent || (cell.offsetX === 0 && cell.offsetY === 0)) {
+    return `Tuile principale ${cell.coord.xKm}/${cell.coord.yKm}`;
   }
 
   const horizontal = cell.offsetX < 0 ? 'ouest' : cell.offsetX > 0 ? 'est' : 'centre';
   const vertical = cell.offsetY > 0 ? 'nord' : cell.offsetY < 0 ? 'sud' : 'centre';
+  const loc = `Tuile ${horizontal} ${vertical} ${cell.coord.xKm}/${cell.coord.yKm}`;
 
-  return `Tuile ${horizontal} ${vertical} ${cell.coord.xKm}/${cell.coord.yKm}`;
+  if (state?.isActiveSecondary) {
+    return `${loc} · Affichée (clic pour masquer)`;
+  }
+  if (state?.isPreviewing) {
+    return state.isCached
+      ? `${loc} · En prévisualisation 3D (cliquez à nouveau pour afficher)`
+      : `${loc} · En prévisualisation 3D (cliquez à nouveau pour confirmer et télécharger)`;
+  }
+  if (state?.isCached) {
+    return `${loc} · Téléchargée (clic pour prévisualiser en 3D)`;
+  }
+  return `${loc} · Clic pour prévisualiser en 3D`;
 }

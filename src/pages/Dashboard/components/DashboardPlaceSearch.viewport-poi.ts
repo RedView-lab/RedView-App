@@ -2,7 +2,7 @@ import type { Map as MapboxMap, Marker } from 'mapbox-gl';
 
 import { fetchPoisInBbox } from '@/features/poi/lib/poi-api';
 import { getPoiIconUrl } from '@/features/poi/lib/poi-icons';
-import type { PoiCategory, PoiFeature } from '@/features/poi/types';
+import { POI_LABELS, type PoiCategory, type PoiFeature } from '@/features/poi/types';
 
 import { DROPDOWN_VIEWPORT_POI_ICON_URLS } from './DashboardPlaceSearch.constants';
 import type {
@@ -19,40 +19,44 @@ function getViewportPoiMarkerKey(feature: PoiFeature): string {
 }
 
 function getViewportPoiMarkerSignature(feature: PoiFeature): string {
-  return [feature.category, feature.id, feature.lat, feature.lon].join('|');
+  return [
+    feature.category,
+    feature.id,
+    feature.lat,
+    feature.lon,
+    feature.tags?.name ?? '',
+    feature.name ?? '',
+  ].join('|');
 }
 
+/**
+ * Limite de POIs demandés au backend par requête bbox.
+ * Réduit drastiquement le volume réseau, le parsing JSON et la mémoire,
+ * tout en fournissant largement assez de candidats pour alimenter la grille d'écran.
+ */
 function getViewportPoiLodProfile(zoom: number): ViewportPoiLodProfile {
-  // `fetchLimit` est l'unique paramètre actif : il borne la requête bbox au
-  // serveur POI. Les anciens caps de sélection (targetCount / maxPerCategory /
-  // cellPx) ont été retirés — voir `selectViewportLodPois` : on affiche
-  // désormais TOUS les POI renvoyés, avec un garde-fou de perf uniquement
-  // lorsque le count devient pathologique.
-  if (zoom < 6.2) {
-    return { fetchLimit: 8_000 };
+  if (zoom < 10.5) {
+    return { fetchLimit: 300 };
   }
-  if (zoom < 7.4) {
-    return { fetchLimit: 8_000 };
+  if (zoom < 12.0) {
+    return { fetchLimit: 450 };
   }
-  if (zoom < 8.8) {
-    return { fetchLimit: 9_000 };
+  if (zoom < 13.5) {
+    return { fetchLimit: 600 };
   }
-  if (zoom < 10.4) {
-    return { fetchLimit: 10_000 };
-  }
-  if (zoom < 12.2) {
-    return { fetchLimit: 11_000 };
-  }
-  return { fetchLimit: 12_000 };
+  return { fetchLimit: 800 };
 }
 
-function getViewportPoiMarkerSizePx(zoom: number): number {
-  if (zoom < 6.2) return 76;
-  if (zoom < 7.4) return 72;
-  if (zoom < 8.8) return 68;
-  if (zoom < 10.4) return 64;
-  if (zoom < 12.2) return 60;
-  return 56;
+/**
+ * Taille en pixels des icônes de POI selon le zoom.
+ * Tailles standards ergonomiques (28px - 36px) pour une netteté parfaite
+ * sans masquer les routes ni le relief.
+ */
+export function getViewportPoiMarkerSizePx(zoom: number): number {
+  if (zoom < 11.0) return 28;
+  if (zoom < 13.0) return 32;
+  if (zoom < 15.0) return 34;
+  return 36;
 }
 
 export function applyViewportPoiMarkerVisualState(marker: Marker, zoom: number): void {
@@ -60,38 +64,37 @@ export function applyViewportPoiMarkerVisualState(marker: Marker, zoom: number):
   marker.getElement().style.setProperty('--rv-dashboard-poi-marker-size', `${sizePx}px`);
 }
 
-function rankViewportPoiCandidates(
-  map: MapboxMap,
-  features: PoiFeature[],
-): ViewportPoiCandidate[] {
-  const container = map.getContainer();
-  const centerX = container.clientWidth / 2;
-  const centerY = container.clientHeight / 2;
-  const ranked: ViewportPoiCandidate[] = [];
-
-  for (const feature of features) {
-    const point = map.project([feature.lon, feature.lat]);
-    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
-    const dx = point.x - centerX;
-    const dy = point.y - centerY;
-    ranked.push({
-      feature,
-      x: point.x,
-      y: point.y,
-      centerDistance: Math.sqrt(dx * dx + dy * dy),
-    });
-  }
-
-  return ranked;
+/**
+ * Taille de cellule de grille en pixels pour le bucketing spatial.
+ * Plus le zoom est faible, plus les cellules sont larges pour aérer la carte.
+ */
+function getGridCellSizePx(zoom: number): number {
+  if (zoom < 11.0) return 72;
+  if (zoom < 13.0) return 56;
+  if (zoom < 15.0) return 44;
+  return 36;
 }
 
 /**
- * Nombre de markers DOM au-delà duquel on amorce un amincissement spatial
- * doux pour éviter le lag pathologique (vue pays entière). En-dessous de ce
- * seuil, TOUS les POI renvoyés par le serveur sont affichés sans aucun drop.
+ * Plafond strict du nombre de markers DOM simultanés sur la carte.
+ * Garantit un framerate de 60 FPS constant sur terrain 3D sans surcharge CPU.
  */
-const VIEWPORT_POI_PERF_HARD_CAP = 800;
+function getMaxViewportDomMarkers(zoom: number): number {
+  if (zoom < 11.0) return 40;
+  if (zoom < 13.0) return 65;
+  return 85;
+}
 
+interface RankedCandidate extends ViewportPoiCandidate {
+  key: string;
+  isSticky: boolean;
+  score: number;
+}
+
+/**
+ * Sélection LOD intelligente avec anti-collision par grille spatiale et
+ * priorité aux POIs qualifiés (sticky > nommé > proche centre).
+ */
 export function selectViewportLodPois(
   map: MapboxMap,
   features: PoiFeature[],
@@ -100,81 +103,127 @@ export function selectViewportLodPois(
 ): PoiFeature[] {
   if (features.length === 0) return [];
 
-  // Cas nominal : on est sous le garde-fou de perf → on affiche TOUT.
-  // Aucun cell-bucketing, aucun cap par catégorie. Les POI proches de la
-  // route (auparavant éliminés par le sélecteur LOD) sont conservés.
-  if (features.length <= VIEWPORT_POI_PERF_HARD_CAP) {
-    return features.slice().sort((left, right) => {
-      const leftId = left.id;
-      const rightId = right.id;
-      return leftId < rightId ? -1 : leftId > rightId ? 1 : 0;
-    });
-  }
-
-  // Garde-fou perf : trop de POI pour le DOM. On amorce un échantillonnage
-  // spatial doux via cell-bucketing, mais UNIQUEMENT comme moyen d'amincir
-  // (plus de grille fixe par zoom, plus de cap par catégorie). La taille de
-  // cellule est calculée dynamiquement pour atterrir près du cap.
-  const candidates = rankViewportPoiCandidates(map, features);
+  const zoom = map.getZoom();
   const container = map.getContainer();
-  const viewportAreaPx = Math.max(1, container.clientWidth * container.clientHeight);
-  // nb de cellules souhaité ≈ cap ; on en déduit la taille de cellule dont
-  // l'aire couvre le viewport en ~`cap` cellules.
-  const cellAreaPx = Math.max(1, viewportAreaPx / VIEWPORT_POI_PERF_HARD_CAP);
-  const cellPx = Math.sqrt(cellAreaPx);
+  const width = container?.clientWidth || window.innerWidth;
+  const height = container?.clientHeight || window.innerHeight;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const maxCenterDistance = Math.hypot(centerX, centerY) || 1;
 
-  const cellBuckets = new Map<string, ViewportPoiCandidate>();
-  for (const candidate of candidates) {
-    const cellX = Math.floor(candidate.x / cellPx);
-    const cellY = Math.floor(candidate.y / cellPx);
-    const key = `${cellX}:${cellY}:${candidate.feature.category}`;
-    const existing = cellBuckets.get(key);
-    const candidateIsSticky = stickyKeys.has(getViewportPoiMarkerKey(candidate.feature));
-    const existingIsSticky = existing
-      ? stickyKeys.has(getViewportPoiMarkerKey(existing.feature))
-      : false;
-    if (
-      !existing
-      || (candidateIsSticky && !existingIsSticky)
-      || (candidateIsSticky === existingIsSticky
-        && candidate.centerDistance < existing.centerDistance)
-    ) {
-      cellBuckets.set(key, candidate);
+  // Marge de débordement légère (30px) pour éviter les apparitions brutales aux bords
+  const marginPx = 30;
+  const minX = -marginPx;
+  const maxX = width + marginPx;
+  const minY = -marginPx;
+  const maxY = height + marginPx;
+
+  const cellPx = getGridCellSizePx(zoom);
+  const maxDomMarkers = getMaxViewportDomMarkers(zoom);
+
+  // 1. Projeter les coordonnées et calculer le score de chaque candidat
+  const cellBuckets = new Map<string, RankedCandidate>();
+
+  for (const feature of features) {
+    const point = map.project([feature.lon, feature.lat]);
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+
+    // Éliminer les POIs hors viewport visible
+    if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) {
+      continue;
+    }
+
+    const dx = point.x - centerX;
+    const dy = point.y - centerY;
+    const centerDistance = Math.hypot(dx, dy);
+
+    const key = getViewportPoiMarkerKey(feature);
+    const isSticky = stickyKeys.has(key);
+    const hasName = Boolean(
+      feature.tags?.name
+      || feature.tags?.['name:fr']
+      || feature.tags?.['name:en']
+      || feature.name
+    );
+
+    // Score de qualité :
+    // - Déjà affiché (sticky) : +1000 pts (anti-flicker lors du pan)
+    // - Avec nom identifiable : +200 pts
+    // - Proximité au centre du viewport : 0 à +100 pts
+    const centerProximityBonus = Math.max(0, (1 - centerDistance / maxCenterDistance) * 100);
+    const score = (isSticky ? 1000 : 0) + (hasName ? 200 : 0) + centerProximityBonus;
+
+    const candidate: RankedCandidate = {
+      feature,
+      x: point.x,
+      y: point.y,
+      centerDistance,
+      key,
+      isSticky,
+      score,
+    };
+
+    // 2. Bucketing spatial (1 seul POI par cellule pixel)
+    const cellX = Math.floor(point.x / cellPx);
+    const cellY = Math.floor(point.y / cellPx);
+    const bucketKey = `${cellX}:${cellY}`;
+
+    const existing = cellBuckets.get(bucketKey);
+    if (!existing || candidate.score > existing.score) {
+      cellBuckets.set(bucketKey, candidate);
     }
   }
 
-  // Tri final stable : d'abord les sticky (évite le clignotement des POI déjà
-  // affichés), puis par distance au centre du viewport.
-  const selected = [...cellBuckets.values()].sort((left, right) => {
-    const leftSticky = stickyKeys.has(getViewportPoiMarkerKey(left.feature));
-    const rightSticky = stickyKeys.has(getViewportPoiMarkerKey(right.feature));
-    if (leftSticky !== rightSticky) {
-      return leftSticky ? -1 : 1;
+  // 3. Tri et application du plafond strict de performance
+  const selectedCandidates = [...cellBuckets.values()].sort((a, b) => {
+    // D'abord les sticky (stabilité visuelle)
+    if (a.isSticky !== b.isSticky) {
+      return a.isSticky ? -1 : 1;
     }
-    return left.centerDistance - right.centerDistance;
+    // Puis par score décroissant
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    // Puis par distance au centre croissante
+    return a.centerDistance - b.centerDistance;
   });
 
-  return selected.map((candidate) => candidate.feature);
+  const cappedCandidates = selectedCandidates.slice(0, maxDomMarkers);
+
+  // 4. Tri déterministe pour stabilité du cycle de vie React/DOM
+  cappedCandidates.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+
+  return cappedCandidates.map((c) => c.feature);
 }
 
-export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLDivElement {
-  const element = document.createElement('div');
-  element.style.display = 'inline-flex';
-  element.style.alignItems = 'center';
-  element.style.justifyContent = 'center';
-  element.style.width = 'var(--rv-dashboard-poi-marker-size, 60px)';
-  element.style.height = 'var(--rv-dashboard-poi-marker-size, 60px)';
-  element.style.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.16))';
-  element.style.pointerEvents = 'none';
+export function createViewportPoiMarkerElement(feature: PoiFeature): HTMLButtonElement {
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.className = 'rvd-viewport-poi-marker';
+  element.dataset.poiCategory = feature.category;
+
+  const poiName =
+    feature.tags?.name
+    || feature.tags?.['name:fr']
+    || feature.tags?.['name:en']
+    || feature.name
+    || POI_LABELS[feature.category]
+    || feature.category;
+
+  element.title = poiName;
+  element.setAttribute(
+    'aria-label',
+    feature.name?.trim() || feature.tags?.name
+      ? `${poiName} - ${POI_LABELS[feature.category] ?? feature.category}`
+      : POI_LABELS[feature.category] ?? feature.category,
+  );
 
   const image = document.createElement('img');
+  image.className = 'rvd-viewport-poi-marker__img';
   image.src = getDropdownViewportPoiIconUrl(feature.category);
   image.alt = '';
   image.draggable = false;
   image.decoding = 'async';
-  image.style.display = 'block';
-  image.style.width = '100%';
-  image.style.height = '100%';
 
   element.appendChild(image);
   return element;

@@ -16,13 +16,13 @@ import {
 
 interface AnalysisChartLayoutProps {
   style: CSSProperties;
-  yTicks: number[];
   axis1Metric: AxisMetricId;
   axis2Metric: AxisMetricId;
   plotAreaRef: RefObject<HTMLDivElement | null>;
   handlePlotClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
   yPositions: Array<{ value: number; ratio: number }>;
+  y2Positions: Array<{ value: number; ratio: number }>;
   xPositions: Array<{ value: number; ratio: number }>;
   nightFrames: Array<{ id: string; startRatio: number; endRatio: number }>;
   seriesCanvasRef: RefObject<HTMLCanvasElement | null>;
@@ -39,11 +39,10 @@ interface AnalysisChartLayoutProps {
   expandedPoiClusterId: string | null;
   onPoiClusterClick: (group: PoiMarkerGroup) => void;
   activeHover: { x: number; ratioX: number } | null;
-  hoverMarkers: Array<{ id: string; topPx: number; color: string; backdrop: boolean }>;
+  hoverMarkers: Array<{ id: string; topRatio: number; color: string; backdrop: boolean }>;
   hoverXValue: number | null;
   xMode: AxisMode;
   hoverRows: HoverCardRow[];
-  y2Ticks: number[];
   xAxisLabels: Array<{ value: number; ratio: number; label: string }>;
   normalizedDetailOffset: number;
   onDetailOffsetChange?: (value: number) => void;
@@ -53,13 +52,13 @@ interface AnalysisChartLayoutProps {
 
 export function AnalysisChartLayout({
   style,
-  yTicks,
   axis1Metric,
   axis2Metric,
   plotAreaRef,
   handlePlotClick,
   dayNightBands,
   yPositions,
+  y2Positions,
   xPositions,
   nightFrames,
   seriesCanvasRef,
@@ -73,7 +72,6 @@ export function AnalysisChartLayout({
   hoverXValue,
   xMode,
   hoverRows,
-  y2Ticks,
   xAxisLabels,
   normalizedDetailOffset,
   onDetailOffsetChange,
@@ -85,9 +83,17 @@ export function AnalysisChartLayout({
     <div className="rvchart" style={style}>
       <div className="rvchart__plot">
         <div className="rvchart__yaxis-left" aria-hidden="true">
-          {yTicks.map((value, index) => (
-            <span key={`yl-${index}-${value}`}>{formatAxisLabel(value, axis1Metric)}</span>
-          ))}
+          {yPositions
+            .filter(({ ratio }) => ratio > 0.01 && ratio < 0.99)
+            .map(({ value, ratio }, index) => (
+              <span
+                key={`yl-${index}-${value}`}
+                className="rvchart__yaxis-label"
+                style={{ top: `${ratio * 100}%` }}
+              >
+                {formatAxisLabel(value, axis1Metric)}
+              </span>
+            ))}
         </div>
 
         <div ref={plotAreaRef} className="rvchart__plotarea" onClick={handlePlotClick}>
@@ -142,7 +148,10 @@ export function AnalysisChartLayout({
               <div
                 key={annotation.id}
                 className="rvchart__alert-marker"
-                style={{ left: `${annotation.xRatio * 100}%`, top: `${annotation.yRatio * 100}%` }}
+                style={{
+                  left: `${annotation.xRatio * 100}%`,
+                  top: `${annotation.yRatio * 100}%`,
+                }}
                 title={`${annotation.itineraryName} · ${annotation.label} · ${annotation.detail}`}
                 aria-hidden="true"
               >
@@ -157,11 +166,38 @@ export function AnalysisChartLayout({
                   <div
                     key={group.id}
                     className="rvchart__poi-marker"
-                    style={{ left: `${group.xRatio * 100}%`, top: `${group.yRatio * 100}%` }}
+                    style={{
+                      left: `${group.xRatio * 100}%`,
+                      top: `${group.yRatio * 100}%`,
+                    }}
                     title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                     aria-hidden="true"
                   >
-                    {annotation.poiCategory ? (
+                    {annotation.kind === 'pause' ? (
+                      <img
+                        src="/svgv2/icone/checkpoint-pause.svg"
+                        alt="Pause"
+                        style={{
+                          width: POI_MARKER_SIZE_PX,
+                          height: POI_MARKER_SIZE_PX,
+                          display: 'block',
+                          objectFit: 'contain',
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                        }}
+                      />
+                    ) : annotation.kind === 'waypoint' ? (
+                      <img
+                        src="/svgv2/icone/checkpoint-waypoint.svg"
+                        alt="Waypoint"
+                        style={{
+                          width: POI_MARKER_SIZE_PX,
+                          height: POI_MARKER_SIZE_PX,
+                          display: 'block',
+                          objectFit: 'contain',
+                          filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                        }}
+                      />
+                    ) : annotation.poiCategory ? (
                       <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
                     ) : (
                       <span className="rvchart__poi-marker-fallback">POI</span>
@@ -176,7 +212,10 @@ export function AnalysisChartLayout({
                     key={group.id}
                     type="button"
                     className="rvchart__poi-cluster"
-                    style={{ left: `${group.xRatio * 100}%`, top: `${group.yRatio * 100}%` }}
+                    style={{
+                      left: `${group.xRatio * 100}%`,
+                      top: `${group.yRatio * 100}%`,
+                    }}
                     title={t('{{count}} POI regroupés. Cliquer pour zoomer sur cette zone.', { count: group.count })}
                     aria-label={t('{{count}} POI regroupés. Cliquer pour zoomer sur cette zone.', { count: group.count })}
                     onClick={(event) => {
@@ -216,7 +255,31 @@ export function AnalysisChartLayout({
                         title={`${annotation.itineraryName} · ${annotation.categoryLabel} · ${annotation.label}`}
                         aria-hidden="true"
                       >
-                        {annotation.poiCategory ? (
+                        {annotation.kind === 'pause' ? (
+                          <img
+                            src="/svgv2/icone/checkpoint-pause.svg"
+                            alt="Pause"
+                            style={{
+                              width: POI_MARKER_SIZE_PX,
+                              height: POI_MARKER_SIZE_PX,
+                              display: 'block',
+                              objectFit: 'contain',
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                            }}
+                          />
+                        ) : annotation.kind === 'waypoint' ? (
+                          <img
+                            src="/svgv2/icone/checkpoint-waypoint.svg"
+                            alt="Waypoint"
+                            style={{
+                              width: POI_MARKER_SIZE_PX,
+                              height: POI_MARKER_SIZE_PX,
+                              display: 'block',
+                              objectFit: 'contain',
+                              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.4))',
+                            }}
+                          />
+                        ) : annotation.poiCategory ? (
                           <PoiBadge category={annotation.poiCategory} size={POI_MARKER_SIZE_PX} />
                         ) : (
                           <span className="rvchart__poi-marker-fallback">POI</span>
@@ -232,7 +295,16 @@ export function AnalysisChartLayout({
           <div className="rvchart__layer rvchart__layer--overlay" aria-hidden="true">
             {activeHover && hoverXValue != null ? (
               <>
-                <div className="rvchart__cursor" style={{ left: `${activeHover.x}px` }} />
+                <HoverCardGroup
+                  hoverRatioX={activeHover.ratioX}
+                  xValue={hoverXValue}
+                  xMode={xMode}
+                  rows={hoverRows}
+                />
+                <div
+                  className="rvchart__cursor"
+                  style={{ left: `${(activeHover.ratioX * 100).toFixed(4)}%` }}
+                />
                 {hoverMarkers.map((marker) => (
                   <div
                     key={marker.id}
@@ -242,28 +314,29 @@ export function AnalysisChartLayout({
                         : 'rvchart__hover-point'
                     }
                     style={{
-                      left: `${activeHover.x}px`,
-                      top: `${marker.topPx}px`,
+                      left: `${(activeHover.ratioX * 100).toFixed(4)}%`,
+                      top: `${(marker.topRatio * 100).toFixed(4)}%`,
                       ['--rvchart-hover-point-color' as string]: marker.color,
                     }}
                   />
                 ))}
-                <HoverCardGroup
-                  hoverX={activeHover.x}
-                  hoverRatioX={activeHover.ratioX}
-                  xValue={hoverXValue}
-                  xMode={xMode}
-                  rows={hoverRows}
-                />
               </>
             ) : null}
           </div>
         </div>
 
         <div className="rvchart__yaxis-right" aria-hidden="true">
-          {y2Ticks.map((value, index) => (
-            <span key={`yr-${index}-${value}`}>{formatAxisLabel(value, axis2Metric)}</span>
-          ))}
+          {y2Positions
+            .filter(({ ratio }) => ratio > 0.01 && ratio < 0.99)
+            .map(({ value, ratio }, index) => (
+              <span
+                key={`yr-${index}-${value}`}
+                className="rvchart__yaxis-label"
+                style={{ top: `${ratio * 100}%` }}
+              >
+                {formatAxisLabel(value, axis2Metric)}
+              </span>
+            ))}
         </div>
       </div>
 

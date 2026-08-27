@@ -118,5 +118,3 @@ export async function refineRouteProfileWithIgnAltimetry(
   if (coverage / rows.length < 0.6) return null;
   return buildRouteProfile(rows);
 }
-
-export const refineRouteProfileWithTerrainTiles = refineRouteProfileWithIgnAltimetry;

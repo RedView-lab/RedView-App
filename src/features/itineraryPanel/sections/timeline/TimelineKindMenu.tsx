@@ -68,6 +68,12 @@ function computeMenuStyle(
   };
 }
 
+function resolvePortalTarget(anchorEl: HTMLElement): HTMLElement {
+  const fullscreenRoot = anchorEl.closest('.rvi-panel-fullscreen-root');
+  if (fullscreenRoot instanceof HTMLElement) return fullscreenRoot;
+  return anchorEl.ownerDocument.body ?? document.body;
+}
+
 export function TimelineKindMenu({
   anchorEl,
   open,
@@ -165,6 +171,6 @@ export function TimelineKindMenu({
         </button>
       ))}
     </div>,
-    document.body,
+    resolvePortalTarget(anchorEl),
   );
 }

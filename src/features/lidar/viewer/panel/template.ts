@@ -1,16 +1,10 @@
 const PANEL_TEMPLATE = `
   <div id="viewer-panel" class="viewer-panel">
+    <div id="viewer-panel-resize-handle" class="viewer-panel__resize-handle" role="separator" aria-orientation="vertical" aria-label="Redimensionner le panneau"></div>
     <div class="viewer-panel__header">
       <span class="viewer-panel__header-icon" aria-hidden="true">
-        <svg class="viewer-panel__icon viewer-panel__icon--header" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M7.083 2.5H2.5v4.583"></path>
-          <path d="m2.5 7.083 5-5"></path>
-          <path d="M12.917 2.5H17.5v4.583"></path>
-          <path d="m17.5 7.083-5-5"></path>
-          <path d="M7.083 17.5H2.5v-4.583"></path>
-          <path d="m2.5 12.917 5 5"></path>
-          <path d="M12.917 17.5H17.5v-4.583"></path>
-          <path d="m17.5 12.917-5 5"></path>
+        <svg class="viewer-panel__icon viewer-panel__icon--header" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.67" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6.66667 2.5H6.5C5.09987 2.5 4.3998 2.5 3.86502 2.77248C3.39462 3.01217 3.01217 3.39462 2.77248 3.86502C2.5 4.3998 2.5 5.09987 2.5 6.5V6.66667M6.66667 17.5H6.5C5.09987 17.5 4.3998 17.5 3.86502 17.2275C3.39462 16.9878 3.01217 16.6054 2.77248 16.135C2.5 15.6002 2.5 14.9001 2.5 13.5V13.3333M17.5 6.66667V6.5C17.5 5.09987 17.5 4.3998 17.2275 3.86502C16.9878 3.39462 16.6054 3.01217 16.135 2.77248C15.6002 2.5 14.9001 2.5 13.5 2.5H13.3333M17.5 13.3333V13.5C17.5 14.9001 17.5 15.6002 17.2275 16.135C16.9878 16.6054 16.6054 16.9878 16.135 17.2275C15.6002 17.5 14.9001 17.5 13.5 17.5H13.3333"></path>
         </svg>
       </span>
       <div class="viewer-panel__title-block">
@@ -68,17 +62,27 @@ const PANEL_TEMPLATE = `
         </div>
       </div>
     </div>
-    <div class="viewer-panel__range-row">
-      <p class="viewer-panel__label">Taille des points</p>
-      <span class="viewer-panel__range-bound">1</span>
-      <input id="panel-point-size" class="viewer-panel__range" type="range" min="1" max="100" value="50" />
-      <span class="viewer-panel__range-bound">100</span>
+    <div id="panel-point-controls" class="viewer-panel__point-controls">
+      <div class="viewer-panel__range-row">
+        <p class="viewer-panel__label">Taille des points</p>
+        <span class="viewer-panel__range-bound">1</span>
+        <input id="panel-point-size" class="viewer-panel__range" type="range" min="1" max="100" value="50" />
+        <span class="viewer-panel__range-bound">100</span>
+      </div>
+      <div class="viewer-panel__range-row">
+        <p class="viewer-panel__label">Densité des points</p>
+        <span class="viewer-panel__range-bound">1</span>
+        <input id="panel-point-density" class="viewer-panel__range" type="range" min="1" max="100" value="100" />
+        <span class="viewer-panel__range-bound">100</span>
+      </div>
     </div>
-    <div class="viewer-panel__range-row">
-      <p class="viewer-panel__label">Densité des points</p>
-      <span class="viewer-panel__range-bound">1</span>
-      <input id="panel-point-density" class="viewer-panel__range" type="range" min="1" max="100" value="100" />
-      <span class="viewer-panel__range-bound">100</span>
+    <div id="panel-elevation-controls" class="viewer-panel__elevation-controls" hidden>
+      <div class="viewer-panel__range-row">
+        <p class="viewer-panel__label">Exagération d'élévation</p>
+        <span class="viewer-panel__range-bound">0.5×</span>
+        <input id="panel-elevation-exaggeration" class="viewer-panel__range" type="range" min="1" max="100" value="25" />
+        <span class="viewer-panel__range-bound">3.0×</span>
+      </div>
     </div>
     <div class="viewer-panel__divider"></div>
     <div class="viewer-panel__toggle-row">
@@ -121,7 +125,6 @@ const PANEL_TEMPLATE = `
       </p>
       <div id="viewer-tile-nav-grid" class="viewer-panel__tile-nav-grid" role="grid"></div>
     </section>
-    <div class="viewer-panel__divider viewer-panel__divider--compact"></div>
     <button id="panel-engine-btn" class="viewer-panel__cta" type="button">
       <span class="viewer-panel__cta-icon" aria-hidden="true">
         <svg class="viewer-panel__cta-icon-svg" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -133,6 +136,15 @@ const PANEL_TEMPLATE = `
       <span id="panel-engine-btn-label">Quitter le mode LIDAR</span>
     </button>
   </div>
+
+  <div id="viewer-left-collapsed-rail" class="viewer-left-collapsed-rail">
+    <button id="viewer-left-restore-btn" class="viewer-collapsed-rail-btn" type="button" aria-label="Rouvrir le panneau LiDAR">
+      <svg class="viewer-collapsed-rail-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+    </button>
+  </div>
 `;
 
 export function ensureViewerPanel(): HTMLDivElement {
@@ -142,11 +154,11 @@ export function ensureViewerPanel(): HTMLDivElement {
   }
 
   const fragment = document.createRange().createContextualFragment(PANEL_TEMPLATE.trim());
-  const root = fragment.firstElementChild;
+  const root = fragment.querySelector('#viewer-panel');
   if (!(root instanceof HTMLDivElement)) {
     throw new Error('Viewer panel template did not produce a root div.');
   }
 
-  document.body.append(root);
+  document.body.append(fragment);
   return root;
 }

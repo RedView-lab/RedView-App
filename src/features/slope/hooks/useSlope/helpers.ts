@@ -162,15 +162,19 @@ export function notifySlopeActiveState(active: boolean): void {
 //
 // `profile`: 'default' (0.40m surface) | 'terrain' (1m bare-earth).
 // `tiles`: array of { z, x, y }. The SW caps the batch at 64 itself.
+// `zoneHash`: analysis-zone hash when the slope source is zone-bounded — the
+// warms must target the same `?zone=` cache keys Mapbox will actually request.
 export function prewarmSlopeViewport(
   tiles: ReadonlyArray<{ z: number; x: number; y: number }>,
   profile: 'default' | 'terrain',
+  zoneHash?: string | null,
 ): void {
   if (!tiles.length) return;
   try {
     navigator.serviceWorker?.controller?.postMessage({
       type: 'PREWARM_SLOPE',
       profile,
+      zone: zoneHash || '',
       tiles: tiles.slice(0, 64).map((t) => ({ z: t.z | 0, x: t.x | 0, y: t.y | 0 })),
     });
   } catch {

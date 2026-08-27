@@ -61,22 +61,24 @@ export function Section({
         >
           {translatedTitle}
         </button>
-        {toggle ? (
-          <Toggle
-            checked={toggle.checked}
-            onChange={toggle.onChange}
-            disabled={toggle.disabled}
-            ariaLabel={t('Activer {{title}}', { title: translatedTitle })}
-          />
-        ) : null}
-        <button
-          type="button"
-          className={`rvc-section__chevron${isOpen ? ' is-open' : ''}`}
-          onClick={toggleOpen}
-          aria-label={isOpen ? t('Réduire') : t('Développer')}
-        >
-          <IconChevronDown size={16} />
-        </button>
+        <div className="rvc-section__actions">
+          {toggle ? (
+            <Toggle
+              checked={toggle.checked}
+              onChange={toggle.onChange}
+              disabled={toggle.disabled}
+              ariaLabel={t('Activer {{title}}', { title: translatedTitle })}
+            />
+          ) : null}
+          <button
+            type="button"
+            className={`rvc-section__chevron${isOpen ? ' is-open' : ''}`}
+            onClick={toggleOpen}
+            aria-label={isOpen ? t('Réduire') : t('Développer')}
+          >
+            <IconChevronDown size={16} />
+          </button>
+        </div>
       </header>
       <div
         className={`rvc-section__body-wrap${isOpen ? ' is-open' : ''}`}

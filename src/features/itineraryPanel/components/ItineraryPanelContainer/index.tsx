@@ -5,10 +5,6 @@ import {
   createOverlayStatus,
   type OverlayStatusReporter,
 } from '@/features/map3d';
-import type {
-  MapContextMenuActionPayload,
-  MapPoiDraftActionPayload,
-} from '@/features/map3d';
 
 import { ItineraryPanel } from '../ItineraryPanel';
 import { AddItineraryDialog } from '../dialogs';
@@ -17,55 +13,26 @@ import { useItineraryDeleteShortcut } from '../../hooks/useItineraryDeleteShortc
 import { useItineraryFitRuntime } from '../../hooks/useItineraryFitRuntime';
 import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
-import { FEATURE_TO_PANEL_POI, poiFeaturesToTimelineItems } from '../../lib/schedule';
+import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpointMarkers';
+import { poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { useProjectStore } from '../../context/ProjectStore';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
-import {
-  DEFAULT_PROFILES,
-  normalizeItineraryRhythmState,
-} from '../../lib/project';
-import { resolveFavoritePoiPauseDurationMin } from '../../sections/timeline/TimelineTimelineView/utilsParts/schedule-stops';
-import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
-import { POI_LABELS, type PoiFeature } from '@/features/poi/types';
+import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
+import type { PoiFeature } from '@/features/poi/types';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
-import {
-  buildImportedRouteMetrics,
-  createImportedTimeline,
-  normalizeImportedRoutePoints,
-  refineImportedRoutePointsWithIgnAltimetry,
-  simplifyPointsByQuality,
-} from '../../lib/routes';
 import type {
-  Itinerary,
   ItineraryProject,
   PanelMode,
   PrioritiesState,
   RhythmState,
   RoadTypesState,
-  TimelineView,
 } from '../../types';
-import { resolveImportedTimelineLabel } from './importedTimelineLabel';
-import {
-  buildPendingRoutePatchAfterRemoval,
-  buildPendingRoutePatchForEditedRow,
-  buildTimelineAfterRemoval,
-  insertTimelineItem,
-  moveTimelinePauseItem,
-} from './timelineMutations';
-import {
-  resolveMapContextPointTitle,
-  resolveDraftTitle,
-  resolveDraftFeatureId,
-  upsertDraftPoiIntoItinerary,
-  removePoiAndLinkedWaypoints,
-} from './poiDraft';
-import {
-  setPoiFeatureFavoriteState,
-  mergePoiFeatureFavorites,
-} from './poiFeatureUtils';
-import { listenItineraryMapAction } from '../../lib/mapActionBridge';
+import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
-const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
+import { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
+import { useItineraryMapActions } from './useItineraryMapActions';
+import { useItineraryGpxImport } from './useItineraryGpxImport';
+import { useItineraryTimelineCallbacks } from './useItineraryTimelineCallbacks';
 
 interface ItineraryPanelContainerProps {
   projectId?: string | null;
@@ -77,8 +44,14 @@ interface ItineraryPanelContainerProps {
   isResizing?: boolean;
   isReturningToBrowser?: boolean;
   onBackToHome?: () => void;
+  pausesEnabled?: boolean;
+  waypointsEnabled?: boolean;
 }
 
+/**
+ * Conteneur principal du panneau d'itinéraire (ItineraryPanel).
+ * Orchestre le routage BRouter, l'import GPX, la synchronisation du tracé 3D, les POIs et le profil de performance.
+ */
 export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   projectId,
   map,
@@ -89,6 +62,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   isResizing,
   isReturningToBrowser,
   onBackToHome,
+  pausesEnabled,
+  waypointsEnabled,
 }: ItineraryPanelContainerProps) {
   const {
     project,
@@ -97,6 +72,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     setItineraryName,
     duplicateItinerary,
     removeItinerary,
+    setItineraryVisibility,
     undoTraceEdit,
     redoTraceEdit,
     canUndoTraceEdit,
@@ -149,10 +125,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
   });
 
-  // Keyboard shortcut: Delete / Backspace removes the active itinerary.
-  // Works from both the left itinerary tabs and the central synthesis panel,
-  // since they share the same `activeItineraryId`. Typing targets and the
-  // single-itinerary edge case are guarded inside the hook.
+
   useItineraryDeleteShortcut({
     activeItineraryId: active?.id ?? null,
     itineraryCount: itineraries.length,
@@ -207,7 +180,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     if (routeError) {
       onRouteStatusChange(createOverlayStatus({
         id: 'itinerary',
-        label: 'Itinéraire',
+        label: t('Itinéraire'),
         state: 'error',
         progress: 100,
         detail: routeError,
@@ -243,411 +216,44 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const activeIdRef = useRef(project.activeItineraryId);
   activeIdRef.current = project.activeItineraryId;
 
-  const resolvePoiTitle = useCallback((feature: PoiFeature) => {
-    return feature.name?.trim() || POI_LABELS[feature.category] || 'POI';
-  }, []);
+  const poiHandlers = useItineraryPoiHandlers({
+    activeItineraryRef,
+    updateActive,
+    project,
+    addItinerary,
+  });
 
-  const resolvePoiPopupState = useCallback((feature: PoiFeature) => {
-    const itinerary = activeItineraryRef.current;
-    if (!itinerary) {
-      return {
-        favoriteEnabled: Boolean(feature.favorite),
-        pauseEnabled: false,
-        pauseDurationMin: 5,
-        manualTraceEnabled: false,
-      };
-    }
+  useItineraryMapActions({
+    updateActive,
+    poiHandlers,
+    project,
+    addItinerary,
+  });
 
-    const poiRow = itinerary.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-    const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
-    const rhythm = normalizeItineraryRhythmState(itinerary.rhythm);
-    const pauseDurationMin = panelCategory
-      ? rhythm.poiPauseDurations[panelCategory] ?? 5
-      : 5;
-    const manualTraceWaypointId = `poi-waypoint-${feature.id}`;
+  const { addItineraryFromGpxFile } = useItineraryGpxImport({
+    setProject,
+    addItinerary,
+    setPendingCorridorFor,
+  });
 
-    return {
-      favoriteEnabled: Boolean(poiRow?.favorite ?? feature.favorite),
-      pauseEnabled: Boolean(
-        poiRow
-        && poiRow.favorite
-        && rhythm.pauseAtFavoritePois
-        && pauseDurationMin > 0,
-      ),
-      pauseDurationMin,
-      manualTraceEnabled: itinerary.timeline.some(
-        (row) => row.id === manualTraceWaypointId,
-      ),
-    };
-  }, []);
+  const timelineCallbacks = useItineraryTimelineCallbacks({
+    setProject,
+    updateActive,
+  });
 
-  const handlePoiFavoriteToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
-    updateActive((it) => {
-      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (poiRow) {
-        poiRow.favorite = nextEnabled;
-      }
-      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
-    });
-  }, [updateActive]);
-
-  const handlePoiStartHere = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      let row = it.timeline.find((item) => item.kind === 'start');
-      if (!row) {
-        insertTimelineItem(it.timeline, 'start');
-        row = it.timeline.find((item) => item.kind === 'start');
-      }
-      if (!row) return;
-
-      row.label = resolvePoiTitle(feature);
-      row.lat = feature.lat;
-      row.lon = feature.lon;
-      row.distanceKm = 0;
-      delete it.routeAudit;
-      delete it.pendingTraceExtension;
-      it.prediction = null;
-
-      if (it.gpxRoute?.source === 'brouter') {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-      }
-    });
-  }, [resolvePoiTitle, updateActive]);
-
-  const handlePoiAddWaypoint = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      const waypointId = `poi-waypoint-${feature.id}`;
-      const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-      if (existingIndex >= 0) return;
-
-      const poiIndex = it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
-      const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-      const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-      const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-      it.timeline.splice(insertAt, 0, {
-        id: waypointId,
-        kind: 'waypoint',
-        label: resolvePoiTitle(feature),
-        distanceKm: anchorRow?.distanceKm ?? null,
-        lat: feature.lat,
-        lon: feature.lon,
-        osmId: feature.id,
-        visible: true,
-      });
-
-      delete it.pendingRoutePatch;
-      delete it.pendingTraceExtension;
-      delete it.routeAudit;
-      it.prediction = null;
-    });
-  }, [resolvePoiTitle, updateActive]);
-
-  const handlePoiFinishHere = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      let row = it.timeline.find((item) => item.kind === 'end');
-      if (!row) {
-        insertTimelineItem(it.timeline, 'end');
-        row = it.timeline.find((item) => item.kind === 'end');
-      }
-      if (!row) return;
-
-      row.label = resolvePoiTitle(feature);
-      row.lat = feature.lat;
-      row.lon = feature.lon;
-      row.distanceKm = null;
-      delete it.routeAudit;
-      delete it.pendingTraceExtension;
-      it.prediction = null;
-
-      if (it.gpxRoute?.source === 'brouter') {
-        it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-      }
-    });
-  }, [resolvePoiTitle, updateActive]);
-
-  const handlePoiCyclePauseDuration = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      const panelCategory = poiRow?.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
-      if (!panelCategory) return;
-
-      const rhythm = normalizeItineraryRhythmState(it.rhythm);
-      it.rhythm = rhythm;
-      const current = rhythm.poiPauseDurations[panelCategory] ?? POI_PAUSE_DURATION_STEPS[0];
-      const currentIndex = POI_PAUSE_DURATION_STEPS.findIndex((value) => value === current);
-      const nextDuration = POI_PAUSE_DURATION_STEPS[(currentIndex + 1) % POI_PAUSE_DURATION_STEPS.length] ?? POI_PAUSE_DURATION_STEPS[0];
-      rhythm.poiPauseDurations[panelCategory] = nextDuration;
-    });
-  }, [updateActive]);
-
-  const handlePoiPauseToggle = useCallback((
-    feature: PoiFeature,
-    nextEnabled: boolean,
-    durationMin: number,
-  ) => {
-    updateActive((it) => {
-      const poiRow = it.timeline.find((row) => row.kind === 'poi' && row.osmId === feature.id);
-      if (!poiRow) return;
-
-      const rhythm = normalizeItineraryRhythmState(it.rhythm);
-      it.rhythm = rhythm;
-      poiRow.favorite = nextEnabled;
-      it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, feature.id, nextEnabled);
-
-      if (!nextEnabled) {
-        return;
-      }
-
-      rhythm.pauseAtFavoritePois = true;
-      const panelCategory = poiRow.poiCategory ?? FEATURE_TO_PANEL_POI[feature.category];
-      if (!panelCategory) return;
-
-      const currentDuration = rhythm.poiPauseDurations[panelCategory];
-      if (currentDuration == null || currentDuration <= 0) {
-        rhythm.poiPauseDurations[panelCategory] = Math.max(1, Math.round(durationMin));
-      }
-    });
-  }, [updateActive]);
-
-  const handlePoiManualTraceToggle = useCallback((feature: PoiFeature, nextEnabled: boolean) => {
-    updateActive((it) => {
-      const waypointId = `poi-waypoint-${feature.id}`;
-      const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-
-      if (nextEnabled) {
-        if (existingIndex >= 0) return;
-
-        const poiIndex = it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === feature.id);
-        const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-        const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-        const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-        it.timeline.splice(insertAt, 0, {
-          id: waypointId,
-          kind: 'waypoint',
-          label: resolvePoiTitle(feature),
-          distanceKm: anchorRow?.distanceKm ?? null,
-          lat: feature.lat,
-          lon: feature.lon,
-          osmId: feature.id,
-          visible: true,
-        });
-      } else {
-        if (existingIndex < 0) return;
-        it.timeline.splice(existingIndex, 1);
-      }
-
-      delete it.pendingRoutePatch;
-      delete it.pendingTraceExtension;
-      delete it.routeAudit;
-      it.prediction = null;
-    });
-  }, [resolvePoiTitle, updateActive]);
-
-  const handlePoiStreetView = useCallback((feature: PoiFeature) => {
-    if (typeof window === 'undefined') return;
-    const url = new URL('https://www.google.com/maps/@');
-    url.searchParams.set('api', '1');
-    url.searchParams.set('map_action', 'pano');
-    url.searchParams.set('viewpoint', `${feature.lat},${feature.lon}`);
-    window.open(url.toString(), '_blank', 'noopener,noreferrer');
-  }, []);
-
-  const handlePoiDelete = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      removePoiAndLinkedWaypoints(it, feature.id);
-      delete it.pendingRoutePatch;
-      delete it.pendingTraceExtension;
-      delete it.routeAudit;
-      it.prediction = null;
-    });
-  }, [updateActive]);
-
-  const handleExternalMapContextAction = useCallback((payload: MapContextMenuActionPayload) => {
-    switch (payload.action) {
-      case 'set-start':
-        updateActive((it) => {
-          let row = it.timeline.find((item) => item.kind === 'start');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'start');
-            row = it.timeline.find((item) => item.kind === 'start');
-          }
-          if (!row) return;
-
-          row.label = resolveMapContextPointTitle(payload.point);
-          row.lat = payload.point.lat;
-          row.lon = payload.point.lng;
-          row.distanceKm = 0;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-          }
-        });
-        break;
-      case 'add-waypoint':
-        updateActive((it) => {
-          const waypointId = `map-waypoint-${Date.now()}`;
-          if (it.timeline.some((row) => row.id === waypointId)) return;
-
-          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-          const insertAt = endIndex >= 0 ? endIndex : it.timeline.length;
-
-          it.timeline.splice(insertAt, 0, {
-            id: waypointId,
-            kind: 'waypoint',
-            label: resolveMapContextPointTitle(payload.point),
-            distanceKm: null,
-            lat: payload.point.lat,
-            lon: payload.point.lng,
-            visible: true,
-          });
-
-          delete it.pendingRoutePatch;
-          delete it.pendingTraceExtension;
-          delete it.routeAudit;
-          it.prediction = null;
-        });
-        break;
-      case 'set-finish':
-        updateActive((it) => {
-          let row = it.timeline.find((item) => item.kind === 'end');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'end');
-            row = it.timeline.find((item) => item.kind === 'end');
-          }
-          if (!row) return;
-
-          row.label = resolveMapContextPointTitle(payload.point);
-          row.lat = payload.point.lat;
-          row.lon = payload.point.lng;
-          row.distanceKm = null;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-          }
-        });
-        break;
-      default:
-        break;
-    }
-  }, [updateActive]);
-
-  const handleExternalPoiDraftAction = useCallback((payload: MapPoiDraftActionPayload) => {
-    switch (payload.action) {
-      case 'toggle-favorite':
-      case 'change-category':
-        updateActive((it) => {
-          upsertDraftPoiIntoItinerary(it, payload.draft);
-        });
-        break;
-      case 'start-here':
-        updateActive((it) => {
-          upsertDraftPoiIntoItinerary(it, payload.draft);
-
-          let row = it.timeline.find((item) => item.kind === 'start');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'start');
-            row = it.timeline.find((item) => item.kind === 'start');
-          }
-          if (!row) return;
-
-          row.label = resolveDraftTitle(payload.draft);
-          row.lat = payload.draft.point.lat;
-          row.lon = payload.draft.point.lng;
-          row.distanceKm = 0;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-          }
-        });
-        break;
-      case 'add-waypoint':
-        updateActive((it) => {
-          const poiId = upsertDraftPoiIntoItinerary(it, payload.draft);
-          const waypointId = poiId != null ? `poi-waypoint-${poiId}` : `draft-waypoint-${payload.draft.id}`;
-          const existingIndex = it.timeline.findIndex((row) => row.id === waypointId);
-          if (existingIndex >= 0) return;
-
-          const poiIndex = poiId != null
-            ? it.timeline.findIndex((row) => row.kind === 'poi' && row.osmId === poiId)
-            : -1;
-          const endIndex = it.timeline.findIndex((row) => row.kind === 'end');
-          const anchorRow = poiIndex >= 0 ? it.timeline[poiIndex] : null;
-          const insertAt = poiIndex >= 0 ? poiIndex : endIndex >= 0 ? endIndex : it.timeline.length;
-
-          it.timeline.splice(insertAt, 0, {
-            id: waypointId,
-            kind: 'waypoint',
-            label: resolveDraftTitle(payload.draft),
-            distanceKm: anchorRow?.distanceKm ?? null,
-            lat: payload.draft.point.lat,
-            lon: payload.draft.point.lng,
-            osmId: poiId ?? undefined,
-            visible: true,
-          });
-
-          delete it.pendingRoutePatch;
-          delete it.pendingTraceExtension;
-          delete it.routeAudit;
-          it.prediction = null;
-        });
-        break;
-      case 'finish-here':
-        updateActive((it) => {
-          upsertDraftPoiIntoItinerary(it, payload.draft);
-
-          let row = it.timeline.find((item) => item.kind === 'end');
-          if (!row) {
-            insertTimelineItem(it.timeline, 'end');
-            row = it.timeline.find((item) => item.kind === 'end');
-          }
-          if (!row) return;
-
-          row.label = resolveDraftTitle(payload.draft);
-          row.lat = payload.draft.point.lat;
-          row.lon = payload.draft.point.lng;
-          row.distanceKm = null;
-          delete it.routeAudit;
-          delete it.pendingTraceExtension;
-          it.prediction = null;
-
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, row.id);
-          }
-        });
-        break;
-      case 'delete':
-        updateActive((it) => {
-          removePoiAndLinkedWaypoints(it, resolveDraftFeatureId(payload.draft));
-          delete it.pendingRoutePatch;
-          delete it.pendingTraceExtension;
-          delete it.routeAudit;
-          it.prediction = null;
-        });
-        break;
-      default:
-        break;
-    }
-  }, [updateActive]);
-
-  useEffect(() => listenItineraryMapAction((detail) => {
-    if (detail.kind === 'context-menu') {
-      handleExternalMapContextAction(detail.payload);
-      return;
-    }
-
-    handleExternalPoiDraftAction(detail.payload);
-  }), [handleExternalMapContextAction, handleExternalPoiDraftAction]);
+  useItineraryCheckpointMarkers({
+    itineraries,
+    map,
+    isMapLoaded,
+    routesEnabled: project.controlPanel?.toggles?.routesEnabled ?? true,
+    pausesEnabled,
+    waypointsEnabled,
+    onChangePauseDuration: timelineCallbacks.handleChangeTimelinePauseDuration,
+    onDeletePause: timelineCallbacks.handleRemoveTimelineItem,
+    onTogglePauseFavorite: timelineCallbacks.handleFavoriteTimelineItem,
+    onDeleteWaypoint: timelineCallbacks.handleRemoveTimelineItem,
+    onToggleWaypointFavorite: timelineCallbacks.handleFavoriteTimelineItem,
+  });
 
   const handleCorridorUpdate = useCallback((features: PoiFeature[]) => {
     const targetId = activeIdRef.current;
@@ -749,96 +355,18 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     handleCorridorUpdate,
     handleCorridorComplete,
     {
-      getPopupState: resolvePoiPopupState,
-      onStartHere: handlePoiStartHere,
-      onAddWaypoint: handlePoiAddWaypoint,
-      onFinishHere: handlePoiFinishHere,
-      onCyclePauseDuration: handlePoiCyclePauseDuration,
-      onToggleFavorite: handlePoiFavoriteToggle,
-      onTogglePause: handlePoiPauseToggle,
-      onToggleManualTrace: handlePoiManualTraceToggle,
-      onOpenStreetView: handlePoiStreetView,
-      onDelete: handlePoiDelete,
+      getPopupState: poiHandlers.resolvePoiPopupState,
+      onStartHere: poiHandlers.handlePoiStartHere,
+      onAddWaypoint: poiHandlers.handlePoiAddWaypoint,
+      onFinishHere: poiHandlers.handlePoiFinishHere,
+      onCyclePauseDuration: poiHandlers.handlePoiCyclePauseDuration,
+      onSelectPauseDuration: poiHandlers.handlePoiSelectPauseDuration,
+      onToggleFavorite: poiHandlers.handlePoiFavoriteToggle,
+      onTogglePause: poiHandlers.handlePoiPauseToggle,
+      onToggleManualTrace: poiHandlers.handlePoiManualTraceToggle,
+      onOpenStreetView: poiHandlers.handlePoiStreetView,
+      onDelete: poiHandlers.handlePoiDelete,
     },
-  );
-
-  const hydrateImportedTimelineEndpoints = useCallback(
-    async (
-      itineraryId: string,
-      points: NonNullable<Itinerary['gpxRoute']>['points'],
-    ) => {
-      const startPoint = points[0];
-      const endPoint = points[points.length - 1] ?? startPoint;
-      if (!startPoint) return;
-
-      const [startLabel, endLabel] = await Promise.all([
-        resolveImportedTimelineLabel(startPoint.lon, startPoint.lat),
-        resolveImportedTimelineLabel(endPoint.lon, endPoint.lat),
-      ]);
-
-      setProject((projectState) => ({
-        ...projectState,
-        itineraries: projectState.itineraries.map((itinerary) => {
-          if (itinerary.id !== itineraryId) return itinerary;
-          return {
-            ...itinerary,
-            timeline: itinerary.timeline.map((item) => {
-              if (item.kind === 'start') {
-                return {
-                  ...item,
-                  label: startLabel,
-                  lat: startPoint.lat,
-                  lon: startPoint.lon,
-                };
-              }
-              if (item.kind === 'end') {
-                return {
-                  ...item,
-                  label: endLabel,
-                  lat: endPoint.lat,
-                  lon: endPoint.lon,
-                };
-              }
-              return item;
-            }),
-          };
-        }),
-      }));
-    },
-    [setProject],
-  );
-
-  const addItineraryFromGpxFile = useCallback(
-    async (file: File) => {
-      const route = await parseGpxFile(file);
-      const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
-      const basePoints = ignAltimetryPoints ?? route.points;
-      const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });
-      const quality = 'default';
-      const simplifiedPoints = normalizeImportedRoutePoints(
-        simplifyPointsByQuality(storedPoints, quality),
-      );
-      const timeline = createImportedTimeline(simplifiedPoints);
-      const id = addItinerary({
-        name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-        gpxRoute: {
-          name: route.name,
-          points: simplifiedPoints,
-          originalPoints: storedPoints,
-          gpxQuality: quality,
-          gpxQualityPointsPerKm: null,
-          source: 'gpx',
-        },
-        timeline,
-        metrics: buildImportedRouteMetrics(simplifiedPoints),
-      });
-
-      if (id) {
-        setPendingCorridorFor(id);
-        void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
-      }
-    },
-    [addItinerary, hydrateImportedTimelineEndpoints],
   );
 
   const duplicateActiveItinerary = useCallback(() => {
@@ -870,203 +398,165 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       ? t('Activez au moins une catégorie ci-dessus.')
       : null;
 
-  const panel = (
-    <ItineraryPanel
-      project={project}
-      profiles={DEFAULT_PROFILES}
-      width={width}
-      isResizing={isResizing}
-      onResizeStart={onResizeStart}
-      isReturningToBrowser={isReturningToBrowser}
-      onBackToHome={onBackToHome}
-      onSaveProject={() => {
-        setProject((p) => ({
-          ...p,
-          savedAt: new Date().toISOString(),
-          sizeBytes: p.sizeBytes ?? 4096,
-        }));
-      }}
-      onDownloadProject={() => {}}
-      onShareProject={() => {}}
-      onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
-      onSelectItinerary={(id) =>
-        setProject((p) => ({ ...p, activeItineraryId: id }))
-      }
-      onAddItinerary={() => addItinerary()}
-      onAddButtonRef={(element) => {
-        addButtonRef.current = element;
-      }}
-      onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
-      onAddItineraryFromGpx={addItineraryFromGpxFile}
-      onDuplicateItinerary={duplicateItinerary}
-      onRemoveItinerary={removeItinerary}
-      onRenameItinerary={setItineraryName}
-      onChangeMode={(mode: PanelMode) =>
-        setProject((p) => ({ ...p, activeMode: mode }))
-      }
-      onChangeProfile={(id) =>
-        updateActive((it) => {
-          it.profileId = id;
-        })
-      }
-      onUndo={() => {
-        cancelRouteRequest();
-        undoTraceEdit();
-      }}
-      onRedo={() => {
-        cancelRouteRequest();
-        redoTraceEdit();
-      }}
-      canUndo={canUndoTraceEdit}
-      canRedo={canRedoTraceEdit}
-      onSaveProfile={() => {}}
-      onChangePriority={(key: keyof PrioritiesState, value) =>
-        updateActive((it) => {
-          it.priorities[key] = value;
-        })
-      }
-      onChangeRoadType={(key, value) =>
-        updateActive((it) => {
-          (it.roadTypes[key] as RoadTypesState[typeof key]) = value;
-        })
-      }
-      onRefreshRoute={() => requestRouteRefresh()}
-      onCancelRoute={() => cancelRouteRequest()}
-      onChangeRhythm={(key, value) =>
-        updateActive((it) => {
-          (it.rhythm[key] as RhythmState[typeof key]) = value;
-        })
-      }
-      onUploadFit={() => {
-        handleUploadFitRequest();
-      }}
-      uploadFitLabel={uploadFitLabel}
-      onCalculate={() => {
-        handleCalculatePrediction();
-      }}
-      onCancelCalculate={() => {
-        cancelCalculatePrediction();
-      }}
-      calculateLabel={calculateLabel}
-      calculateDisabled={calculateDisabled}
-      onChangePoiEntry={(category, next) =>
-        updateActive((it) => {
-          it.poi[category] = next;
-        })
-      }
-      onChangePoiRefine={(value) =>
-        updateActive((it) => {
-          it.poi.refineResults = value;
-        })
-      }
-      onChangePoiRefineLimit={(value) =>
-        updateActive((it) => {
-          it.poi.refineLimitPerKm = value;
-        })
-      }
-      onOpenPoiCategories={() => {}}
-      onLoadPois={() => searchCorridor()}
-      onCancelLoadPois={() => cancelSearchCorridor()}
-      poiLoading={poiLoading}
-      poiProgress={poiProgress}
-      poiCount={poiCount}
-      poiError={poiError}
-      poiLoadDisabled={poiLoadDisabled}
-      poiLoadDisabledReason={poiLoadDisabledReason}
-      onChangeTimelineView={(view: TimelineView) =>
-        setProject((p) => ({ ...p, timelineView: view }))
-      }
-      onAddTimelineItem={(kind, options) =>
-        updateActive((it) => {
-          insertTimelineItem(it.timeline, kind, options);
-        })
-      }
-      onToggleTimelineItem={(id, visible) =>
-        updateActive((it) => {
-          const row = it.timeline.find((item) => item.id === id);
-          if (row) row.visible = visible;
-        })
-      }
-      onMoveTimelinePause={(id, distanceKm) =>
-        updateActive((it) => {
-          const moved = moveTimelinePauseItem(it.timeline, id, distanceKm);
-          if (moved) return;
-          it.rhythm = normalizeItineraryRhythmState(it.rhythm);
-          if (id.startsWith('poi-pause-')) {
-            delete it.rhythm.pausePositionOverridesKm[id];
-            return;
-          }
-          it.rhythm.pausePositionOverridesKm[id] = Math.max(0, Number(distanceKm.toFixed(3)));
-        })
-      }
-      onChangeTimelinePauseDuration={(id, durationMin) =>
-        updateActive((it) => {
-          const row = it.timeline.find((item) => item.id === id && item.kind === 'pause');
-          if (!row) return;
-          row.durationMin = Math.max(0, Math.round(durationMin));
-        })
-      }
-      onRemoveTimelineItem={(id) =>
-        updateActive((it) => {
-          const removedIndex = it.timeline.findIndex((item) => item.id === id);
-          const removedRow = removedIndex >= 0 ? it.timeline[removedIndex] : null;
-          const nextTimeline = buildTimelineAfterRemoval(it.timeline, id);
-          if (!nextTimeline) return;
-
-          it.timeline = nextTimeline;
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchAfterRemoval(
-              nextTimeline,
-              removedIndex,
-              removedRow,
-            );
-            delete it.pendingTraceExtension;
-            delete it.routeAudit;
-            it.prediction = null;
-          }
-        })
-      }
-      onFavoriteTimelineItem={(id, favorite) =>
-        updateActive((it) => {
-          const row = it.timeline.find((item) => item.id === id);
-          if (!row) return;
-
-          const hasAutomaticFavoritePause =
-            !favorite && resolveFavoritePoiPauseDurationMin(row, it.rhythm) > 0;
-          if (hasAutomaticFavoritePause) return;
-
-          row.favorite = favorite;
-          if (row.kind === 'poi' && row.osmId != null) {
-            it.poiFeatures = setPoiFeatureFavoriteState(it.poiFeatures, row.osmId, favorite);
-          }
-        })
-      }
-      onSearchTimeline={() => {}}
-      onOpenTimelineSettings={() => {}}
-      onSelectTimelinePlace={(id, place) =>
-        updateActive((it) => {
-          const row = it.timeline.find((item) => item.id === id);
-          if (!row) return;
-          row.label = place.name;
-          row.lat = place.lat;
-          row.lon = place.lon;
-          if (it.gpxRoute?.source === 'brouter') {
-            it.pendingRoutePatch = buildPendingRoutePatchForEditedRow(it.timeline, id);
-            delete it.pendingTraceExtension;
-            delete it.routeAudit;
-            it.prediction = null;
-          }
-        })
-      }
-      routeLoading={routeLoading}
-      routeError={routeError}
-      routeWarnings={routeWarnings}
-    />
-  );
-
   return (
     <>
-      {panel}
+      <ItineraryPanel
+        project={project}
+        profiles={DEFAULT_PROFILES}
+        width={width}
+        isResizing={isResizing}
+        onResizeStart={onResizeStart}
+        isReturningToBrowser={isReturningToBrowser}
+        onBackToHome={onBackToHome}
+        onSaveProject={() => {
+          setProject((p) => ({
+            ...p,
+            savedAt: new Date().toISOString(),
+            sizeBytes: p.sizeBytes ?? 4096,
+          }));
+        }}
+        onDownloadProject={() => {}}
+        onShareProject={() => {}}
+        onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
+        onSelectItinerary={(id) =>
+          setProject((p) => ({ ...p, activeItineraryId: id }))
+        }
+        onAddItinerary={() => addItinerary()}
+        onAddButtonRef={(element) => {
+          addButtonRef.current = element;
+        }}
+        onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
+        onAddItineraryFromGpx={addItineraryFromGpxFile}
+        onDuplicateItinerary={duplicateItinerary}
+        onRemoveItinerary={removeItinerary}
+        onRenameItinerary={setItineraryName}
+        onToggleItineraryVisibility={(id) => {
+          const it = project.itineraries.find((i) => i.id === id);
+          setItineraryVisibility(id, it ? it.visible === false : true);
+        }}
+        onChangeMode={(mode: PanelMode) =>
+          setProject((p) => ({ ...p, activeMode: mode }))
+        }
+        onChangeProfile={(id) => {
+          const preset = getProfilePreset(id);
+          setProject((prev) => {
+            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
+            const applyToAll = active?.roadTypes.applyToAllItineraries;
+            return {
+              ...prev,
+              itineraries: prev.itineraries.map((itinerary) => {
+                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
+                const copy = structuredClone(itinerary);
+                copy.profileId = id;
+                if (preset) {
+                  copy.priorities = { ...preset.priorities };
+                  copy.roadTypes = {
+                    ...preset.roadTypes,
+                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                  };
+                }
+                return copy;
+              }),
+            };
+          });
+        }}
+        onUndo={() => {
+          cancelRouteRequest();
+          undoTraceEdit();
+        }}
+        onRedo={() => {
+          cancelRouteRequest();
+          redoTraceEdit();
+        }}
+        canUndo={canUndoTraceEdit}
+        canRedo={canRedoTraceEdit}
+        onSaveProfile={() => {}}
+        onChangePriority={(key: keyof PrioritiesState, value) =>
+          updateActive((it) => {
+            it.priorities[key] = value;
+            it.profileId = resolveProfilePresetId(it.priorities, it.roadTypes, it.profileId);
+          })
+        }
+        onChangeRoadType={(key, value) =>
+          setProject((prev) => {
+            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
+            const applyToAll =
+              key === 'applyToAllItineraries' ? value : active?.roadTypes.applyToAllItineraries;
+            return {
+              ...prev,
+              itineraries: prev.itineraries.map((itinerary) => {
+                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
+                const copy = structuredClone(itinerary);
+                (copy.roadTypes[key] as RoadTypesState[typeof key]) = value;
+                if (key !== 'applyToAllItineraries') {
+                  copy.profileId = resolveProfilePresetId(
+                    copy.priorities,
+                    copy.roadTypes,
+                    copy.profileId,
+                  );
+                }
+                return copy;
+              }),
+            };
+          })
+        }
+        onRefreshRoute={() => requestRouteRefresh()}
+        onCancelRoute={() => cancelRouteRequest()}
+        onChangeRhythm={(key, value) =>
+          updateActive((it) => {
+            (it.rhythm[key] as RhythmState[typeof key]) = value;
+          })
+        }
+        onUploadFit={() => {
+          handleUploadFitRequest();
+        }}
+        uploadFitLabel={uploadFitLabel}
+        onCalculate={() => {
+          handleCalculatePrediction();
+        }}
+        onCancelCalculate={() => {
+          cancelCalculatePrediction();
+        }}
+        calculateLabel={calculateLabel}
+        calculateDisabled={calculateDisabled}
+        onChangePoiEntry={(category, next) =>
+          updateActive((it) => {
+            it.poi[category] = next;
+          })
+        }
+        onChangePoiRefine={(value) =>
+          updateActive((it) => {
+            it.poi.refineResults = value;
+          })
+        }
+        onChangePoiRefineLimit={(value) =>
+          updateActive((it) => {
+            it.poi.refineLimitPerKm = value;
+          })
+        }
+        onOpenPoiCategories={() => {}}
+        onLoadPois={() => searchCorridor()}
+        onCancelLoadPois={() => cancelSearchCorridor()}
+        poiLoading={poiLoading}
+        poiProgress={poiProgress}
+        poiCount={poiCount}
+        poiError={poiError}
+        poiLoadDisabled={poiLoadDisabled}
+        poiLoadDisabledReason={poiLoadDisabledReason}
+        onChangeTimelineView={timelineCallbacks.handleChangeTimelineView}
+        onAddTimelineItem={timelineCallbacks.handleAddTimelineItem}
+        onToggleTimelineItem={timelineCallbacks.handleToggleTimelineItem}
+        onMoveTimelinePause={timelineCallbacks.handleMoveTimelinePause}
+        onChangeTimelinePauseDuration={timelineCallbacks.handleChangeTimelinePauseDuration}
+        onRemoveTimelineItem={timelineCallbacks.handleRemoveTimelineItem}
+        onFavoriteTimelineItem={timelineCallbacks.handleFavoriteTimelineItem}
+        onSearchTimeline={() => {}}
+        onOpenTimelineSettings={() => {}}
+        onSelectTimelinePlace={timelineCallbacks.handleSelectTimelinePlace}
+        routeLoading={routeLoading}
+        routeError={routeError}
+        routeWarnings={routeWarnings}
+      />
       <AddItineraryDialog
         open={addDialogOpen}
         anchorEl={addButtonRef.current}

@@ -173,7 +173,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     const raceIGNBorderTile = considerSwiss && tileTrulyTouchesFrance && useFranceMNS;
     let ignResultPromise = null;
     if (raceIGNBorderTile) {
-      ignResultPromise = buildIGNTile(z, x, y, franceClass);
+      ignResultPromise = buildIGNTile(z, x, y, franceClass, requestPurpose);
     }
     if (z >= 12) {
       console.log(
@@ -283,7 +283,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     if (!pngBlob && tileTrulyTouchesFrance && useFranceMNS) {
       const ignResult = ignResultPromise
         ? await ignResultPromise
-        : await buildIGNTile(z, x, y, franceClass);
+        : await buildIGNTile(z, x, y, franceClass, requestPurpose);
       if (ignResult) {
         upgradePending = ignResult.pendingFetches;
         if (ignResult.pendingFetches?.length) upgradeSourceHint = 'ign';
@@ -325,7 +325,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
             try {
               pngBlob = await compositeIGNMapbox(
                 ignResult.elevations, ignResult.coverage, z, x, y,
-                { skipDatumBias: franceClass === 'inside' },
+                { skipDatumBias: franceClass === 'inside', prefilledMbElev: ignResult.prefilledMbElev },
               );
             } finally {
               releaseComposite();
@@ -362,8 +362,8 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       spainBorderFillPromise = null;
     }
 
-    // 3a. Verified terrain path for slope math.
-    if (!pngBlob && tileTrulyTouchesFrance && useFranceTerrainWms) {
+    // 3a. Verified terrain path for slope math & uniform 1m LiDAR fallback.
+    if (!pngBlob && tileTrulyTouchesFrance && (useFranceTerrainWms || useFranceMNS || useFranceHighres)) {
       const terrainResult = await buildIGNTerrainTile(z, x, y, { purpose: requestPurpose });
       if (terrainResult?.elevations) {
         franceHadSomeData = true;
@@ -502,18 +502,21 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       if (upgradePending && upgradePending.length) {
         scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint, demProfile);
       }
-      negCache.put(cacheKey, new Response(null, {
-        status: 204,
-        headers: {
-          'x-cached-at': String(Date.now()),
-          'x-neg-ttl': String(ttl),
-        },
-      }));
+      const isAborted = Boolean(_request?.signal?.aborted);
+      if (!isAborted) {
+        negCache.put(cacheKey, new Response(null, {
+          status: 204,
+          headers: {
+            'x-cached-at': String(Date.now()),
+            'x-neg-ttl': String(ttl),
+          },
+        }));
+      }
       if (DEBUG) {
         const dt = (performance.now() - t0).toFixed(0);
-        console.warn(`[sw-dem] 204 ${z}/${x}/${y} reason=${reason} ttl=${ttl}s ${dt}ms`);
+        console.warn(`[sw-dem] 204 ${z}/${x}/${y} reason=${reason} ttl=${ttl}s ${dt}ms (aborted=${isAborted})`);
       }
-      return noTileResponse(reason);
+      return noTileResponse(isAborted ? 'aborted' : reason);
     }
 
     const preGuardShortCache = forceShortCache;

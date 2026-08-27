@@ -3,16 +3,35 @@
   inset: 0;
   z-index: 60;
   display: flex;
-  padding: 40px 80px 80px;
+  justify-content: center;
+  padding: 40px 180px 80px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%),
     linear-gradient(90deg, #000 0%, #000 100%);
+}
+
+.rvpb-brand-corner {
+  position: absolute;
+  top: 40px;
+  left: 32px;
+  display: flex;
+  align-items: center;
+  z-index: 2;
+}
+
+.rvpb-brand-corner img {
+  display: block;
+  width: 125px;
+  height: 24px;
 }
 
 .rvpb-shell {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
+  max-width: 1560px;
+  width: 100%;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -392,7 +411,7 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(310px, 360px));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   justify-content: start;
   align-content: start;
   gap: 24px;
@@ -415,10 +434,10 @@
 }
 
 .rvpb-grid-shell.is-list {
-  grid-template-columns: 1fr;
-  gap: 24px;
-  padding: 48px;
-  background: #111;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 24px;
 }
 
 .rvpb-grid-shell.is-list .rvpb-card__preview {
@@ -427,16 +446,19 @@
 
 .rvpb-grid-shell.is-list .rvpb-card {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 25px;
-  min-height: 80px;
-  padding: 0 12px 0 0;
-  border-radius: 12px;
+  gap: 12px;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 6px 0 0;
+  border-radius: 6px;
   background: transparent;
+  transition: background-color 150ms ease;
 }
 
 .rvpb-grid-shell.is-list .rvpb-card:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .rvpb-grid-shell.is-list .rvpb-card__header {
@@ -446,12 +468,12 @@
 .rvpb-card__list-main {
   appearance: none;
   border: 0;
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-columns: 200px 26px minmax(0, 1fr) 74px 110px 75px 240px 102px 84px;
+  display: flex;
   align-items: center;
+  gap: 12px;
+  flex: 1 1 auto;
   min-width: 0;
-  height: 80px;
+  height: 40px;
   padding: 0;
   background: transparent;
   color: inherit;
@@ -466,83 +488,94 @@
 
 .rvpb-card__list-preview {
   position: relative;
-  grid-column: 1;
-  width: 200px;
-  height: 80px;
+  width: 100px;
+  height: 40px;
   overflow: hidden;
-  border-radius: 12px;
+  border-radius: 6px;
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.16);
 }
 
+.rvpb-folder-card__list-preview .rvpb-card__preview-placeholder {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+
 .rvpb-card__list-title {
-  grid-column: 3;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 30px;
+  font-size: 16px;
   font-weight: 700;
   line-height: 1.2;
+  color: #fff;
 }
 
 .rvpb-card__list-size,
 .rvpb-card__list-saved {
   min-width: 0;
-  color: rgba(255, 255, 255, 1);
+  color: #fff;
   opacity: 0.4;
-  font-size: 28px;
+  font-size: 13px;
   font-weight: 500;
-  line-height: 1.18;
+  line-height: 1.2;
 }
 
 .rvpb-card__list-size {
-  grid-column: 5;
-  width: 110px;
+  width: 80px;
+  flex-shrink: 0;
+  text-align: right;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .rvpb-card__list-saved {
-  grid-column: 7;
+  width: 160px;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 11px;
-  width: 240px;
+  gap: 4px;
   overflow: hidden;
   white-space: nowrap;
 }
 
 .rvpb-card__badge--list {
-  grid-column: 9;
-  justify-self: start;
-  white-space: nowrap;
-  min-height: 48px;
-  padding: 6px 12px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.24);
-  color: #fff;
-  font-size: 26px;
-  font-weight: 500;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.24);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .rvpb-card__list-actions {
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  width: 251px;
-  flex: 0 0 251px;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .rvpb-card__menu-button--list {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   border-radius: 999px;
   background: transparent;
   opacity: 0;
-  transition: opacity 160ms ease, background-color 160ms ease;
+  color: rgba(255, 255, 255, 0.7);
+  transition: opacity 160ms ease, background-color 160ms ease, color 160ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rvpb-grid-shell.is-list .rvpb-card:hover .rvpb-card__menu-button--list,
@@ -552,30 +585,42 @@
 
 .rvpb-card__menu-button--list:hover {
   background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 
 .rvpb-card__list-actions .rvpb-card__open {
-  width: 62px;
-  height: 62px;
-  border-radius: 77px;
+  width: 31px;
+  height: 31px;
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.1);
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #fff;
+  flex-shrink: 0;
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.rvpb-card__list-actions .rvpb-card__open:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.rvpb-card__list-actions .rvpb-card__open > span {
+  width: 20px !important;
+  height: 20px !important;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
-.rvpb-card__list-actions .rvpb-card__open > span {
-  width: 34px !important;
-  height: 34px !important;
-}
-
 .rvpb-card__rename-input--list {
-  width: 100%;
-}
-
-.rvpb-folder-card__list-preview .rvpb-card__preview-placeholder {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 32px;
+  font-size: 16px;
+  padding: 2px 8px;
 }
 
 .rvpb-card {
@@ -753,7 +798,7 @@
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: #242424;
   box-shadow: 0 22px 48px rgba(0, 0, 0, 0.42);
   backdrop-filter: blur(60px);
 }
@@ -770,7 +815,7 @@
   width: 100%;
   padding: 6px 6px 6px 10px;
   border-radius: 6px;
-  background: #2d2d2d;
+  background: transparent;
   color: #fff;
   cursor: pointer;
   font: inherit;
@@ -782,7 +827,7 @@
 
 .rvpb-card-menu__item:hover,
 .rvpb-card-menu__move-item:hover {
-  background: #383838;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .rvpb-card-menu__item--danger {

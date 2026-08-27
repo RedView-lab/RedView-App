@@ -25,13 +25,20 @@ import {
   type BoundsTuple,
   type ElevationGridSampleResult,
 } from './dem-grid-worker';
+import { applyPolygonMaskToRgba, rasterizePolygonMask } from './polygonMask';
 import { rawPng } from './shadowWorkerEncoding';
 
 /** Target grid cap. ~150 k pixels keeps a single horizon sweep ≲ 5 ms. */
 const GRID_MAX_W = 448;
 const GRID_MAX_H = 336;
-/** Steps processed before yielding to the event loop. */
-const BATCH_STEPS = 6;
+/**
+ * Steps processed before yielding to the event loop. In `preview` (time-scrub)
+ * we yield often so a newer compute can preempt quickly; in `full` quality we
+ * can process many more steps per yield because responsiveness to cancellation
+ * matters less and each yield costs ~1 ms of event-loop overhead.
+ */
+const BATCH_STEPS_PREVIEW = 6;
+const BATCH_STEPS_FULL = 16;
 const PROGRESS_THROTTLE_MS = 90;
 
 interface SampleRequest {
@@ -68,6 +75,8 @@ interface ComputeRequest {
   /** 0..1 final layer alpha multiplier. */
   opacity: number;
   quality: 'preview' | 'full';
+  /** Analysis-zone ring ([lng, lat, …]) — output is masked to the polygon. */
+  zoneRing?: number[] | null;
 }
 
 interface ResetRequest {
@@ -185,12 +194,22 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
     && cache.exposure.length === grid.gridW * grid.gridH;
 
   if (!cacheValid) {
+    // Reuse the previous buffer when the grid size is unchanged (common case:
+    // only the viewport overshoot changed). Saves a ~150 KB allocation per
+    // re-sample on the sunlight-map grid. The buffer is zeroed below; the
+    // NaN sentinel for exposure is 0, so a fresh integration starts clean.
+    const prev = state.caches[cacheSlot];
+    const reusable = prev && prev.exposure.length === grid.gridW * grid.gridH
+      ? prev.exposure
+      : null;
+    const exposure = reusable ?? new Float32Array(grid.gridW * grid.gridH);
+    if (reusable) exposure.fill(0);
     cache = {
       sampleGen: state.sampleGen,
       isoDate: msg.isoDate,
       stepMinutes,
       lastMinutes: 0,
-      exposure: new Float32Array(grid.gridW * grid.gridH),
+      exposure,
     };
   } else if (currentMinutes < cache!.lastMinutes) {
     // Scrubbed backwards → reset and re-integrate (cache stays warm).
@@ -217,6 +236,10 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
 
   postProgress(msg.id, 0, totalSteps, t);
 
+  // Larger batches in full quality: fewer event-loop yields = less overhead,
+  // and the user isn't scrubbing so preemption latency is non-critical.
+  const batchSteps = msg.quality === 'preview' ? BATCH_STEPS_PREVIEW : BATCH_STEPS_FULL;
+
   while (t < currentMinutes) {
     if (token !== currentComputeToken) {
       cache!.lastMinutes = t;
@@ -224,7 +247,7 @@ async function handleCompute(msg: ComputeRequest, token: number): Promise<void> 
       return;
     }
 
-    const batchEnd = Math.min(currentMinutes, t + stepMinutes * BATCH_STEPS);
+    const batchEnd = Math.min(currentMinutes, t + stepMinutes * batchSteps);
     while (t < batchEnd) {
       const next = Math.min(currentMinutes, t + stepMinutes);
       const dt = next - t;
@@ -268,7 +291,11 @@ function finalizeCompute(
     post({ id: msg.id, type: 'sm-compute-cancelled', stepsDone, totalSteps });
     return;
   }
+  const zoneMask = msg.zoneRing && state
+    ? rasterizePolygonMask(msg.zoneRing, state.bounds, grid.gridW, grid.gridH)
+    : null;
   const rgba = colorize(exposure, grid.gridW, grid.gridH, msg.bands, msg.opacity);
+  if (zoneMask) applyPolygonMaskToRgba(rgba, zoneMask);
   const blob = new Blob([rawPng(grid.gridW, grid.gridH, rgba).buffer as ArrayBuffer], { type: 'image/png' });
   post({
     id: msg.id,

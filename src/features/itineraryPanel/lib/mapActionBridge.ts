@@ -1,4 +1,5 @@
 import type { MapContextMenuActionPayload, MapPoiDraftActionPayload } from '@/features/map3d';
+import type { PoiFeature } from '@/features/poi/types';
 
 export const ITINERARY_MAP_ACTION_EVENT = 'redview:itinerary-map-action';
 
@@ -10,6 +11,24 @@ export type ItineraryMapActionEventDetail =
   | {
       kind: 'poi-draft';
       payload: MapPoiDraftActionPayload;
+    }
+  | {
+      kind: 'poi-action';
+      action:
+        | 'start-here'
+        | 'add-waypoint'
+        | 'finish-here'
+        | 'delete'
+        | 'toggle-favorite'
+        | 'toggle-pause'
+        | 'toggle-manual-trace'
+        | 'set-pause-duration'
+        | 'cycle-pause-duration';
+      feature: PoiFeature;
+      extra?: {
+        nextEnabled?: boolean;
+        durationMin?: number;
+      };
     };
 
 export function dispatchItineraryMapAction(detail: ItineraryMapActionEventDetail): void {

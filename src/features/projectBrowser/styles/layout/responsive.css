@@ -1,6 +1,18 @@
+@media (max-width: 1750px) {
+  .rvpb-brand-corner {
+    display: none;
+  }
+}
+
+@media (max-width: 1700px) {
+  .rvpb-overlay {
+    padding: 40px 80px 80px;
+  }
+}
+
 @media (max-width: 1400px) {
   .rvpb-overlay {
-    padding: 48px 120px;
+    padding: 40px 48px 80px;
   }
 }
 

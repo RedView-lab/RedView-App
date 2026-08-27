@@ -40,6 +40,8 @@ export function useSlopeProgressReporter({
     let lastEmittedProgress = -1;
     let lastEmittedState: 'loading' | 'ready' = 'loading';
     let lastProgressMs = Date.now();
+    let isZonePipelineActive = false;
+    let lastZoneProgressMs = 0;
 
     const tileKey = (event: MapSourceDataEvent): string | null => {
       const tileID = (event as unknown as {
@@ -65,6 +67,10 @@ export function useSlopeProgressReporter({
     };
 
     const publishProgress = () => {
+      // If zone pipeline is driving progress, NEVER let viewport/idle emit ready
+      if (isZonePipelineActive) {
+        return;
+      }
       const total = requested.size;
       const done = loaded.size;
       if (total === 0) {
@@ -101,6 +107,15 @@ export function useSlopeProgressReporter({
       const READY_STRAGGLER_THRESHOLD = 8;
       watchdog = setTimeout(() => {
         watchdog = null;
+        if (isZonePipelineActive) {
+          const sinceZone = Date.now() - lastZoneProgressMs;
+          if (sinceZone < 60000) {
+            armWatchdog();
+            return;
+          }
+          // Hard failsafe after 60s of total silence
+          isZonePipelineActive = false;
+        }
         if (requested.size === 0) {
           publishProgress();
           armWatchdog();
@@ -178,29 +193,42 @@ export function useSlopeProgressReporter({
     };
 
     const onIdle = () => {
+      if (isZonePipelineActive) return;
       if (requested.size !== 0) return;
       publishProgress();
       armWatchdog();
     };
 
-    // ── Reset progress tracking on every viewport change ───────────────
-    // `requested` / `loaded` accumulate one entry per slope tile that ever
-    // fired `sourcedataloading`. Mapbox keeps already-loaded tiles across
-    // pans and never re-emits a loading event for them, so these Sets are
-    // effectively SESSION-CUMULATIVE: after exploring several areas the
-    // denominator balloons (the "Tuiles 43/1809" the user reported) even
-    // though only a handful of tiles for the CURRENT viewport are actually
-    // outstanding. That stale denominator also feeds the watchdog's
-    // straggler math, keeping the pill stuck. Clearing both Sets when the
-    // viewport starts moving rescopes the counter to the new viewport's
-    // tiles only — already-rendered tiles stay on screen (Mapbox cache),
-    // they simply don't need to be re-counted.
     const onViewportChange = () => {
+      // Don't reset if active zone pipeline is running
+      if (isZonePipelineActive) {
+        return;
+      }
       requested.clear();
       loaded.clear();
       lastProgressMs = Date.now();
       scheduleSettle();
       armWatchdog();
+    };
+
+    // ── SW Zone Progress Listener ──────────────────────────────────────
+    const onSwMessage = (event: MessageEvent) => {
+      if (event.data?.type !== 'ZONE_SLOPE_PROGRESS') return;
+      const { phase, loaded: count, total: totalCount, percent } = event.data;
+      isZonePipelineActive = phase !== 'done';
+      lastZoneProgressMs = Date.now();
+      lastProgressMs = Date.now();
+
+      if (phase === 'low') {
+        const p = typeof percent === 'number' && percent > 0 ? percent : Math.max(5, Math.min(50, Math.round(((count || 0) / (totalCount || 1)) * 50)));
+        emit('loading', p, `Pentes 30m (${count}/${totalCount})`);
+      } else if (phase === 'hd') {
+        const p = typeof percent === 'number' && percent > 0 ? percent : Math.max(50, Math.min(99, 50 + Math.round(((count || 0) / (totalCount || 1)) * 49)));
+        emit('loading', p, `LiDAR HD (${count}/${totalCount})`);
+      } else if (phase === 'done') {
+        isZonePipelineActive = false;
+        emit('ready', 100, 'Pentes HD prêtes');
+      }
     };
 
     map.on('sourcedataloading', onLoading);
@@ -209,6 +237,7 @@ export function useSlopeProgressReporter({
     map.on('idle', onIdle);
     map.on('movestart', onViewportChange);
     map.on('zoomstart', onViewportChange);
+    navigator.serviceWorker?.addEventListener('message', onSwMessage);
 
     emit('loading', 5, 'Préparation des pentes');
     armWatchdog();
@@ -220,6 +249,7 @@ export function useSlopeProgressReporter({
       map.off('idle', onIdle);
       map.off('movestart', onViewportChange);
       map.off('zoomstart', onViewportChange);
+      navigator.serviceWorker?.removeEventListener('message', onSwMessage);
       if (settleTimer) clearTimeout(settleTimer);
       if (watchdog) clearTimeout(watchdog);
       onLoadStatusChangeRef.current?.(null);

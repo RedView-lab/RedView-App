@@ -11,7 +11,6 @@ use crate::prediction::fatigue::{
     sleep_inertia_factor, thermal_factor, update_glycogen,
 };
 use crate::prediction::surface::{surface_effective_crr, surface_speed_penalty};
-use crate::profile::lookup_speed_for_gradient;
 use crate::profile::gradient_bins::SplineBins;
 use crate::types::{PredictionPoint, RiderProfile, Route, SleepStrategy, StopEvent};
 use std::collections::VecDeque;
@@ -213,6 +212,11 @@ pub fn predict_single_pass(
 
     // Distance-based recent gradient window (500m)
     let mut recent_grads: VecDeque<(f64, f64)> = VecDeque::new();
+    // Running sums for the sliding windows — maintained incrementally so the
+    // per-point cost is O(1) instead of re-summing whole windows each point.
+    let mut recent_grad_sum = 0.0_f64;
+    let mut climb_window_sum = 0.0_f64;
+    let mut climb_window_long_sum = 0.0_f64;
 
     // Climbing load: sliding window of (elapsed_s, ele_gain) for recent climbing effort
     let mut climb_window: VecDeque<(f64, f64)> = VecDeque::new();
@@ -230,8 +234,6 @@ pub fn predict_single_pass(
     let mut prev_speed_ms: f64 = FALLBACK_SPEED_MS;
     // Sleep inertia tracking: time since last sleep stop wake-up (hours)
     let mut time_since_wake_h: f64 = f64::MAX; // MAX = no recent sleep, no inertia
-    // Ambient temperature from config
-    let ambient_temp_c = ambient_temperature_c;
 
     // Pre-compute spline cache for gradient bins — avoids O(N) sort+rebuild per lookup
     let spline_bins = SplineBins::build(&profile.gradient_bins, &profile.fatigued_bins);
@@ -239,6 +241,12 @@ pub fn predict_single_pass(
     // Hoist constant micro-factor floor out of loop
     let total_route_km = route.total_distance_m / 1000.0;
     let micro_floor = combined_micro_factor_floor(total_route_km);
+
+    // Hoisted loop invariants. Calling knn.max_elapsed_h() inside the loop
+    // scanned all training samples per route point (O(points × samples));
+    // thermal factor is constant for the whole route.
+    let knn_max_training_h = if use_knn { knn.max_elapsed_h() } else { 0.0 };
+    let thermal = thermal_factor(ambient_temperature_c);
 
     // ── Route D+ characterization ──
     // Compute route D+ per km for comparison against training
@@ -287,14 +295,17 @@ pub fn predict_single_pass(
 
         // Distance-based recent gradient context (500m window)
         recent_grads.push_back((rp.distance_m, rp.gradient_pct));
+        recent_grad_sum += rp.gradient_pct;
         let dist_cutoff = rp.distance_m - 500.0;
         while recent_grads.len() > 1 && recent_grads[0].0 < dist_cutoff {
-            recent_grads.pop_front();
+            if let Some((_, g)) = recent_grads.pop_front() {
+                recent_grad_sum -= g;
+            }
         }
         let recent_avg_gradient = if recent_grads.is_empty() {
             rp.gradient_pct
         } else {
-            recent_grads.iter().map(|(_, g)| g).sum::<f64>() / recent_grads.len() as f64
+            recent_grad_sum / recent_grads.len() as f64
         };
 
         // Smoothed gradient for the physics solver and power estimate.
@@ -382,20 +393,26 @@ pub fn predict_single_pass(
 
         if ele_gain_here > 0.0 {
             climb_window.push_back((elapsed_s, ele_gain_here));
+            climb_window_sum += ele_gain_here;
             climb_window_long.push_back((elapsed_s, ele_gain_here));
+            climb_window_long_sum += ele_gain_here;
         }
         // Evict old entries outside the short window
         let window_cutoff = elapsed_s - CLIMBING_LOAD_WINDOW_S;
         while !climb_window.is_empty() && climb_window[0].0 < window_cutoff {
-            climb_window.pop_front();
+            if let Some((_, g)) = climb_window.pop_front() {
+                climb_window_sum -= g;
+            }
         }
         // Evict old entries outside the long window
         let long_cutoff = elapsed_s - CLIMBING_LOAD_LONG_WINDOW_S;
         while !climb_window_long.is_empty() && climb_window_long[0].0 < long_cutoff {
-            climb_window_long.pop_front();
+            if let Some((_, g)) = climb_window_long.pop_front() {
+                climb_window_long_sum -= g;
+            }
         }
-        let recent_climb_m: f64 = climb_window.iter().map(|(_, g)| g).sum();
-        let long_climb_m: f64 = climb_window_long.iter().map(|(_, g)| g).sum();
+        let recent_climb_m = climb_window_sum.max(0.0);
+        let long_climb_m = climb_window_long_sum.max(0.0);
 
         // Short-term climbing load penalty (30min window)
         let climbing_load_factor = if rp.gradient_pct > 2.0 && recent_climb_m > 10.0 {
@@ -497,7 +514,7 @@ pub fn predict_single_pass(
                 KNN_BASE_WEIGHT
             };
 
-            let max_training_h = knn.max_elapsed_h();
+            let max_training_h = knn_max_training_h;
             let ultra_shift = if elapsed_h > max_training_h && max_training_h > 0.5 {
                 // Beyond training range: sigmoid decay to zero at 3× max training
                 // Smoother than exponential — avoids sharp cliff at boundary
@@ -532,7 +549,7 @@ pub fn predict_single_pass(
             );
 
             // Improved extrapolation: use fatigue model ratio + exponential decay
-            let max_training_h = knn.max_elapsed_h();
+            let max_training_h = knn_max_training_h;
             let ultra_fatigue = if elapsed_h > max_training_h && max_training_h > 0.5 {
                 let fatigue_at_now = compute_fatigue_factor(&profile.fatigue, elapsed_h);
                 let fatigue_at_max = compute_fatigue_factor(&profile.fatigue, max_training_h);
@@ -566,17 +583,13 @@ pub fn predict_single_pass(
             );
             (speed, 0.0)
         } else {
-            // Empirical gradient bins fallback — use blended fresh/fatigued bins
+            // Empirical gradient bins fallback — use blended fresh/fatigued bins.
+            // The spline cache covers both cases (fresh-only when no fatigued
+            // bins exist), avoiding a re-sort of the bins on every point.
             let fatigue_factor = compute_fatigue_factor(&profile.fatigue, elapsed_h);
-            let base_speed = if !profile.fatigued_bins.is_empty() {
-                spline_bins.lookup_blended(
-                    rp.gradient_pct,
-                    elapsed_h,
-                ).unwrap_or(FALLBACK_SPEED_MS)
-            } else {
-                lookup_speed_for_gradient(&profile.gradient_bins, rp.gradient_pct)
-                    .unwrap_or(FALLBACK_SPEED_MS)
-            };
+            let base_speed = spline_bins
+                .lookup_blended(rp.gradient_pct, elapsed_h)
+                .unwrap_or(FALLBACK_SPEED_MS);
             // Fix double-counting: fatigued bins already encode slower speeds due
             // to tiredness. Scale down the fatigue penalty proportionally to how
             // much we blend toward fatigued bins.
@@ -595,9 +608,6 @@ pub fn predict_single_pass(
         // Apply climbing load micro-fatigue, long-term climb fatigue,
         // distance efficiency decay, circadian, recovery boosts, and morning rebound
         let effective_dist_eff = (dist_eff + dist_eff_recovery).min(1.0);
-
-        // Thermal stress factor
-        let thermal = thermal_factor(ambient_temp_c);
 
         // Glycogen depletion factor
         let glycogen = glycogen_factor(glycogen_level);

@@ -140,7 +140,10 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const considerElevation = true;
   const inClimbMode = climbFocus > 0.25;
   const shortestMode = distanceDetourAllowance >= 0.65 && climbFocus < 0.2 && durationFocus < 0.4;
-  const pass1Coefficient = inClimbMode ? 1.5 : 1.5;
+  
+  // Standard BRouter multi-pass A* coefficients (1.4-1.6 keeps the search corridor stable without pruning)
+  const pass1Coefficient = inClimbMode ? 1.8 : 1.5;
+  const pass2Coefficient = inClimbMode ? 1.2 : 1.2;
 
   const maxSlope = Math.min(99, Math.max(1, roadTypes.maxSlopePercent || 99));
   const maxSlopeCost = maxSlope >= 99 ? 0 : 500;
@@ -257,6 +260,7 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     elevMaxBuffer,
     elevBufferReduce,
     pass1Coefficient,
+    pass2Coefficient,
     inClimbMode,
     maxSlope,
     maxSlopeCost,

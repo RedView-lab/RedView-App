@@ -17,55 +17,64 @@ pub fn build_fatigue_model(activities: &[ActivityData], has_power: bool) -> Fati
         }
 
         let chunk_s = 1800.0; // 30-min chunks
-        let num_chunks = (activity.summary.duration_s / chunk_s).ceil() as usize;
+        let num_chunks = ((activity.summary.duration_s / chunk_s).ceil() as usize).max(1);
         let mut chunk_perfs: Vec<(f64, f64)> = Vec::with_capacity(num_chunks);
 
+        // Single pass over the points, accumulating per-chunk statistics.
+        // (The previous version filtered all points per chunk, which is
+        // O(chunks × points) — quadratic-ish on long FIT files.)
+        let mut counts = vec![0usize; num_chunks];
+        let mut power_sums = vec![0.0_f64; num_chunks];
+        let mut power_ns = vec![0usize; num_chunks];
+        let mut flat_speed_sums = vec![0.0_f64; num_chunks];
+        let mut flat_speed_ns = vec![0usize; num_chunks];
+
+        for i in 0..pts.len() {
+            let p = &pts[i];
+            let t = p.timestamp_s;
+            if t < 0.0 {
+                continue;
+            }
+            let mut c = (t / chunk_s) as usize;
+            if c >= num_chunks {
+                c = num_chunks - 1;
+            }
+            counts[c] += 1;
+            if p.power_w > 0.0 {
+                power_sums[c] += p.power_w;
+                power_ns[c] += 1;
+            }
+            if i > 0 {
+                let dist = p.distance_m - pts[i - 1].distance_m;
+                if dist >= 1.0 {
+                    // Use speed for "near-flat" segments as performance metric
+                    let grad = (p.altitude_m - pts[i - 1].altitude_m) / dist;
+                    if grad.abs() < 0.02 && p.speed_ms > 1.0 {
+                        flat_speed_sums[c] += p.speed_ms;
+                        flat_speed_ns[c] += 1;
+                    }
+                }
+            }
+        }
+
         for c in 0..num_chunks {
-            let t_start = c as f64 * chunk_s;
-            let t_end = t_start + chunk_s;
-
-            let chunk_points: Vec<&_> = pts
-                .iter()
-                .filter(|p| p.timestamp_s >= t_start && p.timestamp_s < t_end)
-                .collect();
-
-            if chunk_points.len() < 10 {
+            if counts[c] < 10 {
                 continue;
             }
 
             let performance = if has_power {
-                let powers: Vec<f64> = chunk_points
-                    .iter()
-                    .filter(|p| p.power_w > 0.0)
-                    .map(|p| p.power_w)
-                    .collect();
-                if powers.is_empty() {
+                if power_ns[c] == 0 {
                     continue;
                 }
-                powers.iter().sum::<f64>() / powers.len() as f64
+                power_sums[c] / power_ns[c] as f64
             } else {
-                // Use speed for "near-flat" segments as performance metric
-                let flat_speeds: Vec<f64> = chunk_points
-                    .windows(2)
-                    .filter_map(|w| {
-                        let dist = w[1].distance_m - w[0].distance_m;
-                        if dist < 1.0 {
-                            return None;
-                        }
-                        let grad = (w[1].altitude_m - w[0].altitude_m) / dist;
-                        if grad.abs() < 0.02 && w[1].speed_ms > 1.0 {
-                            Some(w[1].speed_ms)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                if flat_speeds.is_empty() {
+                if flat_speed_ns[c] == 0 {
                     continue;
                 }
-                flat_speeds.iter().sum::<f64>() / flat_speeds.len() as f64
+                flat_speed_sums[c] / flat_speed_ns[c] as f64
             };
 
+            let t_start = c as f64 * chunk_s;
             let elapsed_h = (t_start + chunk_s / 2.0) / 3600.0;
             chunk_perfs.push((elapsed_h, performance));
         }

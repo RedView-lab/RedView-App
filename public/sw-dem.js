@@ -23,6 +23,8 @@
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
 // Current: dem-tiles-v45 / dem-negative-v27 (France high-zoom transient-miss guard)
+// 2026-08 zone-gated overlays: slope/altitude tiles may carry ?zone=<hash>
+// (masked, separate cache keys); analysis-zone registry + per-pixel mask (v5 Uniform Fast LiDAR).
 // ---------------------------------------------------------------------------
 
 const swModuleEpoch = new URL(self.location.href).searchParams.get('rv-map-cache-epoch') || 'base';
@@ -32,6 +34,7 @@ importScripts(
   // ── Pipeline primitives (config + math + low-level fetchers) ──────────
   withEpoch('/sw-dem/core/config.js'),
   withEpoch('/sw-dem/core/geo.js'),
+  withEpoch('/sw-dem/core/analysis-zone.js'),
   withEpoch('/sw-dem/core/interpolation.js'),
   withEpoch('/sw-dem/core/terrain-rgb.js'),
   withEpoch('/sw-dem/sources/ign-fetcher.js'),

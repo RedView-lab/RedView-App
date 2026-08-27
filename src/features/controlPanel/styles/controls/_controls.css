@@ -132,16 +132,40 @@
 /* Custom dropdown — Figma node 1792:73224 — rendered via portal */
 .rvc-select__dropdown {
   position: fixed;
-  z-index: 9999;
+  z-index: 99999;
   isolation: isolate;
   display: flex;
   flex-direction: column;
   min-width: 80px;
   width: 140px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 260px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: rgba(22, 24, 29, 0.90);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  overflow: clip;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+}
+
+.rvc-select__dropdown::-webkit-scrollbar {
+  width: 4px;
+}
+
+.rvc-select__dropdown::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rvc-select__dropdown::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
+}
+
+.rvc-select__dropdown::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.38);
 }
 
 .rvc-select__dropdown > * {
@@ -298,6 +322,20 @@
   display: inline-block;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+/* Zone-gated widget hint (slopes / altitude / sunlight): shown inside the
+   section while no analysis zone is drawn on the map. */
+.rvc-zone-hint {
+  width: 100%;
+  margin: 2px 0 6px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: rgba(137, 0, 0, 0.10);
+  color: #890000;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .rvc-row {

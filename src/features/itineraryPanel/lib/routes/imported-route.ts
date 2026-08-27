@@ -3,7 +3,12 @@ import { translateAppText } from '@/shared/i18n';
 import { FRANCE_BOUNDS } from '@/features/map3d/lib/ign.config';
 
 import { formatGpsCoordinateLabel } from '../geocoding';
-import { computeRouteElevationMetrics, extractRouteProfileFromPoints } from '../route-metrics';
+import {
+  computeRouteElevationMetrics,
+  computeRouteSurfaceMetricsFromPoints,
+  extractRouteProfileFromPoints,
+  type RouteProfilePoint,
+} from '../route-metrics';
 import { sampleTerrainElevationsAtPoints } from '../route-metrics/terrainTiles';
 import type { Itinerary, ItineraryMetrics } from '../../types';
 
@@ -25,20 +30,16 @@ function haversineM(
 }
 
 function toStoredRoutePoints(
-  profile: Array<{
-    lat: number;
-    lon: number;
-    distanceM: number;
-    elevationM: number;
-    gradientPct: number;
-  }>,
+  profile: RouteProfilePoint[],
+  sourcePoints?: NonNullable<Itinerary['gpxRoute']>['points'],
 ): NonNullable<Itinerary['gpxRoute']>['points'] {
-  return profile.map((point) => ({
+  return profile.map((point, index) => ({
     lat: point.lat,
     lon: point.lon,
     distanceM: point.distanceM,
     elevationM: point.elevationM,
     gradientPct: point.gradientPct,
+    surface: point.surface ?? sourcePoints?.[index]?.surface,
   }));
 }
 
@@ -55,6 +56,7 @@ function buildDistanceOnlyRoutePoints(
       lon: point.lon,
       distanceM: cumulativeDistanceM,
       elevationM: point.elevationM ?? null,
+      surface: point.surface,
     };
   });
 }
@@ -98,8 +100,6 @@ export async function refineImportedRoutePointsWithIgnAltimetry(
   return coverage / points.length >= 0.6 ? refined : null;
 }
 
-export const refineImportedRoutePointsWithTerrainTiles = refineImportedRoutePointsWithIgnAltimetry;
-
 export function normalizeImportedRoutePoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
   options?: NormalizeImportedRoutePointsOptions,
@@ -112,18 +112,20 @@ export function normalizeImportedRoutePoints(
     lat: point.lat,
     lon: point.lon,
     elevationM: point.elevationM ?? null,
+    surface: point.surface,
   }));
   const profile = extractRouteProfileFromPoints(geometryOnlyPoints);
   if (!profile || profile.length !== points.length) {
     return buildDistanceOnlyRoutePoints(points);
   }
-  return toStoredRoutePoints(profile);
+  return toStoredRoutePoints(profile, points);
 }
 
 export function buildImportedRouteMetrics(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
 ): ItineraryMetrics {
   const elevationMetrics = computeRouteElevationMetrics(points);
+  const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(points);
   const distanceM = elevationMetrics?.distanceM ?? routeLengthM(points);
   return {
     distanceKm: Math.round(distanceM / 100) / 10,
@@ -136,6 +138,8 @@ export function buildImportedRouteMetrics(
     avgSlopePercent: elevationMetrics
       ? Math.round(elevationMetrics.avgSlopePercent * 10) / 10
       : undefined,
+    tarmacPercent: surfaceMetrics ? Math.round(surfaceMetrics.tarmacPercent) : undefined,
+    offroadPercent: surfaceMetrics ? Math.round(surfaceMetrics.offroadPercent) : undefined,
   };
 }
 

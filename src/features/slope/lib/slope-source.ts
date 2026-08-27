@@ -6,13 +6,24 @@ import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
 export const SLOPE_SOURCE_ID = 'slope-tiles';
 export const SLOPE_LAYER_ID = 'slope-overlay';
 
+/** Zone restriction for the slope overlay (analysis-zone polygon). */
+export interface SlopeZoneOptions {
+  /** Stable hash of the polygon ring — becomes the `?zone=` cache key. */
+  hash: string;
+  /** [west, south, east, north] — Mapbox raster-source `bounds`. */
+  bounds: [number, number, number, number];
+  /** Flat [lng, lat, ...] ring coordinates for masking. */
+  ring?: number[];
+}
+
 export interface SlopeTileSourceOptions {
   demProfile: SlopeDemProfile;
   resolutionFactor: number;
+  zone?: SlopeZoneOptions | null;
 }
 
 const DEFAULT_SOURCE_OPTIONS: SlopeTileSourceOptions = {
-  demProfile: 'default',
+  demProfile: 'terrain',
   resolutionFactor: 1,
 };
 
@@ -36,16 +47,24 @@ export function resolutionToSourceOptions(
 
 export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined): string {
   const resolved = options ?? DEFAULT_SOURCE_OPTIONS;
-  return `${resolved.demProfile}:${resolved.resolutionFactor}`;
+  const zoneKey = resolved.zone ? `:zone-${resolved.zone.hash}` : '';
+  return `${resolved.demProfile}:${resolved.resolutionFactor}${zoneKey}`;
 }
 
 // ── Raster source definition ──────────────────────────────────────────
 //
-// Tile URL only varies on DEM profile + `resFactor` (the parameters that
-// actually change the slope numbers). Color mode, category breakpoints and
-// band-visibility are applied GPU-side via raster-color paint properties,
-// so changing them never invalidates the SW tile cache and never refetches
-// any tile — `setPaintProperty` is instant and synchronous on the GPU.
+// Tile URL only varies on DEM profile + `resFactor` + the analysis-zone hash
+// (the parameters that actually change the slope pixels). Color mode,
+// category breakpoints and band-visibility are applied GPU-side via
+// raster-color paint properties, so changing them never invalidates the SW
+// tile cache and never refetches any tile — `setPaintProperty` is instant
+// and synchronous on the GPU.
+//
+// Zone mode: `bounds` stops Mapbox from requesting ANY tile outside the
+// polygon bbox, and `?zone=<hash>` makes the Service Worker (a) reject
+// non-intersecting tiles before any DEM fetch and (b) alpha-mask partially
+// covered tiles to the exact polygon. The hash in the URL also isolates
+// zone-masked tiles from unmasked ones in every cache tier.
 
 export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_SOURCE_OPTIONS) {
   const params = new URLSearchParams();
@@ -55,14 +74,28 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   if (options.demProfile === 'terrain') {
     params.set('rv-dem-profile', 'terrain');
   }
+  if (options.zone) {
+    params.set('zone', options.zone.hash);
+  }
   const query = params.toString();
-  return {
-    type: 'raster' as const,
+  const source: {
+    type: 'raster';
+    tiles: string[];
+    tileSize: number;
+    minzoom: number;
+    maxzoom: number;
+    bounds?: [number, number, number, number];
+  } = {
+    type: 'raster',
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 6,
-    maxzoom: 17,
+    maxzoom: 14,
   };
+  if (options.zone) {
+    source.bounds = options.zone.bounds;
+  }
+  return source;
 }
 
 // ── Build layer definition ────────────────────────────────────────────

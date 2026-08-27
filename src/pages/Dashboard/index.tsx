@@ -5,7 +5,7 @@ import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { DashboardEditor } from './components/DashboardEditor';
 import { useDashboardBasemap } from './hooks/useDashboardBasemap';
 import { useDashboardOverlayStatus } from './hooks/useDashboardOverlayStatus';
-import { CENTER_PANEL_STACK_GAP, PANEL_PADDING } from './lib/constants';
+import { CENTER_PANEL_STACK_GAP, COLLAPSED_DRAWER_CLEARANCE, PANEL_PADDING } from './lib/constants';
 import { getDashboardStyles } from './lib/dashboardStyles';
 import { useDashboardChrome } from './useDashboardChrome';
 import { useDashboardProjectState } from './useDashboardProjectState';
@@ -115,9 +115,11 @@ export default function Dashboard({
     : isRightPanelCollapsed
       ? 0
       : panelWidth + PANEL_PADDING * 2;
-  const rightDockOffset = isMapFocusMode || isRightPanelCollapsed
+  const rightDockOffset = isMapFocusMode
     ? PANEL_PADDING
-    : rightDockWidth + PANEL_PADDING;
+    : isRightPanelCollapsed
+      ? COLLAPSED_DRAWER_CLEARANCE
+      : rightDockWidth + PANEL_PADDING;
 
   const statusDockRight = isMapFocusMode
     ? PANEL_PADDING

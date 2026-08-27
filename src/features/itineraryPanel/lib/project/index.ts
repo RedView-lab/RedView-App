@@ -1,6 +1,7 @@
 export {
   ITINERARY_COLORS,
   DEFAULT_PROFILES,
+  ROUTE_PROFILE_PRESETS,
   createDefaultRhythmState,
   normalizeItineraryRhythmState,
   normalizeItineraryProject,
@@ -9,6 +10,12 @@ export {
   createDefaultAnalysisPanelState,
   hasProjectTracedContent,
 } from './defaultState';
+export {
+  getProfilePreset,
+  matchesProfilePreset,
+  resolveProfilePresetId,
+} from './profilePresets';
+export type { RouteProfilePreset } from './profilePresets';
 export {
   MERGE_CONNECT_THRESHOLD_M,
   shouldRouteMergedGap,

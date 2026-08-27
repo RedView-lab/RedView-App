@@ -43,12 +43,17 @@ function _pngChunk(type, data) {
 
 async function buildRawPng(width, height, rgba) {
   // Build raw scanlines: filter-byte(0) + row RGBA data per row
-  const rowBytes = 1 + width * 4;
+  const rowLen = width * 4;
+  const rowBytes = 1 + rowLen;
   const raw = new Uint8Array(height * rowBytes);
   for (let y = 0; y < height; y++) {
     const off = y * rowBytes;
+    const srcOff = y * rowLen;
     raw[off] = 0; // filter: None
-    raw.set(rgba.subarray(y * width * 4, (y + 1) * width * 4), off + 1);
+    // Direct copy without allocating 256 subarray views
+    for (let i = 0; i < rowLen; i++) {
+      raw[off + 1 + i] = rgba[srcOff + i];
+    }
   }
 
   // Compress with deflate via CompressionStream
@@ -183,7 +188,7 @@ async function encodeTerrainRGBPng(elevations) {
 
   for (let i = 0; i < elevations.length; i++) {
     const height = sanitizeElevation(elevations[i]);
-    const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) / 0.1)));
+    const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) * 10)));
     const idx = i * 4;
     rgba[idx]     = (val >> 16) & 0xff;
     rgba[idx + 1] = (val >>  8) & 0xff;
@@ -214,6 +219,27 @@ async function encodeTerrainRGBPng(elevations) {
 // reads (slope/altitude/composite/overzoom all sample, never write).
 const DECODED_TERRAIN_RGB_CACHE = new WeakMap();
 
+let _sharedOffscreenCanvas = null;
+let _sharedOffscreenCtx = null;
+
+function getSharedOffscreenCtx(width, height) {
+  if (!_sharedOffscreenCanvas) {
+    _sharedOffscreenCanvas = new OffscreenCanvas(width, height);
+    _sharedOffscreenCtx = _sharedOffscreenCanvas.getContext('2d', {
+      colorSpace: 'srgb',
+      willReadFrequently: true,
+    });
+  } else if (_sharedOffscreenCanvas.width !== width || _sharedOffscreenCanvas.height !== height) {
+    _sharedOffscreenCanvas.width = width;
+    _sharedOffscreenCanvas.height = height;
+    _sharedOffscreenCtx = _sharedOffscreenCanvas.getContext('2d', {
+      colorSpace: 'srgb',
+      willReadFrequently: true,
+    });
+  }
+  return _sharedOffscreenCtx;
+}
+
 async function decodeTerrainRGBBlob(blob) {
   const cached = DECODED_TERRAIN_RGB_CACHE.get(blob);
   if (cached) return cached;
@@ -227,19 +253,22 @@ async function decodeTerrainRGBBlobUncached(blob) {
     colorSpaceConversion: 'none',
     premultiplyAlpha: 'none',
   });
-  let canvas, ctx, imageData;
+  const width = img.width;
+  const height = img.height;
+  let imageData;
   try {
-    canvas = new OffscreenCanvas(img.width, img.height);
-    ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
+    const ctx = getSharedOffscreenCtx(width, height);
+    ctx.clearRect(0, 0, width, height);
     ctx.drawImage(img, 0, 0);
-    imageData = ctx.getImageData(0, 0, img.width, img.height);
+    imageData = ctx.getImageData(0, 0, width, height);
   } finally {
     img.close(); // Release GPU texture memory immediately
   }
   const pixels = imageData.data;
-  const elevations = new Float32Array(canvas.width * canvas.height);
+  const len = width * height;
+  const elevations = new Float32Array(len);
 
-  for (let i = 0; i < elevations.length; i++) {
+  for (let i = 0; i < len; i++) {
     const idx = i * 4;
     const r = pixels[idx];
     const g = pixels[idx + 1];
@@ -258,7 +287,7 @@ async function decodeTerrainRGBBlobUncached(blob) {
     }
     const meanE = sumE / elevations.length;
     console.log(
-      `[slope][decode] ${canvas.width}x${canvas.height} blob=${blob.size}B | elev min=${minE.toFixed(1)} max=${maxE.toFixed(1)} mean=${meanE.toFixed(1)} range=${(maxE - minE).toFixed(1)}m`,
+      `[slope][decode] ${width}x${height} blob=${blob.size}B | elev min=${minE.toFixed(1)} max=${maxE.toFixed(1)} mean=${meanE.toFixed(1)} range=${(maxE - minE).toFixed(1)}m`,
     );
     if (maxE - minE < 1) {
       console.warn('[slope][decode] FLAT DEM — elevation range < 1 m');
@@ -268,22 +297,14 @@ async function decodeTerrainRGBBlobUncached(blob) {
   return elevations;
 }
 
-// ── Overzoom: extract & upsample a sub-tile from a lower-zoom DEM ─────
-
 /**
- * Given a parent DEM tile blob at (parentZ, parentX, parentY), extract the
- * sub-region corresponding to (targetZ, targetX, targetY) and bicubic
- * (Catmull-Rom) upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
- *
- * Uses cubicHermite() from interpolation.js for higher-quality upsampling
- * that preserves ridge/valley detail better than bilinear.
- *
- * Returns a Terrain-RGB PNG Blob, or null on failure.
+ * Direct Float32Array to Float32Array Catmull-Rom upsampler.
+ * Avoids temporary array allocations in the inner loop and eliminates
+ * intermediate PNG encode/decode steps.
  */
-async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, targetX, targetY) {
-  const parentElevations = await decodeTerrainRGBBlob(parentBlob);
+function overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targetZ, targetX, targetY) {
+  if (!parentElevations) return null;
   const size = DEM_TILE_SIZE; // 256
-
   const dz = targetZ - parentZ;
   const nChildren = 1 << dz; // e.g. dz=2 → 4 sub-tiles per axis
 
@@ -291,8 +312,7 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
   const childX = targetX - (parentX << dz);
   const childY = targetY - (parentY << dz);
 
-  // Guard: target tile must actually lie inside the parent. This can fail on
-  // Mercator dateline wrap or if a caller passes mismatched coordinates.
+  // Guard: target tile must actually lie inside the parent.
   if (childX < 0 || childY < 0 || childX >= nChildren || childY >= nChildren) {
     if (DEBUG) console.warn(
       `[sw-dem][overzoom] child OOB: target ${targetZ}/${targetX}/${targetY} not inside parent ${parentZ}/${parentX}/${parentY} (child=${childX},${childY} max=${nChildren - 1})`,
@@ -312,9 +332,7 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
     return parentElevations[cy * size + cx];
   };
 
-  // Catmull-Rom bicubic upsample from srcSize×srcSize region → size×size
   const out = new Float32Array(size * size);
-  let minE = Infinity, maxE = -Infinity;
 
   for (let py = 0; py < size; py++) {
     const sy = srcY0 + (py + 0.5) * srcSize / size - 0.5;
@@ -326,32 +344,32 @@ async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, t
       const ix = Math.floor(sx);
       const fx = sx - ix;
 
-      // Catmull-Rom 4×4 kernel — uses cubicHermite() from interpolation.js
-      const rows = [];
-      for (let j = -1; j <= 2; j++) {
-        const c0 = pSample(ix - 1, iy + j);
-        const c1 = pSample(ix,     iy + j);
-        const c2 = pSample(ix + 1, iy + j);
-        const c3 = pSample(ix + 2, iy + j);
-        rows.push(cubicHermite(c0, c1, c2, c3, fx));
-      }
-      // Catmull-Rom can overshoot near ridges/valleys; clamp to physical
-      // elevation bounds so spikes cannot survive the encode path.
-      let val = cubicHermite(rows[0], rows[1], rows[2], rows[3], fy);
+      // Catmull-Rom 4×4 kernel without inner-loop array allocations
+      const r0 = cubicHermite(pSample(ix - 1, iy - 1), pSample(ix, iy - 1), pSample(ix + 1, iy - 1), pSample(ix + 2, iy - 1), fx);
+      const r1 = cubicHermite(pSample(ix - 1, iy),     pSample(ix, iy),     pSample(ix + 1, iy),     pSample(ix + 2, iy),     fx);
+      const r2 = cubicHermite(pSample(ix - 1, iy + 1), pSample(ix, iy + 1), pSample(ix + 1, iy + 1), pSample(ix + 2, iy + 1), fx);
+      const r3 = cubicHermite(pSample(ix - 1, iy + 2), pSample(ix, iy + 2), pSample(ix + 1, iy + 2), pSample(ix + 2, iy + 2), fx);
+
+      let val = cubicHermite(r0, r1, r2, r3, fy);
       if (val < MIN_VALID_ELEVATION_M) val = MIN_VALID_ELEVATION_M;
       else if (val > MAX_VALID_ELEVATION_M) val = MAX_VALID_ELEVATION_M;
       out[py * size + px] = val;
-      if (val < minE) minE = val;
-      if (val > maxE) maxE = val;
     }
   }
 
-  const elevRange = maxE - minE;
-  const rangeColor = elevRange < 5 ? '#f44336' : elevRange < 50 ? '#FF9800' : '#4CAF50';
-  console.log(
-    `[sw-dem][overzoom] %c BICUBIC %c ${parentZ}/${parentX}/${parentY} → ${targetZ}/${targetX}/${targetY} (dz=${dz}, child=${childX},${childY}, srcRegion=${srcSize}px, elev=[${minE.toFixed(1)}..${maxE.toFixed(1)}] range=${elevRange.toFixed(1)}m)`,
-    `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
-  );
+  return out;
+}
 
+/**
+ * Given a parent DEM tile blob at (parentZ, parentX, parentY), extract the
+ * sub-region corresponding to (targetZ, targetX, targetY) and bicubic
+ * (Catmull-Rom) upsample it to DEM_TILE_SIZE × DEM_TILE_SIZE.
+ *
+ * Returns a Terrain-RGB PNG Blob, or null on failure.
+ */
+async function overzoomDemTile(parentBlob, parentZ, parentX, parentY, targetZ, targetX, targetY) {
+  const parentElevations = await decodeTerrainRGBBlob(parentBlob);
+  const out = overzoomDemElevations(parentElevations, parentZ, parentX, parentY, targetZ, targetX, targetY);
+  if (!out) return null;
   return encodeTerrainRGBPng(out);
 }

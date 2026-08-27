@@ -1,8 +1,11 @@
 import type { TileCoord, DownloadProgress } from '../types';
 import { resolveDownloadUrls, cacheDownloadUrl } from './wfsClient';
-import { saveTile, hasTile, loadTile, hasValidLasSignature } from './storage';
+import { saveTile, hasTile, loadTile, hasValidLasSignature, hasValidZipSignature } from './storage';
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
 import { extractLasFromZip } from './swiss/zipReader';
+import { resolveNzDownloadUrls } from './nz/stacClient';
+import { resolveJapanDownloadUrls } from './japan/stacClient';
+import { isJgd2011Crs, parseJgd2011Zone } from './coordConvert';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
@@ -108,6 +111,14 @@ export async function downloadTile(
     return downloadSwissTile(coord, onProgress);
   }
 
+  if (coord.projection === 'NZTM2000') {
+    return downloadNzTile(coord, onProgress);
+  }
+
+  if (isJgd2011Crs(coord.projection)) {
+    return downloadJapanTile(coord, onProgress);
+  }
+
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Découverte des zones...' });
 
   const urls = await resolveDownloadUrls(coord);
@@ -117,36 +128,36 @@ export async function downloadTile(
 
   let lastError: DownloadFailure | null = null;
   let preferredError: DownloadFailure | null = null;
+  const triedCandidates: string[] = [];
+
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
+    const candidateLabel = describeCandidateUrl(url);
+    triedCandidates.push(candidateLabel);
+
     try {
       await waitForRateLimit();
       const buffer = await fetchWithRetry(url, coord, onProgress);
-      if (buffer) {
-        cacheDownloadUrl(coord, url);
-        onProgress?.({ tileCoord: coord, bytesDownloaded: buffer.byteLength, totalBytes: buffer.byteLength, phase: 'downloading', message: 'Sauvegarde en cache local...' });
-        await saveTile(coord, buffer);
-        return buffer;
-      }
+      if (!buffer) continue;
+
+      cacheDownloadUrl(coord, url);
+      await saveTile(coord, buffer);
+      return buffer;
     } catch (err: any) {
-      const failure = err as DownloadFailure;
-      lastError = failure;
-      if (failure.status !== 404 || preferredError == null) {
-        preferredError = failure;
-      }
-      if (failure.status === 404) {
+      lastError = err;
+      if (err.status === 404) {
         if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
         continue;
       }
-      console.warn(`[Download] Failed for ${url}: ${failure.message}`);
+      if (err.code === 'ERR_INCOMPLETE_DOWNLOAD' || err.code === 'ERR_INVALID_LAS_SIGNATURE') {
+        preferredError = err;
+      }
+      console.warn(`[Download] Failed for ${url}: ${err.message}`);
       if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
       continue;
     }
   }
 
-  const triedCandidates = urls
-    .map((url) => describeCandidateUrl(url))
-    .filter((value, index, all) => all.indexOf(value) === index);
   const finalError = preferredError ?? lastError;
   console.error(`[Download] All ${urls.length} candidate URLs failed for tile (${coord.xKm}, ${coord.yKm}). Candidates tried: ${triedCandidates.join(', ')}`);
   throw new Error(
@@ -163,6 +174,7 @@ async function fetchWithRetry(
   attempt = 0,
   incompleteRetryCount = 0,
   resumeState?: ResumeState,
+  allowZip = false,
 ): Promise<ArrayBuffer | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
@@ -200,9 +212,9 @@ async function fetchWithRetry(
       }
       setRateLimit(delay);
       if (attempt < MAX_RETRIES) {
-        onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: `Limite de débit IGN, attente ${(delay / 1000).toFixed(0)}s...` });
+        onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: `Limite de débit, attente ${(delay / 1000).toFixed(0)}s...` });
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
       }
       const err = new Error(`HTTP 429 after ${MAX_RETRIES} retries`) as any;
       err.status = 429;
@@ -213,7 +225,7 @@ async function fetchWithRetry(
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
       }
       throw new Error(`Server error ${response.status} after ${MAX_RETRIES} retries`);
     }
@@ -246,7 +258,7 @@ async function fetchWithRetry(
         console.warn(
           `[Download] Resume offset mismatch for ${url} (wanted ${requestedResumeBytes}, got ${effectiveContentRange.start}); restarting full download`,
         );
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip);
       }
       totalBytes = effectiveContentRange.total;
     } else {
@@ -302,14 +314,15 @@ async function fetchWithRetry(
     }
 
     const merged = mergeChunks(chunks);
-    if (!hasValidLasSignature(merged)) {
+    const isValid = hasValidLasSignature(merged) || (allowZip && hasValidZipSignature(merged));
+    if (!isValid) {
       if (requestedResumeBytes > 0 && incompleteRetryCount < MAX_INCOMPLETE_DOWNLOAD_RETRIES) {
         const delay = Math.max(1500, RETRY_BASE_DELAY_5XX_MS * Math.pow(2, incompleteRetryCount));
         console.warn(
-          `[Download] Resumed buffer for ${url} has invalid LAS signature; restarting full download in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,
+          `[Download] Resumed buffer for ${url} has invalid signature; restarting full download in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,
         );
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip);
       }
       throw invalidLasSignatureError(merged);
     }
@@ -322,7 +335,7 @@ async function fetchWithRetry(
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
       }
       throw new Error('Download timeout after retries');
     }
@@ -345,7 +358,7 @@ async function fetchWithRetry(
             : `Téléchargement interrompu, nouvelle tentative ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
         });
         await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState, allowZip);
       }
     }
 
@@ -373,18 +386,26 @@ async function downloadSwissTile(
     const url = urls[i];
     try {
       await waitForRateLimit();
-      const zipBuffer = await fetchWithRetry(url, coord, onProgress);
-      if (!zipBuffer) continue;
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      if (!downloadedBuffer) continue;
 
-      onProgress?.({
-        tileCoord: coord,
-        bytesDownloaded: zipBuffer.byteLength,
-        totalBytes: zipBuffer.byteLength,
-        phase: 'downloading',
-        message: 'Décompression .las.zip...',
-      });
+      let lasBuffer: ArrayBuffer;
+      if (hasValidZipSignature(downloadedBuffer)) {
+        onProgress?.({
+          tileCoord: coord,
+          bytesDownloaded: downloadedBuffer.byteLength,
+          totalBytes: downloadedBuffer.byteLength,
+          phase: 'downloading',
+          message: 'Décompression .las.zip...',
+        });
+        lasBuffer = await extractLasFromZip(downloadedBuffer);
+      } else {
+        lasBuffer = downloadedBuffer;
+      }
 
-      const lasBuffer = await extractLasFromZip(zipBuffer);
+      if (!hasValidLasSignature(lasBuffer)) {
+        throw new Error('Fichier nuage de points suisse corrompu (signature LAS invalide).');
+      }
 
       onProgress?.({
         tileCoord: coord,
@@ -398,7 +419,6 @@ async function downloadSwissTile(
     } catch (err: any) {
       lastError = err;
       if (err.status === 404) {
-        // try next year
         if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
         continue;
       }
@@ -410,6 +430,154 @@ async function downloadSwissTile(
 
   throw new Error(
     `Impossible de télécharger la tuile swissSURFACE3D (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// New Zealand (OpenTopography / LINZ Raw LiDAR Point Clouds) download path
+// ---------------------------------------------------------------------------
+
+async function downloadNzTile(
+  coord: TileCoord,
+  onProgress?: (progress: DownloadProgress) => void
+): Promise<ArrayBuffer> {
+  onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche nuage de points LiDAR Nouvelle-Zélande...' });
+
+  const urls = await resolveNzDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
+  if (urls.length === 0) {
+    throw new Error(`Pas de nuage de points LiDAR classifié disponible pour la dalle (${coord.xKm}, ${coord.yKm}). Cette zone n'a pas encore fait l'objet d'un survol LiDAR.`);
+  }
+
+  let lastError: Error | null = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    try {
+      await waitForRateLimit();
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      if (!downloadedBuffer) continue;
+
+      let lasBuffer: ArrayBuffer;
+      if (hasValidZipSignature(downloadedBuffer)) {
+        onProgress?.({
+          tileCoord: coord,
+          bytesDownloaded: downloadedBuffer.byteLength,
+          totalBytes: downloadedBuffer.byteLength,
+          phase: 'downloading',
+          message: 'Décompression archive point cloud .laz...',
+        });
+        lasBuffer = await extractLasFromZip(downloadedBuffer);
+      } else {
+        lasBuffer = downloadedBuffer;
+      }
+
+      if (!hasValidLasSignature(lasBuffer)) {
+        throw new Error('Fichier nuage de points néo-zélandais corrompu (signature LAS invalide).');
+      }
+
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded: lasBuffer.byteLength,
+        totalBytes: lasBuffer.byteLength,
+        phase: 'downloading',
+        message: 'Sauvegarde en cache local...',
+      });
+      await saveTile(coord, lasBuffer);
+      return lasBuffer;
+    } catch (err: any) {
+      lastError = err;
+      if (err.status === 404) {
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        continue;
+      }
+      console.warn(`[NZ Download] Failed for ${url}: ${err.message}`);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      continue;
+    }
+  }
+
+  throw new Error(
+    `Impossible de télécharger le nuage de points LiDAR Nouvelle-Zélande (${coord.xKm}, ${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Japan (JGD2011 / S3 Open Data / VIRTUAL SHIZUOKA / Tokyo 3D Point Clouds)
+// ---------------------------------------------------------------------------
+
+async function downloadJapanTile(
+  coord: TileCoord,
+  onProgress?: (progress: DownloadProgress) => void
+): Promise<ArrayBuffer> {
+  const zone = parseJgd2011Zone(coord.projection);
+  onProgress?.({
+    tileCoord: coord,
+    bytesDownloaded: 0,
+    totalBytes: 0,
+    phase: 'downloading',
+    message: `Recherche nuage de points LiDAR Japon (Zone ${zone})...`,
+  });
+
+  const urls = await resolveJapanDownloadUrls({
+    eastKm: coord.xKm,
+    northKm: coord.yKm,
+    zone,
+  });
+
+  if (urls.length === 0) {
+    throw new Error(
+      `Pas de nuage de points LiDAR classifié disponible pour la dalle (${coord.xKm}, ${coord.yKm}) en zone JGD2011 ${zone}. Cette zone n'a pas encore fait l'objet d'un relevé ouvert.`
+    );
+  }
+
+  let lastError: Error | null = null;
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    try {
+      await waitForRateLimit();
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      if (!downloadedBuffer) continue;
+
+      let lasBuffer: ArrayBuffer;
+      if (hasValidZipSignature(downloadedBuffer)) {
+        onProgress?.({
+          tileCoord: coord,
+          bytesDownloaded: downloadedBuffer.byteLength,
+          totalBytes: downloadedBuffer.byteLength,
+          phase: 'downloading',
+          message: 'Décompression archive point cloud LAS Japon...',
+        });
+        lasBuffer = await extractLasFromZip(downloadedBuffer);
+      } else {
+        lasBuffer = downloadedBuffer;
+      }
+
+      if (!hasValidLasSignature(lasBuffer)) {
+        throw new Error('Fichier nuage de points japonais corrompu (signature LAS invalide).');
+      }
+
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded: lasBuffer.byteLength,
+        totalBytes: lasBuffer.byteLength,
+        phase: 'downloading',
+        message: 'Sauvegarde en cache local...',
+      });
+      await saveTile(coord, lasBuffer);
+      return lasBuffer;
+    } catch (err: any) {
+      lastError = err;
+      if (err.status === 404) {
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        continue;
+      }
+      console.warn(`[Japan Download] Failed for ${url}: ${err.message}`);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      continue;
+    }
+  }
+
+  throw new Error(
+    `Impossible de télécharger le nuage de points LiDAR Japon (${coord.xKm}, ${coord.yKm}, zone ${zone}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
   );
 }
 

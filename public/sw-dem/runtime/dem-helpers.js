@@ -45,7 +45,11 @@ const TRANSPARENT_PNG = Uint8Array.from(atob(
 function transparentTileResponse() {
   return new Response(TRANSPARENT_PNG.slice(), {
     status: 200,
-    headers: { 'Content-Type': 'image/png' },
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=604800',
+      'X-Tile-Type': 'transparent',
+    },
   });
 }
 
@@ -73,7 +77,11 @@ function resolveDemProfileFromRequest(request) {
 
 function resolveDemRequestPurposeFromRequest(request) {
   try {
-    return new URL(request.url, self.location.origin).searchParams.get('rv-purpose') || null;
+    const url = new URL(request.url, self.location.origin);
+    const purpose = url.searchParams.get('rv-purpose');
+    if (purpose) return purpose;
+    if (url.searchParams.get('pf') === '1') return 'dem-prefetch';
+    return null;
   } catch {
     return null;
   }

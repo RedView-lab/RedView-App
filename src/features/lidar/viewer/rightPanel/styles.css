@@ -1,0 +1,178 @@
+@import '../../../controlPanel/styles/index.css';
+@import '../../../itineraryPanel/styles/overlays/_calendar-popover.css';
+
+.lidar-viewer-right-panel-host {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  height: auto;
+  max-height: calc(100vh - 32px);
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel {
+  --rvc-panel-padding: 12px 14px;
+  --rvc-panel-select-md: 140px;
+  --rvc-panel-select-sm: 110px;
+  --rvc-panel-opacity-control-width: 130px;
+  position: relative;
+  height: auto;
+  min-width: 350px;
+  max-height: calc(100vh - 32px);
+  flex: 0 1 auto;
+  background: rgba(18, 20, 24, 0.72);
+  backdrop-filter: blur(24px) saturate(1.1);
+  -webkit-backdrop-filter: blur(24px) saturate(1.1);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 8px;
+  overflow-x: hidden;
+  overflow-y: visible;
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  filter: blur(0px) saturate(1);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              filter 320ms ease;
+  will-change: transform, opacity, filter;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel.is-collapsed {
+  transform: translate3d(calc(100% + 28px), 0, 0) scale(0.985);
+  opacity: 0;
+  filter: blur(8px) saturate(0.88);
+  pointer-events: none !important;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel.is-resizing {
+  transition: none !important;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__content {
+  flex: 0 1 auto;
+  height: auto;
+  max-height: calc(100vh - 32px);
+  padding: 12px 14px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__content::-webkit-scrollbar {
+  width: 5px;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__content::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.lidar-viewer-right-panel-host .rvc-panel__resize-handle:hover,
+.lidar-viewer-right-panel-host .rvc-panel__resize-handle.is-dragging {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.lidar-viewer-right-panel-host .rvc-panel.is-resizing,
+.lidar-viewer-right-panel-host .rvc-panel.is-resizing * {
+  user-select: none !important;
+}
+
+/* Floating Collapsed Rail for Right Panel */
+.lidar-viewer-right-collapsed-rail {
+  position: fixed;
+  top: 50%;
+  right: 6px;
+  z-index: 75;
+  transform: translate3d(18px, -50%, 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.lidar-viewer-right-collapsed-rail.is-visible {
+  transform: translate3d(0, -50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.lidar-viewer-collapsed-rail-btn {
+  width: 28px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(17, 17, 19, 0.9);
+  color: #ffffff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.lidar-viewer-collapsed-rail-btn:hover {
+  background: rgba(28, 28, 32, 0.96);
+  transform: scale(1.05);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.44);
+}
+
+.lidar-viewer-collapsed-rail-btn:active {
+  transform: scale(0.96);
+}
+
+/* Ensure right-side values and labels have proper alignment */
+.lidar-viewer-right-panel-host .rvc-sunlight__opacity-row {
+  justify-content: space-between;
+}
+
+.lidar-viewer-right-panel-host .rvc-sunlight__sun-value {
+  padding-right: 0;
+}
+
+@media (max-width: 720px) {
+  .lidar-viewer-right-panel-host {
+    top: 12px;
+    right: 12px;
+    max-height: calc(100vh - 24px);
+  }
+
+  .lidar-viewer-right-panel-host .rvc-panel {
+    min-width: unset;
+  }
+
+  .lidar-viewer-right-panel-host .rvc-panel,
+  .lidar-viewer-right-panel-host .rvc-panel__content {
+    max-height: calc(100vh - 24px);
+  }
+}

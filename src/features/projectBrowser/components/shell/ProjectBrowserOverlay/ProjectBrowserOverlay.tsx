@@ -7,7 +7,6 @@ import { ProjectsPanel } from '../../projects';
 import { SubscriptionPanel } from '../../subscription';
 import type { ProjectBrowserOverlayProps } from '../../../types';
 import { TopTabs } from '../TopTabs';
-import { ProjectBrowserOverlayDemoRail } from './ProjectBrowserOverlayDemoRail';
 import { ProjectBrowserOverlayHeader } from './ProjectBrowserOverlayHeader';
 import { useProjectBrowserOverlayState } from './useProjectBrowserOverlayState';
 
@@ -26,23 +25,29 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
       aria-modal="true"
       aria-label={t('Sélecteur de projet principal')}
     >
-      <div className={`rvpb-shell has-demo-rail${state.activeTab === 'account' ? ' is-account-tab' : ''}`}>
-        <ProjectBrowserOverlayDemoRail offersUrl={state.offersUrl} showUpsell={state.showDemoRail} />
+      <div className="rvpb-brand-corner" aria-label="RedView">
+        <img
+          src="/landing/icons/redview-logo.svg"
+          alt="RedView"
+          width={125}
+          height={24}
+        />
+      </div>
 
-        <div className="rvpb-shell__main">
-          <ProjectBrowserOverlayHeader
-            accountDisplayName={state.accountDisplayName}
-            headerMetaLabel={state.headerMetaLabel}
-            tierLabel={state.tierLabel}
-            isSigningOut={state.isSigningOut}
-            onSignOut={state.handleSignOut}
-          />
+      <div className={`rvpb-shell${state.activeTab === 'account' ? ' is-account-tab' : ''}`}>
+        <ProjectBrowserOverlayHeader
+          accountDisplayName={state.accountDisplayName}
+          headerMetaLabel={state.headerMetaLabel}
+          tierLabel={state.tierLabel}
+          isSigningOut={state.isSigningOut}
+          onSignOut={state.handleSignOut}
+        />
 
-          <div className="rvpb-divider" />
+        <div className="rvpb-divider" />
 
-          <TopTabs activeTab={state.activeTab} onChange={state.setActiveTab} />
+        <TopTabs activeTab={state.activeTab} onChange={state.setActiveTab} />
 
-          <div className="rvpb-divider" />
+        <div className="rvpb-divider" />
 
           {state.activeTab === 'projects' ? (
             <ProjectsPanel
@@ -125,7 +130,6 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
           ) : null}
 
           {state.activeTab === 'settings' ? <SettingsPanel /> : null}
-        </div>
 
         {state.billingModal ? (
           <BillingActionModal

@@ -75,12 +75,158 @@
   line-height: 1;
 }
 
-.rvmvc-route-slope-legend {
+.rvmvc-map-tools__legend-row {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  width: 160px;
-  margin-top: 44px;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.rvmvc-route-legend-popover {
+  position: absolute;
+  bottom: 0;
+  right: calc(100% + 10px);
+  width: 242px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.84);
+  color: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 12px 36px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rvmvc-route-legend-popover__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.rvmvc-route-legend-popover__title {
+  overflow: hidden;
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvmvc-route-legend-popover__tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.rvmvc-route-legend-popover__tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.64);
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease;
+  text-align: center;
+}
+
+.rvmvc-route-legend-popover__tab:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.rvmvc-route-legend-popover__tab.is-active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.rvmvc-route-legend-popover__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rvmvc-route-legend-popover__surface-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background-color 140ms ease;
+}
+
+.rvmvc-route-legend-popover__surface-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.rvmvc-route-legend-popover__sample {
+  flex-shrink: 0;
+  display: block;
+}
+
+.rvmvc-route-legend-popover__item-label {
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.2;
+}
+
+.rvmvc-route-legend-popover__slope-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 3px 6px;
+}
+
+.rvmvc-route-legend-popover__slope-swatch {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.rvmvc-route-legend-popover__slope-label {
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.78);
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvmvc-map-tools__zone-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.rvmvc-analysis-zone-popover {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 10px);
+  width: 196px;
   padding: 12px;
   border-radius: 8px;
   background: rgba(0, 0, 0, 0.74);
@@ -88,9 +234,10 @@
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 30px rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
+  z-index: 2;
 }
 
-.rvmvc-route-slope-legend__title {
+.rvmvc-analysis-zone-popover__title {
   overflow: hidden;
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
@@ -100,35 +247,117 @@
   white-space: nowrap;
 }
 
-.rvmvc-route-slope-legend__list {
+.rvmvc-analysis-zone-popover__hint {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.6);
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rvmvc-analysis-zone-popover__actions {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-top: 8px;
 }
 
-.rvmvc-route-slope-legend__item {
+.rvmvc-analysis-zone-popover__action {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
-
-.rvmvc-route-slope-legend__swatch {
-  flex: 0 0 12px;
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-}
-
-.rvmvc-route-slope-legend__label {
-  overflow: hidden;
-  color: rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.92);
   font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   line-height: 1.2;
-  text-overflow: ellipsis;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.rvmvc-analysis-zone-popover__action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rvmvc-analysis-zone-popover__action--danger {
+  color: #ff9d9d;
+}
+
+.rvmvc-analysis-zone-popover__action--danger:hover {
+  background: rgba(137, 0, 0, 0.55);
+}
+
+.rvmvc-analysis-zone-hint {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 10px);
+  width: 210px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(137, 0, 0, 0.88);
+  color: #fff;
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  box-shadow: 0 10px 30px rgba(77, 0, 0, 0.4);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  z-index: 2;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rvmvc-analysis-zone-hint__text {
+  user-select: none;
+}
+
+.rvmvc-analysis-zone-hint__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.rvmvc-analysis-zone-hint__action {
+  appearance: none;
+  border: none;
+  outline: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 120ms ease, opacity 120ms ease;
   white-space: nowrap;
+}
+
+.rvmvc-analysis-zone-hint__action:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.rvmvc-analysis-zone-hint__action--primary {
+  background: #ffffff;
+  color: #890000;
+}
+
+.rvmvc-analysis-zone-hint__action--primary:hover:not(:disabled) {
+  background: #f0f0f0;
+}
+
+.rvmvc-analysis-zone-hint__action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1080px) {
@@ -147,25 +376,25 @@
     font-size: 14px;
   }
 
-  .rvmvc-map-tools__dimension-row {
-    gap: 8px;
-  }
-
-  .rvmvc-map-tools__button-stack {
-    gap: 4px;
-  }
-
-  .rvmvc-route-slope-legend {
-    width: 148px;
-    margin-top: 40px;
+  .rvmvc-route-legend-popover {
+    width: 224px;
     padding: 10px;
   }
 
-  .rvmvc-route-slope-legend__title {
-    font-size: 13px;
+  .rvmvc-route-legend-popover__title {
+    font-size: 12.5px;
   }
 
-  .rvmvc-route-slope-legend__label {
-    font-size: 12px;
+  .rvmvc-route-legend-popover__item-label {
+    font-size: 11.5px;
+  }
+
+  .rvmvc-route-legend-popover__item-desc {
+    font-size: 10px;
+  }
+
+  .rvmvc-analysis-zone-popover,
+  .rvmvc-analysis-zone-hint {
+    width: 176px;
   }
 }

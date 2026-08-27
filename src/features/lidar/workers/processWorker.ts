@@ -3,11 +3,14 @@
 import { parseLazBuffer } from '../lib/lazParser';
 import { colorizePointCloud } from '../lib/colorizer';
 
+import type { DetectedCrs } from '../types';
+
 const workerScope = self as unknown as DedicatedWorkerGlobalScope;
 
 export type WorkerRequest = {
   type: 'process';
   buffer: ArrayBuffer;
+  crs?: DetectedCrs;
 };
 
 export type WorkerResponse =
@@ -30,7 +33,7 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
     const pointCloud = await parseLazBuffer(e.data.buffer, (phase, pct) => {
       const msg: WorkerResponse = { type: 'progress', phase: 'parsing', message: phase, percent: pct };
       workerScope.postMessage(msg);
-    });
+    }, e.data.crs);
 
     await colorizePointCloud(pointCloud, (phase, pct) => {
       const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };

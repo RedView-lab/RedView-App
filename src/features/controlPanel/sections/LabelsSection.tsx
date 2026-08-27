@@ -14,15 +14,15 @@ interface Props {
 
 const COLUMN_A: { key: LabelKey; label: string }[] = [
   { key: 'poiLabels', label: 'POI Labels' },
-  { key: 'roads', label: 'Roads' },
-  { key: 'cities', label: 'Cities' },
-  { key: 'states', label: 'States' },
+  { key: 'roads', label: 'Itinéraires' },
+  { key: 'cities', label: 'Villes' },
+  { key: 'states', label: 'États / Régions' },
 ];
 
 const COLUMN_B: { key: LabelKey; label: string }[] = [
-  { key: 'naturalParks', label: 'Natural Parks' },
-  { key: 'countries', label: 'Countries' },
-  { key: 'waterBody', label: 'Water body' },
+  { key: 'naturalParks', label: 'Parcs Naturels' },
+  { key: 'countries', label: 'Pays' },
+  { key: 'waterBody', label: 'Plans d’eau' },
 ];
 
 export function LabelsSection({

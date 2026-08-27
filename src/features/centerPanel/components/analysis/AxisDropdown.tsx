@@ -65,31 +65,33 @@ export function AxisDropdown({
 
         {isOpen ? (
           <div className="rvc-center-analysis__dropdown" role="listbox" aria-label={translatedAxisLabel}>
-            <MapCanvasGlassBackdrop blur={30} saturate={1.8} />
-            {options.map((option) => {
-              const selected = value === option.value;
-              return (
-                <button
-                  key={option.value}
-                  className="rvc-center-analysis__dropdown-option"
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  onClick={() => onSelect(option.value)}
-                >
-                  <span
-                    className={
-                      option.tone === 'primary'
-                        ? 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--primary'
-                        : 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--secondary'
-                    }
+            <MapCanvasGlassBackdrop blur={30} saturate={1.8} tint="rgba(20, 22, 28, 0.85)" />
+            <div className="rvc-center-analysis__dropdown-list">
+              {options.map((option) => {
+                const selected = value === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    className="rvc-center-analysis__dropdown-option"
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => onSelect(option.value)}
                   >
-                    {t(option.label)}
-                  </span>
-                  {selected ? <IconCheck size={16} className="rvc-center-analysis__dropdown-check" /> : null}
-                </button>
-              );
-            })}
+                    <span
+                      className={
+                        option.tone === 'primary'
+                          ? 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--primary'
+                          : 'rvc-center-analysis__dropdown-text rvc-center-analysis__dropdown-text--secondary'
+                      }
+                    >
+                      {t(option.label)}
+                    </span>
+                    {selected ? <IconCheck size={16} className="rvc-center-analysis__dropdown-check" /> : null}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         ) : null}
       </div>

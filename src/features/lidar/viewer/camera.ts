@@ -18,6 +18,7 @@ export class CameraController {
   private isPanning = false;
   private lastX = 0;
   private lastY = 0;
+  public isLocked = false;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -26,6 +27,14 @@ export class CameraController {
     window.addEventListener('mouseup', this.onMouseUp);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  setLocked(locked: boolean) {
+    this.isLocked = locked;
+    if (locked) {
+      this.isDragging = false;
+      this.isPanning = false;
+    }
   }
 
   destroy() {
@@ -47,14 +56,27 @@ export class CameraController {
   }
 
   private onMouseDown = (e: MouseEvent) => {
+    if (this.isLocked) return;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
-    if (e.button === 0) this.isDragging = true;
-    else if (e.button === 1 || e.button === 2) this.isPanning = true;
-    if (e.button === 1) e.preventDefault();
+    if (e.button === 0) {
+      if (e.shiftKey) {
+        this.isPanning = true;
+      } else {
+        this.isDragging = true;
+      }
+    } else if (e.button === 1 || e.button === 2) {
+      this.isPanning = true;
+    }
+    if (e.button === 1 || e.button === 2) e.preventDefault();
   };
 
   private onMouseMove = (e: MouseEvent) => {
+    if (this.isLocked) {
+      this.isDragging = false;
+      this.isPanning = false;
+      return;
+    }
     if (!this.isDragging && !this.isPanning) return;
     const dx = e.clientX - this.lastX;
     const dy = e.clientY - this.lastY;
@@ -96,53 +118,63 @@ export class CameraController {
     this.onChange?.();
   }
 
+  private _viewMatrix = new Float32Array(16);
+  private _projMatrix = new Float32Array(16);
+  private _eye: [number, number, number] = [0, 0, 0];
+
   getEye(): [number, number, number] {
     const x = this.targetX + this.radius * Math.sin(this.phi) * Math.sin(this.theta);
     const y = this.targetY + this.radius * Math.cos(this.phi);
     const z = this.targetZ + this.radius * Math.sin(this.phi) * Math.cos(this.theta);
-    return [x, y, z];
+    this._eye[0] = x;
+    this._eye[1] = y;
+    this._eye[2] = z;
+    return this._eye;
   }
 
   getViewMatrix(): Float32Array {
     const eye = this.getEye();
     const tx = this.targetX, ty = this.targetY, tz = this.targetZ;
     let fx = tx - eye[0], fy = ty - eye[1], fz = tz - eye[2];
-    const fLen = Math.hypot(fx, fy, fz);
+    const fLen = Math.hypot(fx, fy, fz) || 1;
     fx /= fLen; fy /= fLen; fz /= fLen;
     const upX = 0, upY = 1, upZ = 0;
     let rx = fy * upZ - fz * upY;
     let ry = fz * upX - fx * upZ;
     let rz = fx * upY - fy * upX;
-    const rLen = Math.hypot(rx, ry, rz);
+    const rLen = Math.hypot(rx, ry, rz) || 1;
     rx /= rLen; ry /= rLen; rz /= rLen;
     const ux = ry * fz - rz * fy;
     const uy = rz * fx - rx * fz;
     const uz = rx * fy - ry * fx;
 
-    return new Float32Array([
-      rx, ux, -fx, 0,
-      ry, uy, -fy, 0,
-      rz, uz, -fz, 0,
-      -(rx * eye[0] + ry * eye[1] + rz * eye[2]),
-      -(ux * eye[0] + uy * eye[1] + uz * eye[2]),
-      -(-fx * eye[0] + -fy * eye[1] + -fz * eye[2]),
-      1,
-    ]);
+    const m = this._viewMatrix;
+    m[0] = rx;   m[1] = ux;   m[2] = -fx;  m[3] = 0;
+    m[4] = ry;   m[5] = uy;   m[6] = -fy;  m[7] = 0;
+    m[8] = rz;   m[9] = uz;   m[10] = -fz; m[11] = 0;
+    m[12] = -(rx * eye[0] + ry * eye[1] + rz * eye[2]);
+    m[13] = -(ux * eye[0] + uy * eye[1] + uz * eye[2]);
+    m[14] = -(-fx * eye[0] + -fy * eye[1] + -fz * eye[2]);
+    m[15] = 1;
+
+    return m;
   }
 
   getProjMatrix(): Float32Array {
-    const aspect = this.canvas.width / this.canvas.height;
+    const aspect = this.canvas.width / Math.max(this.canvas.height, 1);
     const fov = Math.PI / 4;
     const near = Math.max(0.05, Math.min(2, this.radius * 0.01));
-    // Keep the far plane anchored to the dataset size so aggressive zooming
-    // doesn't collapse the frustum and make the LiDAR / terrain disappear.
     const far = Math.max(this.radius * 10, this.radius + this.sceneRadius * 4);
     const f = 1 / Math.tan(fov / 2);
-    return new Float32Array([
-      f / aspect, 0, 0, 0,
-      0, f, 0, 0,
-      0, 0, (far + near) / (near - far), -1,
-      0, 0, (2 * far * near) / (near - far), 0,
-    ]);
+    const nf = 1 / (near - far);
+
+    const m = this._projMatrix;
+    m[0] = f / aspect; m[1] = 0; m[2] = 0;           m[3] = 0;
+    m[4] = 0;          m[5] = f; m[6] = 0;           m[7] = 0;
+    m[8] = 0;          m[9] = 0; m[10] = far * nf;   m[11] = -1;
+    m[12] = 0;         m[13] = 0; m[14] = far * near * nf; m[15] = 0;
+
+    return m;
   }
 }
+

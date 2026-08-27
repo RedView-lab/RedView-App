@@ -2,16 +2,16 @@
 
 @container (max-width: 560px) {
   .rvi-tl-schedule {
-    --rvi-tl-times-col: 46px;
-    --rvi-tl-icon-col: 18px;
+    --rvi-tl-times-col: 48px;
+    --rvi-tl-icon-col: 22px;
     --rvi-tl-pause-col: 72px;
-    --rvi-tl-start-col: 54px;
-    --rvi-tl-next-col: 50px;
-    --rvi-tl-fav-col: 0px;
-    --rvi-tl-actions-gutter: 28px;
-    --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 8px;
-    --rvi-tl-card-pad-right: 8px;
+    --rvi-tl-start-col: 60px;
+    --rvi-tl-next-col: 56px;
+    --rvi-tl-fav-col: 16px;
+    --rvi-tl-actions-gutter: 0px;
+    --rvi-tl-card-gap: 4px;
+    --rvi-tl-card-pad-left: 6px;
+    --rvi-tl-card-pad-right: 6px;
   }
 
   .rvi-tl-schedule__legend {
@@ -25,10 +25,6 @@
 
   .rvi-tl-schedule__km-marker {
     font-size: 10px;
-  }
-
-  .rvi-tl-schedule__event-favorite {
-    display: none;
   }
 
   .rvi-tl-schedule__event-metric {
@@ -48,28 +44,12 @@
   }
 
   .rvi-tl-schedule__event-card {
-    min-height: 34px;
+    min-height: 32px;
   }
 
   .rvi-tl-schedule__pause-card {
-    min-height: 34px;
-    padding: 6px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 6px var(--rvi-tl-card-pad-left);
-  }
-
-  .rvi-tl-schedule__actions {
-    display: inline-flex;
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    opacity: 1;
-    pointer-events: auto;
-    padding: 0;
-  }
-
-  .rvi-tl-schedule__action--visibility,
-  .rvi-tl-schedule__action--remove {
-    display: none;
+    min-height: 32px;
+    padding: 4px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 4px var(--rvi-tl-card-pad-left);
   }
 }
 
@@ -80,16 +60,16 @@
   .rvi-tl-row__distance { min-width: 36px; }
 
   .rvi-tl-schedule {
-    --rvi-tl-times-col: 48px;
+    --rvi-tl-times-col: 44px;
     --rvi-tl-icon-col: 20px;
-    --rvi-tl-pause-col: 70px;
+    --rvi-tl-pause-col: 64px;
     --rvi-tl-start-col: 52px;
-    --rvi-tl-next-col: 52px;
-    --rvi-tl-fav-col: 20px;
+    --rvi-tl-next-col: 48px;
+    --rvi-tl-fav-col: 16px;
     --rvi-tl-actions-gutter: 0px;
     --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 6px;
-    --rvi-tl-card-pad-right: 8px;
+    --rvi-tl-card-pad-left: 4px;
+    --rvi-tl-card-pad-right: 4px;
   }
 
   .rvi-tl-schedule__legend {
@@ -99,28 +79,20 @@
   .rvi-tl-schedule__pause-chip {
     font-size: 12px;
   }
-
-  .rvi-tl-schedule__actions {
-    opacity: 1;
-    pointer-events: auto;
-    position: static;
-    transform: none;
-    padding-left: 24px;
-  }
 }
 
 @container (max-width: 460px) {
   .rvi-tl-schedule {
     --rvi-tl-times-col: 44px;
-    --rvi-tl-icon-col: 18px;
-    --rvi-tl-pause-col: 62px;
+    --rvi-tl-icon-col: 20px;
+    --rvi-tl-pause-col: 64px;
     --rvi-tl-start-col: 52px;
     --rvi-tl-next-col: 48px;
-    --rvi-tl-fav-col: 0px;
-    --rvi-tl-actions-gutter: 28px;
+    --rvi-tl-fav-col: 16px;
+    --rvi-tl-actions-gutter: 0px;
     --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 8px;
-    --rvi-tl-card-pad-right: 8px;
+    --rvi-tl-card-pad-left: 4px;
+    --rvi-tl-card-pad-right: 4px;
   }
 
   .rvi-tl-schedule__days {
@@ -138,176 +110,21 @@
 
   .rvi-tl-schedule__km-marker { font-size: 10px; }
 
-  .rvi-tl-schedule__event,
-  .rvi-tl-schedule__pause--standalone {
-    left: 6px;
-    right: 6px;
-  }
-
-  .rvi-tl-schedule__event-icon { min-width: 18px; }
   .rvi-tl-schedule__event-name {
-    min-width: 0;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     font-size: 13px;
   }
   .rvi-tl-schedule__event-metric {
-    min-width: 0;
     font-size: 12px;
     line-height: 18px;
-    text-align: right;
-  }
-  .rvi-tl-schedule__event-favorite {
-    display: none;
   }
   .rvi-tl-schedule__pause-chip {
     font-size: 12px;
-  }
-  .rvi-tl-schedule__event-metric--next {
-    width: auto;
-    min-width: 0;
-    text-align: right;
-    align-self: center;
-  }
-
-  .rvi-tl-schedule__event-card {
-    min-height: 34px;
-    padding: 6px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 6px var(--rvi-tl-card-pad-left);
-  }
-
-  .rvi-tl-schedule__pause-card {
-    min-height: 34px;
-    padding: 6px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 6px var(--rvi-tl-card-pad-left);
-  }
-
-  .rvi-tl-schedule__actions {
-    display: inline-flex;
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    opacity: 1;
-    pointer-events: auto;
-    padding: 0;
-  }
-
-  .rvi-tl-schedule__action--visibility,
-  .rvi-tl-schedule__action--remove {
-    display: none;
   }
 }
 
 @media (max-width: 400px) {
-  .rvi-tl-schedule {
-    --rvi-tl-times-col: 44px;
-    --rvi-tl-icon-col: 18px;
-    --rvi-tl-pause-col: 58px;
-    --rvi-tl-start-col: 46px;
-    --rvi-tl-next-col: 42px;
-    --rvi-tl-fav-col: 0px;
-    --rvi-tl-actions-gutter: 28px;
-    --rvi-tl-card-gap: 3px;
-    --rvi-tl-card-pad-left: 8px;
-    --rvi-tl-card-pad-right: 8px;
-  }
-
-  .rvi-tl-edit__zoom {
-    margin-left: 0;
-  }
-
-  .rvi-tl-edit__controls {
-    gap: 8px;
-  }
-
   .rvi-tl-row__kind-text { width: 44px; }
   .rvi-tl-list__col-type { padding-left: 40px; }
-
-  .rvi-tl-schedule__day {
-    padding-left: 2px;
-    padding-right: 2px;
-  }
-
-  .rvi-tl-schedule__legend {
-    font-size: 11px;
-  }
-
-  .rvi-tl-schedule__time-label {
-    right: 4px;
-    font-size: 11px;
-  }
-
-  .rvi-tl-schedule__km-marker {
-    left: 0;
-    padding: 0 4px;
-    font-size: 10px;
-  }
-
-  .rvi-tl-schedule__event,
-  .rvi-tl-schedule__pause--standalone {
-    left: 6px;
-    right: 6px;
-  }
-
-  .rvi-tl-schedule__event-icon { min-width: 18px; }
-  .rvi-tl-schedule__event-name {
-    min-width: 0;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 12px;
-  }
-  .rvi-tl-schedule__event-metric {
-    min-width: 0;
-    font-size: 11px;
-    line-height: 16px;
-    text-align: right;
-  }
-  .rvi-tl-schedule__event-favorite {
-    display: none;
-  }
-  .rvi-tl-schedule__pause-chip {
-    min-height: 22px;
-    height: 22px;
-    font-size: 11px;
-  }
-  .rvi-tl-schedule__pause-chip-icon {
-    width: 22px;
-    height: 22px;
-  }
-  .rvi-tl-schedule__event-metric--next {
-    width: auto;
-    min-width: 0;
-    text-align: right;
-    align-self: center;
-  }
-
-  .rvi-tl-schedule__event-card {
-    min-height: 32px;
-    padding: 5px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 5px var(--rvi-tl-card-pad-left);
-  }
-
-  .rvi-tl-schedule__pause-card {
-    min-height: 32px;
-    padding: 5px calc(var(--rvi-tl-card-pad-right) + var(--rvi-tl-actions-gutter)) 5px var(--rvi-tl-card-pad-left);
-  }
-
-  .rvi-tl-schedule__actions {
-    display: inline-flex;
-    position: absolute;
-    top: 50%;
-    right: 8px;
-    transform: translateY(-50%);
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .rvi-tl-schedule__action--visibility,
-  .rvi-tl-schedule__action--remove {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

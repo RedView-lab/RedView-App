@@ -94,6 +94,19 @@ export function useItineraryFitRuntime({
     [active?.id, activePersistedUploadSignature, activePrediction],
   );
 
+  const lastProcessedSignatureRef = useRef<Record<string, string>>({});
+  const calculateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const activeRhythmSignature = useMemo(() => {
+    if (!active?.rhythm) return '';
+    return JSON.stringify(active.rhythm);
+  }, [active?.rhythm]);
+
+  const activeCalculationSignature = useMemo(() => {
+    if (!active || !activeRouteSignature) return '';
+    return `${active.id}::${activeRouteSignature}::${activeRhythmSignature}::${activePersistedUploadSignature}`;
+  }, [active, activeRouteSignature, activeRhythmSignature, activePersistedUploadSignature]);
+
   const uploadFitLabel = useMemo(
     () => buildUploadFitLabel(activeFitRuntime),
     [activeFitRuntime],
@@ -240,93 +253,76 @@ export function useItineraryFitRuntime({
   const handleUploadFitRequest = useCallback(() => {
     if (!active) return;
     fitUploadTargetIdRef.current = active.id;
-    fitInputRef.current?.click();
+    if (fitInputRef.current) {
+      fitInputRef.current.value = '';
+      fitInputRef.current.click();
+    }
   }, [active]);
 
   const handleFitInputChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const itineraryId = fitUploadTargetIdRef.current;
-      const files = event.target.files ? Array.from(event.target.files) : [];
-      event.target.value = '';
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const itineraryId = fitUploadTargetIdRef.current ?? active?.id;
       if (!itineraryId) return;
 
-      const fitFiles = files.filter((file) => /\.fit$/i.test(file.name));
-      if (fitFiles.length === 0) {
-        updateFitRuntime(itineraryId, (current) => ({
-          ...current,
-          status: 'error',
-          error: translateAppText('Aucun fichier FIT valide sélectionné.'),
-          updatedAt: new Date().toISOString(),
-        }));
-        return;
-      }
+      const incoming = Array.from(event.target.files ?? []).filter((file) =>
+        file.name.toLowerCase().endsWith('.fit'),
+      );
+      if (incoming.length === 0) return;
 
-      const currentRuntime = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
-      const mergedFitFiles = mergeFitFiles(currentRuntime.fitFiles, fitFiles);
+      const current = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+      const nextFitFiles = mergeFitFiles(current.fitFiles, incoming);
+      const nextFitFileNames = nextFitFiles.map((file) => file.name);
+      const localSignature = buildLocalFitUploadSignature(nextFitFiles);
 
-      updateFitRuntime(itineraryId, (current) => ({
-        ...current,
-        fitFiles: mergedFitFiles,
-        fitFileNames: mergedFitFiles.map((file) => file.name),
-        predictionResult: null,
-        progress: [],
+      updateFitRuntime(itineraryId, (prev) => ({
+        ...prev,
+        fitFiles: nextFitFiles,
+        fitFileNames: nextFitFileNames,
         status: 'ready',
         error: null,
-        updatedAt: new Date().toISOString(),
-        persistedUploadSignature: buildLocalFitUploadSignature(mergedFitFiles),
+        persistedUploadSignature: localSignature,
       }));
 
-      predictionStore?.setPrediction(itineraryId, null);
-      if (!projectId) {
-        updateFitRuntime(itineraryId, (current) => ({
-          ...current,
+      if (!projectId) return;
+
+      try {
+        const storedUploads = await uploadProjectItineraryFitFiles(
+          projectId,
+          itineraryId,
+          nextFitFiles,
+        );
+
+        setProject((prev) => {
+          const nextItineraries = prev.itineraries.map((it) =>
+            it.id === itineraryId
+              ? {
+                  ...it,
+                  fitUploads: storedUploads,
+                  prediction: undefined,
+                  pendingFitRecompute: true,
+                }
+              : it,
+          );
+          return {
+            ...prev,
+            itineraries: nextItineraries,
+          };
+        });
+        predictionStore?.setPrediction(itineraryId, null);
+      } catch (error) {
+        console.error('[fit-predictor] upload persistence error', error);
+        updateFitRuntime(itineraryId, (prev) => ({
+          ...prev,
           status: 'error',
-          error: translateAppText('Projet Supabase introuvable pour sauvegarder les FIT.'),
+          error:
+            error instanceof Error
+              ? translateAppText(error.message)
+              : translateAppText('Impossible de sauvegarder les fichiers FIT sur le serveur.'),
           updatedAt: new Date().toISOString(),
         }));
-        return;
       }
-
-      void uploadProjectItineraryFitFiles(projectId, itineraryId, mergedFitFiles)
-        .then((fitUploads) => {
-          updateFitRuntime(itineraryId, (current) => ({
-            ...current,
-            persistedUploadSignature: buildFitUploadsSignature(fitUploads),
-          }));
-          setProject((prev) => ({
-            ...prev,
-            itineraries: prev.itineraries.map((current) =>
-              current.id === itineraryId
-                ? {
-                    ...current,
-                    fitUploads,
-                    prediction: null,
-                    pendingFitRecompute: undefined,
-                    metrics: current.metrics
-                      ? {
-                          ...current.metrics,
-                          durationSec: undefined,
-                        }
-                      : current.metrics,
-                  }
-                : current,
-            ),
-          }));
-        })
-        .catch((error: unknown) => {
-          console.error('[fit-predictor] failed to persist FIT uploads', error);
-          updateFitRuntime(itineraryId, (current) => ({
-            ...current,
-            status: 'error',
-            error:
-              error instanceof Error
-                ? translateAppText(error.message)
-                : translateAppText('Impossible de sauvegarder les fichiers FIT dans le bucket du projet.'),
-            updatedAt: new Date().toISOString(),
-          }));
-        });
     },
-    [predictionStore, projectId, setProject, updateFitRuntime],
+    [active?.id, predictionStore, projectId, setProject, updateFitRuntime],
   );
 
   const handleCalculatePrediction = useCallback(() => {
@@ -412,6 +408,7 @@ export function useItineraryFitRuntime({
             curr.id === itineraryId
               ? {
                   ...curr,
+                  prediction: result,
                   pendingFitRecompute: undefined,
                   metrics: {
                     ...curr.metrics,
@@ -487,23 +484,61 @@ export function useItineraryFitRuntime({
   }, [active, predictionStore, replaceFitEngine, updateFitRuntime]);
 
   useEffect(() => {
-    if (!active || active.pendingFitRecompute !== true) return;
+    if (!active || !activeCalculationSignature) return;
 
-    const runtime = fitRuntimeRef.current[active.id] ?? createEmptyFitRuntime();
-    if (runtime.status === 'running') return;
+    const itineraryId = active.id;
+    const lastSig = lastProcessedSignatureRef.current[itineraryId];
 
-    if (runtime.fitFiles.length === 0) {
-      setProject((prev) => ({
-        ...prev,
-        itineraries: prev.itineraries.map((curr) =>
-          curr.id === active.id
-            ? {
-                ...curr,
-                pendingFitRecompute: undefined,
-              }
-            : curr,
-        ),
-      }));
+    // If this is the initial load for this itinerary and we already have a matching prediction
+    if (!lastSig) {
+      const lastPointDistM = active.gpxRoute?.points[active.gpxRoute.points.length - 1]?.distanceM ?? 0;
+      const predDistM = active.prediction?.total_distance_m ?? 0;
+      const isDistMismatched = active.prediction && Math.abs(predDistM - lastPointDistM) > 500;
+
+      if (active.prediction && !isDistMismatched) {
+        lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
+        return;
+      }
+    }
+
+    if (lastSig === activeCalculationSignature && active.pendingFitRecompute !== true) {
+      return;
+    }
+
+    const runtime = fitRuntimeRef.current[itineraryId] ?? createEmptyFitRuntime();
+    const hasFitFiles = runtime.fitFiles.length > 0 || (active.fitUploads && active.fitUploads.length > 0);
+
+    if (calculateTimeoutRef.current) {
+      clearTimeout(calculateTimeoutRef.current);
+      calculateTimeoutRef.current = null;
+    }
+
+    if (!hasFitFiles) {
+      lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
+      if (active.prediction || runtime.predictionResult) {
+        predictionStore?.setPrediction(itineraryId, null);
+        updateFitRuntime(itineraryId, (current) => ({
+          ...current,
+          predictionResult: null,
+          status: 'idle',
+        }));
+        setProject((prev) => ({
+          ...prev,
+          itineraries: prev.itineraries.map((curr) =>
+            curr.id === itineraryId
+              ? {
+                  ...curr,
+                  prediction: undefined,
+                  pendingFitRecompute: undefined,
+                  metrics: {
+                    ...curr.metrics,
+                    durationSec: undefined,
+                  },
+                }
+              : curr,
+          ),
+        }));
+      }
       return;
     }
 
@@ -511,8 +546,25 @@ export function useItineraryFitRuntime({
     if (active.gpxRoute.source === 'brouter' && !active.routeAudit) return;
     if (!hasUsableRouteElevation(active.gpxRoute.points)) return;
 
-    handleCalculatePrediction();
-  }, [active, activeRouteSignature, handleCalculatePrediction, setProject]);
+    calculateTimeoutRef.current = setTimeout(() => {
+      lastProcessedSignatureRef.current[itineraryId] = activeCalculationSignature;
+      handleCalculatePrediction();
+    }, 300);
+
+    return () => {
+      if (calculateTimeoutRef.current) {
+        clearTimeout(calculateTimeoutRef.current);
+        calculateTimeoutRef.current = null;
+      }
+    };
+  }, [
+    active,
+    activeCalculationSignature,
+    handleCalculatePrediction,
+    predictionStore,
+    setProject,
+    updateFitRuntime,
+  ]);
 
   return {
     calculateDisabled,

@@ -4,8 +4,10 @@ import type { AltitudeCategory, AltitudeColorMode } from '../types';
 import {
   ALTITUDE_LAYER_ID,
   ALTITUDE_SOURCE_ID,
+  type AltitudeTileSourceOptions,
   buildAltitudeColorExpression,
   buildAltitudeLayer,
+  buildAltitudeSourceKey,
   buildAltitudeTileSource,
 } from '../lib/altitude-source';
 import {
@@ -26,10 +28,11 @@ function addAltitudeLayer(
   colorMode: AltitudeColorMode,
   categories: AltitudeCategory[],
   hiddenIds: Set<string>,
+  sourceOptions: AltitudeTileSourceOptions,
 ) {
   try {
     if (!map.getSource(ALTITUDE_SOURCE_ID)) {
-      map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource());
+      map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(sourceOptions));
     }
     if (!map.getLayer(ALTITUDE_LAYER_ID)) {
       const layer = buildAltitudeLayer(opacity, colorMode, categories, hiddenIds);
@@ -75,6 +78,7 @@ export function useAltitude(
   colorMode: AltitudeColorMode,
   categories: AltitudeCategory[],
   hiddenBandIds?: ReadonlyArray<string>,
+  sourceOptions: AltitudeTileSourceOptions = { zone: null },
   onLoadStatusChange?: OverlayStatusReporter,
 ) {
   const hiddenIds = useMemo(() => new Set(hiddenBandIds ?? []), [hiddenBandIds]);
@@ -83,6 +87,7 @@ export function useAltitude(
     [categories],
   );
   const hiddenKey = useMemo(() => Array.from(hiddenIds).sort().join(','), [hiddenIds]);
+  const sourceKey = useMemo(() => buildAltitudeSourceKey(sourceOptions), [sourceOptions]);
 
   const opacityRef = useRef(opacity);
   const colorModeRef = useRef(colorMode);
@@ -90,8 +95,10 @@ export function useAltitude(
   const categoriesRef = useRef(categories);
   const hiddenIdsRef = useRef(hiddenIds);
   const previousEnabledRef = useRef(enabled);
+  const sourceOptionsRef = useRef(sourceOptions);
 
   const mountedRef = useRef(false);
+  const mountedSourceKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     opacityRef.current = opacity;
@@ -99,7 +106,8 @@ export function useAltitude(
     enabledRef.current = enabled;
     categoriesRef.current = categories;
     hiddenIdsRef.current = hiddenIds;
-  }, [opacity, colorMode, enabled, categories, hiddenIds]);
+    sourceOptionsRef.current = sourceOptions;
+  }, [opacity, colorMode, enabled, categories, hiddenIds, sourceOptions]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
@@ -110,9 +118,45 @@ export function useAltitude(
       colorModeRef.current,
       categoriesRef.current,
       hiddenIdsRef.current,
+      sourceOptionsRef.current,
     );
     mountedRef.current = true;
-  }, [map, isMapLoaded, enabled]);
+    mountedSourceKeyRef.current = buildAltitudeSourceKey(sourceOptionsRef.current);
+  }, [map, isMapLoaded, enabled, sourceKey]);
+
+  // ── Zone swap ──────────────────────────────────────────────────────────
+  // The analysis zone rides in the source options (bounds + `?zone=` cache
+  // key), so a zone draw / redraw / delete swaps the raster source exactly
+  // like the slope overlay's profile switch: remove, re-add, remount.
+  useEffect(() => {
+    if (!map || !isMapLoaded || !mountedRef.current) return;
+    if (mountedSourceKeyRef.current === sourceKey) return;
+    removeAltitudeLayer(map);
+    mountedRef.current = false;
+    const mounted = (() => {
+      try {
+        if (!map.getSource(ALTITUDE_SOURCE_ID)) {
+          map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(sourceOptions));
+        }
+        if (!map.getLayer(ALTITUDE_LAYER_ID)) {
+          map.addLayer(
+            buildAltitudeLayer(
+              opacityRef.current,
+              colorModeRef.current,
+              categoriesRef.current,
+              hiddenIdsRef.current,
+            ) as Parameters<MapboxMap['addLayer']>[0],
+          );
+        }
+        return Boolean(map.getSource(ALTITUDE_SOURCE_ID) && map.getLayer(ALTITUDE_LAYER_ID));
+      } catch {
+        return false;
+      }
+    })();
+    if (!mounted) return;
+    mountedRef.current = true;
+    mountedSourceKeyRef.current = sourceKey;
+  }, [map, isMapLoaded, sourceKey, sourceOptions]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
@@ -155,6 +199,7 @@ export function useAltitude(
 
     const onStyleLoad = () => {
       mountedRef.current = false;
+      mountedSourceKeyRef.current = null;
       setTimeout(() => {
         if (!enabledRef.current) return;
         addAltitudeLayer(
@@ -163,8 +208,10 @@ export function useAltitude(
           colorModeRef.current,
           categoriesRef.current,
           hiddenIdsRef.current,
+          sourceOptionsRef.current,
         );
         mountedRef.current = true;
+        mountedSourceKeyRef.current = buildAltitudeSourceKey(sourceOptionsRef.current);
       }, 0);
     };
 

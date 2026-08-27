@@ -7,6 +7,15 @@ export const POINT_SIZE_MIN = 0.02;
 export const POINT_SIZE_MAX = 1.0;
 export const DENSITY_SCALE_MIN = 0.01;
 export const DENSITY_SCALE_MAX = 1.0;
+export const ELEVATION_EXAGGERATION_MIN = 0.5;
+export const ELEVATION_EXAGGERATION_MAX = 3.0;
+
+export const LEFT_PANEL_STORAGE_WIDTH_KEY = 'rv-viewer-left-panel-width-v2';
+export const LEFT_PANEL_STORAGE_COLLAPSED_KEY = 'rv-viewer-left-panel-collapsed-v2';
+export const LEFT_PANEL_WIDTH_DEFAULT = 300;
+export const LEFT_PANEL_WIDTH_MIN = 280;
+export const LEFT_PANEL_WIDTH_MAX = 460;
+export const LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD = 48;
 
 export interface ViewerEngineOption {
   key: ViewerEngineKey;
@@ -21,10 +30,12 @@ interface ViewerPanelOptions {
   googleMapsUrl: string;
   pointSizePercent?: number;
   densityPercent?: number;
+  elevationPercent?: number;
   engineMode?: ViewerEngineKey;
   engineOptions?: ViewerEngineOption[];
   onPointSizeChange?: (percent: number) => void;
   onDensityChange?: (percent: number) => void;
+  onElevationChange?: (percent: number, factor: number) => void;
   onEngineModeChange?: (mode: ViewerEngineKey) => void;
   onSnowModeChange?: (mode: SnowModeKey) => void;
   onPrimaryActionClick?: () => void;
@@ -98,6 +109,17 @@ export function percentToDensityScale(percent: number): number {
   return toSliderPercent(percent) / 100;
 }
 
+export function elevationPercentToFactor(percent: number): number {
+  const normalized = (toSliderPercent(percent) - 1) / 99;
+  return ELEVATION_EXAGGERATION_MIN + normalized * (ELEVATION_EXAGGERATION_MAX - ELEVATION_EXAGGERATION_MIN);
+}
+
+export function factorToElevationPercent(factor: number): number {
+  const clamped = clamp(factor, ELEVATION_EXAGGERATION_MIN, ELEVATION_EXAGGERATION_MAX);
+  const normalized = (clamped - ELEVATION_EXAGGERATION_MIN) / (ELEVATION_EXAGGERATION_MAX - ELEVATION_EXAGGERATION_MIN);
+  return toSliderPercent(1 + normalized * 99);
+}
+
 function queryElement<T extends HTMLElement>(id: string): T | null {
   return document.getElementById(id) as T | null;
 }
@@ -113,11 +135,18 @@ function syncRangeFill(input: HTMLInputElement | null): void {
 
 export function createViewerPanel(options: ViewerPanelOptions) {
   const root = ensureViewerPanel();
+  const resizeHandle = queryElement<HTMLDivElement>('viewer-panel-resize-handle');
+  const leftCollapsedRail = queryElement<HTMLDivElement>('viewer-left-collapsed-rail');
+  const restoreButton = queryElement<HTMLButtonElement>('viewer-left-restore-btn');
+
   const tileLabelEl = queryElement<HTMLParagraphElement>('panel-tile-label');
   const locationEl = queryElement<HTMLParagraphElement>('panel-location-value');
   const mapsLinkEl = queryElement<HTMLAnchorElement>('panel-maps-link');
+  const pointControlsGroup = queryElement<HTMLDivElement>('panel-point-controls');
+  const elevationControlsGroup = queryElement<HTMLDivElement>('panel-elevation-controls');
   const pointSizeInput = queryElement<HTMLInputElement>('panel-point-size');
   const densityInput = queryElement<HTMLInputElement>('panel-point-density');
+  const elevationInput = queryElement<HTMLInputElement>('panel-elevation-exaggeration');
   const engineModeButton = queryElement<HTMLButtonElement>('panel-engine-mode-button');
   const engineModeValue = queryElement<HTMLSpanElement>('panel-engine-mode-value');
   const engineModeMenu = queryElement<HTMLDivElement>('panel-engine-mode-menu');
@@ -141,6 +170,95 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   let lastSnowMode: Exclude<SnowModeKey, 'off'> = 'cover';
   let currentEngineMode: ViewerEngineKey = options.engineMode ?? 'webgpu';
   let availableEngineOptions = normalizeEngineOptions(options.engineOptions);
+
+  // --- Left panel resize and collapse state ---
+  let leftPanelWidth = LEFT_PANEL_WIDTH_DEFAULT;
+  try {
+    const stored = localStorage.getItem(LEFT_PANEL_STORAGE_WIDTH_KEY);
+    if (stored) {
+      const parsed = parseFloat(stored);
+      if (!Number.isNaN(parsed) && parsed >= LEFT_PANEL_WIDTH_MIN && parsed <= LEFT_PANEL_WIDTH_MAX) {
+        leftPanelWidth = parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  let isLeftCollapsed = false;
+  try {
+    isLeftCollapsed = localStorage.getItem(LEFT_PANEL_STORAGE_COLLAPSED_KEY) === 'true';
+  } catch {
+    // ignore
+  }
+
+  let lastExpandedLeftWidth = leftPanelWidth;
+
+  const applyPanelWidth = (width: number) => {
+    leftPanelWidth = width;
+    root.style.setProperty('--viewer-panel-width', `${width}px`);
+    root.style.width = `min(${width}px, calc(100vw - 32px))`;
+    try {
+      localStorage.setItem(LEFT_PANEL_STORAGE_WIDTH_KEY, String(width));
+    } catch {
+      // ignore
+    }
+  };
+
+  const applyCollapsedState = (collapsed: boolean) => {
+    isLeftCollapsed = collapsed;
+    root.classList.toggle('is-collapsed', collapsed);
+    leftCollapsedRail?.classList.toggle('is-visible', collapsed);
+    try {
+      localStorage.setItem(LEFT_PANEL_STORAGE_COLLAPSED_KEY, String(collapsed));
+    } catch {
+      // ignore
+    }
+  };
+
+  const restoreLeftPanel = () => {
+    const nextWidth = Math.max(
+      LEFT_PANEL_WIDTH_MIN,
+      Math.min(LEFT_PANEL_WIDTH_MAX, lastExpandedLeftWidth || LEFT_PANEL_WIDTH_DEFAULT),
+    );
+    applyPanelWidth(nextWidth);
+    applyCollapsedState(false);
+  };
+
+  const handleResizeHandleMouseDown = (event: MouseEvent) => {
+    event.preventDefault();
+    root.classList.add('is-resizing');
+    resizeHandle?.classList.add('is-dragging');
+    const startX = event.clientX;
+    const startWidth = leftPanelWidth;
+
+    const onMove = (nextEvent: MouseEvent) => {
+      const delta = nextEvent.clientX - startX;
+      const raw = startWidth + delta;
+      const maxAllowed = Math.min(LEFT_PANEL_WIDTH_MAX, window.innerWidth - 32);
+      const minAllowed = Math.min(LEFT_PANEL_WIDTH_MIN, maxAllowed);
+
+      if (raw <= minAllowed - LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD) {
+        applyCollapsedState(true);
+        return;
+      }
+
+      applyCollapsedState(false);
+      const clamped = Math.max(minAllowed, Math.min(maxAllowed, raw));
+      lastExpandedLeftWidth = clamped;
+      applyPanelWidth(clamped);
+    };
+
+    const onUp = () => {
+      root.classList.remove('is-resizing');
+      resizeHandle?.classList.remove('is-dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  };
 
   const getEngineOption = (key: ViewerEngineKey) => availableEngineOptions.find((option) => option.key === key);
 
@@ -185,6 +303,15 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       if (config?.title) option.title = config.title;
       else option.removeAttribute('title');
     });
+
+    const isWebGL = currentEngineMode === 'webgl';
+    if (isWebGL) {
+      pointControlsGroup?.setAttribute('hidden', '');
+      elevationControlsGroup?.removeAttribute('hidden');
+    } else {
+      pointControlsGroup?.removeAttribute('hidden');
+      elevationControlsGroup?.setAttribute('hidden', '');
+    }
 
     if ((engineModeButton?.disabled ?? false) && engineModeMenuOpen) closeEngineModeMenu();
   };
@@ -256,6 +383,13 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     options.onDensityChange?.(toSliderPercent(Number(densityInput.value)));
   };
 
+  const handleElevationInput = () => {
+    if (!elevationInput) return;
+    syncRangeFill(elevationInput);
+    const pct = toSliderPercent(Number(elevationInput.value));
+    options.onElevationChange?.(pct, elevationPercentToFactor(pct));
+  };
+
   const handleEngineModeButtonClick = (event: MouseEvent) => {
     event.stopPropagation();
     if (engineModeButton?.disabled) return;
@@ -308,13 +442,24 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   if (mapsLinkEl) mapsLinkEl.href = options.googleMapsUrl;
   if (pointSizeInput) pointSizeInput.value = String(toSliderPercent(options.pointSizePercent ?? 50));
   if (densityInput) densityInput.value = String(toSliderPercent(options.densityPercent ?? 100));
+  if (elevationInput) {
+    elevationInput.value = String(toSliderPercent(options.elevationPercent ?? factorToElevationPercent(1.0)));
+  }
   syncRangeFill(pointSizeInput);
   syncRangeFill(densityInput);
+  syncRangeFill(elevationInput);
   syncEngineSelection();
   syncSnowModeSelection();
 
+  applyPanelWidth(leftPanelWidth);
+  applyCollapsedState(isLeftCollapsed);
+
+  resizeHandle?.addEventListener('mousedown', handleResizeHandleMouseDown);
+  restoreButton?.addEventListener('click', restoreLeftPanel);
+
   pointSizeInput?.addEventListener('input', handlePointSizeInput);
   densityInput?.addEventListener('input', handleDensityInput);
+  elevationInput?.addEventListener('input', handleElevationInput);
   engineModeButton?.addEventListener('click', handleEngineModeButtonClick);
   engineModeOptions.forEach((option) => option.addEventListener('click', handleEngineModeOptionClick));
   snowToggle?.addEventListener('change', handleSnowToggle);
@@ -345,6 +490,12 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       if (densityInput) {
         densityInput.value = String(toSliderPercent(percent));
         syncRangeFill(densityInput);
+      }
+    },
+    setElevationPercent(percent: number) {
+      if (elevationInput) {
+        elevationInput.value = String(toSliderPercent(percent));
+        syncRangeFill(elevationInput);
       }
     },
     setPointControlsDisabled(disabled: boolean) {
@@ -378,8 +529,11 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       else primaryActionBtn.removeAttribute('title');
     },
     destroy() {
+      resizeHandle?.removeEventListener('mousedown', handleResizeHandleMouseDown);
+      restoreButton?.removeEventListener('click', restoreLeftPanel);
       pointSizeInput?.removeEventListener('input', handlePointSizeInput);
       densityInput?.removeEventListener('input', handleDensityInput);
+      elevationInput?.removeEventListener('input', handleElevationInput);
       engineModeButton?.removeEventListener('click', handleEngineModeButtonClick);
       engineModeOptions.forEach((option) => option.removeEventListener('click', handleEngineModeOptionClick));
       snowToggle?.removeEventListener('change', handleSnowToggle);
@@ -387,6 +541,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
       snowModeOptions.forEach((option) => option.removeEventListener('click', handleSnowModeOptionClick));
       document.removeEventListener('click', handleDocumentClick);
       document.removeEventListener('keydown', handleEscape);
+      leftCollapsedRail?.remove();
     },
   };
 }

@@ -276,6 +276,9 @@ export function TimelinePanel({
               onAdd={handleOpenKindMenu}
               onOpenKindMenu={handleOpenKindMenu}
               onSelectPlace={onSelectPlace}
+              onMovePause={onMovePause}
+              onChangePauseDuration={onChangePauseDuration}
+              onChangeIntervalPauseDuration={onChangeIntervalPauseDuration}
             />
           </>
         ) : (
@@ -284,6 +287,7 @@ export function TimelinePanel({
             rhythm={rhythm}
             prediction={prediction}
             config={railConfig}
+            filters={filters}
             markerStepKm={timelineMarkerStepKm}
             hourZoom={timelineZoomLevel}
             selectedIds={selectedIds}

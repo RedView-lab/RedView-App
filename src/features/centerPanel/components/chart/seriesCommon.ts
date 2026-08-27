@@ -14,6 +14,7 @@ export interface RouteChartPoint {
  * sync with the labels rendered in CenterPanelAnalysis.
  */
 export type AxisMetricId =
+  | 'Altitude'
   | 'Vitesse'
   | 'Vitesse moyenne'
   | 'Puissance'
@@ -29,7 +30,7 @@ export type AxisMetricId =
   | 'Humidité (%)'
   | 'Ensoleillement (min)';
 
-export type ChartMetricId = AxisMetricId | 'Altitude';
+export type ChartMetricId = AxisMetricId;
 
 export type AxisMode = 'distance' | 'temps' | 'heure';
 

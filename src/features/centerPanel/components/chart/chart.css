@@ -14,11 +14,14 @@
   flex-direction: column;
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 0;
-  background: rgba(0, 0, 0, 0.64);
+  min-height: 175px;
+  background: rgba(0, 0, 0, 0.6);
   cursor: crosshair;
   isolation: isolate;
   overflow: hidden;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 14px;
 }
 
 /* Plot area = the chart minus the bottom rows (axis + series + add). */
@@ -32,25 +35,40 @@
 
 .rvchart__yaxis-left,
 .rvchart__yaxis-right {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 8px 6px;
-  font: 600 12px/1 'DM Sans', system-ui, sans-serif;
-  color: rgba(255, 255, 255, 0.64);
+  position: relative;
+  display: block;
+  padding: 0;
+  font: 600 11px/1 'DM Sans', system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.68);
   user-select: none;
 }
 
-.rvchart__yaxis-left { text-align: right; align-items: flex-end; }
-.rvchart__yaxis-right { text-align: left; align-items: flex-start; }
+.rvchart__yaxis-label {
+  position: absolute;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+  pointer-events: none;
+}
+
+.rvchart__yaxis-left .rvchart__yaxis-label {
+  right: 8px;
+  text-align: right;
+}
+
+.rvchart__yaxis-right .rvchart__yaxis-label {
+  left: 8px;
+  text-align: left;
+}
 
 .rvchart__plotarea {
   position: relative;
-  border-left: 1px solid rgba(255, 255, 255, 0.8);
-  border-right: 1px solid rgba(255, 255, 255, 0.96);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.8);
-  overflow: hidden;
+  border-left: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  overflow: visible;
   isolation: isolate;
+  cursor: crosshair;
 }
 
 /* ---- Layers ---- */
@@ -112,6 +130,7 @@
 .rvchart__vline {
   position: absolute;
   background: rgba(255, 255, 255, 0.08);
+  pointer-events: none;
 }
 .rvchart__hline { left: 0; right: 0; height: 1px; }
 .rvchart__vline { top: 0; bottom: 0; width: 1px; }
@@ -122,31 +141,35 @@
   top: 0;
   bottom: 0;
   width: 1px;
-  background: rgba(255, 255, 255, 0.85);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 100%);
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+  z-index: 10;
 }
 
 .rvchart__hover-point {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 999px;
   transform: translate(-50%, -50%);
   background: var(--rvchart-hover-point-color, #ffffff);
-  border: 2px solid rgba(10, 12, 9, 0.82);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18), 0 4px 10px rgba(0, 0, 0, 0.32);
-  z-index: 4;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 12px var(--rvchart-hover-point-color, rgba(255, 255, 255, 0.6)), 0 4px 10px rgba(0, 0, 0, 0.4);
+  z-index: 12;
+  pointer-events: none;
 }
 
 .rvchart__hover-point--backdrop {
-  width: 9px;
-  height: 9px;
-  border-color: rgba(24, 28, 22, 0.94);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.42), 0 4px 12px rgba(0, 0, 0, 0.28);
+  width: 11px;
+  height: 11px;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 10px var(--rvchart-hover-point-color, rgba(255, 255, 255, 0.4));
 }
 
 .rvchart__poi-marker {
   position: absolute;
-  transform: translate(-50%, calc(-100% + 7px));
+  transform: translate(-50%, -100%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -169,7 +192,7 @@
 
 .rvchart__alert-marker {
   position: absolute;
-  transform: translate(-50%, calc(-100% + 10px));
+  transform: translate(-50%, -100%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -192,7 +215,7 @@
 
 .rvchart__poi-cluster {
   position: absolute;
-  transform: translate(-50%, calc(-100% + 7px));
+  transform: translate(-50%, -79.6%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -212,22 +235,23 @@
   height: 100%;
 }
 
-/* ---- Hover info cards ---- */
+/* ---- Hover info cards (Figma Pixel-Perfect node 1894:39098) ---- */
 .rvchart__cards {
   position: absolute;
   top: 8px;
   display: flex;
-  align-items: stretch;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 8px;
   padding: 8px 4px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(32, 24, 18, 0.86);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(60px);
+  -webkit-backdrop-filter: blur(60px);
   box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
-  color: #fff;
-  font: 400 12px/1.35 'DM Sans', system-ui, sans-serif;
+  color: #ffffff;
+  font: 700 12px/normal 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
   white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
 }
 
 .rvchart__card {
@@ -235,22 +259,44 @@
   align-items: flex-start;
   gap: 8px;
   padding: 0 6px;
-  min-width: 96px;
+  flex-shrink: 0;
 }
 
-.rvchart__card + .rvchart__card { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.rvchart__card + .rvchart__card {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
 
 .rvchart__card-dot {
   width: 12px;
   height: 12px;
   border-radius: 2px;
   flex: 0 0 auto;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
-.rvchart__card-copy { display: grid; gap: 4px; min-width: 0; }
-.rvchart__card-distance { font-weight: 500; }
-.rvchart__card-metrics { display: grid; gap: 4px; color: rgba(255, 255, 255, 0.96); }
+.rvchart__card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  font-family: 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  color: #ffffff;
+  line-height: normal;
+  white-space: nowrap;
+}
+
+.rvchart__card-distance {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.rvchart__card-metric {
+  color: #ffffff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
 /* ---- Bottom rows (X axis + series) ---- */
 .rvchart__xaxis,
@@ -259,28 +305,30 @@
   grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
   align-items: center;
   flex: 0 0 auto;
-  background: rgba(0, 0, 0, 0.64);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 .rvchart__xaxis {
   height: 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.8);
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .rvchart__viewport {
   display: grid;
   grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
   align-items: center;
-  height: 12px;
+  height: 14px;
   flex: 0 0 auto;
-  background: rgba(0, 0, 0, 0.64);
+  background: rgba(0, 0, 0, 0.4);
+  padding-bottom: 2px;
 }
 
 .rvchart__viewport-track {
   position: relative;
-  height: 12px;
+  height: 10px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
 }
 
 .rvchart__viewport-window {
@@ -290,6 +338,7 @@
   min-width: 18px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.24);
+  border-radius: 4px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 

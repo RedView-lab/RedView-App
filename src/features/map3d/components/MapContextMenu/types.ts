@@ -3,7 +3,8 @@ export type MapContextMenuActionId =
   | 'create-poi'
   | 'set-start'
   | 'add-waypoint'
-  | 'set-finish';
+  | 'set-finish'
+  | 'delete-forbidden-zone';
 
 export interface MapContextMenuPoint {
   lng: number;
@@ -16,6 +17,7 @@ export interface MapContextMenuPoint {
   surfaceLabel: string | null;
   openingHoursLabel: string | null;
   overlayDetails: MapContextMenuOverlayDetail[];
+  forbiddenZoneId?: string | null;
 }
 
 export type MapContextMenuOverlayDetailKind = 'sunlight' | 'weather' | 'wind';

@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import mapboxgl, { type Map as MapboxMap } from 'mapbox-gl';
 import { MapCanvasGlassBackdrop } from '@/shared/components/MapCanvasGlassBackdrop';
 import type { PoiCategory, PoiFeature } from '@/features/poi/types';
 import { PlaceSearchInput } from '@/features/itineraryPanel/sections/timeline/components';
 import type { GeocodeSuggestion } from '@/features/itineraryPanel/lib/geocoding';
+import { dispatchItineraryMapAction } from '@/features/itineraryPanel/lib/mapActionBridge';
+import {
+  buildPopupContent,
+  resolvePopupState,
+  type PoiPopupState,
+  type UsePoiPopupActions,
+} from '@/features/poi/lib/poi-popup';
 import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
@@ -34,6 +41,7 @@ import {
   fetchVisibleViewportPois,
   getViewportPoiMarkerKey,
   getViewportPoiMarkerSignature,
+  getViewportPoiMarkerSizePx,
   selectViewportLodPois,
 } from './DashboardPlaceSearch.viewport-poi';
 
@@ -45,6 +53,8 @@ export function DashboardPlaceSearch({
   visible,
   left,
   top,
+  activeFilters: controlledActiveFilters,
+  onFilterChange,
 }: DashboardPlaceSearchProps) {
   const { t } = useAppI18n();
   const [proximity, setProximity] = useState<{ lon: number; lat: number } | undefined>(
@@ -62,9 +72,10 @@ export function DashboardPlaceSearch({
   const [selectedPoiIds, setSelectedPoiIds] = useState<Set<DashboardPoiOptionId>>(
     () => new Set(),
   );
-  const [activeFilters, setActiveFilters] = useState<Set<DashboardFilterId>>(
+  const [internalActiveFilters, setInternalActiveFilters] = useState<Set<DashboardFilterId>>(
     () => new Set<DashboardFilterId>(['pois_route', 'favoris', 'pauses']),
   );
+  const activeFilters = controlledActiveFilters ?? internalActiveFilters;
 
   const handleClosePoiMenu = useCallback(() => {
     setPoiMenuOpen(false);
@@ -140,16 +151,80 @@ export function DashboardPlaceSearch({
     };
   }, [handleClosePoiMenu, poiMenuOpen]);
 
+  const lastAppliedPoiSizePxRef = useRef<number>(-1);
+
+  const viewportPoiPopupActions: UsePoiPopupActions = useMemo(() => ({
+    onStartHere: (feature) => {
+      dispatchItineraryMapAction({ kind: 'poi-action', action: 'start-here', feature });
+    },
+    onAddWaypoint: (feature) => {
+      dispatchItineraryMapAction({ kind: 'poi-action', action: 'add-waypoint', feature });
+    },
+    onFinishHere: (feature) => {
+      dispatchItineraryMapAction({ kind: 'poi-action', action: 'finish-here', feature });
+    },
+    onToggleFavorite: (feature, nextEnabled) => {
+      dispatchItineraryMapAction({
+        kind: 'poi-action',
+        action: 'toggle-favorite',
+        feature,
+        extra: { nextEnabled },
+      });
+    },
+    onTogglePause: (feature, nextEnabled, durationMin) => {
+      dispatchItineraryMapAction({
+        kind: 'poi-action',
+        action: 'toggle-pause',
+        feature,
+        extra: { nextEnabled, durationMin },
+      });
+    },
+    onToggleManualTrace: (feature, nextEnabled) => {
+      dispatchItineraryMapAction({
+        kind: 'poi-action',
+        action: 'toggle-manual-trace',
+        feature,
+        extra: { nextEnabled },
+      });
+    },
+    onSelectPauseDuration: (feature, durationMin) => {
+      dispatchItineraryMapAction({
+        kind: 'poi-action',
+        action: 'set-pause-duration',
+        feature,
+        extra: { durationMin },
+      });
+    },
+    onCyclePauseDuration: (feature) => {
+      dispatchItineraryMapAction({ kind: 'poi-action', action: 'cycle-pause-duration', feature });
+    },
+    onDelete: (feature) => {
+      dispatchItineraryMapAction({ kind: 'poi-action', action: 'delete', feature });
+    },
+    onOpenStreetView: (feature) => {
+      if (typeof window === 'undefined') return;
+      const url = new URL('https://www.google.com/maps/@');
+      url.searchParams.set('api', '1');
+      url.searchParams.set('map_action', 'pano');
+      url.searchParams.set('viewpoint', `${feature.lat},${feature.lon}`);
+      window.open(url.toString(), '_blank', 'noopener,noreferrer');
+    },
+  }), []);
+
   const clearViewportPoiMarkers = useCallback(() => {
     for (const { marker } of poiMarkerRegistryRef.current.values()) {
       marker.remove();
     }
     poiMarkerRegistryRef.current.clear();
+    lastAppliedPoiSizePxRef.current = -1;
   }, []);
 
-  const syncViewportPoiMarkerVisualState = useCallback(() => {
+  const syncViewportPoiMarkerVisualState = useCallback((force = false) => {
     if (!map) return;
     const zoom = map.getZoom();
+    const sizePx = getViewportPoiMarkerSizePx(zoom);
+    if (!force && lastAppliedPoiSizePxRef.current === sizePx) return;
+    lastAppliedPoiSizePxRef.current = sizePx;
     for (const { marker } of poiMarkerRegistryRef.current.values()) {
       applyViewportPoiMarkerVisualState(marker, zoom);
     }
@@ -167,6 +242,10 @@ export function DashboardPlaceSearch({
       registry.delete(key);
     }
 
+    const currentZoom = map.getZoom();
+    const currentSizePx = getViewportPoiMarkerSizePx(currentZoom);
+    lastAppliedPoiSizePxRef.current = currentSizePx;
+
     for (const feature of features) {
       const key = getViewportPoiMarkerKey(feature);
       const signature = getViewportPoiMarkerSignature(feature);
@@ -174,21 +253,49 @@ export function DashboardPlaceSearch({
       if (existing && existing.signature === signature) continue;
 
       existing?.marker.remove();
+
+      const popup = new mapboxgl.Popup({
+        className: 'rv-poi-popup',
+        closeButton: false,
+        closeOnClick: true,
+        focusAfterOpen: false,
+        maxWidth: 'none',
+        offset: 24,
+      });
+
+      const refresh = (nextState?: PoiPopupState) => {
+        popup.setDOMContent(
+          buildPopupContent(
+            feature,
+            resolvePopupState(viewportPoiPopupActions, feature, nextState),
+            viewportPoiPopupActions,
+            refresh,
+          ),
+        );
+      };
+
+      refresh();
+      popup.on('open', () => refresh());
+
       const marker = new mapboxgl.Marker({
-          element: createViewportPoiMarkerElement(feature),
-          anchor: 'center',
-          pitchAlignment: 'viewport',
-          rotationAlignment: 'viewport',
-          occludedOpacity: 0.85,
-        }).setLngLat([feature.lon, feature.lat]).addTo(map);
-      applyViewportPoiMarkerVisualState(marker, map.getZoom());
+        element: createViewportPoiMarkerElement(feature),
+        anchor: 'center',
+        pitchAlignment: 'viewport',
+        rotationAlignment: 'viewport',
+        occludedOpacity: 0.85,
+      })
+        .setLngLat([feature.lon, feature.lat])
+        .setPopup(popup)
+        .addTo(map);
+
+      applyViewportPoiMarkerVisualState(marker, currentZoom);
       registry.set(key, {
         marker,
         signature,
         feature,
       });
     }
-  }, [map]);
+  }, [map, viewportPoiPopupActions]);
 
   useEffect(() => {
     if (!map) return;
@@ -347,24 +454,29 @@ export function DashboardPlaceSearch({
     });
   }, []);
 
-  const handleToggleFilter = useCallback((filterId: DashboardFilterId) => {
-    if (filterId === 'pois_map') {
-      setSelectedPoiIds((current) => {
-        if (current.size > 0) return new Set();
-        return new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
-      });
-      return;
-    }
-    setActiveFilters((current) => {
-      const next = new Set(current);
+  const handleToggleFilter = useCallback(
+    (filterId: DashboardFilterId) => {
+      if (filterId === 'pois_map') {
+        setSelectedPoiIds((current) => {
+          if (current.size > 0) return new Set();
+          return new Set(DASHBOARD_POI_OPTIONS.map((option) => option.id));
+        });
+        return;
+      }
+      const next = new Set(activeFilters);
       if (next.has(filterId)) {
         next.delete(filterId);
       } else {
         next.add(filterId);
       }
-      return next;
-    });
-  }, []);
+      if (onFilterChange) {
+        onFilterChange(next);
+      } else {
+        setInternalActiveFilters(next);
+      }
+    },
+    [activeFilters, onFilterChange],
+  );
 
   const isFilterActive = useCallback(
     (filterId: DashboardFilterId) =>
@@ -376,7 +488,7 @@ export function DashboardPlaceSearch({
     <div className="rvd-place-search" style={wrapperStyle} aria-hidden={!visible}>
       <div className="rvd-place-search__row" ref={rootRef}>
         <div className="rvd-place-search__search-shell">
-          <MapCanvasGlassBackdrop blur={60} saturate={1.8} tint="rgba(15, 15, 15, 0.74)" />
+          <MapCanvasGlassBackdrop blur={30} saturate={1.6} tint="rgba(18, 20, 26, 0.32)" />
           <span className="rvd-place-search__icon">
             <SearchIcon />
           </span>
@@ -401,9 +513,9 @@ export function DashboardPlaceSearch({
               <div key={filter.id} className={shellClassName}>
                 <div className="rvd-place-search__filter-shell">
                   <MapCanvasGlassBackdrop
-                    blur={60}
-                    saturate={1.8}
-                    tint={active ? 'rgba(15, 15, 15, 0.74)' : 'rgba(52, 52, 52, 0.77)'}
+                    blur={30}
+                    saturate={1.6}
+                    tint={active ? 'rgba(18, 20, 26, 0.32)' : 'rgba(14, 16, 22, 0.62)'}
                   />
                   <button
                     type="button"
@@ -435,7 +547,7 @@ export function DashboardPlaceSearch({
                       aria-label={t('Catégories POI')}
                       onClick={handleTogglePoiMenu}
                     >
-                      <SvgV2Icon name="chevron-down.svg" size={14} />
+                      <SvgV2Icon name="chevron-down.svg" size={15} />
                     </button>
                   ) : null}
                 </div>
@@ -450,9 +562,9 @@ export function DashboardPlaceSearch({
                     aria-label={t('Catégories POI')}
                   >
                     <MapCanvasGlassBackdrop
-                      blur={60}
-                      saturate={1.8}
-                      tint="rgba(15, 15, 15, 0.74)"
+                      blur={30}
+                      saturate={1.6}
+                      tint="rgba(20, 22, 28, 0.72)"
                     />
                     <div className="rvd-place-search__poi-menu-list">
                       {DASHBOARD_POI_OPTIONS.map((option) => {

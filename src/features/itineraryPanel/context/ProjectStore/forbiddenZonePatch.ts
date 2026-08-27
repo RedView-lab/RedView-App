@@ -50,7 +50,7 @@ function segmentIntersectsPolygon(
   return false;
 }
 
-function pointInPolygon(
+export function pointInPolygon(
   point: { lat: number; lon: number },
   polygon: Array<{ lat: number; lon: number }>,
 ): boolean {

@@ -12,6 +12,7 @@ export {
   fetchBrouterRouteBestByScore,
   fetchBrouterRouteBestWithDistanceDetours,
   fetchBrouterRouteBestWithClimbEfficiency,
+  formatBrouterErrorMessage,
 } from './api';
 export { buildBrouterUrl, formatLonlats, resolveEndpoint } from './api';
 export { formatForbiddenZonePolygons } from './geo';

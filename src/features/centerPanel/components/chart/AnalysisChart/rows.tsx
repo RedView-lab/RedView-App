@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { IconChevronDown } from '../../CenterPanelIcons';
 import {
@@ -96,7 +96,6 @@ export function EmptySeriesRow({
 }
 
 interface HoverCardGroupProps {
-  hoverX: number;
   hoverRatioX: number;
   xValue: number;
   xMode: AxisMode;
@@ -104,36 +103,78 @@ interface HoverCardGroupProps {
 }
 
 export function HoverCardGroup({
-  hoverX,
   hoverRatioX,
   xValue,
   xMode,
   rows,
 }: HoverCardGroupProps) {
   if (rows.length === 0) return null;
-  const transform = hoverRatioX > 0.56 ? 'translateX(calc(-100% - 4px))' : 'translateX(4px)';
+  const transform = hoverRatioX > 0.52 ? 'translateX(-100%)' : 'translateX(0)';
+
+  // Group rows by itineraryName
+  const itineraryGroups = rows.reduce<
+    Record<
+      string,
+      {
+        color: string;
+        gainM?: number;
+        lossM?: number;
+        rows: HoverCardRow[];
+      }
+    >
+  >((acc, row) => {
+    const key = row.itineraryName || 'Itinéraire';
+    if (!acc[key]) {
+      acc[key] = {
+        color: row.color,
+        gainM: row.gainM,
+        lossM: row.lossM,
+        rows: [],
+      };
+    }
+    if (row.gainM != null) acc[key].gainM = row.gainM;
+    if (row.lossM != null) acc[key].lossM = row.lossM;
+    acc[key].rows.push(row);
+    return acc;
+  }, {});
 
   return (
-    <div className="rvchart__cards" style={{ left: `${hoverX}px`, transform }}>
-      {rows.map((row) => (
-        <Fragment key={row.id}>
-          <section className="rvchart__card">
-            <span className="rvchart__card-dot" style={{ background: row.color }} />
+    <div
+      className="rvchart__cards"
+      style={{ left: `${(hoverRatioX * 100).toFixed(4)}%`, transform }}
+    >
+      {Object.entries(itineraryGroups).map(([itineraryName, group]) => {
+        return (
+          <div key={itineraryName} className="rvchart__card">
+            <div
+              className="rvchart__card-dot"
+              style={{ background: group.color }}
+            />
             <div className="rvchart__card-copy">
               <div className="rvchart__card-distance">
-                {row.itineraryName} · {row.axisLabel}
+                {formatXAxisValue(xValue, xMode)}
               </div>
-              <div className="rvchart__card-metrics">
-                <div>
-                  {row.metric}:{' '}
-                  {Number.isFinite(row.value) ? formatAxisValue(row.metric, row.value) : '--'}
-                </div>
-                <div>{formatXAxisValue(xValue, xMode)}</div>
-              </div>
+              {group.gainM != null ? (
+                <div className="rvchart__card-metric">+{group.gainM} m</div>
+              ) : null}
+              {group.lossM != null ? (
+                <div className="rvchart__card-metric">-{group.lossM} m</div>
+              ) : null}
+              {group.rows.map((row) => {
+                const isAltitude = row.metric === 'Altitude';
+                const formatted = Number.isFinite(row.value)
+                  ? formatAxisValue(row.metric, row.value)
+                  : '--';
+                return (
+                  <div key={row.id} className="rvchart__card-metric">
+                    {isAltitude ? formatted : `${row.metric}: ${formatted}`}
+                  </div>
+                );
+              })}
             </div>
-          </section>
-        </Fragment>
-      ))}
+          </div>
+        );
+      })}
     </div>
   );
 }

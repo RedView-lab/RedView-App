@@ -23,31 +23,10 @@ import {
   projectClickOntoRoute,
 } from './routeDragWaypointSnap';
 
-/**
- * Press-and-drag waypoint tool.
- *
- * While a Brouter trace is rendered and no other center-panel tool is armed,
- * the user can grab the trace with the left mouse button and drag it onto
- * another road. On release a new waypoint is inserted at the grabbed position
- * (in route order) and the local segment is rerouted through it via the
- * existing `pendingRoutePatch` pipeline.
- *
- * Unlike the trace / split / forbidden-zone tools this one is **not** armed:
- * it is ambient whenever a route is on the map, and only stands down while an
- * explicit tool is active so the two interaction modes never compete for the
- * same click.
- *
- * Implementation notes:
- *  - Uses Mapbox's own `mousedown`/`mousemove`/`mouseup` events (not raw
- *    `canvas.addEventListener`) so the handlers receive `.lngLat` / `.point`
- *    already resolved — no manual `unproject` maths — and fire even when the
- *    cursor leaves the canvas mid-drag (Mapbox tracks the pointer globally
- *    while a drag is in progress).
- *  - `map.dragPan.disable()` is called on the grab `mousedown` together with
- *    `preventDefault()` on the original event, so Mapbox's built-in pan never
- *    starts and the gesture is fully owned by the waypoint drag. `dragPan` is
- *    re-enabled on every exit path.
- */
+/** Minimum pointer movement (in screen pixels) before a press is treated as a drag. */
+const DRAG_THRESHOLD_PX = 6;
+/** Proximity radius to look for a nearby POI marker when a simple click occurs near one. */
+const POI_CLICK_PROXIMITY_PX = 26;
 
 interface RouteDragWaypointContextValue {
   /** Reserved for future consumers; the drag itself is fully effect-driven. */
@@ -66,6 +45,31 @@ interface RouteDragWaypointProviderProps {
 interface DragSession {
   /** World-space coordinate projected onto the trace where the grab started. */
   anchor: { lat: number; lon: number };
+  startX: number;
+  startY: number;
+  isDragging: boolean;
+}
+
+function findNearbyPoiMarker(clientX: number, clientY: number, maxDistancePx = POI_CLICK_PROXIMITY_PX): HTMLElement | null {
+  const direct = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('.rv-poi-marker, .mapboxgl-marker');
+  if (direct) return direct;
+
+  const markers = document.querySelectorAll<HTMLElement>('.rv-poi-marker');
+  let closest: HTMLElement | null = null;
+  let minDist = maxDistancePx;
+
+  for (const el of markers) {
+    const rect = el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dist = Math.hypot(clientX - cx, clientY - cy);
+    if (dist < minDist) {
+      minDist = dist;
+      closest = el;
+    }
+  }
+
+  return closest;
 }
 
 export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointProviderProps) {
@@ -172,7 +176,11 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       if (!next) return;
       // The drag marker follows the cursor verbatim — BRouter snaps it to the
       // nearest road only on commit, so the preview shows the raw drop target.
-      setRouteHoverPreview(map, { lon: next.lng, lat: next.lat });
+      setRouteHoverPreview(map, {
+        lon: next.lng,
+        lat: next.lat,
+        color: routeColorRef.current,
+      });
     };
 
     const resetAfterDrag = () => {
@@ -192,7 +200,24 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
      * hover detection.
      */
     const handleWindowMouseMove = (event: MouseEvent) => {
-      if (!sessionRef.current) return;
+      const session = sessionRef.current;
+      if (!session) return;
+
+      const dist = Math.hypot(event.clientX - session.startX, event.clientY - session.startY);
+
+      if (!session.isDragging) {
+        if (dist < DRAG_THRESHOLD_PX) return;
+        session.isDragging = true;
+        dragWasActiveRef.current = true;
+        map.dragPan.disable();
+        applyCursor('grabbing');
+        setRouteHoverPreview(map, {
+          lon: session.anchor.lon,
+          lat: session.anchor.lat,
+          color: routeColorRef.current,
+        });
+      }
+
       const lngLat = unprojectClient(event.clientX, event.clientY);
       pendingDragLngLat = { lng: lngLat.lng, lat: lngLat.lat };
       if (rafId === null) rafId = window.requestAnimationFrame(flushDragMove);
@@ -207,8 +232,20 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       window.removeEventListener('mouseup', handleWindowMouseUp);
 
       sessionRef.current = null;
-      const lngLat = unprojectClient(event.clientX, event.clientY);
-      commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat);
+
+      if (session.isDragging) {
+        // Legitimate drag gesture: commit new waypoint.
+        const lngLat = unprojectClient(event.clientX, event.clientY);
+        commitDrag(session.anchor.lat, session.anchor.lon, lngLat.lng, lngLat.lat);
+      } else {
+        // Simple click without drag movement: DO NOT alter route.
+        // If a POI marker was targeted or nearby, trigger its click so the popup opens.
+        const nearbyPoi = findNearbyPoiMarker(event.clientX, event.clientY, POI_CLICK_PROXIMITY_PX);
+        if (nearbyPoi) {
+          nearbyPoi.click();
+        }
+      }
+
       resetAfterDrag();
     };
 
@@ -221,52 +258,74 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
     };
 
     /**
-     * Capture-phase mousedown on the canvas container. By stopping propagation
-     * here Mapbox never receives the press, so it cannot start its own drag-pan
-     * — no race, no immediate cancel. We then drive the rest of the gesture
-     * from window-level listeners (so the cursor can leave the canvas mid-drag).
+     * Capture-phase mousedown on the canvas container.
      */
     const handleMouseDown = (event: MouseEvent) => {
       if (event.button !== 0) return;
       if (sessionRef.current) return;
 
+      // 1. If clicking directly on a POI marker, popup, or any interactive control, let it handle the click natively.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        target.closest(
+          '.rv-poi-marker, .mapboxgl-marker, .mapboxgl-popup, .mapboxgl-popup-content, button, a, [role="button"], input, select, textarea',
+        )
+      ) {
+        return;
+      }
+
       const routePts = routePointsRef.current;
       if (!routePts || routePts.length < 2) return;
 
       const rect = canvas.getBoundingClientRect();
+      const clickX = event.clientX - rect.left;
+      const clickY = event.clientY - rect.top;
+
       const projection = findSplitProjectionForMapHover(
         map,
         routePts,
-        event.clientX - rect.left,
-        event.clientY - rect.top,
+        clickX,
+        clickY,
       );
       if (!projection?.withinTolerance) return;
 
       const anchor = projectClickOntoRoute(routePts, projection.snapped.lon, projection.snapped.lat);
       if (!anchor) return;
 
-      // Swallow the event before Mapbox's own handler sees it. This is the key
-      // fix: previously Mapbox started a pan on the same mousedown and fired a
-      // mouseup immediately, cancelling the grab within a frame.
+      // Prevent Mapbox dragPan from stealing pointer before we know if it's a drag or click.
       event.stopPropagation();
       event.preventDefault();
-      map.dragPan.disable();
 
-      sessionRef.current = { anchor };
-      dragWasActiveRef.current = true;
-      applyCursor('grabbing');
-      setRouteHoverPreview(map, {
-        lon: anchor.lon,
-        lat: anchor.lat,
-        color: routeColorRef.current,
-      });
+      sessionRef.current = {
+        anchor,
+        startX: event.clientX,
+        startY: event.clientY,
+        isDragging: false,
+      };
 
       window.addEventListener('mousemove', handleWindowMouseMove);
       window.addEventListener('mouseup', handleWindowMouseUp);
     };
 
     const handleHoverMouseMove = (event: MouseEvent) => {
-      if (sessionRef.current) return;
+      if (sessionRef.current?.isDragging) return;
+
+      // If hovering over a POI marker or UI control, clear the route grab cursor.
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        target.closest(
+          '.rv-poi-marker, .mapboxgl-marker, .mapboxgl-popup, button, a, [role="button"]',
+        )
+      ) {
+        if (overRouteRef.current) {
+          overRouteRef.current = false;
+          applyCursor('');
+        }
+        return;
+      }
+
       const routePts = routePointsRef.current;
       if (!routePts || routePts.length < 2) return;
       const rect = canvas.getBoundingClientRect();
@@ -320,9 +379,6 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       clearRouteHoverPreview(map);
       dragWasActiveRef.current = false;
     };
-    // Listeners attach once per map/enablement change. Live project data is
-    // read from refs inside the handlers, so a store mutation never tears down
-    // an in-progress grab.
   }, [commitDrag, enabled, map]);
 
   const value = ROUTE_DRAG_WAYPOINT_DEFAULT_VALUE;

@@ -28,6 +28,14 @@ export interface RouteLayerOptions {
   slopeBands?: ReadonlyArray<RouteSlopeBand>;
 }
 
+export interface RoutePatternLayerSpec {
+  colorPaint: string | unknown[] | null;
+  widthPx: number;
+  dasharray: number[] | null;
+  filter: unknown[] | null;
+  lineCap: 'butt' | 'round';
+}
+
 export interface RouteLayerRenderSpec {
   data: GeoJSON.Feature<GeoJSON.LineString> | GeoJSON.FeatureCollection<GeoJSON.LineString>;
   lineColorPaint: string | unknown[];
@@ -37,28 +45,19 @@ export interface RouteLayerRenderSpec {
   casingColorPaint: string | unknown[] | null;
   casingWidthPx: number;
   casingFilter: unknown[] | null;
-  accentColorPaint: string | unknown[] | null;
-  accentWidthPx: number;
-  accentDasharray: number[] | null;
-  accentFilter: unknown[] | null;
-  accentCap: 'butt' | 'round';
-  overlayColorPaint: string | unknown[] | null;
-  overlayWidthPx: number;
-  overlayDasharray: number[] | null;
-  overlayFilter: unknown[] | null;
-  overlayCap: 'butt' | 'round';
-  textureColorPaint: string | unknown[] | null;
-  textureWidthPx: number;
-  textureDasharray: number[] | null;
-  textureFilter: unknown[] | null;
-  textureCap: 'butt' | 'round';
+  pavedPattern: RoutePatternLayerSpec | null;
+  gravelPattern: RoutePatternLayerSpec | null;
+  dirtPattern: RoutePatternLayerSpec | null;
+  sandPattern: RoutePatternLayerSpec | null;
   requiresLineMetrics: boolean;
 }
 
 const ROUTE_SLOPE_TARGET_SEGMENT_M = 10;
 const ROUTE_MIN_SEGMENT_DISTANCE_M = 0.5;
-const ROUTE_GRAVEL_DASHARRAY = [0.95, 0.95];
-const ROUTE_DIRT_DASHARRAY = [0.42, 1.1];
+const ROUTE_PAVED_DASHARRAY = [3.6, 0.35];
+const ROUTE_GRAVEL_DASHARRAY = [1.05, 1.05];
+const ROUTE_DIRT_DASHARRAY = [0.42, 1.25];
+const ROUTE_SAND_DASHARRAY = [0.01, 1.75];
 const ROUTE_TRANSPARENT_COLOR = 'rgba(0,0,0,0)';
 
 interface RgbColor {
@@ -67,7 +66,7 @@ interface RgbColor {
   blue: number;
 }
 
-type StyledSurface = 'paved' | 'gravel' | 'dirt' | 'unknown';
+type StyledSurface = 'asphalt' | 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
 
 export function normalizeTraceWidthPx(value: number | null | undefined): number {
   return Math.max(1, Math.min(20, Math.round(value ?? 8)));
@@ -89,12 +88,20 @@ function tarmacBorderWidthPx(traceWidthPx: number): number {
   return Math.max(1.25, Math.min(3.25, traceWidthPx * 0.22));
 }
 
+function pavedPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(2.4, Math.min(5.2, traceWidthPx * 0.52));
+}
+
 function gravelPatternWidthPx(traceWidthPx: number): number {
-  return Math.max(2.1, Math.min(4.4, traceWidthPx * 0.42));
+  return Math.max(2.1, Math.min(4.6, traceWidthPx * 0.44));
 }
 
 function dirtPatternWidthPx(traceWidthPx: number): number {
-  return Math.max(1.7, Math.min(3.4, traceWidthPx * 0.28));
+  return Math.max(1.6, Math.min(3.6, traceWidthPx * 0.30));
+}
+
+function sandPatternWidthPx(traceWidthPx: number): number {
+  return Math.max(2.0, Math.min(4.2, traceWidthPx * 0.38));
 }
 
 function clampByte(value: number): number {
@@ -289,8 +296,15 @@ function buildUniformRouteGradientPaint(color: string): unknown[] {
 }
 
 function normalizeSurfaceForStyle(surface: Surface): StyledSurface {
-  if (surface === 'sand') return 'dirt';
-  if (surface === 'paved' || surface === 'gravel' || surface === 'dirt') return surface;
+  if (
+    surface === 'asphalt'
+    || surface === 'paved'
+    || surface === 'gravel'
+    || surface === 'dirt'
+    || surface === 'sand'
+  ) {
+    return surface;
+  }
   return 'unknown';
 }
 
@@ -301,7 +315,15 @@ function resolveSegmentSurface(start: RouteLayerPoint, end: RouteLayerPoint): Su
 function hasStyledSurface(points: readonly RouteLayerPoint[]): boolean {
   for (let index = 1; index < points.length; index += 1) {
     const surface = normalizeSurfaceForStyle(resolveSegmentSurface(points[index - 1], points[index]));
-    if (surface === 'gravel' || surface === 'dirt') return true;
+    if (
+      surface === 'asphalt'
+      || surface === 'paved'
+      || surface === 'gravel'
+      || surface === 'dirt'
+      || surface === 'sand'
+    ) {
+      return true;
+    }
   }
   return false;
 }
@@ -316,19 +338,27 @@ function hasSurface(points: readonly RouteLayerPoint[], targetSurface: StyledSur
 function resolveSurfaceFillColor(surface: StyledSurface, fallbackColor: string): string {
   if (surface === 'gravel') return tintUserColor(fallbackColor, 0.18);
   if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.12);
+  if (surface === 'sand') return tintUserColor(fallbackColor, 0.24);
+  if (surface === 'paved') return fallbackColor;
   return fallbackColor;
 }
 
 function resolveSurfaceBorderColor(surface: StyledSurface, fallbackColor: string): string {
   if (surface === 'gravel') return tintUserColor(fallbackColor, 0.34);
   if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.24);
+  if (surface === 'sand') return tintUserColor(fallbackColor, 0.30);
+  if (surface === 'paved') return tintUserColor(fallbackColor, 0.20);
   return ROUTE_TRANSPARENT_COLOR;
 }
 
-function resolveSurfacePatternColor(surface: 'paved' | 'gravel' | 'dirt', fallbackColor: string): string {
-  if (surface === 'paved') return tintUserColor(fallbackColor, 0.92);
+function resolveSurfacePatternColor(
+  surface: 'paved' | 'gravel' | 'dirt' | 'sand',
+  fallbackColor: string,
+): string {
+  if (surface === 'paved') return shadeUserColor(fallbackColor, 0.78);
   if (surface === 'gravel') return shadeUserColor(fallbackColor, 0.84);
   if (surface === 'dirt') return shadeUserColor(fallbackColor, 0.84);
+  if (surface === 'sand') return shadeUserColor(fallbackColor, 0.88);
   return shadeUserColor(fallbackColor, 0.84);
 }
 
@@ -355,7 +385,7 @@ function buildSurfaceColorExpression(property: 'lineColor' | 'casingColor', fall
 }
 
 function buildStyledSurfaceFilter(): unknown[] {
-  return ['in', ['get', 'surface'], ['literal', ['gravel', 'dirt']]];
+  return ['in', ['get', 'surface'], ['literal', ['paved', 'gravel', 'dirt', 'sand']]];
 }
 
 function surfaceFeaturePropertiesEqual(
@@ -491,21 +521,10 @@ function buildSlopeRouteRenderSpec(
     casingColorPaint: null,
     casingWidthPx: 0,
     casingFilter: null,
-    accentColorPaint: null,
-    accentWidthPx: 0,
-    accentDasharray: null,
-    accentFilter: null,
-    accentCap: 'butt',
-    overlayColorPaint: null,
-    overlayWidthPx: 0,
-    overlayDasharray: null,
-    overlayFilter: null,
-    overlayCap: 'butt',
-    textureColorPaint: null,
-    textureWidthPx: 0,
-    textureDasharray: null,
-    textureFilter: null,
-    textureCap: 'round',
+    pavedPattern: null,
+    gravelPattern: null,
+    dirtPattern: null,
+    sandPattern: null,
     requiresLineMetrics: true,
   };
 }
@@ -516,8 +535,11 @@ function buildSurfaceRouteRenderSpec(
   traceWidthPx: number,
 ): RouteLayerRenderSpec {
   const borderWidthPx = tarmacBorderWidthPx(traceWidthPx);
+  const pavedPresent = hasSurface(points, 'paved');
   const gravelPresent = hasSurface(points, 'gravel');
   const dirtPresent = hasSurface(points, 'dirt');
+  const sandPresent = hasSurface(points, 'sand');
+
   return {
     data: buildSurfaceRouteGeoJson(points, fallbackColor),
     lineColorPaint: buildSurfaceColorExpression('lineColor', fallbackColor),
@@ -527,23 +549,42 @@ function buildSurfaceRouteRenderSpec(
     casingColorPaint: buildSurfaceColorExpression('casingColor', ROUTE_TRANSPARENT_COLOR),
     casingWidthPx: traceWidthPx + (borderWidthPx * 2),
     casingFilter: buildStyledSurfaceFilter(),
-    accentColorPaint: null,
-    accentWidthPx: 0,
-    accentDasharray: null,
-    accentFilter: null,
-    accentCap: 'butt',
-    overlayColorPaint: gravelPresent
-      ? resolveSurfacePatternColor('gravel', fallbackColor)
+    pavedPattern: pavedPresent
+      ? {
+          colorPaint: resolveSurfacePatternColor('paved', fallbackColor),
+          widthPx: pavedPatternWidthPx(traceWidthPx),
+          dasharray: ROUTE_PAVED_DASHARRAY,
+          filter: ['==', ['get', 'surface'], 'paved'],
+          lineCap: 'butt',
+        }
       : null,
-    overlayWidthPx: gravelPresent ? gravelPatternWidthPx(traceWidthPx) : 0,
-    overlayDasharray: gravelPresent ? ROUTE_GRAVEL_DASHARRAY : null,
-    overlayFilter: gravelPresent ? ['==', ['get', 'surface'], 'gravel'] : null,
-    overlayCap: 'butt',
-    textureColorPaint: dirtPresent ? resolveSurfacePatternColor('dirt', fallbackColor) : null,
-    textureWidthPx: dirtPresent ? dirtPatternWidthPx(traceWidthPx) : 0,
-    textureDasharray: dirtPresent ? ROUTE_DIRT_DASHARRAY : null,
-    textureFilter: dirtPresent ? ['==', ['get', 'surface'], 'dirt'] : null,
-    textureCap: 'round',
+    gravelPattern: gravelPresent
+      ? {
+          colorPaint: resolveSurfacePatternColor('gravel', fallbackColor),
+          widthPx: gravelPatternWidthPx(traceWidthPx),
+          dasharray: ROUTE_GRAVEL_DASHARRAY,
+          filter: ['==', ['get', 'surface'], 'gravel'],
+          lineCap: 'butt',
+        }
+      : null,
+    dirtPattern: dirtPresent
+      ? {
+          colorPaint: resolveSurfacePatternColor('dirt', fallbackColor),
+          widthPx: dirtPatternWidthPx(traceWidthPx),
+          dasharray: ROUTE_DIRT_DASHARRAY,
+          filter: ['==', ['get', 'surface'], 'dirt'],
+          lineCap: 'butt',
+        }
+      : null,
+    sandPattern: sandPresent
+      ? {
+          colorPaint: resolveSurfacePatternColor('sand', fallbackColor),
+          widthPx: sandPatternWidthPx(traceWidthPx),
+          dasharray: ROUTE_SAND_DASHARRAY,
+          filter: ['==', ['get', 'surface'], 'sand'],
+          lineCap: 'round',
+        }
+      : null,
     requiresLineMetrics: false,
   };
 }
@@ -569,21 +610,10 @@ export function buildRouteGeoJson(
     casingColorPaint: null,
     casingWidthPx: 0,
     casingFilter: null,
-    accentColorPaint: null,
-    accentWidthPx: 0,
-    accentDasharray: null,
-    accentFilter: null,
-    accentCap: 'butt',
-    overlayColorPaint: null,
-    overlayWidthPx: 0,
-    overlayDasharray: null,
-    overlayFilter: null,
-    overlayCap: 'butt',
-    textureColorPaint: null,
-    textureWidthPx: 0,
-    textureDasharray: null,
-    textureFilter: null,
-    textureCap: 'round',
+    pavedPattern: null,
+    gravelPattern: null,
+    dirtPattern: null,
+    sandPattern: null,
     requiresLineMetrics: false,
   };
 }

@@ -1,5 +1,6 @@
 import type { PredictionResult } from '@/features/fitPredictor';
 import type { PoiCategory, RhythmState, TimelineItem, TimelineRailConfig } from '../../../types';
+import type { TimelineFilterState } from '../TimelineFilters';
 
 export interface TimelineTimelineViewProps {
   items: TimelineItem[];
@@ -9,6 +10,7 @@ export interface TimelineTimelineViewProps {
   markerStepKm?: number;
   hourZoom?: number;
   selectedIds?: ReadonlySet<string>;
+  filters?: TimelineFilterState;
   onToggleSelect?: (id: string, selected: boolean) => void;
   onToggleVisibility?: (id: string, visible: boolean) => void;
   onMovePause?: (id: string, distanceKm: number) => void;

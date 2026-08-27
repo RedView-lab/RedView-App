@@ -1,4 +1,5 @@
 import type { LabelCategory } from '@/features/labels/types';
+import type { AnalysisZone } from '@/features/analysisZone';
 import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altitude-persist';
 import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
@@ -83,6 +84,12 @@ export interface ControlPanelPersistedState {
     routesEnabled: boolean;
   };
   sunlightMapExpanded: boolean;
+  /**
+   * Single user-drawn polygon focusing the terrain widgets (slopes /
+   * altitude / sunlight). The terrain widgets are zone-gated: without a zone
+   * they stay off. Synced with the project via AnalysisZoneProjectBridge.
+   */
+  analysisZone?: AnalysisZone | null;
   lidarTilesHidden?: Record<string, boolean>;
   labelsState?: ControlPanelLabelsPersistedState;
   contourLines?: ControlPanelContourLinesPersistedState;

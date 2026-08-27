@@ -131,9 +131,9 @@ export function CenterPanelSummary() {
       <div className="rvc-center-summary__row rvc-center-summary__row--header">
         <div className="rvc-center-summary__title">{t('Synthèse')}</div>
         <div className="rvc-center-summary__metrics" aria-hidden="true">
-          {HEADER_CELLS.map((cell) => (
+          {HEADER_CELLS.map((cell, index) => (
             <div
-              key={cell}
+              key={`header-${index}-${cell}`}
               className="rvc-center-summary__metric rvc-center-summary__metric--header"
               title={t(cell)}
             >
@@ -173,7 +173,7 @@ export function CenterPanelSummary() {
         <SummaryActionMenu
           itinerary={selectedItinerary}
           anchorEl={menuState.anchorEl}
-          canDelete={itineraries.length > 1}
+          canDelete={true}
           onClose={handleCloseMenu}
           onStartRename={() => handleStartRename(selectedItinerary)}
           onDuplicate={handleDuplicate}

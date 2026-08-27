@@ -5,12 +5,12 @@ import {
   CENTER_PANEL_DEFAULT_HEIGHT_RATIO,
   CENTER_PANEL_MAX_HEIGHT_RATIO,
   CENTER_PANEL_MIN_HEIGHT,
-  CENTER_PANEL_MIN_HEIGHT_RATIO,
   CENTER_PANEL_MIN_MAP_STAGE,
   CENTER_PANEL_MIN_WIDTH,
   CENTER_PANEL_RESIZE_HIT_AREA,
   CENTER_PANEL_STACK_GAP,
   CENTER_TOOLBAR_HEIGHT,
+  COLLAPSED_DRAWER_CLEARANCE,
   PANEL_PADDING,
 } from './constants';
 import { clampNumber } from './utils';
@@ -57,13 +57,17 @@ export function getDashboardLayout({
     rightDockContentHeight - exporterPanelHeight - PANEL_PADDING,
   );
 
-  const leftPanelReservedWidth = isMapFocusMode || isLeftPanelCollapsed
-    ? 0
-    : leftPanelWidth + PANEL_PADDING * 2;
+  const leftPanelReservedWidth = isMapFocusMode
+    ? PANEL_PADDING
+    : isLeftPanelCollapsed
+      ? COLLAPSED_DRAWER_CLEARANCE
+      : leftPanelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionLeft = leftPanelReservedWidth;
-  const rightPanelReservedWidth = isMapFocusMode || isRightPanelCollapsed
-    ? 0
-    : panelWidth + PANEL_PADDING * 2;
+  const rightPanelReservedWidth = isMapFocusMode
+    ? PANEL_PADDING
+    : isRightPanelCollapsed
+      ? COLLAPSED_DRAWER_CLEARANCE
+      : panelWidth + PANEL_PADDING * 2;
   const centerPanelBaseRegionRight = rightPanelReservedWidth;
   const centerPanelRegionLeft = leftPanelReservedWidth;
   const centerPanelRegionRight = rightPanelReservedWidth;
@@ -84,27 +88,27 @@ export function getDashboardLayout({
     0,
     designH - PANEL_PADDING * 2 - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP,
   );
-  const centerPanelMinHeight = Math.min(
-    centerPanelAvailableHeight,
-    Math.max(
-      CENTER_PANEL_MIN_HEIGHT,
-      Math.round(centerPanelAvailableHeight * CENTER_PANEL_MIN_HEIGHT_RATIO),
-    ),
-  );
-  const centerPanelReservedMapHeight = clampNumber(
-    Math.round(designH * 0.16),
+  // Ensure the top map stage always retains enough vertical clearance for top-level controls
+  // (PlaceSearch on top-left and MapViewportControls on top-right) plus a uniform spacing margin.
+  const minMapStageClearance = Math.max(
     CENTER_PANEL_MIN_MAP_STAGE,
-    180,
+    Math.round(designH * 0.25),
   );
+  const centerPanelMaxAvailableHeight = Math.max(
+    0,
+    designH - PANEL_PADDING - CENTER_TOOLBAR_HEIGHT - CENTER_PANEL_STACK_GAP - minMapStageClearance,
+  );
+
   const centerPanelMaxHeight = Math.max(
-    centerPanelMinHeight,
+    CENTER_PANEL_MIN_HEIGHT,
     Math.min(
-      centerPanelAvailableHeight,
-      Math.min(
-        Math.round(centerPanelAvailableHeight * CENTER_PANEL_MAX_HEIGHT_RATIO),
-        centerPanelAvailableHeight - centerPanelReservedMapHeight,
-      ),
+      centerPanelMaxAvailableHeight,
+      Math.round(centerPanelAvailableHeight * CENTER_PANEL_MAX_HEIGHT_RATIO),
     ),
+  );
+  const centerPanelMinHeight = Math.min(
+    centerPanelMaxHeight,
+    CENTER_PANEL_MIN_HEIGHT,
   );
   const centerPanelDesiredHeight = clampNumber(
     Math.round(centerPanelAvailableHeight * CENTER_PANEL_DEFAULT_HEIGHT_RATIO),

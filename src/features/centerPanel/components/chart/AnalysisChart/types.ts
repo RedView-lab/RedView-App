@@ -82,4 +82,6 @@ export interface HoverCardRow {
   axisLabel: string;
   metric: ChartMetricId;
   value: number;
+  gainM?: number;
+  lossM?: number;
 }

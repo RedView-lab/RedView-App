@@ -149,3 +149,7 @@ export function WaypointGlyph() {
 export function FinishGlyph() {
   return <RightClickImageIcon src="finish.svg" width={24} height={24} frame={24} />;
 }
+
+export function TrashGlyph() {
+  return <RightClickImageIcon src="trash-01.svg" width={14} height={15} frame={24} />;
+}

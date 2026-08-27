@@ -1,11 +1,38 @@
-/** Detected Coordinate Reference System */
-export type DetectedCrs = 'LAMB93' | 'RGR92UTM40S' | 'CH1903_LV95';
+/** JGD2011 Plane Rectangular Coordinate System Zones (1 to 19) */
+export type Jgd2011ZoneCrs =
+  | 'JGD2011_ZONE_01'
+  | 'JGD2011_ZONE_02'
+  | 'JGD2011_ZONE_03'
+  | 'JGD2011_ZONE_04'
+  | 'JGD2011_ZONE_05'
+  | 'JGD2011_ZONE_06'
+  | 'JGD2011_ZONE_07'
+  | 'JGD2011_ZONE_08'
+  | 'JGD2011_ZONE_09'
+  | 'JGD2011_ZONE_10'
+  | 'JGD2011_ZONE_11'
+  | 'JGD2011_ZONE_12'
+  | 'JGD2011_ZONE_13'
+  | 'JGD2011_ZONE_14'
+  | 'JGD2011_ZONE_15'
+  | 'JGD2011_ZONE_16'
+  | 'JGD2011_ZONE_17'
+  | 'JGD2011_ZONE_18'
+  | 'JGD2011_ZONE_19';
 
-/** Territory code for IGN/Swiss tile naming */
-export type Territory = 'FXX' | 'REU' | 'CH';
+/** Detected Coordinate Reference System */
+export type DetectedCrs =
+  | 'LAMB93'
+  | 'RGR92UTM40S'
+  | 'CH1903_LV95'
+  | 'NZTM2000'
+  | Jgd2011ZoneCrs;
+
+/** Territory code for IGN/Swiss/NZ/Japan tile naming */
+export type Territory = 'FXX' | 'REU' | 'CH' | 'NZ' | 'JP';
 
 /** Altitude reference system */
-export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02';
+export type AltitudeRef = 'IGN69' | 'IGN78' | 'REUN89' | 'LN02' | 'NZVD2016' | 'TP';
 
 /** Status of a LiDAR tile in the pipeline */
 export type LidarTileStatus =

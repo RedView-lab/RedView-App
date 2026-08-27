@@ -23,8 +23,8 @@ const SPAIN_BOUNDS = [-19.5, 27.0, 5.5, 44.5];
 const SPAIN_MAINLAND_BOUNDS = [-10.5, 35.0, 5.5, 44.5];
 const SPAIN_CANARY_BOUNDS = [-19.5, 27.0, -12.0, 30.5];
 const SPAIN_DEM_RESOLUTION_M = 5;
-const SPAIN_DEM_MINZOOM = 12;
-const SPAIN_ENGAGE_MPP = 32;
+const SPAIN_DEM_MINZOOM = 11;
+const SPAIN_ENGAGE_MPP = 60;
 // IDEE backend can be slow on cold misses (server-side raster generation
 // for the requested bbox). 15 s was occasionally too tight on first visits
 // to a fresh region — the abort fired, work was wasted and tiles were

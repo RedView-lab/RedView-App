@@ -3,6 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 export const SOURCE_PREFIX = 'brouter-route-source-';
 export const CASING_PREFIX = 'brouter-route-casing-';
 export const GLOW_PREFIX = 'brouter-route-glow-';
+export const PAVED_PATTERN_PREFIX = 'brouter-route-paved-pattern-';
+export const GRAVEL_PATTERN_PREFIX = 'brouter-route-gravel-pattern-';
 export const DIRT_PATTERN_PREFIX = 'brouter-route-dirt-pattern-';
 export const SAND_PATTERN_PREFIX = 'brouter-route-sand-pattern-';
 export const LINE_PREFIX = 'brouter-route-line-';
@@ -58,6 +60,8 @@ export function ids(itineraryId: string) {
     source: `${SOURCE_PREFIX}${safe}`,
     casing: `${CASING_PREFIX}${safe}`,
     glow: `${GLOW_PREFIX}${safe}`,
+    pavedPattern: `${PAVED_PATTERN_PREFIX}${safe}`,
+    gravelPattern: `${GRAVEL_PATTERN_PREFIX}${safe}`,
     dirtPattern: `${DIRT_PATTERN_PREFIX}${safe}`,
     sandPattern: `${SAND_PATTERN_PREFIX}${safe}`,
     line: `${LINE_PREFIX}${safe}`,

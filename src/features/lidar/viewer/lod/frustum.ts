@@ -44,13 +44,13 @@ export function extractFrustumPlanes(vp: Float32Array): FrustumPlanes {
   planes[14] = vp[11] - vp[9];
   planes[15] = vp[15] - vp[13];
 
-  // Near:   row3 + row2  (WebGPU: clip z in [0,1])
-  planes[16] = vp[3]  + vp[2];
-  planes[17] = vp[7]  + vp[6];
-  planes[18] = vp[11] + vp[10];
-  planes[19] = vp[15] + vp[14];
+  // Near:   row2 (WebGPU: clip z in [0,1], 0 <= z_clip)
+  planes[16] = vp[2];
+  planes[17] = vp[6];
+  planes[18] = vp[10];
+  planes[19] = vp[14];
 
-  // Far:    row3 - row2
+  // Far:    row3 - row2 (z_clip <= w_clip)
   planes[20] = vp[3]  - vp[2];
   planes[21] = vp[7]  - vp[6];
   planes[22] = vp[11] - vp[10];
@@ -100,7 +100,7 @@ export function frustumTestAABB(planes: FrustumPlanes, aabb: AABB): number {
 
 /**
  * Compute screen-space size of an AABB in pixels.
- * Projects all 8 corners to NDC and measures the bounding rect extent.
+ * Uses bounding sphere projection in clip space: zero GC allocations, ultra-fast scalar math.
  */
 export function screenSpaceSize(
   aabb: AABB,
@@ -108,46 +108,26 @@ export function screenSpaceSize(
   viewportW: number,
   viewportH: number,
 ): number {
-  let minNdcX = Infinity, maxNdcX = -Infinity;
-  let minNdcY = Infinity, maxNdcY = -Infinity;
-  let anyBehind = false;
+  const halfX = (aabb.maxX - aabb.minX) * 0.5;
+  const halfY = (aabb.maxY - aabb.minY) * 0.5;
+  const halfZ = (aabb.maxZ - aabb.minZ) * 0.5;
+  const cx = aabb.minX + halfX;
+  const cy = aabb.minY + halfY;
+  const cz = aabb.minZ + halfZ;
+  const radius = Math.sqrt(halfX * halfX + halfY * halfY + halfZ * halfZ);
 
-  const projectCorner = (x: number, y: number, z: number) => {
-    const w = viewProj[3] * x + viewProj[7] * y + viewProj[11] * z + viewProj[15];
+  // Transform center into clip space (w is distance along camera forward in view space)
+  const w = viewProj[3] * cx + viewProj[7] * cy + viewProj[11] * cz + viewProj[15];
 
-    if (w <= 0.001) {
-      anyBehind = true;
-      return;
-    }
-
-    const invW = 1 / w;
-    const ndcX = (viewProj[0] * x + viewProj[4] * y + viewProj[8] * z + viewProj[12]) * invW;
-    const ndcY = (viewProj[1] * x + viewProj[5] * y + viewProj[9] * z + viewProj[13]) * invW;
-
-    if (ndcX < minNdcX) minNdcX = ndcX;
-    if (ndcX > maxNdcX) maxNdcX = ndcX;
-    if (ndcY < minNdcY) minNdcY = ndcY;
-    if (ndcY > maxNdcY) maxNdcY = ndcY;
-  };
-
-  projectCorner(aabb.minX, aabb.minY, aabb.minZ);
-  projectCorner(aabb.maxX, aabb.minY, aabb.minZ);
-  projectCorner(aabb.minX, aabb.maxY, aabb.minZ);
-  projectCorner(aabb.maxX, aabb.maxY, aabb.minZ);
-  projectCorner(aabb.minX, aabb.minY, aabb.maxZ);
-  projectCorner(aabb.maxX, aabb.minY, aabb.maxZ);
-  projectCorner(aabb.minX, aabb.maxY, aabb.maxZ);
-  projectCorner(aabb.maxX, aabb.maxY, aabb.maxZ);
-
-  if (anyBehind) {
-    if (maxNdcX === -Infinity) return 0;
+  if (w <= radius) {
+    // Camera is inside or very close to bounding volume
     return Math.max(viewportW, viewportH);
   }
 
-  if (maxNdcX === -Infinity) return 0;
+  // viewProj[5] corresponds to proj[1][1] = 1 / tan(fov / 2)
+  const projFactor = Math.abs(viewProj[5]) * (viewportH * 0.5);
+  const pixelDiameter = (2 * radius * projFactor) / w;
 
-  const pixW = (maxNdcX - minNdcX) * 0.5 * viewportW;
-  const pixH = (maxNdcY - minNdcY) * 0.5 * viewportH;
-
-  return Math.max(pixW, pixH);
+  return Math.max(0, pixelDiameter);
 }
+

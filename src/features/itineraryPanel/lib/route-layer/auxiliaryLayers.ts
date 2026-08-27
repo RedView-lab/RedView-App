@@ -4,7 +4,6 @@ import {
   ANALYSIS_FLYOVER_PROGRESS_GLOW_LAYER_ID,
   ANALYSIS_FLYOVER_PROGRESS_LINE_LAYER_ID,
   ANALYSIS_FLYOVER_PROGRESS_SOURCE_ID,
-  ANALYSIS_HOVER_HALO_LAYER_ID,
   ANALYSIS_HOVER_POINT_LAYER_ID,
   ANALYSIS_HOVER_SOURCE_ID,
   FORBIDDEN_ZONE_DRAFT_FILL_LAYER_ID,
@@ -44,22 +43,7 @@ export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null 
     data: buildAnalysisHoverGeoJson(null),
   });
 
-  map.addLayer({
-    id: ANALYSIS_HOVER_HALO_LAYER_ID,
-    type: 'circle',
-    source: ANALYSIS_HOVER_SOURCE_ID,
-    slot: 'top',
-    layout: { visibility: 'none' },
-    paint: {
-      'circle-radius': 15,
-      'circle-color': '#ffffff',
-      'circle-opacity': 0.42,
-      'circle-blur': 0.75,
-      'circle-pitch-alignment': 'viewport',
-      'circle-pitch-scale': 'viewport',
-      'circle-emissive-strength': 1,
-    },
-  });
+
 
   map.addLayer({
     id: ANALYSIS_HOVER_POINT_LAYER_ID,

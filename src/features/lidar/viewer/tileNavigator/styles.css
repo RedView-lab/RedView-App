@@ -32,28 +32,42 @@
   cursor: default;
 }
 
-.viewer-panel__tile-nav-cell.is-idle,
-.viewer-panel__tile-nav-cell.is-cached {
-  background: rgba(255, 255, 255, 0.08);
+.viewer-panel__tile-nav-cell.is-idle {
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .viewer-panel__tile-nav-cell.is-cached {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.68);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
 }
 
-.viewer-panel__tile-nav-cell.is-paired,
-.viewer-panel__tile-nav-cell.is-pending {
-  background: rgba(137, 0, 0, 0.4);
+.viewer-panel__tile-nav-cell.is-paired {
+  background: rgba(137, 0, 0, 0.7);
   color: #fff;
-}
-
-.viewer-panel__tile-nav-cell.is-pending {
-  box-shadow: inset 0 0 0 1px rgba(255, 176, 176, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .viewer-panel__tile-nav-cell.is-current {
   background: #890000;
   color: #fff;
+}
+
+.viewer-panel__tile-nav-cell.is-previewing {
+  background: rgba(137, 0, 0, 0.55);
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff, inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+  animation: viewer-panel-tile-preview-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes viewer-panel-tile-preview-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.95), 0 0 10px rgba(255, 255, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45), 0 0 3px rgba(255, 255, 255, 0.1);
+  }
 }
 
 .viewer-panel__tile-nav-cell.is-loading {
@@ -86,4 +100,78 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* Bottom-right overlay status dock matching Figma 3047:115802 & MapOverlayStatusDock */
+.viewer-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 148px;
+  height: 36px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(15, 15, 15, 0.74);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.92);
+  font-family: 'Rethink Sans', 'Segoe UI', sans-serif;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  transition: opacity 200ms ease, transform 200ms ease;
+  pointer-events: none;
+}
+
+.viewer-dock[hidden] {
+  display: none;
+}
+
+.viewer-dock__track-shell {
+  flex: 1 1 auto;
+  min-width: 56px;
+  height: 18px;
+  border-radius: 8px;
+  padding: 1px;
+  background: rgba(255, 255, 255, 0.32);
+  overflow: hidden;
+  display: flex;
+}
+
+.viewer-dock__track-fill {
+  height: 100%;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  transition: width 150ms ease;
+  width: 0%;
+}
+
+.viewer-dock__percent {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  min-width: 28px;
+  text-align: right;
+  letter-spacing: -0.01em;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.viewer-dock__icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.viewer-dock__icon svg {
+  width: 18px;
+  height: 18px;
+  animation: viewer-panel-tile-nav-spin 1.15s linear infinite;
 }

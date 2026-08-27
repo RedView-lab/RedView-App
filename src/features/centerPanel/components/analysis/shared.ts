@@ -45,6 +45,7 @@ export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
 ];
 
 export const axisOptions: AxisOption[] = [
+  { value: 'Altitude', label: 'Altitude', tone: 'primary' },
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
@@ -197,7 +198,7 @@ function normalizeAnalysisColor(value: string | null | undefined): string | unde
 }
 
 function migrateAxisMetric(value: string): AxisMetricId {
-  if (value === 'Dénivelé' || value === 'Altitude') return 'Inclinaison (%)';
+  if (value === 'Dénivelé') return 'Inclinaison (%)';
   return value as AxisMetricId;
 }
 

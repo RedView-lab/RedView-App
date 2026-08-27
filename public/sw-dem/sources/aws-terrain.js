@@ -63,17 +63,21 @@ async function fetchAWSTerrainTile(z, x, y) {
 
     let elevations;
     try {
-      // Decode terrarium pixels → Float32 elevations
-      const canvas = new OffscreenCanvas(img.width, img.height);
-      const ctx = canvas.getContext('2d', { colorSpace: 'srgb' });
+      // Decode terrarium pixels → Float32 elevations using shared canvas
+      const width = img.width;
+      const height = img.height;
+      const ctx = typeof getSharedOffscreenCtx === 'function'
+        ? getSharedOffscreenCtx(width, height)
+        : new OffscreenCanvas(width, height).getContext('2d', { colorSpace: 'srgb' });
+      ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0);
-      const pixels = ctx.getImageData(0, 0, img.width, img.height).data;
+      const pixels = ctx.getImageData(0, 0, width, height).data;
 
-      const srcSize = img.width;
+      const srcSize = width;
       // Always resample to DEM_TILE_SIZE so the SW pipeline sees a consistent
       // grid. Terrarium native tiles are 256×256 — same as DEM_TILE_SIZE — so
       // the `else` fast-path normally fires.
-      if (srcSize === DEM_TILE_SIZE && img.height === DEM_TILE_SIZE) {
+      if (srcSize === DEM_TILE_SIZE && height === DEM_TILE_SIZE) {
         elevations = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
         for (let i = 0; i < elevations.length; i++) {
           const idx = i * 4;
@@ -110,17 +114,12 @@ async function fetchAWSTerrainTile(z, x, y) {
       );
     }
 
-    // If we clamped, extract & upsample the requested sub-tile from the
-    // parent. We re-encode to Terrain-RGB first then run overzoomDemTile
-    // so it can reuse the same decode path as cached tiles.
-    const terrainRGBBlob = await encodeTerrainRGBPng(elevations);
-    if (clamped) {
-      const overzoomed = await overzoomDemTile(
-        terrainRGBBlob, fetchZ, fetchX, fetchY, z, x, y,
-      );
-      return overzoomed || terrainRGBBlob;
+    // Direct in-memory Float32Array upsampling: avoids 2 redundant PNG encode/decode cycles
+    if (clamped && typeof overzoomDemElevations === 'function') {
+      const upsampled = overzoomDemElevations(elevations, fetchZ, fetchX, fetchY, z, x, y);
+      return encodeTerrainRGBPng(upsampled || elevations);
     }
-    return terrainRGBBlob;
+    return encodeTerrainRGBPng(elevations);
   } catch (err) {
     if (DEBUG) {
       console.warn(

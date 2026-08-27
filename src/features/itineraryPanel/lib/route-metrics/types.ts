@@ -4,6 +4,7 @@ export interface RoutePointInput {
   distanceM?: number;
   elevationM?: number | null;
   gradientPct?: number | null;
+  surface?: Surface;
 }
 
 export interface RouteProfilePoint {
@@ -12,6 +13,7 @@ export interface RouteProfilePoint {
   distanceM: number;
   elevationM: number;
   gradientPct: number;
+  surface?: Surface;
 }
 
 export interface RouteMetrics {
@@ -44,7 +46,7 @@ export interface ElevationSample {
   gradientPct?: number | null;
 }
 
-export type Surface = 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
+export type Surface = 'asphalt' | 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
 
 export interface ParsedRow {
   lon: number;

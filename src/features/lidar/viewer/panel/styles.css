@@ -6,7 +6,10 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: min(300px, calc(100vw - 32px));
+  width: min(var(--viewer-panel-width, 300px), calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 8px;
@@ -16,6 +19,120 @@
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
   color: #fff;
   font-family: 'Rethink Sans', system-ui, sans-serif;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  transform: translate3d(0, 0, 0) scale(1);
+  opacity: 1;
+  filter: blur(0px) saturate(1);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              filter 320ms ease;
+  will-change: transform, opacity, filter;
+}
+
+.viewer-panel::-webkit-scrollbar {
+  width: 5px;
+}
+
+.viewer-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.viewer-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.viewer-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.viewer-panel.is-collapsed {
+  transform: translate3d(calc(-100% - 28px), 0, 0) scale(0.985);
+  opacity: 0;
+  filter: blur(8px) saturate(0.88);
+  pointer-events: none !important;
+}
+
+.viewer-panel.is-resizing {
+  transition: none !important;
+  user-select: none !important;
+}
+
+.viewer-panel.is-resizing * {
+  user-select: none !important;
+}
+
+.viewer-panel__resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  z-index: 10;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.viewer-panel__resize-handle:hover,
+.viewer-panel__resize-handle.is-dragging {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Floating Collapsed Rail for Left Panel */
+.viewer-left-collapsed-rail {
+  position: fixed;
+  top: 50%;
+  left: 6px;
+  z-index: 75;
+  transform: translate3d(-18px, -50%, 0);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 320ms cubic-bezier(0.22, 1, 0.36, 1),
+              transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform, opacity;
+}
+
+.viewer-left-collapsed-rail.is-visible {
+  transform: translate3d(0, -50%, 0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.viewer-collapsed-rail-btn {
+  width: 28px;
+  height: 56px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(17, 17, 19, 0.9);
+  color: #ffffff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.viewer-collapsed-rail-icon {
+  width: 18px;
+  height: 18px;
+  transform: rotate(180deg);
+}
+
+.viewer-collapsed-rail-btn:hover {
+  background: rgba(28, 28, 32, 0.96);
+  transform: scale(1.05);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.44);
+}
+
+.viewer-collapsed-rail-btn:active {
+  transform: scale(0.96);
 }
 
 .viewer-panel * {
@@ -189,9 +306,24 @@
   color: rgba(255, 255, 255, 0.64);
 }
 
+.viewer-panel__point-controls,
+.viewer-panel__elevation-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.viewer-panel__point-controls[hidden],
+.viewer-panel__elevation-controls[hidden] {
+  display: none;
+}
+
 .viewer-panel__range-bound {
   flex: 0 0 auto;
-  width: 16px;
+  min-width: 16px;
+  width: auto;
+  padding: 0 2px;
   font-size: 11px;
   font-weight: 500;
   line-height: 16px;
@@ -438,6 +570,7 @@
   line-height: 20px;
   cursor: pointer;
   transition: background 0.15s ease, opacity 0.15s ease;
+  flex-shrink: 0;
 }
 
 .viewer-panel__cta:hover:not(:disabled) {
@@ -465,6 +598,7 @@
   .viewer-panel {
     top: 12px;
     left: 12px;
-    width: min(300px, calc(100vw - 24px));
+    max-height: calc(100vh - 24px);
+    width: min(var(--viewer-panel-width, 300px), calc(100vw - 24px));
   }
 }

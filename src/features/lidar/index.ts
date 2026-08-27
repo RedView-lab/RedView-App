@@ -8,9 +8,20 @@ export {
   buildTileFileName,
   loadLidarTileLabels,
   setLidarTileLabel,
+  syncLidarRouteOverlay,
+  broadcastLidarRouteEdit,
+  loadLidarRouteOverlay,
+  subscribeToLidarRouteOverlay,
+  useLidarRouteSync,
+  extractLidarRouteOverlayState,
+  LIDAR_ROUTE_OVERLAY_STORAGE_KEY,
+  LIDAR_ROUTE_OVERLAY_CHANNEL_NAME,
+  type LidarRouteOverlayItem,
+  type LidarRouteOverlayPoint,
+  type LidarRouteOverlayState,
+  type LidarRouteSyncMessage,
+  type LidarRouteEditMessage,
   toWgs84,
   wgs84ToTileCoord,
 } from './lib';
-export { LidarPanel } from './components/LidarPanel';
-export { useLidarContextMenu } from './components/useLidarContextMenu';
 export { LidarProvider, useLidarManager } from './components/LidarContext';

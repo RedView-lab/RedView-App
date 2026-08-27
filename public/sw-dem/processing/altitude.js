@@ -104,24 +104,29 @@ function buildAltitudeRgba(elevations) {
   return rgba;
 }
 
-async function encodeAltitudePng(elevations) {
+async function encodeAltitudePng(elevations, zoneMask) {
   const size = DEM_TILE_SIZE;
   const rgba = buildAltitudeRgba(elevations);
+  // Analysis-zone mask (core/analysis-zone.js) — alpha outside the polygon
+  // drops to 0; Terrain-RGB RGB channels are left untouched so the GPU-side
+  // raster-color decode stays valid on surviving pixels.
+  if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
   return buildRawPng(size, size, rgba);
 }
 
 // ── Full pipeline — DEM blob → altitude overlay PNG ────────────────────────
-async function buildAltitudeTile(demBlob, z, x, y, shouldCancel) {
+async function buildAltitudeTile(demBlob, z, x, y, shouldCancel, zoneRing) {
   const t0 = performance.now();
   const elevations = await decodeAltitudeDemBlob(demBlob, z, x, y);
   const t1 = performance.now();
   if (typeof shouldCancel === 'function' && shouldCancel()) return null;
-  const blob = await encodeAltitudePng(elevations);
+  const zoneMask = zoneRing ? rasterizeRingMask(zoneRing, z, x, y, DEM_TILE_SIZE) : null;
+  const blob = await encodeAltitudePng(elevations, zoneMask);
   const t3 = performance.now();
 
   if (DEBUG) {
     console.log(
-      `[altitude] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} enc=${(t3 - t1).toFixed(0)} total=${(t3 - t0).toFixed(0)}ms`,
+      `[altitude] ${z}/${x}/${y} dec=${(t1 - t0).toFixed(0)} enc=${(t3 - t1).toFixed(0)} total=${(t3 - t0).toFixed(0)}ms${zoneMask ? ' zone=1' : ''}`,
     );
   }
 

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
+import DevAuthScreen from './shared/components/DevAuthScreen'
 import { useAppI18n } from './shared/i18n'
 import './index.css'
 
@@ -247,6 +248,12 @@ function App() {
       return
     }
 
+    if (session.user.id === 'dev-user-001') {
+      setSubscriptionAccess({ hasAccess: true, status: 'pro' })
+      setSubscriptionStatus('ready')
+      return
+    }
+
     const cachedSubscription = readCachedSubscription(session.user.id)
     if (cachedSubscription != null) {
       setSubscriptionAccess(cachedSubscription)
@@ -373,6 +380,23 @@ function App() {
   }
 
   if (!session) {
+    if (import.meta.env.DEV) {
+      return (
+        <DevAuthScreen
+          landingUrl={landingUrl}
+          onDevLogin={(email) => {
+            if (typeof window !== 'undefined') {
+              window.localStorage.setItem('redview:dev-session', 'true')
+            }
+            const devSession = { user: { id: 'dev-user-001', email: email || 'dev@redview.app' } }
+            setSession(devSession)
+            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
+            setSubscriptionStatus('ready')
+          }}
+        />
+      )
+    }
+
     window.location.href = `${landingUrl}/auth/login`
     return <BootstrapScreen label={t('Redirecting...')} />
   }

@@ -6,6 +6,7 @@
  * timeline (Feuille de route) at the bottom.
  */
 import type { ExpertProfileState } from './expert/types';
+import type { Surface } from './lib/route-metrics/types';
 import type { ControlPanelPersistedState } from '../controlPanel/lib/persistedState';
 import type { PredictionResult } from '../fitPredictor/types';
 import type { PoiFeature } from '../poi/types';
@@ -19,6 +20,7 @@ export type GpxQualityMode = GpxQualityPreset | 'expert';
  * (distance / elapsed time / clock time) survive across sessions.
  */
 export type AnalysisAxisMetricId =
+  | 'Altitude'
   | 'Vitesse'
   | 'Vitesse moyenne'
   | 'Puissance'
@@ -392,7 +394,7 @@ export interface Itinerary {
       distanceM?: number;
       elevationM?: number | null;
       gradientPct?: number | null;
-      surface?: 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
+      surface?: Surface;
     }[];
     source?: 'gpx' | 'brouter';
     originalPoints?: {
@@ -401,7 +403,7 @@ export interface Itinerary {
       distanceM?: number;
       elevationM?: number | null;
       gradientPct?: number | null;
-      surface?: 'paved' | 'gravel' | 'dirt' | 'sand' | 'unknown';
+      surface?: Surface;
     }[];
     gpxQuality?: GpxQualityMode;
     gpxQualityPointsPerKm?: number | null;
@@ -507,6 +509,8 @@ export interface ItineraryPanelProps {
   onRemoveItinerary?: (id: string) => void;
   /** Inline-rename an itinerary from its tab. */
   onRenameItinerary?: (id: string, name: string) => void;
+  /** Toggle visibility of an itinerary. */
+  onToggleItineraryVisibility?: (id: string) => void;
 
   // mode tabs
   onChangeMode?: (mode: PanelMode) => void;

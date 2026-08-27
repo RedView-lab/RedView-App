@@ -58,14 +58,17 @@ impl KdTree {
 
         let dim = depth % N_FEATURES;
 
-        // Sort by split dimension — partial_sort would be ideal but sort_by is fine for build
-        indices.sort_unstable_by(|&a, &b| {
+        // Partition around the median of the split dimension. O(N) average
+        // via quickselect instead of a full O(N log N) sort per level; the
+        // resulting tree is equivalent (subtree membership is all that
+        // matters, not intra-subtree order).
+        let mid = indices.len() / 2;
+        indices.select_nth_unstable_by(mid, |&a, &b| {
             data[a].0[dim]
                 .partial_cmp(&data[b].0[dim])
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        let mid = indices.len() / 2;
         let median_idx = indices[mid];
 
         let (left_indices, right_part) = indices.split_at_mut(mid);

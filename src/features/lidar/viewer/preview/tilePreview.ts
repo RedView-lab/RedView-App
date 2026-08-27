@@ -65,6 +65,7 @@ export function buildTilePreviewMesh(
   const tileBounds = getTileBounds(coord);
   const centerX = (sceneBounds.minX + sceneBounds.maxX) / 2;
   const centerY = (sceneBounds.minY + sceneBounds.maxY) / 2;
+  const centerZ = (sceneBounds.minZ + sceneBounds.maxZ) / 2;
   const samplePoints: Array<[number, number]> = [
     [tileBounds.minX, tileBounds.minY],
     [tileBounds.maxX, tileBounds.minY],
@@ -73,9 +74,17 @@ export function buildTilePreviewMesh(
     [(tileBounds.minX + tileBounds.maxX) / 2, (tileBounds.minY + tileBounds.maxY) / 2],
   ];
 
-  const sampledHeights = samplePoints.map(([x, y]) => sampleSceneHeight(x, y, sceneBounds, terrainMesh));
-  const baseHeight = Math.max(...sampledHeights) + 10;
-  const thickness = 18;
+  // If heightGrid contains absolute altitudes (e.g. WebGL raw heights rather than WebGPU centered heights),
+  // subtract centerZ to place it correctly in renderer space.
+  const isAbsoluteHeight = terrainMesh.heightGrid.some(
+    (h) => Number.isFinite(h) && h >= sceneBounds.minZ - 50 && sceneBounds.minZ > 50,
+  );
+  const sampledHeights = samplePoints.map(([x, y]) => {
+    const raw = sampleSceneHeight(x, y, sceneBounds, terrainMesh);
+    return isAbsoluteHeight ? raw - centerZ : raw;
+  });
+  const baseHeight = Math.max(...sampledHeights) + 6;
+  const thickness = 20;
   const topY = baseHeight + thickness;
   const bottomY = baseHeight;
   const inset = 18;

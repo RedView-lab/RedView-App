@@ -40,12 +40,7 @@ export default async function handler(
     return res.status(204).end();
   }
 
-  const upstream = process.env.POI_UPSTREAM;
-  if (!upstream) {
-    return res.status(500).json({
-      error: 'POI_UPSTREAM env var is not set on Vercel.',
-    });
-  }
+  const upstream = (process.env.POI_UPSTREAM ?? '').trim() || 'http://localhost:17778';
   const base = upstream.replace(/\/+$/, '');
 
   const op = (req.query.op as string | undefined)?.toLowerCase();
@@ -75,11 +70,32 @@ async function handleBbox(
     if (Array.isArray(v)) params.set(k, v[0] ?? '');
     else if (typeof v === 'string') params.set(k, v);
   }
-  return forwardSimple(
-    `${base}/bbox?${params.toString()}`,
-    res,
-    'public, s-maxage=3600, stale-while-revalidate=86400',
-  );
+  
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(`${base}/bbox?${params.toString()}`, {
+      method: 'GET',
+      signal: ctrl.signal,
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'RedView/1.0 (+https://redview.app)',
+      },
+    });
+    clearTimeout(timer);
+    if (!upstream.ok) {
+      console.warn(`[api/poi] Upstream returned HTTP ${upstream.status}`);
+      return res.status(200).json({ features: [] });
+    }
+    const data = await upstream.json().catch(() => ({ features: [] }));
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400');
+    return res.status(200).json(data.features ? data : { features: [] });
+  } catch (err) {
+    clearTimeout(timer);
+    console.warn('[api/poi] Upstream fetch error (is POI server running on 17778?):', err instanceof Error ? err.message : err);
+    return res.status(200).json({ features: [] });
+  }
 }
 
 async function handleCorridor(
@@ -94,9 +110,8 @@ async function handleCorridor(
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
-  let upstream: Response;
   try {
-    upstream = await fetch(`${base}/corridor`, {
+    const upstream = await fetch(`${base}/corridor`, {
       method: 'POST',
       signal: ctrl.signal,
       headers: {
@@ -106,27 +121,27 @@ async function handleCorridor(
       },
       body,
     });
+    clearTimeout(timer);
+    if (!upstream.ok) {
+      console.warn(`[api/poi] Upstream corridor returned HTTP ${upstream.status}`);
+      return res.status(200).json({ features: [] });
+    }
+    const data = await upstream.json().catch(() => ({ features: [] }));
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
+    return res.status(200).json(data.features ? data : { features: [] });
   } catch (err) {
     clearTimeout(timer);
-    const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
-    return res.status(502).json({
-      error: isAbort ? 'POI upstream timeout' : `POI upstream error: ${(err as Error).message}`,
-    });
+    console.warn('[api/poi] Upstream corridor fetch error:', err instanceof Error ? err.message : err);
+    return res.status(200).json({ features: [] });
   }
-  clearTimeout(timer);
-
-  const text = await upstream.text();
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'public, s-maxage=600, stale-while-revalidate=3600');
-  return res.status(upstream.status).send(text);
 }
 
 async function forwardSimple(url: string, res: VercelResponse, cacheControl: string) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
-  let upstream: Response;
   try {
-    upstream = await fetch(url, {
+    const upstream = await fetch(url, {
       method: 'GET',
       signal: ctrl.signal,
       headers: {
@@ -134,6 +149,11 @@ async function forwardSimple(url: string, res: VercelResponse, cacheControl: str
         'User-Agent': 'RedView/1.0 (+https://redview.app)',
       },
     });
+    clearTimeout(timer);
+    const text = await upstream.text();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', cacheControl);
+    return res.status(upstream.status).send(text);
   } catch (err) {
     clearTimeout(timer);
     const isAbort = (err as { name?: string } | undefined)?.name === 'AbortError';
@@ -141,21 +161,10 @@ async function forwardSimple(url: string, res: VercelResponse, cacheControl: str
       error: isAbort ? 'POI upstream timeout' : `POI upstream error: ${(err as Error).message}`,
     });
   }
-  clearTimeout(timer);
-
-  const text = await upstream.text();
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', cacheControl);
-  return res.status(upstream.status).send(text);
 }
 
 async function readBody(req: VercelRequest): Promise<string> {
   if (typeof req.body === 'string') return req.body;
   if (req.body && typeof req.body === 'object') return JSON.stringify(req.body);
-  return new Promise<string>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
-    req.on('error', reject);
-  });
+  return '';
 }

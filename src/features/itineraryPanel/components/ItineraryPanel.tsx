@@ -50,6 +50,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onDuplicateItinerary,
     onRemoveItinerary,
     onRenameItinerary,
+    onToggleItineraryVisibility,
     onChangeMode,
     onChangeProfile,
     onUndo,
@@ -219,9 +220,9 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           aria-label={t('Timeline en plein écran')}
         >
           <MapCanvasGlassBackdrop
-            blur={38}
+            blur={48}
             saturate={1.9}
-            tint="rgba(5, 8, 8, 0.58)"
+            tint="rgba(8, 10, 14, 0.92)"
           />
           <div className="rvi-panel__fullscreen-body">{fullscreenTimelinePanel}</div>
         </aside>
@@ -256,6 +257,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         profiles={profiles}
         activeId={project.activeItineraryId}
         onSelect={onSelectItinerary}
+        onToggleVisibility={onToggleItineraryVisibility}
         onAdd={onOpenAddItinerary ?? onAddItinerary}
         onAddButtonRef={props.onAddButtonRef}
         onDuplicate={onDuplicateItinerary}
