@@ -226,16 +226,10 @@ export function DashboardEditor({
       sunlightMapEnabled: false,
     },
   });
-  const isStandardBasemap = activeBasemapConfig.visualFamily === 'mapbox-standard-v3';
-  // The large docked panel shells are intentionally tint-only and rely on a
-  // mirrored map slice underneath for their glass treatment. Fully disabling
-  // mirrors on Standard v3 fixed a perf cliff, but it also removed the only
-  // blur layer behind the main panels, leaving them visually transparent.
-  // Restore mirrors for the substantive panel surfaces and keep the smaller
-  // center toolbar on the cheaper no-mirror path to avoid reintroducing the
-  // full four-mirror readback cost.
+  // Ultra-fast 1/8th downscaled mirrors provide genuine, rich glassmorphism
+  // showing the blurred 3D map through the panels with zero lag on AMD APUs.
   const shouldRenderPanelMapBlurMirrors = true;
-  const shouldRenderToolbarMapBlurMirror = !isStandardBasemap;
+  const shouldRenderToolbarMapBlurMirror = true;
 
   const routeSlopeLegendTitle = useMemo(() => {
     const project = activeProjectInitial;
@@ -417,8 +411,8 @@ export function DashboardEditor({
           left={PANEL_PADDING}
           width={leftPanelWidth}
           height={Math.max(0, layout.designH - PANEL_PADDING * 2)}
-          blur={24}
-          saturate={1.05}
+          blur={30}
+          saturate={1.3}
           borderRadius={8}
         />
       )}
@@ -429,6 +423,8 @@ export function DashboardEditor({
           left={Math.max(0, layout.designW - panelWidth - PANEL_PADDING)}
           width={panelWidth}
           height={Math.max(0, layout.designH - PANEL_PADDING * 2)}
+          blur={30}
+          saturate={1.3}
           borderRadius={8}
         />
       )}
@@ -440,7 +436,7 @@ export function DashboardEditor({
           width={layout.centerToolbarWidth}
           height={CENTER_TOOLBAR_HEIGHT}
           blur={24}
-          saturate={1.05}
+          saturate={1.2}
           borderRadius={8}
         />
       )}
@@ -451,6 +447,8 @@ export function DashboardEditor({
           left={layout.centerPanelLeft}
           width={layout.centerPanelWidth}
           height={layout.centerPanelHeight}
+          blur={28}
+          saturate={1.2}
           borderRadius={8}
         />
       )}

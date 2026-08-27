@@ -25,11 +25,11 @@ const DEFAULT_SLOPE_BANDS = generateDynamicCategories(10).map((category) => ({
 export const DEFAULT_CONTROL_PANEL_STATE: ControlPanelState = {
   basemaps: buildBasemapList(DEFAULT_BASEMAP_ID),
   basemap3dQuality: {
-    value: 'slow-040',
+    value: 'fast-30m',
     options: [
-      { value: 'slow-040', label: '0.40 m (Lent)' },
+      { value: 'fast-30m', label: '30 m (Rapide - Recommandé)' },
       { value: 'terrain-1m', label: '1 m terrain (IGN)' },
-      { value: 'fast-30m', label: '30 m (Rapide)' },
+      { value: 'slow-040', label: '0.40 m (Haute définition)' },
     ],
   },
   lidarTiles: [

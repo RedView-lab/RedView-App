@@ -4,7 +4,7 @@
   --rvi-red: #890000;
   --rvi-red-border: #700000;
   --rvi-red-accent: #c50000;
-  --rvi-bg: rgba(15, 15, 15, 0.74);
+  --rvi-bg: rgba(14, 14, 18, 0.58);
   --rvi-bg-chip: rgba(255, 255, 255, 0.08);
   --rvi-bg-chip-hover: rgba(255, 255, 255, 0.12);
   --rvi-bg-row: rgba(28, 28, 28, 0.55);
@@ -26,11 +26,8 @@
   max-height: 100%;
   padding: 12px;
   background: var(--rvi-bg);
-
-    /* The itinerary shell sits above an explicit mirrored map backdrop
-      (DashboardEditor on the docked layout, MapCanvasGlassBackdrop when the
-      timeline is fullscreen). Keep the shell tint-only so large surfaces do
-      not pay a second compositor blur pass on top of the mirrored map slice. */
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
 
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);

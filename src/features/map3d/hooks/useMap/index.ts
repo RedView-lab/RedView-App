@@ -83,6 +83,7 @@ export function useMap(
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: runtimeProfile.antialias,
+      pixelRatio: runtimeProfile.pixelRatio,
       preserveDrawingBuffer: true,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,

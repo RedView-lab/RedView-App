@@ -19,7 +19,7 @@ import { resolveDem3dSelection } from './dem3dSelection';
 
 export type Dem3dQuality = 'hd' | 'fast-30m';
 
-export const DEFAULT_DEM3D_QUALITY: Dem3dQuality = 'hd';
+export const DEFAULT_DEM3D_QUALITY: Dem3dQuality = 'fast-30m';
 
 const VALID_QUALITIES: ReadonlySet<string> = new Set(['hd', 'fast-30m']);
 

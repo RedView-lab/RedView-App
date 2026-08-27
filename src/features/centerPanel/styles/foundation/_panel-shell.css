@@ -1,5 +1,5 @@
 .rvc-center-panel {
-  --rvc-center-bg: rgba(15, 15, 15, 0.74);
+  --rvc-center-bg: rgba(14, 14, 18, 0.58);
   --rvc-center-chip: rgba(255, 255, 255, 0.08);
   --rvc-center-chip-strong: rgba(0, 0, 0, 0.64);
   --rvc-center-border: rgba(255, 255, 255, 0.08);
@@ -22,6 +22,8 @@
   padding: 12px;
   border-radius: 8px;
   background: var(--rvc-center-bg);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
   color: var(--rvc-center-text);
   display: flex;
   flex-direction: column;
