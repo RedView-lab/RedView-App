@@ -5,7 +5,7 @@ interface ToggleProps {
   disabled?: boolean;
 }
 
-/** _Toggle base — neutral translucent track, white knob, slides right when on. */
+/** _Toggle base — Figma red switch: translucent track (OFF), #890000 (ON), white knob with 1px border. */
 export function Toggle({ checked, onChange, ariaLabel, disabled = false }: ToggleProps) {
   return (
     <button

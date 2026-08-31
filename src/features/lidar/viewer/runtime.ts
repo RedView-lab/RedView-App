@@ -257,11 +257,12 @@ export async function launchWebGLFallback({
 
 export function buildRGBA(pc: PointCloudData): Uint8Array {
   const rgba = new Uint8Array(pc.count * 4);
+  const cls = pc.classifications;
   for (let index = 0; index < pc.count; index++) {
-    rgba[index * 4 + 0] = pc.colors[index * 3 + 0];
-    rgba[index * 4 + 1] = pc.colors[index * 3 + 1];
-    rgba[index * 4 + 2] = pc.colors[index * 3 + 2];
-    rgba[index * 4 + 3] = 255;
+    rgba[index * 4 + 0] = pc.colors[index * 3 + 0]!;
+    rgba[index * 4 + 1] = pc.colors[index * 3 + 1]!;
+    rgba[index * 4 + 2] = pc.colors[index * 3 + 2]!;
+    rgba[index * 4 + 3] = cls ? (cls[index] ?? 0) : 0;
   }
   return rgba;
 }

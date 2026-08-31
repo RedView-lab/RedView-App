@@ -209,6 +209,7 @@ export default defineConfig({
     },
   },
   server: {
+    host: true,
     proxy: {
       '/api/lidar/wmts': {
         target: 'https://data.geopf.fr',

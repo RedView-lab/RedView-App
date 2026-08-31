@@ -394,6 +394,12 @@ function resizeCanvas() {
       centerLat: lat,
       timeZone: tileTimeZone,
       routeController,
+      onPointFilterChange: (pointFilterState) => {
+        if (renderer) {
+          renderer.setPointFilterState(pointFilterState);
+          requestRender();
+        }
+      },
       onSlopeChange: (slopeState) => {
         slopeController.handleSlopeChange(slopeState);
       },

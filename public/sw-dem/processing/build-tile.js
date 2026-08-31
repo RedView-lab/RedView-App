@@ -95,9 +95,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
 
   // Log source zoom remapping — useful when diagnosing why surface detail is
   // missing (too coarse demZ) or why a close view hits the max zoom clamp.
-  if (demZ !== mercZ) {
-    console.log(
-      `[sw-dem][build] %c SOURCE ZOOM %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ}, using demZ=${demZ} (Δ=${demZ - mercZ}, ${gridCols * gridRows} sub-tiles)`,
+  if (demZ !== mercZ && typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'build',
+      `%c SOURCE ZOOM %c ${mercZ}/${mercX}/${mercY} — requested z${mercZ}, using demZ=${demZ} (Δ=${demZ - mercZ}, ${gridCols * gridRows} sub-tiles)`,
       'background:#FF9800;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
@@ -183,9 +184,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
     }
   }
   const hasPending = pendingCount > 0;
-  if (hasPending && DEBUG) {
-    console.log(
-      `[sw-dem][build] soft-deadline ${mercZ}/${mercX}/${mercY} — ${fetchCount - pendingCount}/${fetchCount} settled, ${pendingCount} continuing in background`,
+  if (hasPending && typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'build',
+      `soft-deadline ${mercZ}/${mercX}/${mercY} — ${fetchCount - pendingCount}/${fetchCount} settled, ${pendingCount} continuing in background`,
     );
   }
 
@@ -200,9 +202,10 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
       ignMissing++;
     }
   }
-  if (ignMissing > 0 || ignFallback > 0) {
-    console.log(
-      `[sw-dem][build] %c IGN FETCH %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${ignOk} fallback=${ignFallback} missing=${ignMissing} (demZ=${demZ})`,
+  if ((ignMissing > 0 || ignFallback > 0) && typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'build',
+      `%c IGN FETCH %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${ignOk} fallback=${ignFallback} missing=${ignMissing} (demZ=${demZ})`,
       'background:#2196F3;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
@@ -278,7 +281,9 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
 
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
+    if (typeof swLog !== 'undefined') {
+      swLog.debug('build', `${mercZ}/${mercX}/${mercY} — 0 coverage, ${fetchCount} sub-tiles, ${dt}ms`);
+    }
     return {
       blob: null, elevations: null, coverage: null,
       source: 'ign-empty',
@@ -298,16 +303,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
       if (elevations[i] > eMax) eMax = elevations[i];
     }
     const eRange = eMax - eMin;
-    if (DEBUG) {
+    if (typeof swLog !== 'undefined' && swLog.isDebug()) {
       const rangeColor = eRange < 5 ? '#f44336' : eRange < 50 ? '#FF9800' : '#4CAF50';
-      console.log(
-        `[sw-dem][build] %c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, elev=[${eMin.toFixed(1)}..${eMax.toFixed(1)}] range=${eRange.toFixed(1)}m, ${fetchCount} sub-tiles, ${dt}ms`,
+      swLog.debug(
+        'build',
+        `%c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, elev=[${eMin.toFixed(1)}..${eMax.toFixed(1)}] range=${eRange.toFixed(1)}m, ${fetchCount} sub-tiles, ${dt}ms`,
         `background:${rangeColor};color:#fff;padding:2px 4px;border-radius:2px`, ''
       );
     }
-    if (eRange < 5) {
-      console.warn(
-        `[sw-dem][build] %c ⚠ FLAT OUTPUT %c ${mercZ}/${mercX}/${mercY} — elevation range ${eRange.toFixed(1)}m → terrain will be flat! demZ=${demZ} mercZ=${mercZ}`,
+    if (eRange < 5 && typeof swLog !== 'undefined' && swLog.isDebug()) {
+      swLog.warn(
+        'build',
+        `%c ⚠ FLAT OUTPUT %c ${mercZ}/${mercX}/${mercY} — elevation range ${eRange.toFixed(1)}m → terrain will be flat! demZ=${demZ} mercZ=${mercZ}`,
         'background:#f44336;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', ''
       );
     }
@@ -382,14 +389,18 @@ async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) 
 
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+    if (typeof swLog !== 'undefined') {
+      swLog.debug('build', `${mercZ}/${mercX}/${mercY} — dilated to full, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+    }
     postProcessFranceMnsTile(elevations, coverage, mercZ);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches, prefilledMbElev };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
-  console.log(`[sw-dem][build] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+  if (typeof swLog !== 'undefined') {
+    swLog.debug('build', `${mercZ}/${mercX}/${mercY} — partial ${covPct}%, src=${source}, ${dilationPasses} passes, ${dt}ms`);
+  }
   postProcessFranceMnsTile(elevations, coverage, mercZ);
   return { blob: null, elevations, coverage, source, pendingFetches, prefilledMbElev };
 }
@@ -447,9 +458,10 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
     if (result && result.data) hrOk++;
     else hrMissing++;
   }
-  if (hrMissing > 0 || DEBUG) {
-    console.log(
-      `[sw-dem][build-hr] %c HIGHRES %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${hrOk} missing=${hrMissing} (demZ=${demZ})`,
+  if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'build-hr',
+      `%c HIGHRES %c ${mercZ}/${mercX}/${mercY} — ${fetchCount} sub-tiles: ok=${hrOk} missing=${hrMissing} (demZ=${demZ})`,
       'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', ''
     );
   }
@@ -508,7 +520,9 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
 
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build-hr] ${mercZ}/${mercX}/${mercY} — 0 HIGHRES coverage, ${dt}ms`);
+    if (typeof swLog !== 'undefined') {
+      swLog.debug('build-hr', `${mercZ}/${mercX}/${mercY} — 0 HIGHRES coverage, ${dt}ms`);
+    }
     return null;
   }
 
@@ -517,10 +531,13 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
   // Full coverage fast path
   if (coveredCount === totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(
-      `[sw-dem][build-hr] %c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, ${fetchCount} sub-tiles, ${dt}ms`,
-      'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', ''
-    );
+    if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+      swLog.debug(
+        'build-hr',
+        `%c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, ${fetchCount} sub-tiles, ${dt}ms`,
+        'background:#9C27B0;color:#fff;padding:2px 4px;border-radius:2px', ''
+      );
+    }
     despikeElevations(elevations, coverage, DEM_TILE_SIZE);
     return { blob: null, elevations, coverage, source, pendingFetches };
   }
@@ -584,14 +601,18 @@ async function buildIGNFallbackTile(mercZ, mercX, mercY) {
 
   if (coveredCount >= totalPixels) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build-hr] ${mercZ}/${mercX}/${mercY} — dilated to full, ${dt}ms`);
+    if (typeof swLog !== 'undefined') {
+      swLog.debug('build-hr', `${mercZ}/${mercX}/${mercY} — dilated to full, ${dt}ms`);
+    }
     despikeElevations(elevations, coverage, DEM_TILE_SIZE);
     return { blob: await encodeTerrainRGBPng(elevations), elevations, coverage, source, pendingFetches };
   }
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
-  console.log(`[sw-dem][build-hr] ${mercZ}/${mercX}/${mercY} — partial ${covPct}%, ${dt}ms`);
+  if (typeof swLog !== 'undefined') {
+    swLog.debug('build-hr', `${mercZ}/${mercX}/${mercY} — partial ${covPct}%, ${dt}ms`);
+  }
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
   return { blob: null, elevations, coverage, source, pendingFetches };
 }
@@ -627,7 +648,9 @@ async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
 
   if (coveredCount === 0) {
     const dt = (performance.now() - t0).toFixed(1);
-    console.log(`[sw-dem][build-terrain] ${mercZ}/${mercX}/${mercY} — 0 WMS coverage, ${dt}ms`);
+    if (typeof swLog !== 'undefined') {
+      swLog.debug('build-terrain', `${mercZ}/${mercX}/${mercY} — 0 WMS coverage, ${dt}ms`);
+    }
     return null;
   }
 
@@ -699,7 +722,9 @@ async function buildIGNTerrainTile(mercZ, mercX, mercY, options) {
 
   const dt = (performance.now() - t0).toFixed(1);
   const covPct = (coveredCount / totalPixels * 100).toFixed(1);
-  console.log(`[sw-dem][build-terrain] ${mercZ}/${mercX}/${mercY} — coverage ${covPct}%, ${dt}ms`);
+  if (typeof swLog !== 'undefined') {
+    swLog.debug('build-terrain', `${mercZ}/${mercX}/${mercY} — coverage ${covPct}%, ${dt}ms`);
+  }
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
   if (typeof smoothSurfaceMicroUndulations === 'function') {
     smoothSurfaceMicroUndulations(elevations, coverage, DEM_TILE_SIZE, 6);

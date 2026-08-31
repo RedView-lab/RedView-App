@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { ROUTE_SLOPE_LEGEND_BANDS } from '@/features/controlPanel/lib';
-import { useAnalysisZone } from '@/features/analysisZone';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
 import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
@@ -9,7 +8,6 @@ import {
   IconCompass,
   IconInfo,
   IconMaximize,
-  IconPolygonZone,
   IconZoomIn,
   IconZoomOut,
 } from './MapViewportControlIcons';
@@ -144,7 +142,6 @@ export function MapViewportControls({
   const [is3DView, setIs3DView] = useState(DEFAULT_VIEW.pitch > THREE_D_PITCH_THRESHOLD);
   const [isLegendOpen, setIsLegendOpen] = useState(false);
   const [activeLegendTab, setActiveLegendTab] = useState<'surfaces' | 'slopes'>('surfaces');
-  const [isZonePopoverOpen, setIsZonePopoverOpen] = useState(false);
 
   const projectStore = useProjectStoreOptional();
   const activeItinerary = projectStore?.project.itineraries.find(
@@ -153,10 +150,6 @@ export function MapViewportControls({
 
   const traceColor = routeColor ?? activeItinerary?.color ?? '#ff3b30';
 
-  const analysisZone = useAnalysisZone();
-  const hasAnalysisZone = Boolean(analysisZone?.zone);
-  const isZoneDrawing = Boolean(analysisZone?.isDrawing);
-  const zonePopoverRef = useRef<HTMLDivElement | null>(null);
   const legendPopoverRef = useRef<HTMLDivElement | null>(null);
 
   const hasRouteSlope = routeSlopeLegendTitle != null;
@@ -192,19 +185,6 @@ export function MapViewportControls({
 
   const disabled = !isMapLoaded || map == null;
 
-  // Close the analysis-zone popover when clicking anywhere outside of it.
-  useEffect(() => {
-    if (!isZonePopoverOpen) return;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (zonePopoverRef.current?.contains(event.target as Node)) return;
-      setIsZonePopoverOpen(false);
-    };
-    window.addEventListener('pointerdown', handlePointerDown);
-    return () => {
-      window.removeEventListener('pointerdown', handlePointerDown);
-    };
-  }, [isZonePopoverOpen]);
-
   // Close the legend popover when clicking anywhere outside of it.
   useEffect(() => {
     if (!isLegendOpen) return;
@@ -217,28 +197,6 @@ export function MapViewportControls({
       window.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [isLegendOpen]);
-
-  // Keep the popover consistent with the zone lifecycle.
-  useEffect(() => {
-    if (!hasAnalysisZone) setIsZonePopoverOpen(false);
-  }, [hasAnalysisZone]);
-  useEffect(() => {
-    if (isZoneDrawing) setIsZonePopoverOpen(false);
-  }, [isZoneDrawing]);
-
-  const handleZoneButtonClick = () => {
-    if (!analysisZone) return;
-    setIsLegendOpen(false);
-    if (analysisZone.isDrawing) {
-      analysisZone.cancelDrawing();
-      return;
-    }
-    if (analysisZone.zone) {
-      setIsZonePopoverOpen((value) => !value);
-      return;
-    }
-    analysisZone.startDrawing();
-  };
 
   const handleZoomIn = () => {
     if (!map) return;
@@ -346,102 +304,6 @@ export function MapViewportControls({
         <span>{is3DView ? '3D' : '2D'}</span>
       </button>
 
-      {analysisZone ? (
-        <div className="rvmvc-map-tools__zone-row" ref={zonePopoverRef}>
-          {isZonePopoverOpen && hasAnalysisZone ? (
-            <section className="rvmvc-analysis-zone-popover" aria-label={t('Zone d’analyse')}>
-              <div className="rvmvc-analysis-zone-popover__title">{t('Zone d’analyse')}</div>
-              {analysisZone.zoneHint ? (
-                <div className="rvmvc-analysis-zone-popover__hint">{analysisZone.zoneHint}</div>
-              ) : null}
-              <div className="rvmvc-analysis-zone-popover__actions">
-                <button
-                  type="button"
-                  className="rvmvc-analysis-zone-popover__action"
-                  onClick={() => {
-                    setIsZonePopoverOpen(false);
-                    analysisZone.startDrawing();
-                  }}
-                >
-                  {t('Redessiner la zone')}
-                </button>
-                <button
-                  type="button"
-                  className="rvmvc-analysis-zone-popover__action"
-                  onClick={() => analysisZone.fitZone()}
-                >
-                  {t('Zoomer sur la zone')}
-                </button>
-                <button
-                  type="button"
-                  className="rvmvc-analysis-zone-popover__action rvmvc-analysis-zone-popover__action--danger"
-                  onClick={() => {
-                    setIsZonePopoverOpen(false);
-                    analysisZone.clearZone();
-                  }}
-                >
-                  {t('Supprimer la zone')}
-                </button>
-              </div>
-            </section>
-          ) : null}
-
-          {isZoneDrawing ? (
-            <div className="rvmvc-analysis-zone-hint" role="status">
-              <div className="rvmvc-analysis-zone-hint__text">
-                {analysisZone.draftPointsCount === 0 &&
-                  t('Cliquez pour placer les sommets, double-cliquez pour terminer, Échap pour annuler')}
-                {analysisZone.draftPointsCount === 1 &&
-                  t('1 sommet placé — cliquez pour le 2e')}
-                {analysisZone.draftPointsCount === 2 &&
-                  t('2 sommets placés — cliquez pour le 3e')}
-                {analysisZone.draftPointsCount >= 3 &&
-                  t('Double-cliquez ou cliquez sur le 1er point pour valider')}
-              </div>
-              <div className="rvmvc-analysis-zone-hint__actions">
-                {analysisZone.draftPointsCount >= 3 ? (
-                  <button
-                    type="button"
-                    className="rvmvc-analysis-zone-hint__action rvmvc-analysis-zone-hint__action--primary"
-                    onClick={() => analysisZone.commitCurrentDraft()}
-                  >
-                    {t('Valider')}
-                  </button>
-                ) : null}
-                {analysisZone.draftPointsCount > 0 ? (
-                  <button
-                    type="button"
-                    className="rvmvc-analysis-zone-hint__action"
-                    onClick={() => analysisZone.undoDraftPoint()}
-                  >
-                    {t('Annuler point')}
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  className="rvmvc-analysis-zone-hint__action"
-                  onClick={() => analysisZone.cancelDrawing()}
-                >
-                  {t('Annuler')}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            className={`rvmvc-map-tools__button${isZoneDrawing || hasAnalysisZone ? ' is-active' : ''}`}
-            aria-label={t('Zone d’analyse terrain (pentes, altitude, ensoleillement)')}
-            aria-pressed={isZoneDrawing || hasAnalysisZone}
-            title={hasAnalysisZone ? t('Zone d’analyse') : t('Tracer une zone d’analyse')}
-            onClick={handleZoneButtonClick}
-            disabled={disabled}
-          >
-            <IconPolygonZone size={20} />
-          </button>
-        </div>
-      ) : null}
-
       <div className="rvmvc-map-tools__legend-row" ref={legendPopoverRef}>
         {isLegendOpen ? (
           <section className="rvmvc-route-legend-popover" aria-label={t('Légende du tracé')}>
@@ -501,7 +363,6 @@ export function MapViewportControls({
           aria-pressed={isLegendOpen}
           title={t('Légende')}
           onClick={() => {
-            setIsZonePopoverOpen(false);
             setIsLegendOpen((value) => !value);
           }}
         >

@@ -1,4 +1,5 @@
 import { supabase } from '@/shared/services/supabase';
+import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId } from './auth';
 import { folderRowToSummary } from './mappers';
@@ -21,7 +22,7 @@ function writeLocalFolders(folders: ProjectFolderRow[]): void {
   try {
     window.localStorage.setItem(LOCAL_FOLDERS_KEY, JSON.stringify(folders));
   } catch (e) {
-    console.warn('[folders] Failed to save local folders', e);
+    logger.projects.warn('Failed to save local folders', e);
   }
 }
 
@@ -39,7 +40,7 @@ export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
         return data.map((row) => folderRowToSummary(row as ProjectFolderRow));
       }
     } catch (e) {
-      console.warn('[folders] Supabase listProjectFolders failed, using local storage fallback', e);
+      logger.projects.debug('Supabase listProjectFolders fallback to local storage', e);
     }
   }
 
@@ -74,7 +75,7 @@ export async function createProjectFolder(
         return folderRowToSummary(data as ProjectFolderRow);
       }
     } catch (e) {
-      console.warn('[folders] Supabase createProjectFolder failed, saving locally', e);
+      logger.projects.debug('Supabase createProjectFolder fallback to local storage', e);
     }
   }
 
@@ -107,7 +108,7 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
       const { error } = await supabase.from('project_folders').update({ name: trimmed }).eq('id', id);
       if (!error) return;
     } catch (e) {
-      console.warn('[folders] Supabase renameProjectFolder failed, renaming locally', e);
+      logger.projects.debug('Supabase renameProjectFolder fallback to local storage', e);
     }
   }
 
@@ -135,7 +136,7 @@ export async function moveProjectFolder(
       });
       if (!error) return;
     } catch (e) {
-      console.warn('[folders] Supabase moveProjectFolder failed, moving locally', e);
+      logger.projects.debug('Supabase moveProjectFolder fallback to local storage', e);
     }
   }
 
@@ -159,7 +160,7 @@ export async function deleteProjectFolder(id: string): Promise<void> {
       });
       if (!error) return;
     } catch (e) {
-      console.warn('[folders] Supabase deleteProjectFolder failed, deleting locally', e);
+      logger.projects.debug('Supabase deleteProjectFolder fallback to local storage', e);
     }
   }
 

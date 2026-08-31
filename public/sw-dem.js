@@ -32,6 +32,7 @@ const withEpoch = (path) => `${path}?rv-map-cache-epoch=${encodeURIComponent(swM
 
 importScripts(
   // ── Pipeline primitives (config + math + low-level fetchers) ──────────
+  withEpoch('/sw-dem/core/logger.js'),
   withEpoch('/sw-dem/core/config.js'),
   withEpoch('/sw-dem/core/geo.js'),
   withEpoch('/sw-dem/core/analysis-zone.js'),

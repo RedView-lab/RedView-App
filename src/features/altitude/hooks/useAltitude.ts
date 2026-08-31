@@ -22,6 +22,25 @@ if (typeof window !== 'undefined') {
   };
 }
 
+export function canStartAltitudeWork(map: MapboxMap): boolean {
+  try {
+    return Boolean(map.getStyle() && (map.getTerrain()?.source || map.getSource(ALTITUDE_SOURCE_ID)));
+  } catch {
+    return false;
+  }
+}
+
+export function notifyAltitudeActiveState(active: boolean): void {
+  try {
+    navigator.serviceWorker?.controller?.postMessage({
+      type: 'ALTITUDE_ACTIVE_STATE',
+      active,
+    });
+  } catch {
+    /* service worker may not control this page yet */
+  }
+}
+
 function addAltitudeLayer(
   map: MapboxMap,
   opacity: number,
@@ -29,7 +48,7 @@ function addAltitudeLayer(
   categories: AltitudeCategory[],
   hiddenIds: Set<string>,
   sourceOptions: AltitudeTileSourceOptions,
-) {
+): boolean {
   try {
     if (!map.getSource(ALTITUDE_SOURCE_ID)) {
       map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(sourceOptions));
@@ -39,11 +58,12 @@ function addAltitudeLayer(
       map.addLayer(layer as Parameters<MapboxMap['addLayer']>[0]);
     }
   } catch {
-    /* style may be transitioning */
+    return false;
   }
+  return Boolean(map.getSource(ALTITUDE_SOURCE_ID) && map.getLayer(ALTITUDE_LAYER_ID));
 }
 
-function removeAltitudeLayer(map: MapboxMap) {
+function removeAltitudeLayer(map: MapboxMap): void {
   try {
     if (map.getLayer(ALTITUDE_LAYER_ID)) map.removeLayer(ALTITUDE_LAYER_ID);
     if (map.getSource(ALTITUDE_SOURCE_ID)) map.removeSource(ALTITUDE_SOURCE_ID);
@@ -96,23 +116,21 @@ export function useAltitude(
   const hiddenIdsRef = useRef(hiddenIds);
   const previousEnabledRef = useRef(enabled);
   const sourceOptionsRef = useRef(sourceOptions);
+  opacityRef.current = opacity;
+  colorModeRef.current = colorMode;
+  enabledRef.current = enabled;
+  categoriesRef.current = categories;
+  hiddenIdsRef.current = hiddenIds;
+  sourceOptionsRef.current = sourceOptions;
 
   const mountedRef = useRef(false);
+  const visibilityDeferredRef = useRef(enabled);
   const mountedSourceKeyRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    opacityRef.current = opacity;
-    colorModeRef.current = colorMode;
-    enabledRef.current = enabled;
-    categoriesRef.current = categories;
-    hiddenIdsRef.current = hiddenIds;
-    sourceOptionsRef.current = sourceOptions;
-  }, [opacity, colorMode, enabled, categories, hiddenIds, sourceOptions]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !enabled) return;
     if (mountedRef.current) return;
-    addAltitudeLayer(
+    const mounted = addAltitudeLayer(
       map,
       opacityRef.current,
       colorModeRef.current,
@@ -120,9 +138,43 @@ export function useAltitude(
       hiddenIdsRef.current,
       sourceOptionsRef.current,
     );
+    if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = buildAltitudeSourceKey(sourceOptionsRef.current);
+    setAltitudeVisibility(map, enabledRef.current);
   }, [map, isMapLoaded, enabled, sourceKey]);
+
+  useEffect(() => {
+    if (!map || !isMapLoaded || !enabled || mountedRef.current) return;
+
+    const tryMount = () => {
+      if (mountedRef.current || !enabledRef.current) return;
+      if (!canStartAltitudeWork(map)) return;
+      const mounted = addAltitudeLayer(
+        map,
+        opacityRef.current,
+        colorModeRef.current,
+        categoriesRef.current,
+        hiddenIdsRef.current,
+        sourceOptionsRef.current,
+      );
+      if (!mounted) return;
+      mountedRef.current = true;
+      mountedSourceKeyRef.current = buildAltitudeSourceKey(sourceOptionsRef.current);
+      setAltitudeVisibility(map, enabledRef.current);
+      map.triggerRepaint();
+    };
+
+    tryMount();
+    map.on('styledata', tryMount);
+    map.on('sourcedata', tryMount);
+    map.on('idle', tryMount);
+    return () => {
+      map.off('styledata', tryMount);
+      map.off('sourcedata', tryMount);
+      map.off('idle', tryMount);
+    };
+  }, [map, isMapLoaded, enabled]);
 
   // ── Zone swap ──────────────────────────────────────────────────────────
   // The analysis zone rides in the source options (bounds + `?zone=` cache
@@ -133,30 +185,25 @@ export function useAltitude(
     if (mountedSourceKeyRef.current === sourceKey) return;
     removeAltitudeLayer(map);
     mountedRef.current = false;
-    const mounted = (() => {
-      try {
-        if (!map.getSource(ALTITUDE_SOURCE_ID)) {
-          map.addSource(ALTITUDE_SOURCE_ID, buildAltitudeTileSource(sourceOptions));
-        }
-        if (!map.getLayer(ALTITUDE_LAYER_ID)) {
-          map.addLayer(
-            buildAltitudeLayer(
-              opacityRef.current,
-              colorModeRef.current,
-              categoriesRef.current,
-              hiddenIdsRef.current,
-            ) as Parameters<MapboxMap['addLayer']>[0],
-          );
-        }
-        return Boolean(map.getSource(ALTITUDE_SOURCE_ID) && map.getLayer(ALTITUDE_LAYER_ID));
-      } catch {
-        return false;
-      }
-    })();
+    const mounted = addAltitudeLayer(
+      map,
+      opacityRef.current,
+      colorModeRef.current,
+      categoriesRef.current,
+      hiddenIdsRef.current,
+      sourceOptions,
+    );
     if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = sourceKey;
+    setAltitudeVisibility(map, enabledRef.current);
   }, [map, isMapLoaded, sourceKey, sourceOptions]);
+
+  // ── Active-state notification ─────────────────────────────────────
+  useEffect(() => {
+    if (!map || !isMapLoaded) return;
+    notifyAltitudeActiveState(enabled);
+  }, [map, isMapLoaded, enabled]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
@@ -164,10 +211,50 @@ export function useAltitude(
   }, [map, isMapLoaded, enabled]);
 
   useEffect(() => {
+    if (!map || !isMapLoaded) return;
+
+    if (!enabled) {
+      visibilityDeferredRef.current = false;
+      if (mountedRef.current) setAltitudeVisibility(map, false);
+      return;
+    }
+
+    visibilityDeferredRef.current = false;
+    if (mountedRef.current) setAltitudeVisibility(map, true);
+
+    const resumeAltitude = () => {
+      if (!enabledRef.current) return;
+      if (!canStartAltitudeWork(map)) return;
+      if (mountedRef.current) {
+        setAltitudeVisibility(map, true);
+      }
+    };
+
+    map.on('moveend', resumeAltitude);
+    map.on('zoomend', resumeAltitude);
+    map.on('sourcedata', resumeAltitude);
+    map.on('styledata', resumeAltitude);
+    map.on('idle', resumeAltitude);
+    return () => {
+      map.off('moveend', resumeAltitude);
+      map.off('zoomend', resumeAltitude);
+      map.off('sourcedata', resumeAltitude);
+      map.off('styledata', resumeAltitude);
+      map.off('idle', resumeAltitude);
+    };
+  }, [map, isMapLoaded, enabled]);
+
+  useEffect(() => {
     const wasEnabled = previousEnabledRef.current;
     previousEnabledRef.current = enabled;
     if (!map || !isMapLoaded) return;
     if (enabled || !wasEnabled) return;
+
+    visibilityDeferredRef.current = false;
+    if (mountedRef.current) {
+      setAltitudeVisibility(map, false);
+      try { map.triggerRepaint(); } catch { /* map gone */ }
+    }
     cancelAltitudeWorkerPressure();
   }, [map, isMapLoaded, enabled]);
 
@@ -202,7 +289,8 @@ export function useAltitude(
       mountedSourceKeyRef.current = null;
       setTimeout(() => {
         if (!enabledRef.current) return;
-        addAltitudeLayer(
+        visibilityDeferredRef.current = true;
+        const mounted = addAltitudeLayer(
           map,
           opacityRef.current,
           colorModeRef.current,
@@ -210,8 +298,10 @@ export function useAltitude(
           hiddenIdsRef.current,
           sourceOptionsRef.current,
         );
+        if (!mounted) return;
         mountedRef.current = true;
         mountedSourceKeyRef.current = buildAltitudeSourceKey(sourceOptionsRef.current);
+        setAltitudeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
       }, 0);
     };
 

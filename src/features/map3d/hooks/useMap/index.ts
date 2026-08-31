@@ -87,7 +87,7 @@ export function useMap(
       preserveDrawingBuffer: true,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
-    });
+    } as mapboxgl.MapOptions);
 
     mapRef.current = map;
 

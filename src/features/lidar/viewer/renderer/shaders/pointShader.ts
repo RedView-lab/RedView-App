@@ -44,6 +44,10 @@ fn vs_main(
     let r = f32(h) / 4294967295.0;
     keep = select(0.0, 1.0, r < camera.density);
   }
+  let rawClass = u32(col.a * 255.0 + 0.5);
+  if (!isPointClassVisible(rawClass)) {
+    keep = 0.0;
+  }
   out.stochasticKeep = keep;
   let uv = vec2<f32>(select(-1.0, 1.0, (vi & 1u) != 0u), select(-1.0, 1.0, (vi & 2u) != 0u));
   let toCamera = camera.cameraPos.xyz - pos;
@@ -55,7 +59,7 @@ fn vs_main(
   let scale = select(0.0, 1.0, keep > 0.5);
   let wp = pos + camera.right.xyz * uv.x * billboardScale * scale + camera.up.xyz * uv.y * billboardScale * scale;
   out.pos = camera.viewProj * vec4<f32>(wp, 1.0);
-  out.color = col;
+  out.color = vec4<f32>(col.rgb, 1.0);
   out.worldPos = wp;
   out.center = pos;
   out.localUV = uv;
@@ -101,7 +105,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
   let N = normalize(in.sobelNormal);
   let color = shadePoint(N, coloredBase, in.center);
-  return vec4<f32>(color, in.color.a * edge);
+  return vec4<f32>(color, edge);
 }
 `;
 
@@ -166,14 +170,16 @@ fn vs_main(
 ) -> VsOutLite {
   var out: VsOutLite;
   let _unused = ii;
+  let rawClass = u32(col.a * 255.0 + 0.5);
+  let keep = select(0.0, 1.0, isPointClassVisible(rawClass));
   let uv = vec2<f32>(select(-1.0, 1.0, (vi & 1u) != 0u), select(-1.0, 1.0, (vi & 2u) != 0u));
   let toCamera = camera.cameraPos.xyz - pos;
   let dist = length(toCamera);
   let distScale = clamp(1.0 + 0.12 * log2(max(dist / 200.0, 1.0)), 1.0, 2.5);
-  let billboardScale = camera.pointSize * 0.5 * distScale * 1.35;
+  let billboardScale = camera.pointSize * 0.5 * distScale * 1.35 * keep;
   let wp = pos + camera.right.xyz * uv.x * billboardScale + camera.up.xyz * uv.y * billboardScale;
   out.pos = camera.viewProj * vec4<f32>(wp, 1.0);
-  out.color = col;
+  out.color = vec4<f32>(col.rgb, 1.0);
   out.localUV = uv;
   out.normal = computeNormalCross(pos);
   out.worldCenter = pos;
@@ -203,11 +209,11 @@ fn fs_main(in: VsOutLite) -> @location(0) vec4<f32> {
     let upFacing = clamp(N.y * 0.5 + 0.5, 0.0, 1.0);
     let ambientBase = baseColor * camera.skyColor.rgb * (0.18 + 0.22 * upFacing);
     let lit = (directSun + ambientBase * shadowMask) * camera.exposure;
-    return vec4<f32>(linearToSrgbLite(lit), in.color.a * edge);
+    return vec4<f32>(linearToSrgbLite(lit), edge);
   }
 
   let diffuse = dot(N, L) * 0.5 + 0.5;
   let lighting = 0.18 + 0.82 * diffuse;
-  return vec4<f32>(linearToSrgbLite(baseColor * lighting), in.color.a * edge);
+  return vec4<f32>(linearToSrgbLite(baseColor * lighting), edge);
 }
 `;

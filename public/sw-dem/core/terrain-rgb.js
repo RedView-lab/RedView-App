@@ -175,7 +175,9 @@ function getFlatDemTile() {
       const size = DEM_TILE_SIZE;
       const elevations = new Float32Array(size * size); // All zeros = sea level
       const blob = await encodeTerrainRGBPng(elevations);
-      console.log(`[sw-dem] Flat DEM tile generated: ${blob.size} bytes (${size}x${size})`);
+      if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+        swLog.debug('build', `Flat DEM tile generated: ${blob.size} bytes (${size}x${size})`);
+      }
       return blob;
     })();
   }
@@ -267,13 +269,14 @@ async function decodeTerrainRGBBlobUncached(blob) {
   const pixels = imageData.data;
   const len = width * height;
   const elevations = new Float32Array(len);
+  const u32 = new Uint32Array(pixels.buffer, pixels.byteOffset, len);
 
   for (let i = 0; i < len; i++) {
-    const idx = i * 4;
-    const r = pixels[idx];
-    const g = pixels[idx + 1];
-    const b = pixels[idx + 2];
-    elevations[i] = -10000 + (r * 65536 + g * 256 + b) * 0.1;
+    const val = u32[i];
+    // In little-endian: val = (A << 24) | (B << 16) | (G << 8) | R
+    // Terrain-RGB formula: -10000 + ((R << 16) | (G << 8) | B) * 0.1
+    const rgb = ((val & 0xff) << 16) | (val & 0x0000ff00) | ((val >> 16) & 0xff);
+    elevations[i] = -10000 + rgb * 0.1;
   }
 
   // ── DEBUG: log decode diagnostics ──

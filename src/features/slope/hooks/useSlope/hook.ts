@@ -4,16 +4,12 @@ import type { SlopeCategory, SlopeColorMode, SlopeDemProfile } from '../../types
 import { type SlopeTileSourceOptions, type SlopeZoneOptions, buildSlopeColorExpression, buildSlopeSourceKey } from '../../lib/slope-source';
 import {
   addSlopeLayer,
-  cancelSlopeWorkerPressure,
   canStartSlopeWork,
   hiddenIdsFromRanges,
   notifySlopeActiveState,
-  prewarmSlopeViewport,
   removeSlopeLayer,
   setSlopeVisibility,
-  snapshotVisibleTiles,
 } from './helpers';
-import { getViewportPrefetch } from '@/features/map3d/lib/viewportPrefetch';
 import { useSlopeProgressReporter } from './progress';
 
 if (typeof window !== 'undefined') {
@@ -129,7 +125,7 @@ export function useSlope(
     if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
-    setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
+    setSlopeVisibility(map, enabledRef.current);
   }, [map, isMapLoaded, enabled, sourceKey]);
 
   useEffect(() => {
@@ -149,7 +145,7 @@ export function useSlope(
       if (!mounted) return;
       mountedRef.current = true;
       mountedSourceKeyRef.current = buildSlopeSourceKey(sourceOptionsRef.current);
-      setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
+      setSlopeVisibility(map, enabledRef.current);
       map.triggerRepaint();
     };
 
@@ -169,7 +165,6 @@ export function useSlope(
     if (mountedSourceKeyRef.current === sourceKey) return;
     removeSlopeLayer(map);
     mountedRef.current = false;
-    visibilityDeferredRef.current = enabledRef.current;
     const mounted = addSlopeLayer(
       map,
       opacityRef.current,
@@ -181,31 +176,17 @@ export function useSlope(
     if (!mounted) return;
     mountedRef.current = true;
     mountedSourceKeyRef.current = sourceKey;
-    setSlopeVisibility(map, enabledRef.current && !visibilityDeferredRef.current);
+    setSlopeVisibility(map, enabledRef.current);
 
-    // ── Zone multi-fetch or cross-profile prewarm on resolution switch ──
+    // ── Zone multi-fetch on resolution switch ──
     if (sourceOptions.zone?.bounds) {
       triggerZonePipeline(sourceOptions.zone, sourceOptions.demProfile);
-    } else {
-      try {
-        const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
-        if (tiles.length) {
-          const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
-          prewarmSlopeViewport(tiles, otherProfile, sourceOptionsRef.current.zone?.hash);
-        }
-      } catch {
-        /* best-effort */
-      }
     }
   }, [map, isMapLoaded, sourceKey, sourceOptions]);
 
-  // ── Active-state + initial dual-profile prewarm ────────────────────
+  // ── Active-state notification ─────────────────────────────────────
   // Tells the SW to grow the DEM hot tier when slope is on (it reads ~5×
-  // more DEM tiles than the basemap). On the enable transition we also
-  // kick a prewarm of the OTHER profile's foreground tiles so the user
-  // can flip between 0.40m / 1m without retriggering the full build
-  // pipeline. We do NOT prewarm the just-enabled profile: Mapbox's own
-  // tile requests handle that with correct slope-visible priority.
+  // more DEM tiles than the basemap).
   useEffect(() => {
     if (!map || !isMapLoaded) return;
     notifySlopeActiveState(enabled);
@@ -214,23 +195,11 @@ export function useSlope(
     if (sourceOptionsRef.current.zone?.bounds) {
       triggerZonePipeline(sourceOptionsRef.current.zone, sourceOptionsRef.current.demProfile);
     }
-
-    const timer = setTimeout(() => {
-      try {
-        const tiles = snapshotVisibleTiles(map, 'slope-tiles').slice(0, 20);
-        if (!tiles.length) return;
-        const otherProfile = sourceOptionsRef.current.demProfile === 'terrain' ? 'default' : 'terrain';
-        prewarmSlopeViewport(tiles, otherProfile, sourceOptionsRef.current.zone?.hash);
-      } catch {
-        /* best-effort */
-      }
-    }, 1200);
-    return () => clearTimeout(timer);
   }, [map, isMapLoaded, enabled]);
 
   useEffect(() => {
     if (!map || !isMapLoaded || !mountedRef.current) return;
-    setSlopeVisibility(map, enabled && !visibilityDeferredRef.current);
+    setSlopeVisibility(map, enabled);
   }, [map, isMapLoaded, enabled]);
 
   useEffect(() => {
@@ -242,47 +211,23 @@ export function useSlope(
       return;
     }
 
-    visibilityDeferredRef.current = true;
-    if (mountedRef.current) setSlopeVisibility(map, false);
+    visibilityDeferredRef.current = false;
+    if (mountedRef.current) setSlopeVisibility(map, true);
 
     const resumeSlope = () => {
       if (!enabledRef.current) return;
-      if (map.isMoving()) return;
       if (!canStartSlopeWork(map)) return;
-      visibilityDeferredRef.current = false;
       if (mountedRef.current) {
         setSlopeVisibility(map, true);
-        map.triggerRepaint();
       }
     };
 
-    const cancelTerrainSlopeBacklog = () => {
-      if (!enabledRef.current) return;
-      // Drop the stale slope backlog on EVERY viewport change, for both
-      // demProfiles. Previously this was gated to `terrain` only, so in
-      // `0.40m (LIDAR SURFACE)` (default profile) mode panning/zooming
-      // never flushed the SW slope build queue + in-flight tile promises.
-      // Each new viewport piled fresh Horn+PNG builds on top of the
-      // previous viewport's unfinished work, so after a few location
-      // changes the slope pipeline carried thousands of orphan builds and
-      // crawled. CANCEL_SLOPE_WORK only bumps the slope cancel generation
-      // and flushes the slope-purpose IGN lanes + slope build queue; it
-      // never touches untagged basemap DEM/ortho fetches, so cancelling
-      // for the default profile is safe for the basemap (its DEM tiles
-      // are shared via DEM_INFLIGHT dedup and re-resolve from cache).
-      cancelSlopeWorkerPressure();
-    };
-
-    map.on('movestart', cancelTerrainSlopeBacklog);
-    map.on('zoomstart', cancelTerrainSlopeBacklog);
     map.on('moveend', resumeSlope);
     map.on('zoomend', resumeSlope);
     map.on('sourcedata', resumeSlope);
     map.on('styledata', resumeSlope);
     map.on('idle', resumeSlope);
     return () => {
-      map.off('movestart', cancelTerrainSlopeBacklog);
-      map.off('zoomstart', cancelTerrainSlopeBacklog);
       map.off('moveend', resumeSlope);
       map.off('zoomend', resumeSlope);
       map.off('sourcedata', resumeSlope);
@@ -298,51 +243,11 @@ export function useSlope(
     if (enabled || !wasEnabled) return;
 
     visibilityDeferredRef.current = false;
-    cancelSlopeWorkerPressure();
 
-    // Full teardown on disable for BOTH demProfiles (default 0.40 m and
-    // terrain 1 m). Leaving the raster source attached with
-    // `visibility:'none'` keeps Mapbox's internal SourceCache registered,
-    // which keeps emitting `styledata` on every style update and prevents
-    // `idle` from firing cleanly — that idle gate is what drives the
-    // ambient DEM/ortho prefetch (viewportPrefetch.ts) AND the basemap
-    // refresh hooks. Result: after disable, no further DEM/ortho tiles
-    // load until the user reloads the page. Matches the May 19 pattern
-    // already applied to useWeatherOverlay / useWindTerrainOverlay (see
-    // overlay-disable-teardown-and-terrain-renderable-may19.md), and the
-    // May 8 pattern that already removed the source for the terrain
-    // profile only (slope-1m-disable-cancel-may08.md). `removeSlopeLayer`
-    // snapshots and re-applies the current terrain so a managed terrain
-    // setup is never lost across the source removal.
+    // Smooth hide without tearing down source, keeping 3D terrain graph 100% stable
     if (mountedRef.current) {
-      removeSlopeLayer(map);
-      mountedRef.current = false;
-      mountedSourceKeyRef.current = null;
+      setSlopeVisibility(map, false);
       try { map.triggerRepaint(); } catch { /* map gone */ }
-
-      // ── Fast basemap recovery on slope-disable ────────────────────
-      // While slope was active, the slope SourceCache was preventing
-      // `idle` from firing cleanly, so `viewportPrefetch.ts` (idle-
-      // gated) wasn't keeping the DEM/ortho ring warm. Once we remove
-      // the slope source, idle can fire again — but the user has to
-      // WAIT for it. Kick the ambient viewportPrefetch right now
-      // (`trigger()` schedules `fire()` after a tiny throttle window
-      // — much faster than waiting for the next `idle`).
-      //
-      // NOTE: We deliberately do NOT post `CANCEL_STALE_DEM` here.
-      // That message calls `cancelInFlightIGN()` / `flushIGNQueue()`
-      // which obliterate BASEMAP-tagged fetches too (the broad cancel
-      // is meant for user gestures where the viewport actually
-      // changed). On slope disable the viewport is stationary —
-      // killing in-flight basemap fetches stalls the world to a flat
-      // empty globe until the user pans, because the aborted tiles
-      // carry USER_CANCEL_REASON and Mapbox does not always retry
-      // them on the same frame. `cancelSlopeWorkerPressure()` above
-      // already posts CANCEL_SLOPE_WORK, which is the surgical
-      // slope-purpose-only drain (basemap untouched).
-      try {
-        getViewportPrefetch()?.trigger();
-      } catch { /* prefetch not installed yet */ }
     }
   }, [map, isMapLoaded, enabled]);
 

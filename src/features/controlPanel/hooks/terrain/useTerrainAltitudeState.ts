@@ -50,25 +50,19 @@ export interface UseTerrainAltitudeStateArgs {
   isMapLoaded: boolean;
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
-  analysisZone: {
-    key: string;
-    bounds: [number, number, number, number];
-    ring: number[];
-  } | null;
+  analysisZone?: unknown;
   onAltitudeOverlayStatusChange?: OverlayStatusReporter;
 }
 
 /**
  * Hook dédié à la gestion d'état et du calque d'altitude (altitude overlay).
- * Gère les tranches altimétriques dynamiques, le masquage par zone d'analyse
- * et la persistance des paramètres au sein du projet.
+ * Gère les tranches altimétriques dynamiques et la persistance des paramètres au sein du projet.
  */
 export function useTerrainAltitudeState({
   map,
   isMapLoaded,
   initialControlPanel,
   updateProjectControlPanel,
-  analysisZone,
   onAltitudeOverlayStatusChange,
 }: UseTerrainAltitudeStateArgs) {
   const [altitudeState, setAltitudeState] = useState(() => {
@@ -148,19 +142,12 @@ export function useTerrainAltitudeState({
   ]);
 
   // ── Zone-gated altitude overlay ──────────────────────────────────────
-  const altitudeSourceOptions = useMemo(
-    () => ({
-      zone: analysisZone
-        ? { hash: analysisZone.key, bounds: analysisZone.bounds, ring: analysisZone.ring }
-        : null,
-    }),
-    [analysisZone],
-  );
+  const altitudeSourceOptions = useMemo(() => ({ zone: null }), []);
 
   useAltitude(
     isMapLoaded ? map : null,
     isMapLoaded,
-    Boolean(altitudeState.enabled && analysisZone),
+    Boolean(altitudeState.enabled),
     altitudeState.opacity,
     altitudeState.colorMode,
     altitudeCategories,

@@ -1057,8 +1057,28 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Slopes"
   },
   {
+    "fr": "Zone active — Qualité max LiDAR ({{res}})",
+    "en": "Active zone — Max LiDAR quality ({{res}})"
+  },
+  {
+    "fr": "Pentes actives via le relief 3D ({{quality}})",
+    "en": "Slopes active via 3D terrain ({{quality}})"
+  },
+  {
+    "fr": "Tracer une zone (LiDAR HD)",
+    "en": "Draw zone (HD LiDAR)"
+  },
+  {
+    "fr": "Tracer une zone pour obtenir la qualité maximale LiDAR",
+    "en": "Draw a zone to get maximum LiDAR quality"
+  },
+  {
     "fr": "Résolution",
     "en": "Resolution"
+  },
+  {
+    "fr": "Résolution max",
+    "en": "Max resolution"
   },
   {
     "fr": "Type de colorisation",
@@ -1303,6 +1323,50 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Tuile {{index}} (LIDAR) ({{size}}mo) ({{year}} IGN)",
     "en": "Tile {{index}} (LIDAR) ({{size}} MB) ({{year}} IGN)"
+  },
+  {
+    "fr": "Filtrage des points",
+    "en": "Point filtering"
+  },
+  {
+    "fr": "Filtre des points",
+    "en": "Point filter"
+  },
+  {
+    "fr": "Sol",
+    "en": "Ground"
+  },
+  {
+    "fr": "Végétation haute",
+    "en": "High vegetation"
+  },
+  {
+    "fr": "Végétation moyenne",
+    "en": "Medium vegetation"
+  },
+  {
+    "fr": "Végétation basse",
+    "en": "Low vegetation"
+  },
+  {
+    "fr": "Bâtiments",
+    "en": "Buildings"
+  },
+  {
+    "fr": "Eau",
+    "en": "Water"
+  },
+  {
+    "fr": "Ponts",
+    "en": "Bridges"
+  },
+  {
+    "fr": "Non classé",
+    "en": "Unclassified"
+  },
+  {
+    "fr": "Bruit",
+    "en": "Noise"
   },
   {
     "fr": "Routes",

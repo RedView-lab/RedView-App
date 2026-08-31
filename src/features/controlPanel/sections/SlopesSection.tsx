@@ -21,8 +21,6 @@ interface Props {
   enabled: boolean;
   state: Omit<ControlPanelState['slopes'], 'enabled'>;
   open?: boolean;
-  /** False while no analysis zone is drawn — the widget is zone-gated. */
-  zoneActive?: boolean;
   onOpenChange?: (open: boolean) => void;
   onEnabledChange: ControlPanelHandlers['onSlopesEnabledChange'];
   onResolutionChange: ControlPanelHandlers['onSlopeResolutionChange'];
@@ -294,7 +292,6 @@ export function SlopesSection({
   enabled,
   state,
   open,
-  zoneActive = true,
   onOpenChange,
   onEnabledChange,
   onResolutionChange,
@@ -320,11 +317,6 @@ export function SlopesSection({
       open={open}
       onOpenChange={onOpenChange}
     >
-      {zoneActive ? null : (
-        <div className="rvc-zone-hint" role="note">
-          {t('Zone d’analyse requise — tracez-la pour activer')}
-        </div>
-      )}
       {showResolution ? (
         <div className="rvc-row rvc-row--split">
           <span className="rvc-row__label">{t('Résolution')}</span>

@@ -1,5 +1,5 @@
 export const PANEL_WIDTH_KEY = 'rvc-panel-width';
-export const LEFT_PANEL_WIDTH_MIN = 320;
+export const LEFT_PANEL_WIDTH_MIN = 360;
 export const PANEL_WIDTH_MIN_FALLBACK = LEFT_PANEL_WIDTH_MIN;
 export const PANEL_WIDTH_MAX = 560;
 export const PANEL_WIDTH_DEFAULT = 300;
@@ -27,6 +27,6 @@ export const CENTER_PANEL_RESIZE_HIT_AREA = 18;
 export const IMMERSIVE_TRANSITION_MS = 320;
 export const IMMERSIVE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
-export const APP_SCALE_MIN = 0.7;
+export const APP_SCALE_MIN = 0.45;
 export const APP_SCALE_DESIGN_WIDTH = 1920;
 export const APP_SCALE_DESIGN_HEIGHT = 1080;

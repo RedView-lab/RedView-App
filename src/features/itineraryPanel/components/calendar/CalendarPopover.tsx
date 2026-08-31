@@ -38,7 +38,7 @@ export function CalendarPopover({
   markedDates,
 }: CalendarPopoverProps) {
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; scale: number; placeAbove: boolean } | null>(null);
 
   // Position computation — runs on open, scroll, and resize.
   useLayoutEffect(() => {
@@ -47,8 +47,14 @@ export function CalendarPopover({
     const compute = () => {
       const trigger = anchorRef.current;
       if (!trigger) return;
+
+      const computed = window.getComputedStyle(trigger);
+      const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
+      const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+
       const rect = trigger.getBoundingClientRect();
-      const popHeight = popoverRef.current?.offsetHeight ?? 360;
+      const popHeight = (popoverRef.current?.offsetHeight ?? 360) * scale;
+      const popWidth = POPOVER_WIDTH * scale;
 
       const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_PADDING;
       const spaceAbove = rect.top - VIEWPORT_PADDING;
@@ -59,10 +65,10 @@ export function CalendarPopover({
         : rect.bottom + TRIGGER_GAP;
 
       const rawLeft = rect.left;
-      const maxLeft = window.innerWidth - POPOVER_WIDTH - VIEWPORT_PADDING;
+      const maxLeft = window.innerWidth - popWidth - VIEWPORT_PADDING;
       const left = Math.max(VIEWPORT_PADDING, Math.min(rawLeft, maxLeft));
 
-      setPos({ top, left });
+      setPos({ top, left, scale, placeAbove });
     };
 
     compute();
@@ -108,6 +114,8 @@ export function CalendarPopover({
         top: pos?.top ?? -9999,
         left: pos?.left ?? -9999,
         width: POPOVER_WIDTH,
+        transform: pos && pos.scale !== 1 ? `scale(${pos.scale})` : undefined,
+        transformOrigin: pos?.placeAbove ? 'bottom left' : 'top left',
         // Hide the popover for one frame while we measure to avoid a flash
         // at the wrong position.
         visibility: pos ? 'visible' : 'hidden',

@@ -183,10 +183,12 @@ export function readStyleHealth(map: MapboxMap): StyleHealth {
   }
 }
 
+import { logger } from '@/shared/lib/logger';
+
 export function logWeatherOverlay(event: string, payload?: Record<string, unknown>): void {
   if (payload) {
-    console.info(`[weather-overlay] ${event}`, payload);
+    logger.weather.debug(event, payload);
     return;
   }
-  console.info(`[weather-overlay] ${event}`);
+  logger.weather.debug(event);
 }

@@ -1,7 +1,6 @@
 /**
  * Public barrel for the Expert Mode subfolder.
  */
-export { ExpertProfileEditor } from './ExpertProfileEditor';
 export {
   ALL_PARAMETERS,
   getParameter,

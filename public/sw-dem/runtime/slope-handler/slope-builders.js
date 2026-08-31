@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Slope Tile Processing — Tile Builders (Low 30m, LiDAR HD, Downsampled)
+// Slope Tile Processing — Tile Builders (LiDAR HD & Downsampled for Zones)
 // ---------------------------------------------------------------------------
 
 const zoneStateMap = new Map();
@@ -34,72 +34,12 @@ async function purgeSlopeCache(zoneHash) {
   }
 }
 
-async function buildAndCacheLowSlopeTile(z, x, y, resFactor, demProfile, zoneHash) {
-  const { entry: zoneEntry, ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
-  if (zoneHash && (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y))) {
-    return transparentTileResponse();
-  }
-
-  const demCache = await caches.open(CACHE_NAME);
-  const previewKey = `${zoneHash}:${demProfile}:${z}/${x}/${y}`;
-  if (zonePreviewMap.has(previewKey)) {
-    const blob = zonePreviewMap.get(previewKey);
-    return new Response(blob, {
-      status: 200,
-      headers: {
-        'Content-Type': 'image/png',
-        'Cache-Control': 'public, max-age=15',
-        'X-Tile-Type': 'slope',
-        'X-Slope-Quality': 'low',
-        'X-DEM-Profile': demProfile,
-      },
-    });
-  }
-
-  let fast30mBlob = null;
-  try {
-    if (typeof fetchAWSTerrainTile === 'function') {
-      fast30mBlob = await fetchAWSTerrainTile(z, x, y);
-    }
-  } catch { /* ignore */ }
-
-  if (!fast30mBlob) {
-    try {
-      const demReq = new Request(`/dem-tiles/${z}/${x}/${y}?rv-dem-profile=${demProfile}&rv-purpose=slope-zone`);
-      const resp = await handleDemRequest(demReq, z, x, y, 0, demProfile);
-      if (resp && resp.status === 200) {
-        fast30mBlob = await resp.clone().blob();
-      }
-    } catch { /* ignore */ }
-  }
-
-  if (!fast30mBlob) return null;
-
-  const lowResResult = await buildSlopeBlobFromDem(fast30mBlob, z, x, y, demCache, resFactor, demProfile, null, zoneRing);
-  if (!lowResResult || !lowResResult.blob) return null;
-
-  zonePreviewMap.set(previewKey, lowResResult.blob);
-
-  return new Response(lowResResult.blob, {
-    status: 200,
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=15',
-      'X-Tile-Type': 'slope',
-      'X-Slope-Quality': 'low',
-      'X-DEM-Profile': demProfile,
-    },
-  });
-}
-
 function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, options = {}) {
   const key = `${demProfile}:${z}/${x}/${y}?${zoneHash}`;
   if (backgroundHdSlopeInflight.has(key)) {
     return backgroundHdSlopeInflight.get(key);
   }
 
-  // Analysis-zone tiles are explicitly requested by the user and must NOT be cancelled
-  // by viewport camera movements.
   const generation = zoneHash ? null : slopeCancelGeneration;
   const task = (async () => {
     const t0 = performance.now();
@@ -107,37 +47,28 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
       if (zoneHash) {
         const { entry: zoneEntry } = resolveAnalysisZoneForTile(zoneHash);
         if (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y)) {
-          logDemPente(`ℹ️ Tuile HD ${z}/${x}/${y} hors zone ${zoneHash} -> transparente`);
           return transparentTileResponse();
         }
       }
 
-      logDemPente(`🏔️ Démarrage calcul HD pour ${z}/${x}/${y} (zone=${zoneHash})...`);
-      const purpose = zoneHash ? 'slope-zone' : SLOPE_REQUEST_PURPOSE_VISIBLE;
-      let demBlob = await fetchLiDARDemTile(z, x, y, demProfile, purpose, zoneHash);
-
-      if (!demBlob && zoneHash) {
-        // Fallback to fast 30m AWS terrain so the tile NEVER returns null and zone reaches 100%
-        try {
-          if (typeof fetchAWSTerrainTile === 'function') {
-            demBlob = await fetchAWSTerrainTile(z, x, y);
-          }
-        } catch { /* ignore */ }
-      }
-
-      if (!demBlob || (generation !== null && isSlopeWorkCancelled(generation))) {
-        logDemPente(`⚠️ Calcul HD avorté pour ${z}/${x}/${y} (pas de blob DEM ou annulé)`);
-        return null;
-      }
-
       const demCache = await caches.open(CACHE_NAME);
+      const demResp = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache);
+
+      if (!demResp || demResp.status !== 200 || (generation !== null && isSlopeWorkCancelled(generation))) {
+        return transparentTileResponse();
+      }
+
+      const demBlob = await demResp.clone().blob();
+      if (!demBlob || (generation !== null && isSlopeWorkCancelled(generation))) {
+        return transparentTileResponse();
+      }
+
       const slopeCache = await caches.open(SLOPE_CACHE_NAME);
       const { ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
 
       const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing);
-      if (!slopeResult || (generation !== null && isSlopeWorkCancelled(generation))) {
-        logDemPente(`⚠️ Horn slope vide pour ${z}/${x}/${y}`);
-        return null;
+      if (!slopeResult || !slopeResult.blob || (generation !== null && isSlopeWorkCancelled(generation))) {
+        return transparentTileResponse();
       }
 
       const params = new URLSearchParams();
@@ -166,7 +97,6 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
         }
       } catch { /* ignore */ }
 
-      // Invalidate parent downsampled tiles when a canonical z14 tile finishes HD (only outside silent batch)
       if (z === 14 && zoneHash && !options?.silent) {
         invalidateParentDownsampledSlopeTiles(z, x, y, zoneHash);
       }
@@ -174,28 +104,11 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
       const dt = Math.round(performance.now() - t0);
       logDemPente(`✨ Succès HD pour ${z}/${x}/${y} en ${dt}ms`);
 
-      // For analysis-zone pipeline, we do NOT emit per-tile updates to avoid patchy tile-by-tile reloads
-      if (!options?.silent && !zoneHash) {
-        try {
-          const clients = await self.clients.matchAll({ type: 'window' });
-          for (const client of clients) {
-            client.postMessage({
-              type: 'SLOPE_TILE_UPDATED',
-              z,
-              x,
-              y,
-              profile: demProfile,
-              zone: zoneHash,
-            });
-          }
-        } catch { /* ignore */ }
-      }
-
       scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, slopeResult.missingNeighbours, generation);
       return response;
     } catch (err) {
       logDemPente(`❌ Erreur buildAndCacheHdSlopeTile ${z}/${x}/${y}: ${err?.message || err}`);
-      return null;
+      return transparentTileResponse();
     } finally {
       backgroundHdSlopeInflight.delete(key);
     }
@@ -210,40 +123,9 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
   const dz = 14 - z;
   if (dz <= 0) return null;
 
-  const { entry: zoneEntry, ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
+  const { entry: zoneEntry } = resolveAnalysisZoneForTile(zoneHash);
   if (zoneHash && (!zoneEntry || !tileIntersectsAnalysisZone(zoneEntry, z, x, y))) {
     return transparentTileResponse();
-  }
-
-  // At far zoom levels (z <= 10), compute the slope directly at level z to avoid massive tile fanout
-  if (dz > 3) {
-    try {
-      let fastBlob = null;
-      if (typeof fetchAWSTerrainTile === 'function') {
-        fastBlob = await fetchAWSTerrainTile(z, x, y);
-      }
-      if (!fastBlob) {
-        const demReq = new Request(`/dem-tiles/${z}/${x}/${y}?rv-dem-profile=${demProfile}&rv-purpose=slope-zone`);
-        const resp = await handleDemRequest(demReq, z, x, y, 0, demProfile);
-        if (resp && resp.status === 200) fastBlob = await resp.clone().blob();
-      }
-      if (fastBlob) {
-        const demCache = await caches.open(CACHE_NAME);
-        const res = await buildSlopeBlobFromDem(fastBlob, z, x, y, demCache, 1, demProfile, null, zoneRing);
-        if (res && res.blob) {
-          return new Response(res.blob, {
-            status: 200,
-            headers: {
-              'Content-Type': 'image/png',
-              'Cache-Control': 'public, max-age=60',
-              'X-Tile-Type': 'slope',
-              'X-Slope-Quality': 'low',
-              'X-DEM-Profile': demProfile,
-            },
-          });
-        }
-      }
-    } catch { /* fall back */ }
   }
 
   const scale = 1 << dz;
@@ -266,7 +148,6 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
   }
 
   const slopeCache = await caches.open(SLOPE_CACHE_NAME);
-  let allChildrenAreHd = true;
   const childBlobs = new Map();
 
   await Promise.all(childTilesToFetch.map(async ({ cx, cy }) => {
@@ -278,26 +159,9 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
       const childUrl = `/slope-tiles/14/${cx}/${cy}${childParams.size ? `?${childParams.toString()}` : ''}`;
 
       let blob = null;
-      let isHd = false;
-      const previewKey = `${zoneHash}:${demProfile}:14/${cx}/${cy}`;
-
-      if (zonePreviewMap.has(previewKey)) {
-        blob = zonePreviewMap.get(previewKey);
-      }
-      if (!blob) {
-        const cached = await slopeCache.match(new Request(childUrl));
-        if (cached && cached.status === 200) {
-          blob = await cached.clone().blob();
-          const q = (cached.headers.get('X-Slope-Quality') || '').toLowerCase();
-          if (q === 'hd') isHd = true;
-        }
-      }
-      if (!isHd) allChildrenAreHd = false;
-      if (!blob) {
-        const lowResp = await buildAndCacheLowSlopeTile(14, cx, cy, resFactor, demProfile, zoneHash);
-        if (lowResp && lowResp.status === 200) {
-          blob = await lowResp.clone().blob();
-        }
+      const cached = await slopeCache.match(new Request(childUrl));
+      if (cached && cached.status === 200) {
+        blob = await cached.clone().blob();
       }
       if (blob) {
         const img = await createImageBitmap(blob, { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
@@ -310,9 +174,7 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
         img.close();
         childBlobs.set(`${cx}/${cy}`, imgData.data);
       }
-    } catch {
-      allChildrenAreHd = false;
-    }
+    } catch { /* ignore */ }
   }));
 
   if (childBlobs.size === 0) {
@@ -353,9 +215,9 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': allChildrenAreHd ? 'public, max-age=604800' : 'public, max-age=5',
+      'Cache-Control': 'public, max-age=604800',
       'X-Tile-Type': 'slope',
-      'X-Slope-Quality': allChildrenAreHd ? 'hd' : 'low',
+      'X-Slope-Quality': 'hd',
       'X-DEM-Profile': demProfile,
     },
   });
@@ -363,16 +225,16 @@ async function buildDownsampledSlopeTile(z, x, y, resFactor, demProfile, zoneHas
 
 async function buildOverzoomedSlopeTile(z, x, y, resFactor, demProfile, zoneHash) {
   const S = DEM_TILE_SIZE;
-  const dz = z - 14;
-  if (dz <= 0) return null;
-  const scale = 1 << dz;
-  const parentX = Math.floor(x / scale);
-  const parentY = Math.floor(y / scale);
-  const subX = (x % scale) * (S / scale);
-  const subY = (y % scale) * (S / scale);
-  const subSize = S / scale;
+  const parentZ = z - 1;
+  if (parentZ < 6) return transparentTileResponse();
 
-  const parentResp = await handleSlopeRequest(14, parentX, parentY, String(resFactor), demProfile, zoneHash);
+  const parentX = Math.floor(x / 2);
+  const parentY = Math.floor(y / 2);
+  const subX = (x % 2) * (S / 2);
+  const subY = (y % 2) * (S / 2);
+  const subSize = S / 2;
+
+  const parentResp = await handleSlopeRequest(parentZ, parentX, parentY, String(resFactor), demProfile, zoneHash);
   if (!parentResp || parentResp.status !== 200) {
     return transparentTileResponse();
   }
@@ -383,7 +245,8 @@ async function buildOverzoomedSlopeTile(z, x, y, resFactor, demProfile, zoneHash
     ? getSharedOffscreenCtx(S, S)
     : new OffscreenCanvas(S, S).getContext('2d', { willReadFrequently: true });
   ctx.clearRect(0, 0, S, S);
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(img, subX, subY, subSize, subSize, 0, 0, S, S);
   img.close();
   const imgData = ctx.getImageData(0, 0, S, S);
@@ -391,14 +254,13 @@ async function buildOverzoomedSlopeTile(z, x, y, resFactor, demProfile, zoneHash
     ? await buildRawPngSlope(S, S, imgData.data)
     : await buildRawPng(S, S, imgData.data);
 
-  const q = (parentResp.headers.get('X-Slope-Quality') || '').toLowerCase();
   return new Response(blob, {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': q === 'hd' ? 'public, max-age=604800' : 'public, max-age=5',
+      'Cache-Control': 'public, max-age=604800',
       'X-Tile-Type': 'slope',
-      'X-Slope-Quality': q,
+      'X-Slope-Quality': 'hd',
       'X-DEM-Profile': demProfile,
     },
   });

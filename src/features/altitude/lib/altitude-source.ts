@@ -4,6 +4,8 @@ import type {
 } from '../types';
 import { buildAltitudeColorExpression, MAX_ALTITUDE_M } from './altitude-config';
 
+import { DEM_SOURCE_MAXZOOM } from '@/features/map3d/lib/ign.config';
+
 export const ALTITUDE_SOURCE_ID = 'altitude-tiles';
 export const ALTITUDE_LAYER_ID = 'altitude-overlay';
 
@@ -51,8 +53,8 @@ export function buildAltitudeTileSource(options: AltitudeTileSourceOptions = DEF
     type: 'raster',
     tiles: [`/altitude-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
-    minzoom: 6,
-    maxzoom: 14,
+    minzoom: 4,
+    maxzoom: DEM_SOURCE_MAXZOOM,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;

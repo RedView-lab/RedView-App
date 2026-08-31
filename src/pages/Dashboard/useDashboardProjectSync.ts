@@ -16,6 +16,8 @@ import {
   writeProjectCache,
 } from './dashboardProjectCache';
 
+import { logger } from '@/shared/lib/logger';
+
 interface UseDashboardProjectSyncArgs {
   mapInstance: MapboxMap | null;
   activeProjectId: string | null;
@@ -43,7 +45,7 @@ export function useDashboardProjectSync({
       const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
       const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
       if (!url || !anonKey) {
-        console.warn('[Dashboard] missing Supabase env, autosave disabled');
+        logger.projects.debug('missing Supabase env, autosave disabled');
         return;
       }
 

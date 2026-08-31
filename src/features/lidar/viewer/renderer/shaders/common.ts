@@ -41,6 +41,11 @@ struct Camera {
   skyColor: vec4<f32>,
   sunDiscPos: vec3<f32>,
   sunDiscRadius: f32,
+  pointFilterEnabled: f32,
+  _padFilter1: f32,
+  _padFilter2: f32,
+  _padFilter3: f32,
+  pointFilterMask: vec4<u32>,
 };
 `;
 
@@ -89,6 +94,25 @@ fn pcgHash(input: u32) -> u32 {
   var state = input * 747796405u + 2891336453u;
   let word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
   return (word >> 22u) ^ word;
+}
+
+fn isPointClassVisible(cls: u32) -> bool {
+  if (camera.pointFilterEnabled < 0.5) {
+    return true;
+  }
+  if (cls < 32u) {
+    return ((camera.pointFilterMask.x >> cls) & 1u) != 0u;
+  }
+  if (cls < 64u) {
+    return ((camera.pointFilterMask.y >> (cls - 32u)) & 1u) != 0u;
+  }
+  if (cls < 96u) {
+    return ((camera.pointFilterMask.z >> (cls - 64u)) & 1u) != 0u;
+  }
+  if (cls < 128u) {
+    return ((camera.pointFilterMask.w >> (cls - 96u)) & 1u) != 0u;
+  }
+  return true;
 }
 `;
 

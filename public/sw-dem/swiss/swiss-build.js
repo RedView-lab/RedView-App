@@ -93,10 +93,13 @@ async function buildSwissTile(mercZ, mercX, mercY) {
 
   const resolvedUrlCount = cellEntries.filter((c) => c.url).length;
   const usableCells = cellEntries.filter((c) => c.cog);
-  console.log(
-    `[swiss][build] %c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${resolvedUrlCount} cog-open=${usableCells.length} stac-transient=${stacHadTransientFailure} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
-    'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
-  );
+  if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'swiss',
+      `%c ${mercZ}/${mercX}/${mercY} %c cells queried=${cellEntries.length} resolved-url=${resolvedUrlCount} cog-open=${usableCells.length} stac-transient=${stacHadTransientFailure} (E:${cells.EkmMin}-${cells.EkmMax} N:${cells.NkmMin}-${cells.NkmMax})`,
+      'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
+    );
+  }
   if (usableCells.length === 0) {
     // Critical: only mark area-neg when STAC SUCCEEDED with zero data
     // (catalogue truly says no published COG here). When STAC failed
@@ -105,16 +108,20 @@ async function buildSwissTile(mercZ, mercX, mercY) {
     // Swiss LiDAR neighbours.
     if (resolvedUrlCount === 0 && !stacHadTransientFailure) {
       swissAreaNegSet(mercZ, mercX, mercY);
-      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 STAC OK with 0 cells, marking area-neg`);
+      if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+        swLog.debug('swiss', `${mercZ}/${mercX}/${mercY} \u2192 STAC OK with 0 cells, marking area-neg`);
+      }
       return {
         blob: null, elevations: null, coverage: null,
         source: 'swiss-empty', allPermanentMissing: true, pendingFetches: null,
       };
     }
-    if (stacHadTransientFailure) {
-      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 STAC transient failure, keeping area live for retry`);
-    } else {
-      console.warn(`[swiss][build] ${mercZ}/${mercX}/${mercY} \u2192 COG headers unavailable, keeping area live for retry`);
+    if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+      if (stacHadTransientFailure) {
+        swLog.debug('swiss', `${mercZ}/${mercX}/${mercY} \u2192 STAC transient failure, keeping area live for retry`);
+      } else {
+        swLog.debug('swiss', `${mercZ}/${mercX}/${mercY} \u2192 COG headers unavailable, keeping area live for retry`);
+      }
     }
     return {
       blob: null, elevations: null, coverage: null,
@@ -323,15 +330,16 @@ async function buildSwissTile(mercZ, mercX, mercY) {
   // Despike LiDAR hot pixels (vegetation tops, scanner artefacts)
   despikeElevations(elevations, coverage, DEM_TILE_SIZE);
 
-  {
+  if (typeof swLog !== 'undefined' && swLog.isDebug()) {
     const dt = (performance.now() - t0).toFixed(0);
     const covPct = (coveredCount / totalPixels * 100).toFixed(1);
     // Summarise picked levels for diagnostics
     const lvlSet = new Set();
     for (const v of pickedLevels.values()) lvlSet.add(v.idx);
     const lvlSummary = Array.from(lvlSet).sort().map((i) => `L${i}@${usableCells[0].cog.levels[i].pixelScaleX.toFixed(1)}m`).join(',');
-    console.log(
-      `[swiss][build] %c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, prefetched=${prefetchCount}, levels=${lvlSummary} (out=${mppOut.toFixed(1)}m), ${dt}ms`,
+    swLog.debug(
+      'swiss',
+      `%c \u2713 swiss %c ${mercZ}/${mercX}/${mercY} \u2014 cov ${covPct}%, cells=${usableCells.length}, tiles=${pixelsByTile.size}, prefetched=${prefetchCount}, levels=${lvlSummary} (out=${mppOut.toFixed(1)}m), ${dt}ms`,
       'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
     );
   }

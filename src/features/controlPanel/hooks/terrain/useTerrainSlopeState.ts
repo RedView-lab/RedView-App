@@ -5,8 +5,10 @@ import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from
 import { generateDynamicCategories, clampBreakpoints, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 import { resolutionToSourceOptions } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
-import type { SlopeCategory, SlopeColorMode, SlopeResolutionKey } from '@/features/slope/types';
+import type { SlopeCategory, SlopeColorMode, SlopeDemProfile, SlopeResolutionKey } from '@/features/slope/types';
 import type { OverlayStatusReporter } from '@/features/map3d';
+import { getActiveDem3dQuality, subscribeDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
+import { getActiveDemProfilePreference, subscribeDemProfilePreference } from '@/features/map3d/lib/demProfileBus';
 
 import type { ControlPanelPersistedState } from '../../lib/persistedState';
 import type {
@@ -51,25 +53,20 @@ export interface UseTerrainSlopeStateArgs {
   isMapLoaded: boolean;
   initialControlPanel: ControlPanelPersistedState;
   updateProjectControlPanel: (mut: (draft: ControlPanelPersistedState) => void) => void;
-  analysisZone: {
-    key: string;
-    bounds: [number, number, number, number];
-    ring: number[];
-  } | null;
+  analysisZone?: unknown;
   onSlopeOverlayStatusChange?: OverlayStatusReporter;
 }
 
 /**
  * Hook dédié à la gestion d'état et du calque de pente (slope overlay).
- * Gère la palette de couleurs dynamiques, les breakpoints personnalisés,
- * le masquage par zone d'analyse et la synchronisation avec le projet.
+ * Gère la palette de couleurs dynamiques, les breakpoints personnalisés
+ * et la synchronisation avec le projet.
  */
 export function useTerrainSlopeState({
   map,
   isMapLoaded,
   initialControlPanel,
   updateProjectControlPanel,
-  analysisZone,
   onSlopeOverlayStatusChange,
 }: UseTerrainSlopeStateArgs) {
   const [slopeState, setSlopeState] = useState(() => {
@@ -150,21 +147,50 @@ export function useTerrainSlopeState({
     [dynamicCategories, slopeCustomColors],
   );
 
-  // ── Zone-gated slope overlay ─────────────────────────────────────────
-  const slopeSourceOptions = useMemo(
-    () => ({
-      ...resolutionToSourceOptions(slopeState.resolution),
-      zone: analysisZone
-        ? { hash: analysisZone.key, bounds: analysisZone.bounds, ring: analysisZone.ring }
-        : null,
-    }),
-    [analysisZone, slopeState.resolution],
-  );
+  const [terrainQuality, setTerrainQuality] = useState(getActiveDem3dQuality);
+  const [terrainProfile, setTerrainProfile] = useState(getActiveDemProfilePreference);
+
+  useEffect(() => {
+    const unsubQ = subscribeDem3dQuality(setTerrainQuality);
+    const unsubP = subscribeDemProfilePreference(setTerrainProfile);
+    return () => {
+      unsubQ();
+      unsubP();
+    };
+  }, []);
+
+  // ── Terrain-driven or Zone-driven slope overlay ─────────────────────
+  // If an analysis zone is active: maximum quality LiDAR HD pipeline
+  // If no zone: directly driven by the local terrain DEM (30m or HD surface/terrain)
+  // ── Slope overlay ───────────────────────────────────────────────────
+  // Follows 3D terrain DEM:
+  // - fast-30m: served directly from 30m AWS Terrarium tiles
+  // - hd: served at the selected LiDAR resolution (0.40m or 1m)
+  const slopeSourceOptions = useMemo(() => {
+    if (terrainQuality === 'fast-30m') {
+      return {
+        demProfile: 'default' as const,
+        resolutionFactor: 1,
+        sourceDem: 'fast-30m' as const,
+        zone: null,
+      };
+    }
+
+    const source = resolutionToSourceOptions(slopeState.resolution);
+    // Align slope DEM profile directly with the active 3D terrain profile for 100% DEM cache hits
+    const demProfile: SlopeDemProfile = terrainProfile === 'terrain' ? 'terrain' : 'default';
+    return {
+      ...source,
+      demProfile,
+      sourceDem: 'hd' as const,
+      zone: null,
+    };
+  }, [slopeState.resolution, terrainProfile, terrainQuality]);
 
   useSlope(
     isMapLoaded ? map : null,
     isMapLoaded,
-    Boolean(slopeState.enabled && analysisZone),
+    Boolean(slopeState.enabled),
     slopeState.opacity,
     slopeState.colorMode,
     useMemo(
@@ -178,10 +204,6 @@ export function useTerrainSlopeState({
     slopeSourceOptions,
     onSlopeOverlayStatusChange,
   );
-
-  useEffect(() => {
-    navigator.serviceWorker?.controller?.postMessage({ type: 'CLEAR_SLOPE_CACHE' });
-  }, [bandCount, currentBreakpoints]);
 
   useEffect(() => {
     updateProjectControlPanel((draft) => {
@@ -218,8 +240,18 @@ export function useTerrainSlopeState({
       scaleSetting: slopeScaleSetting,
       opacity: Math.round(slopeState.opacity * 100),
       bands: buildSlopeBandsFromDynamic(coloredDynamicCategories, slopeBandVisibility),
+      terrainQuality,
+      terrainProfile,
     }),
-    [coloredDynamicCategories, slopeBandVisibility, slopeScale, slopeScaleSetting, slopeState],
+    [
+      coloredDynamicCategories,
+      slopeBandVisibility,
+      slopeScale,
+      slopeScaleSetting,
+      slopeState,
+      terrainQuality,
+      terrainProfile,
+    ],
   );
 
   const handlers = {

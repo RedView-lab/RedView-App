@@ -181,48 +181,27 @@ const ORTHO_TILE_SIZE = 256;
 // slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
 // SW thread (kind:'altitude' dispatch). Previously altitude computed
 // entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
-const MAP_CACHE_EPOCH = '2026-08-21-slope-smooth-hd-1';
+const MAP_CACHE_EPOCH = '2026-08-29-multicore-out-of-core-v1';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
 // thread (network + cache + IGN scheduler) and cap at 8 so very dense
 // machines (16/32-core HEDT) don't over-spawn workers whose message-pass
 // overhead would outweigh the per-tile CPU win.
-const SLOPE_POOL_MAX_WORKERS = 8;
+const SLOPE_POOL_MAX_WORKERS = 16;
 const SLOPE_POOL_MIN_WORKERS = 2;
 
 // SLOPE_HOT_CACHE — in-memory LRU of recently served slope PNG blobs,
-// mirroring DEM_HOT_CACHE. Every cache hit currently pays for
-// caches.open(SLOPE_CACHE_NAME) (~1-5 ms) + cache.match(key) (~5-25 ms on
-// disk-backed CacheStorage). On a single pan-back a 60° pitched viewport
-// at z14 needs ~25-50 slope tiles, and a resolution switch (0.40m ↔ 1m)
-// re-asks for the entire viewport within a few hundred ms. Even when every
-// tile is already cached on disk, the cumulative CacheStorage round-trip
-// latency stacks into ~0.5-2 s of pure I/O on the SW thread — that's the
-// "the switch isn't instant" symptom the user reports.
-//
-// Size budget: 192 entries × ~8 KB average slope PNG ≈ 1.5 MB peak —
-// trivial vs the DEM hot tier (~23 MB) and WebGL textures (1 GB+).
-const SLOPE_HOT_CACHE_MAX = 192;
+// mirroring DEM_HOT_CACHE.
+const SLOPE_HOT_CACHE_MAX = 2048;
 
 // ALTITUDE_HOT_CACHE — in-memory LRU of recently served altitude PNG blobs,
-// mirroring SLOPE_HOT_CACHE. Same rationale: a toggle off/on, Mapbox repaint
-// or pan-back re-asks for ~25-50 altitude tiles within a few hundred ms, and
-// even fully cached on disk each hit still pays 5-25 ms of CacheStorage I/O
-// on the SW thread — exactly the "altitude overlay is sluggish" symptom.
-// This tier returns a fresh Response in <1 ms.
-//
-// Size budget: 192 entries × ~4 KB average altitude PNG ≈ 0.8 MB peak —
-// trivial vs the DEM hot tier (~23 MB) and WebGL textures (1 GB+).
-const ALTITUDE_HOT_CACHE_MAX = 192;
+// mirroring SLOPE_HOT_CACHE.
+const ALTITUDE_HOT_CACHE_MAX = 2048;
 
-// When the user enables slope, the slope pipeline reads up to 5× more DEM
-// tiles than the basemap (own + 4 cardinal neighbours per slope tile).
-// Expand the DEM hot tier so panning around with slope on doesn't evict
-// basemap tiles the user will re-ask for in ~1 frame. This is the LRU
-// size while slope is active; on slope disable we shrink it back via
-// setDemHotCacheCapacity() (defined in lifecycle.js).
-const DEM_HOT_CACHE_MAX_SLOPE_ACTIVE = 384;
+// When the user enables slope or altitude, expand the in-memory DEM hot tier
+// so panning around at high dezoom (+400 tiles) never evicts tiles from RAM.
+const DEM_HOT_CACHE_MAX_SLOPE_ACTIVE = 2048;
 
 // AbortController.abort() reason used when CANCEL_STALE_DEM aborts an
 // in-flight IGN/Ortho fetch. The catch handlers check
@@ -240,7 +219,11 @@ const ALTITUDE_CACHE_NAME = `altitude-tiles-${MAP_CACHE_EPOCH}`;
 const STATIC_CACHE_NAME = `dem-static-${MAP_CACHE_EPOCH}`;
 
 // Debug flag — gate verbose per-tile logging. Warnings and errors always log.
-const DEBUG = false;
+// Can be toggled dynamically via swLog.setLevel('debug' | 'warn') or postMessage({ type: 'SET_SW_LOG_LEVEL' })
+var DEBUG = false;
+function isSwDebug() {
+  return typeof swLog !== 'undefined' ? swLog.isDebug() : Boolean(DEBUG);
+}
 
 const IGN_CACHE_MAX = 500;
 // HTTP/2 on data.geopf.fr comfortably multiplexes 40+ streams per connection.

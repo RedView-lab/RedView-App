@@ -25,6 +25,7 @@ import {
   buildClimbEfficiencyDetourCandidates,
   buildDistanceDetourCandidates,
 } from './brouterDetourOptimizer';
+import { logger } from '@/shared/lib/logger';
 
 interface BrouterFeatureProps {
   'track-length'?: string;
@@ -177,14 +178,14 @@ export async function fetchBrouterRouteBestByScore(
   for (const r of results) {
     if (!r.ok) {
       lastError = r.error;
-      console.warn(
-        `[BRouter] best-of-N: alt ${r.idx} failed —`,
+      logger.brouter.warn(
+        `best-of-N: alt ${r.idx} failed —`,
         r.error.message,
       );
       continue;
     }
-    console.log(
-      `[BRouter] best-of-N: alt ${r.idx} OK — ascent=${Math.round(r.route.ascentM)} m, dist=${(r.route.distanceM / 1000).toFixed(1)} km`,
+    logger.brouter.debug(
+      `best-of-N: alt ${r.idx} OK — ascent=${Math.round(r.route.ascentM)} m, dist=${(r.route.distanceM / 1000).toFixed(1)} km`,
     );
     const score = scoreRoute(r.route);
     if (Number.isFinite(score) && score > bestScore) {
@@ -196,7 +197,7 @@ export async function fetchBrouterRouteBestByScore(
   if (!best) {
     throw lastError ?? new Error('BRouter best-of-N: every alternative failed');
   }
-  console.log(`[BRouter] best-of-N: picked alt ${bestIdx} (${label}, score=${bestScore.toFixed(2)})`);
+  logger.brouter.debug(`best-of-N: picked alt ${bestIdx} (${label}, score=${bestScore.toFixed(2)})`);
   (best as BrouterRoute & { alternativeIdx?: number }).alternativeIdx = bestIdx;
   return best;
 }
@@ -217,8 +218,8 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
 
   const consider = (route: BrouterRoute, candidateLabel: string) => {
     const score = scoreRoute(route);
-    console.log(
-      `[BRouter] distance detour ${candidateLabel} OK — score=${score.toFixed(2)}, ascent=${Math.round(route.ascentM)} m, dist=${(route.distanceM / 1000).toFixed(1)} km`,
+    logger.brouter.debug(
+      `distance detour ${candidateLabel} OK — score=${score.toFixed(2)}, ascent=${Math.round(route.ascentM)} m, dist=${(route.distanceM / 1000).toFixed(1)} km`,
     );
     if (Number.isFinite(score) && score > bestScore) {
       best = route;
@@ -233,14 +234,14 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
     consider(alternatives, 'alternatives');
   } catch (error) {
     lastError = error as Error;
-    console.warn('[BRouter] distance detour alternatives failed —', lastError.message);
+    logger.brouter.warn('distance detour alternatives failed —', lastError.message);
     try {
       const fallbackRoute = await fetchBrouterRoute({ ...req, alternativeIdx: 0 });
       baseRoute = fallbackRoute;
       consider(fallbackRoute, 'direct-fallback');
     } catch (fallbackError) {
       lastError = fallbackError as Error;
-      console.warn('[BRouter] distance detour direct fallback failed —', lastError.message);
+      logger.brouter.warn('distance detour direct fallback failed —', lastError.message);
     }
   }
 
@@ -250,12 +251,12 @@ export async function fetchBrouterRouteBestWithDistanceDetours(
     } catch (error) {
       lastError = error as Error;
       if (!isExpectedDetourCandidateFailure(lastError)) {
-        console.warn(`[BRouter] distance detour ${candidate.label} failed —`, lastError.message);
+        logger.brouter.warn(`distance detour ${candidate.label} failed —`, lastError.message);
       }
     }
   }
   if (!best) throw lastError ?? new Error('BRouter distance detours: every candidate failed');
-  console.log(`[BRouter] distance detour picked ${bestLabel} (${label}, score=${bestScore.toFixed(2)})`);
+  logger.brouter.debug(`distance detour picked ${bestLabel} (${label}, score=${bestScore.toFixed(2)})`);
   return best;
 }
 
@@ -270,8 +271,8 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
   const consider = (route: BrouterRoute, candidateLabel: string) => {
     const score = scoreMinDistanceMaxAscent(route, directBase);
     const efficiency = computeClimbEfficiency(route, directBase);
-    console.log(
-      `[BRouter] climb-efficiency ${candidateLabel} OK — score=${score.toFixed(2)}, gain=${Math.round(efficiency.addedAscentM)} m, extra=${efficiency.addedDistanceKm.toFixed(1)} km, gain/km=${efficiency.gainPerAddedKm.toFixed(1)}`,
+    logger.brouter.debug(
+      `climb-efficiency ${candidateLabel} OK — score=${score.toFixed(2)}, gain=${Math.round(efficiency.addedAscentM)} m, extra=${efficiency.addedDistanceKm.toFixed(1)} km, gain/km=${efficiency.gainPerAddedKm.toFixed(1)}`,
     );
     if (Number.isFinite(score) && score > bestScore) {
       best = route;
@@ -285,10 +286,10 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
       try {
         consider(await fetchBrouterRoute({ ...req, alternativeIdx }), `direct-alt-${alternativeIdx}`);
       } catch (error) {
-        console.warn(`[BRouter] climb-efficiency direct alt ${alternativeIdx} failed —`, (error as Error).message);
+        logger.brouter.warn(`climb-efficiency direct alt ${alternativeIdx} failed —`, (error as Error).message);
       }
     }
-    console.log(`[BRouter] climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
+    logger.brouter.debug(`climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
     return best;
   }
 
@@ -306,12 +307,12 @@ export async function fetchBrouterRouteBestWithClimbEfficiency(
       } catch (error) {
         const routeError = error as Error;
         if (!isExpectedDetourCandidateFailure(routeError)) {
-          console.warn(`[BRouter] climb-efficiency ${candidate.label} alt ${alternativeIdx} failed —`, routeError.message);
+          logger.brouter.warn(`climb-efficiency ${candidate.label} alt ${alternativeIdx} failed —`, routeError.message);
         }
       }
     }
   }
 
-  console.log(`[BRouter] climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
+  logger.brouter.debug(`climb-efficiency picked ${bestLabel} (score=${bestScore.toFixed(2)})`);
   return best;
 }

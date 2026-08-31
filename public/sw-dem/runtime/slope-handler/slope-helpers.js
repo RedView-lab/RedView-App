@@ -75,46 +75,9 @@ function slopeNeighbourWarmList(z, neighbours) {
 }
 
 function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours, generation) {
-  const missing = slopeNeighbourWarmList(z, neighbours);
-  if (missing.length === 0 || !demCache) return;
-
-  setTimeout(() => {
-    if (isSlopeWorkCancelled(generation)) return;
-    const fetches = missing.map(([nx, ny]) => {
-      const nKey = buildDemCacheKey(z, nx, ny, demProfile);
-      return demCache.match(nKey).then((existingDem) => {
-        if (existingDem && existingDem.status === 200) return true;
-        return handleDemRequest(
-          buildSlopeDemRequest(z, nx, ny, demProfile, SLOPE_REQUEST_PURPOSE_WARM),
-          z,
-          nx,
-          ny,
-          undefined,
-          demProfile,
-        )
-          .then((resp) => Boolean(resp && resp.status === 200))
-          .catch(() => false);
-      }).catch(() => false);
-    });
-
-    Promise.allSettled(fetches).then((results) => {
-      if (isSlopeWorkCancelled(generation)) return;
-      const warmed = results.some((result) => result.status === 'fulfilled' && result.value === true);
-      if (!warmed) return;
-      try {
-        self.clients.matchAll({ type: 'window' }).then((clients) => {
-          clients.forEach((client) => client.postMessage({
-            type: 'DEM_TILE_CACHE_UPDATED',
-            z,
-            x,
-            y,
-            source: 'slope-seam-heal',
-            profile: demProfile,
-          }));
-        }).catch(() => { /* best-effort */ });
-      } catch { /* noop */ }
-    });
-  }, SLOPE_NEIGHBOUR_WARM_DELAY_MS);
+  // Never download extra neighbour tiles: slope calculations directly reuse
+  // the exact 3D terrain tiles already requested/cached by the 3D map engine.
+  return;
 }
 
 async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing) {

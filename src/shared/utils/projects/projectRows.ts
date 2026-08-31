@@ -1,5 +1,6 @@
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
 import { supabase } from '@/shared/services/supabase';
+import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId } from './auth';
 import { computeProjectSizeBytes } from './limits';
@@ -23,7 +24,7 @@ function writeLocalProjects(projects: ProjectRow[]): void {
   try {
     window.localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(projects));
   } catch (e) {
-    console.warn('[projects] Failed to save local projects', e);
+    logger.projects.warn('Failed to save local projects', e);
   }
 }
 
@@ -41,7 +42,7 @@ export async function listProjects(): Promise<ProjectSummary[]> {
         return data.map((row) => rowToSummary(row as ProjectRow));
       }
     } catch (e) {
-      console.warn('[projects] Supabase listProjects failed, using local storage fallback', e);
+      logger.projects.debug('Supabase listProjects fallback to local storage', e);
     }
   }
 
@@ -64,7 +65,7 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
         return data as ProjectRow;
       }
     } catch (e) {
-      console.warn('[projects] Supabase getProject failed, using local storage fallback', e);
+      logger.projects.debug('Supabase getProject fallback to local storage', e);
     }
   }
 
@@ -100,7 +101,7 @@ export async function createProject(
         return data as ProjectRow;
       }
     } catch (e) {
-      console.warn('[projects] Supabase createProject failed, saving locally', e);
+      logger.projects.debug('Supabase createProject fallback to local storage', e);
     }
   }
 
@@ -140,7 +141,7 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
         .eq('id', id);
       if (!error) return;
     } catch (e) {
-      console.warn('[projects] Supabase saveProject failed, saving locally', e);
+      logger.projects.debug('Supabase saveProject fallback to local storage', e);
     }
   }
 
@@ -196,7 +197,7 @@ export async function renameProject(id: string, name: string): Promise<void> {
         if (!error) return;
       }
     } catch (e) {
-      console.warn('[projects] Supabase renameProject failed, renaming locally', e);
+      logger.projects.debug('Supabase renameProject fallback to local storage', e);
     }
   }
 
@@ -222,7 +223,7 @@ export async function moveProjectToFolder(
       const { error } = await supabase.from('projects').update({ folder_id: folderId }).eq('id', id);
       if (!error) return;
     } catch (e) {
-      console.warn('[projects] Supabase moveProjectToFolder failed, moving locally', e);
+      logger.projects.debug('Supabase moveProjectToFolder fallback to local storage', e);
     }
   }
 
@@ -244,7 +245,7 @@ export async function deleteProject(id: string): Promise<void> {
       const { error } = await supabase.from('projects').delete().eq('id', id);
       if (!error) return;
     } catch (e) {
-      console.warn('[projects] Supabase deleteProject failed, deleting locally', e);
+      logger.projects.debug('Supabase deleteProject fallback to local storage', e);
     }
   }
 

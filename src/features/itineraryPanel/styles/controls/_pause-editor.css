@@ -55,8 +55,7 @@
 
 /* ---- Label + chip group (Durée / Interval) -------------------------------- */
 .rvi-pause-row__field {
-  display: grid;
-  grid-template-columns: auto minmax(64px, 104px);
+  display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
@@ -65,27 +64,32 @@
 .rvi-pause-row__field-label {
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
-  font-weight: 600; /* SemiBold, per Figma */
+  font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
   opacity: 0.64;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 0 0 auto;
 }
 
-/* Numeric chip: fixed 60px wide, radius 4 (Figma 1695:22013). */
+/* Numeric chip */
 .rvi-pause-chip {
   box-sizing: border-box;
   width: 100%;
-  min-width: 64px;
+  flex: 1 1 auto;
+  min-width: 36px;
   max-width: 104px;
-  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 4px;
-  padding: 6px 8px;
+  padding: 5px 8px;
+  transition: background 0.15s ease;
+}
+.rvi-pause-chip:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvi-pause-chip__native {
@@ -96,8 +100,8 @@
   width: 100%;
   text-align: left;
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 600; /* SemiBold */
+  font-size: 13.5px;
+  font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
   overflow: hidden;
@@ -137,18 +141,6 @@
    POI-favori pause grid (Rythme section).
    Pixel-perfect implementation of Figma node 1695:22638 (PacingBreaksExt —
    Variant2, "Ajouter des pauses à chaque POI favori" expanded state).
-
-   Grid spec (top-level container: w_full, gap 8 vertical):
-     • Row ............... horizontal auto-layout, gap 8, align center, w_full.
-     • Cell .............. flex: 1 0 0, gap 4, align center, min-w 0. Contains:
-         – Checkbox ...... 16×16 (.rvi-checkbox).
-         – Label ......... Rethink Sans 13 Medium white, opacity .64,
-                           flex: 1, min-w 32, ellipsis.
-         – Chip .......... hug height, max-w 104, min-w 64, radius 6,
-                           padding 6/8, bg rgba(255,255,255,.08). Inner text
-                           Rethink Sans 14 SemiBold white, min-w 24, max-w 64,
-                           width 48, left-aligned.
-     • Disabled row ...... opacity .5 (border-only checkbox shown via .is-off).
 ============================================================================ */
 
 .rvi-poipause-grid {
@@ -169,10 +161,12 @@
 
 .rvi-poipause-cell {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) minmax(64px, 104px);
-  min-width: 0;
+  grid-template-columns: 20px minmax(0, 1fr) 52px;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
   transition: opacity 0.15s ease;
 }
 .rvi-poipause-cell.is-off {
@@ -181,11 +175,12 @@
 
 .rvi-poipause-cell__label {
   flex: 1 1 0;
-  min-width: 0; /* allow ellipsis ("Sup…") at narrow widths */
-  margin-left: 4px;
+  min-width: 0;
+  margin-left: 0;
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 13px;
-  font-weight: 500; /* Medium — matches Figma Rethink_Sans:Medium */
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
   line-height: normal;
   color: var(--rvi-text);
   opacity: 0.64;
@@ -195,16 +190,20 @@
 }
 
 .rvi-poipause-cell__chip {
-  /* Default field clamp for pause durations in the responsive POI grid. */
   box-sizing: border-box;
-  min-width: 0;
-  max-width: none;
   width: 100%;
+  min-width: 0;
+  height: 28px;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.08);
   border-radius: 6px;
-  padding: 6px 8px;
+  padding: 4px 6px;
+  transition: background 0.15s ease;
+}
+.rvi-poipause-cell__chip:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .rvi-poipause-cell__native {
@@ -212,10 +211,10 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  text-align: left;
+  text-align: center;
   font-family: 'Rethink Sans', sans-serif;
-  font-size: 14px;
-  font-weight: 600; /* SemiBold */
+  font-size: 13px;
+  font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
   overflow: hidden;

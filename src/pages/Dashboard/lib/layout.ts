@@ -42,9 +42,9 @@ export function getDashboardLayout({
     Math.min(
       viewport.w / APP_SCALE_DESIGN_WIDTH,
       viewport.h / APP_SCALE_DESIGN_HEIGHT,
-    ),
+    ) * 0.86,
     APP_SCALE_MIN,
-    1,
+    0.86,
   );
   const scaledViewportWidth = viewport.w / appScale;
   const scaledViewportHeight = viewport.h / appScale;

@@ -168,7 +168,10 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
       missingNeighbours.push([nx, ny]);
       return null;
     }
-    const resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
+    let resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
+    if ((!resp || resp.status !== 200) && demProfile !== 'default') {
+      resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, 'default')));
+    }
     if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
       missingNeighbours.push([nx, ny]);
       return null;
@@ -483,6 +486,7 @@ function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeig
   const P = S + 2;
   const n = S * S;
   const rgba = new Uint8Array(n * 4);
+  const u32 = new Uint32Array(rgba.buffer);
   const inv8x = 1 / (8 * cellSizeX);
   const inv8y = 1 / (8 * cellSizeY);
   // encoded = round(sqrt(deg/90) * 255) with deg = atan(g) * 180/π
@@ -496,9 +500,7 @@ function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeig
     const outRow = row * S;
     for (let col = 0; col < S; col++) {
       const elev = ownElev[outRow + col];
-      const idx = (outRow + col) * 4;
       if (elev <= DEM_NODATA_THRESHOLD) {
-        rgba[idx + 3] = 0;
         continue;
       }
       const a = pad[r0 + col];
@@ -515,8 +517,7 @@ function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeig
       // sqrt(atan(g) * (2/π)) * 255  — monotonic, [0..255]
       let enc = Math.sqrt(Math.atan(gradMag)) * ENC_K;
       if (enc < 0) enc = 0; else if (enc > 255) enc = 255;
-      rgba[idx] = enc + 0.5 | 0; // round
-      rgba[idx + 3] = 255;
+      u32[outRow + col] = ((enc + 0.5 | 0) & 0xff) | 0xff000000;
     }
   }
 
@@ -524,25 +525,22 @@ function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeig
   // used replicated own-tile edges and produces a noisy 1 px ring. Replace
   // each fallback border pixel with its immediate interior neighbour so the
   // visible tile boundary stays clean. Mirrors encodeSlopePng's behaviour.
-  const copyRgba = (dstIdx, srcIdx) => {
-    rgba[dstIdx]     = rgba[srcIdx];
-    rgba[dstIdx + 1] = rgba[srcIdx + 1];
-    rgba[dstIdx + 2] = rgba[srcIdx + 2];
-    rgba[dstIdx + 3] = rgba[srcIdx + 3];
+  const copyPixel = (dstIdx, srcIdx) => {
+    u32[dstIdx] = u32[srcIdx];
   };
   if (!edgeNeighbours?.north) {
-    for (let col = 0; col < S; col++) copyRgba(col * 4, (S + col) * 4);
+    for (let col = 0; col < S; col++) copyPixel(col, S + col);
   }
   if (!edgeNeighbours?.south) {
     const base = (S - 1) * S;
     const src = (S - 2) * S;
-    for (let col = 0; col < S; col++) copyRgba((base + col) * 4, (src + col) * 4);
+    for (let col = 0; col < S; col++) copyPixel(base + col, src + col);
   }
   if (!edgeNeighbours?.west) {
-    for (let r = 0; r < S; r++) copyRgba(r * S * 4, (r * S + 1) * 4);
+    for (let r = 0; r < S; r++) copyPixel(r * S, r * S + 1);
   }
   if (!edgeNeighbours?.east) {
-    for (let r = 0; r < S; r++) copyRgba((r * S + S - 1) * 4, (r * S + S - 2) * 4);
+    for (let r = 0; r < S; r++) copyPixel(r * S + S - 1, r * S + S - 2);
   }
 
   return rgba;

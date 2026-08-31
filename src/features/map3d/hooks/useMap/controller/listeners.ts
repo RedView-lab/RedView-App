@@ -272,10 +272,10 @@ export function attachListeners(ctx: Ctx): void {
     //      would re-fetch identical bytes.
     const source = typeof event.data.source === 'string' ? event.data.source : '';
     const tileProfile = typeof event.data.profile === 'string' ? event.data.profile : null;
-    const isSlopeSeamHeal = source === 'slope-seam-heal';
+    const isSlopeUpdate = source === 'slope-seam-heal' || source.startsWith('slope');
     const profileMatchesBasemap =
       tileProfile == null || tileProfile === getActiveDemProfilePreference();
-    const affectsBasemap = !isSlopeSeamHeal && profileMatchesBasemap;
+    const affectsBasemap = !isSlopeUpdate && profileMatchesBasemap;
 
     if (affectsBasemap) {
       st.demPassiveRefreshPending = true;

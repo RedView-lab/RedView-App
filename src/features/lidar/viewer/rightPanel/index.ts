@@ -1,10 +1,11 @@
 import React from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LidarViewerRightPanel } from './LidarViewerRightPanel';
-import type { ViewerSlopeState, ViewerAltitudeState, SunlightState } from './types';
+import type { ViewerSlopeState, ViewerAltitudeState, SunlightState, ViewerPointFilterState } from './types';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 
 export interface ViewerRightPanelOptions {
+  onPointFilterChange?: (state: ViewerPointFilterState) => void;
   onSlopeChange?: (state: ViewerSlopeState) => void;
   onAltitudeChange?: (state: ViewerAltitudeState) => void;
   onSunlightChange?: (state: SunlightState) => void;
@@ -33,6 +34,7 @@ export function createViewerRightPanel(opts: ViewerRightPanelOptions = {}): View
   const root: Root = createRoot(container);
   root.render(
     React.createElement(LidarViewerRightPanel, {
+      onPointFilterChange: opts.onPointFilterChange,
       onSlopeChange: opts.onSlopeChange,
       onAltitudeChange: opts.onAltitudeChange,
       onSunlightChange: opts.onSunlightChange,
@@ -57,4 +59,4 @@ export function createViewerRightPanel(opts: ViewerRightPanelOptions = {}): View
 }
 
 export { LidarViewerRightPanel };
-export type { ViewerSlopeState, ViewerAltitudeState, SunlightState };
+export type { ViewerSlopeState, ViewerAltitudeState, SunlightState, ViewerPointFilterState };

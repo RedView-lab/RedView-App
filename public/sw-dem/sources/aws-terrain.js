@@ -28,6 +28,27 @@ const AWS_TERRAIN_MAXZOOM = 14;
 // Access-Control-Allow-Origin: * configured.
 const AWS_TERRAIN_BASE = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 
+// Network fetch concurrency limiter — prevents socket starvation when 400+ tiles burst
+const AWS_FETCH_MAX_CONCURRENT = 32;
+let _awsFetchActive = 0;
+const _awsFetchQueue = [];
+
+function acquireAwsFetchSlot() {
+  if (_awsFetchActive < AWS_FETCH_MAX_CONCURRENT) {
+    _awsFetchActive++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _awsFetchQueue.push(resolve));
+}
+
+function releaseAwsFetchSlot() {
+  _awsFetchActive = Math.max(0, _awsFetchActive - 1);
+  if (_awsFetchQueue.length > 0 && _awsFetchActive < AWS_FETCH_MAX_CONCURRENT) {
+    _awsFetchActive++;
+    _awsFetchQueue.shift()();
+  }
+}
+
 async function fetchAWSTerrainTile(z, x, y) {
   // Clamp to native max zoom — above z14 AWS returns 404. Mapbox GL's GPU
   // handles overzooming from the parent tile.
@@ -37,15 +58,13 @@ async function fetchAWSTerrainTile(z, x, y) {
   const clamped = fetchZ < z;
 
   const url = `${AWS_TERRAIN_BASE}/${fetchZ}/${fetchX}/${fetchY}.png`;
+  await acquireAwsFetchSlot();
   try {
     const t0 = performance.now();
     const res = await fetch(url, { signal: AbortSignal.timeout(6000), priority: 'high' });
     const dt = (performance.now() - t0).toFixed(0);
 
     if (!res.ok) {
-      // 404 over oceans/poles is normal — Terrarium has no data there.
-      // Treat exactly like Mapbox's missing-tile path: return null and let
-      // the caller produce a 204 with appropriate TTL.
       if (DEBUG) {
         console.warn(
           `[sw-dem][aws] %c FAIL %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ}/${fetchX}/${fetchY})` : ''} — HTTP ${res.status}, ${dt}ms`,
@@ -55,7 +74,23 @@ async function fetchAWSTerrainTile(z, x, y) {
       return null;
     }
 
-    const blob = await res.blob();
+    const arrayBuffer = await res.arrayBuffer();
+    releaseAwsFetchSlot();
+
+    // ── Multi-Core Worker Pool Fast-Path (2026-08-29) ──────────────────────
+    // Offloads decoding, Terrarium → Terrain-RGB conversion and Sub-filter
+    // PNG encoding to the worker pool across all CPU cores.
+    if (typeof computeAwsTerrariumViaPool === 'function') {
+      try {
+        const poolBlob = await computeAwsTerrariumViaPool(
+          arrayBuffer.slice(0), z, x, y, fetchZ, fetchX, fetchY, clamped,
+        );
+        if (poolBlob) return poolBlob;
+      } catch { /* fall through to in-process */ }
+    }
+
+    // ── In-Process Fallback ────────────────────────────────────────────────
+    const blob = new Blob([arrayBuffer], { type: 'image/png' });
     const img = await createImageBitmap(blob, {
       colorSpaceConversion: 'none',
       premultiplyAlpha: 'none',
@@ -63,20 +98,16 @@ async function fetchAWSTerrainTile(z, x, y) {
 
     let elevations;
     try {
-      // Decode terrarium pixels → Float32 elevations using shared canvas
       const width = img.width;
       const height = img.height;
       const ctx = typeof getSharedOffscreenCtx === 'function'
         ? getSharedOffscreenCtx(width, height)
-        : new OffscreenCanvas(width, height).getContext('2d', { colorSpace: 'srgb' });
+        : new OffscreenCanvas(width, height).getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
       ctx.clearRect(0, 0, width, height);
       ctx.drawImage(img, 0, 0);
       const pixels = ctx.getImageData(0, 0, width, height).data;
 
       const srcSize = width;
-      // Always resample to DEM_TILE_SIZE so the SW pipeline sees a consistent
-      // grid. Terrarium native tiles are 256×256 — same as DEM_TILE_SIZE — so
-      // the `else` fast-path normally fires.
       if (srcSize === DEM_TILE_SIZE && height === DEM_TILE_SIZE) {
         elevations = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
         for (let i = 0; i < elevations.length; i++) {
@@ -84,11 +115,9 @@ async function fetchAWSTerrainTile(z, x, y) {
           const r = pixels[idx];
           const g = pixels[idx + 1];
           const b = pixels[idx + 2];
-          // Terrarium decode: height = (R*256 + G + B/256) - 32768
           elevations[i] = (r * 256 + g + b / 256) - 32768;
         }
       } else {
-        // Defensive: nearest-neighbour resample (rare path).
         elevations = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
         const scale = srcSize / DEM_TILE_SIZE;
         for (let py = 0; py < DEM_TILE_SIZE; py++) {
@@ -107,20 +136,13 @@ async function fetchAWSTerrainTile(z, x, y) {
       img.close();
     }
 
-    if (DEBUG) {
-      console.log(
-        `[sw-dem][aws] %c OK %c ${z}/${x}/${y}${clamped ? ` (clamped→${fetchZ})` : ''} ${dt}ms`,
-        'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
-      );
-    }
-
-    // Direct in-memory Float32Array upsampling: avoids 2 redundant PNG encode/decode cycles
     if (clamped && typeof overzoomDemElevations === 'function') {
       const upsampled = overzoomDemElevations(elevations, fetchZ, fetchX, fetchY, z, x, y);
       return encodeTerrainRGBPng(upsampled || elevations);
     }
     return encodeTerrainRGBPng(elevations);
   } catch (err) {
+    releaseAwsFetchSlot();
     if (DEBUG) {
       console.warn(
         `[sw-dem][aws] %c ERROR %c ${z}/${x}/${y} — ${err.message || err}`,

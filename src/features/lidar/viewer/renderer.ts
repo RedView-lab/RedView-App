@@ -14,10 +14,12 @@ import type { HeightmapParams, SnowParams } from './renderer/types';
 import { buildSlopeRampData } from './slope/slopeRamp';
 import { buildAltitudeRampData, DEFAULT_MAX_ALTITUDE_M } from './altitude/altitudeRamp';
 import type { ViewerSlopeState, ViewerAltitudeState } from './rightPanel/types';
+import type { ViewerPointFilterState } from './pointFilter';
+import { computePointFilterBitmasks } from './pointFilter';
 import type { SolarRenderState } from '../viewer-webgl/sunlightController';
 
 export type { HeightmapParams, SnowParams } from './renderer/types';
-export type { ViewerSlopeState, ViewerAltitudeState };
+export type { ViewerSlopeState, ViewerAltitudeState, ViewerPointFilterState };
 
 export class LidarRenderer {
   private device!: GPUDevice;
@@ -40,7 +42,11 @@ export class LidarRenderer {
   private heightSampler!: GPUSampler;
   private cameraBufferVoxel!: GPUBuffer;
   private pointBindGroupVoxel!: GPUBindGroup;
-  private uniformCache = new Float32Array(72);
+  private uniformCache = new Float32Array(80);
+  private uniformCacheU32 = new Uint32Array(this.uniformCache.buffer);
+
+  private pointFilterEnabled = 0;
+  private pointFilterMask: [number, number, number, number] = [0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff];
 
   private trajectoryBuffer: GPUBuffer | null = null;
   private trajectoryVertexCount = 0;
@@ -162,7 +168,7 @@ export class LidarRenderer {
     this.pointBindGroupLayout = pipelines.pointBindGroupLayout;
     this.terrainBindGroupLayout = pipelines.terrainBindGroupLayout;
 
-    const bufferSize = 72 * 4; // 288 bytes
+    const bufferSize = 80 * 4; // 320 bytes
     this.cameraBuffer = this.device.createBuffer({
       size: bufferSize,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -747,6 +753,11 @@ export class LidarRenderer {
     this.routeMesh = { vertBuf, colBuf, idxBuf, count: count ?? indices.length };
   }
 
+  setPointFilterState(state: ViewerPointFilterState): void {
+    this.pointFilterEnabled = state.enabled ? 1.0 : 0.0;
+    this.pointFilterMask = computePointFilterBitmasks(state.enabled, state.categories);
+  }
+
   clearRouteMesh(): void {
     if (this.routeMesh) {
       this.routeMesh.vertBuf.destroy();
@@ -880,6 +891,31 @@ export class LidarRenderer {
     f[65] = this.skyColor[1];
     f[66] = this.skyColor[2];
     f[67] = 1.0;
+
+    // 68..71: sun disc
+    if (this.sunDiscPos) {
+      f[68] = this.sunDiscPos[0];
+      f[69] = this.sunDiscPos[1];
+      f[70] = this.sunDiscPos[2];
+      f[71] = this.sunDiscRadius;
+    } else {
+      f[68] = 0;
+      f[69] = 0;
+      f[70] = 0;
+      f[71] = 0;
+    }
+
+    // 72..75: point filter params
+    f[72] = this.pointFilterEnabled;
+    f[73] = 0;
+    f[74] = 0;
+    f[75] = 0;
+
+    // 76..79: point filter bitmask (u32 words)
+    this.uniformCacheU32[76] = this.pointFilterMask[0] >>> 0;
+    this.uniformCacheU32[77] = this.pointFilterMask[1] >>> 0;
+    this.uniformCacheU32[78] = this.pointFilterMask[2] >>> 0;
+    this.uniformCacheU32[79] = this.pointFilterMask[3] >>> 0;
 
     const q = this.device.queue;
     q.writeBuffer(this.cameraBuffer, 0, f as Float32Array<ArrayBuffer>);

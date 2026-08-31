@@ -5,6 +5,13 @@ import { SlopesSection } from '@/features/controlPanel/sections/SlopesSection';
 import { AltitudeSection } from '@/features/controlPanel/sections/AltitudeSection';
 import { SunlightSection } from '@/features/controlPanel/sections/SunlightSection';
 import { RouteSection } from './RouteSection';
+import {
+  PointFilterSection,
+  getDefaultPointFilterCategories,
+  type PointFilterCategoryId,
+  type PointFilterCategoryVisibility,
+  type ViewerPointFilterState,
+} from '../pointFilter';
 import type { ViewerRouteController } from '../route/viewerRouteController';
 import type { ViewerRouteState } from '../route/types';
 import {
@@ -84,6 +91,7 @@ function buildAltitudeBands(
 }
 
 export interface LidarViewerRightPanelProps {
+  onPointFilterChange?: (state: ViewerPointFilterState) => void;
   onSlopeChange?: (state: ViewerSlopeState) => void;
   onAltitudeChange?: (state: ViewerAltitudeState) => void;
   onSunlightChange?: (state: SunlightState) => void;
@@ -94,6 +102,7 @@ export interface LidarViewerRightPanelProps {
 }
 
 export function LidarViewerRightPanelContent({
+  onPointFilterChange,
   onSlopeChange,
   onAltitudeChange,
   onSunlightChange,
@@ -165,9 +174,9 @@ export function LidarViewerRightPanelContent({
       const startWidth = panelWidth;
 
       const onMove = (nextEvent: MouseEvent) => {
-        const delta = startX - nextEvent.clientX;
+        const delta = (startX - nextEvent.clientX) / 0.75;
         const raw = startWidth + delta;
-        const maxAllowed = Math.min(PANEL_WIDTH_MAX, window.innerWidth - 32);
+        const maxAllowed = Math.min(PANEL_WIDTH_MAX, (window.innerWidth - 32) / 0.75);
         const minAllowed = Math.min(PANEL_WIDTH_MIN, maxAllowed);
 
         if (raw <= minAllowed - PANEL_COLLAPSE_DRAG_THRESHOLD) {
@@ -204,15 +213,37 @@ export function LidarViewerRightPanelContent({
 
   const [sectionsOpen, setSectionsOpen] = useState<{
     route: boolean;
+    pointFilter: boolean;
     slopes: boolean;
     altitude: boolean;
     sunlight: boolean;
   }>({
     route: true,
+    pointFilter: false,
     slopes: false,
     altitude: false,
     sunlight: true,
   });
+
+  // ── Point Filter State ───────────────────────────────────────────────────
+  const [pointFilterEnabled, setPointFilterEnabled] = useState(false);
+  const [pointFilterCategories, setPointFilterCategories] = useState<PointFilterCategoryVisibility>(getDefaultPointFilterCategories);
+
+  const pointFilterState = useMemo<ViewerPointFilterState>(
+    () => ({
+      enabled: pointFilterEnabled,
+      categories: pointFilterCategories,
+    }),
+    [pointFilterEnabled, pointFilterCategories],
+  );
+
+  useEffect(() => {
+    onPointFilterChange?.(pointFilterState);
+  }, [onPointFilterChange, pointFilterState]);
+
+  const handlePointFilterCategoryToggle = useCallback((id: PointFilterCategoryId, visible: boolean) => {
+    setPointFilterCategories((prev) => ({ ...prev, [id]: visible }));
+  }, []);
 
   // ── Slopes State ──────────────────────────────────────────────────────────
   const [slopesEnabled, setSlopesEnabled] = useState(false);
@@ -442,7 +473,7 @@ export function LidarViewerRightPanelContent({
     <>
       <aside
         className={`rvc-panel lidar-viewer-right-panel${isResizing ? ' is-resizing' : ''}${isCollapsed ? ' is-collapsed' : ''}`}
-        style={{ width: `min(${panelWidth}px, calc(100vw - 32px))` }}
+        style={{ width: `min(${panelWidth}px, calc(100vw / 0.75 - 32px))` }}
         aria-label="Panneau des couches d'analyse"
       >
         <div
@@ -479,10 +510,20 @@ export function LidarViewerRightPanelContent({
             />
           )}
 
+          <PointFilterSection
+            state={pointFilterState}
+            open={sectionsOpen.pointFilter}
+            onOpenChange={(open) => setSectionsOpen((prev) => ({ ...prev, pointFilter: open }))}
+            onEnabledChange={(enabled) => {
+              setPointFilterEnabled(enabled);
+              if (enabled) setSectionsOpen((prev) => ({ ...prev, pointFilter: true }));
+            }}
+            onCategoryToggle={handlePointFilterCategoryToggle}
+          />
+
           <SlopesSection
             enabled={slopesEnabled}
-            zoneActive={true}
-            noTopBorder={!routeState}
+            noTopBorder={false}
             showResolution={false}
             open={sectionsOpen.slopes}
             onOpenChange={(open) => setSectionsOpen((prev) => ({ ...prev, slopes: open }))}
@@ -512,7 +553,6 @@ export function LidarViewerRightPanelContent({
 
           <AltitudeSection
             enabled={altitudeEnabled}
-            zoneActive={true}
             open={sectionsOpen.altitude}
             onOpenChange={(open) => setSectionsOpen((prev) => ({ ...prev, altitude: open }))}
             state={{

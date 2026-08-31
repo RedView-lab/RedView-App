@@ -488,7 +488,7 @@ export function DashboardPlaceSearch({
     <div className="rvd-place-search" style={wrapperStyle} aria-hidden={!visible}>
       <div className="rvd-place-search__row" ref={rootRef}>
         <div className="rvd-place-search__search-shell">
-          <MapCanvasGlassBackdrop blur={30} saturate={1.6} tint="rgba(18, 20, 26, 0.32)" />
+          <MapCanvasGlassBackdrop blur={20} saturate={1.2} tint="rgba(14, 14, 18, 0.82)" />
           <span className="rvd-place-search__icon">
             <SearchIcon />
           </span>
@@ -513,9 +513,9 @@ export function DashboardPlaceSearch({
               <div key={filter.id} className={shellClassName}>
                 <div className="rvd-place-search__filter-shell">
                   <MapCanvasGlassBackdrop
-                    blur={30}
-                    saturate={1.6}
-                    tint={active ? 'rgba(18, 20, 26, 0.32)' : 'rgba(14, 16, 22, 0.62)'}
+                    blur={20}
+                    saturate={1.2}
+                    tint={active ? 'rgba(20, 20, 26, 0.92)' : 'rgba(14, 14, 18, 0.82)'}
                   />
                   <button
                     type="button"
@@ -562,9 +562,9 @@ export function DashboardPlaceSearch({
                     aria-label={t('Catégories POI')}
                   >
                     <MapCanvasGlassBackdrop
-                      blur={30}
-                      saturate={1.6}
-                      tint="rgba(20, 22, 28, 0.72)"
+                      blur={24}
+                      saturate={1.2}
+                      tint="rgba(14, 14, 18, 0.94)"
                     />
                     <div className="rvd-place-search__poi-menu-list">
                       {DASHBOARD_POI_OPTIONS.map((option) => {

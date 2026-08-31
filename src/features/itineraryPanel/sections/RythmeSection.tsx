@@ -128,7 +128,7 @@ export function RythmeSection({
       <div className="rvi-divider" />
 
       {/* Départ / Heure */}
-      <div className="rvi-row">
+      <div className="rvi-row rvi-row--rhythm-header">
         <div className="rvi-lfield">
           <span className="rvi-lfield__label">{t('Départ :')}</span>
           <button
@@ -185,7 +185,7 @@ export function RythmeSection({
       </div>
 
       {/* Activités passées + FTP */}
-      <div className="rvi-row">
+      <div className="rvi-row rvi-row--rhythm-upload">
         <CheckboxField
           checked={rhythm.usePastActivities}
           onToggle={(v) => onChange?.('usePastActivities', v)}
@@ -223,7 +223,7 @@ export function RythmeSection({
       </div>
 
       {/* Poids + Pneus */}
-      <div className="rvi-row">
+      <div className="rvi-row rvi-row--rhythm-weight">
         <CheckboxField
           checked={rhythm.systemWeightKg !== null}
           onToggle={(v) =>
@@ -261,7 +261,7 @@ export function RythmeSection({
       </div>
 
       {/* Météo + Surfaces */}
-      <div className="rvi-row">
+      <div className="rvi-row rvi-row--rhythm-weather">
         <CheckboxField
           checked={rhythm.useWeather}
           onToggle={(v) => onChange?.('useWeather', v)}

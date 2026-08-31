@@ -20,3 +20,5 @@ export type {
 	OverlayStatusReporter,
 	OverlayStatusSnapshot,
 } from './lib/overlayStatus';
+export { useCinematicIdleRotate } from './hooks/useCinematicIdleRotate';
+export type { UseCinematicIdleRotateOptions } from './hooks/useCinematicIdleRotate';

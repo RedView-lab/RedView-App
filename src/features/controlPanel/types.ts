@@ -137,6 +137,8 @@ export interface SlopesState {
   /** 0..100 */
   opacity: number;
   bands: SlopeBand[];
+  terrainQuality?: 'hd' | 'fast-30m';
+  terrainProfile?: 'default' | 'terrain';
 }
 
 export type WeatherTab = 'forecast' | 'trends';

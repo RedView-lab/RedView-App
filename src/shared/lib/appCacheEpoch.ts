@@ -1,4 +1,4 @@
-const APP_CACHE_FIX_EPOCH = '2026-08-27-dem-spatial-priority-1';
+const APP_CACHE_FIX_EPOCH = '2026-08-29-multicore-out-of-core-v1';
 
 export const APP_BUILD_ID = __REDVIEW_BUILD_ID__;
 export const APP_CACHE_EPOCH = `${__REDVIEW_BUILD_ID__}:${APP_CACHE_FIX_EPOCH}`;

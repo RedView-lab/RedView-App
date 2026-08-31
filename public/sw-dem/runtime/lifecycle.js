@@ -56,7 +56,7 @@ const COMPOSITE_MAX_CONCURRENT = (() => {
 // stale references that never get queried again because the cacheKey URL
 // embeds the epoch via demProfile and PURGE messages call demHotClear).
 // ──────────────────────────────────────────────────────────────────────────
-const DEM_HOT_CACHE_DEFAULT_MAX = 192;
+const DEM_HOT_CACHE_DEFAULT_MAX = 512;
 let DEM_HOT_CACHE_MAX = DEM_HOT_CACHE_DEFAULT_MAX;
 const DEM_HOT_CACHE = new Map();
 
@@ -95,12 +95,22 @@ function demHotResponse(entry) {
   return new Response(entry.blob, { status: 200, headers: entry.headers });
 }
 
-// Resize the DEM hot tier at runtime. Called when slope is enabled (the
-// slope pipeline reads 5× more DEM tiles than the basemap, so the LRU
-// needs more headroom to avoid evicting basemap tiles that will be
-// re-asked for next frame) and when slope is disabled (shrink back to
-// the default to free memory). Setting a smaller cap than the current
-// size triggers an immediate LRU trim.
+// Resize the DEM hot tier at runtime. Called when slope or altitude is enabled.
+let _slopeActive = false;
+let _altitudeActive = false;
+
+function syncDemHotCacheCapacity() {
+  if (_slopeActive || _altitudeActive) {
+    setDemHotCacheCapacity(
+      (typeof DEM_HOT_CACHE_MAX_SLOPE_ACTIVE !== 'undefined')
+        ? DEM_HOT_CACHE_MAX_SLOPE_ACTIVE
+        : 2048
+    );
+  } else {
+    setDemHotCacheCapacity(DEM_HOT_CACHE_DEFAULT_MAX);
+  }
+}
+
 function setDemHotCacheCapacity(newMax) {
   if (!Number.isFinite(newMax) || newMax < 32) return;
   DEM_HOT_CACHE_MAX = newMax;
@@ -550,22 +560,32 @@ self.addEventListener('message', (e) => {
     caches.delete(SLOPE_CACHE_NAME);
     return;
   }
-  // Slope active state change — expands/shrinks the DEM hot tier so panning
-  // with slope on (which reads 5× more DEM tiles than the basemap) does not
+  // Slope / Altitude active state change — expands/shrinks the DEM hot tier so panning
+  // with slope or altitude on (which reads more DEM tiles than the basemap) does not
   // evict basemap DEM tiles the user will re-ask for next frame. Sent by
-  // useSlope on enable/disable. Idempotent.
+  // useSlope / useAltitude on enable/disable. Idempotent.
   if (e.data?.type === 'SLOPE_ACTIVE_STATE') {
     try {
-      if (e.data.active) {
-        setDemHotCacheCapacity(
-          (typeof DEM_HOT_CACHE_MAX_SLOPE_ACTIVE !== 'undefined')
-            ? DEM_HOT_CACHE_MAX_SLOPE_ACTIVE
-            : 384
-        );
-      } else {
-        setDemHotCacheCapacity(DEM_HOT_CACHE_DEFAULT_MAX);
-      }
+      _slopeActive = Boolean(e.data.active);
+      syncDemHotCacheCapacity();
     } catch { /* ignore */ }
+    return;
+  }
+  if (e.data?.type === 'ALTITUDE_ACTIVE_STATE') {
+    try {
+      _altitudeActive = Boolean(e.data.active);
+      syncDemHotCacheCapacity();
+    } catch { /* ignore */ }
+    return;
+  }
+  if (e.data?.type === 'SET_SW_LOG_LEVEL') {
+    if (typeof swLog !== 'undefined' && e.data.level) {
+      swLog.setLevel(e.data.level);
+      if (typeof DEBUG !== 'undefined') {
+        DEBUG = swLog.isDebug();
+      }
+      swLog.info('lifecycle', `log level set to ${e.data.level} (numeric=${swLog.getLevel()})`);
+    }
     return;
   }
   if (e.data?.type === 'CANCEL_SLOPE_WORK') {
@@ -573,32 +593,8 @@ self.addEventListener('message', (e) => {
       activeZonePipeline.cancelled = true;
     }
     const cancelled = cancelSlopeWork();
-    // Free terrain-WMS IGN slots immediately so the basemap (default
-    // DEM profile) doesn't have to wait up to IGN_FETCH_TIMEOUT_MS for
-    // the slope-driven backlog to drain. Both purpose tags are exclusive
-    // to the 1 m slope pipeline.
-    let queuedTerrain = 0;
-    let inflightTerrain = 0;
-    try {
-      queuedTerrain += typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-visible') : 0;
-      queuedTerrain += typeof flushIGNQueueByPurpose === 'function' ? flushIGNQueueByPurpose('slope-warm') : 0;
-    } catch { /* ignore */ }
-    try {
-      inflightTerrain += typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-visible') : 0;
-      inflightTerrain += typeof cancelInFlightIGNByPurpose === 'function' ? cancelInFlightIGNByPurpose('slope-warm') : 0;
-    } catch { /* ignore */ }
-    // Drop in-flight DEM dedup entries scoped to the terrain profile.
-    let demDropped = 0;
-    try {
-      for (const key of Array.from(DEM_INFLIGHT.keys())) {
-        if (typeof key === 'string' && key.indexOf('terrain:') === 0) {
-          DEM_INFLIGHT.delete(key);
-          demDropped++;
-        }
-      }
-    } catch { /* ignore */ }
-    if (DEBUG && (cancelled.slopeCount > 0 || queuedTerrain > 0 || inflightTerrain > 0 || demDropped > 0)) {
-      console.warn(`[sw-dem][cancel-slope] slope=${cancelled.slopeCount} terrainQueued=${queuedTerrain} terrainInflight=${inflightTerrain} demInflightDropped=${demDropped}`);
+    if (DEBUG && cancelled.slopeCount > 0) {
+      console.warn(`[sw-dem][cancel-slope] slopeCount=${cancelled.slopeCount}`);
     }
     return;
   }

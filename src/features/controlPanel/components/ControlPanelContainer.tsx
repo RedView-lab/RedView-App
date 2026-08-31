@@ -177,15 +177,11 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
   }>({ onSlopesEnabledChange: () => {}, onAltitudeEnabledChange: () => {} });
 
   const {
-    analysisZonePayload,
-    analysisZoneActive,
     handleSlopesEnabledChange,
     handleAltitudeEnabledChange,
   } = useControlPanelZoneGating({
     onSlopesEnabledChange: (enabled) => terrainHandlersRef.current.onSlopesEnabledChange(enabled),
     onAltitudeEnabledChange: (enabled) => terrainHandlersRef.current.onAltitudeEnabledChange(enabled),
-    slopesEnabled: initialControlPanel.toggles.slopesEnabled,
-    altitudeEnabled: initialControlPanel.toggles.altitudeEnabled,
   });
 
   const terrainState = useControlPanelTerrainState({
@@ -194,7 +190,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     activeBasemapId,
     initialControlPanel,
     updateProjectControlPanel,
-    analysisZone: analysisZonePayload,
+    analysisZone: null,
     onSlopeOverlayStatusChange,
     onAltitudeOverlayStatusChange,
   });
@@ -204,7 +200,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
     isMapLoaded,
     initialControlPanel,
     updateProjectControlPanel,
-    analysisZone: analysisZonePayload,
+    analysisZone: null,
     onWeatherOverlayStatusChange,
     onWeatherOverlayReloadChange,
     onWindOverlayStatusChange,
@@ -345,7 +341,6 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       className={lidarDownloadModeActive ? 'rvc-panel--lidar-selecting' : undefined}
       sectionsOpen={projectControlPanel.sectionsOpen}
       onSectionOpenChange={handleSectionOpenChange}
-      analysisZoneActive={analysisZoneActive}
       onAltitudeEnabledChange={handleAltitudeEnabledChange}
       onAltitudeColorizationChange={terrainState.handlers.onAltitudeColorizationChange}
       onAltitudeScaleSettingChange={terrainState.handlers.onAltitudeScaleSettingChange}

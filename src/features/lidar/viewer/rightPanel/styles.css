@@ -6,12 +6,14 @@
   top: 16px;
   right: 16px;
   height: auto;
-  max-height: calc(100vh - 32px);
+  max-height: calc((100vh - 32px) / 0.75);
   z-index: 70;
   display: flex;
   flex-direction: column;
   pointer-events: auto;
   font-family: 'Rethink Sans', system-ui, -apple-system, Segoe UI, sans-serif;
+  zoom: 0.75;
+  --app-scale: 0.75;
 }
 
 .lidar-viewer-right-panel-host .rvc-panel {
@@ -22,7 +24,7 @@
   position: relative;
   height: auto;
   min-width: 350px;
-  max-height: calc(100vh - 32px);
+  max-height: calc((100vh - 32px) / 0.75);
   flex: 0 1 auto;
   background: rgba(18, 20, 24, 0.72);
   backdrop-filter: blur(24px) saturate(1.1);
@@ -55,7 +57,7 @@
 .lidar-viewer-right-panel-host .rvc-panel__content {
   flex: 0 1 auto;
   height: auto;
-  max-height: calc(100vh - 32px);
+  max-height: calc((100vh - 32px) / 0.75);
   padding: 12px 14px;
   overflow-y: auto;
   overflow-x: hidden;
@@ -108,6 +110,7 @@
   top: 50%;
   right: 6px;
   z-index: 75;
+  zoom: 0.75;
   transform: translate3d(18px, -50%, 0);
   opacity: 0;
   pointer-events: none;
@@ -164,7 +167,7 @@
   .lidar-viewer-right-panel-host {
     top: 12px;
     right: 12px;
-    max-height: calc(100vh - 24px);
+    max-height: calc((100vh - 24px) / 0.75);
   }
 
   .lidar-viewer-right-panel-host .rvc-panel {
@@ -173,6 +176,6 @@
 
   .lidar-viewer-right-panel-host .rvc-panel,
   .lidar-viewer-right-panel-host .rvc-panel__content {
-    max-height: calc(100vh - 24px);
+    max-height: calc((100vh - 24px) / 0.75);
   }
 }

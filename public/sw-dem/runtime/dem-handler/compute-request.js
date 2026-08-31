@@ -175,9 +175,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     if (raceIGNBorderTile) {
       ignResultPromise = buildIGNTile(z, x, y, franceClass, requestPurpose);
     }
-    if (z >= 12) {
-      console.log(
-        `[sw-dem][dispatch] %c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} trulyFR=${tileTrulyTouchesFrance} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} raceIGN=${raceIGNBorderTile}`,
+    if (z >= 12 && typeof swLog !== 'undefined' && swLog.isDebug()) {
+      swLog.debug(
+        'dispatch',
+        `%c ${z}/${x}/${y} %c inFrance(bbox)=${inFrance} franceClass=${franceClass} ctrInFR=${tileCenterInFrancePoly} trulyFR=${tileTrulyTouchesFrance} predomFR=${tilePredominantlyFrench} inSwitz=${inSwitzerland} considerSwiss=${considerSwiss} raceIGN=${raceIGNBorderTile}`,
         'background:#444;color:#fff;padding:1px 4px;border-radius:2px', '',
       );
     }
@@ -202,10 +203,13 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         demSource = 'swiss-composite';
       } else {
         if (swissResult?.source === 'swiss-unavailable') swissTransientFailure = true;
-        console.log(
-          `[sw-dem][dispatch] %c ${z}/${x}/${y} %c swiss result=${swissResult?.source || 'null'} → falling through`,
-          'background:#FF9800;color:#fff;padding:1px 4px;border-radius:2px', '',
-        );
+        if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+          swLog.debug(
+            'dispatch',
+            `%c ${z}/${x}/${y} %c swiss result=${swissResult?.source || 'null'} → falling through`,
+            'background:#FF9800;color:#fff;padding:1px 4px;border-radius:2px', '',
+          );
+        }
       }
     }
 
@@ -306,9 +310,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
                 }
                 if (merged > 0) {
                   spainHadSomeData = true;
-                  if (DEBUG) {
-                    console.log(
-                      `[sw-dem][border-fill] %c ${z}/${x}/${y} %c IGN+Spain merged ${merged} px`,
+                  if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+                    swLog.debug(
+                      'dispatch',
+                      `%c ${z}/${x}/${y} %c IGN+Spain merged ${merged} px`,
                       'background:#A63A00;color:#fff;padding:1px 4px;border-radius:2px', '',
                     );
                   }
@@ -476,9 +481,10 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           demSource = 'aws-emergency-parent';
           forceShortCache = true;
           healthStatus = 'degraded';
-          if (DEBUG) {
-            console.warn(
-              `[sw-dem][emergency] %c DEGRADED PARENT %c ${z}/${x}/${y} — LiDAR transient + no cached parent, serving AWS 30m with shortCache=15s`,
+          if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+            swLog.warn(
+              'emergency',
+              `%c DEGRADED PARENT %c ${z}/${x}/${y} — LiDAR transient + no cached parent, serving AWS 30m with shortCache=15s`,
               'background:#FF6F00;color:#fff;padding:2px 6px;border-radius:3px;font-weight:bold', '',
             );
           }
@@ -503,7 +509,7 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
         scheduleBackgroundUpgrade(cache, cacheKey, z, x, y, upgradePending, upgradeSourceHint, demProfile);
       }
       const isAborted = Boolean(_request?.signal?.aborted);
-      if (!isAborted) {
+      if (!isAborted && isConfirmedEmpty) {
         negCache.put(cacheKey, new Response(null, {
           status: 204,
           headers: {
@@ -512,9 +518,9 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
           },
         }));
       }
-      if (DEBUG) {
+      if (typeof swLog !== 'undefined' && swLog.isDebug()) {
         const dt = (performance.now() - t0).toFixed(0);
-        console.warn(`[sw-dem] 204 ${z}/${x}/${y} reason=${reason} ttl=${ttl}s ${dt}ms (aborted=${isAborted})`);
+        swLog.debug('dispatch', `204 ${z}/${x}/${y} reason=${reason} ttl=${ttl}s ${dt}ms (aborted=${isAborted})`);
       }
       return noTileResponse(isAborted ? 'aborted' : reason);
     }
@@ -558,7 +564,11 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
       demProfile,
     );
   } catch (err) {
-    console.error('[sw-dem] error', z, x, y, err);
+    if (typeof swLog !== 'undefined') {
+      swLog.error('dispatch', `error ${z}/${x}/${y}`, err);
+    } else {
+      console.error('[sw-dem] error', z, x, y, err);
+    }
     const fb = await tryParentOverzoom(cache, z, x, y, _depth, demProfile);
     if (fb) {
       return finalize(cache, cacheKey, t0, z, x, y, fb.blob, fb.source, null, tileIsInFrance || inSwitzerland || inNorway || considerSpain, '', false, 'ok', demProfile);

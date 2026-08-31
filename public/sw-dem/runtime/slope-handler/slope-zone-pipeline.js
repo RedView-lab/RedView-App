@@ -7,10 +7,8 @@ let activeZonePipeline = null;
 function broadcastZoneProgress(zoneHash, phase, loaded, total) {
   let percent = 0;
   if (total > 0) {
-    if (phase === 'low') {
-      percent = Math.max(1, Math.min(50, Math.round((loaded / total) * 50)));
-    } else if (phase === 'hd') {
-      percent = Math.max(50, Math.min(99, 50 + Math.round((loaded / total) * 49)));
+    if (phase === 'hd') {
+      percent = Math.max(1, Math.min(99, Math.round((loaded / total) * 99)));
     } else if (phase === 'done') {
       percent = 100;
     }
@@ -64,7 +62,6 @@ function extractCanonicalZ14Tiles(tiles, zoneEntry) {
         }
       }
     } else {
-      // t.z > 14
       const scale = 1 << (t.z - 14);
       const cx = Math.floor(t.x / scale);
       const cy = Math.floor(t.y / scale);
@@ -138,9 +135,9 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
     return;
   }
 
-  zoneStateMap.set(zone, { phase: 'low', demProfile });
-  logDemPente(`🚀 Lancement Multi-Fetch Zone: hash=${zone} | profile=${demProfile} | total=${total} tuiles z14`);
-  broadcastZoneProgress(zone, 'low', 0, total);
+  zoneStateMap.set(zone, { phase: 'hd', demProfile });
+  logDemPente(`🚀 Lancement Calcul Pente Zone: hash=${zone} | profile=${demProfile} | total=${total} tuiles z14`);
+  broadcastZoneProgress(zone, 'hd', 0, total);
 
   const runConcurrent = async (items, concurrency, fn) => {
     let index = 0;
@@ -154,38 +151,7 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
     await Promise.all(workers);
   };
 
-  // Phase 1: Fast 30m preview pass across all zone tiles (concurrency = 8, 100% uniform 30m)
-  let lowDone = 0;
-  await runConcurrent(validTiles, 8, async (t) => {
-    if (currentPipeline.cancelled) return;
-    try {
-      await buildAndCacheLowSlopeTile(t.z, t.x, t.y, 1, demProfile, zone);
-    } catch { /* best-effort */ }
-    lowDone++;
-    if (!currentPipeline.cancelled) {
-      broadcastZoneProgress(zone, 'low', lowDone, total);
-    }
-  });
-
-  if (currentPipeline.cancelled) return;
-
-  // Signal completion of Phase 1 to frontend so Mapbox paints the uniform 30m preview across all tiles
-  try {
-    const clients = await self.clients.matchAll({ type: 'window' });
-    for (const client of clients) {
-      client.postMessage({
-        type: 'SLOPE_ZONE_PHASE1_READY',
-        zone,
-        profile: demProfile,
-      });
-    }
-  } catch { /* ignore */ }
-
-  // Transition to Phase 2
-  zoneStateMap.set(zone, { phase: 'hd', demProfile });
-  broadcastZoneProgress(zone, 'hd', 0, total);
-
-  // Phase 2: True HD LiDAR pass across all zone tiles in parallel (concurrency = 8, silent)
+  // Direct HD LiDAR computation from existing terrain DEM tiles (concurrency = 8, silent)
   let hdDone = 0;
   await runConcurrent(validTiles, 8, async (t) => {
     if (currentPipeline.cancelled) return;
@@ -200,13 +166,13 @@ async function startZoneSlopeMultiFetch(tiles, profile, zoneHash) {
 
   if (currentPipeline.cancelled) return;
 
-  // Phase 2 is complete for 100% of zone tiles!
+  // Complete for 100% of zone tiles
   zoneStateMap.set(zone, { phase: 'done', demProfile });
   zonePreviewMap.clear();
   await invalidateParentDownsampledSlopeTiles(14, 0, 0, zone);
   broadcastZoneProgress(zone, 'done', total, total);
 
-  logDemPente(`✨ Zone ${zone} 100% HD terminée (${total} tuiles) -> Bascule atomique`);
+  logDemPente(`✨ Zone ${zone} 100% HD terminée (${total} tuiles) -> Prêt`);
   try {
     const clients = await self.clients.matchAll({ type: 'window' });
     for (const client of clients) {

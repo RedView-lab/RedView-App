@@ -18,10 +18,11 @@
 }
 
 .rvc-color-palette__grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, 12px);
   gap: 10px;
-  width: 108px;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .rvc-color-palette__swatch {

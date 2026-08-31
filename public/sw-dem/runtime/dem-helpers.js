@@ -47,7 +47,7 @@ function transparentTileResponse() {
     status: 200,
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=604800',
+      'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
       'X-Tile-Type': 'transparent',
     },
   });

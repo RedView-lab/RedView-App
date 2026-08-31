@@ -286,7 +286,7 @@ export function PlaceSearchInput({
               }}
               onMouseDown={(e) => e.preventDefault() /* keep input focused */}
             >
-              <MapCanvasGlassBackdrop blur={28} saturate={1.7} tint="rgba(12, 12, 14, 0.76)" />
+              <MapCanvasGlassBackdrop blur={24} saturate={1.2} tint="rgba(14, 14, 18, 0.94)" />
               <div
                 id={listId}
                 role="listbox"

@@ -111,7 +111,9 @@ async function encodeAltitudePng(elevations, zoneMask) {
   // drops to 0; Terrain-RGB RGB channels are left untouched so the GPU-side
   // raster-color decode stays valid on surviving pixels.
   if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
-  return buildRawPng(size, size, rgba);
+  return (typeof buildRawPngSlope === 'function')
+    ? buildRawPngSlope(size, size, rgba)
+    : buildRawPng(size, size, rgba);
 }
 
 // ── Full pipeline — DEM blob → altitude overlay PNG ────────────────────────

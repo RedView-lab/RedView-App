@@ -60,7 +60,7 @@ importScripts(
 // worker's queue (e.g. when the SW re-sends a neighbour that was evicted
 // from the SW-side LRU but is still in flight here). Small budget —
 // workers have tighter memory than the SW.
-const WORKER_DEM_LRU_MAX = 32;
+const WORKER_DEM_LRU_MAX = 128;
 const _workerDemLru = new Map(); // key "z/x/y" → Float32Array
 
 function workerDemGet(key) {
@@ -126,10 +126,85 @@ self.onmessage = async (event) => {
         const zoneMask = rasterizeRingMask(msg.zoneRing, msg.z, msg.x, msg.y, size);
         if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
       }
-      const pngBlob = await buildRawPng(size, size, rgba);
+      const pngBlob = (typeof buildRawPngSlope === 'function')
+        ? await buildRawPngSlope(size, size, rgba)
+        : await buildRawPng(size, size, rgba);
       const pngBuf = await pngBlob.arrayBuffer();
 
       // Transfer the PNG buffer back — zero copy.
+      self.postMessage({ id, ok: true, png: pngBuf }, [pngBuf]);
+    } catch (err) {
+      self.postMessage({ id, ok: false, error: String((err && err.message) || err) });
+    }
+    return;
+  }
+
+  // ── AWS Terrarium → Terrain-RGB multi-core branch (2026-08-29) ─────────
+  // Decodes raw Terrarium PNG, converts to Terrain-RGB RGBA in a tight typed
+  // array loop, and encodes PNG with fast Sub-filter off the main SW thread.
+  if (msg.kind === 'aws-terrarium') {
+    try {
+      if (!msg.terrariumBuf || !msg.terrariumBuf.byteLength) {
+        self.postMessage({ id, ok: false, error: 'missing-terrarium-buf' });
+        return;
+      }
+      const blob = new Blob([msg.terrariumBuf], { type: 'image/png' });
+      const img = await createImageBitmap(blob, {
+        colorSpaceConversion: 'none',
+        premultiplyAlpha: 'none',
+      });
+      const width = img.width;
+      const height = img.height;
+      const canvas = new OffscreenCanvas(width, height);
+      const ctx = canvas.getContext('2d', { colorSpace: 'srgb', willReadFrequently: true });
+      ctx.drawImage(img, 0, 0);
+      img.close();
+      const imgData = ctx.getImageData(0, 0, width, height);
+      const srcPixels = imgData.data;
+      const len = width * height;
+
+      let outRgba;
+      if (msg.clamped && typeof overzoomDemElevations === 'function') {
+        const elevations = new Float32Array(len);
+        for (let i = 0; i < len; i++) {
+          const idx = i * 4;
+          elevations[i] = (srcPixels[idx] * 256 + srcPixels[idx + 1] + srcPixels[idx + 2] / 256) - 32768;
+        }
+        const upsampled = overzoomDemElevations(elevations, msg.fetchZ, msg.fetchX, msg.fetchY, msg.z, msg.x, msg.y);
+        const targetElev = upsampled || elevations;
+        outRgba = new Uint8Array(DEM_TILE_SIZE * DEM_TILE_SIZE * 4);
+        for (let i = 0; i < targetElev.length; i++) {
+          const height = sanitizeElevation(targetElev[i]);
+          const val = Math.max(0, Math.min(16777215, Math.round((height + 10000) * 10)));
+          const idx = i * 4;
+          outRgba[idx]     = (val >> 16) & 0xff;
+          outRgba[idx + 1] = (val >>  8) & 0xff;
+          outRgba[idx + 2] =  val        & 0xff;
+          outRgba[idx + 3] = 255;
+        }
+      } else {
+        outRgba = new Uint8Array(len * 4);
+        for (let i = 0; i < len; i++) {
+          const idx = i * 4;
+          const r = srcPixels[idx];
+          const g = srcPixels[idx + 1];
+          const b = srcPixels[idx + 2];
+          // Terrarium: H = R*256 + G + B/256 - 32768
+          // Terrain-RGB: val = (H + 10000) * 10 = (R*256 + G + B*0.00390625 - 22768) * 10
+          const raw = (r * 256 + g + b * 0.00390625 - 22768) * 10;
+          const val = raw > 0 ? (raw > 16777215 ? 16777215 : (raw + 0.5) | 0) : 0;
+          outRgba[idx]     = (val >> 16) & 0xff;
+          outRgba[idx + 1] = (val >>  8) & 0xff;
+          outRgba[idx + 2] =  val        & 0xff;
+          outRgba[idx + 3] = 255;
+        }
+      }
+
+      const pngBlob = (typeof buildRawPngSlope === 'function')
+        ? await buildRawPngSlope(width, height, outRgba)
+        : await buildRawPng(width, height, outRgba);
+      const pngBuf = await pngBlob.arrayBuffer();
+
       self.postMessage({ id, ok: true, png: pngBuf }, [pngBuf]);
     } catch (err) {
       self.postMessage({ id, ok: false, error: String((err && err.message) || err) });

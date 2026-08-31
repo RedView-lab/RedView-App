@@ -19,18 +19,26 @@ interface ColorPalettePickerProps {
 }
 
 const PALETTE_COLORS = [
-  '#000000', '#292524', '#57534E', '#9AA4B2', '#FFFFFF',
-  '#202939', '#293056', '#3E4784', '#717BBC', '#4B5565',
-  '#18346C', '#0040C1', '#155EEF', '#528BFF', '#155B75',
-  '#095C37', '#0E9384', '#2ED3B7', '#22CCEE', '#088AB2',
-  '#125D56', '#099250', '#3CCB7F', '#326212', '#4CA30D',
-  '#932F19', '#93370D', '#DC6803', '#FF692E', '#FDB022',
-  '#912018', '#D92D20', '#F97066', '#F670C7', '#DD2590',
-  '#9E165F', '#B692F6', '#7F56D9', '#53389E',
+  // 1. Blanc au Noir (Grayscale)
+  '#FFFFFF', '#D4D4D8', '#71717A', '#27272A', '#000000',
+  // 2. Blanc au Bleu foncé
+  '#FFFFFF', '#93C5FD', '#3B82F6', '#1D4ED8', '#0A1B3F',
+  // 3. Cyan au Bleu pétrole
+  '#CCFBF1', '#22D3EE', '#06B6D4', '#0F766E', '#083344',
+  // 4. Vert clair au Vert foncé
+  '#DCFCE7', '#4ADE80', '#16A34A', '#15803D', '#052E16',
+  // 5. Jaune au Rouge
+  '#FEF08A', '#FBBF24', '#F97316', '#DC2626', '#7F1D1D',
+  // 6. Pêche à Terre / Brun
+  '#FFEDD5', '#FB923C', '#C2410C', '#78350F', '#431407',
+  // 7. Rose au Violet
+  '#FBCFE8', '#F472B6', '#D946EF', '#9333EA', '#3B0764',
+  // 8. Lavande au Bleu nuit
+  '#EDE9FE', '#A78BFA', '#6366F1', '#4338CA', '#1E1B4B',
 ] as const;
 
 const POPUP_WIDTH = 128;
-const POPUP_HEIGHT = 202;
+const POPUP_HEIGHT = 188;
 const VIEWPORT_GAP = 8;
 const ANCHOR_GAP = 6;
 
@@ -49,25 +57,31 @@ export function ColorPalettePicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; scale: number; placeAbove: boolean } | null>(null);
   const currentColor = normalizeHex(color);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
 
+    const computed = window.getComputedStyle(trigger);
+    const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
+    const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+
     const rect = trigger.getBoundingClientRect();
-    const maxLeft = Math.max(VIEWPORT_GAP, window.innerWidth - POPUP_WIDTH - VIEWPORT_GAP);
+    const popupWidth = POPUP_WIDTH * scale;
+    const popupHeight = POPUP_HEIGHT * scale;
+    const maxLeft = Math.max(VIEWPORT_GAP, window.innerWidth - popupWidth - VIEWPORT_GAP);
     const left = Math.min(Math.max(rect.left, VIEWPORT_GAP), maxLeft);
     const spaceBelow = window.innerHeight - rect.bottom;
-    const placeAbove = spaceBelow < POPUP_HEIGHT + ANCHOR_GAP && rect.top > POPUP_HEIGHT + ANCHOR_GAP;
+    const placeAbove = spaceBelow < popupHeight + ANCHOR_GAP && rect.top > popupHeight + ANCHOR_GAP;
     const preferredTop = placeAbove
-      ? rect.top - POPUP_HEIGHT - ANCHOR_GAP
+      ? rect.top - popupHeight - ANCHOR_GAP
       : rect.bottom + ANCHOR_GAP;
-    const maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - POPUP_HEIGHT - VIEWPORT_GAP);
+    const maxTop = Math.max(VIEWPORT_GAP, window.innerHeight - popupHeight - VIEWPORT_GAP);
     const top = Math.min(Math.max(preferredTop, VIEWPORT_GAP), maxTop);
 
-    setPosition({ top, left });
+    setPosition({ top, left, scale, placeAbove });
   }, []);
 
   useLayoutEffect(() => {
@@ -108,7 +122,12 @@ export function ColorPalettePicker({
         <div
           ref={popupRef}
           className="rvc-color-palette__popup"
-          style={{ top: position.top, left: position.left }}
+          style={{
+            top: position.top,
+            left: position.left,
+            transform: position.scale !== 1 ? `scale(${position.scale})` : undefined,
+            transformOrigin: position.placeAbove ? 'bottom left' : 'top left',
+          }}
           role="dialog"
           aria-label={ariaLabel ?? 'Choisir une couleur'}
         >

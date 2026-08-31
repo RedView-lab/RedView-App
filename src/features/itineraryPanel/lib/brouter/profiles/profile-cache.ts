@@ -49,9 +49,11 @@ async function waitForProfileUpload(pending: Promise<string>, signal?: AbortSign
   return Promise.race([pending, waitForAbort(signal)]);
 }
 
+import { logger } from '@/shared/lib/logger';
+
 /**
- * Ensure `brf` is uploaded to BRouter and return the custom profile id
- * to use in subsequent routing requests. Concurrent calls for the same
+ * Upload `brf` custom profile to the BRouter server, returning its `profileId`.
+ * Deduplicated in-memory: concurrent/repeated requests for the same profile
  * content share a single upload.
  */
 export async function ensureProfileUploaded(
@@ -62,16 +64,16 @@ export async function ensureProfileUploaded(
   const cached = cache.get(key);
   if (cached) {
     if (cached.profileId) {
-      console.log('[BRouter] profile cache HIT', key, '→', cached.profileId);
+      logger.brouter.debug('profile cache HIT', key, '→', cached.profileId);
       return cached.profileId;
     }
     if (cached.pending) {
-      console.log('[BRouter] profile upload in-flight, sharing', key);
+      logger.brouter.debug('profile upload in-flight, sharing', key);
       return waitForProfileUpload(cached.pending, signal);
     }
   }
 
-  console.log('[BRouter] profile cache MISS', key, '→ uploading', brf.length, 'B');
+  logger.brouter.debug('profile cache MISS', key, '→ uploading', brf.length, 'B');
   const uploadCtrl = new AbortController();
   const timeoutId = setTimeout(() => {
     uploadCtrl.abort(new Error(`BRouter profile upload timed out after ${PROFILE_UPLOAD_TIMEOUT_MS}ms`));
@@ -80,11 +82,11 @@ export async function ensureProfileUploaded(
     try {
       const result = await uploadCustomProfile(brf, undefined, uploadCtrl.signal);
       if (result.error) {
-        console.error('[BRouter] profile compile error', key, result.error);
+        logger.brouter.error('profile compile error', key, result.error);
         throw new Error(`BRouter a refusé le profil : ${result.error}`);
       }
       cache.set(key, { profileId: result.profileId });
-      console.log('[BRouter] profile uploaded', key, '→', result.profileId);
+      logger.brouter.debug('profile uploaded', key, '→', result.profileId);
       return result.profileId;
     } catch (error) {
       cache.delete(key);

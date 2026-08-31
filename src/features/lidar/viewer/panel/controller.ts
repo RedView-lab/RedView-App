@@ -197,7 +197,7 @@ export function createViewerPanel(options: ViewerPanelOptions) {
   const applyPanelWidth = (width: number) => {
     leftPanelWidth = width;
     root.style.setProperty('--viewer-panel-width', `${width}px`);
-    root.style.width = `min(${width}px, calc(100vw - 32px))`;
+    root.style.width = `min(${width}px, calc(100vw / 0.75 - 32px))`;
     try {
       localStorage.setItem(LEFT_PANEL_STORAGE_WIDTH_KEY, String(width));
     } catch {
@@ -233,9 +233,9 @@ export function createViewerPanel(options: ViewerPanelOptions) {
     const startWidth = leftPanelWidth;
 
     const onMove = (nextEvent: MouseEvent) => {
-      const delta = nextEvent.clientX - startX;
+      const delta = (nextEvent.clientX - startX) / 0.75;
       const raw = startWidth + delta;
-      const maxAllowed = Math.min(LEFT_PANEL_WIDTH_MAX, window.innerWidth - 32);
+      const maxAllowed = Math.min(LEFT_PANEL_WIDTH_MAX, (window.innerWidth - 32) / 0.75);
       const minAllowed = Math.min(LEFT_PANEL_WIDTH_MIN, maxAllowed);
 
       if (raw <= minAllowed - LEFT_PANEL_COLLAPSE_DRAG_THRESHOLD) {

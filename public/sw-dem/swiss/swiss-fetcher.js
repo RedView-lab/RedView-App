@@ -221,10 +221,13 @@ async function _resolveSwissCellsViaStac(EkmMin, EkmMax, NkmMin, NkmMax) {
     }
   }
 
-  console.log(
-    `[swiss][stac] %c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${allFeatures.length} features (${page} page${page === 1 ? '' : 's'})`,
-    'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
-  );
+  if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+    swLog.debug(
+      'swiss',
+      `%c bbox %c ${sw.lng.toFixed(3)},${sw.lat.toFixed(3)},${ne.lng.toFixed(3)},${ne.lat.toFixed(3)} \u2192 ${allFeatures.length} features (${page} page${page === 1 ? '' : 's'})`,
+      'background:#D52B1E;color:#fff;padding:1px 4px;border-radius:2px', '',
+    );
+  }
 
   // Group features by (Ekm, Nkm) keeping the most recent year per cell.
   const cellBest = new Map();
@@ -445,10 +448,13 @@ async function openSwissCOG(url) {
       _headerSetNull(url, permanentParseFail ? SWISS_NULL_TTL_PERMANENT : SWISS_NULL_TTL_TRANSIENT);
       return null;
     }
-    console.log(
-      `[swiss][header] %c OK %c ${url.split('/').pop()} \u2192 ${cog.levels.length} levels (${cog.levels.map((l) => `${l.width}\u00d7${l.height}@${l.pixelScaleX.toFixed(2)}m`).join(', ')}), origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
-      'background:#4CAF50;color:#fff;padding:1px 4px;border-radius:2px', '',
-    );
+    if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+      swLog.debug(
+        'swiss',
+        `%c OK %c ${url.split('/').pop()} \u2192 ${cog.levels.length} levels (${cog.levels.map((l) => `${l.width}\u00d7${l.height}@${l.pixelScaleX.toFixed(2)}m`).join(', ')}), origin=(${cog.originE.toFixed(0)},${cog.originN.toFixed(0)})`,
+        'background:#4CAF50;color:#fff;padding:1px 4px;border-radius:2px', '',
+      );
+    }
     _cogHeaderCache.set(url, cog);
     evictMap(_cogHeaderCache, SWISS_HEADER_CACHE_MAX);
     return cog;

@@ -42,8 +42,9 @@ let _slopeWorkers = null;            // Worker[]
 let _slopeWorkerReady = null;        // boolean[] — worker accepted at least one job
 let _slopeWorkerMonotonic = 0;       // round-robin counter
 let _slopePoolDisabled = false;      // set true after a structural failure
-// id → { resolve, reject, kind } — `kind` lets cancel target one overlay only.
+// id → { resolve, reject, kind, workerIdx } — `kind` lets cancel target one overlay only.
 const _slopeJobCallbacks = new Map();
+const _workerActiveJobs = new Map(); // workerIdx → active count
 let _slopeJobMonotonic = 0;
 
 // ── Pre-work concurrency gate ─────────────────────────────────────────
@@ -112,6 +113,10 @@ function spawnSlopeWorker() {
       const cb = _slopeJobCallbacks.get(msg.id);
       if (!cb) return;
       _slopeJobCallbacks.delete(msg.id);
+      if (typeof cb.workerIdx === 'number') {
+        const c = _workerActiveJobs.get(cb.workerIdx) || 0;
+        _workerActiveJobs.set(cb.workerIdx, Math.max(0, c - 1));
+      }
       if (msg.ok) {
         if (cb.kind === 'altitude') {
           // Altitude jobs return a single PNG ArrayBuffer + no neighbours.
@@ -126,12 +131,11 @@ function spawnSlopeWorker() {
     worker.onerror = (err) => {
       if (typeof DEBUG !== 'undefined' && DEBUG) console.warn('[slope-pool] worker error', err?.message || err);
       // Fail all in-flight jobs on this worker — they cannot complete.
-      // (Each job id maps 1:1 to a worker in our round-robin, so we just
-      // reject every pending callback; the SW caller falls back to inline.)
       for (const [id, cb] of _slopeJobCallbacks) {
         _slopeJobCallbacks.delete(id);
         cb.reject(new Error('slope-worker-died'));
       }
+      _workerActiveJobs.clear();
     };
     return worker;
   } catch (err) {
@@ -171,11 +175,18 @@ function ensureSlopePool() {
 
 function pickSlopeWorker() {
   if (!_slopeWorkers || _slopeWorkers.length === 0) return -1;
-  // Round-robin — each worker is stateless so any assignment is fine; we
-  // just want to spread the CPU work evenly across cores.
-  const n = _slopeWorkers.length;
-  _slopeWorkerMonotonic = (_slopeWorkerMonotonic + 1) % n;
-  return _slopeWorkerMonotonic;
+  // Least-busy dispatch: select the worker with the fewest active jobs
+  let minIdx = 0;
+  let minCount = _workerActiveJobs.get(0) || 0;
+  for (let i = 1; i < _slopeWorkers.length; i++) {
+    const c = _workerActiveJobs.get(i) || 0;
+    if (c < minCount) {
+      minCount = c;
+      minIdx = i;
+    }
+  }
+  _workerActiveJobs.set(minIdx, minCount + 1);
+  return minIdx;
 }
 
 function terminateSlopePool() {
@@ -185,6 +196,7 @@ function terminateSlopePool() {
   }
   _slopeWorkers = null;
   _slopeWorkerReady = null;
+  _workerActiveJobs.clear();
   for (const [, cb] of _slopeJobCallbacks) cb.reject(new Error('slope-pool-terminated'));
   _slopeJobCallbacks.clear();
 }
@@ -203,6 +215,10 @@ function cancelPoolJobsByKind(kind) {
     if (cb.kind !== kind) continue;
     if (cb.uncancellable) continue;
     _slopeJobCallbacks.delete(id);
+    if (typeof cb.workerIdx === 'number') {
+      const c = _workerActiveJobs.get(cb.workerIdx) || 0;
+      _workerActiveJobs.set(cb.workerIdx, Math.max(0, c - 1));
+    }
     cb.resolve(null); // null == "cancelled" — caller treats as transparent
     n++;
   }
@@ -274,9 +290,11 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
       return;
     }
     const path = buildSlopePoolCachePath(z, nx, ny, demProfile);
+    const defaultPath = (demProfile !== 'default') ? buildSlopePoolCachePath(z, nx, ny, 'default') : null;
     // 1. Fast in-memory hit from DEM_HOT_CACHE (avoids disk CacheStorage round-trip)
     if (typeof demHotGet === 'function') {
-      const hot = demHotGet(path);
+      let hot = demHotGet(path);
+      if (!hot && defaultPath) hot = demHotGet(defaultPath);
       if (hot && hot.blob) {
         if (shouldUseSlopeNeighbourDem(hot, demProfile)) {
           try {
@@ -294,7 +312,10 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
 
     // 2. Disk CacheStorage match
     try {
-      const resp = await demCache.match(new Request(path));
+      let resp = await demCache.match(new Request(path));
+      if ((!resp || resp.status !== 200) && defaultPath) {
+        resp = await demCache.match(new Request(defaultPath));
+      }
       if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
         missing.push(direction);
         return;
@@ -397,6 +418,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
         resolve,
         reject,
         kind: 'slope',
+        workerIdx,
         uncancellable: generation === null || generation === undefined,
       });
     });
@@ -411,6 +433,10 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
       },
       transferList,
     );
+
+    // Release pre-work gate immediately after buffers are transferred!
+    releaseSlopePreWork();
+
     let result;
     try {
       result = await jobPromise;
@@ -436,6 +462,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 
     return { blob, missingDirections: Array.from(seen) };
   } finally {
+    // Defensive cleanup in case of synchronous throw before transfer
     releaseSlopePreWork();
   }
 }
@@ -523,13 +550,15 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
 
     const id = ++_slopeJobMonotonic;
     const jobPromise = new Promise((resolve, reject) => {
-      _slopeJobCallbacks.set(id, { resolve, reject, kind: 'altitude' });
+      _slopeJobCallbacks.set(id, { resolve, reject, kind: 'altitude', workerIdx });
     });
 
     worker.postMessage(
       { id, kind: 'altitude', z, x, y, ownDem: ownDemBuf, zoneRing: zoneRing || null },
       [ownDemBuf],
     );
+
+    releaseAltitudePreWork();
 
     let result;
     try {
@@ -548,5 +577,36 @@ async function computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing) {
     return { blob };
   } finally {
     releaseAltitudePreWork();
+  }
+}
+
+// ── Multi-Core AWS Terrarium Converter (2026-08-29) ───────────────────
+// Dispatches raw Terrarium PNG ArrayBuffer to worker pool for parallel
+// decoding, Terrarium → Terrain-RGB conversion and Sub-filter PNG encoding.
+async function computeAwsTerrariumViaPool(arrayBuffer, z, x, y, fetchZ, fetchX, fetchY, clamped) {
+  const workers = ensureSlopePool();
+  if (!workers) return null;
+
+  const workerIdx = pickSlopeWorker();
+  if (workerIdx < 0) return null;
+  const worker = workers[workerIdx];
+
+  const id = ++_slopeJobMonotonic;
+  const jobPromise = new Promise((resolve, reject) => {
+    _slopeJobCallbacks.set(id, { resolve, reject, kind: 'aws-terrarium', workerIdx });
+  });
+
+  try {
+    worker.postMessage(
+      { id, kind: 'aws-terrarium', z, x, y, fetchZ, fetchX, fetchY, clamped, terrariumBuf: arrayBuffer },
+      [arrayBuffer],
+    );
+
+    const result = await jobPromise;
+    if (!result || !result.png) return null;
+
+    return new Blob([result.png], { type: 'image/png' });
+  } catch {
+    return null;
   }
 }

@@ -2,6 +2,7 @@ import {
   SW_CONTROLLER_TIMEOUT,
 } from './constants';
 import { ensureMapCacheEpochReset, MAP_CACHE_EPOCH } from '../../lib/mapCacheEpoch';
+import { logger, syncLogLevelToServiceWorker, getLogLevel } from '@/shared/lib/logger';
 
 const MAP_CACHE_AUTO_RELOAD_SESSION_KEY = 'redview:map-cache-auto-reload';
 
@@ -55,7 +56,7 @@ function scheduleEpochTakeoverReload(
     if (reloaded || hasReloadedForCurrentEpoch()) return;
     reloaded = true;
     markReloadedForCurrentEpoch();
-    console.warn(`[sw-dem] map cache epoch changed; reloading page once (${reason})`);
+    logger.sw.warn(`map cache epoch changed; reloading page once (${reason})`);
     window.location.reload();
   };
 
@@ -205,7 +206,7 @@ async function recoverServiceWorkerRegistration(maxAttempts: number): Promise<bo
       swInstallFailed = false;
       await registration.update();
     } catch (err) {
-      console.warn(`[sw-dem] recovery attempt ${attempt}/${maxAttempts} — register/update failed:`, err);
+      logger.sw.warn(`recovery attempt ${attempt}/${maxAttempts} — register/update failed:`, err);
     }
 
     // Wait for the controller to appear after this attempt. Give later
@@ -214,7 +215,7 @@ async function recoverServiceWorkerRegistration(maxAttempts: number): Promise<bo
     const waitMs = Math.min(4000 + attempt * 2000, 10_000);
     const controller = await waitForServiceWorkerController(waitMs);
     if (controller) {
-      console.log(`[sw-dem] recovery succeeded on attempt ${attempt} — controller claimed`);
+      logger.sw.debug(`recovery succeeded on attempt ${attempt} — controller claimed`);
       return true;
     }
   }
@@ -251,7 +252,7 @@ export const swReady: Promise<boolean> = (async () => {
 
     const controller = await waitForServiceWorkerController(SW_CONTROLLER_TIMEOUT);
     if (!controller) {
-      console.warn('[sw-dem] No controller after registration timeout - proceeding without DEM enhancement');
+      logger.sw.warn('No controller after registration timeout - proceeding without DEM enhancement');
       return false;
     }
 
@@ -259,9 +260,10 @@ export const swReady: Promise<boolean> = (async () => {
       notifyMapCacheReset(controller);
     }
 
+    syncLogLevelToServiceWorker(getLogLevel());
     return true;
   } catch (error) {
-    console.error('[sw-dem] Registration failed:', error);
+    logger.sw.error('Registration failed:', error);
     return false;
   }
 })();
@@ -291,14 +293,14 @@ export const swLateReady: Promise<boolean> = (async () => {
   while (Date.now() - start < MAX_LATE_WAIT_MS) {
     await new Promise<void>((r) => setTimeout(r, interval));
     if (navigator.serviceWorker.controller) {
-      console.log('[sw-dem] Late controller claim detected — DEM pipeline can recover');
+      logger.sw.debug('Late controller claim detected — DEM pipeline can recover');
       return true;
     }
     // If the installing worker went redundant, the SW will NEVER claim on
     // its own (importScripts/install threw). Stop polling a dead worker and
     // self-heal immediately via re-register + update().
     if (swInstallFailed) {
-      console.warn('[sw-dem] install failed (worker redundant) — attempting registration self-heal');
+      logger.sw.warn('install failed (worker redundant) — attempting registration self-heal');
       const recovered = await recoverServiceWorkerRegistration(3);
       if (recovered) return true;
       break;
@@ -315,7 +317,7 @@ export const swLateReady: Promise<boolean> = (async () => {
     if (recovered) return true;
   }
 
-  console.warn('[sw-dem] Controller never appeared within late-recovery window');
+  logger.sw.warn('Controller never appeared within late-recovery window');
   return false;
 })();
 

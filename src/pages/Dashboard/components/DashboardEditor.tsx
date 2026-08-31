@@ -37,11 +37,6 @@ import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
-import {
-  AnalysisZoneProvider,
-  AnalysisZoneProjectBridge,
-  AnalysisZoneToolArbiter,
-} from '@/features/analysisZone';
 import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
@@ -283,8 +278,7 @@ export function DashboardEditor({
   };
 
   return (
-    <AnalysisZoneProvider map={mapInstance}>
-      <ProjectProvider
+    <ProjectProvider
         key={activeProjectId ?? 'no-project'}
         initialProject={activeProjectInitial ?? undefined}
         onProjectChange={onProjectChange}
@@ -454,12 +448,10 @@ export function DashboardEditor({
       )}
 
       <TraceRevealWatcher onTraceStarted={onTraceStarted} />
-        <AnalysisZoneProjectBridge />
         <RouteSplitToolProvider map={mapInstance}>
           <RouteMergeToolProvider>
             <TraceToolProvider map={mapInstance}>
               <ForbiddenZoneToolProvider map={mapInstance}>
-                <AnalysisZoneToolArbiter />
             <RouteDragWaypointProvider map={mapInstance}>
                 <PredictionProvider>
                   <div style={styles.leftPanelStyle}>
@@ -539,6 +531,5 @@ export function DashboardEditor({
           </RouteMergeToolProvider>
         </RouteSplitToolProvider>
       </ProjectProvider>
-    </AnalysisZoneProvider>
   );
 }

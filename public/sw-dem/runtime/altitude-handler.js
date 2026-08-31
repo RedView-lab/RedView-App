@@ -2,28 +2,19 @@
 // Altitude tile handler — /altitude-tiles/{z}/{x}/{y}.
 //
 // Pipeline mirrors the slope handler:
-//   own DEM tile (handleDemRequest, deduped by DEM_INFLIGHT)
-//     → computeAltitudeViaPool()  (worker pool, OFF the SW thread)
-//       fallback → scheduleAltitudeBuild(buildAltitudeTile)  (in-process)
-//     → altitude PNG (Terrain-RGB compatible, NoData transparent)
-//
-// Build path selection: the worker pool runs the dominant CPU work
-// (decodeTerrainRGBBlob + altitude encode + PNG encode) on dedicated workers
-// so the SW thread stays free for the basemap/IGN/CacheStorage work the next
-// tile needs. If the pool isn't available (older browser, Worker spawn
-// failure) OR the pool job was cancelled, we fall through to the in-process
-// buildAltitudeTile() — byte-identical because both share altitude.js.
+//   Strictly reuses the 3D terrain DEM tile (getExistingTerrainDemResponse).
+//   NEVER initiates independent remote network downloads of DEM tiles.
+//   Fast-path: when no analysis-zone masking is needed, directly serves
+//   the 3D DEM Terrain-RGB blob (zero worker decode/encode CPU overhead).
+//   When zone-masked, applies polygon mask via worker pool / in-process builder.
 //
 // A hot tier (ALTITUDE_HOT_CACHE) sits in FRONT of CacheStorage so a toggle
 // off/on, pan-back or Mapbox repaint returns a previously served tile in
-// <1 ms instead of paying the 5-25 ms caches.match round-trip. Mirrors
-// SLOPE_HOT_CACHE exactly.
-//
-// Split out of sw-dem.js (May 03). Pool + hot tier added 2026-06-29
-// (altitude-decode-in-worker).
+// <1 ms instead of paying the 5-25 ms caches.match round-trip.
 // ---------------------------------------------------------------------------
 
 function isAltitudeWorkCancelled(generation) {
+  if (generation === null || generation === undefined) return false;
   return generation !== altitudeCancelGeneration;
 }
 
@@ -65,27 +56,16 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '') {
     catch { /* fall through and recompute */ }
   }
 
-  const generation = altitudeCancelGeneration;
+  const generation = zoneHash ? null : altitudeCancelGeneration;
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
-    const demKey = new Request(`/dem-tiles/${z}/${x}/${y}`);
-    // Hot-tier shortcut — see slope-handler for rationale. Altitude is
-    // typically activated alongside slope, so the DEM blob is freshly
-    // hot from the slope path.
-    let demResponse = null;
-    const demHotEntry = (typeof demHotGet === 'function') ? demHotGet(demKey.url) : null;
-    if (demHotEntry) {
-      demResponse = demHotResponse(demHotEntry);
-    } else {
-      demResponse = await demCache.match(demKey);
-    }
-    if (!demResponse || demResponse.status !== 200) {
-      demResponse = await handleDemRequest(demKey, z, x, y);
-    }
-    if (isAltitudeWorkCancelled(generation)) {
-      return transparentTileResponse();
-    }
-    if (!demResponse || demResponse.status !== 200) {
+
+    // 1. Get existing DEM tile from the 3D terrain cache / in-flight requests (NEVER download DEM for altitude)
+    const demResponse = (typeof getExistingTerrainDemResponse === 'function')
+      ? await getExistingTerrainDemResponse(z, x, y, 'default', demCache)
+      : null;
+
+    if (isAltitudeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
     }
 
@@ -95,37 +75,42 @@ async function handleAltitudeRequest(z, x, y, zoneHash = '') {
         return transparentTileResponse();
       }
 
-      // ── Build path selection: worker pool first, in-process fallback ──
-      // Mirrors slope-handler.js. The pool offloads the decode + altitude
-      // encode + PNG encode to dedicated workers. If the pool isn't
-      // available or the job was cancelled, fall through to the in-process
-      // buildAltitudeTile() — byte-identical because both share altitude.js.
+      // Fast-path: When there is no polygon analysis zone masking required,
+      // the 3D terrain DEM blob is ALREADY bit-exact Terrain-RGB! Mapbox's
+      // raster-color-mix directly decodes Terrain-RGB meters on the GPU.
+      // We directly wrap and serve demBlob, avoiding CPU decodes, Float32Array allocations,
+      // and PNG deflate recompression entirely.
       let altitudeBlob = null;
-      let usedPool = false;
-      if (typeof computeAltitudeViaPool === 'function') {
-        try {
-          const poolResult = await computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing);
-          if (poolResult) {
-            altitudeBlob = poolResult.blob;
-            usedPool = true;
+      if (!zoneRing) {
+        altitudeBlob = demBlob;
+      } else {
+        // ── Zone-masked build path: worker pool first, in-process fallback ──
+        let usedPool = false;
+        if (typeof computeAltitudeViaPool === 'function') {
+          try {
+            const poolResult = await computeAltitudeViaPool(demBlob, z, x, y, generation, zoneRing);
+            if (poolResult) {
+              altitudeBlob = poolResult.blob;
+              usedPool = true;
+            }
+          } catch {
+            /* fall through to in-process */
           }
-        } catch {
-          /* fall through to in-process */
         }
-      }
 
-      if (!usedPool) {
-        altitudeBlob = await scheduleAltitudeBuild(
-          () => buildAltitudeTile(
-            demBlob,
-            z,
-            x,
-            y,
-            () => isAltitudeWorkCancelled(generation),
-            zoneRing,
-          ),
-          generation,
-        );
+        if (!usedPool) {
+          altitudeBlob = await scheduleAltitudeBuild(
+            () => buildAltitudeTile(
+              demBlob,
+              z,
+              x,
+              y,
+              () => isAltitudeWorkCancelled(generation),
+              zoneRing,
+            ),
+            generation,
+          );
+        }
       }
 
       if (!altitudeBlob || isAltitudeWorkCancelled(generation)) {

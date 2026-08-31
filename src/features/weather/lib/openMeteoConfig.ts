@@ -8,6 +8,8 @@
 // another self-hosted endpoint, but public Open-Meteo hosts are refused
 // so the app never bypasses the VPS/proxy path.
 
+import { logger } from '@/shared/lib/logger';
+
 const env = (import.meta as unknown as { env?: Record<string, string | undefined> }).env ?? {};
 
 function isForbiddenPublicEndpoint(url: string): boolean {
@@ -19,9 +21,7 @@ function resolveWeatherEndpoint(override: string | undefined, fallback: string):
   const trimmed = override?.trim();
   if (!trimmed) return fallback;
   if (isForbiddenPublicEndpoint(trimmed)) {
-    if (typeof window !== 'undefined') {
-      console.warn(`[weather] refused public Open-Meteo override: ${trimmed}. Falling back to ${fallback}.`);
-    }
+    logger.weather.warn(`refused public Open-Meteo override: ${trimmed}. Falling back to ${fallback}.`);
     return fallback;
   }
   return trimmed;
@@ -41,8 +41,6 @@ if (typeof window !== 'undefined') {
   const tag = isProxy
     ? '\u2705 self-hosted VPS (via /api/openmeteo proxy)'
     : '\uD83D\uDD17 custom override';
-  console.log(
-    `[weather] forecast endpoint: ${OPENMETEO_FORECAST_URL} — ${tag}`,
-  );
-  console.log(`[weather] climate  endpoint: ${OPENMETEO_CLIMATE_URL}`);
+  logger.weather.debug(`forecast endpoint: ${OPENMETEO_FORECAST_URL} — ${tag}`);
+  logger.weather.debug(`climate  endpoint: ${OPENMETEO_CLIMATE_URL}`);
 }

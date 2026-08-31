@@ -6,7 +6,7 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
   enabled: false,
   opacity: 0.5,
   colorMode: 'gradient',
-  resolution: '1m (LIDAR TERRAIN)',
+  resolution: '0.40m (LIDAR SURFACE)',
 };
 
 // ── Build raster-color expression ─────────────────────────────────────

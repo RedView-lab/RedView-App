@@ -17,45 +17,44 @@
 }
 
 .rvi-poi-refine {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  width: 100%;
+  min-width: 0;
 }
 
 .rvi-poi-refine__toggle {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
-  /* Figma 1716:52612 — pr-[8px] py-[8px] padding on the toggle cell. */
-  padding: 8px 8px 8px 0;
+  padding: 4px 4px 4px 0;
   box-sizing: border-box;
 }
 
 .rvi-poi-refine__toggle .rvi-toggle-row {
   padding: 0;
   min-height: 0;
-  /* Figma 1716:52612 — toggle ↔ label gap 8px. */
   gap: 8px;
 }
 
-/* Figma 1716:52614 — "Affiner les résultats (beta)" is 11px SemiBold white
-   at full opacity (NOT 12px like other toggle rows). */
+/* Figma 1716:52614 — "Affiner les résultats (beta)" */
 .rvi-poi-refine__toggle .rvi-toggle-row__text {
   font-family: 'Rethink Sans', sans-serif;
   font-size: 11px;
   font-weight: 600;
   line-height: normal;
   color: var(--rvi-text);
+  white-space: nowrap;
 }
 
-/* Figma 1716:52615 — Catégories button.
-   Spec: h-32, gap-8, px-8 py-7, rounded-6. The Figma border spec is
-   0.5px but on standard DPI that snaps up to a visual 1px; per design
-   feedback we halve it again (0.25px) so the stroke looks hairline. */
+/* Catégories button */
 .rvi-categories-btn {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   height: 32px;
-  padding: 7px 8px;
+  padding: 6px 10px;
   border: 0.25px solid #ffffff;
   border-radius: var(--rvi-radius-md);
   color: var(--rvi-text);
@@ -63,21 +62,23 @@
   flex-shrink: 0;
   box-sizing: border-box;
   transition: background 0.15s ease;
+  white-space: nowrap;
 }
 .rvi-categories-btn:hover {
   background: rgba(255, 255, 255, 0.04);
 }
 
-/* Figma 1716:52618 — label 13px SemiBold (Rethink_Sans:SemiBold). */
 .rvi-categories-btn__label {
   font-family: 'Rethink Sans', sans-serif;
   font-size: 13px;
   font-weight: 600;
   line-height: normal;
+  white-space: nowrap;
 }
 
 .rvi-categories-btn__chevron {
   opacity: 1;
+  flex-shrink: 0;
 }
 
 @media (max-width: 440px) {

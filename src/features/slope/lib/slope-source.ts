@@ -1,5 +1,6 @@
 import type { SlopeColorMode, SlopeCategory, SlopeDemProfile, SlopeResolutionKey } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
+import { DEM_SOURCE_MAXZOOM } from '@/features/map3d/lib/ign.config';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
 
@@ -20,10 +21,11 @@ export interface SlopeTileSourceOptions {
   demProfile: SlopeDemProfile;
   resolutionFactor: number;
   zone?: SlopeZoneOptions | null;
+  sourceDem?: 'fast-30m' | 'hd';
 }
 
 const DEFAULT_SOURCE_OPTIONS: SlopeTileSourceOptions = {
-  demProfile: 'terrain',
+  demProfile: 'default',
   resolutionFactor: 1,
 };
 
@@ -48,7 +50,8 @@ export function resolutionToSourceOptions(
 export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined): string {
   const resolved = options ?? DEFAULT_SOURCE_OPTIONS;
   const zoneKey = resolved.zone ? `:zone-${resolved.zone.hash}` : '';
-  return `${resolved.demProfile}:${resolved.resolutionFactor}${zoneKey}`;
+  const sourceDemKey = resolved.sourceDem ? `:src-${resolved.sourceDem}` : '';
+  return `${resolved.demProfile}:${resolved.resolutionFactor}${sourceDemKey}${zoneKey}`;
 }
 
 // ── Raster source definition ──────────────────────────────────────────
@@ -74,6 +77,9 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   if (options.demProfile === 'terrain') {
     params.set('rv-dem-profile', 'terrain');
   }
+  if (options.sourceDem) {
+    params.set('source-dem', options.sourceDem);
+  }
   if (options.zone) {
     params.set('zone', options.zone.hash);
   }
@@ -89,8 +95,8 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     type: 'raster',
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
-    minzoom: 6,
-    maxzoom: 14,
+    minzoom: 4,
+    maxzoom: DEM_SOURCE_MAXZOOM,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;
