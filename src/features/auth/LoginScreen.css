@@ -1,0 +1,733 @@
+/* ==========================================================================
+   RedView Login Screen — Pixel Perfect Figma Translation
+   ========================================================================== */
+
+/* Root Page Wrapper: Log in */
+.rv-login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 80px 80px;
+  gap: 12px;
+
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%), #000000;
+  border-radius: 0px;
+  overflow-x: hidden;
+  font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  color: #FFFFFF;
+}
+
+/* Header navigation */
+.rv-login-header-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 1760px;
+  height: 72px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Header Container */
+.rv-login-header-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 1760px;
+  height: 72px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Frame 36468 — Logo */
+.rv-login-logo-link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 0px;
+  gap: 5px;
+
+  width: 130.16px;
+  height: 47.54px;
+  text-decoration: none;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-logo-link:hover {
+  opacity: 0.85;
+}
+
+.rv-login-logo-img {
+  width: 130px;
+  height: 24px;
+  display: block;
+}
+
+/* Header Row (Right) */
+.rv-login-header-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 4px;
+
+  height: 21px;
+
+  flex: none;
+  order: 1;
+  flex-grow: 0;
+}
+
+/* Header Prompt Text */
+.rv-login-header-text {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Header Sign Up Button */
+.rv-login-header-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 6px;
+
+  height: 21px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 21px;
+  color: #FFFFFF;
+  text-decoration: none;
+
+  flex: none;
+  order: 1;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-header-btn:hover {
+  opacity: 0.8;
+}
+
+/* Main Container */
+.rv-login-main-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 80px 32px;
+  gap: 32px;
+
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Content Box */
+.rv-login-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 32px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Card Header */
+.rv-login-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 24px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Text and supporting text */
+.rv-login-title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 12px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Title Text */
+.rv-login-title {
+  width: 100%;
+  margin: 0;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 38px;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Supporting text */
+.rv-login-subtitle {
+  width: 100%;
+  margin: 0;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Horizontal tabs */
+.rv-login-tabs {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 3px;
+  gap: 2px;
+  box-sizing: border-box;
+
+  width: 100%;
+  max-width: 480px;
+  height: 42px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Tab button base */
+.rv-login-tab-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  box-sizing: border-box;
+
+  height: 36px;
+  border-radius: 6px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  color: #FFFFFF;
+
+  background: transparent;
+  flex: none;
+  flex-grow: 1;
+  transition: all 0.15s ease;
+}
+
+/* Active Tab (Log in) */
+.rv-login-tab-btn.rv-active {
+  padding: 7px 16px;
+  gap: 16px;
+  height: 34px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+}
+
+/* Form Body / Content */
+.rv-login-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 24px;
+
+  width: 100%;
+  max-width: 480px;
+
+  border-radius: 12px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Form */
+.rv-login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 20px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Input field */
+.rv-login-input-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 6px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Label wrapper */
+.rv-login-label-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 2px;
+
+  height: 20px;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Label */
+.rv-login-label {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Input */
+.rv-login-input {
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 40px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(213, 215, 218, 0.16);
+  box-shadow: 0px 1px 2px rgba(10, 13, 18, 0.05);
+  border-radius: 8px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #FFFFFF;
+  outline: none;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rv-login-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rv-login-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Row: Checkbox + Forgot password */
+.rv-login-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 21px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Checkbox container */
+.rv-login-checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0px;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+
+  flex: none;
+  order: 0;
+  flex-grow: 1;
+}
+
+/* Checkbox base */
+.rv-login-checkbox {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: transparent;
+  accent-color: #890000;
+}
+
+/* Checkbox text */
+.rv-login-checkbox-text {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 1;
+  flex-grow: 1;
+}
+
+/* Forgot password button */
+.rv-login-forgot-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  height: 21px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 21px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+  text-decoration: none;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-forgot-btn:hover {
+  opacity: 0.8;
+}
+
+/* Actions */
+.rv-login-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 16px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 2;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Primary Submit Button */
+.rv-login-submit-btn {
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 10px 14px;
+  gap: 4px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 41px;
+
+  background: #890000;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 21px;
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.rv-login-submit-btn:hover {
+  background: #a30000;
+}
+
+.rv-login-submit-btn:active {
+  transform: scale(0.99);
+}
+
+/* Social Button Groups */
+.rv-login-social-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 12px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 44px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Social Button (Google) */
+.rv-login-social-btn {
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 44px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0px 1px 2px rgba(10, 13, 18, 0.05);
+  border-radius: 8px;
+  cursor: pointer;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 1;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rv-login-social-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Social Icon */
+.rv-login-social-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Bottom Action: Continue with one-time e-mail */
+.rv-login-footer-action {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 6px;
+
+  height: 21px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 21px;
+  color: #FFFFFF;
+
+  flex: none;
+  order: 2;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-footer-action:hover {
+  opacity: 0.8;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+  .rv-login-page {
+    padding: 24px 16px 40px;
+  }
+
+  .rv-login-main-container {
+    padding: 40px 0px;
+  }
+
+  .rv-login-header-text {
+    display: none;
+  }
+}

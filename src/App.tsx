@@ -2,7 +2,7 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
-import DevAuthScreen from './shared/components/DevAuthScreen'
+import { LoginScreen } from './features/auth'
 import { useAppI18n } from './shared/i18n'
 import './index.css'
 
@@ -381,13 +381,13 @@ function App() {
 
   if (!session) {
     return (
-      <DevAuthScreen
+      <LoginScreen
         landingUrl={landingUrl}
-        onDevLogin={(email) => {
+        onLogin={(email) => {
           if (typeof window !== 'undefined') {
             window.localStorage.setItem('redview:dev-session', 'true')
           }
-          const devSession = { user: { id: 'dev-user-001', email: email || 'dev@redview.app' } }
+          const devSession = { user: { id: 'dev-user-001', email: email || 'user@redview.app' } }
           setSession(devSession)
           setSubscriptionAccess({ hasAccess: true, status: 'pro' })
           setSubscriptionStatus('ready')
