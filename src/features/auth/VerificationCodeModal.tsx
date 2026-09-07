@@ -3,7 +3,7 @@ import './VerificationCodeModal.css';
 
 interface VerificationCodeModalProps {
   isOpen: boolean;
-  email: string;
+  email?: string;
   debugCode?: string;
   onClose: () => void;
   onConfirm: (code: string) => Promise<{ success: boolean; error?: string }>;
@@ -12,8 +12,6 @@ interface VerificationCodeModalProps {
 
 export default function VerificationCodeModal({
   isOpen,
-  email,
-  debugCode: initialDebugCode,
   onClose,
   onConfirm,
   onResend,
@@ -22,21 +20,16 @@ export default function VerificationCodeModal({
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [countdown, setCountdown] = useState(60);
-  const [debugCode, setDebugCode] = useState<string | undefined>(initialDebugCode);
+  const [countdown, setCountdown] = useState(30);
 
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
-
-  useEffect(() => {
-    setDebugCode(initialDebugCode);
-  }, [initialDebugCode]);
 
   // Focus first input on open & start countdown
   useEffect(() => {
     if (isOpen) {
       setDigits(['', '', '', '']);
       setErrorMessage(null);
-      setCountdown(60);
+      setCountdown(30);
       const timer = setTimeout(() => {
         inputsRef.current[0]?.focus();
       }, 50);
@@ -169,12 +162,9 @@ export default function VerificationCodeModal({
     try {
       const res = await onResend();
       if (res.success) {
-        setCountdown(60);
+        setCountdown(30);
         setDigits(['', '', '', '']);
         inputsRef.current[0]?.focus();
-        if (res.debugCode) {
-          setDebugCode(res.debugCode);
-        }
       } else {
         setErrorMessage(res.error || 'Impossible de renvoyer le code.');
       }
@@ -204,7 +194,7 @@ export default function VerificationCodeModal({
               height="24"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="currentColor"
+              stroke="#FFFFFF"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -238,9 +228,9 @@ export default function VerificationCodeModal({
 
           {/* Text and supporting text */}
           <div className="rv-modal-text-group">
-            <h2 className="rv-modal-title">Vérifiez votre e-mail</h2>
+            <h2 className="rv-modal-title">Vérifiez vos e-mails.</h2>
             <p className="rv-modal-supporting-text">
-              Nous avons envoyé un code de vérification à <strong>{email}</strong>
+              Nous avons envoyé un e-mail à votre adresse avec un code de confirmation.
             </p>
           </div>
         </header>
@@ -249,13 +239,6 @@ export default function VerificationCodeModal({
         <div className="rv-modal-content">
           {/* Error Message */}
           {errorMessage && <div className="rv-modal-error">{errorMessage}</div>}
-
-          {/* Debug hint if in development or no SMTP configured */}
-          {debugCode && (
-            <div className="rv-modal-debug-hint">
-              Code de test : <strong>{debugCode}</strong> (SMTP non configuré)
-            </div>
-          )}
 
           {/* 4 Mega inputs row */}
           <div className="rv-modal-digits-row">
@@ -283,9 +266,9 @@ export default function VerificationCodeModal({
 
           {/* Hint text / Resend */}
           <div className="rv-modal-hint-row">
-            <span>Vous n'avez pas reçu le code ?</span>
+            <span className="rv-modal-hint-label">Vous n'avez rien reçu ?</span>
             {countdown > 0 ? (
-              <span>Renvoyer ({countdown}s)</span>
+              <span className="rv-modal-hint-countdown">Cliquez ici pour renvoyer ({countdown}s)</span>
             ) : (
               <button
                 type="button"
@@ -293,7 +276,7 @@ export default function VerificationCodeModal({
                 onClick={handleResend}
                 disabled={resending}
               >
-                {resending ? 'Envoi...' : 'Renvoyer'}
+                {resending ? 'Envoi...' : 'Cliquez ici pour renvoyer'}
               </button>
             )}
           </div>
@@ -311,14 +294,14 @@ export default function VerificationCodeModal({
             Annuler
           </button>
 
-          {/* Confirm */}
+          {/* Verify */}
           <button
             type="button"
             className="rv-modal-btn-confirm"
             onClick={() => verify(digits.join(''))}
             disabled={loading || digits.some((d) => !d)}
           >
-            {loading ? <div className="rv-modal-spinner" /> : 'Confirmer'}
+            {loading ? <div className="rv-modal-spinner" /> : 'Vérifier'}
           </button>
         </div>
       </div>
