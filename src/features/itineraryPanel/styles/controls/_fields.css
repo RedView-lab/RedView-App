@@ -280,6 +280,15 @@
   border-radius: var(--rvi-radius-sm);
   background: transparent;
   box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.rvi-input:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.rvi-input:focus-within {
+  outline: 2px solid var(--rvi-red, #c8102e);
+  outline-offset: -2px;
+  border-radius: var(--rvi-radius-sm);
 }
 .rvi-input__native {
   flex: 1 1 0;
@@ -719,6 +728,47 @@
   grid-template-columns: 20px minmax(0, 1fr) 56px;
 }
 
+/* ── Road types section: uniform size and alignment across all rows ── */
+.rvi-road-types {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.rvi-row.rvi-row--road-type,
+.rvi-road-types .rvi-row,
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.rvi-row--road-type .rvi-lfield,
+.rvi-road-types .rvi-lfield,
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+}
+
+.rvi-row--road-type .rvi-select,
+.rvi-row--road-type .rvi-input,
+.rvi-road-types .rvi-select,
+.rvi-road-types .rvi-input,
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-select,
+.rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-input {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  height: 28px;
+  box-sizing: border-box;
+}
+
 .rvi-row > .rvi-lfield:only-child {
   display: flex;
   align-items: center;
@@ -780,6 +830,24 @@
 
   .rvi-uploadchip__text {
     font-size: 11px;
+  }
+
+  .rvi-row--road-type .rvi-lfield,
+  .rvi-road-types .rvi-lfield,
+  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield {
+    grid-template-columns: minmax(0, 1fr) 74px;
+    gap: 4px;
+  }
+
+  .rvi-row--road-type .rvi-select,
+  .rvi-row--road-type .rvi-input,
+  .rvi-road-types .rvi-select,
+  .rvi-road-types .rvi-input,
+  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-select,
+  .rvi-row:has(> .rvi-lfield + .rvi-lfield) > .rvi-lfield .rvi-input {
+    width: 74px;
+    min-width: 74px;
+    max-width: 74px;
   }
 }
 

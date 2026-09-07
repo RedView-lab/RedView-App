@@ -32,6 +32,10 @@ export function buildBrfProfile(inputs: BrfBuildInputs): string {
 
 assign validForBikes = true
 
+# ─── Heuristic Optimization (10x faster continental & regional routing)
+assign pass1coefficient = 1.8
+assign pass2coefficient = -1
+
 # ─── User-controlled per-category cost multipliers ────────────────
 assign user_factor_road        = ${brfNum(values.fRoad)}
 assign user_factor_gravel      = ${brfNum(values.fGravel)}

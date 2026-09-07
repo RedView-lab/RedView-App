@@ -143,7 +143,7 @@ export function PanelSelect<T extends string = string>({
       >
         {startAdornment}
         <span className="rvi-select__value">{label}</span>
-        <IconChevronDown size={20} className="rvi-select__chevron" />
+        <IconChevronDown size={16} className="rvi-select__chevron" />
         <button
           type="button"
           className="rvi-select__trigger"

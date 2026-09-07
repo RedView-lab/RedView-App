@@ -1,10 +1,10 @@
-﻿/**
+/**
  * Comprehensive scenario tests for the BRF generator + upload pipeline.
  *
  *   npx tsx scripts/test-brouter-scenarios.ts
  */
-import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/brf-template';
-import { isClimbingMode } from '../src/features/itineraryPanel/lib/brouter/climb-mode';
+import { buildBrfProfile } from '../src/features/itineraryPanel/lib/brouter/profiles/brf-template';
+import { isClimbingMode } from '../src/features/itineraryPanel/lib/brouter/routing/climb-mode';
 import type {
   PrioritiesState,
   RoadTypesState,

@@ -12,7 +12,8 @@
     "build": "node scripts/prebuild-api-i18n.mjs && tsc -b && vite build",
     "test:openmeteo:vps": "node ./scripts/test-openmeteo-vps.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "tsx server.mjs"
   },
   "dependencies": {
     "@garmin/fitsdk": "^21.201.0",
@@ -29,7 +30,8 @@
     "proj4": "^2.20.6",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "stripe": "^22.0.1"
+    "stripe": "^22.0.1",
+    "tsx": "^4.19.3"
   },
   "overrides": {
     "protocol-buffers-schema": "3.6.1",

@@ -73,69 +73,71 @@ export function TracageSection({
 
       <h3 className="rvi-section-title">{t('Types de route')}</h3>
 
-      <div className="rvi-row">
-        <LabeledSelect
-          label="Route"
-          value={roadTypes.road}
-          onChange={(v) => onChangeRoadType?.('road', v)}
-        />
-        <LabeledSelect
-          label="Gravel"
-          value={roadTypes.gravel}
-          onChange={(v) => onChangeRoadType?.('gravel', v)}
-        />
-      </div>
-      <div className="rvi-row">
-        <LabeledSelect
-          label="Singletrack"
-          value={roadTypes.singletrack}
-          onChange={(v) => onChangeRoadType?.('singletrack', v)}
-        />
-        <LabeledSelect
-          label="Hors-piste"
-          value={roadTypes.offroad}
-          onChange={(v) => onChangeRoadType?.('offroad', v)}
-        />
-      </div>
-      <div className="rvi-row">
-        <LabeledSelect
-          label="Voies cyclables"
-          value={roadTypes.bikeLanes}
-          onChange={(v) => onChangeRoadType?.('bikeLanes', v)}
-        />
-        <LabeledSelect
-          label="Axes majeurs"
-          value={roadTypes.majorRoads}
-          onChange={(v) => onChangeRoadType?.('majorRoads', v)}
-        />
-      </div>
-      <div className="rvi-row">
-        <LabeledSelect
-          label="Ferry"
-          value={roadTypes.ferry}
-          onChange={(v) => onChangeRoadType?.('ferry', v)}
-        />
-        <LabeledSelect
-          label="Virages"
-          value={roadTypes.turns}
-          onChange={(v) => onChangeRoadType?.('turns', v)}
-        />
-      </div>
-      <div className="rvi-row">
-        <LabeledInput
-          label="Pentes max."
-          value={`${roadTypes.maxSlopePercent}%`}
-          onChange={(v) => {
-            const n = parseInt(v.replace('%', ''), 10);
-            if (Number.isFinite(n)) onChangeRoadType?.('maxSlopePercent', n);
-          }}
-          placeholder="20%"
-        />
-        <LabeledSelect
-          label="Villes"
-          value={roadTypes.cities}
-          onChange={(v) => onChangeRoadType?.('cities', v)}
-        />
+      <div className="rvi-road-types">
+        <div className="rvi-row rvi-row--road-type">
+          <LabeledSelect
+            label="Route"
+            value={roadTypes.road}
+            onChange={(v) => onChangeRoadType?.('road', v)}
+          />
+          <LabeledSelect
+            label="Gravel"
+            value={roadTypes.gravel}
+            onChange={(v) => onChangeRoadType?.('gravel', v)}
+          />
+        </div>
+        <div className="rvi-row rvi-row--road-type">
+          <LabeledSelect
+            label="Singletrack"
+            value={roadTypes.singletrack}
+            onChange={(v) => onChangeRoadType?.('singletrack', v)}
+          />
+          <LabeledSelect
+            label="Hors-piste"
+            value={roadTypes.offroad}
+            onChange={(v) => onChangeRoadType?.('offroad', v)}
+          />
+        </div>
+        <div className="rvi-row rvi-row--road-type">
+          <LabeledSelect
+            label="Voies cyclables"
+            value={roadTypes.bikeLanes}
+            onChange={(v) => onChangeRoadType?.('bikeLanes', v)}
+          />
+          <LabeledSelect
+            label="Axes majeurs"
+            value={roadTypes.majorRoads}
+            onChange={(v) => onChangeRoadType?.('majorRoads', v)}
+          />
+        </div>
+        <div className="rvi-row rvi-row--road-type">
+          <LabeledSelect
+            label="Ferry"
+            value={roadTypes.ferry}
+            onChange={(v) => onChangeRoadType?.('ferry', v)}
+          />
+          <LabeledSelect
+            label="Virages"
+            value={roadTypes.turns}
+            onChange={(v) => onChangeRoadType?.('turns', v)}
+          />
+        </div>
+        <div className="rvi-row rvi-row--road-type">
+          <LabeledInput
+            label="Pentes max."
+            value={`${roadTypes.maxSlopePercent}%`}
+            onChange={(v) => {
+              const n = parseInt(v.replace('%', ''), 10);
+              if (Number.isFinite(n)) onChangeRoadType?.('maxSlopePercent', n);
+            }}
+            placeholder="20%"
+          />
+          <LabeledSelect
+            label="Villes"
+            value={roadTypes.cities}
+            onChange={(v) => onChangeRoadType?.('cities', v)}
+          />
+        </div>
       </div>
 
       <CheckboxField
