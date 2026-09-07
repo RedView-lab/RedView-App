@@ -453,6 +453,20 @@
   color: rgba(255, 255, 255, 0.35);
 }
 
+/* Hint text */
+.rv-login-hint-text {
+  width: 100%;
+  max-width: 480px;
+  height: 20px;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.64);
+  margin-top: 2px;
+}
+
 /* Row: Checkbox + Forgot password */
 .rv-login-row {
   display: flex;

@@ -8,15 +8,16 @@ interface LoginScreenProps {
 
 type AuthMode = 'login' | 'signup'
 
-export default function LoginScreen({ onLogin, landingUrl = 'http://localhost:3002' }: LoginScreenProps) {
+export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.145.220.99.sslip.io' }: LoginScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    onLogin?.(email.trim())
+    onLogin?.(email.trim() || 'user@redview.app')
   }
 
   const isLogin = mode === 'login'
@@ -65,7 +66,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://localhost:30
               <p className="rv-login-subtitle">
                 {isLogin
                   ? 'Welcome back! Please enter your details.'
-                  : 'Start your 3D spatial journey today.'}
+                  : 'Start your 30-day free trial.'}
               </p>
             </div>
 
@@ -96,6 +97,27 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://localhost:30
           <div className="rv-login-body">
             {/* Form */}
             <form onSubmit={handleSubmit} className="rv-login-form">
+              {/* Name Input Field (Sign up only) */}
+              {!isLogin && (
+                <div className="rv-login-input-field">
+                  <div className="rv-login-label-wrapper">
+                    <label htmlFor="rv-name" className="rv-login-label">
+                      Name
+                    </label>
+                  </div>
+                  <input
+                    id="rv-name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="rv-login-input"
+                    autoComplete="name"
+                    required
+                  />
+                </div>
+              )}
+
               {/* Email Input Field */}
               <div className="rv-login-input-field">
                 <div className="rv-login-label-wrapper">
@@ -127,41 +149,46 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://localhost:30
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder={isLogin ? '••••••••' : 'Create a password'}
                   className="rv-login-input"
                   autoComplete={isLogin ? 'current-password' : 'new-password'}
                   required
                 />
+                {!isLogin && (
+                  <span className="rv-login-hint-text">
+                    Must be at least 8 characters.
+                  </span>
+                )}
               </div>
 
-              {/* Row: Checkbox & Forgot Password */}
-              <div className="rv-login-row">
-                <label className="rv-login-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rv-login-checkbox"
-                  />
-                  <span className="rv-login-checkbox-text">Remember for 30 days</span>
-                </label>
+              {/* Row: Checkbox & Forgot Password (Log in only) */}
+              {isLogin && (
+                <div className="rv-login-row">
+                  <label className="rv-login-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="rv-login-checkbox"
+                    />
+                    <span className="rv-login-checkbox-text">Remember for 30 days</span>
+                  </label>
 
-                {isLogin && (
                   <button
                     type="button"
                     className="rv-login-forgot-btn"
-                    onClick={() => alert('Password reset link will be sent to your email.')}
+                    onClick={() => alert('Password reset instructions will be sent to your email.')}
                   >
                     Forgot password
                   </button>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="rv-login-actions">
                 {/* Primary Button */}
                 <button type="submit" className="rv-login-submit-btn">
-                  {isLogin ? 'Sign in' : 'Create account'}
+                  {isLogin ? 'Sign in' : 'Get started'}
                 </button>
 
                 {/* Social Button: Google */}
@@ -191,20 +218,30 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://localhost:30
                         />
                       </svg>
                     </span>
-                    Sign in with Google
+                    {isLogin ? 'Sign in with Google' : 'Sign up with Google'}
                   </button>
                 </div>
               </div>
             </form>
 
             {/* Footer Action */}
-            <button
-              type="button"
-              className="rv-login-footer-action"
-              onClick={() => onLogin?.(email || 'magic-link@redview.app')}
-            >
-              Continue with one-time e-mail
-            </button>
+            {isLogin ? (
+              <button
+                type="button"
+                className="rv-login-footer-action"
+                onClick={() => onLogin?.(email || 'magic-link@redview.app')}
+              >
+                Continue with one-time e-mail
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="rv-login-footer-action"
+                onClick={() => setMode('login')}
+              >
+                Already have an account? Log in
+              </button>
+            )}
           </div>
         </div>
       </main>
