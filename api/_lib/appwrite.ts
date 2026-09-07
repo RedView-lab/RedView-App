@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './types.js';
 import { Account, Client, Databases, Storage, Users } from 'node-appwrite';
 
 import { requireEnv } from './config.js';
@@ -74,7 +74,7 @@ export function getAppwriteStorage(): Storage {
   return adminStorage;
 }
 
-function getBearerToken(req: VercelRequest): string | null {
+function getBearerToken(req: ApiRequest): string | null {
   const header = req.headers.authorization;
   if (!header) return null;
 
@@ -87,8 +87,8 @@ function getBearerToken(req: VercelRequest): string | null {
 }
 
 export async function requireAuthenticatedUser(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
 ): Promise<AuthenticatedUser | null> {
   const token = getBearerToken(req);
   if (!token) {

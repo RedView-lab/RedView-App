@@ -1,7 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { resolveAppLocale, createAppTranslationBundle } from './_lib/i18n.js';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(204).end();

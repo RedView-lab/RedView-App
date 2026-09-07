@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import { buildBillingOverview } from '../_lib/billing.js';
 import { sendMethodNotAllowed } from '../_lib/http.js';
 import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'GET') {
     return sendMethodNotAllowed(res, ['GET']);
   }

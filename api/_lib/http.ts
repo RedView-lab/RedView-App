@@ -1,14 +1,14 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './types.js';
 
 export function sendMethodNotAllowed(
-  res: VercelResponse,
+  res: ApiResponse,
   allowedMethods: string[],
-): VercelResponse {
+): ApiResponse {
   res.setHeader('Allow', allowedMethods.join(', '));
   return res.status(405).json({ error: 'Method not allowed' });
 }
 
-export async function readJsonBody<T>(req: VercelRequest): Promise<T> {
+export async function readJsonBody<T>(req: ApiRequest): Promise<T> {
   if (req.body && typeof req.body === 'object') {
     return req.body as T;
   }
@@ -26,7 +26,7 @@ export async function readJsonBody<T>(req: VercelRequest): Promise<T> {
   return (raw ? JSON.parse(raw) : {}) as T;
 }
 
-export async function readRawBody(req: VercelRequest): Promise<Buffer> {
+export async function readRawBody(req: ApiRequest): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));

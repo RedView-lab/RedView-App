@@ -1,4 +1,4 @@
-import type { VercelRequest } from '@vercel/node';
+import type { ApiRequest } from './types.js';
 
 export type BillingPlanId = 'explorer' | 'proCommit' | 'proMonthly';
 
@@ -33,13 +33,13 @@ export function requireConfiguredPriceId(planId: BillingPlanId): string {
   return priceId;
 }
 
-export function getAppBaseUrl(req: VercelRequest): string {
+export function getAppBaseUrl(req: ApiRequest): string {
   const configured = process.env.APP_BASE_URL?.trim();
   if (configured) {
     return configured.replace(/\/+$/, '');
   }
 
-  const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host ?? process.env.VERCEL_URL;
+  const hostHeader = req.headers['x-forwarded-host'] ?? req.headers.host;
   const protoHeader = req.headers['x-forwarded-proto'];
   const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
   const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;

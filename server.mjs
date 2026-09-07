@@ -155,8 +155,8 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     parsedBody = rawBody.toString('utf-8');
   }
 
-  // Build Vercel-compatible Request
-  const vercelReq = Object.assign(req, {
+  // Build ApiRequest
+  const apiReq = Object.assign(req, {
     query,
     cookies: {},
     body: parsedBody,
@@ -165,18 +165,18 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     },
   });
 
-  // Build Vercel-compatible Response
-  const vercelRes = Object.assign(res, {
+  // Build ApiResponse
+  const apiRes = Object.assign(res, {
     status(code) {
       res.statusCode = code;
-      return vercelRes;
+      return apiRes;
     },
     json(data) {
       if (!res.headersSent) {
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
       }
       res.end(JSON.stringify(data));
-      return vercelRes;
+      return apiRes;
     },
     send(data) {
       if (Buffer.isBuffer(data)) {
@@ -184,9 +184,9 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
       } else if (typeof data === 'string') {
         res.end(data);
       } else {
-        vercelRes.json(data);
+        apiRes.json(data);
       }
-      return vercelRes;
+      return apiRes;
     },
     redirect(statusOrUrl, url) {
       if (typeof statusOrUrl === 'string') {
@@ -195,7 +195,7 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
         res.writeHead(statusOrUrl, { Location: url });
       }
       res.end();
-      return vercelRes;
+      return apiRes;
     },
   });
 
@@ -203,7 +203,7 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     const mod = await import(candidateFile);
     const handler = mod.default || mod;
     if (typeof handler === 'function') {
-      await handler(vercelReq, vercelRes);
+      await handler(apiReq, apiRes);
     } else {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');

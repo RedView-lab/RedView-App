@@ -19,7 +19,7 @@
  *     also caches them in IndexedDB, but the edge cache helps when
  *     several users plan the same corridor.
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
@@ -32,8 +32,8 @@ const PER_MIRROR_TIMEOUT_MS = 60_000;
 const MAX_QUERY_BYTES = 50_000;
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
 ) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'POST, OPTIONS');
@@ -112,7 +112,7 @@ export default async function handler(
   });
 }
 
-async function readBody(req: VercelRequest): Promise<string> {
+async function readBody(req: ApiRequest): Promise<string> {
   if (typeof req.body === 'string') return req.body;
   if (req.body && typeof req.body === 'object') {
     return JSON.stringify(req.body);

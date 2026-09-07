@@ -25,7 +25,7 @@
  *   # or
  *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const ALLOWED_PARAMS = new Set([
   'lonlats',
@@ -48,8 +48,8 @@ const UPLOAD_TIMEOUT_MS = 15_000;
 const MAX_PROFILE_BYTES = 100_000;
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
 ) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, POST, OPTIONS');
@@ -74,8 +74,8 @@ export default async function handler(
 /* ------------------------------------------------------------------ */
 
 async function handleRouteQuery(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
   base: string,
 ) {
   const params = new URLSearchParams();
@@ -146,8 +146,8 @@ async function handleRouteQuery(
 /* ------------------------------------------------------------------ */
 
 async function handleProfileUpload(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
   base: string,
 ) {
   // Accept either raw text/plain body OR JSON { profile: "<brf>" }.

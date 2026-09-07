@@ -25,7 +25,7 @@
  * Env var (optional, falls back to v0.1 embedded beta token):
  *   METEOFRANCE_API_KEY=<JWT>
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 import { GribMessageFactory, parseMessagesFromBuffer } from '@mattnucc/gribberish';
 
 // ────────────────────────────── Constants ──────────────────────────────
@@ -295,7 +295,7 @@ function parseFloatStrict(v: unknown, name: string): number {
   return n;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(204).end();

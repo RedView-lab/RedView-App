@@ -15,7 +15,7 @@
  * Required env var on Vercel for forecast requests:
  *   OPENMETEO_UPSTREAM=http://<DROPLET_IP>:8080
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const TIMEOUT_MS = 25_000;
 const PUBLIC_CLIMATE_UPSTREAM = 'https://climate-api.open-meteo.com';
@@ -77,8 +77,8 @@ async function fetchWithTimeout(target: string): Promise<Response> {
 }
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
 ) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, OPTIONS');

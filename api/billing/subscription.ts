@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from '../_lib/types.js';
 
 import {
   changeManagedSubscriptionPlan,
@@ -19,7 +19,7 @@ type SubscriptionActionRequestBody = {
   subscriptionId?: string;
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') {
     return sendMethodNotAllowed(res, ['POST']);
   }

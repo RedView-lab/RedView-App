@@ -22,7 +22,7 @@
  * Variable d'env requise :
  *   POI_UPSTREAM=http://<DROPLET_IP>/poi
  */
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { ApiRequest, ApiResponse } from './_lib/types.js';
 
 const REQUEST_TIMEOUT_MS = 28_000; // Vercel hobby cap = 30 s
 const MAX_BODY_BYTES = 256_000;
@@ -32,8 +32,8 @@ const ALLOWED_BBOX_PARAMS = new Set([
 ]);
 
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
 ) {
   if (req.method === 'OPTIONS') {
     res.setHeader('Allow', 'GET, POST, OPTIONS');
@@ -60,8 +60,8 @@ export default async function handler(
 }
 
 async function handleBbox(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
   base: string,
 ) {
   const params = new URLSearchParams();
@@ -99,8 +99,8 @@ async function handleBbox(
 }
 
 async function handleCorridor(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ApiRequest,
+  res: ApiResponse,
   base: string,
 ) {
   const body = await readBody(req);
@@ -137,7 +137,7 @@ async function handleCorridor(
   }
 }
 
-async function forwardSimple(url: string, res: VercelResponse, cacheControl: string) {
+async function forwardSimple(url: string, res: ApiResponse, cacheControl: string) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -163,7 +163,7 @@ async function forwardSimple(url: string, res: VercelResponse, cacheControl: str
   }
 }
 
-async function readBody(req: VercelRequest): Promise<string> {
+async function readBody(req: ApiRequest): Promise<string> {
   if (typeof req.body === 'string') return req.body;
   if (req.body && typeof req.body === 'object') return JSON.stringify(req.body);
   return '';

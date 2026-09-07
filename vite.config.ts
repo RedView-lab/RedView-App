@@ -117,8 +117,8 @@ function redviewDevApiPlugin(): Plugin {
                 parsedBody = rawBody.toString('utf-8')
               }
 
-              // Build VercelRequest adapter
-              const vercelReq = Object.assign(req, {
+              // Build ApiRequest adapter
+              const apiReq = Object.assign(req, {
                 query,
                 cookies: {},
                 body: parsedBody,
@@ -127,18 +127,18 @@ function redviewDevApiPlugin(): Plugin {
                 },
               })
 
-              // Build VercelResponse adapter
-              const vercelRes = Object.assign(res, {
+              // Build ApiResponse adapter
+              const apiRes = Object.assign(res, {
                 status(code: number) {
                   res.statusCode = code
-                  return vercelRes
+                  return apiRes
                 },
                 json(data: unknown) {
                   if (!res.headersSent) {
                     res.setHeader('Content-Type', 'application/json; charset=utf-8')
                   }
                   res.end(JSON.stringify(data))
-                  return vercelRes
+                  return apiRes
                 },
                 send(data: unknown) {
                   if (Buffer.isBuffer(data)) {
@@ -146,9 +146,9 @@ function redviewDevApiPlugin(): Plugin {
                   } else if (typeof data === 'string') {
                     res.end(data)
                   } else {
-                    vercelRes.json(data)
+                    apiRes.json(data)
                   }
-                  return vercelRes
+                  return apiRes
                 },
                 redirect(statusOrUrl: string | number, url?: string) {
                   if (typeof statusOrUrl === 'string') {
@@ -157,7 +157,7 @@ function redviewDevApiPlugin(): Plugin {
                     res.writeHead(statusOrUrl, { Location: url! })
                   }
                   res.end()
-                  return vercelRes
+                  return apiRes
                 },
               })
 
@@ -166,7 +166,7 @@ function redviewDevApiPlugin(): Plugin {
               const handler = mod.default || mod
 
               if (typeof handler === 'function') {
-                await handler(vercelReq, vercelRes)
+                await handler(apiReq, apiRes)
                 return
               } else {
                 console.error(`[redview-dev-api] Handler in ${candidateFile} is not a function`)
