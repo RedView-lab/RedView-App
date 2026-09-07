@@ -1,10 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import {
   account,
-  ID,
   OAuthProvider,
   saveStoredAppwriteSession,
 } from '@/shared/services/appwrite'
+import VerificationCodeModal from './VerificationCodeModal'
 import './LoginScreen.css'
 
 interface LoginScreenProps {
@@ -23,6 +23,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
+  // Verification modal states
+  const [showVerificationModal, setShowVerificationModal] = useState(false)
+  const [verificationDebugCode, setVerificationDebugCode] = useState<string | undefined>()
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setErrorMessage(null)
@@ -38,15 +42,28 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
     try {
       if (mode === 'signup') {
         const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
-        // 1. Create account
-        await account.create(ID.unique(), trimmedEmail, password, trimmedName)
-        // 2. Create session
-        await account.createEmailPasswordSession(trimmedEmail, password)
-      } else {
-        // Mode login
-        await account.createEmailPasswordSession(trimmedEmail, password)
+        // Call API to send 4-digit verification code
+        const res = await fetch('/api/auth/send-verification-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: trimmedEmail, name: trimmedName }),
+        })
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok) {
+          setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
+          setLoading(false)
+          return
+        }
+
+        setVerificationDebugCode(data.debugCode)
+        setShowVerificationModal(true)
+        setLoading(false)
+        return
       }
 
+      // Mode login
+      await account.createEmailPasswordSession(trimmedEmail, password)
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       onLogin?.(user.email)
@@ -56,6 +73,60 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
       setErrorMessage(message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleConfirmVerification = async (code: string): Promise<{ success: boolean; error?: string }> => {
+    const trimmedEmail = email.trim()
+    const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
+
+    try {
+      const res = await fetch('/api/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          code,
+          name: trimmedName,
+          password,
+        }),
+      })
+
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Code invalide.' }
+      }
+
+      // Account created with email verified -> establish session
+      await account.createEmailPasswordSession(trimmedEmail, password)
+      const user = await account.get()
+      saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+
+      setShowVerificationModal(false)
+      onLogin?.(user.email)
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Erreur lors de la confirmation du compte.' }
+    }
+  }
+
+  const handleResendVerification = async (): Promise<{ success: boolean; debugCode?: string; error?: string }> => {
+    const trimmedEmail = email.trim()
+    const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
+
+    try {
+      const res = await fetch('/api/auth/send-verification-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: trimmedEmail, name: trimmedName }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Impossible de renvoyer le code.' }
+      }
+      return { success: true, debugCode: data.debugCode }
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Erreur lors du renvoi du code.' }
     }
   }
 
@@ -334,6 +405,16 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
           </div>
         </div>
       </main>
+
+      {/* 4-digit Email Verification Modal */}
+      <VerificationCodeModal
+        isOpen={showVerificationModal}
+        email={email.trim()}
+        debugCode={verificationDebugCode}
+        onClose={() => setShowVerificationModal(false)}
+        onConfirm={handleConfirmVerification}
+        onResend={handleResendVerification}
+      />
     </div>
   )
 }
