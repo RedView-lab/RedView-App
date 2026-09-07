@@ -147,39 +147,41 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
 
   return (
     <div className="rv-login-page">
-      {/* Header navigation */}
-      <header className="rv-login-header-nav">
-        <div className="rv-login-header-container">
-          {/* Frame 36468 — Logo */}
-          <a href={landingUrl} className="rv-login-logo-link" aria-label="RedView">
-            <img
-              src="/landing/icons/redview-logo.svg"
-              alt="RedView"
-              className="rv-login-logo-img"
-            />
-          </a>
+      {!showVerificationModal && (
+        <>
+          {/* Header navigation */}
+          <header className="rv-login-header-nav">
+            <div className="rv-login-header-container">
+              {/* Frame 36468 — Logo */}
+              <a href={landingUrl} className="rv-login-logo-link" aria-label="RedView">
+                <img
+                  src="/landing/icons/redview-logo.svg"
+                  alt="RedView"
+                  className="rv-login-logo-img"
+                />
+              </a>
 
-          {/* Row */}
-          <div className="rv-login-header-row">
-            <span className="rv-login-header-text">
-              {isLogin ? "Don't have an account?" : 'Already have an account?'}
-            </span>
-            <button
-              type="button"
-              className="rv-login-header-btn"
-              onClick={() => {
-                setMode(isLogin ? 'signup' : 'login')
-                setErrorMessage(null)
-              }}
-            >
-              {isLogin ? 'Sign up' : 'Log in'}
-            </button>
-          </div>
-        </div>
-      </header>
+              {/* Row */}
+              <div className="rv-login-header-row">
+                <span className="rv-login-header-text">
+                  {isLogin ? "Don't have an account?" : 'Already have an account?'}
+                </span>
+                <button
+                  type="button"
+                  className="rv-login-header-btn"
+                  onClick={() => {
+                    setMode(isLogin ? 'signup' : 'login')
+                    setErrorMessage(null)
+                  }}
+                >
+                  {isLogin ? 'Sign up' : 'Log in'}
+                </button>
+              </div>
+            </div>
+          </header>
 
-      {/* Container */}
-      <main className="rv-login-main-container">
+          {/* Container */}
+          <main className="rv-login-main-container">
         {/* Content */}
         <div className="rv-login-content">
           {/* Header */}
@@ -405,6 +407,8 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
           </div>
         </div>
       </main>
+        </>
+      )}
 
       {/* 4-digit Email Verification Modal */}
       <VerificationCodeModal

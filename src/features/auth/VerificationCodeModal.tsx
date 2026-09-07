@@ -181,7 +181,7 @@ export default function VerificationCodeModal({
       <div className="rv-modal-overlay" onClick={onClose} />
 
       {/* Modal Card */}
-      <div className="rv-modal-card">
+      <div className="rv-modal-card" data-rv-no-translate="true" translate="no">
         {/* Background pattern decorative */}
         <div className="rv-modal-decorative-glow" />
 
