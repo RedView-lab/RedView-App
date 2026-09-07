@@ -85,17 +85,17 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             }}
           >
             <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#ef4444' }} />
-            Environnement Local
+            Plateforme RedView 3D
           </div>
           <h1 style={{ fontSize: '24px', fontWeight: 700, margin: '6px 0 2px', letterSpacing: '-0.02em', color: '#fff' }}>
-            RedView Dev
+            Bienvenue sur RedView
           </h1>
           <p style={{ fontSize: '13px', color: '#9ca3af', lineHeight: 1.5, margin: 0 }}>
-            Aucune session active détectée. Vous pouvez accéder directement à l&apos;application en mode dev ou vous connecter.
+            Visualisation 3D haute résolution &amp; calculs d&apos;itinéraires en temps réel.
           </p>
         </div>
 
-        {/* 1-Click Dev Access */}
+        {/* 1-Click Access */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <button
             type="button"
@@ -126,10 +126,10 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
               e.currentTarget.style.boxShadow = '0 4px 14px rgba(239, 68, 68, 0.35)'
             }}
           >
-            ⚡ Entrer directement (Mode Dev Pro)
+            ⚡ Accéder à l&apos;application (Accès Démo Immédiat)
           </button>
           <span style={{ fontSize: '11px', color: '#6b7280', textAlign: 'center' }}>
-            Accès instantané avec toutes les fonctionnalités débloquées
+            Accès instantané avec toutes les fonctionnalités débloquées (3D, BRouter, POIs)
           </span>
         </div>
 
@@ -244,7 +244,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
         {/* Footer landing page link */}
         <div style={{ textAlign: 'center', paddingTop: '4px' }}>
           <a
-            href={`${landingUrl}/auth/login`}
+            href={landingUrl}
             style={{
               fontSize: '12px',
               color: '#6b7280',
@@ -254,7 +254,7 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             onMouseOver={(e) => (e.currentTarget.style.color = '#9ca3af')}
             onMouseOut={(e) => (e.currentTarget.style.color = '#6b7280')}
           >
-            Ouvrir la Landing Page ({landingUrl}) ↗
+            ← Revenir au site vitrine RedView ({landingUrl})
           </a>
         </div>
       </div>

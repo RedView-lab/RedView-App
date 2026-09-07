@@ -380,25 +380,20 @@ function App() {
   }
 
   if (!session) {
-    if (import.meta.env.DEV) {
-      return (
-        <DevAuthScreen
-          landingUrl={landingUrl}
-          onDevLogin={(email) => {
-            if (typeof window !== 'undefined') {
-              window.localStorage.setItem('redview:dev-session', 'true')
-            }
-            const devSession = { user: { id: 'dev-user-001', email: email || 'dev@redview.app' } }
-            setSession(devSession)
-            setSubscriptionAccess({ hasAccess: true, status: 'pro' })
-            setSubscriptionStatus('ready')
-          }}
-        />
-      )
-    }
-
-    window.location.href = `${landingUrl}/auth/login`
-    return <BootstrapScreen label={t('Redirecting...')} />
+    return (
+      <DevAuthScreen
+        landingUrl={landingUrl}
+        onDevLogin={(email) => {
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('redview:dev-session', 'true')
+          }
+          const devSession = { user: { id: 'dev-user-001', email: email || 'dev@redview.app' } }
+          setSession(devSession)
+          setSubscriptionAccess({ hasAccess: true, status: 'pro' })
+          setSubscriptionStatus('ready')
+        }}
+      />
+    )
   }
 
   if (!subscriptionAccess.hasAccess) {
