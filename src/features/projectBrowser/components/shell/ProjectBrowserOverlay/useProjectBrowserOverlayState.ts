@@ -285,15 +285,15 @@ export function useProjectBrowserOverlayState({
     setIsSigningOut(true);
     try {
       await signOutAccount();
-      window.location.reload();
     } catch (nextError) {
-      console.warn('[ProjectBrowserOverlay] Failed to sign out', nextError);
-      setAccountError(
-        nextError instanceof Error ? t(nextError.message) : t('Impossible de se déconnecter.'),
-      );
-      setIsSigningOut(false);
+      console.warn('[ProjectBrowserOverlay] Failed to sign out cleanly', nextError);
+    } finally {
+      if (typeof window !== 'undefined') {
+        window.localStorage.removeItem('redview:dev-session');
+        window.location.reload();
+      }
     }
-  }, [isSigningOut, t]);
+  }, [isSigningOut]);
 
   const handlePlanSelection = useCallback(
     async (requestedPlanId: ManagedPlanId) => {

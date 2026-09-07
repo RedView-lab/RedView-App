@@ -168,7 +168,31 @@ export async function updateAccountPassword(password: string) {
 export async function signOutAccount() {
   if (typeof window !== 'undefined') {
     window.localStorage.removeItem('redview:dev-session');
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < window.localStorage.length; i++) {
+        const key = window.localStorage.key(i);
+        if (key && (key.startsWith('redview:') || key.startsWith('sb-'))) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+    } catch {
+      // ignore storage access errors
+    }
   }
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+
+  try {
+    const { error } = await Promise.race([
+      supabase.auth.signOut(),
+      new Promise<{ error: Error }>((resolve) =>
+        setTimeout(() => resolve({ error: new Error('timeout') }), 1000),
+      ),
+    ]);
+    if (error) {
+      console.warn('[auth] Supabase signOut returned error (ignored):', error);
+    }
+  } catch (err) {
+    console.warn('[auth] Supabase signOut exception (ignored):', err);
+  }
 }
