@@ -1,35 +1,46 @@
-import { getSupabaseUser, readStoredSupabaseSession, supabase } from '@/shared/services/supabase';
+import {
+  getAppwriteUser,
+  readStoredAppwriteSession,
+  Role,
+  Permission,
+  storage,
+  THUMBNAILS_BUCKET_ID,
+} from '@/shared/services/appwrite';
 
-const THUMBNAIL_BUCKET = 'project-thumbnails';
-const THUMBNAIL_SIGNED_URL_TTL = 60 * 60;
-const THUMBNAIL_EXTENSIONS = ['jpg', 'png'] as const;
-
-function thumbnailPath(
-  userId: string,
-  projectId: string,
-  extension: (typeof THUMBNAIL_EXTENSIONS)[number] = 'jpg',
-): string {
-  return `${userId}/${projectId}.${extension}`;
+function safeThumbnailFileId(projectId: string): string {
+  const sanitized = projectId.replace(/[^a-zA-Z0-9._-]/g, '');
+  return sanitized.slice(0, 36) || 'thumbnail';
 }
 
 async function getAuthenticatedUserId(): Promise<string> {
-  const storedSession = readStoredSupabaseSession();
+  const storedSession = readStoredAppwriteSession();
   if (storedSession?.user.id) return storedSession.user.id;
 
-  const user = await getSupabaseUser();
+  const user = await getAppwriteUser();
   if (!user) throw new Error('Not authenticated');
-  return user.id;
+  return user.$id;
 }
 
 export async function uploadProjectThumbnail(projectId: string, blob: Blob): Promise<void> {
   const userId = await getAuthenticatedUserId();
+  const fileId = safeThumbnailFileId(projectId);
+  const file = new File([blob], `${fileId}.jpg`, { type: 'image/jpeg' });
 
-  const { error } = await supabase.storage.from(THUMBNAIL_BUCKET).upload(thumbnailPath(userId, projectId, 'jpg'), blob, {
-    contentType: 'image/jpeg',
-    upsert: true,
-    cacheControl: '86400',
-  });
-  if (error) throw error;
+  try {
+    await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId).catch(() => {});
+    await storage.createFile(
+      THUMBNAILS_BUCKET_ID,
+      fileId,
+      file,
+      [
+        Permission.read(Role.any()),
+        Permission.update(Role.user(userId)),
+        Permission.delete(Role.user(userId)),
+      ],
+    );
+  } catch (error) {
+    console.warn('[projects] uploadProjectThumbnail error', error);
+  }
 }
 
 export async function getProjectThumbnailUrls(
@@ -38,33 +49,16 @@ export async function getProjectThumbnailUrls(
   const out: Record<string, string | null> = {};
   if (projectIds.length === 0) return out;
 
-  const userId = await getAuthenticatedUserId();
-
-  const requests = projectIds.flatMap((projectId) =>
-    THUMBNAIL_EXTENSIONS.map((extension) => ({
-      projectId,
-      path: thumbnailPath(userId, projectId, extension),
-    })),
-  );
-  const { data, error } = await supabase.storage
-    .from(THUMBNAIL_BUCKET)
-    .createSignedUrls(
-      requests.map((entry) => entry.path),
-      THUMBNAIL_SIGNED_URL_TTL,
-    );
-
-  for (const id of projectIds) out[id] = null;
-
-  if (error) {
-    console.warn('[projects] createSignedUrls failed', error);
-    return out;
+  for (const id of projectIds) {
+    try {
+      const fileId = safeThumbnailFileId(id);
+      const url = storage.getFileView(THUMBNAILS_BUCKET_ID, fileId);
+      out[id] = url.toString();
+    } catch {
+      out[id] = null;
+    }
   }
 
-  for (const [index, entry] of (data ?? []).entries()) {
-    const request = requests[index];
-    if (!request || out[request.projectId] || !entry?.path || entry.error || !entry.signedUrl) continue;
-    out[request.projectId] = entry.signedUrl;
-  }
   return out;
 }
 
@@ -76,22 +70,23 @@ export async function duplicateProjectThumbnail(
   const sourceUrl = urls[sourceProjectId];
   if (!sourceUrl) return false;
 
-  const response = await fetch(sourceUrl);
-  if (!response.ok) {
-    throw new Error('Impossible de copier la miniature du projet.');
+  try {
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      return false;
+    }
+    const blob = await response.blob();
+    await uploadProjectThumbnail(targetProjectId, blob);
+    return true;
+  } catch {
+    return false;
   }
-
-  const blob = await response.blob();
-  await uploadProjectThumbnail(targetProjectId, blob);
-  return true;
 }
 
 export async function deleteProjectThumbnail(projectId: string): Promise<void> {
   try {
-    const userId = await getAuthenticatedUserId();
-    await supabase.storage
-      .from(THUMBNAIL_BUCKET)
-      .remove(THUMBNAIL_EXTENSIONS.map((extension) => thumbnailPath(userId, projectId, extension)));
+    const fileId = safeThumbnailFileId(projectId);
+    await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId);
   } catch (error) {
     console.warn('[projects] deleteProjectThumbnail failed', error);
   }

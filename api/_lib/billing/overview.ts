@@ -1,6 +1,10 @@
 import type Stripe from 'stripe';
 
-import { getSupabaseAdmin } from '../supabase.js';
+import {
+  APPWRITE_DATABASE_ID,
+  CUSTOMERS_COLLECTION_ID,
+  getAppwriteDatabases,
+} from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
 import {
   getCustomerRow,
@@ -162,8 +166,8 @@ export async function saveBillingContactPreference(
   userId: string,
   preference: BillingContactPreference,
 ): Promise<BillingContactPreference> {
+  const db = getAppwriteDatabases();
   const payload = {
-    id: userId,
     billing_email_mode: preference.mode,
     billing_email:
       preference.mode === 'alternative' && preference.alternativeEmail.trim()
@@ -171,18 +175,18 @@ export async function saveBillingContactPreference(
         : null,
   };
 
-  const { error } = await getSupabaseAdmin().from('customers').upsert(payload, {
-    onConflict: 'id',
-  });
-
-  if (error) {
-    const message = error.message.toLowerCase();
-    if (message.includes('billing_email')) {
-      throw new Error(
-        'Supabase billing contact migration is missing. Run the billing contact SQL migration first.',
-      );
+  try {
+    await db.updateDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, payload);
+  } catch (error: any) {
+    if (error?.code === 404) {
+      await db.createDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
+        user_id: userId,
+        stripe_customer_id: '',
+        ...payload,
+      });
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   return {

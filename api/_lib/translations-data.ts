@@ -2853,8 +2853,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "No valid FIT file selected."
   },
   {
-    "fr": "Projet Supabase introuvable pour sauvegarder les FIT.",
-    "en": "Supabase project not found to save FIT files."
+    "fr": "Projet cloud introuvable pour sauvegarder les FIT.",
+    "en": "Cloud project not found to save FIT files."
   },
   {
     "fr": "Impossible de sauvegarder les fichiers FIT dans le bucket du projet.",

@@ -1,6 +1,11 @@
 import type Stripe from 'stripe';
+import { Query } from 'node-appwrite';
 
-import { getSupabaseAdmin } from '../supabase.js';
+import {
+  APPWRITE_DATABASE_ID,
+  CUSTOMERS_COLLECTION_ID,
+  getAppwriteDatabases,
+} from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
 import type { CustomerRow } from './types.js';
 
@@ -31,21 +36,23 @@ export function isStripeCustomer(
 async function createAndStoreStripeCustomer(userId: string, email: string | null): Promise<string> {
   const customer = await getStripeServer().customers.create({
     ...(email ? { email } : {}),
-    metadata: { supabase_user_id: userId },
+    metadata: { appwrite_user_id: userId },
   });
 
-  const { error: upsertError } = await getSupabaseAdmin().from('customers').upsert(
-    {
-      id: userId,
+  const db = getAppwriteDatabases();
+  try {
+    await db.createDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
+      user_id: userId,
       stripe_customer_id: customer.id,
-    },
-    {
-      onConflict: 'id',
-    },
-  );
-
-  if (upsertError) {
-    throw upsertError;
+    });
+  } catch (error: any) {
+    if (error?.code === 409) {
+      await db.updateDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId, {
+        stripe_customer_id: customer.id,
+      });
+    } else {
+      throw error;
+    }
   }
 
   return customer.id;
@@ -70,22 +77,19 @@ export async function getOrCreateStripeCustomer(
   userId: string,
   email: string | null,
 ): Promise<string> {
-  const admin = getSupabaseAdmin();
+  const db = getAppwriteDatabases();
 
-  const { data: existing, error } = await admin
-    .from('customers')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .maybeSingle<{ stripe_customer_id: string | null }>();
-
-  if (error) {
-    throw error;
-  }
-
-  if (existing?.stripe_customer_id) {
-    const validatedCustomerId = await getValidatedStripeCustomerId(existing.stripe_customer_id);
-    if (validatedCustomerId) {
-      return validatedCustomerId;
+  try {
+    const existing = await db.getDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId);
+    if (existing?.stripe_customer_id && typeof existing.stripe_customer_id === 'string') {
+      const validatedCustomerId = await getValidatedStripeCustomerId(existing.stripe_customer_id);
+      if (validatedCustomerId) {
+        return validatedCustomerId;
+      }
+    }
+  } catch (error: any) {
+    if (error?.code !== 404) {
+      throw error;
     }
   }
 
@@ -93,33 +97,20 @@ export async function getOrCreateStripeCustomer(
 }
 
 export async function getCustomerRow(userId: string): Promise<CustomerRow | null> {
-  const admin = getSupabaseAdmin();
-  const detailedQuery = await admin
-    .from('customers')
-    .select('stripe_customer_id, billing_email_mode, billing_email')
-    .eq('id', userId)
-    .maybeSingle<CustomerRow>();
-
-  if (!detailedQuery.error) {
-    return detailedQuery.data ?? null;
+  const db = getAppwriteDatabases();
+  try {
+    const doc = await db.getDocument(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, userId);
+    return {
+      stripe_customer_id: (doc.stripe_customer_id as string) ?? null,
+      billing_email_mode: (doc.billing_email_mode as string) ?? null,
+      billing_email: (doc.billing_email as string) ?? null,
+    };
+  } catch (error: any) {
+    if (error?.code === 404) {
+      return null;
+    }
+    throw error;
   }
-
-  const message = detailedQuery.error.message.toLowerCase();
-  if (!message.includes('billing_email')) {
-    throw detailedQuery.error;
-  }
-
-  const fallbackQuery = await admin
-    .from('customers')
-    .select('stripe_customer_id')
-    .eq('id', userId)
-    .maybeSingle<{ stripe_customer_id: string | null }>();
-
-  if (fallbackQuery.error) {
-    throw fallbackQuery.error;
-  }
-
-  return fallbackQuery.data ?? null;
 }
 
 export async function getStripeCustomerId(userId: string): Promise<string | null> {
@@ -132,15 +123,17 @@ export async function getStripeCustomerId(userId: string): Promise<string | null
 }
 
 export async function getUserIdFromCustomer(stripeCustomerId: string): Promise<string | null> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('customers')
-    .select('id')
-    .eq('stripe_customer_id', stripeCustomerId)
-    .maybeSingle<{ id: string }>();
+  const db = getAppwriteDatabases();
+  try {
+    const result = await db.listDocuments(APPWRITE_DATABASE_ID, CUSTOMERS_COLLECTION_ID, [
+      Query.equal('stripe_customer_id', stripeCustomerId),
+      Query.limit(1),
+    ]);
 
-  if (error) {
-    throw error;
+    const first = result.documents[0];
+    return (first?.user_id as string) ?? null;
+  } catch (error) {
+    console.warn('[customers] getUserIdFromCustomer failed', error);
+    return null;
   }
-
-  return data?.id ?? null;
 }

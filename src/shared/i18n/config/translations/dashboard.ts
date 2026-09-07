@@ -372,7 +372,7 @@ export const dashboardTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Activez au moins une catégorie ci-dessus.', en: 'Enable at least one category above.' },
   { fr: 'Impossible de recharger les fichiers FIT du projet.', en: 'Unable to reload the project FIT files.' },
   { fr: 'Aucun fichier FIT valide sélectionné.', en: 'No valid FIT file selected.' },
-  { fr: 'Projet Supabase introuvable pour sauvegarder les FIT.', en: 'Supabase project not found to save FIT files.' },
+  { fr: 'Projet cloud introuvable pour sauvegarder les FIT.', en: 'Cloud project not found to save FIT files.' },
   { fr: 'Impossible de sauvegarder les fichiers FIT dans le bucket du projet.', en: 'Unable to save FIT files in the project bucket.' },
   { fr: 'Chargez au moins un fichier FIT avant de calculer.', en: 'Upload at least one FIT file before calculating.' },
   { fr: 'L’itinéraire actif n’a pas encore de trace GPX exploitable.', en: 'The active route does not yet have a usable GPX track.' },

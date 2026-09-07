@@ -7,7 +7,11 @@ import {
   upsertSubscription,
 } from '../_lib/billing.js';
 import { readRawBody, sendMethodNotAllowed } from '../_lib/http.js';
-import { getSupabaseAdmin } from '../_lib/supabase.js';
+import {
+  APPWRITE_DATABASE_ID,
+  SUBSCRIPTIONS_COLLECTION_ID,
+  getAppwriteDatabases,
+} from '../_lib/appwrite.js';
 import { getStripeServer } from '../_lib/stripe.js';
 import { requireEnv } from '../_lib/config.js';
 
@@ -116,16 +120,14 @@ async function handleSubscriptionChanged(subscription: Stripe.Subscription) {
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  const { error } = await getSupabaseAdmin()
-    .from('subscriptions')
-    .update({
+  const db = getAppwriteDatabases();
+  try {
+    await db.updateDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, {
       status: 'canceled',
       cancel_at_period_end: false,
-    })
-    .eq('id', subscription.id);
-
-  if (error) {
-    throw error;
+    });
+  } catch (error) {
+    console.warn('[stripe/webhook] handleSubscriptionDeleted error', error);
   }
 }
 

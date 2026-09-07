@@ -2,7 +2,7 @@
  * Constants for the Project Browser overlay.
  *
  * The mock card list ("fake projects") used to live here. Real projects
- * now come from Supabase via `src/lib/projects.ts`; this inline SVG stays
+ * now come from Appwrite; this inline SVG stays
  * as a local fallback when a project thumbnail is missing or broken.
  */
 export const PROJECT_BROWSER_PREVIEW_URL = `data:image/svg+xml;utf8,${encodeURIComponent(

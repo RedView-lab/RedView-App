@@ -6,7 +6,7 @@ import {
   setDefaultPaymentMethod,
 } from '../_lib/billing.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
-import { requireAuthenticatedUser } from '../_lib/supabase.js';
+import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 
 type PaymentMethodRequestBody = {
   setupIntentId?: string;

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { supabase } from '@/shared/services/supabase'
+import { account } from '@/shared/services/appwrite'
 
 interface DevAuthScreenProps {
   onDevLogin: (email?: string) => void
@@ -11,9 +11,9 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [showSupabaseForm, setShowSupabaseForm] = useState(false)
+  const [showAppwriteForm, setShowAppwriteForm] = useState(false)
 
-  const handleSupabaseLogin = async (e: FormEvent) => {
+  const handleAppwriteLogin = async (e: FormEvent) => {
     e.preventDefault()
     if (!email || !password) {
       setErrorMessage('Veuillez renseigner email et mot de passe.')
@@ -24,14 +24,8 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
     setErrorMessage(null)
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: email.trim(),
-        password,
-      })
-
-      if (error) {
-        setErrorMessage(error.message)
-      }
+      await account.createEmailPasswordSession(email.trim(), password)
+      window.location.reload()
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Erreur de connexion')
     } finally {
@@ -140,11 +134,11 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
           <div style={{ flex: 1, height: '1px', background: 'rgba(255, 255, 255, 0.08)' }} />
         </div>
 
-        {/* Supabase direct login toggle */}
-        {!showSupabaseForm ? (
+        {/* Appwrite direct login toggle */}
+        {!showAppwriteForm ? (
           <button
             type="button"
-            onClick={() => setShowSupabaseForm(true)}
+            onClick={() => setShowAppwriteForm(true)}
             style={{
               width: '100%',
               padding: '10px 16px',
@@ -160,12 +154,12 @@ export default function DevAuthScreen({ onDevLogin, landingUrl }: DevAuthScreenP
             onMouseOver={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)')}
             onMouseOut={(e) => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.04)')}
           >
-            🔑 Connexion avec compte Supabase
+            🔑 Connexion avec compte Appwrite
           </button>
         ) : (
-          <form onSubmit={handleSupabaseLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <form onSubmit={handleAppwriteLogin} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>Email Supabase</label>
+              <label style={{ fontSize: '12px', color: '#9ca3af', fontWeight: 500 }}>Email Appwrite</label>
               <input
                 type="email"
                 value={email}

@@ -1,4 +1,10 @@
 import { useState, type FormEvent } from 'react'
+import {
+  account,
+  ID,
+  OAuthProvider,
+  saveStoredAppwriteSession,
+} from '@/shared/services/appwrite'
 import './LoginScreen.css'
 
 interface LoginScreenProps {
@@ -14,10 +20,56 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [rememberMe, setRememberMe] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    onLogin?.(email.trim() || 'user@redview.app')
+    setErrorMessage(null)
+    setLoading(true)
+
+    const trimmedEmail = email.trim()
+    if (!trimmedEmail || !password) {
+      setErrorMessage('Please provide both email and password.')
+      setLoading(false)
+      return
+    }
+
+    try {
+      if (mode === 'signup') {
+        const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
+        // 1. Create account
+        await account.create(ID.unique(), trimmedEmail, password, trimmedName)
+        // 2. Create session
+        await account.createEmailPasswordSession(trimmedEmail, password)
+      } else {
+        // Mode login
+        await account.createEmailPasswordSession(trimmedEmail, password)
+      }
+
+      const user = await account.get()
+      saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+      onLogin?.(user.email)
+    } catch (error: any) {
+      console.warn('[auth] Appwrite action error:', error)
+      const message = error?.message || 'Authentication failed. Please check your credentials.'
+      setErrorMessage(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleGoogleAuth = () => {
+    setErrorMessage(null)
+    try {
+      account.createOAuth2Session(
+        OAuthProvider.Google,
+        window.location.origin,
+        window.location.origin,
+      )
+    } catch (error: any) {
+      setErrorMessage(error?.message || 'Failed to initiate Google OAuth.')
+    }
   }
 
   const isLogin = mode === 'login'
@@ -44,7 +96,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
             <button
               type="button"
               className="rv-login-header-btn"
-              onClick={() => setMode(isLogin ? 'signup' : 'login')}
+              onClick={() => {
+                setMode(isLogin ? 'signup' : 'login')
+                setErrorMessage(null)
+              }}
             >
               {isLogin ? 'Sign up' : 'Log in'}
             </button>
@@ -77,7 +132,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                 role="tab"
                 aria-selected={!isLogin}
                 className={`rv-login-tab-btn ${!isLogin ? 'rv-active' : ''}`}
-                onClick={() => setMode('signup')}
+                onClick={() => {
+                  setMode('signup')
+                  setErrorMessage(null)
+                }}
               >
                 Sign up
               </button>
@@ -86,7 +144,10 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                 role="tab"
                 aria-selected={isLogin}
                 className={`rv-login-tab-btn ${isLogin ? 'rv-active' : ''}`}
-                onClick={() => setMode('login')}
+                onClick={() => {
+                  setMode('login')
+                  setErrorMessage(null)
+                }}
               >
                 Log in
               </button>
@@ -95,6 +156,24 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
 
           {/* Content Body */}
           <div className="rv-login-body">
+            {/* Error Message banner */}
+            {errorMessage && (
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  border: '1px solid rgba(239, 68, 68, 0.3)',
+                  color: '#fca5a5',
+                  fontSize: '14px',
+                  lineHeight: '1.4',
+                  textAlign: 'center',
+                }}
+              >
+                {errorMessage}
+              </div>
+            )}
+
             {/* Form */}
             <form onSubmit={handleSubmit} className="rv-login-form">
               {/* Name Input Field (Sign up only) */}
@@ -187,8 +266,8 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
               {/* Actions */}
               <div className="rv-login-actions">
                 {/* Primary Button */}
-                <button type="submit" className="rv-login-submit-btn">
-                  {isLogin ? 'Sign in' : 'Get started'}
+                <button type="submit" className="rv-login-submit-btn" disabled={loading}>
+                  {loading ? 'Processing...' : isLogin ? 'Sign in' : 'Get started'}
                 </button>
 
                 {/* Social Button: Google */}
@@ -196,7 +275,8 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                   <button
                     type="button"
                     className="rv-login-social-btn"
-                    onClick={() => onLogin?.('google-user@redview.app')}
+                    onClick={handleGoogleAuth}
+                    disabled={loading}
                   >
                     <span className="rv-login-social-icon">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -229,15 +309,24 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
               <button
                 type="button"
                 className="rv-login-footer-action"
-                onClick={() => onLogin?.(email || 'magic-link@redview.app')}
+                onClick={() => {
+                  // Fallback to dev login if needed
+                  if (typeof window !== 'undefined') {
+                    window.localStorage.setItem('redview:dev-session', 'true')
+                  }
+                  onLogin?.('dev@redview.app')
+                }}
               >
-                Continue with one-time e-mail
+                Continue with Demo account
               </button>
             ) : (
               <button
                 type="button"
                 className="rv-login-footer-action"
-                onClick={() => setMode('login')}
+                onClick={() => {
+                  setMode('login')
+                  setErrorMessage(null)
+                }}
               >
                 Already have an account? Log in
               </button>

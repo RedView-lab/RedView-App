@@ -1,5 +1,13 @@
 import { createDefaultProject } from '@/features/itineraryPanel/lib/project';
-import { supabase } from '@/shared/services/supabase';
+import {
+  APPWRITE_DATABASE_ID,
+  databases,
+  ID,
+  Permission,
+  PROJECTS_COLLECTION_ID,
+  Query,
+  Role,
+} from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId } from './auth';
@@ -28,21 +36,50 @@ function writeLocalProjects(projects: ProjectRow[]): void {
   }
 }
 
+function docToProjectRow(doc: any): ProjectRow {
+  let parsedData: ItineraryProject;
+  if (typeof doc.data === 'string') {
+    try {
+      parsedData = JSON.parse(doc.data);
+    } catch {
+      parsedData = createDefaultProject();
+    }
+  } else if (doc.data && typeof doc.data === 'object') {
+    parsedData = doc.data;
+  } else {
+    parsedData = createDefaultProject();
+  }
+
+  return {
+    id: doc.$id,
+    user_id: doc.user_id,
+    folder_id: doc.folder_id ?? null,
+    name: doc.name || parsedData.name || 'Untitled',
+    data: parsedData,
+    size_bytes: typeof doc.size_bytes === 'number' ? doc.size_bytes : computeProjectSizeBytes(parsedData),
+    privacy: doc.privacy || 'private',
+    created_at: doc.$createdAt,
+    updated_at: doc.$updatedAt,
+  };
+}
+
 export async function listProjects(): Promise<ProjectSummary[]> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
   if (!isDev) {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, folder_id, name, privacy, size_bytes, created_at, updated_at')
-        .order('updated_at', { ascending: false });
-      if (!error && data) {
-        return data.map((row) => rowToSummary(row as ProjectRow));
+      const result = await databases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        PROJECTS_COLLECTION_ID,
+        [Query.equal('user_id', userId), Query.orderDesc('$updatedAt'), Query.limit(100)],
+      );
+
+      if (result.documents) {
+        return result.documents.map((doc) => rowToSummary(docToProjectRow(doc)));
       }
     } catch (e) {
-      logger.projects.debug('Supabase listProjects fallback to local storage', e);
+      logger.projects.debug('Appwrite listProjects fallback to local storage', e);
     }
   }
 
@@ -54,18 +91,14 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('local-')) {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('id', id)
-        .maybeSingle();
-      if (!error && data) {
-        return data as ProjectRow;
+      const doc = await databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id);
+      if (doc) {
+        return docToProjectRow(doc);
       }
     } catch (e) {
-      logger.projects.debug('Supabase getProject fallback to local storage', e);
+      logger.projects.debug('Appwrite getProject fallback to local storage', e);
     }
   }
 
@@ -85,23 +118,33 @@ export async function createProject(
 
   if (!isDev) {
     try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          user_id: userId,
-          folder_id: folderId ?? null,
-          name: finalProject.name,
-          data: finalProject,
-          size_bytes: computeProjectSizeBytes(finalProject),
-          privacy: finalProject.privacy ?? 'private',
-        })
-        .select('*')
-        .single();
-      if (!error && data) {
-        return data as ProjectRow;
+      const docId = ID.unique();
+      const payload = {
+        user_id: userId,
+        folder_id: folderId ?? null,
+        name: finalProject.name,
+        data: JSON.stringify(finalProject),
+        size_bytes: computeProjectSizeBytes(finalProject),
+        privacy: finalProject.privacy ?? 'private',
+      };
+
+      const doc = await databases.createDocument(
+        APPWRITE_DATABASE_ID,
+        PROJECTS_COLLECTION_ID,
+        docId,
+        payload,
+        [
+          Permission.read(Role.user(userId)),
+          Permission.update(Role.user(userId)),
+          Permission.delete(Role.user(userId)),
+        ],
+      );
+
+      if (doc) {
+        return docToProjectRow(doc);
       }
     } catch (e) {
-      logger.projects.debug('Supabase createProject fallback to local storage', e);
+      logger.projects.debug('Appwrite createProject fallback to local storage', e);
     }
   }
 
@@ -130,24 +173,22 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
 
   if (!isDev && !id.startsWith('local-')) {
     try {
-      const { error } = await supabase
-        .from('projects')
-        .update({
-          name: project.name,
-          data: project,
-          size_bytes: computeProjectSizeBytes(project),
-          privacy: project.privacy ?? 'private',
-        })
-        .eq('id', id);
-      if (!error) return;
+      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
+        name: project.name,
+        data: JSON.stringify(project),
+        size_bytes: computeProjectSizeBytes(project),
+        privacy: project.privacy ?? 'private',
+      });
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase saveProject fallback to local storage', e);
+      logger.projects.debug('Appwrite saveProject fallback to local storage', e);
     }
   }
 
   const projects = readLocalProjects();
   const index = projects.findIndex((p) => p.id === id);
   const now = new Date().toISOString();
+
   if (index !== -1) {
     projects[index] = {
       ...projects[index],
@@ -181,23 +222,20 @@ export async function renameProject(id: string, name: string): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('local-')) {
     try {
       const current = await getProject(id);
       if (current) {
         const nextData: ItineraryProject = { ...current.data, name: trimmed };
-        const { error } = await supabase
-          .from('projects')
-          .update({
-            name: trimmed,
-            data: nextData,
-            size_bytes: computeProjectSizeBytes(nextData),
-          })
-          .eq('id', id);
-        if (!error) return;
+        await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
+          name: trimmed,
+          data: JSON.stringify(nextData),
+          size_bytes: computeProjectSizeBytes(nextData),
+        });
+        return;
       }
     } catch (e) {
-      logger.projects.debug('Supabase renameProject fallback to local storage', e);
+      logger.projects.debug('Appwrite renameProject fallback to local storage', e);
     }
   }
 
@@ -218,12 +256,14 @@ export async function moveProjectToFolder(
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('local-')) {
     try {
-      const { error } = await supabase.from('projects').update({ folder_id: folderId }).eq('id', id);
-      if (!error) return;
+      await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
+        folder_id: folderId,
+      });
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase moveProjectToFolder fallback to local storage', e);
+      logger.projects.debug('Appwrite moveProjectToFolder fallback to local storage', e);
     }
   }
 
@@ -240,12 +280,12 @@ export async function deleteProject(id: string): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('local-')) {
     try {
-      const { error } = await supabase.from('projects').delete().eq('id', id);
-      if (!error) return;
+      await databases.deleteDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id);
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase deleteProject fallback to local storage', e);
+      logger.projects.debug('Appwrite deleteProject fallback to local storage', e);
     }
   }
 

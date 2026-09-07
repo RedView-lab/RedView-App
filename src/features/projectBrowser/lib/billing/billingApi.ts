@@ -1,4 +1,4 @@
-import { getSupabaseAccessToken } from '@/shared/services/supabase';
+import { getAppwriteJwt } from '@/shared/services/appwrite';
 import { translateAppText } from '@/shared/i18n';
 
 import { logBillingUi, logBillingUiError } from './debug';
@@ -43,7 +43,7 @@ function summarizeResponse(data: Record<string, unknown>) {
 }
 
 async function getAccessToken(): Promise<string> {
-  const token = await getSupabaseAccessToken();
+  const token = await getAppwriteJwt();
 
   if (!token) {
     throw new Error(translateAppText('Session expirée. Reconnectez-vous pour gérer votre abonnement.'));

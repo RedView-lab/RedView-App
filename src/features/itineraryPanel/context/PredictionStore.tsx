@@ -33,7 +33,7 @@ interface PredictionProviderProps {
  * having to be wired through props or duplicate the worker call.
  *
  * Predictions are also mirrored into the project store so the Dashboard
- * autosaver persists them to Supabase. On mount we hydrate from any
+ * autosaver persists them to Appwrite. On mount we hydrate from any
  * predictions previously saved on the project itineraries — that way the
  * analysis chart instantly re-appears when reopening a saved project.
  */
@@ -104,7 +104,7 @@ export function PredictionProvider({ children }: PredictionProviderProps) {
         return { ...prev, [itineraryId]: result };
       });
       // Mirror into the project so the Dashboard autosaver pushes the
-      // prediction to Supabase.
+      // prediction to Appwrite.
       const updateItinerary = projectStore?.updateItinerary;
       if (updateItinerary) {
         updateItinerary(itineraryId, (draft) => {

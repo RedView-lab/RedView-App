@@ -1,5 +1,13 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
-import { getSupabaseSession, hasStoredSupabaseSession, readStoredSupabaseSession, supabase } from './shared/services/supabase'
+import {
+  APPWRITE_DATABASE_ID,
+  databases,
+  getAppwriteUser,
+  hasStoredAppwriteSession,
+  Query,
+  readStoredAppwriteSession,
+  SUBSCRIPTIONS_COLLECTION_ID,
+} from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import PayWall from './shared/components/PayWall'
 import { LoginScreen } from './features/auth'
@@ -15,51 +23,8 @@ type SubscriptionAccessState = {
   status: string | null
 }
 
-const AUTH_BOOT_TIMEOUT_MS = 8000
-// Cold-start of supabase-js + a possible token refresh + the first PostgREST round trip
-// can comfortably exceed 4s on a fresh tab. Give it a generous budget; the cached
-// subscription state means the user never sees this latency anyway.
-const SUBSCRIPTION_BOOT_TIMEOUT_MS = 12000
-const SUBSCRIPTION_RETRY_TIMEOUT_MS = 15000
 const SUBSCRIPTION_CACHE_KEY_PREFIX = 'redview:subscription-status:v2:'
 const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000
-
-function hasAppAccess(subscription: { is_subscribed?: boolean | null; status?: string | null } | null): boolean {
-  if (!subscription) return true
-  if (subscription.status == null || subscription.status === 'demo') return true
-  return subscription.is_subscribed === true
-}
-
-function withTimeout<T>(promise: PromiseLike<T>, timeoutMs: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-    }, timeoutMs)
-
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer)
-        resolve(value)
-      },
-      (error) => {
-        window.clearTimeout(timer)
-        reject(error)
-      },
-    )
-  })
-}
-
-async function awaitSupabaseAuth<T>(promise: PromiseLike<T>, label: string): Promise<T> {
-  const timer = window.setTimeout(() => {
-    console.warn(`[app] ${label} is still pending after ${AUTH_BOOT_TIMEOUT_MS}ms`)
-  }, AUTH_BOOT_TIMEOUT_MS)
-
-  try {
-    return await promise
-  } finally {
-    window.clearTimeout(timer)
-  }
-}
 
 type CachedSubscriptionSnapshot = {
   hasAccess: boolean
@@ -126,42 +91,29 @@ function writeCachedSubscription(userId: string, subscription: SubscriptionAcces
     }
     window.localStorage.setItem(getSubscriptionCacheKey(userId), JSON.stringify(payload))
   } catch {
-    // Ignore storage write failures; runtime state already has the resolved value.
+    // Ignore storage write failures
   }
 }
 
-function resolveInitialSupabaseSession(): Promise<BootstrapSession> {
+function resolveInitialAppwriteSession(): Promise<BootstrapSession> {
   if (!initialSessionBootstrapPromise) {
     initialSessionBootstrapPromise = (async () => {
-      const hash = window.location.hash.substring(1)
-      const params = new URLSearchParams(hash)
-      const accessToken = params.get('access_token')
-      const refreshToken = params.get('refresh_token')
-      const storedSession = readStoredSupabaseSession()
-
-      if (accessToken && refreshToken) {
-        window.history.replaceState(null, '', window.location.pathname)
-        const { data, error } = await awaitSupabaseAuth(
-          supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          }),
-          'supabase.auth.setSession',
-        )
-        if (error) throw error
-        return data.session
-      }
-
-      if (!storedSession) {
-        return null
+      const stored = readStoredAppwriteSession()
+      if (stored?.user?.id) {
+        // Trigger background validation
+        getAppwriteUser().catch(() => {})
+        return stored
       }
 
       try {
-        const session = await awaitSupabaseAuth(getSupabaseSession(), 'supabase.auth.getSession')
-        return session ?? storedSession
-      } catch (warmupError) {
-        console.warn('[app] supabase.auth.getSession() warmup failed', warmupError)
-        return storedSession
+        const user = await getAppwriteUser()
+        if (user) {
+          return { user: { id: user.$id, email: user.email } }
+        }
+        return null
+      } catch (err) {
+        console.warn('[app] resolveInitialAppwriteSession error', err)
+        return null
       }
     })()
   }
@@ -171,20 +123,20 @@ function resolveInitialSupabaseSession(): Promise<BootstrapSession> {
 
 function App() {
   const { t } = useAppI18n()
-  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredSupabaseSession())
+  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredAppwriteSession())
   const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
   const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
-    const storedSession = readStoredSupabaseSession()
+    const storedSession = readStoredAppwriteSession()
     return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
   })
   const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccessState>(() => {
-    const storedSession = readStoredSupabaseSession()
-    return readCachedSubscription(storedSession?.user.id) ?? { hasAccess: false, status: null }
+    const storedSession = readStoredAppwriteSession()
+    return readCachedSubscription(storedSession?.user.id) ?? { hasAccess: true, status: 'demo' }
   })
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const initialProjectId = readProjectIdFromPath(pathname)
 
-  const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000'
+  const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://landing.141.145.220.99.sslip.io'
   const offersUrl = `${landingUrl.replace(/\/$/, '')}/#offres`
 
   useEffect(() => {
@@ -204,39 +156,29 @@ function App() {
 
   useEffect(() => {
     let cancelled = false
-    let authBootstrapSettled = false
 
-    const resolveInitialSession = async () => {
+    const resolveSession = async () => {
       try {
-        const nextSession = await resolveInitialSupabaseSession()
+        const nextSession = await resolveInitialAppwriteSession()
         if (!cancelled) setSession(nextSession)
       } catch (error) {
         console.error('[app] Failed to resolve auth session during bootstrap', error)
-        if (!cancelled && !hasStoredSupabaseSession()) setSession(null)
+        if (!cancelled && !hasStoredAppwriteSession()) setSession(null)
       } finally {
-        authBootstrapSettled = true
         if (!cancelled) setAuthStatus('ready')
       }
     }
 
-    void resolveInitialSession()
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      if (cancelled) return
-      setSession(nextSession)
-      if (authBootstrapSettled) setAuthStatus('ready')
-    })
+    void resolveSession()
 
     return () => {
       cancelled = true
-      subscription.unsubscribe()
     }
   }, [])
 
   // Check subscription status after session is available
   useEffect(() => {
     let cancelled = false
-    let activeSubscriptionAbortController: AbortController | null = null
 
     if (authStatus !== 'ready') {
       return
@@ -262,107 +204,43 @@ function App() {
       setSubscriptionStatus('loading')
     }
 
-    const fetchSubscriptionStatus = async (
-      userId: string,
-      timeoutMs: number,
-    ): Promise<SubscriptionAccessState> => {
-      activeSubscriptionAbortController?.abort()
-      const abortController = new AbortController()
-      activeSubscriptionAbortController = abortController
-
+    const fetchSubscriptionStatus = async (userId: string): Promise<SubscriptionAccessState> => {
       try {
-        const { data, error } = await withTimeout(
-          supabase
-            .from('user_subscription_status')
-            .select('is_subscribed, status')
-            .eq('user_id', userId)
-            .abortSignal(abortController.signal)
-            .maybeSingle(),
-          timeoutMs,
-          'user_subscription_status bootstrap',
+        const res = await databases.listDocuments(
+          APPWRITE_DATABASE_ID,
+          SUBSCRIPTIONS_COLLECTION_ID,
+          [Query.equal('user_id', userId), Query.limit(1)],
         )
 
-        if (error) throw error
+        const first = res.documents[0]
+        if (first) {
+          const status = (first.status as string) ?? null
+          const isSubscribed = status === 'active' || status === 'trialing'
+          return {
+            hasAccess: isSubscribed || status === 'demo' || status == null,
+            status,
+          }
+        }
 
-        return {
-          hasAccess: hasAppAccess(data),
-          status: typeof data?.status === 'string' ? data.status : null,
-        }
-      } finally {
-        if (activeSubscriptionAbortController === abortController) {
-          activeSubscriptionAbortController = null
-        }
-        abortController.abort()
-      }
-    }
-
-    const resetSessionToLogin = async () => {
-      try {
-        await supabase.auth.signOut()
-      } catch (signOutError) {
-        console.warn('[app] Failed to clear Supabase session after subscription bootstrap failure', signOutError)
-      } finally {
-        if (!cancelled) {
-          setSubscriptionAccess({ hasAccess: false, status: null })
-          setSession(null)
-        }
+        // Default to demo access
+        return { hasAccess: true, status: 'demo' }
+      } catch (err) {
+        console.warn('[app] Appwrite subscription check error', err)
+        return { hasAccess: true, status: 'demo' }
       }
     }
 
     const resolveSubscription = async () => {
       try {
-        const nextSubscription = await fetchSubscriptionStatus(
-          session.user.id,
-          SUBSCRIPTION_BOOT_TIMEOUT_MS,
-        )
+        const nextSubscription = await fetchSubscriptionStatus(session.user.id)
         if (cancelled) return
 
         setSubscriptionAccess(nextSubscription)
         writeCachedSubscription(session.user.id, nextSubscription)
       } catch (error) {
         if (cancelled) return
-
-        const fallbackSubscription = readCachedSubscription(session.user.id)
-        if (fallbackSubscription != null) {
-          console.warn('[app] Subscription bootstrap timed out, using cached subscription state', error)
-          setSubscriptionAccess(fallbackSubscription)
-          return
-        }
-
-        console.warn('[app] Subscription bootstrap failed, refreshing auth before redirecting', error)
-
-        try {
-          const { data, error: refreshError } = await awaitSupabaseAuth(
-            supabase.auth.refreshSession(),
-            'supabase.auth.refreshSession',
-          )
-
-          if (refreshError) throw refreshError
-          if (cancelled) return
-
-          const refreshedSession = data.session
-          if (!refreshedSession?.user?.id) {
-            await resetSessionToLogin()
-            return
-          }
-
-          setSession(refreshedSession)
-
-          const nextSubscription = await fetchSubscriptionStatus(
-            refreshedSession.user.id,
-            SUBSCRIPTION_RETRY_TIMEOUT_MS,
-          )
-          if (cancelled) return
-
-          setSubscriptionAccess(nextSubscription)
-          writeCachedSubscription(refreshedSession.user.id, nextSubscription)
-        } catch (recoveryError) {
-          if (cancelled) return
-          console.error('[app] Subscription bootstrap failed after refresh, redirecting to login', recoveryError)
-          await resetSessionToLogin()
-        }
+        console.warn('[app] Subscription bootstrap error', error)
       } finally {
-        activeSubscriptionAbortController?.abort()
         if (!cancelled) setSubscriptionStatus('ready')
       }
     }
@@ -371,7 +249,6 @@ function App() {
 
     return () => {
       cancelled = true
-      activeSubscriptionAbortController?.abort()
     }
   }, [authStatus, session?.user?.id])
 
@@ -384,11 +261,11 @@ function App() {
       <LoginScreen
         landingUrl={landingUrl}
         onLogin={(email) => {
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem('redview:dev-session', 'true')
+          const stored = readStoredAppwriteSession()
+          const nextSession = stored ?? {
+            user: { id: 'dev-user-001', email: email || 'user@redview.app' },
           }
-          const devSession = { user: { id: 'dev-user-001', email: email || 'user@redview.app' } }
-          setSession(devSession)
+          setSession(nextSession)
           setSubscriptionAccess({ hasAccess: true, status: 'pro' })
           setSubscriptionStatus('ready')
         }}

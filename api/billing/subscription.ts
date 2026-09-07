@@ -11,7 +11,7 @@ import {
 } from '../_lib/billing.js';
 import { isBillingPlanId } from '../_lib/config.js';
 import { readJsonBody, sendMethodNotAllowed } from '../_lib/http.js';
-import { requireAuthenticatedUser } from '../_lib/supabase.js';
+import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 
 type SubscriptionActionRequestBody = {
   action?: 'subscribe' | 'change' | 'cancel' | 'resume' | 'sync';

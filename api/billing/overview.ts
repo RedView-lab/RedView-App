@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 import { buildBillingOverview } from '../_lib/billing.js';
 import { sendMethodNotAllowed } from '../_lib/http.js';
-import { requireAuthenticatedUser } from '../_lib/supabase.js';
+import { requireAuthenticatedUser } from '../_lib/appwrite.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

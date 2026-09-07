@@ -1,7 +1,12 @@
 import type Stripe from 'stripe';
+import { Query } from 'node-appwrite';
 
 import { requireConfiguredPriceId, type BillingPlanId } from '../config.js';
-import { getSupabaseAdmin } from '../supabase.js';
+import {
+  APPWRITE_DATABASE_ID,
+  SUBSCRIPTIONS_COLLECTION_ID,
+  getAppwriteDatabases,
+} from '../appwrite.js';
 import { getStripeServer } from '../stripe.js';
 import {
   getOrCreateStripeCustomer,
@@ -14,32 +19,6 @@ import type {
   SubscriptionSnapshot,
 } from './types.js';
 import { MANAGED_SUBSCRIPTION_STATUSES } from './types.js';
-
-function isSubscriptionStatusViewError(error: unknown): boolean {
-  if (!error || typeof error !== 'object') {
-    return false;
-  }
-
-  const candidate = error as {
-    code?: string;
-    message?: string;
-    details?: string;
-    hint?: string;
-  };
-
-  const haystack = [candidate.message, candidate.details, candidate.hint]
-    .filter((value): value is string => typeof value === 'string' && value.length > 0)
-    .join(' ')
-    .toLowerCase();
-
-  return (
-    candidate.code === '42P01' ||
-    candidate.code === '42703' ||
-    haystack.includes('user_subscription_status') ||
-    haystack.includes('is_subscribed') ||
-    haystack.includes('cancel_at_period_end')
-  );
-}
 
 function toSnapshotFromStoredSubscription(
   row: Pick<
@@ -75,33 +54,7 @@ async function getSubscriptionSnapshotFromStoredSubscriptions(
 }
 
 export async function getSubscriptionSnapshot(userId: string): Promise<SubscriptionSnapshot> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('user_subscription_status')
-    .select('is_subscribed, status, price_id, current_period_end, cancel_at_period_end')
-    .eq('user_id', userId)
-    .maybeSingle<{
-      is_subscribed: boolean | null;
-      status: string | null;
-      price_id: string | null;
-      current_period_end: string | null;
-      cancel_at_period_end: boolean | null;
-    }>();
-
-  if (error) {
-    if (isSubscriptionStatusViewError(error)) {
-      return getSubscriptionSnapshotFromStoredSubscriptions(userId);
-    }
-
-    throw error;
-  }
-
-  return {
-    isSubscribed: data?.is_subscribed ?? false,
-    status: data?.status ?? 'demo',
-    priceId: data?.price_id ?? null,
-    currentPeriodEnd: data?.current_period_end ?? null,
-    cancelAtPeriodEnd: data?.cancel_at_period_end ?? false,
-  };
+  return getSubscriptionSnapshotFromStoredSubscriptions(userId);
 }
 
 function toSnapshotFromStripeSubscription(subscription: Stripe.Subscription): SubscriptionSnapshot {
@@ -180,17 +133,24 @@ function getStripeCustomerIdFromSubscription(subscription: Stripe.Subscription):
 }
 
 async function listStoredSubscriptions(userId: string): Promise<StoredSubscriptionRow[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from('subscriptions')
-    .select('id, status, price_id, cancel_at_period_end, current_period_end')
-    .eq('user_id', userId)
-    .returns<StoredSubscriptionRow[]>();
+  const db = getAppwriteDatabases();
+  try {
+    const res = await db.listDocuments(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, [
+      Query.equal('user_id', userId),
+      Query.limit(100),
+    ]);
 
-  if (error) {
-    throw error;
+    return res.documents.map((doc) => ({
+      id: doc.$id,
+      status: (doc.status as string) ?? null,
+      price_id: (doc.price_id as string) ?? null,
+      cancel_at_period_end: Boolean(doc.cancel_at_period_end),
+      current_period_end: (doc.current_period_end as string) ?? null,
+    }));
+  } catch (error) {
+    console.warn('[subscriptions] listStoredSubscriptions error', error);
+    return [];
   }
-
-  return data ?? [];
 }
 
 export async function getCurrentManagedSubscriptionRow(
@@ -343,18 +303,24 @@ export async function upsertSubscription(
   const periodStart = firstItem?.current_period_start;
   const periodEnd = firstItem?.current_period_end;
 
-  const { error } = await getSupabaseAdmin().from('subscriptions').upsert({
-    id: subscription.id,
+  const db = getAppwriteDatabases();
+  const payload = {
     user_id: userId,
     status: subscription.status,
     price_id: priceId,
     current_period_start: periodStart ? new Date(periodStart * 1000).toISOString() : null,
     current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     cancel_at_period_end: subscription.cancel_at_period_end,
-  });
+  };
 
-  if (error) {
-    throw error;
+  try {
+    await db.createDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, payload);
+  } catch (error: any) {
+    if (error?.code === 409) {
+      await db.updateDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, payload);
+    } else {
+      throw error;
+    }
   }
 }
 

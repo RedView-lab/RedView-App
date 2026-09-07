@@ -21,7 +21,7 @@ interface UseDashboardProjectStateArgs {
 }
 
 /**
- * Hook gérant l'état, le chargement, la persistance locale et distante (Supabase)
+ * Hook gérant l'état, le chargement, la persistance locale et distante (Appwrite)
  * ainsi que le cycle de vie du projet actif dans le Dashboard RedView.
  */
 export function useDashboardProjectState({

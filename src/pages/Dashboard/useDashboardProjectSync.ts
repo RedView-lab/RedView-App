@@ -3,18 +3,14 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { normalizeItineraryProject } from '@/features/itineraryPanel/lib/project';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import {
-  isSupabaseProjectTooLarge,
-  MAX_SUPABASE_PROJECT_SIZE_BYTES,
+  isProjectTooLarge,
+  MAX_PROJECT_SIZE_BYTES,
   saveProject,
   uploadProjectThumbnail,
 } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
-import {
-  KEEPALIVE_BODY_LIMIT_BYTES,
-  readAccessTokenSync,
-  writeProjectCache,
-} from './dashboardProjectCache';
+import { writeProjectCache } from './dashboardProjectCache';
 
 import { logger } from '@/shared/lib/logger';
 
@@ -37,15 +33,14 @@ export function useDashboardProjectSync({
   const saveTimerRef = useRef<number | null>(null);
 
   const flushSave = useCallback(
-    async ({ keepalive = false }: { keepalive?: boolean } = {}): Promise<void> => {
+    async ({ keepalive: _keepalive = false }: { keepalive?: boolean } = {}): Promise<void> => {
       const id = activeProjectIdRef.current;
       const payload = pendingSaveRef.current;
       if (!id || !payload) return;
 
-      const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (!url || !anonKey) {
-        logger.projects.debug('missing Supabase env, autosave disabled');
+      const endpoint = import.meta.env.VITE_APPWRITE_ENDPOINT as string | undefined;
+      if (!endpoint && !import.meta.env.DEV) {
+        logger.projects.debug('missing Appwrite env, autosave disabled');
         return;
       }
 
@@ -69,14 +64,14 @@ export function useDashboardProjectSync({
       }
 
       const sizeBytes = new Blob([serialized]).size;
-      if (isSupabaseProjectTooLarge(sizeBytes)) {
+      if (isProjectTooLarge(sizeBytes)) {
         const oversizedSignature = `${id}:${sizeBytes}`;
         if (oversizedSignature !== lastOversizedSignatureRef.current) {
           console.warn(
-            '[Dashboard] autosave skipped: project exceeds Supabase payload safety limit',
+            '[Dashboard] autosave skipped: project exceeds payload safety limit',
             {
               sizeBytes,
-              maxSizeBytes: MAX_SUPABASE_PROJECT_SIZE_BYTES,
+              maxSizeBytes: MAX_PROJECT_SIZE_BYTES,
               projectId: id,
             },
           );
@@ -89,40 +84,8 @@ export function useDashboardProjectSync({
       }
       lastOversizedSignatureRef.current = null;
 
-      const accessToken = readAccessTokenSync(anonKey);
-      const body = JSON.stringify({
-        name: payload.name,
-        data: payload,
-        size_bytes: sizeBytes,
-        privacy: payload.privacy ?? 'private',
-      });
-
-      const canUseKeepalive =
-        keepalive && new Blob([body]).size <= KEEPALIVE_BODY_LIMIT_BYTES;
-
       try {
-        const res = await fetch(
-          `${url}/rest/v1/projects?id=eq.${encodeURIComponent(id)}`,
-          {
-            method: 'PATCH',
-            headers: {
-              apikey: anonKey,
-              Authorization: `Bearer ${accessToken}`,
-              'Content-Type': 'application/json',
-              Prefer: 'return=minimal',
-            },
-            body,
-            keepalive: canUseKeepalive,
-          },
-        );
-        if (!res.ok) {
-          console.error(
-            '[Dashboard] autosave HTTP error',
-            res.status,
-            await res.text().catch(() => ''),
-          );
-          return;
-        }
+        await saveProject(id, payload);
         lastSavedSerializedRef.current = serialized;
         if (pendingSaveRef.current === payload) {
           pendingSaveRef.current = null;

@@ -1,4 +1,8 @@
-import { getSupabaseUser, supabase } from '@/shared/services/supabase';
+import {
+  account,
+  clearStoredAppwriteSession,
+  getAppwriteUser,
+} from '@/shared/services/appwrite';
 import { readDocumentAppLocale, translateAppText } from '@/shared/i18n';
 
 import {
@@ -13,12 +17,6 @@ import type {
   AccountSportEntry,
 } from '../types';
 
-type SupabaseUserLike = {
-  email?: string | null;
-  last_sign_in_at?: string | null;
-  user_metadata?: unknown;
-};
-
 type AccountMetadata = {
   first_name?: unknown;
   last_name?: unknown;
@@ -30,10 +28,8 @@ function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
 }
 
-function readMetadata(user: SupabaseUserLike): AccountMetadata {
-  return user.user_metadata && typeof user.user_metadata === 'object'
-    ? (user.user_metadata as AccountMetadata)
-    : {};
+function readMetadata(user: any): AccountMetadata {
+  return user?.prefs && typeof user.prefs === 'object' ? (user.prefs as AccountMetadata) : {};
 }
 
 function buildSportEntry(value: Partial<AccountSportEntry> | null | undefined, index: number): AccountSportEntry {
@@ -105,94 +101,100 @@ export function formatLastConnection(lastSignInAt: string | null) {
 }
 
 export async function loadAccountProfile(fallbackEmail: string, fallbackDisplayName: string): Promise<AccountProfile> {
-  const user = await getSupabaseUser();
+  const user = await getAppwriteUser();
   if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
   const metadata = readMetadata(user);
   const email = readString(user.email, fallbackEmail);
-  const fallbackName = splitFallbackName(buildFallbackName(email, fallbackDisplayName));
+  const nameParts = splitFallbackName(readString(user.name, buildFallbackName(email, fallbackDisplayName)));
 
   return {
-    firstName: readString(metadata.first_name, fallbackName.firstName),
-    lastName: readString(metadata.last_name, fallbackName.lastName),
+    firstName: readString(metadata.first_name, nameParts.firstName),
+    lastName: readString(metadata.last_name, nameParts.lastName),
     email,
     country: readString(metadata.country, DEFAULT_COUNTRY),
     sports: readSports(metadata.sports),
-    lastSignInAt: typeof user.last_sign_in_at === 'string' ? user.last_sign_in_at : null,
+    lastSignInAt: typeof user.accessedAt === 'string' ? user.accessedAt : null,
   };
 }
 
 export async function saveAccountIdentity(form: AccountIdentityForm) {
-  const user = await getSupabaseUser();
+  const user = await getAppwriteUser();
   if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
 
-  const metadata = readMetadata(user);
-  const { data, error } = await supabase.auth.updateUser({
-    email: form.email.trim(),
-    data: {
-      ...metadata,
-      first_name: form.firstName.trim(),
-      last_name: form.lastName.trim(),
-    },
-  });
-
-  if (error) throw error;
-  return data.user;
-}
-
-export async function saveAccountPractice(form: AccountPracticeForm) {
-  const user = await getSupabaseUser();
-  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
-
-  const metadata = readMetadata(user);
-  const { data, error } = await supabase.auth.updateUser({
-    data: {
-      ...metadata,
-      country: form.country,
-      sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
-    },
-  });
-
-  if (error) throw error;
-  return data.user;
-}
-
-export async function updateAccountPassword(password: string) {
-  const { error } = await supabase.auth.updateUser({
-    password,
-  });
-
-  if (error) throw error;
-}
-
-export async function signOutAccount() {
-  if (typeof window !== 'undefined') {
-    window.localStorage.removeItem('redview:dev-session');
+  const fullName = `${form.firstName.trim()} ${form.lastName.trim()}`.trim();
+  if (fullName && fullName !== user.name) {
     try {
-      const keysToRemove: string[] = [];
-      for (let i = 0; i < window.localStorage.length; i++) {
-        const key = window.localStorage.key(i);
-        if (key && (key.startsWith('redview:') || key.startsWith('sb-'))) {
-          keysToRemove.push(key);
-        }
-      }
-      keysToRemove.forEach((k) => window.localStorage.removeItem(k));
-    } catch {
-      // ignore storage access errors
+      await account.updateName(fullName);
+    } catch (e) {
+      console.warn('[profile] updateName failed', e);
     }
   }
 
+  const currentPrefs = readMetadata(user);
+  const updatedPrefs = {
+    ...currentPrefs,
+    first_name: form.firstName.trim(),
+    last_name: form.lastName.trim(),
+  };
+
   try {
-    const { error } = await Promise.race([
-      supabase.auth.signOut(),
-      new Promise<{ error: Error }>((resolve) =>
-        setTimeout(() => resolve({ error: new Error('timeout') }), 1000),
-      ),
-    ]);
-    if (error) {
-      console.warn('[auth] Supabase signOut returned error (ignored):', error);
-    }
+    return await account.updatePrefs(updatedPrefs);
   } catch (err) {
-    console.warn('[auth] Supabase signOut exception (ignored):', err);
+    console.warn('[profile] updatePrefs failed', err);
+    return user;
+  }
+}
+
+export async function saveAccountPractice(form: AccountPracticeForm) {
+  const user = await getAppwriteUser();
+  if (!user) throw new Error(translateAppText('Session utilisateur introuvable.'));
+
+  const currentPrefs = readMetadata(user);
+  const updatedPrefs = {
+    ...currentPrefs,
+    country: form.country,
+    sports: form.sports.map((sport, index) => buildSportEntry(sport, index)),
+  };
+
+  try {
+    return await account.updatePrefs(updatedPrefs);
+  } catch (err) {
+    console.warn('[profile] updatePrefs failed', err);
+    return user;
+  }
+}
+
+export async function updateAccountPassword(password: string) {
+  try {
+    await account.updatePassword(password);
+  } catch (error: any) {
+    throw new Error(error?.message || 'Impossible de mettre à jour le mot de passe.');
+  }
+}
+
+export async function signOutAccount() {
+  clearStoredAppwriteSession();
+
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key && (key.startsWith('redview:') || key.startsWith('sb-') || key.startsWith('cookieFallback'))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((k) => window.localStorage.removeItem(k));
+  } catch {
+    // ignore storage access errors
+  }
+
+  try {
+    await Promise.race([
+      account.deleteSession('current'),
+      new Promise((resolve) => setTimeout(resolve, 1500)),
+    ]);
+  } catch (err) {
+    console.warn('[auth] Appwrite deleteSession error (ignored):', err);
   }
 }

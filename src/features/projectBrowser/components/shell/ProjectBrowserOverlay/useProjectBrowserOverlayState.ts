@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useAppI18n } from '@/shared/i18n';
-import { readStoredSupabaseSession } from '@/shared/services/supabase';
+import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 
 import {
   formatAccountDisplayName,
@@ -90,7 +90,7 @@ export function useProjectBrowserOverlayState({
   canClose = true,
 }: ProjectBrowserOverlayProps) {
   const { t } = useAppI18n();
-  const storedSession = readStoredSupabaseSession();
+  const storedSession = readStoredAppwriteSession();
   const userId = storedSession?.user.id ?? null;
   const accountEmail = storedSession?.user.email ?? '';
   const [activeTab, setActiveTab] = useState<OverlayTab>(() => readStoredActiveTab(userId) ?? 'projects');

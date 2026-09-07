@@ -1,4 +1,13 @@
-import { supabase } from '@/shared/services/supabase';
+import {
+  APPWRITE_DATABASE_ID,
+  databases,
+  FOLDERS_COLLECTION_ID,
+  ID,
+  Permission,
+  PROJECTS_COLLECTION_ID,
+  Query,
+  Role,
+} from '@/shared/services/appwrite';
 import { logger } from '@/shared/lib/logger';
 
 import { getCurrentUserId } from './auth';
@@ -26,21 +35,34 @@ function writeLocalFolders(folders: ProjectFolderRow[]): void {
   }
 }
 
+function docToFolderRow(doc: any): ProjectFolderRow {
+  return {
+    id: doc.$id,
+    user_id: doc.user_id,
+    parent_folder_id: doc.parent_folder_id ?? null,
+    name: doc.name || 'Dossier',
+    privacy: doc.privacy || 'private',
+    created_at: doc.$createdAt,
+    updated_at: doc.$updatedAt,
+  };
+}
+
 export async function listProjectFolders(): Promise<ProjectFolderSummary[]> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
   if (!isDev) {
     try {
-      const { data, error } = await supabase
-        .from('project_folders')
-        .select('id, parent_folder_id, name, privacy, created_at, updated_at')
-        .order('updated_at', { ascending: false });
-      if (!error && data) {
-        return data.map((row) => folderRowToSummary(row as ProjectFolderRow));
+      const result = await databases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        FOLDERS_COLLECTION_ID,
+        [Query.equal('user_id', userId), Query.orderDesc('$updatedAt'), Query.limit(100)],
+      );
+      if (result.documents) {
+        return result.documents.map((doc) => folderRowToSummary(docToFolderRow(doc)));
       }
     } catch (e) {
-      logger.projects.debug('Supabase listProjectFolders fallback to local storage', e);
+      logger.projects.debug('Appwrite listProjectFolders fallback to local storage', e);
     }
   }
 
@@ -61,21 +83,28 @@ export async function createProjectFolder(
 
   if (!isDev) {
     try {
-      const { data, error } = await supabase
-        .from('project_folders')
-        .insert({
+      const docId = ID.unique();
+      const doc = await databases.createDocument(
+        APPWRITE_DATABASE_ID,
+        FOLDERS_COLLECTION_ID,
+        docId,
+        {
           user_id: userId,
           parent_folder_id: parentFolderId ?? null,
           name: trimmed,
           privacy,
-        })
-        .select('id, parent_folder_id, name, privacy, created_at, updated_at')
-        .single();
-      if (!error && data) {
-        return folderRowToSummary(data as ProjectFolderRow);
+        },
+        [
+          Permission.read(Role.user(userId)),
+          Permission.update(Role.user(userId)),
+          Permission.delete(Role.user(userId)),
+        ],
+      );
+      if (doc) {
+        return folderRowToSummary(docToFolderRow(doc));
       }
     } catch (e) {
-      logger.projects.debug('Supabase createProjectFolder fallback to local storage', e);
+      logger.projects.debug('Appwrite createProjectFolder fallback to local storage', e);
     }
   }
 
@@ -103,12 +132,14 @@ export async function renameProjectFolder(id: string, name: string): Promise<voi
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('folder-')) {
     try {
-      const { error } = await supabase.from('project_folders').update({ name: trimmed }).eq('id', id);
-      if (!error) return;
+      await databases.updateDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id, {
+        name: trimmed,
+      });
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase renameProjectFolder fallback to local storage', e);
+      logger.projects.debug('Appwrite renameProjectFolder fallback to local storage', e);
     }
   }
 
@@ -125,18 +156,19 @@ export async function moveProjectFolder(
   id: string,
   parentFolderId: string | null,
 ): Promise<void> {
+  if (id === parentFolderId) return;
+
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('folder-')) {
     try {
-      const { error } = await supabase.rpc('move_project_folder', {
-        target_folder_id: id,
-        next_parent_folder_id: parentFolderId,
+      await databases.updateDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id, {
+        parent_folder_id: parentFolderId,
       });
-      if (!error) return;
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase moveProjectFolder fallback to local storage', e);
+      logger.projects.debug('Appwrite moveProjectFolder fallback to local storage', e);
     }
   }
 
@@ -153,14 +185,37 @@ export async function deleteProjectFolder(id: string): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
-  if (!isDev) {
+  if (!isDev && !id.startsWith('folder-')) {
     try {
-      const { error } = await supabase.rpc('delete_project_folder', {
-        target_folder_id: id,
-      });
-      if (!error) return;
+      // Find and detach child projects
+      const childProjects = await databases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        PROJECTS_COLLECTION_ID,
+        [Query.equal('folder_id', id)],
+      );
+      for (const p of childProjects.documents) {
+        await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, p.$id, {
+          folder_id: null,
+        });
+      }
+
+      // Find and detach child folders
+      const childFolders = await databases.listDocuments(
+        APPWRITE_DATABASE_ID,
+        FOLDERS_COLLECTION_ID,
+        [Query.equal('parent_folder_id', id)],
+      );
+      for (const cf of childFolders.documents) {
+        await databases.updateDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, cf.$id, {
+          parent_folder_id: null,
+        });
+      }
+
+      // Delete the folder itself
+      await databases.deleteDocument(APPWRITE_DATABASE_ID, FOLDERS_COLLECTION_ID, id);
+      return;
     } catch (e) {
-      logger.projects.debug('Supabase deleteProjectFolder fallback to local storage', e);
+      logger.projects.debug('Appwrite deleteProjectFolder fallback to local storage', e);
     }
   }
 
