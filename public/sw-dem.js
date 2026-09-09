@@ -84,5 +84,6 @@ importScripts(
   withEpoch('/sw-dem/runtime/slope-pool.js'),
   withEpoch('/sw-dem/runtime/slope-handler.js'),
   withEpoch('/sw-dem/runtime/altitude-handler.js'),
+  withEpoch('/sw-dem/runtime/radar-handler.js'),
   withEpoch('/sw-dem/runtime/router.js'),
 );

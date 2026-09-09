@@ -49,6 +49,7 @@ import {
   fetchRadarMeta,
   getLatestRadarFrame,
   buildRadarTileUrl,
+  formatRadarPaletteParam,
   isInstantT,
 } from '../../radar/radarClient';
 
@@ -240,18 +241,20 @@ export function useWeatherDataPipeline({
         continue;
       }
 
-      // Real-time Doppler Radar observation at Instant T (current day & hour)
+      // Real-time Doppler Radar observation at Instant T (only when radarEnabled is toggled on)
       if (key === 'rain') {
-        const isLive = isInstantT(currentState.date, currentState.time);
+        const isLive = (currentState.radarEnabled ?? true) && isInstantT(currentState.date, currentState.time);
         if (isLive) {
           try {
             const radarMeta = await fetchRadarMeta();
             const latestFrame = getLatestRadarFrame(radarMeta);
             if (latestFrame && ensureRadarLayer) {
-              const radarTileUrl = buildRadarTileUrl(radarMeta.host, latestFrame.path);
+              const sig = paletteSignature(currentState, 'rain');
+              const pParam = formatRadarPaletteParam(currentState.palettes?.rain?.bands, activeLayer.mode);
+              const radarTileUrl = buildRadarTileUrl(radarMeta.host, latestFrame.path, sig, pParam);
               const opacity = (currentState.palettes?.rain?.opacity ?? 85) / 100;
               if (ensureRadarLayer(radarTileUrl, opacity)) {
-                // Live Doppler Radar is actively displayed
+                // Live Doppler Radar is actively displayed with user's custom palette
                 setVisibility('rain', false);
                 renderedCount += 1;
                 continue;
@@ -260,9 +263,9 @@ export function useWeatherDataPipeline({
           } catch (radarErr) {
             console.warn('[weather-radar] Radar fallback to VPS forecast model:', radarErr);
           }
-        } else {
-          setRadarVisibility?.(false);
         }
+        // When radar is not toggled on, hide radar and proceed to recolor forecast with user's custom palette
+        setRadarVisibility?.(false);
       }
 
       const signature = [

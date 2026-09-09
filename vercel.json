@@ -19,7 +19,7 @@
     { "source": "/viewer", "destination": "/viewer.html" },
     { "source": "/api/openmeteo/(.*)", "destination": "/api/openmeteo" },
     { "source": "/api/weather/(.*)", "destination": "/api/weather" },
-    { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|radar-tiles/|slope-tiles/|altitude-tiles/|sw-dem/|viewer).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -63,7 +63,7 @@
       ]
     },
     {
-      "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|sw-dem/|viewer).*)",
+      "source": "/((?!api/|assets/|dem-tiles/|ortho-tiles/|radar-tiles/|slope-tiles/|altitude-tiles/|sw-dem/|viewer).*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" }
       ]

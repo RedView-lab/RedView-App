@@ -145,4 +145,15 @@ self.addEventListener('fetch', (event) => {
     ));
     return;
   }
+
+  const radarMatch = url.pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)$/);
+  if (radarMatch) {
+    event.respondWith(handleRadarTileRequest(
+      url,
+      parseInt(radarMatch[1], 10),
+      parseInt(radarMatch[2], 10),
+      parseInt(radarMatch[3], 10),
+    ));
+    return;
+  }
 });

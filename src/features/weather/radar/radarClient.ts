@@ -62,14 +62,45 @@ export function getLatestRadarFrame(meta: RadarMapsPayload | null): RadarFrame |
   return meta.radar.past[meta.radar.past.length - 1] ?? null;
 }
 
+export interface RadarPaletteBandLike {
+  color: string;
+  visible?: boolean;
+  minValue?: number;
+  maxValue?: number;
+}
+
+export function formatRadarPaletteParam(
+  bands: RadarPaletteBandLike[] | undefined,
+  mode = 'gradient',
+): string {
+  if (!bands || bands.length === 0) return '';
+  const bandStrs = bands
+    .filter((b) => b.visible !== false)
+    .map((b) => {
+      const col = b.color.replace('#', '').trim();
+      const min = Number.isFinite(b.minValue) ? b.minValue : 0;
+      const max = Number.isFinite(b.maxValue) ? b.maxValue : 20;
+      return `${col}_${min}_${max}`;
+    });
+  return `${mode}:${bandStrs.join(':')}`;
+}
+
 /**
- * Builds the Mapbox-compatible Slippy tile URL template for the given radar frame path.
- * Uses color scheme 2 (Universal Blue/Multi-intensity) and smoothing 1_1 for sharp Doppler precipitation.
+ * Builds the Mapbox-compatible raster tile URL for the given radar frame path.
+ * Routes through the Service Worker /radar-tiles/{z}/{x}/{y} pipeline to recolor
+ * Doppler radar reflectivity tiles in real time according to the user's custom palette.
  */
-export function buildRadarTileUrl(host: string, framePath: string): string {
-  const cleanHost = host.replace(/\/+$/, '');
-  const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
-  return `${cleanHost}${cleanPath}/512/{z}/{x}/{y}/2/1_1.png`;
+export function buildRadarTileUrl(
+  host: string,
+  framePath: string,
+  paletteSig?: string,
+  paletteParam?: string,
+): string {
+  const cleanHost = encodeURIComponent(host.replace(/\/+$/, ''));
+  const cleanPath = encodeURIComponent(framePath.startsWith('/') ? framePath : `/${framePath}`);
+  const p = paletteParam ? `&p=${encodeURIComponent(paletteParam)}` : '';
+  const sig = paletteSig ? `&sig=${encodeURIComponent(paletteSig)}` : '';
+  return `/radar-tiles/{z}/{x}/{y}?host=${cleanHost}&path=${cleanPath}${p}${sig}`;
 }
 
 /**

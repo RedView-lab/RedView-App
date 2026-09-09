@@ -15,6 +15,7 @@ export interface WeatherOverlayState {
   time: string;
   forecastDay: number;
   layers: WeatherOverlayLayer[];
+  radarEnabled?: boolean;
   palettes?: Partial<Record<string, {
     opacity: number;
     scaleSetting: string;

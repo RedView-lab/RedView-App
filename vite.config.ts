@@ -63,6 +63,33 @@ function redviewDevApiPlugin(): Plugin {
           return next()
         }
 
+        // 2b. Fallback proxy for /radar-tiles/ when SW is not controlling the page
+        if (req.url.startsWith('/radar-tiles/')) {
+          try {
+            const urlObj = new URL(req.url, 'http://localhost')
+            const host = decodeURIComponent(urlObj.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '')
+            const framePath = decodeURIComponent(urlObj.searchParams.get('path') || '')
+            const match = urlObj.pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            if (match && framePath) {
+              const [, z, x, y] = match
+              const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`
+              const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`
+              const upstreamRes = await fetch(target)
+              if (upstreamRes.ok) {
+                res.statusCode = 200
+                res.setHeader('Content-Type', 'image/png')
+                res.setHeader('Cache-Control', 'public, max-age=300')
+                const buf = Buffer.from(await upstreamRes.arrayBuffer())
+                return res.end(buf)
+              }
+            }
+          } catch (e) {
+            console.warn('[vite-radar-tiles-fallback] error:', e)
+          }
+          res.statusCode = 204
+          return res.end()
+        }
+
         // 3. Match /api/* routes to api/*.ts handlers
         if (req.url.startsWith('/api/')) {
           const urlObj = new URL(req.url, 'http://localhost')
