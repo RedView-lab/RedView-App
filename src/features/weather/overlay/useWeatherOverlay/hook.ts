@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { clearWeatherOverlayCache } from '../client';
+import { clearWeatherMetaCache } from '../vpsWeatherClient';
 import type { WeatherOverlayMetric, WeatherOverlayState } from '../types';
 import {
   createOverlayStatus,
@@ -8,6 +9,7 @@ import {
   type OverlayStatusReporter,
 } from '@/features/map3d';
 import type { RefreshReason } from './constants';
+import { SUPPORTED_KEYS } from './constants';
 import {
   activeRenderableLayers,
   paletteSignature,
@@ -64,6 +66,7 @@ export function useWeatherOverlay(
 
   const {
     canMutateStyle,
+    setVisibility,
     setLayerPaint,
     armStyleRecovery,
     completeStyleRecovery,
@@ -93,6 +96,7 @@ export function useWeatherOverlay(
     armStyleRecovery,
     completeStyleRecovery,
     hideAll,
+    setVisibility,
     ensureLayer,
     publishStatus,
     isCancelled: () => isCancelledRef.current,
@@ -127,14 +131,28 @@ export function useWeatherOverlay(
   }, [map, isMapLoaded, state.enabled]);
 
   useEffect(() => {
-    if (!state.enabled || activeLayers.length === 0) return;
+    if (!state.enabled || activeLayers.length === 0) {
+      hideAll();
+      cancelPipeline();
+      return;
+    }
+
+    // Immediately hide any layers that are no longer active
+    for (const key of SUPPORTED_KEYS) {
+      if (!activeLayers.some((layer) => layer.key === key)) {
+        setVisibility(key, false);
+      }
+    }
+
     scheduleRefresh('normal');
-  }, [selectionKey, activeLayersKey]);
+  }, [selectionKey, activeLayersKey, state.enabled]);
 
   useEffect(() => {
     if (!state.enabled || activeLayers.length === 0) return;
     if (dataRef.current) {
       void renderFromData(dataRef.current);
+    } else {
+      scheduleRefresh('force');
     }
   }, [paletteKey]);
 
@@ -149,6 +167,7 @@ export function useWeatherOverlay(
     if (!registerReload) return;
     registerReload(() => {
       clearWeatherOverlayCache();
+      clearWeatherMetaCache();
       dataRef.current = null;
       scheduleRefresh('reload');
     });

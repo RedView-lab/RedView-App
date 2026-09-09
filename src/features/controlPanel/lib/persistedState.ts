@@ -118,7 +118,7 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
     basemapId: DEFAULT_BASEMAP_ID,
-    basemap3dQuality: 'slow-040',
+    basemap3dQuality: 'fast-30m',
     toggles: {
       labelsEnabled: false,
       contourLinesEnabled: false,

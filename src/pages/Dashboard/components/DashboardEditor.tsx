@@ -12,6 +12,7 @@ import {
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import {
+  FpsDiagnosticsMonitor,
   MapBlurMirror,
   MapOverlayStatusDock,
   MapView,
@@ -221,8 +222,7 @@ export function DashboardEditor({
       sunlightMapEnabled: false,
     },
   });
-  // Ultra-fast 1/8th downscaled mirrors provide genuine, rich glassmorphism
-  // showing the blurred 3D map through the panels with zero lag on AMD APUs.
+  // Genuine, rich glassmorphism showing the blurred 3D map through panels.
   const shouldRenderPanelMapBlurMirrors = true;
   const shouldRenderToolbarMapBlurMirror = true;
 
@@ -315,6 +315,15 @@ export function DashboardEditor({
           routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
       </div>
+
+      <FpsDiagnosticsMonitor
+        map={mapInstance}
+        top={PANEL_PADDING}
+        style={{
+          right: `calc(${styles.mapViewportControlsStyle.right}px + 52px)`,
+          transition: styles.mapViewportControlsStyle.transition,
+        }}
+      />
 
       <div style={styles.leftCollapsedRailStyle}>
         <button

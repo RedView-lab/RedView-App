@@ -10,7 +10,7 @@ import { loadViewport } from '../../lib/viewport-persist';
 import { TerrainManager } from '../../lib/terrain';
 import { createMapLifecycleController } from './controller';
 import { styleHasUsableContent } from './controller/styleContent';
-import { getMapRuntimeProfile } from './runtimeProfile';
+import { applyRuntimeProfileDpr, getMapRuntimeProfile } from './runtimeProfile';
 import type { UseMapOptions } from './types';
 import {
   createEmptyBootstrapStyle,
@@ -21,6 +21,11 @@ import {
 import { setupMapSubscriptions } from './useMapSubscriptions';
 
 mapboxgl.accessToken = MAPBOX_TOKEN;
+
+// Request maximum clock state from Windows D3D11 / AMD graphics driver for APUs
+if ((mapboxgl.supported as any)?.webGLContextAttributes) {
+  (mapboxgl.supported as any).webGLContextAttributes.powerPreference = 'high-performance';
+}
 
 const DEFAULT_BASEMAP_CONFIG = {
   styleUrl: MAPBOX_STYLE,
@@ -72,6 +77,7 @@ export function useMap(
     let cancelled = false;
     const savedVp = initialViewport ?? loadViewport();
     const runtimeProfile = getMapRuntimeProfile();
+    applyRuntimeProfileDpr(runtimeProfile);
     const shouldHydrateInitialStyle = shouldPrefetchMapboxStyle(basemapConfig.styleUrl);
 
     const map = new mapboxgl.Map({
@@ -83,8 +89,8 @@ export function useMap(
       bearing: savedVp?.bearing ?? DEFAULT_VIEW.bearing,
       projection: DEFAULT_VIEW.projection,
       antialias: runtimeProfile.antialias,
-      pixelRatio: runtimeProfile.pixelRatio,
       preserveDrawingBuffer: true,
+      fadeDuration: 0,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
     } as mapboxgl.MapOptions);

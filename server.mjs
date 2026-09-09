@@ -1,7 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -104,10 +104,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handleApiRoute(pathname, parsedUrl, req, res) {
-  // Normalize openmeteo
+  // Normalize openmeteo & weather
   let apiPath = pathname;
   if (apiPath.startsWith('/api/openmeteo')) {
     apiPath = '/api/openmeteo';
+  } else if (apiPath.startsWith('/api/weather')) {
+    apiPath = '/api/weather';
   }
 
   const relPath = apiPath.replace(/^\/api\//, '');
@@ -200,7 +202,7 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
   });
 
   try {
-    const mod = await import(candidateFile);
+    const mod = await import(pathToFileURL(candidateFile).href);
     const handler = mod.default || mod;
     if (typeof handler === 'function') {
       await handler(apiReq, apiRes);

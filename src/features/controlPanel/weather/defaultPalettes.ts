@@ -31,16 +31,28 @@ export function buildDefaultWeatherPalettePresets(): Record<string, WeatherPalet
   );
 }
 
+export function isLegacyTemperaturePalette(palette: WeatherPaletteConfig | undefined): boolean {
+  if (!palette) return false;
+  if (palette.bands.length === 4) {
+    const b0 = palette.bands[0]?.maxValue;
+    const b1 = palette.bands[1]?.maxValue;
+    const b2 = palette.bands[2]?.maxValue;
+    // Legacy [0, 10, 20] breakpoints
+    if (b0 === 0 && b1 === 10 && b2 === 20) return true;
+  }
+  return false;
+}
+
 export function isLegacyFeelsLikePalette(palette: WeatherPaletteConfig | undefined): boolean {
   if (!palette) return false;
-  if (palette.opacity !== 37 || palette.scaleSetting !== '4 couleurs' || palette.bands.length !== 4) return false;
-  const expectedColors = ['#2DBF8C', '#D3D820', '#FF9B00', '#FF0000'];
-  const expectedRanges: Array<[number, number]> = [[-40, 0], [0, 10], [10, 20], [20, 50]];
-  return palette.bands.every((band, index) => (
-    band.color.toUpperCase() === expectedColors[index]
-    && band.minValue === expectedRanges[index][0]
-    && band.maxValue === expectedRanges[index][1]
-  ));
+  if (palette.bands.length === 4) {
+    const b0 = palette.bands[0]?.maxValue;
+    const b1 = palette.bands[1]?.maxValue;
+    const b2 = palette.bands[2]?.maxValue;
+    // Legacy [0, 10, 20] or [-5, 8, 18] breakpoints
+    if ((b0 === 0 && b1 === 10 && b2 === 20) || (b0 === -5 && b1 === 8 && b2 === 18)) return true;
+  }
+  return false;
 }
 
 export function hasLegacyFeelsLikeBreakpoints(palette: WeatherPaletteConfig | undefined): boolean {

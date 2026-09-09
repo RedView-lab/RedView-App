@@ -33,6 +33,18 @@ import {
   type RenderedLayerEntry,
   type ViewportBounds,
 } from './helpers';
+import {
+  fetchWeatherMeta,
+  findClosestForecastHour,
+  buildVpsTileUrl,
+  bboxToImageCoords,
+  loadTileImage,
+  prefetchAdjacentHours,
+} from '../vpsWeatherClient';
+import {
+  recolorTileToCanvas,
+  canvasToBlobUrl,
+} from '../vpsTileRenderer';
 
 interface UseWeatherDataPipelineArgs {
   map: MapboxMap | null;
@@ -42,6 +54,7 @@ interface UseWeatherDataPipelineArgs {
   armStyleRecovery: (reason: RefreshReason, trigger: string) => void;
   completeStyleRecovery: () => void;
   hideAll: () => void;
+  setVisibility: (key: WeatherOverlayMetric, visible: boolean) => void;
   ensureLayer: (
     key: WeatherOverlayMetric,
     mode: WeatherOverlayMode,
@@ -60,6 +73,7 @@ export function useWeatherDataPipeline({
   armStyleRecovery,
   completeStyleRecovery,
   hideAll,
+  setVisibility,
   ensureLayer,
   publishStatus,
   isCancelled,
@@ -96,6 +110,7 @@ export function useWeatherDataPipeline({
     for (const key of SUPPORTED_KEYS) {
       const activeLayer = activeLayerMap.get(key);
       if (!activeLayer) {
+        setVisibility(key, false);
         continue;
       }
 
@@ -173,6 +188,131 @@ export function useWeatherDataPipeline({
     return true;
   };
 
+  const renderVpsForecast = async (generation: number, reason: RefreshReason = 'normal'): Promise<boolean> => {
+    if (!map || isCancelled() || !canMutateStyle()) return false;
+    const currentState = stateRef.current;
+    const currentActiveLayers = activeRenderableLayers(currentState);
+    if (!currentState.enabled || currentActiveLayers.length === 0) {
+      hideAll();
+      return true;
+    }
+
+    publishStatus(createOverlayStatus({
+      id: STATUS_ID,
+      label: 'Météo (VPS)',
+      state: 'loading',
+      progress: 30,
+      detail: 'Connexion serveur météo VPS',
+      reloadable: true,
+    }));
+
+    const meta = await fetchWeatherMeta(undefined, reason === 'reload');
+    if (generation !== generationRef.current || isCancelled()) return false;
+
+    if (!meta || !Array.isArray(meta.hours) || meta.hours.length === 0) {
+      throw new Error('Données météo non disponibles sur le serveur');
+    }
+
+    const closestHour = findClosestForecastHour(currentState.date, currentState.time, meta.hours);
+    if (!closestHour) {
+      throw new Error('Heure de prévision non trouvée');
+    }
+    const coords = bboxToImageCoords(meta.bbox);
+    const renderableCount = Math.max(1, currentActiveLayers.length);
+    let renderedCount = 0;
+
+    const activeLayerMap = new Map(currentActiveLayers.map((layer) => [layer.key, layer] as const));
+    for (const key of SUPPORTED_KEYS) {
+      const activeLayer = activeLayerMap.get(key);
+      if (!activeLayer) {
+        setVisibility(key, false);
+        continue;
+      }
+      const signature = [
+        'vps',
+        closestHour,
+        activeLayer.mode,
+        paletteSignature(currentState, key),
+      ].join('|');
+
+      const rendered = renderedRef.current[key];
+      if (rendered && rendered.signature === signature && coordsEqual(rendered.coords, coords)) {
+        if (!ensureLayer(key, activeLayer.mode, rendered.url, rendered.coords)) {
+          armStyleRecovery('force', `vps-reuse:${key}`);
+          return false;
+        }
+        renderedCount += 1;
+        continue;
+      }
+
+      // Load high-resolution raster tile from VPS (instant memory cache + HTTP/2)
+      const tileUrl = buildVpsTileUrl(key, closestHour, meta.tileFormat || 'png');
+      let img: HTMLImageElement;
+      try {
+        img = await loadTileImage(tileUrl);
+      } catch (decodeErr) {
+        if (generation !== generationRef.current || isCancelled()) return false;
+        console.warn(`[weather-vps] Failed to load tile for ${key}:`, decodeErr);
+        throw new Error(`Tuile météo indisponible (${key})`);
+      }
+
+      // Prefetch adjacent hours (+1h, +2h, -1h) in background for instant 60 FPS timeline scrubbing
+      prefetchAdjacentHours(key, closestHour, meta.hours, meta.tileFormat || 'png');
+
+      if (generation !== generationRef.current || isCancelled() || !canMutateStyle()) return false;
+
+      // Ultra-fast 1ms 1D color table recoloring
+      const palette = currentState.palettes?.[key];
+      const varSpec = meta.variables[key];
+      const canvas = recolorTileToCanvas(
+        img,
+        key,
+        activeLayer.mode,
+        palette?.bands,
+        varSpec?.min ?? -40,
+        varSpec?.max ?? 50,
+      );
+
+      const blobUrl = await canvasToBlobUrl(canvas);
+      if (generation !== generationRef.current || isCancelled() || !canMutateStyle()) {
+        if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
+        return false;
+      }
+
+      if (!ensureLayer(key, activeLayer.mode, blobUrl, coords)) {
+        if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
+        armStyleRecovery('force', `vps-new:${key}`);
+        return false;
+      }
+
+      if (rendered?.url.startsWith('blob:')) {
+        window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
+      }
+      renderedRef.current[key] = { url: blobUrl, coords, signature };
+      renderedCount += 1;
+
+      publishStatus(createOverlayStatus({
+        id: STATUS_ID,
+        label: 'Météo (VPS)',
+        state: 'loading',
+        progress: 40 + (renderedCount / renderableCount) * 55,
+        detail: `Rendu ${key}`,
+        reloadable: true,
+      }));
+    }
+
+    publishStatus(createOverlayStatus({
+      id: STATUS_ID,
+      label: 'Météo (VPS)',
+      state: 'ready',
+      progress: 100,
+      detail: 'Overlay VPS prêt',
+      reloadable: true,
+    }));
+    completeStyleRecovery();
+    return true;
+  };
+
   const refresh = async (reason: RefreshReason = 'normal') => {
     const earlyState = stateRef.current;
     const earlyActive = activeRenderableLayers(earlyState);
@@ -189,6 +329,28 @@ export function useWeatherDataPipeline({
     const currentGeneration = ++generationRef.current;
     const viewport = getViewportBounds(map);
     const selection = selectionFromState(earlyState);
+
+    // Primary path for Forecast +2d: VPS 2D raster textures
+    if (selection.mode === 'forecast') {
+      try {
+        const vpsSuccess = await renderVpsForecast(currentGeneration, reason);
+        if (currentGeneration !== generationRef.current || isCancelled()) return;
+        if (!vpsSuccess && !canMutateStyle()) {
+          armStyleRecovery(reason, 'vps-style-not-ready');
+        }
+      } catch (vpsErr) {
+        if (currentGeneration !== generationRef.current || isCancelled()) return;
+        console.warn('[weather-overlay] VPS tile pipeline error:', vpsErr);
+        publishStatus(createOverlayStatus({
+          id: STATUS_ID,
+          label: 'Météo (VPS)',
+          state: 'error',
+          detail: vpsErr instanceof Error ? vpsErr.message : 'Erreur chargement météo VPS',
+          reloadable: true,
+        }));
+      }
+      return;
+    }
 
     const now = Date.now();
     const existingDataset = dataRef.current;

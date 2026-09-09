@@ -151,6 +151,7 @@ export function MapViewportControls({
   const traceColor = routeColor ?? activeItinerary?.color ?? '#ff3b30';
 
   const legendPopoverRef = useRef<HTMLDivElement | null>(null);
+  const compassNeedleRef = useRef<HTMLSpanElement | null>(null);
 
   const hasRouteSlope = routeSlopeLegendTitle != null;
   const slopeLegendPanelTitle = routeSlopeLegendTitle ?? t('Légende de pente du tracé');
@@ -168,17 +169,31 @@ export function MapViewportControls({
       return;
     }
 
+    const updateCompassDirect = () => {
+      const b = map.getBearing();
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transform = `rotate(${-b}deg)`;
+      }
+      const next3D = map.getPitch() > THREE_D_PITCH_THRESHOLD;
+      setIs3DView((prev) => (prev !== next3D ? next3D : prev));
+    };
+
     const syncCameraState = () => {
-      setBearing(map.getBearing());
-      setIs3DView(map.getPitch() > THREE_D_PITCH_THRESHOLD);
+      const b = map.getBearing();
+      setBearing(b);
+      const next3D = map.getPitch() > THREE_D_PITCH_THRESHOLD;
+      setIs3DView((prev) => (prev !== next3D ? next3D : prev));
+      if (compassNeedleRef.current) {
+        compassNeedleRef.current.style.transform = `rotate(${-b}deg)`;
+      }
     };
 
     syncCameraState();
-    map.on('move', syncCameraState);
+    map.on('move', updateCompassDirect);
     map.on('moveend', syncCameraState);
 
     return () => {
-      map.off('move', syncCameraState);
+      map.off('move', updateCompassDirect);
       map.off('moveend', syncCameraState);
     };
   }, [map]);
@@ -267,7 +282,12 @@ export function MapViewportControls({
         onClick={handleResetNorth}
         disabled={disabled}
       >
-        <IconCompass size={20} rotation={-bearing} />
+        <span
+          ref={compassNeedleRef}
+          style={{ display: 'inline-flex', transform: `rotate(${-bearing}deg)`, transformOrigin: 'center', transition: 'none' }}
+        >
+          <IconCompass size={20} />
+        </span>
       </button>
 
       <button

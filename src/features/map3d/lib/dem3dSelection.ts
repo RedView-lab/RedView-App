@@ -12,11 +12,12 @@ export function resolveDem3dSelection(
   value: string | null | undefined,
 ): Dem3dSelectionState {
   switch (value) {
+    case 'slow-040':
+      return { quality: 'hd', profile: 'default' };
     case 'terrain-1m':
       return { quality: 'hd', profile: 'terrain' };
     case 'fast-30m':
-      return { quality: 'fast-30m', profile: 'default' };
     default:
-      return { quality: 'hd', profile: 'default' };
+      return { quality: 'fast-30m', profile: 'default' };
   }
 }

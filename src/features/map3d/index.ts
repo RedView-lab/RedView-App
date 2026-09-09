@@ -1,5 +1,6 @@
 export { default as MapView } from './components/MapView';
 export { default as MapBlurMirror } from './components/MapBlurMirror';
+export { FpsDiagnosticsMonitor } from './components/FpsDiagnosticsMonitor/FpsDiagnosticsMonitor';
 export { default as MapOverlayStatusDock } from './components/MapOverlayStatusDock';
 export type {
 	MapContextMenuActionId,

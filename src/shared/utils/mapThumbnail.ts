@@ -2,8 +2,8 @@
  * Capture a downsized JPEG snapshot of the live Mapbox canvas.
  *
  * Used by the project browser to show a per-project thumbnail.
- * Requires the Map to have been instantiated with
- * `preserveDrawingBuffer: true` (already the case in `useMap.ts`).
+ * Captures the WebGL canvas synchronously on `render` via `map.triggerRepaint()`,
+ * working cleanly without requiring `preserveDrawingBuffer: true`.
  *
  * The capture pipeline is:
  *   map canvas (full device-pixel resolution)

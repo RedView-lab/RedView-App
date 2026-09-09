@@ -286,7 +286,8 @@ export function useWeatherStyleManager({
       setLayerPaint(key, mode);
       setVisibility(key, true);
       return true;
-    } catch {
+    } catch (err) {
+      console.warn('[weather-style] ensureLayer failed:', err);
       return false;
     }
   };

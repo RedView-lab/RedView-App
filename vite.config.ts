@@ -73,6 +73,11 @@ function redviewDevApiPlugin(): Plugin {
             pathname = '/api/openmeteo'
           }
 
+          // Normalize /api/weather/... to /api/weather
+          if (pathname.startsWith('/api/weather')) {
+            pathname = '/api/weather'
+          }
+
           const relPath = pathname.replace(/^\/api\//, '')
           const candidateFile = path.resolve(__dirname, 'api', `${relPath}.ts`)
 

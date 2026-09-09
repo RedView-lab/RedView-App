@@ -6,7 +6,11 @@ import { useWeatherOverlay } from '@/features/weather/overlay/useWeatherOverlay'
 import { clampForecastSelection, getForecastDateForOffset } from '@/features/weather/lib/forecastTime.ts';
 
 import { DEFAULT_CONTROL_PANEL_STATE } from '../../lib/defaultState';
-import { hasLegacyFeelsLikeBreakpoints, isLegacyFeelsLikePalette } from '../../weather/defaultPalettes';
+import {
+  hasLegacyFeelsLikeBreakpoints,
+  isLegacyFeelsLikePalette,
+  isLegacyTemperaturePalette,
+} from '../../weather/defaultPalettes';
 import {
   buildWeatherPaletteBands,
   clampWeatherPaletteBreakpoints,
@@ -64,9 +68,11 @@ export function useOverlayWeatherState({
     for (const layer of merged.layers) {
       const fallback = DEFAULT_CONTROL_PANEL_STATE.weather.palettes[layer.key];
       const rawPalette = merged.palettes[layer.key] ?? fallback;
-      let palette = layer.key === 'feelsLike' && isLegacyFeelsLikePalette(rawPalette)
-        ? fallback
-        : rawPalette;
+      const isLegacy = (
+        (layer.key === 'temperature' && isLegacyTemperaturePalette(rawPalette)) ||
+        (layer.key === 'feelsLike' && isLegacyFeelsLikePalette(rawPalette))
+      );
+      let palette = isLegacy ? fallback : rawPalette;
       if (!palette || !fallback) continue;
 
       if (layer.key === 'feelsLike' && hasLegacyFeelsLikeBreakpoints(palette) && fallback.bands.length === palette.bands.length) {

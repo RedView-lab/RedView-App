@@ -1,0 +1,12 @@
+[Unit]
+Description=RedView Weather 48h Ingestion Worker (DWD ICON-EU Europe)
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/redview-weather
+ExecStart=/usr/bin/python3 /opt/redview-weather/ingest_europe.py --output-dir /var/www/weather --hours 48
+ExecStartPost=/usr/bin/chcon -R -t httpd_sys_content_t /var/www/weather
+StandardOutput=journal
+StandardError=journal

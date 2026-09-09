@@ -170,12 +170,20 @@ export function useMapPoiExternalLink(map: MapboxMap | null): void {
     if (!map) return;
 
     let startPoint: { x: number; y: number } | null = null;
+    let hoverRafId: number | null = null;
 
     const onMouseDown = (e: mapboxgl.MapMouseEvent) => {
       startPoint = { x: e.point.x, y: e.point.y };
     };
 
+    const onMouseUp = () => {
+      startPoint = null;
+    };
+
     const onMouseMove = (e: mapboxgl.MapMouseEvent) => {
+      // Skip expensive spatial queries while dragging or during active camera movement
+      if (startPoint !== null || map.isMoving()) return;
+
       const canvas = map.getCanvas();
       const currentCursor = canvas.style.cursor;
       if (
@@ -187,21 +195,27 @@ export function useMapPoiExternalLink(map: MapboxMap | null): void {
         return;
       }
 
-      const bbox: [PointLike, PointLike] = [
-        [e.point.x - 16, e.point.y - 16],
-        [e.point.x + 16, e.point.y + 16],
-      ];
-      try {
-        const features = map.queryRenderedFeatures(bbox);
-        const match = findNamedPoiFeature(features);
-        if (match) {
-          canvas.style.cursor = 'pointer';
-        } else if (canvas.style.cursor === 'pointer') {
-          canvas.style.cursor = '';
+      if (hoverRafId !== null) return;
+      const point = { x: e.point.x, y: e.point.y };
+      hoverRafId = requestAnimationFrame(() => {
+        hoverRafId = null;
+        if (startPoint !== null || map.isMoving()) return;
+        const bbox: [PointLike, PointLike] = [
+          [point.x - 16, point.y - 16],
+          [point.x + 16, point.y + 16],
+        ];
+        try {
+          const features = map.queryRenderedFeatures(bbox);
+          const match = findNamedPoiFeature(features);
+          if (match) {
+            canvas.style.cursor = 'pointer';
+          } else if (canvas.style.cursor === 'pointer') {
+            canvas.style.cursor = '';
+          }
+        } catch {
+          // Query rendered features may throw during rapid style switches
         }
-      } catch {
-        // Query rendered features may throw during rapid style switches
-      }
+      });
     };
 
     const onClick = (e: mapboxgl.MapMouseEvent) => {
@@ -243,11 +257,14 @@ export function useMapPoiExternalLink(map: MapboxMap | null): void {
     };
 
     map.on('mousedown', onMouseDown);
+    map.on('mouseup', onMouseUp);
     map.on('mousemove', onMouseMove);
     map.on('click', onClick);
 
     return () => {
+      if (hoverRafId !== null) cancelAnimationFrame(hoverRafId);
       map.off('mousedown', onMouseDown);
+      map.off('mouseup', onMouseUp);
       map.off('mousemove', onMouseMove);
       map.off('click', onClick);
     };

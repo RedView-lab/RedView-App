@@ -15,10 +15,10 @@ export const DEFAULT_VIEW = {
 };
 
 export const FOG_CONFIG = {
-  range: [2, 20],
+  range: [0.6, 8.5],
   color: 'rgb(255, 196, 150)',
   'high-color': 'rgb(255, 138, 92)',
-  'horizon-blend': 0.08,
+  'horizon-blend': 0.1,
   'space-color': 'rgb(92, 56, 78)',
   'star-intensity': 0,
 };
