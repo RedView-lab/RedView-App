@@ -10,7 +10,7 @@ export async function sendVerificationEmail({
   name,
 }: SendVerificationEmailOptions): Promise<{ sent: boolean; debugCode?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM || 'RedView <onboarding@resend.dev>';
+  const from = process.env.RESEND_FROM || 'RedView <noreply@auth.redview.app>';
   const recipientName = name || to.split('@')[0] || 'Aventurier';
 
   console.log(`[AUTH] 📧 Verification code for ${to} (${recipientName}): [ ${code} ]`);
@@ -103,7 +103,7 @@ export async function sendVerificationEmail({
   `.trim();
 
   try {
-    const response = await fetch('https://api.resend.com/emails', {
+    let response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -118,10 +118,34 @@ export async function sendVerificationEmail({
       }),
     });
 
-    const data = await response.json().catch(() => ({}));
+    let data = await response.json().catch(() => ({}));
+
+    // If custom domain is not yet verified and we're sending during test/propagation, attempt fallback
+    if (!response.ok && from !== 'RedView <onboarding@resend.dev>') {
+      console.warn(`[AUTH] Resend sending from ${from} returned ${response.status} (${data?.message}). Testing fallback to onboarding@resend.dev...`);
+      const fallbackResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'RedView <onboarding@resend.dev>',
+          to: [to],
+          subject: `${code} est votre code de vérification RedView`,
+          text: `Votre code de vérification RedView est : ${code}. Il expire dans 10 minutes.`,
+          html,
+        }),
+      });
+      const fallbackData = await fallbackResponse.json().catch(() => ({}));
+      if (fallbackResponse.ok) {
+        response = fallbackResponse;
+        data = fallbackData;
+      }
+    }
+
     if (!response.ok) {
       console.warn('[AUTH] Resend API response error:', data);
-      // In development or when domain is pending verification, log and return debugCode
       return { sent: false, debugCode: code };
     }
 
