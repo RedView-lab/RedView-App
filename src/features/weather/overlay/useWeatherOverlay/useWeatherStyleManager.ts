@@ -243,13 +243,19 @@ export function useWeatherStyleManager({
   const ensureRadarLayer = (tileUrl: string, opacity: number): boolean => {
     if (!map || !canMutateStyle()) return false;
     try {
+      const existingSource = map.getSource(RADAR_SOURCE_ID) as { tiles?: string[]; maxzoom?: number } | undefined;
+      if (existingSource && (existingSource.maxzoom !== 7 || !existingSource.tiles || existingSource.tiles[0] !== tileUrl)) {
+        if (map.getLayer(RADAR_LAYER_ID)) map.removeLayer(RADAR_LAYER_ID);
+        map.removeSource(RADAR_SOURCE_ID);
+      }
+
       if (!map.getSource(RADAR_SOURCE_ID)) {
         map.addSource(RADAR_SOURCE_ID, {
           type: 'raster',
           tiles: [tileUrl],
           tileSize: 512,
           minzoom: 0,
-          maxzoom: 8,
+          maxzoom: 7, // RainViewer ceiling is 7. Mapbox automatically overscales on zoom 8+
         } as never);
       }
       if (!map.getLayer(RADAR_LAYER_ID)) {
