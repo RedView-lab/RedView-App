@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import {
   account,
+  ID,
   OAuthProvider,
   saveStoredAppwriteSession,
 } from '@/shared/services/appwrite'
 import VerificationCodeModal from './VerificationCodeModal'
 import './LoginScreen.css'
+
+// Basculer à true pour réactiver l'envoi de code de vérification par e-mail
+const ENABLE_EMAIL_VERIFICATION = false
 
 interface LoginScreenProps {
   onLogin?: (email?: string) => void
@@ -49,28 +53,35 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
 
       if (mode === 'signup') {
         const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
-        // Call API to send 4-digit verification code via Resend
-        const res = await fetch('/api/auth/send-verification-code', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: trimmedEmail, name: trimmedName }),
-        })
-        const data = await res.json().catch(() => ({}))
 
-        if (!res.ok) {
-          setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
+        if (ENABLE_EMAIL_VERIFICATION) {
+          // Call API to send 4-digit verification code via Resend
+          const res = await fetch('/api/auth/send-verification-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: trimmedEmail, name: trimmedName }),
+          })
+          const data = await res.json().catch(() => ({}))
+
+          if (!res.ok) {
+            setErrorMessage(data.error || "Impossible d'envoyer le code de vérification.")
+            setLoading(false)
+            return
+          }
+
+          setVerificationDebugCode(data.debugCode)
+          setShowVerificationModal(true)
           setLoading(false)
           return
         }
 
-        setVerificationDebugCode(data.debugCode)
-        setShowVerificationModal(true)
-        setLoading(false)
-        return
+        // Inscription directe (sans code) en attendant la validation DNS
+        await account.create(ID.unique(), trimmedEmail, password, trimmedName)
+        await account.createEmailPasswordSession(trimmedEmail, password)
+      } else {
+        // Mode login
+        await account.createEmailPasswordSession(trimmedEmail, password)
       }
-
-      // Mode login
-      await account.createEmailPasswordSession(trimmedEmail, password)
 
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
