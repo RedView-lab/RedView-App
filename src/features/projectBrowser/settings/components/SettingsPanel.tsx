@@ -8,6 +8,8 @@ import {
   useAppI18n,
 } from '@/shared/i18n';
 import { AccountSelect, type AccountSelectOption } from '../../account/components/AccountSelect';
+import type { AccountProfile } from '../../account';
+import { readStoredAppwriteSession } from '@/shared/services/appwrite';
 import { LANDING_URL } from '../../lib';
 
 type DisplayMode = 'system' | 'light' | 'dark';
@@ -158,11 +160,34 @@ function SettingsSelect({
   );
 }
 
-function buildFeedbackHref() {
-  return `${LANDING_URL.replace(/\/$/, '')}/formulaire`;
+function buildFeedbackHref(profile?: AccountProfile | null) {
+  const base = `${LANDING_URL.replace(/\/$/, '')}/`;
+  const params = new URLSearchParams();
+  params.set('feedback', 'open');
+  params.set('step', '3');
+
+  const sessionUser = readStoredAppwriteSession()?.user;
+  const email = profile?.email || sessionUser?.email || '';
+  const firstName =
+    profile?.firstName || (sessionUser?.name ? sessionUser.name.split(' ')[0] : '');
+  const lastName =
+    profile?.lastName ||
+    (sessionUser?.name ? sessionUser.name.split(' ').slice(1).join(' ') : '');
+  const country = profile?.country || '';
+
+  if (email) params.set('email', email);
+  if (firstName) params.set('firstName', firstName);
+  if (lastName) params.set('lastName', lastName);
+  if (country) params.set('country', country);
+
+  return `${base}?${params.toString()}`;
 }
 
-export function SettingsPanel() {
+export type SettingsPanelProps = {
+  profile?: AccountProfile | null;
+};
+
+export function SettingsPanel({ profile }: SettingsPanelProps = {}) {
   const { locale, setLocale, t } = useAppI18n();
   const [settings, setSettings] = useState<SettingsState>(() => readStoredSettings(locale));
 
@@ -321,7 +346,7 @@ export function SettingsPanel() {
 
           <a
             className="rvpb-settings-feedback__chip"
-            href={buildFeedbackHref()}
+            href={buildFeedbackHref(profile)}
             rel="noreferrer"
             target="_blank"
           >

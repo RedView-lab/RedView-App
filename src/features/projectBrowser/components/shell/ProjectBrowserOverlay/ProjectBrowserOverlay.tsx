@@ -129,7 +129,9 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
             />
           ) : null}
 
-          {state.activeTab === 'settings' ? <SettingsPanel /> : null}
+          {state.activeTab === 'settings' ? (
+            <SettingsPanel profile={state.accountProfile} />
+          ) : null}
 
         {state.billingModal ? (
           <BillingActionModal
