@@ -1,37 +1,7 @@
-import nodemailer from 'nodemailer';
-
 interface SendVerificationEmailOptions {
   to: string;
   code: string;
   name?: string;
-}
-
-let transporter: nodemailer.Transporter | null = null;
-
-function getTransporter(): nodemailer.Transporter | null {
-  if (transporter) return transporter;
-
-  const host = process.env.SMTP_HOST;
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-  if (!host || !user || !pass) {
-    return null;
-  }
-
-  transporter = nodemailer.createTransport({
-    host,
-    port,
-    secure,
-    auth: {
-      user,
-      pass,
-    },
-  });
-
-  return transporter;
 }
 
 export async function sendVerificationEmail({
@@ -39,14 +9,14 @@ export async function sendVerificationEmail({
   code,
   name,
 }: SendVerificationEmailOptions): Promise<{ sent: boolean; debugCode?: string }> {
-  const mailTransporter = getTransporter();
-  const from = process.env.SMTP_FROM || 'RedView <noreply@redview.app>';
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM || 'RedView <onboarding@resend.dev>';
   const recipientName = name || to.split('@')[0] || 'Aventurier';
 
   console.log(`[AUTH] 📧 Verification code for ${to} (${recipientName}): [ ${code} ]`);
 
-  if (!mailTransporter) {
-    console.log('[AUTH] (Note: SMTP not configured. Code logged to console & returned in debugCode)');
+  if (!apiKey) {
+    console.log('[AUTH] (Note: RESEND_API_KEY not configured in environment. Code logged to console & returned in debugCode)');
     return { sent: false, debugCode: code };
   }
 
@@ -133,16 +103,32 @@ export async function sendVerificationEmail({
   `.trim();
 
   try {
-    await mailTransporter.sendMail({
-      from,
-      to,
-      subject: `${code} est votre code de vérification RedView`,
-      text: `Votre code de vérification RedView est : ${code}. Il expire dans 10 minutes.`,
-      html,
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject: `${code} est votre code de vérification RedView`,
+        text: `Votre code de vérification RedView est : ${code}. Il expire dans 10 minutes.`,
+        html,
+      }),
     });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn('[AUTH] Resend API response error:', data);
+      // In development or when domain is pending verification, log and return debugCode
+      return { sent: false, debugCode: code };
+    }
+
+    console.log('[AUTH] ✅ Verification email sent via Resend, id:', data?.id);
     return { sent: true };
   } catch (err) {
-    console.error('[AUTH] Failed to send email via SMTP:', err);
+    console.error('[AUTH] Failed to send email via Resend:', err);
     return { sent: false, debugCode: code };
   }
 }

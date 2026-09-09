@@ -40,9 +40,16 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
     }
 
     try {
+      // In case an old session remains active
+      try {
+        await account.deleteSession('current')
+      } catch {
+        // Ignore if no active session
+      }
+
       if (mode === 'signup') {
         const trimmedName = name.trim() || trimmedEmail.split('@')[0] || 'User'
-        // Call API to send 4-digit verification code
+        // Call API to send 4-digit verification code via Resend
         const res = await fetch('/api/auth/send-verification-code', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -64,6 +71,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
 
       // Mode login
       await account.createEmailPasswordSession(trimmedEmail, password)
+
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
       onLogin?.(user.email)
