@@ -31,6 +31,9 @@ export const STATUS_ID = 'weather';
 
 export type RefreshReason = 'normal' | 'force' | 'reload';
 
+export const RADAR_SOURCE_ID = 'weather-overlay-source-rain-radar';
+export const RADAR_LAYER_ID = 'weather-overlay-layer-rain-radar';
+
 export function sourceId(key: WeatherOverlayMetric): string {
   return `${SOURCE_PREFIX}-${key}`;
 }

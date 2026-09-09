@@ -11,6 +11,8 @@ import {
   type RefreshReason,
   layerId,
   sourceId,
+  RADAR_LAYER_ID,
+  RADAR_SOURCE_ID,
 } from './constants';
 import {
   imageCoords,
@@ -227,8 +229,55 @@ export function useWeatherStyleManager({
     }
   };
 
+  const setRadarVisibility = (visible: boolean) => {
+    if (!map) return;
+    try {
+      if (map.getLayer(RADAR_LAYER_ID)) {
+        map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', visible ? 'visible' : 'none');
+      }
+    } catch {
+      /* no-op */
+    }
+  };
+
+  const ensureRadarLayer = (tileUrl: string, opacity: number): boolean => {
+    if (!map || !canMutateStyle()) return false;
+    try {
+      if (!map.getSource(RADAR_SOURCE_ID)) {
+        map.addSource(RADAR_SOURCE_ID, {
+          type: 'raster',
+          tiles: [tileUrl],
+          tileSize: 512,
+          minzoom: 0,
+          maxzoom: 8,
+        } as never);
+      }
+      if (!map.getLayer(RADAR_LAYER_ID)) {
+        map.addLayer({
+          id: RADAR_LAYER_ID,
+          type: 'raster',
+          source: RADAR_SOURCE_ID,
+          slot: 'top',
+          paint: {
+            'raster-opacity': opacity,
+            'raster-fade-duration': 150,
+            'raster-resampling': 'linear',
+          },
+        } as never);
+      } else {
+        map.setPaintProperty(RADAR_LAYER_ID, 'raster-opacity', opacity);
+        map.setLayoutProperty(RADAR_LAYER_ID, 'visibility', 'visible');
+      }
+      return true;
+    } catch (err) {
+      console.warn('[weather-style] ensureRadarLayer failed:', err);
+      return false;
+    }
+  };
+
   const hideAll = () => {
     for (const key of SUPPORTED_KEYS) setVisibility(key, false);
+    setRadarVisibility(false);
     publishStatus(null);
   };
 
@@ -242,6 +291,12 @@ export function useWeatherStyleManager({
       } catch {
         /* no-op */
       }
+    }
+    try {
+      if (map.getLayer(RADAR_LAYER_ID)) map.removeLayer(RADAR_LAYER_ID);
+      if (map.getSource(RADAR_SOURCE_ID)) map.removeSource(RADAR_SOURCE_ID);
+    } catch {
+      /* no-op */
     }
     for (const rendered of Object.values(renderedRef.current)) {
       if (rendered?.url.startsWith('blob:')) {
@@ -296,6 +351,8 @@ export function useWeatherStyleManager({
     canMutateStyle,
     setVisibility,
     setLayerPaint,
+    setRadarVisibility,
+    ensureRadarLayer,
     armStyleRecovery,
     completeStyleRecovery,
     clearStyleRecoveryTimers,

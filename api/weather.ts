@@ -52,6 +52,29 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   const rawUrl = req.url ?? '';
   const subPath = rawUrl.replace(/^\/api\/weather\/?/, '') || 'meta.json';
+
+  // Dedicated European live Doppler radar endpoint (cached 2 min)
+  if (subPath.startsWith('radar')) {
+    try {
+      const radarResponse = await fetch('https://api.rainviewer.com/public/weather-maps.json', {
+        headers: { Accept: 'application/json' },
+      });
+      if (!radarResponse.ok) {
+        throw new Error(`RainViewer HTTP ${radarResponse.status}`);
+      }
+      const radarJson = await radarResponse.json();
+      res.status(200);
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Cache-Control', 'public, max-age=120, stale-while-revalidate=300');
+      res.setHeader('X-Weather-Source', 'radar-nowcast');
+      return res.json(radarJson);
+    } catch (radarErr) {
+      const msg = radarErr instanceof Error ? radarErr.message : String(radarErr);
+      return res.status(502).json({ error: 'Radar service unavailable', detail: msg });
+    }
+  }
+
   const upstreamBase = (process.env.WEATHER_UPSTREAM ?? DEFAULT_VPS_UPSTREAM).replace(/\/+$/, '');
   const targetUrl = `${upstreamBase}/${subPath}`;
 

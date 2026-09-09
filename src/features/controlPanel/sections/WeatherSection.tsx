@@ -29,6 +29,7 @@ import {
   minutesToTime,
   timeToMinutes,
 } from '@/features/weather/lib/forecastTime.ts';
+import { isInstantT } from '@/features/weather/radar/radarClient';
 
 interface Props {
   state: WeatherState;
@@ -361,6 +362,9 @@ export function WeatherSection({
     );
   }, [isForecast, state.layers]);
 
+  const isRainActive = state.enabled && state.layers.some((layer) => layer.key === 'rain' && layer.enabled);
+  const isLiveInstant = isForecast && forecastDay === 0 && isInstantT(state.date, state.time);
+
   return (
     <Section
       title="Météo"
@@ -442,6 +446,20 @@ export function WeatherSection({
               />
             </div>
           </div>
+
+          {isRainActive && (
+            isLiveInstant ? (
+              <div className="rvc-weather__radar-badge">
+                <span className="rvc-weather__radar-badge-dot" />
+                <span>{t('Radar pluie direct (Instant T · Nowcasting)')}</span>
+              </div>
+            ) : (
+              <div className="rvc-weather__forecast-badge">
+                <span>📅</span>
+                <span>{t('Prévision modèle DWD ICON-EU')}</span>
+              </div>
+            )
+          )}
         </>
       ) : (
         <div className="rvc-weather__month-row">

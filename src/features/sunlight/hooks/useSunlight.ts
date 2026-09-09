@@ -12,7 +12,6 @@ import {
 } from '../lib/observerPoint';
 import { addSunRayLayer, removeSunRayLayer, updateSunRayPosition } from '../lib/sun-ray/sun-ray-layer';
 import { FOG_CONFIG } from '../../map3d/lib/mapbox.config';
-import { OPENMETEO_FORECAST_URL } from '@/features/weather/lib/openMeteoConfig';
 
 /**
  * Computes real sun position from date/time and map center.
@@ -52,10 +51,6 @@ export interface UseSunlightResult {
   observerTimeZone: string | null;
 }
 
-interface TimeZoneLookupPayload {
-  timezone?: string | null;
-}
-
 const timeZoneLookupCache = new Map<string, Promise<string | null>>();
 
 function pointLookupKey(point: Pick<SunObserverPoint, 'lat' | 'lng'>): string {
@@ -67,37 +62,25 @@ function getHostTimeZone(): string | null {
   return typeof candidate === 'string' && candidate.trim() ? candidate : null;
 }
 
+function resolveLocalTimeZone(lat: number, lng: number): string {
+  const hostTz = getHostTimeZone();
+  // Within Western & Central Europe
+  if (lat >= 34 && lat <= 72 && lng >= -15 && lng <= 35) {
+    if (lng < -5) return 'Europe/London';
+    if (lng > 25) return 'Europe/Athens';
+    return hostTz || 'Europe/Paris';
+  }
+  return hostTz || 'UTC';
+}
+
 async function lookupTimeZoneForPoint(point: Pick<SunObserverPoint, 'lat' | 'lng'>): Promise<string | null> {
   const key = pointLookupKey(point);
   const existing = timeZoneLookupCache.get(key);
   if (existing) return existing;
 
-  const request = (() => {
-    const target = new URL(OPENMETEO_FORECAST_URL, window.location.origin);
-    target.searchParams.set('latitude', String(point.lat));
-    target.searchParams.set('longitude', String(point.lng));
-    target.searchParams.set('timezone', 'auto');
-    target.searchParams.set('current', 'is_day');
-    target.searchParams.set('forecast_days', '1');
-
-    return fetch(target.toString())
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(`timezone lookup failed with ${response.status}`);
-      }
-      const payload = (await response.json()) as TimeZoneLookupPayload;
-      return typeof payload.timezone === 'string' && payload.timezone.trim()
-        ? payload.timezone
-        : null;
-    })
-    .catch((error) => {
-      console.warn('[sunlight] timezone lookup failed, falling back to host timezone', error);
-      return getHostTimeZone();
-    });
-  })();
-
-  timeZoneLookupCache.set(key, request);
-  return request;
+  const resolved = Promise.resolve(resolveLocalTimeZone(point.lat, point.lng));
+  timeZoneLookupCache.set(key, resolved);
+  return resolved;
 }
 
 const DEFAULT_LIGHTS: LightsSpecification[] = [

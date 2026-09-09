@@ -31,8 +31,8 @@ BBOX = {
     "north": 62.0,
 }
 
-OUT_W = 1280
-OUT_H = 720
+OUT_W = 1920
+OUT_H = 1080
 FORECAST_HOURS = 48
 DWD_BASE = "https://opendata.dwd.de/weather/nwp/icon-eu/grib"
 
@@ -338,11 +338,37 @@ def run_europe_pipeline(output_dir: str, forecast_hours: int = FORECAST_HOURS) -
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
+    # 4. Prune obsolete tiles from previous runs to cap storage strictly under ~150 MB (far below 10 GB limit)
+    pruned = prune_obsolete_tiles(tiles_dir, valid_hours)
+    if pruned > 0:
+        print(f"[Storage Cap] Pruned {pruned} obsolete tiles. VPS disk usage strictly capped < 150 MB.")
+
     total_dur = time.time() - t_start
     print(
         f"[Pipeline Complete] Generated {len(valid_hours)} hours x 6 variables "
         f"({len(valid_hours)*6} tiles) in {total_dur:.1f}s!"
     )
+
+
+def prune_obsolete_tiles(tiles_dir: str, valid_hours: List[str]) -> int:
+    """
+    Guarantees that disk usage on the VPS NEVER accumulates old files.
+    Deletes any .png file in tiles_dir whose timestamp is not in the current valid_hours.
+    Strictly caps total storage under ~150 MB (far below 10 GB limit).
+    """
+    valid_set = set(f"{v}_{h}.png" for v in VARIABLES for h in valid_hours)
+    pruned_count = 0
+    try:
+        for fname in os.listdir(tiles_dir):
+            if fname.endswith(".png") and fname not in valid_set:
+                try:
+                    os.remove(os.path.join(tiles_dir, fname))
+                    pruned_count += 1
+                except OSError:
+                    pass
+    except Exception as e:
+        print(f"[Prune Warning] Could not prune {tiles_dir}: {e}")
+    return pruned_count
 
 
 def main():

@@ -316,7 +316,9 @@ export function MapContextMenu({ map, containerRef, onAction, overlayContext }: 
     const controller = new AbortController();
     overlayAbortRef.current = controller;
 
-    fetchOverlayDetails(activePointLat, activePointLng, overlayContext, controller.signal)
+    const activePointElevation = menuState?.point.elevationMeters;
+
+    fetchOverlayDetails(activePointLat, activePointLng, overlayContext, controller.signal, activePointElevation)
       .then((overlayDetails) => {
         if (controller.signal.aborted) return;
         setMenuState((current) => {

@@ -45,6 +45,12 @@ import {
   recolorTileToCanvas,
   canvasToBlobUrl,
 } from '../vpsTileRenderer';
+import {
+  fetchRadarMeta,
+  getLatestRadarFrame,
+  buildRadarTileUrl,
+  isInstantT,
+} from '../../radar/radarClient';
 
 interface UseWeatherDataPipelineArgs {
   map: MapboxMap | null;
@@ -61,6 +67,8 @@ interface UseWeatherDataPipelineArgs {
     url: string,
     coords: ReturnType<typeof imageCoords>,
   ) => boolean;
+  ensureRadarLayer?: (tileUrl: string, opacity: number) => boolean;
+  setRadarVisibility?: (visible: boolean) => void;
   publishStatus: (status: ReturnType<typeof createOverlayStatus> | null) => void;
   isCancelled: () => boolean;
 }
@@ -75,6 +83,8 @@ export function useWeatherDataPipeline({
   hideAll,
   setVisibility,
   ensureLayer,
+  ensureRadarLayer,
+  setRadarVisibility,
   publishStatus,
   isCancelled,
 }: UseWeatherDataPipelineArgs) {
@@ -226,8 +236,35 @@ export function useWeatherDataPipeline({
       const activeLayer = activeLayerMap.get(key);
       if (!activeLayer) {
         setVisibility(key, false);
+        if (key === 'rain') setRadarVisibility?.(false);
         continue;
       }
+
+      // Real-time Doppler Radar observation at Instant T (current day & hour)
+      if (key === 'rain') {
+        const isLive = isInstantT(currentState.date, currentState.time);
+        if (isLive) {
+          try {
+            const radarMeta = await fetchRadarMeta();
+            const latestFrame = getLatestRadarFrame(radarMeta);
+            if (latestFrame && ensureRadarLayer) {
+              const radarTileUrl = buildRadarTileUrl(radarMeta.host, latestFrame.path);
+              const opacity = (currentState.palettes?.rain?.opacity ?? 85) / 100;
+              if (ensureRadarLayer(radarTileUrl, opacity)) {
+                // Live Doppler Radar is actively displayed
+                setVisibility('rain', false);
+                renderedCount += 1;
+                continue;
+              }
+            }
+          } catch (radarErr) {
+            console.warn('[weather-radar] Radar fallback to VPS forecast model:', radarErr);
+          }
+        } else {
+          setRadarVisibility?.(false);
+        }
+      }
+
       const signature = [
         'vps',
         closestHour,

@@ -13,6 +13,7 @@ export interface ForecastPointResponse {
     cloud_cover?: Array<number | null>;
     wind_speed_10m?: Array<number | null>;
     wind_direction_10m?: Array<number | null>;
+    wind_gusts_10m?: Array<number | null>;
   };
   daily?: {
     sunrise?: string[];
@@ -47,11 +48,17 @@ export function formatWindDirection(degrees: number): string {
   return headings[index];
 }
 
-export function formatWindLabel(speed: number | null | undefined, direction: number | null | undefined): string | null {
+export function formatWindLabel(
+  speed: number | null | undefined,
+  direction: number | null | undefined,
+  gusts?: number | null | undefined,
+): string | null {
   if (!Number.isFinite(speed)) return null;
-  const speedLabel = `${Math.round(Number(speed) * 3.6)} km/h`;
-  if (!Number.isFinite(direction)) return speedLabel;
-  return `${speedLabel} ${formatWindDirection(Number(direction))}`;
+  const speedKmh = Math.round(Number(speed) * 3.6);
+  const dirLabel = Number.isFinite(direction) ? ` ${formatWindDirection(Number(direction))}` : '';
+  const gustsKmh = Number.isFinite(gusts) ? Math.round(Number(gusts) * 3.6) : null;
+  const gustsLabel = gustsKmh && gustsKmh > speedKmh + 4 ? ` (raf. ${gustsKmh})` : '';
+  return `${speedKmh} km/h${dirLabel}${gustsLabel}`;
 }
 
 export function formatIsoTime(value: string | null | undefined): string | null {
@@ -64,6 +71,7 @@ export function buildOverlayForecastUrl(
   lat: number,
   lng: number,
   overlayContext: MapContextMenuOverlayContext,
+  elevationMeters?: number | null,
 ): string | null {
   const needsWeather = overlayContext.weather.enabled && overlayContext.weather.activeLayers.length > 0;
   const needsWind = overlayContext.wind.enabled && (overlayContext.wind.terrainOverlayEnabled || overlayContext.wind.particlesEnabled);
@@ -85,6 +93,15 @@ export function buildOverlayForecastUrl(
   url.searchParams.set('start_hour', `${date}T${time}`);
   url.searchParams.set('end_hour', `${date}T${time}`);
 
+  // European high-definition model selection (AROME HD 1.3km in France, ICON-D2 in Central Europe)
+  const isFrance = lat >= 41 && lat <= 52 && lng >= -6 && lng <= 10;
+  url.searchParams.set('models', isFrance ? 'meteofrance_seamless' : 'best_match');
+
+  // Realistic 3D terrain elevation downscaling (adiabatique lapse rate)
+  if (elevationMeters != null && Number.isFinite(elevationMeters)) {
+    url.searchParams.set('elevation', Math.round(elevationMeters).toString());
+  }
+
   const hourlyFields = new Set<string>();
   if (needsWeather) {
     hourlyFields.add('temperature_2m');
@@ -96,6 +113,7 @@ export function buildOverlayForecastUrl(
   if (needsWind) {
     hourlyFields.add('wind_speed_10m');
     hourlyFields.add('wind_direction_10m');
+    hourlyFields.add('wind_gusts_10m');
   }
   if (hourlyFields.size > 0) {
     url.searchParams.set('hourly', [...hourlyFields].join(','));
@@ -116,8 +134,9 @@ export async function fetchOverlayDetails(
   lng: number,
   overlayContext: MapContextMenuOverlayContext,
   signal: AbortSignal,
+  elevationMeters?: number | null,
 ): Promise<MapContextMenuOverlayDetail[]> {
-  const url = buildOverlayForecastUrl(lat, lng, overlayContext);
+  const url = buildOverlayForecastUrl(lat, lng, overlayContext, elevationMeters);
   if (!url) return [];
 
   const response = await fetch(url, { signal });
@@ -179,6 +198,7 @@ export async function fetchOverlayDetails(
     const windLabel = formatWindLabel(
       payload.hourly?.wind_speed_10m?.[0],
       payload.hourly?.wind_direction_10m?.[0],
+      payload.hourly?.wind_gusts_10m?.[0],
     );
     if (windLabel) {
       details.push({

@@ -68,6 +68,8 @@ export function useWeatherOverlay(
     canMutateStyle,
     setVisibility,
     setLayerPaint,
+    setRadarVisibility,
+    ensureRadarLayer,
     armStyleRecovery,
     completeStyleRecovery,
     clearStyleRecoveryTimers,
@@ -98,6 +100,8 @@ export function useWeatherOverlay(
     hideAll,
     setVisibility,
     ensureLayer,
+    ensureRadarLayer,
+    setRadarVisibility,
     publishStatus,
     isCancelled: () => isCancelledRef.current,
   });
