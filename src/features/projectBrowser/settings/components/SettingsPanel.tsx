@@ -164,7 +164,7 @@ function buildFeedbackHref(profile?: AccountProfile | null) {
   const base = `${LANDING_URL.replace(/\/$/, '')}/`;
   const params = new URLSearchParams();
   params.set('feedback', 'open');
-  params.set('step', '3');
+  params.set('step', '1');
 
   const sessionUser = readStoredAppwriteSession()?.user;
   const email = profile?.email || sessionUser?.email || '';
