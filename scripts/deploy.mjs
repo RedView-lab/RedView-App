@@ -73,7 +73,7 @@ async function main() {
     process.exit(1);
   }
 
-  const triggerPhp = `
+  const phpScript = `<?php
 require 'vendor/autoload.php';
 $app = require_once 'bootstrap/app.php';
 $kernel = $app->make(Illuminate\\Contracts\\Console\\Kernel::class);
@@ -82,23 +82,18 @@ $application = App\\Models\\Application::where('uuid', '${APP_UUID}')->first();
 $deployment_uuid = (string) Illuminate\\Support\\Str::uuid();
 $res = queue_application_deployment(application: $application, deployment_uuid: $deployment_uuid);
 echo json_encode($res);
-`.trim().replace(/\n/g, ' ');
-
+`;
+  const b64 = Buffer.from(phpScript).toString('base64');
   const sshBaseCmd = `ssh -i "${SSH_KEY}" -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_HOST}`;
   
   let deploymentUuid = '';
   try {
-    const triggerRes = run(`${sshBaseCmd} "sudo docker exec coolify php -r \\"${triggerPhp.replace(/"/g, '\\"')}\\""`);
+    const triggerRes = run(`${sshBaseCmd} "echo '${b64}' | base64 -d | sudo docker exec -i coolify php"`);
     const parsed = JSON.parse(triggerRes);
     deploymentUuid = parsed.deployment_uuid;
     success(`Coolify deployment queued! UUID: ${deploymentUuid}`);
   } catch (err) {
     warn(`Deployment trigger response: ${err.message}. Checking latest deployment in database...`);
-    try {
-      deploymentUuid = run(`${sshBaseCmd} "sudo docker exec coolify-db psql -U coolify -d coolify -t -A -c \\"SELECT deployment_uuid FROM application_deployment_queues ORDER BY id DESC LIMIT 1;\\""`);
-    } catch {
-      // ignore
-    }
   }
 
   // 4. Poll deployment progress
@@ -109,10 +104,10 @@ echo json_encode($res);
   for (let attempt = 1; attempt <= 45; attempt++) {
     await new Promise((r) => setTimeout(r, 2000));
     try {
-      const q = deploymentUuid
-        ? `SELECT status FROM application_deployment_queues WHERE deployment_uuid = '${deploymentUuid}'`
-        : `SELECT status FROM application_deployment_queues ORDER BY id DESC LIMIT 1`;
-      const dbStatus = run(`${sshBaseCmd} "sudo docker exec coolify-db psql -U coolify -d coolify -t -A -c \\"${q};\\""`);
+      const sql = deploymentUuid
+        ? `SELECT status FROM application_deployment_queues WHERE deployment_uuid = '${deploymentUuid}';`
+        : `SELECT status FROM application_deployment_queues ORDER BY id DESC LIMIT 1;`;
+      const dbStatus = run(`${sshBaseCmd} "echo \\"${sql}\\" | sudo docker exec -i coolify-db psql -U coolify -d coolify -t -A"`).trim();
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
       process.stdout.write(`\r\x1b[36m[RedView Deploy]\x1b[0m Build status: \x1b[33m${dbStatus}\x1b[0m (${elapsed}s elapsed)... `);
