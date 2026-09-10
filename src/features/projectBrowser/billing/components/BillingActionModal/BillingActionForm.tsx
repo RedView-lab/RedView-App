@@ -6,6 +6,7 @@ import {
   useStripe,
 } from '@stripe/react-stripe-js';
 import { useAppI18n } from '@/shared/i18n';
+import { trackAnalyticsEvent } from '@/shared/lib/analytics';
 import { buildAccountCountryOptions, DEFAULT_COUNTRY } from '../../../account/lib/options';
 import { logBillingUi, logBillingUiError } from '../../../lib';
 import type { SubscriptionPlanId } from '../../../types';
@@ -181,6 +182,13 @@ export function BillingActionForm({
       await onComplete({
         mode: 'subscription',
         subscriptionId: flow.subscriptionId,
+      });
+      trackAnalyticsEvent({
+        name: 'click_upgrade_pro',
+        data: {
+          plan: 'pro',
+          status: 'success',
+        },
       });
     } catch (nextError) {
       logBillingUiError('billing-page-submit-error', nextError, {

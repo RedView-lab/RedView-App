@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { trackAnalyticsEvent } from '../../../../shared/lib/analytics';
 import {
   buildBrfProfile,
   checkRouteWithinFrance,
@@ -414,6 +415,14 @@ export function useItineraryBrouterRouting({
           route.coordinates.length,
         );
         setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+        trackAnalyticsEvent({
+          name: 'route_calculated',
+          data: {
+            distance_km: Math.round(route.distanceM / 1000),
+            elevation_gain: Math.round(route.ascentM),
+            surface: resolved?.roadTypes?.effective?.gravel === 'prefer' ? 'gravel' : 'road',
+          },
+        });
       })
       .catch((error: unknown) => {
         if ((error as { name?: string }).name === 'AbortError') return;

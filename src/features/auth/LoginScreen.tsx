@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { trackAnalyticsEvent } from '@/shared/lib/analytics'
 import {
   account,
   ID,
@@ -141,6 +142,13 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
 
       const user = await account.get()
       saveStoredAppwriteSession({ id: user.$id, email: user.email, name: user.name })
+      trackAnalyticsEvent({
+        name: mode === 'signup' ? 'user_signup' : 'user_login',
+        data: { method: 'email' },
+      })
+      if (typeof window !== 'undefined' && window.umami && user.email) {
+        window.umami.identify({ email: user.email, userId: user.$id })
+      }
       onLogin?.(user.email)
     } catch (error: any) {
       console.warn('[auth] Appwrite action error:', error)

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { recolorRadarPng } from './server/radar-recolor.mjs';
+import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,6 +55,16 @@ const server = http.createServer(async (req, res) => {
     // 2b. Fallback proxy for /radar-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
     if (pathname.startsWith('/radar-tiles/')) {
       return await handleRadarTileRoute(pathname, parsedUrl, req, res);
+    }
+
+    // 2c. Fallback for /slope-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
+    if (pathname.startsWith('/slope-tiles/')) {
+      return await handleSlopeTileRoute(pathname, parsedUrl, req, res);
+    }
+
+    // 2d. Fallback for /altitude-tiles/* and /dem-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
+    if (pathname.startsWith('/altitude-tiles/') || pathname.startsWith('/dem-tiles/')) {
+      return await handleAltitudeTileRoute(pathname, parsedUrl, req, res);
     }
 
     // 3. Serve Static Files from dist
@@ -251,6 +262,46 @@ async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
     }
   } catch (e) {
     console.warn('[server-radar-tiles] error:', e);
+  }
+  res.statusCode = 204;
+  return res.end();
+}
+
+async function handleSlopeTileRoute(pathname, parsedUrl, req, res) {
+  try {
+    const match = pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    if (match) {
+      const [, z, x, y] = match;
+      const pngBuf = await generateSlopeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10));
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('X-Tile-Type', 'slope');
+      return res.end(pngBuf);
+    }
+  } catch (e) {
+    console.warn('[server-slope-tiles] error:', e);
+  }
+  res.statusCode = 204;
+  return res.end();
+}
+
+async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
+  try {
+    const match = pathname.match(/^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    if (match) {
+      const [, z, x, y] = match;
+      const pngBuf = await generateAltitudeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10));
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('X-Tile-Type', 'altitude');
+      return res.end(pngBuf);
+    }
+  } catch (e) {
+    console.warn('[server-altitude-tiles] error:', e);
   }
   res.statusCode = 204;
   return res.end();

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
+import { trackAnalyticsEvent } from '../../../shared/lib/analytics';
 import { createFitPredictionEngine } from '../engine/api';
 import { exportPredictionToExcel } from '../export';
 import {
@@ -129,6 +130,9 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
     if (file && !validateFileSize(file)) return;
     setGpxFile(file);
     resetOutputs();
+    if (file) {
+      trackAnalyticsEvent({ name: 'gpx_imported' });
+    }
   };
 
   const handleValidationChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -182,6 +186,10 @@ export function FitPredictionPanel({ open, onToggleOpen }: FitPredictionPanelPro
           });
         });
         setPredictionResult(result);
+        trackAnalyticsEvent({
+          name: 'fit_simulation_run',
+          data: { ftp_w: config.ftp_w, mass_kg: config.mass_kg },
+        });
       }
 
       if (mode === 'compare' && validationFile) {

@@ -6,6 +6,8 @@ import fs from 'fs'
 import { startDevServices } from './scripts/start-dev-services.mjs'
 // @ts-expect-error JS module without declarations
 import { recolorRadarPng } from './server/radar-recolor.mjs'
+// @ts-expect-error JS module without declarations
+import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs'
 
 const redviewBuildId = (
   process.env.VERCEL_GIT_COMMIT_SHA
@@ -89,6 +91,50 @@ function redviewDevApiPlugin(): Plugin {
             }
           } catch (e) {
             console.warn('[vite-radar-tiles-fallback] error:', e)
+          }
+          res.statusCode = 204
+          return res.end()
+        }
+
+        // 2c. Fallback for /slope-tiles/ when SW is not controlling the page
+        if (req.url.startsWith('/slope-tiles/')) {
+          try {
+            const urlObj = new URL(req.url, 'http://localhost')
+            const match = urlObj.pathname.match(/^\/slope-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            if (match) {
+              const [, z, x, y] = match
+              const pngBuf = await generateSlopeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10))
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'image/png')
+              res.setHeader('Cache-Control', 'public, max-age=604800')
+              res.setHeader('Access-Control-Allow-Origin', '*')
+              res.setHeader('X-Tile-Type', 'slope')
+              return res.end(pngBuf)
+            }
+          } catch (e) {
+            console.warn('[vite-slope-tiles-fallback] error:', e)
+          }
+          res.statusCode = 204
+          return res.end()
+        }
+
+        // 2d. Fallback for /altitude-tiles/ and /dem-tiles/
+        if (req.url.startsWith('/altitude-tiles/') || req.url.startsWith('/dem-tiles/')) {
+          try {
+            const urlObj = new URL(req.url, 'http://localhost')
+            const match = urlObj.pathname.match(/^\/(?:altitude|dem)-tiles\/(\d+)\/(\d+)\/(\d+)/)
+            if (match) {
+              const [, z, x, y] = match
+              const pngBuf = await generateAltitudeTile(parseInt(z, 10), parseInt(x, 10), parseInt(y, 10))
+              res.statusCode = 200
+              res.setHeader('Content-Type', 'image/png')
+              res.setHeader('Cache-Control', 'public, max-age=604800')
+              res.setHeader('Access-Control-Allow-Origin', '*')
+              res.setHeader('X-Tile-Type', 'altitude')
+              return res.end(pngBuf)
+            }
+          } catch (e) {
+            console.warn('[vite-altitude-tiles-fallback] error:', e)
           }
           res.statusCode = 204
           return res.end()
