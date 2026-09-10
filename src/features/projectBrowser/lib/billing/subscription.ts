@@ -10,145 +10,152 @@ import type {
 export const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000';
 
 const PLAN_PRICE_IDS: Partial<Record<SubscriptionPlanId, string>> = {
+  founder: import.meta.env.VITE_STRIPE_PRICE_ID_FOUNDER,
+  founderMonthly: import.meta.env.VITE_STRIPE_PRICE_ID_FOUNDER_MONTHLY,
+  patron: import.meta.env.VITE_STRIPE_PRICE_ID_PATRON,
+  patronMonthly: import.meta.env.VITE_STRIPE_PRICE_ID_PATRON_MONTHLY,
   explorer: import.meta.env.VITE_STRIPE_PRICE_ID_EXPLORER,
   proCommit: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_COMMIT,
   proMonthly: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_MONTHLY,
 };
 
-const FEATURE_BADGES = {
-  cloudStorage: {
-    id: 'cloud-storage',
-    label: 'Stockage Cloud',
-    icon: 'folder.svg',
-    tone: 'gray' as const,
-    featureItems: [{ icon: 'folder.svg', label: 'Gestionnaire de projet' }],
-  },
-  mapping3d: {
-    id: 'mapping-3d',
-    label: 'Cartographie 3D HD',
-    icon: 'diamond.svg',
-    tone: 'gold' as const,
-    featureItems: [
-      { icon: 'diamond.svg', label: 'Cartographie 3D haute fidélité' },
-      { icon: 'cube-outline.svg', label: 'Analyse LIDAR 20cm' },
-    ],
-  },
-  terrainAnalysis: {
-    id: 'terrain-analysis',
-    label: 'Analyse du terrain',
-    icon: 'multi-layer.svg',
-    tone: 'brown' as const,
-    featureItems: [
-      { icon: 'slope.svg', label: 'Analyse des pentes' },
-      { icon: 'multi-layer.svg', label: 'Analyse de l’altitude' },
-    ],
-  },
-  meteoSunlight: {
-    id: 'meteo-sunlight',
-    label: 'Météo et ensoleillement',
-    icon: 'weather.svg',
-    tone: 'blue' as const,
-    featureItems: [
-      { icon: 'sun.svg', label: 'Simulation ensoleillement' },
-      { icon: 'cloud-sun-02.svg', label: 'Prévisions et tendances Météo' },
-      { icon: 'wind-03.svg', label: 'Vent en temps réel' },
-      { icon: 'snowflake.svg', label: 'Simulation de la neige en temps réel' },
-    ],
-  },
-  routePlanning: {
-    id: 'route-planning',
-    label: 'Création d’itinéraire avancée',
-    icon: 'route.svg',
-    tone: 'teal' as const,
-    featureItems: [
-      { icon: 'settings-01.svg', label: 'Création d’itinéraire customisable' },
-      { icon: 'route.svg', label: 'Comparaison d’itinéraire' },
-    ],
-  },
-  routeAnalysis: {
-    id: 'route-analysis',
-    label: 'Analyse d’itinéraire',
-    icon: 'line-chart.svg',
-    tone: 'green' as const,
-    featureItems: [
-      { icon: 'line-chart.svg', label: 'Graphique customisable' },
-      { icon: 'list.svg', label: 'Feuille de route et timeline exportables' },
-      { icon: 'share-07.svg', label: 'Export multi format' },
-    ],
-  },
-  poiManagement: {
-    id: 'poi-management',
-    label: 'Gestion des Points d’Intérêts',
-    icon: 'poi-pin.svg',
-    tone: 'purple' as const,
-    featureItems: [{ icon: 'poi-pin.svg', label: 'Sélection et édition des POIs' }],
-  },
-  paceEstimation: {
-    id: 'pace-estimation',
-    label: 'Estimation du rythme',
-    icon: 'stopwatch.svg',
-    tone: 'black' as const,
-    featureItems: [{ icon: 'stopwatch.svg', label: 'Pacing et gestion des pauses' }],
-  },
-};
+export const FREE_BULLETS = [
+  'Moteur 3D & LiDAR 20 cm illimités sur le web',
+  'Simulation météo, vent, ensoleillement & neige',
+  'Routage intelligent & export GPX illimité',
+  'Accès complet sans carte bancaire',
+];
 
-export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+export const FOUNDER_BULLETS = [
+  'Tout l’Accès Web Bêta inclus',
+  'Accès prioritaire à la future App Mobile (iOS TestFlight & Android)',
+  'Statut Fondateur : -50% à vie sur les futurs abonnements',
+  'Droit de vote sur les prochains massifs 3D modélisés',
+  'Salon Discord privé & échanges directs avec le développeur',
+  'Soutenez directement le développement indépendant',
+];
+
+export const PATRON_BULLETS = [
+  'Tous les privilèges du Pass Fondateur inclus',
+  '1 An de compte PRO offert au lancement de la v1',
+  'Accès VIP ultra-prioritaire aux premières versions mobiles',
+  'Votre nom ou pseudo sur la page officielle des Soutiens',
+  'Contact direct pour proposer de nouvelles zones ou fonctionnalités',
+];
+
+export const YEARLY_PLANS: SubscriptionPlan[] = [
   {
     id: 'demo',
-    name: 'Démo',
-    priceLabel: 'Gratuit',
+    name: 'Accès Bêta Web',
+    priceLabel: '0 €',
+    pricePrefix: '',
+    priceValue: 0,
+    priceSuffix: '/ gratuit sur le web pendant la Bêta',
+    billingPeriod: 'yearly',
+    iconSrc: '/images/pricing/plans/pro-icon.webp',
+    iconAlt: 'Icône accès gratuit',
+    bullets: FREE_BULLETS,
     tags: [],
     iconBadges: [],
     description: '',
+    ctaDefaultLabel: 'Lancer l’exploration Web (0€)',
   },
   {
-    id: 'explorer',
-    name: 'Abonnement Explorer',
-    priceLabel: '9.99€/mois',
+    id: 'founder',
+    name: 'Pass Fondateur',
+    priceLabel: '10 €',
+    pricePrefix: '',
+    priceValue: 10,
+    priceSuffix: '/ paiement unique · avantages à vie',
+    billingPeriod: 'yearly',
+    iconSrc: '/images/pricing/plans/organization-icon.webp',
+    iconAlt: 'Icône pass fondateur',
+    bullets: FOUNDER_BULLETS,
+    highlighted: true,
+    tags: ['Recommandé'],
+    iconBadges: [],
+    description: '',
+    ctaDefaultLabel: 'Devenir Membre Fondateur (10€)',
+  },
+  {
+    id: 'patron',
+    name: 'Mécène & Soutien Majeur',
+    priceLabel: 'dès 30 €',
+    pricePrefix: 'dès ',
+    priceValue: 30,
+    priceSuffix: '/ don libre de soutien',
+    billingPeriod: 'yearly',
+    iconSrc: '/images/pricing/plans/enterprise-icon.webp',
+    iconAlt: 'Icône mécène don libre',
+    bullets: PATRON_BULLETS,
     tags: [],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.cloudStorage,
-    ],
+    iconBadges: [],
     description: '',
-  },
-  {
-    id: 'proCommit',
-    name: 'Abonnement Pro',
-    priceLabel: '14.99€/mois',
-    tags: ['Engagement de 6 mois', '-25%'],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.routeAnalysis,
-      FEATURE_BADGES.poiManagement,
-      FEATURE_BADGES.paceEstimation,
-      FEATURE_BADGES.cloudStorage,
-    ],
-    description: '',
-  },
-  {
-    id: 'proMonthly',
-    name: 'Abonnement Pro',
-    priceLabel: '19.99€/mois',
-    tags: ['Sans engagement'],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.routeAnalysis,
-      FEATURE_BADGES.poiManagement,
-      FEATURE_BADGES.paceEstimation,
-      FEATURE_BADGES.cloudStorage,
-    ],
-    description: '',
+    ctaDefaultLabel: 'Devenir Mécène (dès 30€)',
   },
 ];
+
+export const MONTHLY_PLANS: SubscriptionPlan[] = [
+  {
+    id: 'demo',
+    name: 'Accès Bêta Web',
+    priceLabel: '0 €',
+    pricePrefix: '',
+    priceValue: 0,
+    priceSuffix: '/ gratuit sur le web pendant la Bêta',
+    billingPeriod: 'monthly',
+    iconSrc: '/images/pricing/plans/pro-icon.webp',
+    iconAlt: 'Icône accès gratuit',
+    bullets: FREE_BULLETS,
+    tags: [],
+    iconBadges: [],
+    description: '',
+    ctaDefaultLabel: 'Lancer l’exploration Web (0€)',
+  },
+  {
+    id: 'founderMonthly',
+    name: 'Pass Fondateur',
+    priceLabel: '5 €',
+    pricePrefix: '',
+    priceValue: 5,
+    priceSuffix: '/ par mois (soutien libre)',
+    billingPeriod: 'monthly',
+    iconSrc: '/images/pricing/plans/organization-icon.webp',
+    iconAlt: 'Icône pass fondateur',
+    bullets: FOUNDER_BULLETS,
+    highlighted: true,
+    tags: ['Soutien libre'],
+    iconBadges: [],
+    description: '',
+    ctaDefaultLabel: 'Devenir Membre Fondateur (5€/mois)',
+  },
+  {
+    id: 'patronMonthly',
+    name: 'Mécène & Soutien Majeur',
+    priceLabel: 'dès 15 €',
+    pricePrefix: 'dès ',
+    priceValue: 15,
+    priceSuffix: '/ par mois (soutien pro)',
+    billingPeriod: 'monthly',
+    iconSrc: '/images/pricing/plans/enterprise-icon.webp',
+    iconAlt: 'Icône mécène don libre',
+    bullets: PATRON_BULLETS,
+    tags: [],
+    iconBadges: [],
+    description: '',
+    ctaDefaultLabel: 'Devenir Mécène (15€/mois)',
+  },
+];
+
+export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
+  ...YEARLY_PLANS,
+  MONTHLY_PLANS[1],
+  MONTHLY_PLANS[2],
+];
+
+export function getPlansForPeriod(period: 'yearly' | 'monthly'): SubscriptionPlan[] {
+  return period === 'yearly' ? YEARLY_PLANS : MONTHLY_PLANS;
+}
 
 export const DEFAULT_CONTACT_PREFERENCE: BillingContactPreference = {
   mode: 'account',
@@ -205,7 +212,13 @@ export function hasPaidSubscription(snapshot: SubscriptionSnapshot | null): bool
 
 export function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoading: boolean): string {
   if (isLoading) return translateAppText('Compte');
-  return hasPaidSubscription(snapshot) ? translateAppText('Premium') : translateAppText('Démo');
+  if (!hasPaidSubscription(snapshot)) return translateAppText('Accès Bêta');
+
+  const activePlanId = resolveActivePlanId(snapshot);
+  if (activePlanId === 'patron' || activePlanId === 'patronMonthly') {
+    return translateAppText('Mécène');
+  }
+  return translateAppText('Membre Fondateur');
 }
 
 export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
@@ -220,7 +233,7 @@ export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): Subs
 
 export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot || isDemoPlan(snapshot)) {
-    return translateAppText('Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.');
+    return translateAppText('Votre compte bénéficie de l’accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.');
   }
 
   if (snapshot.cancelAtPeriodEnd) {
@@ -235,12 +248,12 @@ export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null)
     });
   }
 
-  return translateAppText('Votre abonnement RedView Pro est actif.');
+  return translateAppText('Votre statut Fondateur est actif.');
 }
 
 export function statusLabel(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot?.status) return translateAppText('Statut indisponible');
-  if (snapshot.status === 'demo') return translateAppText('Démo');
+  if (snapshot.status === 'demo') return translateAppText('Accès Bêta');
   if (snapshot.status === 'active') return translateAppText('Actif');
   if (snapshot.status === 'trialing') return translateAppText('Essai');
   return snapshot.status;

@@ -637,6 +637,186 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Explore our subscription offers."
   },
   {
+    "fr": "Bêta Ouverte & Accès Fondateur",
+    "en": "Open Beta & Founder Access"
+  },
+  {
+    "fr": "Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l’application mobile et débloquer vos avantages à vie.",
+    "en": "Explore the RedView 3D engine on the Web for free. Become a Founder Member to fund the mobile app and unlock lifetime perks."
+  },
+  {
+    "fr": "Pass Unique",
+    "en": "One-Time Pass"
+  },
+  {
+    "fr": "Soutien Mensuel",
+    "en": "Monthly Support"
+  },
+  {
+    "fr": "Formule de soutien",
+    "en": "Support option"
+  },
+  {
+    "fr": "Accès Bêta Web",
+    "en": "Web Beta Access"
+  },
+  {
+    "fr": "/ gratuit sur le web pendant la Bêta",
+    "en": "/ free on the web during Beta"
+  },
+  {
+    "fr": "Lancer l’exploration Web (0€)",
+    "en": "Start Web Exploration (0€)"
+  },
+  {
+    "fr": "Accès Bêta Actif",
+    "en": "Web Beta Active"
+  },
+  {
+    "fr": "Pass Fondateur",
+    "en": "Founder Pass"
+  },
+  {
+    "fr": "/ paiement unique · avantages à vie",
+    "en": "/ one-time payment · lifetime perks"
+  },
+  {
+    "fr": "/ par mois (soutien libre)",
+    "en": "/ per month (open support)"
+  },
+  {
+    "fr": "Devenir Membre Fondateur (10€)",
+    "en": "Become Founder Member (10€)"
+  },
+  {
+    "fr": "Devenir Membre Fondateur (5€/mois)",
+    "en": "Become Founder Member (5€/month)"
+  },
+  {
+    "fr": "Mécène & Soutien Majeur",
+    "en": "Patron & Major Support"
+  },
+  {
+    "fr": "dès ",
+    "en": "from "
+  },
+  {
+    "fr": "dès 30 €",
+    "en": "from €30"
+  },
+  {
+    "fr": "dès 15 €",
+    "en": "from €15"
+  },
+  {
+    "fr": "/ don libre de soutien",
+    "en": "/ open support donation"
+  },
+  {
+    "fr": "/ par mois (soutien pro)",
+    "en": "/ per month (pro support)"
+  },
+  {
+    "fr": "Devenir Mécène (dès 30€)",
+    "en": "Become Patron (from €30)"
+  },
+  {
+    "fr": "Devenir Mécène (15€/mois)",
+    "en": "Become Patron (€15/month)"
+  },
+  {
+    "fr": "Recommandé",
+    "en": "Recommended"
+  },
+  {
+    "fr": "Soutien libre",
+    "en": "Open support"
+  },
+  {
+    "fr": "Membre Fondateur",
+    "en": "Founder Member"
+  },
+  {
+    "fr": "Mécène",
+    "en": "Patron"
+  },
+  {
+    "fr": "Accès Bêta",
+    "en": "Beta Access"
+  },
+  {
+    "fr": "Votre statut Fondateur est actif.",
+    "en": "Your Founder status is active."
+  },
+  {
+    "fr": "Votre compte bénéficie de l’accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.",
+    "en": "Your account has full access to the Web Beta. Become a Founder Member to unlock your lifetime perks."
+  },
+  {
+    "fr": "L’accès Bêta Web ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement si vous souhaitez devenir Membre Fondateur ou Mécène.",
+    "en": "Web Beta access requires no payment. Only add a payment method if you wish to become a Founder Member or Patron."
+  },
+  {
+    "fr": "Moteur 3D & LiDAR 20 cm illimités sur le web",
+    "en": "Unlimited 3D engine & 20 cm LiDAR on the web"
+  },
+  {
+    "fr": "Simulation météo, vent, ensoleillement & neige",
+    "en": "Weather, wind, sunlight & snow simulation"
+  },
+  {
+    "fr": "Routage intelligent & export GPX illimité",
+    "en": "Smart routing & unlimited GPX export"
+  },
+  {
+    "fr": "Accès complet sans carte bancaire",
+    "en": "Full access without credit card"
+  },
+  {
+    "fr": "Tout l’Accès Web Bêta inclus",
+    "en": "All Web Beta Access included"
+  },
+  {
+    "fr": "Accès prioritaire à la future App Mobile (iOS TestFlight & Android)",
+    "en": "Priority access to future Mobile App (iOS TestFlight & Android)"
+  },
+  {
+    "fr": "Statut Fondateur : -50% à vie sur les futurs abonnements",
+    "en": "Founder Status: -50% for life on future subscriptions"
+  },
+  {
+    "fr": "Droit de vote sur les prochains massifs 3D modélisés",
+    "en": "Voting rights on next 3D mountain ranges modeled"
+  },
+  {
+    "fr": "Salon Discord privé & échanges directs avec le développeur",
+    "en": "Private Discord channel & direct chats with the developer"
+  },
+  {
+    "fr": "Soutenez directement le développement indépendant",
+    "en": "Directly support independent development"
+  },
+  {
+    "fr": "Tous les privilèges du Pass Fondateur inclus",
+    "en": "All Founder Pass privileges included"
+  },
+  {
+    "fr": "1 An de compte PRO offert au lancement de la v1",
+    "en": "1 Year of PRO account offered at v1 launch"
+  },
+  {
+    "fr": "Accès VIP ultra-prioritaire aux premières versions mobiles",
+    "en": "Ultra-priority VIP access to early mobile versions"
+  },
+  {
+    "fr": "Votre nom ou pseudo sur la page officielle des Soutiens",
+    "en": "Your name or handle on the official Supporters page"
+  },
+  {
+    "fr": "Contact direct pour proposer de nouvelles zones ou fonctionnalités",
+    "en": "Direct contact to suggest new areas or features"
+  },
+  {
     "fr": "Informations de paiement",
     "en": "Payment information"
   },

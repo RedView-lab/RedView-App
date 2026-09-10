@@ -1,8 +1,7 @@
 import { useState } from 'react';
 
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
-
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { logBillingUi } from '../../lib';
 import type { SubscriptionPlanId, SubscriptionPlan } from '../../types';
 
@@ -29,7 +28,6 @@ export function SubscriptionPlanCard({
 }: SubscriptionPlanCardProps) {
   const { t } = useAppI18n();
   const [openBadgeId, setOpenBadgeId] = useState<string | null>(null);
-  const hasMetadata = plan.tags.length > 0 || plan.iconBadges.length > 0;
 
   const isNestedInteractiveTarget = (target: EventTarget | null, currentTarget: EventTarget | null) => {
     if (!(target instanceof HTMLElement) || !(currentTarget instanceof HTMLElement)) {
@@ -49,9 +47,11 @@ export function SubscriptionPlanCard({
     onSelect(plan.id);
   };
 
+  const effectiveCtaLabel = ctaLabel ?? plan.ctaDefaultLabel ?? plan.priceLabel;
+
   return (
     <article
-      className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.id === 'demo' ? ' is-demo' : ''}${openBadgeId ? ' has-open-popover' : ''}`}
+      className={`rvpb-subscription-card${selected ? ' is-selected' : ''}${active ? ' is-active' : ''}${plan.highlighted ? ' is-highlighted' : ''}${plan.id === 'demo' ? ' is-demo' : ''}${openBadgeId ? ' has-open-popover' : ''}`}
       onClick={(event) => {
         if (isNestedInteractiveTarget(event.target, event.currentTarget)) {
           return;
@@ -69,20 +69,62 @@ export function SubscriptionPlanCard({
       role="button"
       tabIndex={0}
     >
-      <div className="rvpb-subscription-card__select">
-        <div className="rvpb-subscription-card__top">
-          <span className={`rvpb-radio${selected ? ' is-selected' : ''}`} aria-hidden="true" />
-          <div className="rvpb-subscription-card__copy">
-            <div className="rvpb-subscription-card__title-row">
-              <strong>{t(plan.name)}</strong>
-              <span>{t(plan.priceLabel)}</span>
-            </div>
-            {plan.description ? <p className="rvpb-subscription-card__description">{t(plan.description)}</p> : null}
+      {plan.highlighted ? (
+        <div className="rvpb-subscription-card__badge-corner">
+          <span>{t('Recommandé')}</span>
+        </div>
+      ) : null}
+
+      <div className="rvpb-subscription-card__header">
+        <div className="rvpb-subscription-card__header-info">
+          <div className="rvpb-subscription-card__title-row">
+            <h3>{t(plan.name)}</h3>
+          </div>
+          <div className="rvpb-subscription-card__price-line">
+            <span className="rvpb-subscription-card__price">
+              {plan.pricePrefix ? t(plan.pricePrefix) : ''}
+              {t(plan.priceLabel)}
+            </span>
+            {plan.priceSuffix ? (
+              <span className="rvpb-subscription-card__suffix">{t(plan.priceSuffix)}</span>
+            ) : null}
           </div>
         </div>
+
+        {plan.iconSrc ? (
+          <div className="rvpb-subscription-card__icon-wrap">
+            <img
+              src={plan.iconSrc}
+              alt={plan.iconAlt ? t(plan.iconAlt) : t(plan.name)}
+              className="rvpb-subscription-card__icon-img"
+              width={54}
+              height={54}
+              loading="lazy"
+            />
+          </div>
+        ) : null}
       </div>
 
-      {hasMetadata ? (
+      <div className="rvpb-subscription-card__divider" />
+
+      {plan.bullets && plan.bullets.length > 0 ? (
+        <ul className="rvpb-subscription-card__bullets">
+          {plan.bullets.map((bullet, idx) => (
+            <li key={idx} className="rvpb-subscription-card__bullet-item">
+              <span className="rvpb-subscription-card__bullet-icon" aria-hidden="true">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="8" cy="8" r="7" stroke="currentColor" strokeOpacity="0.45" strokeWidth="1.2" />
+                  <path d="M5.2 8.2L7.2 10.2L11 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              <span className="rvpb-subscription-card__bullet-text">{t(bullet)}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {/* Legacy icon badges if any */}
+      {plan.iconBadges && plan.iconBadges.length > 0 ? (
         <div className="rvpb-subscription-card__chips">
           {plan.tags.map((tag) => (
             <span key={tag} className="rvpb-chip">
@@ -135,18 +177,19 @@ export function SubscriptionPlanCard({
         </div>
       ) : null}
 
-      {ctaLabel ? (
+      {effectiveCtaLabel ? (
         <div className="rvpb-subscription-card__footer">
           <button
             type="button"
-            className={`rvpb-inline-cta${ctaTone === 'danger' ? ' is-danger' : ''}`}
-            disabled={ctaDisabled}
+            className={`rvpb-subscription-card__cta${plan.highlighted ? ' is-highlighted' : ''}${ctaTone === 'danger' ? ' is-danger' : ''}${active ? ' is-active-plan' : ''}`}
+            disabled={ctaDisabled || (active && plan.id === 'demo')}
             onClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
+              if (active && plan.id === 'demo') return;
               logBillingUi('subscription-cta-click', {
                 planId: plan.id,
-                ctaLabel,
+                ctaLabel: effectiveCtaLabel,
                 ctaTone,
                 ctaDisabled,
                 selected,
@@ -156,7 +199,7 @@ export function SubscriptionPlanCard({
               void onCtaClick?.();
             }}
           >
-            {t(ctaLabel)}
+            {t(effectiveCtaLabel)}
           </button>
         </div>
       ) : null}

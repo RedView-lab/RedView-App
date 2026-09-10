@@ -7,7 +7,15 @@ export interface ProjectBrowserOverlayProps {
 }
 
 export type OverlayTab = 'projects' | 'account' | 'subscription' | 'settings';
-export type SubscriptionPlanId = 'demo' | 'explorer' | 'proCommit' | 'proMonthly';
+export type SubscriptionPlanId =
+  | 'demo'
+  | 'founder'
+  | 'founderMonthly'
+  | 'patron'
+  | 'patronMonthly'
+  | 'explorer'
+  | 'proCommit'
+  | 'proMonthly';
 
 export type SubscriptionSnapshot = {
   isSubscribed: boolean;
@@ -41,6 +49,15 @@ export type SubscriptionPlan = {
   id: SubscriptionPlanId;
   name: string;
   priceLabel: string;
+  pricePrefix?: string;
+  priceValue?: number | string;
+  priceSuffix?: string;
+  billingPeriod?: 'yearly' | 'monthly';
+  iconSrc?: string;
+  iconAlt?: string;
+  bullets?: string[];
+  highlighted?: boolean;
+  ctaDefaultLabel?: string;
   tags: string[];
   iconBadges: Array<{
     id: string;

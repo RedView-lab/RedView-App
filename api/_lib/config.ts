@@ -1,8 +1,19 @@
 import type { ApiRequest } from './types.js';
 
-export type BillingPlanId = 'explorer' | 'proCommit' | 'proMonthly';
+export type BillingPlanId =
+  | 'founder'
+  | 'founderMonthly'
+  | 'patron'
+  | 'patronMonthly'
+  | 'explorer'
+  | 'proCommit'
+  | 'proMonthly';
 
 const PRICE_ID_BY_PLAN: Record<BillingPlanId, string | undefined> = {
+  founder: process.env.STRIPE_PRICE_ID_FOUNDER,
+  founderMonthly: process.env.STRIPE_PRICE_ID_FOUNDER_MONTHLY,
+  patron: process.env.STRIPE_PRICE_ID_PATRON,
+  patronMonthly: process.env.STRIPE_PRICE_ID_PATRON_MONTHLY,
   explorer: process.env.STRIPE_PRICE_ID_EXPLORER,
   proCommit: process.env.STRIPE_PRICE_ID_PRO_COMMIT,
   proMonthly: process.env.STRIPE_PRICE_ID_PRO_MONTHLY,
@@ -17,7 +28,15 @@ export function requireEnv(name: string): string {
 }
 
 export function isBillingPlanId(value: string): value is BillingPlanId {
-  return value === 'explorer' || value === 'proCommit' || value === 'proMonthly';
+  return (
+    value === 'founder' ||
+    value === 'founderMonthly' ||
+    value === 'patron' ||
+    value === 'patronMonthly' ||
+    value === 'explorer' ||
+    value === 'proCommit' ||
+    value === 'proMonthly'
+  );
 }
 
 export function getConfiguredPriceId(planId: BillingPlanId): string | null {
