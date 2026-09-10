@@ -119,6 +119,9 @@ export function useWeatherStyleManager({
         map.setPaintProperty(layerId(key), 'raster-opacity', paletteOpacity(stateRef.current, key));
         map.setPaintProperty(layerId(key), 'raster-resampling', mode === 'fill' ? 'nearest' : 'linear');
       }
+      if (key === 'rain' && map.getLayer(RADAR_LAYER_ID)) {
+        map.setPaintProperty(RADAR_LAYER_ID, 'raster-opacity', (stateRef.current.palettes?.rain?.opacity ?? 85) / 100);
+      }
     } catch {
       /* no-op */
     }
@@ -243,13 +246,34 @@ export function useWeatherStyleManager({
   const ensureRadarLayer = (tileUrl: string, opacity: number): boolean => {
     if (!map || !canMutateStyle()) return false;
     try {
-      const existingSource = map.getSource(RADAR_SOURCE_ID) as { tiles?: string[]; maxzoom?: number } | undefined;
-      if (existingSource && (existingSource.maxzoom !== 7 || !existingSource.tiles || existingSource.tiles[0] !== tileUrl)) {
-        if (map.getLayer(RADAR_LAYER_ID)) map.removeLayer(RADAR_LAYER_ID);
-        map.removeSource(RADAR_SOURCE_ID);
-      }
+      const existingSource = map.getSource(RADAR_SOURCE_ID) as {
+        _options?: { tiles?: string[] };
+        tiles?: string[];
+        setTiles?: (tiles: string[]) => unknown;
+        reload?: () => unknown;
+      } | undefined;
 
-      if (!map.getSource(RADAR_SOURCE_ID)) {
+      if (existingSource) {
+        const currentTileUrl = existingSource._options?.tiles?.[0] ?? existingSource.tiles?.[0];
+        if (currentTileUrl !== tileUrl) {
+          if (typeof existingSource.setTiles === 'function') {
+            existingSource.setTiles([tileUrl]);
+          } else if (typeof existingSource.reload === 'function') {
+            if (existingSource._options) existingSource._options.tiles = [tileUrl];
+            existingSource.reload();
+          } else {
+            if (map.getLayer(RADAR_LAYER_ID)) map.removeLayer(RADAR_LAYER_ID);
+            map.removeSource(RADAR_SOURCE_ID);
+            map.addSource(RADAR_SOURCE_ID, {
+              type: 'raster',
+              tiles: [tileUrl],
+              tileSize: 512,
+              minzoom: 0,
+              maxzoom: 7,
+            } as never);
+          }
+        }
+      } else {
         map.addSource(RADAR_SOURCE_ID, {
           type: 'raster',
           tiles: [tileUrl],
@@ -258,6 +282,7 @@ export function useWeatherStyleManager({
           maxzoom: 7, // RainViewer ceiling is 7. Mapbox automatically overscales on zoom 8+
         } as never);
       }
+
       if (!map.getLayer(RADAR_LAYER_ID)) {
         map.addLayer({
           id: RADAR_LAYER_ID,
