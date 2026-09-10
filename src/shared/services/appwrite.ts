@@ -13,7 +13,7 @@ import {
 
 const appwriteEndpoint =
   (import.meta.env.VITE_APPWRITE_ENDPOINT as string | undefined) ||
-  'http://appwrite.141.145.220.99.sslip.io/v1';
+  'https://appwrite.redview.tech/v1';
 const appwriteProjectId =
   (import.meta.env.VITE_APPWRITE_PROJECT_ID as string | undefined) || 'redview-prod';
 

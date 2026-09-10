@@ -84,7 +84,7 @@ export async function sendVerificationEmail({
 <body>
   <div class="container">
     <div class="logo">
-      <img src="https://app.141.145.220.99.sslip.io/landing/icons/redview-logo.svg" alt="RedView" width="130" style="display:block;margin:0 auto;" />
+      <img src="https://app.redview.tech/landing/icons/redview-logo.svg" alt="RedView" width="130" style="display:block;margin:0 auto;" />
     </div>
     <h1>Vérifiez votre adresse e-mail</h1>
     <p>Bonjour <strong>${recipientName}</strong>,<br>Voici votre code de sécurité pour finaliser la création de votre compte RedView :</p>

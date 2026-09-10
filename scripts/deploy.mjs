@@ -131,10 +131,10 @@ echo json_encode($res);
   // 5. Verification
   log('Verifying production endpoint...');
   try {
-    const testRes = run('node -e "fetch(\'http://app.141.145.220.99.sslip.io\').then(r => console.log(r.status))"');
-    success(`Production is LIVE on http://app.141.145.220.99.sslip.io (HTTP ${testRes})`);
+    const testRes = run('node -e "fetch(\'https://app.redview.tech\').then(r => console.log(r.status))"');
+    success(`Production is LIVE on https://app.redview.tech (HTTP ${testRes})`);
   } catch {
-    log('Production URL: http://app.141.145.220.99.sslip.io');
+    log('Production URL: https://app.redview.tech');
   }
 }
 

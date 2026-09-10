@@ -79,7 +79,7 @@ async function handleBbox(
       signal: ctrl.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'RedView/1.0 (+https://redview.app)',
+        'User-Agent': 'RedView/1.0 (+https://redview.tech)',
       },
     });
     clearTimeout(timer);
@@ -117,7 +117,7 @@ async function handleCorridor(
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
-        'User-Agent': 'RedView/1.0 (+https://redview.app)',
+        'User-Agent': 'RedView/1.0 (+https://redview.tech)',
       },
       body,
     });
@@ -146,7 +146,7 @@ async function forwardSimple(url: string, res: ApiResponse, cacheControl: string
       signal: ctrl.signal,
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'RedView/1.0 (+https://redview.app)',
+        'User-Agent': 'RedView/1.0 (+https://redview.tech)',
       },
     });
     clearTimeout(timer);

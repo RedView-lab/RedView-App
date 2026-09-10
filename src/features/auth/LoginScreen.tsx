@@ -54,7 +54,7 @@ function EyeOffIcon() {
   )
 }
 
-export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.145.220.99.sslip.io' }: LoginScreenProps) {
+export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tech' }: LoginScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')

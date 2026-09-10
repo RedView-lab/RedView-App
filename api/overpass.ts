@@ -72,7 +72,7 @@ export default async function handler(
         headers: {
           'Content-Type': 'text/plain;charset=UTF-8',
           'Accept': 'application/json',
-          'User-Agent': 'RedView/1.0 (+https://redview.app)',
+          'User-Agent': 'RedView/1.0 (+https://redview.tech)',
         },
         body,
       });

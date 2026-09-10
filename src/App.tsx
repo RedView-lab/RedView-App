@@ -130,7 +130,7 @@ function App() {
   const [pathname, setPathname] = useState(() => window.location.pathname)
   const initialProjectId = readProjectIdFromPath(pathname)
 
-  const landingUrl = import.meta.env.VITE_LANDING_URL || 'http://landing.141.145.220.99.sslip.io'
+  const landingUrl = import.meta.env.VITE_LANDING_URL || 'https://redview.tech'
   const offersUrl = `${landingUrl.replace(/\/$/, '')}/#offres`
 
   useEffect(() => {
