@@ -56,7 +56,7 @@ export function readStoredAppwriteSession(): StoredAppwriteSessionSnapshot | nul
     return {
       user: {
         id: 'dev-user-001',
-        email: 'dev@redview.app',
+        email: 'dev@redview.tech',
         name: 'Dev User',
       },
     };
@@ -106,7 +106,7 @@ export async function getAppwriteUser(): Promise<Models.User<Models.Preferences>
     return {
       $id: 'dev-user-001',
       name: 'Dev User',
-      email: 'dev@redview.app',
+      email: 'dev@redview.tech',
       status: true,
       labels: [],
       passwordUpdate: '',

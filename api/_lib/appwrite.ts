@@ -99,7 +99,7 @@ export async function requireAuthenticatedUser(
   if (token === 'dev-jwt-token') {
     return {
       id: 'dev-user-001',
-      email: 'dev@redview.app',
+      email: 'dev@redview.tech',
     };
   }
 

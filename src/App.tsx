@@ -257,7 +257,7 @@ function App() {
         onLogin={(email) => {
           const stored = readStoredAppwriteSession()
           const nextSession = stored ?? {
-            user: { id: 'dev-user-001', email: email || 'user@redview.app' },
+            user: { id: 'dev-user-001', email: email || 'user@redview.tech' },
           }
           setSession(nextSession)
           setSubscriptionAccess({ hasAccess: true, status: 'pro' })

@@ -10,7 +10,7 @@ export async function sendVerificationEmail({
   name,
 }: SendVerificationEmailOptions): Promise<{ sent: boolean; debugCode?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM || 'RedView <noreply@auth.redview.app>';
+  const from = process.env.RESEND_FROM || 'RedView <noreply@redview.tech>';
   const recipientName = name || to.split('@')[0] || 'Aventurier';
 
   console.log(`[AUTH] 📧 Verification code for ${to} (${recipientName}): [ ${code} ]`);

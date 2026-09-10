@@ -521,7 +521,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   if (typeof window !== 'undefined') {
                     window.localStorage.setItem('redview:dev-session', 'true')
                   }
-                  onLogin?.('dev@redview.app')
+                  onLogin?.('dev@redview.tech')
                 }}
               >
                 Continue with Demo account
