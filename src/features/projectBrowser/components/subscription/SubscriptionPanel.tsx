@@ -1,16 +1,15 @@
-import { useState } from 'react';
-
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
+
 import {
   isDemoPlan,
   resolveActivePlanId,
-  getPlansForPeriod,
+  SUBSCRIPTION_PLANS,
 } from '../../lib';
 import { SubscriptionPlanCard } from './SubscriptionPlanCard';
 import type {
   BillingContactPreference,
   PaymentMethodSummary,
-  SubscriptionPlan,
   SubscriptionPlanId,
   SubscriptionState,
 } from '../../types';
@@ -78,19 +77,13 @@ export function SubscriptionPanel({
   const showDemoUpsell = isDemoPlan(subscriptionState.snapshot);
   const activePlanId = resolveActivePlanId(subscriptionState.snapshot);
   const hasManagedSubscription = !showDemoUpsell;
-
-  const [billingPeriod, setBillingPeriod] = useState<'yearly' | 'monthly'>(() => {
-    if (activePlanId === 'founderMonthly' || activePlanId === 'patronMonthly') {
-      return 'monthly';
-    }
-    return 'yearly';
-  });
-
-  const visiblePlans = getPlansForPeriod(billingPeriod);
-
+  const visiblePlans = hasManagedSubscription
+    ? SUBSCRIPTION_PLANS.filter((plan) => plan.id !== 'demo')
+    : SUBSCRIPTION_PLANS;
   const effectiveSelectedPlanId: SubscriptionPlanId =
-    selectedPlanId === 'demo' ? 'demo' : selectedPlanId;
-
+    hasManagedSubscription && selectedPlanId === 'demo' ? activePlanId : selectedPlanId;
+  const selectedPlan =
+    SUBSCRIPTION_PLANS.find((plan) => plan.id === effectiveSelectedPlanId) ?? SUBSCRIPTION_PLANS[2];
   const savedPaymentMethods = paymentMethods.length > 0 ? paymentMethods : paymentMethod ? [paymentMethod] : [];
   const paymentMethodLabel = paymentMethod
     ? t('{{brand}} se terminant par {{last4}}', {
@@ -106,8 +99,47 @@ export function SubscriptionPanel({
       })
     : hasManagedSubscription
       ? t('Ajoutez ou remplacez votre carte directement dans RedView App.')
-      : t('L’accès Bêta Web ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement si vous souhaitez devenir Membre Fondateur ou Mécène.');
+      : t('Le plan Demo ne requiert aucun paiement. Ajoutez un moyen de paiement uniquement lorsque vous passez à une offre payante.');
   const panelError = billingActionError ?? subscriptionState.error;
+  const subscriptionOffersContent = (
+    <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
+      {visiblePlans.map((plan) => {
+        const isActivePlan = activePlanId === plan.id;
+        const isSelectedPlan = selectedPlan.id === plan.id;
+        const isDemoSelection = plan.id === 'demo';
+
+        return (
+          <SubscriptionPlanCard
+            key={plan.id}
+            plan={plan}
+            selected={isSelectedPlan}
+            active={Boolean(isActivePlan)}
+            onSelect={setSelectedPlanId}
+            ctaLabel={
+              isActivePlan && !isDemoSelection
+                ? subscriptionState.snapshot?.cancelAtPeriodEnd
+                  ? 'Reprendre'
+                  : 'Interrompre'
+                : isSelectedPlan && !isDemoSelection
+                  ? hasManagedSubscription
+                    ? 'Basculer sur cette offre'
+                    : 'Choisir cette offre'
+                  : undefined
+            }
+            ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
+            ctaDisabled={billingActionBusy}
+            onCtaClick={
+              isDemoSelection
+                ? undefined
+                : isActivePlan
+                  ? onToggleManagedSubscription
+                  : () => onSelectPlan(plan.id as ManagedPlanId)
+            }
+          />
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className="rvpb-subscription-panel" aria-label={t('Gestion de l’abonnement')}>
@@ -119,96 +151,17 @@ export function SubscriptionPanel({
 
       <div className="rvpb-subscription-layout">
         <div className="rvpb-subscription-layout__main">
-          {/* Main header matching landing page */}
-          <div className="rvpb-subscription-header">
-            <div className="rvpb-subscription-header__titles">
-              <h2 className="rvpb-subscription-header__title">
-                {t('Bêta Ouverte & Accès Fondateur')}
-              </h2>
-              <p className="rvpb-subscription-header__subtitle">
-                {t('Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l’application mobile et débloquer vos avantages à vie.')}
-              </p>
+            <div className="rvpb-subscription-section">
+              <div className="rvpb-subscription-section__label">
+                <h2>{t('Abonnements')}</h2>
+                <p>{t('Découvrez nos offres d’abonnement.')}</p>
+              </div>
+
+              {subscriptionOffersContent}
             </div>
-
-            <div
-              className="rvpb-billing-toggle"
-              role="radiogroup"
-              aria-label={t('Formule de soutien')}
-            >
-              <button
-                type="button"
-                className={`rvpb-billing-toggle__btn${billingPeriod === 'yearly' ? ' is-active' : ''}`}
-                onClick={() => setBillingPeriod('yearly')}
-                role="radio"
-                aria-checked={billingPeriod === 'yearly'}
-              >
-                {t('Pass Unique')}
-              </button>
-              <button
-                type="button"
-                className={`rvpb-billing-toggle__btn${billingPeriod === 'monthly' ? ' is-active' : ''}`}
-                onClick={() => setBillingPeriod('monthly')}
-                role="radio"
-                aria-checked={billingPeriod === 'monthly'}
-              >
-                {t('Soutien Mensuel')}
-              </button>
-            </div>
-          </div>
-
-          {/* 3 cards grid */}
-          <div className="rvpb-subscription-cards-grid">
-            {visiblePlans.map((plan: SubscriptionPlan) => {
-              const isCurrentPlanActive =
-                activePlanId === plan.id ||
-                (!hasManagedSubscription && plan.id === 'demo');
-
-              const isSelectedPlan = effectiveSelectedPlanId === plan.id;
-              const isDemoSelection = plan.id === 'demo';
-
-              let ctaLabel: string | undefined;
-              let ctaTone: 'danger' | 'neutral' = 'neutral';
-
-              if (isCurrentPlanActive) {
-                if (isDemoSelection) {
-                  ctaLabel = t('Accès Bêta Actif');
-                } else {
-                  ctaLabel = subscriptionState.snapshot?.cancelAtPeriodEnd
-                    ? t('Reprendre')
-                    : t('Interrompre');
-                  ctaTone = 'danger';
-                }
-              } else if (hasManagedSubscription) {
-                ctaLabel = t('Basculer sur cette offre');
-              } else {
-                ctaLabel = plan.ctaDefaultLabel;
-              }
-
-              return (
-                <SubscriptionPlanCard
-                  key={`${billingPeriod}-${plan.id}`}
-                  plan={plan}
-                  selected={isSelectedPlan}
-                  active={Boolean(isCurrentPlanActive)}
-                  onSelect={setSelectedPlanId}
-                  ctaLabel={ctaLabel}
-                  ctaTone={ctaTone}
-                  ctaDisabled={billingActionBusy || (isCurrentPlanActive && isDemoSelection)}
-                  onCtaClick={
-                    isDemoSelection
-                      ? undefined
-                      : isCurrentPlanActive
-                        ? onToggleManagedSubscription
-                        : () => onSelectPlan(plan.id as ManagedPlanId)
-                  }
-                />
-              );
-            })}
-          </div>
 
           <div className="rvpb-divider" />
 
-          {/* Payment information section */}
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
               <h2>{t('Informations de paiement')}</h2>
@@ -246,124 +199,145 @@ export function SubscriptionPanel({
                             date: `${String(method.expMonth).padStart(2, '0')}/${method.expYear}`,
                           })}
                         </span>
-                      </div>
 
-                      <div className="rvpb-payment-card__actions">
-                        {!method.isDefault ? (
+                        <div className="rvpb-link-row">
+                          {!method.isDefault ? (
+                            <button
+                              type="button"
+                              className="rvpb-text-link"
+                              onClick={() => onSetDefaultPaymentMethod(method.id)}
+                              disabled={billingActionBusy}
+                            >
+                              {t('Définir par défaut')}
+                            </button>
+                          ) : null}
                           <button
                             type="button"
-                            className="rvpb-action-link"
+                            className="rvpb-text-link"
+                            onClick={onManagePaymentMethod}
                             disabled={billingActionBusy}
-                            onClick={() => onSetDefaultPaymentMethod(method.id)}
                           >
-                            {t('Définir par défaut')}
+                            {t('Modifier')}
                           </button>
-                        ) : null}
+                        </div>
                       </div>
                     </div>
                   ))
                 ) : (
-                  <div className="rvpb-payment-card rvpb-payment-card--empty">
+                  <div className="rvpb-payment-card">
                     <div className="rvpb-payment-card__icon rvpb-payment-card__icon--generic">
-                      <span className="rvpb-payment-card__brand-mark">CARD</span>
+                      <SvgV2Icon name="credit-card-02.svg" size={18} />
                     </div>
-
                     <div className="rvpb-payment-card__copy">
-                      <div className="rvpb-payment-card__headline">
-                        <strong>{paymentMethodLabel}</strong>
-                      </div>
+                      <strong>{paymentMethodLabel}</strong>
                       <span>{paymentMethodHelper}</span>
+                      <div className="rvpb-link-row">
+                        <button
+                          type="button"
+                          className="rvpb-text-link"
+                          onClick={onManagePaymentMethod}
+                          disabled={billingActionBusy}
+                        >
+                          {showDemoUpsell
+                            ? t('Choisir une offre payante')
+                            : paymentMethod
+                              ? t('Remplacer mon moyen de paiement')
+                              : t('Ajouter un moyen de paiement')}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
-
-                <div className="rvpb-payment-methods__footer">
-                  <button
-                    type="button"
-                    className="rvpb-primary-button rvpb-primary-button--compact"
-                    disabled={billingActionBusy}
-                    onClick={onManagePaymentMethod}
-                  >
-                    {savedPaymentMethods.length > 0
-                      ? t('Ajouter ou modifier un moyen de paiement')
-                      : t('Ajouter un moyen de paiement')}
-                  </button>
-                </div>
               </div>
+
+              <p className="rvpb-inline-note">
+                {hasManagedSubscription
+                  ? t('Toute carte confirmée pendant la souscription ou via le formulaire Stripe apparaît ici automatiquement et peut devenir votre carte par défaut.')
+                  : t('Quand vous passez à une offre payante, la carte validée pendant la souscription sera enregistrée ici automatiquement.')}
+              </p>
+
+              <button
+                type="button"
+                className="rvpb-add-row"
+                onClick={onManagePaymentMethod}
+                disabled={billingActionBusy}
+              >
+                <SvgV2Icon name="plus.svg" size={16} />
+                <span>
+                  {showDemoUpsell
+                    ? t('Passer à une offre payante')
+                    : savedPaymentMethods.length > 0
+                      ? t('Ajouter une nouvelle carte')
+                      : t('Ajouter un moyen de paiement')}
+                </span>
+              </button>
             </div>
           </div>
 
           <div className="rvpb-divider" />
 
-          {/* Contact email section */}
           <div className="rvpb-subscription-section">
             <div className="rvpb-subscription-section__label">
               <h2>{t('E-mail de contact')}</h2>
             </div>
 
-            <div className="rvpb-subscription-section__content">
-              <div className="rvpb-contact-options">
-                <label className="rvpb-contact-option">
-                  <input
-                    type="radio"
-                    name="rvpb-billing-contact"
-                    value="account"
-                    checked={contactPreference.mode === 'account'}
-                    onChange={() =>
-                      setContactPreference((current) => ({
-                        ...current,
-                        mode: 'account',
-                      }))
-                    }
-                  />
-                  <span className="rvpb-radio-faux" aria-hidden="true" />
-                  <div className="rvpb-contact-option__copy">
-                    <strong>{t('Envoyer sur mon e-mail de compte')}</strong>
-                    <span>{accountEmail || t('E-mail principal du compte')}</span>
-                  </div>
-                </label>
+            <div className="rvpb-subscription-section__content rvpb-subscription-section__content--stacked">
+              {contactStatusMessage ? <p className="rvpb-inline-note">{contactStatusMessage}</p> : null}
 
+              <label className="rvpb-contact-option">
+                <input
+                  type="radio"
+                  name="billing-contact"
+                  checked={contactPreference.mode === 'account'}
+                  onChange={() =>
+                    setContactPreference((prev) => ({
+                      ...prev,
+                      mode: 'account',
+                    }))
+                  }
+                />
+                <span className="rvpb-radio-faux" aria-hidden="true" />
+                <span className="rvpb-contact-option__copy">
+                  <strong>{t('Envoyer sur mon e-mail de compte')}</strong>
+                  <span>{accountEmail || t('Adresse indisponible')}</span>
+                </span>
+              </label>
+
+              <div className="rvpb-contact-group">
                 <label className="rvpb-contact-option">
                   <input
                     type="radio"
-                    name="rvpb-billing-contact"
-                    value="alternative"
+                    name="billing-contact"
                     checked={contactPreference.mode === 'alternative'}
                     onChange={() =>
-                      setContactPreference((current) => ({
-                        ...current,
+                      setContactPreference((prev) => ({
+                        ...prev,
                         mode: 'alternative',
                       }))
                     }
                   />
                   <span className="rvpb-radio-faux" aria-hidden="true" />
-                  <div className="rvpb-contact-option__copy">
+                  <span className="rvpb-contact-option__copy">
                     <strong>{t('Envoyer sur un e-mail alternatif')}</strong>
-                  </div>
+                  </span>
                 </label>
 
-                {contactPreference.mode === 'alternative' ? (
-                  <div className="rvpb-contact-field">
-                    <input
-                      type="email"
-                      className="rvpb-input"
-                      placeholder="facturation@entreprise.com"
-                      value={contactPreference.alternativeEmail}
-                      onChange={(event) =>
-                        setContactPreference((current) => ({
-                          ...current,
-                          alternativeEmail: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                ) : null}
-
-                {contactStatusMessage ? (
-                  <span className="rvpb-contact-status" role="status">
-                    {contactStatusMessage}
+                <label className="rvpb-input-wrap">
+                  <span className="rvpb-input-icon">
+                    <SvgV2Icon name="mail-02.svg" size={16} />
                   </span>
-                ) : null}
+                  <input
+                    type="email"
+                    value={contactPreference.alternativeEmail}
+                    placeholder={t('billing@votre-domaine.com')}
+                    onChange={(event) =>
+                      setContactPreference({
+                        mode: 'alternative',
+                        alternativeEmail: event.target.value,
+                      })
+                    }
+                  />
+                </label>
               </div>
             </div>
           </div>

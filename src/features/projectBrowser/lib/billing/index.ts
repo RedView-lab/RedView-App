@@ -15,7 +15,6 @@ export { logBillingUi, logBillingUiError } from './debug';
 export {
   accountTierLabel,
   buildSubscriptionHeadline,
-  getPlansForPeriod,
   hasPaidSubscription,
   isDemoPlan,
   LANDING_URL,
