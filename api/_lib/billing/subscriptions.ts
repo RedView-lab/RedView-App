@@ -184,16 +184,58 @@ export async function createManagedSubscription(
   userId: string,
   email: string | null,
   planId: BillingPlanId,
+  customAmount?: number,
 ): Promise<SubscriptionActionResult> {
   const stripeCustomerId = await getOrCreateStripeCustomer(userId, email);
-  const priceId = requireConfiguredPriceId(planId);
+  const defaultPriceId = requireConfiguredPriceId(planId);
+
+  // Clean up any dangling incomplete subscription for this user
+  const existingRow = await getCurrentManagedSubscriptionRow(userId);
+  if (existingRow && existingRow.status === 'incomplete') {
+    try {
+      await getStripeServer().subscriptions.cancel(existingRow.id);
+    } catch (cancelErr) {
+      console.warn('[createManagedSubscription] Cleaned up previous incomplete subscription warning:', cancelErr);
+    }
+  }
+
+  let itemsPayload: Stripe.SubscriptionCreateParams.Item[];
+
+  if (customAmount && Number.isFinite(customAmount) && customAmount > 0) {
+    const minAmount = planId === 'founder' ? 5 : 15;
+    const finalAmount = Math.max(minAmount, Math.round(customAmount));
+    const defaultAmount = planId === 'founder' ? 5 : 15;
+
+    if (finalAmount === defaultAmount) {
+      itemsPayload = [{ price: defaultPriceId }];
+    } else {
+      const defaultPrice = await getStripeServer().prices.retrieve(defaultPriceId);
+      const productId =
+        typeof defaultPrice.product === 'string'
+          ? defaultPrice.product
+          : (defaultPrice.product as Stripe.Product).id;
+
+      itemsPayload = [
+        {
+          price_data: {
+            currency: 'eur',
+            product: productId,
+            unit_amount: finalAmount * 100,
+            recurring: { interval: 'year' },
+          },
+        },
+      ];
+    }
+  } else {
+    itemsPayload = [{ price: defaultPriceId }];
+  }
 
   const subscription = await getStripeServer().subscriptions.create({
     customer: stripeCustomerId,
-    items: [{ price: priceId }],
+    items: itemsPayload,
     payment_behavior: 'default_incomplete',
     payment_settings: {
-      payment_method_types: ['card', 'amazon_pay'],
+      payment_method_types: ['card', 'paypal'],
       save_default_payment_method: 'on_subscription',
     },
     expand: ['latest_invoice.payment_intent', 'latest_invoice.confirmation_secret'],
@@ -240,7 +282,7 @@ export async function changeManagedSubscriptionPlan(
     ],
     payment_behavior: 'default_incomplete',
     payment_settings: {
-      payment_method_types: ['card', 'amazon_pay'],
+      payment_method_types: ['card', 'paypal'],
       save_default_payment_method: 'on_subscription',
     },
     proration_behavior: 'always_invoice',

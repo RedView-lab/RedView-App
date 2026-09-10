@@ -17,6 +17,7 @@ type SubscriptionActionRequestBody = {
   action?: 'subscribe' | 'change' | 'cancel' | 'resume' | 'sync';
   planId?: string;
   subscriptionId?: string;
+  amount?: number;
 };
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
@@ -63,7 +64,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
         });
       }
 
-      const result = await createManagedSubscription(user.id, user.email, requestedPlanId);
+      const result = await createManagedSubscription(user.id, user.email, requestedPlanId, body.amount);
       return res.status(200).json(result);
     }
 

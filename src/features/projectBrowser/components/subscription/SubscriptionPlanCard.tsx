@@ -77,66 +77,69 @@ export function SubscriptionPlanCard({
               <strong>{t(plan.name)}</strong>
               <span>{t(plan.priceLabel)}</span>
             </div>
-            {plan.description ? <p className="rvpb-subscription-card__description">{t(plan.description)}</p> : null}
           </div>
         </div>
       </div>
 
-      {hasMetadata ? (
-        <div className="rvpb-subscription-card__chips">
-          {plan.tags.map((tag) => (
-            <span key={tag} className="rvpb-chip">
-              {t(tag)}
-            </span>
-          ))}
-          {plan.iconBadges.map((badge) => {
-            const isOpen = openBadgeId === badge.id;
-
-            return (
-              <span
-                key={`${plan.id}-${badge.id}`}
-                className={`rvpb-icon-chip-wrap is-${badge.tone}${isOpen ? ' is-open' : ''}`}
-                onMouseEnter={() => setOpenBadgeId(badge.id)}
-                onMouseLeave={() => setOpenBadgeId((current) => (current === badge.id ? null : current))}
-              >
-                <button
-                  type="button"
-                  className={`rvpb-icon-chip is-${badge.tone}`}
-                  aria-label={t(badge.label)}
-                  aria-expanded={isOpen}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    selectPlan();
-                    setOpenBadgeId((current) => (current === badge.id ? null : badge.id));
-                  }}
-                  onFocus={() => setOpenBadgeId(badge.id)}
-                  onBlur={(event) => {
-                    if (event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
-                      return;
-                    }
-                    setOpenBadgeId((current) => (current === badge.id ? null : current));
-                  }}
-                >
-                  <SvgV2Icon name={badge.icon} size={20} />
-                </button>
-
-                <span className="rvpb-feature-popover" role="tooltip" aria-hidden={!isOpen}>
-                  {badge.featureItems.map((item) => (
-                    <span key={`${badge.id}-${item.label}`} className="rvpb-feature-popover__item">
-                      <SvgV2Icon name={item.icon} size={20} />
-                      <span>{t(item.label)}</span>
-                    </span>
-                  ))}
-                </span>
+      <div className="rvpb-subscription-card__details">
+        {hasMetadata ? (
+          <div className="rvpb-subscription-card__chips">
+            {plan.tags.map((tag) => (
+              <span key={tag} className="rvpb-chip">
+                {t(tag)}
               </span>
-            );
-          })}
-        </div>
-      ) : null}
+            ))}
+            {plan.iconBadges.map((badge) => {
+              const isOpen = openBadgeId === badge.id;
 
-      {ctaLabel ? (
-        <div className="rvpb-subscription-card__footer">
+              return (
+                <span
+                  key={`${plan.id}-${badge.id}`}
+                  className={`rvpb-icon-chip-wrap is-${badge.tone}${isOpen ? ' is-open' : ''}`}
+                  onMouseEnter={() => setOpenBadgeId(badge.id)}
+                  onMouseLeave={() => setOpenBadgeId((current) => (current === badge.id ? null : current))}
+                >
+                  <button
+                    type="button"
+                    className={`rvpb-icon-chip is-${badge.tone}`}
+                    aria-label={t(badge.label)}
+                    aria-expanded={isOpen}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      selectPlan();
+                      setOpenBadgeId((current) => (current === badge.id ? null : badge.id));
+                    }}
+                    onFocus={() => setOpenBadgeId(badge.id)}
+                    onBlur={(event) => {
+                      if (event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+                        return;
+                      }
+                      setOpenBadgeId((current) => (current === badge.id ? null : current));
+                    }}
+                  >
+                    <SvgV2Icon name={badge.icon} size={20} />
+                  </button>
+
+                  <span className="rvpb-feature-popover" role="tooltip" aria-hidden={!isOpen}>
+                    {badge.featureItems.map((item) => (
+                      <span key={`${badge.id}-${item.label}`} className="rvpb-feature-popover__item">
+                        <SvgV2Icon name={item.icon} size={20} />
+                        <span>{t(item.label)}</span>
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {plan.description ? (
+          <span className="rvpb-subscription-card__description">{t(plan.description)}</span>
+        ) : null}
+
+        {ctaLabel ? (
           <button
             type="button"
             className={`rvpb-inline-cta${ctaTone === 'danger' ? ' is-danger' : ''}`}
@@ -158,8 +161,8 @@ export function SubscriptionPlanCard({
           >
             {t(ctaLabel)}
           </button>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </article>
   );
 }

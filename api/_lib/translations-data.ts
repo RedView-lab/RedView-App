@@ -233,8 +233,8 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Card number"
   },
   {
-    "fr": "Amazon Pay",
-    "en": "Amazon Pay"
+    "fr": "PayPal",
+    "en": "PayPal"
   },
   {
     "fr": "Numéro de carte *",
@@ -629,12 +629,84 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Explore plans"
   },
   {
-    "fr": "Abonnements",
-    "en": "Subscriptions"
+    "fr": "Bêta Ouverte & Accès Fondateur",
+    "en": "Open Beta & Founder Access"
   },
   {
-    "fr": "Découvrez nos offres d’abonnement.",
-    "en": "Explore our subscription offers."
+    "fr": "Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l\\'application mobile et débloquer vos avantages à vie.",
+    "en": "Explore the RedView 3D engine on the Web for free. Become a Founder Member to fund the mobile app and unlock lifetime perks."
+  },
+  {
+    "fr": "Accès Bêta Web",
+    "en": "Web Beta Access"
+  },
+  {
+    "fr": "0 €",
+    "en": "0 €"
+  },
+  {
+    "fr": "Gratuit sur le web pendant la Bêta",
+    "en": "Free on the web during Beta"
+  },
+  {
+    "fr": "Pass Fondateur",
+    "en": "Founder Pass"
+  },
+  {
+    "fr": "5 €",
+    "en": "5 €"
+  },
+  {
+    "fr": "10 €",
+    "en": "10 €"
+  },
+  {
+    "fr": "Paiement unique · avantages à vie",
+    "en": "One-time payment · lifetime perks"
+  },
+  {
+    "fr": "Recommandé",
+    "en": "Recommended"
+  },
+  {
+    "fr": "Mécène & Soutien Majeur",
+    "en": "Patron & Major Support"
+  },
+  {
+    "fr": "dès 15 €",
+    "en": "from €15"
+  },
+  {
+    "fr": "dès 30 €",
+    "en": "from €30"
+  },
+  {
+    "fr": "Don libre de soutien",
+    "en": "Open support donation"
+  },
+  {
+    "fr": "Don libre",
+    "en": "Open donation"
+  },
+  {
+    "fr": "Accès Bêta",
+    "en": "Beta Access"
+  },
+  {
+    "fr": "Membre Fondateur",
+    "en": "Founder Member"
+  },
+  {
+    "fr": "Mécène",
+    "en": "Patron"
+  },
+  {
+    "fr": "Votre statut Fondateur est actif.",
+    "en": "Your Founder status is active."
+  },
+  {
+    "fr": "Votre compte bénéficie de l\\'accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.",
+    "en": "Your account has full access to the Web Beta. Become a Founder Member to unlock your lifetime perks."
   },
   {
     "fr": "Informations de paiement",
@@ -653,34 +725,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Send to an alternative email"
   },
   {
-    "fr": "Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:",
-    "en": "You are on a reduced RedView demo. To unlock the full interface, choose your subscription:"
-  },
-  {
-    "fr": "Démo",
-    "en": "Demo"
-  },
-  {
-    "fr": "Gratuit",
-    "en": "Free"
-  },
-  {
-    "fr": "Abonnement Explorer",
-    "en": "Explorer plan"
-  },
-  {
-    "fr": "Abonnement Pro",
-    "en": "Pro plan"
-  },
-  {
-    "fr": "Engagement de 6 mois",
-    "en": "6-month commitment"
-  },
-  {
-    "fr": "Sans engagement",
-    "en": "No commitment"
-  },
-  {
     "fr": "Stockage Cloud",
     "en": "Cloud storage"
   },
@@ -689,12 +733,32 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Project manager"
   },
   {
+    "fr": "Gestionnaire de projets",
+    "en": "Project manager"
+  },
+  {
+    "fr": "Moteur 3D & LiDAR",
+    "en": "3D Engine & LiDAR"
+  },
+  {
+    "fr": "Moteur 3D temps réel illimité",
+    "en": "Unlimited real-time 3D engine"
+  },
+  {
+    "fr": "Moteur 3D & LiDAR 20 cm illimités sur le web",
+    "en": "Unlimited 3D engine & 20 cm LiDAR on the web"
+  },
+  {
     "fr": "Cartographie 3D HD",
     "en": "HD 3D mapping"
   },
   {
     "fr": "Cartographie 3D haute fidélité",
     "en": "High-fidelity 3D mapping"
+  },
+  {
+    "fr": "LiDAR HD 20 cm sur le web",
+    "en": "20 cm HD LiDAR on web"
   },
   {
     "fr": "Analyse LIDAR 20cm",
@@ -709,7 +773,7 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Slope analysis"
   },
   {
-    "fr": "Analyse de l’altitude",
+    "fr": "Analyse de l\\'altitude",
     "en": "Altitude analysis"
   },
   {
@@ -721,31 +785,59 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Sunlight simulation"
   },
   {
+    "fr": "Simulation ensoleillement & ombres",
+    "en": "Sunlight & shadow simulation"
+  },
+  {
     "fr": "Prévisions et tendances Météo",
     "en": "Weather forecasts and trends"
+  },
+  {
+    "fr": "Prévisions météo & vent direct",
+    "en": "Live weather forecasts & wind"
   },
   {
     "fr": "Vent en temps réel",
     "en": "Real-time wind"
   },
   {
+    "fr": "Simulation neige temps réel",
+    "en": "Real-time snow simulation"
+  },
+  {
     "fr": "Simulation de la neige en temps réel",
     "en": "Real-time snow simulation"
   },
   {
-    "fr": "Création d’itinéraire avancée",
+    "fr": "Routage & GPX",
+    "en": "Routing & GPX"
+  },
+  {
+    "fr": "Routage intelligent",
+    "en": "Smart routing"
+  },
+  {
+    "fr": "Routage intelligent & export GPX illimité",
+    "en": "Smart routing & unlimited GPX export"
+  },
+  {
+    "fr": "Export GPX illimité",
+    "en": "Unlimited GPX export"
+  },
+  {
+    "fr": "Création d\\'itinéraire avancée",
     "en": "Advanced route planning"
   },
   {
-    "fr": "Création d’itinéraire customisable",
+    "fr": "Création d\\'itinéraire customisable",
     "en": "Customizable route creation"
   },
   {
-    "fr": "Comparaison d’itinéraire",
+    "fr": "Comparaison d\\'itinéraire",
     "en": "Route comparison"
   },
   {
-    "fr": "Analyse d’itinéraire",
+    "fr": "Analyse d\\'itinéraire",
     "en": "Route analysis"
   },
   {
@@ -761,7 +853,107 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Multi-format export"
   },
   {
-    "fr": "Gestion des Points d’Intérêts",
+    "fr": "Accès Web & Projets",
+    "en": "Web Access & Projects"
+  },
+  {
+    "fr": "Accès sans carte bancaire",
+    "en": "No credit card required"
+  },
+  {
+    "fr": "Accès complet sans carte bancaire",
+    "en": "Full access with no credit card required"
+  },
+  {
+    "fr": "Avantages Fondateur",
+    "en": "Founder Perks"
+  },
+  {
+    "fr": "Accès anticipé App Mobile",
+    "en": "Early Mobile App access"
+  },
+  {
+    "fr": "Statut Fondateur : -50% à vie",
+    "en": "Founder status: -50% lifetime"
+  },
+  {
+    "fr": "Accès prioritaire à la future App Mobile (iOS TestFlight & Android)",
+    "en": "Priority access to upcoming Mobile App (iOS TestFlight & Android)"
+  },
+  {
+    "fr": "Statut Fondateur : -50% à vie sur les futurs abonnements",
+    "en": "Founder status: -50% lifetime on future subscriptions"
+  },
+  {
+    "fr": "Communauté & Soutien",
+    "en": "Community & Support"
+  },
+  {
+    "fr": "Vote sur les prochains massifs 3D",
+    "en": "Vote on upcoming 3D massifs"
+  },
+  {
+    "fr": "Discord privé & contact direct dev",
+    "en": "Private Discord & direct dev contact"
+  },
+  {
+    "fr": "Soutien direct dev indépendant",
+    "en": "Support indie development"
+  },
+  {
+    "fr": "Droit de vote sur les prochains massifs 3D modélisés",
+    "en": "Voting rights on upcoming 3D modeled massifs"
+  },
+  {
+    "fr": "Salon Discord privé & échanges directs avec le développeur",
+    "en": "Private Discord channel & direct chats with the developer"
+  },
+  {
+    "fr": "Soutenez directement le développement indépendant",
+    "en": "Directly support independent development"
+  },
+  {
+    "fr": "Privilèges Mécène",
+    "en": "Patron Privileges"
+  },
+  {
+    "fr": "1 An de compte PRO offert (v1)",
+    "en": "1 Year free PRO account (v1)"
+  },
+  {
+    "fr": "Accès VIP ultra-prioritaire mobile",
+    "en": "VIP ultra-priority mobile access"
+  },
+  {
+    "fr": "1 An de compte PRO offert au lancement de la v1",
+    "en": "1 Year free PRO account at v1 launch"
+  },
+  {
+    "fr": "Accès VIP ultra-prioritaire aux premières versions mobiles",
+    "en": "Ultra-priority VIP access to early mobile versions"
+  },
+  {
+    "fr": "Cercle des Soutiens",
+    "en": "Supporters Circle"
+  },
+  {
+    "fr": "Nom sur la page des Soutiens",
+    "en": "Name on Supporters page"
+  },
+  {
+    "fr": "Propositions de zones & features",
+    "en": "Direct input on new areas & features"
+  },
+  {
+    "fr": "Votre nom ou pseudo sur la page officielle des Soutiens",
+    "en": "Your name or handle on the official Supporters page"
+  },
+  {
+    "fr": "Contact direct pour proposer de nouvelles zones ou fonctionnalités",
+    "en": "Direct contact to suggest new areas or features"
+  },
+  {
+    "fr": "Gestion des Points d\\'Intérêts",
     "en": "POI management"
   },
   {
@@ -775,18 +967,6 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Pacing et gestion des pauses",
     "en": "Pacing and pause management"
-  },
-  {
-    "fr": "Votre mode de paiement :",
-    "en": "Your payment method:"
-  },
-  {
-    "fr": "Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.",
-    "en": "Your account starts on the Demo plan. Open RedView Web from this tab to switch to a paid plan whenever you want."
-  },
-  {
-    "fr": "Votre abonnement RedView Pro est actif.",
-    "en": "Your RedView Pro subscription is active."
   },
   {
     "fr": "Public",

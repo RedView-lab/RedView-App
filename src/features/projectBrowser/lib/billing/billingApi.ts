@@ -109,12 +109,14 @@ export async function fetchBillingOverview(): Promise<BillingOverviewResponse> {
 
 export async function createSubscriptionIntent(
   planId: Exclude<SubscriptionPlanId, 'demo'>,
+  amount?: number,
 ): Promise<SubscriptionActionResponse> {
   return apiRequest<SubscriptionActionResponse>('/api/billing/subscription', {
     method: 'POST',
     body: JSON.stringify({
       action: 'subscribe',
       planId,
+      ...(amount ? { amount } : {}),
     }),
   });
 }

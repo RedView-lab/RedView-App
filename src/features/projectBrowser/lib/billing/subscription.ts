@@ -10,37 +10,19 @@ import type {
 export const LANDING_URL = import.meta.env.VITE_LANDING_URL || 'http://localhost:3000';
 
 const PLAN_PRICE_IDS: Partial<Record<SubscriptionPlanId, string>> = {
-  explorer: import.meta.env.VITE_STRIPE_PRICE_ID_EXPLORER,
-  proCommit: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_COMMIT,
-  proMonthly: import.meta.env.VITE_STRIPE_PRICE_ID_PRO_MONTHLY,
+  founder: import.meta.env.VITE_STRIPE_PRICE_ID_FOUNDER,
+  patron: import.meta.env.VITE_STRIPE_PRICE_ID_PATRON,
 };
 
 const FEATURE_BADGES = {
-  cloudStorage: {
-    id: 'cloud-storage',
-    label: 'Stockage Cloud',
-    icon: 'folder.svg',
-    tone: 'gray' as const,
-    featureItems: [{ icon: 'folder.svg', label: 'Gestionnaire de projet' }],
-  },
   mapping3d: {
     id: 'mapping-3d',
-    label: 'Cartographie 3D HD',
+    label: 'Moteur 3D & LiDAR',
     icon: 'diamond.svg',
     tone: 'gold' as const,
     featureItems: [
-      { icon: 'diamond.svg', label: 'Cartographie 3D haute fidélité' },
-      { icon: 'cube-outline.svg', label: 'Analyse LIDAR 20cm' },
-    ],
-  },
-  terrainAnalysis: {
-    id: 'terrain-analysis',
-    label: 'Analyse du terrain',
-    icon: 'multi-layer.svg',
-    tone: 'brown' as const,
-    featureItems: [
-      { icon: 'slope.svg', label: 'Analyse des pentes' },
-      { icon: 'multi-layer.svg', label: 'Analyse de l’altitude' },
+      { icon: 'diamond.svg', label: 'Moteur 3D temps réel illimité' },
+      { icon: 'cube-outline.svg', label: 'LiDAR HD 20 cm sur le web' },
     ],
   },
   meteoSunlight: {
@@ -49,104 +31,119 @@ const FEATURE_BADGES = {
     icon: 'weather.svg',
     tone: 'blue' as const,
     featureItems: [
-      { icon: 'sun.svg', label: 'Simulation ensoleillement' },
-      { icon: 'cloud-sun-02.svg', label: 'Prévisions et tendances Météo' },
-      { icon: 'wind-03.svg', label: 'Vent en temps réel' },
-      { icon: 'snowflake.svg', label: 'Simulation de la neige en temps réel' },
+      { icon: 'sun.svg', label: 'Simulation ensoleillement & ombres' },
+      { icon: 'cloud-sun-02.svg', label: 'Prévisions météo & vent direct' },
+      { icon: 'snowflake.svg', label: 'Simulation neige temps réel' },
     ],
   },
   routePlanning: {
     id: 'route-planning',
-    label: 'Création d’itinéraire avancée',
+    label: 'Routage & GPX',
     icon: 'route.svg',
     tone: 'teal' as const,
     featureItems: [
-      { icon: 'settings-01.svg', label: 'Création d’itinéraire customisable' },
-      { icon: 'route.svg', label: 'Comparaison d’itinéraire' },
+      { icon: 'route.svg', label: 'Routage intelligent' },
+      { icon: 'share-07.svg', label: 'Export GPX illimité' },
     ],
   },
-  routeAnalysis: {
-    id: 'route-analysis',
-    label: 'Analyse d’itinéraire',
+  cloudStorage: {
+    id: 'cloud-storage',
+    label: 'Accès Web & Projets',
+    icon: 'folder.svg',
+    tone: 'gray' as const,
+    featureItems: [
+      { icon: 'folder.svg', label: 'Gestionnaire de projets' },
+      { icon: 'check.svg', label: 'Accès sans carte bancaire' },
+    ],
+  },
+  founderPrivileges: {
+    id: 'founder-privileges',
+    label: 'Avantages Fondateur',
+    icon: 'multi-layer.svg',
+    tone: 'brown' as const,
+    featureItems: [
+      { icon: 'navigation-pointer-01.svg', label: 'Accès anticipé App Mobile' },
+      { icon: 'currency-euro.svg', label: 'Statut Fondateur : -50% à vie' },
+    ],
+  },
+  communitySupport: {
+    id: 'community-support',
+    label: 'Communauté & Soutien',
+    icon: 'poi-pin.svg',
+    tone: 'purple' as const,
+    featureItems: [
+      { icon: 'check-circle.svg', label: 'Vote sur les prochains massifs 3D' },
+      { icon: 'user-circle.svg', label: 'Discord privé & contact direct dev' },
+      { icon: 'heart.svg', label: 'Soutien direct dev indépendant' },
+    ],
+  },
+  proYear: {
+    id: 'pro-year',
+    label: 'Privilèges Mécène',
     icon: 'line-chart.svg',
     tone: 'green' as const,
     featureItems: [
-      { icon: 'line-chart.svg', label: 'Graphique customisable' },
-      { icon: 'list.svg', label: 'Feuille de route et timeline exportables' },
-      { icon: 'share-07.svg', label: 'Export multi format' },
+      { icon: 'diamond.svg', label: '1 An de compte PRO offert (v1)' },
+      { icon: 'star-01.svg', label: 'Accès VIP ultra-prioritaire mobile' },
     ],
   },
-  poiManagement: {
-    id: 'poi-management',
-    label: 'Gestion des Points d’Intérêts',
-    icon: 'poi-pin.svg',
-    tone: 'purple' as const,
-    featureItems: [{ icon: 'poi-pin.svg', label: 'Sélection et édition des POIs' }],
-  },
-  paceEstimation: {
-    id: 'pace-estimation',
-    label: 'Estimation du rythme',
+  patronCircle: {
+    id: 'patron-circle',
+    label: 'Cercle des Soutiens',
     icon: 'stopwatch.svg',
     tone: 'black' as const,
-    featureItems: [{ icon: 'stopwatch.svg', label: 'Pacing et gestion des pauses' }],
+    featureItems: [
+      { icon: 'user-circle.svg', label: 'Nom sur la page des Soutiens' },
+      { icon: 'mail-02.svg', label: 'Propositions de zones & features' },
+    ],
   },
 };
 
 export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'demo',
-    name: 'Démo',
-    priceLabel: 'Gratuit',
-    tags: [],
-    iconBadges: [],
-    description: '',
-  },
-  {
-    id: 'explorer',
-    name: 'Abonnement Explorer',
-    priceLabel: '9.99€/mois',
+    name: 'Accès Bêta Web',
+    priceLabel: '0 €',
     tags: [],
     iconBadges: [
       FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
-      FEATURE_BADGES.meteoSunlight,
-      FEATURE_BADGES.cloudStorage,
-    ],
-    description: '',
-  },
-  {
-    id: 'proCommit',
-    name: 'Abonnement Pro',
-    priceLabel: '14.99€/mois',
-    tags: ['Engagement de 6 mois', '-25%'],
-    iconBadges: [
-      FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
       FEATURE_BADGES.meteoSunlight,
       FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.routeAnalysis,
-      FEATURE_BADGES.poiManagement,
-      FEATURE_BADGES.paceEstimation,
       FEATURE_BADGES.cloudStorage,
     ],
-    description: '',
+    description: 'Gratuit sur le web pendant la Bêta',
   },
   {
-    id: 'proMonthly',
-    name: 'Abonnement Pro',
-    priceLabel: '19.99€/mois',
-    tags: ['Sans engagement'],
+    id: 'founder',
+    name: 'Pass Fondateur',
+    priceLabel: '5 €',
+    tags: [],
     iconBadges: [
       FEATURE_BADGES.mapping3d,
-      FEATURE_BADGES.terrainAnalysis,
       FEATURE_BADGES.meteoSunlight,
       FEATURE_BADGES.routePlanning,
-      FEATURE_BADGES.routeAnalysis,
-      FEATURE_BADGES.poiManagement,
-      FEATURE_BADGES.paceEstimation,
       FEATURE_BADGES.cloudStorage,
+      FEATURE_BADGES.founderPrivileges,
+      FEATURE_BADGES.communitySupport,
     ],
-    description: '',
+    description: 'Paiement unique · avantages à vie',
+  },
+  {
+    id: 'patron',
+    name: 'Mécène & Soutien Majeur',
+    priceLabel: 'dès 15 €',
+    tags: [],
+    iconBadges: [
+      FEATURE_BADGES.mapping3d,
+      FEATURE_BADGES.meteoSunlight,
+      FEATURE_BADGES.routePlanning,
+      FEATURE_BADGES.cloudStorage,
+      FEATURE_BADGES.founderPrivileges,
+      FEATURE_BADGES.communitySupport,
+      FEATURE_BADGES.proYear,
+      FEATURE_BADGES.patronCircle,
+    ],
+    description: 'Don libre de soutien',
   },
 ];
 
@@ -205,7 +202,13 @@ export function hasPaidSubscription(snapshot: SubscriptionSnapshot | null): bool
 
 export function accountTierLabel(snapshot: SubscriptionSnapshot | null, isLoading: boolean): string {
   if (isLoading) return translateAppText('Compte');
-  return hasPaidSubscription(snapshot) ? translateAppText('Premium') : translateAppText('Démo');
+  if (!hasPaidSubscription(snapshot)) return translateAppText('Accès Bêta');
+
+  const activePlanId = resolveActivePlanId(snapshot);
+  if (activePlanId === 'patron') {
+    return translateAppText('Mécène');
+  }
+  return translateAppText('Membre Fondateur');
 }
 
 export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): SubscriptionPlanId {
@@ -220,7 +223,7 @@ export function resolveActivePlanId(snapshot: SubscriptionSnapshot | null): Subs
 
 export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot || isDemoPlan(snapshot)) {
-    return translateAppText('Votre compte démarre sur le plan Demo. Ouvrez RedView Web depuis cet onglet pour passer à une offre payante quand vous le souhaitez.');
+    return translateAppText('Votre compte bénéficie de l\'accès complet à la Bêta Web. Devenez Membre Fondateur pour débloquer vos avantages à vie.');
   }
 
   if (snapshot.cancelAtPeriodEnd) {
@@ -235,12 +238,12 @@ export function buildSubscriptionHeadline(snapshot: SubscriptionSnapshot | null)
     });
   }
 
-  return translateAppText('Votre abonnement RedView Pro est actif.');
+  return translateAppText('Votre statut Fondateur est actif.');
 }
 
 export function statusLabel(snapshot: SubscriptionSnapshot | null): string {
   if (!snapshot?.status) return translateAppText('Statut indisponible');
-  if (snapshot.status === 'demo') return translateAppText('Démo');
+  if (snapshot.status === 'demo') return translateAppText('Accès Bêta');
   if (snapshot.status === 'active') return translateAppText('Actif');
   if (snapshot.status === 'trialing') return translateAppText('Essai');
   return snapshot.status;

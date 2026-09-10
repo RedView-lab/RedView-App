@@ -27,9 +27,7 @@ function redviewDevApiPlugin(): Plugin {
       // Ensure .env and .env.local variables are available in process.env for API handlers
       const env = loadEnv(config.mode, process.cwd(), '')
       for (const [key, value] of Object.entries(env)) {
-        if (process.env[key] === undefined) {
-          process.env[key] = value
-        }
+        process.env[key] = value
       }
 
       // Auto-generate translations data if not present
@@ -142,6 +140,16 @@ function redviewDevApiPlugin(): Plugin {
 
         // 3. Match /api/* routes to api/*.ts handlers
         if (req.url.startsWith('/api/')) {
+          // Keep process.env fresh with latest .env changes in dev
+          try {
+            const devEnv = loadEnv(server.config.mode, __dirname, '')
+            for (const [key, value] of Object.entries(devEnv)) {
+              process.env[key] = value
+            }
+          } catch {
+            // ignore
+          }
+
           const urlObj = new URL(req.url, 'http://localhost')
           let pathname = urlObj.pathname
 
@@ -243,7 +251,8 @@ function redviewDevApiPlugin(): Plugin {
                 },
               })
 
-              // Load module with Vite SSR (compiles TS automatically)
+              // Invalidate SSR module cache in dev so code and env updates are reflected immediately
+              server.moduleGraph.invalidateAll()
               const mod = await server.ssrLoadModule(candidateFile)
               const handler = mod.default || mod
 

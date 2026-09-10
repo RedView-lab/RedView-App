@@ -58,7 +58,7 @@
 
 .rvpb-subscription-section {
   display: grid;
-  grid-template-columns: minmax(200px, 280px) minmax(0, 640px);
+  grid-template-columns: minmax(200px, 280px) minmax(0, 1fr);
   gap: 24px 32px;
   align-items: start;
   padding: 16px 0;
@@ -89,19 +89,20 @@
   min-width: 0;
   flex-direction: column;
   gap: 16px;
+  max-width: 960px;
 }
 
 .rvpb-subscription-section__content--stacked {
-  gap: 12px;
+  gap: 10px;
 }
 
 .rvpb-subscription-card {
   position: relative;
-  z-index: 0;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 16px;
+  gap: 10px;
+  padding: 12px 16px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
@@ -126,27 +127,30 @@
   cursor: pointer;
 }
 
-.rvpb-subscription-card:hover {
-  border-color: rgba(255, 255, 255, 0.22);
-  transform: translateY(-1px);
-}
-
-.rvpb-subscription-card:hover,
-.rvpb-subscription-card:focus-within,
-.rvpb-subscription-card.has-open-popover {
-  z-index: 12;
-}
-
 .rvpb-subscription-card.is-selected {
+  z-index: 2;
   border-color: rgba(255, 255, 255, 0.16);
 }
 
 .rvpb-subscription-card.is-active {
+  z-index: 2;
   border-color: rgba(255, 255, 255, 0.16);
 }
 
+.rvpb-subscription-card:focus-within {
+  z-index: 3;
+}
+
+.rvpb-subscription-card:hover,
+.rvpb-subscription-card.has-open-popover,
+.rvpb-subscription-card:has(.rvpb-icon-chip-wrap:hover),
+.rvpb-subscription-card:has(.rvpb-feature-popover:hover) {
+  z-index: 50;
+  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-1px);
+}
+
 .rvpb-subscription-card.is-demo {
-  gap: 0;
   border: 0;
   background: rgba(0, 0, 0, 0.4);
 }
@@ -157,8 +161,8 @@
 
 .rvpb-subscription-card__top {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
 }
 
 .rvpb-radio,
@@ -166,7 +170,7 @@
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  margin-top: 2px;
+  margin-top: 0;
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 999px;
 }
@@ -184,43 +188,52 @@
   flex: 1 1 auto;
   min-width: 0;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
 .rvpb-subscription-card__title-row {
   display: flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
-  color: rgba(255, 255, 255, 0.64);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 14px;
-  line-height: 1.4286;
+  line-height: 1.4;
 }
 
 .rvpb-subscription-card__title-row strong {
   color: #fff;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.rvpb-subscription-card__details {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
 }
 
 .rvpb-subscription-card__chips {
   display: flex;
+  align-items: center;
   gap: 4px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
-.rvpb-chip,
-.rvpb-icon-chip {
+.rvpb-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 32px;
-  padding: 7px 12px;
+  min-height: 28px;
+  padding: 3px 9px;
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
-  font-size: 14px;
+  font-size: 12.5px;
+  font-weight: 500;
   line-height: 1;
+  white-space: nowrap;
 }
 
 .rvpb-icon-chip-wrap {
@@ -240,11 +253,15 @@
 
 .rvpb-icon-chip {
   appearance: none;
-  min-width: 36px;
-  min-height: 32px;
-  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 28px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
+  color: #fff;
   cursor: pointer;
   transition:
     transform 120ms ease,
@@ -345,11 +362,12 @@
   top: calc(100% + 10px);
   z-index: 20;
   display: flex;
-  min-width: 280px;
+  min-width: 220px;
+  width: max-content;
   max-width: min(320px, calc(100vw - 48px));
   flex-direction: column;
-  gap: 4px;
-  padding: 4px;
+  gap: 3px;
+  padding: 3px;
   border-radius: 8px;
   border: 1px solid var(--rvpb-feature-popover-border);
   background: var(--rvpb-feature-popover-bg);
@@ -374,18 +392,18 @@
 
 .rvpb-feature-popover__item {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 8px;
-  border-radius: 8px;
+  gap: 7px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 6px;
   background: var(--rvpb-feature-popover-row-bg);
   color: #fff;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 500;
-  letter-spacing: -0.03em;
-  line-height: 1;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
   white-space: nowrap;
 }
 
@@ -408,16 +426,21 @@
 
 .rvpb-subscription-card__description {
   margin: 0;
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 14px;
-  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13.5px;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
-.rvpb-subscription-card__footer {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+.rvpb-subscription-card .rvpb-inline-cta {
+  min-height: 28px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .rvpb-payment-card {

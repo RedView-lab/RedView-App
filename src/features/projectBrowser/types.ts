@@ -7,7 +7,7 @@ export interface ProjectBrowserOverlayProps {
 }
 
 export type OverlayTab = 'projects' | 'account' | 'subscription' | 'settings';
-export type SubscriptionPlanId = 'demo' | 'explorer' | 'proCommit' | 'proMonthly';
+export type SubscriptionPlanId = 'demo' | 'founder' | 'patron';
 
 export type SubscriptionSnapshot = {
   isSubscribed: boolean;

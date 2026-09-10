@@ -63,7 +63,7 @@ export const globalTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'billing@votre-domaine.com', en: 'billing@your-domain.com' },
   { fr: 'Carte Bancaire', en: 'Bank card' },
   { fr: 'Numéro de carte', en: 'Card number' },
-  { fr: 'Amazon Pay', en: 'Amazon Pay' },
+  { fr: 'PayPal', en: 'PayPal' },
   { fr: 'Numéro de carte *', en: 'Card number *' },
   { fr: 'CVV *', en: 'CVV *' },
   { fr: 'Name on card *', en: 'Name on card *' },

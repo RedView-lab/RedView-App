@@ -84,6 +84,41 @@ body.rvpb-billing-page-open {
   line-height: 20px;
 }
 
+.rvpb-billing-page__summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  backdrop-filter: blur(20px);
+  margin-bottom: 4px;
+}
+
+.rvpb-billing-page__summary-plan {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.rvpb-billing-page__summary-price {
+  font-size: 20px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.rvpb-billing-page__summary-badge {
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffb4b4;
+  background: rgba(137, 0, 0, 0.25);
+  border: 1px solid rgba(137, 0, 0, 0.5);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
 .rvpb-billing-page__section-label {
   display: inline-flex;
   align-items: center;
@@ -96,7 +131,7 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__section-label-mark,
 .rvpb-billing-page__field-required {
-  color: #7f56d9;
+  color: #e02424;
 }
 
 .rvpb-billing-page__error {
@@ -188,6 +223,10 @@ body.rvpb-billing-page-open {
   border-color: #fff;
 }
 
+.rvpb-billing-page__method-tile--selected .rvpb-billing-page__method-radio-dot {
+  background: #fff;
+}
+
 .rvpb-billing-page__method-title {
   min-width: 0;
   font-size: 14px;
@@ -208,34 +247,16 @@ body.rvpb-billing-page-open {
   color: #fff;
 }
 
-.rvpb-billing-page__method-icon--amazon {
+.rvpb-billing-page__method-icon--paypal {
   background: #fff;
-  color: #1f242f;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rvpb-billing-page__method-icon-svg {
   width: 24px;
   height: 24px;
-}
-
-.rvpb-billing-page__amazon-pay-wordmark {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  font-size: 16px;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-}
-
-.rvpb-billing-page__amazon-pay-wordmark::after {
-  content: '';
-  position: absolute;
-  left: 1px;
-  right: -2px;
-  bottom: -2px;
-  height: 2px;
-  border-radius: 999px;
-  background: #ff9900;
 }
 
 .rvpb-billing-page__custom-card-fields {
@@ -414,23 +435,27 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__consent {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
   color: rgba(255, 255, 255, 0.92);
   cursor: pointer;
+  margin-top: 4px;
 }
 
 .rvpb-billing-page__consent input {
-  width: 16px;
-  height: 16px;
-  margin: 2px 0 0;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
   accent-color: #890000;
+  cursor: pointer;
 }
 
 .rvpb-billing-page__consent-copy {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
+  color: rgba(255, 255, 255, 0.74);
+  user-select: none;
 }
 
 .rvpb-billing-page__actions {
@@ -484,6 +509,145 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page__button--primary:hover:not(:disabled) {
   background: #a10000;
+}
+
+/* Amount selector styles */
+.rvpb-billing-page__amount-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 14px 16px;
+  backdrop-filter: blur(12px);
+}
+
+.rvpb-billing-page__amount-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.rvpb-billing-page__amount-subtext {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.rvpb-billing-page__amount-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr) 1.25fr;
+  gap: 8px;
+}
+
+.rvpb-billing-page__amount-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rvpb-billing-page__amount-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.rvpb-billing-page__amount-btn.is-active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: #e02b2b;
+  color: #fff;
+  box-shadow: none;
+}
+
+.rvpb-billing-page__amount-custom-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 8px;
+  transition: all 0.15s ease;
+}
+
+.rvpb-billing-page__amount-custom-field:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.rvpb-billing-page__amount-custom-field.is-active {
+  border-color: #e02b2b;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
+.rvpb-billing-page__amount-custom-field input::-webkit-outer-spin-button,
+.rvpb-billing-page__amount-custom-field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.rvpb-billing-page__amount-custom-field input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.rvpb-billing-page__amount-custom-field input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  outline: none;
+  padding: 8px 0;
+  min-width: 0;
+  text-align: center;
+}
+
+.rvpb-billing-page__amount-custom-field input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.rvpb-billing-page__amount-custom-unit {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  font-weight: 600;
+  margin-left: 2px;
+}
+
+.rvpb-billing-page__amount-error {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #ff8e8e;
+}
+
+.rvpb-billing-page__amount-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 4px;
+}
+
+.rvpb-billing-page__stripe-container.is-updating {
+  opacity: 0.35;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
 }
 
 @media (max-width: 900px) {

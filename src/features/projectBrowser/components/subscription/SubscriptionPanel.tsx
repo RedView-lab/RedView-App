@@ -28,7 +28,7 @@ type SubscriptionPanelProps = {
   billingActionBusy: boolean;
   billingActionError: string | null;
   contactStatusMessage: string | null;
-  onSelectPlan: (planId: ManagedPlanId) => void;
+  onSelectPlan: (planId: ManagedPlanId, amount?: number) => void;
   onToggleManagedSubscription: () => void;
   onManagePaymentMethod: () => void;
   onSetDefaultPaymentMethod: (paymentMethodId: string) => void;
@@ -153,8 +153,8 @@ export function SubscriptionPanel({
         <div className="rvpb-subscription-layout__main">
             <div className="rvpb-subscription-section">
               <div className="rvpb-subscription-section__label">
-                <h2>{t('Abonnements')}</h2>
-                <p>{t('Découvrez nos offres d’abonnement.')}</p>
+                <h2>{t('Bêta Ouverte & Accès Fondateur')}</h2>
+                <p>{t('Explorez gratuitement le moteur 3D RedView sur le Web. Devenez Membre Fondateur pour financer l\'application mobile et débloquer vos avantages à vie.')}</p>
               </div>
 
               {subscriptionOffersContent}

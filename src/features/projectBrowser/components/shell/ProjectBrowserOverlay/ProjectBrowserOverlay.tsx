@@ -138,6 +138,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
             flow={state.billingModal}
             onClose={state.closeBillingModal}
             onComplete={state.handleBillingModalComplete}
+            onUpdateAmount={state.handleUpdateBillingModalAmount}
           />
         ) : null}
       </div>

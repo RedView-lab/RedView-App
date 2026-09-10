@@ -9,7 +9,6 @@ import {
   SUBSCRIPTIONS_COLLECTION_ID,
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
-import PayWall from './shared/components/PayWall'
 import { LoginScreen } from './features/auth'
 import { useAppI18n } from './shared/i18n'
 import './index.css'
@@ -56,14 +55,7 @@ function readCachedSubscription(userId: string | null | undefined): Subscription
     if (!raw) return null
 
     const parsed = JSON.parse(raw) as Partial<CachedSubscriptionSnapshot> & { isSubscribed?: boolean }
-    const hasAccess =
-      typeof parsed.hasAccess === 'boolean'
-        ? parsed.hasAccess
-        : typeof parsed.isSubscribed === 'boolean'
-          ? parsed.isSubscribed
-          : null
-
-    if (typeof parsed.cachedAt !== 'number' || hasAccess == null) {
+    if (typeof parsed.cachedAt !== 'number') {
       window.localStorage.removeItem(getSubscriptionCacheKey(userId))
       return null
     }
@@ -73,9 +65,11 @@ function readCachedSubscription(userId: string | null | undefined): Subscription
       return null
     }
 
+    // In Open Beta, all registered users have free access to the web app
+    const isSubscribed = parsed.status === 'active' || parsed.status === 'trialing'
     return {
-      hasAccess,
-      status: typeof parsed.status === 'string' ? parsed.status : null,
+      hasAccess: true,
+      status: isSubscribed ? (parsed.status as string) : 'demo',
     }
   } catch {
     return null
@@ -217,12 +211,12 @@ function App() {
           const status = (first.status as string) ?? null
           const isSubscribed = status === 'active' || status === 'trialing'
           return {
-            hasAccess: isSubscribed || status === 'demo' || status == null,
-            status,
+            hasAccess: true,
+            status: isSubscribed ? status : 'demo',
           }
         }
 
-        // Default to demo access
+        // Default to free demo access for all users in Open Beta
         return { hasAccess: true, status: 'demo' }
       } catch (err) {
         console.warn('[app] Appwrite subscription check error', err)
@@ -273,16 +267,13 @@ function App() {
     )
   }
 
-  if (!subscriptionAccess.hasAccess) {
-    return <PayWall />
-  }
-
+  // In Open Beta, all registered accounts access RedView App
   return (
     <Suspense fallback={<BootstrapScreen label={t('Loading dashboard...')} />}>
       <Dashboard
         email={session.user.email || 'unknown'}
         initialProjectId={initialProjectId}
-        isDemoAccount={subscriptionAccess.status === 'demo'}
+        isDemoAccount={subscriptionAccess.status !== 'active' && subscriptionAccess.status !== 'trialing'}
         offersUrl={offersUrl}
       />
     </Suspense>

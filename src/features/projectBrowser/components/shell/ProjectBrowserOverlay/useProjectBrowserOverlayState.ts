@@ -103,7 +103,7 @@ export function useProjectBrowserOverlayState({
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('proMonthly');
+  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('founder');
   const [contactPreference, setContactPreference] = useState<BillingContactPreference>(() =>
     readBillingContactPreference(userId),
   );
@@ -296,9 +296,10 @@ export function useProjectBrowserOverlayState({
   }, [isSigningOut]);
 
   const handlePlanSelection = useCallback(
-    async (requestedPlanId: ManagedPlanId) => {
+    async (requestedPlanId: ManagedPlanId, amount?: number) => {
       logBillingUi('handle-plan-selection-start', {
         requestedPlanId,
+        amount,
         currentStatus: subscriptionState.snapshot?.status ?? null,
         currentPriceId: subscriptionState.snapshot?.priceId ?? null,
         hasPaidSubscription: hasPaidSubscription(subscriptionState.snapshot),
@@ -310,7 +311,7 @@ export function useProjectBrowserOverlayState({
       try {
         const result = hasPaidSubscription(subscriptionState.snapshot)
           ? await changeSubscriptionPlan(requestedPlanId)
-          : await createSubscriptionIntent(requestedPlanId);
+          : await createSubscriptionIntent(requestedPlanId, amount);
 
         logBillingUi('handle-plan-selection-result', {
           requestedPlanId,
@@ -326,20 +327,20 @@ export function useProjectBrowserOverlayState({
             subscriptionId: result.subscriptionId,
             mode: 'subscription',
           });
+          const isFounder = requestedPlanId === 'founder';
+          const defaultPrice = isFounder ? 5 : 15;
+          const currentAmount = amount ?? defaultPrice;
+          const planName = isFounder ? 'Pass Fondateur' : 'Mécène & Soutien';
+          const planPrice = `${currentAmount} €`;
           setBillingModal({
             mode: 'subscription',
             clientSecret: result.clientSecret,
             subscriptionId: result.subscriptionId,
             planId: requestedPlanId,
-            title: hasPaidSubscription(subscriptionState.snapshot)
-              ? 'Confirmer le changement de plan'
-              : 'Finaliser votre abonnement',
-            description: hasPaidSubscription(subscriptionState.snapshot)
-              ? 'Validez ici le paiement ou le prorata éventuel sans quitter RedView.'
-              : 'Choisissez votre mode de paiement pour vous abonner.',
-            submitLabel: hasPaidSubscription(subscriptionState.snapshot)
-              ? 'Confirmer le changement'
-              : 'Activer l’abonnement',
+            amount: currentAmount,
+            title: 'Finaliser votre paiement',
+            description: `Paiement unique de ${planPrice} · ${planName} avec avantages à vie.`,
+            submitLabel: `Payer ${planPrice}`,
           });
           return;
         }
@@ -365,6 +366,36 @@ export function useProjectBrowserOverlayState({
     [refreshBillingOverview, subscriptionState.snapshot, t],
   );
 
+  const handleUpdateBillingModalAmount = useCallback(
+    async (newAmount: number) => {
+      if (!billingModal || billingModal.mode !== 'subscription' || !billingModal.planId) {
+        return;
+      }
+      const planId = billingModal.planId;
+      const minAmount = planId === 'founder' ? 5 : 15;
+      const validAmount = Math.max(minAmount, Math.round(newAmount));
+
+      const result = await createSubscriptionIntent(planId, validAmount);
+      if (result.clientSecret) {
+        const isFounder = planId === 'founder';
+        const planName = isFounder ? 'Pass Fondateur' : 'Mécène & Soutien';
+        const planPrice = `${validAmount} €`;
+        setBillingModal((prev) =>
+          prev
+            ? {
+                ...prev,
+                clientSecret: result.clientSecret!,
+                subscriptionId: result.subscriptionId,
+                amount: validAmount,
+                description: `Paiement unique de ${planPrice} · ${planName} avec avantages à vie.`,
+                submitLabel: `Payer ${planPrice}`,
+              }
+            : null,
+        );
+      }
+    },
+    [billingModal],
+  );
   const handleManagedSubscriptionToggle = useCallback(async () => {
     if (!hasPaidSubscription(subscriptionState.snapshot)) {
       return;
@@ -395,7 +426,7 @@ export function useProjectBrowserOverlayState({
   const handlePaymentMethodAction = useCallback(async () => {
     if (!hasPaidSubscription(subscriptionState.snapshot)) {
       const targetPlanId: ManagedPlanId =
-        selectedPlanId !== 'demo' ? selectedPlanId : 'proMonthly';
+        selectedPlanId !== 'demo' ? selectedPlanId : 'founder';
       await handlePlanSelection(targetPlanId);
       return;
     }
@@ -567,5 +598,6 @@ export function useProjectBrowserOverlayState({
     visibleFolders: projects.visibleFolders,
     visibleProjects: projects.visibleProjects,
     closeBillingModal,
+    handleUpdateBillingModalAmount,
   };
 }
