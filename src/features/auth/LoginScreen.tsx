@@ -11,18 +11,56 @@ import './LoginScreen.css'
 // Basculer à true pour réactiver l'envoi de code de vérification par e-mail
 const ENABLE_EMAIL_VERIFICATION = false
 
+type AuthMode = 'login' | 'signup'
+
 interface LoginScreenProps {
   onLogin?: (email?: string) => void
   landingUrl?: string
 }
 
-type AuthMode = 'login' | 'signup'
+function EyeIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path
+        d="M2.01677 10.5943C1.90328 10.4146 1.84654 10.3248 1.81477 10.1862C1.79091 10.0821 1.79091 9.91791 1.81477 9.81381C1.84654 9.67522 1.90328 9.58537 2.01677 9.40567C2.95461 7.92069 5.74617 4.16666 10.0003 4.16666C14.2545 4.16666 17.0461 7.92069 17.9839 9.40567C18.0974 9.58537 18.1541 9.67522 18.1859 9.81381C18.2098 9.91791 18.2098 10.0821 18.1859 10.1862C18.1541 10.3248 18.0974 10.4146 17.9839 10.5943C17.0461 12.0793 14.2545 15.8333 10.0003 15.8333C5.74617 15.8333 2.95461 12.0793 2.01677 10.5943Z"
+        stroke="currentColor"
+        strokeWidth="1.66667"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10.0003 12.5C11.381 12.5 12.5003 11.3807 12.5003 9.99999C12.5003 8.61928 11.381 7.49999 10.0003 7.49999C8.61962 7.49999 7.50034 8.61928 7.50034 9.99999C7.50034 11.3807 8.61962 12.5 10.0003 12.5Z"
+        stroke="currentColor"
+        strokeWidth="1.66667"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path
+        d="M8.95245 4.2436C9.29113 4.19353 9.64051 4.16667 10.0003 4.16667C14.2545 4.16667 17.0461 7.9207 17.9839 9.40569C18.0974 9.58542 18.1542 9.67528 18.1859 9.81389C18.2098 9.91799 18.2098 10.0822 18.1859 10.1863C18.1541 10.3249 18.097 10.4154 17.9827 10.5963C17.7328 10.9918 17.3518 11.5476 16.8471 12.1504M5.6036 5.59586C3.80187 6.81808 2.57871 8.51615 2.01759 9.4044C1.90357 9.58489 1.84656 9.67514 1.81478 9.81374C1.79091 9.91783 1.7909 10.082 1.81476 10.1861C1.84652 10.3247 1.90328 10.4146 2.01678 10.5943C2.95462 12.0793 5.74618 15.8333 10.0003 15.8333C11.7157 15.8333 13.1932 15.223 14.4073 14.3972M2.50035 2.5L17.5003 17.5M8.23258 8.23223C7.78017 8.68464 7.50035 9.30964 7.50035 10C7.50035 11.3807 8.61963 12.5 10.0003 12.5C10.6907 12.5 11.3157 12.2202 11.7681 11.7678"
+        stroke="currentColor"
+        strokeWidth="1.66667"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
 
 export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.145.220.99.sslip.io' }: LoginScreenProps) {
   const [mode, setMode] = useState<AuthMode>('login')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -41,6 +79,24 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
       setErrorMessage('Please provide both email and password.')
       setLoading(false)
       return
+    }
+
+    if (mode === 'signup') {
+      if (!confirmPassword) {
+        setErrorMessage('Please confirm your password.')
+        setLoading(false)
+        return
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Passwords do not match.')
+        setLoading(false)
+        return
+      }
+      if (password.length < 8) {
+        setErrorMessage('Password must be at least 8 characters.')
+        setLoading(false)
+        return
+      }
     }
 
     try {
@@ -191,6 +247,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                   onClick={() => {
                     setMode(isLogin ? 'signup' : 'login')
                     setErrorMessage(null)
+                    setConfirmPassword('')
                   }}
                 >
                   {isLogin ? 'Sign up' : 'Log in'}
@@ -227,6 +284,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                 onClick={() => {
                   setMode('signup')
                   setErrorMessage(null)
+                  setConfirmPassword('')
                 }}
               >
                 Sign up
@@ -239,6 +297,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                 onClick={() => {
                   setMode('login')
                   setErrorMessage(null)
+                  setConfirmPassword('')
                 }}
               >
                 Log in
@@ -315,22 +374,70 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                     Password
                   </label>
                 </div>
-                <input
-                  id="rv-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={isLogin ? '••••••••' : 'Create a password'}
-                  className="rv-login-input"
-                  autoComplete={isLogin ? 'current-password' : 'new-password'}
-                  required
-                />
+                <div className="rv-login-input-wrapper">
+                  <input
+                    id="rv-password"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder={isLogin ? '••••••••' : 'Create a password'}
+                    className="rv-login-input"
+                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="rv-login-password-toggle"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                  </button>
+                </div>
                 {!isLogin && (
                   <span className="rv-login-hint-text">
                     Must be at least 8 characters.
                   </span>
                 )}
               </div>
+
+              {/* Confirm Password Input Field (Sign up only) */}
+              {!isLogin && (
+                <div className="rv-login-input-field">
+                  <div className="rv-login-label-wrapper">
+                    <label htmlFor="rv-confirm-password" className="rv-login-label">
+                      Confirm password
+                    </label>
+                  </div>
+                  <div className="rv-login-input-wrapper">
+                    <input
+                      id="rv-confirm-password"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm your password"
+                      className="rv-login-input"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="rv-login-password-toggle"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                      title={showConfirmPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                  {confirmPassword && password && confirmPassword !== password && (
+                    <span className="rv-login-hint-error">
+                      Passwords do not match.
+                    </span>
+                  )}
+                </div>
+              )}
 
               {/* Row: Checkbox & Forgot Password (Log in only) */}
               {isLogin && (
@@ -418,6 +525,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'http://landing.141.
                 onClick={() => {
                   setMode('login')
                   setErrorMessage(null)
+                  setConfirmPassword('')
                 }}
               >
                 Already have an account? Log in

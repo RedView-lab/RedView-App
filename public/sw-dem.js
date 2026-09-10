@@ -22,7 +22,7 @@
 // ---------------------------------------------------------------------------
 // Cache stamp — bumped on every cache-invalidating change so the browser
 // detects a byte diff in this file and triggers install→activate→purge.
-// Current: dem-tiles-v45 / dem-negative-v27 (France high-zoom transient-miss guard)
+// Current: dem-tiles-v46 / radar-v2 / dem-negative-v27 (Doppler radar tile proxy & recolor)
 // 2026-08 zone-gated overlays: slope/altitude tiles may carry ?zone=<hash>
 // (masked, separate cache keys); analysis-zone registry + per-pixel mask (v5 Uniform Fast LiDAR).
 // ---------------------------------------------------------------------------

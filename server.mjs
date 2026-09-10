@@ -50,6 +50,11 @@ const server = http.createServer(async (req, res) => {
       return await handleApiRoute(pathname, parsedUrl, req, res);
     }
 
+    // 2b. Fallback proxy for /radar-tiles/* when Service Worker is inactive (e.g. over plain HTTP)
+    if (pathname.startsWith('/radar-tiles/')) {
+      return await handleRadarTileRoute(pathname, parsedUrl, req, res);
+    }
+
     // 3. Serve Static Files from dist
     let filePath = path.join(DIST_DIR, pathname);
 
@@ -219,6 +224,33 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
       res.end(JSON.stringify({ error: err.message || 'Internal Server Error' }));
     }
   }
+}
+
+async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
+  try {
+    const host = decodeURIComponent(parsedUrl.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
+    const framePath = decodeURIComponent(parsedUrl.searchParams.get('path') || '');
+    const match = pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
+    if (match && framePath) {
+      const [, z, x, y] = match;
+      const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
+      const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
+      const upstreamRes = await fetch(target);
+      if (upstreamRes.ok) {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=300');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('X-Weather-Source', 'server-radar-proxy');
+        const buf = Buffer.from(await upstreamRes.arrayBuffer());
+        return res.end(buf);
+      }
+    }
+  } catch (e) {
+    console.warn('[server-radar-tiles] error:', e);
+  }
+  res.statusCode = 204;
+  return res.end();
 }
 
 server.listen(PORT, '0.0.0.0', () => {

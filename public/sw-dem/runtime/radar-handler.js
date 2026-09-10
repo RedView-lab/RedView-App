@@ -194,9 +194,19 @@ async function handleRadarTileRequest(url, z, x, y) {
 
       ctx.putImageData(imgData, 0, 0);
       recoloredBlob = await canvas.convertToBlob({ type: 'image/png' });
-    } else if (typeof buildRawPng === 'function') {
+    } else {
       imgBitmap.close();
-      return new Response(null, { status: 204 });
+    }
+
+    if (!recoloredBlob && blob) {
+      return new Response(blob, {
+        status: 200,
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=300',
+          'X-Weather-Source': 'radar-raw-fallback',
+        },
+      });
     }
 
     if (!recoloredBlob) {
@@ -212,7 +222,11 @@ async function handleRadarTileRequest(url, z, x, y) {
       },
     });
   } catch (err) {
-    console.warn('[radar-handler] recolor failed:', err);
+    console.warn('[radar-handler] recolor failed, attempting raw tile fallback:', err);
+    try {
+      const fallbackRes = await fetch(upstreamUrl);
+      if (fallbackRes.ok) return fallbackRes;
+    } catch { /* ignore */ }
     return new Response(null, { status: 204 });
   }
 }

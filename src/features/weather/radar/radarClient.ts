@@ -87,8 +87,11 @@ export function formatRadarPaletteParam(
 
 /**
  * Builds the Mapbox-compatible raster tile URL for the given radar frame path.
- * Routes through the Service Worker /radar-tiles/{z}/{x}/{y} pipeline to recolor
- * Doppler radar reflectivity tiles in real time according to the user's custom palette.
+ * If the Service Worker is actively controlling the page, routes through
+ * /radar-tiles/{z}/{x}/{y} to recolor Doppler radar reflectivity tiles in real time
+ * according to the user's custom palette.
+ * Otherwise, falls back to the direct upstream RainViewer Slippy CDN URL for zero-latency,
+ * rock-solid reliability in any environment (plain HTTP, incognito, non-SW).
  */
 export function buildRadarTileUrl(
   host: string,
@@ -96,11 +99,21 @@ export function buildRadarTileUrl(
   paletteSig?: string,
   paletteParam?: string,
 ): string {
-  const cleanHost = encodeURIComponent(host.replace(/\/+$/, ''));
-  const cleanPath = encodeURIComponent(framePath.startsWith('/') ? framePath : `/${framePath}`);
-  const p = paletteParam ? `&p=${encodeURIComponent(paletteParam)}` : '';
-  const sig = paletteSig ? `&sig=${encodeURIComponent(paletteSig)}` : '';
-  return `/radar-tiles/{z}/{x}/{y}?host=${cleanHost}&path=${cleanPath}${p}${sig}`;
+  const rawHost = host.replace(/\/+$/, '');
+  const rawPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
+
+  // If Service Worker is actively controlling this page, route through the SW recoloring pipeline
+  const hasActiveSw = typeof navigator !== 'undefined' && Boolean(navigator.serviceWorker?.controller);
+  if (hasActiveSw) {
+    const cleanHost = encodeURIComponent(rawHost);
+    const cleanPath = encodeURIComponent(rawPath);
+    const p = paletteParam ? `&p=${encodeURIComponent(paletteParam)}` : '';
+    const sig = paletteSig ? `&sig=${encodeURIComponent(paletteSig)}` : '';
+    return `/radar-tiles/{z}/{x}/{y}?host=${cleanHost}&path=${cleanPath}${p}${sig}`;
+  }
+
+  // Direct CDN fallback: Scheme 2 (Universal Blue Doppler precipitation)
+  return `${rawHost}${rawPath}/512/{z}/{x}/{y}/2/1_1.png`;
 }
 
 /**

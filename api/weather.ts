@@ -53,6 +53,34 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const rawUrl = req.url ?? '';
   const subPath = rawUrl.replace(/^\/api\/weather\/?/, '') || 'meta.json';
 
+  // Live Doppler radar tile proxy (relayed from /radar-tiles/*)
+  if (subPath.startsWith('radar-tile')) {
+    try {
+      const parsed = new URL(rawUrl, 'http://localhost');
+      const host = decodeURIComponent(parsed.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
+      const framePath = decodeURIComponent(parsed.searchParams.get('path') || '');
+      const match = parsed.pathname.match(/(?:\/radar-tiles?\/|\/)(\d+)\/(\d+)\/(\d+)/);
+      if (match && framePath) {
+        const [, z, x, y] = match;
+        const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
+        const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
+        const tileRes = await fetch(target);
+        if (tileRes.ok) {
+          const buf = Buffer.from(await tileRes.arrayBuffer());
+          res.status(200);
+          res.setHeader('Content-Type', 'image/png');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'public, max-age=300');
+          res.setHeader('X-Weather-Source', 'rainviewer-tile-proxy');
+          return res.send(buf);
+        }
+      }
+      return res.status(204).end();
+    } catch {
+      return res.status(204).end();
+    }
+  }
+
   // Dedicated European live Doppler radar endpoint (cached 2 min)
   if (subPath.startsWith('radar')) {
     try {
