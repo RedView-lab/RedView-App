@@ -57,7 +57,7 @@ export default async function handler(
   }
 
   const upstream = (process.env.BROUTER_UPSTREAM ?? '').trim() || 'http://localhost:17777';
-  const base = upstream.replace(/\/+$/, '');
+  const base = upstream.replace(/\/+$/, '').replace(/\/brouter$/, '');
 
   if (req.method === 'POST') {
     return handleProfileUpload(req, res, base);
@@ -150,10 +150,12 @@ async function handleProfileUpload(
   res: ApiResponse,
   base: string,
 ) {
-  // Accept either raw text/plain body OR JSON { profile: "<brf>" }.
+  // Accept either raw text/plain body OR JSON { profile: "<brf>" } OR Buffer.
   let profileText: string | null = null;
   if (typeof req.body === 'string') {
     profileText = req.body;
+  } else if (Buffer.isBuffer(req.body)) {
+    profileText = req.body.toString('utf-8');
   } else if (req.body && typeof req.body === 'object') {
     const maybe = (req.body as { profile?: unknown }).profile;
     if (typeof maybe === 'string') profileText = maybe;
