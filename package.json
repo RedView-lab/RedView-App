@@ -13,7 +13,9 @@
     "test:openmeteo:vps": "node ./scripts/test-openmeteo-vps.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "tsx server.mjs"
+    "start": "tsx server.mjs",
+    "push": "node scripts/deploy.mjs",
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@garmin/fitsdk": "^21.201.0",

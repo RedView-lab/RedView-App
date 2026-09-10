@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { recolorRadarPng } from './server/radar-recolor.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -230,6 +231,7 @@ async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
   try {
     const host = decodeURIComponent(parsedUrl.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
     const framePath = decodeURIComponent(parsedUrl.searchParams.get('path') || '');
+    const pStr = parsedUrl.searchParams.get('p') || '';
     const match = pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
     if (match && framePath) {
       const [, z, x, y] = match;
@@ -237,13 +239,14 @@ async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
       const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
       const upstreamRes = await fetch(target);
       if (upstreamRes.ok) {
+        const rawBuf = Buffer.from(await upstreamRes.arrayBuffer());
+        const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf;
         res.statusCode = 200;
         res.setHeader('Content-Type', 'image/png');
         res.setHeader('Cache-Control', 'public, max-age=300');
         res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('X-Weather-Source', 'server-radar-proxy');
-        const buf = Buffer.from(await upstreamRes.arrayBuffer());
-        return res.end(buf);
+        res.setHeader('X-Weather-Source', pStr ? 'server-radar-recolor' : 'server-radar-proxy');
+        return res.end(finalBuf);
       }
     }
   } catch (e) {

@@ -99,21 +99,11 @@ export function buildRadarTileUrl(
   paletteSig?: string,
   paletteParam?: string,
 ): string {
-  const rawHost = host.replace(/\/+$/, '');
-  const rawPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
-
-  // If Service Worker is actively controlling this page, route through the SW recoloring pipeline
-  const hasActiveSw = typeof navigator !== 'undefined' && Boolean(navigator.serviceWorker?.controller);
-  if (hasActiveSw) {
-    const cleanHost = encodeURIComponent(rawHost);
-    const cleanPath = encodeURIComponent(rawPath);
-    const p = paletteParam ? `&p=${encodeURIComponent(paletteParam)}` : '';
-    const sig = paletteSig ? `&sig=${encodeURIComponent(paletteSig)}` : '';
-    return `/radar-tiles/{z}/{x}/{y}?host=${cleanHost}&path=${cleanPath}${p}${sig}`;
-  }
-
-  // Direct CDN fallback: Scheme 2 (Universal Blue Doppler precipitation)
-  return `${rawHost}${rawPath}/512/{z}/{x}/{y}/2/1_1.png`;
+  const cleanHost = encodeURIComponent(host.replace(/\/+$/, ''));
+  const cleanPath = encodeURIComponent(framePath.startsWith('/') ? framePath : `/${framePath}`);
+  const p = paletteParam ? `&p=${encodeURIComponent(paletteParam)}` : '';
+  const sig = paletteSig ? `&sig=${encodeURIComponent(paletteSig)}` : '';
+  return `/radar-tiles/{z}/{x}/{y}?host=${cleanHost}&path=${cleanPath}${p}${sig}`;
 }
 
 /**

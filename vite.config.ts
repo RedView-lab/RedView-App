@@ -4,6 +4,8 @@ import path from 'path'
 import fs from 'fs'
 // @ts-expect-error JS module without declarations
 import { startDevServices } from './scripts/start-dev-services.mjs'
+// @ts-expect-error JS module without declarations
+import { recolorRadarPng } from './server/radar-recolor.mjs'
 
 const redviewBuildId = (
   process.env.VERCEL_GIT_COMMIT_SHA
@@ -79,8 +81,10 @@ function redviewDevApiPlugin(): Plugin {
                 res.statusCode = 200
                 res.setHeader('Content-Type', 'image/png')
                 res.setHeader('Cache-Control', 'public, max-age=300')
-                const buf = Buffer.from(await upstreamRes.arrayBuffer())
-                return res.end(buf)
+                const rawBuf = Buffer.from(await upstreamRes.arrayBuffer())
+                const pStr = urlObj.searchParams.get('p') || ''
+                const finalBuf = pStr ? recolorRadarPng(rawBuf, pStr) : rawBuf
+                return res.end(finalBuf)
               }
             }
           } catch (e) {
