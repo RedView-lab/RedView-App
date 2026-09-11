@@ -5,8 +5,20 @@
  */
 
 import dns from 'node:dns/promises';
+import fs from 'node:fs';
+import path from 'node:path';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY || 're_GmThxzMu_JLRKWUYKiiGWQrTHqP7xH5xT';
+// Read from env or .env file
+let RESEND_API_KEY = process.env.RESEND_API_KEY;
+if (!RESEND_API_KEY) {
+  const envPath = path.resolve(process.cwd(), '.env');
+  if (fs.existsSync(envPath)) {
+    const match = fs.readFileSync(envPath, 'utf-8').match(/RESEND_API_KEY=(.*)/);
+    if (match && match[1]) {
+      RESEND_API_KEY = match[1].trim().replace(/^["']|["']$/g, '');
+    }
+  }
+}
 const DOMAIN_NAME = 'redview.tech';
 
 const ANSI = {
