@@ -45,6 +45,11 @@ export function readProjectIdFromPath(pathname: string): string | null {
 
 export function replaceProjectLocation(project: ProjectRouteTarget | null): void {
   const nextPath = project ? buildProjectPath(project) : '/';
+  if (typeof document !== 'undefined') {
+    document.title = project?.name && project.name !== 'project'
+      ? `${project.name} · RedView`
+      : 'RedView — Cartographie 3D Haute Résolution & LiDAR Outdoor';
+  }
   if (window.location.pathname === nextPath) return;
   window.history.replaceState(null, '', nextPath);
   window.dispatchEvent(new CustomEvent(PROJECT_LOCATION_CHANGE_EVENT, {

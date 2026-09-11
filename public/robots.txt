@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://redview.tech/sitemap.xml
+Host: https://app.redview.tech
