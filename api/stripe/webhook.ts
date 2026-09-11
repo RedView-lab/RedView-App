@@ -120,6 +120,15 @@ async function handleSubscriptionChanged(subscription: Stripe.Subscription) {
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
+  if (
+    subscription.metadata?.is_lifetime === 'true' ||
+    subscription.metadata?.plan_id === 'founder' ||
+    subscription.metadata?.plan_id === 'patron'
+  ) {
+    console.log(`[stripe/webhook] Preserving lifetime subscription ${subscription.id} for user ${subscription.metadata?.user_id}`);
+    return;
+  }
+
   const db = getAppwriteDatabases();
   try {
     await db.updateDocument(APPWRITE_DATABASE_ID, SUBSCRIPTIONS_COLLECTION_ID, subscription.id, {

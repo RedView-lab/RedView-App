@@ -32,6 +32,39 @@ const MIME_TYPES = {
   '.brf': 'text/plain; charset=utf-8',
 };
 
+// In-memory rate limiting map: ip -> { count, resetTime }
+const rateLimitMap = new Map();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const MAX_AUTH_REQUESTS = 15;
+const MAX_API_REQUESTS = 120;
+
+function checkRateLimit(req, isAuth) {
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1';
+  const key = `${ip}:${isAuth ? 'auth' : 'general'}`;
+  const max = isAuth ? MAX_AUTH_REQUESTS : MAX_API_REQUESTS;
+  const now = Date.now();
+
+  const record = rateLimitMap.get(key) || { count: 0, resetTime: now + RATE_LIMIT_WINDOW_MS };
+  if (now > record.resetTime) {
+    record.count = 0;
+    record.resetTime = now + RATE_LIMIT_WINDOW_MS;
+  }
+
+  record.count += 1;
+  rateLimitMap.set(key, record);
+
+  return record.count <= max;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitMap.entries()) {
+    if (now > record.resetTime) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, 5 * 60 * 1000);
+
 const server = http.createServer(async (req, res) => {
   try {
     if (!req.url) {
@@ -42,13 +75,27 @@ const server = http.createServer(async (req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     let pathname = decodeURIComponent(parsedUrl.pathname);
 
+    // 0. Health check endpoint for uptime monitoring & Docker
+    if (pathname === '/health' || pathname === '/healthz' || pathname === '/api/health') {
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      return res.end(JSON.stringify({ status: 'ok', uptime: Math.round(process.uptime()), timestamp: Date.now() }));
+    }
+
     // 1. Rewrite /viewer to /viewer.html
     if (pathname === '/viewer') {
       pathname = '/viewer.html';
     }
 
-    // 2. Handle /api/* routes
+    // 2. Handle /api/* routes with rate limiting
     if (pathname.startsWith('/api/')) {
+      const isAuth = pathname.startsWith('/api/auth');
+      if (!checkRateLimit(req, isAuth)) {
+        res.statusCode = 429;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Retry-After', '60');
+        return res.end(JSON.stringify({ error: 'Trop de requêtes. Veuillez patienter une minute.' }));
+      }
       return await handleApiRoute(pathname, parsedUrl, req, res);
     }
 

@@ -117,13 +117,22 @@ function resolveInitialAppwriteSession(): Promise<BootstrapSession> {
 
 function App() {
   const { t } = useAppI18n()
-  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => readStoredAppwriteSession())
+  const isPasswordResetUrl = typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('userId') &&
+    new URLSearchParams(window.location.search).has('secret')
+
+  const [session, setSession] = useState<{ user: { id: string; email?: string } } | null>(() => {
+    if (isPasswordResetUrl) return null
+    return readStoredAppwriteSession()
+  })
   const [authStatus, setAuthStatus] = useState<BootstrapStatus>('loading')
   const [subscriptionStatus, setSubscriptionStatus] = useState<BootstrapStatus>(() => {
+    if (isPasswordResetUrl) return 'ready'
     const storedSession = readStoredAppwriteSession()
     return readCachedSubscription(storedSession?.user.id) == null ? 'loading' : 'ready'
   })
   const [subscriptionAccess, setSubscriptionAccess] = useState<SubscriptionAccessState>(() => {
+    if (isPasswordResetUrl) return { hasAccess: true, status: 'demo' }
     const storedSession = readStoredAppwriteSession()
     return readCachedSubscription(storedSession?.user.id) ?? { hasAccess: true, status: 'demo' }
   })
@@ -153,6 +162,10 @@ function App() {
 
     const resolveSession = async () => {
       try {
+        if (isPasswordResetUrl) {
+          if (!cancelled) setSession(null)
+          return
+        }
         const nextSession = await resolveInitialAppwriteSession()
         if (!cancelled) setSession(nextSession)
       } catch (error) {

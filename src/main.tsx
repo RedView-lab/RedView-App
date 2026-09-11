@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { APP_BUILD_ID, APP_CACHE_EPOCH, ensureAppCacheEpochReset } from './shared/lib/appCacheEpoch'
 import { logger } from './shared/lib/logger'
 import { AppI18nProvider } from './shared/i18n'
+import { GlobalErrorBoundary } from './shared/components/GlobalErrorBoundary'
 import './features/map3d/hooks/useMap/serviceWorker'
 import './index.css'
 import App from './App.tsx'
@@ -18,9 +19,11 @@ async function bootstrap(): Promise<void> {
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <AppI18nProvider>
-        <App />
-      </AppI18nProvider>
+      <GlobalErrorBoundary>
+        <AppI18nProvider>
+          <App />
+        </AppI18nProvider>
+      </GlobalErrorBoundary>
     </StrictMode>,
   )
 }

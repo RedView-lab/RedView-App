@@ -31,7 +31,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(200).json({
       success: true,
       message: 'Un code de vérification à 4 chiffres a été envoyé par e-mail.',
-      debugCode: result.debugCode,
+      debugCode: process.env.NODE_ENV !== 'production' ? result.debugCode : undefined,
     });
   } catch (error: any) {
     console.error('[send-verification-code] Error:', error);

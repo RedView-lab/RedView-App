@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, useEffect, type FormEvent } from 'react'
 import { trackAnalyticsEvent } from '@/shared/lib/analytics'
 import {
   account,
@@ -9,10 +9,10 @@ import {
 import VerificationCodeModal from './VerificationCodeModal'
 import './LoginScreen.css'
 
-// Basculer à true pour réactiver l'envoi de code de vérification par e-mail
-const ENABLE_EMAIL_VERIFICATION = false
+// Envoi du code de vérification à 4 chiffres par e-mail lors de l'inscription
+const ENABLE_EMAIL_VERIFICATION = true
 
-type AuthMode = 'login' | 'signup'
+type AuthMode = 'login' | 'signup' | 'forgot-password' | 'reset-password'
 
 interface LoginScreenProps {
   onLogin?: (email?: string) => void
@@ -65,6 +65,21 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  // Auto-detect recovery token in URL query
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.has('userId') && params.has('secret')) {
+        setMode('reset-password')
+        setErrorMessage(null)
+        setSuccessMessage(null)
+        const paramEmail = params.get('email')
+        if (paramEmail) setEmail(paramEmail)
+      }
+    }
+  }, [])
 
   // Verification modal states
   const [showVerificationModal, setShowVerificationModal] = useState(false)
@@ -73,9 +88,70 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setErrorMessage(null)
+    setSuccessMessage(null)
     setLoading(true)
 
     const trimmedEmail = email.trim()
+
+    // 1. Forgot password mode: request recovery email
+    if (mode === 'forgot-password') {
+      if (!trimmedEmail || !trimmedEmail.includes('@')) {
+        setErrorMessage('Veuillez fournir une adresse e-mail valide.')
+        setLoading(false)
+        return
+      }
+
+      try {
+        await account.createRecovery(trimmedEmail, `${window.location.origin}/`)
+        setSuccessMessage('Un e-mail de réinitialisation a été envoyé ! Consultez votre boîte de réception.')
+      } catch (error: any) {
+        setErrorMessage(error?.message || "Impossible d'envoyer l'e-mail de réinitialisation.")
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // 2. Reset password mode: update password with token from URL
+    if (mode === 'reset-password') {
+      if (!password || !confirmPassword) {
+        setErrorMessage('Veuillez renseigner et confirmer le nouveau mot de passe.')
+        setLoading(false)
+        return
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Les mots de passe ne correspondent pas.')
+        setLoading(false)
+        return
+      }
+      if (password.length < 8) {
+        setErrorMessage('Le mot de passe doit comporter au moins 8 caractères.')
+        setLoading(false)
+        return
+      }
+
+      try {
+        const params = new URLSearchParams(window.location.search)
+        const userId = params.get('userId')
+        const secret = params.get('secret')
+        if (!userId || !secret) {
+          throw new Error('Jeton de réinitialisation manquant ou invalide.')
+        }
+
+        await account.updateRecovery(userId, secret, password)
+        window.history.replaceState({}, document.title, window.location.pathname)
+        setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter.')
+        setMode('login')
+        setPassword('')
+        setConfirmPassword('')
+      } catch (error: any) {
+        setErrorMessage(error?.message || 'Erreur lors de la réinitialisation du mot de passe.')
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
     if (!trimmedEmail || !password) {
       setErrorMessage('Please provide both email and password.')
       setLoading(false)
@@ -273,48 +349,80 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
             {/* Text and supporting text */}
             <div className="rv-login-title-group">
               <h1 className="rv-login-title">
-                {isLogin ? 'Log in to your account' : 'Create an account'}
+                {mode === 'forgot-password'
+                  ? 'Mot de passe oublié'
+                  : mode === 'reset-password'
+                  ? 'Nouveau mot de passe'
+                  : isLogin
+                  ? 'Log in to your account'
+                  : 'Create an account'}
               </h1>
               <p className="rv-login-subtitle">
-                {isLogin
+                {mode === 'forgot-password'
+                  ? 'Saisissez votre e-mail pour recevoir le lien de réinitialisation.'
+                  : mode === 'reset-password'
+                  ? 'Choisissez un nouveau mot de passe sécurisé (min. 8 caractères).'
+                  : isLogin
                   ? 'Welcome back! Please enter your details.'
                   : 'Start your 30-day free trial.'}
               </p>
             </div>
 
             {/* Horizontal tabs */}
-            <div className="rv-login-tabs" role="tablist">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={!isLogin}
-                className={`rv-login-tab-btn ${!isLogin ? 'rv-active' : ''}`}
-                onClick={() => {
-                  setMode('signup')
-                  setErrorMessage(null)
-                  setConfirmPassword('')
-                }}
-              >
-                Sign up
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isLogin}
-                className={`rv-login-tab-btn ${isLogin ? 'rv-active' : ''}`}
-                onClick={() => {
-                  setMode('login')
-                  setErrorMessage(null)
-                  setConfirmPassword('')
-                }}
-              >
-                Log in
-              </button>
-            </div>
+            {(mode === 'login' || mode === 'signup') && (
+              <div className="rv-login-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={!isLogin}
+                  className={`rv-login-tab-btn ${!isLogin ? 'rv-active' : ''}`}
+                  onClick={() => {
+                    setMode('signup')
+                    setErrorMessage(null)
+                    setSuccessMessage(null)
+                    setConfirmPassword('')
+                  }}
+                >
+                  Sign up
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isLogin}
+                  className={`rv-login-tab-btn ${isLogin ? 'rv-active' : ''}`}
+                  onClick={() => {
+                    setMode('login')
+                    setErrorMessage(null)
+                    setSuccessMessage(null)
+                    setConfirmPassword('')
+                  }}
+                >
+                  Log in
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Content Body */}
           <div className="rv-login-body">
+            {/* Success Message banner (for reset-password, login, signup) */}
+            {successMessage && mode !== 'forgot-password' && (
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderRadius: '10px',
+                  background: 'rgba(34, 197, 94, 0.15)',
+                  border: '1px solid rgba(34, 197, 94, 0.3)',
+                  color: '#86efac',
+                  fontSize: '14px',
+                  lineHeight: '1.4',
+                  textAlign: 'center',
+                }}
+              >
+                {successMessage}
+              </div>
+            )}
+
             {/* Error Message banner */}
             {errorMessage && (
               <div
@@ -333,10 +441,70 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               </div>
             )}
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="rv-login-form">
+            {/* If in forgot-password mode and email has been sent, show dedicated confirmation card */}
+            {mode === 'forgot-password' && successMessage ? (
+              <div className="rv-login-recovery-success" style={{ textAlign: 'center', padding: '16px 8px' }}>
+                <div
+                  style={{
+                    width: '60px',
+                    height: '60px',
+                    borderRadius: '50%',
+                    background: 'rgba(34, 197, 94, 0.15)',
+                    border: '1px solid rgba(34, 197, 94, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 16px',
+                    color: '#4ade80',
+                  }}
+                >
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                </div>
+                <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#ffffff', margin: '0 0 10px' }}>
+                  E-mail de récupération envoyé
+                </h2>
+                <p style={{ fontSize: '14px', color: 'rgba(255, 255, 255, 0.7)', lineHeight: '1.5', margin: '0 0 24px' }}>
+                  Un lien de réinitialisation sécurisé a été envoyé à <strong>{email.trim()}</strong>.<br />
+                  Consultez votre boîte de réception ainsi que vos courriers indésirables (spams).
+                </p>
+                <button
+                  type="button"
+                  className="rv-login-submit-btn"
+                  onClick={() => {
+                    setMode('login')
+                    setSuccessMessage(null)
+                    setErrorMessage(null)
+                  }}
+                >
+                  Retour à la connexion
+                </button>
+                <div style={{ marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'rgba(255, 255, 255, 0.5)',
+                      fontSize: '13px',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                    onClick={() => {
+                      setSuccessMessage(null)
+                    }}
+                  >
+                    Renvoyer un autre e-mail
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* Form */
+              <form onSubmit={handleSubmit} className="rv-login-form">
               {/* Name Input Field (Sign up only) */}
-              {!isLogin && (
+              {mode === 'signup' && (
                 <div className="rv-login-input-field">
                   <div className="rv-login-label-wrapper">
                     <label htmlFor="rv-name" className="rv-login-label">
@@ -356,62 +524,66 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 </div>
               )}
 
-              {/* Email Input Field */}
-              <div className="rv-login-input-field">
-                <div className="rv-login-label-wrapper">
-                  <label htmlFor="rv-email" className="rv-login-label">
-                    Email
-                  </label>
-                </div>
-                <input
-                  id="rv-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email"
-                  className="rv-login-input"
-                  autoComplete="email"
-                  required
-                />
-              </div>
-
-              {/* Password Input Field */}
-              <div className="rv-login-input-field">
-                <div className="rv-login-label-wrapper">
-                  <label htmlFor="rv-password" className="rv-login-label">
-                    Password
-                  </label>
-                </div>
-                <div className="rv-login-input-wrapper">
+              {/* Email Input Field (all modes except reset-password) */}
+              {mode !== 'reset-password' && (
+                <div className="rv-login-input-field">
+                  <div className="rv-login-label-wrapper">
+                    <label htmlFor="rv-email" className="rv-login-label">
+                      Email
+                    </label>
+                  </div>
                   <input
-                    id="rv-password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={isLogin ? '••••••••' : 'Create a password'}
+                    id="rv-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
                     className="rv-login-input"
-                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    autoComplete="email"
                     required
                   />
-                  <button
-                    type="button"
-                    className="rv-login-password-toggle"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOffIcon /> : <EyeIcon />}
-                  </button>
                 </div>
-                {!isLogin && (
-                  <span className="rv-login-hint-text">
-                    Must be at least 8 characters.
-                  </span>
-                )}
-              </div>
+              )}
 
-              {/* Confirm Password Input Field (Sign up only) */}
-              {!isLogin && (
+              {/* Password Input Field (all modes except forgot-password) */}
+              {mode !== 'forgot-password' && (
+                <div className="rv-login-input-field">
+                  <div className="rv-login-label-wrapper">
+                    <label htmlFor="rv-password" className="rv-login-label">
+                      {mode === 'reset-password' ? 'New password' : 'Password'}
+                    </label>
+                  </div>
+                  <div className="rv-login-input-wrapper">
+                    <input
+                      id="rv-password"
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder={mode === 'reset-password' ? '••••••••' : isLogin ? '••••••••' : 'Create a password'}
+                      className="rv-login-input"
+                      autoComplete={isLogin ? 'current-password' : 'new-password'}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="rv-login-password-toggle"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      title={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOffIcon /> : <EyeIcon />}
+                    </button>
+                  </div>
+                  {mode !== 'login' && (
+                    <span className="rv-login-hint-text">
+                      Must be at least 8 characters.
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Confirm Password Input Field (Sign up and Reset password only) */}
+              {(mode === 'signup' || mode === 'reset-password') && (
                 <div className="rv-login-input-field">
                   <div className="rv-login-label-wrapper">
                     <label htmlFor="rv-confirm-password" className="rv-login-label">
@@ -463,7 +635,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                   <button
                     type="button"
                     className="rv-login-forgot-btn"
-                    onClick={() => alert('Password reset instructions will be sent to your email.')}
+                    onClick={() => {
+                      setMode('forgot-password')
+                      setErrorMessage(null)
+                      setSuccessMessage(null)
+                    }}
                   >
                     Forgot password
                   </button>
@@ -474,45 +650,70 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
               <div className="rv-login-actions">
                 {/* Primary Button */}
                 <button type="submit" className="rv-login-submit-btn" disabled={loading}>
-                  {loading ? 'Processing...' : isLogin ? 'Sign in' : 'Get started'}
+                  {loading
+                    ? 'Processing...'
+                    : mode === 'forgot-password'
+                    ? 'Envoyer le lien de réinitialisation'
+                    : mode === 'reset-password'
+                    ? 'Enregistrer le nouveau mot de passe'
+                    : isLogin
+                    ? 'Sign in'
+                    : 'Get started'}
                 </button>
 
-                {/* Social Button: Google */}
-                <div className="rv-login-social-group">
-                  <button
-                    type="button"
-                    className="rv-login-social-btn"
-                    onClick={handleGoogleAuth}
-                    disabled={loading}
-                  >
-                    <span className="rv-login-social-icon">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                        <path
-                          fill="#4285F4"
-                          d="M23.49 12.27c0-.79-.07-1.55-.2-2.27H12v4.29h6.44a5.5 5.5 0 0 1-2.39 3.61v2.99h3.86c2.26-2.08 3.58-5.15 3.58-8.62Z"
-                        />
-                        <path
-                          fill="#34A853"
-                          d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.86-2.99c-1.07.72-2.44 1.14-4.07 1.14-3.13 0-5.79-2.11-6.74-4.95H1.27v3.08A11.99 11.99 0 0 0 12 24Z"
-                        />
-                        <path
-                          fill="#FBBC05"
-                          d="M5.26 14.29A7.2 7.2 0 0 1 4.88 12c0-.79.14-1.56.38-2.29V6.63H1.27A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.27 5.37l3.99-3.08Z"
-                        />
-                        <path
-                          fill="#EA4335"
-                          d="M12 4.77c1.76 0 3.34.61 4.58 1.81l3.43-3.43C17.94 1.15 15.24 0 12 0A11.99 11.99 0 0 0 1.27 6.63l3.99 3.08c.95-2.84 3.61-4.94 6.74-4.94Z"
-                        />
-                      </svg>
-                    </span>
-                    {isLogin ? 'Sign in with Google' : 'Sign up with Google'}
-                  </button>
-                </div>
+                {/* Social Button: Google (only in login/signup) */}
+                {(mode === 'login' || mode === 'signup') && (
+                  <div className="rv-login-social-group">
+                    <button
+                      type="button"
+                      className="rv-login-social-btn"
+                      onClick={handleGoogleAuth}
+                      disabled={loading}
+                    >
+                      <span className="rv-login-social-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                          <path
+                            fill="#4285F4"
+                            d="M23.49 12.27c0-.79-.07-1.55-.2-2.27H12v4.29h6.44a5.5 5.5 0 0 1-2.39 3.61v2.99h3.86c2.26-2.08 3.58-5.15 3.58-8.62Z"
+                          />
+                          <path
+                            fill="#34A853"
+                            d="M12 24c3.24 0 5.95-1.07 7.93-2.91l-3.86-2.99c-1.07.72-2.44 1.14-4.07 1.14-3.13 0-5.79-2.11-6.74-4.95H1.27v3.08A11.99 11.99 0 0 0 12 24Z"
+                          />
+                          <path
+                            fill="#FBBC05"
+                            d="M5.26 14.29A7.2 7.2 0 0 1 4.88 12c0-.79.14-1.56.38-2.29V6.63H1.27A11.99 11.99 0 0 0 0 12c0 1.94.46 3.77 1.27 5.37l3.99-3.08Z"
+                          />
+                          <path
+                            fill="#EA4335"
+                            d="M12 4.77c1.76 0 3.34.61 4.58 1.81l3.43-3.43C17.94 1.15 15.24 0 12 0A11.99 11.99 0 0 0 1.27 6.63l3.99 3.08c.95-2.84 3.61-4.94 6.74-4.94Z"
+                          />
+                        </svg>
+                      </span>
+                      {isLogin ? 'Sign in with Google' : 'Sign up with Google'}
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
+            )}
 
             {/* Footer Action */}
-            {isLogin ? (
+            {mode === 'forgot-password' || mode === 'reset-password' ? (
+              !(mode === 'forgot-password' && successMessage) && (
+                <button
+                  type="button"
+                  className="rv-login-footer-action"
+                  onClick={() => {
+                    setMode('login')
+                    setErrorMessage(null)
+                    setSuccessMessage(null)
+                  }}
+                >
+                  ← Back to log in
+                </button>
+              )
+            ) : isLogin ? (
               <button
                 type="button"
                 className="rv-login-footer-action"
@@ -533,6 +734,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 onClick={() => {
                   setMode('login')
                   setErrorMessage(null)
+                  setSuccessMessage(null)
                   setConfirmPassword('')
                 }}
               >

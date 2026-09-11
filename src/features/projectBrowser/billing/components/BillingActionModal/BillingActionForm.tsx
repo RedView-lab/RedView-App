@@ -164,13 +164,6 @@ export function BillingActionForm({
           elements,
           confirmParams: {
             return_url: `${window.location.origin}/`,
-            payment_method_data: {
-              billing_details: {
-                address: {
-                  country: 'FR',
-                },
-              },
-            },
           },
           redirect: 'if_required',
         });
@@ -192,13 +185,6 @@ export function BillingActionForm({
         elements,
         confirmParams: {
           return_url: `${window.location.origin}/`,
-          payment_method_data: {
-            billing_details: {
-              address: {
-                country: 'FR',
-              },
-            },
-          },
         },
         redirect: 'if_required',
       });

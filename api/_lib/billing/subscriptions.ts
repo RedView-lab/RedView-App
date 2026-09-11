@@ -27,7 +27,7 @@ function toSnapshotFromStoredSubscription(
   > | null,
 ): SubscriptionSnapshot {
   const status = row?.status ?? 'demo';
-  const isSubscribed = status === 'active' || status === 'trialing';
+  const isSubscribed = status === 'active' || status === 'trialing' || status === 'lifetime';
 
   return {
     isSubscribed,
@@ -230,10 +230,13 @@ export async function createManagedSubscription(
     itemsPayload = [{ price: defaultPriceId }];
   }
 
+  const isLifetimePass = planId === 'founder' || planId === 'patron';
+
   const subscription = await getStripeServer().subscriptions.create({
     customer: stripeCustomerId,
     items: itemsPayload,
     payment_behavior: 'default_incomplete',
+    cancel_at_period_end: isLifetimePass,
     payment_settings: {
       payment_method_types: ['card', 'paypal'],
       save_default_payment_method: 'on_subscription',
@@ -242,6 +245,7 @@ export async function createManagedSubscription(
     metadata: {
       user_id: userId,
       plan_id: planId,
+      is_lifetime: isLifetimePass ? 'true' : 'false',
     },
   });
 
