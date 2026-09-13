@@ -51,7 +51,17 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const rawUrl = req.url ?? '';
-  const subPath = rawUrl.replace(/^\/api\/weather\/?/, '') || 'meta.json';
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(rawUrl, 'http://localhost');
+  } catch {
+    parsedUrl = new URL('/api/weather', 'http://localhost');
+  }
+  const subPath = parsedUrl.pathname.replace(/^\/api\/weather\/?/, '') || 'meta.json';
+
+  if (!/^[a-zA-Z0-9_\-./]+$/.test(subPath) || subPath.includes('..')) {
+    return res.status(400).json({ error: 'Invalid path parameter' });
+  }
 
   // Live Doppler radar tile proxy (relayed from /radar-tiles/*)
   const ALLOWED_RADAR_HOSTS = new Set([
@@ -61,7 +71,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
   if (subPath.startsWith('radar-tile')) {
     try {
-      const parsed = new URL(rawUrl, 'http://localhost');
+      const parsed = parsedUrl;
       const requestedHost = (parsed.searchParams.get('host') || '').trim();
       const host = ALLOWED_RADAR_HOSTS.has(requestedHost)
         ? requestedHost
