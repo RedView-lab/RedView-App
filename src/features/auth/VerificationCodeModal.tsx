@@ -182,9 +182,6 @@ export default function VerificationCodeModal({
 
       {/* Modal Card */}
       <div className="rv-modal-card" data-rv-no-translate="true" translate="no">
-        {/* Background pattern decorative */}
-        <div className="rv-modal-decorative-glow" />
-
         {/* Modal header */}
         <header className="rv-modal-header">
           {/* Featured icon */}

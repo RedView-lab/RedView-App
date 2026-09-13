@@ -31,12 +31,15 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(200).json({
       success: true,
       message: 'Un code de vérification à 4 chiffres a été envoyé par e-mail.',
-      debugCode: process.env.NODE_ENV !== 'production' ? result.debugCode : undefined,
     });
   } catch (error: any) {
     console.error('[send-verification-code] Error:', error);
+    const userFacingError =
+      error?.message && !error.message.includes('API') && !error.message.includes('connect')
+        ? error.message
+        : 'Impossible d’envoyer le code de vérification.';
     return res.status(500).json({
-      error: error?.message || 'Impossible d’envoyer le code de vérification.',
+      error: userFacingError,
     });
   }
 }

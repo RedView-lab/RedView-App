@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const TIMEOUT_MS = 15_000;
-const DEFAULT_VPS_UPSTREAM = 'http://141.145.220.99/weather';
+const DEFAULT_VPS_UPSTREAM = process.env.WEATHER_UPSTREAM || '';
 
 async function fetchUpstream(target: string): Promise<{ response: Response; body: Buffer }> {
   const controller = new AbortController();
@@ -54,17 +54,33 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   const subPath = rawUrl.replace(/^\/api\/weather\/?/, '') || 'meta.json';
 
   // Live Doppler radar tile proxy (relayed from /radar-tiles/*)
+  const ALLOWED_RADAR_HOSTS = new Set([
+    'https://tilecache.rainviewer.com',
+    'https://tilecache.rainviewer.net',
+  ]);
+
   if (subPath.startsWith('radar-tile')) {
     try {
       const parsed = new URL(rawUrl, 'http://localhost');
-      const host = decodeURIComponent(parsed.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
-      const framePath = decodeURIComponent(parsed.searchParams.get('path') || '');
+      const requestedHost = (parsed.searchParams.get('host') || '').trim();
+      const host = ALLOWED_RADAR_HOSTS.has(requestedHost)
+        ? requestedHost
+        : 'https://tilecache.rainviewer.com';
+
+      const rawFramePath = decodeURIComponent(parsed.searchParams.get('path') || '').trim();
+      if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-\/]+$/.test(rawFramePath)) {
+        res.status(400);
+        return res.json({ error: 'Invalid frame path parameter' });
+      }
+
       const match = parsed.pathname.match(/(?:\/radar-tiles?\/|\/)(\d+)\/(\d+)\/(\d+)/);
-      if (match && framePath) {
+      if (match) {
         const [, z, x, y] = match;
-        const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
-        const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
-        const tileRes = await fetch(target);
+        const cleanPath = rawFramePath.startsWith('/') ? rawFramePath : `/${rawFramePath}`;
+        const target = `${host}${cleanPath}/512/${encodeURIComponent(z)}/${encodeURIComponent(x)}/${encodeURIComponent(y)}/2/1_1.png`;
+        const tileRes = await fetch(target, {
+          signal: AbortSignal.timeout(10_000),
+        });
         if (tileRes.ok) {
           const buf = Buffer.from(await tileRes.arrayBuffer());
           res.status(200);
@@ -104,6 +120,9 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const upstreamBase = (process.env.WEATHER_UPSTREAM ?? DEFAULT_VPS_UPSTREAM).replace(/\/+$/, '');
+  if (!upstreamBase) {
+    return res.status(503).json({ error: 'WEATHER_UPSTREAM environment variable is not configured' });
+  }
   const targetUrl = `${upstreamBase}/${subPath}`;
 
   try {
@@ -131,29 +150,47 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     return res.send(body);
   } catch (err) {
-    // Check local fallback directory (e.g. during local dev or tests)
-    const localFallbackFile = path.resolve(process.cwd(), 'dist_weather', subPath.split('?')[0]);
-    if (fs.existsSync(localFallbackFile) && fs.statSync(localFallbackFile).isFile()) {
-      const content = fs.readFileSync(localFallbackFile);
-      const contentType =
-        subPath.endsWith('.webp') ? 'image/webp' :
-        subPath.endsWith('.png') ? 'image/png' :
-        'application/json; charset=utf-8';
+    // SÉCURISÉ : Confinement strict du fallback local dans dist_weather (Anti-Path-Traversal)
+    const rawTargetName = subPath.split('?')[0].replace(/\0/g, '').trim();
+    const fallbackDir = path.resolve(process.cwd(), 'dist_weather');
 
-      res.status(200);
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('X-Weather-Source', 'local-fallback');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Cache-Control', 'no-cache');
-      return res.send(content);
+    // Rejeter immédiatement toute tentative de traversée ou chemin absolu
+    const isSuspicious = !rawTargetName ||
+      rawTargetName.includes('..') ||
+      path.isAbsolute(rawTargetName) ||
+      rawTargetName.startsWith('/') ||
+      rawTargetName.startsWith('\\');
+
+    if (!isSuspicious) {
+      const localFallbackFile = path.resolve(fallbackDir, rawTargetName);
+      const isContained = localFallbackFile.startsWith(fallbackDir + path.sep);
+
+      if (isContained && fs.existsSync(localFallbackFile)) {
+        try {
+          const stat = fs.statSync(localFallbackFile);
+          if (stat.isFile()) {
+            const content = fs.readFileSync(localFallbackFile);
+            const contentType =
+              rawTargetName.endsWith('.webp') ? 'image/webp' :
+              rawTargetName.endsWith('.png') ? 'image/png' :
+              'application/json; charset=utf-8';
+
+            res.status(200);
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('X-Weather-Source', 'local-fallback');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cache-Control', 'public, max-age=60');
+            return res.send(content);
+          }
+        } catch {
+          // Ignorer silencieusement si lecture impossible
+        }
+      }
     }
 
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[weather-proxy] upstream failed: ${msg}`);
+    console.warn(`[weather-proxy] upstream fetch failed:`, err instanceof Error ? err.message : err);
     return res.status(502).json({
-      error: 'Weather upstream unavailable',
-      upstream: targetUrl,
-      detail: msg,
+      error: 'Weather service temporarily unavailable',
     });
   }
 }

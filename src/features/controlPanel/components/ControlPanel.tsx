@@ -231,22 +231,27 @@ export function ControlPanel({
         onAddAlert={onWeatherAddAlert}
       />
 
-      <WindSection
-        state={state.wind}
-        open={sectionsOpen?.wind}
-        onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
-        onEnabledChange={onWindEnabledChange}
-        onDateChange={onWindDateChange}
-      />
-      <SunlightSection
-        state={state.sunlight}
-        open={sectionsOpen?.sunlight}
-        onOpenChange={(open) => onSectionOpenChange?.('sunlight', open)}
-        mapExpanded={sunlightMapExpanded ?? true}
-        onMapExpandedChange={onSunlightMapExpandedChange}
-        onEnabledChange={onSunlightEnabledChange}
-        onChange={onSunlightStateChange}
-      />
+      {/* Wind & Sunlight masqués et désactivés (code conservé) */}
+      {false && (
+        <>
+          <WindSection
+            state={state.wind}
+            open={sectionsOpen?.wind}
+            onOpenChange={(open) => onSectionOpenChange?.('wind', open)}
+            onEnabledChange={onWindEnabledChange}
+            onDateChange={onWindDateChange}
+          />
+          <SunlightSection
+            state={state.sunlight}
+            open={sectionsOpen?.sunlight}
+            onOpenChange={(open) => onSectionOpenChange?.('sunlight', open)}
+            mapExpanded={sunlightMapExpanded ?? true}
+            onMapExpandedChange={onSunlightMapExpandedChange}
+            onEnabledChange={onSunlightEnabledChange}
+            onChange={onSunlightStateChange}
+          />
+        </>
+      )}
       </div>
     </aside>
   );

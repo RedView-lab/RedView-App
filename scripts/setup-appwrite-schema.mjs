@@ -85,8 +85,8 @@ async function main() {
     {
       id: 'customers',
       name: 'Stripe Customers',
-      documentSecurity: false,
-      permissions: ['read("users")'],
+      documentSecurity: true,
+      permissions: [],
       attributes: [
         { type: 'string', key: 'user_id', size: 128, required: true },
         { type: 'string', key: 'stripe_customer_id', size: 128, required: true },
@@ -101,8 +101,8 @@ async function main() {
     {
       id: 'subscriptions',
       name: 'User Subscriptions',
-      documentSecurity: false,
-      permissions: ['read("users")'],
+      documentSecurity: true,
+      permissions: [],
       attributes: [
         { type: 'string', key: 'user_id', size: 128, required: true },
         { type: 'string', key: 'status', size: 64, required: true },
@@ -190,7 +190,7 @@ async function main() {
         'update("users")',
         'delete("users")',
       ],
-      fileSecurity: false,
+      fileSecurity: true,
       maxFileSize: 10485760, // 10MB
       allowedFileExtensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'],
     },

@@ -1,5 +1,5 @@
 import type { ApiRequest, ApiResponse } from '../_lib/types.js';
-import { ID } from 'node-appwrite';
+import { ID, Query } from 'node-appwrite';
 import { getAppwriteUsers } from '../_lib/appwrite.js';
 import { validateVerificationCode } from '../_lib/verificationStore.js';
 
@@ -16,6 +16,10 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     return res.status(400).json({ error: 'E-mail et code de vérification requis.' });
   }
 
+  if (typeof password === 'string' && password.length < 8) {
+    return res.status(400).json({ error: 'Le mot de passe doit comporter au moins 8 caractères.' });
+  }
+
   // 1. Validate code
   const validation = validateVerificationCode(trimmedEmail, trimmedCode);
   if (!validation.valid) {
@@ -27,13 +31,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
 
     // 2. Create the Appwrite user
     const finalName = (typeof name === 'string' && name.trim()) || trimmedEmail.split('@')[0] || 'User';
-    const user = await users.create(
-      ID.unique(),
-      trimmedEmail,
-      undefined,
-      typeof password === 'string' ? password : undefined,
-      finalName,
-    );
+    let user;
+    try {
+      user = await users.create(
+        ID.unique(),
+        trimmedEmail,
+        undefined,
+        typeof password === 'string' && password ? password : undefined,
+        finalName,
+      );
+    } catch (createErr: any) {
+      if (createErr?.message?.includes('already exists') || createErr?.code === 409) {
+        return res.status(409).json({
+          error: 'Un compte existe déjà avec cette adresse e-mail. Veuillez vous connecter.',
+        });
+      } else {
+        throw createErr;
+      }
+    }
 
     // 3. Mark email as verified immediately
     await users.updateEmailVerification(user.$id, true);
@@ -48,7 +63,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   } catch (error: any) {
     console.error('[verify-code] Error creating user:', error);
     return res.status(500).json({
-      error: error?.message || 'Erreur lors de la création du compte.',
+      error: 'Erreur lors de la création du compte. Veuillez réessayer.',
     });
   }
 }

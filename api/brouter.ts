@@ -26,6 +26,7 @@
  *   BROUTER_UPSTREAM=http://<DROPLET_IP>:17777    (BRouter direct)
  */
 import type { ApiRequest, ApiResponse } from './_lib/types.js';
+import { requireAuthenticatedUser } from './_lib/appwrite.js';
 
 const ALLOWED_PARAMS = new Set([
   'lonlats',
@@ -60,7 +61,11 @@ export default async function handler(
   const base = upstream.replace(/\/+$/, '').replace(/\/brouter$/, '');
 
   if (req.method === 'POST') {
-    return handleProfileUpload(req, res, base);
+    const user = await requireAuthenticatedUser(req, res);
+    if (!user) {
+      return;
+    }
+    return handleProfileUpload(req, res, base, user.id);
   }
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET, POST, OPTIONS');
@@ -149,6 +154,7 @@ async function handleProfileUpload(
   req: ApiRequest,
   res: ApiResponse,
   base: string,
+  userId: string,
 ) {
   // Accept either raw text/plain body OR JSON { profile: "<brf>" } OR Buffer.
   let profileText: string | null = null;
@@ -173,11 +179,12 @@ async function handleProfileUpload(
     });
   }
 
-  // Optional ?id=custom_xxx → update existing profile in place.
-  const idParam = req.query.id;
-  const id = typeof idParam === 'string' ? idParam : '';
-  const url = id
-    ? `${base}/brouter/profile/${encodeURIComponent(id)}`
+  // Tenant-scoped custom profile ID to prevent collision/overwriting
+  const idParam = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+  const sanitizedId = idParam.replace(/[^a-zA-Z0-9_\-]/g, '');
+  const scopedId = sanitizedId ? `usr_${userId}_${sanitizedId}` : '';
+  const url = scopedId
+    ? `${base}/brouter/profile/${encodeURIComponent(scopedId)}`
     : `${base}/brouter/profile`;
 
   const controller = new AbortController();

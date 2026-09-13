@@ -96,13 +96,6 @@ export async function requireAuthenticatedUser(
     return null;
   }
 
-  if (token === 'dev-jwt-token') {
-    return {
-      id: 'dev-user-001',
-      email: 'dev@redview.tech',
-    };
-  }
-
   try {
     const userClient = new Client()
       .setEndpoint(getAppwriteEndpoint())

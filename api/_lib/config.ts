@@ -43,9 +43,11 @@ export function getAppBaseUrl(req: ApiRequest): string {
   const host = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
   const proto = Array.isArray(protoHeader) ? protoHeader[0] : protoHeader;
 
-  if (host) {
+  const ALLOWED_HOST_PATTERN = /^(?:(?:[a-zA-Z0-9-]+\.)*redview\.tech|localhost|127\.0\.0\.1)(?::\d+)?$/;
+
+  if (host && ALLOWED_HOST_PATTERN.test(host)) {
     return `${proto ?? 'https'}://${host}`.replace(/\/+$/, '');
   }
 
-  return 'http://localhost:5173';
+  return 'https://app.redview.tech';
 }

@@ -52,16 +52,6 @@ export function hasStoredAppwriteSession(): boolean {
 export function readStoredAppwriteSession(): StoredAppwriteSessionSnapshot | null {
   if (typeof window === 'undefined') return null;
 
-  if (window.localStorage.getItem('redview:dev-session') === 'true') {
-    return {
-      user: {
-        id: 'dev-user-001',
-        email: 'dev@redview.tech',
-        name: 'Dev User',
-      },
-    };
-  }
-
   try {
     const raw = window.localStorage.getItem(APPWRITE_AUTH_STORAGE_KEY);
     if (!raw) return null;
@@ -102,25 +92,6 @@ export function clearStoredAppwriteSession(): void {
 let inFlightUserPromise: Promise<Models.User<Models.Preferences> | null> | null = null;
 
 export async function getAppwriteUser(): Promise<Models.User<Models.Preferences> | null> {
-  if (typeof window !== 'undefined' && window.localStorage.getItem('redview:dev-session') === 'true') {
-    return {
-      $id: 'dev-user-001',
-      name: 'Dev User',
-      email: 'dev@redview.tech',
-      status: true,
-      labels: [],
-      passwordUpdate: '',
-      emailVerification: true,
-      phone: '',
-      phoneVerification: false,
-      mfa: false,
-      prefs: {},
-      targets: [],
-      accessedAt: '',
-      registration: '',
-    } as unknown as Models.User<Models.Preferences>;
-  }
-
   if (!inFlightUserPromise) {
     inFlightUserPromise = (async () => {
       try {
@@ -142,10 +113,6 @@ export async function getAppwriteUser(): Promise<Models.User<Models.Preferences>
 }
 
 export async function getAppwriteJwt(): Promise<string | null> {
-  if (typeof window !== 'undefined' && window.localStorage.getItem('redview:dev-session') === 'true') {
-    return 'dev-jwt-token';
-  }
-
   try {
     const { jwt } = await account.createJWT();
     return jwt;

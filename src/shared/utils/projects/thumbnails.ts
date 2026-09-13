@@ -13,12 +13,13 @@ function safeThumbnailFileId(projectId: string): string {
 }
 
 async function getAuthenticatedUserId(): Promise<string> {
+  const user = await getAppwriteUser();
+  if (user?.$id) return user.$id;
+
   const storedSession = readStoredAppwriteSession();
   if (storedSession?.user.id) return storedSession.user.id;
 
-  const user = await getAppwriteUser();
-  if (!user) throw new Error('Not authenticated');
-  return user.$id;
+  throw new Error('Not authenticated');
 }
 
 export async function uploadProjectThumbnail(projectId: string, blob: Blob): Promise<void> {

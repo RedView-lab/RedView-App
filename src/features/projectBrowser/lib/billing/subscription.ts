@@ -62,8 +62,8 @@ const FEATURE_BADGES = {
     icon: 'multi-layer.svg',
     tone: 'brown' as const,
     featureItems: [
-      { icon: 'navigation-pointer-01.svg', label: 'Accès anticipé App Mobile' },
-      { icon: 'currency-euro.svg', label: 'Statut Fondateur : -50% à vie' },
+      { icon: 'navigation-pointer-01.svg', label: 'Accès Bêta App iOS (TestFlight)' },
+      { icon: 'star-01.svg', label: 'Badge Fondateur officiel' },
     ],
   },
   communitySupport: {
@@ -73,7 +73,6 @@ const FEATURE_BADGES = {
     tone: 'purple' as const,
     featureItems: [
       { icon: 'check-circle.svg', label: 'Vote sur les prochains massifs 3D' },
-      { icon: 'user-circle.svg', label: 'Discord privé & contact direct dev' },
       { icon: 'heart.svg', label: 'Soutien direct dev indépendant' },
     ],
   },
@@ -83,7 +82,7 @@ const FEATURE_BADGES = {
     icon: 'line-chart.svg',
     tone: 'green' as const,
     featureItems: [
-      { icon: 'diamond.svg', label: '1 An de compte PRO offert (v1)' },
+      { icon: 'diamond.svg', label: '3 mois de compte PRO offerts (v1)' },
       { icon: 'star-01.svg', label: 'Accès VIP ultra-prioritaire mobile' },
     ],
   },

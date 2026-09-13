@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import net from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { recolorRadarPng } from './server/radar-recolor.mjs';
 import { generateSlopeTile, generateAltitudeTile } from './server/terrain-tiles.mjs';
@@ -38,8 +39,45 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const MAX_AUTH_REQUESTS = 15;
 const MAX_API_REQUESTS = 120;
 
+function isPrivateOrLoopbackIp(ip) {
+  if (!ip) return false;
+  if (ip === '127.0.0.1' || ip === '::1' || ip.startsWith('fe80:')) return true;
+  // 10.0.0.0/8
+  if (ip.startsWith('10.')) return true;
+  // 172.16.0.0/12 (Docker networks)
+  const match172 = ip.match(/^172\.(\d+)\./);
+  if (match172) {
+    const second = parseInt(match172[1], 10);
+    if (second >= 16 && second <= 31) return true;
+  }
+  // 192.168.0.0/16
+  if (ip.startsWith('192.168.')) return true;
+  return false;
+}
+
+function getClientIp(req) {
+  const socketIp = (req.socket?.remoteAddress || '').replace(/^::ffff:/, '').trim();
+
+  // If request arrives via Coolify's Traefik reverse proxy or localhost Docker bridge,
+  // we can safely parse forwarded headers.
+  if (isPrivateOrLoopbackIp(socketIp)) {
+    const cfIp = req.headers['cf-connecting-ip'];
+    if (cfIp && typeof cfIp === 'string') {
+      const sanitized = cfIp.trim();
+      if (net.isIP(sanitized)) return sanitized;
+    }
+    const xff = req.headers['x-forwarded-for'];
+    if (xff && typeof xff === 'string') {
+      const first = xff.split(',')[0].trim();
+      if (net.isIP(first)) return first;
+    }
+  }
+
+  return socketIp || '127.0.0.1';
+}
+
 function checkRateLimit(req, isAuth) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || '127.0.0.1';
+  const ip = getClientIp(req);
   const key = `${ip}:${isAuth ? 'auth' : 'general'}`;
   const max = isAuth ? MAX_AUTH_REQUESTS : MAX_API_REQUESTS;
   const now = Date.now();
@@ -155,6 +193,13 @@ const server = http.createServer(async (req, res) => {
     // Security headers
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=()');
+    res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline' https://api.mapbox.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tilecache.rainviewer.com https://*.rainviewer.com https://api.mapbox.com https://s3.amazonaws.com; connect-src 'self' https://appwrite.redview.tech https://api.stripe.com https://api.mapbox.com https://*.rainviewer.com https://api.open-meteo.com https://climate-api.open-meteo.com https://nominatim.openstreetmap.org; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+    );
 
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -280,20 +325,36 @@ async function handleApiRoute(pathname, parsedUrl, req, res) {
     if (!res.headersSent) {
       res.statusCode = 500;
       res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({ error: err.message || 'Internal Server Error' }));
+      const safeMessage = process.env.NODE_ENV === 'production'
+        ? 'Internal Server Error'
+        : (err.message || 'Internal Server Error');
+      res.end(JSON.stringify({ error: safeMessage }));
     }
   }
 }
 
+const ALLOWED_RADAR_HOSTS = new Set([
+  'https://tilecache.rainviewer.com',
+  'https://tilecache.rainviewer.net',
+]);
+
 async function handleRadarTileRoute(pathname, parsedUrl, req, res) {
   try {
-    const host = decodeURIComponent(parsedUrl.searchParams.get('host') || 'https://tilecache.rainviewer.com').replace(/\/+$/, '');
-    const framePath = decodeURIComponent(parsedUrl.searchParams.get('path') || '');
+    const rawHost = (parsedUrl.searchParams.get('host') || '').trim();
+    const host = ALLOWED_RADAR_HOSTS.has(rawHost) ? rawHost : 'https://tilecache.rainviewer.com';
+    const rawFramePath = decodeURIComponent(parsedUrl.searchParams.get('path') || '').trim();
+
+    // Prevent SSRF / path traversal: framePath must strictly be a relative alphanumeric path
+    if (!rawFramePath || !/^\/?[a-zA-Z0-9_\-\/]+$/.test(rawFramePath)) {
+      res.statusCode = 400;
+      return res.end('Invalid path parameter');
+    }
+
     const pStr = parsedUrl.searchParams.get('p') || '';
     const match = pathname.match(/^\/radar-tiles\/(\d+)\/(\d+)\/(\d+)/);
-    if (match && framePath) {
+    if (match) {
       const [, z, x, y] = match;
-      const cleanPath = framePath.startsWith('/') ? framePath : `/${framePath}`;
+      const cleanPath = rawFramePath.startsWith('/') ? rawFramePath : `/${rawFramePath}`;
       const target = `${host}${cleanPath}/512/${z}/${x}/${y}/2/1_1.png`;
       const upstreamRes = await fetch(target);
       if (upstreamRes.ok) {

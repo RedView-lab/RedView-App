@@ -36,19 +36,14 @@ const SNOW_COVERAGE_PREFIX = 'SNOW_DEPTH__GROUND_OR_WATER_SURFACE___';
 
 const FETCH_TIMEOUT_MS = 25_000;
 
-/**
- * Fallback JWT API key embedded in v0.1 (distribution bêta).
- * Expiry: 2027-04-09 (exp claim in payload).
- * Override with env METEOFRANCE_API_KEY if needed.
- */
-const EMBEDDED_BETA_TOKEN =
-  'eyJ4NXQiOiJZV0kxTTJZNE1qWTNOemsyTkRZeU5XTTRPV014TXpjek1UVmhNbU14T1RSa09ETXlOVEE0Tnc9PSIsImtpZCI6ImdhdGV3YXlfY2VydGlmaWNhdGVfYWxpYXMiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJTaW1vbkxlU2ltb25AY2FyYm9uLnN1cGVyIiwiYXBwbGljYXRpb24iOnsib3duZXIiOiJTaW1vbkxlU2ltb24iLCJ0aWVyUXVvdGFUeXBlIjpudWxsLCJ0aWVyIjoiVW5saW1pdGVkIiwibmFtZSI6IkRlZmF1bHRBcHBsaWNhdGlvbiIsImlkIjozNzA1NCwidXVpZCI6IjNhZjgzOWE5LTVmZWMtNDM1NC1hODk2LWZiZDI0YmZmZWRhYiJ9LCJpc3MiOiJodHRwczpcL1wvcG9ydGFpbC1hcGkubWV0ZW9mcmFuY2UuZnI6NDQzXC9vYXV0aDJcL3Rva2VuIiwidGllckluZm8iOnsiNTBQZXJNaW4iOnsidGllclF1b3RhVHlwZSI6InJlcXVlc3RDb3VudCIsImdyYXBoUUxNYXhDb21wbGV4aXR5IjowLCJncmFwaFFMTWF4RGVwdGgiOjAsInN0b3BPblF1b3RhUmVhY2giOnRydWUsInNwaWtlQXJyZXN0TGltaXQiOjAsInNwaWtlQXJyZXN0VW5pdCI6InNlYyJ9fSwia2V5dHlwZSI6IlBST0RVQ1RJT04iLCJzdWJzY3JpYmVkQVBJcyI6W3sic3Vic2NyaWJlclRlbmFudERvbWFpbiI6ImNhcmJvbi5zdXBlciIsIm5hbWUiOiJBUk9NRSIsImNvbnRleHQiOiJcL3B1YmxpY1wvYXJvbWVcLzEuMCIsInB1Ymxpc2hlciI6ImFkbWluX21mIiwidmVyc2lvbiI6IjEuMCIsInN1YnNjcmlwdGlvblRpZXIiOiI1MFBlck1pbiJ9XSwiZXhwIjoxODAyNDY5NTYyLCJ0b2tlbl90eXBlIjoiYXBpS2V5IiwiaWF0IjoxNzcwOTMzNTYyLCJqdGkiOiI2MDkxYzc5YS0yNDQyLTRmNzMtYTQ4ZS1lODg3N2RmMmVkZjUifQ==.EJGvCWbmVQgr9I7w4VGZJcoT1V1Ge4FJn94D-xaqCHBUzmPi8DbP0JJ4UQUcMACKwCsYGbvw2yMAErwcoX9Lpfq_vO2jElcOm8LYdrriOcWDcRIoMghVPnNmtxN0AXlac7T-6uGK6BTFEKCOa6_DTXA6WUYrOYWvRrv1W9T5O5f6tWkurSSebvAYvZgp91K4KujXfuGBmU08NpfAu5ZIzaKG3ktATsv1qSO7d_td4h28tDfyDLsmc5XA8hxJWgoIqdcsjAETaQ-tYuX0RR5THjLGyU1z2RsjzLLcGbS7mmpEryKAMq6sYbcc963N1TekklfbLiiKDD9IyKQbxUOZqg==';
-
 // ────────────────────────────── HTTP helpers ──────────────────────────────
 
 function getToken(): string {
   const env = (process.env.METEOFRANCE_API_KEY ?? '').trim();
-  return env || EMBEDDED_BETA_TOKEN;
+  if (!env) {
+    throw new Error('Missing required environment variable: METEOFRANCE_API_KEY');
+  }
+  return env;
 }
 
 async function fetchWithApikey(url: string, accept: string, asText: boolean) {

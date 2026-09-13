@@ -4,6 +4,15 @@ interface SendVerificationEmailOptions {
   name?: string;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export async function sendVerificationEmail({
   to,
   code,
@@ -11,93 +20,141 @@ export async function sendVerificationEmail({
 }: SendVerificationEmailOptions): Promise<{ sent: boolean; debugCode?: string }> {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM || 'RedView <noreply@redview.tech>';
-  const recipientName = name || to.split('@')[0] || 'Aventurier';
+  const rawRecipientName = name || to.split('@')[0] || 'Aventurier';
+  const recipientName = escapeHtml(rawRecipientName);
 
-  console.log(`[AUTH] 📧 Verification code for ${to} (${recipientName}): [ ${code} ]`);
+  const maskedEmail = to.replace(/^(.)(.*)(@.*)$/, (_, first, middle, domain) => `${first}${'*'.repeat(Math.min(middle.length, 5))}${domain}`);
+  console.log(`[AUTH] 📧 Dispatching verification email to ${maskedEmail}`);
 
   if (!apiKey) {
-    console.log('[AUTH] (Note: RESEND_API_KEY not configured in environment. Code logged to console & returned in debugCode)');
-    return { sent: false, debugCode: code };
+    console.warn('[AUTH] RESEND_API_KEY is not configured.');
+    return { sent: false };
   }
+
+  const digits = (code || '').split('');
+  const cleanName = name && name.trim().length > 0 && !name.includes('@') ? escapeHtml(name.trim()) : '';
+  const greeting = cleanName ? `Bonjour ${cleanName},` : 'Bonjour,';
 
   const html = `
 <!DOCTYPE html>
-<html>
+<html lang="fr" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="utf-8">
-  <title>Votre code de vérification RedView</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <title>${code} est votre code de vérification RedView</title>
   <style>
+    :root {
+      color-scheme: light dark;
+      supported-color-schemes: light dark;
+    }
     body {
-      background-color: #0d0d0d;
-      color: #ffffff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       margin: 0;
-      padding: 40px 20px;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
-    .container {
-      max-width: 460px;
-      margin: 0 auto;
-      background: #141414;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 36px 28px;
-      text-align: center;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    @media (prefers-color-scheme: dark) {
+      .body-bg { background-color: #0b0c10 !important; }
+      .email-card { background-color: #12141c !important; border-color: #232736 !important; }
+      .text-title { color: #ffffff !important; }
+      .text-body { color: #94a3b8 !important; }
+      .text-brand { color: #ffffff !important; }
+      .digit-box { background-color: #181b26 !important; border-color: #2e3448 !important; color: #ffffff !important; }
+      .text-muted { color: #64748b !important; }
+      .divider { border-color: #1e2230 !important; }
     }
-    .logo {
-      margin-bottom: 24px;
-    }
-    h1 {
-      font-size: 22px;
-      font-weight: 600;
-      color: #ffffff;
-      margin: 0 0 10px 0;
-    }
-    p {
-      color: rgba(255, 255, 255, 0.7);
-      font-size: 14px;
-      line-height: 22px;
-      margin: 0 0 24px 0;
-    }
-    .code-container {
-      display: inline-block;
-      margin: 10px auto 24px;
-      padding: 16px 28px;
-      background: rgba(137, 0, 0, 0.15);
-      border: 2px solid #890000;
-      border-radius: 12px;
-      font-size: 38px;
-      font-weight: 700;
-      letter-spacing: 12px;
-      color: #ffffff;
-      text-align: center;
-    }
-    .footer {
-      font-size: 12px;
-      color: rgba(255, 255, 255, 0.4);
-      margin-top: 24px;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-      padding-top: 20px;
+    @media only screen and (max-width: 480px) {
+      .email-card { padding: 28px 20px !important; }
+      .digit-box { width: 46px !important; height: 54px !important; font-size: 26px !important; }
     }
   </style>
 </head>
-<body>
-  <div class="container">
-    <div class="logo">
-      <img src="https://app.redview.tech/landing/icons/redview-logo.svg" alt="RedView" width="130" style="display:block;margin:0 auto;" />
-    </div>
-    <h1>Vérifiez votre adresse e-mail</h1>
-    <p>Bonjour <strong>${recipientName}</strong>,<br>Voici votre code de sécurité pour finaliser la création de votre compte RedView :</p>
-    
-    <div class="code-container">${code}</div>
-
-    <p style="font-size: 13px; color: rgba(255, 255, 255, 0.5);">Ce code est valable pendant 10 minutes.</p>
-    
-    <div class="footer">
-      Si vous n'avez pas initié cette inscription, vous pouvez ignorer cet e-mail en toute sécurité.<br>
-      © RedView — La cartographie 3D Haute Définition
-    </div>
+<body class="body-bg" style="margin: 0; padding: 0; background-color: #f4f5f7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  
+  <!-- Preheader invisible pour aperçu net dans l'inbox -->
+  <div style="display: none; font-size: 1px; line-height: 1px; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden; mso-hide: all;">
+    ${code} est votre code de sécurité RedView. Valable 10 minutes.
+    &#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;
   </div>
+
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" class="body-bg" style="background-color: #f4f5f7; width: 100%; min-height: 100vh; padding: 40px 16px;">
+    <tr>
+      <td align="center" valign="top">
+
+        <!-- Carte principale -->
+        <table role="presentation" class="email-card" border="0" cellspacing="0" cellpadding="0" style="max-width: 440px; width: 100%; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); overflow: hidden;">
+          <tr>
+            <td style="padding: 40px 36px; text-align: center;">
+
+              <!-- Header Brand (Indicateur rouge signature + typo épurée) -->
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto 28px;">
+                <tr>
+                  <td style="vertical-align: middle; padding-right: 8px;">
+                    <table role="presentation" border="0" cellspacing="0" cellpadding="0">
+                      <tr>
+                        <td style="width: 9px; height: 9px; background-color: #e11d48; border-radius: 50%; line-height: 1px; font-size: 1px;">&nbsp;</td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td style="vertical-align: middle;">
+                    <span class="text-brand" style="font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #0f172a; text-transform: uppercase;">REDVIEW</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Titre sobre & humain -->
+              <h1 class="text-title" style="margin: 0 0 10px; font-size: 21px; font-weight: 600; color: #0f172a; letter-spacing: -0.02em; line-height: 28px;">
+                Code de vérification
+              </h1>
+
+              <p class="text-body" style="margin: 0 0 32px; font-size: 14px; line-height: 22px; color: #475569;">
+                ${greeting}<br>
+                Voici votre code de sécurité pour valider votre adresse e-mail :
+              </p>
+
+              <!-- Cases de code individuelles (Option C) -->
+              <table role="presentation" border="0" cellspacing="0" cellpadding="0" align="center" style="margin: 0 auto 28px;">
+                <tr>
+                  ${digits.map(d => `
+                    <td style="padding: 0 6px;">
+                      <div class="digit-box" style="width: 54px; height: 62px; line-height: 62px; background-color: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 12px; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 30px; font-weight: 700; color: #0f172a; text-align: center; display: block;">
+                        ${d}
+                      </div>
+                    </td>
+                  `).join('')}
+                </tr>
+              </table>
+
+              <p class="text-muted" style="margin: 0 0 28px; font-size: 13px; line-height: 20px; color: #64748b;">
+                Ce code expire dans <strong style="font-weight: 600;">10 minutes</strong>.
+              </p>
+
+              <!-- Ligne de séparation très fine -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td class="divider" style="border-top: 1px solid #f1f5f9; height: 1px; line-height: 1px; font-size: 1px;">&nbsp;</td>
+                </tr>
+              </table>
+
+              <!-- Footer sécuritaire & minimal -->
+              <p class="text-muted" style="margin: 0 0 12px; font-size: 12px; line-height: 18px; color: #94a3b8;">
+                Si vous n'êtes pas à l'origine de cette demande, vous pouvez ignorer cet e-mail en toute sécurité.
+              </p>
+
+              <p class="text-muted" style="margin: 0; font-size: 11px; line-height: 16px; color: #cbd5e1;">
+                © RedView · Plateforme de cartographie 3D Haute Définition
+              </p>
+
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
 </body>
 </html>
   `.trim();
@@ -146,13 +203,13 @@ export async function sendVerificationEmail({
 
     if (!response.ok) {
       console.warn('[AUTH] Resend API response error:', data);
-      return { sent: false, debugCode: code };
+      return { sent: false };
     }
 
     console.log('[AUTH] ✅ Verification email sent via Resend, id:', data?.id);
     return { sent: true };
   } catch (err) {
     console.error('[AUTH] Failed to send email via Resend:', err);
-    return { sent: false, debugCode: code };
+    return { sent: false };
   }
 }

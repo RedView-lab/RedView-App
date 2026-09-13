@@ -93,7 +93,23 @@ export function useProjectBrowserOverlayState({
   const storedSession = readStoredAppwriteSession();
   const userId = storedSession?.user.id ?? null;
   const accountEmail = storedSession?.user.email ?? '';
-  const [activeTab, setActiveTab] = useState<OverlayTab>(() => readStoredActiveTab(userId) ?? 'projects');
+  const [activeTab, setActiveTab] = useState<OverlayTab>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get('tab');
+        if (tabParam === 'subscription' || tabParam === 'projects' || tabParam === 'account' || tabParam === 'settings') {
+          return tabParam;
+        }
+        if (params.get('action') === 'upgrade' || params.has('upgrade')) {
+          return 'subscription';
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return readStoredActiveTab(userId) ?? 'projects';
+  });
   const [subscriptionState, setSubscriptionState] = useState<SubscriptionState>({
     isLoading: false,
     error: null,
@@ -103,7 +119,20 @@ export function useProjectBrowserOverlayState({
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [isSigningOut, setIsSigningOut] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>('founder');
+  const [selectedPlanId, setSelectedPlanId] = useState<SubscriptionPlanId>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const tierParam = params.get('tier') || params.get('upgrade');
+        if (tierParam === 'founder' || tierParam === 'patron') {
+          return tierParam;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return 'founder';
+  });
   const [contactPreference, setContactPreference] = useState<BillingContactPreference>(() =>
     readBillingContactPreference(userId),
   );
@@ -124,6 +153,25 @@ export function useProjectBrowserOverlayState({
   useEffect(() => {
     setActiveTab(readStoredActiveTab(userId) ?? 'projects');
   }, [userId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'subscription' || tabParam === 'projects' || tabParam === 'account' || tabParam === 'settings') {
+        setActiveTab(tabParam);
+      } else if (params.get('action') === 'upgrade' || params.has('upgrade')) {
+        setActiveTab('subscription');
+      }
+      const tierParam = params.get('tier') || params.get('upgrade');
+      if (tierParam === 'founder' || tierParam === 'patron') {
+        setSelectedPlanId(tierParam);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   useEffect(() => {
     writeStoredActiveTab(userId, activeTab);
