@@ -1,4 +1,4 @@
-export const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN as string;
+export const MAPBOX_TOKEN = (import.meta.env?.VITE_MAPBOX_TOKEN ?? '') as string;
 
 // Default style aligns with DEFAULT_BASEMAP_ID in features/controlPanel/basemaps.
 // Outdoors (vector) is billed under Vector Tiles, NOT Raster Tiles, so the

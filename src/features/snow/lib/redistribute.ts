@@ -389,22 +389,30 @@ export function computeSnowRedistribution(
     }
   }
 
-  // Sort indices by elevation desc
+  // Sort indices by elevation desc (in-place typed array sort)
   const sortedIdx = new Int32Array(total);
   for (let i = 0; i < total; i++) sortedIdx[i] = i;
-  const sortedArr = Array.from(sortedIdx).sort((a, b) => workHm[b] - workHm[a]);
+  sortedIdx.sort((a, b) => workHm[b] - workHm[a]);
 
-  const isBoundary = (idx: number) => {
-    const x = idx % tw, y = (idx / tw) | 0;
-    return x === 0 || x === tw - 1 || y === 0 || y === th - 1;
-  };
+  // Precomputed boundary mask (elimine des centaines de milliers de modulos et divisions)
+  const isBoundaryMask = new Uint8Array(total);
+  for (let y = 0; y < th; y++) {
+    const isEdgeY = y === 0 || y === th - 1;
+    const rowOffset = y * tw;
+    for (let x = 0; x < tw; x++) {
+      if (isEdgeY || x === 0 || x === tw - 1) {
+        isBoundaryMask[rowOffset + x] = 1;
+      }
+    }
+  }
 
   let boundaryLoss = 0;
   for (let it = 0; it < config.gravityIterations; it++) {
     let movedAny = false;
     let iterMoved = 0;
 
-    for (const idx of sortedArr) {
+    for (let i = 0; i < total; i++) {
+      const idx = sortedIdx[i];
       const excess = snow[idx] - holding[idx];
       if (excess <= 0.1) continue;
       const fl = dinfFlow[idx];
@@ -413,8 +421,8 @@ export function computeSnowRedistribution(
         const send = excess * sendFrac;
         snow[idx] -= send;
         iterMoved += send;
-        const t1b = isBoundary(fl.target1);
-        const t2b = isBoundary(fl.target2);
+        const t1b = isBoundaryMask[fl.target1] === 1;
+        const t2b = isBoundaryMask[fl.target2] === 1;
         const toT1 = send * fl.prop1;
         const toT2 = send * (1 - fl.prop1);
         if (t1b) { snow[fl.target1] += toT1 * 0.5; boundaryLoss += toT1 * 0.5; }

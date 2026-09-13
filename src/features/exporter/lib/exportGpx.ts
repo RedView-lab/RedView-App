@@ -79,18 +79,15 @@ export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnl
     })
     .join('\n');
 
-  const trackPointXml = routePoints
-    .map((point) => {
-      const lines = [
-        `      <trkpt lat="${formatCoordinate(point.lat)}" lon="${formatCoordinate(point.lon)}">`,
-      ];
-      if (point.elevationM != null) {
-        lines.push(`        <ele>${formatDecimal(point.elevationM, 1)}</ele>`);
-      }
-      lines.push('      </trkpt>');
-      return lines.join('\n');
-    })
-    .join('\n');
+  const ptCount = routePoints.length;
+  const trackPointParts = new Array<string>(ptCount);
+  for (let i = 0; i < ptCount; i++) {
+    const point = routePoints[i]!;
+    trackPointParts[i] = point.elevationM != null
+      ? `      <trkpt lat="${formatCoordinate(point.lat)}" lon="${formatCoordinate(point.lon)}">\n        <ele>${formatDecimal(point.elevationM, 1)}</ele>\n      </trkpt>`
+      : `      <trkpt lat="${formatCoordinate(point.lat)}" lon="${formatCoordinate(point.lon)}">\n      </trkpt>`;
+  }
+  const trackPointXml = trackPointParts.join('\n');
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',

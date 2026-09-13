@@ -35,44 +35,64 @@ function extractRouteName(text: string): string | null {
   return decodeXmlText(rawName);
 }
 
+const LAT_REGEX = /\blat\s*=\s*["']([^"']+)["']/i;
+const LON_REGEX = /\blon\s*=\s*["']([^"']+)["']/i;
+const TO_RAD = Math.PI / 180;
+
 function extractPoints(text: string, pattern: RegExp): GpxRoute['points'] {
   const points: GpxRoute['points'] = [];
   let distanceM = 0;
+  let prevLatRad = 0;
+  let prevLonRad = 0;
   let match: RegExpExecArray | null;
 
   pattern.lastIndex = 0;
   while ((match = pattern.exec(text)) !== null) {
     const attrs = match[1] ?? match[3] ?? '';
     const body = match[2] ?? '';
-    const lat = parseCoordinateAttribute(attrs, 'lat');
-    const lon = parseCoordinateAttribute(attrs, 'lon');
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      continue;
+
+    const latMatch = LAT_REGEX.exec(attrs);
+    const lonMatch = LON_REGEX.exec(attrs);
+    if (!latMatch || !lonMatch) continue;
+
+    const lat = Number.parseFloat(latMatch[1]);
+    const lon = Number.parseFloat(lonMatch[1]);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+    let elevationM: number | null = null;
+    const elevationMatch = ELEVATION_REGEX.exec(body);
+    if (elevationMatch) {
+      const elevationText = elevationMatch[1].trim();
+      if (elevationText.length > 0) {
+        const val = Number.parseFloat(elevationText.includes('&') ? decodeXmlText(elevationText) : elevationText);
+        if (Number.isFinite(val)) elevationM = val;
+      }
     }
 
-    const elevationMatch = ELEVATION_REGEX.exec(body);
-    const elevationText = elevationMatch?.[1]?.trim() ?? '';
-    const elevationM = elevationText.length > 0 ? Number.parseFloat(decodeXmlText(elevationText)) : Number.NaN;
-    const nextPoint: GpxRoute['points'][number] = {
+    const latRad = lat * TO_RAD;
+    const lonRad = lon * TO_RAD;
+
+    if (points.length > 0) {
+      const dLat = latRad - prevLatRad;
+      const dLon = lonRad - prevLonRad;
+      const sinDLat2 = Math.sin(dLat * 0.5);
+      const sinDLon2 = Math.sin(dLon * 0.5);
+      const h = sinDLat2 * sinDLat2 + Math.cos(prevLatRad) * Math.cos(latRad) * sinDLon2 * sinDLon2;
+      distanceM += 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
+    }
+
+    prevLatRad = latRad;
+    prevLonRad = lonRad;
+
+    points.push({
       lat,
       lon,
       distanceM,
-      elevationM: Number.isFinite(elevationM) ? elevationM : null,
-    };
-    if (points.length > 0) {
-      distanceM += haversineM(points[points.length - 1], nextPoint);
-      nextPoint.distanceM = distanceM;
-    }
-    points.push(nextPoint);
+      elevationM,
+    });
   }
 
   return points;
-}
-
-function parseCoordinateAttribute(attrs: string, attribute: 'lat' | 'lon'): number {
-  const match = new RegExp(`\\b${attribute}\\s*=\\s*(["'])(.*?)\\1`, 'i').exec(attrs);
-  if (!match) return Number.NaN;
-  return Number.parseFloat(match[2]);
 }
 
 function stripCdata(value: string): string {
@@ -108,19 +128,4 @@ function decodeXmlText(value: string): string {
         return entity;
     }
   });
-}
-
-function haversineM(
-  a: { lat: number; lon: number },
-  b: { lat: number; lon: number },
-): number {
-  const toRad = (degrees: number) => (degrees * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const lat1 = toRad(a.lat);
-  const lat2 = toRad(b.lat);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
 }

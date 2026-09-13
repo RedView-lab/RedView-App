@@ -95,3 +95,6 @@ scripts/test-user-reported-tiles.ts
 scripts/test-user-tile-color.ts
 scripts/test-zone-mns-skip.mjs
 start-dev.bat
+
+# Test bench json reports
+script-test-bench/reports/*.json

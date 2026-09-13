@@ -81,6 +81,27 @@ function getProj(crs: DetectedCrs): string {
   return PROJ_LAMB93;
 }
 
+const CONVERTERS_TO_WGS84: Map<string, proj4.Converter> = new Map();
+const CONVERTERS_FROM_WGS84: Map<string, proj4.Converter> = new Map();
+
+function getConverterToWgs84(projStr: string): proj4.Converter {
+  let conv = CONVERTERS_TO_WGS84.get(projStr);
+  if (!conv) {
+    conv = proj4(projStr, PROJ_WGS84);
+    CONVERTERS_TO_WGS84.set(projStr, conv);
+  }
+  return conv;
+}
+
+function getConverterFromWgs84(projStr: string): proj4.Converter {
+  let conv = CONVERTERS_FROM_WGS84.get(projStr);
+  if (!conv) {
+    conv = proj4(PROJ_WGS84, projStr);
+    CONVERTERS_FROM_WGS84.set(projStr, conv);
+  }
+  return conv;
+}
+
 export function toWgs84(x: number, y: number, crs: DetectedCrs): [number, number] {
   if (crs === 'CH1903_LV95') return swissToWgs84(x, y);
   if (crs === 'NZTM2000') return nzToWgs84(x, y);
@@ -88,7 +109,7 @@ export function toWgs84(x: number, y: number, crs: DetectedCrs): [number, number
     const zone = parseJgd2011Zone(crs);
     return japanToWgs84(x, y, zone);
   }
-  return proj4(getProj(crs), PROJ_WGS84, [x, y]) as [number, number];
+  return getConverterToWgs84(getProj(crs)).forward([x, y]) as [number, number];
 }
 
 export function fromWgs84(lon: number, lat: number, crs: DetectedCrs): [number, number] {
@@ -98,14 +119,20 @@ export function fromWgs84(lon: number, lat: number, crs: DetectedCrs): [number, 
     const zone = parseJgd2011Zone(crs);
     return wgs84ToJapan(lon, lat, zone);
   }
-  return proj4(PROJ_WGS84, getProj(crs), [lon, lat]) as [number, number];
+  return getConverterFromWgs84(getProj(crs)).forward([lon, lat]) as [number, number];
 }
 
+const DEG_TO_RAD = Math.PI / 180;
+const INV_PI = 1 / Math.PI;
+const INV_360 = 1 / 360;
+
 export function wgs84ToTile(lon: number, lat: number, zoom: number): { tx: number; ty: number } {
-  const n = Math.pow(2, zoom);
-  const tx = Math.floor(((lon + 180) / 360) * n);
-  const latRad = (lat * Math.PI) / 180;
-  const ty = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
+  const n = 1 << zoom;
+  const tx = Math.floor((lon + 180) * INV_360 * n);
+  const sinLat = Math.sin(lat * DEG_TO_RAD);
+  // Projection Mercator standard : ln((1 + sin) / (1 - sin)) / (2 * PI)
+  const yProj = 0.5 * Math.log((1 + sinLat) / (1 - sinLat));
+  const ty = Math.floor((1 - yProj * INV_PI) * 0.5 * n);
   return { tx, ty };
 }
 

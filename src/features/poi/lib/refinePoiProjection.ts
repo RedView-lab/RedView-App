@@ -56,11 +56,64 @@ export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePo
   return result;
 }
 
+interface RouteChunk {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  start: number;
+  end: number;
+}
+
+const CHUNK_SIZE = 128;
+
+function getRouteChunks(route: readonly ProjectedRoutePoint[]): RouteChunk[] {
+  const cached = (route as { _chunks?: RouteChunk[] })._chunks;
+  if (cached) return cached;
+
+  const chunks: RouteChunk[] = [];
+  const n = route.length;
+  for (let start = 0; start < n - 1; start += CHUNK_SIZE) {
+    const end = Math.min(start + CHUNK_SIZE, n - 1);
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (let i = start; i <= end; i++) {
+      const p = route[i]!;
+      if (p.x < minX) minX = p.x;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    chunks.push({ minX, maxX, minY, maxY, start, end });
+  }
+  try {
+    (route as { _chunks?: RouteChunk[] })._chunks = chunks;
+  } catch {}
+  return chunks;
+}
+
 export function projectPoiOntoRoute(
   poi: PoiFeature,
   route: readonly ProjectedRoutePoint[],
   etaSecByPoint?: readonly number[],
 ): { progressM: number; lateralDistanceM: number; etaSec: number | null } {
+  if (route.length === 0) {
+    return { progressM: 0, lateralDistanceM: 0, etaSec: null };
+  }
+  if (route.length === 1) {
+    const p = route[0]!;
+    const refLat = poi.lat;
+    const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
+    const latScale = METERS_PER_DEG_LAT;
+    const px = poi.lon * lonScale;
+    const py = poi.lat * latScale;
+    const dx = px - p.x;
+    const dy = py - p.y;
+    return { progressM: p.progressM, lateralDistanceM: Math.sqrt(dx * dx + dy * dy), etaSec: etaSecByPoint?.[0] ?? null };
+  }
+
   const refLat = poi.lat;
   const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
   const latScale = METERS_PER_DEG_LAT;
@@ -72,31 +125,76 @@ export function projectPoiOntoRoute(
   let bestSegmentIndex = 0;
   let bestSegmentT = 0;
 
-  for (let i = 0; i < route.length - 1; i++) {
-    const a = route[i]!;
-    const b = route[i + 1]!;
-    const abx = b.x - a.x;
-    const aby = b.y - a.y;
-    const apx = px - a.x;
-    const apy = py - a.y;
-    const segLenSq = abx * abx + aby * handy_square(aby);
+  // 1. Échantillonnage grossier : borne supérieure rapide
+  const stride = Math.max(1, Math.floor(route.length / 64));
+  for (let i = 0; i < route.length; i += stride) {
+    const pt = route[i]!;
+    const dx = px - pt.x;
+    const dy = py - pt.y;
+    const dSq = dx * dx + dy * dy;
+    if (dSq < minDistanceSq) {
+      minDistanceSq = dSq;
+      bestProgressM = pt.progressM;
+      bestSegmentIndex = Math.min(i, route.length - 2);
+      bestSegmentT = 0;
+    }
+  }
 
-    let t = 0;
-    if (segLenSq > 0) {
-      t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / segLenSq));
+  let bestDist = Math.sqrt(minDistanceSq);
+
+  // 2. Élagage spatial hiérarchique par paquets (chunks de 128 points)
+  const chunks = getRouteChunks(route);
+  for (let c = 0; c < chunks.length; c++) {
+    const chunk = chunks[c]!;
+
+    // Élimination du paquet entier de 128 segments en un seul test AABB
+    if (
+      px < chunk.minX - bestDist ||
+      px > chunk.maxX + bestDist ||
+      py < chunk.minY - bestDist ||
+      py > chunk.maxY + bestDist
+    ) {
+      continue;
     }
 
-    const projX = a.x + t * abx;
-    const projY = a.y + t * aby;
-    const dx = px - projX;
-    const dy = py - projY;
-    const distSq = dx * dx + dy * dy;
+    // Parcours fin des segments uniquement dans les paquets candidats
+    for (let i = chunk.start; i < chunk.end; i++) {
+      const a = route[i]!;
+      const b = route[i + 1]!;
 
-    if (distSq < minDistanceSq) {
-      minDistanceSq = distSq;
-      bestProgressM = a.progressM + t * Math.sqrt(segLenSq);
-      bestSegmentIndex = i;
-      bestSegmentT = t;
+      const minX = (a.x < b.x ? a.x : b.x) - bestDist;
+      if (px < minX) continue;
+      const maxX = (a.x > b.x ? a.x : b.x) + bestDist;
+      if (px > maxX) continue;
+      const minY = (a.y < b.y ? a.y : b.y) - bestDist;
+      if (py < minY) continue;
+      const maxY = (a.y > b.y ? a.y : b.y) + bestDist;
+      if (py > maxY) continue;
+
+      const abx = b.x - a.x;
+      const aby = b.y - a.y;
+      const apx = px - a.x;
+      const apy = py - a.y;
+      const segLenSq = abx * abx + aby * aby;
+
+      let t = 0;
+      if (segLenSq > 0) {
+        t = Math.max(0, Math.min(1, (apx * abx + apy * aby) / segLenSq));
+      }
+
+      const projX = a.x + t * abx;
+      const projY = a.y + t * aby;
+      const dx = px - projX;
+      const dy = py - projY;
+      const distSq = dx * dx + dy * dy;
+
+      if (distSq < minDistanceSq) {
+        minDistanceSq = distSq;
+        bestDist = Math.sqrt(distSq);
+        bestProgressM = a.progressM + t * Math.sqrt(segLenSq);
+        bestSegmentIndex = i;
+        bestSegmentT = t;
+      }
     }
   }
 
@@ -111,14 +209,11 @@ export function projectPoiOntoRoute(
 
   return {
     progressM: bestProgressM,
-    lateralDistanceM: Math.sqrt(minDistanceSq),
+    lateralDistanceM: bestDist,
     etaSec,
   };
 }
 
-function handy_square(val: number): number {
-  return val;
-}
 
 export function scorePoiFeature(poi: PoiFeature, lateralDistanceM: number): number {
   const proximity = Math.max(0, 1 - lateralDistanceM / PROXIMITY_FULL_FALLOFF_M);

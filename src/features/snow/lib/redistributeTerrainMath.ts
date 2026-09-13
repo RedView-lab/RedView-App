@@ -68,7 +68,7 @@ export function upsampleBilinear(
   return out;
 }
 
-/** Lissage gaussien séparable (1D × 2). */
+/** Lissage gaussien séparable (1D × 2) optimisé avec cœur intérieur vectorisable. */
 export function gaussianSmoothLight(
   data: Float32Array, w: number, h: number, sigma: number,
 ): Float32Array {
@@ -86,21 +86,60 @@ export function gaussianSmoothLight(
   for (let i = 0; i < ks; i++) kernel[i] /= ksum;
 
   const tmp = new Float32Array(w * h);
+  const xMinInner = radius;
+  const xMaxInner = w - radius;
+
+  // Passe horizontale
   for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
+    const rowOffset = y * w;
+
+    // Bord gauche
+    for (let x = 0; x < Math.min(xMinInner, w); x++) {
       let s = 0, wt = 0;
       for (let ki = 0; ki < ks; ki++) {
         const sx = x + (ki - radius);
         if (sx >= 0 && sx < w) {
-          s += data[y * w + sx] * kernel[ki];
+          s += data[rowOffset + sx] * kernel[ki];
           wt += kernel[ki];
         }
       }
-      tmp[y * w + x] = wt > 0 ? s / wt : data[y * w + x];
+      tmp[rowOffset + x] = wt > 0 ? s / wt : data[rowOffset + x];
+    }
+
+    // Cœur intérieur (garanti sans débordement, wt == 1.0)
+    if (xMaxInner > xMinInner) {
+      for (let x = xMinInner; x < xMaxInner; x++) {
+        let s = 0;
+        const base = rowOffset + x - radius;
+        for (let ki = 0; ki < ks; ki++) {
+          s += data[base + ki] * kernel[ki];
+        }
+        tmp[rowOffset + x] = s;
+      }
+    }
+
+    // Bord droit
+    for (let x = Math.max(xMaxInner, 0); x < w; x++) {
+      let s = 0, wt = 0;
+      for (let ki = 0; ki < ks; ki++) {
+        const sx = x + (ki - radius);
+        if (sx >= 0 && sx < w) {
+          s += data[rowOffset + sx] * kernel[ki];
+          wt += kernel[ki];
+        }
+      }
+      tmp[rowOffset + x] = wt > 0 ? s / wt : data[rowOffset + x];
     }
   }
+
   const out = new Float32Array(w * h);
-  for (let y = 0; y < h; y++) {
+  const yMinInner = radius;
+  const yMaxInner = h - radius;
+
+  // Passe verticale
+  // Bord haut
+  for (let y = 0; y < Math.min(yMinInner, h); y++) {
+    const rowOffset = y * w;
     for (let x = 0; x < w; x++) {
       let s = 0, wt = 0;
       for (let ki = 0; ki < ks; ki++) {
@@ -110,9 +149,40 @@ export function gaussianSmoothLight(
           wt += kernel[ki];
         }
       }
-      out[y * w + x] = wt > 0 ? s / wt : tmp[y * w + x];
+      out[rowOffset + x] = wt > 0 ? s / wt : tmp[rowOffset + x];
     }
   }
+
+  // Cœur intérieur
+  if (yMaxInner > yMinInner) {
+    for (let y = yMinInner; y < yMaxInner; y++) {
+      const rowOffset = y * w;
+      for (let x = 0; x < w; x++) {
+        let s = 0;
+        for (let ki = 0; ki < ks; ki++) {
+          s += tmp[(y + ki - radius) * w + x] * kernel[ki];
+        }
+        out[rowOffset + x] = s;
+      }
+    }
+  }
+
+  // Bord bas
+  for (let y = Math.max(yMaxInner, 0); y < h; y++) {
+    const rowOffset = y * w;
+    for (let x = 0; x < w; x++) {
+      let s = 0, wt = 0;
+      for (let ki = 0; ki < ks; ki++) {
+        const sy = y + (ki - radius);
+        if (sy >= 0 && sy < h) {
+          s += tmp[sy * w + x] * kernel[ki];
+          wt += kernel[ki];
+        }
+      }
+      out[rowOffset + x] = wt > 0 ? s / wt : tmp[rowOffset + x];
+    }
+  }
+
   return out;
 }
 
@@ -383,8 +453,9 @@ export function computeFlowAccumulationDinf(flow: Array<DinfFlow | null>, hm: Fl
   const accum = new Float32Array(total).fill(1);
   const sorted = new Int32Array(total);
   for (let i = 0; i < total; i++) sorted[i] = i;
-  const sortedArr = Array.from(sorted).sort((a, b) => hm[b] - hm[a]);
-  for (const idx of sortedArr) {
+  sorted.sort((a, b) => hm[b] - hm[a]);
+  for (let i = 0; i < total; i++) {
+    const idx = sorted[i];
     const f = flow[idx];
     if (f) {
       const area = accum[idx];
