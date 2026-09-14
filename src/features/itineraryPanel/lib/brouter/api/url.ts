@@ -55,6 +55,15 @@ export function buildBrouterUrl(req: BrouterRequest): string {
       params.set(k, value);
     }
   }
+
+  // Fast One-Pass mode (pass2coefficient = -1): linear in distance, 5-10x faster
+  if (!params.has('profile:pass2coefficient')) {
+    params.set('profile:pass2coefficient', '-1');
+  }
+  if (!params.has('profile:pass1coefficient')) {
+    params.set('profile:pass1coefficient', '2.0');
+  }
+
   return `${base}${appendBrouter ? '/brouter' : ''}?${params.toString()}`;
 }
 

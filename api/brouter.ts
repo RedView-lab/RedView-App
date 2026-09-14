@@ -73,6 +73,16 @@ export default async function handler(
 /* GET → /brouter routing query                                        */
 /* ------------------------------------------------------------------ */
 
+interface CachedRoute {
+  body: string;
+  contentType: string;
+  status: number;
+  timestamp: number;
+}
+const ROUTE_CACHE = new Map<string, CachedRoute>();
+const MAX_ROUTE_CACHE = 512;
+const ROUTE_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 async function handleRouteQuery(
   req: ApiRequest,
   res: ApiResponse,
@@ -93,6 +103,24 @@ async function handleRouteQuery(
   }
   if (!params.has('format')) params.set('format', 'geojson');
   if (!params.has('profile')) params.set('profile', 'trekking');
+
+  // Enforce high-speed One-Pass mode (O(D) linear complexity) unless explicitly overridden
+  if (!params.has('profile:pass2coefficient')) {
+    params.set('profile:pass2coefficient', '-1');
+  }
+  if (!params.has('profile:pass1coefficient')) {
+    params.set('profile:pass1coefficient', '2.0');
+  }
+
+  const cacheKey = params.toString();
+  const cached = ROUTE_CACHE.get(cacheKey);
+  const now = Date.now();
+  if (cached && now - cached.timestamp < ROUTE_CACHE_TTL_MS) {
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600, s-maxage=7200');
+    res.setHeader('X-Route-Cache', 'HIT');
+    return res.status(cached.status).send(cached.body);
+  }
 
   const url = `${base}/brouter?${params.toString()}`;
 
@@ -137,7 +165,19 @@ async function handleRouteQuery(
       'x-brouter-upstream-error',
       body.replace(/[\r\n]+/g, ' ').slice(0, 400),
     );
+  } else if (upstreamRes.status === 200) {
+    if (ROUTE_CACHE.size >= MAX_ROUTE_CACHE) {
+      const firstKey = ROUTE_CACHE.keys().next().value;
+      if (firstKey !== undefined) ROUTE_CACHE.delete(firstKey);
+    }
+    ROUTE_CACHE.set(cacheKey, {
+      body,
+      contentType,
+      status: upstreamRes.status,
+      timestamp: now,
+    });
   }
+
   return res.status(looksLikeError ? 422 : upstreamRes.status).send(body);
 }
 

@@ -35,6 +35,9 @@ interface BrouterFeatureProps {
   [k: string]: unknown;
 }
 
+const clientRouteCache = new Map<string, BrouterRoute>();
+const MAX_CLIENT_CACHE = 256;
+
 /**
  * Fetch a route from BRouter. Throws on network/HTTP errors and on
  * BRouter-side errors (which are returned as plain-text responses
@@ -44,6 +47,9 @@ export async function fetchBrouterRoute(
   req: BrouterRequest,
 ): Promise<BrouterRoute> {
   const url = buildBrouterUrl(req);
+  if (clientRouteCache.has(url)) {
+    return clientRouteCache.get(url)!;
+  }
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= WATCHDOG_RETRY_DELAYS_MS.length; attempt += 1) {
     const res = await fetch(url, {
@@ -96,7 +102,7 @@ export async function fetchBrouterRoute(
     const coords = feature.geometry.coordinates as [number, number][];
     const props = (feature.properties ?? {}) as BrouterFeatureProps;
 
-    return {
+    const route: BrouterRoute = {
       coordinates: coords,
       distanceM: num(props['track-length']),
       durationS: num(props['total-time']),
@@ -104,6 +110,14 @@ export async function fetchBrouterRoute(
       descentM: num(props['plain-ascend']) - num(props['filtered ascend']),
       raw: json,
     };
+
+    if (clientRouteCache.size >= MAX_CLIENT_CACHE) {
+      const oldestKey = clientRouteCache.keys().next().value;
+      if (oldestKey !== undefined) clientRouteCache.delete(oldestKey);
+    }
+    clientRouteCache.set(url, route);
+
+    return route;
   }
   throw lastError ?? new Error('BRouter: route fetch failed after watchdog retries');
 }
