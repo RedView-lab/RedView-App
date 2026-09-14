@@ -141,8 +141,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const inClimbMode = climbFocus > 0.25;
   const shortestMode = distanceDetourAllowance >= 0.65 && climbFocus < 0.2 && durationFocus < 0.4;
   
-  // One-pass BRouter mode: pass2coefficient < 0 disables the 2nd A* pass, making routing linear in distance (3x to 10x faster)
-  const pass1Coefficient = 2.0;
+  // One-pass BRouter mode: pass2coefficient < 0 disables the 2nd A* pass, making routing linear in distance (5x to 15x faster)
+  const pass1Coefficient = 2.5;
   const pass2Coefficient = -1;
 
   const maxSlope = Math.min(99, Math.max(1, roadTypes.maxSlopePercent || 99));

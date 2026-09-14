@@ -104,12 +104,11 @@ async function handleRouteQuery(
   if (!params.has('format')) params.set('format', 'geojson');
   if (!params.has('profile')) params.set('profile', 'trekking');
 
-  // Enforce high-speed One-Pass mode (O(D) linear complexity) unless explicitly overridden
-  if (!params.has('profile:pass2coefficient')) {
-    params.set('profile:pass2coefficient', '-1');
-  }
-  if (!params.has('profile:pass1coefficient')) {
-    params.set('profile:pass1coefficient', '2.0');
+  // Enforce high-speed One-Pass mode (O(D) linear complexity) unconditionally
+  params.set('profile:pass2coefficient', '-1');
+  const pass1 = Number(params.get('profile:pass1coefficient'));
+  if (!params.has('profile:pass1coefficient') || !Number.isFinite(pass1) || pass1 < 1.0) {
+    params.set('profile:pass1coefficient', '2.5');
   }
 
   const cacheKey = params.toString();
@@ -211,6 +210,18 @@ async function handleProfileUpload(
     return res.status(413).json({
       error: `Profile exceeds ${MAX_PROFILE_BYTES} chars`,
     });
+  }
+
+  // Enforce unconditional One-Pass mode (pass2=-1, pass1=2.5) in uploaded profiles
+  if (/assign\s+pass2coefficient\s*=/i.test(profileText)) {
+    profileText = profileText.replace(/assign\s+pass2coefficient\s*=\s*[\d.-]+/gi, 'assign pass2coefficient = -1');
+  } else {
+    profileText = `${profileText}\nassign pass2coefficient = -1\n`;
+  }
+  if (/assign\s+pass1coefficient\s*=/i.test(profileText)) {
+    profileText = profileText.replace(/assign\s+pass1coefficient\s*=\s*[\d.-]+/gi, 'assign pass1coefficient = 2.5');
+  } else {
+    profileText = `${profileText}\nassign pass1coefficient = 2.5\n`;
   }
 
   // Optional ?id=custom_xxx → update existing profile in place.

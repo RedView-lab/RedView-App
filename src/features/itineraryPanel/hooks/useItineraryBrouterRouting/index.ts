@@ -223,8 +223,9 @@ export function useItineraryBrouterRouting({
         .then(async ({ route, usedFallbackProfile, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
-          const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'local patch');
-          if (ctrl.signal.aborted) return;
+          // Render route immediately with native BRouter elevation data
+          setProject((project) => applyPendingRoutePatch(project, route, null));
+          setRouteLoading(false);
           console.log(
             '[BRouter] local patch OK in',
             Math.round(performance.now() - t0),
@@ -233,7 +234,13 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          setProject((project) => applyPendingRoutePatch(project, route, ignAltimetryRouteProfile));
+          // Background IGN altimetry refinement for short segments only (<= 50km)
+          if (route.distanceM <= 50_000) {
+            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'local patch');
+            if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
+              setProject((project) => applyPendingRoutePatch(project, route, ignAltimetryRouteProfile));
+            }
+          }
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
@@ -293,8 +300,9 @@ export function useItineraryBrouterRouting({
         .then(async ({ route, usedFallbackProfile, resolvedWarnings }) => {
           if (ctrl.signal.aborted) return;
           setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
-          const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'append segment');
-          if (ctrl.signal.aborted) return;
+          // Render route immediately with native BRouter elevation data
+          setProject((project) => applyPendingTraceAppend(project, route, null));
+          setRouteLoading(false);
           console.log(
             '[BRouter] append segment OK in',
             Math.round(performance.now() - t0),
@@ -303,7 +311,13 @@ export function useItineraryBrouterRouting({
             'km | pts=',
             route.coordinates.length,
           );
-          setProject((project) => applyPendingTraceAppend(project, route, ignAltimetryRouteProfile));
+          // Background IGN altimetry refinement for short segments only (<= 50km)
+          if (route.distanceM <= 50_000) {
+            const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'append segment');
+            if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
+              setProject((project) => applyPendingTraceAppend(project, route, ignAltimetryRouteProfile));
+            }
+          }
         })
         .catch((error: unknown) => {
           if ((error as { name?: string }).name === 'AbortError') return;
@@ -402,8 +416,6 @@ export function useItineraryBrouterRouting({
           resolved.roadTypes.warnings.length,
         );
         setRouteWarnings(applyRouteWarnings(resolvedWarnings, usedFallbackProfile));
-        const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'recompute route');
-        if (ctrl.signal.aborted) return;
         console.log(
           '[BRouter] route OK in',
           Math.round(performance.now() - t0),
@@ -414,7 +426,10 @@ export function useItineraryBrouterRouting({
           'm | pts=',
           route.coordinates.length,
         );
-        setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+        // Render route immediately with native BRouter elevation data & unblock UI
+        setProject((project) => applyRecomputedRoute(project, route, null));
+        setRouteLoading(false);
+
         trackAnalyticsEvent({
           name: 'route_calculated',
           data: {
@@ -423,6 +438,14 @@ export function useItineraryBrouterRouting({
             surface: resolved?.roadTypes?.effective?.gravel === 'prefer' ? 'gravel' : 'road',
           },
         });
+
+        // Background IGN altimetry refinement for short routes only (<= 50km)
+        if (route.distanceM <= 50_000) {
+          const ignAltimetryRouteProfile = await resolveIgnAltimetryRouteProfile(route, ctrl.signal, 'recompute route');
+          if (ignAltimetryRouteProfile && !ctrl.signal.aborted) {
+            setProject((project) => applyRecomputedRoute(project, route, ignAltimetryRouteProfile));
+          }
+        }
       })
       .catch((error: unknown) => {
         if ((error as { name?: string }).name === 'AbortError') return;

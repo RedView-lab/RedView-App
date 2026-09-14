@@ -56,12 +56,11 @@ export function buildBrouterUrl(req: BrouterRequest): string {
     }
   }
 
-  // Fast One-Pass mode (pass2coefficient = -1): linear in distance, 5-10x faster
-  if (!params.has('profile:pass2coefficient')) {
-    params.set('profile:pass2coefficient', '-1');
-  }
-  if (!params.has('profile:pass1coefficient')) {
-    params.set('profile:pass1coefficient', '2.0');
+  // Fast One-Pass mode (pass2coefficient = -1): linear in distance, 5-15x faster (unconditionally enforced)
+  params.set('profile:pass2coefficient', '-1');
+  const pass1 = Number(params.get('profile:pass1coefficient'));
+  if (!params.has('profile:pass1coefficient') || !Number.isFinite(pass1) || pass1 < 1.0) {
+    params.set('profile:pass1coefficient', '2.5');
   }
 
   return `${base}${appendBrouter ? '/brouter' : ''}?${params.toString()}`;

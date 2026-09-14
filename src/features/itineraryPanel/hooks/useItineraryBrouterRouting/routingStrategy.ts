@@ -29,6 +29,14 @@ export function fetchRouteForPriorities(
     return fetchBrouterRoute(reqBase);
   }
 
+  // For long distance (> 50 km straight-line), avoid multi-alternative overhead so calculations stay instant
+  const dLat = (reqBase.end.lat - reqBase.start.lat) * 111_000;
+  const dLon = (reqBase.end.lon - reqBase.start.lon) * 111_000 * Math.cos((reqBase.start.lat * Math.PI) / 180);
+  const approxDistanceM = Math.hypot(dLat, dLon);
+  if (approxDistanceM > 50_000) {
+    return fetchBrouterRoute(reqBase);
+  }
+
   const climbFocus = Math.max(0, prioritySign(priorities.elevation));
   const distanceAvoid = Math.max(0, -prioritySign(priorities.distance));
   const distanceFocus = Math.max(0, prioritySign(priorities.distance));
@@ -41,7 +49,7 @@ export function fetchRouteForPriorities(
       reqBase,
       (route) => -((route.distanceM * 1.4) + (route.durationS * 18)),
       'min distance + directness',
-      4,
+      2,
     );
   }
   if (climbFocus > 0.4 && distanceFocus > 0.5) {
@@ -51,10 +59,10 @@ export function fetchRouteForPriorities(
       'max ascent + long distance',
       distanceFocus,
       climbFocus,
-      4,
+      2,
     );
   }
-  if (climbFocus > 0.4) return fetchBrouterRouteBestOfN(reqBase, 4);
+  if (climbFocus > 0.4) return fetchBrouterRouteBestOfN(reqBase, 2);
   if (distanceFocus > 0.65) {
     return fetchBrouterRouteBestWithDistanceDetours(
       reqBase,
@@ -62,7 +70,7 @@ export function fetchRouteForPriorities(
       'max distance',
       distanceFocus,
       climbFocus,
-      4,
+      2,
     );
   }
   if (durationFocus > 0.65) {
@@ -70,7 +78,7 @@ export function fetchRouteForPriorities(
       reqBase,
       (route) => -((route.durationS * 35) + route.distanceM),
       'min duration + directness',
-      4,
+      2,
     );
   }
   return fetchBrouterRoute(reqBase);
