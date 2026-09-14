@@ -226,12 +226,14 @@ const server = http.createServer(async (req, res) => {
 });
 
 async function handleApiRoute(pathname, parsedUrl, req, res) {
-  // Normalize openmeteo & weather
+  // Normalize openmeteo, weather & brouter
   let apiPath = pathname;
   if (apiPath.startsWith('/api/openmeteo')) {
     apiPath = '/api/openmeteo';
   } else if (apiPath.startsWith('/api/weather')) {
     apiPath = '/api/weather';
+  } else if (apiPath.startsWith('/api/brouter')) {
+    apiPath = '/api/brouter';
   }
 
   const relPath = apiPath.replace(/^\/api\//, '');

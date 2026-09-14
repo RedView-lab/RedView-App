@@ -1,6 +1,6 @@
 import { ALL_PARAMETERS } from '../../../../expert/parameters';
 import type { ExpertProfileState } from '../../../../expert/types';
-import type { RoadPreference, RoadTypesState } from '../../../../types';
+import type { RoadPreference } from '../../../../types';
 import type { BrfBuildInputs, BrfProfileValues } from './types';
 
 function clamp(value: number, min: number, max: number): number {
@@ -37,13 +37,13 @@ function buildBonusByClass(
 function prefToFactor(preference: RoadPreference): number {
   switch (preference) {
     case 'prefer':
-      return 1.0;
+      return 0.9;
     case 'tolerate':
       return 1.0;
     case 'avoid':
-      return 1.4;
+      return 1.15;
     case 'forbid':
-      return 6.0;
+      return 2.5;
   }
   return 1.0;
 }
@@ -67,13 +67,7 @@ function defaultFor(id: string): unknown {
 export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValues {
   const { priorities, roadTypes, expert } = inputs;
 
-  const categories: Array<keyof Pick<
-    RoadTypesState,
-    'road' | 'gravel' | 'singletrack' | 'offroad' | 'bikeLanes' | 'majorRoads'
-  >> = ['road', 'gravel', 'singletrack', 'offroad', 'bikeLanes', 'majorRoads'];
-  const anyPrefer = categories.some((category) => roadTypes[category] === 'prefer');
   const factorFor = (preference: RoadPreference): number => {
-    if (preference === 'tolerate' && anyPrefer) return 1.15;
     return prefToFactor(preference);
   };
 
@@ -112,8 +106,8 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   let climbMul = 1.0;
 
   if (climbFocus <= 0.15) {
-    // Follow BRouter trekking baseline: no uphill penalty in neutral mode so crossing mountains/valleys doesn't explode A*
-    upCost = climbAvoid > 0.1 ? Math.round(climbAvoid * 120) : 0;
+    // Standard BRouter trekking baseline: no uphill penalty in neutral mode so mountains/valleys don't explode search
+    upCost = climbAvoid > 0.1 ? Math.round(climbAvoid * 80) : 0;
     downCost = 60;
     upCutoff = 1.5;
     downCutoff = 1.5;
@@ -122,14 +116,14 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
     elevBufferReduce = 0.25;
   } else {
     const climbScale = clamp((climbFocus - 0.15) / 0.85, 0, 1);
-    upCost = Math.round(30 * (1 - climbScale));
+    upCost = Math.round(20 * (1 - climbScale));
     downCost = 0;
     upCutoff = 1.5 + (climbScale * 1.5);
     downCutoff = 1.5 + (climbScale * 1.0);
     elevPenaltyBuffer = 8 - (climbScale * 7.25);
     elevMaxBuffer = 16 - (climbScale * 14.5);
     elevBufferReduce = 0.35 + (climbScale * 1.4);
-    climbMul = 1.0 + (climbScale * (distanceFocus > 0.7 ? 6.0 : 4.0));
+    climbMul = 1.0 + (climbScale * (distanceFocus > 0.7 ? 3.0 : 2.0));
   }
 
   upCutoff = clamp(upCutoff, 0.8, 3.0);
@@ -142,57 +136,55 @@ export function resolveBrfProfileValues(inputs: BrfBuildInputs): BrfProfileValue
   const inClimbMode = climbFocus > 0.25;
   const shortestMode = distanceDetourAllowance >= 0.65 && climbFocus < 0.2 && durationFocus < 0.4;
   
-  // One-pass BRouter mode: pass2coefficient < 0 disables the 2nd A* pass, making routing linear in distance (5x to 15x faster)
-  const pass1Coefficient = 2.5;
+  // Ultra-fast One-Pass BRouter mode: pass1=3.5 directs A* linearly to destination, pass2=-1 disables quadratic 2nd pass
+  const pass1Coefficient = 3.5;
   const pass2Coefficient = -1;
 
   const maxSlope = Math.min(99, Math.max(1, roadTypes.maxSlopePercent || 99));
-  const maxSlopeCost = maxSlope >= 99 ? 0 : 500;
+  const maxSlopeCost = 0;
 
   const baseTurnFactor = (() => {
     switch (roadTypes.turns) {
       case 'prefer':
-        return 0.6;
+        return 0.8;
       case 'tolerate':
         return 1.0;
       case 'avoid':
-        return 1.3;
+        return 1.1;
       case 'forbid':
-        return 2.5;
+        return 1.4;
     }
     return 1.0;
   })();
 
-  const turnFactor = baseTurnFactor * (1 + (durationFocus * 0.8) + (distanceDetourAllowance * 0.4));
+  const turnFactor = baseTurnFactor * (1 + (durationFocus * 0.3) + (distanceDetourAllowance * 0.2));
 
   const ignoreCycleroutes = distanceFocus >= 0.75 || distanceDetourAllowance >= 0.75 || durationFocus >= 0.85;
   const distDetourRelief = distanceFocus > 0
     ? (inClimbMode
-        ? clamp(1 - (distanceFocus * 0.5), 0.4, 1)
-        : clamp(1 - (distanceFocus * 0.3), 0.6, 1))
-    : 1 + (distanceDetourAllowance * 1.2);
-  const distDirectPenalty = 1 + (distanceFocus * (inClimbMode ? 2.0 : 1.5));
-  const durSlowPenalty = 1 + (durationFocus * 1.5);
-  const durFastPenalty = durationRelax > 0 ? 1 + (durationRelax * 0.3) : 1;
-  const durMinorPenalty = 1 + (durationFocus * 1.2);
-  const signalPenalty = Math.round(15 + (durationFocus * 80) + (tranquilityFocus * 40));
+        ? clamp(1 - (distanceFocus * 0.3), 0.7, 1)
+        : clamp(1 - (distanceFocus * 0.2), 0.8, 1))
+    : 1 + (distanceDetourAllowance * 0.5);
+  const distDirectPenalty = 1 + (distanceFocus * (inClimbMode ? 1.4 : 1.2));
+  const durSlowPenalty = 1 + (durationFocus * 0.6);
+  const durFastPenalty = durationRelax > 0 ? 1 + (durationRelax * 0.2) : 1;
+  const durMinorPenalty = 1 + (durationFocus * 0.4);
+  const signalPenalty = Math.round(10 + (durationFocus * 40) + (tranquilityFocus * 20));
 
-  const tranqConsiderNoise = tranquilityFocus >= 0.5;
-  const tranqStickToCycleroutes = tranquilityFocus >= 0.75;
-  const considerTraffic = tranquilityFocus >= 0.4;
-  const avoidUnsafe = false; // avoidUnsafe removes non-tagged rural roads in France, severely breaking connectivity
-  const tranqMajorPenalty = 1 + (tranquilityFocus * 1.5);
-  const tranqFastTrafficPenalty = 1 + (tranquilityFocus * 2.0);
-  const tranqBackgroundPenalty = 1 + (tranquilityFocus * 0.3);
+  const tranqConsiderNoise = false;
+  const tranqStickToCycleroutes = tranquilityFocus >= 0.85;
+  const considerTraffic = false;
+  const avoidUnsafe = false;
+  const tranqMajorPenalty = 1 + (tranquilityFocus * 0.3);
+  const tranqFastTrafficPenalty = 1 + (tranquilityFocus * 0.4);
+  const tranqBackgroundPenalty = 1.0;
   const citiesMult =
-    roadTypes.cities === 'forbid' ? 3.0
-      : roadTypes.cities === 'avoid' ? 1.5
+    roadTypes.cities === 'forbid' ? 1.5
+      : roadTypes.cities === 'avoid' ? 1.2
         : 1.0;
-  const considerTown =
-    roadTypes.cities === 'avoid' ||
-    roadTypes.cities === 'forbid';
-  const townPenaltyScale = 1 + (tranquilityFocus * 0.6);
-  const trafficPenaltyScale = 1 + (tranquilityFocus * 0.8);
+  const considerTown = false;
+  const townPenaltyScale = 1.0;
+  const trafficPenaltyScale = 1.0;
   const forestReliefByClass = tranquilityFocus > 0
     ? buildBonusByClass(1 + (tranquilityFocus * 0.6), clamp(1 - (tranquilityFocus * 0.4), 0.5, 1))
     : buildReliefByClass(1);

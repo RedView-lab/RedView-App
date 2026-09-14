@@ -108,7 +108,7 @@ async function handleRouteQuery(
   params.set('profile:pass2coefficient', '-1');
   const pass1 = Number(params.get('profile:pass1coefficient'));
   if (!params.has('profile:pass1coefficient') || !Number.isFinite(pass1) || pass1 < 1.0) {
-    params.set('profile:pass1coefficient', '2.5');
+    params.set('profile:pass1coefficient', '3.5');
   }
 
   const cacheKey = params.toString();
@@ -212,16 +212,16 @@ async function handleProfileUpload(
     });
   }
 
-  // Enforce unconditional One-Pass mode (pass2=-1, pass1=2.5) in uploaded profiles
+  // Enforce unconditional One-Pass mode (pass2=-1, pass1=3.5) in uploaded profiles
   if (/assign\s+pass2coefficient\s*=/i.test(profileText)) {
     profileText = profileText.replace(/assign\s+pass2coefficient\s*=\s*[\d.-]+/gi, 'assign pass2coefficient = -1');
   } else {
     profileText = `${profileText}\nassign pass2coefficient = -1\n`;
   }
   if (/assign\s+pass1coefficient\s*=/i.test(profileText)) {
-    profileText = profileText.replace(/assign\s+pass1coefficient\s*=\s*[\d.-]+/gi, 'assign pass1coefficient = 2.5');
+    profileText = profileText.replace(/assign\s+pass1coefficient\s*=\s*[\d.-]+/gi, 'assign pass1coefficient = 3.5');
   } else {
-    profileText = `${profileText}\nassign pass1coefficient = 2.5\n`;
+    profileText = `${profileText}\nassign pass1coefficient = 3.5\n`;
   }
 
   // Optional ?id=custom_xxx → update existing profile in place.
