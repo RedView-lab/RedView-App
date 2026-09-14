@@ -29,6 +29,8 @@ export type TimelineColumnId =
   | 'rain'
   | 'cloudCover';
 
+import type { RouteWeatherDataset, RouteWeatherValues } from '@/features/weather';
+
 export type TimelineColumnAlign = 'left' | 'right' | 'center';
 
 export interface TimelineColumnContext {
@@ -48,6 +50,7 @@ export interface TimelineColumnContext {
   point: PredictionPoint | null;
   pointPrev: PredictionPoint | null;
   pointNext: PredictionPoint | null;
+  weather?: RouteWeatherValues | null;
 }
 
 export interface TimelineColumnCell {
@@ -75,4 +78,5 @@ export interface BuildContextArgs {
   prediction: PredictionResult | null | undefined;
   rhythm: RhythmState | undefined;
   reference: StartReference;
+  weatherDataset?: RouteWeatherDataset | null;
 }

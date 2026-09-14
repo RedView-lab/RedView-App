@@ -12,6 +12,8 @@ import {
   buildSeriesFromPrediction,
   computeXDomain,
   isInclinationMetric,
+  isWeatherMetric,
+  unitForMetric,
   type AxisDomain,
   type AxisMetricId,
   type AxisMode,
@@ -21,6 +23,7 @@ import {
   type ChartPoiAnnotation,
   type ChartSeries,
 } from '../chart';
+import type { RouteWeatherDataset } from '@/features/weather';
 import { lightenColor, type FilterKey, type PreparedChartNode } from './shared';
 
 interface UseAnalysisChartDataArgs {
@@ -34,6 +37,7 @@ interface UseAnalysisChartDataArgs {
   detailZoom: number;
   filters: Record<FilterKey, boolean>;
   activeItinerary: Itinerary | null;
+  weatherByItinerary?: Record<string, RouteWeatherDataset | null>;
 }
 
 /**
@@ -50,6 +54,7 @@ export function useAnalysisChartData({
   detailZoom,
   filters,
   activeItinerary,
+  weatherByItinerary,
 }: UseAnalysisChartDataArgs) {
   const visualNodes = useMemo(
     () => buildItineraryVisualNodes(itineraries),
@@ -68,6 +73,8 @@ export function useAnalysisChartData({
       const routeSource = itinerary.gpxRoute?.source;
       const startTime = itinerary.rhythm.startTime;
       const xOffset = xMode === 'distance' ? node.startDistanceKm : 0;
+      const weatherDataset = weatherByItinerary?.[itinerary.id] ?? null;
+
       const axis1Points = buildSeriesFromPrediction(
         prediction,
         axis1Value,
@@ -77,6 +84,7 @@ export function useAnalysisChartData({
         startTime,
         itinerary,
         detailZoom,
+        weatherDataset,
       );
       const axis2Points = buildSeriesFromPrediction(
         prediction,
@@ -87,6 +95,7 @@ export function useAnalysisChartData({
         startTime,
         itinerary,
         detailZoom,
+        weatherDataset,
       );
       const altitudePoints = buildSeriesFromPrediction(
         prediction,
@@ -113,7 +122,7 @@ export function useAnalysisChartData({
       });
     }
     return result;
-  }, [axis1Value, axis2Value, detailZoom, predictions, visualNodes, xMode]);
+  }, [axis1Value, axis2Value, detailZoom, predictions, visualNodes, weatherByItinerary, xMode]);
 
   const visibleChartNodes = useMemo(
     () => preparedChartNodes.map(({ itinerary, startDistanceKm }) => ({ itinerary, startDistanceKm })),
@@ -132,7 +141,7 @@ export function useAnalysisChartData({
           metricId: axis1Value,
           color: axis1Color ?? itinerary.color,
           axis: 1,
-          unit: '',
+          unit: unitForMetric(axis1Value),
           points: axis1ShiftedPoints,
         });
       }
@@ -145,7 +154,7 @@ export function useAnalysisChartData({
           metricId: axis2Value,
           color: axis2Color ?? lightenColor(itinerary.color, 0.4),
           axis: 2,
-          unit: '',
+          unit: unitForMetric(axis2Value),
           points: axis2ShiftedPoints,
         });
       }
@@ -156,7 +165,9 @@ export function useAnalysisChartData({
   const showAltitudeBackdrop =
     filters.pente ||
     isInclinationMetric(axis1Value) ||
-    isInclinationMetric(axis2Value);
+    isInclinationMetric(axis2Value) ||
+    isWeatherMetric(axis1Value) ||
+    isWeatherMetric(axis2Value);
 
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
     if (!showAltitudeBackdrop) return [];

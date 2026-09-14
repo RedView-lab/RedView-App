@@ -286,6 +286,7 @@ export const AnalysisChart = memo(function AnalysisChart({
       series.map((entry) => ({
         id: entry.id,
         color: entry.color,
+        fillColor: withAlpha(entry.color, 0.12),
         lineWidth: 2.0,
         points: selectPointsForPlotLod(entry.points, plotXDomain, plotSize.width),
         yDomain: entry.axis === 2 ? plotY2Domain : plotYDomain,

@@ -126,10 +126,25 @@ export function formatAxisValue(metric: ChartMetricId, value: number): string {
   return unit ? `${txt} ${unit}` : txt;
 }
 
+export function isWeatherMetric(metric: ChartMetricId): boolean {
+  switch (metric) {
+    case 'Température':
+    case 'Température ressentie (°)':
+    case 'Pluie (mm)':
+    case 'Vent (km/h)':
+    case 'Couverture nuageuse (%)':
+    case 'Humidité (%)':
+    case 'Ensoleillement (min)':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /**
- * Whether a metric's running value can be computed from the prediction
- * timeline. Weather/surface metrics are not yet wired and return false so
- * the chart can show an empty plot rather than a flat zero line.
+ * Whether a metric's running value can be computed. Returns true for
+ * physical model metrics (speed, power, elevation, slope) and for all
+ * supported route weather metrics.
  */
 export function metricIsAvailable(metric: ChartMetricId): boolean {
   switch (metric) {
@@ -140,6 +155,13 @@ export function metricIsAvailable(metric: ChartMetricId): boolean {
     case 'Altitude':
     case 'Inclinaison (°)':
     case 'Inclinaison (%)':
+    case 'Température':
+    case 'Température ressentie (°)':
+    case 'Pluie (mm)':
+    case 'Vent (km/h)':
+    case 'Couverture nuageuse (%)':
+    case 'Humidité (%)':
+    case 'Ensoleillement (min)':
       return true;
     default:
       return false;

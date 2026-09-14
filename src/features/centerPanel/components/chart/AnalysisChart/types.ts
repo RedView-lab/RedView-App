@@ -69,6 +69,7 @@ export interface PoiMarkerGroup {
 export interface CanvasSeriesLayer {
   id: string;
   color: string;
+  fillColor?: string;
   lineWidth: number;
   points: { x: number; y: number }[];
   yDomain: AxisDomain;

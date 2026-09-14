@@ -68,7 +68,6 @@ export const axisOptions: AxisOption[] = [
   },
   { value: 'Humidité (%)', label: 'Humidité (%)', tone: 'secondary' },
   { value: 'Ensoleillement (min)', label: 'Ensoleillement (min)', tone: 'secondary' },
-  { value: 'Humidité (%)__bis', label: 'Humidité (%)', tone: 'secondary' },
 ];
 
 export const DETAIL_ZOOM_STEP = 0.1;

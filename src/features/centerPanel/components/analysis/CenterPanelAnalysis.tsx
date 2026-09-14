@@ -19,6 +19,7 @@ import {
   type AxisMetricId,
   type AxisMode,
 } from '../chart';
+import { useRouteWeather } from '@/features/weather';
 import {
   usePredictionStoreOptional,
   useProjectStoreOptional,
@@ -58,6 +59,17 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const axis2Value = analysisState.axis2 as AxisMetricId;
   const xMode = analysisState.xMode as AxisMode;
   const filters = analysisState.filters;
+
+  const weatherControl = project?.controlPanel?.weather;
+  const fallbackDate = weatherControl?.date;
+  const fallbackTime = weatherControl?.time;
+
+  const { weatherByItinerary } = useRouteWeather({
+    itineraries,
+    fallbackDate,
+    fallbackTime,
+    enabled: Boolean(itineraries.length > 0),
+  });
 
   const {
     detailZoom,
@@ -107,6 +119,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     detailZoom,
     filters,
     activeItinerary,
+    weatherByItinerary,
   });
 
   const { updateHoverPoint } = useAnalysisHoverPointMarker({

@@ -33,6 +33,22 @@ const MIME_TYPES = {
   '.brf': 'text/plain; charset=utf-8',
 };
 
+export const REDVIEW_CSP_HEADER = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
+  "worker-src 'self' blob:",
+  "child-src 'self' blob:",
+  "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com data:",
+  "img-src 'self' data: blob: https://*.tilecache.rainviewer.com https://*.rainviewer.com https://*.rainviewer.net https://api.mapbox.com https://*.mapbox.com https://s3.amazonaws.com https://*.s3.amazonaws.com https://*.amazonaws.com https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
+  "connect-src 'self' blob: data: https://appwrite.redview.tech https://api.stripe.com https://api.mapbox.com https://events.mapbox.com https://*.mapbox.com https://*.rainviewer.com https://*.rainviewer.net https://api.open-meteo.com https://climate-api.open-meteo.com https://*.open-meteo.com https://nominatim.openstreetmap.org https://analytics.redview.tech https://s3.amazonaws.com https://*.s3.amazonaws.com https://*.amazonaws.com https://opentopography.s3.sdsc.edu https://data.geopf.fr https://*.geopf.fr https://data.geo.admin.ch https://*.geo.admin.ch https://*.admin.ch https://servicios.idee.es https://*.idee.es https://www.ign.es https://*.ign.es https://hoydedata.no https://*.hoydedata.no https://cyberjapandata.gsi.go.jp https://*.gsi.go.jp https://server.arcgisonline.com https://*.arcgisonline.com",
+  "frame-src https://js.stripe.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join('; ');
+
 // In-memory rate limiting map: ip -> { count, resetTime }
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
@@ -101,7 +117,7 @@ setInterval(() => {
       rateLimitMap.delete(key);
     }
   }
-}, 5 * 60 * 1000);
+}, 5 * 60 * 1000).unref();
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -196,10 +212,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=()');
     res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-    res.setHeader(
-      'Content-Security-Policy',
-      "default-src 'self'; script-src 'self' 'unsafe-inline' https://api.mapbox.com https://js.stripe.com; style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.tilecache.rainviewer.com https://*.rainviewer.com https://api.mapbox.com https://s3.amazonaws.com; connect-src 'self' https://appwrite.redview.tech https://api.stripe.com https://api.mapbox.com https://*.rainviewer.com https://api.open-meteo.com https://climate-api.open-meteo.com https://nominatim.openstreetmap.org; frame-src https://js.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
-    );
+    res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
 
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -415,6 +428,12 @@ async function handleAltitudeTileRoute(pathname, parsedUrl, req, res) {
   return res.end();
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
-});
+export { server };
+
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isMain) {
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`[RedView Server] Running on http://0.0.0.0:${PORT}`);
+  });
+}
+

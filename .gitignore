@@ -26,6 +26,7 @@ COOLIFY.txt
 *.njsproj
 *.sln
 *.sw?
+Untitled*.txt
 
 # Rust / Cargo build outputs
 target/

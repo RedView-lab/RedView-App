@@ -29,6 +29,7 @@ import {
   type TimelineColumnId,
 } from './TimelineColumns';
 import type { TimelineTableSortState } from './TimelineTableSettings';
+import type { RouteWeatherDataset } from '@/features/weather';
 import {
   parseStartReference,
   resolveTotalDistanceM,
@@ -38,6 +39,7 @@ interface TimelineSheetViewProps {
   items: TimelineItem[];
   rhythm?: RhythmState;
   prediction?: PredictionResult | null;
+  weatherDataset?: RouteWeatherDataset | null;
   columns: Record<TimelineColumnId, boolean>;
   sort: TimelineTableSortState | null;
   onChangeSort: (next: TimelineTableSortState | null) => void;
@@ -112,6 +114,7 @@ export function TimelineSheetView({
   items,
   rhythm,
   prediction,
+  weatherDataset,
   columns,
   sort,
   onChangeSort,
@@ -162,11 +165,12 @@ export function TimelineSheetView({
         prediction: prediction ?? null,
         rhythm,
         reference,
+        weatherDataset,
       });
       const cells = visibleColumns.map((col) => col.getCell(ctx));
       return { item, ctx, cells };
     });
-  }, [items, prediction, rhythm, visibleColumns]);
+  }, [items, prediction, rhythm, visibleColumns, weatherDataset]);
 
   const sortedRows: PreparedRow[] = useMemo(() => {
     if (!sort) return preparedRows;

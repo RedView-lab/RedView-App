@@ -7,6 +7,7 @@ export {
   computeXDomain,
   isInclinationMetric,
   isIntervalAverageMetric,
+  isWeatherMetric,
   locateRoutePointAtX,
   metricIsAvailable,
   unitForMetric,

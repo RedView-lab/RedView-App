@@ -1,13 +1,16 @@
 import type { TimelineColumnDef } from './TimelineColumnsTypes';
 import {
   avgPowerBetween,
-  DASH,
   fmtClock,
+  fmtCloudCover,
   fmtDistanceKm,
   fmtElevation,
   fmtPower,
+  fmtRain,
   fmtSeconds,
   fmtSpeed,
+  fmtTemperature,
+  fmtWind,
   gainLossBetween,
 } from './timelineColumnsFormatters';
 
@@ -287,7 +290,10 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     defaultOn: false,
     align: 'right',
     minWidth: 72,
-    getCell: () => ({ display: DASH, sortKey: null }),
+    getCell: (ctx) => ({
+      display: fmtWind(ctx.weather?.windKmh),
+      sortKey: ctx.weather?.windKmh ?? null,
+    }),
   },
   {
     id: 'temperature',
@@ -296,7 +302,10 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     defaultOn: false,
     align: 'right',
     minWidth: 72,
-    getCell: () => ({ display: DASH, sortKey: null }),
+    getCell: (ctx) => ({
+      display: fmtTemperature(ctx.weather?.temperature),
+      sortKey: ctx.weather?.temperature ?? null,
+    }),
   },
   {
     id: 'rain',
@@ -304,7 +313,10 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     defaultOn: false,
     align: 'right',
     minWidth: 64,
-    getCell: () => ({ display: DASH, sortKey: null }),
+    getCell: (ctx) => ({
+      display: fmtRain(ctx.weather?.rain),
+      sortKey: ctx.weather?.rain ?? null,
+    }),
   },
   {
     id: 'cloudCover',
@@ -313,6 +325,9 @@ export const TIMELINE_COLUMNS: TimelineColumnDef[] = [
     defaultOn: false,
     align: 'right',
     minWidth: 72,
-    getCell: () => ({ display: DASH, sortKey: null }),
+    getCell: (ctx) => ({
+      display: fmtCloudCover(ctx.weather?.cloudCover),
+      sortKey: ctx.weather?.cloudCover ?? null,
+    }),
   },
 ];

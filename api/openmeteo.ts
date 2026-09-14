@@ -118,15 +118,31 @@ export default async function handler(
   }
 
   try {
-    const response = await fetchWithTimeout(target);
-    const upstreamPayload = await readUpstreamPayload(response);
-    if (response.ok && !upstreamPayload.isJson) {
-      throw new Error(`${source} returned non-JSON payload${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`);
-    }
-    if (!response.ok) {
-      throw new Error(
-        `${source} returned ${response.status}${response.statusText ? ` ${response.statusText}` : ''}${upstreamPayload.preview ? ` — ${upstreamPayload.preview}` : ''}`,
-      );
+    let response: Response;
+    let upstreamPayload: UpstreamPayload;
+
+    try {
+      response = await fetchWithTimeout(target);
+      upstreamPayload = await readUpstreamPayload(response);
+      if (!response.ok || !upstreamPayload.isJson) {
+        throw new Error(
+          `${source} returned ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`,
+        );
+      }
+    } catch (primaryErr) {
+      if (source === 'self-hosted-vps') {
+        console.warn(`[openmeteo-proxy] Self-hosted VPS failed, falling back to public Open-Meteo API:`, primaryErr);
+        const fallbackTarget = `https://api.open-meteo.com${pathAndQuery}`;
+        target = fallbackTarget;
+        source = 'public-api';
+        response = await fetchWithTimeout(fallbackTarget);
+        upstreamPayload = await readUpstreamPayload(response);
+        if (!response.ok || !upstreamPayload.isJson) {
+          throw new Error(`public-api fallback returned ${response.status}`);
+        }
+      } else {
+        throw primaryErr;
+      }
     }
 
     console.log(

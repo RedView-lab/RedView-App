@@ -17,6 +17,7 @@ import {
   type ChartPoint,
 } from '../src/features/centerPanel/components/chart/series.ts';
 import type { PredictionResult } from '../src/features/fitPredictor/types.ts';
+import type { RouteWeatherDataset } from '../src/features/weather/lib/routeWeather.ts';
 
 export async function runCenterPanelBenchmark(options: { quick?: boolean } = {}): Promise<BenchmarkSuite> {
   const suite = new BenchmarkSuite('Center Panel (Graphiques Multi-Axes & Timeline)');
@@ -151,6 +152,72 @@ export async function runCenterPanelBenchmark(options: { quick?: boolean } = {})
       }
       return dummy;
     },
+  );
+
+  // --- BENCHMARK 7 : Construction de la Série Météo Température (24k pts) ---
+  const mockWeatherDataset: RouteWeatherDataset = {
+    itineraryId: 'bench-route',
+    signature: 'bench-sig',
+    startDate: '2026-09-13',
+    startTime: '08:00',
+    fetchedAt: Date.now(),
+    samples: [
+      {
+        lat: 45.0,
+        lng: 6.0,
+        distanceM: 0,
+        elevationM: 700,
+        hourly: {
+          time: Array.from({ length: 48 }, (_, h) => `2026-09-13T${String(h % 24).padStart(2, '0')}:00`),
+          temperature_2m: Array.from({ length: 48 }, (_, h) => 18 + Math.sin(h / 3) * 6),
+          apparent_temperature: Array.from({ length: 48 }, (_, h) => 17 + Math.sin(h / 3) * 6),
+          precipitation: Array.from({ length: 48 }, (_, h) => (h > 12 && h < 16 ? 1.5 : 0)),
+          wind_speed_10m: Array.from({ length: 48 }, () => 14),
+          cloud_cover: Array.from({ length: 48 }, () => 40),
+          relative_humidity_2m: Array.from({ length: 48 }, () => 65),
+          sunshine_duration: Array.from({ length: 48 }, () => 35),
+        },
+      },
+      {
+        lat: 47.0,
+        lng: 8.6,
+        distanceM: 288_000,
+        elevationM: 1600,
+        hourly: {
+          time: Array.from({ length: 48 }, (_, h) => `2026-09-13T${String(h % 24).padStart(2, '0')}:00`),
+          temperature_2m: Array.from({ length: 48 }, (_, h) => 12 + Math.sin(h / 3) * 5),
+          apparent_temperature: Array.from({ length: 48 }, (_, h) => 11 + Math.sin(h / 3) * 5),
+          precipitation: Array.from({ length: 48 }, (_, h) => (h > 13 && h < 18 ? 3.0 : 0)),
+          wind_speed_10m: Array.from({ length: 48 }, () => 22),
+          cloud_cover: Array.from({ length: 48 }, () => 70),
+          relative_humidity_2m: Array.from({ length: 48 }, () => 80),
+          sunshine_duration: Array.from({ length: 48 }, () => 15),
+        },
+      },
+    ],
+  };
+
+  suite.measureSync(
+    {
+      name: 'Génération Série Météo Température (Mode Distance, 24k pts)',
+      category: 'chart-weather-series',
+      iterations,
+      regressionThresholdP95Ms: 15.0,
+      itemsProcessedPerOp: 24_000,
+    },
+    () => buildSeriesFromPrediction(prediction, 'Température', 'distance', routePoints, 'gpx', '08:00', undefined, 0, mockWeatherDataset),
+  );
+
+  // --- BENCHMARK 8 : Construction de la Série Météo Pluie & Nuages (Mode Heure, 24k pts) ---
+  suite.measureSync(
+    {
+      name: 'Génération Série Météo Pluie (Mode Heure, 24k pts)',
+      category: 'chart-weather-series',
+      iterations,
+      regressionThresholdP95Ms: 15.0,
+      itemsProcessedPerOp: 24_000,
+    },
+    () => buildSeriesFromPrediction(prediction, 'Pluie (mm)', 'heure', routePoints, 'gpx', '08:00', undefined, 0, mockWeatherDataset),
   );
 
   // Diagnostics & Recommandations DevOps

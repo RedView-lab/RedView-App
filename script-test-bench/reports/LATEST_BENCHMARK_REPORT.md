@@ -1,6 +1,6 @@
 # Rapport de Test-Bench RedView — Performance & Non-Régression
 
-> **Date d'exécution** : 2026-09-13T14:10:15.651Z  
+> **Date d'exécution** : 2026-09-13T14:46:22.908Z  
 > **Environnement** : Node.js v24.19.0 | win32 (x64)
 
 ## Vue d'Ensemble & Scorecard
@@ -9,8 +9,8 @@
 | :--- | :--- |
 | **Suites Fonctionnelles Exécutées** | **11** |
 | **Météo, Pente, Alti, Neige, BRouter, FIT...** | Couverture 100% |
-| **Total Opérations Évaluées** | **65** |
-| **Statut Conforme (PASS)** | **65** (100.0%) |
+| **Total Opérations Évaluées** | **67** |
+| **Statut Conforme (PASS)** | **67** (100.0%) |
 | **Avertissements (WARN - Jitter/Peak)** | **0** |
 | **Régressions / Dépassements Seuil** | **0** |
 
@@ -18,10 +18,10 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Parsing JSON Open-Meteo (168h x 11 vars)** | 5 | 0.04 ms | 0.07 ms | 19319.9 | +0.13 MB | ✅ PASS |
-| **Interpolation Trace (10k pts)** | 5 | 0.14 ms | 1.29 ms | 1780.1 | +3.81 MB | ✅ PASS |
-| **Calcul Grille de Vent GPU (Zoom 9)** | 10 | 0.18 ms | 0.29 ms | 5805.9 | +4.14 MB | ✅ PASS |
-| **Recoloration Tuile Radar PNG (512x512)** | 5 | 3.58 ms | 4.34 ms | 270.3 | +14.42 MB | ✅ PASS |
+| **Parsing JSON Open-Meteo (168h x 11 vars)** | 20 | 0.02 ms | 0.03 ms | 43262.0 | +0.48 MB | ✅ PASS |
+| **Interpolation Trace (10k pts)** | 20 | 0.08 ms | 0.18 ms | 9074.0 | +0.02 MB | ✅ PASS |
+| **Calcul Grille de Vent GPU (Zoom 9)** | 40 | 0.08 ms | 0.26 ms | 8674.0 | +1.95 MB | ✅ PASS |
+| **Recoloration Tuile Radar PNG (512x512)** | 20 | 1.38 ms | 2.59 ms | 590.0 | -12.68 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -39,13 +39,13 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Noyau Horn 3x3 (128x128 MNT)** | 10 | 0.39 ms | 0.91 ms | 2058.0 | +8.84 MB | ✅ PASS |
-| **Noyau Horn 3x3 (256x256 MNT standard)** | 5 | 1.78 ms | 2.28 ms | 562.5 | +14.40 MB | ✅ PASS |
-| **Noyau Horn 3x3 (512x512 MNT HD)** | 3 | 5.80 ms | 7.52 ms | 155.9 | +7.24 MB | ✅ PASS |
-| **Compilation Mapbox Expression (Gradient)** | 25 | 0.00 ms | 0.03 ms | 165892.5 | +0.04 MB | ✅ PASS |
-| **Compilation Mapbox Expression (Step + Masque)** | 25 | 0.00 ms | 0.01 ms | 338295.0 | +0.04 MB | ✅ PASS |
-| **Lissage Gradient Trace (10k pts, 200m)** | 5 | 0.19 ms | 1.89 ms | 1325.4 | +5.16 MB | ✅ PASS |
-| **Génération Tuile Serveur (/slope-tiles)** | 3 | 0.00 ms | 0.02 ms | 109090.9 | +0.00 MB | ✅ PASS |
+| **Noyau Horn 3x3 (128x128 MNT)** | 40 | 0.55 ms | 0.61 ms | 1878.1 | +28.63 MB | ✅ PASS |
+| **Noyau Horn 3x3 (256x256 MNT standard)** | 20 | 1.33 ms | 1.70 ms | 722.4 | +9.58 MB | ✅ PASS |
+| **Noyau Horn 3x3 (512x512 MNT HD)** | 10 | 5.24 ms | 5.58 ms | 190.0 | +4.08 MB | ✅ PASS |
+| **Compilation Mapbox Expression (Gradient)** | 100 | 0.00 ms | 0.00 ms | 584453.5 | +0.17 MB | ✅ PASS |
+| **Compilation Mapbox Expression (Step + Masque)** | 100 | 0.00 ms | 0.00 ms | 917431.2 | +0.16 MB | ✅ PASS |
+| **Lissage Gradient Trace (10k pts, 200m)** | 20 | 0.13 ms | 0.18 ms | 7463.0 | +5.91 MB | ✅ PASS |
+| **Génération Tuile Serveur (/slope-tiles)** | 8 | 0.00 ms | 0.00 ms | 1142857.1 | +0.01 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -63,12 +63,12 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Échantillonnage MNT Bilinéaire (1k pts)** | 10 | 0.05 ms | 0.36 ms | 8208.2 | +0.90 MB | ✅ PASS |
-| **Échantillonnage MNT Bilinéaire (10k pts)** | 5 | 0.16 ms | 1.55 ms | 1947.1 | +4.43 MB | ✅ PASS |
-| **Échantillonnage MNT Bilinéaire (50k pts)** | 3 | 0.97 ms | 1.34 ms | 944.9 | +0.00 MB | ✅ PASS |
-| **Calcul D+/D- Seuil 5m (50k pts)** | 10 | 0.20 ms | 1.24 ms | 2600.9 | +1.00 MB | ✅ PASS |
-| **Génération Échelle Altitudes (6 couleurs)** | 50 | 0.01 ms | 0.05 ms | 44682.8 | +0.23 MB | ✅ PASS |
-| **Génération Tuile Serveur (/altitude-tiles)** | 3 | 0.00 ms | 0.02 ms | 132743.4 | +0.00 MB | ✅ PASS |
+| **Échantillonnage MNT Bilinéaire (1k pts)** | 40 | 0.04 ms | 0.04 ms | 24683.7 | +0.03 MB | ✅ PASS |
+| **Échantillonnage MNT Bilinéaire (10k pts)** | 20 | 0.24 ms | 0.26 ms | 4183.0 | +0.02 MB | ✅ PASS |
+| **Échantillonnage MNT Bilinéaire (50k pts)** | 10 | 0.72 ms | 0.77 ms | 1378.7 | +0.00 MB | ✅ PASS |
+| **Calcul D+/D- Seuil 5m (50k pts)** | 40 | 0.12 ms | 0.15 ms | 7971.1 | +0.32 MB | ✅ PASS |
+| **Génération Échelle Altitudes (6 couleurs)** | 200 | 0.00 ms | 0.00 ms | 293384.2 | +0.96 MB | ✅ PASS |
+| **Génération Tuile Serveur (/altitude-tiles)** | 6 | 0.00 ms | 0.00 ms | 1935483.9 | +0.01 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -86,11 +86,11 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Upsampling Bilinéaire (32x32 → 256x256)** | 12 | 0.56 ms | 3.70 ms | 728.4 | +7.60 MB | ✅ PASS |
-| **Lissage Gaussien Séparable (256x256, σ=2.0)** | 6 | 2.40 ms | 9.17 ms | 269.8 | +7.62 MB | ✅ PASS |
-| **Indice d'Abri Winstral Sx (128x128, 5 dirs)** | 3 | 8.24 ms | 12.45 ms | 102.2 | +5.00 MB | ✅ PASS |
-| **Routage de flux D-infinity & Accumulation (128x128)** | 3 | 13.55 ms | 17.77 ms | 76.5 | +6.99 MB | ✅ PASS |
-| **Pipeline 7 Phases Universitaire (SnowSlide + Eolien)** | 2 | 101.16 ms | 112.76 ms | 9.9 | +27.17 MB | ✅ PASS |
+| **Upsampling Bilinéaire (32x32 → 256x256)** | 40 | 0.49 ms | 0.54 ms | 2006.6 | +0.04 MB | ✅ PASS |
+| **Lissage Gaussien Séparable (256x256, σ=2.0)** | 20 | 1.24 ms | 1.94 ms | 700.4 | +0.27 MB | ✅ PASS |
+| **Indice d'Abri Winstral Sx (128x128, 5 dirs)** | 10 | 7.51 ms | 7.67 ms | 133.1 | +0.03 MB | ✅ PASS |
+| **Routage de flux D-infinity & Accumulation (128x128)** | 10 | 6.51 ms | 9.61 ms | 144.4 | +25.83 MB | ✅ PASS |
+| **Pipeline 7 Phases Universitaire (SnowSlide + Eolien)** | 5 | 57.47 ms | 62.61 ms | 17.6 | +24.03 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -108,17 +108,17 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Compilation Profil BRF Dynamique (Gravel)** | 25 | 0.06 ms | 0.66 ms | 6647.2 | +0.44 MB | ✅ PASS |
-| **Compilation Profil BRF Dynamique (Route)** | 25 | 0.02 ms | 0.09 ms | 25301.1 | +0.29 MB | ✅ PASS |
-| **Encodage & Validation No-Go Areas (BRouter URL)** | 50 | 0.00 ms | 0.00 ms | 239923.2 | -0.08 MB | ✅ PASS |
-| **Découpage Géométrique Trace (Split 50k pts à 25k)** | 5 | 0.68 ms | 1.09 ms | 1334.6 | +22.53 MB | ✅ PASS |
-| **Fusion Géométrique Traces (Merge 2x 25k pts)** | 5 | 1.33 ms | 1.84 ms | 705.9 | +21.94 MB | ✅ PASS |
-| **Calcul Métriques & Tortuosité (10k pts)** | 5 | 0.22 ms | 0.34 ms | 4066.7 | +3.06 MB | ✅ PASS |
-| **Live One-Pass: Gien→Orléans (Full Route)** | 1 | 424.27 ms | 424.27 ms | 2.4 | +0.77 MB | ✅ PASS |
-| **Live One-Pass: Gien→Orléans (Full VTT/Sentiers)** | 1 | 570.67 ms | 570.67 ms | 1.8 | +0.72 MB | ✅ PASS |
-| **Live One-Pass: Gien→Orléans (Plat / D+ = 0)** | 1 | 186.41 ms | 186.41 ms | 5.4 | +0.60 MB | ✅ PASS |
-| **Live One-Pass: Gien→Orléans (Grimpeur / D+=100)** | 1 | 687.32 ms | 687.32 ms | 1.5 | +0.84 MB | ✅ PASS |
-| **Live One-Pass: St-Étienne→Chamonix 300km** | 1 | 14545.58 ms | 14545.58 ms | 0.1 | +2.50 MB | ✅ PASS |
+| **Compilation Profil BRF Dynamique (Gravel)** | 100 | 0.01 ms | 0.04 ms | 72160.5 | +1.34 MB | ✅ PASS |
+| **Compilation Profil BRF Dynamique (Route)** | 100 | 0.01 ms | 0.01 ms | 123152.7 | +1.14 MB | ✅ PASS |
+| **Encodage & Validation No-Go Areas (BRouter URL)** | 200 | 0.00 ms | 0.00 ms | 585137.5 | +0.44 MB | ✅ PASS |
+| **Découpage Géométrique Trace (Split 50k pts à 25k)** | 20 | 0.51 ms | 2.05 ms | 1372.1 | +27.34 MB | ✅ PASS |
+| **Fusion Géométrique Traces (Merge 2x 25k pts)** | 20 | 1.14 ms | 1.58 ms | 908.7 | +26.09 MB | ✅ PASS |
+| **Calcul Métriques & Tortuosité (10k pts)** | 20 | 0.03 ms | 0.06 ms | 30362.8 | +0.03 MB | ✅ PASS |
+| **Live One-Pass: Gien→Orléans (Full Route)** | 2 | 378.77 ms | 387.51 ms | 2.6 | +1.63 MB | ✅ PASS |
+| **Live One-Pass: Gien→Orléans (Full VTT/Sentiers)** | 2 | 495.53 ms | 552.40 ms | 2.0 | +1.19 MB | ✅ PASS |
+| **Live One-Pass: Gien→Orléans (Plat / D+ = 0)** | 2 | 162.60 ms | 171.97 ms | 6.1 | +1.03 MB | ✅ PASS |
+| **Live One-Pass: Gien→Orléans (Grimpeur / D+=100)** | 2 | 673.95 ms | 695.50 ms | 1.5 | +1.67 MB | ✅ PASS |
+| **Live One-Pass: St-Étienne→Chamonix 300km** | 1 | 14623.62 ms | 14623.62 ms | 0.1 | -17.54 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -138,11 +138,11 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Calcul Densité d'Air Dynamique ρ(h, T)** | 50 | 0.13 ms | 0.19 ms | 7391.5 | +0.02 MB | ✅ PASS |
-| **Bilan de Puissance Stationnaire (10k itérations)** | 25 | 0.15 ms | 0.34 ms | 4915.5 | +1.53 MB | ✅ PASS |
-| **Courbe de Fatigue Exponentielle (24h simulation)** | 50 | 0.03 ms | 0.06 ms | 28477.0 | +3.42 MB | ✅ PASS |
-| **Convergence Vitesse Newton-Raphson (10k segments)** | 5 | 3.31 ms | 4.17 ms | 348.3 | +2.26 MB | ✅ PASS |
-| **Simulation Étape Ultra (50k segments, vent/relief)** | 3 | 4.77 ms | 4.78 ms | 209.8 | +0.00 MB | ✅ PASS |
+| **Calcul Densité d'Air Dynamique ρ(h, T)** | 200 | 0.11 ms | 0.14 ms | 8455.5 | +0.05 MB | ✅ PASS |
+| **Bilan de Puissance Stationnaire (10k itérations)** | 100 | 0.13 ms | 0.14 ms | 7152.8 | +0.59 MB | ✅ PASS |
+| **Courbe de Fatigue Exponentielle (24h simulation)** | 200 | 0.01 ms | 0.05 ms | 91558.3 | +1.34 MB | ✅ PASS |
+| **Convergence Vitesse Newton-Raphson (10k segments)** | 20 | 0.86 ms | 0.96 ms | 1121.2 | +2.13 MB | ✅ PASS |
+| **Simulation Étape Ultra (50k segments, vent/relief)** | 10 | 4.41 ms | 4.59 ms | 224.7 | -0.73 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -160,11 +160,11 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Reprojection Géodésique Lambert-93 → WGS84 (10k pts)** | 3 | 5.50 ms | 6.93 ms | 166.6 | +0.27 MB | ✅ PASS |
-| **Empaquetage Tampon WebGL (100k pts x,y,z,rgba,norm)** | 6 | 1.03 ms | 2.31 ms | 754.1 | +1.57 MB | ✅ PASS |
-| **Simulation Soleil : Éclairage Lambertien (100k pts)** | 3 | 0.35 ms | 1.23 ms | 1506.3 | +3.90 MB | ✅ PASS |
-| **Simulation Soleil : Ombres Portées Ray-Casting (100k pts)** | 2 | 1.82 ms | 2.49 ms | 549.9 | +2.46 MB | ✅ PASS |
-| **Mapping Tuiles Web-Mercator Zoom 16 (10k pts)** | 15 | 0.31 ms | 0.64 ms | 2867.1 | +0.84 MB | ✅ PASS |
+| **Reprojection Géodésique Lambert-93 → WGS84 (10k pts)** | 10 | 4.83 ms | 5.43 ms | 200.9 | -0.61 MB | ✅ PASS |
+| **Empaquetage Tampon WebGL (100k pts x,y,z,rgba,norm)** | 20 | 0.66 ms | 1.31 ms | 980.3 | -10.20 MB | ✅ PASS |
+| **Simulation Soleil : Éclairage Lambertien (100k pts)** | 10 | 0.31 ms | 0.32 ms | 3184.6 | +0.01 MB | ✅ PASS |
+| **Simulation Soleil : Ombres Portées Ray-Casting (100k pts)** | 5 | 0.57 ms | 0.57 ms | 1772.1 | +0.01 MB | ✅ PASS |
+| **Mapping Tuiles Web-Mercator Zoom 16 (10k pts)** | 50 | 0.21 ms | 0.26 ms | 4534.5 | -2.86 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -182,10 +182,10 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Projection Métrique Trace (projectRoutePoints 10k pts)** | 10 | 0.09 ms | 1.15 ms | 2996.4 | +4.05 MB | ✅ PASS |
-| **Filtrage Corridor Bounding Box (2 500 POIs)** | 5 | 0.34 ms | 0.60 ms | 2543.0 | +4.55 MB | ✅ PASS |
-| **Projection Orthogonale POIs (projectPoiOntoRoute)** | 10 | 0.52 ms | 0.79 ms | 1662.1 | +1.87 MB | ✅ PASS |
-| **Clustering Spatial (buildPoiClusters 500 POIs)** | 25 | 0.10 ms | 0.19 ms | 8634.1 | +1.84 MB | ✅ PASS |
+| **Projection Métrique Trace (projectRoutePoints 10k pts)** | 40 | 0.08 ms | 0.54 ms | 5498.4 | +2.97 MB | ✅ PASS |
+| **Filtrage Corridor Bounding Box (2 500 POIs)** | 20 | 0.06 ms | 0.12 ms | 14191.4 | +3.50 MB | ✅ PASS |
+| **Projection Orthogonale POIs (projectPoiOntoRoute)** | 40 | 0.52 ms | 0.57 ms | 1865.5 | +5.93 MB | ✅ PASS |
+| **Clustering Spatial (buildPoiClusters 500 POIs)** | 100 | 0.06 ms | 0.16 ms | 11699.7 | +2.66 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -203,13 +203,13 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Sérialisation GPX (1k pts)** | 20 | 0.53 ms | 0.70 ms | 1937.8 | +3.75 MB | ✅ PASS |
-| **Sérialisation GPX (10k pts)** | 5 | 4.25 ms | 4.79 ms | 239.1 | +7.36 MB | ✅ PASS |
-| **Sérialisation GPX Échelle Ultra (50k pts)** | 3 | 30.32 ms | 30.40 ms | 34.7 | +94.06 MB | ✅ PASS |
-| **Parsing GPX XML Regex (10k pts)** | 5 | 3.36 ms | 4.63 ms | 271.0 | +48.37 MB | ✅ PASS |
-| **Parsing GPX XML Regex (50k pts)** | 2 | 16.13 ms | 16.25 ms | 62.0 | +26.16 MB | ✅ PASS |
-| **Sérialisation GeoJSON (50k pts)** | 3 | 11.28 ms | 12.52 ms | 86.0 | +22.63 MB | ✅ PASS |
-| **Échappement XML (100k chaînes)** | 25 | 0.54 ms | 0.69 ms | 1694.9 | +32.06 MB | ✅ PASS |
+| **Sérialisation GPX (1k pts)** | 80 | 0.43 ms | 0.62 ms | 2154.9 | -5.42 MB | ✅ PASS |
+| **Sérialisation GPX (10k pts)** | 20 | 3.33 ms | 6.35 ms | 253.0 | +0.64 MB | ✅ PASS |
+| **Sérialisation GPX Échelle Ultra (50k pts)** | 10 | 24.63 ms | 30.15 ms | 40.3 | +106.99 MB | ✅ PASS |
+| **Parsing GPX XML Regex (10k pts)** | 20 | 2.82 ms | 3.31 ms | 349.0 | -4.74 MB | ✅ PASS |
+| **Parsing GPX XML Regex (50k pts)** | 10 | 16.79 ms | 22.01 ms | 58.2 | +51.22 MB | ✅ PASS |
+| **Sérialisation GeoJSON (50k pts)** | 10 | 11.31 ms | 13.67 ms | 84.6 | +65.23 MB | ✅ PASS |
+| **Échappement XML (100k chaînes)** | 100 | 0.53 ms | 0.68 ms | 1694.8 | -32.34 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -227,12 +227,14 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Génération Série Altitude (Mode Heure, 24k pts)** | 5 | 0.00 ms | 0.09 ms | 38819.9 | +0.00 MB | ✅ PASS |
-| **Génération Série Inclinaison (Mode Temps, 24k pts)** | 5 | 0.00 ms | 0.05 ms | 65530.8 | +0.00 MB | ✅ PASS |
-| **Génération Série Vitesse (Mode Distance, 24k pts)** | 5 | 0.00 ms | 0.02 ms | 181159.4 | +0.00 MB | ✅ PASS |
-| **Downsampling LTTB 60 FPS (24k pts → 1 200 pts)** | 20 | 0.00 ms | 0.01 ms | 1176470.6 | +0.00 MB | ✅ PASS |
-| **Calcul Domaine Y (computeDomain sur 24k pts)** | 25 | 0.00 ms | 0.01 ms | 644329.9 | +0.01 MB | ✅ PASS |
-| **Recherche Curseur Hover (1k requêtes dichotomiques)** | 25 | 0.02 ms | 0.04 ms | 50658.6 | +0.77 MB | ✅ PASS |
+| **Génération Série Altitude (Mode Heure, 24k pts)** | 20 | 0.00 ms | 0.01 ms | 300751.9 | +0.22 MB | ✅ PASS |
+| **Génération Série Inclinaison (Mode Temps, 24k pts)** | 20 | 0.00 ms | 0.00 ms | 947867.3 | +0.02 MB | ✅ PASS |
+| **Génération Série Vitesse (Mode Distance, 24k pts)** | 20 | 0.00 ms | 0.00 ms | 826446.3 | +0.01 MB | ✅ PASS |
+| **Downsampling LTTB 60 FPS (24k pts → 1 200 pts)** | 80 | 0.00 ms | 0.00 ms | 5839416.1 | +0.02 MB | ✅ PASS |
+| **Calcul Domaine Y (computeDomain sur 24k pts)** | 100 | 0.00 ms | 0.00 ms | 2386634.8 | +0.20 MB | ✅ PASS |
+| **Recherche Curseur Hover (1k requêtes dichotomiques)** | 100 | 0.00 ms | 0.02 ms | 142592.3 | +0.18 MB | ✅ PASS |
+| **Génération Série Météo Température (Mode Distance, 24k pts)** | 20 | 0.00 ms | 0.00 ms | 711743.8 | +0.02 MB | ✅ PASS |
+| **Génération Série Météo Pluie (Mode Heure, 24k pts)** | 20 | 0.00 ms | 0.00 ms | 704225.4 | +0.02 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 
@@ -250,11 +252,11 @@
 
 | Opération / Fonctionnalité | Iter | p50 (ms) | p95 (ms) | Débit (ops/s) | Mémoire Δ | Statut |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Vérification Rate Limiting IP (10k requêtes)** | 5 | 1.61 ms | 2.17 ms | 584.4 | +5.05 MB | ✅ PASS |
-| **Cache LRU Éviction & Insertion (10k ops, cap 1024)** | 5 | 2.97 ms | 3.32 ms | 326.5 | +9.94 MB | ✅ PASS |
-| **Résolution IP Forwarded Headers (10k requêtes)** | 10 | 0.31 ms | 0.58 ms | 2983.0 | +4.24 MB | ✅ PASS |
-| **Vérification Anti Path-Traversal (10k requêtes URL)** | 10 | 2.04 ms | 3.35 ms | 437.8 | +36.03 MB | ✅ PASS |
-| **Formatage JSON Health Endpoint (/health)** | 50 | 0.28 ms | 0.41 ms | 3283.0 | +8.14 MB | ✅ PASS |
+| **Vérification Rate Limiting IP (10k requêtes)** | 20 | 1.42 ms | 2.02 ms | 616.1 | -34.92 MB | ✅ PASS |
+| **Cache LRU Éviction & Insertion (10k ops, cap 1024)** | 20 | 2.70 ms | 2.91 ms | 366.2 | +36.78 MB | ✅ PASS |
+| **Résolution IP Forwarded Headers (10k requêtes)** | 40 | 0.16 ms | 0.25 ms | 3285.0 | -42.77 MB | ✅ PASS |
+| **Vérification Anti Path-Traversal (10k requêtes URL)** | 40 | 1.80 ms | 2.29 ms | 530.5 | +13.25 MB | ✅ PASS |
+| **Formatage JSON Health Endpoint (/health)** | 200 | 0.27 ms | 0.30 ms | 3567.7 | +32.09 MB | ✅ PASS |
 
 ### ⚠️ Risques de Régression Surveillés
 

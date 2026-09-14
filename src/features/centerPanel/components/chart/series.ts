@@ -9,6 +9,7 @@ export {
   formatAxisValue,
   isInclinationMetric,
   isIntervalAverageMetric,
+  isWeatherMetric,
   metricIsAvailable,
   unitForMetric,
 } from './seriesCommon';

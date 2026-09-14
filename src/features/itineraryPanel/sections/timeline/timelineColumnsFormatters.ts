@@ -50,6 +50,26 @@ export function fmtElevation(m: number | null | undefined): string {
   return `${Math.round(m)} m`;
 }
 
+export function fmtTemperature(c: number | null | undefined): string {
+  if (c == null || !Number.isFinite(c)) return DASH;
+  return `${Math.round(c)}°C`;
+}
+
+export function fmtRain(mm: number | null | undefined): string {
+  if (mm == null || !Number.isFinite(mm)) return DASH;
+  return `${mm.toFixed(1)} mm`;
+}
+
+export function fmtWind(kmh: number | null | undefined): string {
+  if (kmh == null || !Number.isFinite(kmh)) return DASH;
+  return `${Math.round(kmh)} km/h`;
+}
+
+export function fmtCloudCover(pct: number | null | undefined): string {
+  if (pct == null || !Number.isFinite(pct)) return DASH;
+  return `${Math.round(pct)}%`;
+}
+
 /** Binary-search the nearest prediction point + linear interpolation. */
 export function pointAtDistanceM(
   prediction: PredictionResult | null | undefined,

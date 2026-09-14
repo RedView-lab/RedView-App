@@ -2,7 +2,13 @@ import type { PredictionResult } from '@/features/fitPredictor';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
 import { buildPauseAwareSchedule, type PauseAwareSchedule } from '@/features/itineraryPanel/lib/schedule';
 import type { Itinerary } from '@/features/itineraryPanel/types';
-import { metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
+import { isWeatherMetric, metricIsAvailable, type AxisDomain, type AxisMode, type ChartMetricId, type ChartPoint, type RouteChartPoint } from '../seriesCommon';
+import {
+  generateEstimatedRouteWeatherValues,
+  getRouteWeatherAtDistanceAndTime,
+  getRouteWeatherMetricValue,
+  type RouteWeatherDataset,
+} from '@/features/weather';
 import {
   buildFixedDistanceAverageSeries,
   fitChartPointBudget,
@@ -33,6 +39,93 @@ import {
 
 function isRouteBackedMetric(metric: ChartMetricId): boolean {
   return metric === 'Altitude' || metric === 'Inclinaison (°)' || metric === 'Inclinaison (%)';
+}
+
+function buildSeriesFromRouteWeather(
+  routePoints: RouteChartPoint[] | null | undefined,
+  prediction: PredictionResult | null | undefined,
+  weatherDataset: RouteWeatherDataset | null | undefined,
+  metric: ChartMetricId,
+  xMode: AxisMode,
+  startTime?: string | null,
+  pauseSchedule?: PauseAwareSchedule | null,
+  detailZoom = 0,
+): ChartPoint[] | null {
+  if (!routePoints || routePoints.length === 0) return null;
+
+  const sampleSpacingM = getAdaptiveRouteProfileSampleSpacingM(routePoints, detailZoom);
+  const routeSignature = routePoints ? buildRouteContentSignature(routePoints) : '';
+
+  const routeCache = routePoints
+    ? getRouteBackedSeriesCacheMap(routePoints, xMode === 'distance' ? null : prediction)
+    : null;
+  const weatherVersion = weatherDataset ? `live-${weatherDataset.fetchedAt}` : 'estimated';
+  const routeCacheKey = routePoints
+    ? getRouteBackedSeriesCacheKey(
+        metric,
+        xMode,
+        'weather',
+        startTime,
+        pauseSchedule?.pauseSignature,
+        `${routeSignature}:${weatherVersion}`,
+        sampleSpacingM,
+      )
+    : null;
+  if (routeCache && routeCacheKey) {
+    const cached = routeCache.get(routeCacheKey);
+    if (cached !== undefined) return cached;
+  }
+
+  const profile = sampleNormalizedRouteProfile(routePoints, sampleSpacingM);
+  if (!profile || profile.length === 0) return null;
+
+  const timeline = xMode === 'distance' ? null : getPredictionTimeline(prediction);
+  const FALLBACK_SPEED_MS = 20 / 3.6; // 20 km/h default
+
+  const points: ChartPoint[] = [];
+  for (const sample of profile) {
+    let elapsedHours: number;
+    if (timeline && timeline.length > 0) {
+      elapsedHours = interpolateElapsedHoursFromTimeline(timeline, sample.distanceM) ?? ((sample.distanceM / FALLBACK_SPEED_MS) / 3600);
+    } else {
+      elapsedHours = (sample.distanceM / FALLBACK_SPEED_MS) / 3600;
+    }
+
+    const x =
+      xMode === 'distance'
+        ? sample.distanceM / 1000
+        : projectPredictionElapsedHoursToX(elapsedHours, xMode, startTime, pauseSchedule);
+
+    const weatherValues = weatherDataset
+      ? getRouteWeatherAtDistanceAndTime(
+          weatherDataset,
+          sample.distanceM,
+          elapsedHours * 3600,
+          sample.elevationM,
+        )
+      : generateEstimatedRouteWeatherValues(
+          sample,
+          elapsedHours * 3600,
+          startTime,
+        );
+
+    if (weatherValues) {
+      const y = getRouteWeatherMetricValue(metric, weatherValues);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        points.push({ x: x as number, y });
+      }
+    }
+  }
+
+  const pointsWithPauses = xMode === 'distance'
+    ? points
+    : insertPauseSegments(points, pauseSchedule?.pauseSpans ?? [], xMode, startTime, () => null);
+
+  const result = pointsWithPauses.length > 1 ? fitChartPointBudget(pointsWithPauses) : null;
+  if (routeCache && routeCacheKey) {
+    routeCache.set(routeCacheKey, result);
+  }
+  return result;
 }
 
 function buildSeriesFromRouteProfile(
@@ -114,6 +207,7 @@ export function buildSeriesFromPrediction(
   startTime?: string | null,
   itinerary?: Itinerary,
   detailZoom = 0,
+  weatherDataset?: RouteWeatherDataset | null,
 ): ChartPoint[] | null {
   const pauseSchedule = xMode === 'distance' || !itinerary
     ? null
@@ -131,6 +225,19 @@ export function buildSeriesFromPrediction(
       detailZoom,
     );
     if (routeSeries) return routeSeries;
+  }
+
+  if (isWeatherMetric(metric)) {
+    return buildSeriesFromRouteWeather(
+      routePoints,
+      prediction,
+      weatherDataset,
+      metric,
+      xMode,
+      startTime,
+      pauseSchedule,
+      detailZoom,
+    );
   }
 
   if (!prediction || prediction.points.length === 0) return null;

@@ -46,7 +46,7 @@ export function getRouteBackedSeriesCacheMap(
 export function getRouteBackedSeriesCacheKey(
   metric: ChartMetricId,
   xMode: AxisMode,
-  routeSource?: 'gpx' | 'brouter',
+  routeSource?: 'gpx' | 'brouter' | 'weather' | string,
   startTime?: string | null,
   pauseSignature?: string,
   routeSignature?: string,

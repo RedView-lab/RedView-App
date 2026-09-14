@@ -6,6 +6,7 @@
  */
 
 import { elapsedSecondsAtDistance } from '@/features/centerPanel/flyover/playback';
+import { getRouteWeatherAtDistanceAndTime } from '@/features/weather';
 import { pointAtDistanceM } from './timelineColumnsFormatters';
 import { TIMELINE_COLUMNS } from './timelineColumnsRegistry';
 import type {
@@ -50,6 +51,17 @@ export function buildTimelineColumnContext(args: BuildContextArgs): TimelineColu
   const elapsedNextS = nextDistanceM != null
     ? elapsedSecondsAtDistance(args.prediction ?? null, nextDistanceM, args.totalDistanceM)
     : null;
+  const point = pointAtDistanceM(args.prediction, distanceM);
+  const effectiveElapsedS = distanceM != null ? elapsedS : null;
+  const weather = (args.weatherDataset && distanceM != null)
+    ? getRouteWeatherAtDistanceAndTime(
+        args.weatherDataset,
+        distanceM,
+        effectiveElapsedS ?? ((distanceM / 1000) / 20 * 3600),
+        point?.elevation_m,
+      )
+    : null;
+
   return {
     item: args.item,
     prevItem: args.prevItem,
@@ -61,11 +73,12 @@ export function buildTimelineColumnContext(args: BuildContextArgs): TimelineColu
     prediction: args.prediction,
     rhythm: args.rhythm,
     reference: args.reference,
-    elapsedS: distanceM != null ? elapsedS : null,
+    elapsedS: effectiveElapsedS,
     elapsedPrevS,
     elapsedNextS,
-    point: pointAtDistanceM(args.prediction, distanceM),
+    point,
     pointPrev: pointAtDistanceM(args.prediction, prevDistanceM),
     pointNext: pointAtDistanceM(args.prediction, nextDistanceM),
+    weather,
   };
 }

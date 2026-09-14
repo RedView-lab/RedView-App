@@ -49,6 +49,17 @@ export function drawAnalysisChartCanvas(
   }
 
   for (const layer of input.seriesLayers) {
+    if (layer.fillColor) {
+      drawCanvasArea(
+        ctx,
+        layer.points,
+        input.xDomain,
+        layer.yDomain,
+        layer.fillColor,
+        width,
+        height,
+      );
+    }
     drawCanvasLine(
       ctx,
       layer.points,
