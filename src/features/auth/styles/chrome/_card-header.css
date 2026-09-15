@@ -1,0 +1,141 @@
+/* ==========================================================================
+   Login Screen — Card header & tabs
+   Title, subtitle, and the Sign up / Log in segmented control.
+   ========================================================================== */
+
+/* Card Header */
+.rv-login-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 24px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Text and supporting text */
+.rv-login-title-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 12px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Title Text */
+.rv-login-title {
+  width: 100%;
+  margin: 0;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 38px;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Supporting text */
+.rv-login-subtitle {
+  width: 100%;
+  margin: 0;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Horizontal tabs */
+.rv-login-tabs {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 3px;
+  gap: 2px;
+  box-sizing: border-box;
+
+  width: 100%;
+  max-width: 480px;
+  height: 42px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Tab button base */
+.rv-login-tab-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+  border: none;
+  cursor: pointer;
+  box-sizing: border-box;
+
+  height: 36px;
+  border-radius: 6px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  color: #FFFFFF;
+
+  background: transparent;
+  flex: none;
+  flex-grow: 1;
+  transition: all 0.15s ease;
+}
+
+/* Active Tab (Log in) */
+.rv-login-tab-btn.rv-active {
+  padding: 7px 16px;
+  gap: 16px;
+  height: 34px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 6px;
+}

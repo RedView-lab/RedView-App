@@ -1,0 +1,79 @@
+/* ==========================================================================
+   Login Screen — Page shell
+   Root wrapper, background, and overall page framing.
+   ========================================================================== */
+
+/* Root Page Wrapper: Log in */
+.rv-login-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 80px 80px;
+  gap: 12px;
+
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  box-sizing: border-box;
+
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(153, 153, 153, 0.12) 100%), #000000;
+  border-radius: 0px;
+  overflow-x: hidden;
+  font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  color: #FFFFFF;
+}
+
+/* Main Container — centered regardless of viewport width */
+.rv-login-main-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 32px;
+  gap: 32px;
+
+  width: 100%;
+  max-width: 1280px;
+  box-sizing: border-box;
+  margin-inline: auto;
+
+  flex: none;
+  order: 1;
+  align-self: center;
+  flex-grow: 0;
+}
+
+/* Content Box — the 480px column that holds the whole auth card */
+.rv-login-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 32px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Form Body / Content */
+.rv-login-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+  gap: 24px;
+
+  width: 100%;
+  max-width: 480px;
+
+  border-radius: 12px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}

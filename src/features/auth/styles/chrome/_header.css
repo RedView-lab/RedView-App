@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Login Screen — Header chrome
+   Top navigation bar: logo link and the "Sign up / Log in" switch.
+   ========================================================================== */
+
+/* Header navigation */
+.rv-login-header-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 1280px;
+  height: 72px;
+
+  flex: none;
+  order: 0;
+  align-self: center;
+  flex-grow: 0;
+}
+
+/* Header Container */
+.rv-login-header-container {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 100%;
+  height: 72px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Frame 36468 — Logo */
+.rv-login-logo-link {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 12px 0px;
+  gap: 5px;
+
+  width: 130.16px;
+  height: 47.54px;
+  text-decoration: none;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-logo-link:hover {
+  opacity: 0.85;
+}
+
+.rv-login-logo-img {
+  width: 130px;
+  height: 24px;
+  display: block;
+}
+
+/* Header Row (Right) */
+.rv-login-header-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 4px;
+
+  height: 21px;
+
+  flex: none;
+  order: 1;
+  flex-grow: 0;
+}
+
+/* Header Prompt Text */
+.rv-login-header-text {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+  text-align: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Header Sign Up Button */
+.rv-login-header-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 6px;
+
+  height: 21px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 21px;
+  color: #FFFFFF;
+  text-decoration: none;
+
+  flex: none;
+  order: 1;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-header-btn:hover {
+  opacity: 0.8;
+}

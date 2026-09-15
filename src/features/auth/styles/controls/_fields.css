@@ -1,0 +1,291 @@
+/* ==========================================================================
+   Login Screen — Form fields
+   Form wrapper, labels, text inputs, and the password toggle.
+   ========================================================================== */
+
+/* Form */
+.rv-login-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 20px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  order: 0;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Input field */
+.rv-login-input-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 6px;
+
+  width: 100%;
+  max-width: 480px;
+
+  flex: none;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Label wrapper */
+.rv-login-label-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  padding: 0px;
+  gap: 2px;
+
+  height: 20px;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Label */
+.rv-login-label {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 0;
+  flex-grow: 0;
+}
+
+/* Input */
+.rv-login-input {
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 12px;
+  gap: 8px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 40px;
+
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(213, 215, 218, 0.16);
+  box-shadow: 0px 1px 2px rgba(10, 13, 18, 0.05);
+  border-radius: 8px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #FFFFFF;
+  outline: none;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.rv-login-input:focus {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.rv-login-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Input wrapper for password toggle */
+.rv-login-input-wrapper {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  order: 1;
+  align-self: stretch;
+}
+
+.rv-login-input-wrapper .rv-login-input {
+  padding-right: 44px;
+}
+
+/* Eye button toggle */
+.rv-login-password-toggle {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  transition: color 0.15s ease, background-color 0.15s ease;
+  z-index: 2;
+}
+
+.rv-login-password-toggle:hover {
+  color: #FFFFFF;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.rv-login-password-toggle:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Hint text */
+.rv-login-hint-text {
+  width: 100%;
+  max-width: 480px;
+  height: 20px;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: rgba(255, 255, 255, 0.64);
+  margin-top: 2px;
+  order: 2;
+}
+
+/* Hint error text */
+.rv-login-hint-error {
+  width: 100%;
+  max-width: 480px;
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 18px;
+  color: #fca5a5;
+  margin-top: 2px;
+  order: 2;
+}
+
+/* Row: Checkbox + Forgot password */
+.rv-login-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0px;
+
+  width: 100%;
+  max-width: 480px;
+  height: 21px;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+}
+
+/* Checkbox container */
+.rv-login-checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0px;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+
+  flex: none;
+  order: 0;
+  flex-grow: 1;
+}
+
+/* Checkbox base */
+.rv-login-checkbox {
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  cursor: pointer;
+
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  background: transparent;
+  accent-color: #890000;
+}
+
+/* Checkbox text */
+.rv-login-checkbox-text {
+  height: 20px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 20px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+
+  flex: none;
+  order: 1;
+  flex-grow: 1;
+}
+
+/* Forgot password button */
+.rv-login-forgot-btn {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: center;
+  padding: 0px;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+
+  height: 21px;
+
+  font-family: 'Rethink Sans', system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 21px;
+  display: flex;
+  align-items: center;
+
+  color: #FFFFFF;
+  text-decoration: none;
+
+  flex: none;
+  order: 1;
+  align-self: stretch;
+  flex-grow: 0;
+  transition: opacity 0.15s ease;
+}
+
+.rv-login-forgot-btn:hover {
+  opacity: 0.8;
+}

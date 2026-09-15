@@ -1,0 +1,17 @@
+/* ==========================================================================
+   Login Screen — Responsive adjustments
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .rv-login-page {
+    padding: 24px 16px 40px;
+  }
+
+  .rv-login-main-container {
+    padding: 40px 0px;
+  }
+
+  .rv-login-header-text {
+    display: none;
+  }
+}
