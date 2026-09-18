@@ -14,6 +14,15 @@ export interface ProjectedRoutePoint {
   x: number;
   y: number;
   progressM: number;
+  lat?: number;
+  lon?: number;
+}
+
+export interface ProjectedRouteMetadata {
+  refLat: number;
+  lonScale: number;
+  latScale: number;
+  _chunks?: RouteChunk[];
 }
 
 export interface ProjectedPoi {
@@ -29,7 +38,11 @@ export interface ProjectedPoi {
 
 export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePoint[] {
   if (points.length === 0) return [];
-  const refLat = points[0]!.lat;
+  let sumLat = 0;
+  for (let i = 0; i < points.length; i++) {
+    sumLat += points[i]!.lat;
+  }
+  const refLat = sumLat / points.length;
   const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
   const latScale = METERS_PER_DEG_LAT;
 
@@ -38,7 +51,7 @@ export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePo
   let prevX = points[0]!.lon * lonScale;
   let prevY = points[0]!.lat * latScale;
 
-  result[0] = { x: prevX, y: prevY, progressM: 0 };
+  result[0] = { x: prevX, y: prevY, progressM: 0, lat: points[0]!.lat, lon: points[0]!.lon };
 
   for (let i = 1; i < points.length; i++) {
     const p = points[i]!;
@@ -48,10 +61,15 @@ export function projectRoutePoints(points: GpxRoute['points']): ProjectedRoutePo
     const dy = curY - prevY;
     const dist = Math.sqrt(dx * dx + dy * dy);
     totalProgress += dist;
-    result[i] = { x: curX, y: curY, progressM: totalProgress };
+    result[i] = { x: curX, y: curY, progressM: totalProgress, lat: p.lat, lon: p.lon };
     prevX = curX;
     prevY = curY;
   }
+
+  const meta = result as unknown as ProjectedRouteMetadata;
+  meta.refLat = refLat;
+  meta.lonScale = lonScale;
+  meta.latScale = latScale;
 
   return result;
 }
@@ -102,23 +120,29 @@ export function projectPoiOntoRoute(
   if (route.length === 0) {
     return { progressM: 0, lateralDistanceM: 0, etaSec: null };
   }
-  if (route.length === 1) {
-    const p = route[0]!;
-    const refLat = poi.lat;
-    const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
-    const latScale = METERS_PER_DEG_LAT;
-    const px = poi.lon * lonScale;
-    const py = poi.lat * latScale;
-    const dx = px - p.x;
-    const dy = py - p.y;
-    return { progressM: p.progressM, lateralDistanceM: Math.sqrt(dx * dx + dy * dy), etaSec: etaSecByPoint?.[0] ?? null };
-  }
 
-  const refLat = poi.lat;
-  const lonScale = Math.cos((refLat * Math.PI) / 180) * METERS_PER_DEG_LON;
-  const latScale = METERS_PER_DEG_LAT;
+  // Use the exact same coordinate scale as the route to eliminate spurious lateral offsets
+  const meta = route as unknown as Partial<ProjectedRouteMetadata>;
+  const lonScale = meta.lonScale ?? (
+    route[0]?.lat != null
+      ? Math.cos((route[0].lat * Math.PI) / 180) * METERS_PER_DEG_LON
+      : Math.cos((poi.lat * Math.PI) / 180) * METERS_PER_DEG_LON
+  );
+  const latScale = meta.latScale ?? METERS_PER_DEG_LAT;
+
   const px = poi.lon * lonScale;
   const py = poi.lat * latScale;
+
+  if (route.length === 1) {
+    const p = route[0]!;
+    const dx = px - p.x;
+    const dy = py - p.y;
+    return {
+      progressM: p.progressM,
+      lateralDistanceM: Math.sqrt(dx * dx + dy * dy),
+      etaSec: etaSecByPoint?.[0] ?? null,
+    };
+  }
 
   let minDistanceSq = Infinity;
   let bestProgressM = 0;
