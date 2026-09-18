@@ -35,7 +35,7 @@ const MIME_TYPES = {
 
 export const REDVIEW_CSP_HEADER = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
+  "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://api.mapbox.com https://js.stripe.com https://analytics.redview.tech",
   "worker-src 'self' blob:",
   "child-src 'self' blob:",
   "style-src 'self' 'unsafe-inline' https://api.mapbox.com https://fonts.googleapis.com",

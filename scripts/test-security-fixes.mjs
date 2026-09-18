@@ -34,6 +34,7 @@ assert.ok(REDVIEW_CSP_HEADER, 'REDVIEW_CSP_HEADER must be defined');
 assert.match(REDVIEW_CSP_HEADER, /worker-src [^;]*blob:/, 'worker-src must allow blob: for Mapbox GL workers');
 assert.match(REDVIEW_CSP_HEADER, /child-src [^;]*blob:/, 'child-src must allow blob: for Safari/legacy worker fallback');
 assert.match(REDVIEW_CSP_HEADER, /script-src [^;]*https:\/\/analytics\.redview\.tech/, 'script-src must include analytics.redview.tech');
+assert.match(REDVIEW_CSP_HEADER, /script-src [^;]*'wasm-unsafe-eval'/, 'script-src must include wasm-unsafe-eval for WebAssembly compilation in workers');
 assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/s3\.amazonaws\.com/, 'connect-src must include S3 for Terrarium elevation tiles');
 assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/events\.mapbox\.com/, 'connect-src must include events.mapbox.com');
 assert.match(REDVIEW_CSP_HEADER, /connect-src [^;]*https:\/\/analytics\.redview\.tech/, 'connect-src must include analytics.redview.tech');
