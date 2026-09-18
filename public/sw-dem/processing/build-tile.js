@@ -58,6 +58,106 @@ function postProcessFranceMnsTile(elevations, coverage, mercZ) {
 async function buildIGNTile(mercZ, mercX, mercY, tileClass, tilePurpose = null) {
   const t0 = performance.now();
   const isBorder = tileClass === 'border';
+
+  // ── High-Performance WMS LiDAR HD Path (1 single HTTP request per Mercator tile) ──
+  if (typeof getMnsWmsTile === 'function') {
+    const rawElevations = await getMnsWmsTile(mercZ, mercX, mercY, tilePurpose);
+    if (rawElevations && rawElevations.length === DEM_TILE_SIZE * DEM_TILE_SIZE) {
+      const totalPixels = DEM_TILE_SIZE * DEM_TILE_SIZE;
+      const elevations = new Float32Array(totalPixels);
+      const coverage = new Uint8Array(totalPixels);
+      let coveredCount = 0;
+
+      for (let i = 0; i < totalPixels; i++) {
+        const v = rawElevations[i];
+        if (!Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M) {
+          elevations[i] = v;
+          coverage[i] = 1;
+          coveredCount++;
+        }
+      }
+
+      if (coveredCount > 0) {
+        despikeElevations(elevations, coverage, DEM_TILE_SIZE);
+        const source = 'ign-lidar-hd-wms';
+
+        // Full coverage: return immediately without low-pass blur to preserve true 0.40m LiDAR detail
+        if (coveredCount === totalPixels) {
+          const dt = (performance.now() - t0).toFixed(1);
+          if (typeof swLog !== 'undefined' && swLog.isDebug()) {
+            swLog.debug(
+              'build',
+              `%c ${source} %c ${mercZ}/${mercX}/${mercY} — full coverage, ${dt}ms`,
+              'background:#4CAF50;color:#fff;padding:2px 4px;border-radius:2px', '',
+            );
+          }
+          return { blob: null, elevations, coverage, source, pendingFetches: null };
+        }
+
+        // Partial coverage (border tiles): fill uncovered border pixels with AWS/Mapbox
+        try {
+          let bgBlob = null;
+          if (typeof fetchAWSTerrainTile === 'function') {
+            bgBlob = await fetchAWSTerrainTile(mercZ, mercX, mercY);
+          }
+          if (!bgBlob && mercZ <= MAPBOX_DEM_MAXZOOM && typeof fetchMapboxTile === 'function') {
+            bgBlob = await fetchMapboxTile(mercZ, mercX, mercY);
+          }
+          if (bgBlob) {
+            const bgElev = await decodeTerrainRGBBlob(bgBlob);
+            if (bgElev && bgElev.length > 0) {
+              const bgSize = Math.round(Math.sqrt(bgElev.length));
+              const bgScale = bgSize / DEM_TILE_SIZE;
+              for (let i = 0; i < totalPixels; i++) {
+                if (!coverage[i]) {
+                  const py = (i / DEM_TILE_SIZE) | 0;
+                  const px = i % DEM_TILE_SIZE;
+                  const mx = Math.min((px * bgScale) | 0, bgSize - 1);
+                  const my = Math.min((py * bgScale) | 0, bgSize - 1);
+                  const val = bgElev[my * bgSize + mx];
+                  if (!Number.isNaN(val) && val >= MIN_VALID_ELEVATION_M && val <= MAX_VALID_ELEVATION_M) {
+                    elevations[i] = val;
+                    coverage[i] = 1;
+                    coveredCount++;
+                  }
+                }
+              }
+            }
+          }
+        } catch { /* best-effort */ }
+
+        // Adaptive border dilation
+        const coverageRatio = coveredCount / totalPixels;
+        const dilationPasses = coverageRatio > 0.9 ? 2 : 4;
+        for (let pass = 0; pass < dilationPasses; pass++) {
+          const newElevations = new Float32Array(elevations);
+          const newCoverage = new Uint8Array(coverage);
+          for (let py = 0; py < DEM_TILE_SIZE; py++) {
+            for (let px = 0; px < DEM_TILE_SIZE; px++) {
+              const idx = py * DEM_TILE_SIZE + px;
+              if (coverage[idx]) continue;
+              let sum = 0, count = 0;
+              if (py > 0 && coverage[idx - DEM_TILE_SIZE]) { sum += elevations[idx - DEM_TILE_SIZE]; count++; }
+              if (py < DEM_TILE_SIZE - 1 && coverage[idx + DEM_TILE_SIZE]) { sum += elevations[idx + DEM_TILE_SIZE]; count++; }
+              if (px > 0 && coverage[idx - 1]) { sum += elevations[idx - 1]; count++; }
+              if (px < DEM_TILE_SIZE - 1 && coverage[idx + 1]) { sum += elevations[idx + 1]; count++; }
+              if (count > 0) {
+                newElevations[idx] = sum / count;
+                newCoverage[idx] = 1;
+                coveredCount++;
+              }
+            }
+          }
+          elevations.set(newElevations);
+          coverage.set(newCoverage);
+        }
+
+        return { blob: null, elevations, coverage, source, pendingFetches: null };
+      }
+    }
+  }
+
+  // ── Legacy Multi-Subtile WMTS Fallback ──
   // Zoom-aware MNS source bias (see ignMnsSourceZoomBias in config.js).
   // Avoids the 63-sub-tile fan-out that wedged the SW thread at z14.
   const mnsBias = (typeof ignMnsSourceZoomBias === 'function')

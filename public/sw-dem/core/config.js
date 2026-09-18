@@ -19,6 +19,22 @@ const IGN_DEM_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
 const IGN_DEM_TILEMATRIXSET = 'WGS84G_4_17';
 const IGN_DEM_FORMAT = 'image/x-bil;bits=32';
 
+// LiDAR HD MNS — true ~0.40 m LiDAR surface model, served through the WMS so a
+// whole Mercator tile costs ONE request instead of the 20-63 sub-tile WMTS
+// fan-out. The request MUST stay metre-square (WIDTH = HEIGHT / cos(lat)); see
+// mnsWmsRequestSize() in sources/ign-fetcher.js for the measured 1 - cos(lat)
+// row-duplication defect that a degree-square request causes.
+const IGN_LIDAR_MNS_LAYER = 'IGNF_LIDAR-HD_MNS_ELEVATION.ELEVATIONGRIDCOVERAGE.WGS84G';
+
+// MNS correlation fallback — intentionally NOT used as a WMS fallback.
+// Measured through EPSG:4326 AND EPSG:3857: only half the requested rows are
+// ever distinct (128/256), the duplicated rows are not pair-aligned, and the
+// even/odd row-gradient comb stays at 0.70-1.23 whatever the request geometry.
+// Feeding that raster to Horn re-creates the dash artefact on the slope
+// overlay, so getMnsWmsTile() returns null and lets buildIGNTile fall through
+// to the WMTS path (native WGS84G tile matrix, no row resampling).
+const IGN_MNS_CORREL_LAYER = 'ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES.MNS';
+
 // RGE ALTI terrain model (MNT / bare earth). IGN officially publishes this
 // dataset at 1 m and 5 m resolution; the WMTS endpoint below exposes the same
 // terrain product on a coarser tiled grid, while the WMS endpoint can serve a
@@ -181,7 +197,7 @@ const ORTHO_TILE_SIZE = 256;
 // slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
 // SW thread (kind:'altitude' dispatch). Previously altitude computed
 // entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
-const MAP_CACHE_EPOCH = '2026-08-29-multicore-out-of-core-v1';
+const MAP_CACHE_EPOCH = '2026-09-18-lidar-wms-aspect-v2';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW
