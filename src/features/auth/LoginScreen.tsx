@@ -67,7 +67,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Auto-detect recovery token in URL query
+  // Auto-detect recovery token or OAuth errors in URL query
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -77,6 +77,12 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         setSuccessMessage(null)
         const paramEmail = params.get('email')
         if (paramEmail) setEmail(paramEmail)
+      } else if (params.has('error') || params.has('message')) {
+        const urlError = params.get('error') || params.get('message')
+        if (urlError) {
+          setErrorMessage(decodeURIComponent(urlError))
+          window.history.replaceState({}, document.title, window.location.pathname)
+        }
       }
     }
   }, [])
@@ -291,6 +297,8 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
   const handleGoogleAuth = () => {
     setErrorMessage(null)
+    setLoading(true)
+    trackAnalyticsEvent('auth_google_clicked', { mode })
     try {
       account.createOAuth2Session(
         OAuthProvider.Google,
@@ -298,6 +306,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         window.location.origin,
       )
     } catch (error: any) {
+      setLoading(false)
       setErrorMessage(error?.message || 'Failed to initiate Google OAuth.')
     }
   }
