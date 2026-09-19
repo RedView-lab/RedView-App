@@ -11,6 +11,7 @@ export type WorkerRequest = {
   type: 'process';
   buffer: ArrayBuffer;
   crs?: DetectedCrs;
+  wasmModule?: WebAssembly.Module;
 };
 
 export type WorkerResponse =
@@ -30,10 +31,15 @@ workerScope.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   if (e.data.type !== 'process') return;
 
   try {
-    const pointCloud = await parseLazBuffer(e.data.buffer, (phase, pct) => {
-      const msg: WorkerResponse = { type: 'progress', phase: 'parsing', message: phase, percent: pct };
-      workerScope.postMessage(msg);
-    }, e.data.crs);
+    const pointCloud = await parseLazBuffer(
+      e.data.buffer,
+      (phase, pct) => {
+        const msg: WorkerResponse = { type: 'progress', phase: 'parsing', message: phase, percent: pct };
+        workerScope.postMessage(msg);
+      },
+      e.data.crs,
+      e.data.wasmModule,
+    );
 
     await colorizePointCloud(pointCloud, (phase, pct) => {
       const msg: WorkerResponse = { type: 'progress', phase: 'colorizing', message: phase, percent: pct };

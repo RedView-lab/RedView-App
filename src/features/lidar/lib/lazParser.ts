@@ -3,14 +3,29 @@ import { detectCrs } from './coordConvert';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let lazPerfPromise: Promise<any> | null = null;
+let lazPerfWithModule = false;
 
-async function getLazPerf() {
-  if (!lazPerfPromise) {
+export async function getLazPerf(wasmModule?: WebAssembly.Module) {
+  if (!lazPerfPromise || (wasmModule && !lazPerfWithModule)) {
+    if (wasmModule) lazPerfWithModule = true;
     lazPerfPromise = (async () => {
       const { Las } = await import('copc');
-      return Las.PointData.createLazPerf({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const options: any = {
         locateFile: () => '/laz-perf.wasm',
-      });
+      };
+      if (wasmModule) {
+        options.instantiateWasm = (
+          info: WebAssembly.Imports,
+          receiveInstance: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void,
+        ) => {
+          WebAssembly.instantiate(wasmModule, info)
+            .then((instance) => receiveInstance(instance, wasmModule))
+            .catch((err) => console.error('[laz-perf] instantiateWasm failed:', err));
+          return {};
+        };
+      }
+      return Las.PointData.createLazPerf(options);
     })();
   }
   return lazPerfPromise;
@@ -24,13 +39,14 @@ function makeGetter(ab: ArrayBuffer): (begin: number, end: number) => Promise<Ui
 export async function parseLazBuffer(
   buffer: ArrayBuffer,
   onProgress?: (phase: string, percent: number) => void,
-  hintCrs?: DetectedCrs
+  hintCrs?: DetectedCrs,
+  wasmModule?: WebAssembly.Module,
 ): Promise<PointCloudData> {
   onProgress?.('Chargement du parser LAZ...', 0);
 
   const [{ Copc, Las }, lazPerf] = await Promise.all([
     import('copc'),
-    getLazPerf(),
+    getLazPerf(wasmModule),
   ]);
   const fileBytes = new Uint8Array(buffer);
 

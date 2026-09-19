@@ -201,11 +201,15 @@ const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', contentType);
 
     const isHtml = ext === '.html' || pathname === '/' || pathname === '/viewer' || filePath.endsWith('index.html') || filePath.endsWith('viewer.html');
+    const isWorker = ext === '.js' && (pathname.toLowerCase().includes('worker') || req.headers['sec-fetch-dest'] === 'worker');
 
     if (isHtml) {
       res.setHeader('Cache-Control', 'no-store');
       res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
       res.setHeader('X-Frame-Options', 'DENY');
+    } else if (isWorker) {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
     } else if (pathname.startsWith('/assets/')) {
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }

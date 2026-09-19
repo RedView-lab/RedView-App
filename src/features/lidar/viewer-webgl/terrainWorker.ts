@@ -48,6 +48,7 @@ type WorkerInput = {
   maxGrid?: number;
   /** Floor on cell size in metres. Caller picks per device tier. */
   minResM?: number;
+  wasmModule?: WebAssembly.Module;
 };
 
 type WorkerOutput =
@@ -88,10 +89,15 @@ scope.onmessage = async (e: MessageEvent<WorkerInput>) => {
     const totalBuffers = rawBuffers.length;
     for (let i = 0; i < totalBuffers; i++) {
       const buf = rawBuffers[i]!;
-      const pc = await parseLazBuffer(buf, (phase, pct) => {
-        const slicePct = (i + pct) / totalBuffers;
-        post({ type: 'progress', phase: `LAZ (${i + 1}/${totalBuffers}) : ${phase}`, percent: slicePct * 0.55 });
-      });
+      const pc = await parseLazBuffer(
+        buf,
+        (phase, pct) => {
+          const slicePct = (i + pct) / totalBuffers;
+          post({ type: 'progress', phase: `LAZ (${i + 1}/${totalBuffers}) : ${phase}`, percent: slicePct * 0.55 });
+        },
+        undefined,
+        e.data.wasmModule,
+      );
       pointClouds.push({
         positions: pc.positions,
         classifications: pc.classifications,

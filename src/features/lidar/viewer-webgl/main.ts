@@ -18,6 +18,7 @@ import { setViewerStatus } from '../viewer/runtime';
 import { detectDeviceTier, readBoundsFromLasHeader } from './qualityProfile';
 import { SunlightController } from './sunlightController';
 import { unionBounds } from '../viewer/session/datasetMerge';
+import { getLazWasmModule } from '../lib/lazWasm';
 
 export interface WebGLViewerHandles {
   canvas: HTMLCanvasElement;
@@ -99,6 +100,8 @@ export async function runWebGLFallback(
 
   setStatus('Décompression du relief LiDAR…', 65);
 
+  const wasmModule = await getLazWasmModule().catch(() => null);
+
   const worker = new Worker(
     new URL('./terrainWorker.ts', import.meta.url),
     { type: 'module' },
@@ -130,6 +133,7 @@ export async function runWebGLFallback(
         cornerUV: ortho.cornerUV,
         maxGrid: profile.maxGrid,
         minResM: profile.minResM,
+        wasmModule: wasmModule || undefined,
       },
       rawBuffers,
     );

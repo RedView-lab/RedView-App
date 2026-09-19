@@ -1,6 +1,9 @@
 import type { AltitudeRef, DetectedCrs, PointCloudData } from '../types';
 import type { WorkerResponse } from '../workers/processWorker';
 import type { AABB, FlatOctree, OctreeWorkerResponse } from './lod/types';
+import { getLazWasmModule } from '../lib/lazWasm';
+
+export { getLazWasmModule };
 
 export interface ViewerDomElements {
   canvas: HTMLCanvasElement;
@@ -67,11 +70,13 @@ export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBu
   throw new Error(`Tile not found in OPFS: ${tileFileNames[0] ?? 'unknown tile'}`);
 }
 
-export function processPointCloudInWorker(
+export async function processPointCloudInWorker(
   buffer: ArrayBuffer,
   setStatus: ViewerStatusReporter,
   crs?: DetectedCrs,
 ): Promise<PointCloudData> {
+  const wasmModule = await getLazWasmModule().catch(() => null);
+
   return new Promise((resolve, reject) => {
     const worker = new Worker(new URL('../workers/processWorker.ts', import.meta.url), { type: 'module' });
 
@@ -102,7 +107,7 @@ export function processPointCloudInWorker(
       reject(new Error(err.message));
     };
 
-    worker.postMessage({ type: 'process', buffer, crs }, [buffer]);
+    worker.postMessage({ type: 'process', buffer, crs, wasmModule: wasmModule || undefined }, [buffer]);
   });
 }
 
