@@ -298,7 +298,11 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const handleGoogleAuth = () => {
     setErrorMessage(null)
     setLoading(true)
-    trackAnalyticsEvent('auth_google_clicked', { mode })
+    if (mode === 'signup') {
+      trackAnalyticsEvent({ name: 'user_signup', data: { method: 'google', provider: 'google' } })
+    } else {
+      trackAnalyticsEvent({ name: 'user_login', data: { method: 'google' } })
+    }
     try {
       account.createOAuth2Session(
         OAuthProvider.Google,
