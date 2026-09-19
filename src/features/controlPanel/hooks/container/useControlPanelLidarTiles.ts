@@ -92,6 +92,15 @@ export function useControlPanelLidarTiles({
     [cachedTiles, customLabels, hiddenTiles],
   );
 
+  useEffect(() => {
+    if (lidarDownloadError) {
+      const timer = window.setTimeout(() => {
+        setLidarDownloadError(null);
+      }, 8000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [lidarDownloadError]);
+
   const handlers = {
     onLidarTileToggle: useCallback((id: string) => {
       setHiddenTiles((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -114,6 +123,7 @@ export function useControlPanelLidarTiles({
       setCustomLabels(next);
     }, []),
     onLidarTileDownload: useCallback(() => {
+      setLidarDownloadError(null);
       onToggleLidarDownloadMode?.();
     }, [onToggleLidarDownloadMode]),
   };
