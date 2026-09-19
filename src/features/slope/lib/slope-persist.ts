@@ -25,11 +25,7 @@ export function loadSlopeState(): SlopeState {
       colorMode: parsed.colorMode === 'gradient' || parsed.colorMode === 'step'
         ? parsed.colorMode
         : DEFAULT_SLOPE_STATE.colorMode,
-      resolution:
-        migratedResolution
-          ?? (parsed.resolution && VALID_RESOLUTIONS.includes(parsed.resolution as SlopeResolutionKey)
-          ? (parsed.resolution as SlopeResolutionKey)
-          : DEFAULT_SLOPE_STATE.resolution),
+      resolution: migratedResolution ?? (parsed.resolution ? String(parsed.resolution) : undefined),
     };
   } catch {
     return { ...DEFAULT_SLOPE_STATE };

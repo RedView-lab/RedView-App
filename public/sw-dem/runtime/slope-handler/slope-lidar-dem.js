@@ -5,7 +5,33 @@
 // NEVER initiates independent network downloads of DEM tiles for slope.
 // ---------------------------------------------------------------------------
 
-async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache) {
+async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem = '') {
+  // 0. Fast 30m mode: directly leverage AWS Terrarium DEM tiles
+  if (sourceDem === 'fast-30m' || demProfile === 'fast-30m') {
+    const awsKey = new Request(`/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`);
+    if (demCache) {
+      const cached = await demCache.match(awsKey);
+      if (cached && cached.status === 200) return cached;
+    }
+    if (typeof fetchAWSTerrainTile === 'function') {
+      const blob = await fetchAWSTerrainTile(z, x, y);
+      if (blob) {
+        const resp = new Response(blob, {
+          status: 200,
+          headers: {
+            'Content-Type': 'image/png',
+            'X-DEM-Source': 'aws-fast-30m',
+            'X-DEM-Health': 'ok',
+          },
+        });
+        if (demCache) {
+          try { demCache.put(awsKey, resp.clone()); } catch { /* ignore */ }
+        }
+        return resp;
+      }
+    }
+  }
+
   // 1. Check in-memory DEM Hot Cache for requested profile
   const specificKey = buildDemCacheKey(z, x, y, demProfile);
   let hotEntry = (typeof demHotGet === 'function') ? demHotGet(specificKey.url) : null;

@@ -236,21 +236,16 @@ export async function generateSlopeTile(z, x, y) {
       for (let r = 0; r < height; r++) {
         const rowOff = r * (1 + width * 4);
         outRgba[rowOff] = 0; // Filter 0 (None)
-        const rPrev = Math.max(0, r - 1);
-        const rNext = Math.min(height - 1, r + 1);
-
         for (let c = 0; c < width; c++) {
-          const cPrev = Math.max(0, c - 1);
-          const cNext = Math.min(width - 1, c + 1);
-
-          const z_nw = elev[rPrev * width + cPrev];
-          const z_n  = elev[rPrev * width + c];
-          const z_ne = elev[rPrev * width + cNext];
-          const z_w  = elev[r * width + cPrev];
-          const z_e  = elev[r * width + cNext];
-          const z_sw = elev[rNext * width + cPrev];
-          const z_s  = elev[rNext * width + c];
-          const z_se = elev[rNext * width + cNext];
+          const z_curr = elev[r * width + c];
+          const z_n  = r > 0 ? elev[(r - 1) * width + c] : 2 * z_curr - elev[(r + 1) * width + c];
+          const z_s  = r < height - 1 ? elev[(r + 1) * width + c] : 2 * z_curr - elev[(r - 1) * width + c];
+          const z_w  = c > 0 ? elev[r * width + c - 1] : 2 * z_curr - elev[r * width + c + 1];
+          const z_e  = c < width - 1 ? elev[r * width + c + 1] : 2 * z_curr - elev[r * width + c - 1];
+          const z_nw = (r > 0 && c > 0) ? elev[(r - 1) * width + c - 1] : z_n + z_w - z_curr;
+          const z_ne = (r > 0 && c < width - 1) ? elev[(r - 1) * width + c + 1] : z_n + z_e - z_curr;
+          const z_sw = (r < height - 1 && c > 0) ? elev[(r + 1) * width + c - 1] : z_s + z_w - z_curr;
+          const z_se = (r < height - 1 && c < width - 1) ? elev[(r + 1) * width + c + 1] : z_s + z_e - z_curr;
 
           const dzdx = ((z_ne + 2 * z_e + z_se) - (z_nw + 2 * z_w + z_sw)) * inv8;
           const dzdy = ((z_sw + 2 * z_s + z_se) - (z_nw + 2 * z_n + z_ne)) * inv8;

@@ -4,6 +4,41 @@
    - Stepped (Remplissage): legend grid (eye | hex | %-range | °-range)
 */
 
+/* ── Dynamic Resolution Info Row ─────────────────────────────────── */
+
+.rvc-slopes__resolution-row {
+  align-items: center;
+  padding: 4px 0;
+}
+
+.rvc-slopes__resolution-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rvc-slopes__resolution-hint {
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 10px;
+  color: var(--rvc-text-muted, #8e8e93);
+  line-height: 1.2;
+}
+
+.rvc-slopes__resolution-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  background: var(--rvc-bg-card, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--rvc-border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 4px;
+  color: var(--rvc-text, #ffffff);
+  font-family: 'Rethink Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
 /* ── Opacity row ──────────────────────────────────────────────────── */
 
 .rvc-slopes__opacity-row {

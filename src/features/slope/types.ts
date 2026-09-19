@@ -29,7 +29,7 @@ export type SlopeColorMode = 'gradient' | 'step';
  * TERRAIN uses the bare-earth IGN terrain model (MNT / DTM) for slope
  * calculation while keeping the visual LiDAR surface rendering elsewhere.
  */
-export type SlopeResolutionKey = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)';
+export type SlopeResolutionKey = '0.40m (LIDAR SURFACE)' | '1m (LIDAR TERRAIN)' | string;
 
 export type SlopeDemProfile = 'default' | 'terrain';
 
@@ -37,7 +37,8 @@ export interface SlopeState {
   enabled: boolean;
   opacity: number;
   colorMode: SlopeColorMode;
-  resolution: SlopeResolutionKey;
+  /** @deprecated Resolution is now dynamically inherited from the active 3D map */
+  resolution?: string;
 }
 
 // ── Panel props ───────────────────────────────────────────────────────

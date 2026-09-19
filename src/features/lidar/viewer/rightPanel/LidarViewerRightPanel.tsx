@@ -247,7 +247,7 @@ export function LidarViewerRightPanelContent({
 
   // ── Slopes State ──────────────────────────────────────────────────────────
   const [slopesEnabled, setSlopesEnabled] = useState(false);
-  const [slopeResolution, setSlopeResolution] = useState<SlopeResolution>('1m (LIDAR TERRAIN)');
+  const [slopeResolution, setSlopeResolution] = useState<SlopeResolution>('0.40 m (LiDAR Surface IGN)');
   const [slopeColorization, setSlopeColorization] = useState<SlopeColorization>('gradient');
   const [slopeScale, setSlopeScale] = useState<SlopeScale>('degree');
   const [slopeScaleSetting, setSlopeScaleSetting] = useState<SlopeScaleSetting>('6 couleurs');

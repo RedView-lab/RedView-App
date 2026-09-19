@@ -56,7 +56,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     const demCache = await caches.open(CACHE_NAME);
 
     // 1. Get existing DEM tile from the 3D terrain cache / in-flight requests (NEVER download DEM for slope)
-    const demResponse = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache);
+    const demResponse = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem);
 
     if (isSlopeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
       return transparentTileResponse();

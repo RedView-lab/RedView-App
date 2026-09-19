@@ -35,11 +35,6 @@ interface Props {
   showResolution?: boolean;
 }
 
-const RESOLUTION_OPTIONS: { value: SlopeResolution; label: string }[] = [
-  { value: '0.40m (LIDAR SURFACE)', label: '0.40m LIDAR SURFACE' },
-  { value: '1m (LIDAR TERRAIN)', label: '1m LIDAR TERRAIN' },
-];
-
 // Figma node 1792:73116 — dropdown options "Remplissage" / "Dégradé"
 const COLORIZATION_OPTIONS: { value: SlopeColorization; label: string }[] = [
   { value: 'stepped', label: 'Remplissage' },
@@ -308,6 +303,14 @@ export function SlopesSection({
   const { t } = useAppI18n();
   const visibleBands = state.bands;
 
+  const resolutionLabel = useMemo(() => {
+    if (state.resolutionLabel) return state.resolutionLabel;
+    if (state.terrainQuality === 'fast-30m') return '30 m (Relief rapide)';
+    if (state.terrainProfile === 'terrain') return '1 m (LiDAR Terrain IGN)';
+    if (state.terrainProfile === 'default') return '0.40 m (LiDAR Surface IGN)';
+    return '30 m (Relief rapide)';
+  }, [state.resolutionLabel, state.terrainQuality, state.terrainProfile]);
+
   return (
     <Section
       title="Pentes"
@@ -318,14 +321,19 @@ export function SlopesSection({
       onOpenChange={onOpenChange}
     >
       {showResolution ? (
-        <div className="rvc-row rvc-row--split">
-          <span className="rvc-row__label">{t('Résolution')}</span>
-          <Select
-            width="var(--rvc-panel-select-md)"
-            value={state.resolution}
-            options={RESOLUTION_OPTIONS}
-            onChange={(v) => onResolutionChange?.(v as SlopeResolution)}
-          />
+        <div className="rvc-row rvc-row--split rvc-slopes__resolution-row">
+          <div className="rvc-slopes__resolution-info">
+            <span className="rvc-row__label">{t('Résolution')}</span>
+            <span className="rvc-slopes__resolution-hint">
+              {t('(en fonction de la résolution de la map 3D)')}
+            </span>
+          </div>
+          <div
+            className="rvc-slopes__resolution-badge"
+            title={t('Résolution calculée directement depuis le cache du relief 3D actif')}
+          >
+            {resolutionLabel}
+          </div>
         </div>
       ) : null}
 

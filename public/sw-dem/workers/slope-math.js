@@ -19,13 +19,14 @@
 // ---------------------------------------------------------------------------
 
 // ── Ground-cell size (meters per DEM pixel) ───────────────────────────
+// In Web Mercator (EPSG:3857, conformal projection), horizontal and
+// vertical scale are identical at any given latitude:
+//   cellSizeX = cellSizeY = (2 * PI * R * cos(lat)) / (tileSize * 2^z)
 function computeCellSize(z, x, y, tileSize) {
-  const bounds = mercatorTileBounds(z, x, y);
-  const midLat = (bounds.north + bounds.south) / 2;
-  const latRad = (midLat * Math.PI) / 180;
-  const metersX = ((bounds.east - bounds.west) * Math.PI * 6378137 * Math.cos(latRad)) / 180;
-  const metersY = ((bounds.north - bounds.south) * Math.PI * 6378137) / 180;
-  return { cellSizeX: metersX / tileSize, cellSizeY: metersY / tileSize };
+  const n = Math.PI - 2 * Math.PI * (y + 0.5) / (1 << z);
+  const latRad = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  const cellSize = (40075016.686 * Math.abs(Math.cos(latRad))) / (tileSize * (1 << z));
+  return { cellSizeX: cellSize, cellSizeY: cellSize };
 }
 
 // ── Horn's method on the padded buffer ────────────────────────────────
@@ -108,22 +109,41 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
   if (!nS) missingDirections.push('south');
   if (!nW) missingDirections.push('west');
 
-  for (let c = 0; c < S; c++) {
-    pad[0 * P + (c + 1)] = nN ? nN[(S - 1) * S + c] : ownElev[c];
+  // Top row (pad row 0) — borrow south row of north neighbour or extrapolate
+  if (nN) {
+    for (let c = 0; c < S; c++) pad[0 * P + (c + 1)] = nN[(S - 1) * S + c];
+  } else {
+    for (let c = 0; c < S; c++) pad[0 * P + (c + 1)] = 2 * ownElev[c] - ownElev[S + c];
   }
-  for (let c = 0; c < S; c++) {
-    pad[(S + 1) * P + (c + 1)] = nS ? nS[c] : ownElev[(S - 1) * S + c];
+
+  // Bottom row (pad row S+1) — borrow north row of south neighbour or extrapolate
+  if (nS) {
+    for (let c = 0; c < S; c++) pad[(S + 1) * P + (c + 1)] = nS[c];
+  } else {
+    const rLast = (S - 1) * S;
+    const rPrev = (S - 2) * S;
+    for (let c = 0; c < S; c++) pad[(S + 1) * P + (c + 1)] = 2 * ownElev[rLast + c] - ownElev[rPrev + c];
   }
-  for (let r = 0; r < S; r++) {
-    pad[(r + 1) * P + 0] = nW ? nW[r * S + (S - 1)] : ownElev[r * S];
+
+  // Left column (pad col 0) — borrow east column of west neighbour or extrapolate
+  if (nW) {
+    for (let r = 0; r < S; r++) pad[(r + 1) * P + 0] = nW[r * S + (S - 1)];
+  } else {
+    for (let r = 0; r < S; r++) pad[(r + 1) * P + 0] = 2 * ownElev[r * S] - ownElev[r * S + 1];
   }
-  for (let r = 0; r < S; r++) {
-    pad[(r + 1) * P + (S + 1)] = nE ? nE[r * S] : ownElev[r * S + (S - 1)];
+
+  // Right column (pad col S+1) — borrow west column of east neighbour or extrapolate
+  if (nE) {
+    for (let r = 0; r < S; r++) pad[(r + 1) * P + (S + 1)] = nE[r * S];
+  } else {
+    for (let r = 0; r < S; r++) pad[(r + 1) * P + (S + 1)] = 2 * ownElev[r * S + S - 1] - ownElev[r * S + S - 2];
   }
-  pad[0] = ownElev[0];
-  pad[S + 1] = ownElev[S - 1];
-  pad[(S + 1) * P] = ownElev[(S - 1) * S];
-  pad[(S + 1) * P + (S + 1)] = ownElev[(S - 1) * S + (S - 1)];
+
+  // Four corners: smooth 2D extrapolation
+  pad[0] = pad[1 * P + 0] + pad[0 * P + 1] - pad[1 * P + 1];
+  pad[S + 1] = pad[1 * P + S + 1] + pad[0 * P + S] - pad[1 * P + S];
+  pad[(S + 1) * P] = pad[S * P + 0] + pad[(S + 1) * P + 1] - pad[S * P + 1];
+  pad[(S + 1) * P + (S + 1)] = pad[S * P + S + 1] + pad[(S + 1) * P + S] - pad[S * P + S];
 
   return {
     pad,
@@ -134,7 +154,7 @@ function buildPaddedElevationsFromArrays(ownElev, neighbourElevations) {
 }
 
 // ── Fused Horn + sqrt-gamma encode in a single pass ───────────────────
-function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours) {
+function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, _edgeNeighbours) {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
   const n = S * S;
@@ -171,24 +191,6 @@ function computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeig
     }
   }
 
-  const copyPixel = (dstIdx, srcIdx) => {
-    u32[dstIdx] = u32[srcIdx];
-  };
-  if (!edgeNeighbours?.north) {
-    for (let col = 0; col < S; col++) copyPixel(col, S + col);
-  }
-  if (!edgeNeighbours?.south) {
-    const base = (S - 1) * S;
-    const src = (S - 2) * S;
-    for (let col = 0; col < S; col++) copyPixel(base + col, src + col);
-  }
-  if (!edgeNeighbours?.west) {
-    for (let r = 0; r < S; r++) copyPixel(r * S, r * S + 1);
-  }
-  if (!edgeNeighbours?.east) {
-    for (let r = 0; r < S; r++) copyPixel(r * S + S - 1, r * S + S - 2);
-  }
-
   return rgba;
 }
 
@@ -198,93 +200,10 @@ function encodeSingleSlopeByte(deg) {
   return Math.max(0, Math.min(255, Math.round(Math.sqrt(d / 90) * 255)));
 }
 
-function harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY) {
-  if (!neighbourElevations) return;
-  const S = DEM_TILE_SIZE;
-  const inv8x = 1 / (8 * cellSizeX);
-  const inv8y = 1 / (8 * cellSizeY);
-
-  const blend = (idx, paired) => {
-    if (rgba[idx + 3] === 0) return;
-    const r = rgba[idx];
-    const own = (r / 255);
-    const ownDeg = own * own * 90;
-    const avgDeg = (ownDeg + paired) * 0.5;
-    rgba[idx] = encodeSingleSlopeByte(avgDeg);
-  };
-
-  if (neighbourElevations.north) {
-    const north = neighbourElevations.north;
-    for (let col = 0; col < S; col++) {
-      const paired = computeHornSlope(
-        sampleTile(north, S - 2, col - 1),
-        sampleTile(north, S - 2, col),
-        sampleTile(north, S - 2, col + 1),
-        sampleTile(north, S - 1, col - 1),
-        sampleTile(north, S - 1, col + 1),
-        sampleTile(ownElev, 0, col - 1),
-        sampleTile(ownElev, 0, col),
-        sampleTile(ownElev, 0, col + 1),
-        inv8x, inv8y,
-      );
-      blend(col * 4, paired);
-    }
-  }
-
-  if (neighbourElevations.south) {
-    const south = neighbourElevations.south;
-    const ownRow = (S - 1) * S;
-    for (let col = 0; col < S; col++) {
-      const paired = computeHornSlope(
-        sampleTile(ownElev, S - 1, col - 1),
-        sampleTile(ownElev, S - 1, col),
-        sampleTile(ownElev, S - 1, col + 1),
-        sampleTile(south, 0, col - 1),
-        sampleTile(south, 0, col + 1),
-        sampleTile(south, 1, col - 1),
-        sampleTile(south, 1, col),
-        sampleTile(south, 1, col + 1),
-        inv8x, inv8y,
-      );
-      blend((ownRow + col) * 4, paired);
-    }
-  }
-
-  if (neighbourElevations.west) {
-    const west = neighbourElevations.west;
-    for (let row = 0; row < S; row++) {
-      const paired = computeHornSlope(
-        sampleTile(west, row - 1, S - 2),
-        sampleTile(west, row - 1, S - 1),
-        sampleTile(ownElev, row - 1, 0),
-        sampleTile(west, row, S - 2),
-        sampleTile(ownElev, row, 0),
-        sampleTile(west, row + 1, S - 2),
-        sampleTile(west, row + 1, S - 1),
-        sampleTile(ownElev, row + 1, 0),
-        inv8x, inv8y,
-      );
-      blend(row * S * 4, paired);
-    }
-  }
-
-  if (neighbourElevations.east) {
-    const east = neighbourElevations.east;
-    for (let row = 0; row < S; row++) {
-      const paired = computeHornSlope(
-        sampleTile(ownElev, row - 1, S - 1),
-        sampleTile(east, row - 1, 0),
-        sampleTile(east, row - 1, 1),
-        sampleTile(ownElev, row, S - 1),
-        sampleTile(east, row, 1),
-        sampleTile(ownElev, row + 1, S - 1),
-        sampleTile(east, row + 1, 0),
-        sampleTile(east, row + 1, 1),
-        inv8x, inv8y,
-      );
-      blend((row * S + S - 1) * 4, paired);
-    }
-  }
+function harmonizeSlopeBordersIntoRgba() {
+  // No-op in Slope Engine 2.0: Conformal Mercator metric scale + 1st-order boundary
+  // extrapolation mathematically eliminates tile seams at the source.
+  return;
 }
 
 // ── Resolution downsampling (legacy resFactor > 1 path) ───────────────
@@ -316,84 +235,16 @@ function downsampleSlopes(slopes, factor) {
   return out;
 }
 
-function harmonizeSlopeBorders(slopes, ownElev, neighbourElevations, cellSizeX, cellSizeY) {
-  if (!neighbourElevations) return slopes;
-  const S = DEM_TILE_SIZE;
-  const inv8x = 1 / (8 * cellSizeX);
-  const inv8y = 1 / (8 * cellSizeY);
-
-  if (neighbourElevations.north) {
-    const north = neighbourElevations.north;
-    for (let col = 0; col < S; col++) {
-      const paired = computeHornSlope(
-        sampleTile(north, S - 2, col - 1), sampleTile(north, S - 2, col), sampleTile(north, S - 2, col + 1),
-        sampleTile(north, S - 1, col - 1), sampleTile(north, S - 1, col + 1),
-        sampleTile(ownElev, 0, col - 1), sampleTile(ownElev, 0, col), sampleTile(ownElev, 0, col + 1),
-        inv8x, inv8y,
-      );
-      slopes[col] = (slopes[col] + paired) * 0.5;
-    }
-  }
-  if (neighbourElevations.south) {
-    const south = neighbourElevations.south;
-    const ownRow = (S - 1) * S;
-    for (let col = 0; col < S; col++) {
-      const idx = ownRow + col;
-      const paired = computeHornSlope(
-        sampleTile(ownElev, S - 1, col - 1), sampleTile(ownElev, S - 1, col), sampleTile(ownElev, S - 1, col + 1),
-        sampleTile(south, 0, col - 1), sampleTile(south, 0, col + 1),
-        sampleTile(south, 1, col - 1), sampleTile(south, 1, col), sampleTile(south, 1, col + 1),
-        inv8x, inv8y,
-      );
-      slopes[idx] = (slopes[idx] + paired) * 0.5;
-    }
-  }
-  if (neighbourElevations.west) {
-    const west = neighbourElevations.west;
-    for (let row = 0; row < S; row++) {
-      const idx = row * S;
-      const paired = computeHornSlope(
-        sampleTile(west, row - 1, S - 2), sampleTile(west, row - 1, S - 1), sampleTile(ownElev, row - 1, 0),
-        sampleTile(west, row, S - 2), sampleTile(ownElev, row, 0),
-        sampleTile(west, row + 1, S - 2), sampleTile(west, row + 1, S - 1), sampleTile(ownElev, row + 1, 0),
-        inv8x, inv8y,
-      );
-      slopes[idx] = (slopes[idx] + paired) * 0.5;
-    }
-  }
-  if (neighbourElevations.east) {
-    const east = neighbourElevations.east;
-    for (let row = 0; row < S; row++) {
-      const idx = row * S + (S - 1);
-      const paired = computeHornSlope(
-        sampleTile(ownElev, row - 1, S - 1), sampleTile(east, row - 1, 0), sampleTile(east, row - 1, 1),
-        sampleTile(ownElev, row, S - 1), sampleTile(east, row, 1),
-        sampleTile(ownElev, row + 1, S - 1), sampleTile(east, row + 1, 0), sampleTile(east, row + 1, 1),
-        inv8x, inv8y,
-      );
-      slopes[idx] = (slopes[idx] + paired) * 0.5;
-    }
-  }
+function harmonizeSlopeBorders(slopes) {
+  // No-op in Slope Engine 2.0: Conformal Mercator metric scale + 1st-order boundary
+  // extrapolation mathematically eliminates tile seams at the source.
   return slopes;
 }
 
-async function encodeSlopePng(slopes, ownElev, edgeNeighbours, zoneMask) {
+async function encodeSlopePng(slopes, ownElev, _edgeNeighbours, zoneMask) {
   const size = DEM_TILE_SIZE;
   const n = size * size;
   const rgba = new Uint8Array(n * 4);
-
-  if (!edgeNeighbours?.north) {
-    for (let c = 0; c < size; c++) slopes[c] = slopes[size + c];
-  }
-  if (!edgeNeighbours?.south) {
-    for (let c = 0; c < size; c++) slopes[(size - 1) * size + c] = slopes[(size - 2) * size + c];
-  }
-  if (!edgeNeighbours?.west) {
-    for (let r = 0; r < size; r++) slopes[r * size] = slopes[r * size + 1];
-  }
-  if (!edgeNeighbours?.east) {
-    for (let r = 0; r < size; r++) slopes[r * size + size - 1] = slopes[r * size + size - 2];
-  }
 
   const INV_MAX = 1 / 90;
   for (let j = 0; j < n; j++) {

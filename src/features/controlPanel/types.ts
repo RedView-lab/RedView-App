@@ -130,7 +130,8 @@ export interface AltitudeState {
 }
 
 export interface SlopesState {
-  resolution: SlopeResolution;
+  resolution?: SlopeResolution;
+  resolutionLabel?: string;
   colorization: SlopeColorization;
   scale: SlopeScale;
   scaleSetting: SlopeScaleSetting;

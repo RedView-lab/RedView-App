@@ -163,9 +163,9 @@ export function useTerrainSlopeState({
   // If an analysis zone is active: maximum quality LiDAR HD pipeline
   // If no zone: directly driven by the local terrain DEM (30m or HD surface/terrain)
   // ── Slope overlay ───────────────────────────────────────────────────
-  // Follows 3D terrain DEM:
+  // Follows 3D terrain DEM directly from the 3D cache:
   // - fast-30m: served directly from 30m AWS Terrarium tiles
-  // - hd: served at the selected LiDAR resolution (0.40m or 1m)
+  // - hd: served at the active 3D profile (0.40m surface or 1m terrain)
   const slopeSourceOptions = useMemo(() => {
     if (terrainQuality === 'fast-30m') {
       return {
@@ -176,16 +176,21 @@ export function useTerrainSlopeState({
       };
     }
 
-    const source = resolutionToSourceOptions(slopeState.resolution);
     // Align slope DEM profile directly with the active 3D terrain profile for 100% DEM cache hits
     const demProfile: SlopeDemProfile = terrainProfile === 'terrain' ? 'terrain' : 'default';
     return {
-      ...source,
       demProfile,
+      resolutionFactor: 1,
       sourceDem: 'hd' as const,
       zone: null,
     };
-  }, [slopeState.resolution, terrainProfile, terrainQuality]);
+  }, [terrainProfile, terrainQuality]);
+
+  const resolutionLabel = useMemo(() => {
+    if (terrainQuality === 'fast-30m') return '30 m (Relief rapide)';
+    if (terrainProfile === 'terrain') return '1 m (LiDAR Terrain IGN)';
+    return '0.40 m (LiDAR Surface IGN)';
+  }, [terrainQuality, terrainProfile]);
 
   useSlope(
     isMapLoaded ? map : null,
@@ -234,7 +239,8 @@ export function useTerrainSlopeState({
   const slopesSlice = useMemo(
     () => ({
       enabled: slopeState.enabled,
-      resolution: slopeState.resolution,
+      resolution: resolutionLabel,
+      resolutionLabel,
       colorization: colorModeToPanel(slopeState.colorMode),
       scale: slopeScale,
       scaleSetting: slopeScaleSetting,
@@ -245,6 +251,7 @@ export function useTerrainSlopeState({
     }),
     [
       coloredDynamicCategories,
+      resolutionLabel,
       slopeBandVisibility,
       slopeScale,
       slopeScaleSetting,
@@ -260,12 +267,10 @@ export function useTerrainSlopeState({
       [persistSlope, slopeState],
     ),
     onSlopeResolutionChange: useCallback(
-      (value: SlopeResolution) => {
-        const valid: SlopeResolutionKey[] = ['0.40m (LIDAR SURFACE)', '1m (LIDAR TERRAIN)'];
-        if (!valid.includes(value as SlopeResolutionKey)) return;
-        persistSlope({ ...slopeState, resolution: value as SlopeResolutionKey });
+      (_value: SlopeResolution) => {
+        // No-op: Resolution is now dynamically inherited from the active 3D map
       },
-      [persistSlope, slopeState],
+      [],
     ),
     onSlopeColorizationChange: useCallback(
       (value: SlopeColorization) =>

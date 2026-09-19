@@ -52,7 +52,7 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
       }
 
       const demCache = await caches.open(CACHE_NAME);
-      const demResp = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache);
+      const demResp = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, options?.sourceDem);
 
       if (!demResp || demResp.status !== 200 || (generation !== null && isSlopeWorkCancelled(generation))) {
         return transparentTileResponse();
