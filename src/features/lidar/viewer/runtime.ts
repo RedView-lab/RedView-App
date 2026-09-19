@@ -2,6 +2,7 @@ import type { AltitudeRef, DetectedCrs, PointCloudData } from '../types';
 import type { WorkerResponse } from '../workers/processWorker';
 import type { AABB, FlatOctree, OctreeWorkerResponse } from './lod/types';
 import { getLazWasmModule } from '../lib/lazWasm';
+import { loadTileByFileName } from '../lib/storage';
 
 export { getLazWasmModule };
 
@@ -56,18 +57,15 @@ export function setViewerStatus(
 }
 
 export async function loadTileFromOPFS(tileFileNames: string[]): Promise<ArrayBuffer> {
-  const root = await navigator.storage.getDirectory();
-  const dir = await root.getDirectoryHandle('lidar-hd');
   for (const name of tileFileNames) {
     try {
-      const handle = await dir.getFileHandle(name);
-      const file = await handle.getFile();
-      return file.arrayBuffer();
+      const buffer = await loadTileByFileName(name);
+      if (buffer) return buffer;
     } catch {
       // try next candidate
     }
   }
-  throw new Error(`Tile not found in OPFS: ${tileFileNames[0] ?? 'unknown tile'}`);
+  throw new Error(`Tuile introuvable dans le stockage local: ${tileFileNames[0] ?? 'inconnue'}`);
 }
 
 export async function processPointCloudInWorker(

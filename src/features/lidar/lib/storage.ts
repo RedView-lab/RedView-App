@@ -2,15 +2,42 @@ import type { TileCoord, CachedTileInfo, PointCloudData, DetectedCrs } from '../
 import { buildTileFileName } from './coordConvert';
 
 const LIDAR_DIR = 'lidar-hd';
+const CACHE_NAME = 'redview-lidar-hd-v1';
+const inMemoryTileCache = new Map<string, ArrayBuffer>();
 const MAX_COLORIZED_CACHE_BYTES = 512 * 1024 * 1024;
 const MAX_TERRAIN_CACHE_BYTES = 256 * 1024 * 1024;
 
-async function getLidarDir(): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory();
-  return root.getDirectoryHandle(LIDAR_DIR, { create: true });
+let opfsAvailable: boolean | null = null;
+
+async function getLidarDir(): Promise<FileSystemDirectoryHandle | null> {
+  if (opfsAvailable === false) return null;
+  if (typeof navigator === 'undefined' || !navigator?.storage?.getDirectory) {
+    opfsAvailable = false;
+    return null;
+  }
+  try {
+    const root = await navigator.storage.getDirectory();
+    const dir = await root.getDirectoryHandle(LIDAR_DIR, { create: true });
+    opfsAvailable = true;
+    return dir;
+  } catch (err: any) {
+    console.warn(`[LiDAR storage] OPFS unavailable or blocked by browser security (${err?.message || err}), using CacheStorage fallback.`);
+    opfsAvailable = false;
+    return null;
+  }
 }
 
-async function removeFileIfPresent(dir: FileSystemDirectoryHandle, fileName: string): Promise<void> {
+async function getLidarCache(): Promise<Cache | null> {
+  if (typeof caches === 'undefined') return null;
+  try {
+    return await caches.open(CACHE_NAME);
+  } catch {
+    return null;
+  }
+}
+
+async function removeFileIfPresent(dir: FileSystemDirectoryHandle | null, fileName: string): Promise<void> {
+  if (!dir) return;
   try {
     await dir.removeEntry(fileName);
   } catch {
@@ -52,79 +79,159 @@ export async function saveTile(coord: TileCoord, data: ArrayBuffer): Promise<voi
   if (!hasValidLasSignature(data)) {
     throw new Error('Tuile LiDAR corrompue: signature LAS/COPC invalide.');
   }
-  const dir = await getLidarDir();
   const fileName = tileKey(coord);
-  const fileHandle = await dir.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
-  await writable.write(data);
-  await writable.close();
+
+  // 1. Try OPFS
+  const dir = await getLidarDir();
+  if (dir) {
+    try {
+      const fileHandle = await dir.getFileHandle(fileName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(data);
+      await writable.close();
+      return;
+    } catch (err) {
+      console.warn(`[LiDAR storage] OPFS write failed for ${fileName}, falling back to CacheStorage:`, err);
+    }
+  }
+
+  // 2. Try CacheStorage
+  const cache = await getLidarCache();
+  if (cache) {
+    try {
+      const response = new Response(data, {
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'X-Redview-Cached-At': String(Date.now()),
+        },
+      });
+      await cache.put(`/lidar-hd/${fileName}`, response);
+      return;
+    } catch (err) {
+      console.warn(`[LiDAR storage] CacheStorage put failed for ${fileName}, keeping in memory:`, err);
+    }
+  }
+
+  // 3. Fallback: In-memory
+  inMemoryTileCache.set(fileName, data);
 }
 
 export async function loadTile(coord: TileCoord): Promise<ArrayBuffer | null> {
+  return loadTileByFileName(tileKey(coord), coord);
+}
+
+export async function loadTileByFileName(fileName: string, coordHint?: TileCoord): Promise<ArrayBuffer | null> {
+  // 1. Try OPFS
   try {
     const dir = await getLidarDir();
-    const fileName = tileKey(coord);
-    const fileHandle = await dir.getFileHandle(fileName);
-    const file = await fileHandle.getFile();
-    const data = await file.arrayBuffer();
-    if (!hasValidLasSignature(data)) {
-      console.warn(`[LiDAR storage] Invalid LAS signature in cached tile ${fileName}; deleting corrupted cache entry.`);
-      await deleteTile(coord);
-      return null;
+    if (dir) {
+      const fileHandle = await dir.getFileHandle(fileName);
+      const file = await fileHandle.getFile();
+      const data = await file.arrayBuffer();
+      if (!hasValidLasSignature(data)) {
+        console.warn(`[LiDAR storage] Invalid signature in cached tile ${fileName}; deleting corrupted entry.`);
+        if (coordHint) await deleteTile(coordHint);
+        return null;
+      }
+      return data;
     }
-    return data;
   } catch {
-    return null;
+    // Not in OPFS or OPFS error
   }
+
+  // 2. Try CacheStorage
+  try {
+    const cache = await getLidarCache();
+    if (cache) {
+      const match = await cache.match(`/lidar-hd/${fileName}`);
+      if (match) {
+        const data = await match.arrayBuffer();
+        if (!hasValidLasSignature(data)) {
+          console.warn(`[LiDAR storage] Invalid signature in CacheStorage tile ${fileName}; deleting entry.`);
+          await cache.delete(`/lidar-hd/${fileName}`);
+          return null;
+        }
+        return data;
+      }
+    }
+  } catch {
+    // CacheStorage error
+  }
+
+  // 3. Try In-memory
+  const mem = inMemoryTileCache.get(fileName);
+  if (mem && hasValidLasSignature(mem)) {
+    return mem;
+  }
+
+  return null;
 }
 
 export async function hasTile(coord: TileCoord): Promise<boolean> {
+  const fileName = tileKey(coord);
+
   try {
     const dir = await getLidarDir();
-    const fileName = tileKey(coord);
-    await dir.getFileHandle(fileName);
-    return true;
+    if (dir) {
+      await dir.getFileHandle(fileName);
+      return true;
+    }
   } catch {
-    return false;
+    // not in OPFS
   }
+
+  try {
+    const cache = await getLidarCache();
+    if (cache) {
+      const match = await cache.match(`/lidar-hd/${fileName}`);
+      if (match) return true;
+    }
+  } catch {}
+
+  return inMemoryTileCache.has(fileName);
 }
 
 export async function deleteTile(coord: TileCoord): Promise<void> {
-  const dir = await getLidarDir();
   const fileName = tileKey(coord);
-  // Best-effort delete of the colorized companion cache (no error if absent).
   const companion = colorizedKey(fileName);
+  const terrain = terrainKey(fileName);
+
+  // 1. Delete from OPFS
   try {
-    await dir.removeEntry(companion);
-  } catch {
-    /* no companion cached, ignore */
-  }
-  try {
-    await dir.removeEntry(fileName);
+    const dir = await getLidarDir();
+    if (dir) {
+      await removeFileIfPresent(dir, companion);
+      await removeFileIfPresent(dir, terrain);
+      await dir.removeEntry(fileName);
+    }
   } catch (err: any) {
-    // NotFoundError = already gone, treat as success.
-    if (err && err.name === 'NotFoundError') return;
-    throw err;
+    if (err && err.name !== 'NotFoundError') {
+      console.warn(`[LiDAR storage] OPFS delete error for ${fileName}:`, err);
+    }
   }
+
+  // 2. Delete from CacheStorage
+  try {
+    const cache = await getLidarCache();
+    if (cache) {
+      await cache.delete(`/lidar-hd/${fileName}`);
+      await cache.delete(`/lidar-hd/${companion}`);
+      await cache.delete(`/lidar-hd/${terrain}`);
+    }
+  } catch {}
+
+  // 3. Delete from in-memory
+  inMemoryTileCache.delete(fileName);
 }
 
 export async function listCachedTiles(): Promise<CachedTileInfo[]> {
-  const dir = await getLidarDir();
-  const tiles: CachedTileInfo[] = [];
+  const tilesMap = new Map<string, CachedTileInfo>();
 
-  for await (const [name, handle] of (dir as any).entries()) {
-    if (handle.kind !== 'file') continue;
-    if (!name.endsWith('.laz')) continue;
-
-    const file = await (handle as FileSystemFileHandle).getFile();
-
+  const parseTileName = (name: string, sizeBytes: number, cachedAt: number) => {
     const match = name.match(/^LHD_(\w+)_([-\w]+)_([-\w]+)_PTS_(\w+)_(\w+)\.copc\.laz$/);
-    if (!match) continue;
+    if (!match) return;
 
     const [, territory, xStr, yStr, projection, altRef] = match;
-    // For IGN tiles the filename encodes the NW corner (y = south edge + 1 km)
-    // and TileCoord uses the south edge convention. For Swiss, NZ and Japan tiles the
-    // filename already encodes the SW corner (no offset).
     const isSwiss = territory === 'CH';
     const isNz = territory === 'NZ';
     const isJapan = territory === 'JP';
@@ -137,7 +244,7 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
       yKm = yStr.startsWith('m') ? -parseInt(yStr.slice(1), 10) : yStr.startsWith('p') ? parseInt(yStr.slice(1), 10) : parseInt(yStr, 10);
     }
 
-    tiles.push({
+    tilesMap.set(name, {
       coord: {
         xKm,
         yKm: yKm - (isSwCorner ? 0 : 1),
@@ -146,26 +253,86 @@ export async function listCachedTiles(): Promise<CachedTileInfo[]> {
         altRef: altRef as any,
       },
       fileName: name,
-      sizeBytes: file.size,
-      cachedAt: file.lastModified,
+      sizeBytes,
+      cachedAt,
     });
+  };
+
+  // 1. Check OPFS
+  try {
+    const dir = await getLidarDir();
+    if (dir) {
+      for await (const [name, handle] of (dir as any).entries()) {
+        if (handle.kind !== 'file') continue;
+        if (!name.endsWith('.laz')) continue;
+        try {
+          const file = await (handle as FileSystemFileHandle).getFile();
+          parseTileName(name, file.size, file.lastModified);
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('[LiDAR storage] listCachedTiles OPFS error:', err);
   }
 
-  return tiles;
+  // 2. Check CacheStorage
+  try {
+    const cache = await getLidarCache();
+    if (cache) {
+      const keys = await cache.keys();
+      for (const req of keys) {
+        const parts = req.url.split('/lidar-hd/');
+        if (parts.length < 2) continue;
+        const name = parts[1]!;
+        if (tilesMap.has(name)) continue;
+
+        try {
+          const res = await cache.match(req);
+          if (res) {
+            const size = parseInt(res.headers.get('content-length') || '0', 10);
+            const cachedAt = parseInt(res.headers.get('x-redview-cached-at') || String(Date.now()), 10);
+            parseTileName(name, size, cachedAt);
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    console.warn('[LiDAR storage] listCachedTiles CacheStorage error:', err);
+  }
+
+  // 3. Check inMemory
+  for (const [name, buf] of inMemoryTileCache.entries()) {
+    if (!tilesMap.has(name)) {
+      parseTileName(name, buf.byteLength, Date.now());
+    }
+  }
+
+  return Array.from(tilesMap.values());
 }
 
 export async function getStorageUsage(): Promise<{ used: number; quota: number }> {
-  const estimate = await navigator.storage.estimate();
-  return { used: estimate.usage ?? 0, quota: estimate.quota ?? 0 };
+  try {
+    if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+      const estimate = await navigator.storage.estimate();
+      return { used: estimate.usage ?? 0, quota: estimate.quota ?? 0 };
+    }
+  } catch {}
+  return { used: 0, quota: 0 };
 }
 
 export async function clearAllTiles(): Promise<void> {
-  const root = await navigator.storage.getDirectory();
   try {
-    await root.removeEntry(LIDAR_DIR, { recursive: true });
-  } catch {
-    // Directory doesn't exist
-  }
+    if (typeof navigator !== 'undefined' && navigator.storage?.getDirectory) {
+      const root = await navigator.storage.getDirectory();
+      await root.removeEntry(LIDAR_DIR, { recursive: true });
+    }
+  } catch {}
+  try {
+    if (typeof caches !== 'undefined') {
+      await caches.delete(CACHE_NAME);
+    }
+  } catch {}
+  inMemoryTileCache.clear();
 }
 
 // --- Colorized point cloud cache ---
@@ -176,6 +343,7 @@ function colorizedKey(baseName: string): string {
 
 export async function saveColorizedData(lazFileName: string, pc: PointCloudData): Promise<void> {
   const dir = await getLidarDir();
+  if (!dir) return;
   const fileName = colorizedKey(lazFileName);
   const crsBytes = new TextEncoder().encode(pc.crs);
 
@@ -205,21 +373,26 @@ export async function saveColorizedData(lazFileName: string, pc: PointCloudData)
   view.setUint8(offset, crsBytes.length); offset += 1;
   new Uint8Array(header, offset, crsBytes.length).set(crsBytes);
 
-  const fileHandle = await dir.getFileHandle(fileName, { create: true });
-  const writable = await fileHandle.createWritable();
   try {
-    await writeBufferChunk(writable, header);
-    await writeBufferChunk(writable, new Uint8Array(pc.positions.buffer, pc.positions.byteOffset, posBytes));
-    await writeBufferChunk(writable, pc.colors.subarray(0, colBytes));
-    await writeBufferChunk(writable, pc.classifications.subarray(0, clsBytes));
-  } finally {
-    await writable.close();
+    const fileHandle = await dir.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    try {
+      await writeBufferChunk(writable, header);
+      await writeBufferChunk(writable, new Uint8Array(pc.positions.buffer, pc.positions.byteOffset, posBytes));
+      await writeBufferChunk(writable, pc.colors.subarray(0, colBytes));
+      await writeBufferChunk(writable, pc.classifications.subarray(0, clsBytes));
+    } finally {
+      await writable.close();
+    }
+  } catch (err) {
+    console.warn(`[LiDAR storage] Failed to write colorized cache:`, err);
   }
 }
 
 export async function loadColorizedData(lazFileName: string): Promise<PointCloudData | null> {
   try {
     const dir = await getLidarDir();
+    if (!dir) return null;
     const fileName = colorizedKey(lazFileName);
     const fileHandle = await dir.getFileHandle(fileName);
     const file = await fileHandle.getFile();
@@ -272,6 +445,7 @@ export interface TerrainCache {
 
 export async function saveTerrainData(lazFileName: string, mesh: TerrainCache): Promise<void> {
   const dir = await getLidarDir();
+  if (!dir) return;
   const fileName = terrainKey(lazFileName);
   const headerSize = 16;
   const vertBytes = mesh.vertexCount * 24;
@@ -293,22 +467,27 @@ export async function saveTerrainData(lazFileName: string, mesh: TerrainCache): 
   view.setUint32(8, mesh.gridWidth, true);
   view.setUint32(12, mesh.gridHeight, true);
 
-  const fh = await dir.getFileHandle(fileName, { create: true });
-  const w = await fh.createWritable();
   try {
-    await writeBufferChunk(w, header);
-    await writeBufferChunk(w, new Uint8Array(mesh.vertices.buffer, mesh.vertices.byteOffset, vertBytes));
-    await writeBufferChunk(w, mesh.colors.subarray(0, colBytes));
-    await writeBufferChunk(w, new Uint8Array(mesh.indices.buffer, mesh.indices.byteOffset, idxBytes));
-    await writeBufferChunk(w, new Uint8Array(mesh.heightGrid.buffer, mesh.heightGrid.byteOffset, hmBytes));
-  } finally {
-    await w.close();
+    const fh = await dir.getFileHandle(fileName, { create: true });
+    const w = await fh.createWritable();
+    try {
+      await writeBufferChunk(w, header);
+      await writeBufferChunk(w, new Uint8Array(mesh.vertices.buffer, mesh.vertices.byteOffset, vertBytes));
+      await writeBufferChunk(w, mesh.colors.subarray(0, colBytes));
+      await writeBufferChunk(w, new Uint8Array(mesh.indices.buffer, mesh.indices.byteOffset, idxBytes));
+      await writeBufferChunk(w, new Uint8Array(mesh.heightGrid.buffer, mesh.heightGrid.byteOffset, hmBytes));
+    } finally {
+      await w.close();
+    }
+  } catch (err) {
+    console.warn(`[LiDAR storage] Failed to write terrain cache:`, err);
   }
 }
 
 export async function loadTerrainData(lazFileName: string): Promise<TerrainCache | null> {
   try {
     const dir = await getLidarDir();
+    if (!dir) return null;
     const fileName = terrainKey(lazFileName);
     const fh = await dir.getFileHandle(fileName);
     const file = await fh.getFile();
@@ -349,15 +528,21 @@ function normalsKey(baseName: string): string {
 
 export async function saveNormalsData(lazFileName: string, normals: Float32Array): Promise<void> {
   const dir = await getLidarDir();
-  const fh = await dir.getFileHandle(normalsKey(lazFileName), { create: true });
-  const w = await fh.createWritable();
-  await w.write(normals.buffer as ArrayBuffer);
-  await w.close();
+  if (!dir) return;
+  try {
+    const fh = await dir.getFileHandle(normalsKey(lazFileName), { create: true });
+    const w = await fh.createWritable();
+    await w.write(normals.buffer as ArrayBuffer);
+    await w.close();
+  } catch (err) {
+    console.warn(`[LiDAR storage] Failed to write normals cache:`, err);
+  }
 }
 
 export async function loadNormalsData(lazFileName: string, expectedCount: number): Promise<Float32Array | null> {
   try {
     const dir = await getLidarDir();
+    if (!dir) return null;
     const fh = await dir.getFileHandle(normalsKey(lazFileName));
     const buf = await (await fh.getFile()).arrayBuffer();
     const normals = new Float32Array(buf);

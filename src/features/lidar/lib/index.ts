@@ -18,6 +18,7 @@ export {
   loadColorizedData,
   loadTerrainData,
   loadTile,
+  loadTileByFileName,
   saveColorizedData,
   saveTerrainData,
   saveTile,

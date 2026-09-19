@@ -2,7 +2,6 @@ import type { TileCoord } from '../../types';
 import { LidarManager } from '../../lib/lidarManager';
 import { MAX_VIEWER_SCENE_TILES } from '../../lib/viewerUrl';
 import { ensureViewerPanel } from '../panel/template';
-import { buildTileFileCandidates } from '../session/datasetPointCap';
 import { buildTileNavigatorCells, buildTileNavigatorLabel, tileCoordKey } from './model';
 
 interface ViewerTileNavigatorOptions {
@@ -184,38 +183,14 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
 
   const refreshCachedTiles = async () => {
     const cachedKeys = new Set<string>();
-    const cells = buildTileNavigatorCells(currentTile);
 
     try {
-      const root = await navigator.storage.getDirectory();
-      const dir = await root.getDirectoryHandle('lidar-hd', { create: false });
-      for (const cell of cells) {
-        const { fileName, legacyFileName } = buildTileFileCandidates(cell.coord);
-        let found = false;
-        try {
-          await dir.getFileHandle(fileName);
-          found = true;
-        } catch {
-          try {
-            await dir.getFileHandle(legacyFileName);
-            found = true;
-          } catch {
-            // file absent
-          }
-        }
-        if (found) {
-          cachedKeys.add(tileCoordKey(cell.coord));
-        }
+      const tiles = await options.manager.getCachedTiles();
+      for (const tile of tiles) {
+        cachedKeys.add(tileCoordKey(tile.coord));
       }
-    } catch {
-      try {
-        const tiles = await options.manager.getCachedTiles();
-        for (const tile of tiles) {
-          cachedKeys.add(tileCoordKey(tile.coord));
-        }
-      } catch {
-        // ignore
-      }
+    } catch (err) {
+      console.warn('[TileNavigator] Failed to get cached tiles:', err);
     }
 
     if (destroyed) return;

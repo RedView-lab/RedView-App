@@ -141,7 +141,11 @@ export async function downloadTile(
       if (!buffer) continue;
 
       cacheDownloadUrl(coord, url);
-      await saveTile(coord, buffer);
+      try {
+        await saveTile(coord, buffer);
+      } catch (saveErr) {
+        console.warn(`[LiDAR storage] Failed to cache tile locally:`, saveErr);
+      }
       return buffer;
     } catch (err: any) {
       lastError = err;
@@ -414,7 +418,11 @@ async function downloadSwissTile(
         phase: 'downloading',
         message: 'Sauvegarde en cache local...',
       });
-      await saveTile(coord, lasBuffer);
+      try {
+        await saveTile(coord, lasBuffer);
+      } catch (saveErr) {
+        console.warn(`[LiDAR storage] Failed to cache tile locally:`, saveErr);
+      }
       return lasBuffer;
     } catch (err: any) {
       lastError = err;
@@ -481,7 +489,11 @@ async function downloadNzTile(
         phase: 'downloading',
         message: 'Sauvegarde en cache local...',
       });
-      await saveTile(coord, lasBuffer);
+      try {
+        await saveTile(coord, lasBuffer);
+      } catch (saveErr) {
+        console.warn(`[LiDAR storage] Failed to cache tile locally:`, saveErr);
+      }
       return lasBuffer;
     } catch (err: any) {
       lastError = err;
@@ -562,7 +574,11 @@ async function downloadJapanTile(
         phase: 'downloading',
         message: 'Sauvegarde en cache local...',
       });
-      await saveTile(coord, lasBuffer);
+      try {
+        await saveTile(coord, lasBuffer);
+      } catch (saveErr) {
+        console.warn(`[LiDAR storage] Failed to cache tile locally:`, saveErr);
+      }
       return lasBuffer;
     } catch (err: any) {
       lastError = err;
