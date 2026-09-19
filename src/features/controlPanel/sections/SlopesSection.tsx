@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { Section } from '../components/Section';
 import { Select } from '../components/Select';
@@ -12,7 +12,6 @@ import type {
   ControlPanelState,
   SlopeBand,
   SlopeColorization,
-  SlopeResolution,
   SlopeScale,
   SlopeScaleSetting,
 } from '../types';
@@ -289,7 +288,7 @@ export function SlopesSection({
   open,
   onOpenChange,
   onEnabledChange,
-  onResolutionChange,
+  onResolutionChange: _onResolutionChange,
   onColorizationChange,
   onScaleChange,
   onScaleSettingChange,

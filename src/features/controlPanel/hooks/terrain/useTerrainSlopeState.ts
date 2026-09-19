@@ -3,9 +3,8 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
 import { generateDynamicCategories, clampBreakpoints, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
-import { resolutionToSourceOptions } from '@/features/slope/lib/slope-source';
 import { useSlope } from '@/features/slope/hooks/useSlope';
-import type { SlopeCategory, SlopeColorMode, SlopeDemProfile, SlopeResolutionKey } from '@/features/slope/types';
+import type { SlopeCategory, SlopeColorMode, SlopeDemProfile } from '@/features/slope/types';
 import type { OverlayStatusReporter } from '@/features/map3d';
 import { getActiveDem3dQuality, subscribeDem3dQuality } from '@/features/map3d/lib/dem3dQualityBus';
 import { getActiveDemProfilePreference, subscribeDemProfilePreference } from '@/features/map3d/lib/demProfileBus';

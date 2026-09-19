@@ -4,8 +4,6 @@ import { DEFAULT_SLOPE_STATE } from './slope-config';
 const STORAGE_KEY = 'redview_slope_prefs';
 const BREAKPOINTS_KEY = 'redview_slope_breakpoints';
 
-const VALID_RESOLUTIONS: SlopeResolutionKey[] = ['0.40m (LIDAR SURFACE)', '1m (LIDAR TERRAIN)'];
-
 function migrateLegacyResolution(value: unknown): SlopeResolutionKey | null {
   if (value === '0.40m (LIDAR)') return '0.40m (LIDAR SURFACE)';
   if (value === '1m' || value === '5m' || value === '10m') return '1m (LIDAR TERRAIN)';
