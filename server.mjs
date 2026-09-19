@@ -200,19 +200,21 @@ const server = http.createServer(async (req, res) => {
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
 
-    if (pathname.startsWith('/assets/')) {
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    } else if (pathname === '/index.html' || pathname === '/viewer.html' || filePath.endsWith('index.html')) {
+    const isHtml = ext === '.html' || pathname === '/' || pathname === '/viewer' || filePath.endsWith('index.html') || filePath.endsWith('viewer.html');
+
+    if (isHtml) {
       res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
+      res.setHeader('X-Frame-Options', 'DENY');
+    } else if (pathname.startsWith('/assets/')) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
 
-    // Security headers
+    // Security headers applied to all responses
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=()');
     res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
-    res.setHeader('Content-Security-Policy', REDVIEW_CSP_HEADER);
 
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);

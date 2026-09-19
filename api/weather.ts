@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const TIMEOUT_MS = 15_000;
-const DEFAULT_VPS_UPSTREAM = process.env.WEATHER_UPSTREAM || '';
+const DEFAULT_VPS_UPSTREAM = process.env.WEATHER_UPSTREAM || 'http://141.145.220.99/weather';
 
 async function fetchUpstream(target: string): Promise<{ response: Response; body: Buffer }> {
   const controller = new AbortController();
@@ -51,15 +51,26 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   }
 
   const rawUrl = req.url ?? '';
+  if (rawUrl.includes('..') || rawUrl.includes('%2e') || rawUrl.includes('%2E')) {
+    return res.status(400).json({ error: 'Invalid path parameter' });
+  }
+
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(rawUrl, 'http://localhost');
   } catch {
     parsedUrl = new URL('/api/weather', 'http://localhost');
   }
-  const subPath = parsedUrl.pathname.replace(/^\/api\/weather\/?/, '') || 'meta.json';
+  const rawSubPath = parsedUrl.pathname.replace(/^\/api\/weather\/?/, '') || 'meta.json';
+  let subPath: string;
+  try {
+    subPath = decodeURIComponent(rawSubPath);
+  } catch {
+    subPath = rawSubPath;
+  }
+  subPath = subPath.replace(/^\/+/, '');
 
-  if (!/^[a-zA-Z0-9_\-./]+$/.test(subPath) || subPath.includes('..')) {
+  if (!/^[a-zA-Z0-9_\-.:/]+$/.test(subPath) || subPath.includes('..')) {
     return res.status(400).json({ error: 'Invalid path parameter' });
   }
 
@@ -133,7 +144,7 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (!upstreamBase) {
     return res.status(503).json({ error: 'WEATHER_UPSTREAM environment variable is not configured' });
   }
-  const targetUrl = `${upstreamBase}/${subPath}`;
+  const targetUrl = `${upstreamBase}/${subPath}${parsedUrl.search}`;
 
   try {
     const { response, body } = await fetchUpstream(targetUrl);

@@ -27,6 +27,24 @@ const isPathSafe = /^\/?[a-zA-Z0-9_\-\/]+$/.test(maliciousPath);
 assert.strictEqual(isPathSafe, false, 'Malicious path with query string must be rejected');
 console.log('✅ Test 3 Passed: SSRF protection filters unauthorized hosts and query injections.');
 
+// Test 3b: Weather Proxy Path & Tile Timestamp Validation
+const isValidWeatherSubPath = (raw) => {
+  let subPath;
+  try {
+    subPath = decodeURIComponent(raw);
+  } catch {
+    subPath = raw;
+  }
+  subPath = subPath.replace(/^\/+/, '');
+  return /^[a-zA-Z0-9_\-.:/]+$/.test(subPath) && !subPath.includes('..');
+};
+assert.strictEqual(isValidWeatherSubPath('tiles/temperature_2026-09-19T17:00:00Z.png'), true, 'ISO timestamp with colons must be accepted');
+assert.strictEqual(isValidWeatherSubPath('tiles/temperature_2026-09-19T17%3A00%3A00Z.png'), true, 'URL-encoded timestamp must be accepted');
+assert.strictEqual(isValidWeatherSubPath('meta.json'), true, 'meta.json must be accepted');
+assert.strictEqual(isValidWeatherSubPath('..%2F..%2Fetc%2Fpasswd'), false, 'Path traversal with %2F must be rejected');
+assert.strictEqual(isValidWeatherSubPath('../../etc/passwd'), false, 'Path traversal with .. must be rejected');
+console.log('✅ Test 3b Passed: Weather proxy accepts ISO timestamp colons and rejects path traversal.');
+
 import { REDVIEW_CSP_HEADER } from '../server.mjs';
 
 // Test 4: Content-Security-Policy Directives Integrity
