@@ -58,11 +58,9 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     // 1. Get existing DEM tile from the 3D terrain cache
     // Clamped dynamically:
     // - 30m resolution: maxzoom 13 (native resolution, prevents stair oversampling)
-    // - 1m terrain: maxzoom 16
-    // - 0.40m LiDAR surface: maxzoom 17 (IGN_DEM_MAXZOOM, native resolution ceiling)
+    // - 1m terrain & 0.40m LiDAR surface: maxzoom 16 (prevents WMS oversampling artifacts)
     const is30m = sourceDem === 'fast-30m' || sourceDem === '30m' || demProfile === 'fast-30m';
-    const isTerrain1m = demProfile === 'terrain' || sourceDem === '1m';
-    const maxAllowedZ = is30m ? 13 : (isTerrain1m ? 16 : IGN_DEM_MAXZOOM);
+    const maxAllowedZ = is30m ? 13 : 16;
     const effectiveZ = (!zoneHash && z > maxAllowedZ) ? maxAllowedZ : z;
     const effectiveX = (!zoneHash && z > maxAllowedZ) ? (x >> (z - maxAllowedZ)) : x;
     const effectiveY = (!zoneHash && z > maxAllowedZ) ? (y >> (z - maxAllowedZ)) : y;

@@ -1,6 +1,5 @@
 import type { SlopeColorMode, SlopeCategory, SlopeDemProfile, SlopeResolutionKey } from '../types';
 import { buildSlopeColorExpression, MAX_SLOPE_DEG } from './slope-config';
-import { DEM_SOURCE_MAXZOOM } from '@/features/map3d/lib/ign.config';
 
 // ── Source & Layer IDs ────────────────────────────────────────────────
 
@@ -62,7 +61,7 @@ export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined)
 }
 
 export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
-  if (options.zone) return DEM_SOURCE_MAXZOOM;
+  if (options.zone) return 16;
   // 30m resolution (fast-30m / 30m): capped at z13 (~13.5m/px at lat 45°) to prevent stair-step oversampling
   if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
     return 13;
@@ -71,9 +70,8 @@ export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
   if (options.demProfile === 'terrain') {
     return 16;
   }
-  // 0.40m LiDAR Surface: native IGN WMTS ceiling is z17 (DEM_SOURCE_MAXZOOM).
-  // Capping at z17 matches native resolution without oversampling beyond z17.
-  return DEM_SOURCE_MAXZOOM;
+  // 0.40m LiDAR Surface: capped at z16 (~1.69m/px at 45° lat) to prevent WMS oversampling artifacts
+  return 16;
 }
 
 // ── Raster source definition ──────────────────────────────────────────
