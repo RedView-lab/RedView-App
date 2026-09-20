@@ -328,6 +328,12 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile, sourceDem = 
       if ((!resp || resp.status !== 200) && defaultPath) {
         resp = await demCache.match(new Request(defaultPath));
       }
+      if ((!resp || resp.status !== 200) && typeof getExistingTerrainDemResponse === 'function') {
+        try {
+          resp = await getExistingTerrainDemResponse(z, nx, ny, demProfile, demCache, sourceDem);
+        } catch { /* ignore */ }
+      }
+
       if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
         missing.push(direction);
         return;
