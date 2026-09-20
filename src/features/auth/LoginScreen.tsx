@@ -5,6 +5,7 @@ import {
   ID,
   OAuthProvider,
   saveStoredAppwriteSession,
+  clearStoredAppwriteSession,
 } from '@/shared/services/appwrite'
 import VerificationCodeModal from './VerificationCodeModal'
 import './LoginScreen.css'
@@ -67,16 +68,37 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
+  // Recovery token states held in memory (sanitized from URL immediately)
+  const [recoveryUserId, setRecoveryUserId] = useState<string | null>(null)
+  const [recoverySecret, setRecoverySecret] = useState<string | null>(null)
+  const [resendCooldown, setResendCooldown] = useState(0)
+
   // Auto-detect recovery token or OAuth errors in URL query
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       if (params.has('userId') && params.has('secret')) {
-        setMode('reset-password')
-        setErrorMessage(null)
-        setSuccessMessage(null)
-        const paramEmail = params.get('email')
-        if (paramEmail) setEmail(paramEmail)
+        const uid = params.get('userId')
+        const sec = params.get('secret')
+        if (uid && sec) {
+          setRecoveryUserId(uid)
+          setRecoverySecret(sec)
+          setMode('reset-password')
+          setErrorMessage(null)
+          setSuccessMessage(null)
+          const paramEmail = params.get('email')
+          if (paramEmail) setEmail(paramEmail)
+
+          // SECURITY: Purge pre-existing local session artifacts (Anti-Session Fixation)
+          clearStoredAppwriteSession()
+          try {
+            account.deleteSession('current').catch(() => {})
+          } catch {}
+
+          // SECURITY: Immediately strip sensitive recovery tokens from browser address bar
+          // and history to prevent token leakage via referrers, history or shoulder surfing
+          window.history.replaceState({}, document.title, window.location.pathname)
+        }
       } else if (params.has('error') || params.has('message')) {
         const urlError = params.get('error') || params.get('message')
         if (urlError) {
@@ -86,6 +108,15 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
     }
   }, [])
+
+  // Cooldown timer for recovery resend button
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   // Verification modal states
   const [showVerificationModal, setShowVerificationModal] = useState(false)
@@ -99,7 +130,7 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
 
     const trimmedEmail = email.trim()
 
-    // 1. Forgot password mode: request recovery email
+    // 1. Forgot password mode: request recovery email via secure backend endpoint (Anti-enumeration)
     if (mode === 'forgot-password') {
       if (!trimmedEmail || !trimmedEmail.includes('@')) {
         setErrorMessage('Veuillez fournir une adresse e-mail valide.')
@@ -108,17 +139,42 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
       }
 
       try {
-        await account.createRecovery(trimmedEmail, `${window.location.origin}/`)
-        setSuccessMessage('Un e-mail de réinitialisation a été envoyé ! Consultez votre boîte de réception.')
-      } catch (error: any) {
-        setErrorMessage(error?.message || "Impossible d'envoyer l'e-mail de réinitialisation.")
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: trimmedEmail,
+            redirectUrl: `${window.location.origin}/`,
+          }),
+        })
+
+        const data = await res.json().catch(() => ({}))
+
+        if (!res.ok && res.status !== 200) {
+          setErrorMessage(data?.error || "Impossible d'envoyer l'e-mail de réinitialisation.")
+          setLoading(false)
+          return
+        }
+
+        // Generic anti-enumeration confirmation message
+        setSuccessMessage(
+          data?.message ||
+            'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
+        )
+        setResendCooldown(60)
+      } catch {
+        // Defensive anti-enumeration: always display confirmation card
+        setSuccessMessage(
+          'Si un compte est associé à cette adresse e-mail, un lien de réinitialisation vous a été envoyé.'
+        )
+        setResendCooldown(60)
       } finally {
         setLoading(false)
       }
       return
     }
 
-    // 2. Reset password mode: update password with token from URL
+    // 2. Reset password mode: update password with token from memory or URL
     if (mode === 'reset-password') {
       if (!password || !confirmPassword) {
         setErrorMessage('Veuillez renseigner et confirmer le nouveau mot de passe.')
@@ -136,22 +192,35 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
         return
       }
 
-      try {
-        const params = new URLSearchParams(window.location.search)
-        const userId = params.get('userId')
-        const secret = params.get('secret')
-        if (!userId || !secret) {
-          throw new Error('Jeton de réinitialisation manquant ou invalide.')
-        }
 
+      const userId = recoveryUserId || new URLSearchParams(window.location.search).get('userId')
+      const secret = recoverySecret || new URLSearchParams(window.location.search).get('secret')
+
+      if (!userId || !secret) {
+        setErrorMessage('Ce lien de réinitialisation est incomplet ou invalide. Veuillez refaire une demande.')
+        setLoading(false)
+        return
+      }
+
+      try {
         await account.updateRecovery(userId, secret, password)
-        window.history.replaceState({}, document.title, window.location.pathname)
         setSuccessMessage('Votre mot de passe a été réinitialisé avec succès ! Vous pouvez maintenant vous connecter.')
         setMode('login')
         setPassword('')
         setConfirmPassword('')
+        setRecoveryUserId(null)
+        setRecoverySecret(null)
       } catch (error: any) {
-        setErrorMessage(error?.message || 'Erreur lors de la réinitialisation du mot de passe.')
+        if (
+          error?.type === 'user_invalid_token' ||
+          error?.code === 401 ||
+          error?.message?.toLowerCase().includes('token') ||
+          error?.message?.toLowerCase().includes('invalid credential')
+        ) {
+          setErrorMessage('Ce lien de réinitialisation a expiré ou est invalide. Veuillez refaire une demande.')
+        } else {
+          setErrorMessage(error?.message || 'Erreur lors de la réinitialisation du mot de passe.')
+        }
       } finally {
         setLoading(false)
       }
@@ -497,19 +566,22 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                 <div style={{ marginTop: '16px' }}>
                   <button
                     type="button"
+                    disabled={resendCooldown > 0}
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: 'rgba(255, 255, 255, 0.5)',
+                      color: resendCooldown > 0 ? 'rgba(255, 255, 255, 0.35)' : 'rgba(255, 255, 255, 0.5)',
                       fontSize: '13px',
-                      cursor: 'pointer',
-                      textDecoration: 'underline',
+                      cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer',
+                      textDecoration: resendCooldown > 0 ? 'none' : 'underline',
                     }}
                     onClick={() => {
-                      setSuccessMessage(null)
+                      if (resendCooldown <= 0) {
+                        setSuccessMessage(null)
+                      }
                     }}
                   >
-                    Renvoyer un autre e-mail
+                    {resendCooldown > 0 ? `Renvoyer un autre e-mail (${resendCooldown}s)` : 'Renvoyer un autre e-mail'}
                   </button>
                 </div>
               </div>
@@ -721,6 +793,9 @@ export default function LoginScreen({ onLogin, landingUrl = 'https://redview.tec
                     setMode('login')
                     setErrorMessage(null)
                     setSuccessMessage(null)
+                    if (typeof window !== 'undefined' && window.location.search) {
+                      window.history.replaceState({}, document.title, window.location.pathname)
+                    }
                   }}
                 >
                   ← Back to log in
