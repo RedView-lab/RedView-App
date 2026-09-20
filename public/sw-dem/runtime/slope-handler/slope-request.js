@@ -55,8 +55,11 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
 
-    // 1. Get existing DEM tile from the 3D terrain cache / in-flight requests (NEVER download DEM for slope)
-    const demResponse = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem);
+    // 1. Get existing DEM tile from the 3D terrain cache (clamped to maxzoom 14 outside analysis zones)
+    const effectiveZ = (!zoneHash && z > 14) ? 14 : z;
+    const effectiveX = (!zoneHash && z > 14) ? (x >> (z - 14)) : x;
+    const effectiveY = (!zoneHash && z > 14) ? (y >> (z - 14)) : y;
+    const demResponse = await getExistingTerrainDemResponse(effectiveZ, effectiveX, effectiveY, demProfile, demCache, sourceDem);
 
     if (isSlopeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
@@ -68,7 +71,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
         return transparentTileResponse();
       }
 
-      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, sourceDem);
+      const slopeResult = await buildSlopeBlobFromDem(demBlob, effectiveZ, effectiveX, effectiveY, demCache, resFactor, demProfile, generation, zoneRing, sourceDem);
       if (!slopeResult || !slopeResult.blob || isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
