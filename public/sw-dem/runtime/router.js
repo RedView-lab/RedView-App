@@ -115,6 +115,7 @@ self.addEventListener('fetch', (event) => {
     const shed = shedPrefetchIfBusy(url);
     if (shed) { event.respondWith(shed); return; }
     const slopeRes = url.searchParams.get('res') || '';
+    const slopeDemProfile = resolveDemProfile(url);
     const rawSourceDem = url.searchParams.get('source-dem') || url.searchParams.get('quality') || '';
     const slopeSourceDem = (rawSourceDem === '30m' || rawSourceDem === 'fast-30m') ? 'fast-30m' : rawSourceDem;
     // Zone-scoped slope: `?zone=<hash>` references the polygon registered via

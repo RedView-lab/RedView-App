@@ -55,10 +55,10 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
 
-    // 1. Get existing DEM tile from the 3D terrain cache (clamped to maxzoom 14 outside analysis zones)
-    const effectiveZ = (!zoneHash && z > 14) ? 14 : z;
-    const effectiveX = (!zoneHash && z > 14) ? (x >> (z - 14)) : x;
-    const effectiveY = (!zoneHash && z > 14) ? (y >> (z - 14)) : y;
+    // 1. Get existing DEM tile from the 3D terrain cache (clamped to maxzoom 13 outside analysis zones)
+    const effectiveZ = (!zoneHash && z > 13) ? 13 : z;
+    const effectiveX = (!zoneHash && z > 13) ? (x >> (z - 13)) : x;
+    const effectiveY = (!zoneHash && z > 13) ? (y >> (z - 13)) : y;
     const demResponse = await getExistingTerrainDemResponse(effectiveZ, effectiveX, effectiveY, demProfile, demCache, sourceDem);
 
     if (isSlopeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {

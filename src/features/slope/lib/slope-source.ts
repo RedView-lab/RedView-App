@@ -96,9 +96,9 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 4,
-    // Universal maxzoom = 14 across France, Europe, and Asia.
-    // At z14 native 30m resolution is reached; prevents oversampling on high zooms.
-    maxzoom: options.zone ? DEM_SOURCE_MAXZOOM : 14,
+    // Universal maxzoom = 13 across France, Europe, and Asia.
+    // At z13 native 30m resolution (~27m spacing at 45° lat) is reached; prevents oversampling on high zooms.
+    maxzoom: options.zone ? DEM_SOURCE_MAXZOOM : 13,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;
