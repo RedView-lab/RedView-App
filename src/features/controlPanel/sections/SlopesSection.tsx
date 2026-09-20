@@ -306,18 +306,20 @@ export function SlopesSection({
   const qualityOptions = useMemo(() => {
     const autoDetail = state.terrainQuality === 'fast-30m' ? '30 m' : (state.terrainProfile === 'terrain' ? '1 m' : '0.40 m');
     return [
-      { value: '30m', label: '30 m' },
       { value: 'auto', label: `${t('Auto')} (${autoDetail})` },
+      { value: '0.40m', label: '0.40 m' },
+      { value: '1m', label: '1 m' },
+      { value: '30m', label: '30 m' },
     ];
   }, [t, state.terrainQuality, state.terrainProfile]);
 
   const currentQuality = useMemo(() => {
     const res = state.resolution;
-    if (!res || res === '30m' || res === 'fast-30m' || res.includes('30')) return '30m';
-    if (res === 'auto') return 'auto';
-    if (res === '1m' || res.includes('1m') || res.includes('TERRAIN')) return '1m';
+    if (!res || res === 'auto') return 'auto';
     if (res === '0.40m' || res.includes('0.40') || res.includes('SURFACE')) return '0.40m';
-    return '30m';
+    if (res === '1m' || res.includes('1m') || res.includes('TERRAIN')) return '1m';
+    if (res === '30m' || res === 'fast-30m' || res.includes('30')) return '30m';
+    return 'auto';
   }, [state.resolution]);
 
   return (

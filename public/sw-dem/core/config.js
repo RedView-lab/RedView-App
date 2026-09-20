@@ -197,7 +197,7 @@ const ORTHO_TILE_SIZE = 256;
 // slope worker pool — its decode + RGBA encode + PNG encode now run OFF the
 // SW thread (kind:'altitude' dispatch). Previously altitude computed
 // entirely on the SW thread at ALTITUDE_BUILD_MAX_CONCURRENT=2, the dominant
-const MAP_CACHE_EPOCH = '2026-09-19-slope-engine-2-v5';
+const MAP_CACHE_EPOCH = '2026-09-19-slope-engine-2-v6';
 
 // ── Slope pipeline tuning (2026-06-20 multicore pass) ─────────────────
 // Dedicated slope build worker pool depth. We reserve one core for the SW

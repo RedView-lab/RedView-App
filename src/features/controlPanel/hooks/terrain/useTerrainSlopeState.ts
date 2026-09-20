@@ -173,7 +173,7 @@ export function useTerrainSlopeState({
   const slopeSourceOptions = useMemo(() => {
     const selected = slopeState.resolution || 'auto';
 
-    if (selected === '30m' || selected === 'fast-30m') {
+    if (selected === '30m' || selected === 'fast-30m' || selected.includes('30')) {
       return {
         demProfile: 'default' as const,
         resolutionFactor: 1,
@@ -181,7 +181,7 @@ export function useTerrainSlopeState({
         zone: null,
       };
     }
-    if (selected === '1m' || selected === '1m (LIDAR TERRAIN)') {
+    if (selected === '1m' || selected.includes('1m') || selected.includes('TERRAIN')) {
       return {
         demProfile: 'terrain' as const,
         resolutionFactor: 1,
@@ -189,7 +189,7 @@ export function useTerrainSlopeState({
         zone: null,
       };
     }
-    if (selected === '0.40m' || selected === '0.40m (LIDAR SURFACE)') {
+    if (selected === '0.40m' || selected.includes('0.40') || selected.includes('SURFACE')) {
       return {
         demProfile: 'default' as const,
         resolutionFactor: 1,
@@ -219,9 +219,9 @@ export function useTerrainSlopeState({
 
   const resolutionLabel = useMemo(() => {
     const selected = slopeState.resolution || 'auto';
-    if (selected === '30m' || selected === 'fast-30m') return '30 m';
-    if (selected === '1m' || selected === '1m (LIDAR TERRAIN)') return '1 m (LiDAR Terrain IGN)';
-    if (selected === '0.40m' || selected === '0.40m (LIDAR SURFACE)') return '0.40 m (LiDAR Surface IGN)';
+    if (selected === '30m' || selected === 'fast-30m' || selected.includes('30')) return '30 m';
+    if (selected === '1m' || selected.includes('1m') || selected.includes('TERRAIN')) return '1 m (LiDAR Terrain IGN)';
+    if (selected === '0.40m' || selected.includes('0.40') || selected.includes('SURFACE')) return '0.40 m (LiDAR Surface IGN)';
 
     if (terrainQuality === 'fast-30m') return 'Auto (30 m)';
     if (terrainProfile === 'terrain') return 'Auto (1 m)';

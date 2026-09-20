@@ -33,10 +33,17 @@ const RESOLUTION_OPTIONS: Record<SlopeResolutionKey, SlopeTileSourceOptions> = {
   '0.40m (LIDAR SURFACE)': {
     demProfile: 'default',
     resolutionFactor: 1,
+    sourceDem: 'hd',
   },
   '1m (LIDAR TERRAIN)': {
     demProfile: 'terrain',
     resolutionFactor: 1,
+    sourceDem: 'hd',
+  },
+  '30m': {
+    demProfile: 'default',
+    resolutionFactor: 1,
+    sourceDem: 'fast-30m',
   },
 };
 
@@ -52,6 +59,21 @@ export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined)
   const zoneKey = resolved.zone ? `:zone-${resolved.zone.hash}` : '';
   const sourceDemKey = resolved.sourceDem ? `:src-${resolved.sourceDem}` : '';
   return `${resolved.demProfile}:${resolved.resolutionFactor}${sourceDemKey}${zoneKey}`;
+}
+
+export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
+  if (options.zone) return DEM_SOURCE_MAXZOOM;
+  // 30m resolution (fast-30m / 30m): capped at z13 (~13.5m/px at lat 45°) to prevent stair-step oversampling
+  if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
+    return 13;
+  }
+  // 1m LiDAR Terrain:
+  if (options.demProfile === 'terrain') {
+    return 16;
+  }
+  // 0.40m LiDAR Surface: native IGN WMTS ceiling is z17 (DEM_SOURCE_MAXZOOM).
+  // Capping at z17 matches native resolution without oversampling beyond z17.
+  return DEM_SOURCE_MAXZOOM;
 }
 
 // ── Raster source definition ──────────────────────────────────────────
@@ -84,6 +106,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     params.set('zone', options.zone.hash);
   }
   const query = params.toString();
+  const maxzoom = resolveSlopeMaxZoom(options);
   const source: {
     type: 'raster';
     tiles: string[];
@@ -96,9 +119,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 4,
-    // Universal maxzoom = 13 across France, Europe, and Asia.
-    // At z13 native 30m resolution (~27m spacing at 45° lat) is reached; prevents oversampling on high zooms.
-    maxzoom: options.zone ? DEM_SOURCE_MAXZOOM : 13,
+    maxzoom,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;

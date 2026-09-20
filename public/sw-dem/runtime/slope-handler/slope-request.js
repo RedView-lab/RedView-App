@@ -55,10 +55,17 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
   const work = (async () => {
     const demCache = await caches.open(CACHE_NAME);
 
-    // 1. Get existing DEM tile from the 3D terrain cache (clamped to maxzoom 13 outside analysis zones)
-    const effectiveZ = (!zoneHash && z > 13) ? 13 : z;
-    const effectiveX = (!zoneHash && z > 13) ? (x >> (z - 13)) : x;
-    const effectiveY = (!zoneHash && z > 13) ? (y >> (z - 13)) : y;
+    // 1. Get existing DEM tile from the 3D terrain cache
+    // Clamped dynamically:
+    // - 30m resolution: maxzoom 13 (native resolution, prevents stair oversampling)
+    // - 1m terrain: maxzoom 16
+    // - 0.40m LiDAR surface: maxzoom 17 (IGN_DEM_MAXZOOM, native resolution ceiling)
+    const is30m = sourceDem === 'fast-30m' || sourceDem === '30m' || demProfile === 'fast-30m';
+    const isTerrain1m = demProfile === 'terrain' || sourceDem === '1m';
+    const maxAllowedZ = is30m ? 13 : (isTerrain1m ? 16 : IGN_DEM_MAXZOOM);
+    const effectiveZ = (!zoneHash && z > maxAllowedZ) ? maxAllowedZ : z;
+    const effectiveX = (!zoneHash && z > maxAllowedZ) ? (x >> (z - maxAllowedZ)) : x;
+    const effectiveY = (!zoneHash && z > maxAllowedZ) ? (y >> (z - maxAllowedZ)) : y;
     const demResponse = await getExistingTerrainDemResponse(effectiveZ, effectiveX, effectiveY, demProfile, demCache, sourceDem);
 
     if (isSlopeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
