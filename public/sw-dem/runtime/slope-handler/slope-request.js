@@ -68,7 +68,7 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
         return transparentTileResponse();
       }
 
-      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing);
+      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, sourceDem);
       if (!slopeResult || !slopeResult.blob || isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }

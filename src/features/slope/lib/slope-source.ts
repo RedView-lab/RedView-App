@@ -96,7 +96,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 4,
-    maxzoom: DEM_SOURCE_MAXZOOM,
+    maxzoom: options.sourceDem === 'fast-30m' ? 14 : DEM_SOURCE_MAXZOOM,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;

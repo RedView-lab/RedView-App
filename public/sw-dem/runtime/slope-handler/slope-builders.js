@@ -66,7 +66,7 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
       const slopeCache = await caches.open(SLOPE_CACHE_NAME);
       const { ring: zoneRing } = resolveAnalysisZoneForTile(zoneHash);
 
-      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing);
+      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, options?.sourceDem);
       if (!slopeResult || !slopeResult.blob || (generation !== null && isSlopeWorkCancelled(generation))) {
         return transparentTileResponse();
       }

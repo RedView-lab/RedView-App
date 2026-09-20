@@ -118,20 +118,31 @@ function computeCellSize(z, x, y, tileSize) {
 // outside coverage) we replicate the own-tile edge — identical to the old
 // behaviour, so there is no regression; where neighbours *are* cached (the
 // common case during steady viewing) the seam disappears.
-function buildSlopeDemCachePath(z, x, y, demProfile) {
+function buildSlopeDemCachePath(z, x, y, demProfile, sourceDem = '') {
+  if (sourceDem === 'fast-30m') {
+    return `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`;
+  }
   return demProfile === 'terrain'
     ? `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=terrain`
     : `/dem-tiles/${z}/${x}/${y}`;
 }
 
-function shouldUseSlopeNeighbourDem(resp, demProfile) {
+function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '') {
   if (!resp || resp.status !== 200) return false;
 
   const health = (resp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
   if (health !== 'ok') return false;
 
   const source = (resp.headers.get('X-DEM-Source') || '').toLowerCase();
-  if (!source) return true;
+
+  // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
+  if (sourceDem === 'fast-30m') {
+    return source === 'aws-fast-30m' || source.startsWith('aws-terrarium') || source.startsWith('aws');
+  } else {
+    if (source === 'aws-fast-30m' || source.startsWith('aws-terrarium')) {
+      return false;
+    }
+  }
 
   if (
     source.startsWith('aws-emergency')
@@ -152,7 +163,7 @@ function shouldUseSlopeNeighbourDem(resp, demProfile) {
   return true;
 }
 
-async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
+async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile, sourceDem = '') {
   const S = DEM_TILE_SIZE;
   const P = S + 2;
   const pad = new Float32Array(P * P);
@@ -169,11 +180,11 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile) {
       missingNeighbours.push([nx, ny]);
       return null;
     }
-    let resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile)));
-    if ((!resp || resp.status !== 200) && demProfile !== 'default') {
-      resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, 'default')));
+    let resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile, sourceDem)));
+    if ((!resp || resp.status !== 200) && demProfile !== 'default' && sourceDem !== 'fast-30m') {
+      resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, 'default', sourceDem)));
     }
-    if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
+    if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
       missingNeighbours.push([nx, ny]);
       return null;
     }
@@ -445,12 +456,12 @@ function harmonizeSlopeBordersIntoRgba() {
   return;
 }
 
-async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing) {
+async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing, sourceDem = '') {
   const t0 = performance.now();
   const ownElev = await decodeSlopeDemBlob(demBlob, z, x, y, demProfile);
   const t1 = performance.now();
   const { cellSizeX, cellSizeY } = computeCellSize(z, x, y, DEM_TILE_SIZE);
-  const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile);
+  const { pad, missingNeighbours, edgeNeighbours, neighbourElevations } = await buildPaddedElevations(ownElev, z, x, y, demCache, demProfile, sourceDem);
   const t2 = performance.now();
 
   // Analysis-zone mask (see core/analysis-zone.js). rasterizeRingMask comes

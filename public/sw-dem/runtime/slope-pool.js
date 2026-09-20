@@ -240,13 +240,16 @@ function cancelAllAltitudePoolJobs() {
 // happens IN THE WORKER, not here — that's the whole point of the pool.
 // The SW only pays the CacheStorage match (5-25 ms, mostly I/O) per
 // neighbour, which is unavoidable because we need the bytes to transfer.
-function buildSlopePoolCachePath(z, x, y, demProfile) {
+function buildSlopePoolCachePath(z, x, y, demProfile, sourceDem = '') {
+  if (sourceDem === 'fast-30m') {
+    return `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=fast-30m`;
+  }
   return demProfile === 'terrain'
     ? `/dem-tiles/${z}/${x}/${y}?rv-dem-profile=terrain`
     : `/dem-tiles/${z}/${x}/${y}`;
 }
 
-function shouldUseSlopeNeighbourDem(resp, demProfile) {
+function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '') {
   if (!resp) return false;
   if (typeof resp.status === 'number' && resp.status !== 200) return false;
   const getHeader = (name) => {
@@ -260,7 +263,16 @@ function shouldUseSlopeNeighbourDem(resp, demProfile) {
   const health = (getHeader('X-DEM-Health') || 'ok').toLowerCase();
   if (health !== 'ok') return false;
   const source = (getHeader('X-DEM-Source') || '').toLowerCase();
-  if (!source) return true;
+
+  // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
+  if (sourceDem === 'fast-30m') {
+    return source === 'aws-fast-30m' || source.startsWith('aws-terrarium') || source.startsWith('aws');
+  } else {
+    if (source === 'aws-fast-30m' || source.startsWith('aws-terrarium')) {
+      return false;
+    }
+  }
+
   if (
     source.startsWith('aws-emergency')
     || source.startsWith('mapbox')
@@ -277,7 +289,7 @@ function isValidSlopeTileCoord(z, x, y) {
   return x >= 0 && y >= 0 && x < n && y < n;
 }
 
-async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
+async function resolveNeighbourBlobs(z, x, y, demCache, demProfile, sourceDem = '') {
   const out = { north: null, east: null, south: null, west: null };
   const missing = [];
   if (!demCache) {
@@ -289,14 +301,14 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
       missing.push(direction);
       return;
     }
-    const path = buildSlopePoolCachePath(z, nx, ny, demProfile);
-    const defaultPath = (demProfile !== 'default') ? buildSlopePoolCachePath(z, nx, ny, 'default') : null;
+    const path = buildSlopePoolCachePath(z, nx, ny, demProfile, sourceDem);
+    const defaultPath = (demProfile !== 'default' && sourceDem !== 'fast-30m') ? buildSlopePoolCachePath(z, nx, ny, 'default', sourceDem) : null;
     // 1. Fast in-memory hit from DEM_HOT_CACHE (avoids disk CacheStorage round-trip)
     if (typeof demHotGet === 'function') {
       let hot = demHotGet(path);
       if (!hot && defaultPath) hot = demHotGet(defaultPath);
       if (hot && hot.blob) {
-        if (shouldUseSlopeNeighbourDem(hot, demProfile)) {
+        if (shouldUseSlopeNeighbourDem(hot, demProfile, sourceDem)) {
           try {
             out[direction] = await hot.blob.arrayBuffer();
             return;
@@ -316,7 +328,7 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
       if ((!resp || resp.status !== 200) && defaultPath) {
         resp = await demCache.match(new Request(defaultPath));
       }
-      if (!shouldUseSlopeNeighbourDem(resp, demProfile)) {
+      if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
         missing.push(direction);
         return;
       }
@@ -357,7 +369,7 @@ async function resolveNeighbourBlobs(z, x, y, demCache, demProfile) {
 // SW-thread work done here: CacheStorage match for neighbours + 1
 // arrayBuffer() on the own blob + postMessage. NO createImageBitmap, NO
 // getImageData, NO Float32 decode loop — all of that moved into the worker.
-async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demProfile, generation, zoneRing) {
+async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demProfile, generation, zoneRing, sourceDem = '') {
   const workers = ensureSlopePool();
   if (!workers) return null;
 
@@ -391,7 +403,7 @@ async function computeSlopeViaPool(demBlob, demCache, z, x, y, resFactor, demPro
 
     // Resolve neighbour DEM blobs from the cache. Each is a raw PNG
     // ArrayBuffer ready to transfer.
-    const { blobs: neighbourBlobs, missing } = await resolveNeighbourBlobs(z, x, y, demCache, demProfile);
+    const { blobs: neighbourBlobs, missing } = await resolveNeighbourBlobs(z, x, y, demCache, demProfile, sourceDem);
     if (isCancelled()) {
       return null;
     }

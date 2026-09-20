@@ -80,7 +80,7 @@ function scheduleSlopeNeighbourWarm(z, x, y, demProfile, demCache, neighbours, g
   return;
 }
 
-async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing) {
+async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, sourceDem = '') {
   let slopeResult = null;
   let usedPool = false;
   if (typeof computeSlopeViaPool === 'function') {
@@ -95,6 +95,7 @@ async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demP
         demProfile,
         generation,
         zoneRing,
+        sourceDem,
       );
       if (poolResult) {
         slopeResult = {
@@ -116,7 +117,7 @@ async function buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demP
 
   if (!usedPool) {
     slopeResult = await scheduleSlopeBuild(
-      () => buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing),
+      () => buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing, sourceDem),
       generation,
     );
   }
