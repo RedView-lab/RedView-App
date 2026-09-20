@@ -21,7 +21,7 @@ export interface SlopeTileSourceOptions {
   demProfile: SlopeDemProfile;
   resolutionFactor: number;
   zone?: SlopeZoneOptions | null;
-  sourceDem?: 'fast-30m' | 'hd';
+  sourceDem?: 'fast-30m' | 'hd' | '30m';
 }
 
 const DEFAULT_SOURCE_OPTIONS: SlopeTileSourceOptions = {
@@ -96,7 +96,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 4,
-    maxzoom: options.sourceDem === 'fast-30m' ? 14 : DEM_SOURCE_MAXZOOM,
+    maxzoom: (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') ? 14 : DEM_SOURCE_MAXZOOM,
   };
   if (options.zone) {
     source.bounds = options.zone.bounds;

@@ -106,14 +106,10 @@ function isValidSlopeTileCoord(z, x, y) {
 // In Web Mercator (EPSG:3857, conformal projection), horizontal and
 // vertical scale are identical at any given latitude:
 //   cellSizeX = cellSizeY = (2 * PI * R * cos(lat)) / (tileSize * 2^z)
-function computeCellSizeAtLat(z, yFrac, tileSize = DEM_TILE_SIZE) {
-  const n = Math.PI - 2 * Math.PI * yFrac / (1 << z);
+function computeCellSize(z, x, y, tileSize) {
+  const n = Math.PI - 2 * Math.PI * (y + 0.5) / (1 << z);
   const latRad = Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
-  return (40075016.686 * Math.abs(Math.cos(latRad))) / (tileSize * (1 << z));
-}
-
-function computeCellSize(z, x, y, tileSize = DEM_TILE_SIZE) {
-  const cellSize = computeCellSizeAtLat(z, y + 0.5, tileSize);
+  const cellSize = (40075016.686 * Math.abs(Math.cos(latRad))) / (tileSize * (1 << z));
   return { cellSizeX: cellSize, cellSizeY: cellSize };
 }
 
@@ -132,19 +128,12 @@ function buildSlopeDemCachePath(z, x, y, demProfile, sourceDem = '') {
 }
 
 function shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem = '') {
-  if (!resp) return false;
-  if (typeof resp.status === 'number' && resp.status !== 200) return false;
-  const getHeader = (name) => {
-    if (typeof resp.headers?.get === 'function') return resp.headers.get(name);
-    if (Array.isArray(resp.headers)) {
-      const entry = resp.headers.find(([k]) => k.toLowerCase() === name.toLowerCase());
-      return entry ? entry[1] : null;
-    }
-    return null;
-  };
-  const health = (getHeader('X-DEM-Health') || 'ok').toLowerCase();
+  if (!resp || resp.status !== 200) return false;
+
+  const health = (resp.headers.get('X-DEM-Health') || 'ok').toLowerCase();
   if (health !== 'ok') return false;
-  const source = (getHeader('X-DEM-Source') || '').toLowerCase();
+
+  const source = (resp.headers.get('X-DEM-Source') || '').toLowerCase();
 
   // Strict DEM source segregation: NEVER mix 30m AWS DEM with high-res LiDAR DEM!
   if (sourceDem === 'fast-30m') {
@@ -194,11 +183,6 @@ async function buildPaddedElevations(ownElev, z, x, y, demCache, demProfile, sou
     let resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, demProfile, sourceDem)));
     if ((!resp || resp.status !== 200) && demProfile !== 'default' && sourceDem !== 'fast-30m') {
       resp = await demCache.match(new Request(buildSlopeDemCachePath(z, nx, ny, 'default', sourceDem)));
-    }
-    if ((!resp || resp.status !== 200) && typeof getExistingTerrainDemResponse === 'function') {
-      try {
-        resp = await getExistingTerrainDemResponse(z, nx, ny, demProfile, demCache, sourceDem);
-      } catch { /* ignore */ }
     }
     if (!shouldUseSlopeNeighbourDem(resp, demProfile, sourceDem)) {
       missingNeighbours.push([nx, ny]);
@@ -466,97 +450,10 @@ function encodeSingleSlopeByte(deg) {
   return Math.max(0, Math.min(255, Math.round(Math.sqrt(d / 90) * 255)));
 }
 
-function harmonizeSlopeBordersIntoRgba(rgba, ownElev, ne, z, x, y) {
-  if (!ne || !rgba || !ownElev) return;
-  const S = DEM_TILE_SIZE;
-  const ENC_K = 255 / Math.sqrt(Math.PI / 2);
-
-  const encodeSlope = (rad) => {
-    const enc = Math.sqrt(rad) * ENC_K;
-    return Math.max(0, Math.min(255, (enc + 0.5) | 0));
-  };
-
-  // 1. South seam (shared between own row S-1 and south row 0 at exact seam latitude y + 1.0)
-  if (ne.south) {
-    const south = ne.south;
-    const ownRow = (S - 1) * S;
-    const csSeamY = computeCellSizeAtLat(z, y + 1.0);
-    const inv4y = 1 / (4 * csSeamY);
-    const invCsX = 1 / csSeamY;
-    for (let c = 0; c < S; c++) {
-      const idx = (ownRow + c) * 4;
-      if (rgba[idx + 3] === 0) continue;
-      const cL = Math.max(0, c - 1);
-      const cR = Math.min(S - 1, c + 1);
-      const dzDy = ((south[cL] - ownElev[ownRow + cL]) + 2 * (south[c] - ownElev[ownRow + c]) + (south[cR] - ownElev[ownRow + cR])) * inv4y;
-      const zL = 0.5 * (ownElev[ownRow + cL] + south[cL]);
-      const zR = 0.5 * (ownElev[ownRow + cR] + south[cR]);
-      const dzDx = (zR - zL) * (cL === cR ? 0 : invCsX / (cR - cL));
-      rgba[idx] = encodeSlope(Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)));
-    }
-  }
-
-  // 2. North seam (shared between north row S-1 and own row 0 at exact seam latitude y + 0.0)
-  if (ne.north) {
-    const north = ne.north;
-    const northRow = (S - 1) * S;
-    const csSeamY = computeCellSizeAtLat(z, y + 0.0);
-    const inv4y = 1 / (4 * csSeamY);
-    const invCsX = 1 / csSeamY;
-    for (let c = 0; c < S; c++) {
-      const idx = c * 4;
-      if (rgba[idx + 3] === 0) continue;
-      const cL = Math.max(0, c - 1);
-      const cR = Math.min(S - 1, c + 1);
-      const dzDy = ((ownElev[cL] - north[northRow + cL]) + 2 * (ownElev[c] - north[northRow + c]) + (ownElev[cR] - north[northRow + cR])) * inv4y;
-      const zL = 0.5 * (north[northRow + cL] + ownElev[cL]);
-      const zR = 0.5 * (north[northRow + cR] + ownElev[cR]);
-      const dzDx = (zR - zL) * (cL === cR ? 0 : invCsX / (cR - cL));
-      rgba[idx] = encodeSlope(Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)));
-    }
-  }
-
-  // 3. East seam (shared between own col S-1 and east col 0 at latitude y + 0.5)
-  if (ne.east) {
-    const east = ne.east;
-    const csEW = computeCellSizeAtLat(z, y + 0.5);
-    const inv4x = 1 / (4 * csEW);
-    const invCsY = 1 / csEW;
-    const rStart = ne.north ? 1 : 0;
-    const rEnd = ne.south ? S - 1 : S;
-    for (let r = rStart; r < rEnd; r++) {
-      const idx = (r * S + S - 1) * 4;
-      if (rgba[idx + 3] === 0) continue;
-      const rT = Math.max(0, r - 1);
-      const rB = Math.min(S - 1, r + 1);
-      const dzDx = ((east[rT * S] - ownElev[rT * S + S - 1]) + 2 * (east[r * S] - ownElev[r * S + S - 1]) + (east[rB * S] - ownElev[rB * S + S - 1])) * inv4x;
-      const zT = 0.5 * (ownElev[rT * S + S - 1] + east[rT * S]);
-      const zB = 0.5 * (ownElev[rB * S + S - 1] + east[rB * S]);
-      const dzDy = (zB - zT) * (rT === rB ? 0 : invCsY / (rB - rT));
-      rgba[idx] = encodeSlope(Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)));
-    }
-  }
-
-  // 4. West seam (shared between west col S-1 and own col 0 at latitude y + 0.5)
-  if (ne.west) {
-    const west = ne.west;
-    const csEW = computeCellSizeAtLat(z, y + 0.5);
-    const inv4x = 1 / (4 * csEW);
-    const invCsY = 1 / csEW;
-    const rStart = ne.north ? 1 : 0;
-    const rEnd = ne.south ? S - 1 : S;
-    for (let r = rStart; r < rEnd; r++) {
-      const idx = (r * S) * 4;
-      if (rgba[idx + 3] === 0) continue;
-      const rT = Math.max(0, r - 1);
-      const rB = Math.min(S - 1, r + 1);
-      const dzDx = ((ownElev[rT * S] - west[rT * S + S - 1]) + 2 * (ownElev[r * S] - west[r * S + S - 1]) + (ownElev[rB * S] - west[rB * S + S - 1])) * inv4x;
-      const zT = 0.5 * (west[rT * S + S - 1] + ownElev[rT * S]);
-      const zB = 0.5 * (west[rB * S + S - 1] + ownElev[rB * S]);
-      const dzDy = (zB - zT) * (rT === rB ? 0 : invCsY / (rB - rT));
-      rgba[idx] = encodeSlope(Math.atan(Math.sqrt(dzDx * dzDx + dzDy * dzDy)));
-    }
-  }
+function harmonizeSlopeBordersIntoRgba() {
+  // No-op in Slope Engine 2.0: Conformal Mercator metric scale + 1st-order boundary
+  // extrapolation mathematically eliminates tile seams at the source.
+  return;
 }
 
 async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile, zoneRing, sourceDem = '') {
@@ -577,9 +474,8 @@ async function buildSlopeTile(demBlob, z, x, y, demCache, resFactor, demProfile,
   if (useFusedFastPath) {
     // Single-pass compute + encode (fast path, default resolution).
     const rgba = computeAndEncodeSlopeFused(pad, ownElev, cellSizeX, cellSizeY, edgeNeighbours);
-    harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, z, x, y);
+    harmonizeSlopeBordersIntoRgba(rgba, ownElev, neighbourElevations, cellSizeX, cellSizeY);
     if (zoneMask) applyRingMaskToRgba(rgba, zoneMask);
-
     const t3 = performance.now();
     blob = (typeof buildRawPngSlope === 'function')
       ? await buildRawPngSlope(DEM_TILE_SIZE, DEM_TILE_SIZE, rgba)

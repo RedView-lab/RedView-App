@@ -38,6 +38,8 @@ export const controlPanelTranslationPairs: ReadonlyArray<AppTranslationPair> = [
   { fr: 'Tracer une zone (LiDAR HD)', en: 'Draw zone (HD LiDAR)' },
   { fr: 'Tracer une zone pour obtenir la qualité maximale LiDAR', en: 'Draw a zone to get maximum LiDAR quality' },
   { fr: 'Résolution', en: 'Resolution' },
+  { fr: 'Qualité', en: 'Quality' },
+  { fr: 'Auto', en: 'Auto' },
   { fr: 'Résolution max', en: 'Max resolution' },
   { fr: 'Type de colorisation', en: 'Colorization type' },
   { fr: 'Échelle', en: 'Scale' },

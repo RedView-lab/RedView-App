@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 
-import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints } from '@/features/slope/lib/slope-persist';
+import { loadSlopeState, saveSlopeState, loadBreakpoints, saveBreakpoints, migrateLegacyResolution } from '@/features/slope/lib/slope-persist';
 import { generateDynamicCategories, clampBreakpoints, formatSlopeDegreeLabel } from '@/features/slope/lib/slope-config';
 import { useSlope } from '@/features/slope/hooks/useSlope';
 import type { SlopeCategory, SlopeColorMode, SlopeDemProfile } from '@/features/slope/types';
@@ -70,8 +70,10 @@ export function useTerrainSlopeState({
 }: UseTerrainSlopeStateArgs) {
   const [slopeState, setSlopeState] = useState(() => {
     const loaded = initialControlPanel.slopes?.state ?? loadSlopeState();
+    const migrated = migrateLegacyResolution(loaded.resolution) ?? loaded.resolution;
     return {
       ...loaded,
+      resolution: migrated ?? 'auto',
       enabled: initialControlPanel.toggles.slopesEnabled ?? loaded.enabled,
     };
   });
@@ -162,10 +164,41 @@ export function useTerrainSlopeState({
   // If an analysis zone is active: maximum quality LiDAR HD pipeline
   // If no zone: directly driven by the local terrain DEM (30m or HD surface/terrain)
   // ── Slope overlay ───────────────────────────────────────────────────
-  // Follows 3D terrain DEM directly from the 3D cache:
-  // - fast-30m: served directly from 30m AWS Terrarium tiles
-  // - hd: served at the active 3D profile (0.40m surface or 1m terrain)
+  // ── Slope overlay ───────────────────────────────────────────────────
+  // Follows selected quality ('auto' | '30m' | '1m' | '0.40m'):
+  // - auto: directly inherits 3D terrain DEM (30m or HD surface/terrain)
+  // - 30m: served directly from 30m AWS Terrarium tiles
+  // - 1m: served from 1m LiDAR Terrain MNT
+  // - 0.40m: served from 0.40m LiDAR Surface MNS
   const slopeSourceOptions = useMemo(() => {
+    const selected = slopeState.resolution || 'auto';
+
+    if (selected === '30m' || selected === 'fast-30m') {
+      return {
+        demProfile: 'default' as const,
+        resolutionFactor: 1,
+        sourceDem: 'fast-30m' as const,
+        zone: null,
+      };
+    }
+    if (selected === '1m' || selected === '1m (LIDAR TERRAIN)') {
+      return {
+        demProfile: 'terrain' as const,
+        resolutionFactor: 1,
+        sourceDem: 'hd' as const,
+        zone: null,
+      };
+    }
+    if (selected === '0.40m' || selected === '0.40m (LIDAR SURFACE)') {
+      return {
+        demProfile: 'default' as const,
+        resolutionFactor: 1,
+        sourceDem: 'hd' as const,
+        zone: null,
+      };
+    }
+
+    // Default / 'auto': follow active 3D terrain
     if (terrainQuality === 'fast-30m') {
       return {
         demProfile: 'default' as const,
@@ -175,7 +208,6 @@ export function useTerrainSlopeState({
       };
     }
 
-    // Align slope DEM profile directly with the active 3D terrain profile for 100% DEM cache hits
     const demProfile: SlopeDemProfile = terrainProfile === 'terrain' ? 'terrain' : 'default';
     return {
       demProfile,
@@ -183,13 +215,18 @@ export function useTerrainSlopeState({
       sourceDem: 'hd' as const,
       zone: null,
     };
-  }, [terrainProfile, terrainQuality]);
+  }, [slopeState.resolution, terrainProfile, terrainQuality]);
 
   const resolutionLabel = useMemo(() => {
-    if (terrainQuality === 'fast-30m') return '30 m (Relief rapide)';
-    if (terrainProfile === 'terrain') return '1 m (LiDAR Terrain IGN)';
-    return '0.40 m (LiDAR Surface IGN)';
-  }, [terrainQuality, terrainProfile]);
+    const selected = slopeState.resolution || 'auto';
+    if (selected === '30m' || selected === 'fast-30m') return '30 m';
+    if (selected === '1m' || selected === '1m (LIDAR TERRAIN)') return '1 m (LiDAR Terrain IGN)';
+    if (selected === '0.40m' || selected === '0.40m (LIDAR SURFACE)') return '0.40 m (LiDAR Surface IGN)';
+
+    if (terrainQuality === 'fast-30m') return 'Auto (30 m)';
+    if (terrainProfile === 'terrain') return 'Auto (1 m)';
+    return 'Auto (0.40 m)';
+  }, [slopeState.resolution, terrainQuality, terrainProfile]);
 
   useSlope(
     isMapLoaded ? map : null,
@@ -238,7 +275,7 @@ export function useTerrainSlopeState({
   const slopesSlice = useMemo(
     () => ({
       enabled: slopeState.enabled,
-      resolution: resolutionLabel,
+      resolution: slopeState.resolution || 'auto',
       resolutionLabel,
       colorization: colorModeToPanel(slopeState.colorMode),
       scale: slopeScale,
@@ -266,10 +303,10 @@ export function useTerrainSlopeState({
       [persistSlope, slopeState],
     ),
     onSlopeResolutionChange: useCallback(
-      (_value: SlopeResolution) => {
-        // No-op: Resolution is now dynamically inherited from the active 3D map
+      (value: SlopeResolution) => {
+        persistSlope({ ...slopeState, resolution: value });
       },
-      [],
+      [persistSlope, slopeState],
     ),
     onSlopeColorizationChange: useCallback(
       (value: SlopeColorization) =>

@@ -1257,6 +1257,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Resolution"
   },
   {
+    "fr": "Qualité",
+    "en": "Quality"
+  },
+  {
+    "fr": "Auto",
+    "en": "Auto"
+  },
+  {
     "fr": "Résolution max",
     "en": "Max resolution"
   },

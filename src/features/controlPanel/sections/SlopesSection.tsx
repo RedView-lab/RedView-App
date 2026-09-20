@@ -12,6 +12,7 @@ import type {
   ControlPanelState,
   SlopeBand,
   SlopeColorization,
+  SlopeResolution,
   SlopeScale,
   SlopeScaleSetting,
 } from '../types';
@@ -288,7 +289,7 @@ export function SlopesSection({
   open,
   onOpenChange,
   onEnabledChange,
-  onResolutionChange: _onResolutionChange,
+  onResolutionChange,
   onColorizationChange,
   onScaleChange,
   onScaleSettingChange,
@@ -302,13 +303,22 @@ export function SlopesSection({
   const { t } = useAppI18n();
   const visibleBands = state.bands;
 
-  const resolutionLabel = useMemo(() => {
-    if (state.resolutionLabel) return state.resolutionLabel;
-    if (state.terrainQuality === 'fast-30m') return '30 m (Relief rapide)';
-    if (state.terrainProfile === 'terrain') return '1 m (LiDAR Terrain IGN)';
-    if (state.terrainProfile === 'default') return '0.40 m (LiDAR Surface IGN)';
-    return '30 m (Relief rapide)';
-  }, [state.resolutionLabel, state.terrainQuality, state.terrainProfile]);
+  const qualityOptions = useMemo(() => {
+    const autoDetail = state.terrainQuality === 'fast-30m' ? '30 m' : (state.terrainProfile === 'terrain' ? '1 m' : '0.40 m');
+    return [
+      { value: 'auto', label: `${t('Auto')} (${autoDetail})` },
+      { value: '30m', label: '30 m' },
+    ];
+  }, [t, state.terrainQuality, state.terrainProfile]);
+
+  const currentQuality = useMemo(() => {
+    const res = state.resolution;
+    if (!res || res === 'auto') return 'auto';
+    if (res === '30m' || res.includes('30')) return '30m';
+    if (res === '1m' || res.includes('1m') || res.includes('TERRAIN')) return '1m';
+    if (res === '0.40m' || res.includes('0.40') || res.includes('SURFACE')) return '0.40m';
+    return 'auto';
+  }, [state.resolution]);
 
   return (
     <Section
@@ -320,19 +330,14 @@ export function SlopesSection({
       onOpenChange={onOpenChange}
     >
       {showResolution ? (
-        <div className="rvc-row rvc-row--split rvc-slopes__resolution-row">
-          <div className="rvc-slopes__resolution-info">
-            <span className="rvc-row__label">{t('Résolution')}</span>
-            <span className="rvc-slopes__resolution-hint">
-              {t('(en fonction de la résolution de la map 3D)')}
-            </span>
-          </div>
-          <div
-            className="rvc-slopes__resolution-badge"
-            title={t('Résolution calculée directement depuis le cache du relief 3D actif')}
-          >
-            {resolutionLabel}
-          </div>
+        <div className="rvc-row rvc-row--split">
+          <span className="rvc-row__label">{t('Qualité')}</span>
+          <Select
+            width="var(--rvc-panel-select-md)"
+            value={currentQuality}
+            options={qualityOptions}
+            onChange={(v) => onResolutionChange?.(v as SlopeResolution)}
+          />
         </div>
       ) : null}
 

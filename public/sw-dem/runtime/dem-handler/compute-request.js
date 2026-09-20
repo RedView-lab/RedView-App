@@ -77,6 +77,19 @@ async function computeDemRequest(_request, z, x, y, _depth, demProfile) {
     negCache.delete(cacheKey);
   }
 
+  // 2b. Fast 30m mode: directly serve AWS Terrarium (global 30m, zero country-specific oversampling)
+  if (demProfile === 'fast-30m') {
+    try {
+      const pngBlob = await fetchAWSTerrainTile(z, x, y);
+      if (pngBlob) {
+        return finalize(cache, cacheKey, t0, z, x, y, pngBlob, 'aws-fast-30m', null, false, '', false, 'ok', demProfile);
+      }
+      return noTileResponse('aws-failed');
+    } catch {
+      return noTileResponse('aws-error');
+    }
+  }
+
   const inFrance = tileOverlapsFrance(z, x, y);
   const inOverseasFrance = tileOverlapsOverseasFrance(z, x, y);
   const inSwitzerland = tileOverlapsSwitzerland(z, x, y);

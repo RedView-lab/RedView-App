@@ -30,6 +30,7 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
         return resp;
       }
     }
+    return null; // Fast-30m mode strictly uses AWS Terrarium; never fall through to IGN France!
   }
 
   // 1. Check in-memory DEM Hot Cache for requested profile

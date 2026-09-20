@@ -115,8 +115,8 @@ self.addEventListener('fetch', (event) => {
     const shed = shedPrefetchIfBusy(url);
     if (shed) { event.respondWith(shed); return; }
     const slopeRes = url.searchParams.get('res') || '';
-    const slopeDemProfile = resolveDemProfile(url);
-    const slopeSourceDem = url.searchParams.get('source-dem') || url.searchParams.get('quality') || '';
+    const rawSourceDem = url.searchParams.get('source-dem') || url.searchParams.get('quality') || '';
+    const slopeSourceDem = (rawSourceDem === '30m' || rawSourceDem === 'fast-30m') ? 'fast-30m' : rawSourceDem;
     // Zone-scoped slope: `?zone=<hash>` references the polygon registered via
     // SET_ANALYSIS_ZONE — tiles outside it are rejected before any DEM fetch.
     const slopeZone = sanitizeZoneHash(url.searchParams.get('zone'));
