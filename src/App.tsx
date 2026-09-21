@@ -10,6 +10,8 @@ import {
 } from './shared/services/appwrite'
 import { PROJECT_LOCATION_CHANGE_EVENT, readProjectIdFromPath } from './shared/utils/projectLocation'
 import { LoginScreen } from './features/auth'
+import { MobileBlockScreen } from './shared/components/MobileBlockScreen'
+import { useIsMobileDevice } from './shared/hooks/useIsMobileDevice'
 import { useAppI18n } from './shared/i18n'
 import './index.css'
 
@@ -258,6 +260,12 @@ function App() {
       cancelled = true
     }
   }, [authStatus, session?.user?.id])
+
+  const { isMobile } = useIsMobileDevice()
+
+  if (isMobile) {
+    return <MobileBlockScreen landingUrl={landingUrl} />
+  }
 
   if (authStatus === 'loading' || (session && subscriptionStatus === 'loading')) {
     return <BootstrapScreen label={t('Loading...')} />

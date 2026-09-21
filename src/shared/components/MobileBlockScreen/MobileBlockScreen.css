@@ -1,0 +1,70 @@
+/* ==========================================================================
+   Mobile Block Screen — Ultra-simple Minimal Dark Gray
+   ========================================================================== */
+
+.rv-mobile-block-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  background-color: #0f1015;
+  color: #ffffff;
+  font-family: 'Rethink Sans', system-ui, -apple-system, sans-serif;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+.rv-mobile-block-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 380px;
+  gap: 20px;
+}
+
+.rv-mobile-block-logo {
+  height: 28px;
+  width: auto;
+  margin-bottom: 8px;
+  opacity: 0.95;
+}
+
+.rv-mobile-block-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.rv-mobile-block-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #8b909a;
+  margin: 0;
+}
+
+.rv-mobile-block-link {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  background: #1c1e26;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #e5e7eb;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rv-mobile-block-link:active {
+  background: #252834;
+}
