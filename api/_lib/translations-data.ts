@@ -409,6 +409,14 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Choose this plan"
   },
   {
+    "fr": "Pas encore disponible",
+    "en": "Not yet available"
+  },
+  {
+    "fr": "Offres payantes pas encore disponibles",
+    "en": "Paid plans not yet available"
+  },
+  {
     "fr": "Choisir une offre payante",
     "en": "Choose a paid plan"
   },

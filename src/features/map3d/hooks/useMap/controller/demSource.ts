@@ -178,6 +178,23 @@ export function attachDemSource(ctx: Ctx): void {
       }
       let removeSucceeded = false;
       try {
+        // Mapbox GL JS v3 bug workaround: in globe projection, calling setTerrain(null)
+        // triggers setTerrainForDraping() which leaves an internal dummy { source: "", exaggeration: 0 }
+        // terrain object lacking StyleProperty wrappers (.properties / .get).
+        // Calling map.removeSource() subsequently runs painter.updateTerrain() which crashes
+        // with "TypeError: can't access property 'get', i is undefined".
+        // Detach internal terrain before removeSource to ensure safe removal:
+        const mapAny = map as unknown as {
+          style?: { terrain?: unknown };
+          painter?: { _terrain?: { enabled?: boolean } | null };
+        };
+        if (mapAny.style && 'terrain' in mapAny.style) {
+          delete (mapAny.style as { terrain?: unknown }).terrain;
+        }
+        if (mapAny.painter?._terrain) {
+          mapAny.painter._terrain.enabled = false;
+        }
+
         map.removeSource(unifiedDEMSource.id);
         removeSucceeded = true;
       } catch (error) {

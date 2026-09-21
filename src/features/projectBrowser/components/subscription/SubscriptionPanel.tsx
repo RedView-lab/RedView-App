@@ -107,6 +107,7 @@ export function SubscriptionPanel({
         const isActivePlan = activePlanId === plan.id;
         const isSelectedPlan = selectedPlan.id === plan.id;
         const isDemoSelection = plan.id === 'demo';
+        const isPaidPlan = plan.id === 'founder' || plan.id === 'patron';
 
         return (
           <SubscriptionPlanCard
@@ -120,16 +121,18 @@ export function SubscriptionPanel({
                 ? subscriptionState.snapshot?.cancelAtPeriodEnd
                   ? 'Reprendre'
                   : 'Interrompre'
-                : isSelectedPlan && !isDemoSelection
-                  ? hasManagedSubscription
-                    ? 'Basculer sur cette offre'
-                    : 'Choisir cette offre'
-                  : undefined
+                : isPaidPlan
+                  ? 'Pas encore disponible'
+                  : isSelectedPlan && !isDemoSelection
+                    ? hasManagedSubscription
+                      ? 'Basculer sur cette offre'
+                      : 'Choisir cette offre'
+                    : undefined
             }
             ctaTone={isActivePlan && !isDemoSelection ? 'danger' : 'neutral'}
-            ctaDisabled={billingActionBusy}
+            ctaDisabled={isPaidPlan || billingActionBusy}
             onCtaClick={
-              isDemoSelection
+              isPaidPlan || isDemoSelection
                 ? undefined
                 : isActivePlan
                   ? onToggleManagedSubscription
@@ -235,11 +238,11 @@ export function SubscriptionPanel({
                         <button
                           type="button"
                           className="rvpb-text-link"
-                          onClick={onManagePaymentMethod}
-                          disabled={billingActionBusy}
+                          onClick={showDemoUpsell ? undefined : onManagePaymentMethod}
+                          disabled={billingActionBusy || showDemoUpsell}
                         >
                           {showDemoUpsell
-                            ? t('Choisir une offre payante')
+                            ? t('Pas encore disponible')
                             : paymentMethod
                               ? t('Remplacer mon moyen de paiement')
                               : t('Ajouter un moyen de paiement')}
@@ -259,13 +262,13 @@ export function SubscriptionPanel({
               <button
                 type="button"
                 className="rvpb-add-row"
-                onClick={onManagePaymentMethod}
-                disabled={billingActionBusy}
+                onClick={showDemoUpsell ? undefined : onManagePaymentMethod}
+                disabled={billingActionBusy || showDemoUpsell}
               >
                 <SvgV2Icon name="plus.svg" size={16} />
                 <span>
                   {showDemoUpsell
-                    ? t('Passer à une offre payante')
+                    ? t('Offres payantes pas encore disponibles')
                     : savedPaymentMethods.length > 0
                       ? t('Ajouter une nouvelle carte')
                       : t('Ajouter un moyen de paiement')}

@@ -19,6 +19,8 @@ export const projectBrowserTranslationPairs: ReadonlyArray<AppTranslationPair> =
   { fr: 'Interrompre', en: 'Pause' },
   { fr: 'Basculer sur cette offre', en: 'Switch to this plan' },
   { fr: 'Choisir cette offre', en: 'Choose this plan' },
+  { fr: 'Pas encore disponible', en: 'Not yet available' },
+  { fr: 'Offres payantes pas encore disponibles', en: 'Paid plans not yet available' },
   { fr: 'Choisir une offre payante', en: 'Choose a paid plan' },
   { fr: 'Remplacer mon moyen de paiement', en: 'Replace my payment method' },
   { fr: 'Ajouter un moyen de paiement', en: 'Add a payment method' },

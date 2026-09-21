@@ -4,7 +4,7 @@ export type MapboxStyleDefinition = Record<string, unknown>;
 
 export const prefetchedStyleCache = new Map<string, MapboxStyleDefinition>();
 
-export const STYLE_PREFETCH_TIMEOUT_MS = 2500;
+export const STYLE_PREFETCH_TIMEOUT_MS = 6000;
 
 export function createEmptyBootstrapStyle(): MapboxStyleDefinition {
   return { version: 8, sources: {}, layers: [] };

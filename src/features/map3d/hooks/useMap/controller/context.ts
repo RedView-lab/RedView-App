@@ -305,6 +305,15 @@ export function attachHelpers(ctx: Ctx): void {
       }
       if (!sourceLoaded) return true;
 
+      // Below DEM source minzoom (e.g. unifiedDEMSource minzoom is 6 while default view
+      // is zoom 5.5 globe), Mapbox does not load DEM tiles so queryTerrainElevation returns null.
+      // The terrain is bound and valid; marking it unrenderable here triggers a false escalation loop.
+      const source = map.getSource(expectedSourceId) as { minzoom?: number } | undefined;
+      const minzoom = typeof source?.minzoom === 'number'
+        ? source.minzoom
+        : (expectedSourceId === unifiedDEMSource.id ? unifiedDEMSource.minzoom : 0);
+      if (map.getZoom() < minzoom) return true;
+
       const queryTerrainElevation = (map as unknown as {
         queryTerrainElevation?: (
           lngLat: [number, number],
