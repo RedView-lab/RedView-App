@@ -140,7 +140,7 @@ function App() {
   const initialProjectId = readProjectIdFromPath(pathname)
 
   const landingUrl = import.meta.env.VITE_LANDING_URL || 'https://redview.tech'
-  const offersUrl = `${landingUrl.replace(/\/$/, '')}/#offres`
+  const offersUrl = `${landingUrl.replace(/\/$/, '')}/pricing`
 
   useEffect(() => {
     const syncPathname = () => {

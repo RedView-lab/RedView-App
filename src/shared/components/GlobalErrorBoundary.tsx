@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import * as Sentry from '@sentry/react';
 import { logger } from '../lib/logger';
 
 interface Props {
@@ -26,6 +27,13 @@ export class GlobalErrorBoundary extends Component<Props, State> {
       stack: error.stack,
       componentStack: errorInfo.componentStack,
     });
+    try {
+      Sentry.captureException(error, {
+        extra: { componentStack: errorInfo.componentStack },
+      });
+    } catch {
+      // Ignore if Sentry fails to capture
+    }
   }
 
   handleReload = (): void => {

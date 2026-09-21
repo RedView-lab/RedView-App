@@ -4,7 +4,6 @@ import {
   useState,
   useCallback,
   useMemo,
-  type CSSProperties,
   type Dispatch,
   type MouseEvent as ReactMouseEvent,
   type RefObject,
@@ -42,6 +41,7 @@ import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
+import { FeedbackTriggerButton } from '@/shared/components/FeedbackTriggerButton';
 import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
 import type { DashboardFilterId } from './DashboardPlaceSearch.types';
@@ -139,8 +139,8 @@ function TraceRevealWatcher({ onTraceStarted }: { onTraceStarted: () => void }) 
 export function DashboardEditor({
   activeProjectId,
   activeProjectInitial,
-  isDemoAccount,
-  offersUrl,
+  isDemoAccount: _isDemoAccount,
+  offersUrl: _offersUrl,
   isClosingProject,
   mapInstance,
   mapLoaded,
@@ -249,33 +249,7 @@ export function DashboardEditor({
     setLidarModeEnabled((value) => !value);
   }, [setLidarModeEnabled]);
 
-  const demoUpsellWidth = Math.min(
-    330,
-    Math.max(
-      280,
-      (layout.centerToolbarVisible
-        ? layout.centerToolbarWidth
-        : layout.designW - PANEL_PADDING * 2),
-    ),
-  );
-  const demoUpsellStyle: CSSProperties = {
-    position: 'absolute',
-    left: layout.centerToolbarVisible ? layout.centerToolbarLeft : PANEL_PADDING,
-    bottom: layout.centerToolbarVisible
-      ? layout.designH - layout.centerToolbarTop + 14
-      : PANEL_PADDING + 56,
-    width: demoUpsellWidth,
-    zIndex: 29,
-    display: 'grid',
-    gap: 12,
-    padding: 12,
-    borderRadius: 8,
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    background: 'rgba(0, 0, 0, 0.6)',
-    color: '#ffffff',
-    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.04)',
-    backdropFilter: 'blur(24px)',
-  };
+
 
   return (
     <ProjectProvider
@@ -371,41 +345,17 @@ export function DashboardEditor({
         onFilterChange={setDashboardSearchActiveFilters}
       />
 
-      {isDemoAccount ? (
-        <aside style={demoUpsellStyle} aria-label={t('Découvrir les offres payantes')}>
-          <p
-            style={{
-              margin: 0,
-              fontSize: 13,
-              lineHeight: 'normal',
-              color: '#ffffff',
-            }}
-          >
-            {t('Vous êtes sur une démo réduite de RedView. Pour activer l’interface, choisissez votre abonnement:')}
-          </p>
-          <a
-            href={offersUrl}
-            style={{
-              minHeight: 40,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              width: '100%',
-              padding: '9px 10px',
-              borderRadius: 6,
-              background: '#890000',
-              color: '#ffffff',
-              textDecoration: 'none',
-              fontSize: 16,
-              fontWeight: 500,
-            }}
-          >
-            <SvgV2Icon name="feedback-play.svg" size={18} />
-            <span>{t('Découvrir les offres')}</span>
-          </a>
-        </aside>
-      ) : null}
+
+
+      <FeedbackTriggerButton
+        variant="floating"
+        style={{
+          position: 'absolute',
+          bottom: 18,
+          right: isRightPanelCollapsed || isMapFocusMode ? 18 : panelWidth + 24,
+          zIndex: 32,
+        }}
+      />
 
       {mapLoaded && shouldRenderPanelMapBlurMirrors && leftPanelOpen && (
         <MapBlurMirror

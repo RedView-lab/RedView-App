@@ -33,6 +33,7 @@
     "@garmin/fitsdk": "^21.201.0",
     "@mapbox/mapbox-gl-draw": "^1.5.1",
     "@mattnucc/gribberish": "^0.30.2",
+    "@sentry/react": "^10.75.1",
     "@stripe/react-stripe-js": "^3.7.0",
     "@stripe/stripe-js": "^5.4.0",
     "@types/nodemailer": "^8.0.1",
