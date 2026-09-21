@@ -18,7 +18,6 @@ import { ProjectBrowserCardMenu } from './ProjectBrowserCardMenu';
 import { ProjectBrowserDragPreview } from './ProjectBrowserDragPreview';
 import { ProjectBrowserToast } from './ProjectBrowserToast';
 import { ProjectCard } from './ProjectCard';
-import { FeedbackTriggerButton } from '@/shared/components/FeedbackTriggerButton';
 
 type MenuState =
   | { kind: 'project'; id: string; anchorEl: HTMLButtonElement }
@@ -435,7 +434,6 @@ export function ProjectsPanel({
 
       {dragPreview ? <ProjectBrowserDragPreview {...dragPreview} /> : null}
       {toast ? <ProjectBrowserToast kind={toast.kind} message={toast.message} /> : null}
-      <FeedbackTriggerButton variant="floating" style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 100 }} />
     </>
   );
 }

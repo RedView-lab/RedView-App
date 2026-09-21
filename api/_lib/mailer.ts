@@ -213,3 +213,134 @@ export async function sendVerificationEmail({
     return { sent: false };
   }
 }
+
+export interface SendFeedbackNotificationEmailOptions {
+  type: string;
+  feature?: string;
+  message: string;
+  email?: string;
+  name?: string;
+  context?: {
+    url?: string;
+    userAgent?: string;
+  };
+}
+
+export async function sendFeedbackNotificationEmail({
+  type,
+  feature = 'Général',
+  message,
+  email,
+  name,
+  context,
+}: SendFeedbackNotificationEmailOptions): Promise<{ sent: boolean; id?: string }> {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM || 'RedView <noreply@redview.tech>';
+  const recipient = process.env.FEEDBACK_RECIPIENT_EMAIL || 'redview.app@proton.me';
+
+  if (!apiKey) {
+    console.warn('[FEEDBACK] RESEND_API_KEY not configured. Feedback recorded in logs.');
+    console.log(`[FEEDBACK] Type: ${type} | Feature: ${feature} | From: ${name || 'Anonyme'} (${email || 'Sans email'})\nMessage: ${message}`);
+    return { sent: false };
+  }
+
+  const cleanType = escapeHtml(type);
+  const cleanFeature = escapeHtml(feature);
+  const cleanMessage = escapeHtml(message);
+  const cleanName = escapeHtml(name || 'Utilisateur RedView');
+  const cleanEmail = escapeHtml(email || 'Non renseigné');
+  const cleanUrl = escapeHtml(context?.url || 'app.redview.tech');
+  const cleanUserAgent = escapeHtml(context?.userAgent || 'Non renseigné');
+  const submittedAt = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+
+  const isBug = type.toLowerCase().includes('bug');
+  const badgeColor = isBug ? '#ef4444' : '#3b82f6';
+  const badgeBg = isBug ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)';
+
+  const html = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Retour utilisateur RedView</title>
+  <style>
+    body { background-color: #0b0c10; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0; padding: 24px; }
+    .container { max-width: 580px; margin: 0 auto; background: #13151b; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 28px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; background: ${badgeBg}; color: ${badgeColor}; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+    h1 { font-size: 18px; font-weight: 700; color: #ffffff; margin: 0 0 16px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 12px; }
+    .field { margin-bottom: 10px; font-size: 13px; line-height: 1.5; }
+    .label { color: #64748b; font-weight: 500; display: inline-block; min-width: 110px; }
+    .value { color: #f8fafc; font-weight: 600; }
+    .message-box { margin-top: 16px; padding: 16px; background: #0a0b0e; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; font-size: 14px; line-height: 1.6; color: #ffffff; white-space: pre-wrap; word-break: break-word; }
+    .footer { margin-top: 24px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.06); font-size: 11px; color: #64748b; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badge">${cleanType}</div>
+    <h1>Nouveau retour RedView App : ${cleanFeature}</h1>
+    <div class="field"><span class="label">Utilisateur :</span> <span class="value">${cleanName}</span></div>
+    <div class="field"><span class="label">E-mail :</span> <span class="value">${cleanEmail}</span></div>
+    <div class="field"><span class="label">Section :</span> <span class="value">${cleanFeature}</span></div>
+    <div class="field"><span class="label">URL :</span> <span class="value">${cleanUrl}</span></div>
+    <div class="message-box">${cleanMessage}</div>
+    <div class="footer">
+      Soumis le ${submittedAt} | Navigateur : ${cleanUserAgent}
+    </div>
+  </div>
+</body>
+</html>
+  `.trim();
+
+  try {
+    let response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from,
+        to: [recipient],
+        subject: `[RedView Feedback] [${type}] ${feature} - ${cleanName}`,
+        text: `Nouveau retour RedView:\n\nType: ${type}\nModule: ${feature}\nDe: ${cleanName} (${cleanEmail})\n\nMessage:\n${message}\n\nDate: ${submittedAt}\nURL: ${cleanUrl}`,
+        html,
+      }),
+    });
+
+    let data = await response.json().catch(() => ({}));
+
+    if (!response.ok && from !== 'RedView <onboarding@resend.dev>') {
+      const fallbackResponse = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'RedView <onboarding@resend.dev>',
+          to: [recipient],
+          subject: `[RedView Feedback] [${type}] ${feature} - ${cleanName}`,
+          text: `Nouveau retour RedView:\n\nType: ${type}\nModule: ${feature}\nDe: ${cleanName} (${cleanEmail})\n\nMessage:\n${message}\n\nDate: ${submittedAt}`,
+          html,
+        }),
+      });
+      if (fallbackResponse.ok) {
+        response = fallbackResponse;
+        data = await fallbackResponse.json().catch(() => ({}));
+      }
+    }
+
+    if (!response.ok) {
+      console.warn('[FEEDBACK] Resend delivery warning:', data);
+      return { sent: false };
+    }
+
+    console.log('[FEEDBACK] ✅ Feedback email sent via Resend, id:', data?.id);
+    return { sent: true, id: data?.id };
+  } catch (err) {
+    console.error('[FEEDBACK] Failed to send feedback email:', err);
+    return { sent: false };
+  }
+}
+

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
+import { FeedbackModal } from '@/shared/components/FeedbackModal';
 
 type ProjectBrowserOverlayHeaderProps = {
   accountDisplayName: string;
@@ -17,6 +19,7 @@ export function ProjectBrowserOverlayHeader({
   onSignOut,
 }: ProjectBrowserOverlayHeaderProps) {
   const { t } = useAppI18n();
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   return (
     <header className="rvpb-header">
@@ -33,10 +36,24 @@ export function ProjectBrowserOverlayHeader({
         </div>
       </div>
 
-      <button type="button" className="rvpb-logout-button" onClick={() => void onSignOut()}>
-        <SvgV2Icon name="log-out-03.svg" size={20} />
-        <span>{isSigningOut ? t('Déconnexion...') : t('Se déconnecter')}</span>
-      </button>
+      <div className="rvpb-header__actions">
+        <button
+          type="button"
+          className="rvpb-feedback-button"
+          onClick={() => setFeedbackOpen(true)}
+          title={t('Donner un avis ou signaler un bug')}
+        >
+          <SvgV2Icon name="annotation.svg" size={16} />
+          <span>{t('Donner un avis')}</span>
+        </button>
+
+        <button type="button" className="rvpb-logout-button" onClick={() => void onSignOut()}>
+          <SvgV2Icon name="log-out-03.svg" size={20} />
+          <span>{isSigningOut ? t('Déconnexion...') : t('Se déconnecter')}</span>
+        </button>
+      </div>
+
+      <FeedbackModal open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </header>
   );
 }

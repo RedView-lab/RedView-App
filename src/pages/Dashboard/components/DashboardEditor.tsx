@@ -11,7 +11,6 @@ import {
 } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import {
-  FpsDiagnosticsMonitor,
   MapBlurMirror,
   MapOverlayStatusDock,
   MapView,
@@ -289,15 +288,6 @@ export function DashboardEditor({
           routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
       </div>
-
-      <FpsDiagnosticsMonitor
-        map={mapInstance}
-        top={PANEL_PADDING}
-        style={{
-          right: `calc(${styles.mapViewportControlsStyle.right}px + 52px)`,
-          transition: styles.mapViewportControlsStyle.transition,
-        }}
-      />
 
       <div style={styles.leftCollapsedRailStyle}>
         <button

@@ -57,6 +57,18 @@ export function FpsDiagnosticsMonitor({
   right = 72,
   style,
 }: FpsDiagnosticsMonitorProps) {
+  // Masqué de l'interface par défaut (gardé en codebase pour debug/diagnostics).
+  // Activé uniquement si ?fps ou ?debug est présent dans l'URL ou via window.__REDVIEW_DEBUG_FPS__.
+  const isDebugFps =
+    typeof window !== 'undefined' &&
+    (new URLSearchParams(window.location.search).has('fps') ||
+      new URLSearchParams(window.location.search).has('debug') ||
+      (window as unknown as { __REDVIEW_DEBUG_FPS__?: boolean }).__REDVIEW_DEBUG_FPS__ === true);
+
+  if (!isDebugFps) {
+    return null;
+  }
+
   const [isOpen, setIsOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<PerformanceSnapshot>({
     fps: 60,
