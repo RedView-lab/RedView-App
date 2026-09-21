@@ -13,7 +13,7 @@
 import { uploadCustomProfile } from '../api/client';
 import { hashBrf } from './brf-template';
 
-const PROFILE_UPLOAD_TIMEOUT_MS = 25000;
+const PROFILE_UPLOAD_TIMEOUT_MS = 6000;
 
 interface CacheEntry {
   /** custom_<id> returned by the server. */

@@ -80,6 +80,24 @@ export async function resolveItineraryRouting(
     roadTypes: roadTypes.effective,
     expert,
   });
-  const profileId = await ensureProfileUploaded(brf, signal);
-  return { profileId, roadTypes, brf };
+  try {
+    const profileId = await ensureProfileUploaded(brf, signal);
+    return { profileId, roadTypes, brf };
+  } catch (err) {
+    if ((err as { name?: string })?.name === 'AbortError') {
+      throw err;
+    }
+    console.warn('[BRouter] Custom profile upload failed, falling back to stock profile:', err);
+    return {
+      profileId: DEFAULT_PROFILE,
+      roadTypes: {
+        ...roadTypes,
+        warnings: [
+          ...roadTypes.warnings,
+          'Profil personnalisé momentanément indisponible, calcul avec le profil standard.',
+        ],
+      },
+      brf: null,
+    };
+  }
 }
