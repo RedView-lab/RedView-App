@@ -1,7 +1,37 @@
 import { useState, type CSSProperties } from 'react';
+import { readStoredAppwriteSession } from '../services/appwrite';
 import { useAppI18n } from '../i18n';
 import { SvgV2Icon } from './SvgV2Icon';
-import { FeedbackModal } from './FeedbackModal';
+
+export function buildFeedbackUrl(): string {
+  const landingUrl =
+    (import.meta.env.VITE_LANDING_URL as string | undefined) || 'https://redview.tech';
+  const base = `${landingUrl.replace(/\/$/, '')}/`;
+  const params = new URLSearchParams();
+  params.set('feedback', 'open');
+  params.set('step', '1');
+
+  try {
+    const sessionUser = readStoredAppwriteSession()?.user;
+    if (sessionUser?.email) params.set('email', sessionUser.email);
+    if (sessionUser?.name) {
+      const parts = sessionUser.name.trim().split(' ');
+      params.set('firstName', parts[0] || '');
+      if (parts.length > 1) {
+        params.set('lastName', parts.slice(1).join(' '));
+      }
+    }
+  } catch {
+    // Ignore if session not available
+  }
+
+  return `${base}?${params.toString()}`;
+}
+
+export function openFeedbackPage() {
+  const url = buildFeedbackUrl();
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
 
 interface FeedbackTriggerButtonProps {
   variant?: 'floating' | 'inline' | 'header';
@@ -17,7 +47,6 @@ export function FeedbackTriggerButton({
   label,
 }: FeedbackTriggerButtonProps) {
   const { t } = useAppI18n();
-  const [modalOpen, setModalOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
   const displayLabel = label || t('Donner un avis');
@@ -91,26 +120,22 @@ export function FeedbackTriggerButton({
         };
 
   return (
-    <>
-      <button
-        type="button"
-        className={className}
-        style={baseStyle}
-        onClick={() => setModalOpen(true)}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        title={t('Donner un avis ou signaler un bug')}
-        aria-label={t('Donner un avis ou signaler un bug')}
-      >
-        <SvgV2Icon
-          name="annotation.svg"
-          size={variant === 'floating' ? 14 : 16}
-          style={{ opacity: isHovered ? 1 : 0.75 }}
-        />
-        <span>{displayLabel}</span>
-      </button>
-
-      <FeedbackModal open={modalOpen} onClose={() => setModalOpen(false)} />
-    </>
+    <button
+      type="button"
+      className={className}
+      style={baseStyle}
+      onClick={openFeedbackPage}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      title={t('Donner un avis ou signaler un bug')}
+      aria-label={t('Donner un avis ou signaler un bug')}
+    >
+      <SvgV2Icon
+        name="annotation.svg"
+        size={variant === 'floating' ? 14 : 16}
+        style={{ opacity: isHovered ? 1 : 0.75 }}
+      />
+      <span>{displayLabel}</span>
+    </button>
   );
 }
