@@ -41,8 +41,6 @@ export function ensureAnalysisHoverLayers(map: MapboxMap): GeoJSONSource | null 
   map.addSource(ANALYSIS_HOVER_SOURCE_ID, {
     type: 'geojson',
     data: buildAnalysisHoverGeoJson(null),
-    buffer: 0,
-    tolerance: 0,
   });
 
 
@@ -77,8 +75,6 @@ export function ensureRouteHoverPreviewLayers(map: MapboxMap): GeoJSONSource | n
   map.addSource(ROUTE_HOVER_PREVIEW_SOURCE_ID, {
     type: 'geojson',
     data: buildRouteHoverPreviewGeoJson(null),
-    buffer: 0,
-    tolerance: 0,
   });
 
   map.addLayer({
@@ -188,8 +184,6 @@ export function ensureRouteAuditLayers(map: MapboxMap): GeoJSONSource | null {
   map.addSource(ROUTE_AUDIT_SOURCE_ID, {
     type: 'geojson',
     data: buildRouteAuditGeoJson(null),
-    buffer: 32,
-    tolerance: 0.375,
   });
 
   map.addLayer({
@@ -248,8 +242,6 @@ export function ensureForbiddenZoneLayers(map: MapboxMap): GeoJSONSource | null 
   map.addSource(FORBIDDEN_ZONE_SOURCE_ID, {
     type: 'geojson',
     data: buildForbiddenZoneGeoJson(null),
-    buffer: 32,
-    tolerance: 0.375,
   });
 
   map.addLayer({
@@ -290,8 +282,6 @@ export function ensureForbiddenZoneDraftLayers(map: MapboxMap): GeoJSONSource | 
   map.addSource(FORBIDDEN_ZONE_DRAFT_SOURCE_ID, {
     type: 'geojson',
     data: buildForbiddenZoneDraftGeoJson(null),
-    buffer: 32,
-    tolerance: 0.375,
   });
 
   map.addLayer({
