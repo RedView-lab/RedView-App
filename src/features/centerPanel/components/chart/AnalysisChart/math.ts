@@ -48,6 +48,23 @@ export function normalizeMetricDomain(
     const clampedBound = Math.min(maxBound, Math.ceil(bound / 5) * 5);
     return { min: -clampedBound, max: clampedBound };
   }
+
+  if (metric === 'Altitude') {
+    let min = Math.max(-500, Math.min(9000, Number.isFinite(domain.min) ? domain.min : 0));
+    let max = Math.max(min + 50, Math.min(9000, Number.isFinite(domain.max) ? domain.max : 2000));
+
+    // Si le minimum est proche du niveau de la mer (entre -20m et 10m), aligner à 0m
+    if (min >= -20 && min <= 10) {
+      min = 0;
+    }
+
+    if (max - min < 60) {
+      max = min + 60;
+    }
+
+    return { min, max };
+  }
+
   return domain;
 }
 
@@ -405,15 +422,19 @@ export function computeCumulativeElevationAtX(
 
     if (pCurr.x <= xTarget) {
       const dy = pCurr.y - pPrev.y;
-      if (dy > 0) gain += dy;
-      else if (dy < 0) loss += Math.abs(dy);
+      if (Math.abs(dy) <= 300) {
+        if (dy > 0) gain += dy;
+        else if (dy < 0) loss += Math.abs(dy);
+      }
     } else if (pPrev.x < xTarget && pCurr.x > xTarget) {
       const span = pCurr.x - pPrev.x;
       const t = span > 0 ? (xTarget - pPrev.x) / span : 0;
       const yInterp = pPrev.y + t * (pCurr.y - pPrev.y);
       const dy = yInterp - pPrev.y;
-      if (dy > 0) gain += dy;
-      else if (dy < 0) loss += Math.abs(dy);
+      if (Math.abs(dy) <= 300) {
+        if (dy > 0) gain += dy;
+        else if (dy < 0) loss += Math.abs(dy);
+      }
       break;
     } else if (pPrev.x >= xTarget) {
       break;

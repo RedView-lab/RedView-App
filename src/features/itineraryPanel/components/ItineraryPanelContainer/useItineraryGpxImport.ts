@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { parseGpxFile } from '@/features/poi/lib/gpx-loader';
 import {
   analyzeGpxSurfaces,
+  cleanAndInterpolateElevations,
   computeRouteSurfaceMetricsFromPoints,
 } from '../../lib/route-metrics';
 import {
@@ -155,7 +156,7 @@ export function useItineraryGpxImport({
       try {
         const route = await parseGpxFile(file);
         const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
-        const basePoints = ignAltimetryPoints ?? route.points;
+        const basePoints = cleanAndInterpolateElevations(ignAltimetryPoints ?? route.points);
         const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });
         const quality: GpxQualityMode = 'default';
         const simplifiedPoints = normalizeImportedRoutePoints(

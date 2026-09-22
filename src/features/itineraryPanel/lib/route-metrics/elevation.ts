@@ -1,4 +1,5 @@
 import type { ElevationSample, RoutePointInput, RouteProfilePoint } from './types';
+import { isValidElevation } from './elevationSanitizer';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 const GRADIENT_SEGMENT_M = 30;
@@ -47,7 +48,7 @@ export function buildElevationSamplesFromPoints(
   for (let i = 0; i < points.length; i++) {
     const point = points[i];
     const elevationM = Number(point.elevationM);
-    if (!Number.isFinite(elevationM)) continue;
+    if (!Number.isFinite(elevationM) || !isValidElevation(elevationM)) continue;
     samples.push({
       lat: point.lat,
       lon: point.lon,
@@ -152,11 +153,16 @@ export function computeAscentDescentFromElevations(
   let descent = 0;
   let pivot = elevations[0];
   for (let i = 1; i < elevations.length; i++) {
-    const delta = elevations[i] - pivot;
+    const cur = elevations[i];
+    if (!isValidElevation(cur)) continue;
+    const delta = cur - pivot;
     if (Math.abs(delta) < thresholdM) continue;
+    // Si un saut différentiel isolé dépasse 500m en un pas sans contexte,
+    // on l'ignore pour éviter d'exploser le D+ ou D-
+    if (Math.abs(delta) > 500) continue;
     if (delta > 0) ascent += delta;
     else descent += -delta;
-    pivot = elevations[i];
+    pivot = cur;
   }
   return { ascent, descent };
 }

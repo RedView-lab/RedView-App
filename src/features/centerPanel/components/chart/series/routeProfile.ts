@@ -1,5 +1,9 @@
 import type { RouteChartPoint } from '../seriesCommon';
 import { buildRouteContentSignature } from '@/features/itineraryPanel/lib/routes';
+import {
+  cleanAndInterpolateElevations,
+  hasCorruptedElevations,
+} from '@/features/itineraryPanel/lib/route-metrics';
 
 export interface NormalizedRoutePoint {
   distanceM: number;
@@ -135,22 +139,26 @@ export function normalizeRouteProfile(
 ): NormalizedRoutePoint[] | null {
   if (!routePoints || routePoints.length < 2) return null;
 
-  const signature = buildRouteContentSignature(routePoints);
+  const pointsToUse = hasCorruptedElevations(routePoints)
+    ? cleanAndInterpolateElevations(routePoints)
+    : routePoints;
 
-  const cached = normalizedRouteProfileCache.get(routePoints);
+  const signature = buildRouteContentSignature(pointsToUse);
+
+  const cached = normalizedRouteProfileCache.get(pointsToUse);
   if (cached !== undefined && cached.signature === signature) return cached.value;
 
   const samples: Array<{ distanceM: number; elevationM: number; gradientPct?: number | null }> = [];
   let cumulativeDistanceM = 0;
 
-  for (let i = 0; i < routePoints.length; i++) {
-    const point = routePoints[i];
+  for (let i = 0; i < pointsToUse.length; i++) {
+    const point = pointsToUse[i];
     if (i > 0) {
       const nextDistance = point.distanceM;
       if (Number.isFinite(nextDistance) && (nextDistance as number) >= cumulativeDistanceM) {
         cumulativeDistanceM = nextDistance as number;
       } else {
-        cumulativeDistanceM += haversineM(routePoints[i - 1], point);
+        cumulativeDistanceM += haversineM(pointsToUse[i - 1], point);
       }
     }
 

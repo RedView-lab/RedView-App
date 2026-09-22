@@ -1,5 +1,9 @@
 import type { GpxRoute } from '../types';
 import { parseGpxText } from './gpx-parse';
+import {
+  cleanAndInterpolateElevations,
+  isValidElevation,
+} from '../../itineraryPanel/lib/route-metrics';
 
 interface GpxParseWorkerSuccess {
   ok: true;
@@ -96,7 +100,7 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
       lat,
       lon,
       distanceM,
-      elevationM: Number.isFinite(elevationM) ? elevationM : null,
+      elevationM: isValidElevation(elevationM) ? elevationM : null,
     };
     if (points.length > 0) {
       distanceM += haversineM(points[points.length - 1], nextPoint);
@@ -109,7 +113,8 @@ function parseGpxTextWithDomParser(text: string): GpxRoute {
     throw new Error('GPX doit contenir au moins 2 points');
   }
 
-  return { name, points };
+  const cleanedPoints = cleanAndInterpolateElevations(points);
+  return { name, points: cleanedPoints };
 }
 
 /**

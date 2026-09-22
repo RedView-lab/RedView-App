@@ -9,6 +9,8 @@ import { translateAppText } from '@/shared/i18n';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
 import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
+import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics';
+import { buildImportedRouteMetrics } from '../routes';
 
 /**
  * Defaults for a brand-new session ("début d'utilisation").
@@ -103,10 +105,37 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
 export function normalizeItineraryProject(project: ItineraryProject): ItineraryProject {
   return {
     ...project,
-    itineraries: project.itineraries.map((itinerary) => ({
-      ...itinerary,
-      rhythm: normalizeItineraryRhythmState(itinerary.rhythm),
-    })),
+    itineraries: project.itineraries.map((itinerary) => {
+      let gpxRoute = itinerary.gpxRoute;
+      let metrics = itinerary.metrics;
+
+      if (gpxRoute && gpxRoute.points.length > 0) {
+        const needsCleaning =
+          hasCorruptedElevations(gpxRoute.points) ||
+          (gpxRoute.originalPoints != null && hasCorruptedElevations(gpxRoute.originalPoints));
+
+        if (needsCleaning) {
+          const cleanedPoints = cleanAndInterpolateElevations(gpxRoute.points);
+          const cleanedOriginalPoints = gpxRoute.originalPoints
+            ? cleanAndInterpolateElevations(gpxRoute.originalPoints)
+            : undefined;
+
+          gpxRoute = {
+            ...gpxRoute,
+            points: cleanedPoints,
+            ...(cleanedOriginalPoints ? { originalPoints: cleanedOriginalPoints } : {}),
+          };
+          metrics = buildImportedRouteMetrics(cleanedPoints);
+        }
+      }
+
+      return {
+        ...itinerary,
+        gpxRoute,
+        metrics,
+        rhythm: normalizeItineraryRhythmState(itinerary.rhythm),
+      };
+    }),
   };
 }
 

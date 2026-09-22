@@ -1,4 +1,8 @@
 import type { GpxRoute } from '../types';
+import {
+  cleanAndInterpolateElevations,
+  isValidElevation,
+} from '../../itineraryPanel/lib/route-metrics';
 
 const EARTH_RADIUS_M = 6_371_008.8;
 
@@ -25,7 +29,8 @@ export function parseGpxText(text: string): GpxRoute {
     throw new Error('GPX doit contenir au moins 2 points');
   }
 
-  return { name, points: routePoints };
+  const cleanedPoints = cleanAndInterpolateElevations(routePoints);
+  return { name, points: cleanedPoints };
 }
 
 function extractRouteName(text: string): string | null {
@@ -65,7 +70,7 @@ function extractPoints(text: string, pattern: RegExp): GpxRoute['points'] {
       const elevationText = elevationMatch[1].trim();
       if (elevationText.length > 0) {
         const val = Number.parseFloat(elevationText.includes('&') ? decodeXmlText(elevationText) : elevationText);
-        if (Number.isFinite(val)) elevationM = val;
+        if (isValidElevation(val)) elevationM = val;
       }
     }
 

@@ -316,6 +316,7 @@ export function computeDomain(series: ChartPoint[][]): AxisDomain | null {
   let max = -Infinity;
   for (const arr of series) {
     for (const point of arr) {
+      if (!Number.isFinite(point.y) || point.y < -500 || point.y > 10000) continue;
       if (point.y < min) min = point.y;
       if (point.y > max) max = point.y;
     }

@@ -30,3 +30,13 @@ export {
   type SurfaceAnalysisResult,
 } from './surfaceAnalysis';
 
+export {
+  MIN_VALID_TERRESTRIAL_ELEVATION_M,
+  MAX_VALID_TERRESTRIAL_ELEVATION_M,
+  isValidElevation,
+  sanitizeRawElevation,
+  hasCorruptedElevations,
+  cleanAndInterpolateElevations,
+  type RoutePointWithElevation,
+} from './elevationSanitizer';
+

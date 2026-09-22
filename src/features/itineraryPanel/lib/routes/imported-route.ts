@@ -4,6 +4,7 @@ import { FRANCE_BOUNDS } from '@/features/map3d/lib/ign.config';
 
 import { formatGpsCoordinateLabel } from '../geocoding';
 import {
+  cleanAndInterpolateElevations,
   computeRouteElevationMetrics,
   computeRouteSurfaceMetricsFromPoints,
   extractRouteProfileFromPoints,
@@ -97,36 +98,39 @@ export async function refineImportedRoutePointsWithIgnAltimetry(
     return point;
   });
 
-  return coverage / points.length >= 0.6 ? refined : null;
+  return coverage / points.length >= 0.6 ? cleanAndInterpolateElevations(refined) : null;
 }
 
 export function normalizeImportedRoutePoints(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
   options?: NormalizeImportedRoutePointsOptions,
 ): NonNullable<Itinerary['gpxRoute']>['points'] {
+  const sanitizedPoints = cleanAndInterpolateElevations(points);
+
   if (options?.includeGradient === false) {
-    return buildDistanceOnlyRoutePoints(points);
+    return buildDistanceOnlyRoutePoints(sanitizedPoints);
   }
 
-  const geometryOnlyPoints = points.map((point) => ({
+  const geometryOnlyPoints = sanitizedPoints.map((point) => ({
     lat: point.lat,
     lon: point.lon,
     elevationM: point.elevationM ?? null,
     surface: point.surface,
   }));
   const profile = extractRouteProfileFromPoints(geometryOnlyPoints);
-  if (!profile || profile.length !== points.length) {
-    return buildDistanceOnlyRoutePoints(points);
+  if (!profile || profile.length !== sanitizedPoints.length) {
+    return buildDistanceOnlyRoutePoints(sanitizedPoints);
   }
-  return toStoredRoutePoints(profile, points);
+  return toStoredRoutePoints(profile, sanitizedPoints);
 }
 
 export function buildImportedRouteMetrics(
   points: NonNullable<Itinerary['gpxRoute']>['points'],
 ): ItineraryMetrics {
-  const elevationMetrics = computeRouteElevationMetrics(points);
-  const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(points);
-  const distanceM = elevationMetrics?.distanceM ?? routeLengthM(points);
+  const sanitizedPoints = cleanAndInterpolateElevations(points);
+  const elevationMetrics = computeRouteElevationMetrics(sanitizedPoints);
+  const surfaceMetrics = computeRouteSurfaceMetricsFromPoints(sanitizedPoints);
+  const distanceM = elevationMetrics?.distanceM ?? routeLengthM(sanitizedPoints);
   return {
     distanceKm: Math.round(distanceM / 100) / 10,
     ascentM: elevationMetrics
