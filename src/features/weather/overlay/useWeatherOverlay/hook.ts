@@ -119,7 +119,23 @@ export function useWeatherOverlay(
     }
 
     const onMoveEnd = () => scheduleRefresh('normal', true);
-    const onStyleData = () => scheduleRefresh('force');
+    const onStyleData = () => {
+      if (!map || isCancelledRef.current || !canMutateStyle()) return;
+      // Re-apply already rendered layers if map style stripped them (e.g. during basemap transition)
+      const rendered = renderedRef.current;
+      let hasMissingLayer = false;
+      for (const layer of activeLayers) {
+        const item = rendered[layer.key];
+        if (item) {
+          ensureLayer(layer.key, layer.mode, item.url, item.coords);
+        } else {
+          hasMissingLayer = true;
+        }
+      }
+      if (hasMissingLayer) {
+        scheduleRefresh('normal', 'move');
+      }
+    };
 
     map.on('moveend', onMoveEnd);
     map.on('styledata', onStyleData);

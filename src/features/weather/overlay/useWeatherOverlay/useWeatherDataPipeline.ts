@@ -57,6 +57,14 @@ import {
   isInstantT,
 } from '../../radar/radarClient';
 
+function isAbortError(err: unknown): boolean {
+  if (!err) return false;
+  if (err instanceof DOMException && err.name === 'AbortError') return true;
+  if (err instanceof Error && (err.name === 'AbortError' || err.message.includes('abort') || err.message.includes('AbortError'))) return true;
+  const msg = String(err);
+  return msg.includes('AbortError') || msg.includes('aborted');
+}
+
 interface UseWeatherDataPipelineArgs {
   map: MapboxMap | null;
   stateRef: React.MutableRefObject<WeatherOverlayState>;
@@ -225,7 +233,14 @@ export function useWeatherDataPipeline({
       reloadable: true,
     }));
 
-    const meta = await fetchWeatherMeta(signal, reason === 'reload');
+    let meta: Awaited<ReturnType<typeof fetchWeatherMeta>>;
+    try {
+      meta = await fetchWeatherMeta(signal, reason === 'reload');
+    } catch (metaErr) {
+      if (isAbortError(metaErr) || generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
+      throw metaErr;
+    }
+
     if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
 
     if (!meta || !Array.isArray(meta.hours) || meta.hours.length === 0) {
@@ -322,7 +337,7 @@ export function useWeatherDataPipeline({
       try {
         img = await loadTileImage(tileUrl, signal);
       } catch (decodeErr) {
-        if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
+        if (isAbortError(decodeErr) || generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
         console.warn(`[weather-vps] Failed to load tile for ${key}:`, decodeErr);
         throw new Error(`Tuile météo indisponible (${key})`);
       }
@@ -421,7 +436,7 @@ export function useWeatherDataPipeline({
           armStyleRecovery(reason, 'vps-style-not-ready');
         }
       } catch (vpsErr) {
-        if (currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
+        if (isAbortError(vpsErr) || currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
         console.warn('[weather-overlay] VPS tile pipeline error:', vpsErr);
         publishStatus(createOverlayStatus({
           id: STATUS_ID,
