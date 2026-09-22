@@ -311,6 +311,8 @@ export function upsertRouteLayer(
       type: 'geojson',
       lineMetrics: true,
       data: renderSpec.data,
+      buffer: 64,
+      tolerance: 0.375,
     });
     map.addLayer({
       id: lineId,

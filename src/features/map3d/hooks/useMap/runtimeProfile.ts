@@ -61,8 +61,8 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
     return {
       antialias: false,
       pixelRatio: 1.0,
-      minTileCacheSize: 240,
-      maxTileCacheSize: 800,
+      minTileCacheSize: 280,
+      maxTileCacheSize: 900,
       orthoBootFallbackMs: 2400,
     };
   }
@@ -77,8 +77,8 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
     return {
       antialias: false,
       pixelRatio: Math.min(rawDpr, 1.25),
-      minTileCacheSize: 320,
-      maxTileCacheSize: 1000,
+      minTileCacheSize: 380,
+      maxTileCacheSize: 1200,
       orthoBootFallbackMs: 1800,
     };
   }
@@ -86,8 +86,8 @@ export function getMapRuntimeProfile(): MapRuntimeProfile {
   return {
     antialias: true,
     pixelRatio: Math.min(rawDpr, 1.5),
-    minTileCacheSize: 400,
-    maxTileCacheSize: 1200,
+    minTileCacheSize: 500,
+    maxTileCacheSize: 1600,
     orthoBootFallbackMs: DEFAULT_ORTHO_BOOT_FALLBACK_MS,
   };
 }

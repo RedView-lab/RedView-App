@@ -23,6 +23,7 @@ export class TerrainManager {
       this.map.setTerrain({
         source: this.sourceId,
         exaggeration: this.exaggeration,
+        'exaggeration-transition': { duration: 250 },
       });
       this.applied = true;
     } catch (error) {

@@ -91,6 +91,8 @@ export function useMap(
       antialias: runtimeProfile.antialias,
       preserveDrawingBuffer: true,
       fadeDuration: 0,
+      precompilePrograms: true,
+      cooperativeGestures: false,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
     } as mapboxgl.MapOptions);
