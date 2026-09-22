@@ -370,7 +370,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         return previous
           ? {
               ...row,
-              favorite: previous.favorite,
+              favorite: Boolean(previous.favorite || row.favorite),
               visible: previous.visible ?? row.visible,
             }
           : row;

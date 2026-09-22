@@ -1,0 +1,18 @@
+{
+  "name": "redview-poi-server",
+  "version": "1.1.0",
+  "main": "server.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "ingest": "bash ../poi-ingest/rebuild-poi-db.sh",
+    "ingest:relations": "node ../poi-ingest/import-relations.mjs --db data/pois.db"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "better-sqlite3": "^9.4.3",
+    "fastify": "^4.26.2",
+    "osm-pbf-parser": "^2.3.0"
+  }
+}

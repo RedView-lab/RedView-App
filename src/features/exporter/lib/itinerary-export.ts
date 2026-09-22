@@ -21,17 +21,18 @@ export {
 export function exportItineraryFile(
   itinerary: Itinerary,
   format: ItineraryExportFormat,
+  options?: { favoritesOnly?: boolean },
 ): { fileName: string } {
   const fileName = buildExportFileName(itinerary, format);
 
   if (format === 'gpx') {
-    const xml = buildItineraryGpx(itinerary);
+    const xml = buildItineraryGpx(itinerary, options);
     triggerBrowserDownload(new Blob([xml], { type: 'application/gpx+xml;charset=utf-8' }), fileName);
     return { fileName };
   }
 
   if (format === 'kml') {
-    const xml = buildItineraryKml(itinerary);
+    const xml = buildItineraryKml(itinerary, options);
     triggerBrowserDownload(
       new Blob([xml], { type: 'application/vnd.google-earth.kml+xml;charset=utf-8' }),
       fileName,
@@ -39,7 +40,7 @@ export function exportItineraryFile(
     return { fileName };
   }
 
-  const fitBytes = buildItineraryFitCourse(itinerary);
+  const fitBytes = buildItineraryFitCourse(itinerary, options);
   const fitPayload = new Uint8Array(fitBytes.byteLength);
   fitPayload.set(fitBytes);
   triggerBrowserDownload(new Blob([fitPayload], { type: 'application/octet-stream' }), fileName);

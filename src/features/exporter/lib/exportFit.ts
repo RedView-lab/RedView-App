@@ -84,6 +84,10 @@ function mapAnchorToFitCoursePointType(anchor: ExportAnchor): string {
       return 'shelter';
     case 'passes':
       return 'summit';
+    case 'health':
+      return 'first_aid';
+    case 'transport':
+      return 'transport';
     default:
       return 'generic';
   }
@@ -92,9 +96,12 @@ function mapAnchorToFitCoursePointType(anchor: ExportAnchor): string {
 /**
  * Génère le fichier binaire FIT Course (Garmin) avec points de parcours (CoursePoint) et altitudes.
  */
-export function buildItineraryFitCourse(itinerary: Itinerary): Uint8Array {
+export function buildItineraryFitCourse(
+  itinerary: Itinerary,
+  options?: { favoritesOnly?: boolean },
+): Uint8Array {
   const routePoints = getExportRoutePoints(itinerary);
-  const anchors = collectExportAnchors(itinerary, routePoints).filter(
+  const anchors = collectExportAnchors(itinerary, routePoints, options).filter(
     (anchor) => anchor.kind !== 'start' && anchor.kind !== 'end',
   );
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';

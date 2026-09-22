@@ -190,6 +190,8 @@ export function useItineraryGpxImport({
             hotels: { enabled: true, distanceM: 40 },
             refuges: { enabled: true, distanceM: 40 },
             passes: { enabled: true, distanceM: 40 },
+            health: { enabled: true, distanceM: 40 },
+            transport: { enabled: true, distanceM: 40 },
           },
         });
 

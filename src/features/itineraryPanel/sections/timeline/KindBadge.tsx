@@ -82,7 +82,14 @@ interface PoiBadgeSpec {
   Icon: React.ComponentType<{ size?: number }>;
 }
 
-export const POI_BADGE_REGISTRY: Record<PoiCategory, PoiBadgeSpec> = {
+/**
+ * Registry of designed teardrop badges, par catégorie de panneau.
+ *
+ * Volontairement partiel : `PoiBadge` résout d'abord un asset fourni
+ * (`PROVIDED_TIMELINE_BADGE_URLS`), et les catégories santé / transport
+ * n'ont pas encore de pictogramme dédié côté design.
+ */
+export const POI_BADGE_REGISTRY: Partial<Record<PoiCategory, PoiBadgeSpec>> = {
   fountains:    { color: '#1e5fc7', Icon: IconDroplet },
   toilets:      { color: '#5a8fc7', Icon: IconToilet },
   supermarkets: { color: '#a85a1a', Icon: IconShoppingCart },
@@ -129,6 +136,8 @@ export function poiLabel(category: PoiCategory): string {
     case 'hotels':       return translateAppText('Hôtel');
     case 'refuges':      return translateAppText('Refuge');
     case 'passes':       return translateAppText('Col');
+    case 'health':       return translateAppText('Santé');
+    case 'transport':    return translateAppText('Transport');
   }
 }
 
@@ -150,7 +159,9 @@ export function PoiBadge({
     return <ProvidedPoiSvgBadge url={providedUrl} size={size} className="rvi-kind--pin" />;
   }
 
+  // Les catégories sans badge designé retombent sur un pin neutre.
   const spec = POI_BADGE_REGISTRY[category];
+  const color = spec?.color ?? '#5a5a5a';
   const glyph = Math.round(size * 0.5);
   return (
     <span
@@ -158,8 +169,8 @@ export function PoiBadge({
       style={{ width: size, height: size }}
       aria-hidden
     >
-      <IconTeardropPin size={size} color={spec.color} />
-      {!hideGlyph ? (
+      <IconTeardropPin size={size} color={color} />
+      {!hideGlyph && spec ? (
         <span className="rvi-kind__pin-icon" style={{ width: glyph, height: glyph }}>
           <spec.Icon size={glyph} />
         </span>

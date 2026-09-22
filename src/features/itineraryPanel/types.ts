@@ -117,7 +117,9 @@ export type PoiCategory =
   | 'bikeShops'
   | 'hotels'
   | 'refuges'
-  | 'passes';
+  | 'passes'
+  | 'health'
+  | 'transport';
 
 export interface PoiState {
   fountains: PoiEntry;
@@ -133,6 +135,10 @@ export interface PoiState {
   hotels: PoiEntry;
   refuges: PoiEntry;
   passes: PoiEntry;
+  /** Pharmacies, hôpitaux, médecins, défibrillateurs, police. */
+  health: PoiEntry;
+  /** Gares, arrêts, terminaux ferry, distributeurs, poste, laveries. */
+  transport: PoiEntry;
 }
 
 /** A single user-defined pause inserted at a recurring interval. */

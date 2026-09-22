@@ -9,14 +9,14 @@ import type { PoiFeature } from '@/features/poi/types';
 
 export function setPoiFeatureFavoriteState(
   features: PoiFeature[] | undefined,
-  poiId: number,
+  poiId: number | string,
   favorite: boolean,
 ): PoiFeature[] | undefined {
   if (!features || features.length === 0) return features;
 
   let changed = false;
   const nextFeatures = features.map((feature) => {
-    if (feature.id !== poiId) return feature;
+    if (feature.id !== poiId && String(feature.id) !== String(poiId)) return feature;
     if (Boolean(feature.favorite) === favorite) return feature;
     changed = true;
     return { ...feature, favorite };

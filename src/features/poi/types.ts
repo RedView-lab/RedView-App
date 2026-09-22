@@ -1,27 +1,73 @@
 // ── POI categories relevant to ultra cyclists / outdoor sports ─────────
 //
-// Aligné sur la taxonomie du panneau Itinerary (Figma) ET sur les tags
-// indexés par le serveur self-hosted (`redview-poi-server/filter.txt`).
+// La liste des catégories est dérivée de `poi-taxonomy.json`, la source de
+// vérité partagée avec l'importeur OSM du serveur POI. Le type `PoiCategory`
+// reste une union littérale explicite : c'est ce qui garantit à la
+// compilation que les libellés, icônes et mappings du panneau couvrent bien
+// toutes les catégories réellement indexées en base.
+
+import {
+  POI_TAXONOMY,
+  POI_TAXONOMY_ICON,
+  POI_TAXONOMY_LABELS,
+  POI_TAXONOMY_GROUP,
+} from './poi-taxonomy';
 
 export const POI_CATEGORIES = [
+  // Eau
   'drinking_water',
-  'toilets',
-  'fuel',
+  'water_point',
+  'water_tap',
+  'spring',
+  'fountain',
+  // Ravitaillement
+  'supermarket',
+  'convenience',
+  'bakery',
+  'butcher',
+  'marketplace',
+  'restaurant',
   'fast_food',
   'cafe',
   'bar',
-  'restaurant',
-  'bakery',
-  'supermarket',
-  'convenience',
-  'bicycle',
-  'bicycle_repair',
+  'pub',
+  'ice_cream',
+  'vending_machine',
+  // Dormir / bivouac
   'hotel',
   'alpine_hut',
-  'camp_site',
+  'wilderness_hut',
   'shelter',
+  'camp_site',
+  'caravan_site',
+  // Vélo & réparation
+  'bicycle',
+  'bicycle_repair',
+  'compressed_air',
+  'charging_station',
+  'outdoor_shop',
+  // Santé & sécurité
   'pharmacy',
   'hospital',
+  'clinic',
+  'doctors',
+  'defibrillator',
+  'police',
+  // Transport & évacuation
+  'train_station',
+  'bus_station',
+  'ferry_terminal',
+  // Services
+  'toilets',
+  'shower',
+  'fuel',
+  'atm',
+  'post_office',
+  'laundry',
+  // Paysage & cols
+  'pass',
+  'viewpoint',
+  'picnic_site',
 ] as const;
 
 export type PoiCategory = (typeof POI_CATEGORIES)[number];
@@ -32,58 +78,27 @@ export interface PoiGroup {
   categories: PoiCategory[];
 }
 
-export const POI_GROUPS: PoiGroup[] = [
-  { label: 'Eau', categories: ['drinking_water'] },
-  { label: 'Alimentation', categories: ['bakery', 'convenience', 'supermarket'] },
-  { label: 'Restauration', categories: ['restaurant', 'fast_food', 'cafe', 'bar'] },
-  { label: 'Vélo', categories: ['bicycle', 'bicycle_repair'] },
-  { label: 'Hébergement', categories: ['hotel', 'alpine_hut', 'camp_site', 'shelter'] },
-  { label: 'Services', categories: ['toilets', 'fuel', 'pharmacy', 'hospital'] },
-];
+/** Groupes dérivés de la taxonomie (ordre du fichier source). */
+export const POI_GROUPS: PoiGroup[] = POI_TAXONOMY.groups.map((group) => ({
+  label: group.label,
+  categories: POI_CATEGORIES.filter((key) => POI_TAXONOMY_GROUP[key] === group.key),
+})).filter((group) => group.categories.length > 0);
 
-/** Human-readable labels (FR) */
-export const POI_LABELS: Record<PoiCategory, string> = {
-  drinking_water: 'Fontaine / eau',
-  toilets: 'Toilettes',
-  fuel: 'Station-service',
-  fast_food: 'Fast-food',
-  cafe: 'Café',
-  bar: 'Bar',
-  restaurant: 'Restaurant',
-  bakery: 'Boulangerie',
-  supermarket: 'Supermarché',
-  convenience: 'Supérette',
-  bicycle: 'Magasin vélo',
-  bicycle_repair: 'Réparation vélo',
-  hotel: 'Hôtel',
-  alpine_hut: 'Refuge',
-  camp_site: 'Camping',
-  shelter: 'Abri',
-  pharmacy: 'Pharmacie',
-  hospital: 'Hôpital',
-};
+/**
+ * Human-readable labels (FR).
+ *
+ * Construits depuis `poi-taxonomy.json` : si une catégorie est ajoutée au
+ * type `PoiCategory` sans être déclarée dans le JSON, le libellé retombe sur
+ * la clé brute au lieu d'échouer silencieusement.
+ */
+export const POI_LABELS: Record<PoiCategory, string> = Object.fromEntries(
+  POI_CATEGORIES.map((key) => [key, POI_TAXONOMY_LABELS[key] ?? key]),
+) as Record<PoiCategory, string>;
 
-/** Colors per category for icons */
-export const POI_COLORS: Record<PoiCategory, string> = {
-  drinking_water: '#38bdf8',
-  toilets: '#a78bfa',
-  fuel: '#facc15',
-  fast_food: '#fb7185',
-  cafe: '#a16207',
-  bar: '#c084fc',
-  restaurant: '#ef4444',
-  bakery: '#fbbf24',
-  supermarket: '#f97316',
-  convenience: '#fb923c',
-  bicycle: '#34d399',
-  bicycle_repair: '#10b981',
-  hotel: '#60a5fa',
-  alpine_hut: '#15803d',
-  camp_site: '#22c55e',
-  shelter: '#94a3b8',
-  pharmacy: '#f472b6',
-  hospital: '#dc2626',
-};
+/** Nom logique d'icône par catégorie (résolu en URL par `lib/poi-icons`). */
+export const POI_ICON_NAMES: Record<PoiCategory, string> = Object.fromEntries(
+  POI_CATEGORIES.map((key) => [key, POI_TAXONOMY_ICON[key] ?? 'fallback']),
+) as Record<PoiCategory, string>;
 
 /** A single POI feature */
 export interface PoiFeature {
@@ -94,6 +109,8 @@ export interface PoiFeature {
   name: string | null;
   tags: Record<string, string>;
   favorite?: boolean;
+  /** Type d'objet OSM d'origine, renvoyé par le serveur POI. */
+  osmType?: 'node' | 'way' | 'relation';
 }
 
 /** Backend response (Fastify /bbox and /corridor) */

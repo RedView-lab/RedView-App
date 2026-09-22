@@ -3,27 +3,13 @@ import { POI_LABELS, type PoiCategory } from '@/features/poi/types';
 import type { MapContextMenuPoint } from './types';
 
 export const FEATURE_CATEGORY_LABELS: Record<string, string> = {
+  // Toutes les catégories POI indexées par le serveur, plus les couches
+  // Mapbox natives que le menu contextuel sait nommer.
+  ...POI_LABELS,
   address: 'Adresse',
-  bakery: POI_LABELS.bakery,
-  bar: POI_LABELS.bar,
-  bicycle: POI_LABELS.bicycle,
-  bicycle_repair: POI_LABELS.bicycle_repair,
-  cafe: POI_LABELS.cafe,
-  camp_site: POI_LABELS.camp_site,
-  convenience: POI_LABELS.convenience,
-  drinking_water: POI_LABELS.drinking_water,
-  fast_food: POI_LABELS.fast_food,
-  fuel: POI_LABELS.fuel,
-  hospital: POI_LABELS.hospital,
-  hotel: POI_LABELS.hotel,
-  pharmacy: POI_LABELS.pharmacy,
   place: 'Lieu',
   poi: 'POI',
-  restaurant: POI_LABELS.restaurant,
   road: 'Route',
-  shelter: POI_LABELS.shelter,
-  supermarket: POI_LABELS.supermarket,
-  toilets: POI_LABELS.toilets,
 };
 
 export const SURFACE_LABELS: Record<string, string> = {

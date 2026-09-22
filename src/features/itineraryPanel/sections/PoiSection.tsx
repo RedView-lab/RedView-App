@@ -54,6 +54,10 @@ const POI_ROWS: { key: PoiCategory; label: string }[][] = [
     { key: 'hotels', label: 'Hôtels' },
     { key: 'refuges', label: 'Refuges' },
   ],
+  [
+    { key: 'health', label: 'Santé' },
+    { key: 'transport', label: 'Transport' },
+  ],
 ];
 
 /** Parses a `"40m"`-style string into a positive integer or null. */

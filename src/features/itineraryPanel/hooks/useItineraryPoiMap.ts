@@ -16,25 +16,30 @@ import type {
 
 /**
  * Mapping from the panel's per-row POI keys (Figma taxonomy) to the
- * underlying OSM/Overpass categories used by the POI engine.
+ * underlying OSM categories used by the POI engine.
  *
- * Empty arrays mean the row is shown in the UI but not yet wired to
- * an OSM tag — the corridor search will simply ignore it.
+ * Each row now aggregates every category the base indexes for that need, so
+ * a single checkbox surfaces the whole family instead of one narrow OSM tag.
+ * The engine no longer filters anything else out (see
+ * `src/features/poi/lib/corridor-distance-filter.ts`), which means a checked
+ * row really does return *all* matching POI within the row's distance.
  */
 const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
-  fountains: ['drinking_water'],
-  toilets: ['toilets'],
-  supermarkets: ['supermarket', 'convenience'],
-  gasStations: ['fuel'],
-  bakeries: ['bakery'],
-  fastFood: ['fast_food'],
+  fountains: ['drinking_water', 'water_point', 'water_tap', 'spring', 'fountain'],
+  toilets: ['toilets', 'shower'],
+  supermarkets: ['supermarket', 'convenience', 'marketplace'],
+  gasStations: ['fuel', 'charging_station'],
+  bakeries: ['bakery', 'butcher', 'ice_cream'],
+  fastFood: ['fast_food', 'vending_machine'],
   cafes: ['cafe'],
-  bars: ['bar'],
+  bars: ['bar', 'pub'],
   restaurants: ['restaurant'],
-  bikeShops: ['bicycle', 'bicycle_repair'],
-  hotels: ['hotel'],
-  refuges: ['alpine_hut', 'shelter', 'camp_site'],
-  passes: [],
+  bikeShops: ['bicycle', 'bicycle_repair', 'compressed_air', 'outdoor_shop'],
+  hotels: ['hotel', 'camp_site', 'caravan_site'],
+  refuges: ['alpine_hut', 'wilderness_hut', 'shelter'],
+  passes: ['pass', 'viewpoint', 'picnic_site'],
+  health: ['pharmacy', 'hospital', 'clinic', 'doctors', 'defibrillator', 'police'],
+  transport: ['train_station', 'bus_station', 'ferry_terminal', 'atm', 'post_office', 'laundry'],
 };
 
 const DEFAULT_RADIUS_M = 1000;

@@ -17,24 +17,70 @@ import {
 } from '../routes';
 import type { PoiCategory as PanelPoiCategory, TimelineItem } from '../../types';
 
-/** OSM/Overpass → panel category. Anything not listed here is dropped. */
+/**
+ * OSM category → panel row. Anything not listed here is dropped from the
+ * timeline (but still rendered on the map).
+ *
+ * Doit rester l'exact inverse de `PANEL_TO_FEATURE_POI`
+ * (itineraryPanel/hooks/useItineraryPoiMap.ts) : une catégorie ajoutée à la
+ * taxonomie sans entrée ici disparaîtrait silencieusement de la timeline.
+ */
 export const FEATURE_TO_PANEL_POI: Partial<Record<FeaturePoiCategory, PanelPoiCategory>> = {
+  // Eau
   drinking_water: 'fountains',
+  water_point: 'fountains',
+  water_tap: 'fountains',
+  spring: 'fountains',
+  fountain: 'fountains',
+  // Sanitaires
   toilets: 'toilets',
+  shower: 'toilets',
+  // Ravitaillement
   supermarket: 'supermarkets',
   convenience: 'supermarkets',
-  fuel: 'gasStations',
+  marketplace: 'supermarkets',
   bakery: 'bakeries',
+  butcher: 'bakeries',
+  ice_cream: 'bakeries',
   fast_food: 'fastFood',
+  vending_machine: 'fastFood',
   cafe: 'cafes',
   bar: 'bars',
+  pub: 'bars',
   restaurant: 'restaurants',
+  // Carburant / recharge
+  fuel: 'gasStations',
+  charging_station: 'gasStations',
+  // Vélo
   bicycle: 'bikeShops',
   bicycle_repair: 'bikeShops',
+  compressed_air: 'bikeShops',
+  outdoor_shop: 'bikeShops',
+  // Dormir
   hotel: 'hotels',
+  camp_site: 'hotels',
+  caravan_site: 'hotels',
   alpine_hut: 'refuges',
+  wilderness_hut: 'refuges',
   shelter: 'refuges',
-  camp_site: 'refuges',
+  // Paysage
+  pass: 'passes',
+  viewpoint: 'passes',
+  picnic_site: 'passes',
+  // Santé & sécurité
+  pharmacy: 'health',
+  hospital: 'health',
+  clinic: 'health',
+  doctors: 'health',
+  defibrillator: 'health',
+  police: 'health',
+  // Transport & services
+  train_station: 'transport',
+  bus_station: 'transport',
+  ferry_terminal: 'transport',
+  atm: 'transport',
+  post_office: 'transport',
+  laundry: 'transport',
 };
 
 /**

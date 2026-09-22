@@ -36,9 +36,12 @@ const KML_STYLE_COLORS: Record<string, string> = {
 /**
  * Génère le fichier KML complet pour un itinéraire avec styles de trace et icônes d'étape.
  */
-export function buildItineraryKml(itinerary: Itinerary): string {
+export function buildItineraryKml(
+  itinerary: Itinerary,
+  options?: { favoritesOnly?: boolean },
+): string {
   const routePoints = getExportRoutePoints(itinerary);
-  const anchors = collectExportAnchors(itinerary, routePoints, { favoritesOnly: true });
+  const anchors = collectExportAnchors(itinerary, routePoints, options);
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';
 
   const styleIds = new Set<string>(['rv-track']);

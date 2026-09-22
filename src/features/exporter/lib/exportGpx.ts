@@ -8,6 +8,7 @@ import {
   formatDecimal,
   getExportRoutePoints,
   GPX_NAMESPACE,
+  POI_CATEGORY_LABEL_FR,
   POI_CATEGORY_TO_GPX_SYM,
   type ExportAnchor,
 } from './exportHelpers';
@@ -31,7 +32,11 @@ export function buildGpxWaypointType(anchor: ExportAnchor): string {
 
 export function buildWaypointDescription(anchor: ExportAnchor): string {
   if (anchor.kind === 'waypoint') return 'Point de passage exporte depuis la feuille de route.';
-  if (anchor.kind === 'poi') return 'POI exporte depuis RedView pour navigation sur montre ou compteur.';
+  if (anchor.kind === 'poi') {
+    const catLabel = anchor.poiCategory ? (POI_CATEGORY_LABEL_FR[anchor.poiCategory] ?? 'POI') : 'POI';
+    const distKm = (anchor.distanceM / 1000).toFixed(1);
+    return `${catLabel} - km ${distKm}${anchor.favorite ? ' (favori)' : ''}`;
+  }
   if (anchor.kind === 'start') return 'Depart du parcours.';
   if (anchor.kind === 'end') return 'Arrivee du parcours.';
   return 'Point exporte depuis RedView.';
@@ -42,7 +47,7 @@ export function buildWaypointDescription(anchor: ExportAnchor): string {
  */
 export function buildItineraryGpx(itinerary: Itinerary, options?: { favoritesOnly?: boolean }): string {
   const routePoints = getExportRoutePoints(itinerary);
-  const anchors = collectExportAnchors(itinerary, routePoints, { favoritesOnly: options?.favoritesOnly ?? true });
+  const anchors = collectExportAnchors(itinerary, routePoints, options);
   const bounds = buildBounds(routePoints);
   const exportedAt = new Date().toISOString();
   const routeName = itinerary.gpxRoute?.name?.trim() || itinerary.name.trim() || 'Itineraire';

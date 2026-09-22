@@ -1,0 +1,84 @@
+{
+  "$comment": "Source de vérité de la taxonomie POI RedView. Consommée par (1) le client React via src/features/poi/poi-taxonomy.ts et (2) l'importeur OSM déployé sur le VPS (/opt/poi-server/import-osm.mjs). Toute catégorie ajoutée ici doit aussi l'être dans PoiCategory (src/features/poi/types.ts), dans PANEL_TO_FEATURE_POI (src/features/itineraryPanel/hooks/useItineraryPoiMap.ts) et dans FEATURE_TO_PANEL_POI (src/features/itineraryPanel/lib/schedule/poi-to-timeline.ts).",
+  "version": 2,
+  "groups": [
+    { "key": "water", "label": "Eau" },
+    { "key": "food", "label": "Ravitaillement" },
+    { "key": "sleep", "label": "Dormir / bivouac" },
+    { "key": "bike", "label": "Vélo & réparation" },
+    { "key": "health", "label": "Santé & sécurité" },
+    { "key": "transport", "label": "Transport & évacuation" },
+    { "key": "services", "label": "Services" },
+    { "key": "scenic", "label": "Paysage & cols" }
+  ],
+  "$tagsComment": "Clés de tags conservées en base. Les autres sont jetées pour garder la base compacte (les gros tags source/wikipedia/image gonflent inutilement chaque ligne).",
+  "keepTags": [
+    "name", "name:fr", "name:en", "alt_name", "old_name", "loc_name", "brand", "operator",
+    "opening_hours", "opening_hours:url", "phone", "contact:phone", "website", "contact:website",
+    "email", "contact:email", "wheelchair", "cuisine", "addr:street", "addr:city", "addr:postcode",
+    "addr:housenumber", "ele", "capacity", "fee", "charge", "access", "vending", "shelter_type",
+    "drinking_water", "takeaway", "outdoor_seating", "internet_access", "shower", "toilets",
+    "rooms", "beds", "tourism", "amenity", "shop", "leisure", "emergency", "railway",
+    "public_transport", "mountain_pass", "natural", "man_made", "service:bicycle:repair",
+    "description", "note", "ref", "network", "route_ref", "departures_board", "motor_vehicle",
+    "bicycle", "surface", "covered", "inscription", "height", "lit", "indoor", "level"
+  ],
+  "$iconComment": "`icon` référence le vocabulaire d'icônes résolu par src/features/poi/lib/poi-icons.ts (LOGICAL_ICON_URLS). Ajouter un nom ici sans l'ajouter là-bas fait retomber sur l'icône générique.",
+  "$uiComment": "`ui: false` = catégorie indexée en base mais NON exposée dans l'app (pas de ligne dans le panneau POI, pas de choix dans le sélecteur de catégorie d'un POI manuel, pas de ligne de timeline). Sert à garder « en stock » des POI sans rapport avec la préparation d'itinéraire (défibrillateur, police, poste, laverie…). Retirer le drapeau suffit à les réafficher, aucune réingestion nécessaire.",
+  "$rulesComment": "rules = OR de AND. Chaque règle est un tableau de conditions AND. Une condition = { k, v } (égalité) ou { k, in: [...] } (appartenance).",
+  "categories": [
+    { "key": "drinking_water", "label": "Point d'eau potable", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "drinking_water" }]] },
+    { "key": "water_point", "label": "Point d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "water_point" }]] },
+    { "key": "water_tap", "label": "Robinet d'eau", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "man_made", "v": "water_tap" }]] },
+    { "key": "spring", "label": "Source", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "natural", "v": "spring" }]] },
+    { "key": "fountain", "label": "Fontaine", "group": "water", "icon": "drinking_water", "rules": [[{ "k": "amenity", "v": "fountain" }]] },
+
+    { "key": "supermarket", "label": "Supermarché", "group": "food", "icon": "supermarket", "rules": [[{ "k": "shop", "v": "supermarket" }]] },
+    { "key": "convenience", "label": "Épicerie", "group": "food", "icon": "shop", "rules": [[{ "k": "shop", "v": "convenience" }]] },
+    { "key": "bakery", "label": "Boulangerie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "bakery" }]] },
+    { "key": "butcher", "label": "Boucherie / charcuterie", "group": "food", "icon": "bakery", "rules": [[{ "k": "shop", "v": "butcher" }]] },
+    { "key": "marketplace", "label": "Marché", "group": "food", "icon": "shop", "rules": [[{ "k": "amenity", "v": "marketplace" }]] },
+    { "key": "restaurant", "label": "Restaurant", "group": "food", "icon": "restaurant", "rules": [[{ "k": "amenity", "v": "restaurant" }]] },
+    { "key": "fast_food", "label": "Restauration rapide", "group": "food", "icon": "fast_food", "rules": [[{ "k": "amenity", "v": "fast_food" }]] },
+    { "key": "cafe", "label": "Café", "group": "food", "icon": "cafe", "rules": [[{ "k": "amenity", "v": "cafe" }]] },
+    { "key": "bar", "label": "Bar", "group": "food", "icon": "bar", "rules": [[{ "k": "amenity", "v": "bar" }]] },
+    { "key": "pub", "label": "Pub / brasserie", "group": "food", "icon": "bar", "rules": [[{ "k": "amenity", "v": "pub" }], [{ "k": "amenity", "v": "biergarten" }]] },
+    { "key": "ice_cream", "label": "Glacier", "group": "food", "icon": "fast_food", "rules": [[{ "k": "amenity", "v": "ice_cream" }], [{ "k": "shop", "v": "ice_cream" }]] },
+    { "key": "vending_machine", "label": "Distributeur", "group": "food", "icon": "shop", "rules": [[{ "k": "amenity", "v": "vending_machine" }, { "k": "vending", "in": ["drinks", "coffee", "food", "water", "milk", "sandwiches", "sweets", "ice_cream", "hot_drinks"] }]] },
+
+    { "key": "hotel", "label": "Hôtel / hébergement", "group": "sleep", "icon": "hotel", "rules": [[{ "k": "tourism", "in": ["hotel", "motel", "hostel", "guest_house", "chalet", "apartment", "apartments", "aparthotel"] }]] },
+    { "key": "alpine_hut", "label": "Refuge de montagne", "group": "sleep", "icon": "refuge", "rules": [[{ "k": "tourism", "v": "alpine_hut" }]] },
+    { "key": "wilderness_hut", "label": "Cabane non gardée", "group": "sleep", "icon": "refuge", "rules": [[{ "k": "tourism", "v": "wilderness_hut" }]] },
+    { "key": "shelter", "label": "Abri", "group": "sleep", "icon": "refuge", "rules": [[{ "k": "amenity", "v": "shelter" }], [{ "k": "shelter_type", "in": ["basic_hut", "weather_shelter", "lean_to", "picnic_shelter", "field_shelter", "rock_shelter"] }]] },
+    { "key": "camp_site", "label": "Camping", "group": "sleep", "icon": "refuge", "rules": [[{ "k": "tourism", "v": "camp_site" }]] },
+    { "key": "caravan_site", "label": "Aire de camping-car", "group": "sleep", "icon": "refuge", "ui": false, "rules": [[{ "k": "tourism", "v": "caravan_site" }]] },
+
+    { "key": "bicycle", "label": "Magasin de vélo", "group": "bike", "icon": "bicycle", "rules": [[{ "k": "shop", "v": "bicycle" }]] },
+    { "key": "bicycle_repair", "label": "Réparation vélo", "group": "bike", "icon": "bicycle", "rules": [[{ "k": "amenity", "v": "bicycle_repair_station" }], [{ "k": "service:bicycle:repair", "v": "yes" }]] },
+    { "key": "compressed_air", "label": "Gonflage", "group": "bike", "icon": "bicycle", "rules": [[{ "k": "amenity", "v": "compressed_air" }], [{ "k": "service:bicycle:pump", "v": "yes" }]] },
+    { "key": "charging_station", "label": "Recharge électrique", "group": "bike", "icon": "fuel", "rules": [[{ "k": "amenity", "v": "charging_station" }]] },
+    { "key": "outdoor_shop", "label": "Magasin outdoor / sport", "group": "bike", "icon": "bicycle", "rules": [[{ "k": "shop", "in": ["outdoor", "sports"] }]] },
+
+    { "key": "pharmacy", "label": "Pharmacie", "group": "health", "icon": "medical", "rules": [[{ "k": "amenity", "v": "pharmacy" }]] },
+    { "key": "hospital", "label": "Hôpital", "group": "health", "icon": "medical", "rules": [[{ "k": "amenity", "v": "hospital" }]] },
+    { "key": "clinic", "label": "Clinique", "group": "health", "icon": "medical", "ui": false, "rules": [[{ "k": "amenity", "v": "clinic" }]] },
+    { "key": "doctors", "label": "Médecin", "group": "health", "icon": "medical", "ui": false, "rules": [[{ "k": "amenity", "v": "doctors" }]] },
+    { "key": "defibrillator", "label": "Défibrillateur", "group": "health", "icon": "medical", "ui": false, "rules": [[{ "k": "emergency", "v": "defibrillator" }]] },
+    { "key": "police", "label": "Police / gendarmerie", "group": "health", "icon": "police", "ui": false, "rules": [[{ "k": "amenity", "v": "police" }]] },
+
+    { "key": "train_station", "label": "Gare", "group": "transport", "icon": "transport", "rules": [[{ "k": "railway", "in": ["station", "halt"] }], [{ "k": "public_transport", "v": "station" }, { "k": "train", "v": "yes" }]] },
+    { "key": "bus_station", "label": "Gare routière", "group": "transport", "icon": "transport", "ui": false, "rules": [[{ "k": "amenity", "v": "bus_station" }]] },
+    { "key": "ferry_terminal", "label": "Terminal ferry", "group": "transport", "icon": "transport", "rules": [[{ "k": "amenity", "v": "ferry_terminal" }]] },
+
+    { "key": "toilets", "label": "Toilettes", "group": "services", "icon": "toilets", "rules": [[{ "k": "amenity", "v": "toilets" }]] },
+    { "key": "shower", "label": "Douche", "group": "services", "icon": "toilets", "rules": [[{ "k": "amenity", "v": "shower" }]] },
+    { "key": "fuel", "label": "Station-service", "group": "services", "icon": "fuel", "rules": [[{ "k": "amenity", "v": "fuel" }]] },
+    { "key": "atm", "label": "Distributeur de billets", "group": "services", "icon": "cash", "ui": false, "rules": [[{ "k": "amenity", "v": "atm" }], [{ "k": "amenity", "v": "bank" }]] },
+    { "key": "post_office", "label": "Bureau de poste", "group": "services", "icon": "mail", "ui": false, "rules": [[{ "k": "amenity", "v": "post_office" }]] },
+    { "key": "laundry", "label": "Laverie", "group": "services", "icon": "shop", "ui": false, "rules": [[{ "k": "shop", "v": "laundry" }]] },
+
+    { "key": "pass", "label": "Col / passage", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "mountain_pass", "v": "yes" }], [{ "k": "natural", "v": "saddle" }]] },
+    { "key": "viewpoint", "label": "Point de vue", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "tourism", "v": "viewpoint" }]] },
+    { "key": "picnic_site", "label": "Aire de pique-nique", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "tourism", "v": "picnic_site" }], [{ "k": "amenity", "v": "picnic_table" }]] }
+  ]
+}
