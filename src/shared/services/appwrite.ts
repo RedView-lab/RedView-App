@@ -3,6 +3,7 @@ import {
   Client,
   Databases,
   ID,
+  ImageFormat,
   OAuthProvider,
   Permission,
   Query,
@@ -43,7 +44,7 @@ export const account = new Account(client);
 export const databases = new Databases(client);
 export const storage = new Storage(client);
 
-export { ID, OAuthProvider, Permission, Query, Role };
+export { ID, OAuthProvider, Permission, Query, Role, ImageFormat };
 
 export function hasStoredAppwriteSession(): boolean {
   return readStoredAppwriteSession() !== null;

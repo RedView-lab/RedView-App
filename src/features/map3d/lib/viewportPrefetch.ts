@@ -81,12 +81,10 @@ export function installViewportPrefetch(
 
     const sw = lngLatToTile(bounds.getWest(), bounds.getSouth(), z);
     const ne = lngLatToTile(bounds.getEast(), bounds.getNorth(), z);
-    const xMin = Math.min(sw.x, ne.x);
-    const xMax = Math.max(sw.x, ne.x);
-    const yMin = Math.min(sw.y, ne.y);
-    const yMax = Math.max(sw.y, ne.y);
-
-    if (xMax - xMin > 16 || yMax - yMin > 16) return;
+    let xMin = Math.min(sw.x, ne.x);
+    let xMax = Math.max(sw.x, ne.x);
+    let yMin = Math.min(sw.y, ne.y);
+    let yMax = Math.max(sw.y, ne.y);
 
     const pitch = typeof map.getPitch === 'function' ? map.getPitch() : 0;
     const tilted = pitch >= PITCH_FOREGROUND_THRESHOLD_DEG;
@@ -97,12 +95,27 @@ export function installViewportPrefetch(
       const w = canvas.clientWidth || canvas.width || 0;
       const h = canvas.clientHeight || canvas.height || 0;
       if (w > 0 && h > 0) {
-        anchor = screenToLngLat(map, w * 0.5, h * 0.7);
+        anchor = screenToLngLat(map, w * 0.5, h * 0.75);
       }
     }
     if (!anchor) {
       const c = map.getCenter();
       anchor = { lng: c.lng, lat: c.lat };
+    }
+
+    // Gestion spécifique des vues très couchées (pitch >= 55°)
+    // En vue rasante/couchée, la boîte englobante de l'écran s'étend jusqu'à l'horizon
+    // infini (xMax - xMin > 16), ce qui coupait brutalement le préchargement du sol.
+    // On cadre ici un cône de qualité foreground centré sur le sol devant la caméra (±2 tuiles).
+    if (pitch >= 55) {
+      const ac = lngLatToTile(anchor.lng, anchor.lat, z);
+      const cap = (1 << z) - 1;
+      xMin = Math.max(0, ac.x - 2);
+      xMax = Math.min(cap, ac.x + 2);
+      yMin = Math.max(0, ac.y - 2);
+      yMax = Math.min(cap, ac.y + 2);
+    } else if (xMax - xMin > 16 || yMax - yMin > 16) {
+      return;
     }
 
     const centreTile = lngLatToTile(anchor.lng, anchor.lat, z);

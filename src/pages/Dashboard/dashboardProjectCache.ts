@@ -1,5 +1,6 @@
 import { PROJECT_CACHE_KEY_PREFIX } from '@/features/map3d/lib/mapCacheEpoch';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
+import { idbSaveProjectCache, idbGetProjectCache } from '@/shared/utils/storage/idbProjectStore';
 
 export interface LocalProjectCacheEntry {
   cachedAt: string;
@@ -202,7 +203,27 @@ export function readProjectCache(projectId: string): LocalProjectCacheEntry | nu
   }
 }
 
+export async function readProjectCacheAsync(projectId: string): Promise<LocalProjectCacheEntry | null> {
+  try {
+    const idbEntry = await idbGetProjectCache(projectId);
+    if (idbEntry?.project) {
+      return {
+        cachedAt: idbEntry.cachedAt,
+        project: idbEntry.project,
+      };
+    }
+  } catch {
+    // fallback to sync cache
+  }
+  return readProjectCache(projectId);
+}
+
 export function writeProjectCache(projectId: string, project: ItineraryProject): void {
+  // 1. Toujours enregistrer immédiatement le snapshot complet dans IndexedDB (Crash-Proof, sans perte de POIs ni d'altitudes)
+  void idbSaveProjectCache(projectId, project).catch((err) => {
+    console.warn('[Dashboard] idbSaveProjectCache error', err);
+  });
+
   if (cacheWritesDisabledForProject.has(projectId)) return;
 
   const key = getProjectCacheKey(projectId);
@@ -214,9 +235,6 @@ export function writeProjectCache(projectId: string, project: ItineraryProject):
     } catch {
       // Ignore
     }
-    console.warn('[Dashboard] local project cache skipped: project snapshot too large', {
-      projectId,
-    });
     return;
   }
 
@@ -235,15 +253,10 @@ export function writeProjectCache(projectId: string, project: ItineraryProject):
         return;
       } catch (retryError) {
         cacheWritesDisabledForProject.add(projectId);
-        console.warn(
-          '[Dashboard] local project cache disabled after quota exhaustion',
-          retryError,
-        );
         return;
       }
     }
 
     cacheWritesDisabledForProject.add(projectId);
-    console.warn('[Dashboard] local project cache write failed', error);
   }
 }

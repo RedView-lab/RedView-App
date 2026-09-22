@@ -18,7 +18,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 
 export async function captureMapThumbnail(
   map: MapboxMap | null,
-  targetWidth = 360,
+  targetWidth = 320,
   aspectRatio = 16 / 9,
 ): Promise<Blob | null> {
   if (!map) return null;
@@ -52,7 +52,14 @@ export async function captureMapThumbnail(
       ctx.drawImage(src, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
 
       return new Promise<Blob | null>((resolve) => {
-        off.toBlob((b) => resolve(b), 'image/jpeg', 0.72);
+        // Encodage WebP léger et ultra-net (qualité 0.65), fallback JPEG 0.68
+        off.toBlob((blob) => {
+          if (blob && blob.size > 0) {
+            resolve(blob);
+          } else {
+            off.toBlob((jpegBlob) => resolve(jpegBlob), 'image/jpeg', 0.68);
+          }
+        }, 'image/webp', 0.65);
       });
     } catch {
       return Promise.resolve(null);

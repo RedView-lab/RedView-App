@@ -5,7 +5,9 @@ import {
   Permission,
   storage,
   THUMBNAILS_BUCKET_ID,
+  ImageFormat,
 } from '@/shared/services/appwrite';
+import { idbSaveThumbnail, idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
 
 function safeThumbnailFileId(projectId: string): string {
   const sanitized = projectId.replace(/[^a-zA-Z0-9._-]/g, '');
@@ -23,11 +25,18 @@ async function getAuthenticatedUserId(): Promise<string> {
 }
 
 export async function uploadProjectThumbnail(projectId: string, blob: Blob): Promise<void> {
-  const userId = await getAuthenticatedUserId();
-  const fileId = safeThumbnailFileId(projectId);
-  const file = new File([blob], `${fileId}.jpg`, { type: 'image/jpeg' });
+  // 1. Toujours enregistrer la miniature dans IndexedDB pour affichage immédiat
+  void idbSaveThumbnail(projectId, blob).catch((err) => {
+    console.warn('[thumbnails] idbSaveThumbnail error', err);
+  });
 
   try {
+    const userId = await getAuthenticatedUserId();
+    const fileId = safeThumbnailFileId(projectId);
+    const mime = blob.type || 'image/webp';
+    const ext = mime.includes('webp') ? 'webp' : 'jpg';
+    const file = new File([blob], `${fileId}.${ext}`, { type: mime });
+
     await storage.deleteFile(THUMBNAILS_BUCKET_ID, fileId).catch(() => {});
     await storage.createFile(
       THUMBNAILS_BUCKET_ID,
@@ -40,7 +49,7 @@ export async function uploadProjectThumbnail(projectId: string, blob: Blob): Pro
       ],
     );
   } catch (error) {
-    console.warn('[projects] uploadProjectThumbnail error', error);
+    console.debug('[projects] uploadProjectThumbnail cloud skip (saved locally)', error);
   }
 }
 
@@ -51,12 +60,41 @@ export async function getProjectThumbnailUrls(
   if (projectIds.length === 0) return out;
 
   for (const id of projectIds) {
-    try {
-      const fileId = safeThumbnailFileId(id);
-      const url = storage.getFileView(THUMBNAILS_BUCKET_ID, fileId);
-      out[id] = url.toString();
-    } catch {
-      out[id] = null;
+    if (!id.startsWith('local-')) {
+      try {
+        const fileId = safeThumbnailFileId(id);
+        // Appwrite getFilePreview compresse à la volée en WebP 320x180 avec qualité 65
+        const url = storage.getFilePreview(
+          THUMBNAILS_BUCKET_ID,
+          fileId,
+          320,
+          180,
+          undefined,
+          65,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          ImageFormat.Webp,
+        );
+        out[id] = url.toString();
+      } catch {
+        out[id] = null;
+      }
+    }
+
+    // Fallback ou projets locaux : charger depuis IndexedDB
+    if (!out[id]) {
+      try {
+        const localBlob = await idbGetThumbnail(id);
+        if (localBlob) {
+          out[id] = URL.createObjectURL(localBlob);
+        }
+      } catch {
+        out[id] = null;
+      }
     }
   }
 

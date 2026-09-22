@@ -14,6 +14,13 @@ import { getCurrentUserId } from './auth';
 import { computeProjectSizeBytes } from './limits';
 import { rowToSummary } from './mappers';
 import type { ItineraryProject, ProjectRow, ProjectSummary } from './types';
+import { compressProjectPayload, decompressProjectPayload } from './compression';
+import {
+  idbSaveProject,
+  idbGetProject,
+  idbListProjects,
+  idbDeleteProject,
+} from '@/shared/utils/storage/idbProjectStore';
 
 const LOCAL_PROJECTS_KEY = 'redview:local-projects:v1';
 
@@ -32,15 +39,16 @@ function writeLocalProjects(projects: ProjectRow[]): void {
   try {
     window.localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(projects));
   } catch (e) {
-    logger.projects.warn('Failed to save local projects', e);
+    // QuotaExceededError ignoré sans risque : IndexedDB a déjà persisté la donnée complète
+    logger.projects.debug('LocalStorage write skipped or quota exceeded', e);
   }
 }
 
-function docToProjectRow(doc: any): ProjectRow {
+async function docToProjectRow(doc: any): Promise<ProjectRow> {
   let parsedData: ItineraryProject;
   if (typeof doc.data === 'string') {
     try {
-      parsedData = JSON.parse(doc.data);
+      parsedData = await decompressProjectPayload(doc.data);
     } catch {
       parsedData = createDefaultProject();
     }
@@ -76,11 +84,22 @@ export async function listProjects(): Promise<ProjectSummary[]> {
       );
 
       if (result.documents) {
-        return result.documents.map((doc) => rowToSummary(docToProjectRow(doc)));
+        const rows = await Promise.all(result.documents.map((doc) => docToProjectRow(doc)));
+        return rows.map((row) => rowToSummary(row));
       }
     } catch (e) {
       logger.projects.debug('Appwrite listProjects fallback to local storage', e);
     }
+  }
+
+  // 1. Priorité IndexedDB (pas de limite 5 Mo)
+  try {
+    const idbRows = await idbListProjects();
+    if (idbRows.length > 0) {
+      return idbRows.map((row) => rowToSummary(row));
+    }
+  } catch {
+    /* fallback to localStorage */
   }
 
   const local = readLocalProjects();
@@ -95,11 +114,22 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
     try {
       const doc = await databases.getDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id);
       if (doc) {
-        return docToProjectRow(doc);
+        const row = await docToProjectRow(doc);
+        // Synchroniser en tâche de fond dans IndexedDB pour accès offline/crash-proof
+        void idbSaveProject(row);
+        return row;
       }
     } catch (e) {
       logger.projects.debug('Appwrite getProject fallback to local storage', e);
     }
+  }
+
+  // 1. Priorité IndexedDB (complet, avec originalPoints et POIs)
+  try {
+    const idbRow = await idbGetProject(id);
+    if (idbRow) return idbRow;
+  } catch {
+    /* fallback to localStorage */
   }
 
   const local = readLocalProjects();
@@ -119,11 +149,12 @@ export async function createProject(
   if (!isDev) {
     try {
       const docId = ID.unique();
+      const compressedData = await compressProjectPayload(finalProject);
       const payload = {
         user_id: userId,
         folder_id: folderId ?? null,
         name: finalProject.name,
-        data: JSON.stringify(finalProject),
+        data: compressedData,
         size_bytes: computeProjectSizeBytes(finalProject),
         privacy: finalProject.privacy ?? 'private',
       };
@@ -141,7 +172,9 @@ export async function createProject(
       );
 
       if (doc) {
-        return docToProjectRow(doc);
+        const row = await docToProjectRow(doc);
+        void idbSaveProject(row);
+        return row;
       }
     } catch (e) {
       logger.projects.debug('Appwrite createProject fallback to local storage', e);
@@ -161,6 +194,7 @@ export async function createProject(
     updated_at: now,
   };
 
+  void idbSaveProject(localRow);
   const projects = readLocalProjects();
   projects.unshift(localRow);
   writeLocalProjects(projects);
@@ -170,12 +204,48 @@ export async function createProject(
 export async function saveProject(id: string, project: ItineraryProject): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
+  const now = new Date().toISOString();
 
+  const localRow: ProjectRow = {
+    id,
+    user_id: userId,
+    folder_id: null,
+    name: project.name,
+    data: project,
+    size_bytes: computeProjectSizeBytes(project),
+    privacy: project.privacy ?? 'private',
+    created_at: now,
+    updated_at: now,
+  };
+
+  // 1. Sauvegarde locale instantanée dans IndexedDB (Crash-Proof, illimité)
+  try {
+    await idbSaveProject(localRow);
+  } catch (err) {
+    logger.projects.warn('IndexedDB saveProject error', err);
+  }
+
+  // Best-effort localStorage (ne bloque jamais si quota plein)
+  try {
+    const projects = readLocalProjects();
+    const index = projects.findIndex((p) => p.id === id);
+    if (index !== -1) {
+      projects[index] = { ...projects[index], ...localRow };
+    } else {
+      projects.unshift(localRow);
+    }
+    writeLocalProjects(projects);
+  } catch {
+    // QuotaExceededError ignoré
+  }
+
+  // 2. Sauvegarde Cloud Appwrite avec compression transparente Gzip
   if (!isDev && !id.startsWith('local-')) {
     try {
+      const compressedData = await compressProjectPayload(project);
       await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
         name: project.name,
-        data: JSON.stringify(project),
+        data: compressedData,
         size_bytes: computeProjectSizeBytes(project),
         privacy: project.privacy ?? 'private',
       });
@@ -183,35 +253,6 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
     } catch (e) {
       logger.projects.debug('Appwrite saveProject fallback to local storage', e);
     }
-  }
-
-  const projects = readLocalProjects();
-  const index = projects.findIndex((p) => p.id === id);
-  const now = new Date().toISOString();
-
-  if (index !== -1) {
-    projects[index] = {
-      ...projects[index],
-      name: project.name,
-      data: project,
-      size_bytes: computeProjectSizeBytes(project),
-      privacy: project.privacy ?? 'private',
-      updated_at: now,
-    };
-    writeLocalProjects(projects);
-  } else {
-    projects.unshift({
-      id,
-      user_id: userId,
-      folder_id: null,
-      name: project.name,
-      data: project,
-      size_bytes: computeProjectSizeBytes(project),
-      privacy: project.privacy ?? 'private',
-      created_at: now,
-      updated_at: now,
-    });
-    writeLocalProjects(projects);
   }
 }
 
@@ -227,11 +268,13 @@ export async function renameProject(id: string, name: string): Promise<void> {
       const current = await getProject(id);
       if (current) {
         const nextData: ItineraryProject = { ...current.data, name: trimmed };
+        const compressedData = await compressProjectPayload(nextData);
         await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
           name: trimmed,
-          data: JSON.stringify(nextData),
+          data: compressedData,
           size_bytes: computeProjectSizeBytes(nextData),
         });
+        void idbSaveProject({ ...current, name: trimmed, data: nextData, updated_at: new Date().toISOString() });
         return;
       }
     } catch (e) {
@@ -245,6 +288,7 @@ export async function renameProject(id: string, name: string): Promise<void> {
     target.name = trimmed;
     target.data = { ...target.data, name: trimmed };
     target.updated_at = new Date().toISOString();
+    void idbSaveProject(target);
     writeLocalProjects(projects);
   }
 }
@@ -261,6 +305,10 @@ export async function moveProjectToFolder(
       await databases.updateDocument(APPWRITE_DATABASE_ID, PROJECTS_COLLECTION_ID, id, {
         folder_id: folderId,
       });
+      const current = await getProject(id);
+      if (current) {
+        void idbSaveProject({ ...current, folder_id: folderId, updated_at: new Date().toISOString() });
+      }
       return;
     } catch (e) {
       logger.projects.debug('Appwrite moveProjectToFolder fallback to local storage', e);
@@ -272,6 +320,7 @@ export async function moveProjectToFolder(
   if (target) {
     target.folder_id = folderId;
     target.updated_at = new Date().toISOString();
+    void idbSaveProject(target);
     writeLocalProjects(projects);
   }
 }
@@ -279,6 +328,13 @@ export async function moveProjectToFolder(
 export async function deleteProject(id: string): Promise<void> {
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
+
+  // 1. Suppression IndexedDB (projets + cache + miniature)
+  try {
+    await idbDeleteProject(id);
+  } catch {
+    // ignore
+  }
 
   if (!isDev && !id.startsWith('local-')) {
     try {

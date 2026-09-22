@@ -5,7 +5,7 @@ import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { getProject } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import {
-  readProjectCache,
+  readProjectCacheAsync,
   writeProjectCache,
 } from './dashboardProjectCache';
 import { useDashboardProjectSync } from './useDashboardProjectSync';
@@ -69,7 +69,7 @@ export function useDashboardProjectState({
           return;
         }
 
-        const cached = readProjectCache(projectId);
+        const cached = await readProjectCacheAsync(projectId);
         if (cached) {
           const normalized = normalizeItineraryProject(cached.project);
           setActiveProjectId(projectId);
