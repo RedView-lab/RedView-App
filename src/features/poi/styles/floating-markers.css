@@ -19,6 +19,7 @@
   background: transparent;
   cursor: pointer;
   pointer-events: auto;
+  transition: opacity 140ms ease;
 }
 
 .rv-poi-marker:focus {

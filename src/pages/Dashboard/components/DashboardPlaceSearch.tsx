@@ -282,7 +282,7 @@ export function DashboardPlaceSearch({
         anchor: 'center',
         pitchAlignment: 'viewport',
         rotationAlignment: 'viewport',
-        occludedOpacity: 0.85,
+        occludedOpacity: 0,
       })
         .setLngLat([feature.lon, feature.lat])
         .setPopup(popup)

@@ -791,7 +791,7 @@ export function useItineraryCheckpointMarkers({
           anchor: 'bottom',
           pitchAlignment: 'viewport',
           rotationAlignment: 'viewport',
-          occludedOpacity: 0.85,
+          occludedOpacity: 0,
         })
           .setLngLat(cp.coord);
 

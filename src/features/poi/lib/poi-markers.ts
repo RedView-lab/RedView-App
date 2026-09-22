@@ -40,8 +40,8 @@ const MARKER_MIN_SCREEN_SCALE = 0.42;
 const MARKER_MAX_SCREEN_SCALE = 1;
 const MARKER_MIN_POPUP_OFFSET_PX = 38;
 const MARKER_MAX_POPUP_OFFSET_PX = 80;
-/** Same occlusion behaviour as the viewport POI markers. */
-const MARKER_OCCLUDED_OPACITY = 0.85;
+/** Occlusion relief 3D : 0 pour masquer complètement les POI situés derrière les montagnes. */
+const MARKER_OCCLUDED_OPACITY = 0;
 
 const FAVORITE_BADGE_ICON_URL = '/svgv2/icone/star-01.svg';
 
