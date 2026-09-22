@@ -1,4 +1,4 @@
-﻿import { ActionButtonStack, CheckboxField, ToggleRow } from '../components/controls';
+﻿import { ActionButtonStack, CheckboxField } from '../components/controls';
 import { useAppI18n } from '@/shared/i18n';
 import {
   IconChevronDown,
@@ -9,8 +9,6 @@ import type { PoiCategory, PoiEntry, PoiState } from '../types';
 interface PoiSectionProps {
   poi: PoiState;
   onChangeEntry?: (category: PoiCategory, next: PoiEntry) => void;
-  onChangeRefine?: (value: boolean) => void;
-  onChangeRefineLimit?: (value: 2 | 4 | 6) => void;
   onOpenCategories?: () => void;
   onLoad?: () => void;
   onCancelLoad?: () => void;
@@ -90,7 +88,6 @@ function DistanceInput({
 export function PoiSection({
   poi,
   onChangeEntry,
-  onChangeRefine,
   onOpenCategories,
   onLoad,
   onCancelLoad,
@@ -148,14 +145,12 @@ export function PoiSection({
         </div>
       ))}
 
+      {/* The "Affiner les résultats (beta)" toggle used to live here. It has
+          been removed: the corridor search is now exhaustive, and every POI
+          within the distance set on each row is displayed. The spacer below
+          keeps the Catégories button right-aligned as before. */}
       <div className="rvi-row rvi-poi-refine">
-        <div className="rvi-poi-refine__toggle">
-          <ToggleRow
-            checked={poi.refineResults}
-            onChange={onChangeRefine}
-            label={t('Affiner les résultats (beta)')}
-          />
-        </div>
+        <div className="rvi-poi-refine__spacer" aria-hidden="true" />
         <button
           type="button"
           className="rvi-categories-btn"

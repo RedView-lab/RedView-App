@@ -126,12 +126,11 @@ function getMarkerVisualState(zoom: number): PoiMarkerVisualState {
 }
 
 function applyMarkerVisualState(entry: PoiMarkerEntry, zoom: number): void {
+  // No zoom-based culling: every POI inside the requested distance stays on
+  // the map at every zoom level. The previous `zoom < 8` guard wiped the
+  // whole layer as soon as the user zoomed out to frame the GPX track,
+  // which read as "the POIs are missing".
   const el = entry.marker.getElement();
-  if (zoom < 8.0) {
-    el.style.display = 'none';
-    return;
-  }
-  el.style.display = '';
   const visual = getMarkerVisualState(zoom);
   el.style.setProperty(
     '--rv-poi-marker-scale',
@@ -233,6 +232,11 @@ export class PoiMarkerManager {
       offset: MARKER_MAX_POPUP_OFFSET_PX,
     });
 
+    // Popup DOM is built lazily, on first open, then kept in sync while
+    // open. Building it eagerly for every marker (the previous behaviour)
+    // cost one full popup DOM tree per POI at creation time — fine for a
+    // shortlist of a few dozen POIs, untenable now that the exhaustive
+    // corridor search can legitimately return thousands of them.
     const refresh = (nextState?: PoiPopupState) => {
       const actions = this.getActions();
       popup.setDOMContent(buildPopupContent(
@@ -243,7 +247,6 @@ export class PoiMarkerManager {
       ));
     };
 
-    refresh();
     // Re-resolve state from the itinerary every time the popup reopens.
     popup.on('open', () => refresh());
 

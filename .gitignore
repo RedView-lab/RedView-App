@@ -37,6 +37,7 @@ vendor/redviewalgo/target/
 
 # Local IDE plans
 .zcode/plans/
+.workbuddy-ai/
 
 # Local development / test scripts
 scripts/benchmark-stac-index.mjs

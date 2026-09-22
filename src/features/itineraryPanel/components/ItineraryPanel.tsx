@@ -69,7 +69,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     calculateLabel,
     calculateDisabled,
     onChangePoiEntry,
-    onChangePoiRefine,
     onOpenPoiCategories,
     onLoadPois,
     onCancelLoadPois,
@@ -310,7 +309,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           dockTimelinePanel={dockTimelinePanel}
           onCalculate={onCalculate}
           onChangePoiEntry={onChangePoiEntry}
-          onChangePoiRefine={onChangePoiRefine}
           onChangeProfile={onChangeProfile}
           onChangePriority={onChangePriority}
           onChangeRhythm={onChangeRhythm}

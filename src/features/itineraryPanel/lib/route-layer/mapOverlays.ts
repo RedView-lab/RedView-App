@@ -305,9 +305,16 @@ export function clearAnalysisFlyoverProgress(map: MapboxMap): void {
   }
 }
 
+export interface FitToRouteOptions {
+  padding?: number | { top: number; bottom: number; left: number; right: number };
+  maxZoom?: number;
+  duration?: number;
+}
+
 export function fitToRoute(
   map: MapboxMap,
   coordinates: [number, number][],
+  options?: FitToRouteOptions,
 ): void {
   if (coordinates.length === 0) return;
   let minLat = 90;
@@ -324,5 +331,9 @@ export function fitToRoute(
     [minLon, minLat],
     [maxLon, maxLat],
   ];
-  map.fitBounds(bounds, { padding: 80, maxZoom: 14, duration: 800 });
+  map.fitBounds(bounds, {
+    padding: options?.padding ?? 80,
+    maxZoom: options?.maxZoom ?? 14,
+    duration: options?.duration ?? 800,
+  });
 }

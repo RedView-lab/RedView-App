@@ -410,6 +410,7 @@ export function DashboardEditor({
                         map={mapInstance}
                         isMapLoaded={mapLoaded}
                         onRouteStatusChange={onItineraryRouteStatusChange}
+                        onRevealCenterPanel={onRestoreCenterPanel}
                         width={leftPanelWidth}
                         onResizeStart={onLeftResizeStart}
                         isResizing={isLeftResizing}

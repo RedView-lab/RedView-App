@@ -47,6 +47,7 @@ interface ItineraryPanelContainerProps {
   onBackToHome?: () => void;
   pausesEnabled?: boolean;
   waypointsEnabled?: boolean;
+  onRevealCenterPanel?: () => void;
 }
 
 /**
@@ -65,6 +66,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   onBackToHome,
   pausesEnabled,
   waypointsEnabled,
+  onRevealCenterPanel,
 }: ItineraryPanelContainerProps) {
   const {
     project,
@@ -233,17 +235,28 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
 
   // GPX import progress, surfaced as a loading row in the itinerary list.
   const [pendingImportName, setPendingImportName] = useState<string | null>(null);
+  const gpxInputRef = useRef<HTMLInputElement | null>(null);
 
   const fitMapToImportedRoute = useCallback(
     (points: [number, number][]) => {
       if (!map || points.length === 0) return;
       try {
-        fitToRoute(map, points);
+        const leftPadding = Math.max(80, (width ?? 360) + 40);
+        fitToRoute(map, points, {
+          padding: {
+            top: 80,
+            bottom: Math.min(270, Math.round(window.innerHeight * 0.35)),
+            left: Math.min(leftPadding, Math.round(window.innerWidth * 0.4)),
+            right: 80,
+          },
+          maxZoom: 14,
+          duration: 800,
+        });
       } catch (error) {
         console.warn('[ItineraryPanelContainer] fitToRoute after GPX import failed', error);
       }
     },
-    [map],
+    [map, width],
   );
 
   const { addItineraryFromGpxFile } = useItineraryGpxImport({
@@ -251,8 +264,34 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     addItinerary,
     setPendingCorridorFor,
     onImportStateChange: setPendingImportName,
-    onItineraryImported: (_id, points) => fitMapToImportedRoute(points),
+    onItineraryImported: (_id, points) => {
+      fitMapToImportedRoute(points);
+      onRevealCenterPanel?.();
+    },
   });
+
+  const handleGpxFileChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      e.target.value = '';
+      if (!file) return;
+      if (!file.name.toLowerCase().endsWith('.gpx')) {
+        console.warn('[ItineraryPanelContainer] Selected file is not a .gpx');
+        return;
+      }
+      try {
+        await addItineraryFromGpxFile(file);
+      } catch (err) {
+        console.warn('[ItineraryPanelContainer] GPX import failed', err);
+      }
+    },
+    [addItineraryFromGpxFile],
+  );
+
+  const handlePickGpx = useCallback(() => {
+    setAddDialogOpen(false);
+    gpxInputRef.current?.click();
+  }, []);
 
   const timelineCallbacks = useItineraryTimelineCallbacks({
     setProject,
@@ -543,16 +582,6 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             it.poi[category] = next;
           })
         }
-        onChangePoiRefine={(value) =>
-          updateActive((it) => {
-            it.poi.refineResults = value;
-          })
-        }
-        onChangePoiRefineLimit={(value) =>
-          updateActive((it) => {
-            it.poi.refineLimitPerKm = value;
-          })
-        }
         onOpenPoiCategories={() => {}}
         onLoadPois={() => searchCorridor()}
         onCancelLoadPois={() => cancelSearchCorridor()}
@@ -582,7 +611,14 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onClose={() => setAddDialogOpen(false)}
         onPickScratch={() => addItinerary()}
         onPickDuplicate={duplicateActiveItinerary}
-        onPickGpx={addItineraryFromGpxFile}
+        onPickGpx={handlePickGpx}
+      />
+      <input
+        ref={gpxInputRef}
+        type="file"
+        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        hidden
+        onChange={handleGpxFileChange}
       />
       <input
         ref={fitInputRef}

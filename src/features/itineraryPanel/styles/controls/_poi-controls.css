@@ -1,4 +1,4 @@
-/* POI section — refine row + Catégories dropdown button.
+/* POI section — Catégories dropdown row.
    Source of truth: Figma 1716:52683 (POI) — gap-[8px] between rows. */
 
 /* Figma 1716:52683 — the POI block uses an 8px vertical rhythm (gap-[8px]),
@@ -25,27 +25,11 @@
   min-width: 0;
 }
 
-.rvi-poi-refine__toggle {
+/* Flex spacer replacing the removed "Affiner les résultats (beta)" toggle:
+   keeps the Catégories button pinned to the right edge of the row. */
+.rvi-poi-refine__spacer {
   flex: 1 1 auto;
   min-width: 0;
-  padding: 4px 4px 4px 0;
-  box-sizing: border-box;
-}
-
-.rvi-poi-refine__toggle .rvi-toggle-row {
-  padding: 0;
-  min-height: 0;
-  gap: 8px;
-}
-
-/* Figma 1716:52614 — "Affiner les résultats (beta)" */
-.rvi-poi-refine__toggle .rvi-toggle-row__text {
-  font-family: 'Rethink Sans', sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: normal;
-  color: var(--rvi-text);
-  white-space: nowrap;
 }
 
 /* Catégories button */

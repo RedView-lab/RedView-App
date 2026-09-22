@@ -270,9 +270,18 @@ export function ItineraryTabs({
           <div className="rvi-itin-wrap rvi-itin-wrap--pending" aria-live="polite">
             <div className="rvi-itin rvi-itin--pending">
               <span className="rvi-itin__spinner" aria-hidden />
-              <span className="rvi-itin__label" title={pendingImportName}>
-                {pendingImportName}
-              </span>
+              <div className="rvi-itin__main">
+                <span className="rvi-itin__label-wrap">
+                  <span className="rvi-itin__label" title={pendingImportName}>
+                    {pendingImportName}
+                  </span>
+                </span>
+                <span className="rvi-itin__meta">
+                  <span className="rvi-itin__profile" title={t('Chargement…')}>
+                    {t('Chargement…')}
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
         ) : null}

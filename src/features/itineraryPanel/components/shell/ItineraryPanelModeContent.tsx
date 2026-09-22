@@ -38,7 +38,6 @@ type ItineraryPanelModeContentProps = Pick<
   | 'calculateLabel'
   | 'onCalculate'
   | 'onChangePoiEntry'
-  | 'onChangePoiRefine'
   | 'onChangeProfile'
   | 'onChangePriority'
   | 'onChangeRhythm'
@@ -80,7 +79,6 @@ export function ItineraryPanelModeContent({
   dockTimelinePanel,
   onCalculate,
   onChangePoiEntry,
-  onChangePoiRefine,
   onChangeProfile,
   onChangePriority,
   onChangeRhythm,
@@ -160,7 +158,6 @@ export function ItineraryPanelModeContent({
         <PoiSection
           poi={active.poi}
           onChangeEntry={onChangePoiEntry}
-          onChangeRefine={onChangePoiRefine}
           onOpenCategories={onOpenPoiCategories}
           onLoad={onLoadPois}
           onCancelLoad={onCancelLoadPois}

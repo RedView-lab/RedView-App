@@ -12,6 +12,7 @@ import {
   refineImportedRoutePointsWithIgnAltimetry,
   simplifyPointsByQuality,
 } from '../../lib/routes';
+import { createDefaultAnalysisPanelState } from '../../lib/project';
 import type { GpxQualityMode, Itinerary, ItineraryProject } from '../../types';
 import { resolveImportedTimelineLabel } from './importedTimelineLabel';
 
@@ -173,9 +174,55 @@ export function useItineraryGpxImport({
           },
           timeline,
           metrics: buildImportedRouteMetrics(simplifiedPoints),
+          visible: true,
+          analysisVisible: true,
+          poi: {
+            fountains: { enabled: true, distanceM: 40 },
+            toilets: { enabled: true, distanceM: 40 },
+            supermarkets: { enabled: true, distanceM: 40 },
+            gasStations: { enabled: true, distanceM: 40 },
+            bakeries: { enabled: true, distanceM: 40 },
+            fastFood: { enabled: true, distanceM: 40 },
+            cafes: { enabled: true, distanceM: 40 },
+            bars: { enabled: true, distanceM: 40 },
+            restaurants: { enabled: true, distanceM: 40 },
+            bikeShops: { enabled: true, distanceM: 40 },
+            hotels: { enabled: true, distanceM: 40 },
+            refuges: { enabled: true, distanceM: 40 },
+            passes: { enabled: true, distanceM: 40 },
+          },
         });
 
         if (id) {
+          // Central panel:
+          // 1. Only the newly created itinerary is visible in analysis
+          // 2. Simple elevation view by default (Altitude / Altitude, distance mode)
+          // 3. All analysis filters (poi, pauses, etc.) enabled by default
+          setProject((projectState) => ({
+            ...projectState,
+            itineraries: projectState.itineraries.map((itinerary) => ({
+              ...itinerary,
+              analysisVisible: itinerary.id === id,
+            })),
+            activeItineraryId: id,
+            analysis: {
+              ...createDefaultAnalysisPanelState(),
+              xMode: 'distance',
+              axis1: 'Altitude',
+              axis2: 'Altitude',
+              filters: {
+                waypoint: true,
+                poi: true,
+                pause: true,
+                alertes: true,
+                pente: true,
+                jourNuit: true,
+              },
+              detailZoom: 0,
+              detailOffset: 0,
+            },
+          }));
+
           setPendingCorridorFor(id);
           onItineraryImported?.(id, simplifiedPoints.map((point) => [point.lon, point.lat]));
           void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
@@ -192,6 +239,7 @@ export function useItineraryGpxImport({
       onImportStateChange,
       onItineraryImported,
       setPendingCorridorFor,
+      setProject,
     ],
   );
 

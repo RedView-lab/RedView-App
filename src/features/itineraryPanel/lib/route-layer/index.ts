@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Public route-layer barrel.
  */
 
@@ -34,6 +34,7 @@ export {
   clearRouteAuditFindings,
   clearRouteHoverPreview,
   fitToRoute,
+  type FitToRouteOptions,
   setAnalysisFlyoverProgress,
   setAnalysisHoverPoint,
   setForbiddenZoneDraft,

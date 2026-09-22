@@ -38,7 +38,7 @@ const PANEL_TO_FEATURE_POI: Record<PanelPoiCategory, FeaturePoiCategory[]> = {
 };
 
 const DEFAULT_RADIUS_M = 1000;
-const DEFAULT_REFINE_LIMIT_PER_KM = 4;
+/** Legacy keys kept so projects saved with the removed refine toggle still load. */
 const POI_NON_ENTRY_KEYS = new Set(['refineResults', 'refineLimitPerKm']);
 
 export interface UseItineraryPoiMapResult {
@@ -90,6 +90,13 @@ export function useItineraryPoiMap(
   }, [active]);
 
   // ── Effective corridor radius: max of enabled rows ────────────────
+  //
+  // The POI server takes a single radius for the whole corridor query, so
+  // we query with the widest X any enabled row asks for, then narrow each
+  // category down to its own X on the client
+  // (`maxLateralDistanceByCategory` below). Querying with the max — instead
+  // of a fixed default — is what makes "all POIs within X" actually true
+  // for the widest row.
   const radiusM = useMemo(() => {
     if (!active) return DEFAULT_RADIUS_M;
     let max = 0;
@@ -101,11 +108,6 @@ export function useItineraryPoiMap(
       }
     }
     return max > 0 ? max : DEFAULT_RADIUS_M;
-  }, [active]);
-
-  const refineMaxPerCategoryPerKm = useMemo(() => {
-    if (!active?.poi.refineResults) return null;
-    return active.poi.refineLimitPerKm ?? DEFAULT_REFINE_LIMIT_PER_KM;
   }, [active]);
 
   const maxLateralDistanceByCategory = useMemo<Partial<Record<FeaturePoiCategory, number>> | null>(() => {
@@ -132,7 +134,6 @@ export function useItineraryPoiMap(
     enabledCategories,
     gpxRoute,
     radiusM,
-    refineMaxPerCategoryPerKm,
     maxLateralDistanceByCategory,
     onCorridorUpdate,
     onCorridorComplete,

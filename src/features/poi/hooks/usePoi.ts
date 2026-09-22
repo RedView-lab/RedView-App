@@ -7,6 +7,14 @@
 // occlusion culling that previously made POIs invisible on the 3D map, so
 // this hook no longer needs any `styledata` resynchronisation, sprite
 // registration or source/layer lifecycle management.
+//
+// Filtering policy — EXHAUSTIVE BY DESIGN:
+//   The only filter applied is the one the user configures: for each
+//   category, keep every POI whose lateral distance to the track is <= the
+//   X metres set in the POI panel. There is deliberately NO density cap, NO
+//   "top N per km" shortlist, NO opening-hours exclusion and NO zoom-based
+//   culling any more — the map must show *all* the POIs that exist within
+//   the requested distance. See lib/corridor-distance-filter.ts.
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
@@ -14,7 +22,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { PoiCategory, PoiFeature, GpxRoute } from '../types';
 import { fetchPoisAlongRouteChunked } from '../lib/poi-api';
 import { sampleRouteByDistance } from '../lib/gpx-loader';
-import { refinePoiFeaturesAlongRoute } from '../lib/refine-corridor-pois';
+import { filterPoisByLateralDistance } from '../lib/corridor-distance-filter';
 import { PoiMarkerManager } from '../lib/poi-markers';
 import type { UsePoiPopupActions } from '../lib/poi-popup';
 import '../styles/floating-markers.css';
@@ -28,7 +36,6 @@ export function usePoi(
   enabledCategories: Set<PoiCategory>,
   gpxRoute: GpxRoute | null = null,
   radiusM: number = 1000,
-  refineMaxPerCategoryPerKm: number | null = null,
   maxLateralDistanceByCategory: Partial<Record<PoiCategory, number>> | null = null,
   onCorridorUpdate?: (features: PoiFeature[]) => void,
   onCorridorComplete?: (features: PoiFeature[]) => void,
@@ -57,8 +64,6 @@ export function usePoi(
   gpxRef.current = gpxRoute;
   const radiusRef = useRef(radiusM);
   radiusRef.current = radiusM;
-  const refineMaxRef = useRef(refineMaxPerCategoryPerKm);
-  refineMaxRef.current = refineMaxPerCategoryPerKm;
   const maxLateralDistanceByCategoryRef = useRef(maxLateralDistanceByCategory);
   maxLateralDistanceByCategoryRef.current = maxLateralDistanceByCategory;
   const onCorridorUpdateRef = useRef(onCorridorUpdate);
@@ -72,7 +77,6 @@ export function usePoi(
 
   // Stable dependency keys for effects that react to semantic changes.
   const enabledCategoriesKey = Array.from(enabledCategories).sort().join('|');
-  const refineKey = refineMaxPerCategoryPerKm ? String(refineMaxPerCategoryPerKm) : 'off';
   const lateralDistanceKey = maxLateralDistanceByCategory
     ? Object.entries(maxLateralDistanceByCategory)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -91,7 +95,14 @@ export function usePoi(
     ].join(':')).join('|')
     : 'empty';
 
-  // ── Feature filtering / refinement ────────────────────────────────
+  // ── Feature filtering ─────────────────────────────────────────────
+  //
+  // Two passes only, both of them user-controlled:
+  //   1. category is enabled in the POI panel,
+  //   2. lateral distance to the track <= the X metres set for that
+  //      category.
+  // Everything the POI server returned inside the corridor that survives
+  // these two passes is rendered. Nothing else is dropped.
 
   const buildRenderableFeatures = useCallback((features: PoiFeature[]) => {
     if (features.length === 0 || enabledRef.current.size === 0) return [];
@@ -100,14 +111,13 @@ export function usePoi(
     if (filtered.length === 0) return [];
 
     const route = gpxRef.current;
-    const maxPerCategoryPerKm = refineMaxRef.current;
-    if (!route || !maxPerCategoryPerKm) return filtered;
+    if (!route || route.points.length < 2) return filtered;
 
-    return refinePoiFeaturesAlongRoute(filtered, route.points, {
-      maxPerCategoryPerKm,
-      windowM: 1_000,
-      maxLateralDistanceByCategory: maxLateralDistanceByCategoryRef.current ?? undefined,
-    });
+    return filterPoisByLateralDistance(
+      filtered,
+      route.points,
+      maxLateralDistanceByCategoryRef.current ?? undefined,
+    );
   }, []);
 
   const syncRenderedFeatures = useCallback((features: PoiFeature[]) => {
@@ -136,13 +146,17 @@ export function usePoi(
     setError(null);
     setCorridorProgress(0);
 
-    // Spacing chosen so consecutive `around:r` disks overlap (no corridor
-    // gaps) under three constraints:
-    //   1. spacing >= radius * 1.6  → adjacent disks overlap.
-    //   2. spacing >= 200 m         → tiny user radii still produce a
-    //      reasonable sample count (avoids 10 000+ samples for 40 m).
-    //   3. total samples never exceed ~1500 → caps sequential POI-server
-    //      chunks for huge GPX routes (multi-day tours) at ~20 calls.
+    // Spacing chosen so consecutive radius disks OVERLAP, which is the only
+    // way to get *every* POI within `radius` of the track:
+    //   1. spacing = radius * 1.4  → strictly < 2 * radius, so adjacent
+    //      disks always intersect and no slice of the corridor is skipped.
+    //      (The previous `max(200, radius * 1.6)` floor silently broke this
+    //      for any radius < 125 m — with the shipped 40 m default it left a
+    //      120 m blind gap between two 40 m disks, i.e. ~80 % of the route
+    //      was never queried.)
+    //   2. spacing >= 10 m         → bounds the sample count for tiny radii.
+    //   3. spacing >= length/8000  → keeps the POST body under the proxy
+    //      limit for very long routes (multi-day tours).
     const radius = radiusRef.current;
     let approxLenM = 0;
     for (let i = 1; i < route.points.length; i++) {
@@ -155,8 +169,8 @@ export function usePoi(
         Math.cos(((a.lat + b.lat) / 2) * (Math.PI / 180));
       approxLenM += Math.sqrt(dLat * dLat + dLon * dLon);
     }
-    const lenBasedSpacing = approxLenM > 0 ? approxLenM / 1_500 : 0;
-    const spacing = Math.max(200, radius * 1.6, lenBasedSpacing);
+    const lenBasedSpacing = approxLenM > 0 ? approxLenM / 8_000 : 0;
+    const spacing = Math.max(10, radius * 1.4, lenBasedSpacing);
     const sampled = sampleRouteByDistance(route.points, spacing, 8_000);
 
     try {
@@ -228,7 +242,7 @@ export function usePoi(
     };
   }, [map, isMapLoaded, buildRenderableFeatures]);
 
-  // ── React to category / refinement changes ────────────────────────
+  // ── React to category / distance changes ──────────────────────────
 
   useEffect(() => {
     if (!managerRef.current) return;
@@ -240,7 +254,7 @@ export function usePoi(
     }
 
     syncRenderedFeatures(buildRenderableFeatures(initialFeaturesRef.current ?? []));
-  }, [map, isMapLoaded, enabledCategoriesKey, refineKey, lateralDistanceKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
+  }, [map, isMapLoaded, enabledCategoriesKey, lateralDistanceKey, fetchCorridorPois, buildRenderableFeatures, syncRenderedFeatures]);
 
   // ── Rehydrate when the active itinerary's saved features change ───
 
