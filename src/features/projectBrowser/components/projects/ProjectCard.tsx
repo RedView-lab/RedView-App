@@ -8,6 +8,7 @@ import {
 import type { ProjectSummary } from '@/shared/utils/projects';
 
 import { formatSavedAt, formatSize, privacyLabel } from '../../lib';
+import { idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
 
 type ProjectCardProps = {
   project: ProjectSummary;
@@ -50,6 +51,7 @@ export function ProjectCard({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const dragImageRef = useRef<HTMLImageElement | null>(null);
+  const localBlobUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (renaming) inputRef.current?.select();
@@ -66,10 +68,23 @@ export function ProjectCard({
   }, [project.name]);
 
   useEffect(() => {
+    if (localBlobUrlRef.current && localBlobUrlRef.current !== thumbnailUrl) {
+      URL.revokeObjectURL(localBlobUrlRef.current);
+      localBlobUrlRef.current = null;
+    }
     setPreviewSrc(thumbnailUrl);
     setPreviewReady(false);
     setPreviewUnavailable(false);
   }, [thumbnailUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (localBlobUrlRef.current) {
+        URL.revokeObjectURL(localBlobUrlRef.current);
+        localBlobUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const hasPreviewImage = Boolean(previewSrc) && !previewUnavailable;
   const showLoadingPlaceholder = !previewUnavailable && (thumbnailLoading || (hasPreviewImage && !previewReady));
@@ -97,9 +112,25 @@ export function ProjectCard({
           className={`rvpb-card__preview-image${previewReady ? ' is-ready' : ''}`}
           src={previewSrc ?? undefined}
           alt={t('Aperçu de projet')}
-          loading="lazy"
+          loading="eager"
+          decoding="async"
           onLoad={() => setPreviewReady(true)}
-          onError={() => {
+          onError={async () => {
+            // Si le chargement cloud échoue (ex: 404, déconnexion), repli immédiat sur le cache local IndexedDB
+            if (previewSrc && !previewSrc.startsWith('blob:')) {
+              try {
+                const localBlob = await idbGetThumbnail(project.id);
+                if (localBlob) {
+                  const blobUrl = URL.createObjectURL(localBlob);
+                  localBlobUrlRef.current = blobUrl;
+                  setPreviewSrc(blobUrl);
+                  setPreviewReady(false);
+                  return;
+                }
+              } catch {
+                // ignorer
+              }
+            }
             setPreviewReady(false);
             setPreviewUnavailable(true);
           }}

@@ -5,7 +5,6 @@ import {
   Permission,
   storage,
   THUMBNAILS_BUCKET_ID,
-  ImageFormat,
 } from '@/shared/services/appwrite';
 import { idbSaveThumbnail, idbGetThumbnail } from '@/shared/utils/storage/idbProjectStore';
 
@@ -60,41 +59,28 @@ export async function getProjectThumbnailUrls(
   if (projectIds.length === 0) return out;
 
   for (const id of projectIds) {
+    // 1. Toujours vérifier IndexedDB en premier : affichage instantané (0 ms, hors-ligne, fiable sur Firefox & Chrome)
+    try {
+      const localBlob = await idbGetThumbnail(id);
+      if (localBlob) {
+        out[id] = URL.createObjectURL(localBlob);
+        continue;
+      }
+    } catch {
+      // continuer vers le cloud
+    }
+
+    // 2. URL cloud directe via getFileView : sert le WebP/JPEG pré-compressé sans bug 0-octet de preview Appwrite
     if (!id.startsWith('local-')) {
       try {
         const fileId = safeThumbnailFileId(id);
-        // Appwrite getFilePreview compresse à la volée en WebP 320x180 avec qualité 65
-        const url = storage.getFilePreview(
-          THUMBNAILS_BUCKET_ID,
-          fileId,
-          320,
-          180,
-          undefined,
-          65,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          ImageFormat.Webp,
-        );
+        const url = storage.getFileView(THUMBNAILS_BUCKET_ID, fileId);
         out[id] = url.toString();
       } catch {
         out[id] = null;
       }
-    }
-
-    // Fallback ou projets locaux : charger depuis IndexedDB
-    if (!out[id]) {
-      try {
-        const localBlob = await idbGetThumbnail(id);
-        if (localBlob) {
-          out[id] = URL.createObjectURL(localBlob);
-        }
-      } catch {
-        out[id] = null;
-      }
+    } else {
+      out[id] = null;
     }
   }
 
