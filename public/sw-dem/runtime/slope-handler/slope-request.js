@@ -61,10 +61,10 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
     // - 1m terrain & 0.40m LiDAR surface: maxzoom 16 (prevents WMS oversampling artifacts)
     const is30m = sourceDem === 'fast-30m' || sourceDem === '30m' || demProfile === 'fast-30m';
     const maxAllowedZ = is30m ? 13 : 16;
-    const effectiveZ = (!zoneHash && z > maxAllowedZ) ? maxAllowedZ : z;
-    const effectiveX = (!zoneHash && z > maxAllowedZ) ? (x >> (z - maxAllowedZ)) : x;
-    const effectiveY = (!zoneHash && z > maxAllowedZ) ? (y >> (z - maxAllowedZ)) : y;
-    const demResponse = await getExistingTerrainDemResponse(effectiveZ, effectiveX, effectiveY, demProfile, demCache, sourceDem);
+    if (z > maxAllowedZ) {
+      return transparentTileResponse();
+    }
+    const demResponse = await getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sourceDem);
 
     if (isSlopeWorkCancelled(generation) || !demResponse || demResponse.status !== 200) {
       return transparentTileResponse();
@@ -76,25 +76,30 @@ async function handleSlopeRequest(z, x, y, resParam, demProfile = 'default', zon
         return transparentTileResponse();
       }
 
-      const slopeResult = await buildSlopeBlobFromDem(demBlob, effectiveZ, effectiveX, effectiveY, demCache, resFactor, demProfile, generation, zoneRing, sourceDem);
+      const slopeResult = await buildSlopeBlobFromDem(demBlob, z, x, y, demCache, resFactor, demProfile, generation, zoneRing, sourceDem);
       if (!slopeResult || !slopeResult.blob || isSlopeWorkCancelled(generation)) {
         return transparentTileResponse();
       }
 
       const slopeBlob = slopeResult.blob;
+      const isSeamComplete = !slopeResult.missingNeighbours || slopeResult.missingNeighbours.length === 0;
       const response = new Response(slopeBlob, {
         status: 200,
         headers: {
           'Content-Type': 'image/png',
-          'Cache-Control': 'public, max-age=604800',
+          'Cache-Control': isSeamComplete ? 'public, max-age=604800' : 'no-cache',
           'X-Tile-Type': 'slope',
           'X-Slope-Quality': 'hd',
+          'X-Slope-Seam': isSeamComplete ? 'complete' : 'provisional',
           'X-DEM-Profile': demProfile,
         },
       });
 
       if (!isSlopeWorkCancelled(generation)) {
-        slopeCache.put(cacheKey, response.clone());
+        // Only lock into persistent CacheStorage when seam is complete (all neighbours present)
+        if (isSeamComplete) {
+          slopeCache.put(cacheKey, response.clone());
+        }
         try {
           if (typeof slopeHotPut === 'function') {
             slopeHotPut(hotKey, slopeBlob, Array.from(response.headers.entries()));

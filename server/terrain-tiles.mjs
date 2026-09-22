@@ -187,24 +187,16 @@ async function fetchRawTerrariumRgb(fetchZ, fetchX, fetchY) {
 }
 
 async function getElevationGrid(z, x, y) {
-  const fetchZ = Math.min(z, AWS_TERRAIN_MAXZOOM);
-  const fetchX = fetchZ < z ? x >> (z - fetchZ) : x;
-  const fetchY = fetchZ < z ? y >> (z - fetchZ) : y;
-
-  const rgb = await fetchRawTerrariumRgb(fetchZ, fetchX, fetchY);
+  if (z > AWS_TERRAIN_MAXZOOM) return null;
+  const rgb = await fetchRawTerrariumRgb(z, x, y);
   if (!rgb) return null;
 
   const width = 256;
   const height = 256;
-  let elev = new Float32Array(width * height);
+  const elev = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
     elev[i] = (rgb[i * 3] * 256 + rgb[i * 3 + 1] + rgb[i * 3 + 2] / 256) - 32768;
   }
-
-  if (fetchZ < z) {
-    elev = upsampleElevations(elev, fetchZ, fetchX, fetchY, z, x, y, width);
-  }
-
   return elev;
 }
 
@@ -213,6 +205,7 @@ async function getElevationGrid(z, x, y) {
  * Horn 3x3 algorithm encoded as 1-channel sqrt-gamma PNG.
  */
 export async function generateSlopeTile(z, x, y) {
+  if (z > AWS_TERRAIN_MAXZOOM) return TRANSPARENT_1X1_PNG;
   const cacheKey = `${z}/${x}/${y}`;
   if (SLOPE_CACHE.has(cacheKey)) return SLOPE_CACHE.get(cacheKey);
   if (INFLIGHT_SLOPE.has(cacheKey)) return INFLIGHT_SLOPE.get(cacheKey);

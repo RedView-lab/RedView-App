@@ -90,7 +90,10 @@ function buildAndCacheHdSlopeTile(z, x, y, resFactor, demProfile, zoneHash, opti
         },
       });
 
-      await slopeCache.put(cacheKey, response.clone());
+      const isSeamComplete = !slopeResult.missingNeighbours || slopeResult.missingNeighbours.length === 0;
+      if (isSeamComplete) {
+        await slopeCache.put(cacheKey, response.clone());
+      }
       try {
         if (typeof slopeHotPut === 'function') {
           slopeHotPut(hotKey, slopeResult.blob, Array.from(response.headers.entries()));

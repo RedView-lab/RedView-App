@@ -61,10 +61,13 @@ export function buildSlopeSourceKey(options: SlopeTileSourceOptions | undefined)
 }
 
 export function resolveSlopeMaxZoom(options: SlopeTileSourceOptions): number {
-  if (options.zone) return 16;
   // 30m resolution (fast-30m / 30m): capped at z13 (~13.5m/px at lat 45°) to prevent stair-step oversampling
   if (options.sourceDem === 'fast-30m' || options.sourceDem === '30m') {
     return 13;
+  }
+  // Analysis zone: pipeline pre-computes at z14, draped seamlessly on GPU beyond
+  if (options.zone) {
+    return 14;
   }
   // 1m LiDAR Terrain:
   if (options.demProfile === 'terrain') {

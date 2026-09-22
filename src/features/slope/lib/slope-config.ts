@@ -6,7 +6,7 @@ export const DEFAULT_SLOPE_STATE: SlopeState = {
   enabled: false,
   opacity: 0.5,
   colorMode: 'gradient',
-  resolution: '30m',
+  resolution: 'auto',
 };
 
 // ── Build raster-color expression ─────────────────────────────────────

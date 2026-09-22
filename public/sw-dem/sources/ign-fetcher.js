@@ -593,17 +593,13 @@ function buildTerrainWmsTileURL(mercZ, mercX, mercY, supersample) {
   const bounds = mercatorTileBounds(mercZ, mercX, mercY);
   // WMS 1.3.0 axis order for EPSG:4326 is latitude,longitude.
   const bbox = [bounds.south, bounds.west, bounds.north, bounds.east].join(',');
-  // 2× supersample only where the rendered grid is fine enough to expose the
-  // RGE ALTI server's row-staircase artefact in Horn slope math. At z≤14 the
-  // screen pixel footprint is already coarser than native 1 m terrain, so a
-  // 256² request is visually equivalent and 4× cheaper over the wire.
-  const size = DEM_TILE_SIZE * supersample;
+  const { width, height } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
   return (
     `${IGN_WMS_BASE}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0` +
     `&LAYERS=${IGN_DEM_FALLBACK_LAYER}&STYLES=` +
     `&FORMAT=${encodeURIComponent(IGN_DEM_FORMAT)}` +
     `&CRS=EPSG:4326&BBOX=${bbox}` +
-    `&WIDTH=${size}&HEIGHT=${size}`
+    `&WIDTH=${width}&HEIGHT=${height}`
   );
 }
 
@@ -849,35 +845,19 @@ async function getTerrainWmsTile(mercZ, mercX, mercY, purpose = PURPOSE_SLOPE_VI
         return null;
       }
       const buf = await res.arrayBuffer();
-      const SS = DEM_TILE_SIZE * supersample;
-      if (buf.byteLength !== SS * SS * 4) {
+      const { width: srcW, height: srcH } = mnsWmsRequestSize(mercZ, mercX, mercY, supersample);
+      if (buf.byteLength !== srcW * srcH * 4) {
         cacheTerrainWmsNull(key, 'permanent');
         return null;
       }
-      const hi = decodeBIL32(buf);
-      if (supersample === 1) {
-        evict(terrainWmsTileCache, TERRAIN_WMS_CACHE_MAX);
-        terrainWmsTileCache.set(key, hi);
-        return hi;
+      const raw = new Float32Array(buf);
+      let validCount = 0;
+      for (let i = 0; i < raw.length; i++) {
+        const v = raw[i];
+        if (!Number.isNaN(v) && v >= MIN_VALID_ELEVATION_M && v <= MAX_VALID_ELEVATION_M) validCount++;
       }
-      // Box-average supersample×supersample → 1 into a 256² Float32Array.
-      // NaN-aware so sentinel/no-data pixels never poison the average.
-      const data = new Float32Array(DEM_TILE_SIZE * DEM_TILE_SIZE);
-      for (let y = 0; y < DEM_TILE_SIZE; y++) {
-        const sy = y * supersample;
-        for (let x = 0; x < DEM_TILE_SIZE; x++) {
-          const sx = x * supersample;
-          let sum = 0, n = 0;
-          for (let yy = 0; yy < supersample; yy++) {
-            const row = (sy + yy) * SS;
-            for (let xx = 0; xx < supersample; xx++) {
-              const value = hi[row + sx + xx];
-              if (!Number.isNaN(value)) { sum += value; n++; }
-            }
-          }
-          data[y * DEM_TILE_SIZE + x] = n > 0 ? sum / n : NaN;
-        }
-      }
+      if (validCount === 0) return null;
+      const data = mnsWmsResampleToTile(raw, srcW, srcH);
       evict(terrainWmsTileCache, TERRAIN_WMS_CACHE_MAX);
       terrainWmsTileCache.set(key, data);
       return data;

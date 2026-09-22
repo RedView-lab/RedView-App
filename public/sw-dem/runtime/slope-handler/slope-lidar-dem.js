@@ -80,22 +80,9 @@ async function getExistingTerrainDemResponse(z, x, y, demProfile, demCache, sour
     }
   }
 
-  // 6. Parent overzoom fallback (zero network): if parent tile is in cache, upsample it
-  try {
-    if (typeof tryParentOverzoom === 'function' && demCache) {
-      const overzoomed = await tryParentOverzoom(demCache, z, x, y, 0, demProfile);
-      if (overzoomed && overzoomed.blob) {
-        return new Response(overzoomed.blob, {
-          status: 200,
-          headers: {
-            'Content-Type': 'image/png',
-            'X-DEM-Source': overzoomed.source || 'overzoom',
-            'X-DEM-Health': 'ok',
-          },
-        });
-      }
-    }
-  } catch { /* ignore */ }
+  // 6. Zero artificial overzoom: slope math must NEVER compute gradients on Catmull-Rom
+  // or bilinearly upsampled DEMs, as that generates artificial spline ripple waves and terracing.
+  // We strictly proceed to genuine DEM retrieval via handleDemRequest.
 
   // 7. If not in cache, fetch via handleDemRequest so both 3D terrain and overlays receive elevation data
   try {
