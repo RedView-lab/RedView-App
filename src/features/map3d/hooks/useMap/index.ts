@@ -95,13 +95,6 @@ export function useMap(
       cooperativeGestures: false,
       maxTileCacheSize: runtimeProfile.maxTileCacheSize,
       minTileCacheSize: runtimeProfile.minTileCacheSize,
-      transformRequest: (url: string) => {
-        if (url.startsWith('/')) {
-          const origin = typeof window !== 'undefined' ? window.location.origin : '';
-          return { url: `${origin}${url}` };
-        }
-        return { url };
-      },
     } as mapboxgl.MapOptions);
 
     mapRef.current = map;

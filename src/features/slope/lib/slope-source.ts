@@ -105,7 +105,6 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
   }
   const query = params.toString();
   const maxzoom = resolveSlopeMaxZoom(options);
-  const origin = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
   const source: {
     type: 'raster';
     tiles: string[];
@@ -115,7 +114,7 @@ export function buildSlopeTileSource(options: SlopeTileSourceOptions = DEFAULT_S
     bounds?: [number, number, number, number];
   } = {
     type: 'raster',
-    tiles: [`${origin}/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
+    tiles: [`/slope-tiles/{z}/{x}/{y}${query ? `?${query}` : ''}`],
     tileSize: 256,
     minzoom: 4,
     maxzoom,

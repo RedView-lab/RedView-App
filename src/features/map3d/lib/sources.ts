@@ -1,10 +1,5 @@
 import { FRANCE_BOUNDS, DEM_SOURCE_MAXZOOM } from './ign.config';
 
-const toAbsoluteTileUrl = (path: string) =>
-  typeof window !== 'undefined' && window.location?.origin
-    ? `${window.location.origin}${path}`
-    : path;
-
 /**
  * Unified DEM source: high-res national DEM in covered regions, AWS Terrarium
  * (~30 m global) elsewhere. Processed client-side by Service Worker
@@ -13,7 +8,7 @@ const toAbsoluteTileUrl = (path: string) =>
 export const unifiedDEMSource = {
   id: 'unified-dem',
   type: 'raster-dem' as const,
-  tiles: [toAbsoluteTileUrl('/dem-tiles/{z}/{x}/{y}')],
+  tiles: ['/dem-tiles/{z}/{x}/{y}'],
   // 256px to match the SW output (DEM_TILE_SIZE in config.js)
   tileSize: 256,
   encoding: 'mapbox' as const,
@@ -39,7 +34,7 @@ export const unifiedDEMSource = {
 export const ignOrthoSource = {
   id: 'ign-ortho',
   type: 'raster' as const,
-  tiles: [toAbsoluteTileUrl('/ortho-tiles/{z}/{x}/{y}')],
+  tiles: ['/ortho-tiles/{z}/{x}/{y}'],
   tileSize: 256,
   minzoom: 11,
   maxzoom: 19,

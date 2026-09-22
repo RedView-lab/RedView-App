@@ -44,13 +44,6 @@ export function buildDemTilesTemplate(
     ...(cacheBust > 0 ? [`rv-dem=${cacheBust}`] : []),
   ];
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  const baseTiles = unifiedDEMSource.tiles.map((tile) =>
-    tile.startsWith('http://') || tile.startsWith('https://')
-      ? tile
-      : `${origin}${tile}`
-  );
-
-  if (queryParams.length === 0) return baseTiles;
-  return baseTiles.map((tile) => `${tile}?${queryParams.join('&')}`);
+  if (queryParams.length === 0) return unifiedDEMSource.tiles;
+  return unifiedDEMSource.tiles.map((tile) => `${tile}?${queryParams.join('&')}`);
 }
