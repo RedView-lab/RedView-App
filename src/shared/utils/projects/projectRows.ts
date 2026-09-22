@@ -85,7 +85,6 @@ export async function listProjects(): Promise<ProjectSummary[]> {
           Query.equal('user_id', userId),
           Query.orderDesc('$updatedAt'),
           Query.limit(100),
-          Query.select(['name', 'folder_id', 'privacy', 'size_bytes']),
         ],
       );
 
