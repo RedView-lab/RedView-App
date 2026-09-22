@@ -325,6 +325,25 @@
   background: transparent;
 }
 
+.rvi-itin--pending .rvi-itin__main {
+  min-width: 0;
+  flex: 1 1 0%;
+  display: flex;
+  align-items: center;
+}
+
+.rvi-itin--pending .rvi-itin__label-wrap {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rvi-itin--pending .rvi-itin__meta {
+  margin-left: 14px;
+  flex: 0 0 auto;
+}
+
 .rvi-itin__spinner {
   flex: 0 0 auto;
   width: 12px;
