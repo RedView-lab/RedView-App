@@ -10,6 +10,7 @@ import {
 } from '@/shared/utils/projects';
 import { replaceProjectLocation } from '@/shared/utils/projectLocation';
 import { captureMapThumbnail } from '@/shared/utils/mapThumbnail';
+import { idbSaveThumbnail } from '@/shared/utils/storage/idbProjectStore';
 import { writeProjectCache } from './dashboardProjectCache';
 
 import { logger } from '@/shared/lib/logger';
@@ -127,7 +128,10 @@ export function useDashboardProjectSync({
       try {
         const blob = await captureMapThumbnail(mapInstance);
         if (!blob) return;
-        await uploadProjectThumbnail(projectId, blob);
+        // Sauvegarde locale instantanée dans IndexedDB
+        await idbSaveThumbnail(projectId, blob);
+        // Upload cloud en arrière-plan sans bloquer
+        void uploadProjectThumbnail(projectId, blob);
       } catch (error) {
         console.warn('[Dashboard] project thumbnail capture/upload failed', error);
       }

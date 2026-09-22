@@ -77,15 +77,28 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 
   if (!isDev) {
     try {
+      // Query.select évite de télécharger les mégaoctets de `data` pour chaque projet
       const result = await databases.listDocuments(
         APPWRITE_DATABASE_ID,
         PROJECTS_COLLECTION_ID,
-        [Query.equal('user_id', userId), Query.orderDesc('$updatedAt'), Query.limit(100)],
+        [
+          Query.equal('user_id', userId),
+          Query.orderDesc('$updatedAt'),
+          Query.limit(100),
+          Query.select(['name', 'folder_id', 'privacy', 'size_bytes']),
+        ],
       );
 
       if (result.documents) {
-        const rows = await Promise.all(result.documents.map((doc) => docToProjectRow(doc)));
-        return rows.map((row) => rowToSummary(row));
+        return result.documents.map((doc: any) => ({
+          id: doc.$id,
+          folderId: doc.folder_id ?? null,
+          name: doc.name || 'Untitled',
+          privacy: doc.privacy || 'private',
+          sizeBytes: typeof doc.size_bytes === 'number' ? doc.size_bytes : 0,
+          createdAt: doc.$createdAt,
+          updatedAt: doc.$updatedAt,
+        }));
       }
     } catch (e) {
       logger.projects.debug('Appwrite listProjects fallback to local storage', e);
@@ -107,6 +120,16 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 export async function getProject(id: string): Promise<ProjectRow | null> {
+  // 1. Priorité absolue IndexedDB : ouverture instantanée (2-5ms) sans latence réseau ni décompression lourde
+  try {
+    const idbRow = await idbGetProject(id);
+    if (idbRow?.data) {
+      return idbRow;
+    }
+  } catch {
+    /* fallback to cloud */
+  }
+
   const userId = await getCurrentUserId().catch(() => 'dev-user-001');
   const isDev = userId === 'dev-user-001';
 
@@ -122,14 +145,6 @@ export async function getProject(id: string): Promise<ProjectRow | null> {
     } catch (e) {
       logger.projects.debug('Appwrite getProject fallback to local storage', e);
     }
-  }
-
-  // 1. Priorité IndexedDB (complet, avec originalPoints et POIs)
-  try {
-    const idbRow = await idbGetProject(id);
-    if (idbRow) return idbRow;
-  } catch {
-    /* fallback to localStorage */
   }
 
   const local = readLocalProjects();
@@ -218,25 +233,11 @@ export async function saveProject(id: string, project: ItineraryProject): Promis
     updated_at: now,
   };
 
-  // 1. Sauvegarde locale instantanée dans IndexedDB (Crash-Proof, illimité)
+  // 1. Sauvegarde locale instantanée dans IndexedDB (Crash-Proof, multi-Go, ~2-5ms)
   try {
     await idbSaveProject(localRow);
   } catch (err) {
     logger.projects.warn('IndexedDB saveProject error', err);
-  }
-
-  // Best-effort localStorage (ne bloque jamais si quota plein)
-  try {
-    const projects = readLocalProjects();
-    const index = projects.findIndex((p) => p.id === id);
-    if (index !== -1) {
-      projects[index] = { ...projects[index], ...localRow };
-    } else {
-      projects.unshift(localRow);
-    }
-    writeLocalProjects(projects);
-  } catch {
-    // QuotaExceededError ignoré
   }
 
   // 2. Sauvegarde Cloud Appwrite avec compression transparente Gzip

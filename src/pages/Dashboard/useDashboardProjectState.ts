@@ -109,16 +109,22 @@ export function useDashboardProjectState({
       const closingId = activeProjectIdRef.current;
       suppressedInitialProjectIdRef.current = closingId;
 
+      // 1. Capturer la miniature pendant que le WebGL Canvas est actif
+      if (closingId) {
+        try {
+          await captureThumbnailForProject(closingId);
+        } catch (error) {
+          console.warn('[Dashboard] captureThumbnailForProject failed', error);
+        }
+      }
+
+      // 2. Nettoyage de la carte
       if (beforeCloseProject) {
         try {
           await beforeCloseProject();
         } catch (error) {
           console.warn('[Dashboard] beforeCloseProject hook failed', error);
         }
-      }
-
-      if (closingId) {
-        await captureThumbnailForProject(closingId);
       }
 
       await flushSave();
