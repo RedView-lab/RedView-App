@@ -77,8 +77,8 @@
     { "key": "post_office", "label": "Bureau de poste", "group": "services", "icon": "mail", "ui": false, "rules": [[{ "k": "amenity", "v": "post_office" }]] },
     { "key": "laundry", "label": "Laverie", "group": "services", "icon": "shop", "ui": false, "rules": [[{ "k": "shop", "v": "laundry" }]] },
 
-    { "key": "pass", "label": "Col / passage", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "mountain_pass", "v": "yes" }], [{ "k": "natural", "v": "saddle" }]] },
-    { "key": "viewpoint", "label": "Point de vue", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "tourism", "v": "viewpoint" }]] },
-    { "key": "picnic_site", "label": "Aire de pique-nique", "group": "scenic", "icon": "scenic", "rules": [[{ "k": "tourism", "v": "picnic_site" }], [{ "k": "amenity", "v": "picnic_table" }]] }
+    { "key": "pass", "label": "Col / passage", "group": "scenic", "icon": "refuge", "rules": [[{ "k": "mountain_pass", "v": "yes" }], [{ "k": "natural", "v": "saddle" }]] },
+    { "key": "viewpoint", "label": "Point de vue", "group": "scenic", "icon": "refuge", "rules": [[{ "k": "tourism", "v": "viewpoint" }]] },
+    { "key": "picnic_site", "label": "Aire de pique-nique", "group": "scenic", "icon": "refuge", "rules": [[{ "k": "tourism", "v": "picnic_site" }], [{ "k": "amenity", "v": "picnic_table" }]] }
   ]
 }

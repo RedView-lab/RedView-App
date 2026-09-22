@@ -38,7 +38,7 @@ const LOGICAL_ICON_URLS: Record<string, string> = {
   transport: '/svgv2/icone/marker-pin-02.svg',
   cash: '/svgv2/icone/credit-card-02.svg',
   mail: '/svgv2/icone/mail-02.svg',
-  scenic: '/svgv2/icone/marker-pin-04.svg',
+  scenic: PROVIDED_POI_SVG.refugePin,
 };
 
 /** Variantes « favori » disponibles, par nom d'icône logique. */
@@ -55,6 +55,7 @@ const LOGICAL_FAVORITE_ICON_URLS: Record<string, string> = {
   restaurant: PROVIDED_POI_SVG.favoriteRestaurant,
   hotel: PROVIDED_POI_SVG.favoriteHotelPin,
   refuge: PROVIDED_POI_SVG.favoriteRefugePin,
+  scenic: PROVIDED_POI_SVG.favoriteRefugePin,
 };
 
 function logicalName(category: PoiCategory): string {
