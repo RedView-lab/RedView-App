@@ -17,6 +17,34 @@ import path from 'node:path';
 const TIMEOUT_MS = 15_000;
 const DEFAULT_VPS_UPSTREAM = process.env.WEATHER_UPSTREAM || 'http://141.145.220.99/weather';
 
+interface CacheEntry {
+  body: Buffer;
+  contentType: string;
+  status: number;
+  expiresAt: number;
+}
+
+const memoryCache = new Map<string, CacheEntry>();
+const MAX_CACHE_ENTRIES = 128;
+
+function getCached(key: string): CacheEntry | undefined {
+  const entry = memoryCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() > entry.expiresAt) {
+    memoryCache.delete(key);
+    return undefined;
+  }
+  return entry;
+}
+
+function setCached(key: string, entry: CacheEntry) {
+  if (memoryCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = memoryCache.keys().next().value;
+    if (oldestKey) memoryCache.delete(oldestKey);
+  }
+  memoryCache.set(key, entry);
+}
+
 async function fetchUpstream(target: string): Promise<{ response: Response; body: Buffer }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -140,6 +168,22 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
     }
   }
 
+  // 1. Check in-memory LRU cache (< 1 ms latency)
+  const cacheKey = `${subPath}${parsedUrl.search}`;
+  const cached = getCached(cacheKey);
+  if (cached) {
+    res.status(cached.status);
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('X-Weather-Source', 'memory-cache');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (subPath.includes('tiles/')) {
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200, immutable');
+    } else {
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
+    }
+    return res.send(cached.body);
+  }
+
   const upstreamBase = (process.env.WEATHER_UPSTREAM ?? DEFAULT_VPS_UPSTREAM).replace(/\/+$/, '');
   if (!upstreamBase) {
     return res.status(503).json({ error: 'WEATHER_UPSTREAM environment variable is not configured' });
@@ -158,15 +202,24 @@ export default async function handler(req: ApiRequest, res: ApiResponse) {
        subPath.endsWith('.png') ? 'image/png' :
        'application/json; charset=utf-8');
 
+    // Populate memory cache: 60s for metadata, 1h for immutable raster tiles
+    const ttlMs = subPath.includes('tiles/') ? 3_600_000 : 60_000;
+    setCached(cacheKey, {
+      body,
+      contentType,
+      status: response.status,
+      expiresAt: Date.now() + ttlMs,
+    });
+
     res.status(response.status);
     res.setHeader('Content-Type', contentType);
     res.setHeader('X-Weather-Source', 'oracle-vps');
     res.setHeader('Access-Control-Allow-Origin', '*');
 
     if (subPath.includes('tiles/')) {
-      res.setHeader('Cache-Control', 'public, max-age=1800, stale-while-revalidate=3600');
+      res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=7200, immutable');
     } else {
-      res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600');
+      res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
     }
 
     return res.send(body);

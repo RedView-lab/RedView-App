@@ -17,6 +17,7 @@ import { createOverlayStatus } from '@/features/map3d';
 import {
   MIN_FETCH_INTERVAL_MS,
   MOVE_DEBOUNCE_MS,
+  SCRUB_DEBOUNCE_MS,
   STATUS_ID,
   SUPPORTED_KEYS,
   type RefreshReason,
@@ -40,10 +41,13 @@ import {
   bboxToImageCoords,
   loadTileImage,
   prefetchAdjacentHours,
+  cancelPrefetch,
 } from '../vpsWeatherClient';
 import {
   recolorTileToCanvas,
   canvasToBlobUrl,
+  getCachedRecoloredBlob,
+  cacheRecoloredBlob,
 } from '../vpsTileRenderer';
 import {
   fetchRadarMeta,
@@ -199,8 +203,12 @@ export function useWeatherDataPipeline({
     return true;
   };
 
-  const renderVpsForecast = async (generation: number, reason: RefreshReason = 'normal'): Promise<boolean> => {
-    if (!map || isCancelled() || !canMutateStyle()) return false;
+  const renderVpsForecast = async (
+    generation: number,
+    reason: RefreshReason = 'normal',
+    signal?: AbortSignal,
+  ): Promise<boolean> => {
+    if (!map || isCancelled() || signal?.aborted || !canMutateStyle()) return false;
     const currentState = stateRef.current;
     const currentActiveLayers = activeRenderableLayers(currentState);
     if (!currentState.enabled || currentActiveLayers.length === 0) {
@@ -212,13 +220,13 @@ export function useWeatherDataPipeline({
       id: STATUS_ID,
       label: 'Météo (VPS)',
       state: 'loading',
-      progress: 30,
+      progress: 20,
       detail: 'Connexion serveur météo VPS',
       reloadable: true,
     }));
 
-    const meta = await fetchWeatherMeta(undefined, reason === 'reload');
-    if (generation !== generationRef.current || isCancelled()) return false;
+    const meta = await fetchWeatherMeta(signal, reason === 'reload');
+    if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
 
     if (!meta || !Array.isArray(meta.hours) || meta.hours.length === 0) {
       throw new Error('Données météo non disponibles sur le serveur');
@@ -232,8 +240,19 @@ export function useWeatherDataPipeline({
     const renderableCount = Math.max(1, currentActiveLayers.length);
     let renderedCount = 0;
 
+    publishStatus(createOverlayStatus({
+      id: STATUS_ID,
+      label: 'Météo (VPS)',
+      state: 'loading',
+      progress: 45,
+      detail: 'Chargement des prévisions',
+      reloadable: true,
+    }));
+
     const activeLayerMap = new Map(currentActiveLayers.map((layer) => [layer.key, layer] as const));
     for (const key of SUPPORTED_KEYS) {
+      if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
+
       const activeLayer = activeLayerMap.get(key);
       if (!activeLayer) {
         setVisibility(key, false);
@@ -246,7 +265,7 @@ export function useWeatherDataPipeline({
         const isLive = (currentState.radarEnabled ?? true) && isInstantT(currentState.date, currentState.time);
         if (isLive) {
           try {
-            const radarMeta = await fetchRadarMeta();
+            const radarMeta = await fetchRadarMeta(signal);
             const latestFrame = getLatestRadarFrame(radarMeta);
             if (latestFrame && ensureRadarLayer) {
               const sig = paletteSignature(currentState, 'rain');
@@ -285,21 +304,39 @@ export function useWeatherDataPipeline({
         continue;
       }
 
+      // Check client recolored blob cache (< 1ms instant display)
+      const cachedBlob = getCachedRecoloredBlob(signature);
+      if (cachedBlob) {
+        if (!ensureLayer(key, activeLayer.mode, cachedBlob, coords)) {
+          armStyleRecovery('force', `vps-cache-reuse:${key}`);
+          return false;
+        }
+        renderedRef.current[key] = { url: cachedBlob, coords, signature };
+        renderedCount += 1;
+        continue;
+      }
+
       // Load high-resolution raster tile from VPS (instant memory cache + HTTP/2)
       const tileUrl = buildVpsTileUrl(key, closestHour, meta.tileFormat || 'png');
       let img: HTMLImageElement;
       try {
-        img = await loadTileImage(tileUrl);
+        img = await loadTileImage(tileUrl, signal);
       } catch (decodeErr) {
-        if (generation !== generationRef.current || isCancelled()) return false;
+        if (generation !== generationRef.current || isCancelled() || signal?.aborted) return false;
         console.warn(`[weather-vps] Failed to load tile for ${key}:`, decodeErr);
         throw new Error(`Tuile météo indisponible (${key})`);
       }
 
-      // Prefetch adjacent hours (+1h, +2h, -1h) in background for instant 60 FPS timeline scrubbing
-      prefetchAdjacentHours(key, closestHour, meta.hours, meta.tileFormat || 'png');
+      if (generation !== generationRef.current || isCancelled() || signal?.aborted || !canMutateStyle()) return false;
 
-      if (generation !== generationRef.current || isCancelled() || !canMutateStyle()) return false;
+      publishStatus(createOverlayStatus({
+        id: STATUS_ID,
+        label: 'Météo (VPS)',
+        state: 'loading',
+        progress: 70 + Math.round((renderedCount / renderableCount) * 15),
+        detail: `Recoloration ${key}`,
+        reloadable: true,
+      }));
 
       // Ultra-fast 1ms 1D color table recoloring
       const palette = currentState.palettes?.[key];
@@ -314,29 +351,30 @@ export function useWeatherDataPipeline({
       );
 
       const blobUrl = await canvasToBlobUrl(canvas);
-      if (generation !== generationRef.current || isCancelled() || !canMutateStyle()) {
+      if (generation !== generationRef.current || isCancelled() || signal?.aborted || !canMutateStyle()) {
         if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
         return false;
       }
 
+      cacheRecoloredBlob(signature, blobUrl);
+
       if (!ensureLayer(key, activeLayer.mode, blobUrl, coords)) {
-        if (blobUrl.startsWith('blob:')) URL.revokeObjectURL(blobUrl);
         armStyleRecovery('force', `vps-new:${key}`);
         return false;
       }
 
-      if (rendered?.url.startsWith('blob:')) {
-        window.setTimeout(() => URL.revokeObjectURL(rendered.url), 1_000);
-      }
       renderedRef.current[key] = { url: blobUrl, coords, signature };
       renderedCount += 1;
+
+      // Prefetch adjacent hours only AFTER current target hour is rendered
+      prefetchAdjacentHours(key, closestHour, meta.hours, meta.tileFormat || 'png');
 
       publishStatus(createOverlayStatus({
         id: STATUS_ID,
         label: 'Météo (VPS)',
         state: 'loading',
-        progress: 40 + (renderedCount / renderableCount) * 55,
-        detail: `Rendu ${key}`,
+        progress: 90,
+        detail: `Affichage ${key}`,
         reloadable: true,
       }));
     }
@@ -370,16 +408,20 @@ export function useWeatherDataPipeline({
     const viewport = getViewportBounds(map);
     const selection = selectionFromState(earlyState);
 
+    abortRef.current?.abort();
+    const abortController = new AbortController();
+    abortRef.current = abortController;
+
     // Primary path for Forecast +2d: VPS 2D raster textures
     if (selection.mode === 'forecast') {
       try {
-        const vpsSuccess = await renderVpsForecast(currentGeneration, reason);
-        if (currentGeneration !== generationRef.current || isCancelled()) return;
+        const vpsSuccess = await renderVpsForecast(currentGeneration, reason, abortController.signal);
+        if (currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
         if (!vpsSuccess && !canMutateStyle()) {
           armStyleRecovery(reason, 'vps-style-not-ready');
         }
       } catch (vpsErr) {
-        if (currentGeneration !== generationRef.current || isCancelled()) return;
+        if (currentGeneration !== generationRef.current || isCancelled() || abortController.signal.aborted) return;
         console.warn('[weather-overlay] VPS tile pipeline error:', vpsErr);
         publishStatus(createOverlayStatus({
           id: STATUS_ID,
@@ -404,10 +446,6 @@ export function useWeatherDataPipeline({
         return;
       }
     }
-
-    abortRef.current?.abort();
-    const abortController = new AbortController();
-    abortRef.current = abortController;
 
     publishStatus(createOverlayStatus({
       id: STATUS_ID,
@@ -452,12 +490,20 @@ export function useWeatherDataPipeline({
     }
   };
 
-  const scheduleRefresh = (reason: RefreshReason = 'normal', isDebounced = false) => {
+  const scheduleRefresh = (
+    reason: RefreshReason = 'normal',
+    debounceMode: boolean | 'scrub' | 'move' = false,
+  ) => {
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
-    const delay = isDebounced ? MOVE_DEBOUNCE_MS : 0;
+    const delay = debounceMode === 'scrub'
+      ? SCRUB_DEBOUNCE_MS
+      : (debounceMode === true || debounceMode === 'move')
+        ? MOVE_DEBOUNCE_MS
+        : 0;
+
     if (delay === 0) {
       void refresh(reason);
       return;
@@ -471,6 +517,7 @@ export function useWeatherDataPipeline({
 
   const cancelPipeline = () => {
     abortRef.current?.abort();
+    cancelPrefetch();
     if (debounceRef.current) {
       window.clearTimeout(debounceRef.current);
       debounceRef.current = null;

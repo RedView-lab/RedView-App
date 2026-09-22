@@ -50,6 +50,12 @@ function buildColorLookup(
     for (let b = 0; b < 256; b++) {
       const realVal = valMin + (b / 255.0) * span;
 
+      // Precipitation mask: 0 mm or < 0.1 mm (dry land) MUST be completely transparent
+      if (metric === 'rain' && (realVal < 0.1 || b === 0)) {
+        lookup[b] = 0;
+        continue;
+      }
+
       // Find band
       let matchedIndex = paletteBands.length - 1;
       for (let i = 0; i < paletteBands.length; i++) {
@@ -85,7 +91,14 @@ function buildColorLookup(
         const r = Math.round(lerp(currentRgb[0], nextRgb[0], t));
         const g = Math.round(lerp(currentRgb[1], nextRgb[1], t));
         const bl = Math.round(lerp(currentRgb[2], nextRgb[2], t));
-        lookup[b] = (255 << 24) | (bl << 16) | (g << 8) | r;
+
+        // Smooth alpha edge ramp for light rain (0.1mm - 0.5mm)
+        let alpha = 255;
+        if (metric === 'rain' && realVal < 0.5) {
+          alpha = Math.round(lerp(110, 255, clamp((realVal - 0.1) / 0.4, 0, 1)));
+        }
+
+        lookup[b] = (alpha << 24) | (bl << 16) | (g << 8) | r;
       }
     }
     return lookup;
@@ -94,6 +107,14 @@ function buildColorLookup(
   // Default color stops from paletteMetrics
   const defaultStops = getWeatherOverlayColorStops(metric);
   for (let b = 0; b < 256; b++) {
+    const realVal = valMin + (b / 255.0) * span;
+
+    // Precipitation mask: 0 mm or < 0.1 mm (dry land) MUST be completely transparent
+    if (metric === 'rain' && (realVal < 0.1 || b === 0)) {
+      lookup[b] = 0;
+      continue;
+    }
+
     const ratio = b / 255.0;
     let r = 255, g = 255, bl = 255;
 
@@ -109,7 +130,12 @@ function buildColorLookup(
       }
     }
 
-    lookup[b] = (255 << 24) | (bl << 16) | (g << 8) | r;
+    let alpha = 255;
+    if (metric === 'rain' && realVal < 0.5) {
+      alpha = Math.round(lerp(110, 255, clamp((realVal - 0.1) / 0.4, 0, 1)));
+    }
+
+    lookup[b] = (alpha << 24) | (bl << 16) | (g << 8) | r;
   }
 
   return lookup;
@@ -228,12 +254,65 @@ export function recolorTileToCanvas(
 
 export function canvasToBlobUrl(canvas: HTMLCanvasElement): Promise<string> {
   return new Promise<string>((resolve) => {
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(canvas.toDataURL());
-        return;
-      }
-      resolve(URL.createObjectURL(blob));
-    }, 'image/png');
+    // WebP hardware encoder is 5x-10x faster than PNG on modern browsers
+    try {
+      canvas.toBlob((blob) => {
+        if (blob) {
+          resolve(URL.createObjectURL(blob));
+          return;
+        }
+        // Fallback to PNG if WebP fails
+        canvas.toBlob((pngBlob) => {
+          if (!pngBlob) {
+            resolve(canvas.toDataURL());
+            return;
+          }
+          resolve(URL.createObjectURL(pngBlob));
+        }, 'image/png');
+      }, 'image/webp', 0.92);
+    } catch {
+      canvas.toBlob((pngBlob) => {
+        if (!pngBlob) {
+          resolve(canvas.toDataURL());
+          return;
+        }
+        resolve(URL.createObjectURL(pngBlob));
+      }, 'image/png');
+    }
   });
 }
+
+const recoloredBlobCache = new Map<string, string>();
+const MAX_RECOLORED_BLOBS = 32;
+
+export function getCachedRecoloredBlob(signature: string): string | undefined {
+  return recoloredBlobCache.get(signature);
+}
+
+export function cacheRecoloredBlob(signature: string, blobUrl: string): void {
+  if (recoloredBlobCache.size >= MAX_RECOLORED_BLOBS) {
+    const oldestKey = recoloredBlobCache.keys().next().value;
+    if (oldestKey) {
+      const oldUrl = recoloredBlobCache.get(oldestKey);
+      if (oldUrl?.startsWith('blob:')) {
+        window.setTimeout(() => URL.revokeObjectURL(oldUrl), 500);
+      }
+      recoloredBlobCache.delete(oldestKey);
+    }
+  }
+  recoloredBlobCache.set(signature, blobUrl);
+}
+
+export function clearRecoloredBlobCache(): void {
+  for (const url of recoloredBlobCache.values()) {
+    if (url.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* no-op */
+      }
+    }
+  }
+  recoloredBlobCache.clear();
+}
+

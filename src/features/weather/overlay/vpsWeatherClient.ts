@@ -86,8 +86,17 @@ export function bboxToImageCoords(bbox: WeatherMetaBbox = DEFAULT_WEATHER_BBOX):
 
 export function findClosestForecastHour(targetDate: string, targetTime: string, availableHours: string[]): string {
   if (!availableHours.length) return '';
-  const targetIso = `${targetDate}T${targetTime.slice(0, 5)}:00Z`;
-  const targetMs = new Date(targetIso).getTime();
+  const dateParts = targetDate.split('-').map(Number);
+  const timeParts = targetTime.split(':').map(Number);
+  const year = dateParts[0] || new Date().getFullYear();
+  const month = (dateParts[1] || 1) - 1;
+  const day = dateParts[2] || 1;
+  const hour = timeParts[0] || 0;
+  const minute = timeParts[1] || 0;
+
+  // Local wall-clock Date converted to UTC timestamp
+  const localDate = new Date(year, month, day, hour, minute, 0, 0);
+  const targetMs = localDate.getTime();
 
   if (Number.isNaN(targetMs)) return availableHours[0]!;
 
@@ -95,11 +104,11 @@ export function findClosestForecastHour(targetDate: string, targetTime: string, 
   let minDiff = Math.abs(new Date(bestHour).getTime() - targetMs);
 
   for (let i = 1; i < availableHours.length; i++) {
-    const hour = availableHours[i]!;
-    const diff = Math.abs(new Date(hour).getTime() - targetMs);
+    const h = availableHours[i]!;
+    const diff = Math.abs(new Date(h).getTime() - targetMs);
     if (diff < minDiff) {
       minDiff = diff;
-      bestHour = hour;
+      bestHour = h;
     }
   }
 
@@ -119,7 +128,27 @@ export async function loadTileImage(url: string, signal?: AbortSignal): Promise<
   if (cached) return cached;
 
   const inFlight = inFlightImagePromises.get(url);
-  if (inFlight) return inFlight;
+  if (inFlight) {
+    if (!signal) return inFlight;
+    return new Promise<HTMLImageElement>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      inFlight.then(
+        (img) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(img);
+        },
+        (err) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        },
+      );
+    });
+  }
 
   const promise = new Promise<HTMLImageElement>((resolve, reject) => {
     if (signal?.aborted) {
@@ -132,6 +161,7 @@ export async function loadTileImage(url: string, signal?: AbortSignal): Promise<
 
     const onAbort = () => {
       img.src = '';
+      inFlightImagePromises.delete(url);
       reject(new DOMException('Aborted', 'AbortError'));
     };
 
@@ -166,12 +196,28 @@ export async function loadTileImage(url: string, signal?: AbortSignal): Promise<
   return promise;
 }
 
+let activePrefetchTimer: number | null = null;
+let prefetchAbortController: AbortController | null = null;
+
+export function cancelPrefetch(): void {
+  if (activePrefetchTimer !== null) {
+    window.clearTimeout(activePrefetchTimer);
+    activePrefetchTimer = null;
+  }
+  if (prefetchAbortController) {
+    prefetchAbortController.abort();
+    prefetchAbortController = null;
+  }
+}
+
 export function prefetchAdjacentHours(
   variable: string,
   currentHour: string,
   availableHours: string[],
   tileFormat: string = 'png',
 ): void {
+  cancelPrefetch();
+
   const currentIndex = availableHours.indexOf(currentHour);
   if (currentIndex === -1) return;
 
@@ -190,14 +236,18 @@ export function prefetchAdjacentHours(
 
   if (urlsToPrefetch.length === 0) return;
 
-  const schedule = typeof window !== 'undefined' && 'requestIdleCallback' in window
-    ? (window as unknown as { requestIdleCallback: (fn: () => void) => number }).requestIdleCallback
-    : (fn: () => void) => window.setTimeout(fn, 50);
+  const controller = new AbortController();
+  prefetchAbortController = controller;
 
-  schedule(() => {
+  // Debounce background prefetch by 250ms so active timeline scrubbing isn't choked
+  activePrefetchTimer = window.setTimeout(() => {
+    activePrefetchTimer = null;
+    if (controller.signal.aborted) return;
+
     for (const url of urlsToPrefetch) {
-      loadTileImage(url).catch(() => {});
+      loadTileImage(url, controller.signal).catch(() => {});
     }
-  });
+  }, 250);
 }
+
 

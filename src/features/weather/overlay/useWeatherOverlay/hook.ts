@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { clearWeatherOverlayCache } from '../client';
 import { clearWeatherMetaCache } from '../vpsWeatherClient';
+import { clearRecoloredBlobCache } from '../vpsTileRenderer';
 import type { WeatherOverlayMetric, WeatherOverlayState } from '../types';
 import {
   createOverlayStatus,
@@ -134,6 +135,9 @@ export function useWeatherOverlay(
     };
   }, [map, isMapLoaded, state.enabled]);
 
+  const prevSelectionKeyRef = useRef(selectionKey);
+  const prevActiveLayersKeyRef = useRef(activeLayersKey);
+
   useEffect(() => {
     if (!state.enabled || activeLayers.length === 0) {
       hideAll();
@@ -148,7 +152,14 @@ export function useWeatherOverlay(
       }
     }
 
-    scheduleRefresh('normal');
+    const isOnlySelectionScrubbing =
+      prevActiveLayersKeyRef.current === activeLayersKey &&
+      prevSelectionKeyRef.current !== selectionKey;
+    prevSelectionKeyRef.current = selectionKey;
+    prevActiveLayersKeyRef.current = activeLayersKey;
+
+    // Use fast scrub debounce (120ms) during time scrubbing so slider dragging doesn't overwhelm network
+    scheduleRefresh('normal', isOnlySelectionScrubbing ? 'scrub' : false);
   }, [selectionKey, activeLayersKey, state.enabled]);
 
   useEffect(() => {
@@ -172,6 +183,7 @@ export function useWeatherOverlay(
     registerReload(() => {
       clearWeatherOverlayCache();
       clearWeatherMetaCache();
+      clearRecoloredBlobCache();
       dataRef.current = null;
       scheduleRefresh('reload');
     });

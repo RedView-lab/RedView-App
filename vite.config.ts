@@ -251,8 +251,11 @@ function redviewDevApiPlugin(): Plugin {
                 },
               })
 
-              // Invalidate SSR module cache in dev so code and env updates are reflected immediately
-              server.moduleGraph.invalidateAll()
+              // Invalidate candidate module in dev so updates are reflected without wiping entire dev graph
+              const modNode = server.moduleGraph.getModuleById(candidateFile)
+              if (modNode) {
+                server.moduleGraph.invalidateModule(modNode)
+              }
               const mod = await server.ssrLoadModule(candidateFile)
               const handler = mod.default || mod
 
