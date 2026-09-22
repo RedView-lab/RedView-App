@@ -29,6 +29,14 @@ interface ItineraryTabsProps {
   itineraries: Itinerary[];
   profiles: RouteProfile[];
   activeId: string;
+  /**
+   * Name of a GPX file currently being parsed. While set, a non-interactive
+   * "loading" row is rendered after the real itineraries and before the add
+   * button, so the user sees the import in flight in the same list that will
+   * hold the result. The row is replaced by the actual itinerary row as soon as
+   * `addItineraryFromGpxFile` resolves.
+   */
+  pendingImportName?: string | null;
   onSelect?: (id: string) => void;
   onToggleVisibility?: (id: string) => void;
   onAdd?: () => void;
@@ -48,6 +56,7 @@ export function ItineraryTabs({
   itineraries,
   profiles,
   activeId,
+  pendingImportName,
   onSelect,
   onToggleVisibility,
   onAdd,
@@ -254,6 +263,19 @@ export function ItineraryTabs({
             </div>
           );
         })}
+        {/* GPX import in flight: a non-interactive row in the same list that
+            will receive the parsed itinerary, so the result lands where the
+            user is already looking. */}
+        {pendingImportName ? (
+          <div className="rvi-itin-wrap rvi-itin-wrap--pending" aria-live="polite">
+            <div className="rvi-itin rvi-itin--pending">
+              <span className="rvi-itin__spinner" aria-hidden />
+              <span className="rvi-itin__label" title={pendingImportName}>
+                {pendingImportName}
+              </span>
+            </div>
+          </div>
+        ) : null}
         <button
           ref={onAddButtonRef}
           type="button"

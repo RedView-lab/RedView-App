@@ -176,7 +176,7 @@ export default function VerificationCodeModal({
   };
 
   return (
-    <div className="rv-modal-backdrop" role="dialog" aria-modal="true">
+    <div className="rv-modal-backdrop rv-fixed-viewport" role="dialog" aria-modal="true">
       {/* Background overlay */}
       <div className="rv-modal-overlay" onClick={onClose} />
 

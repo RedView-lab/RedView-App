@@ -35,7 +35,7 @@ class BillingModalErrorBoundary extends Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="rvpb-billing-page" style={{ padding: '40px', textAlign: 'center' }}>
+        <div className="rvpb-billing-page rv-fixed-viewport" style={{ padding: '40px', textAlign: 'center' }}>
           <h2>Une erreur est survenue lors du chargement de la page de paiement</h2>
           <p style={{ color: '#ff8e8e', margin: '16px 0' }}>
             {this.state.error?.message || 'Erreur inattendue'}

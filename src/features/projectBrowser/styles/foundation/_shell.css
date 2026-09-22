@@ -1,6 +1,10 @@
+/*
+ * The overlay is rendered inside the scaled dashboard canvas, so it must carry
+ * the shared `rv-fixed-viewport` class (src/index.css) to land on the real
+ * screen bounds: a bare `inset: 0` would resolve against the scaled canvas and
+ * leave the app showing through at the right/bottom edges.
+ */
 .rvpb-overlay {
-  position: absolute;
-  inset: 0;
   z-index: 60;
   display: flex;
   justify-content: center;
@@ -174,6 +178,12 @@
   gap: 4px;
   flex: 0 0 auto;
   min-height: 40px;
+}
+
+/* Search sits on the far left of the actions cluster; the view toggle (and
+   everything after it) is pushed to the right edge. */
+.rvpb-view-toggle {
+  margin-left: auto;
 }
 
 .rvpb-icon-button,
@@ -375,6 +385,21 @@
   background: #383838;
 }
 
+.rvpb-square-button__spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  border-top-color: #fff;
+  animation: rvpb-square-button-spin 900ms linear infinite;
+}
+
+@keyframes rvpb-square-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .rvpb-create-menu {
   position: relative;
   display: flex;
@@ -386,13 +411,13 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-width: 190px;
+  min-width: 0;
   height: 40px;
-  padding: 0 14px;
+  padding: 0 16px;
   border-radius: 6px;
   background: #890000;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   line-height: 1;
   white-space: nowrap;

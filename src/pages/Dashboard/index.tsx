@@ -3,6 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import { ProjectBrowserOverlay } from '@/features/projectBrowser';
 import { LidarProvider } from '@/features/lidar/components/LidarContext';
 import { DashboardEditor } from './components/DashboardEditor';
+import { DashboardProjectLoading } from './components/DashboardProjectLoading';
 import { useDashboardBasemap } from './hooks/useDashboardBasemap';
 import { useDashboardOverlayStatus } from './hooks/useDashboardOverlayStatus';
 import { CENTER_PANEL_STACK_GAP, COLLAPSED_DRAWER_CLEARANCE, PANEL_PADDING } from './lib/constants';
@@ -156,6 +157,11 @@ export default function Dashboard({
 
   const displayName = formatDisplayName(email);
   const editorOpen = !projectBrowserOpen && activeProjectId != null;
+  // Full screen: project manager -> loading page -> 3D editor. We keep the
+  // manager mounted underneath while a project loads so its state survives the
+  // transition, but the loading page covers it entirely.
+  const loadingProject = projectLoading || isClosingProject;
+  const projectBrowserVisible = (projectBrowserOpen || activeProjectId == null) && !loadingProject;
 
   useEffect(() => {
     if (editorOpen) return;
@@ -237,15 +243,19 @@ export default function Dashboard({
               onAltitudeOverlayStatusChange={handleAltitudeOverlayStatusChange}
               onItineraryRouteStatusChange={handleItineraryRouteStatusChange}
             />
-          ) : null}
+        ) : null}
 
-          <ProjectBrowserOverlay
-            open={projectBrowserOpen || activeProjectId == null}
-            displayName={displayName}
-            canClose={activeProjectId != null && !projectLoading && !isClosingProject}
-            onOpenProject={handleOpenProject}
-            onRequestClose={() => setProjectBrowserOpen(false)}
-          />
+        <ProjectBrowserOverlay
+          open={projectBrowserVisible}
+          displayName={displayName}
+          canClose={activeProjectId != null && !projectLoading && !isClosingProject}
+          onOpenProject={handleOpenProject}
+          onRequestClose={() => setProjectBrowserOpen(false)}
+        />
+
+        {loadingProject ? (
+          <DashboardProjectLoading projectName={activeProjectInitial?.name ?? null} />
+        ) : null}
         </div>
       </div>
     </LidarProvider>

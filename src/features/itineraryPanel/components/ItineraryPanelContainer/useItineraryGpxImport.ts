@@ -19,6 +19,18 @@ interface UseItineraryGpxImportArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
   addItinerary: (overrides?: Partial<Itinerary>) => string | null;
   setPendingCorridorFor: (id: string | null) => void;
+  /**
+   * Called with the file name the moment parsing starts, and with `null` once
+   * the itinerary has been added (or the import failed). Drives the loading row
+   * in the itinerary list, so the user sees the import in the slot the parsed
+   * itinerary will occupy.
+   */
+  onImportStateChange?: (fileName: string | null) => void;
+  /**
+   * Called after an itinerary has been added from a GPX, with its route points.
+   * Used to frame the map on the freshly imported itinerary.
+   */
+  onItineraryImported?: (itineraryId: string, points: [number, number][]) => void;
 }
 
 /**
@@ -30,6 +42,8 @@ export function useItineraryGpxImport({
   setProject,
   addItinerary,
   setPendingCorridorFor,
+  onImportStateChange,
+  onItineraryImported,
 }: UseItineraryGpxImportArgs) {
   const hydrateImportedTimelineEndpoints = useCallback(
     async (
@@ -134,36 +148,51 @@ export function useItineraryGpxImport({
 
   const addItineraryFromGpxFile = useCallback(
     async (file: File) => {
-      const route = await parseGpxFile(file);
-      const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
-      const basePoints = ignAltimetryPoints ?? route.points;
-      const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });
-      const quality: GpxQualityMode = 'default';
-      const simplifiedPoints = normalizeImportedRoutePoints(
-        simplifyPointsByQuality(storedPoints, quality),
-      );
-      const timeline = createImportedTimeline(simplifiedPoints);
-      const id = addItinerary({
-        name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
-        gpxRoute: {
-          name: route.name,
-          points: simplifiedPoints,
-          originalPoints: storedPoints,
-          gpxQuality: quality,
-          gpxQualityPointsPerKm: null,
-          source: 'gpx',
-        },
-        timeline,
-        metrics: buildImportedRouteMetrics(simplifiedPoints),
-      });
+      // Surface the import in the itinerary list straight away: the list shows
+      // a loading row named after the file until the itinerary row replaces it.
+      onImportStateChange?.(file.name);
+      try {
+        const route = await parseGpxFile(file);
+        const ignAltimetryPoints = await refineImportedRoutePointsWithIgnAltimetry(route.points);
+        const basePoints = ignAltimetryPoints ?? route.points;
+        const storedPoints = normalizeImportedRoutePoints(basePoints, { includeGradient: false });
+        const quality: GpxQualityMode = 'default';
+        const simplifiedPoints = normalizeImportedRoutePoints(
+          simplifyPointsByQuality(storedPoints, quality),
+        );
+        const timeline = createImportedTimeline(simplifiedPoints);
+        const id = addItinerary({
+          name: route.name?.trim() || file.name.replace(/\.gpx$/i, ''),
+          gpxRoute: {
+            name: route.name,
+            points: simplifiedPoints,
+            originalPoints: storedPoints,
+            gpxQuality: quality,
+            gpxQualityPointsPerKm: null,
+            source: 'gpx',
+          },
+          timeline,
+          metrics: buildImportedRouteMetrics(simplifiedPoints),
+        });
 
-      if (id) {
-        setPendingCorridorFor(id);
-        void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
-        void enrichImportedRouteSurfaces(id, storedPoints, quality);
+        if (id) {
+          setPendingCorridorFor(id);
+          onItineraryImported?.(id, simplifiedPoints.map((point) => [point.lon, point.lat]));
+          void hydrateImportedTimelineEndpoints(id, simplifiedPoints);
+          void enrichImportedRouteSurfaces(id, storedPoints, quality);
+        }
+      } finally {
+        onImportStateChange?.(null);
       }
     },
-    [addItinerary, enrichImportedRouteSurfaces, hydrateImportedTimelineEndpoints, setPendingCorridorFor],
+    [
+      addItinerary,
+      enrichImportedRouteSurfaces,
+      hydrateImportedTimelineEndpoints,
+      onImportStateChange,
+      onItineraryImported,
+      setPendingCorridorFor,
+    ],
   );
 
   return {

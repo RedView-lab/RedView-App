@@ -17,6 +17,32 @@ body {
   flex-direction: column;
 }
 
+/*
+ * Full-viewport overlays (project manager, loading page, modals, mobile block).
+ *
+ * These are rendered inside the dashboard's `transform: scale(appScale)` canvas,
+ * and a transformed ancestor becomes the containing block for its fixed
+ * descendants. `inset: 0` would therefore span the *canvas* box rather than the
+ * screen, leaving whatever is underneath showing through at the right/bottom
+ * edges.
+ *
+ * Both axes use `100%`, which resolves against that box — already exactly the
+ * region an `inset: 0` overlay is meant to fill — instead of mixing in viewport
+ * units, which resolve in a different coordinate space (the real viewport) and
+ * would therefore disagree with the width axis.
+ *
+ * Any new full-screen overlay rendered inside the dashboard canvas MUST carry
+ * the `rv-fixed-viewport` class instead of relying on `inset: 0`.
+ */
+.rv-fixed-viewport {
+  position: fixed;
+  inset: auto;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .loading {
   display: flex;
   align-items: center;

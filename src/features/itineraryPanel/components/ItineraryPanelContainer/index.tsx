@@ -15,6 +15,7 @@ import { useItineraryPoiMap } from '../../hooks/useItineraryPoiMap';
 import { useItineraryRouteLayerSync } from '../../hooks/useItineraryRouteLayerSync';
 import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpointMarkers';
 import { poiFeaturesToTimelineItems } from '../../lib/schedule';
+import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
@@ -230,10 +231,27 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     addItinerary,
   });
 
+  // GPX import progress, surfaced as a loading row in the itinerary list.
+  const [pendingImportName, setPendingImportName] = useState<string | null>(null);
+
+  const fitMapToImportedRoute = useCallback(
+    (points: [number, number][]) => {
+      if (!map || points.length === 0) return;
+      try {
+        fitToRoute(map, points);
+      } catch (error) {
+        console.warn('[ItineraryPanelContainer] fitToRoute after GPX import failed', error);
+      }
+    },
+    [map],
+  );
+
   const { addItineraryFromGpxFile } = useItineraryGpxImport({
     setProject,
     addItinerary,
     setPendingCorridorFor,
+    onImportStateChange: setPendingImportName,
+    onItineraryImported: (_id, points) => fitMapToImportedRoute(points),
   });
 
   const timelineCallbacks = useItineraryTimelineCallbacks({
@@ -427,6 +445,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }}
         onOpenAddItinerary={() => setAddDialogOpen((open) => !open)}
         onAddItineraryFromGpx={addItineraryFromGpxFile}
+        pendingImportName={pendingImportName}
         onDuplicateItinerary={duplicateItinerary}
         onRemoveItinerary={removeItinerary}
         onRenameItinerary={setItineraryName}

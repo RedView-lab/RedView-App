@@ -308,6 +308,41 @@
   flex: 0 0 auto;
 }
 
+/* ── Pending GPX import row ───────────────────────────────────────
+   Occupies the slot the imported itinerary will take. Non-interactive
+   (no hover/active state) so it never reads as a selectable tab. */
+.rvi-itin-wrap--pending {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rvi-itin--pending {
+  cursor: default;
+  color: var(--rvi-text-dim);
+  font-weight: 500;
+}
+
+.rvi-itin--pending:hover {
+  background: transparent;
+}
+
+.rvi-itin__spinner {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  border-top-color: var(--rvi-text);
+  animation: rvi-itin-spin 0.7s linear infinite;
+}
+
+@keyframes rvi-itin-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rvi-itin__spinner { animation-duration: 2s; }
+}
+
 .rvi-modes {
   display: flex;
   gap: 4px;
@@ -346,6 +381,27 @@
   background: rgba(0, 0, 0, 0.34);
   opacity: 0.82;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* No itinerary yet: the mode menu is inert (nothing to edit). */
+.rvi-mode:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.rvi-mode:disabled:hover {
+  opacity: 0.4;
+}
+
+.rvi-panel__empty-hint {
+  margin: 0;
+  padding: 16px 12px;
+  color: var(--rvi-text);
+  opacity: 0.55;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .rvi-mode__icon {

@@ -6,7 +6,7 @@ interface MobileBlockScreenProps {
 
 export function MobileBlockScreen({ landingUrl = 'https://redview.tech' }: MobileBlockScreenProps) {
   return (
-    <div className="rv-mobile-block-overlay">
+    <div className="rv-mobile-block-overlay rv-fixed-viewport">
       <div className="rv-mobile-block-container">
         <img
           src="/landing/icons/redview-logo.svg"

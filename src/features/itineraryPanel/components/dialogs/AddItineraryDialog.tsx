@@ -119,11 +119,16 @@ export function AddItineraryDialog({
     }
     setError(null);
     setLoading(true);
+    // Close the pop-in as soon as the file is chosen: the import progress is
+    // reported by a loading row inside the itinerary list itself, so the menu
+    // does not need to stay open to show it.
+    onClose();
     try {
       await onPickGpx(file);
-      onClose();
     } catch (err) {
-      setError(err instanceof Error ? t(err.message) : t('Impossible de lire ce GPX'));
+      // The menu is gone by now, so surface the failure instead of leaving the
+      // user with no feedback at all.
+      console.warn('[AddItineraryDialog] GPX import failed', err);
     } finally {
       setLoading(false);
     }

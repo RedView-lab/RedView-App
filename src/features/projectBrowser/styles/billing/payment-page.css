@@ -4,7 +4,9 @@ body.rvpb-billing-page-open {
 
 .rvpb-billing-page {
   position: fixed;
-  inset: 0;
+  /* Handled by .rv-fixed-viewport (src/index.css): this overlay is rendered
+       inside the scaled dashboard canvas, where `inset: 0` would span the
+       canvas box instead of the real viewport. */
   z-index: 160;
   overflow-y: auto;
   color: #fff;

@@ -6,10 +6,12 @@ export const MAPBOX_TOKEN = (import.meta.env?.VITE_MAPBOX_TOKEN ?? '') as string
 // available as a premium-tier basemap option.
 export const MAPBOX_STYLE = 'mapbox://styles/mapbox/outdoors-v12';
 
+// Default camera for a brand-new project: France seen wide, so the user starts
+// from a national overview and zooms into their area of interest.
 export const DEFAULT_VIEW = {
   center: [2.3522, 46.6034] as [number, number],
-  zoom: 5.5,
-  pitch: 60,
+  zoom: 5,
+  pitch: 0,
   bearing: 0,
   projection: 'globe' as const,
 };

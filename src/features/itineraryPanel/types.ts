@@ -503,6 +503,12 @@ export interface ItineraryPanelProps {
    * The container is expected to call `parseGpxFile()` and store the route.
    */
   onAddItineraryFromGpx?: (file: File) => Promise<void> | void;
+  /**
+   * Name of a GPX file currently being parsed, or null. While set, the
+   * itinerary list shows a loading row in the position the parsed itinerary
+   * will occupy, so the user gets immediate feedback after picking the file.
+   */
+  pendingImportName?: string | null;
   /** Duplicate an itinerary by id. */
   onDuplicateItinerary?: (id: string) => void;
   /** Remove an itinerary by id. The container should refuse if it's the last one. */

@@ -7,6 +7,7 @@ import type {
 } from '../../types';
 import { translateAppText } from '@/shared/i18n';
 import { createDefaultControlPanelPersistedState } from '../../../controlPanel/lib/persistedState';
+import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
 
 /**
@@ -150,8 +151,12 @@ export function createDefaultItinerary(
 export function createDefaultAnalysisPanelState(): AnalysisPanelState {
   return {
     xMode: 'distance',
-    axis1: 'Vitesse',
-    axis2: 'Puissance',
+    // Default to a plain elevation profile. The chart always draws altitude as
+    // its backdrop, so putting Altitude on both axes gives a clean, uncluttered
+    // profile of the route — the most useful first read after importing a GPX.
+    // Users can switch axes to speed / power / slope from the chart toolbar.
+    axis1: 'Altitude',
+    axis2: 'Altitude',
     filters: {
       waypoint: true,
       poi: true,
@@ -165,19 +170,41 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
   };
 }
 
+/**
+ * Default project for a freshly created project.
+ *
+ * Product rules for a brand-new project:
+ * - The itinerary list starts EMPTY: the user creates their own
+ *   itineraries / variants / imports from the itinerary menu.
+ * - Consequently the itinerary menu below it (tracage / rythme / POI) has
+ *   nothing to edit, so it is disabled, collapsed and unselected (see
+ *   `activeMode` below and the `disabled` handling in the panel).
+ * - The central panel stays hidden until the first trace lands.
+ * - The map camera is seeded with DEFAULT_VIEW (wide France overview).
+ *   `useDashboardChrome.resolveProjectViewport` re-applies the same
+ *   wide-France fallback for any project without a saved viewport, so a new
+ *   project can never inherit the camera of the previously opened one.
+ */
 export function createDefaultProject(): ItineraryProject {
-  const it = createDefaultItinerary(1);
   return {
     name: translateAppText('Nouveau projet'),
     savedAt: null,
     sizeBytes: null,
     privacy: 'private',
-    itineraries: [it],
-    activeItineraryId: it.id,
+    itineraries: [],
+    activeItineraryId: '',
     activeMode: 'tracage',
     timelineView: 'sheet',
     controlPanel: createDefaultControlPanelPersistedState(),
     analysis: createDefaultAnalysisPanelState(),
+    dashboard: {
+      mapViewport: {
+        center: [...DEFAULT_VIEW.center],
+        zoom: DEFAULT_VIEW.zoom,
+        pitch: DEFAULT_VIEW.pitch,
+        bearing: DEFAULT_VIEW.bearing,
+      },
+    },
   };
 }
 

@@ -1,10 +1,10 @@
 import type { LabelCategory } from '@/features/labels/types';
+import { LABEL_CATEGORIES } from '@/features/labels/lib/label-config';
 import type { AnalysisZone } from '@/features/analysisZone';
 import type { PersistedAltitudeBreakpoints } from '@/features/altitude/lib/altitude-persist';
 import type { AltitudeState } from '@/features/altitude/types';
 import type { PersistedBreakpoints } from '@/features/slope/lib/slope-persist';
 import type { SlopeState } from '@/features/slope/types';
-import { DEFAULT_BASEMAP_ID } from './basemaps';
 import type {
   BasemapId,
   Basemap3dQualityId,
@@ -114,13 +114,40 @@ const DEFAULT_SECTIONS_OPEN: ControlPanelSectionsOpenState = {
   sunlight: false,
 };
 
+/**
+ * Default label categories for a brand-new project.
+ *
+ * Without an explicit `labelsState`, `useOverlayLabelsState` falls back to the
+ * GLOBAL `redview_label_prefs` localStorage entry — i.e. whatever categories
+ * the user last toggled in a *previous* project. A new project must always
+ * start with labels ON, so the defaults are materialised here from the label
+ * config instead of being inherited.
+ */
+function buildDefaultLabelBackend(): Record<LabelCategory, boolean> {
+  const backend = {} as Record<LabelCategory, boolean>;
+  for (const category of LABEL_CATEGORIES) {
+    backend[category.id] = category.defaultEnabled;
+  }
+  return backend;
+}
+
+/**
+ * Default control-panel state for a brand-new project.
+ *
+ * Product defaults once a project is created:
+ * - Basemap: satellite, 30 m resolution (`fast-30m`).
+ * - Labels ON; contours / slopes / altitude / weather / wind / snow / sunlight OFF.
+ * - Every collapsible section starts collapsed.
+ */
 export function createDefaultControlPanelPersistedState(): ControlPanelPersistedState {
+  const labelBackend = buildDefaultLabelBackend();
+
   return {
     sectionsOpen: { ...DEFAULT_SECTIONS_OPEN },
-    basemapId: DEFAULT_BASEMAP_ID,
+    basemapId: 'satellite',
     basemap3dQuality: 'fast-30m',
     toggles: {
-      labelsEnabled: false,
+      labelsEnabled: true,
       contourLinesEnabled: false,
       slopesEnabled: false,
       altitudeEnabled: false,
@@ -131,6 +158,10 @@ export function createDefaultControlPanelPersistedState(): ControlPanelPersisted
       routesEnabled: true,
     },
     sunlightMapExpanded: false,
+    labelsState: {
+      backend: labelBackend,
+      statesUiEnabled: labelBackend.states,
+    },
     contourLines: {
       interval: '200m',
       opacity: 100,

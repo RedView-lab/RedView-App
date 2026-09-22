@@ -3,7 +3,7 @@ import '@mapbox/mapbox-gl-draw/dist/mapbox-gl-draw.css';
 import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import type { Map as MapboxMap } from 'mapbox-gl';
 import { useMap } from '../hooks/useMap';
-import { useMapPoiExternalLink } from '../hooks/useMapPoiExternalLink';
+import { useMapPoiHoverCursor } from '../hooks/useMapPoiHoverCursor';
 import { useCinematicIdleRotate } from '../hooks/useCinematicIdleRotate';
 import { useLidarSelection } from '@/features/lidar/components/useLidarSelection';
 import { MapContextMenu } from './MapContextMenu/MapContextMenu';
@@ -91,7 +91,7 @@ export default memo(function MapView({
   });
 
   useLidarSelection(isLoaded ? map.current : null, lidarSelectionEnabled, onLidarSelectionDisable);
-  useMapPoiExternalLink(isLoaded ? map.current : null);
+  useMapPoiHoverCursor(isLoaded ? map.current : null);
   useCinematicIdleRotate(isLoaded ? map.current : null, isLoaded);
 
   useEffect(() => {

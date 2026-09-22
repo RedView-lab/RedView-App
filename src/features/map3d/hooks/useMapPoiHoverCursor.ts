@@ -158,14 +158,17 @@ export function findNamedPoiFeature(
   return { name, feature: best };
 }
 
-export function openGoogleSearchForPoi(name: string): void {
-  const query = name.trim();
-  if (!query) return;
-  const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-export function useMapPoiExternalLink(map: MapboxMap | null): void {
+/**
+ * Sets a `pointer` cursor when the map is hovered over a named POI/label so the
+ * user can tell a place is interactive — hover affordance only, no navigation.
+ *
+ * NOTE: this hook used to also open a Google search tab on every plain map
+ * `click`. That was removed: clicking the map (a national park label, a peak, a
+ * town…) after a pan threw the user out of the app, and since drag-and-drop is
+ * the way projects are filed here, accidental clicks are frequent. Clicking the
+ * map must stay inert.
+ */
+export function useMapPoiHoverCursor(map: MapboxMap | null): void {
   useEffect(() => {
     if (!map) return;
 
@@ -218,55 +221,15 @@ export function useMapPoiExternalLink(map: MapboxMap | null): void {
       });
     };
 
-    const onClick = (e: mapboxgl.MapMouseEvent) => {
-      if (e.originalEvent.button !== 0) return;
-
-      // Check movement tolerance (prevent accidental triggers during drag/pan)
-      if (startPoint) {
-        const dist = Math.hypot(e.point.x - startPoint.x, e.point.y - startPoint.y);
-        if (dist > 8) return;
-      }
-
-      const currentCursor = map.getCanvas().style.cursor;
-      if (currentCursor.includes('edit-04') || currentCursor.includes('crosshair')) {
-        return;
-      }
-
-      // Try tight bbox first (16px), then broader bbox (26px)
-      const primaryBbox: [PointLike, PointLike] = [
-        [e.point.x - 16, e.point.y - 16],
-        [e.point.x + 16, e.point.y + 16],
-      ];
-      try {
-        let features = map.queryRenderedFeatures(primaryBbox);
-        let match = findNamedPoiFeature(features);
-        if (!match) {
-          const secondaryBbox: [PointLike, PointLike] = [
-            [e.point.x - 26, e.point.y - 26],
-            [e.point.x + 26, e.point.y + 26],
-          ];
-          features = map.queryRenderedFeatures(secondaryBbox);
-          match = findNamedPoiFeature(features);
-        }
-        if (match) {
-          openGoogleSearchForPoi(match.name);
-        }
-      } catch {
-        // Catch gracefully
-      }
-    };
-
     map.on('mousedown', onMouseDown);
     map.on('mouseup', onMouseUp);
     map.on('mousemove', onMouseMove);
-    map.on('click', onClick);
 
     return () => {
       if (hoverRafId !== null) cancelAnimationFrame(hoverRafId);
       map.off('mousedown', onMouseDown);
       map.off('mouseup', onMouseUp);
       map.off('mousemove', onMouseMove);
-      map.off('click', onClick);
     };
   }, [map]);
 }

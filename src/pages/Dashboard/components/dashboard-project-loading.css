@@ -1,0 +1,91 @@
+/*
+ * Full-screen project-loading page shown between the project manager and the
+ * 3D editor. Self-contained (no dependency on the manager stylesheet) so it can
+ * be rendered standalone while the project browser is unmounted.
+ */
+
+@keyframes rv-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rv-loading-screen {
+  /*
+   * Size/position come from the shared `.rv-fixed-viewport` rule (see
+   * `src/index.css`): this overlay lives inside the scaled dashboard canvas,
+   * where `inset: 0` would resolve against that box instead of the real
+   * viewport and leave the project manager visible at the edges.
+   */
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(153, 153, 153, 0.04) 100%),
+    #000;
+  color: #fff;
+  font-family: 'Rethink Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.rv-loading-screen__brand {
+  position: absolute;
+  top: 40px;
+  left: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.rv-loading-screen__brand img {
+  display: block;
+  width: 125px;
+  height: 24px;
+}
+
+.rv-loading-screen__center {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 24px;
+  text-align: center;
+}
+
+.rv-loading-screen__spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: #890000;
+  animation: rv-loading-spin 900ms linear infinite;
+}
+
+.rv-loading-screen__label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.rv-loading-screen__project {
+  margin: 0;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.42);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rv-loading-screen__spinner {
+    animation-duration: 2.4s;
+  }
+}

@@ -1,6 +1,7 @@
 import {
   APP_SCALE_DESIGN_HEIGHT,
   APP_SCALE_DESIGN_WIDTH,
+  APP_SCALE_MAX,
   APP_SCALE_MIN,
   CENTER_PANEL_DEFAULT_HEIGHT_RATIO,
   CENTER_PANEL_MAX_HEIGHT_RATIO,
@@ -44,7 +45,7 @@ export function getDashboardLayout({
       viewport.h / APP_SCALE_DESIGN_HEIGHT,
     ) * 0.86,
     APP_SCALE_MIN,
-    0.86,
+    APP_SCALE_MAX,
   );
   const scaledViewportWidth = viewport.w / appScale;
   const scaledViewportHeight = viewport.h / appScale;

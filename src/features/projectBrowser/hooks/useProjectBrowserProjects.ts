@@ -133,7 +133,9 @@ export function useProjectBrowserProjects({
     setCreatingProject(true);
     setError(null);
     try {
-      const row = await createProject(undefined, undefined, currentFolderId);
+      // Creation always happens at the root of the manager: the user then
+      // drags the project into whichever folder they created for it.
+      const row = await createProject(undefined, undefined, null);
       setProjects((prev) => [
         {
           id: row.id,
@@ -154,7 +156,7 @@ export function useProjectBrowserProjects({
     } finally {
       setCreatingProject(false);
     }
-  }, [creatingProject, currentFolderId, onOpenProject, showToast]);
+  }, [creatingProject, onOpenProject, showToast]);
 
   const handleCreateFolder = useCallback(async () => {
     if (creatingFolder) return;

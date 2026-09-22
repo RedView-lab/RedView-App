@@ -2,7 +2,9 @@
 
 .rv-modal-backdrop {
   position: fixed;
-  inset: 0;
+  /* Handled by .rv-fixed-viewport (src/index.css): this overlay is rendered
+       inside the scaled dashboard canvas, where `inset: 0` would span the
+       canvas box instead of the real viewport. */
   width: 100vw;
   height: 100vh;
   display: flex;

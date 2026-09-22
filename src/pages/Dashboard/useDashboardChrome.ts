@@ -7,7 +7,8 @@ import {
 } from 'react';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
-import { loadViewport, type MapViewport } from '@/features/map3d/lib/viewport-persist';
+import { DEFAULT_VIEW } from '@/features/map3d/lib/mapbox.config';
+import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
 import {
   CENTER_PANEL_HEIGHT_KEY,
   LEFT_PANEL_WIDTH_KEY,
@@ -32,6 +33,31 @@ interface UseDashboardChromeArgs {
   updatePersistedDashboard: (mutateDashboard: DashboardPersistedMutator) => void;
 }
 
+/**
+ * Camera the map must mount with for a given project.
+ *
+ * A project that has never been panned/zoomed has no `dashboard.mapViewport`
+ * yet; we then seed the wide-France overview (`DEFAULT_VIEW`) instead of
+ * falling back to the GLOBAL `redview-map-viewport` localStorage entry — that
+ * entry still holds the camera of the *previously opened* project, which is
+ * exactly why a brand-new project used to spawn on the last project's village
+ * instead of a France-wide plan. `null` (no project open) lets the map hook
+ * keep its own fallback; no map is mounted in that state anyway.
+ */
+function resolveProjectViewport(project: ItineraryProject | null): MapViewport | null {
+  if (!project) return null;
+
+  const saved = project.dashboard?.mapViewport;
+  if (saved) return saved;
+
+  return {
+    center: [...DEFAULT_VIEW.center],
+    zoom: DEFAULT_VIEW.zoom,
+    pitch: DEFAULT_VIEW.pitch,
+    bearing: DEFAULT_VIEW.bearing,
+  };
+}
+
 export function useDashboardChrome({
   activeProjectInitial,
   updatePersistedDashboard,
@@ -40,7 +66,7 @@ export function useDashboardChrome({
   const [lidarModeEnabled, setLidarModeEnabled] = useState(false);
   const [isMapFocusMode, setIsMapFocusMode] = useState(false);
   const [projectMapViewport, setProjectMapViewport] = useState<MapViewport | null>(
-    () => loadViewport(),
+    () => resolveProjectViewport(activeProjectInitial),
   );
   const [panelWidth, setPanelWidth] = useState<number>(() => readStoredWidth());
   const [isRightPanelCollapsed, setIsRightPanelCollapsed] = useState(false);
@@ -62,25 +88,22 @@ export function useDashboardChrome({
     h: window.innerHeight,
   }));
 
-  const rightPrimaryPanelHostRef = useRef<HTMLDivElement | null>(null);
-  const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
-  const lastExpandedPanelWidthRef = useRef(panelWidth);
-  const lastExpandedLeftPanelWidthRef = useRef(leftPanelWidth);
-  const lastExpandedCenterPanelHeightRef = useRef<number | null>(null);
-  const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
+  // ── Per-project chrome reset, applied DURING RENDER ────────────────────
+  // Everything below is derived from the active project. Doing this in an
+  // effect would run *after* the editor — and therefore its Mapbox map — has
+  // already mounted on the previous project's state: the map would be
+  // constructed on the wrong camera (the "new project spawns on the last
+  // project's location" bug) and the docked panels would flash open for a
+  // frame. React's "adjusting state when a prop changes" pattern keeps the
+  // project switch and this reset in the same render, so the very first frame
+  // already shows the correct defaults.
+  const [chromeProject, setChromeProject] = useState(activeProjectInitial);
 
-  useEffect(() => {
-    const onResize = () => {
-      setViewport({ w: window.innerWidth, h: window.innerHeight });
-    };
-
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
-
-  useEffect(() => {
+  if (chromeProject !== activeProjectInitial) {
     const dashboard = activeProjectInitial?.dashboard;
 
+    setChromeProject(activeProjectInitial);
+    setProjectMapViewport(resolveProjectViewport(activeProjectInitial));
     setPanelWidth(
       typeof dashboard?.rightPanelWidth === 'number'
         ? clampPanelWidth(dashboard.rightPanelWidth, PANEL_WIDTH_MIN_FALLBACK)
@@ -101,15 +124,30 @@ export function useDashboardChrome({
     // On a brand-new (empty) project the user hasn't started tracing yet, so we
     // keep the docked panels out of the way: the right settings dock and the
     // center analysis table stay collapsed. They reveal themselves as soon as
-    // the first trace point lands (see the traced-content effect below). The
-    // left "feuille de route" dock stays open — that's where tracing starts.
+    // the first trace point lands (see `handleTraceStarted` below). The left
+    // "feuille de route" dock stays open — that's where tracing starts.
     const isEmptyProject = !hasProjectTracedContent(activeProjectInitial);
     setIsLeftPanelCollapsed(false);
     setIsCenterPanelCollapsed(isEmptyProject);
     setIsRightPanelCollapsed(isEmptyProject);
     setLidarModeEnabled(dashboard?.lidarDownloadModeEnabled ?? false);
-    setProjectMapViewport(dashboard?.mapViewport ?? loadViewport());
-  }, [activeProjectInitial]);
+  }
+
+  const rightPrimaryPanelHostRef = useRef<HTMLDivElement | null>(null);
+  const exporterPanelHostRef = useRef<HTMLDivElement | null>(null);
+  const lastExpandedPanelWidthRef = useRef(panelWidth);
+  const lastExpandedLeftPanelWidthRef = useRef(leftPanelWidth);
+  const lastExpandedCenterPanelHeightRef = useRef<number | null>(null);
+  const panelMinWidth = PANEL_WIDTH_MIN_FALLBACK;
+
+  useEffect(() => {
+    const onResize = () => {
+      setViewport({ w: window.innerWidth, h: window.innerHeight });
+    };
+
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   useEffect(() => {
     if (isRightPanelCollapsed) return;

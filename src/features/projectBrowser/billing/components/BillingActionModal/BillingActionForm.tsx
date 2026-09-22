@@ -225,7 +225,7 @@ export function BillingActionForm({
   };
 
   return (
-    <section className="rvpb-billing-page" aria-labelledby={paymentPageTitleId}>
+    <section className="rvpb-billing-page rv-fixed-viewport" aria-labelledby={paymentPageTitleId}>
       <div className="rvpb-billing-page__chrome">
         <header className="rvpb-billing-page__header">
           <RedViewWordmark />

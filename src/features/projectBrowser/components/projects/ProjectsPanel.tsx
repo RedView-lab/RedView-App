@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 
 import {
-  IconChevronDown,
   IconFolderPlus,
   IconLayoutGrid,
   IconList,
@@ -127,27 +126,7 @@ export function ProjectsPanel({
 }: ProjectsPanelProps) {
   const { t } = useAppI18n();
   const visibleCount = visibleFolders.length + visibleProjects.length;
-  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [menuState, setMenuState] = useState<MenuState>(null);
-  const createMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!createMenuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!createMenuRef.current?.contains(event.target as Node)) {
-        setCreateMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setCreateMenuOpen(false);
-    };
-    window.addEventListener('mousedown', handlePointerDown);
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('mousedown', handlePointerDown);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [createMenuOpen]);
 
   const activeProject = menuState?.kind === 'project'
     ? visibleProjects.find((project) => project.id === menuState.id) ?? null
@@ -224,6 +203,29 @@ export function ProjectsPanel({
         </div>
 
         <div className="rvpb-toolbar__actions">
+          {showSearch ? (
+            <input
+              className="rvpb-search-input"
+              autoFocus
+              placeholder={t('Rechercher…')}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              onBlur={() => {
+                if (!search) setShowSearch(false);
+              }}
+            />
+          ) : (
+            <button
+              type="button"
+              className="rvpb-square-button"
+              aria-label={t('Rechercher un projet')}
+              title={t('Rechercher un projet')}
+              onClick={() => setShowSearch(true)}
+            >
+              <IconSearch size={18} />
+            </button>
+          )}
+
           <div className="rvpb-view-toggle" role="tablist" aria-label={t('Affichage des projets')}>
             <button
               type="button"
@@ -245,82 +247,30 @@ export function ProjectsPanel({
             </button>
           </div>
 
-          {showSearch ? (
-            <input
-              className="rvpb-search-input"
-              autoFocus
-              placeholder={t('Rechercher…')}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onBlur={() => {
-                if (!search) setShowSearch(false);
-              }}
-            />
-          ) : (
-            <button
-              type="button"
-              className="rvpb-square-button"
-              aria-label={t('Rechercher un projet')}
-              onClick={() => setShowSearch(true)}
-            >
-              <IconSearch size={18} />
-            </button>
-          )}
           <button
             type="button"
             className="rvpb-square-button"
-            aria-label={t('Créer un dossier')}
+            aria-label={creatingFolder ? t('Création…') : t('Créer un dossier')}
+            title={t('Créer un dossier')}
             onClick={handleCreateFolder}
             disabled={creatingFolder}
           >
-            <IconFolderPlus size={18} />
+            {creatingFolder ? (
+              <span className="rvpb-square-button__spinner" aria-hidden="true" />
+            ) : (
+              <IconFolderPlus size={18} />
+            )}
           </button>
 
-          <div className={`rvpb-create-menu${createMenuOpen ? ' is-open' : ''}`} ref={createMenuRef}>
-            <button
-              type="button"
-              className="rvpb-create-button"
-              aria-haspopup="menu"
-              aria-expanded={createMenuOpen}
-              onClick={() => setCreateMenuOpen((prev) => !prev)}
-              disabled={creatingProject || creatingFolder}
-            >
-              <IconPlusCircle size={20} />
-              <span>
-                {creatingProject || creatingFolder ? t('Création…') : t('Créer un projet')}
-              </span>
-              <IconChevronDown size={16} />
-            </button>
-
-            {createMenuOpen ? (
-              <div className="rvpb-create-menu__dropdown" role="menu" aria-label={t('Créer un élément')}>
-                <button
-                  type="button"
-                  className="rvpb-create-menu__item"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    handleCreateProject();
-                  }}
-                >
-                  <IconPlusCircle size={18} />
-                  <span>{t('Créer un projet ici')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="rvpb-create-menu__item"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateMenuOpen(false);
-                    handleCreateFolder();
-                  }}
-                >
-                  <IconFolderPlus size={18} />
-                  <span>{t('Créer un dossier ici')}</span>
-                </button>
-              </div>
-            ) : null}
-          </div>
+          <button
+            type="button"
+            className="rvpb-create-button"
+            onClick={handleCreateProject}
+            disabled={creatingProject}
+          >
+            <IconPlusCircle size={20} />
+            <span>{creatingProject ? t('Création…') : t('Créer un projet')}</span>
+          </button>
         </div>
       </div>
 

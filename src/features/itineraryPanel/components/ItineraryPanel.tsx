@@ -47,6 +47,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onSelectItinerary,
     onAddItinerary,
     onOpenAddItinerary,
+    pendingImportName,
     onDuplicateItinerary,
     onRemoveItinerary,
     onRenameItinerary,
@@ -95,7 +96,10 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
   const active = project.itineraries.find((i) => i.id === project.activeItineraryId);
   const activeMode = resolveVisiblePanelMode(project.activeMode);
   const [collapsedMode, setCollapsedMode] = useState<Exclude<PanelMode, 'nutrition'> | null>(null);
-  const modeCollapsed = collapsedMode === activeMode;
+  // A brand-new project starts with no itinerary at all: the mode menu has
+  // nothing to edit, so it is disabled, collapsed and shows no selection.
+  const settingsDisabled = !active;
+  const modeCollapsed = settingsDisabled || collapsedMode === activeMode;
   const isTimelineFullscreenOpen = timelineFullscreen && Boolean(active);
 
   const style: CSSProperties | undefined =
@@ -212,7 +216,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
   if (isTimelineFullscreenOpen && fullscreenTimelinePanel && typeof document !== 'undefined') {
     return createPortal(
-      <div className="rvi-panel-fullscreen-root">
+      <div className="rvi-panel-fullscreen-root rv-fixed-viewport">
         <aside
           className="rvi-panel rvi-panel--timeline-fullscreen"
           role="dialog"
@@ -256,6 +260,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         itineraries={project.itineraries}
         profiles={profiles}
         activeId={project.activeItineraryId}
+        pendingImportName={pendingImportName}
         onSelect={onSelectItinerary}
         onToggleVisibility={onToggleItineraryVisibility}
         onAdd={onOpenAddItinerary ?? onAddItinerary}
@@ -270,6 +275,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
       <ModeTabs
         active={activeMode}
         collapsed={modeCollapsed}
+        disabled={settingsDisabled}
         controlsId={modeContentId}
         onChange={handleModeChange}
       />
@@ -282,6 +288,13 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         onWheelCapture={handleWheelCapture}
       >
         <RouteStatusBanners routeError={routeError} routeWarnings={routeWarnings} />
+        {/* With no itinerary yet the mode settings are inert — render a short
+            hint pointing at the itinerary menu instead of the editor. */}
+        {settingsDisabled ? (
+          <p className="rvi-panel__empty-hint">
+            {t('Créez un itinéraire, une variante ou importez une trace pour commencer.')}
+          </p>
+        ) : (
         <ItineraryPanelModeContent
           active={active ?? undefined}
           activeMode={activeMode}
@@ -319,6 +332,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
           routeLoading={routeLoading}
           uploadFitLabel={uploadFitLabel}
         />
+        )}
       </div>
 
       {onResizeStart ? (

@@ -20,7 +20,7 @@ export function ProjectBrowserOverlay(props: ProjectBrowserOverlayProps) {
 
   return (
     <div
-      className="rvpb-overlay"
+      className="rvpb-overlay rv-fixed-viewport"
       role="dialog"
       aria-modal="true"
       aria-label={t('Sélecteur de projet principal')}

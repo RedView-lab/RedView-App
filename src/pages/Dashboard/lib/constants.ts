@@ -30,3 +30,4 @@ export const IMMERSIVE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 export const APP_SCALE_MIN = 0.45;
 export const APP_SCALE_DESIGN_WIDTH = 1920;
 export const APP_SCALE_DESIGN_HEIGHT = 1080;
+export const APP_SCALE_MAX = 0.86;
