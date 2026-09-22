@@ -87,7 +87,7 @@
   overflow: hidden;
 }
 .rvchart__layer--markers { z-index: 3; pointer-events: none; }
-.rvchart__layer--overlay{ z-index: 4; }
+.rvchart__layer--overlay{ z-index: 1000; }
 
 .rvchart__backdrop-fill {
   fill: rgba(245, 248, 252, 0.08);
@@ -140,11 +140,12 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.7) 100%);
-  box-shadow: 0 0 4px rgba(255, 255, 255, 0.3);
+  width: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 5px rgba(255, 255, 255, 0.9), 0 0 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
-  z-index: 10;
+  transform: translateX(-50%);
+  z-index: 9999;
 }
 
 .rvchart__hover-point {
@@ -156,7 +157,7 @@
   background: var(--rvchart-hover-point-color, #ffffff);
   border: 2px solid #ffffff;
   box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 12px var(--rvchart-hover-point-color, rgba(255, 255, 255, 0.6)), 0 4px 10px rgba(0, 0, 0, 0.4);
-  z-index: 12;
+  z-index: 10000;
   pointer-events: none;
 }
 
@@ -251,7 +252,7 @@
   font: 700 12px/normal 'DM Sans', 'Rethink Sans', system-ui, sans-serif;
   white-space: nowrap;
   pointer-events: none;
-  z-index: 5;
+  z-index: 10001;
 }
 
 .rvchart__card {
