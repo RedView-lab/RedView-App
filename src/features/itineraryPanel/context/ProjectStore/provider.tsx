@@ -69,7 +69,8 @@ export function ProjectProvider({
     setPendingTraceAppend,
     pushTraceHistoryEntry,
     pushTraceHistoryEntries,
-  } = useTraceHistory({ setProject });
+    commitTraceMutation,
+  } = useTraceHistory({ projectRef, setProject });
 
   const {
     updateItinerary,
@@ -83,7 +84,7 @@ export function ProjectProvider({
     duplicateItinerary,
     removeItinerary,
     clearItineraryRoute,
-  } = useItineraryCrudActions({ setProject });
+  } = useItineraryCrudActions({ setProject, commitTraceMutation });
 
   const {
     reverseItineraryGpx,
@@ -113,6 +114,7 @@ export function ProjectProvider({
       redoTraceEdit,
       canUndoTraceEdit,
       canRedoTraceEdit,
+      commitTraceMutation,
       rollbackPendingTraceAppend,
       addItinerary,
       updateItinerary,
@@ -144,6 +146,7 @@ export function ProjectProvider({
       changeItineraryGpxQuality,
       cleanItineraryGpxGlitches,
       clearItineraryRoute,
+      commitTraceMutation,
       duplicateItinerary,
       mergeItineraries,
       project,

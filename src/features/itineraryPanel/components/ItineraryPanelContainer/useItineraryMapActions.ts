@@ -22,6 +22,13 @@ import type { useItineraryPoiHandlers } from './useItineraryPoiHandlers';
 
 interface UseItineraryMapActionsArgs {
   updateActive: (mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => void) => void;
+  /**
+   * Variante de `updateActive` enregistrée dans l'historique undo/redo.
+   * Utilisée pour les suppressions (retour `false` = aucun changement).
+   */
+  updateActiveWithHistory?: (
+    mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => boolean | void,
+  ) => boolean;
   poiHandlers?: ReturnType<typeof useItineraryPoiHandlers>;
   project?: ItineraryProject;
   addItinerary?: (overrides?: Partial<Itinerary>) => string | null;
@@ -33,6 +40,7 @@ interface UseItineraryMapActionsArgs {
  */
 export function useItineraryMapActions({
   updateActive,
+  updateActiveWithHistory,
   poiHandlers,
   project,
   addItinerary,
@@ -263,19 +271,27 @@ export function useItineraryMapActions({
           }
         });
         break;
-      case 'delete':
-        updateActive((it) => {
-          removePoiAndLinkedWaypoints(it, resolveDraftFeatureId(payload.draft));
+      case 'delete': {
+        const applyDelete = (it: Itinerary) => {
+          const removed = removePoiAndLinkedWaypoints(it, resolveDraftFeatureId(payload.draft));
           delete it.pendingRoutePatch;
           delete it.pendingTraceExtension;
           delete it.routeAudit;
           it.prediction = null;
-        });
+          return removed;
+        };
+
+        if (updateActiveWithHistory) {
+          updateActiveWithHistory(applyDelete);
+          break;
+        }
+        updateActive(applyDelete);
         break;
+      }
       default:
         break;
     }
-  }, [addItinerary, project?.itineraries?.length, updateActive]);
+  }, [addItinerary, project?.itineraries?.length, updateActive, updateActiveWithHistory]);
 
   useEffect(() => listenItineraryMapAction((detail) => {
     if (detail.kind === 'context-menu') {

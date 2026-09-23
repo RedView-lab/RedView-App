@@ -15,6 +15,13 @@ import type { ItineraryProject } from '../../types';
 interface UseItineraryTimelineCallbacksArgs {
   setProject: React.Dispatch<React.SetStateAction<ItineraryProject>>;
   updateActive: (mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => void) => void;
+  /**
+   * Variante de `updateActive` enregistrée dans l'historique undo/redo.
+   * Utilisée pour les suppressions (retour `false` = aucun changement).
+   */
+  updateActiveWithHistory?: (
+    mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => boolean | void,
+  ) => boolean;
 }
 
 /**
@@ -24,6 +31,7 @@ interface UseItineraryTimelineCallbacksArgs {
 export function useItineraryTimelineCallbacks({
   setProject,
   updateActive,
+  updateActiveWithHistory,
 }: UseItineraryTimelineCallbacksArgs) {
   const handleChangeTimelineView = useCallback((view: TimelineView) => {
     setProject((p) => ({ ...p, timelineView: view }));
@@ -64,11 +72,11 @@ export function useItineraryTimelineCallbacks({
   }, [updateActive]);
 
   const handleRemoveTimelineItem = useCallback((id: string) => {
-    updateActive((it) => {
+    const applyRemoval = (it: ItineraryProject['itineraries'][number]) => {
       const removedIndex = it.timeline.findIndex((item) => item.id === id);
       const removedRow = removedIndex >= 0 ? it.timeline[removedIndex] : null;
       const nextTimeline = buildTimelineAfterRemoval(it.timeline, id);
-      if (!nextTimeline) return;
+      if (!nextTimeline) return false;
 
       it.timeline = nextTimeline;
       if (it.gpxRoute?.source === 'brouter') {
@@ -81,8 +89,15 @@ export function useItineraryTimelineCallbacks({
         delete it.routeAudit;
         it.prediction = null;
       }
-    });
-  }, [updateActive]);
+      return true;
+    };
+
+    if (updateActiveWithHistory) {
+      updateActiveWithHistory(applyRemoval);
+      return;
+    }
+    updateActive(applyRemoval);
+  }, [updateActive, updateActiveWithHistory]);
 
   const handleFavoriteTimelineItem = useCallback((id: string, favorite: boolean) => {
     updateActive((it) => {

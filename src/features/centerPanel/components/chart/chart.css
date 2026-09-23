@@ -135,17 +135,22 @@
 .rvchart__hline { left: 0; right: 0; height: 1px; }
 .rvchart__vline { top: 0; bottom: 0; width: 1px; }
 
-/* ---- Hover crosshair ---- */
+/* ---- Hover crosshair ----
+   Empilement de l'indicateur de survol, du bas vers le haut :
+     .rvchart__cards (10001)  carte d'infos
+     .rvchart__cursor (10002) ligne verticale — DOIT passer au-dessus de la carte
+     .rvchart__hover-point (10003) rond
+   Ne pas fixer ces z-index en inline dans le JSX : la valeur y était dupliquée et
+   désynchronisée, ce qui faisait passer la ligne derrière la carte d'infos. */
 .rvchart__cursor {
   position: absolute;
   top: 0;
   bottom: 0;
   width: 2px;
   background: #ffffff;
-  box-shadow: 0 0 5px rgba(255, 255, 255, 0.9), 0 0 2px rgba(0, 0, 0, 0.85);
   pointer-events: none;
   transform: translateX(-50%);
-  z-index: 9999;
+  z-index: 10002;
 }
 
 .rvchart__hover-point {
@@ -156,8 +161,9 @@
   transform: translate(-50%, -50%);
   background: var(--rvchart-hover-point-color, #ffffff);
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 12px var(--rvchart-hover-point-color, rgba(255, 255, 255, 0.6)), 0 4px 10px rgba(0, 0, 0, 0.4);
-  z-index: 10000;
+  /* Anneau net de contraste uniquement : pas de halo flouté. */
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8);
+  z-index: 10003;
   pointer-events: none;
 }
 
@@ -165,7 +171,7 @@
   width: 11px;
   height: 11px;
   border: 2px solid #ffffff;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 10px var(--rvchart-hover-point-color, rgba(255, 255, 255, 0.4));
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8);
 }
 
 .rvchart__poi-marker {

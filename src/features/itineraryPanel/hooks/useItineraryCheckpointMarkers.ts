@@ -4,6 +4,7 @@ import type { Map as MapboxMap } from 'mapbox-gl';
 import type { ItineraryProject } from '../types';
 import { translateAppText } from '@/shared/i18n';
 import { cumulativeRouteLengthsM, type RouteDistancePoint } from '../lib/routes';
+import { writeTracePointDataset } from '../lib/tracer/tracePointDataset';
 import { buildScheduledTimelineState, parseStartReference } from '../sections/timeline/TimelineTimelineView/utils';
 
 interface UseItineraryCheckpointMarkersArgs {
@@ -29,6 +30,8 @@ interface CheckpointData {
   signature: string;
   pauseId?: string;
   waypointId?: string;
+  /** Id de la ligne de timeline portée par ce marqueur (départ / arrivée / waypoint). */
+  rowId?: string;
   durationMin?: number | null;
   distanceKm?: number | null;
   favorite?: boolean;
@@ -506,6 +509,24 @@ function createMarkerElement(
   return el;
 }
 
+/**
+ * Expose sur l'élément du marqueur de quoi l'identifier depuis un handler DOM
+ * générique (utilisé par le drag & drop de l'outil Tracer). Les pauses sont
+ * exclues : elles sont positionnées par distance le long du tracé, pas par
+ * coordonnées libres.
+ */
+function applyTracePointDataset(element: HTMLElement, cp: CheckpointData): void {
+  if (cp.kind === 'pause' || !cp.rowId) return;
+
+  writeTracePointDataset(element.dataset, {
+    itineraryId: cp.itineraryId,
+    rowId: cp.rowId,
+    kind: cp.kind,
+    lon: cp.coord[0],
+    lat: cp.coord[1],
+  });
+}
+
 export function useItineraryCheckpointMarkers({
   itineraries,
   map,
@@ -586,6 +607,7 @@ export function useItineraryCheckpointMarkers({
           label: startLabel,
           itineraryId: itinerary.id,
           signature,
+          rowId: startRow?.id,
           distanceKm: 0,
         });
       }
@@ -613,6 +635,7 @@ export function useItineraryCheckpointMarkers({
           label: endLabel,
           itineraryId: itinerary.id,
           signature,
+          rowId: endRow?.id,
           distanceKm: endRow?.distanceKm ?? null,
         });
       }
@@ -720,6 +743,7 @@ export function useItineraryCheckpointMarkers({
               itineraryId: itinerary.id,
               signature,
               waypointId: row.id,
+              rowId: row.id,
               distanceKm: row.distanceKm ?? null,
               favorite: row.favorite === true,
             });
@@ -757,10 +781,12 @@ export function useItineraryCheckpointMarkers({
           existing.element.title = title;
           existing.element.setAttribute('aria-label', title);
           existing.signature = cp.signature;
+          applyTracePointDataset(existing.element, cp);
         }
         applyMarkerVisualState(existing, currentZoom);
       } else {
         const element = createMarkerElement(cp.kind, cp.label, cp.durationMin, cp.distanceKm);
+        applyTracePointDataset(element, cp);
         const popup =
           cp.kind === 'pause' && cp.pauseId
             ? createPausePopup(

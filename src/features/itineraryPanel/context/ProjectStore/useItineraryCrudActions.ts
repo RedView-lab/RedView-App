@@ -12,13 +12,24 @@ import type {
 
 interface UseItineraryCrudActionsArgs {
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
+  /**
+   * Enregistre une mutation destructive dans l'historique undo/redo.
+   * Requis pour que les suppressions d'itinéraires soient annulables.
+   */
+  commitTraceMutation: (
+    itineraryId: string,
+    mutate: (draft: ItineraryProject) => boolean | void,
+  ) => boolean;
 }
 
 /**
  * Gère les actions CRUD de base sur les itinéraires du projet
  * (nom, couleur, visibilité, mode de rendu, opacité, ajout, duplication, suppression).
  */
-export function useItineraryCrudActions({ setProject }: UseItineraryCrudActionsArgs) {
+export function useItineraryCrudActions({
+  setProject,
+  commitTraceMutation,
+}: UseItineraryCrudActionsArgs) {
   const updateItinerary = useCallback(
     (
       id: string,
@@ -214,43 +225,40 @@ export function useItineraryCrudActions({ setProject }: UseItineraryCrudActionsA
     (id: string) => {
       let removed = false;
 
-      setProject((currentProject) => {
-        const remaining = currentProject.itineraries.filter((itinerary) => itinerary.id !== id);
-        if (remaining.length === currentProject.itineraries.length) return currentProject;
+      commitTraceMutation(id, (draft) => {
+        const remaining = draft.itineraries.filter((itinerary) => itinerary.id !== id);
+        if (remaining.length === draft.itineraries.length) return false;
 
         removed = true;
-        const nextActive =
-          currentProject.activeItineraryId === id
-            ? (remaining[0]?.id ?? '')
-            : currentProject.activeItineraryId;
-
-        return {
-          ...currentProject,
-          itineraries: remaining,
-          activeItineraryId: nextActive,
-        };
+        draft.itineraries = remaining;
+        if (draft.activeItineraryId === id) {
+          draft.activeItineraryId = remaining[0]?.id ?? '';
+        }
       });
 
       return removed;
     },
-    [setProject],
+    [commitTraceMutation],
   );
 
   const clearItineraryRoute = useCallback(
     (id: string) => {
-      updateItinerary(id, (it) => {
-        const emptyTimeline = createDefaultItinerary(1, it.color).timeline;
-        it.timeline = structuredClone(emptyTimeline);
-        delete it.gpxRoute;
-        delete it.metrics;
-        delete it.poiFeatures;
-        delete it.routeAudit;
-        delete it.pendingTraceExtension;
-        delete it.pendingRoutePatch;
-        it.prediction = null;
+      commitTraceMutation(id, (draft) => {
+        const target = draft.itineraries.find((itinerary) => itinerary.id === id);
+        if (!target) return false;
+
+        const emptyTimeline = createDefaultItinerary(1, target.color).timeline;
+        target.timeline = structuredClone(emptyTimeline);
+        delete target.gpxRoute;
+        delete target.metrics;
+        delete target.poiFeatures;
+        delete target.routeAudit;
+        delete target.pendingTraceExtension;
+        delete target.pendingRoutePatch;
+        target.prediction = null;
       });
     },
-    [updateItinerary],
+    [commitTraceMutation],
   );
 
   return {

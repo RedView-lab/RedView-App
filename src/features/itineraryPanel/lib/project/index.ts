@@ -30,3 +30,5 @@ export type {
 export { reverseItineraryGpxProject } from './reverse-itinerary-gpx';
 export { splitItineraryProject } from './split-itinerary';
 export type { SplitItineraryProjectResult } from './split-itinerary';
+export { addItineraryVariantInPlace } from './create-itinerary-variant';
+export type { CreateItineraryVariantResult } from './create-itinerary-variant';

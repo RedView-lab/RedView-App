@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type Dispatch,
+  type MutableRefObject,
   type SetStateAction,
 } from 'react';
 
@@ -10,10 +11,11 @@ import type { ItineraryProject } from '../../types';
 import type { TraceHistoryEntry } from './types';
 
 interface UseTraceHistoryArgs {
+  projectRef: MutableRefObject<ItineraryProject>;
   setProject: Dispatch<SetStateAction<ItineraryProject>>;
 }
 
-export function useTraceHistory({ setProject }: UseTraceHistoryArgs) {
+export function useTraceHistory({ projectRef, setProject }: UseTraceHistoryArgs) {
   const [traceHistoryPast, setTraceHistoryPast] = useState<TraceHistoryEntry[]>([]);
   const [traceHistoryFuture, setTraceHistoryFuture] = useState<TraceHistoryEntry[]>([]);
   const traceHistoryPastRef = useRef<TraceHistoryEntry[]>([]);
@@ -54,6 +56,33 @@ export function useTraceHistory({ setProject }: UseTraceHistoryArgs) {
       setProject(entries[entries.length - 1].after);
     },
     [setProject, syncTraceHistory],
+  );
+
+  /**
+   * Applique une mutation au projet courant en l'enregistrant dans l'historique
+   * undo/redo, au même titre qu'une édition de trace.
+   *
+   * Le mutateur reçoit un clone profond du projet : il le modifie librement.
+   * S'il retourne `false`, la mutation est considérée comme sans effet et
+   * n'est pas enregistrée (pas de nouvelle entrée d'historique).
+   */
+  const commitTraceMutation = useCallback(
+    (
+      itineraryId: string,
+      mutate: (draft: ItineraryProject) => boolean | void,
+    ): boolean => {
+      const before = projectRef.current;
+      const after = structuredClone(before);
+      if (mutate(after) === false) return false;
+
+      pushTraceHistoryEntry({
+        itineraryId,
+        before: structuredClone(before),
+        after,
+      });
+      return true;
+    },
+    [projectRef, pushTraceHistoryEntry],
   );
 
   const undoTraceEdit = useCallback(() => {
@@ -103,6 +132,7 @@ export function useTraceHistory({ setProject }: UseTraceHistoryArgs) {
     traceHistoryFutureCount: traceHistoryFuture.length,
     pushTraceHistoryEntry,
     pushTraceHistoryEntries,
+    commitTraceMutation,
     undoTraceEdit,
     redoTraceEdit,
     rollbackPendingTraceAppend,

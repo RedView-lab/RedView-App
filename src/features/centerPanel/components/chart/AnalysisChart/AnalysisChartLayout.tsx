@@ -303,10 +303,7 @@ export function AnalysisChartLayout({
                 />
                 <div
                   className="rvchart__cursor"
-                  style={{
-                    left: `${(activeHover.ratioX * 100).toFixed(4)}%`,
-                    zIndex: 9999,
-                  }}
+                  style={{ left: `${(activeHover.ratioX * 100).toFixed(4)}%` }}
                 />
                 {hoverMarkers.map((marker) => (
                   <div

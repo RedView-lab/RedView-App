@@ -22,6 +22,14 @@ export interface ProjectStoreValue {
   redoTraceEdit: () => void;
   canUndoTraceEdit: boolean;
   canRedoTraceEdit: boolean;
+  /**
+   * Applique une mutation au projet en l'enregistrant dans l'historique undo/redo.
+   * Retourne `false` si la mutation a été déclarée sans effet (aucune entrée créée).
+   */
+  commitTraceMutation: (
+    itineraryId: string,
+    mutate: (draft: ItineraryProject) => boolean | void,
+  ) => boolean;
   rollbackPendingTraceAppend: (itineraryId: string) => boolean;
   addItinerary: (overrides?: Partial<Itinerary>) => string | null;
   updateItinerary: (

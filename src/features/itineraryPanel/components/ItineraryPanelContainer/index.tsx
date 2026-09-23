@@ -17,6 +17,7 @@ import { useItineraryCheckpointMarkers } from '../../hooks/useItineraryCheckpoin
 import { poiFeaturesToTimelineItems } from '../../lib/schedule';
 import { fitToRoute } from '../../lib/route-layer';
 import { useProjectStore } from '../../context/ProjectStore';
+import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
 import type { PoiFeature } from '@/features/poi/types';
@@ -80,9 +81,11 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     redoTraceEdit,
     canUndoTraceEdit,
     canRedoTraceEdit,
+    commitTraceMutation,
     rollbackPendingTraceAppend,
   } = useProjectStore();
   const predictionStore = usePredictionStoreOptional();
+  const traceTool = useTraceToolOptional();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const addButtonRef = useRef<HTMLButtonElement | null>(null);
   const [pendingCorridorFor, setPendingCorridorFor] = useState<string | null>(null);
@@ -219,15 +222,38 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const activeIdRef = useRef(project.activeItineraryId);
   activeIdRef.current = project.activeItineraryId;
 
+  /**
+   * Variante de `updateActive` qui enregistre la mutation dans l'historique
+   * undo/redo : utilisée pour les suppressions (POI, waypoints, étapes) afin
+   * qu'elles soient annulables avec les flèches Précédent / Rétablir.
+   */
+  const updateActiveWithHistory = useCallback(
+    (
+      mutateItinerary: (
+        itinerary: ItineraryProject['itineraries'][number],
+      ) => boolean | void,
+    ) => {
+      const targetId = activeIdRef.current;
+      return commitTraceMutation(targetId, (draft) => {
+        const target = draft.itineraries.find((itinerary) => itinerary.id === targetId);
+        if (!target) return false;
+        return mutateItinerary(target);
+      });
+    },
+    [commitTraceMutation],
+  );
+
   const poiHandlers = useItineraryPoiHandlers({
     activeItineraryRef,
     updateActive,
+    updateActiveWithHistory,
     project,
     addItinerary,
   });
 
   useItineraryMapActions({
     updateActive,
+    updateActiveWithHistory,
     poiHandlers,
     project,
     addItinerary,
@@ -296,6 +322,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
   const timelineCallbacks = useItineraryTimelineCallbacks({
     setProject,
     updateActive,
+    updateActiveWithHistory,
   });
 
   useItineraryCheckpointMarkers({
@@ -430,6 +457,19 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
     duplicateItinerary(project.activeItineraryId);
   }, [duplicateItinerary, project.activeItineraryId]);
 
+  /**
+   * Création d'un itinéraire vierge (« Créer un nouvel itinéraire »).
+   *
+   * On arme Tracer dans la foulée : l'utilisateur enchaîne directement sur le
+   * tracé au clic sur la carte, sans avoir à cliquer le bouton. L'armement ne
+   * passe pas par le garde `canTrace` de `toggle()` — le store vient d'être muté
+   * et les deux mises à jour sont batchées, donc le rendu suivant est cohérent.
+   */
+  const handleCreateBlankItinerary = useCallback(() => {
+    addItinerary();
+    traceTool?.activate();
+  }, [addItinerary, traceTool]);
+
   useEffect(() => {
     if (!pendingCorridorFor) return;
     if (!active || active.id !== pendingCorridorFor) return;
@@ -484,7 +524,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             ),
           }))
         }
-        onAddItinerary={() => addItinerary()}
+        onAddItinerary={handleCreateBlankItinerary}
         onAddButtonRef={(element) => {
           addButtonRef.current = element;
         }}
@@ -615,7 +655,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         open={addDialogOpen}
         anchorEl={addButtonRef.current}
         onClose={() => setAddDialogOpen(false)}
-        onPickScratch={() => addItinerary()}
+        onPickScratch={handleCreateBlankItinerary}
         onPickDuplicate={duplicateActiveItinerary}
         onPickGpx={handlePickGpx}
       />

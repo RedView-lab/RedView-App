@@ -23,6 +23,7 @@ import {
   buildPendingRoutePatchForForbiddenZone,
   pointInPolygon,
 } from './forbiddenZonePatch';
+import { applyTraceAppend, resolveTraceAppendKind } from '../../lib/tracer/traceEdits';
 import type {
   GpxQualityMode,
   ItineraryForbiddenZone,
@@ -77,138 +78,15 @@ export function useItineraryGpxActions({
       const itinerary = currentProject.itineraries.find((it) => it.id === id);
       if (!itinerary) return false;
 
-      const startRow = itinerary.timeline.find((row) => row.kind === 'start');
-      const endIndex = itinerary.timeline.findIndex((row) => row.kind === 'end');
-      const endRow = endIndex >= 0 ? itinerary.timeline[endIndex] : null;
-      if (!startRow || !endRow || endIndex < 0) {
-        return false;
-      }
+      const pointKind = resolveTraceAppendKind(itinerary);
+      if (!pointKind) return false;
 
-      const resetMetrics = (metrics: typeof itinerary.metrics) => {
-        if (!metrics) return metrics;
-        return {
-          ...metrics,
-          distanceKm: undefined,
-          ascentM: undefined,
-          descentM: undefined,
-          avgSlopePercent: undefined,
-          tarmacPercent: undefined,
-          offroadPercent: undefined,
-        };
-      };
-
-      if (startRow.lat == null || startRow.lon == null) {
-        const nextProject = {
-          ...currentProject,
-          itineraries: currentProject.itineraries.map((it) => {
-            if (it.id !== id) return it;
-            const copy = structuredClone(it);
-            const currentStart = copy.timeline.find((row) => row.kind === 'start');
-            if (!currentStart) return copy;
-
-            currentStart.label = point.label;
-            currentStart.lat = point.lat;
-            currentStart.lon = point.lon;
-            currentStart.distanceKm = 0;
-            copy.metrics = resetMetrics(copy.metrics);
-            delete copy.routeAudit;
-            delete copy.pendingTraceExtension;
-            delete copy.pendingRoutePatch;
-            copy.prediction = null;
-            return copy;
-          }),
-        };
-
-        const entry: TraceHistoryEntry = {
-          itineraryId: id,
-          before: structuredClone(currentProject),
-          after: structuredClone(nextProject),
-        };
-        setPendingTraceAppend(null);
-        pushTraceHistoryEntry(entry);
-        return true;
-      }
-
-      if (endRow.lat == null || endRow.lon == null) {
-        const nextProject = {
-          ...currentProject,
-          itineraries: currentProject.itineraries.map((it) => {
-            if (it.id !== id) return it;
-            const copy = structuredClone(it);
-            const currentEnd = copy.timeline.find((row) => row.kind === 'end');
-            if (!currentEnd) return copy;
-
-            currentEnd.label = point.label;
-            currentEnd.lat = point.lat;
-            currentEnd.lon = point.lon;
-            currentEnd.distanceKm = null;
-            copy.metrics = resetMetrics(copy.metrics);
-            delete copy.routeAudit;
-            delete copy.pendingTraceExtension;
-            delete copy.pendingRoutePatch;
-            copy.prediction = null;
-            return copy;
-          }),
-        };
-
-        const entry: TraceHistoryEntry = {
-          itineraryId: id,
-          before: structuredClone(currentProject),
-          after: structuredClone(nextProject),
-        };
-        setPendingTraceAppend(null);
-        pushTraceHistoryEntry(entry);
-        return true;
-      }
-
-      const previousEndLat = endRow.lat;
-      const previousEndLon = endRow.lon;
-      const waypointId = `wp-${Date.now()}-${Math.round(point.lat * 1e5)}-${Math.round(point.lon * 1e5)}`;
-
-      const nextProject = {
+      const nextProject: ItineraryProject = {
         ...currentProject,
         itineraries: currentProject.itineraries.map((it) => {
           if (it.id !== id) return it;
           const copy = structuredClone(it);
-          const previousEndWaypoint = {
-            ...endRow,
-            id: waypointId,
-            kind: 'waypoint' as const,
-            distanceKm: endRow.distanceKm,
-          };
-          const nextEndRow = {
-            ...endRow,
-            label: point.label,
-            lat: point.lat,
-            lon: point.lon,
-            distanceKm: null,
-          };
-
-          copy.timeline.splice(endIndex, 1, previousEndWaypoint, nextEndRow);
-          copy.timeline = copy.timeline.map((row) => {
-            if (row.kind === 'start') {
-              return row.distanceKm === 0 ? row : { ...row, distanceKm: 0 };
-            }
-            if (row.kind === 'end') {
-              return row.distanceKm == null ? row : { ...row, distanceKm: null };
-            }
-            return row;
-          });
-
-          if (copy.gpxRoute?.source === 'brouter' && (copy.gpxRoute.points.length ?? 0) >= 2) {
-            copy.pendingTraceExtension = {
-              from: { lat: previousEndLat, lon: previousEndLon },
-              to: { lat: point.lat, lon: point.lon },
-            };
-            delete copy.pendingRoutePatch;
-          } else {
-            delete copy.pendingTraceExtension;
-            delete copy.pendingRoutePatch;
-          }
-
-          copy.metrics = resetMetrics(copy.metrics);
-          delete copy.routeAudit;
-          copy.prediction = null;
+          applyTraceAppend(copy, point);
           return copy;
         }),
       };
@@ -218,8 +96,18 @@ export function useItineraryGpxActions({
         before: structuredClone(currentProject),
         after: structuredClone(nextProject),
       };
-      setPendingTraceAppend(entry);
-      pushTraceHistoryEntry(entry, { preservePendingTraceAppend: true });
+
+      if (pointKind === 'waypoint') {
+        // Deux clics d'affilée sur le même prolongement doivent se replier en
+        // une seule étape d'historique : on garde l'entrée « en attente » pour
+        // que le recalcul BRouter puisse l'annuler s'il échoue.
+        setPendingTraceAppend(entry);
+        pushTraceHistoryEntry(entry, { preservePendingTraceAppend: true });
+      } else {
+        setPendingTraceAppend(null);
+        pushTraceHistoryEntry(entry);
+      }
+
       return true;
     },
     [projectRef, pushTraceHistoryEntry, setPendingTraceAppend],

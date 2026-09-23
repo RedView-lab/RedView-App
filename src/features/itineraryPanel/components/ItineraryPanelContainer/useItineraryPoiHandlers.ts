@@ -17,6 +17,14 @@ const POI_PAUSE_DURATION_STEPS = [5, 10, 15, 20, 30, 45, 60, 90, 120] as const;
 interface UseItineraryPoiHandlersArgs {
   activeItineraryRef: MutableRefObject<Itinerary | null>;
   updateActive: (mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => void) => void;
+  /**
+   * Variante de `updateActive` qui enregistre la mutation dans l'historique
+   * undo/redo. Le mutateur peut retourner `false` pour signaler une absence
+   * de changement (aucune entrée d'historique créée).
+   */
+  updateActiveWithHistory?: (
+    mutateItinerary: (itinerary: ItineraryProject['itineraries'][number]) => boolean | void,
+  ) => boolean;
   project?: ItineraryProject;
   addItinerary?: (overrides?: Partial<Itinerary>) => string | null;
 }
@@ -28,6 +36,7 @@ interface UseItineraryPoiHandlersArgs {
 export function useItineraryPoiHandlers({
   activeItineraryRef,
   updateActive,
+  updateActiveWithHistory,
   project,
   addItinerary,
 }: UseItineraryPoiHandlersArgs) {
@@ -303,14 +312,21 @@ export function useItineraryPoiHandlers({
   }, [updateActive]);
 
   const handlePoiDelete = useCallback((feature: PoiFeature) => {
-    updateActive((it) => {
-      removePoiAndLinkedWaypoints(it, feature.id);
+    const applyDelete = (it: Itinerary) => {
+      const removed = removePoiAndLinkedWaypoints(it, feature.id);
       delete it.pendingRoutePatch;
       delete it.pendingTraceExtension;
       delete it.routeAudit;
       it.prediction = null;
-    });
-  }, [updateActive]);
+      return removed;
+    };
+
+    if (updateActiveWithHistory) {
+      updateActiveWithHistory(applyDelete);
+      return;
+    }
+    updateActive(applyDelete);
+  }, [updateActive, updateActiveWithHistory]);
 
   return {
     resolvePoiPopupState,

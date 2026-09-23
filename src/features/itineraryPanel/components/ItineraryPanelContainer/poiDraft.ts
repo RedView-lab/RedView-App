@@ -112,14 +112,23 @@ export function upsertDraftPoiIntoItinerary(itinerary: Itinerary, draft: MapPoiD
   return feature.id;
 }
 
-export function removePoiAndLinkedWaypoints(itinerary: Itinerary, poiId: number): void {
+/**
+ * Retire un POI de l'itinéraire ainsi que les waypoints qui lui sont rattachés.
+ * Retourne `true` si au moins un élément a effectivement été supprimé.
+ */
+export function removePoiAndLinkedWaypoints(itinerary: Itinerary, poiId: number): boolean {
+  const hadPoiFeature = itinerary.poiFeatures?.some((feature) => feature.id === poiId) ?? false;
   if (itinerary.poiFeatures) {
     itinerary.poiFeatures = itinerary.poiFeatures.filter((feature) => feature.id !== poiId);
   }
 
-  itinerary.timeline = itinerary.timeline.filter((row) => !(
+  const nextTimeline = itinerary.timeline.filter((row) => !(
     (row.kind === 'poi' && row.osmId === poiId)
     || (row.kind === 'waypoint' && row.osmId === poiId)
     || row.id === `poi-waypoint-${poiId}`
   ));
+  const removedTimelineRows = nextTimeline.length !== itinerary.timeline.length;
+  itinerary.timeline = nextTimeline;
+
+  return hadPoiFeature || removedTimelineRows;
 }

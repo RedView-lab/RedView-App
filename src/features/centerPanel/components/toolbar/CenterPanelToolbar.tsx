@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, memo } from 'react';
 import { Slider } from '@/features/controlPanel/components/Slider';
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
 import { useAppI18n } from '@/shared/i18n';
+import { variantModifierLabel } from '@/shared/lib/platform';
 import { useRouteMergeToolOptional } from '../../routeMerge';
 import { useRouteSplitToolOptional } from '../../routeSplit';
 import { useTraceToolOptional } from '../../tracer';
@@ -113,6 +114,10 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar() {
   const canTrace = traceTool?.canTrace ?? false;
   const traceStatusMessage = traceTool?.statusMessage ?? null;
   const traceArmed = traceTool?.armed ?? false;
+  const traceToolTitle = t(
+    'Tracer : cliquez pour prolonger le tracé, glissez un point pour le déplacer, {{mod}} + clic pour créer une variante',
+    { mod: variantModifierLabel() },
+  );
   const canEditForbiddenZone = forbiddenZoneTool?.canEdit ?? false;
   const canUndoForbiddenZoneDraft = forbiddenZoneTool?.canUndoDraft ?? false;
   const canRedoForbiddenZoneDraft = forbiddenZoneTool?.canRedoDraft ?? false;
@@ -356,7 +361,7 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar() {
               : 'rvc-center-toolbar__button rvc-center-toolbar__button--label'}
             type="button"
             aria-label="Tracer"
-            title="Tracer"
+            title={traceToolTitle}
             onClick={handleToggleTrace}
             disabled={!canTrace}
             aria-pressed={traceArmed}

@@ -9,6 +9,7 @@ import {
 import type { Map as MapboxMap } from 'mapbox-gl';
 
 import { useProjectStoreOptional } from '@/features/itineraryPanel';
+import { unprojectClientPoint } from '@/features/map3d/lib/mapPointer';
 import {
   clearRouteHoverPreview,
   setRouteHoverPreview,
@@ -163,11 +164,16 @@ export function RouteDragWaypointProvider({ children, map }: RouteDragWaypointPr
       }
     };
 
-    /** Convert a viewport (clientX/Y) coordinate into an lng/lat. */
-    const unprojectClient = (clientX: number, clientY: number) => {
-      const rect = canvas.getBoundingClientRect();
-      return map.unproject([clientX - rect.left, clientY - rect.top] as [number, number]);
-    };
+    /**
+     * Convert a viewport (clientX/Y) coordinate into an lng/lat.
+     *
+     * Goes through `unprojectClientPoint` rather than `map.unproject` directly:
+     * Mapbox's own events (and therefore the hover preview the user follows)
+     * offset by the canvas *container* rect and apply its CSS scale factor.
+     * Skipping those terms dropped the point hundreds of metres off target.
+     */
+    const unprojectClient = (clientX: number, clientY: number) =>
+      unprojectClientPoint(map, clientX, clientY);
 
     const flushDragMove = () => {
       rafId = null;
