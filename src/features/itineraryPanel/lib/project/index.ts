@@ -2,6 +2,8 @@ export {
   ITINERARY_COLORS,
   DEFAULT_PROFILES,
   ROUTE_PROFILE_PRESETS,
+  createDefaultPoiState,
+  normalizeItineraryPoiState,
   createDefaultRhythmState,
   normalizeItineraryRhythmState,
   normalizeItineraryProject,

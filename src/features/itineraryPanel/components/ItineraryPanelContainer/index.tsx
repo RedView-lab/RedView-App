@@ -476,7 +476,13 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onShareProject={() => {}}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
         onSelectItinerary={(id) =>
-          setProject((p) => ({ ...p, activeItineraryId: id }))
+          setProject((p) => ({
+            ...p,
+            activeItineraryId: id,
+            itineraries: p.itineraries.map((it) =>
+              it.id === id ? { ...it, visible: true, analysisVisible: true } : it,
+            ),
+          }))
         }
         onAddItinerary={() => addItinerary()}
         onAddButtonRef={(element) => {

@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
   useMemo,
+  useCallback,
 } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import { useRouteMergeToolOptional } from '@/features/centerPanel/routeMerge';
@@ -126,6 +127,19 @@ export function CenterPanelSummary() {
     routeMergeTool?.selectItinerary(itineraryId);
   };
 
+  const handleSelectItinerary = useCallback(
+    (itineraryId: string) => {
+      store?.setProject((p) => ({
+        ...p,
+        activeItineraryId: itineraryId,
+        itineraries: p.itineraries.map((it) =>
+          it.id === itineraryId ? { ...it, visible: true, analysisVisible: true } : it,
+        ),
+      }));
+    },
+    [store],
+  );
+
   return (
     <section className="rvc-center-summary" aria-label={t("Synthèse d'itinéraire")}>
       <div className="rvc-center-summary__row rvc-center-summary__row--header">
@@ -155,6 +169,8 @@ export function CenterPanelSummary() {
             mergeArmed={routeMergeTool?.armed ?? false}
             mergeSelectable={(id) => routeMergeTool?.canSelectItinerary(id) ?? false}
             mergeSelectionOrder={(id) => routeMergeTool?.getSelectionOrder(id) ?? null}
+            activeItineraryId={store?.project.activeItineraryId}
+            onSelectItinerary={handleSelectItinerary}
             onToggleAnalysisVisibility={handleToggleAnalysisVisibility}
             onToggleExpanded={handleToggleExpanded}
             onStartRename={handleStartRename}

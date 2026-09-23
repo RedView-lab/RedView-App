@@ -46,6 +46,7 @@ export function usePoi(
    */
   initialFeatures: PoiFeature[] | null = null,
   popupActions: UsePoiPopupActions = {},
+  routeId: string | null = null,
 ) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -241,6 +242,21 @@ export function usePoi(
       setPoiCount(0);
     };
   }, [map, isMapLoaded, buildRenderableFeatures]);
+
+  // ── Route switch lifecycle ────────────────────────────────────────
+
+  useEffect(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setLoading(false);
+    setCorridorProgress(null);
+    setError(null);
+    if (!managerRef.current) return;
+    const seed = buildRenderableFeatures(initialFeaturesRef.current ?? []);
+    lastCorridorFeatures.current = seed;
+    syncRenderedFeatures(seed);
+    setPoiCount(seed.length);
+  }, [routeId, buildRenderableFeatures, syncRenderedFeatures]);
 
   // ── React to category / distance changes ──────────────────────────
 

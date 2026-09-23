@@ -1,4 +1,4 @@
-﻿import { ActionButtonStack, CheckboxField } from '../components/controls';
+import { ActionButtonStack, CheckboxField } from '../components/controls';
 import { useAppI18n } from '@/shared/i18n';
 import {
   IconChevronDown,
@@ -7,7 +7,7 @@ import {
 import type { PoiCategory, PoiEntry, PoiState } from '../types';
 
 interface PoiSectionProps {
-  poi: PoiState;
+  poi?: PoiState | null;
   onChangeEntry?: (category: PoiCategory, next: PoiEntry) => void;
   onOpenCategories?: () => void;
   onLoad?: () => void;
@@ -121,22 +121,22 @@ export function PoiSection({
       {POI_ROWS.map((row) => (
         <div key={row.map((c) => c.key).join('-')} className="rvi-row">
           {row.map((cell) => {
-            const entry = poi[cell.key];
+            const entry = poi?.[cell.key] ?? { enabled: false, distanceM: 40 };
             return (
               <CheckboxField
                 key={cell.key}
-                checked={entry.enabled}
+                checked={Boolean(entry.enabled)}
                 onToggle={(v) =>
                   onChangeEntry?.(cell.key, {
                     ...entry,
                     enabled: v,
-                    distanceM: v ? entry.distanceM ?? 40 : entry.distanceM,
+                    distanceM: v ? (entry.distanceM ?? 40) : entry.distanceM,
                   })
                 }
                 label={cell.label}
                 trailing={
                   <DistanceInput
-                    value={entry.distanceM}
+                    value={entry.distanceM ?? null}
                     onChange={(dist) =>
                       onChangeEntry?.(cell.key, { ...entry, distanceM: dist })
                     }

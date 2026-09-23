@@ -83,9 +83,10 @@ export function useItineraryPoiMap(
   // ── Derive enabled OSM categories from the panel POI rows ─────────
   const enabledCategories = useMemo<Set<FeaturePoiCategory>>(() => {
     const set = new Set<FeaturePoiCategory>();
-    if (!active) return set;
+    if (!active?.poi) return set;
     for (const [panelKey, raw] of Object.entries(active.poi)) {
       if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
+      if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
       if (!entry.enabled) continue;
       const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
@@ -103,12 +104,13 @@ export function useItineraryPoiMap(
   // of a fixed default — is what makes "all POIs within X" actually true
   // for the widest row.
   const radiusM = useMemo(() => {
-    if (!active) return DEFAULT_RADIUS_M;
+    if (!active?.poi) return DEFAULT_RADIUS_M;
     let max = 0;
     for (const [k, raw] of Object.entries(active.poi)) {
       if (POI_NON_ENTRY_KEYS.has(k)) continue;
+      if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
-      if (entry.enabled && entry.distanceM && entry.distanceM > max) {
+      if (entry.enabled && typeof entry.distanceM === 'number' && entry.distanceM > max) {
         max = entry.distanceM;
       }
     }
@@ -116,12 +118,13 @@ export function useItineraryPoiMap(
   }, [active]);
 
   const maxLateralDistanceByCategory = useMemo<Partial<Record<FeaturePoiCategory, number>> | null>(() => {
-    if (!active) return null;
+    if (!active?.poi) return null;
     const next: Partial<Record<FeaturePoiCategory, number>> = {};
     for (const [panelKey, raw] of Object.entries(active.poi)) {
       if (POI_NON_ENTRY_KEYS.has(panelKey)) continue;
+      if (!raw || typeof raw !== 'object') continue;
       const entry = raw as PoiEntry;
-      if (!entry.enabled || !entry.distanceM || entry.distanceM <= 0) continue;
+      if (!entry.enabled || typeof entry.distanceM !== 'number' || entry.distanceM <= 0) continue;
       const mapped = PANEL_TO_FEATURE_POI[panelKey as PanelPoiCategory] ?? [];
       for (const category of mapped) {
         next[category] = entry.distanceM;
@@ -144,6 +147,7 @@ export function useItineraryPoiMap(
     onCorridorComplete,
     persistedPoiFeatures,
     popupActions,
+    active?.id ?? null,
   );
 
   return {

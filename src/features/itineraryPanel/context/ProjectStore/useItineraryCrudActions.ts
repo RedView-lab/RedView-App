@@ -59,22 +59,66 @@ export function useItineraryCrudActions({ setProject }: UseItineraryCrudActionsA
 
   const setItineraryVisibility = useCallback(
     (id: string, visible: boolean) => {
-      updateItinerary(id, (it) => {
-        it.visible = visible;
-        it.analysisVisible = visible;
+      setProject((prev) => {
+        const nextItineraries = prev.itineraries.map((it) => {
+          if (it.id !== id) return it;
+          return {
+            ...it,
+            visible,
+            analysisVisible: visible,
+          };
+        });
+
+        let nextActiveId = prev.activeItineraryId;
+        if (!visible && prev.activeItineraryId === id) {
+          const visibleCandidate = nextItineraries.find((it) => it.visible !== false && it.id !== id);
+          if (visibleCandidate) {
+            nextActiveId = visibleCandidate.id;
+          }
+        } else if (visible && (!prev.activeItineraryId || !nextItineraries.some((it) => it.id === prev.activeItineraryId && it.visible !== false))) {
+          nextActiveId = id;
+        }
+
+        return {
+          ...prev,
+          itineraries: nextItineraries,
+          activeItineraryId: nextActiveId,
+        };
       });
     },
-    [updateItinerary],
+    [setProject],
   );
 
   const setItineraryAnalysisVisibility = useCallback(
     (id: string, visible: boolean) => {
-      updateItinerary(id, (it) => {
-        it.visible = visible;
-        it.analysisVisible = visible;
+      setProject((prev) => {
+        const nextItineraries = prev.itineraries.map((it) => {
+          if (it.id !== id) return it;
+          return {
+            ...it,
+            visible,
+            analysisVisible: visible,
+          };
+        });
+
+        let nextActiveId = prev.activeItineraryId;
+        if (!visible && prev.activeItineraryId === id) {
+          const visibleCandidate = nextItineraries.find((it) => it.visible !== false && it.id !== id);
+          if (visibleCandidate) {
+            nextActiveId = visibleCandidate.id;
+          }
+        } else if (visible && (!prev.activeItineraryId || !nextItineraries.some((it) => it.id === prev.activeItineraryId && it.visible !== false))) {
+          nextActiveId = id;
+        }
+
+        return {
+          ...prev,
+          itineraries: nextItineraries,
+          activeItineraryId: nextActiveId,
+        };
       });
     },
-    [updateItinerary],
+    [setProject],
   );
 
   const setItineraryRenderMode = useCallback(

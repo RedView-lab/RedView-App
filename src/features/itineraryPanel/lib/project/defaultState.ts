@@ -2,6 +2,8 @@ import type {
   AnalysisPanelState,
   Itinerary,
   ItineraryProject,
+  PoiCategory,
+  PoiState,
   RhythmState,
   TimelineItem,
 } from '../../types';
@@ -11,6 +13,62 @@ import { DEFAULT_VIEW } from '../../../map3d/lib/mapbox.config';
 import { createDefaultExpertState } from '../../expert/defaults';
 import { cleanAndInterpolateElevations, hasCorruptedElevations } from '../route-metrics';
 import { buildImportedRouteMetrics } from '../routes';
+
+export const ALL_POI_CATEGORIES: PoiCategory[] = [
+  'fountains',
+  'toilets',
+  'supermarkets',
+  'gasStations',
+  'bakeries',
+  'fastFood',
+  'cafes',
+  'bars',
+  'restaurants',
+  'bikeShops',
+  'hotels',
+  'refuges',
+  'passes',
+  'health',
+  'transport',
+];
+
+export function createDefaultPoiState(): PoiState {
+  return {
+    fountains: { enabled: true, distanceM: 40 },
+    toilets: { enabled: true, distanceM: 40 },
+    supermarkets: { enabled: true, distanceM: 40 },
+    gasStations: { enabled: true, distanceM: 40 },
+    bakeries: { enabled: true, distanceM: 40 },
+    fastFood: { enabled: true, distanceM: 40 },
+    cafes: { enabled: true, distanceM: 40 },
+    bars: { enabled: true, distanceM: 40 },
+    restaurants: { enabled: true, distanceM: 40 },
+    bikeShops: { enabled: true, distanceM: 40 },
+    hotels: { enabled: true, distanceM: 40 },
+    refuges: { enabled: true, distanceM: 40 },
+    passes: { enabled: false, distanceM: 40 },
+    health: { enabled: false, distanceM: 40 },
+    transport: { enabled: false, distanceM: 40 },
+  };
+}
+
+export function normalizeItineraryPoiState(poi?: Partial<PoiState> | null): PoiState {
+  const base = createDefaultPoiState();
+  if (!poi || typeof poi !== 'object') return base;
+  const normalized: PoiState = { ...base };
+  for (const key of ALL_POI_CATEGORIES) {
+    const raw = poi[key];
+    if (raw && typeof raw === 'object') {
+      const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : base[key].enabled;
+      const distanceM =
+        typeof raw.distanceM === 'number' && Number.isFinite(raw.distanceM) && raw.distanceM >= 0
+          ? raw.distanceM
+          : base[key].distanceM;
+      normalized[key] = { enabled, distanceM };
+    }
+  }
+  return normalized;
+}
 
 /**
  * Defaults for a brand-new session ("début d'utilisation").
@@ -103,39 +161,48 @@ export function normalizeItineraryRhythmState(rhythm?: Partial<RhythmState> | nu
 }
 
 export function normalizeItineraryProject(project: ItineraryProject): ItineraryProject {
+  const itineraries = project.itineraries.map((itinerary) => {
+    let gpxRoute = itinerary.gpxRoute;
+    let metrics = itinerary.metrics;
+
+    if (gpxRoute && gpxRoute.points.length > 0) {
+      const needsCleaning =
+        hasCorruptedElevations(gpxRoute.points) ||
+        (gpxRoute.originalPoints != null && hasCorruptedElevations(gpxRoute.originalPoints));
+
+      if (needsCleaning) {
+        const cleanedPoints = cleanAndInterpolateElevations(gpxRoute.points);
+        const cleanedOriginalPoints = gpxRoute.originalPoints
+          ? cleanAndInterpolateElevations(gpxRoute.originalPoints)
+          : undefined;
+
+        gpxRoute = {
+          ...gpxRoute,
+          points: cleanedPoints,
+          ...(cleanedOriginalPoints ? { originalPoints: cleanedOriginalPoints } : {}),
+        };
+        metrics = buildImportedRouteMetrics(cleanedPoints);
+      }
+    }
+
+    return {
+      ...itinerary,
+      gpxRoute,
+      metrics,
+      poi: normalizeItineraryPoiState(itinerary.poi),
+      rhythm: normalizeItineraryRhythmState(itinerary.rhythm),
+    };
+  });
+
+  const activeExists = itineraries.some((it) => it.id === project.activeItineraryId);
+  const activeItineraryId = activeExists
+    ? project.activeItineraryId
+    : (itineraries[0]?.id ?? '');
+
   return {
     ...project,
-    itineraries: project.itineraries.map((itinerary) => {
-      let gpxRoute = itinerary.gpxRoute;
-      let metrics = itinerary.metrics;
-
-      if (gpxRoute && gpxRoute.points.length > 0) {
-        const needsCleaning =
-          hasCorruptedElevations(gpxRoute.points) ||
-          (gpxRoute.originalPoints != null && hasCorruptedElevations(gpxRoute.originalPoints));
-
-        if (needsCleaning) {
-          const cleanedPoints = cleanAndInterpolateElevations(gpxRoute.points);
-          const cleanedOriginalPoints = gpxRoute.originalPoints
-            ? cleanAndInterpolateElevations(gpxRoute.originalPoints)
-            : undefined;
-
-          gpxRoute = {
-            ...gpxRoute,
-            points: cleanedPoints,
-            ...(cleanedOriginalPoints ? { originalPoints: cleanedOriginalPoints } : {}),
-          };
-          metrics = buildImportedRouteMetrics(cleanedPoints);
-        }
-      }
-
-      return {
-        ...itinerary,
-        gpxRoute,
-        metrics,
-        rhythm: normalizeItineraryRhythmState(itinerary.rhythm),
-      };
-    }),
+    itineraries,
+    activeItineraryId,
   };
 }
 
@@ -155,23 +222,7 @@ export function createDefaultItinerary(
       applyToAllItineraries: false,
     },
     rhythm: createDefaultRhythmState(),
-    poi: {
-      fountains: { enabled: true, distanceM: 40 },
-      toilets: { enabled: true, distanceM: 40 },
-      supermarkets: { enabled: true, distanceM: 40 },
-      gasStations: { enabled: true, distanceM: 40 },
-      bakeries: { enabled: true, distanceM: 40 },
-      fastFood: { enabled: true, distanceM: 40 },
-      cafes: { enabled: true, distanceM: 40 },
-      bars: { enabled: true, distanceM: 40 },
-      restaurants: { enabled: true, distanceM: 40 },
-      bikeShops: { enabled: true, distanceM: 40 },
-      hotels: { enabled: true, distanceM: 40 },
-      refuges: { enabled: true, distanceM: 40 },
-      passes: { enabled: false, distanceM: 40 },
-      health: { enabled: false, distanceM: 40 },
-      transport: { enabled: false, distanceM: 40 },
-    },
+    poi: createDefaultPoiState(),
     timeline: [DEFAULT_TIMELINE_START, DEFAULT_TIMELINE_END],
     expertProfile: createDefaultExpertState(),
     visible: true,

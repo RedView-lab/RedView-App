@@ -30,6 +30,8 @@ interface SummaryRowProps extends SummaryRowMenuHandlers {
   mergeArmed?: boolean;
   mergeSelectable?: boolean;
   mergeSelectionOrder?: number | null;
+  activeItineraryId?: string | null;
+  onSelectItinerary?: (id: string) => void;
 }
 
 export function SummaryRow({
@@ -41,6 +43,8 @@ export function SummaryRow({
   mergeArmed,
   mergeSelectable,
   mergeSelectionOrder,
+  activeItineraryId,
+  onSelectItinerary,
   onToggleAnalysisVisibility,
   onToggleExpanded,
   onStartRename,
@@ -58,6 +62,7 @@ export function SummaryRow({
   const analysisVisible = itinerary.visible !== false && itinerary.analysisVisible !== false;
   const hasChildren = childCount > 0;
   const isMergeSelected = mergeSelectionOrder != null;
+  const isActive = activeItineraryId === itinerary.id;
   const rowStyle =
     depth > 0
       ? ({
@@ -68,6 +73,7 @@ export function SummaryRow({
     depth > 0
       ? 'rvc-center-summary__row rvc-center-summary__row--item rvc-center-summary__row--child'
       : 'rvc-center-summary__row rvc-center-summary__row--item',
+    isActive ? 'rvc-center-summary__row--active' : '',
     mergeArmed ? 'rvc-center-summary__row--merge-armed' : '',
     isMergeSelected ? 'rvc-center-summary__row--merge-selected' : '',
     mergeArmed && !mergeSelectable ? 'rvc-center-summary__row--merge-disabled' : '',
@@ -84,7 +90,13 @@ export function SummaryRow({
           ? t('{{name}} commence à {{distance}} km', { name: itinerary.name, distance: startDistanceKm.toFixed(1) })
           : itinerary.name
       }
-      onClick={mergeArmed && mergeSelectable ? () => onSelectForMerge?.(itinerary.id) : undefined}
+      onClick={
+        mergeArmed && mergeSelectable
+          ? () => onSelectForMerge?.(itinerary.id)
+          : !isEditing
+            ? () => onSelectItinerary?.(itinerary.id)
+            : undefined
+      }
       onKeyDown={
         mergeArmed && mergeSelectable
           ? (event) => {
@@ -92,11 +104,17 @@ export function SummaryRow({
               event.preventDefault();
               onSelectForMerge?.(itinerary.id);
             }
-          : undefined
+          : !isEditing
+            ? (event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                onSelectItinerary?.(itinerary.id);
+              }
+            : undefined
       }
-      role={mergeArmed && mergeSelectable ? 'button' : undefined}
-      tabIndex={mergeArmed && mergeSelectable ? 0 : undefined}
-      aria-pressed={mergeArmed && mergeSelectable ? isMergeSelected : undefined}
+      role="button"
+      tabIndex={0}
+      aria-pressed={mergeArmed && mergeSelectable ? isMergeSelected : isActive}
     >
       <div className="rvc-center-summary__route" style={{ opacity: analysisVisible ? 1 : 0.45 }}>
         {hasChildren ? (
@@ -229,6 +247,8 @@ interface SummaryTreeBranchProps extends SummaryRowMenuHandlers {
   mergeArmed?: boolean;
   mergeSelectable?: (id: string) => boolean;
   mergeSelectionOrder?: (id: string) => number | null;
+  activeItineraryId?: string | null;
+  onSelectItinerary?: (id: string) => void;
 }
 
 export function SummaryTreeBranch({
@@ -238,6 +258,8 @@ export function SummaryTreeBranch({
   mergeArmed,
   mergeSelectable,
   mergeSelectionOrder,
+  activeItineraryId,
+  onSelectItinerary,
   onToggleAnalysisVisibility,
   onToggleExpanded,
   onStartRename,
@@ -261,6 +283,8 @@ export function SummaryTreeBranch({
         mergeArmed={mergeArmed}
         mergeSelectable={mergeSelectable?.(branch.node.itinerary.id) ?? false}
         mergeSelectionOrder={mergeSelectionOrder?.(branch.node.itinerary.id) ?? null}
+        activeItineraryId={activeItineraryId}
+        onSelectItinerary={onSelectItinerary}
         onToggleAnalysisVisibility={onToggleAnalysisVisibility}
         onToggleExpanded={onToggleExpanded}
         onStartRename={onStartRename}
@@ -282,6 +306,8 @@ export function SummaryTreeBranch({
               mergeArmed={mergeArmed}
               mergeSelectable={mergeSelectable}
               mergeSelectionOrder={mergeSelectionOrder}
+              activeItineraryId={activeItineraryId}
+              onSelectItinerary={onSelectItinerary}
               onToggleAnalysisVisibility={onToggleAnalysisVisibility}
               onToggleExpanded={onToggleExpanded}
               onStartRename={onStartRename}
