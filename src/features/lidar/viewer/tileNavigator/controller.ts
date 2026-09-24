@@ -213,6 +213,11 @@ export function createViewerTileNavigator(options: ViewerTileNavigatorOptions) {
           stop();
           resolve(false);
         }
+        if (event.type === 'cancelled') {
+          settled = true;
+          stop();
+          resolve(false);
+        }
       });
 
       void options.manager.downloadTile(coord).finally(() => {

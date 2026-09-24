@@ -104,7 +104,7 @@ export interface GpuTileBuffers {
 }
 
 /** LiDAR manager event types */
-export type LidarEventType = 'progress' | 'tileLoaded' | 'tileRemoved' | 'error';
+export type LidarEventType = 'progress' | 'tileLoaded' | 'tileRemoved' | 'error' | 'cancelled';
 
 export interface LidarEvent {
   type: LidarEventType;

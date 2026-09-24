@@ -19,6 +19,26 @@ type DownloadFailure = Error & {
   code?: string;
 };
 
+/** Erreur levée lorsqu'un téléchargement est annulé par l'utilisateur. */
+export class DownloadCancelledError extends Error {
+  constructor() {
+    super('Téléchargement annulé');
+    this.name = 'DownloadCancelledError';
+    (this as unknown as { code?: string }).code = 'ERR_DOWNLOAD_CANCELLED';
+  }
+}
+
+export function isDownloadCancelledError(err: unknown): boolean {
+  return (
+    err instanceof DownloadCancelledError ||
+    (err as { code?: string } | null | undefined)?.code === 'ERR_DOWNLOAD_CANCELLED'
+  );
+}
+
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DownloadCancelledError();
+}
+
 type ResumeState = {
   chunks: Uint8Array[];
   bytesDownloaded: number;
@@ -47,16 +67,28 @@ function describeCandidateUrl(url: string): string {
 
 let rateLimitUntil = 0;
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return new Promise(resolve => setTimeout(resolve, ms));
+  throwIfCancelled(signal);
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DownloadCancelledError());
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
-async function waitForRateLimit(): Promise<void> {
+async function waitForRateLimit(signal?: AbortSignal): Promise<void> {
   const now = Date.now();
   if (now < rateLimitUntil) {
     const wait = rateLimitUntil - now;
     console.log(`[Download] Rate limited, waiting ${wait}ms...`);
-    await sleep(wait);
+    await sleep(wait, signal);
   }
 }
 
@@ -99,8 +131,11 @@ function invalidLasSignatureError(buffer: ArrayBuffer): DownloadFailure {
 
 export async function downloadTile(
   coord: TileCoord,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
+  throwIfCancelled(signal);
+
   if (await hasTile(coord)) {
     onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'cached', message: 'Chargement depuis le cache...' });
     const cached = await loadTile(coord);
@@ -108,20 +143,21 @@ export async function downloadTile(
   }
 
   if (coord.projection === 'CH1903_LV95') {
-    return downloadSwissTile(coord, onProgress);
+    return downloadSwissTile(coord, onProgress, signal);
   }
 
   if (coord.projection === 'NZTM2000') {
-    return downloadNzTile(coord, onProgress);
+    return downloadNzTile(coord, onProgress, signal);
   }
 
   if (isJgd2011Crs(coord.projection)) {
-    return downloadJapanTile(coord, onProgress);
+    return downloadJapanTile(coord, onProgress, signal);
   }
 
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Découverte des zones...' });
 
   const urls = await resolveDownloadUrls(coord);
+  throwIfCancelled(signal);
   if (urls.length === 0) {
     throw new Error(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
   }
@@ -136,10 +172,12 @@ export async function downloadTile(
     triedCandidates.push(candidateLabel);
 
     try {
-      await waitForRateLimit();
-      const buffer = await fetchWithRetry(url, coord, onProgress);
+      throwIfCancelled(signal);
+      await waitForRateLimit(signal);
+      const buffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, false, signal);
       if (!buffer) continue;
 
+      throwIfCancelled(signal);
       cacheDownloadUrl(coord, url);
       try {
         await saveTile(coord, buffer);
@@ -148,6 +186,7 @@ export async function downloadTile(
       }
       return buffer;
     } catch (err: any) {
+      if (isDownloadCancelledError(err)) throw err;
       lastError = err;
       if (err.status === 404) {
         if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
@@ -179,9 +218,20 @@ async function fetchWithRetry(
   incompleteRetryCount = 0,
   resumeState?: ResumeState,
   allowZip = false,
+  signal?: AbortSignal,
 ): Promise<ArrayBuffer | null> {
+  throwIfCancelled(signal);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+
+  // Relie le signal d'annulation utilisateur au controller du fetch :
+  // un abort externe interrompt la requête ET la lecture du flux.
+  const onExternalAbort = () => controller.abort();
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', onExternalAbort, { once: true });
+  }
 
   try {
     const requestedResumeBytes = resumeState?.bytesDownloaded ?? 0;
@@ -325,8 +375,8 @@ async function fetchWithRetry(
         console.warn(
           `[Download] Resumed buffer for ${url} has invalid signature; restarting full download in ${delay}ms (${incompleteRetryCount + 1}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES})`,
         );
-        await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip);
+        await sleep(delay, signal);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, undefined, allowZip, signal);
       }
       throw invalidLasSignatureError(merged);
     }
@@ -334,12 +384,17 @@ async function fetchWithRetry(
     return merged;
   } catch (err: any) {
     clearTimeout(timeout);
+    signal?.removeEventListener('abort', onExternalAbort);
+
+    if (signal?.aborted) {
+      throw new DownloadCancelledError();
+    }
 
     if (err.name === 'AbortError') {
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_DELAY_5XX_MS * Math.pow(2, attempt);
-        await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip);
+        await sleep(delay, signal);
+        return fetchWithRetry(url, coord, onProgress, attempt + 1, incompleteRetryCount, resumeState, allowZip, signal);
       }
       throw new Error('Download timeout after retries');
     }
@@ -376,11 +431,14 @@ async function fetchWithRetry(
 
 async function downloadSwissTile(
   coord: TileCoord,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
+  throwIfCancelled(signal);
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche STAC swisstopo...' });
 
   const urls = await resolveSwissDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
+  throwIfCancelled(signal);
   if (urls.length === 0) {
     throw new Error(`Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}).`);
   }
@@ -389,10 +447,12 @@ async function downloadSwissTile(
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
-      await waitForRateLimit();
-      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      throwIfCancelled(signal);
+      await waitForRateLimit(signal);
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true, signal);
       if (!downloadedBuffer) continue;
 
+      throwIfCancelled(signal);
       let lasBuffer: ArrayBuffer;
       if (hasValidZipSignature(downloadedBuffer)) {
         onProgress?.({
@@ -407,6 +467,7 @@ async function downloadSwissTile(
         lasBuffer = downloadedBuffer;
       }
 
+      throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
         throw new Error('Fichier nuage de points suisse corrompu (signature LAS invalide).');
       }
@@ -496,9 +557,10 @@ async function downloadNzTile(
       }
       return lasBuffer;
     } catch (err: any) {
+      if (isDownloadCancelledError(err)) throw err;
       lastError = err;
       if (err.status === 404) {
-        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
         continue;
       }
       console.warn(`[NZ Download] Failed for ${url}: ${err.message}`);
@@ -518,8 +580,10 @@ async function downloadNzTile(
 
 async function downloadJapanTile(
   coord: TileCoord,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
+  throwIfCancelled(signal);
   const zone = parseJgd2011Zone(coord.projection);
   onProgress?.({
     tileCoord: coord,

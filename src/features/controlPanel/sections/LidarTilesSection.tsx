@@ -17,6 +17,7 @@ interface Props {
   onTileDelete: ControlPanelHandlers['onLidarTileDelete'];
   onTileRename?: ControlPanelHandlers['onLidarTileRename'];
   onDownload: ControlPanelHandlers['onLidarTileDownload'];
+  onCancelDownload?: ControlPanelHandlers['onLidarDownloadCancel'];
 }
 
 export function LidarTilesSection({
@@ -30,6 +31,7 @@ export function LidarTilesSection({
   onTileDelete,
   onTileRename,
   onDownload,
+  onCancelDownload,
 }: Props) {
   const { t } = useAppI18n();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -74,12 +76,22 @@ export function LidarTilesSection({
       ? t('Clique sur la carte pour choisir une tuile')
       : t('Télécharger une tuile LIDAR');
   const buttonMeta = progress
-    ? progress.message ?? t('Téléchargement en cours')
+    ? `${progress.message ?? t('Téléchargement en cours')} — ${t('cliquer pour annuler')}`
     : error
       ? error
       : downloadModeActive
         ? t('Mode sélection actif')
         : t('Active le mode puis clique sur la carte');
+
+  // Pendant un téléchargement, le bouton rouge devient un bouton d'annulation.
+  const isDownloading = Boolean(progress);
+  const handleButtonClick = () => {
+    if (isDownloading) {
+      onCancelDownload?.();
+      return;
+    }
+    onDownload();
+  };
 
   return (
     <Section
@@ -154,7 +166,9 @@ export function LidarTilesSection({
       <button
         type="button"
         className={`rvc-btn-primary rvc-btn-primary--lidar${progress ? ' is-busy' : ''}`}
-        onClick={onDownload}
+        onClick={handleButtonClick}
+        aria-label={isDownloading ? t('Annuler le téléchargement') : undefined}
+        title={isDownloading ? t('Cliquer pour annuler le téléchargement') : undefined}
       >
         <IconExpand size={18} />
         <span className="rvc-btn-primary__content">

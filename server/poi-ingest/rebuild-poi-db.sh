@@ -21,6 +21,18 @@
 #   ./rebuild-poi-db.sh --relations            # + multipolygones (Overpass)
 #   ./rebuild-poi-db.sh --regions europe/france,europe/belgium
 #   ./rebuild-poi-db.sh --swap                 # bascule le service en fin de course
+#
+# Complétion par les sources externes (voir REDVIEW_POI_EXTERNAL_SOURCES.md) :
+#   ./rebuild-poi-db.sh --with-external
+#   ./rebuild-poi-db.sh --with-external --atp-zip /tmp/output.zip --skip-overture
+#
+# `--with-external` enchaîne, dans cet ordre : Overture → SIRENE → AllThePlaces.
+# Overture d'abord car elle agrège déjà Meta, Microsoft, Foursquare et
+# AllThePlaces : les sources suivantes ne sont dédupliquées que sur ce qui
+# reste, ce qui évite d'importer trois fois le même contenu.
+#
+# Prérequis : binaire DuckDB dans le PATH ou via DUCKDB_BIN (Overture et
+# SIRENE sont distribuées en Parquet).
 # ─────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
@@ -31,6 +43,13 @@ OUT="data/pois.new.db"
 WORK="/tmp/poi-pbf"
 WITH_RELATIONS=0
 DO_SWAP=0
+WITH_EXTERNAL=0
+SKIP_OVERTURE=0
+SKIP_SIRENE=0
+SKIP_ATP=0
+OVERTURE_RELEASE=""
+ATP_ZIP=""
+SIRENE_GEOLOC=""
 REGIONS=()
 
 # Pays frontaliers : un cycliste traverse les frontières, la base doit suivre.
@@ -50,6 +69,13 @@ while [[ $# -gt 0 ]]; do
     --regions) REGIONS+=("$(echo "$2" | tr ',' ' ')"); shift 2 ;;
     --with-neighbours) REGIONS=("europe/france" "${NEIGHBOURS[@]}"); shift ;;
     --relations) WITH_RELATIONS=1; shift ;;
+    --with-external) WITH_EXTERNAL=1; shift ;;
+    --skip-overture) SKIP_OVERTURE=1; shift ;;
+    --skip-sirene) SKIP_SIRENE=1; shift ;;
+    --skip-atp) SKIP_ATP=1; shift ;;
+    --overture-release) OVERTURE_RELEASE="$2"; shift 2 ;;
+    --atp-zip) ATP_ZIP="$2"; shift 2 ;;
+    --sirene-geoloc) SIRENE_GEOLOC="$2"; shift 2 ;;
     --swap) DO_SWAP=1; shift ;;
     --out) OUT="$2"; shift 2 ;;
     *) echo "Option inconnue: $1"; exit 1 ;;
@@ -108,6 +134,48 @@ if [[ $WITH_RELATIONS -eq 1 ]]; then
     echo "⚠️  Étape relations échouée — la base reste valide sans elle."
 fi
 
+# ── Sources externes ────────────────────────────────────────────────────
+# Overture d'abord : elle agrège déjà Meta, Microsoft, Foursquare et
+# AllThePlaces. Chaque source suivante n'est dédupliquée que sur ce qui reste.
+if [[ $WITH_EXTERNAL -eq 1 ]]; then
+  if ! command -v duckdb >/dev/null 2>&1 && [[ -z "${DUCKDB_BIN:-}" ]] && [[ ! -x "bin/duckdb" ]]; then
+    echo ""
+    echo "❌ --with-external requiert DuckDB : Overture et SIRENE sont en Parquet,"
+    echo "   et c'est DuckDB qui les lit à distance sans les télécharger."
+    echo "   Installation : curl -Ls https://install.duckdb.org | sh"
+    exit 1
+  fi
+
+  if [[ $SKIP_OVERTURE -eq 0 ]]; then
+    echo ""
+    echo "── Overture Maps (thème places)…"
+    OVER_ARGS=(--db "$OUT" --enrich)
+    [[ -n "$OVERTURE_RELEASE" ]] && OVER_ARGS+=(--release "$OVERTURE_RELEASE")
+    nice -n 10 node import-overture.mjs "${OVER_ARGS[@]}"
+  fi
+
+  if [[ $SKIP_SIRENE -eq 0 ]]; then
+    echo ""
+    echo "── SIRENE géocodée (INSEE)…"
+    SIR_ARGS=(--db "$OUT")
+    [[ -n "$SIRENE_GEOLOC" ]] && SIR_ARGS+=(--geoloc "$SIRENE_GEOLOC")
+    nice -n 10 node import-sirene.mjs "${SIR_ARGS[@]}"
+  fi
+
+  if [[ $SKIP_ATP -eq 0 ]]; then
+    if [[ -z "$ATP_ZIP" ]]; then
+      echo ""
+      echo "⚠️  AllThePlaces ignoré : aucune archive fournie."
+      echo "   Dernier run : https://data.alltheplaces.xyz/runs/latest/info_embed.html"
+      echo "   Puis : ./rebuild-poi-db.sh --with-external --atp-zip <output.zip>"
+    else
+      echo ""
+      echo "── AllThePlaces…"
+      nice -n 10 node import-atp.mjs --zip "$ATP_ZIP" --db "$OUT" --enrich
+    fi
+  fi
+fi
+
 echo ""
 echo "✅ Base construite : $OUT"
 node -e "
@@ -117,6 +185,12 @@ const t=db.prepare('SELECT count(*) n FROM pois').get().n;
 const byType=db.prepare('SELECT osm_type, count(*) n FROM pois GROUP BY osm_type ORDER BY n DESC').all();
 console.log('Total POI :', t.toLocaleString('fr-FR'));
 for (const r of byType) console.log('   ', String(r.n).padStart(9), r.osm_type ?? '(non typé)');
+const cols=db.prepare(\"SELECT name FROM pragma_table_info('pois')\").all().map(r=>r.name);
+if (cols.includes('source')) {
+  console.log('Par source :');
+  for (const r of db.prepare('SELECT coalesce(source,\'osm\') s, count(*) n FROM pois GROUP BY 1 ORDER BY 2 DESC').all())
+    console.log('   ', String(r.n).padStart(9), r.s);
+}
 "
 
 if [[ $DO_SWAP -eq 1 ]]; then

@@ -27,12 +27,26 @@ const HAS_OSM_TYPE = db
   .prepare("SELECT count(*) AS n FROM pragma_table_info('pois') WHERE name = 'osm_type'")
   .get().n > 0;
 
-const SELECT_COLUMNS = HAS_OSM_TYPE
-  ? 'p.id, p.osm_id, p.osm_type, p.lat, p.lon, p.category, p.name, p.tags'
-  : 'p.id, p.osm_id, NULL AS osm_type, p.lat, p.lon, p.category, p.name, p.tags';
+// `source` et `src_confidence` n'existent que sur une base enrichie par les
+// sources externes (Overture, AllThePlaces, SIRENE). Même logique de détection
+// pour rester compatible avec une base OSM seule.
+const HAS_SOURCE = db
+  .prepare("SELECT count(*) AS n FROM pragma_table_info('pois') WHERE name = 'source'")
+  .get().n > 0;
+
+const SELECT_COLUMNS = [
+  'p.id',
+  'p.osm_id',
+  HAS_OSM_TYPE ? 'p.osm_type' : 'NULL AS osm_type',
+  'p.lat', 'p.lon', 'p.category', 'p.name', 'p.tags',
+  ...(HAS_SOURCE ? ['p.source', 'p.src_confidence'] : []),
+].join(', ');
 
 if (!HAS_OSM_TYPE) {
   console.warn('[poi-server] colonne osm_type absente — base historique détectée.');
+}
+if (HAS_SOURCE) {
+  console.log('[poi-server] base enrichie détectée (colonnes source / src_confidence).');
 }
 
 function toFeature(r) {
@@ -45,6 +59,10 @@ function toFeature(r) {
     category: r.category,
     name: r.name,
     tags: r.tags ? JSON.parse(r.tags) : {},
+    // Provenance : `null` = POI OSM (source canonique), sinon la source
+    // externe qui l'a apporté. Permet de filtrer ou d'attribuer côté client.
+    source: r.source ?? null,
+    srcConfidence: r.src_confidence ?? null,
   };
 }
 
@@ -62,7 +80,7 @@ fastify.get('/categories', async () => {
 
 // ─── GET /bbox ──────────────────────────────────────────────────────────
 fastify.get('/bbox', async (req, reply) => {
-  const { south, west, north, east, categories, limit = '500' } = req.query;
+  const { south, west, north, east, categories, sources, limit = '500' } = req.query;
 
   if (!south || !west || !north || !east) {
     return reply.status(400).send({ error: 'Missing bounds (south, west, north, east)' });
@@ -89,6 +107,23 @@ fastify.get('/bbox', async (req, reply) => {
     const placeholders = catList.map(() => '?').join(',');
     query += ` AND p.category IN (${placeholders})`;
     params.push(...catList);
+  }
+
+  // `sources=osm` restreint aux POI OSM d'origine ; `sources=overture,sirene`
+  // aux seuls apports externes. Ignoré sur une base non enrichie.
+  const sourceList = HAS_SOURCE && sources
+    ? sources.split(',').map((x) => x.trim()).filter(Boolean)
+    : [];
+  if (sourceList.length > 0) {
+    const wantsOsm = sourceList.includes('osm');
+    const external = sourceList.filter((x) => x !== 'osm');
+    const clauses = [];
+    if (wantsOsm) clauses.push('p.source IS NULL');
+    if (external.length > 0) {
+      clauses.push(`p.source IN (${external.map(() => '?').join(',')})`);
+      params.push(...external);
+    }
+    if (clauses.length > 0) query += ` AND (${clauses.join(' OR ')})`;
   }
 
   query += ` LIMIT ?`;

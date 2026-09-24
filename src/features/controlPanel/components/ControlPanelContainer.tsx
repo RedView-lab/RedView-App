@@ -363,6 +363,7 @@ export const ControlPanelContainer = memo(function ControlPanelContainer({
       onLidarTileDelete={lidarHandlers.onLidarTileDelete}
       onLidarTileRename={lidarHandlers.onLidarTileRename}
       onLidarTileDownload={lidarHandlers.onLidarTileDownload}
+      onLidarDownloadCancel={lidarHandlers.onLidarDownloadCancel}
       onLabelsEnabledChange={overlayState.handlers.onLabelsEnabledChange}
       onLabelToggle={overlayState.handlers.onLabelToggle}
       onContourLinesEnabledChange={terrainState.handlers.onContourLinesEnabledChange}

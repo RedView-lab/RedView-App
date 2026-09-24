@@ -58,6 +58,11 @@ export function useControlPanelLidarTiles({
         setLidarDownloadProgress(evt.progress);
         setLidarDownloadError(null);
       }
+      if (evt.type === 'cancelled') {
+        // Annulation utilisateur : on repart simplement à zéro, sans erreur.
+        setLidarDownloadProgress(null);
+        setLidarDownloadError(null);
+      }
       if (evt.type === 'tileLoaded' || evt.type === 'tileRemoved') {
         setLidarDownloadProgress(null);
         if (evt.type === 'tileLoaded') setLidarDownloadError(null);
@@ -126,6 +131,9 @@ export function useControlPanelLidarTiles({
       setLidarDownloadError(null);
       onToggleLidarDownloadMode?.();
     }, [onToggleLidarDownloadMode]),
+    onLidarDownloadCancel: useCallback(() => {
+      lidarManager.cancelDownload();
+    }, [lidarManager]),
   };
 
   return {

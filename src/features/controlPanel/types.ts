@@ -275,6 +275,8 @@ export interface ControlPanelHandlers {
   onLidarTileDelete?: (id: string) => void;
   onLidarTileRename?: (id: string, name: string) => void;
   onLidarTileDownload?: () => void;
+  /** Annule le téléchargement LiDAR en cours (clic sur le bouton de progression). */
+  onLidarDownloadCancel?: () => void;
   /** Triggered when the user clicks the eye icon on a tile — opens 3D viewer. */
   onLidarTileOpen?: (id: string) => void;
 

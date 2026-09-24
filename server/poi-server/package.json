@@ -7,7 +7,11 @@
   "scripts": {
     "start": "node server.js",
     "ingest": "bash ../poi-ingest/rebuild-poi-db.sh",
-    "ingest:relations": "node ../poi-ingest/import-relations.mjs --db data/pois.db"
+    "ingest:relations": "node ../poi-ingest/import-relations.mjs --db data/pois.db",
+    "ingest:external": "bash ../poi-ingest/rebuild-poi-db.sh --with-external",
+    "ingest:overture": "node ../poi-ingest/import-overture.mjs --db data/pois.db --enrich",
+    "ingest:sirene": "node ../poi-ingest/import-sirene.mjs --db data/pois.db",
+    "ingest:atp": "node ../poi-ingest/import-atp.mjs --db data/pois.db --enrich"
   },
   "dependencies": {
     "@fastify/cors": "^9.0.1",

@@ -656,7 +656,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         anchorEl={addButtonRef.current}
         onClose={() => setAddDialogOpen(false)}
         onPickScratch={handleCreateBlankItinerary}
-        onPickDuplicate={duplicateActiveItinerary}
+        onPickDuplicate={active ? duplicateActiveItinerary : undefined}
         onPickGpx={handlePickGpx}
       />
       <input

@@ -62,6 +62,12 @@ export function AddItineraryDialog({
     return () => window.cancelAnimationFrame(focusHandle);
   }, [open]);
 
+  // L'option « Dupliquer » n'est proposée que s'il existe un itinéraire
+  // sélectionné : en début de création de projet, le menu se limite aux
+  // choix manuel et GPX.
+  const showDuplicate = Boolean(onPickDuplicate);
+  const visibleRowCount = showDuplicate ? 3 : 2;
+
   useLayoutEffect(() => {
     if (!open || !anchorEl) {
       setMenuStyle(null);
@@ -73,7 +79,7 @@ export function AddItineraryDialog({
       const computed = window.getComputedStyle(anchorEl);
       const rawScale = Number.parseFloat(computed.getPropertyValue('--app-scale'));
       const scale = Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
-      const menuHeight = MENU_ROW_HEIGHT * 3 * scale;
+      const menuHeight = MENU_ROW_HEIGHT * visibleRowCount * scale;
       const gap = MENU_GAP * scale;
       const maxLeft = Math.max(8, window.innerWidth - MENU_WIDTH * scale - 8);
       const spaceBelow = window.innerHeight - rect.bottom - 8;
@@ -97,7 +103,7 @@ export function AddItineraryDialog({
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [anchorEl, open]);
+  }, [anchorEl, open, visibleRowCount]);
 
   const handleScratch = () => {
     onPickScratch();
@@ -149,20 +155,22 @@ export function AddItineraryDialog({
         </span>
       </button>
 
-      <button
-        type="button"
-        className="rvi-add-itin-menu__item"
-        role="menuitem"
-        onClick={handleDuplicate}
-        disabled={!onPickDuplicate}
-      >
-        <span className="rvi-add-itin-menu__label">
-          {t('Dupliquer à partir de l’itinéraire sélectionné')}
-        </span>
-        <span className="rvi-add-itin-menu__icon" aria-hidden>
-          <IconCopy04 size={16} />
-        </span>
-      </button>
+      {showDuplicate && (
+        <button
+          type="button"
+          className="rvi-add-itin-menu__item"
+          role="menuitem"
+          onClick={handleDuplicate}
+          disabled={!onPickDuplicate}
+        >
+          <span className="rvi-add-itin-menu__label">
+            {t('Dupliquer à partir de l’itinéraire sélectionné')}
+          </span>
+          <span className="rvi-add-itin-menu__icon" aria-hidden>
+            <IconCopy04 size={16} />
+          </span>
+        </button>
+      )}
 
       <button
         type="button"
