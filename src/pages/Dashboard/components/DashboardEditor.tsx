@@ -315,17 +315,6 @@ export function DashboardEditor({
         </button>
       </div>
 
-      <div style={styles.rightCollapsedRailStyle}>
-        <button
-          type="button"
-          aria-label="Rouvrir le panneau de droite"
-          onClick={onRestoreRightPanel}
-          style={styles.collapsedPanelRailButtonStyle}
-        >
-          <IconArrowLeft size={18} />
-        </button>
-      </div>
-
       <div style={styles.centerCollapsedRailStyle}>
         <button
           type="button"
