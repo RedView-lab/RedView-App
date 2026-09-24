@@ -101,11 +101,14 @@ function buildPredictedUrl(year: number, coord: SwissTileCoord): string {
  * `swisssurface3d_<year>_<E>-<N>`. We filter by a tiny bbox around the tile
  * centre to keep the response small.
  *
- * Returns one entry per acquisition year (sorted newest first).
+ * Returns one entry per acquisition year (sorted newest first), or `null`
+ * when the STAC API itself could not be reached (offline / blocked) — the
+ * caller can then use predicted URLs. An empty array means the API answered
+ * and swisstopo definitively has no item for this tile.
  */
 export async function fetchSwissTileItems(
   coord: SwissTileCoord
-): Promise<SwissTileStacItem[]> {
+): Promise<SwissTileStacItem[] | null> {
   const key = swissTileKey(coord);
   const cached = itemCache.get(key);
   if (cached) return cached;
@@ -138,9 +141,9 @@ export async function fetchSwissTileItems(
     );
     return items;
   } catch (err) {
+    // STAC unreachable: do NOT cache — a later retry may succeed.
     console.warn(`[Swiss STAC] Lookup failed for tile ${key}:`, err);
-    itemCache.set(key, []);
-    return [];
+    return null;
   }
 }
 
@@ -150,23 +153,28 @@ export async function fetchSwissTileItems(
  * Strategy:
  *   1. Ask the STAC API for the actual published item(s) — gives the exact
  *      acquisition year and asset href.
- *   2. If the STAC call fails or returns nothing, fall back to predicted URLs
- *      built from FALLBACK_YEARS. Caller is expected to try them in order
- *      and stop on the first 200.
+ *   2. If the API answers with no item for this tile, swisstopo definitively
+ *      has no coverage here: return [] so the caller can fall back to another
+ *      provider (e.g. IGN LiDAR HD across the border) without wasting
+ *      requests on predicted URLs.
+ *   3. If the STAC call itself fails, fall back to predicted URLs built from
+ *      FALLBACK_YEARS. Caller is expected to try them in order and stop on
+ *      the first 200.
  */
 export async function resolveSwissDownloadUrls(
   coord: SwissTileCoord
 ): Promise<string[]> {
   const items = await fetchSwissTileItems(coord);
-  if (items.length > 0) return items.map(i => i.href);
-
-  const [lon, lat] = swissTileCenterWgs84(coord);
-  if (!isInSwissCoverage(lon, lat)) return [];
-
-  console.log(
-    `[Swiss STAC] No items found for ${swissTileKey(coord)}, using ${FALLBACK_YEARS.length} predicted URLs`
-  );
-  return FALLBACK_YEARS.map(y => buildPredictedUrl(y, coord));
+  if (items === null) {
+    // STAC unreachable — best effort with predicted URLs.
+    const [lon, lat] = swissTileCenterWgs84(coord);
+    if (!isInSwissCoverage(lon, lat)) return [];
+    console.log(
+      `[Swiss STAC] API unreachable for ${swissTileKey(coord)}, using ${FALLBACK_YEARS.length} predicted URLs`
+    );
+    return FALLBACK_YEARS.map(y => buildPredictedUrl(y, coord));
+  }
+  return items.map(i => i.href);
 }
 
 /** Test hook — clears in-memory STAC cache. */

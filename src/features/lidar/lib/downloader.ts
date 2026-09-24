@@ -3,9 +3,16 @@ import { resolveDownloadUrls, cacheDownloadUrl } from './wfsClient';
 import { saveTile, hasTile, loadTile, hasValidLasSignature, hasValidZipSignature } from './storage';
 import { resolveSwissDownloadUrls } from './swiss/stacClient';
 import { extractLasFromZip } from './swiss/zipReader';
+import { getSwissTileBounds, swissToWgs84 } from './swiss/coordConvert';
 import { resolveNzDownloadUrls } from './nz/stacClient';
 import { resolveJapanDownloadUrls } from './japan/stacClient';
-import { isJgd2011Crs, parseJgd2011Zone } from './coordConvert';
+import {
+  fromWgs84,
+  getTileInfo,
+  isCorsica,
+  isJgd2011Crs,
+  parseJgd2011Zone,
+} from './coordConvert';
 
 const DOWNLOAD_TIMEOUT_MS = 600_000;
 const MAX_RETRIES = 4;
@@ -25,6 +32,19 @@ export class DownloadCancelledError extends Error {
     super('Téléchargement annulé');
     this.name = 'DownloadCancelledError';
     (this as unknown as { code?: string }).code = 'ERR_DOWNLOAD_CANCELLED';
+  }
+}
+
+/**
+ * Erreur levée lorsqu'un fournisseur confirme n'avoir aucune couverture pour
+ * la tuile demandée (recherche vide ou toutes URLs introuvables 404) —
+ * c'est le signal déclencheur du fallback inter-fournisseurs.
+ */
+export class NoCoverageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NoCoverageError';
+    (this as unknown as { code?: string }).code = 'ERR_NO_COVERAGE';
   }
 }
 
@@ -143,7 +163,37 @@ export async function downloadTile(
   }
 
   if (coord.projection === 'CH1903_LV95') {
-    return downloadSwissTile(coord, onProgress, signal);
+    try {
+      return await downloadSwissTile(coord, onProgress, signal);
+    } catch (err: unknown) {
+      if (isDownloadCancelledError(err)) throw err;
+      // Le bbox suisse couvre largement la Haute-Savoie : une tuile routée
+      // vers swisstopo peut en réalité être hors couverture (Chamonix,
+      // Annecy...). Si swisstopo confirme l'absence de couverture, on
+      // retombe sur IGN LiDAR HD avec la tuile Lambert93 équivalente —
+      // re-clée en LAMB93 pour que cache, nommage et viewer restent cohérents.
+      if (!(err instanceof NoCoverageError)) throw err;
+      const lambCoord = swissTileToLamb93TileCoord(coord);
+      onProgress?.({
+        tileCoord: coord,
+        bytesDownloaded: 0,
+        totalBytes: 0,
+        phase: 'downloading',
+        message: 'Hors couverture swisstopo, recherche IGN LiDAR HD...',
+      });
+      try {
+        return await downloadIgnTile(lambCoord, onProgress, signal);
+      } catch (ignErr: unknown) {
+        if (isDownloadCancelledError(ignErr)) throw ignErr;
+        if (ignErr instanceof NoCoverageError) {
+          throw new Error(
+            `Aucune couverture LiDAR à cet emplacement — ni swisstopo swissSURFACE3D, ni IGN LiDAR HD ` +
+            `(LV95 ${coord.xKm}/${coord.yKm}, LAMB93 ${lambCoord.xKm}/${lambCoord.yKm}).`
+          );
+        }
+        throw ignErr;
+      }
+    }
   }
 
   if (coord.projection === 'NZTM2000') {
@@ -154,16 +204,42 @@ export async function downloadTile(
     return downloadJapanTile(coord, onProgress, signal);
   }
 
+  return downloadIgnTile(coord, onProgress, signal);
+}
+
+/**
+ * Convertit une tuile du maillage suisse (LV95, coin SW en km) vers la tuile
+ * équivalente du maillage Lambert93 (IGN), via le centre de la tuile.
+ */
+export function swissTileToLamb93TileCoord(coord: TileCoord): TileCoord {
+  const bounds = getSwissTileBounds({ eastKm: coord.xKm, northKm: coord.yKm });
+  const [lon, lat] = swissToWgs84(bounds.minE + 500, bounds.minN + 500);
+  const [x, y] = fromWgs84(lon, lat, 'LAMB93');
+  const xKm = Math.floor(x / 1000);
+  const yKm = Math.floor(y / 1000);
+  const info = getTileInfo('LAMB93');
+  const altRef = isCorsica(x, y) ? 'IGN78' : info.altRef;
+  return { xKm, yKm, territory: info.territory, projection: 'LAMB93', altRef };
+}
+
+async function downloadIgnTile(
+  coord: TileCoord,
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal
+): Promise<ArrayBuffer> {
+  throwIfCancelled(signal);
+
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Découverte des zones...' });
 
   const urls = await resolveDownloadUrls(coord);
   throwIfCancelled(signal);
   if (urls.length === 0) {
-    throw new Error(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
+    throw new NoCoverageError(`Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}). Le programme LiDAR HD de l'IGN ne couvre pas encore cette zone.`);
   }
 
   let lastError: DownloadFailure | null = null;
   let preferredError: DownloadFailure | null = null;
+  let allNotFound = true;
   const triedCandidates: string[] = [];
 
   for (let i = 0; i < urls.length; i++) {
@@ -187,6 +263,7 @@ export async function downloadTile(
       return buffer;
     } catch (err: any) {
       if (isDownloadCancelledError(err)) throw err;
+      if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {
         if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
@@ -203,6 +280,13 @@ export async function downloadTile(
 
   const finalError = preferredError ?? lastError;
   console.error(`[Download] All ${urls.length} candidate URLs failed for tile (${coord.xKm}, ${coord.yKm}). Candidates tried: ${triedCandidates.join(', ')}`);
+  if (allNotFound) {
+    // Chaque zone candidate a répondu 404 : le fichier n'existe nulle part
+    // chez IGN → absence de couverture confirmée (utile au fallback CH→IGN).
+    throw new NoCoverageError(
+      `Pas de couverture LiDAR HD à cet emplacement (${coord.xKm}, ${coord.yKm}) — ${urls.length} URL(s) testée(s), toutes introuvables (404).`
+    );
+  }
   throw new Error(
     `Impossible de télécharger la tuile LiDAR HD pour (${coord.xKm}, ${coord.yKm}) — ` +
     `${urls.length} URL(s) testée(s), candidats [${triedCandidates.slice(0, 5).join(', ')}${triedCandidates.length > 5 ? '...' : ''}]. ` +
@@ -416,8 +500,8 @@ async function fetchWithRetry(
             ? `Téléchargement interrompu, reprise ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`
             : `Téléchargement interrompu, nouvelle tentative ${incompleteRetryCount + 2}/${MAX_INCOMPLETE_DOWNLOAD_RETRIES + 1}...`,
         });
-        await sleep(delay);
-        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState, allowZip);
+        await sleep(delay, signal);
+        return fetchWithRetry(url, coord, onProgress, attempt, incompleteRetryCount + 1, nextResumeState, allowZip, signal);
       }
     }
 
@@ -440,10 +524,11 @@ async function downloadSwissTile(
   const urls = await resolveSwissDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
   throwIfCancelled(signal);
   if (urls.length === 0) {
-    throw new Error(`Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}).`);
+    throw new NoCoverageError(`Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}).`);
   }
 
   let lastError: Error | null = null;
+  let allNotFound = true;
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
@@ -486,17 +571,26 @@ async function downloadSwissTile(
       }
       return lasBuffer;
     } catch (err: any) {
+      if (isDownloadCancelledError(err)) throw err;
+      if (err.status !== 404) allNotFound = false;
       lastError = err;
       if (err.status === 404) {
-        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+        if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
         continue;
       }
       console.warn(`[Swiss Download] Failed for ${url}: ${err.message}`);
-      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS);
+      if (i < urls.length - 1) await sleep(INTER_REQUEST_DELAY_MS, signal);
       continue;
     }
   }
 
+  if (allNotFound) {
+    // Toutes les URLs (y compris prédites) ont répondu 404 : swisstopo n'a
+    // pas cette tuile → déclenche le fallback IGN côté downloadTile.
+    throw new NoCoverageError(
+      `Pas de couverture swissSURFACE3D à cet emplacement (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s), toutes introuvables (404).`
+    );
+  }
   throw new Error(
     `Impossible de télécharger la tuile swissSURFACE3D (E${coord.xKm}, N${coord.yKm}) — ${urls.length} URL(s) testée(s). Dernière erreur: ${lastError?.message || 'inconnue'}`
   );
