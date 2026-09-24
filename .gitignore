@@ -103,7 +103,6 @@ start-dev.bat
 # Test bench json reports
 script-test-bench/reports/*.json
 
-# Temp/cache dirs
+# Claude temp files
 .claude-temp/
 .figma-cache/
-.zcode/
