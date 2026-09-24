@@ -19,7 +19,6 @@ import { ComingSoonSection } from '../../sections/ComingSoonSection';
 import { PoiSection } from '../../sections/PoiSection';
 import { RythmeSection } from '../../sections/RythmeSection';
 import { TracageSection } from '../../sections/TracageSection';
-import { ProfileBar } from './ProfileBar';
 
 type VisiblePanelMode = Exclude<PanelMode, 'nutrition'>;
 
@@ -42,6 +41,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onChangePriority'
   | 'onChangeRhythm'
   | 'onChangeRoadType'
+  | 'onBatchChangeRoadTypes'
   | 'onLoadPois'
   | 'onOpenPoiCategories'
   | 'onRefreshRoute'
@@ -83,6 +83,7 @@ export function ItineraryPanelModeContent({
   onChangePriority,
   onChangeRhythm,
   onChangeRoadType,
+  onBatchChangeRoadTypes,
   onLoadPois,
   onOpenPoiCategories,
   onRefreshRoute,
@@ -114,28 +115,25 @@ export function ItineraryPanelModeContent({
   switch (activeMode) {
     case 'tracage':
       modeContent = active ? (
-        <>
-          <ProfileBar
-            profiles={profiles}
-            activeProfileId={active.profileId}
-            onChange={onChangeProfile}
-            onUndo={onUndo}
-            onRedo={onRedo}
-            canUndo={canUndo}
-            canRedo={canRedo}
-            onSave={onSaveProfile}
-          />
-          <TracageSection
-            priorities={active.priorities}
-            roadTypes={active.roadTypes}
-            onChangePriority={onChangePriority}
-            onChangeRoadType={onChangeRoadType}
-            onApply={onRefreshRoute}
-            onCancelApply={onCancelRoute}
-            applyLoading={routeLoading}
-            resultLabel={routeResultLabel}
-          />
-        </>
+        <TracageSection
+          priorities={active.priorities}
+          roadTypes={active.roadTypes}
+          profiles={profiles}
+          activeProfileId={active.profileId}
+          onChangeProfile={onChangeProfile}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          onUndo={onUndo}
+          onRedo={onRedo}
+          onSaveProfile={onSaveProfile}
+          onChangePriority={onChangePriority}
+          onChangeRoadType={onChangeRoadType}
+          onBatchChangeRoadTypes={onBatchChangeRoadTypes}
+          onApply={onRefreshRoute}
+          onCancelApply={onCancelRoute}
+          applyLoading={routeLoading}
+          resultLabel={routeResultLabel}
+        />
       ) : null;
       break;
     case 'rythme':

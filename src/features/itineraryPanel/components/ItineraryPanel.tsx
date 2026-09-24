@@ -57,6 +57,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onSaveProfile,
     onChangePriority,
     onChangeRoadType,
+    onBatchChangeRoadTypes,
     onRefreshRoute,
     onCancelRoute,
     onChangeRhythm,
@@ -309,6 +310,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onChangePriority={onChangePriority}
             onChangeRhythm={onChangeRhythm}
             onChangeRoadType={onChangeRoadType}
+            onBatchChangeRoadTypes={onBatchChangeRoadTypes}
             onLoadPois={onLoadPois}
             onOpenPoiCategories={onOpenPoiCategories}
             onRefreshRoute={onRefreshRoute}

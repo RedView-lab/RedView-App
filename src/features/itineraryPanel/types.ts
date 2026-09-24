@@ -95,6 +95,13 @@ export interface RoadTypesState {
    * of the project. Figma 1705:23497 (Appliquer à tout les itinéraires).
    */
   applyToAllItineraries: boolean;
+  /** Figma 5918:103512 / 5918:112682 additions */
+  elevationPreference?: RoadPreference;
+  woods?: RoadPreference;
+  surfacePreference?: 'tarmac' | 'paved' | 'gravel' | 'other';
+  surfaceTolerance?: number;
+  activityType?: string;
+  tracingMode?: 'vitesse' | 'aventure' | 'comfort';
 }
 
 /** One POI type row: enabled + search radius (metres, or null when disabled). */
@@ -538,6 +545,10 @@ export interface ItineraryPanelProps {
   onChangeRoadType?: <K extends keyof RoadTypesState>(
     key: K,
     value: RoadTypesState[K],
+  ) => void;
+  onBatchChangeRoadTypes?: (
+    roadUpdates: Partial<RoadTypesState>,
+    priorityUpdates?: Partial<PrioritiesState>,
   ) => void;
   onRefreshRoute?: () => void;
   onCancelRoute?: () => void;

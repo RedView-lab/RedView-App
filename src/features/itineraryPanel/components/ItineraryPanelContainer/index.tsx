@@ -584,12 +584,32 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
                 if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
                 const copy = structuredClone(itinerary);
                 (copy.roadTypes[key] as RoadTypesState[typeof key]) = value;
-                if (key !== 'applyToAllItineraries') {
-                  copy.profileId = resolveProfilePresetId(
-                    copy.priorities,
-                    copy.roadTypes,
-                    copy.profileId,
-                  );
+                if (key === 'activityType') {
+                  copy.profileId = value as string;
+                }
+                return copy;
+              }),
+            };
+          })
+        }
+        onBatchChangeRoadTypes={(roadUpdates, priorityUpdates) =>
+          setProject((prev) => {
+            const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
+            const applyToAll =
+              roadUpdates.applyToAllItineraries !== undefined
+                ? roadUpdates.applyToAllItineraries
+                : active?.roadTypes.applyToAllItineraries;
+            return {
+              ...prev,
+              itineraries: prev.itineraries.map((itinerary) => {
+                if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
+                const copy = structuredClone(itinerary);
+                Object.assign(copy.roadTypes, roadUpdates);
+                if (priorityUpdates) {
+                  Object.assign(copy.priorities, priorityUpdates);
+                }
+                if (roadUpdates.activityType) {
+                  copy.profileId = roadUpdates.activityType;
                 }
                 return copy;
               }),

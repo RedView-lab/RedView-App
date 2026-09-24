@@ -107,6 +107,20 @@ export function basicStateToOverrides(
   // profile already exposes a number of toggles we can flip.
   if (roads.ferry === 'forbid') safeOverride(o, 'allow_ferries', false);
   if (roads.ferry === 'prefer') safeOverride(o, 'allow_ferries', true);
+  if (roads.elevationPreference === 'avoid' || roads.elevationPreference === 'forbid') {
+    safeOverride(o, 'consider_elevation', true);
+    safeOverride(o, 'uphillcost', roads.elevationPreference === 'forbid' ? 120 : 80);
+    safeOverride(o, 'downhillcost', 60);
+  } else if (roads.elevationPreference === 'prefer') {
+    safeOverride(o, 'consider_elevation', true);
+    safeOverride(o, 'uphillcost', 0);
+    safeOverride(o, 'downhillcost', 0);
+  }
+  if (roads.woods === 'prefer') {
+    safeOverride(o, 'consider_forest', true);
+  } else if (roads.woods === 'avoid' || roads.woods === 'forbid') {
+    safeOverride(o, 'consider_forest', false);
+  }
 
   // Gravel/singletrack/offroad influence: surface & track preferences live
   // inside the BRF body. Use the closest exposed knob — `consider_elevation`
