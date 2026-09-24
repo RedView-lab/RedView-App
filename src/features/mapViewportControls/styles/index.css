@@ -85,10 +85,10 @@
 
 .rvmvc-route-legend-popover {
   position: absolute;
-  bottom: 0;
+  top: 0;
   right: calc(100% + 10px);
   width: 242px;
-  max-height: calc(100vh - 120px);
+  max-height: calc(100vh - 280px);
   overflow-y: auto;
   padding: 10px 12px;
   border-radius: 8px;
