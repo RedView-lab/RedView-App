@@ -1,5 +1,4 @@
-import { useRef, useState } from 'react';
-import { Slider } from '@/features/controlPanel/components/Slider';
+import { useEffect, useRef, useState } from 'react';
 import { readDocumentAppLocale, translateAppText, useAppI18n } from '@/shared/i18n';
 import { ActionButtonStack, CheckboxField, PanelSelect, ToggleRow } from '../components/controls';
 import { Collapse } from '../components/shell';
@@ -50,6 +49,14 @@ function ChipInput({
   );
 }
 
+function parseTimeDigits(timeStr: string | null | undefined): [string, string, string, string] {
+  if (!timeStr) return ['0', '0', '0', '0'];
+  const [h = '00', m = '00'] = timeStr.split(':');
+  const hPad = h.padStart(2, '0');
+  const mPad = m.padStart(2, '0');
+  return [hPad[0] || '0', hPad[1] || '0', mPad[0] || '0', mPad[1] || '0'];
+}
+
 function TimeChipInput({
   displayTime,
   onChange,
@@ -59,25 +66,195 @@ function TimeChipInput({
   onChange?: (value: string | null) => void;
   ariaLabel: string;
 }) {
-  const [hours = '--', minutes = '--'] = displayTime.split(':');
+  const [digits, setDigits] = useState<[string, string, string, string]>(() => parseTimeDigits(displayTime));
+  const [activeSlot, setActiveSlot] = useState<number | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setDigits(parseTimeDigits(displayTime));
+  }, [displayTime]);
+
+  const commitTime = (d: [string, string, string, string]) => {
+    const formatted = `${d[0]}${d[1]}:${d[2]}${d[3]}`;
+    onChange?.(formatted);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Tab') {
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      setActiveSlot(null);
+      inputRef.current?.blur();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      const reverted = parseTimeDigits(displayTime);
+      setDigits(reverted);
+      commitTime(reverted);
+      setActiveSlot(null);
+      inputRef.current?.blur();
+      return;
+    }
+
+    const currentSlot = activeSlot ?? 0;
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setActiveSlot(Math.max(0, currentSlot - 1));
+      return;
+    }
+
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      setActiveSlot(Math.min(3, currentSlot + 1));
+      return;
+    }
+
+    if (event.key === ':' || event.key === 'h' || event.key === 'H') {
+      event.preventDefault();
+      setActiveSlot(2);
+      return;
+    }
+
+    if (event.key === 'Backspace') {
+      event.preventDefault();
+      const next: [string, string, string, string] = [...digits];
+      next[currentSlot] = '0';
+      setDigits(next);
+      commitTime(next);
+      setActiveSlot(Math.max(0, currentSlot - 1));
+      return;
+    }
+
+    if (event.key >= '0' && event.key <= '9') {
+      event.preventDefault();
+      const next: [string, string, string, string] = [...digits];
+
+      if (currentSlot === 0) {
+        if (event.key === '0' || event.key === '1') {
+          next[0] = event.key;
+          setDigits(next);
+          commitTime(next);
+          setActiveSlot(1);
+        } else if (event.key === '2') {
+          next[0] = '2';
+          if (next[1] > '3') next[1] = '3';
+          setDigits(next);
+          commitTime(next);
+          setActiveSlot(1);
+        } else {
+          // Shortcut: e.g. '8' -> 08:xx
+          next[0] = '0';
+          next[1] = event.key;
+          setDigits(next);
+          commitTime(next);
+          setActiveSlot(2);
+        }
+      } else if (currentSlot === 1) {
+        if (next[0] === '2' && event.key > '3') {
+          next[1] = '3';
+        } else {
+          next[1] = event.key;
+        }
+        setDigits(next);
+        commitTime(next);
+        setActiveSlot(2);
+      } else if (currentSlot === 2) {
+        if (event.key >= '0' && event.key <= '5') {
+          next[2] = event.key;
+        } else {
+          next[2] = '5';
+        }
+        setDigits(next);
+        commitTime(next);
+        setActiveSlot(3);
+      } else if (currentSlot === 3) {
+        next[3] = event.key;
+        setDigits(next);
+        commitTime(next);
+        setActiveSlot(3);
+      }
+      return;
+    }
+
+    event.preventDefault();
+  };
 
   return (
-    <div className="rvi-time-input">
+    <div
+      className="rvi-time-input"
+      onClick={() => {
+        if (activeSlot === null) {
+          setActiveSlot(0);
+        }
+        inputRef.current?.focus();
+      }}
+    >
       <span className="rvi-time-input__icon" aria-hidden="true">
         <IconClock size={12} />
       </span>
-      <div className="rvi-time-input__display" aria-hidden="true">
-        <div className="rvi-time-input__segment">{hours}</div>
-        <span className="rvi-time-input__colon">
-          :
+      <div className="rvi-time-input__display">
+        <span
+          className={`rvi-time-input__digit ${activeSlot === 0 ? 'is-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveSlot(0);
+            inputRef.current?.focus();
+          }}
+        >
+          {digits[0]}
         </span>
-        <div className="rvi-time-input__segment">{minutes}</div>
+        <span
+          className={`rvi-time-input__digit ${activeSlot === 1 ? 'is-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveSlot(1);
+            inputRef.current?.focus();
+          }}
+        >
+          {digits[1]}
+        </span>
+        <span className="rvi-time-input__colon">:</span>
+        <span
+          className={`rvi-time-input__digit ${activeSlot === 2 ? 'is-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveSlot(2);
+            inputRef.current?.focus();
+          }}
+        >
+          {digits[2]}
+        </span>
+        <span
+          className={`rvi-time-input__digit ${activeSlot === 3 ? 'is-active' : ''}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveSlot(3);
+            inputRef.current?.focus();
+          }}
+        >
+          {digits[3]}
+        </span>
       </div>
       <input
-        type="time"
-        value={displayTime}
-        onChange={(event) => onChange?.(event.target.value || null)}
-        className="rvi-time-input__native"
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        value=""
+        onChange={() => {}}
+        onFocus={() => {
+          if (activeSlot === null) setActiveSlot(0);
+        }}
+        onBlur={() => {
+          setActiveSlot(null);
+        }}
+        onKeyDown={handleKeyDown}
+        className="rvi-time-input__hidden-input"
         aria-label={ariaLabel}
       />
     </div>
@@ -104,24 +281,7 @@ export function RythmeSection({
   const { locale, t } = useAppI18n();
   const dateChipRef = useRef<HTMLButtonElement | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [timeDraftMinutes, setTimeDraftMinutes] = useState(() => getMinutesFromTime(rhythm.startTime || '00:00'));
-  const [isScrubbingTime, setIsScrubbingTime] = useState(false);
-
-  const displayTime = isScrubbingTime
-    ? formatMinutes(timeDraftMinutes)
-    : (rhythm.startTime || '00:00');
-
-  const handleTimeSliderChange = (nextMinutes: number) => {
-    setIsScrubbingTime(true);
-    setTimeDraftMinutes(nextMinutes);
-    onChange?.('startTime', formatMinutes(nextMinutes));
-  };
-
-  const handleTimeSliderCommit = (nextMinutes: number) => {
-    setIsScrubbingTime(false);
-    setTimeDraftMinutes(nextMinutes);
-    onChange?.('startTime', formatMinutes(nextMinutes));
-  };
+  const displayTime = rhythm.startTime || '00:00';
 
   return (
     <div className="rvi-params">
@@ -160,28 +320,9 @@ export function RythmeSection({
           <TimeChipInput
             displayTime={displayTime}
             ariaLabel={t('Heure de départ')}
-            onChange={(nextValue) => {
-              setIsScrubbingTime(false);
-              setTimeDraftMinutes(getMinutesFromTime(nextValue || '00:00'));
-              onChange?.('startTime', nextValue);
-            }}
+            onChange={(nextValue) => onChange?.('startTime', nextValue)}
           />
         </div>
-      </div>
-
-      <div className="rvi-time-row">
-        <span className="rvi-time-row__bound">00:00</span>
-        <div className="rvi-time-row__slider-shell">
-          <Slider
-            min={0}
-            max={1439}
-            value={isScrubbingTime ? timeDraftMinutes : getMinutesFromTime(rhythm.startTime || '00:00')}
-            onChange={handleTimeSliderChange}
-            onCommit={handleTimeSliderCommit}
-            width="100%"
-          />
-        </div>
-        <span className="rvi-time-row__bound">23:59</span>
       </div>
 
       {/* Activités passées + FTP */}
@@ -390,17 +531,6 @@ function formatDateForLocale(iso: string, locale: 'fr' | 'en'): string {
     month: '2-digit',
     year: '2-digit',
   }).format(d);
-}
-
-function getMinutesFromTime(timeStr: string): number {
-  const [hh, mm] = timeStr.split(':').map(Number);
-  return (hh || 0) * 60 + (mm || 0);
-}
-
-function formatMinutes(value: number): string {
-  const h = Math.floor(value / 60).toString().padStart(2, '0');
-  const m = (value % 60).toString().padStart(2, '0');
-  return `${h}:${m}`;
 }
 
 /** Default new pause row: 5 min duration every hour. */
