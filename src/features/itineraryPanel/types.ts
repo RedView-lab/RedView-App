@@ -486,8 +486,6 @@ export interface ItineraryPanelProps {
 
   // project-level
   onBackToHome?: () => void;
-  onSaveProject?: () => void;
-  onDownloadProject?: () => void;
   onShareProject?: () => void;
   onRenameProject?: (next: string) => void;
 

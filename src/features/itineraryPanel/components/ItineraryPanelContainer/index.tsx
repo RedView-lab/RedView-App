@@ -396,10 +396,10 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         const previous = row.osmId != null ? existingPoiRows.get(row.osmId) : undefined;
         return previous
           ? {
-              ...row,
-              favorite: Boolean(previous.favorite || row.favorite),
-              visible: previous.visible ?? row.visible,
-            }
+            ...row,
+            favorite: Boolean(previous.favorite || row.favorite),
+            visible: previous.visible ?? row.visible,
+          }
           : row;
       });
 
@@ -505,15 +505,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onResizeStart={onResizeStart}
         isReturningToBrowser={isReturningToBrowser}
         onBackToHome={onBackToHome}
-        onSaveProject={() => {
-          setProject((p) => ({
-            ...p,
-            savedAt: new Date().toISOString(),
-            sizeBytes: p.sizeBytes ?? 4096,
-          }));
-        }}
-        onDownloadProject={() => {}}
-        onShareProject={() => {}}
+        onShareProject={() => { }}
         onRenameProject={(next) => setProject((p) => ({ ...p, name: next }))}
         onSelectItinerary={(id) =>
           setProject((p) => ({
@@ -574,7 +566,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }}
         canUndo={canUndoTraceEdit}
         canRedo={canRedoTraceEdit}
-        onSaveProfile={() => {}}
+        onSaveProfile={() => { }}
         onChangePriority={(key: keyof PrioritiesState, value) =>
           updateActive((it) => {
             it.priorities[key] = value;
@@ -628,7 +620,7 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
             it.poi[category] = next;
           })
         }
-        onOpenPoiCategories={() => {}}
+        onOpenPoiCategories={() => { }}
         onLoadPois={() => searchCorridor()}
         onCancelLoadPois={() => cancelSearchCorridor()}
         poiLoading={poiLoading}
@@ -644,8 +636,8 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         onChangeTimelinePauseDuration={timelineCallbacks.handleChangeTimelinePauseDuration}
         onRemoveTimelineItem={timelineCallbacks.handleRemoveTimelineItem}
         onFavoriteTimelineItem={timelineCallbacks.handleFavoriteTimelineItem}
-        onSearchTimeline={() => {}}
-        onOpenTimelineSettings={() => {}}
+        onSearchTimeline={() => { }}
+        onOpenTimelineSettings={() => { }}
         onSelectTimelinePlace={timelineCallbacks.handleSelectTimelinePlace}
         routeLoading={routeLoading}
         routeError={routeError}

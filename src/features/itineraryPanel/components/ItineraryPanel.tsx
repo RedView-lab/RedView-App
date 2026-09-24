@@ -40,8 +40,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     isReturningToBrowser,
     onResizeStart,
     onBackToHome,
-    onSaveProject,
-    onDownloadProject,
     onShareProject,
     onRenameProject,
     onSelectItinerary,
@@ -150,38 +148,38 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
 
   const timelinePanelProps = active
     ? {
-        items: active.timeline,
-        rhythm: active.rhythm,
-        prediction: active.prediction ?? null,
-        view: project.timelineView,
-        onChangeView: onChangeTimelineView,
-        onOpenSettings: onOpenTimelineSettings,
-        onAdd: onAddTimelineItem,
-        onToggleItem: onToggleTimelineItem,
-        onMovePause: onMoveTimelinePause,
-        onChangePauseDuration: onChangeTimelinePauseDuration,
-        onChangeIntervalPauseDuration: (pauseIntervalId: string, durationMin: number) => {
-          if (!active || !onChangeRhythm) return;
-          onChangeRhythm(
-            'pauseIntervals',
-            active.rhythm.pauseIntervals.map((row) => (
-              row.id === pauseIntervalId
-                ? { ...row, durationMin: Math.max(0, Math.round(durationMin)) }
-                : row
-            )),
-          );
-        },
-        onChangeFavoritePoiPauseDuration: (category: PoiCategory, durationMin: number) => {
-          if (!active || !onChangeRhythm) return;
-          onChangeRhythm('poiPauseDurations', {
-            ...active.rhythm.poiPauseDurations,
-            [category]: Math.max(0, Math.round(durationMin)),
-          });
-        },
-        onFavoriteItem: onFavoriteTimelineItem,
-        onRemoveItem: onRemoveTimelineItem,
-        onSelectPlace: onSelectTimelinePlace,
-      }
+      items: active.timeline,
+      rhythm: active.rhythm,
+      prediction: active.prediction ?? null,
+      view: project.timelineView,
+      onChangeView: onChangeTimelineView,
+      onOpenSettings: onOpenTimelineSettings,
+      onAdd: onAddTimelineItem,
+      onToggleItem: onToggleTimelineItem,
+      onMovePause: onMoveTimelinePause,
+      onChangePauseDuration: onChangeTimelinePauseDuration,
+      onChangeIntervalPauseDuration: (pauseIntervalId: string, durationMin: number) => {
+        if (!active || !onChangeRhythm) return;
+        onChangeRhythm(
+          'pauseIntervals',
+          active.rhythm.pauseIntervals.map((row) => (
+            row.id === pauseIntervalId
+              ? { ...row, durationMin: Math.max(0, Math.round(durationMin)) }
+              : row
+          )),
+        );
+      },
+      onChangeFavoritePoiPauseDuration: (category: PoiCategory, durationMin: number) => {
+        if (!active || !onChangeRhythm) return;
+        onChangeRhythm('poiPauseDurations', {
+          ...active.rhythm.poiPauseDurations,
+          [category]: Math.max(0, Math.round(durationMin)),
+        });
+      },
+      onFavoriteItem: onFavoriteTimelineItem,
+      onRemoveItem: onRemoveTimelineItem,
+      onSelectPlace: onSelectTimelinePlace,
+    }
     : null;
 
   const dockTimelinePanel = timelinePanelProps ? (
@@ -248,8 +246,6 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
         backDisabled={isReturningToBrowser}
         onBack={onBackToHome}
         onRename={onRenameProject}
-        onSettings={onSaveProject}
-        onDownload={onDownloadProject}
         onShare={onShareProject}
       />
 
@@ -294,42 +290,42 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             {t('Créez un itinéraire, une variante ou importez une trace pour commencer.')}
           </p>
         ) : (
-        <ItineraryPanelModeContent
-          active={active ?? undefined}
-          activeMode={activeMode}
-          canRedo={canRedo}
-          canUndo={canUndo}
-          collapsed={modeCollapsed}
-          contentId={modeContentId}
-          onCancelCalculate={onCancelCalculate}
-          onCancelLoadPois={onCancelLoadPois}
-          onCancelRoute={onCancelRoute}
-          calculateDisabled={calculateDisabled}
-          calculateLabel={calculateLabel}
-          dockTimelinePanel={dockTimelinePanel}
-          onCalculate={onCalculate}
-          onChangePoiEntry={onChangePoiEntry}
-          onChangeProfile={onChangeProfile}
-          onChangePriority={onChangePriority}
-          onChangeRhythm={onChangeRhythm}
-          onChangeRoadType={onChangeRoadType}
-          onLoadPois={onLoadPois}
-          onOpenPoiCategories={onOpenPoiCategories}
-          onRefreshRoute={onRefreshRoute}
-          onRedo={onRedo}
-          onSaveProfile={onSaveProfile}
-          onUndo={onUndo}
-          onUploadFit={onUploadFit}
-          poiCount={poiCount}
-          poiError={poiError}
-          poiLoadDisabled={poiLoadDisabled}
-          poiLoadDisabledReason={poiLoadDisabledReason}
-          poiLoading={poiLoading}
-          poiProgress={poiProgress}
-          profiles={profiles}
-          routeLoading={routeLoading}
-          uploadFitLabel={uploadFitLabel}
-        />
+          <ItineraryPanelModeContent
+            active={active ?? undefined}
+            activeMode={activeMode}
+            canRedo={canRedo}
+            canUndo={canUndo}
+            collapsed={modeCollapsed}
+            contentId={modeContentId}
+            onCancelCalculate={onCancelCalculate}
+            onCancelLoadPois={onCancelLoadPois}
+            onCancelRoute={onCancelRoute}
+            calculateDisabled={calculateDisabled}
+            calculateLabel={calculateLabel}
+            dockTimelinePanel={dockTimelinePanel}
+            onCalculate={onCalculate}
+            onChangePoiEntry={onChangePoiEntry}
+            onChangeProfile={onChangeProfile}
+            onChangePriority={onChangePriority}
+            onChangeRhythm={onChangeRhythm}
+            onChangeRoadType={onChangeRoadType}
+            onLoadPois={onLoadPois}
+            onOpenPoiCategories={onOpenPoiCategories}
+            onRefreshRoute={onRefreshRoute}
+            onRedo={onRedo}
+            onSaveProfile={onSaveProfile}
+            onUndo={onUndo}
+            onUploadFit={onUploadFit}
+            poiCount={poiCount}
+            poiError={poiError}
+            poiLoadDisabled={poiLoadDisabled}
+            poiLoadDisabledReason={poiLoadDisabledReason}
+            poiLoading={poiLoading}
+            poiProgress={poiProgress}
+            profiles={profiles}
+            routeLoading={routeLoading}
+            uploadFitLabel={uploadFitLabel}
+          />
         )}
       </div>
 

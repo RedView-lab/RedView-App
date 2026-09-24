@@ -90,7 +90,7 @@ export function LidarTilesSection({
       onCancelDownload?.();
       return;
     }
-    onDownload();
+    onDownload?.();
   };
 
   return (

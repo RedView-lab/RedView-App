@@ -1485,6 +1485,18 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Download in progress"
   },
   {
+    "fr": "cliquer pour annuler",
+    "en": "click to cancel"
+  },
+  {
+    "fr": "Cliquer pour annuler le téléchargement",
+    "en": "Click to cancel the download"
+  },
+  {
+    "fr": "Annuler le téléchargement",
+    "en": "Cancel the download"
+  },
+  {
     "fr": "Télécharger une tuile LIDAR",
     "en": "Download a LIDAR tile"
   },

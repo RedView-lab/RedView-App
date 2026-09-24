@@ -295,10 +295,10 @@ async function fetchWithRetry(
     const effectiveContentRange = contentRange
       ?? (response.status === 206 && requestedResumeBytes > 0 && contentLength > 0
         ? {
-            start: requestedResumeBytes,
-            end: requestedResumeBytes + contentLength - 1,
-            total: requestedResumeBytes + contentLength,
-          }
+          start: requestedResumeBytes,
+          end: requestedResumeBytes + contentLength - 1,
+          total: requestedResumeBytes + contentLength,
+        }
         : null);
     const reader = response.body?.getReader();
     if (!reader) throw new Error('No response body');
@@ -508,11 +508,14 @@ async function downloadSwissTile(
 
 async function downloadNzTile(
   coord: TileCoord,
-  onProgress?: (progress: DownloadProgress) => void
+  onProgress?: (progress: DownloadProgress) => void,
+  signal?: AbortSignal
 ): Promise<ArrayBuffer> {
+  throwIfCancelled(signal);
   onProgress?.({ tileCoord: coord, bytesDownloaded: 0, totalBytes: 0, phase: 'downloading', message: 'Recherche nuage de points LiDAR Nouvelle-Zélande...' });
 
   const urls = await resolveNzDownloadUrls({ eastKm: coord.xKm, northKm: coord.yKm });
+  throwIfCancelled(signal);
   if (urls.length === 0) {
     throw new Error(`Pas de nuage de points LiDAR classifié disponible pour la dalle (${coord.xKm}, ${coord.yKm}). Cette zone n'a pas encore fait l'objet d'un survol LiDAR.`);
   }
@@ -521,10 +524,12 @@ async function downloadNzTile(
   for (let i = 0; i < urls.length; i++) {
     const url = urls[i];
     try {
-      await waitForRateLimit();
-      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true);
+      throwIfCancelled(signal);
+      await waitForRateLimit(signal);
+      const downloadedBuffer = await fetchWithRetry(url, coord, onProgress, 0, 0, undefined, true, signal);
       if (!downloadedBuffer) continue;
 
+      throwIfCancelled(signal);
       let lasBuffer: ArrayBuffer;
       if (hasValidZipSignature(downloadedBuffer)) {
         onProgress?.({
@@ -539,6 +544,7 @@ async function downloadNzTile(
         lasBuffer = downloadedBuffer;
       }
 
+      throwIfCancelled(signal);
       if (!hasValidLasSignature(lasBuffer)) {
         throw new Error('Fichier nuage de points néo-zélandais corrompu (signature LAS invalide).');
       }

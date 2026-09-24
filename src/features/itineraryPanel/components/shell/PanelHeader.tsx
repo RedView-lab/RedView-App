@@ -1,8 +1,6 @@
 import {
   IconClose,
   IconSave,
-  IconSettingsCog,
-  IconDownload,
   IconShare,
 } from '../icons';
 import { useAppI18n } from '@/shared/i18n';
@@ -15,8 +13,6 @@ interface PanelHeaderProps {
   onBack?: () => void;
   backDisabled?: boolean;
   onRename?: (next: string) => void;
-  onSettings?: () => void;
-  onDownload?: () => void;
   onShare?: () => void;
 }
 
@@ -49,8 +45,6 @@ export function PanelHeader({
   onBack,
   backDisabled = false,
   onRename,
-  onSettings,
-  onDownload,
   onShare,
 }: PanelHeaderProps) {
   const { locale, t } = useAppI18n();
@@ -99,23 +93,6 @@ export function PanelHeader({
         </div>
       </div>
       <div className="rvi-header__actions">
-        <button
-          type="button"
-          className="rvi-iconbtn"
-          onClick={onSettings}
-          aria-label={t('Paramètres du projet')}
-        >
-          <IconSettingsCog size={16} />
-        </button>
-        <button
-          type="button"
-          className="rvi-iconbtn"
-          onClick={onDownload}
-          aria-label={t('Télécharger')}
-          aria-disabled={!savedAt}
-        >
-          <IconDownload size={16} />
-        </button>
         <button
           type="button"
           className="rvi-iconbtn"
