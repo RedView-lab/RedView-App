@@ -5,6 +5,7 @@ import { IconMoon, IconSun } from '../../CenterPanelIcons';
 import type { AxisMetricId, AxisMode, ChartSeries } from '../series';
 import { formatAxisLabel, xAnchorTransformFor } from './format';
 import { buildPoiSpreadOffsetPx, shouldExpandPoiCluster, shouldRenderPoiCluster } from './poi';
+import { ChartZoomNavigator } from './ChartZoomNavigator';
 import { EmptySeriesRow, HoverCardGroup, SeriesRow } from './rows';
 import {
   MULTI_POI_MARKER_HEIGHT_PX,
@@ -17,7 +18,7 @@ import {
 interface AnalysisChartLayoutProps {
   style: CSSProperties;
   axis1Metric: AxisMetricId;
-  axis2Metric: AxisMetricId;
+  axis2Metric: AxisMetricId | null;
   plotAreaRef: RefObject<HTMLDivElement | null>;
   handlePlotClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   dayNightBands: Array<{ id: string; startRatio: number; endRatio: number }>;
@@ -45,7 +46,10 @@ interface AnalysisChartLayoutProps {
   hoverRows: HoverCardRow[];
   xAxisLabels: Array<{ value: number; ratio: number; label: string }>;
   normalizedDetailOffset: number;
-  onDetailOffsetChange?: (value: number) => void;
+  yVisibleFraction: number;
+  normalizedYOffset: number;
+  onHorizontalNavigatorChange: (next: { visibleFraction: number; offset: number }) => void;
+  onVerticalNavigatorChange: (next: { visibleFraction: number; offset: number }) => void;
   showSeriesRows: boolean;
   visibleSeries: ChartSeries[];
 }
@@ -74,7 +78,10 @@ export function AnalysisChartLayout({
   hoverRows,
   xAxisLabels,
   normalizedDetailOffset,
-  onDetailOffsetChange,
+  yVisibleFraction,
+  normalizedYOffset,
+  onHorizontalNavigatorChange,
+  onVerticalNavigatorChange,
   showSeriesRows,
   visibleSeries,
 }: AnalysisChartLayoutProps) {
@@ -325,19 +332,31 @@ export function AnalysisChartLayout({
           </div>
         </div>
 
-        <div className="rvchart__yaxis-right" aria-hidden="true">
-          {y2Positions
-            .filter(({ ratio }) => ratio > 0.01 && ratio < 0.99)
-            .map(({ value, ratio }, index) => (
-              <span
-                key={`yr-${index}-${value}`}
-                className="rvchart__yaxis-label"
-                style={{ top: `${ratio * 100}%` }}
-              >
-                {formatAxisLabel(value, axis2Metric)}
-              </span>
-            ))}
-        </div>
+        {axis2Metric ? (
+          <div className="rvchart__yaxis-right" aria-hidden="true">
+            {y2Positions
+              .filter(({ ratio }) => ratio > 0.01 && ratio < 0.99)
+              .map(({ value, ratio }, index) => (
+                <span
+                  key={`yr-${index}-${value}`}
+                  className="rvchart__yaxis-label"
+                  style={{ top: `${ratio * 100}%` }}
+                >
+                  {formatAxisLabel(value, axis2Metric)}
+                </span>
+              ))}
+          </div>
+        ) : (
+          <div className="rvchart__yaxis-right rvchart__yaxis-right--empty" aria-hidden="true" />
+        )}
+
+        <ChartZoomNavigator
+          orientation="vertical"
+          visibleFraction={yVisibleFraction}
+          offset={normalizedYOffset}
+          onChange={onVerticalNavigatorChange}
+          className="rvchart__zoom-vertical"
+        />
       </div>
 
       <div className="rvchart__xaxis">
@@ -354,30 +373,19 @@ export function AnalysisChartLayout({
           ))}
         </div>
         <div />
+        <div />
       </div>
 
       <div className="rvchart__viewport" aria-label={t('Déplacement horizontal du graphique')}>
         <div />
-        <div className="rvchart__viewport-track">
-          <div
-            className="rvchart__viewport-window"
-            style={{
-              width: `${visibleFraction * 100}%`,
-              left: `${normalizedDetailOffset * (1 - visibleFraction) * 100}%`,
-            }}
-          />
-          <input
-            className="rvchart__viewport-input"
-            type="range"
-            min="0"
-            max="1000"
-            step="1"
-            value={Math.round(normalizedDetailOffset * 1000)}
-            onChange={(event) => onDetailOffsetChange?.(Number(event.target.value) / 1000)}
-            disabled={visibleFraction >= 0.999}
-            aria-label={t('Déplacer la zone visible du graphique')}
-          />
-        </div>
+        <ChartZoomNavigator
+          orientation="horizontal"
+          visibleFraction={visibleFraction}
+          offset={normalizedDetailOffset}
+          onChange={onHorizontalNavigatorChange}
+          className="rvchart__zoom-horizontal"
+        />
+        <div />
         <div />
       </div>
 

@@ -45,7 +45,7 @@ export const filterDefs: ReadonlyArray<{ key: FilterKey; label: string }> = [
 ];
 
 export const axisOptions: AxisOption[] = [
-  { value: 'Altitude', label: 'Altitude', tone: 'primary' },
+  { value: 'Altitude', label: 'Élévation', tone: 'primary' },
   { value: 'Vitesse', label: 'Vitesse', tone: 'primary' },
   { value: 'Vitesse moyenne', label: 'Vitesse moyenne', tone: 'primary' },
   { value: 'Puissance', label: 'Puissance', tone: 'primary' },
@@ -68,6 +68,11 @@ export const axisOptions: AxisOption[] = [
   },
   { value: 'Humidité (%)', label: 'Humidité (%)', tone: 'secondary' },
   { value: 'Ensoleillement (min)', label: 'Ensoleillement (min)', tone: 'secondary' },
+];
+
+export const axis2Options: AxisOption[] = [
+  { value: 'none', label: 'Désactivé', tone: 'secondary' },
+  ...axisOptions,
 ];
 
 export const DETAIL_ZOOM_STEP = 0.1;
@@ -132,15 +137,26 @@ export function normalizeAnalysisState(
     ...(state?.filters ?? {}),
   };
   if (filters.poi) filters.pente = true;
+
+  const rawAxis2 = state?.axis2;
+  const isLegacyDuplicateAltitude =
+    rawAxis2 === 'Altitude' && (state?.axis1 === 'Altitude' || !state?.axis1);
+  const normalizedAxis2 =
+    !rawAxis2 || (rawAxis2 as string) === 'none' || isLegacyDuplicateAltitude
+      ? null
+      : migrateAxisMetric(rawAxis2);
+
   return {
     xMode: state?.xMode ?? fallback.xMode,
     axis1: migrateAxisMetric(state?.axis1 ?? fallback.axis1),
-    axis2: migrateAxisMetric(state?.axis2 ?? fallback.axis2),
+    axis2: normalizedAxis2,
     axis1Color: normalizeAnalysisColor(state?.axis1Color),
     axis2Color: normalizeAnalysisColor(state?.axis2Color),
     filters,
     detailZoom: normalizeUnitInterval(state?.detailZoom, fallback.detailZoom),
     detailOffset: normalizeUnitInterval(state?.detailOffset, fallback.detailOffset),
+    yZoom: normalizeUnitInterval(state?.yZoom, fallback.yZoom ?? 0),
+    yOffset: normalizeUnitInterval(state?.yOffset, fallback.yOffset ?? 0),
   };
 }
 
@@ -151,6 +167,10 @@ export function normalizeUnitInterval(value: number | undefined, fallback = 0): 
 
 export function detailZoomToVisibleFraction(detailZoom: number): number {
   return 1 - normalizeUnitInterval(detailZoom) * (1 - DETAIL_MIN_VISIBLE_FRACTION);
+}
+
+export function visibleFractionToDetailZoom(visibleFraction: number): number {
+  return normalizeUnitInterval((1 - visibleFraction) / (1 - DETAIL_MIN_VISIBLE_FRACTION));
 }
 
 export function detailOffsetForCenter(center: number, visibleFraction: number): number {

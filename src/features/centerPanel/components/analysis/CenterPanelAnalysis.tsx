@@ -8,7 +8,6 @@ import {
   type CenterPanelAnalysisProps,
   DEFAULT_ANALYSIS_AXIS_COLORS,
   findSplitIndexForChartX,
-  type FilterKey,
   lightenColor,
   normalizeAnalysisState,
   selectInteractiveItineraryForChartX,
@@ -40,7 +39,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const { t } = useAppI18n();
   const rootRef = useRef<HTMLElement | null>(null);
   const [openAxis, setOpenAxis] = useState<'axis1' | 'axis2' | null>(null);
-  const [showDayNightRequirementHint, setShowDayNightRequirementHint] = useState(false);
 
   const projectStore = useProjectStoreOptional();
   const predictionStore = usePredictionStoreOptional();
@@ -56,7 +54,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     ? normalizeAnalysisState(rawAnalysis)
     : normalizeAnalysisState();
   const axis1Value = analysisState.axis1 as AxisMetricId;
-  const axis2Value = analysisState.axis2 as AxisMetricId;
+  const axis2Value = analysisState.axis2 as AxisMetricId | null;
   const xMode = analysisState.xMode as AxisMode;
   const filters = analysisState.filters;
 
@@ -74,13 +72,17 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   const {
     detailZoom,
     detailOffset,
-    handleZoomIn,
-    handleZoomOut,
+    yZoom,
+    yOffset,
     handleOffsetChange,
+    handleViewportChange,
+    handleYViewportChange,
   } = useAnalysisViewportSync({
     projectStore,
     storedDetailZoom: analysisState.detailZoom,
     storedDetailOffset: analysisState.detailOffset,
+    storedYZoom: analysisState.yZoom ?? 0,
+    storedYOffset: analysisState.yOffset ?? 0,
   });
 
   const activeItinerary = useMemo(() => {
@@ -157,37 +159,11 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         filters: { ...current.filters },
         detailZoom: current.detailZoom,
         detailOffset: current.detailOffset,
+        yZoom: current.yZoom ?? 0,
+        yOffset: current.yOffset ?? 0,
       };
       mut(next);
       return { ...prev, analysis: next };
-    });
-  };
-
-  const toggleFilter = (key: FilterKey) => {
-    if (key === 'jourNuit') {
-      const wantsEnabled = !filters.jourNuit;
-      if (wantsEnabled && !dayNightStartReady) {
-        setShowDayNightRequirementHint(true);
-        return;
-      }
-      setShowDayNightRequirementHint(false);
-    }
-
-    updateAnalysis((draft) => {
-      if (key === 'poi') {
-        const wantsPoi = !draft.filters.poi;
-        draft.filters.poi = wantsPoi;
-        if (wantsPoi) draft.filters.pente = true;
-        return;
-      }
-
-      if (key === 'pente' && draft.filters.pente && draft.filters.poi) {
-        draft.filters.pente = false;
-        draft.filters.poi = false;
-        return;
-      }
-
-      draft.filters[key] = !draft.filters[key];
     });
   };
 
@@ -203,7 +179,7 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
   }, [openAxis]);
 
   const dayNightWarning =
-    (filters.jourNuit || showDayNightRequirementHint) && !dayNightStartReady
+    filters.jourNuit && !dayNightStartReady
       ? t('Renseigne une date et une heure de départ pour activer Jour/nuit.')
       : null;
 
@@ -262,6 +238,12 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     });
   };
 
+  const toggleFilter = (key: 'pente' | 'jourNuit') => {
+    updateAnalysis((draft) => {
+      draft.filters[key] = !draft.filters[key];
+    });
+  };
+
   return (
     <section
       ref={rootRef}
@@ -271,9 +253,6 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
       <AnalysisToolbar
         xMode={xMode}
         onXModeChange={(mode) => updateAnalysis((d) => { d.xMode = mode; })}
-        detailZoom={detailZoom}
-        onZoomIn={handleZoomIn}
-        onZoomOut={handleZoomOut}
         openAxis={openAxis}
         onToggleAxis={(axis) => setOpenAxis((curr) => (curr === axis ? null : axis))}
         axis1Value={axis1Value}
@@ -281,7 +260,11 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         axis1Color={axis1Color}
         axis2Color={axis2Color}
         onAxis1Select={(val) => { updateAnalysis((d) => { d.axis1 = val.replace('__bis', '') as AxisMetricId; }); setOpenAxis(null); }}
-        onAxis2Select={(val) => { updateAnalysis((d) => { d.axis2 = val.replace('__bis', '') as AxisMetricId; }); setOpenAxis(null); }}
+        onAxis2Select={(val) => {
+          const nextVal = val === 'none' ? null : (val.replace('__bis', '') as AxisMetricId);
+          updateAnalysis((d) => { d.axis2 = nextVal; });
+          setOpenAxis(null);
+        }}
         onAxis1ColorChange={(col) => updateAnalysis((d) => { d.axis1Color = col; })}
         onAxis2ColorChange={(col) => updateAnalysis((d) => { d.axis2Color = col; })}
         filters={filters}
@@ -306,10 +289,11 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
           xMode={xMode}
           detailZoom={detailZoom}
           detailOffset={detailOffset}
+          yZoom={yZoom}
+          yOffset={yOffset}
           xDomainClamp={routeXDomainClamp}
-          onViewportChange={({ detailOffset: o }) => {
-            handleOffsetChange(o);
-          }}
+          onViewportChange={handleViewportChange}
+          onYViewportChange={handleYViewportChange}
           onDetailOffsetChange={handleOffsetChange}
           onHoverXValueChange={handleHoverXValueChange}
           controlledHoverXValue={controlledHoverXValue}

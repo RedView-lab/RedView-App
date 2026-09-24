@@ -30,7 +30,11 @@
   flex: 1 1 auto;
   min-height: 120px;
   display: grid;
-  grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
+  grid-template-columns: var(--rvchart-left, 80px) 1fr var(--rvchart-right, 0px) 16px;
+}
+
+.rvchart__yaxis-right--empty {
+  display: none;
 }
 
 .rvchart__yaxis-left,
@@ -305,11 +309,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- Bottom rows (X axis + series) ---- */
+/* ---- Bottom rows (X axis + series + viewport) ---- */
 .rvchart__xaxis,
 .rvchart__series {
   display: grid;
-  grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
+  grid-template-columns: var(--rvchart-left, 80px) 1fr var(--rvchart-right, 0px) 16px;
   align-items: center;
   flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.4);
@@ -322,55 +326,138 @@
 
 .rvchart__viewport {
   display: grid;
-  grid-template-columns: var(--rvchart-left, 95px) 1fr var(--rvchart-right, 36px);
+  grid-template-columns: var(--rvchart-left, 80px) 1fr var(--rvchart-right, 0px) 16px;
   align-items: center;
-  height: 14px;
+  height: 16px;
   flex: 0 0 auto;
   background: rgba(0, 0, 0, 0.4);
-  padding-bottom: 2px;
 }
 
-.rvchart__viewport-track {
+/* ---- Premiere Pro Zoom & Pan Navigators ---- */
+.rvc-zoom-bar {
   position: relative;
-  height: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  user-select: none;
+  touch-action: none;
+  cursor: pointer;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
 }
 
-.rvchart__viewport-window {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  min-width: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.24);
-  border-radius: 4px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+.rvc-zoom-bar--horizontal {
+  width: 100%;
+  height: 16px;
+  background: rgba(0, 0, 0, 0.28);
 }
 
-.rvchart__viewport-window::after {
-  content: '...';
+.rvc-zoom-bar--vertical {
+  width: 16px;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.28);
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.rvc-zoom-bar__thumb {
   position: absolute;
-  inset: 0;
+  background: rgba(255, 255, 255, 0.28);
+  cursor: grab;
+  transition: background 120ms ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.74);
-  font: 700 9px/1 'DM Sans', system-ui, sans-serif;
-  letter-spacing: 1px;
+  box-sizing: border-box;
 }
 
-.rvchart__viewport-input {
+.rvc-zoom-bar__thumb:hover,
+.rvc-zoom-bar__thumb.is-active {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.rvc-zoom-bar.is-dragging .rvc-zoom-bar__thumb {
+  cursor: grabbing;
+}
+
+/* Horizontal thumb */
+.rvc-zoom-bar--horizontal .rvc-zoom-bar__thumb {
+  top: 0;
+  bottom: 0;
+  min-width: 20px;
+}
+
+/* Vertical thumb */
+.rvc-zoom-bar--vertical .rvc-zoom-bar__thumb {
+  left: 0;
+  right: 0;
+  min-height: 20px;
+}
+
+/* Boundary handles (white end bars) */
+.rvc-zoom-bar__handle {
   position: absolute;
-  inset: 0;
-  margin: 0;
-  opacity: 0;
+  background: #ffffff;
+  z-index: 2;
+  transition: background 120ms ease, filter 120ms ease;
+}
+
+.rvc-zoom-bar__handle:hover {
+  background: #ffffff;
+  filter: brightness(1.2);
+}
+
+.rvc-zoom-bar__handle--left,
+.rvc-zoom-bar__handle--right {
+  top: 0;
+  bottom: 0;
+  width: 4px;
   cursor: ew-resize;
 }
 
-.rvchart__viewport-input:disabled {
-  cursor: default;
+.rvc-zoom-bar__handle--left {
+  left: 0;
+  border-radius: 1px 0 0 1px;
+}
+
+.rvc-zoom-bar__handle--right {
+  right: 0;
+  border-radius: 0 1px 1px 0;
+}
+
+.rvc-zoom-bar__handle--top,
+.rvc-zoom-bar__handle--bottom {
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.rvc-zoom-bar__handle--top {
+  top: 0;
+  border-radius: 1px 1px 0 0;
+}
+
+.rvc-zoom-bar__handle--bottom {
+  bottom: 0;
+  border-radius: 0 0 1px 1px;
+}
+
+/* Center dots */
+.rvc-zoom-bar__dots {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.rvc-zoom-bar--vertical .rvc-zoom-bar__dots {
+  flex-direction: column;
+}
+
+.rvc-zoom-bar__dots span {
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 0.5px 1px rgba(0, 0, 0, 0.4);
 }
 
 .rvchart__xaxis-cells {

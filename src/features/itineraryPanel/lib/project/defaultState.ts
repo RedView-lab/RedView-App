@@ -233,12 +233,10 @@ export function createDefaultItinerary(
 export function createDefaultAnalysisPanelState(): AnalysisPanelState {
   return {
     xMode: 'distance',
-    // Default to a plain elevation profile. The chart always draws altitude as
-    // its backdrop, so putting Altitude on both axes gives a clean, uncluttered
-    // profile of the route — the most useful first read after importing a GPX.
-    // Users can switch axes to speed / power / slope from the chart toolbar.
+    // Default to a plain elevation profile with Axis 2 disabled.
+    // Users can enable Axis 2 (speed, power, temp, etc.) from the chart toolbar.
     axis1: 'Altitude',
-    axis2: 'Altitude',
+    axis2: null,
     filters: {
       waypoint: true,
       poi: true,
@@ -249,6 +247,8 @@ export function createDefaultAnalysisPanelState(): AnalysisPanelState {
     },
     detailZoom: 0,
     detailOffset: 0,
+    yZoom: 0,
+    yOffset: 0,
   };
 }
 

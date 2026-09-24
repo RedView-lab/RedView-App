@@ -50,12 +50,14 @@ export interface AnalysisFiltersState {
 export interface AnalysisPanelState {
   xMode: AnalysisAxisMode;
   axis1: AnalysisAxisMetricId;
-  axis2: AnalysisAxisMetricId;
+  axis2: AnalysisAxisMetricId | null;
   axis1Color?: string;
   axis2Color?: string;
   filters: AnalysisFiltersState;
   detailZoom: number;
   detailOffset: number;
+  yZoom?: number;
+  yOffset?: number;
 }
 
 export type PanelMode = 'tracage' | 'rythme' | 'poi' | 'nutrition';

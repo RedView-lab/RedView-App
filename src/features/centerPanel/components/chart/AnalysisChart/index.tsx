@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import { useChartHover } from '../useChartHover';
 import { computeDomain, computeXDomain, isInclinationMetric, type AxisDomain, type ChartMetricId } from '../series';
 import '../chart.css';
@@ -8,6 +8,7 @@ import { buildResponsiveXAxisLabels } from './format';
 import {
   buildInterpolatedTicks,
   buildNiceDomain,
+  buildNiceTicks,
   buildNiceXTicks,
   buildVisibleXDomain,
   clampXDomainToRoute,
@@ -19,6 +20,7 @@ import {
   normalizeUnitInterval,
   ratioFor,
   selectPointsForPlotLod,
+  visibleFractionToDetailZoom,
 } from './math';
 import { buildPoiMarkerGroups, buildViewportForPoiCluster } from './poi';
 import {
@@ -51,8 +53,11 @@ export const AnalysisChart = memo(function AnalysisChart({
   xMode,
   detailZoom = 0,
   detailOffset = 0,
+  yZoom = 0,
+  yOffset = 0,
   xDomainClamp = null,
   onViewportChange,
+  onYViewportChange,
   onDetailOffsetChange,
   onHoverXValueChange,
   controlledHoverXValue = null,
@@ -121,6 +126,7 @@ export const AnalysisChart = memo(function AnalysisChart({
   }, [axis1Metric, axis1Series]);
 
   const rawY2Domain = useMemo<AxisDomain>(() => {
+    if (!axis2Metric) return { min: 0, max: 1 };
     const domain = computeDomain(axis2Series.map((entry) => entry.points));
     if (!domain) return defaultDomainFor(axis2Metric);
     const range = Math.max(1, domain.max - domain.min);
@@ -131,7 +137,15 @@ export const AnalysisChart = memo(function AnalysisChart({
     return normalizeMetricDomain(axis2Metric, withHeadroom);
   }, [axis2Metric, axis2Series]);
 
-  const yNice = useMemo(() => {
+  const yVisibleFraction = useMemo(() => {
+    return detailZoomToVisibleFraction(yZoom);
+  }, [yZoom]);
+
+  const normalizedYOffset = useMemo(() => {
+    return normalizeUnitInterval(yOffset);
+  }, [yOffset]);
+
+  const yNiceBase = useMemo(() => {
     const target =
       plotSize.height > 0
         ? Math.max(2, Math.round(plotSize.height / Y_MAJOR_TARGET_PX))
@@ -140,11 +154,28 @@ export const AnalysisChart = memo(function AnalysisChart({
     return buildNiceDomain(rawYDomain.min, rawYDomain.max, target, { forceZero });
   }, [axis1Metric, plotSize.height, rawYDomain]);
 
-  const plotYDomain = yNice.domain;
-  const yTicksAsc = yNice.ticks;
-  const yTicks = useMemo(() => yTicksAsc.slice().reverse(), [yTicksAsc]);
+  const { plotYDomain, yTicks } = useMemo(() => {
+    if (yVisibleFraction >= 0.999) {
+      return {
+        plotYDomain: yNiceBase.domain,
+        yTicks: yNiceBase.ticks.slice().reverse(),
+      };
+    }
+    const fullSpan = yNiceBase.domain.max - yNiceBase.domain.min;
+    const visibleSpan = Math.max(1, fullSpan * yVisibleFraction);
+    const startRatio = normalizedYOffset * (1 - yVisibleFraction);
+    const effectiveMin = yNiceBase.domain.min + startRatio * fullSpan;
+    const effectiveMax = effectiveMin + visibleSpan;
+    const target = yNiceBase.ticks.length || DEFAULT_TICK_COUNT;
+    const ticks = buildNiceTicks(effectiveMin, effectiveMax, target);
+    return {
+      plotYDomain: { min: effectiveMin, max: effectiveMax },
+      yTicks: ticks.slice().reverse(),
+    };
+  }, [normalizedYOffset, yNiceBase, yVisibleFraction]);
 
   const y2Nice = useMemo(() => {
+    if (!axis2Metric) return { domain: { min: 0, max: 1 }, ticks: [] };
     const target = yTicks.length || DEFAULT_TICK_COUNT;
     const forceZero = axis2Metric !== 'Altitude' && !isInclinationMetric(axis2Metric);
     return buildNiceDomain(rawY2Domain.min, rawY2Domain.max, target, { forceZero });
@@ -152,8 +183,11 @@ export const AnalysisChart = memo(function AnalysisChart({
 
   const plotY2Domain = y2Nice.domain;
   const y2Ticks = useMemo(
-    () => buildInterpolatedTicks(plotY2Domain.max, plotY2Domain.min, yTicks.length),
-    [plotY2Domain.max, plotY2Domain.min, yTicks.length],
+    () =>
+      axis2Metric
+        ? buildInterpolatedTicks(plotY2Domain.max, plotY2Domain.min, yTicks.length)
+        : [],
+    [axis2Metric, plotY2Domain.max, plotY2Domain.min, yTicks.length],
   );
 
   const xPositions = useMemo(
@@ -176,16 +210,21 @@ export const AnalysisChart = memo(function AnalysisChart({
 
   const y2Positions = useMemo(
     () =>
-      y2Ticks.map((value) => ({
-        value,
-        ratio: 1 - ratioFor(value, plotY2Domain),
-      })),
-    [plotY2Domain, y2Ticks],
+      axis2Metric
+        ? y2Ticks.map((value) => ({
+            value,
+            ratio: 1 - ratioFor(value, plotY2Domain),
+          }))
+        : [],
+    [axis2Metric, plotY2Domain, y2Ticks],
   );
 
   const style = useMemo<CSSProperties>(
-    () => ({ ['--rvchart-left' as string]: '95px', ['--rvchart-right' as string]: '60px' }),
-    [],
+    () => ({
+      ['--rvchart-left' as string]: '80px',
+      ['--rvchart-right' as string]: axis2Metric ? '48px' : '0px',
+    }),
+    [axis2Metric],
   );
 
   const rawBackdropYDomain = useMemo<AxisDomain | null>(() => {
@@ -434,6 +473,23 @@ export const AnalysisChart = memo(function AnalysisChart({
     if (nextViewport) onViewportChange?.(nextViewport);
   };
 
+  const handleHorizontalNavigatorChange = useCallback(
+    (next: { visibleFraction: number; offset: number }) => {
+      const nextDetailZoom = visibleFractionToDetailZoom(next.visibleFraction);
+      onViewportChange?.({ detailZoom: nextDetailZoom, detailOffset: next.offset });
+      onDetailOffsetChange?.(next.offset);
+    },
+    [onDetailOffsetChange, onViewportChange],
+  );
+
+  const handleVerticalNavigatorChange = useCallback(
+    (next: { visibleFraction: number; offset: number }) => {
+      const nextYZoom = visibleFractionToDetailZoom(next.visibleFraction);
+      onYViewportChange?.({ yZoom: nextYZoom, yOffset: next.offset });
+    },
+    [onYViewportChange],
+  );
+
   return (
     <AnalysisChartLayout
       style={style}
@@ -459,7 +515,10 @@ export const AnalysisChart = memo(function AnalysisChart({
       hoverRows={hoverRows}
       xAxisLabels={xAxisLabels}
       normalizedDetailOffset={normalizedDetailOffset}
-      onDetailOffsetChange={onDetailOffsetChange}
+      yVisibleFraction={yVisibleFraction}
+      normalizedYOffset={normalizedYOffset}
+      onHorizontalNavigatorChange={handleHorizontalNavigatorChange}
+      onVerticalNavigatorChange={handleVerticalNavigatorChange}
       showSeriesRows={showSeriesRows}
       visibleSeries={visibleSeries}
     />

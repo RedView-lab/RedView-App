@@ -30,12 +30,15 @@ export interface AnalysisChartProps {
   alertAnnotations?: ChartAlertAnnotation[];
   dayNightOverlay?: ChartDayNightOverlay | null;
   axis1Metric: AxisMetricId;
-  axis2Metric: AxisMetricId;
+  axis2Metric: AxisMetricId | null;
   xMode: AxisMode;
   detailZoom: number;
   detailOffset: number;
+  yZoom?: number;
+  yOffset?: number;
   xDomainClamp?: AxisDomain | null;
   onViewportChange?: (next: { detailZoom: number; detailOffset: number }) => void;
+  onYViewportChange?: (next: { yZoom: number; yOffset: number }) => void;
   onDetailOffsetChange?: (value: number) => void;
   onHoverXValueChange?: (xValue: number | null) => void;
   controlledHoverXValue?: number | null;

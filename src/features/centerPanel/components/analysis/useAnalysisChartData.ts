@@ -30,7 +30,7 @@ interface UseAnalysisChartDataArgs {
   itineraries: Itinerary[];
   predictions: Record<string, unknown> | null;
   axis1Value: AxisMetricId;
-  axis2Value: AxisMetricId;
+  axis2Value: AxisMetricId | null;
   axis1Color: string;
   axis2Color: string;
   xMode: AxisMode;
@@ -86,17 +86,20 @@ export function useAnalysisChartData({
         detailZoom,
         weatherDataset,
       );
-      const axis2Points = buildSeriesFromPrediction(
-        prediction,
-        axis2Value,
-        xMode,
-        routePoints,
-        routeSource,
-        startTime,
-        itinerary,
-        detailZoom,
-        weatherDataset,
-      );
+      const axis2Points =
+        axis2Value && (axis2Value as string) !== 'none'
+          ? buildSeriesFromPrediction(
+              prediction,
+              axis2Value,
+              xMode,
+              routePoints,
+              routeSource,
+              startTime,
+              itinerary,
+              detailZoom,
+              weatherDataset,
+            )
+          : null;
       const altitudePoints = buildSeriesFromPrediction(
         prediction,
         'Altitude',
@@ -146,7 +149,7 @@ export function useAnalysisChartData({
         });
       }
 
-      if (axis2ShiftedPoints) {
+      if (axis2ShiftedPoints && axis2Value && (axis2Value as string) !== 'none') {
         result.push({
           id: `${itinerary.id}::axis2`,
           itineraryId: itinerary.id,
@@ -165,9 +168,9 @@ export function useAnalysisChartData({
   const showAltitudeBackdrop =
     filters.pente ||
     isInclinationMetric(axis1Value) ||
-    isInclinationMetric(axis2Value) ||
+    Boolean(axis2Value && isInclinationMetric(axis2Value)) ||
     isWeatherMetric(axis1Value) ||
-    isWeatherMetric(axis2Value);
+    Boolean(axis2Value && isWeatherMetric(axis2Value));
 
   const altitudeBackdropProfiles = useMemo<ChartBackdropProfile[]>(() => {
     if (!showAltitudeBackdrop) return [];

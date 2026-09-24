@@ -10,48 +10,68 @@ import {
   VIEWPORT_COMMIT_DEBOUNCE_MS,
 } from './shared';
 
+
 interface UseAnalysisViewportSyncArgs {
   projectStore?: ReturnType<typeof useProjectStoreOptional>;
   storedDetailZoom: number;
   storedDetailOffset: number;
+  storedYZoom?: number;
+  storedYOffset?: number;
 }
 
 /**
  * Gère la synchronisation bidirectionnelle, le zoom et le défilement (offset)
- * de la vue détaillée du graphique d'analyse avec le store de projet.
+ * de la vue détaillée du graphique d'analyse (horizontal et vertical) avec le store de projet.
  */
 export function useAnalysisViewportSync({
   projectStore,
   storedDetailZoom,
   storedDetailOffset,
+  storedYZoom = 0,
+  storedYOffset = 0,
 }: UseAnalysisViewportSyncArgs) {
   const [prevStoredZoom, setPrevStoredZoom] = useState(storedDetailZoom);
   const [prevStoredOffset, setPrevStoredOffset] = useState(storedDetailOffset);
+  const [prevStoredYZoom, setPrevStoredYZoom] = useState(storedYZoom);
+  const [prevStoredYOffset, setPrevStoredYOffset] = useState(storedYOffset);
+
   const [viewportState, setViewportState] = useState(() => ({
     detailZoom: storedDetailZoom,
     detailOffset: storedDetailOffset,
+    yZoom: storedYZoom,
+    yOffset: storedYOffset,
   }));
 
   if (
     !sameViewportValue(prevStoredZoom, storedDetailZoom) ||
-    !sameViewportValue(prevStoredOffset, storedDetailOffset)
+    !sameViewportValue(prevStoredOffset, storedDetailOffset) ||
+    !sameViewportValue(prevStoredYZoom, storedYZoom) ||
+    !sameViewportValue(prevStoredYOffset, storedYOffset)
   ) {
     setPrevStoredZoom(storedDetailZoom);
     setPrevStoredOffset(storedDetailOffset);
+    setPrevStoredYZoom(storedYZoom);
+    setPrevStoredYOffset(storedYOffset);
     setViewportState({
       detailZoom: storedDetailZoom,
       detailOffset: storedDetailOffset,
+      yZoom: storedYZoom,
+      yOffset: storedYOffset,
     });
   }
 
   const detailZoom = viewportState.detailZoom;
   const detailOffset = viewportState.detailOffset;
+  const yZoom = viewportState.yZoom;
+  const yOffset = viewportState.yOffset;
 
   useEffect(() => {
     if (!projectStore) return;
     if (
       sameViewportValue(detailZoom, storedDetailZoom) &&
-      sameViewportValue(detailOffset, storedDetailOffset)
+      sameViewportValue(detailOffset, storedDetailOffset) &&
+      sameViewportValue(yZoom, storedYZoom) &&
+      sameViewportValue(yOffset, storedYOffset)
     ) {
       return;
     }
@@ -61,7 +81,9 @@ export function useAnalysisViewportSync({
         const current = normalizeAnalysisState(prev.analysis);
         if (
           sameViewportValue(current.detailZoom, detailZoom) &&
-          sameViewportValue(current.detailOffset, detailOffset)
+          sameViewportValue(current.detailOffset, detailOffset) &&
+          sameViewportValue(current.yZoom ?? 0, yZoom) &&
+          sameViewportValue(current.yOffset ?? 0, yOffset)
         ) {
           return prev;
         }
@@ -71,13 +93,25 @@ export function useAnalysisViewportSync({
             ...current,
             detailZoom,
             detailOffset,
+            yZoom,
+            yOffset,
           },
         };
       });
     }, VIEWPORT_COMMIT_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeoutId);
-  }, [detailOffset, detailZoom, projectStore, storedDetailOffset, storedDetailZoom]);
+  }, [
+    detailOffset,
+    detailZoom,
+    projectStore,
+    storedDetailOffset,
+    storedDetailZoom,
+    storedYOffset,
+    storedYZoom,
+    yOffset,
+    yZoom,
+  ]);
 
   const handleZoomIn = useCallback(() => {
     setViewportState((prev) => {
@@ -87,6 +121,7 @@ export function useAnalysisViewportSync({
       const nextVisible = detailZoomToVisibleFraction(nextZoom);
       const prevCenter = prev.detailOffset * (1 - prevVisible) + prevVisible / 2;
       return {
+        ...prev,
         detailZoom: nextZoom,
         detailOffset: detailOffsetForCenter(prevCenter, nextVisible),
       };
@@ -101,6 +136,7 @@ export function useAnalysisViewportSync({
       const nextVisible = detailZoomToVisibleFraction(nextZoom);
       const prevCenter = prev.detailOffset * (1 - prevVisible) + prevVisible / 2;
       return {
+        ...prev,
         detailZoom: nextZoom,
         detailOffset: detailOffsetForCenter(prevCenter, nextVisible),
       };
@@ -108,7 +144,7 @@ export function useAnalysisViewportSync({
   }, []);
 
   const handleResetZoom = useCallback(() => {
-    setViewportState({ detailZoom: 0, detailOffset: 0 });
+    setViewportState((prev) => ({ ...prev, detailZoom: 0, detailOffset: 0 }));
   }, []);
 
   const handleOffsetChange = useCallback((nextOffset: number) => {
@@ -118,12 +154,38 @@ export function useAnalysisViewportSync({
     }));
   }, []);
 
+  const handleViewportChange = useCallback(
+    (next: { detailZoom: number; detailOffset: number }) => {
+      setViewportState((prev) => ({
+        ...prev,
+        detailZoom: normalizeUnitInterval(next.detailZoom, 0),
+        detailOffset: normalizeUnitInterval(next.detailOffset, 0),
+      }));
+    },
+    [],
+  );
+
+  const handleYViewportChange = useCallback(
+    (next: { yZoom: number; yOffset: number }) => {
+      setViewportState((prev) => ({
+        ...prev,
+        yZoom: normalizeUnitInterval(next.yZoom, 0),
+        yOffset: normalizeUnitInterval(next.yOffset, 0),
+      }));
+    },
+    [],
+  );
+
   return {
     detailZoom,
     detailOffset,
+    yZoom,
+    yOffset,
     handleZoomIn,
     handleZoomOut,
     handleResetZoom,
     handleOffsetChange,
+    handleViewportChange,
+    handleYViewportChange,
   };
 }

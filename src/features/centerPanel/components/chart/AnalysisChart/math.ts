@@ -307,6 +307,10 @@ export function detailZoomToVisibleFraction(detailZoom: number): number {
   return 1 - normalizeUnitInterval(detailZoom) * (1 - MIN_VISIBLE_FRACTION);
 }
 
+export function visibleFractionToDetailZoom(visibleFraction: number): number {
+  return normalizeUnitInterval((1 - visibleFraction) / (1 - MIN_VISIBLE_FRACTION));
+}
+
 export function buildVisibleXDomain(
   xDomain: AxisDomain,
   visibleFraction: number,

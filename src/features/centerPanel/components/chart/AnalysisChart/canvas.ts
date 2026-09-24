@@ -94,6 +94,9 @@ function prepareCanvas2d(
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, width, height);
+  ctx.beginPath();
+  ctx.rect(0, 0, width, height);
+  ctx.clip();
   return ctx;
 }
 

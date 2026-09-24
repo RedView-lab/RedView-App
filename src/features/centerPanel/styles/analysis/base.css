@@ -193,6 +193,22 @@
   opacity: 0.92;
 }
 
+.rvc-center-analysis__axis--disabled {
+  opacity: 0.55;
+  transition: opacity 140ms ease;
+}
+
+.rvc-center-analysis__axis--disabled:hover {
+  opacity: 0.85;
+}
+
+.rvc-center-analysis__axis-line--dashed {
+  background: transparent !important;
+  border-top: 2px dashed;
+  height: 0 !important;
+  opacity: 0.85;
+}
+
 .rvc-center-analysis__axis-wrap {
   position: relative;
   display: flex;

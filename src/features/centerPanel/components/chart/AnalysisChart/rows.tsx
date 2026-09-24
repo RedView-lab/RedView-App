@@ -63,13 +63,13 @@ export function EmptySeriesRow({
   axis2,
 }: {
   axis1: AxisMetricId;
-  axis2: AxisMetricId;
+  axis2: AxisMetricId | null;
 }) {
   const { t } = useAppI18n();
   const message = (() => {
     const a1Ok = metricIsAvailable(axis1);
-    const a2Ok = metricIsAvailable(axis2);
-    if (!a1Ok && !a2Ok) {
+    const a2Ok = axis2 ? metricIsAvailable(axis2) : true;
+    if (!a1Ok && !a2Ok && axis2) {
       return t('{{axis1}} et {{axis2}} ne sont pas encore disponibles.', {
         axis1: t(axis1),
         axis2: t(axis2),

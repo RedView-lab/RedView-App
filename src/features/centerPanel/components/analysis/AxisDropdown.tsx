@@ -12,12 +12,13 @@ export interface AxisOption {
 interface AxisDropdownProps {
   axisLabel: string;
   axisColor: string;
-  value: string;
+  value: string | null;
   isOpen: boolean;
   options: AxisOption[];
   onToggle: () => void;
   onColorChange: (color: string) => void;
   onSelect: (value: string) => void;
+  isDashed?: boolean;
 }
 
 export function AxisDropdown({
@@ -29,12 +30,17 @@ export function AxisDropdown({
   onToggle,
   onColorChange,
   onSelect,
+  isDashed = false,
 }: AxisDropdownProps) {
   const { t } = useAppI18n();
   const translatedAxisLabel = t(axisLabel);
+  const isDisabled = !value || value === 'none';
+
+  const selectedOption = options.find((opt) => (isDisabled ? opt.value === 'none' : opt.value === value));
+  const displayLabel = selectedOption ? t(selectedOption.label) : (value ? t(value) : t('Désactivé'));
 
   return (
-    <div className="rvc-center-analysis__axis">
+    <div className={`rvc-center-analysis__axis${isDisabled ? ' rvc-center-analysis__axis--disabled' : ''}`}>
       <ColorPalettePicker
         color={axisColor}
         onChange={onColorChange}
@@ -44,8 +50,8 @@ export function AxisDropdown({
         <span className="rvc-center-analysis__axis-meta" aria-hidden="true">
           <span className="rvc-center-analysis__axis-label">{translatedAxisLabel}</span>
           <span
-            className="rvc-center-analysis__axis-line"
-            style={{ backgroundColor: axisColor }}
+            className={`rvc-center-analysis__axis-line${isDashed ? ' rvc-center-analysis__axis-line--dashed' : ''}`}
+            style={isDashed ? { borderColor: axisColor } : { backgroundColor: axisColor }}
           />
         </span>
       </ColorPalettePicker>
@@ -57,9 +63,9 @@ export function AxisDropdown({
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           onClick={onToggle}
-          title={value ? t(value) : '-'}
+          title={displayLabel}
         >
-          <span className="rvc-center-analysis__select-value">{value ? t(value) : '-'}</span>
+          <span className="rvc-center-analysis__select-value">{displayLabel}</span>
           <IconChevronDown size={20} className="rvc-center-analysis__select-icon" />
         </button>
 
