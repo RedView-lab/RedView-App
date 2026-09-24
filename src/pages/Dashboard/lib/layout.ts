@@ -1,6 +1,7 @@
 import {
   APP_SCALE_DESIGN_HEIGHT,
   APP_SCALE_DESIGN_WIDTH,
+  APP_SCALE_GROW_FACTOR,
   APP_SCALE_MAX,
   APP_SCALE_MIN,
   CENTER_PANEL_DEFAULT_HEIGHT_RATIO,
@@ -39,14 +40,19 @@ export function getDashboardLayout({
   isCenterPanelCollapsed,
   isRightPanelCollapsed,
 }: DashboardLayoutInput) {
-  const appScale = clampNumber(
-    Math.min(
-      viewport.w / APP_SCALE_DESIGN_WIDTH,
-      viewport.h / APP_SCALE_DESIGN_HEIGHT,
-    ) * 0.86,
-    APP_SCALE_MIN,
-    APP_SCALE_MAX,
+  // Fluid UI density — see APP_SCALE_* docs in constants.ts.
+  // `fit` is the contain-fit ratio of the viewport against the design canvas.
+  const fit = Math.min(
+    viewport.w / APP_SCALE_DESIGN_WIDTH,
+    viewport.h / APP_SCALE_DESIGN_HEIGHT,
   );
+  // Below the design reference: track the fit exactly so the logical canvas
+  // stays at least design-sized (all layout minimums remain satisfied).
+  // Above it: apply only a fraction of the surplus, clamped, so large
+  // displays gain text comfort without a bloated zoom.
+  const appScale = fit <= 1
+    ? clampNumber(fit, APP_SCALE_MIN, 1)
+    : clampNumber(1 + (fit - 1) * APP_SCALE_GROW_FACTOR, 1, APP_SCALE_MAX);
   const scaledViewportWidth = viewport.w / appScale;
   const scaledViewportHeight = viewport.h / appScale;
   const designW = scaledViewportWidth;

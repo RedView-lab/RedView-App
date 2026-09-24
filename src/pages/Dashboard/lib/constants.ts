@@ -27,7 +27,25 @@ export const CENTER_PANEL_RESIZE_HIT_AREA = 18;
 export const IMMERSIVE_TRANSITION_MS = 320;
 export const IMMERSIVE_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
+/**
+ * UI density (fluid canvas scale).
+ *
+ * The dashboard renders on a design canvas of DESIGN_WIDTH × DESIGN_HEIGHT
+ * logical pixels, scaled by `appScale` (see getDashboardLayout). The scale
+ * follows the viewport so text and controls keep a comfortable physical size
+ * from 13" laptops up to ultrawide displays:
+ *
+ * - Below the design reference: the scale tracks the contain-fit ratio
+ *   exactly, so the logical canvas never shrinks below the design size and
+ *   every layout minimum stays valid (a 14" MacBook renders ~16% larger than
+ *   the previous fixed ×0.86 curve).
+ * - Above the design reference: the scale keeps growing gently
+ *   (GROW_FACTOR of the surplus) up to MAX — a 34" ultrawide renders ~30%
+ *   larger than before, without turning into a giant zoom.
+ */
 export const APP_SCALE_MIN = 0.45;
 export const APP_SCALE_DESIGN_WIDTH = 1920;
 export const APP_SCALE_DESIGN_HEIGHT = 1080;
-export const APP_SCALE_MAX = 0.86;
+export const APP_SCALE_MAX = 1.12;
+/** Fraction of the viewport surplus (above the design reference) applied to the scale. */
+export const APP_SCALE_GROW_FACTOR = 0.55;
