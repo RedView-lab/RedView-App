@@ -302,6 +302,11 @@ export function useDashboardChrome({
     setIsRightPanelCollapsed(false);
   }, [panelMinWidth]);
 
+  const collapseRightPanel = useCallback(() => {
+    lastExpandedPanelWidthRef.current = panelWidth;
+    setIsRightPanelCollapsed(true);
+  }, [panelWidth]);
+
   const handleLeftResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       event.preventDefault();
@@ -335,6 +340,11 @@ export function useDashboardChrome({
     setLeftPanelWidth(nextWidth);
     setIsLeftPanelCollapsed(false);
   }, []);
+
+  const collapseLeftPanel = useCallback(() => {
+    lastExpandedLeftPanelWidthRef.current = leftPanelWidth;
+    setIsLeftPanelCollapsed(true);
+  }, [leftPanelWidth]);
 
   const handleCenterPanelResizeStart = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -386,6 +396,11 @@ export function useDashboardChrome({
     setIsCenterPanelCollapsed(false);
   }, []);
 
+  const collapseCenterPanel = useCallback(() => {
+    setCenterPanelHeightOverride(layout.centerPanelHeight);
+    setIsCenterPanelCollapsed(true);
+  }, [layout.centerPanelHeight]);
+
   const handleToggleMapFocusMode = useCallback(() => {
     setIsMapFocusMode((current) => !current);
   }, []);
@@ -433,5 +448,8 @@ export function useDashboardChrome({
     restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,
+    collapseLeftPanel,
+    collapseRightPanel,
+    collapseCenterPanel,
   };
 }

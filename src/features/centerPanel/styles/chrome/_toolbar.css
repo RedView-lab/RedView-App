@@ -73,6 +73,51 @@
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
 }
 
+/*
+ * Center panel toggle. Same convention as the map-viewport panel toggles:
+ * panel shown -> engaged, filled with 60% black; panel hidden -> red, to pull
+ * the eye back to the control. No icon: a small neutral placeholder glyph.
+ */
+.rvc-center-toolbar__button--panel-toggle {
+  width: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+}
+
+.rvc-center-toolbar__button--panel-toggle.is-panel-shown {
+  background: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.rvc-center-toolbar__button--panel-toggle.is-panel-shown:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.rvc-center-toolbar__button--panel-toggle.is-panel-hidden {
+  background: rgba(137, 0, 0, 0.82);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+}
+
+.rvc-center-toolbar__button--panel-toggle.is-panel-hidden:hover {
+  background: rgba(160, 0, 0, 0.9);
+}
+
+.rvc-center-toolbar__panel-glyph {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: rgba(132, 132, 132, 0.55);
+  transition: background-color 140ms ease;
+}
+
+.rvc-center-toolbar__button--panel-toggle:hover .rvc-center-toolbar__panel-glyph {
+  background: rgba(170, 170, 170, 0.7);
+}
+
+.rvc-center-toolbar__button--panel-toggle.is-panel-hidden:hover .rvc-center-toolbar__panel-glyph {
+  background: rgba(255, 255, 255, 0.6);
+}
+
 .rvc-center-toolbar__button--accent {
   padding-left: 12px;
   padding-right: 8px;

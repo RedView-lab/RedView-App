@@ -18,6 +18,13 @@ interface MapViewportControlsProps {
   isMapLoaded: boolean;
   immersiveMode: boolean;
   onToggleImmersiveMode: () => void;
+  /**
+   * Visibility of the right settings panel (only panel this control drives).
+   * The dedicated toggle button is rendered only when `onToggleRightPanel` is
+   * provided.
+   */
+  isRightPanelVisible?: boolean;
+  onToggleRightPanel?: () => void;
   routeSlopeLegendTitle?: string | null;
   routeColor?: string | null;
 }
@@ -134,6 +141,8 @@ export function MapViewportControls({
   isMapLoaded,
   immersiveMode,
   onToggleImmersiveMode,
+  isRightPanelVisible = true,
+  onToggleRightPanel,
   routeSlopeLegendTitle = null,
   routeColor = null,
 }: MapViewportControlsProps) {
@@ -200,6 +209,12 @@ export function MapViewportControls({
 
   const disabled = !isMapLoaded || map == null;
 
+  // Drives the right settings panel ONLY — never the left drawer.
+  const showRightPanelToggle = onToggleRightPanel != null;
+  const rightPanelToggleLabel = isRightPanelVisible
+    ? t('Masquer le panneau droit')
+    : t('Afficher le panneau droit');
+
   // Close the legend popover when clicking anywhere outside of it.
   useEffect(() => {
     if (!isLegendOpen) return;
@@ -265,7 +280,7 @@ export function MapViewportControls({
     <aside className="rvmvc-map-tools" aria-label={t('Contrôles de la vue carte')} data-node-id="1765:66284">
       <button
         type="button"
-        className={`rvmvc-map-tools__button${immersiveMode ? ' is-active' : ''}`}
+        className={`rvmvc-map-tools__button${immersiveMode ? ' is-active' : ' is-inactive'}`}
         aria-label={t('Activer ou quitter le mode plein écran')}
         aria-pressed={immersiveMode}
         title={t('Plein écran')}
@@ -273,6 +288,21 @@ export function MapViewportControls({
       >
         <IconMaximize size={18} />
       </button>
+
+      {showRightPanelToggle ? (
+        <button
+          type="button"
+          className={`rvmvc-map-tools__button rvmvc-map-tools__button--panel${
+            isRightPanelVisible ? ' is-panel-shown' : ' is-panel-hidden'
+          }`}
+          aria-label={rightPanelToggleLabel}
+          aria-pressed={isRightPanelVisible}
+          title={rightPanelToggleLabel}
+          onClick={onToggleRightPanel}
+        >
+          <span className="rvmvc-map-tools__panel-glyph" aria-hidden="true" />
+        </button>
+      ) : null}
 
       <button
         type="button"
@@ -314,7 +344,7 @@ export function MapViewportControls({
 
       <button
         type="button"
-        className={`rvmvc-map-tools__button rvmvc-map-tools__button--label${is3DView ? ' is-active' : ''}`}
+        className={`rvmvc-map-tools__button rvmvc-map-tools__button--label${is3DView ? ' is-active' : ' is-inactive'}`}
         aria-label={is3DView ? t('Passer en vue 2D') : t('Passer en vue 3D')}
         aria-pressed={is3DView}
         title={is3DView ? t('Passer en 2D') : t('Passer en 3D')}

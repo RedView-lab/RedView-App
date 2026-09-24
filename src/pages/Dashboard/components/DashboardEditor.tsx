@@ -62,7 +62,9 @@ interface DashboardEditorProps {
   leftPanelOpen: boolean;
   panelWidth: number;
   leftPanelWidth: number;
+  isLeftPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
+  isCenterPanelCollapsed: boolean;
   isResizing: boolean;
   isLeftResizing: boolean;
   projectMapViewport: MapViewport | null;
@@ -85,6 +87,9 @@ interface DashboardEditorProps {
   onRestoreLeftPanel: () => void;
   onRestoreRightPanel: () => void;
   onRestoreCenterPanel: () => void;
+  onCollapseLeftPanel: () => void;
+  onCollapseRightPanel: () => void;
+  onCollapseCenterPanel: () => void;
   /**
    * Fired the first time the active (empty) project receives traced content
    * (a placed start point or an imported route). Used to auto-reveal the
@@ -149,7 +154,9 @@ export function DashboardEditor({
   leftPanelOpen,
   panelWidth,
   leftPanelWidth,
+  isLeftPanelCollapsed,
   isRightPanelCollapsed,
+  isCenterPanelCollapsed,
   isResizing,
   isLeftResizing,
   projectMapViewport,
@@ -172,6 +179,9 @@ export function DashboardEditor({
   onRestoreLeftPanel,
   onRestoreRightPanel,
   onRestoreCenterPanel,
+  onCollapseLeftPanel,
+  onCollapseRightPanel,
+  onCollapseCenterPanel,
   onTraceStarted,
   onLeftResizeStart,
   onRightResizeStart,
@@ -285,6 +295,8 @@ export function DashboardEditor({
           isMapLoaded={mapLoaded}
           immersiveMode={isMapFocusMode}
           onToggleImmersiveMode={onToggleMapFocusMode}
+          isRightPanelVisible={!isRightPanelCollapsed}
+          onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
           routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
       </div>
@@ -333,6 +345,9 @@ export function DashboardEditor({
         top={PANEL_PADDING}
         activeFilters={dashboardSearchActiveFilters}
         onFilterChange={setDashboardSearchActiveFilters}
+        isLeftPanelCollapsed={isLeftPanelCollapsed}
+        onRestoreLeftPanel={onRestoreLeftPanel}
+        onCollapseLeftPanel={onCollapseLeftPanel}
       />
 
 
@@ -425,7 +440,10 @@ export function DashboardEditor({
                   <AnalysisFlyoverProvider map={mapInstance}>
                     {layout.centerToolbarVisible ? (
                       <div style={styles.centerToolbarShellStyle}>
-                        <CenterPanelToolbar />
+                        <CenterPanelToolbar
+                          isPanelVisible={layout.centerPanelVisible}
+                          onTogglePanel={isCenterPanelCollapsed ? onRestoreCenterPanel : onCollapseCenterPanel}
+                        />
                       </div>
                     ) : null}
 

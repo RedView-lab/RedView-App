@@ -54,10 +54,72 @@
   cursor: default;
 }
 
+/* Activated / engaged control: solid 60% black pill. */
 .rvmvc-map-tools__button.is-active {
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.rvmvc-map-tools__button.is-active:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+/* Pending / not engaged control: red, to draw the eye back to it. */
+.rvmvc-map-tools__button.is-inactive {
   background: rgba(137, 0, 0, 0.82);
   color: #fff;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 14px 34px rgba(77, 0, 0, 0.4);
+}
+
+.rvmvc-map-tools__button.is-inactive:hover:not(:disabled) {
+  background: rgba(160, 0, 0, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 16px 38px rgba(77, 0, 0, 0.46);
+}
+
+/* Right settings panel SHOWN: engaged, filled with 60% black. */
+.rvmvc-map-tools__button--panel.is-panel-shown {
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 12px 30px rgba(0, 0, 0, 0.3);
+}
+
+.rvmvc-map-tools__button--panel.is-panel-shown:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), 0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+/* Right settings panel HIDDEN: red, to draw the eye back to the control. */
+.rvmvc-map-tools__button--panel.is-panel-hidden {
+  background: rgba(137, 0, 0, 0.82);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), 0 14px 34px rgba(77, 0, 0, 0.4);
+}
+
+.rvmvc-map-tools__button--panel.is-panel-hidden:hover:not(:disabled) {
+  background: rgba(160, 0, 0, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14), 0 16px 38px rgba(77, 0, 0, 0.46);
+}
+
+/*
+ * Icon-less panel toggle: a small neutral placeholder shape so the button
+ * reads as "no icon" without looking broken in the button stack.
+ */
+.rvmvc-map-tools__panel-glyph {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: rgba(132, 132, 132, 0.55);
+  transition: background-color 160ms ease;
+}
+
+.rvmvc-map-tools__button--panel:hover:not(:disabled) .rvmvc-map-tools__panel-glyph {
+  background: rgba(170, 170, 170, 0.7);
+}
+
+.rvmvc-map-tools__button--panel.is-panel-hidden:hover:not(:disabled) .rvmvc-map-tools__panel-glyph {
+  background: rgba(255, 255, 255, 0.6);
 }
 
 .rvmvc-map-tools__button--compact {

@@ -35,7 +35,17 @@ import {
   routePointsEqual,
 } from './utils';
 
-export const CenterPanelToolbar = memo(function CenterPanelToolbar() {
+interface CenterPanelToolbarProps {
+  /** Visibility of the center analysis panel this toolbar belongs to. */
+  isPanelVisible?: boolean;
+  /** Collapses / restores the center panel. */
+  onTogglePanel?: () => void;
+}
+
+export const CenterPanelToolbar = memo(function CenterPanelToolbar({
+  isPanelVisible = true,
+  onTogglePanel,
+}: CenterPanelToolbarProps) {
   const { locale, t } = useAppI18n();
   const store = useProjectStoreOptional();
   const routeMergeTool = useRouteMergeToolOptional();
@@ -328,6 +338,29 @@ export const CenterPanelToolbar = memo(function CenterPanelToolbar() {
     <section className="rvc-center-toolbar" aria-label={t("Barre d'outils centrale")}>
       <div className="rvc-center-toolbar__viewport">
         <div className="rvc-center-toolbar__track" role="toolbar" aria-label={t("Outils d'édition du parcours")}>
+          {/*
+           * Center panel toggle — mirrors the map-side panel toggles:
+           * engaged (shown) = 60% black fill, hidden = red.
+           */}
+          {onTogglePanel ? (
+            <>
+              <button
+                type="button"
+                className={`rvc-center-toolbar__button rvc-center-toolbar__button--panel-toggle${
+                  isPanelVisible ? ' is-panel-shown' : ' is-panel-hidden'
+                }`}
+                aria-label={isPanelVisible ? t('Masquer le panneau central') : t('Afficher le panneau central')}
+                aria-pressed={isPanelVisible}
+                title={isPanelVisible ? t('Masquer le panneau central') : t('Afficher le panneau central')}
+                onClick={onTogglePanel}
+              >
+                <span className="rvc-center-toolbar__panel-glyph" aria-hidden="true" />
+              </button>
+
+              <div className="rvc-center-toolbar__separator" aria-hidden="true" />
+            </>
+          ) : null}
+
           <ToolbarIconButton label="Annuler" onClick={handleUndoTraceEdit} disabled={!canUndoTraceEdit}>
             <IconUndo />
           </ToolbarIconButton>

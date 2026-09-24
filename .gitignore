@@ -102,3 +102,8 @@ start-dev.bat
 
 # Test bench json reports
 script-test-bench/reports/*.json
+
+# Temp/cache dirs
+.claude-temp/
+.figma-cache/
+.zcode/

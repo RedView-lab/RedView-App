@@ -101,6 +101,9 @@ export default function Dashboard({
     restoreCenterPanel,
     restoreLeftPanel,
     restoreRightPanel,
+    collapseLeftPanel,
+    collapseRightPanel,
+    collapseCenterPanel,
   } = useDashboardChrome({
     activeProjectInitial,
     updatePersistedDashboard,
@@ -136,9 +139,12 @@ export default function Dashboard({
     ? 0
     : leftPanelWidth + PANEL_PADDING * 2;
 
+  // The search wrapper now starts right after the left drawer and owns the
+  // mirrored panel toggle as its first flex child, so the row reads:
+  // [ drawer ] PANEL_PADDING [ toggle ] PANEL_PADDING [ search bar ]
   const dashboardSearchLeft = isMapFocusMode || !leftPanelOpen
     ? PANEL_PADDING
-    : leftPanelWidth + PANEL_PADDING * 2 + PANEL_PADDING;
+    : leftPanelWidth + PANEL_PADDING * 2;
   const dashboardSearchVisible = !projectBrowserOpen && activeProjectId != null;
 
   const styles = getDashboardStyles({
@@ -223,6 +229,11 @@ export default function Dashboard({
               onRestoreLeftPanel={restoreLeftPanel}
               onRestoreRightPanel={restoreRightPanel}
               onRestoreCenterPanel={restoreCenterPanel}
+              onCollapseLeftPanel={collapseLeftPanel}
+              onCollapseRightPanel={collapseRightPanel}
+              onCollapseCenterPanel={collapseCenterPanel}
+              isLeftPanelCollapsed={isLeftPanelCollapsed}
+              isCenterPanelCollapsed={isCenterPanelCollapsed}
               onTraceStarted={handleTraceStarted}
               onLeftResizeStart={handleLeftResizeStart}
               onRightResizeStart={handleResizeStart}

@@ -24,6 +24,7 @@ import {
   VIEWPORT_POI_FETCH_DEBOUNCE_MS,
   VIEWPORT_POI_MIN_ZOOM,
 } from './DashboardPlaceSearch.constants';
+import { IMMERSIVE_EASING, IMMERSIVE_TRANSITION_MS, PANEL_PADDING } from '../lib/constants';
 import {
   FilterChipIcon,
   PoiOptionMarker,
@@ -55,6 +56,9 @@ export function DashboardPlaceSearch({
   top,
   activeFilters: controlledActiveFilters,
   onFilterChange,
+  isLeftPanelCollapsed,
+  onRestoreLeftPanel,
+  onCollapseLeftPanel,
 }: DashboardPlaceSearchProps) {
   const { t } = useAppI18n();
   const [proximity, setProximity] = useState<{ lon: number; lat: number } | undefined>(
@@ -437,9 +441,14 @@ export function DashboardPlaceSearch({
     top,
     left,
     zIndex: 30,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: PANEL_PADDING,
     opacity: visible ? 1 : 0,
     transform: visible ? 'translateY(0)' : 'translateY(-6px)',
     pointerEvents: visible ? 'auto' : 'none',
+    transition: `left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
   };
 
   const handleTogglePoiOption = useCallback((optionId: DashboardPoiOptionId) => {
@@ -486,6 +495,28 @@ export function DashboardPlaceSearch({
 
   return (
     <div className="rvd-place-search" style={wrapperStyle} aria-hidden={!visible}>
+      {/*
+       * Left drawer toggle. It shares the search wrapper's flex row so the
+       * panel / button / search-bar gutters stay exactly PANEL_PADDING wide
+       * and can never overlap the place-search field.
+       */}
+      {onCollapseLeftPanel || onRestoreLeftPanel ? (
+        <div className="rvd-place-search__panel-toggle">
+          <button
+            type="button"
+            className={`rvmvc-map-tools__button rvmvc-map-tools__button--panel${
+              isLeftPanelCollapsed ? ' is-panel-hidden' : ' is-panel-shown'
+            }`}
+            aria-label={isLeftPanelCollapsed ? t('Afficher le panneau gauche') : t('Masquer le panneau gauche')}
+            aria-pressed={!isLeftPanelCollapsed}
+            title={isLeftPanelCollapsed ? t('Afficher le panneau gauche') : t('Masquer le panneau gauche')}
+            onClick={isLeftPanelCollapsed ? onRestoreLeftPanel : onCollapseLeftPanel}
+          >
+            <span className="rvmvc-map-tools__panel-glyph" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
       <div className="rvd-place-search__row" ref={rootRef}>
         <div className="rvd-place-search__search-shell">
           <MapCanvasGlassBackdrop blur={20} saturate={1.2} tint="rgba(14, 14, 18, 0.82)" />
