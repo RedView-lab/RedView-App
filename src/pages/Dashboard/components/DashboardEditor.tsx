@@ -36,10 +36,8 @@ import { ForbiddenZoneToolProvider } from '@/features/centerPanel/forbiddenZones
 import { ItineraryPanel, PredictionProvider, ProjectProvider, useProjectStore } from '@/features/itineraryPanel';
 import type { ItineraryProject } from '@/features/itineraryPanel/types';
 import { hasProjectTracedContent } from '@/features/itineraryPanel/lib/project';
-import { IconArrowLeft } from '@/features/itineraryPanel/components/icons';
 import { MapViewportControls } from '@/features/mapViewportControls';
 import type { MapViewport } from '@/features/map3d/lib/viewport-persist';
-import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { FeedbackTriggerButton } from '@/shared/components/FeedbackTriggerButton';
 import { useAppI18n } from '@/shared/i18n';
 import { DashboardPlaceSearch } from './DashboardPlaceSearch';
@@ -299,31 +297,6 @@ export function DashboardEditor({
           onToggleRightPanel={isRightPanelCollapsed ? onRestoreRightPanel : onCollapseRightPanel}
           routeSlopeLegendTitle={routeSlopeLegendTitle}
         />
-      </div>
-
-      <div style={styles.leftCollapsedRailStyle}>
-        <button
-          type="button"
-          aria-label="Rouvrir le panneau de gauche"
-          onClick={onRestoreLeftPanel}
-          style={{
-            ...styles.collapsedPanelRailButtonStyle,
-            transform: 'rotate(180deg)',
-          }}
-        >
-          <IconArrowLeft size={18} />
-        </button>
-      </div>
-
-      <div style={styles.centerCollapsedRailStyle}>
-        <button
-          type="button"
-          aria-label="Rouvrir le panneau central"
-          onClick={onRestoreCenterPanel}
-          style={styles.centerCollapsedRailButtonStyle}
-        >
-          <SvgV2Icon name="chevron-down.svg" size={18} />
-        </button>
       </div>
 
       <DashboardPlaceSearch

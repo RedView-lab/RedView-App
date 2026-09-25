@@ -178,10 +178,38 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [openAxis]);
 
-  const dayNightWarning =
-    filters.jourNuit && !dayNightStartReady
-      ? t('Renseigne une date et une heure de départ pour activer Jour/nuit.')
-      : null;
+  /**
+   * Le calque Jour/nuit n'est calculable que si l'itinéraire actif possède une
+   * date ET une heure de départ (voir useAnalysisChartData).
+   */
+  const dayNightUnavailable = !dayNightStartReady;
+
+  /**
+   * Aide affichée en pop-in sur le chip Jour/nuit tant que la date/heure de
+   * départ manque. Sert à deux choses :
+   * - au survol du chip (`disabledFilters`) ;
+   * - en continu dès que le filtre est ACTIVÉ sans ses prérequis
+   *   (`pinnedFilters`) — l'utilisateur n'a donc pas besoin de survoler.
+   *
+   * Le chip reste volontairement COCHABLE/DÉCOCHABLE (pas de `disabled`) : sinon,
+   * comme `filters.jourNuit` vaut `true` par défaut, le chip serait coché ET
+   * désactivé — impossible à décocher, avec un pop-in qui se réaffiche à chaque
+   * survol. C'est ce clic qui fait disparaître le pop-in épinglé.
+   */
+  const dayNightHint = t(
+    'Renseigne une date et une heure de départ pour activer Jour/nuit.',
+  );
+
+  const disabledFilters = useMemo(
+    () => (dayNightUnavailable ? { jourNuit: dayNightHint } : undefined),
+    [dayNightUnavailable, dayNightHint],
+  );
+
+  const pinnedFilters = useMemo(
+    () =>
+      dayNightUnavailable && filters.jourNuit ? { jourNuit: dayNightHint } : undefined,
+    [dayNightUnavailable, dayNightHint, filters.jourNuit],
+  );
 
   const handleChartClick = (xValue: number) => {
     const targetItinerary = selectInteractiveItineraryForChartX(
@@ -269,13 +297,9 @@ export function CenterPanelAnalysis({ map }: CenterPanelAnalysisProps) {
         onAxis2ColorChange={(col) => updateAnalysis((d) => { d.axis2Color = col; })}
         filters={filters}
         onToggleFilter={toggleFilter}
+        disabledFilters={disabledFilters}
+        pinnedFilters={pinnedFilters}
       />
-
-      {dayNightWarning ? (
-        <div className="rvc-center-analysis__warning" role="status" aria-live="polite">
-          {dayNightWarning}
-        </div>
-      ) : null}
 
       <div className="rvc-center-analysis__results" aria-label={t("Graphique d'analyse")}>
         <AnalysisChart

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useAppI18n } from '@/shared/i18n';
 import type { PrioritiesState, RoadPreference, RoadTypesState, RouteProfile } from '../types';
 import {
@@ -8,6 +8,10 @@ import {
   IconFigmaChevronDown,
   IconFlash,
   IconTelescope,
+  IconSlidersFigma,
+  IconTrashFigma,
+  IconRepeatFigma,
+  IconSaveFigma,
 } from '../components/iconsFigma';
 import { PortalDropdown } from '../components/controls/PortalDropdown';
 import {
@@ -18,6 +22,18 @@ import {
   type TracingModeType,
   type SurfaceType,
 } from '../lib/project/syncTracageParams';
+import {
+  ROUTE_PROFILE_PRESETS,
+  isRoadTypesMatching,
+} from '../lib/project/profilePresets';
+import {
+  getSavedCustomProfiles,
+  saveCustomProfileToStorage,
+  deleteCustomProfileFromStorage,
+  getNextCustomProfileName,
+  CUSTOM_PROFILES_CHANGED_EVENT,
+  type SavedCustomProfile,
+} from '../lib/project/customProfiles';
 
 export interface TracageSectionProps {
   priorities: PrioritiesState;
@@ -29,7 +45,8 @@ export interface TracageSectionProps {
   canRedo?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
-  onSaveProfile?: () => void;
+  onSaveProfile?: (profile?: SavedCustomProfile) => void;
+  onDeleteProfile?: (id: string) => void;
   onChangePriority?: (key: keyof PrioritiesState, value: number) => void;
   onChangeRoadType?: <K extends keyof RoadTypesState>(
     key: K,
@@ -67,21 +84,19 @@ const SURFACES: { id: SurfaceType; label: string; pct: number }[] = [
  * TracageSection — Pixel perfect implementation of Figma nodes 5918:103512 & 5918:112682.
  */
 export function TracageSection({
+  priorities,
   roadTypes,
-  profiles = [],
   activeProfileId,
   onChangeProfile,
+  onSaveProfile,
+  onDeleteProfile,
   onChangeRoadType,
   onBatchChangeRoadTypes,
-  onApply,
-  onCancelApply,
-  applyLoading = false,
-  resultLabel = null,
 }: TracageSectionProps) {
   const { t } = useAppI18n();
 
   // Collapsible additional params (smooth accordion)
-  const [paramsOpen, setParamsOpen] = useState(true);
+  const [paramsOpen, setParamsOpen] = useState(false);
 
   // Activity type dropdown state
   const [activityOpen, setActivityOpen] = useState(false);
@@ -95,6 +110,42 @@ export function TracageSection({
   const [toleranceOpen, setToleranceOpen] = useState(false);
   const toleranceBtnRef = useRef<HTMLButtonElement>(null);
 
+  // Saved custom profiles from storage
+  const [savedProfiles, setSavedProfiles] = useState<SavedCustomProfile[]>(() =>
+    getSavedCustomProfiles(),
+  );
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setSavedProfiles(getSavedCustomProfiles());
+    };
+    window.addEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handleUpdate);
+    return () => window.removeEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handleUpdate);
+  }, []);
+
+  // Base profile id currently selected or active
+  const [selectedBaseId, setSelectedBaseId] = useState<string>(() => {
+    if (
+      activeProfileId &&
+      (ROUTE_PROFILE_PRESETS[activeProfileId] || savedProfiles.some((p) => p.id === activeProfileId))
+    ) {
+      return activeProfileId;
+    }
+    if (roadTypes.activityType && ROUTE_PROFILE_PRESETS[roadTypes.activityType]) {
+      return roadTypes.activityType;
+    }
+    return 'gravel-default';
+  });
+
+  useEffect(() => {
+    if (
+      activeProfileId &&
+      (ROUTE_PROFILE_PRESETS[activeProfileId] || savedProfiles.some((p) => p.id === activeProfileId))
+    ) {
+      setSelectedBaseId(activeProfileId);
+    }
+  }, [activeProfileId, savedProfiles]);
+
   // Active surface preference
   const currentSurface: SurfaceType =
     roadTypes.surfacePreference ?? (roadTypes.gravel === 'prefer' ? 'gravel' : 'tarmac');
@@ -105,21 +156,35 @@ export function TracageSection({
   // Active tracing mode
   const currentTracingMode: TracingModeType = roadTypes.tracingMode ?? 'vitesse';
 
-  // Resolved active activity ID
-  const resolvedActivityId: ActivityType =
-    roadTypes.activityType === 'road' || activeProfileId === 'road'
-      ? 'road'
-      : roadTypes.activityType === 'mtb' || activeProfileId === 'mtb'
-        ? 'mtb'
-        : 'gravel-default';
+  // Compare roadTypes against base profile
+  const activeBaseSaved = savedProfiles.find((p) => p.id === selectedBaseId);
+  const activeBasePreset = ROUTE_PROFILE_PRESETS[selectedBaseId];
+  const targetRoadTypes = activeBaseSaved
+    ? activeBaseSaved.roadTypes
+    : activeBasePreset
+      ? activeBasePreset.roadTypes
+      : ROUTE_PROFILE_PRESETS['gravel-default'].roadTypes;
+
+  const isCustomized = !isRoadTypesMatching(roadTypes, targetRoadTypes);
 
   // Resolved active activity name displayed in the top selector
-  const currentActivityName =
-    resolvedActivityId === 'road'
-      ? t('Vélo de route')
-      : resolvedActivityId === 'mtb'
-        ? 'MTB'
-        : t('Gravel');
+  const currentActivityName = isCustomized
+    ? activeBaseSaved
+      ? activeBaseSaved.name
+      : getNextCustomProfileName(savedProfiles)
+    : activeBaseSaved
+      ? activeBaseSaved.name
+      : selectedBaseId === 'road'
+        ? t('Route')
+        : selectedBaseId === 'mtb'
+          ? t('VTT')
+          : t('Gravel');
+
+  const currentActivityIcon = isCustomized || activeBaseSaved ? (
+    <IconSlidersFigma size={16} />
+  ) : (
+    <IconBikeShop size={16} />
+  );
 
   // Surface slider position and smooth dragging
   const sliderWrapRef = useRef<HTMLDivElement>(null);
@@ -138,12 +203,10 @@ export function TracageSection({
     });
   };
 
-  // Global change handlers with automatic synchronization to "Paramètres additionnels" and backend
-  const handleActivitySelect = (activityId: string) => {
-    const activityKey: ActivityType =
-      activityId === 'road' ? 'road' : activityId === 'mtb' ? 'mtb' : 'gravel-default';
+  const handleActivitySelect = (activityId: ActivityType) => {
+    setSelectedBaseId(activityId);
     const syncResult = syncTracageOnActivityChange(
-      activityKey,
+      activityId,
       currentTracingMode,
       currentTolerance,
     );
@@ -153,14 +216,31 @@ export function TracageSection({
     } else {
       applyRoadUpdates(syncResult.roadTypes);
     }
-    onChangeProfile?.(activityKey);
+    onChangeProfile?.(activityId);
+    setActivityOpen(false);
+  };
+
+  const handleCustomProfileSelect = (profile: SavedCustomProfile) => {
+    setSelectedBaseId(profile.id);
+    if (onBatchChangeRoadTypes) {
+      onBatchChangeRoadTypes(profile.roadTypes, profile.priorities);
+    } else {
+      applyRoadUpdates(profile.roadTypes);
+    }
+    onChangeProfile?.(profile.id);
     setActivityOpen(false);
   };
 
   const handleTracingModeSelect = (mode: TracingModeType) => {
+    const currentActivity: ActivityType =
+      selectedBaseId === 'road'
+        ? 'road'
+        : selectedBaseId === 'mtb'
+          ? 'mtb'
+          : 'gravel-default';
     const syncResult = syncTracageOnTracingModeChange(
       mode,
-      resolvedActivityId,
+      currentActivity,
     );
 
     if (onBatchChangeRoadTypes) {
@@ -172,7 +252,13 @@ export function TracageSection({
   };
 
   const handleSurfaceSelect = (surface: SurfaceType) => {
-    const syncResult = syncTracageOnSurfaceChange(surface, resolvedActivityId);
+    const currentActivity: ActivityType =
+      selectedBaseId === 'road'
+        ? 'road'
+        : selectedBaseId === 'mtb'
+          ? 'mtb'
+          : 'gravel-default';
+    const syncResult = syncTracageOnSurfaceChange(surface, currentActivity);
 
     if (onBatchChangeRoadTypes) {
       onBatchChangeRoadTypes(syncResult.roadTypes);
@@ -184,6 +270,103 @@ export function TracageSection({
   const handleToleranceSelect = (val: number) => {
     onChangeRoadType?.('surfaceTolerance', val);
     setToleranceOpen(false);
+  };
+
+  const handleReset = () => {
+    if (activeBaseSaved) {
+      if (onBatchChangeRoadTypes) {
+        onBatchChangeRoadTypes(activeBaseSaved.roadTypes, activeBaseSaved.priorities);
+      } else {
+        applyRoadUpdates(activeBaseSaved.roadTypes);
+      }
+      onChangeProfile?.(activeBaseSaved.id);
+      return;
+    }
+
+    const presetKey: ActivityType = ROUTE_PROFILE_PRESETS[selectedBaseId]
+      ? (selectedBaseId as ActivityType)
+      : 'gravel-default';
+    const preset = ROUTE_PROFILE_PRESETS[presetKey];
+    if (onBatchChangeRoadTypes) {
+      onBatchChangeRoadTypes(preset.roadTypes, preset.priorities);
+    } else {
+      applyRoadUpdates(preset.roadTypes);
+    }
+    onChangeProfile?.(presetKey);
+  };
+
+  const handleSave = () => {
+    let profileToSave: SavedCustomProfile;
+
+    if (activeBaseSaved) {
+      profileToSave = {
+        ...activeBaseSaved,
+        roadTypes: {
+          road: roadTypes.road,
+          gravel: roadTypes.gravel,
+          singletrack: roadTypes.singletrack,
+          offroad: roadTypes.offroad,
+          bikeLanes: roadTypes.bikeLanes,
+          majorRoads: roadTypes.majorRoads,
+          ferry: roadTypes.ferry,
+          turns: roadTypes.turns,
+          maxSlopePercent: roadTypes.maxSlopePercent,
+          cities: roadTypes.cities,
+          elevationPreference: roadTypes.elevationPreference,
+          woods: roadTypes.woods,
+          surfacePreference: roadTypes.surfacePreference,
+          surfaceTolerance: roadTypes.surfaceTolerance,
+          activityType: activeBaseSaved.name,
+          tracingMode: roadTypes.tracingMode,
+        },
+        priorities: { ...priorities },
+      };
+    } else {
+      const nextName = getNextCustomProfileName(savedProfiles);
+      const newId = `custom_${Date.now()}`;
+      profileToSave = {
+        id: newId,
+        name: nextName,
+        basePresetId: selectedBaseId,
+        roadTypes: {
+          road: roadTypes.road,
+          gravel: roadTypes.gravel,
+          singletrack: roadTypes.singletrack,
+          offroad: roadTypes.offroad,
+          bikeLanes: roadTypes.bikeLanes,
+          majorRoads: roadTypes.majorRoads,
+          ferry: roadTypes.ferry,
+          turns: roadTypes.turns,
+          maxSlopePercent: roadTypes.maxSlopePercent,
+          cities: roadTypes.cities,
+          elevationPreference: roadTypes.elevationPreference,
+          woods: roadTypes.woods,
+          surfacePreference: roadTypes.surfacePreference,
+          surfaceTolerance: roadTypes.surfaceTolerance,
+          activityType: nextName,
+          tracingMode: roadTypes.tracingMode,
+        },
+        priorities: { ...priorities },
+        createdAt: Date.now(),
+      };
+    }
+
+    saveCustomProfileToStorage(profileToSave);
+    const updated = getSavedCustomProfiles();
+    setSavedProfiles(updated);
+    setSelectedBaseId(profileToSave.id);
+    onSaveProfile?.(profileToSave);
+    onChangeProfile?.(profileToSave.id);
+  };
+
+  const handleDeleteProfile = (id: string) => {
+    deleteCustomProfileFromStorage(id);
+    const updated = getSavedCustomProfiles();
+    setSavedProfiles(updated);
+    onDeleteProfile?.(id);
+    if (selectedBaseId === id) {
+      handleActivitySelect('gravel-default');
+    }
   };
 
   const getRatioFromPointerEvent = (clientX: number): number => {
@@ -252,7 +435,7 @@ export function TracageSection({
             aria-haspopup="listbox"
           >
             <span className="rvi-tracage__mode-btn-icon">
-              <IconBikeShop size={16} />
+              {currentActivityIcon}
             </span>
             <span className="rvi-tracage__mode-btn-text" title={currentActivityName}>
               {currentActivityName}
@@ -269,46 +452,59 @@ export function TracageSection({
             minWidth={140}
             align="left"
           >
-            {profiles.length > 0 ? (
-              profiles
-                .filter((p) => p.id !== 'custom')
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`rvi-tracage__mode-menu-item${p.id === resolvedActivityId ? ' is-selected' : ''}`}
-                    onClick={() => handleActivitySelect(p.id)}
-                  >
-                    <IconBikeShop size={15} />
-                    <span>{p.id === 'mtb' ? 'MTB' : p.name}</span>
-                  </button>
-                ))
-            ) : (
+            {/* Standard 3 Presets: Route, Gravel, VTT */}
+            <button
+              type="button"
+              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'road' && !isCustomized ? ' is-selected' : ''}`}
+              onClick={() => handleActivitySelect('road')}
+            >
+              <IconBikeShop size={15} />
+              <span>{t('Route')}</span>
+            </button>
+            <button
+              type="button"
+              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'gravel-default' && !isCustomized ? ' is-selected' : ''}`}
+              onClick={() => handleActivitySelect('gravel-default')}
+            >
+              <IconBikeShop size={15} />
+              <span>{t('Gravel')}</span>
+            </button>
+            <button
+              type="button"
+              className={`rvi-tracage__mode-menu-item${selectedBaseId === 'mtb' && !isCustomized ? ' is-selected' : ''}`}
+              onClick={() => handleActivitySelect('mtb')}
+            >
+              <IconBikeShop size={15} />
+              <span>{t('VTT')}</span>
+            </button>
+
+            {/* Saved custom profiles if any */}
+            {savedProfiles.length > 0 && (
               <>
-                <button
-                  type="button"
-                  className={`rvi-tracage__mode-menu-item${resolvedActivityId === 'road' ? ' is-selected' : ''}`}
-                  onClick={() => handleActivitySelect('road')}
-                >
-                  <IconBikeShop size={15} />
-                  <span>{t('Vélo de route')}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`rvi-tracage__mode-menu-item${resolvedActivityId === 'gravel-default' ? ' is-selected' : ''}`}
-                  onClick={() => handleActivitySelect('gravel-default')}
-                >
-                  <IconBikeShop size={15} />
-                  <span>{t('Gravel')}</span>
-                </button>
-                <button
-                  type="button"
-                  className={`rvi-tracage__mode-menu-item${resolvedActivityId === 'mtb' ? ' is-selected' : ''}`}
-                  onClick={() => handleActivitySelect('mtb')}
-                >
-                  <IconBikeShop size={15} />
-                  <span>MTB</span>
-                </button>
+                <div className="rvi-tracage__dropdown-divider" />
+                {savedProfiles.map((cp) => (
+                  <div key={cp.id} className="rvi-tracage__mode-menu-item-row">
+                    <button
+                      type="button"
+                      className={`rvi-tracage__mode-menu-item${selectedBaseId === cp.id && !isCustomized ? ' is-selected' : ''}`}
+                      onClick={() => handleCustomProfileSelect(cp)}
+                    >
+                      <IconSlidersFigma size={15} />
+                      <span>{cp.name}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="rvi-tracage__delete-profile-btn"
+                      title={t('Supprimer le profil')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProfile(cp.id);
+                      }}
+                    >
+                      <IconTrashFigma size={13} />
+                    </button>
+                  </div>
+                ))}
               </>
             )}
           </PortalDropdown>
@@ -571,47 +767,58 @@ export function TracageSection({
                 />
               </div>
             </div>
+
+            {/* Checkbox: Appliquer à tout les itinéraires (Figma 5925:123599) */}
+            <button
+              type="button"
+              className="rvi-tracage__checkbox-row"
+              onClick={() =>
+                onChangeRoadType?.('applyToAllItineraries', !roadTypes.applyToAllItineraries)
+              }
+              role="checkbox"
+              aria-checked={Boolean(roadTypes.applyToAllItineraries)}
+            >
+              <span
+                className={`rvi-tracage__checkbox${roadTypes.applyToAllItineraries ? ' is-checked' : ''}`}
+              >
+                {roadTypes.applyToAllItineraries && <IconFigmaCheck size={10} />}
+              </span>
+              <span className="rvi-tracage__checkbox-text">
+                {t('Appliquer à tout les itinéraires')}
+              </span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* ── Checkbox: Appliquer à tout les itinéraires (Figma 5925:123599) ── */}
-      <button
-        type="button"
-        className="rvi-tracage__checkbox-row"
-        onClick={() =>
-          onChangeRoadType?.('applyToAllItineraries', !roadTypes.applyToAllItineraries)
-        }
-        role="checkbox"
-        aria-checked={Boolean(roadTypes.applyToAllItineraries)}
-      >
-        <span
-          className={`rvi-tracage__checkbox${roadTypes.applyToAllItineraries ? ' is-checked' : ''}`}
-        >
-          {roadTypes.applyToAllItineraries && <IconFigmaCheck size={10} />}
-        </span>
-        <span className="rvi-tracage__checkbox-text">
-          {t('Appliquer à tout les itinéraires')}
-        </span>
-      </button>
+      {/* ── Custom Actions: Réinitialiser & Enregistrer ── */}
+      {isCustomized ? (
+        <div className="rvi-tracage__actions-row">
+          <button
+            type="button"
+            className="rvi-tracage__reset-btn"
+            onClick={handleReset}
+            aria-label={t('Réinitialiser')}
+          >
+            <span className="rvi-tracage__action-icon">
+              <IconRepeatFigma size={14} />
+            </span>
+            <span>{t('Réinitialiser')}</span>
+          </button>
 
-      {/* ── Main Button: Valider (Figma 5918:103549 & 5918:112719) ── */}
-      <button
-        type="button"
-        className="rvi-tracage__submit-btn"
-        onClick={applyLoading ? onCancelApply : onApply}
-        disabled={applyLoading && !onCancelApply}
-      >
-        <span className="rvi-tracage__submit-icon">
-          <IconFigmaCheck size={16} />
-        </span>
-        <span className="rvi-tracage__submit-text">
-          {applyLoading ? t('Calcul du tracé en cours') : t('Valider')}
-          {resultLabel && !applyLoading ? (
-            <span className="rvi-tracage__submit-dist">{resultLabel}</span>
-          ) : null}
-        </span>
-      </button>
+          <button
+            type="button"
+            className="rvi-tracage__save-btn"
+            onClick={handleSave}
+            aria-label={t('Enregistrer')}
+          >
+            <span className="rvi-tracage__action-icon">
+              <IconSaveFigma size={14} />
+            </span>
+            <span>{t('Enregistrer')}</span>
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { SvgV2Icon } from '@/shared/components/SvgV2Icon';
 import { useAppI18n } from '@/shared/i18n';
 
 type ProjectBrowserDragPreviewProps = {
@@ -18,10 +19,21 @@ export function ProjectBrowserDragPreview({
   return (
     <div
       className="rvpb-drag-preview"
-      style={{ transform: `translate(${x + 18}px, ${y + 18}px)` }}
+      style={{ transform: `translate(${x}px, ${y}px)` }}
     >
-      <span className="rvpb-drag-preview__eyebrow">{type === 'folder' ? t('Dossier') : t('Projet')}</span>
-      <span className="rvpb-drag-preview__label">{label}</span>
+      <span className="rvpb-drag-preview__tile">
+        {type === 'folder' ? (
+          <SvgV2Icon name="folder.svg" size={44} />
+        ) : (
+          <SvgV2Icon name="map-01.svg" size={44} />
+        )}
+      </span>
+      <span className="rvpb-drag-preview__label" title={label}>
+        {label}
+      </span>
+      <span className="rvpb-drag-preview__eyebrow">
+        {type === 'folder' ? t('Dossier') : t('Projet')}
+      </span>
     </div>
   );
 }

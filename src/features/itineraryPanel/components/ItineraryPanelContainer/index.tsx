@@ -20,6 +20,13 @@ import { useProjectStore } from '../../context/ProjectStore';
 import { useTraceToolOptional } from '@/features/centerPanel/tracer';
 import { usePredictionStoreOptional } from '../../context/PredictionStore';
 import { DEFAULT_PROFILES, getProfilePreset, resolveProfilePresetId } from '../../lib/project';
+import {
+  getSavedCustomProfiles,
+  saveCustomProfileToStorage,
+  deleteCustomProfileFromStorage,
+  CUSTOM_PROFILES_CHANGED_EVENT,
+  type SavedCustomProfile,
+} from '../../lib/project/customProfiles';
 import type { PoiFeature } from '@/features/poi/types';
 import { deleteProjectItineraryFitFiles } from '@/shared/utils/projects';
 import type {
@@ -28,6 +35,7 @@ import type {
   PrioritiesState,
   RhythmState,
   RoadTypesState,
+  RouteProfile,
 } from '../../types';
 import { mergePoiFeatureFavorites } from './poiFeatureUtils';
 
@@ -495,11 +503,29 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
       ? t('Activez au moins une catégorie ci-dessus.')
       : null;
 
+  const [savedCustomProfiles, setSavedCustomProfiles] = useState<SavedCustomProfile[]>(() =>
+    getSavedCustomProfiles(),
+  );
+
+  useEffect(() => {
+    const handler = () => setSavedCustomProfiles(getSavedCustomProfiles());
+    window.addEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(CUSTOM_PROFILES_CHANGED_EVENT, handler);
+  }, []);
+
+  const combinedProfiles = useMemo<RouteProfile[]>(() => {
+    const customItems: RouteProfile[] = savedCustomProfiles.map((cp) => ({
+      id: cp.id,
+      name: cp.name,
+    }));
+    return [...DEFAULT_PROFILES, ...customItems];
+  }, [savedCustomProfiles]);
+
   return (
     <>
       <ItineraryPanel
         project={project}
-        profiles={DEFAULT_PROFILES}
+        profiles={combinedProfiles}
         width={width}
         isResizing={isResizing}
         onResizeStart={onResizeStart}
@@ -534,6 +560,28 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
           setProject((p) => ({ ...p, activeMode: mode }))
         }
         onChangeProfile={(id) => {
+          const custom = savedCustomProfiles.find((p) => p.id === id);
+          if (custom) {
+            setProject((prev) => {
+              const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
+              const applyToAll = active?.roadTypes.applyToAllItineraries;
+              return {
+                ...prev,
+                itineraries: prev.itineraries.map((itinerary) => {
+                  if (itinerary.id !== prev.activeItineraryId && !applyToAll) return itinerary;
+                  const copy = structuredClone(itinerary);
+                  copy.profileId = id;
+                  copy.priorities = { ...custom.priorities };
+                  copy.roadTypes = {
+                    ...custom.roadTypes,
+                    applyToAllItineraries: copy.roadTypes.applyToAllItineraries,
+                  };
+                  return copy;
+                }),
+              };
+            });
+            return;
+          }
           const preset = getProfilePreset(id);
           setProject((prev) => {
             const active = prev.itineraries.find((it) => it.id === prev.activeItineraryId);
@@ -566,7 +614,16 @@ export const ItineraryPanelContainer = memo(function ItineraryPanelContainer({
         }}
         canUndo={canUndoTraceEdit}
         canRedo={canRedoTraceEdit}
-        onSaveProfile={() => { }}
+        onSaveProfile={(profile) => {
+          if (profile) {
+            saveCustomProfileToStorage(profile);
+            setSavedCustomProfiles(getSavedCustomProfiles());
+          }
+        }}
+        onDeleteProfile={(id) => {
+          deleteCustomProfileFromStorage(id);
+          setSavedCustomProfiles(getSavedCustomProfiles());
+        }}
         onChangePriority={(key: keyof PrioritiesState, value) =>
           updateActive((it) => {
             it.priorities[key] = value;

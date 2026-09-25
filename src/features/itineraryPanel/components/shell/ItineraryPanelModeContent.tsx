@@ -47,6 +47,7 @@ type ItineraryPanelModeContentProps = Pick<
   | 'onRefreshRoute'
   | 'onRedo'
   | 'onSaveProfile'
+  | 'onDeleteProfile'
   | 'onUndo'
   | 'onUploadFit'
   | 'poiCount'
@@ -89,6 +90,7 @@ export function ItineraryPanelModeContent({
   onRefreshRoute,
   onRedo,
   onSaveProfile,
+  onDeleteProfile,
   onUndo,
   onUploadFit,
   collapsed = false,
@@ -126,6 +128,7 @@ export function ItineraryPanelModeContent({
           onUndo={onUndo}
           onRedo={onRedo}
           onSaveProfile={onSaveProfile}
+          onDeleteProfile={onDeleteProfile}
           onChangePriority={onChangePriority}
           onChangeRoadType={onChangeRoadType}
           onBatchChangeRoadTypes={onBatchChangeRoadTypes}

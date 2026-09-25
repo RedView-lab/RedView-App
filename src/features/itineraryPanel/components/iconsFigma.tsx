@@ -145,3 +145,117 @@ export function IconFigmaChevronUp({ size = 24, ...props }: SVGProps<SVGSVGEleme
     </svg>
   );
 }
+
+export function IconWalk({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <circle cx="8" cy="2.5" r="1.5" fill="currentColor" />
+      <path
+        d="M6 6.2L7.8 5.2C8.3 4.9 8.9 5.1 9.2 5.6L10.5 7.5L12 8M6.2 8.8L5 8.2M8.5 9.5L6.5 14M8.5 9.5L10.2 11.2L9.5 14"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconSlidersFigma({ size = 16, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path
+        d="M2.5 13.5V9.5M2.5 6.5V2.5M8 13.5V8M8 5V2.5M13.5 13.5V11M13.5 8V2.5M1 9.5H4M6.5 5H9.5M12 11H15"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconTrashFigma({ size = 14, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path
+        d="M2.5 4H13.5M6 1.5H10M4 4L4.8 13.2C4.85 13.8 5.35 14.3 5.95 14.3H10.05C10.65 14.3 11.15 13.8 11.2 13.2L12 4M6.5 7V11.5M9.5 7V11.5"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconRepeatFigma({ size = 14, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path
+        d="M2.5 2.5V6H6M13.5 13.5V10H10M13 5.5A6 6 0 0 0 3.2 4.2L2.5 6M3 10.5A6 6 0 0 0 12.8 11.8L13.5 10"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+export function IconSaveFigma({ size = 14, ...props }: SVGProps<SVGSVGElement> & { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 16 16"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path
+        d="M13 14H3C2.44772 14 2 13.5523 2 13V3C2 2.44772 2.44772 2 3 2H11L14 5V13C14 13.5523 13.5523 14 13 14Z"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M11 14V9H5V14M5 2V5H10"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+

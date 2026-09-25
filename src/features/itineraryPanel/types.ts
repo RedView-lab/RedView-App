@@ -536,7 +536,8 @@ export interface ItineraryPanelProps {
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
-  onSaveProfile?: () => void;
+  onSaveProfile?: (profile?: any) => void;
+  onDeleteProfile?: (id: string) => void;
   /** Open the Expert Mode profile editor modal. */
   onOpenExpertEditor?: () => void;
   /** Whether Expert Mode is currently enabled for the active itinerary. */

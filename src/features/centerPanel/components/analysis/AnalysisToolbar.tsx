@@ -1,10 +1,13 @@
+import { useMemo, useState } from 'react';
 import { IconCheck } from '../CenterPanelIcons';
 import { AxisDropdown } from './AxisDropdown';
 import { axisOptions, axis2Options } from './shared';
 import type { AxisMetricId, AxisMode } from '../chart';
 import { useAppI18n } from '@/shared/i18n';
 
-const visibleToolbarFilters: ReadonlyArray<{ key: 'pente' | 'jourNuit'; label: string }> = [
+type ToolbarFilterKey = 'pente' | 'jourNuit';
+
+const visibleToolbarFilters: ReadonlyArray<{ key: ToolbarFilterKey; label: string }> = [
   { key: 'pente', label: "Profils d'altitude" },
   { key: 'jourNuit', label: 'Jour/nuit' },
 ];
@@ -23,7 +26,19 @@ interface AnalysisToolbarProps {
   onAxis1ColorChange: (color: string) => void;
   onAxis2ColorChange: (color: string) => void;
   filters: { pente: boolean; jourNuit: boolean };
-  onToggleFilter: (key: 'pente' | 'jourNuit') => void;
+  onToggleFilter: (key: ToolbarFilterKey) => void;
+  /**
+   * Aide au survol par filtre : si une entrée existe pour un filtre, son chip
+   * affiche ce message en pop-in au survol. Le chip reste cliquable — c'est un
+   * simple indicateur de prérequis manquant, pas un état désactivé.
+   */
+  disabledFilters?: Partial<Record<ToolbarFilterKey, string>>;
+  /**
+   * Filtres dont le prérequis manque ET qui sont actuellement activés : leur
+   * chip affiche le pop-in en continu, sans survol, tant que l'utilisateur ne
+   * les désactive pas. Renversé par le parent (voir CenterPanelAnalysis).
+   */
+  pinnedFilters?: Partial<Record<ToolbarFilterKey, string>>;
 }
 
 export function AnalysisToolbar({
@@ -41,8 +56,28 @@ export function AnalysisToolbar({
   onAxis2ColorChange,
   filters,
   onToggleFilter,
+  disabledFilters,
+  pinnedFilters,
 }: AnalysisToolbarProps) {
   const { t } = useAppI18n();
+  const [hovered, setHovered] = useState<ToolbarFilterKey | null>(null);
+
+  /**
+   * Un pop-in est affiché quand le filtre correspondant a un prérequis manquant
+   * ET qu'il est soit survolé, soit activé. Ce second cas le rend persistant :
+   * pas besoin de survoler pour voir le message.
+   */
+  const activeHintKey = useMemo<ToolbarFilterKey | null>(() => {
+    const found = visibleToolbarFilters.find(
+      ({ key }) =>
+        disabledFilters?.[key] && (hovered === key || (pinnedFilters?.[key] && filters[key])),
+    );
+    return found?.key ?? null;
+  }, [disabledFilters, filters, hovered, pinnedFilters]);
+
+  const activeHint = activeHintKey
+    ? disabledFilters?.[activeHintKey] ?? pinnedFilters?.[activeHintKey]
+    : undefined;
 
   return (
     <div className="rvc-center-analysis__toolbar">
@@ -112,29 +147,63 @@ export function AnalysisToolbar({
       <div className="rvc-center-analysis__filters" aria-label={t('Filtres')}>
         {visibleToolbarFilters.map(({ key, label }) => {
           const checked = filters[key];
+          const hint = disabledFilters?.[key];
+          const hasHint = Boolean(hint);
+          const showHint = activeHintKey === key && Boolean(activeHint);
+
+          const className = [
+            'rvc-center-analysis__filter-chip',
+            checked ? '' : 'rvc-center-analysis__filter-chip--off',
+            hasHint ? 'rvc-center-analysis__filter-chip--hint' : '',
+          ]
+            .filter(Boolean)
+            .join(' ');
+
           return (
-            <label
+            <div
               key={key}
-              className={
-                checked
-                  ? 'rvc-center-analysis__filter-chip'
-                  : 'rvc-center-analysis__filter-chip rvc-center-analysis__filter-chip--off'
-              }
+              className="rvc-center-analysis__filter-item"
+              onMouseEnter={() => {
+                if (hasHint) setHovered(key);
+              }}
+              onMouseLeave={() => {
+                setHovered((curr) => (curr === key ? null : curr));
+              }}
             >
-              <input
-                type="checkbox"
-                className="rvc-center-analysis__filter-input"
-                checked={checked}
-                onChange={() => onToggleFilter(key)}
-                aria-label={t(label)}
-              />
-              <span className="rvc-center-analysis__checkbox" aria-hidden="true">
-                {checked ? <IconCheck size={10} /> : null}
-              </span>
-              <span className="rvc-center-analysis__filter-label" title={t(label)}>
-                {t(label)}
-              </span>
-            </label>
+              <label className={className}>
+                {/*
+                  Volontairement PAS de `disabled` : le chip doit rester coché/
+                  décochable même sans ses prérequis. Sinon le filtre (actif par
+                  défaut) deviendrait impossible à désactiver.
+                */}
+                <input
+                  type="checkbox"
+                  className="rvc-center-analysis__filter-input"
+                  checked={checked}
+                  onChange={() => onToggleFilter(key)}
+                  aria-label={t(label)}
+                  aria-describedby={
+                    showHint ? `rvc-analysis-filter-hint-${key}` : undefined
+                  }
+                />
+                <span className="rvc-center-analysis__checkbox" aria-hidden="true">
+                  {checked ? <IconCheck size={10} /> : null}
+                </span>
+                <span className="rvc-center-analysis__filter-label" title={t(label)}>
+                  {t(label)}
+                </span>
+              </label>
+
+              {showHint && activeHint ? (
+                <div
+                  id={`rvc-analysis-filter-hint-${key}`}
+                  className="rvc-center-analysis__tooltip"
+                  role="tooltip"
+                >
+                  {activeHint}
+                </div>
+              ) : null}
+            </div>
           );
         })}
       </div>

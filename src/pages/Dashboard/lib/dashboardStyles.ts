@@ -14,7 +14,6 @@ interface DashboardStylesInput {
   layout: DashboardLayout;
   isMapFocusMode: boolean;
   isLeftPanelCollapsed: boolean;
-  isCenterPanelCollapsed: boolean;
   isRightPanelCollapsed: boolean;
   isCenterResizing: boolean;
   panelWidth: number;
@@ -28,7 +27,6 @@ export function getDashboardStyles({
   layout,
   isMapFocusMode,
   isLeftPanelCollapsed,
-  isCenterPanelCollapsed,
   isRightPanelCollapsed,
   isCenterResizing,
   panelWidth,
@@ -37,78 +35,6 @@ export function getDashboardStyles({
   rightDockOffset,
   leftDockWidth,
 }: DashboardStylesInput) {
-  const collapsedPanelRailButtonStyle: CSSProperties = {
-    width: 28,
-    height: 56,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
-    background: 'rgba(17, 17, 19, 0.9)',
-    color: '#ffffff',
-    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-    cursor: 'pointer',
-    padding: 0,
-  };
-
-  const rightCollapsedRailStyle: CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    right: 6,
-    zIndex: 31,
-    transform: isRightPanelCollapsed && !isMapFocusMode
-      ? 'translate3d(0, -50%, 0)'
-      : 'translate3d(18px, -50%, 0)',
-    opacity: isRightPanelCollapsed && !isMapFocusMode ? 1 : 0,
-    pointerEvents: isRightPanelCollapsed && !isMapFocusMode ? 'auto' : 'none',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity',
-  };
-
-  const leftCollapsedRailStyle: CSSProperties = {
-    position: 'absolute',
-    top: '50%',
-    left: 6,
-    zIndex: 31,
-    transform: isLeftPanelCollapsed && !isMapFocusMode
-      ? 'translate3d(0, -50%, 0)'
-      : 'translate3d(-18px, -50%, 0)',
-    opacity: isLeftPanelCollapsed && !isMapFocusMode ? 1 : 0,
-    pointerEvents: isLeftPanelCollapsed && !isMapFocusMode ? 'auto' : 'none',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity',
-  };
-
-  const centerCollapsedRailStyle: CSSProperties = {
-    position: 'absolute',
-    top: layout.centerToolbarTop - 36,
-    left: layout.centerToolbarLeft + layout.centerToolbarWidth / 2,
-    zIndex: 27,
-    transform: isCenterPanelCollapsed && !isMapFocusMode
-      ? 'translate3d(-50%, 0, 0)'
-      : 'translate3d(-50%, 18px, 0)',
-    opacity: isCenterPanelCollapsed && !isMapFocusMode ? 1 : 0,
-    pointerEvents: isCenterPanelCollapsed && !isMapFocusMode ? 'auto' : 'none',
-    transition: `opacity ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, transform ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, top ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}, left ${IMMERSIVE_TRANSITION_MS}ms ${IMMERSIVE_EASING}`,
-    willChange: 'transform, opacity, top, left',
-  };
-
-  const centerCollapsedRailButtonStyle: CSSProperties = {
-    width: 56,
-    height: 28,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
-    borderRadius: 8,
-    background: 'rgba(17, 17, 19, 0.9)',
-    color: '#ffffff',
-    boxShadow: '0 12px 32px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.06)',
-    cursor: 'pointer',
-    padding: 0,
-  };
-
   const rightPanelStyle: CSSProperties = {
     position: 'absolute',
     top: 0,
@@ -259,11 +185,6 @@ export function getDashboardStyles({
   };
 
   return {
-    collapsedPanelRailButtonStyle,
-    rightCollapsedRailStyle,
-    leftCollapsedRailStyle,
-    centerCollapsedRailStyle,
-    centerCollapsedRailButtonStyle,
     rightPanelStyle,
     rightPanelContentStyle,
     leftPanelStyle,

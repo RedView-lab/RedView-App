@@ -55,6 +55,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
     onUndo,
     onRedo,
     onSaveProfile,
+    onDeleteProfile,
     onChangePriority,
     onChangeRoadType,
     onBatchChangeRoadTypes,
@@ -316,6 +317,7 @@ export function ItineraryPanel(props: ItineraryPanelProps) {
             onRefreshRoute={onRefreshRoute}
             onRedo={onRedo}
             onSaveProfile={onSaveProfile}
+            onDeleteProfile={onDeleteProfile}
             onUndo={onUndo}
             onUploadFit={onUploadFit}
             poiCount={poiCount}

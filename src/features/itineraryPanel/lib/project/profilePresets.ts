@@ -10,63 +10,6 @@ export interface RouteProfilePreset {
 }
 
 export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
-  mtb: {
-    id: 'mtb',
-    name: translateAppText('VTT'),
-    priorities: {
-      duration: 35,
-      elevation: 25,
-      distance: 40,
-      tranquility: 90,
-    },
-    roadTypes: {
-      activityType: 'mtb',
-      tracingMode: 'comfort',
-      surfacePreference: 'gravel',
-      surfaceTolerance: 10,
-      elevationPreference: 'avoid',
-      road: 'avoid',
-      gravel: 'prefer',
-      singletrack: 'prefer',
-      offroad: 'tolerate',
-      bikeLanes: 'avoid',
-      majorRoads: 'forbid',
-      woods: 'prefer',
-      ferry: 'tolerate',
-      turns: 'tolerate',
-      maxSlopePercent: 25,
-      cities: 'avoid',
-    },
-  },
-  'gravel-default': {
-    id: 'gravel-default',
-    name: translateAppText('Gravel (défaut)'),
-    isDefault: true,
-    priorities: {
-      duration: 50,
-      elevation: 50,
-      distance: 50,
-      tranquility: 70,
-    },
-    roadTypes: {
-      activityType: 'gravel-default',
-      tracingMode: 'vitesse',
-      surfacePreference: 'gravel',
-      surfaceTolerance: 10,
-      elevationPreference: 'avoid',
-      road: 'avoid',
-      gravel: 'prefer',
-      singletrack: 'tolerate',
-      offroad: 'forbid',
-      bikeLanes: 'tolerate',
-      majorRoads: 'avoid',
-      woods: 'prefer',
-      ferry: 'tolerate',
-      turns: 'avoid',
-      maxSlopePercent: 15,
-      cities: 'avoid',
-    },
-  },
   road: {
     id: 'road',
     name: translateAppText('Route'),
@@ -95,21 +38,77 @@ export const ROUTE_PROFILE_PRESETS: Record<string, RouteProfilePreset> = {
       cities: 'tolerate',
     },
   },
+  'gravel-default': {
+    id: 'gravel-default',
+    name: translateAppText('Gravel'),
+    isDefault: true,
+    priorities: {
+      duration: 50,
+      elevation: 50,
+      distance: 50,
+      tranquility: 70,
+    },
+    roadTypes: {
+      activityType: 'gravel-default',
+      tracingMode: 'vitesse',
+      surfacePreference: 'gravel',
+      surfaceTolerance: 10,
+      elevationPreference: 'avoid',
+      road: 'avoid',
+      gravel: 'prefer',
+      singletrack: 'tolerate',
+      offroad: 'forbid',
+      bikeLanes: 'tolerate',
+      majorRoads: 'avoid',
+      woods: 'prefer',
+      ferry: 'tolerate',
+      turns: 'avoid',
+      maxSlopePercent: 15,
+      cities: 'avoid',
+    },
+  },
+  mtb: {
+    id: 'mtb',
+    name: translateAppText('VTT'),
+    priorities: {
+      duration: 35,
+      elevation: 25,
+      distance: 40,
+      tranquility: 90,
+    },
+    roadTypes: {
+      activityType: 'mtb',
+      tracingMode: 'comfort',
+      surfacePreference: 'gravel',
+      surfaceTolerance: 10,
+      elevationPreference: 'avoid',
+      road: 'avoid',
+      gravel: 'prefer',
+      singletrack: 'prefer',
+      offroad: 'tolerate',
+      bikeLanes: 'avoid',
+      majorRoads: 'forbid',
+      woods: 'prefer',
+      ferry: 'tolerate',
+      turns: 'tolerate',
+      maxSlopePercent: 25,
+      cities: 'avoid',
+    },
+  },
 };
 
 export const DEFAULT_PROFILES: RouteProfile[] = [
-  { id: 'mtb', name: translateAppText('VTT') },
-  { id: 'gravel-default', name: translateAppText('Gravel (défaut)'), isDefault: true },
   { id: 'road', name: translateAppText('Route') },
-  { id: 'custom', name: translateAppText('Personnalisé') },
+  { id: 'gravel-default', name: translateAppText('Gravel'), isDefault: true },
+  { id: 'mtb', name: translateAppText('VTT') },
 ];
 
 export function getProfilePreset(profileId: string): RouteProfilePreset | undefined {
   return ROUTE_PROFILE_PRESETS[profileId];
 }
 
-const PRIORITY_KEYS: (keyof PrioritiesState)[] = ['duration', 'elevation', 'distance', 'tranquility'];
-const ROAD_TYPE_KEYS: (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[] = [
+export const PRIORITY_KEYS: (keyof PrioritiesState)[] = ['duration', 'elevation', 'distance', 'tranquility'];
+export const ROAD_TYPE_KEYS: (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[] = [
   'road',
   'gravel',
   'singletrack',
@@ -120,7 +119,24 @@ const ROAD_TYPE_KEYS: (keyof Omit<RoadTypesState, 'applyToAllItineraries'>)[] = 
   'turns',
   'maxSlopePercent',
   'cities',
+  'elevationPreference',
+  'woods',
+  'surfacePreference',
+  'surfaceTolerance',
+  'tracingMode',
 ];
+
+export function isRoadTypesMatching(
+  current: Partial<RoadTypesState>,
+  target: Partial<RoadTypesState>,
+): boolean {
+  for (const k of ROAD_TYPE_KEYS) {
+    if (current[k] !== target[k]) {
+      return false;
+    }
+  }
+  return true;
+}
 
 export function matchesProfilePreset(
   profileId: string,
@@ -134,11 +150,7 @@ export function matchesProfilePreset(
     if (priorities[k] !== preset.priorities[k]) return false;
   }
 
-  for (const k of ROAD_TYPE_KEYS) {
-    if (roadTypes[k] !== preset.roadTypes[k]) return false;
-  }
-
-  return true;
+  return isRoadTypesMatching(roadTypes, preset.roadTypes);
 }
 
 export function resolveProfilePresetId(
@@ -162,3 +174,4 @@ export function resolveProfilePresetId(
 
   return 'custom';
 }
+

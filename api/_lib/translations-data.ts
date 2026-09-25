@@ -2061,8 +2061,24 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
     "en": "Road"
   },
   {
+    "fr": "Marche",
+    "en": "Walking"
+  },
+  {
     "fr": "VTT",
     "en": "MTB"
+  },
+  {
+    "fr": "Profil 1",
+    "en": "Profile 1"
+  },
+  {
+    "fr": "Réinitialiser",
+    "en": "Reset"
+  },
+  {
+    "fr": "Supprimer le profil",
+    "en": "Delete profile"
   },
   {
     "fr": "Touring",
@@ -2207,6 +2223,10 @@ export const APP_TRANSLATION_PAIRS: ReadonlyArray<{ fr: string; en: string }> = 
   {
     "fr": "Renseigne une date et une heure de départ pour activer Jour/nuit.",
     "en": "Set a departure date and time to enable Day/Night."
+  },
+  {
+    "fr": "Renseigne une date de départ.",
+    "en": "Set a departure date."
   },
   {
     "fr": "Waypoint",
